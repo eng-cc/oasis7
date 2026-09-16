@@ -296,6 +296,7 @@ NODE_ROLE=storage
 P2P_NODE_ROLE=full_storage
 STATUS_BIND=0.0.0.0:6634
 NODE_GOSSIP_BIND=0.0.0.0:6834
+REPLICATION_NETWORK_LISTEN_ADDRS_CSV=/ip4/0.0.0.0/tcp/6834
 CHECKPOINT_PROVIDER=1
 FULL_STORAGE_PROVIDER=1
 WORLD_ID=oasis7-public-testnet-governed-20260606
@@ -313,6 +314,42 @@ IDENTITY_RECEIPT_PATH=config/identity-receipt.json
 IDENTITY_KEY_SHA256=$validator47_key_sha256
 IDENTITY_RECEIPT_SHA256=$validator47_receipt_sha256
 EOF
+
+# A missing or drifted public replication listener must fail before any new
+# stack root is materialized.  Keep the valid staged source for the happy path
+# below and exercise each invalid variant in an isolated root.
+validator47_node_env_valid="$TMP_DIR/validator47-node.env.valid"
+cp "$validator47_config/node.env" "$validator47_node_env_valid"
+export OASIS7_TEST_RUNTIME_PEER_ID="$validator47_peer_id"
+sed -i.bak '/^REPLICATION_NETWORK_LISTEN_ADDRS_CSV=/d' "$validator47_config/node.env"
+rm -f "$validator47_config/node.env.bak"
+expect_fail "validator-47 node.env REPLICATION_NETWORK_LISTEN_ADDRS_CSV mismatch" env OASIS7_TEST_ONLY=1 "$BOOTSTRAP" \
+  --allow-test-stack-root --test-root-prefix "$TMP_DIR" \
+  --systemd-unit-dir "$TMP_DIR/validator47-missing-listener-systemd" \
+  --stack-root "$TMP_DIR/validator47-missing-listener-opt/oasis7/p2p-testnet" \
+  --package-deb "$package_deb" --ops-tools-tar "$ops_tools_tar" \
+  --config-dir "$validator47_config" --world-dir "$world_dir" \
+  --identity-dir "$validator47_identity" --node-id triad-testnet-validator-47 \
+  --service-name oasis7-triad-validator-47.service \
+  --receipt "$TMP_DIR/validator47-missing-listener-receipt.json"
+test ! -e "$TMP_DIR/validator47-missing-listener-opt/oasis7/p2p-testnet"
+cp "$validator47_node_env_valid" "$validator47_config/node.env"
+
+sed -i.bak 's#^REPLICATION_NETWORK_LISTEN_ADDRS_CSV=.*#REPLICATION_NETWORK_LISTEN_ADDRS_CSV=/ip4/0.0.0.0/tcp/6835#' \
+  "$validator47_config/node.env"
+rm -f "$validator47_config/node.env.bak"
+expect_fail "validator-47 node.env REPLICATION_NETWORK_LISTEN_ADDRS_CSV mismatch" env OASIS7_TEST_ONLY=1 "$BOOTSTRAP" \
+  --allow-test-stack-root --test-root-prefix "$TMP_DIR" \
+  --systemd-unit-dir "$TMP_DIR/validator47-drifted-listener-systemd" \
+  --stack-root "$TMP_DIR/validator47-drifted-listener-opt/oasis7/p2p-testnet" \
+  --package-deb "$package_deb" --ops-tools-tar "$ops_tools_tar" \
+  --config-dir "$validator47_config" --world-dir "$world_dir" \
+  --identity-dir "$validator47_identity" --node-id triad-testnet-validator-47 \
+  --service-name oasis7-triad-validator-47.service \
+  --receipt "$TMP_DIR/validator47-drifted-listener-receipt.json"
+test ! -e "$TMP_DIR/validator47-drifted-listener-opt/oasis7/p2p-testnet"
+cp "$validator47_node_env_valid" "$validator47_config/node.env"
+
 baseline_runtime_commands="$(wc -l <"$OASIS7_TEST_RUNTIME_LOG" | tr -d ' ')"
 export OASIS7_TEST_RUNTIME_PEER_ID="$validator47_peer_id"
 OASIS7_TEST_ONLY=1 "$BOOTSTRAP" \
