@@ -46,20 +46,20 @@
         "repository": {"const": "eng-cc/oasis7"},
         "path": {"type": "string", "minLength": 1},
         "fragment": {"type": "string", "minLength": 1},
+        "clause_id": {"type": "string", "minLength": 1},
         "contract_id": {"type": "string", "minLength": 1},
         "revision": {"anyOf": [{"type": "integer", "minimum": 1}, {"type": "string", "minLength": 1}]},
         "contract_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
         "source_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
         "content_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-        "publication_ref": {"$ref": "#/$defs/publication_ref"},
-        "clause_id": {"type": "string", "minLength": 1}
+        "publication_ref": {"$ref": "#/$defs/publication_ref"}
       }
     },
     "bound_path_ref": {
       "allOf": [
         {"$ref": "#/$defs/path_ref"}
       ],
-      "required": ["contract_id", "revision", "contract_digest", "publication_ref"],
+      "required": ["clause_id", "contract_id", "revision", "contract_digest", "publication_ref"],
       "properties": {
         "revision": {"type": "integer", "minimum": 1}
       }
@@ -69,12 +69,28 @@
       "enum": ["required", "not_applicable"]
     },
     "evidence_ref": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["repository", "issue_number", "comment_id"],
+          "properties": {
+            "repository": {"const": "eng-cc/oasis7"},
+            "issue_number": {"type": "integer", "minimum": 1},
+            "comment_id": {"type": "integer", "minimum": 1}
+          }
+        },
+        {"$ref": "#/$defs/na_path_ref"}
+      ]
+    },
+    "na_path_ref": {
       "type": "object",
-      "required": ["repository", "issue_number", "comment_id"],
+      "additionalProperties": false,
+      "required": ["repository", "path", "fragment"],
       "properties": {
         "repository": {"const": "eng-cc/oasis7"},
-        "issue_number": {"type": "integer", "minimum": 1},
-        "comment_id": {"type": "integer", "minimum": 1}
+        "path": {"type": "string", "minLength": 1},
+        "fragment": {"type": "string", "minLength": 1}
       }
     },
     "na_disposition": {
@@ -110,7 +126,7 @@
           "oneOf": [
             {
               "properties": {"applicability": {"const": "required"}},
-              "required": ["repository", "path", "fragment", "contract_id", "revision", "contract_digest", "publication_ref"]
+              "required": ["repository", "path", "fragment", "clause_id", "contract_id", "revision", "contract_digest", "publication_ref"]
             },
             {
               "allOf": [
@@ -131,6 +147,7 @@
             "repository": {"const": "eng-cc/oasis7"},
             "path": {"type": "string", "minLength": 1},
             "fragment": {"type": "string", "minLength": 1},
+            "clause_id": {"type": "string", "minLength": 1},
             "contract_id": {"type": "string", "minLength": 1},
             "revision": {"anyOf": [{"type": "integer", "minimum": 1}, {"type": "string", "minLength": 1}]},
             "contract_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
@@ -146,7 +163,7 @@
           "oneOf": [
             {
               "properties": {"applicability": {"const": "required"}},
-              "required": ["repository", "path", "fragment", "contract_id", "revision", "contract_digest", "publication_ref"]
+              "required": ["repository", "path", "fragment", "clause_id", "contract_id", "revision", "contract_digest", "publication_ref"]
             },
             {"$ref": "#/$defs/na_disposition"}
           ]

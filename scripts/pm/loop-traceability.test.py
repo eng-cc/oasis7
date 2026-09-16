@@ -948,6 +948,67 @@ class TraceabilityTests(unittest.TestCase):
         self.assertIn("upstream_refs", trace_schema["properties"])
         self.assertIn("system_design", trace_schema["properties"])
 
+        for name in ("typed_upstream_ref", "system_design_ref"):
+            required_branch = schema["$defs"][name]["allOf"][1]["oneOf"][0]
+            self.assertIn("clause_id", required_branch["required"], name)
+
+    def test_task2_required_published_trace_refs_require_clause_binding(self):
+        for label, mutate in (
+            (
+                "upstream",
+                lambda record: record["required_obligations"][0]["trace"]["upstream_refs"][0].pop("clause_id"),
+            ),
+            (
+                "system design",
+                lambda record: record["required_obligations"][0]["trace"]["system_design"].pop("clause_id"),
+            ),
+        ):
+            with self.subTest(relation=label):
+                record = deepcopy(self.record)
+                mutate(record)
+                record["coordination_ref"]["record_digest"] = _record_digest(record)
+                self.assert_trace_blocked(
+                    self.leaf(record, self.refresh_record_binding(record)),
+                    "trace-ref-unresolved",
+                )
+
+    def test_task2_published_contract_rejects_path_without_clause_binding(self):
+        source_head = "b" * 40
+        raw = b'<a id="frozen-clause"></a>\n# Frozen contract\n'
+        digest = "sha256:" + hashlib.sha256(raw).hexdigest()
+        contract = {
+            "schema": "oasis7.loop-contract/v1",
+            "contract_id": "engineering-workflow",
+            "revision": 1,
+            "source_head": source_head,
+            "merged_head": source_head,
+            "content_refs": [{
+                "path": "contract.md",
+                "fragment": "frozen-clause",
+                "clauses": ["QW2-1"],
+                "sha256": digest,
+            }],
+        }
+        publication_digest = self.api.published_contract_digest(contract)
+        reference = _contract_ref(path="unrelated.md", fragment="unrelated", clause_id=None)
+        reference.update({"revision": 1, "contract_digest": publication_digest})
+
+        class PublicationAuthority:
+            reader_kind = "github_live_query"
+
+            def __call__(self, _reference):
+                return {
+                    "reader_kind": self.reader_kind,
+                    "comment": {"body": json.dumps({
+                        "marker": "oasis7-loop-contract",
+                        "contract": contract,
+                        "contract_digest": publication_digest,
+                    })},
+                }
+
+        errors = self.api._validate_published_contract(reference, PublicationAuthority())
+        self.assertTrue(any("clause" in error or "path/fragment" in error for error in errors), errors)
+
     def test_task2_professional_only_upstream_with_complete_na_dispositions_passes(self):
         record = _populate_trace(deepcopy(self.record), upstream_kind="professional_acceptance", system_required=False)
         result = self.api.validate_record(record)
@@ -994,6 +1055,35 @@ class TraceabilityTests(unittest.TestCase):
         readers.authority = authority
         result = self.leaf(record, self.refresh_record_binding(record), readers)
         self.assert_trace_blocked(result, "trace-na-evidence-unresolved")
+
+    def test_task2_na_repository_path_ref_is_read_back_for_leaf_admission(self):
+        record = _populate_trace(
+            deepcopy(self.record), upstream_kind="professional_acceptance", system_required=False
+        )
+        path_ref = {
+            "repository": REPOSITORY,
+            "path": "doc/engineering/prd.md",
+            "fragment": "prd-engineering-001",
+        }
+        for obligation in record["required_obligations"]:
+            for reference in obligation["trace"]["upstream_refs"] + [obligation["trace"]["system_design"]]:
+                if isinstance(reference, dict) and reference.get("applicability") == "not_applicable":
+                    reference["evidence_ref"] = deepcopy(path_ref)
+        record["coordination_ref"]["record_digest"] = _record_digest(record)
+        readers = FixtureReaders(record)
+
+        def contract(reference, *args, **kwargs):
+            return {
+                "status": "passed",
+                "repository": REPOSITORY,
+                "path": reference["path"],
+                "fragment": reference["fragment"],
+                "source_commit": SOURCE_OID,
+            }
+
+        readers.contract = contract
+        result = self.leaf(record, self.refresh_record_binding(record), readers)
+        self.assertEqual(result.get("status"), "passed", result)
 
     def test_task2_product_upstream_with_required_system_design_passes(self):
         record = _populate_trace(deepcopy(self.record), upstream_kind="product_requirement", system_required=True)
@@ -1138,6 +1228,32 @@ class TraceabilityTests(unittest.TestCase):
                     self.aggregate(candidate, evidence, self.record, readers),
                     "trace-evidence-identity",
                 )
+
+    def test_task2_aggregate_allows_one_leaf_task_for_distinct_obligation_slots(self):
+        candidate, evidence = self.complete_aggregate()
+        first_row = candidate["applicability_matrix"][0]
+        second_row = candidate["applicability_matrix"][1]
+        second_row["leaf_task_uid"] = first_row["leaf_task_uid"]
+        second_row["leaf_evidence_locator"] = first_row["leaf_evidence_locator"]
+        second_row["leaf_evidence_digest"] = first_row["leaf_evidence_digest"]
+        for field in CANDIDATE_FIELDS:
+            if field in first_row:
+                second_row[field] = deepcopy(first_row[field])
+        self.assertEqual(self.api._validate_matrix(self.record, candidate, evidence), [])
+
+    def test_task2_live_aggregate_reuses_one_leaf_evidence_for_distinct_obligation_slots(self):
+        candidate, evidence, readers = self.complete_live_aggregate()
+        first_row = candidate["applicability_matrix"][0]
+        second_row = candidate["applicability_matrix"][1]
+        second_row["leaf_task_uid"] = first_row["leaf_task_uid"]
+        second_row["leaf_evidence_locator"] = deepcopy(first_row["leaf_evidence_locator"])
+        second_row["leaf_evidence_digest"] = first_row["leaf_evidence_digest"]
+        for field in CANDIDATE_FIELDS:
+            if field in first_row:
+                second_row[field] = deepcopy(first_row[field])
+        candidate["equivalence_rules"] = []
+        result = self.aggregate(candidate, evidence[:1], self.record, readers)
+        self.assertEqual(result.get("status"), "passed", result)
 
     def test_task2_untouched_legacy_record_is_readable_but_new_aggregate_requires_upgrade(self):
         legacy = _legacy_record(self.record)
@@ -1353,6 +1469,7 @@ class TraceabilityTests(unittest.TestCase):
             schema["properties"]["consumed_clause_refs"],
             {"type": "array", "items": {"$ref": "#/$defs/bound_path_ref"}},
         )
+        self.assertIn("clause_id", schema["$defs"]["bound_path_ref"]["required"])
         self.assertEqual(
             schema["$defs"]["bound_path_ref"]["properties"]["revision"],
             {"type": "integer", "minimum": 1},

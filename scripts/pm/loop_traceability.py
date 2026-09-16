@@ -312,7 +312,7 @@ TRACE_REPAIR_HINTS = {
     "trace-upstream-missing": "add one required typed upstream relation",
     "trace-system-design-missing": "add system_design or a complete explicit N/A disposition",
     "trace-na-incomplete": "complete reason, scope, owner_role, evidence_ref, and reevaluation_trigger",
-    "trace-na-evidence-unresolved": "rebind the N/A evidence_ref to a live canonical Issue/comment",
+    "trace-na-evidence-unresolved": "rebind the N/A evidence_ref to a readable repository path#fragment or live canonical Issue/comment",
     "trace-ref-unresolved": "rebind the relation to the canonical frozen publication/path/fragment",
     "trace-required-alias-mismatch": "set applicability and required to matching values",
     "trace-slot-cardinality": "provide exactly one row for each required obligation and mapping slot",
@@ -359,7 +359,7 @@ def _validate_na_disposition(
         errors.append(_trace_diagnostic("trace-na-incomplete", obligation, f"{field}.evidence_ref is required", record=record))
     else:
         try:
-            _authority_reference(evidence_ref, f"{field}.evidence_ref")
+            _validate_na_evidence_locator(evidence_ref, f"{field}.evidence_ref")
         except TraceabilityError as exc:
             errors.append(_trace_diagnostic("trace-na-incomplete", obligation, _error_text(exc), record=record))
     declared_role = disposition.get("owner_role")
@@ -375,22 +375,50 @@ def _validate_na_disposition(
     return errors
 
 
+def _is_path_evidence_locator(reference: Any) -> bool:
+    return isinstance(reference, dict) and any(key in reference for key in ("path", "fragment"))
+
+
+def _validate_na_evidence_locator(reference: Any, field: str) -> dict[str, Any]:
+    """Accept only a repository path#fragment or canonical Issue/comment locator."""
+    if _is_path_evidence_locator(reference):
+        if any(key in reference for key in ("issue_number", "comment_id")):
+            raise TraceabilityError(f"{field} mixes path and Issue/comment identity")
+        return _reference_value(reference, field)
+    return _authority_reference(reference, field)
+
+
 def _validate_na_evidence_readback(
     record: dict[str, Any], obligation: dict[str, Any], disposition: Any, field: str,
     authority_reader: Callable[..., Any] | None,
+    contract_reader: Callable[..., Any] | None = None,
+    source_commit: str | None = None,
 ) -> list[str]:
     """Require a complete N/A locator to resolve through repository authority.
 
     Structural record validation intentionally remains side-effect free.  Leaf
     and aggregate admission call this helper from their bound-reference pass,
-    where the authenticated/fake authority reader is available.  A shaped
-    locator is not evidence until its canonical Issue and comment identities
-    have been read back and bound to this coordinating record's Task UID.
+    where the authenticated/fake authority or immutable source reader is
+    available.  A shaped locator is not evidence until its canonical Issue and
+    comment identities or source path and fragment have been read back.
     """
     errors: list[str] = []
     try:
         evidence_ref = disposition.get("evidence_ref") if isinstance(disposition, dict) else None
-        _authority_reference(evidence_ref, f"{field}.evidence_ref")
+        _validate_na_evidence_locator(evidence_ref, f"{field}.evidence_ref")
+        if _is_path_evidence_locator(evidence_ref):
+            if contract_reader is None:
+                raise TraceabilityError("N/A repository path evidence requires source readback")
+            result = _reader_result(contract_reader, evidence_ref, "N/A evidence source readback")
+            if result.get("repository") != REPOSITORY:
+                raise TraceabilityError("N/A evidence source repository identity mismatch")
+            if result.get("path") != evidence_ref["path"]:
+                raise TraceabilityError("N/A evidence source path identity mismatch")
+            if result.get("fragment") != evidence_ref["fragment"]:
+                raise TraceabilityError("N/A evidence source fragment identity mismatch")
+            if source_commit is not None and result.get("source_commit") != source_commit:
+                raise TraceabilityError("N/A evidence source commit mismatch")
+            return errors
         if authority_reader is None:
             raise TraceabilityError("N/A evidence locator requires live authority readback")
         readback = _reader_result(authority_reader, evidence_ref, "N/A evidence readback")
@@ -667,7 +695,7 @@ def _validate_bound_identity(reference: dict[str, Any], field: str, *, strict_re
     an already frozen contract.  Consumed clause references are the typed
     contract boundary and use the canonical positive integer revision.
     """
-    for key in ("contract_id", "revision", "contract_digest", "publication_ref"):
+    for key in ("contract_id", "revision", "contract_digest", "publication_ref", "clause_id"):
         if key not in reference:
             raise TraceabilityError(f"{field} missing inherited {key}")
     if not isinstance(reference["contract_id"], str) or not reference["contract_id"].strip():
@@ -684,6 +712,8 @@ def _validate_bound_identity(reference: dict[str, Any], field: str, *, strict_re
             raise TraceabilityError(f"{field} revision must be a positive integer or non-empty string")
     _digest(reference["contract_digest"], f"{field} contract_digest")
     _authority_reference(reference["publication_ref"], f"{field} publication_ref")
+    if not isinstance(reference["clause_id"], str) or not reference["clause_id"].strip():
+        raise TraceabilityError(f"{field} clause_id is invalid")
 
 
 def _validate_published_contract(
@@ -711,6 +741,8 @@ def _validate_published_contract(
             errors.append("contract publication contract_digest mismatch")
         content_refs = contract.get("content_refs")
         clause_id = reference.get("clause_id")
+        if not isinstance(clause_id, str) or not clause_id.strip():
+            raise TraceabilityError("contract publication clause_id is required")
         matches: list[tuple[Any, Any]] = []
         if isinstance(content_refs, list):
             for item in content_refs:
@@ -720,7 +752,7 @@ def _validate_published_contract(
                 if clause_id in clauses:
                     fragments = item.get("fragments") if isinstance(item.get("fragments"), dict) else {}
                     matches.append((fragments.get(clause_id, item.get("fragment")), item.get("sha256")))
-        if clause_id and (not matches or reference.get("fragment") not in {fragment for fragment, _digest in matches}):
+        if len(matches) != 1 or reference.get("fragment") != matches[0][0]:
             errors.append("contract publication path/fragment mismatch")
         expected_content_digests = {digest for fragment, digest in matches if isinstance(digest, str)}
         declared_heads: list[str] = []
@@ -757,7 +789,9 @@ def _validate_trace_relation_readback(
     if not isinstance(reference, dict):
         return []
     if reference.get("applicability") == "not_applicable":
-        return _validate_na_evidence_readback(record, obligation, reference, field, authority_reader)
+        return _validate_na_evidence_readback(
+            record, obligation, reference, field, authority_reader, contract_reader, source_commit
+        )
     if reference.get("applicability") != "required":
         return []
     errors: list[str] = []
@@ -1434,7 +1468,6 @@ def _validate_matrix(
     by_obligation: set[str] = set()
     by_slot: set[str] = set()
     rules = candidate.get("equivalence_rules") if isinstance(candidate.get("equivalence_rules"), list) else []
-    row_task_uids: dict[str, int] = {}
     required_obligation_ids = {
         item.get("obligation_id") for item in obligations
         if isinstance(item, dict) and item.get("applicability") == "required"
@@ -1491,8 +1524,6 @@ def _validate_matrix(
             if slot.get("owner_role") != obligation.get("owner_role"):
                 errors.append(f"mapping_slot owner_role does not match obligation {obligation_id}")
         uid = row.get("leaf_task_uid")
-        if isinstance(uid, str):
-            row_task_uids[uid] = row_task_uids.get(uid, 0) + 1
         item = evidence_by_uid.get(uid)
         if item is None:
             errors.append("unknown Task UID in applicability_matrix")
@@ -1548,14 +1579,6 @@ def _validate_matrix(
                 "trace-evidence-identity",
                 obligation or {"obligation_id": obligation_id},
                 "candidate identity does not match leaf evidence",
-                record=record,
-            ))
-    for uid, count in sorted(row_task_uids.items()):
-        if count > 1:
-            errors.append(_trace_diagnostic(
-                "trace-evidence-identity",
-                {"obligation_id": "<matrix>"},
-                f"leaf Task UID {uid} is mapped by {count} matrix rows",
                 record=record,
             ))
     for missing in sorted(required_obligation_ids - by_obligation):
@@ -1719,6 +1742,7 @@ def _validate_live_leaf_results(
     if not isinstance(matrix, list):
         return []
     errors: list[str] = []
+    verified_locators: set[tuple[Any, ...]] = set()
     evidence_by_uid = {
         item.get("task_uid"): item for item in evidence if isinstance(item, dict)
     }
@@ -1727,8 +1751,12 @@ def _validate_live_leaf_results(
             continue
         try:
             locator = _leaf_result_locator(row.get("leaf_evidence_locator"))
+            locator_key = tuple(locator.get(field) for field in ("repository", "issue_number", "comment_id", "body_digest"))
+            if locator_key in verified_locators:
+                continue
             readback = _reader_result(authority_reader, locator, "leaf result live readback")
             errors.extend(_validate_leaf_result_readback(readback, locator, record, row))
+            verified_locators.add(locator_key)
             item = evidence_by_uid.get(row.get("leaf_task_uid"))
             if item is None:
                 continue

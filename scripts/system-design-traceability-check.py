@@ -47,6 +47,9 @@ HTML_COMMENT_RE = re.compile(r"<!--[\s\S]*?-->")
 REQUIRED_NA_FIELDS = ("reason", "scope", "owner_role", "evidence_ref", "re-evaluate")
 DEMAND_ROW_CELLS = 5
 VALIDATION_ROW_CELLS = 6
+CANONICAL_GITHUB_EVIDENCE_RE = re.compile(
+    r"^https://github\.com/eng-cc/oasis7/issues/(?P<issue>[1-9][0-9]*)#issuecomment-(?P<comment>[1-9][0-9]*)$"
+)
 
 
 @dataclass(frozen=True)
@@ -642,6 +645,50 @@ def na_is_complete(value: str) -> bool:
     return True
 
 
+def na_evidence_ref_is_readable(
+    root: Path,
+    source: Path,
+    raw_value: str,
+    *,
+    follow_symlinks: bool,
+    read_target: TargetTextReader,
+) -> bool:
+    """Accept a readable repository path#fragment or canonical GitHub locator."""
+    value = raw_value.strip()
+    if CANONICAL_GITHUB_EVIDENCE_RE.fullmatch(value):
+        return True
+    links = link_nodes(value)
+    if len(links) == 1:
+        value = links[0].strip()
+    target, fragment = split_link_target(value)
+    if not target or not fragment or external_target(target):
+        return False
+    candidates: list[Path] = []
+    source_relative = resolve_target(root, source, target, follow_symlinks=follow_symlinks)
+    if source_relative is not None:
+        candidates.append(source_relative)
+    repository_relative = posixpath.normpath(target)
+    if (
+        repository_relative not in {"..", "."}
+        and not posixpath.isabs(repository_relative)
+        and not repository_relative.startswith("../")
+    ):
+        candidate = root / Path(repository_relative)
+        if follow_symlinks:
+            try:
+                candidate = candidate.resolve(strict=False)
+                candidate.relative_to(root.resolve())
+            except (OSError, ValueError):
+                candidate = None
+        if candidate is not None:
+            candidates.append(candidate)
+    for candidate in candidates:
+        text = read_target(candidate)
+        if text is not None and fragment_occurrences(text, fragment) == 1:
+            return True
+    return False
+
+
 def check_design_content(
     root: Path,
     source: Path,
@@ -740,6 +787,20 @@ def check_design_content(
         if method.strip().casefold().startswith("n/a"):
             if not na_is_complete(method):
                 fail(errors, "trace-na-incomplete", row_path, "complete N/A with reason, scope, owner_role, evidence_ref, and re-evaluate fields; repair the fourth cell")
+            else:
+                evidence_match = re.search(
+                    r"(?:^|[:：;；,，])\s*evidence_ref\s*=\s*(?P<value>[^;；,，]+)",
+                    method,
+                    re.IGNORECASE,
+                )
+                if evidence_match is None or not na_evidence_ref_is_readable(
+                    root,
+                    source,
+                    evidence_match.group("value"),
+                    follow_symlinks=follow_symlinks,
+                    read_target=read_target,
+                ):
+                    fail(errors, "trace-na-incomplete", row_path, "evidence_ref must resolve to one readable repository path#fragment or canonical eng-cc/oasis7 Issue/comment; repair the fourth cell")
             continue
         source_links = link_nodes(method)
         if not source_links:

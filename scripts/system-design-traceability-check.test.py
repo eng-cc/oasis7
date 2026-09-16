@@ -362,13 +362,48 @@ def scenario_complete_na() -> None:
     module = load_checker()
     root, _base, _head = make_repo(
         design_text=na_design(
-            disposition="N/A: reason=该条款不涉及运行时技术义务；scope=本次文档治理变更；owner_role=repository_health_engineer；evidence_ref=GitHub task evidence；re-evaluate=下次改变跨组件行为时。"
+            disposition="N/A: reason=该条款不涉及运行时技术义务；scope=本次文档治理变更；owner_role=repository_health_engineer；evidence_ref=https://github.com/eng-cc/oasis7/issues/3671#issuecomment-5636906114；re-evaluate=下次改变跨组件行为时。"
         )
     )
     try:
         assert_no_errors(module, root / DESIGN)
     finally:
         shutil.rmtree(root)
+
+
+def scenario_na_accepts_readable_repository_path_fragment() -> None:
+    module = load_checker()
+    root, _base, _head = make_repo(
+        design_text=na_design(
+            disposition="N/A: reason=该条款不涉及运行时技术义务；scope=本次文档治理变更；owner_role=repository_health_engineer；evidence_ref=doc/product/sample.prd.md#req-sample；re-evaluate=下次改变跨组件行为时。"
+        )
+    )
+    try:
+        assert_no_errors(module, root / DESIGN)
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_na_rejects_unreadable_or_noncanonical_evidence_locator() -> None:
+    module = load_checker()
+    for locator in (
+        "garbage",
+        "../tests/sample.test.py",
+        "../tests/missing.test.py#sample",
+        "../../outside.md#sample",
+        "https://github.com/example/oasis7/issues/3671#issuecomment-5636906114",
+        "https://github.com/eng-cc/oasis7/issues/0#issuecomment-5636906114",
+        "https://github.com/eng-cc/oasis7/issues/3671#comment-5636906114",
+    ):
+        root, _base, _head = make_repo(
+            design_text=na_design(
+                disposition=f"N/A: reason=范围外；scope=本次文档治理变更；owner_role=repository_health_engineer；evidence_ref={locator}；re-evaluate=下次改变跨组件行为时。"
+            )
+        )
+        try:
+            assert_code(module, root / DESIGN, "trace-na-incomplete")
+        finally:
+            shutil.rmtree(root)
 
 
 def scenario_incomplete_na() -> None:
@@ -568,6 +603,8 @@ def main() -> None:
         scenario_anchor_and_heading_fragment_collision_is_ambiguous,
         scenario_fenced_code_trace_decoy_is_ignored,
         scenario_complete_na,
+        scenario_na_accepts_readable_repository_path_fragment,
+        scenario_na_rejects_unreadable_or_noncanonical_evidence_locator,
         scenario_incomplete_na,
         scenario_target_only_design_change_is_excluded,
         scenario_whitespace_and_comment_only_source_change_is_excluded,
