@@ -167,8 +167,10 @@ assert_reason_absent "$static_governance_output" "unclassified_or_unresolvable:"
 rust_gate_helper_output="$(plan_for_paths \
   scripts/cargo-dev.sh \
   scripts/cargo-dev-lib.sh \
+  scripts/cargo-dev-lib.test.sh \
   scripts/cargo-dev-windows-toolchain.test.sh \
   scripts/check-standalone-tool-lockfiles.sh \
+  scripts/check-standalone-tool-lockfiles.test.sh \
   scripts/check-rust-file-size.sh \
   scripts/check-rust-file-size.test.sh \
   scripts/check-rustsec-ignore-baseline.sh \
@@ -179,8 +181,10 @@ assert_key_equals "$rust_gate_helper_output" needs_rust_toolchain true
 for rust_gate_helper_path in \
   scripts/cargo-dev.sh \
   scripts/cargo-dev-lib.sh \
+  scripts/cargo-dev-lib.test.sh \
   scripts/cargo-dev-windows-toolchain.test.sh \
   scripts/check-standalone-tool-lockfiles.sh \
+  scripts/check-standalone-tool-lockfiles.test.sh \
   scripts/check-rust-file-size.sh \
   scripts/check-rust-file-size.test.sh \
   scripts/check-rustsec-ignore-baseline.sh \
@@ -234,6 +238,17 @@ assert_key_equals "$operational_contract_output" needs_system_deps false
 assert_reason_contains "$operational_contract_output" \
   "operational_contracts:scripts/p2p-public-testnet-package-rollout.test.sh"
 assert_reason_absent "$operational_contract_output" "unclassified_or_unresolvable:"
+
+service_readback_output="$(plan_for_path scripts/p2p-public-testnet-service-readback.test.sh)"
+assert_key_equals "$service_readback_output" scope targeted
+assert_key_equals "$service_readback_output" selected_capabilities operational_contracts
+assert_key_equals "$service_readback_output" run_operational_contracts true
+assert_key_equals "$service_readback_output" run_rust_baseline false
+assert_key_equals "$service_readback_output" needs_rust_toolchain false
+assert_key_equals "$service_readback_output" needs_node false
+assert_reason_contains "$service_readback_output" \
+  "operational_contracts:scripts/p2p-public-testnet-service-readback.test.sh"
+assert_reason_absent "$service_readback_output" "unclassified_or_unresolvable:"
 
 # Keep the implementation sources paired with their fixture-backed operational
 # contracts. Source-only changes must select the same non-Rust lane rather than
