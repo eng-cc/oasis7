@@ -145,7 +145,7 @@
   - 系统提供过多 operator/debug 语义，淹没当前主意图与主因果：判定为 presentation-level control-feeling regression。
   - active-LLM lane 因 provider 问题卡死时，不得用 deterministic `--no-llm` 样本代替本专题正式验收；debug lane 只能帮助定位哪条 guarantee 先失效。
 - Non-Functional Requirements:
-  - NFR-CFC-1: `PRD-GAME-014` 的 active 入口互链必须在 1 个工作日内完成，并可通过 grep 直接定位到根 PRD / project、主文档、索引与专题三件套。
+  - NFR-CFC-1: `PRD-GAME-014` 的 active 入口互链必须在 1 个工作日内完成，并可通过 grep 直接定位到 game 根 PRD、gameplay 主文档、索引、专题 PRD 与产品分册。
   - NFR-CFC-2: headed Web/UI 与 pure API 的 control-feeling 关键字段覆盖率必须为 100%：`accepted_intent`、`execution_status`、`primary_reason`、`next_step` 四类字段不得缺任一类。
   - NFR-CFC-3: 任何导致 accepted intent 与当前世界结果脱钩、且没有 override/replaced 解释的回归，都必须被 QA 标记为 blocker，而不是低优先级文案问题。
   - NFR-CFC-4: control-feeling 合同验证必须可在 fresh bundle 本地复跑，并能区分 formal active-LLM lane 与 debug/probe lane。
