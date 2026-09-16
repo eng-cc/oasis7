@@ -333,6 +333,31 @@ assert_reason_contains "$governance_helper_output" "governance_script:scripts/pr
 assert_reason_contains "$governance_helper_output" "governance_script:scripts/plan-rust-required-scope.test.sh"
 assert_reason_absent "$governance_helper_output" "unclassified_or_unresolvable:"
 
+# Traceability checkers and their caller contract are required-gate governance
+# fixtures.  Keep them on the minimal lane so adding these checks does not
+# widen an otherwise documentation-only change through the unmatched fallback.
+traceability_governance_output="$(plan_for_paths \
+  scripts/system-design-traceability-check.py \
+  scripts/system-design-traceability-check.test.py \
+  scripts/product-doc-content-check.py \
+  scripts/product-doc-content-check.test.py \
+  scripts/product-doc-content-callers.test.sh)"
+assert_key_equals "$traceability_governance_output" scope minimal
+assert_key_equals "$traceability_governance_output" selected_capabilities required_gate_baseline
+assert_key_equals "$traceability_governance_output" run_rust_baseline false
+assert_key_equals "$traceability_governance_output" needs_rust_toolchain false
+assert_key_equals "$traceability_governance_output" needs_node false
+for traceability_governance_path in \
+  scripts/system-design-traceability-check.py \
+  scripts/system-design-traceability-check.test.py \
+  scripts/product-doc-content-check.py \
+  scripts/product-doc-content-check.test.py \
+  scripts/product-doc-content-callers.test.sh; do
+  assert_reason_contains "$traceability_governance_output" \
+    "governance_script:$traceability_governance_path"
+done
+assert_reason_absent "$traceability_governance_output" "unclassified_or_unresolvable:"
+
 # These seven shell fixtures validate required-gate workflow wiring.  Keep
 # every path exact so a missing mapping cannot silently widen this plan to the
 # full Rust baseline/toolchain.
