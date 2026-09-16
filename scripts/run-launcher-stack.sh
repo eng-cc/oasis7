@@ -1238,13 +1238,13 @@ Recommended use:
 - source mode remains for development/debug only
 
 agent-browser example:
-  AB_SESSION="$(agent-browser session id --scope worktree --prefix launcher)"
+  AB_SESSION="\$(agent-browser session id --scope worktree --prefix launcher)"
   export AB_SESSION
-  agent-browser --session "$AB_SESSION" --headed open "$GAME_URL"
-  agent-browser --session "$AB_SESSION" wait --load domcontentloaded
-  agent-browser --session "$AB_SESSION" wait --fn "typeof window.__AW_TEST__ === 'object'"
-  agent-browser --session "$AB_SESSION" session info --json
-  agent-browser --session "$AB_SESSION" close
+  agent-browser --session "\$AB_SESSION" --headed open "\$GAME_URL"
+  agent-browser --session "\$AB_SESSION" wait --load domcontentloaded
+  agent-browser --session "\$AB_SESSION" wait --fn "typeof window.__AW_TEST__ === 'object'"
+  agent-browser --session "\$AB_SESSION" session info --json
+  agent-browser --session "\$AB_SESSION" close
 
 Press Ctrl+C to stop launcher process.
 INFO

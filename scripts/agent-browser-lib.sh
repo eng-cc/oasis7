@@ -18,6 +18,36 @@ ab_has_cli() {
   command -v agent-browser >/dev/null 2>&1 || command -v npx >/dev/null 2>&1
 }
 
+# Native agent-browser derives a Unix socket name from the supplied prefix.
+# Keep the final scoped prefix below the platform's conservative 103-byte
+# socket-name limit while retaining a readable head and a deterministic hash
+# of the complete input (including the per-process suffix).
+AB_SESSION_PREFIX_MAX_LENGTH=48
+AB_SESSION_PREFIX_HASH_LENGTH=10
+
+ab_compact_session_prefix() {
+  local prefix="$1"
+  python3 - "$prefix" "$AB_SESSION_PREFIX_MAX_LENGTH" "$AB_SESSION_PREFIX_HASH_LENGTH" <<'PY'
+import hashlib
+import sys
+
+prefix = sys.argv[1]
+max_length = int(sys.argv[2])
+hash_length = int(sys.argv[3])
+encoded = prefix.encode("utf-8")
+if len(encoded) <= max_length:
+    print(prefix)
+    raise SystemExit(0)
+
+digest = hashlib.sha256(encoded).hexdigest()[:hash_length]
+head_budget = max_length - hash_length - 1
+head = encoded[:head_budget].decode("utf-8", errors="ignore")
+while len(head.encode("utf-8")) + 1 + len(digest) > max_length:
+    head = head[:-1]
+print(f"{head}-{digest}")
+PY
+}
+
 ab_require() {
   if ! ab_has_cli; then
     echo "error: missing required command: agent-browser (or npx fallback)" >&2
@@ -34,7 +64,7 @@ ab_session_id() {
   local prefix=${1:-oasis7-viewer}
   local scoped_prefix
   local output
-  scoped_prefix="${prefix}-$$"
+  scoped_prefix="$(ab_compact_session_prefix "${prefix}-$$")" || return $?
   if command -v agent-browser >/dev/null 2>&1; then
     output=$(agent-browser session id --scope worktree --prefix "$scoped_prefix" 2>/dev/null) || return $?
   else

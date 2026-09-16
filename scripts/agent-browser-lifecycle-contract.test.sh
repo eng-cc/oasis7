@@ -72,10 +72,52 @@ fi
 # exact session it owns, while using the current wait API spelling.
 assert_contains "$PROMPT_SCRIPT" 'ab_cmd "$SESSION" close' \
   "prompt-control cleanup closes its owned session"
-assert_contains "$PROMPT_SCRIPT" 'wait --load networkidle' \
+assert_contains "$PROMPT_SCRIPT" 'wait --load domcontentloaded' \
   "prompt-control uses the current wait load option"
 assert_not_contains "$PROMPT_SCRIPT" '--load-state networkidle' \
   "prompt-control does not use the removed wait load-state option"
+
+# A long runner/worktree prefix must not be passed through to the native
+# agent-browser socket name.  The compact form must remain deterministic and
+# distinguish different long prefixes so concurrent agents retain isolation.
+lifecycle_tmp="$(mktemp -d)"
+prefix_capture="$lifecycle_tmp/prefixes.txt"
+prefix_fake_bin="$lifecycle_tmp/bin"
+mkdir -p "$prefix_fake_bin"
+cat >"$prefix_fake_bin/agent-browser" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "session" && "${2:-}" == "id" ]]; then
+  prefix=""
+  while (($# > 0)); do
+    if [[ "${1:-}" == "--prefix" ]]; then
+      shift
+      prefix="${1:-}"
+    fi
+    shift
+  done
+  printf '%s\n' "$prefix" >>"$AB_TEST_PREFIX_CAPTURE"
+  printf '%s\n' 'prefix-regression-session'
+  exit 0
+fi
+exit 0
+EOF
+chmod +x "$prefix_fake_bin/agent-browser"
+long_prefix="$(printf '%180s' '' | tr ' ' 'x')"
+PATH="$prefix_fake_bin:$PATH" AB_TEST_PREFIX_CAPTURE="$prefix_capture" \
+  /bin/bash -c 'source "$1"; ab_session_id "$2" >/dev/null; ab_session_id "${2}b" >/dev/null' \
+  _ "$LIB" "$long_prefix"
+first_prefix="$(sed -n '1p' "$prefix_capture")"
+second_prefix="$(sed -n '2p' "$prefix_capture")"
+if [[ "${#first_prefix}" -gt 48 || "${#second_prefix}" -gt 48 ]]; then
+  fail "long session prefix was not compacted below the socket-safe limit"
+fi
+if ! [[ "$first_prefix" =~ -[0-9a-f]{10}$ && "$second_prefix" =~ -[0-9a-f]{10}$ ]]; then
+  fail "compacted session prefix does not carry the required short hash"
+fi
+if [[ "$first_prefix" == "$second_prefix" ]]; then
+  fail "different long session prefixes collapsed to the same compact prefix"
+fi
 
 # Project-facing guidance must never ask a concurrent agent to terminate every
 # browser session.  close-all is intentionally not searched in this test file.
