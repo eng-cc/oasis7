@@ -17,7 +17,7 @@
 - 想先进入 gameplay 热点子域，而不是直接面对完整 gameplay 文档长表：先读 `doc/game/gameplay/README.md`
 - 想先理解核心玩法骨架，而不是逐篇翻 gameplay 长表：先读 `doc/game/prd.md` 确认活跃基线与路由，再读 `doc/game/gameplay/gameplay-top-level-design.prd.md`
 - 想先看首局与持续游玩的产品承诺：先读 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`；exact gameplay 合同读 `doc/game/gameplay/gameplay-top-level-design.prd.md`，当前 verdict 由同候选 GitHub task evidence 与 `doc/testing/evidence/` 确认。
-- 想先看“间接控制为什么仍然要让玩家感觉自己在控制”：先读 `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md`
+- 想先看“间接控制为什么仍然要让玩家感觉自己在控制”：先读 `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md`；跨 runtime、Agent、Viewer/API 与 QA 的系统边界读同名 design
 - 想先看“成熟世界里小玩家为什么不必立刻依附 major power，仍能继续形成 leverage”：先读 `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md`，再读 `doc/game/gameplay/gameplay-mature-world-progression-contract.prd.md`
 - 想先回答“1cm 物理世界”和“当前为什么不是 Minecraft 式逐块玩法”之间的边界：先读 `doc/product/world-rules-core-gameplay/prd.md` 的产品承诺，再读 `doc/game/gameplay/gameplay-top-level-design.prd.md` 的玩法合同
 - 想先回答“可编程区域设施如何作为中后期区域专业化能力落地，而不变成自由建造或任意 WASM 上传”：先读 `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md`
@@ -64,7 +64,7 @@
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
 | `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md` | `doc/game/gameplay/gameplay-agent-claim-economy-contract.design.md` |
-| `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md` | PRD-only；产品分册承载长期玩家承诺，本文保留 gameplay 保证项、字段、状态、失败签名与专业验收，不另设重复 design |
+| `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md` | `doc/game/gameplay/gameplay-indirect-control-agency-contract.design.md` |
 | `doc/game/gameplay/gameplay-industrial-backpressure-recovery-contract.prd.md` | PRD-only；本专题只承载玩家选择、节奏、机会成本与验收，不新增实现结构 |
 | `doc/game/gameplay/gameplay-industrial-demand-change-disposition-contract.prd.md` | PRD-only；本专题只承载需求变化后的既有工作选择、机会成本与验收，不新增实现结构 |
 | `doc/game/gameplay/gameplay-industrial-externality-contract.prd.md` | PRD-only；本专题只承载工业外部性的玩家可读影响、处置选择与验收，不新增实现结构 |

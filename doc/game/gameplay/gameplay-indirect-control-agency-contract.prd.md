@@ -1,6 +1,6 @@
 # Gameplay 间接控制 agency 合同 PRD
 
-- 产品设计边界：长期玩家承诺由产品分册承载；本文是 `PRD-GAME-014` 的完整专业合同，不另设重复的配对 design。
+- 对应系统设计：[`DES-GAME-IA`](gameplay-indirect-control-agency-contract.design.md)；长期玩家承诺仍由产品分册承载，本文继续拥有 `PRD-GAME-014` 的 gameplay guarantee、字段语义、状态与失败签名，系统设计承接跨 runtime、Agent、Viewer/API 与 QA 的技术边界和验证映射。
 - 可变执行状态: 对应 GitHub Project task 与 issue evidence comments
 - 产品层长期承诺: [`doc/product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md`](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md)；本文继续拥有保证项字段、状态与失败签名，以及 gameplay、runtime、Viewer/API、Agent 和 QA 的专业合同与任务证据。
 - 产品叶子入口：[`REQ-WR-IA-001`](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-001)；本文件保留字段、状态、失败签名与专业证据权威。
@@ -76,6 +76,7 @@
 
 同一边界适用于采集、精炼、移动和排程等工业恢复动作：若 Agent 因资源不足、地点不可达、世界约束或 guardrail 改写而不能按原意图推进，receipt 必须把原意图与替换动作/拒绝原因连接起来，并进入既有的 wait、repair、reroute 或 reprioritize 恢复面。仅 debug/probe 可用的资源注入不属于玩家意图、玩家奖励或正式 playability 样本，不能用于伪造该因果链。
 
+<a id="prd-game-014-acceptance"></a>
 - Acceptance Criteria:
   - AC-1: 本专题至少冻结 5 条 control-feeling guarantees，其中至少 4 条具备可直接验收的字段、状态与失败签名。
   - AC-2: “间接控制仍然像控制”在本专题中被具体定义为：玩家始终能回答 `我让系统做了什么 / 系统有没有接受 / 为什么现在这样 / 我下一步该做什么`，而不是只看到世界在变化。
@@ -144,8 +145,9 @@
   - 玩家已纠正长期记忆，但系统未展示接受/拒绝、影响范围或最早应用行动，或已接受的纠正未在下一条 memory-driven action summary 中反映且没有明确 stale/ignored reason：判定为 `memory_correction_outcome_missing`。
   - 系统提供过多 operator/debug 语义，淹没当前主意图与主因果：判定为 presentation-level control-feeling regression。
   - active-LLM lane 因 provider 问题卡死时，不得用 deterministic `--no-llm` 样本代替本专题正式验收；debug lane 只能帮助定位哪条 guarantee 先失效。
+<a id="prd-game-014-nfr"></a>
 - Non-Functional Requirements:
-  - NFR-CFC-1: `PRD-GAME-014` 的 active 入口互链必须在 1 个工作日内完成，并可通过 grep 直接定位到 game 根 PRD、gameplay 主文档、索引、专题 PRD 与产品分册。
+  - NFR-CFC-1: `PRD-GAME-014` 的 active 入口互链必须在 1 个工作日内完成，并可通过 grep 直接定位到 game 根 PRD、gameplay 主文档、索引、专题 PRD、系统设计与产品分册。
   - NFR-CFC-2: headed Web/UI 与 pure API 的 control-feeling 关键字段覆盖率必须为 100%：`accepted_intent`、`execution_status`、`primary_reason`、`next_step` 四类字段不得缺任一类。
   - NFR-CFC-3: 任何导致 accepted intent 与当前世界结果脱钩、且没有 override/replaced 解释的回归，都必须被 QA 标记为 blocker，而不是低优先级文案问题。
   - NFR-CFC-4: control-feeling 合同验证必须可在 fresh bundle 本地复跑，并能区分 formal active-LLM lane 与 debug/probe lane。

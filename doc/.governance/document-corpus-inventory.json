@@ -510,8 +510,22 @@
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
     },
     {
+      "path": "doc/game/gameplay/gameplay-indirect-control-agency-contract.design.md",
+      "content_sha256": "a4d5e8c8a61e89d3b8df8e07300e02ebb277ee8cffad140cb271762d57cf3eb9",
+      "registry_type": "professional_domain",
+      "structural_owner": "gameplay_designer",
+      "authority_entry": "doc/game/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "gameplay_designer",
+      "object_kind": "design",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "game-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
       "path": "doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md",
-      "content_sha256": "d43bb1e51e58d6057807f66100c3f135e88d5d53bc9784654b23aa5c6908e445",
+      "content_sha256": "57681d95a3cc0eb76a5283ac87f01e0e26f5a9549eca93da97caa141cf9c796c",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -609,7 +623,7 @@
     },
     {
       "path": "doc/game/prd.index.md",
-      "content_sha256": "8bb433ea24f0df9ccd256407157a00379aeea1067653723b2bdc5d0c910a98ff",
+      "content_sha256": "4088b5e68ae4f85d3d76c636477ba7a1454ce1991e0a3d5f0ece34f94b2cfb35",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -2387,7 +2401,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md",
-      "content_sha256": "6eedae1336938e7e63f9d0c0d6979b69d35d7ea95424cba2cf8b5f32a922c9df",
+      "content_sha256": "90e5c6c5e982e1b63be2b75959606f3a36dcd15c2342bcd8fd30f8f0f7c5ec56",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
