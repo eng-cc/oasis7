@@ -11,10 +11,11 @@ GAME_URL=""
 AUTH_BOUNDARY_PROOF=""
 RUN_ID="viewer-prompt-control-race-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 
-# Explicit actor/session names are required by the race evidence contract.
-# They stay empty until the fail-closed live gate passes.
-SESSION_A=""
-SESSION_B=""
+# Both real actors are tabs in one owned browser session.  Stable tab IDs are
+# resolved after creation and used explicitly before every actor operation.
+SESSION=""
+TAB_A=""
+TAB_B=""
 ARTIFACT_DIR_A=""
 ARTIFACT_DIR_B=""
 REQUEST_ID_A=""
@@ -209,11 +210,8 @@ PY
 cleanup() {
   local exit_code=$?
   trap - EXIT INT TERM
-  if [[ -n "$SESSION_A" ]]; then
-    ab_session_cleanup "$SESSION_A" "$ARTIFACT_DIR_A" || true
-  fi
-  if [[ -n "$SESSION_B" ]]; then
-    ab_session_cleanup "$SESSION_B" "$ARTIFACT_DIR_B" || true
+  if [[ -n "$SESSION" ]]; then
+    ab_session_cleanup "$SESSION" "$OUT_DIR" || true
   fi
   exit "$exit_code"
 }
@@ -231,34 +229,113 @@ source "$ROOT_DIR/scripts/agent-browser-lib.sh"
 ab_require
 mkdir -p "$OUT_DIR" "$ARTIFACT_DIR_A" "$ARTIFACT_DIR_B"
 
-SESSION_A="$(ab_session_begin "viewer-prompt-control-race-${CASE_ID}-actor-a-${RUN_ID}" "$ARTIFACT_DIR_A")"
-SESSION_B="$(ab_session_begin "viewer-prompt-control-race-${CASE_ID}-actor-b-${RUN_ID}" "$ARTIFACT_DIR_B")"
+SESSION="$(ab_session_begin "viewer-prompt-control-race-${CASE_ID}-${RUN_ID}" "$OUT_DIR")"
 
 if [[ -z "$GAME_URL" ]]; then
   echo "error: live dual-actor lane requires --url from the authoritative launcher" >&2
   exit 2
 fi
 
+require_loopback_url() {
+  python3 - "$1" <<'PY'
+import ipaddress
+import sys
+from urllib.parse import urlsplit
+host = (urlsplit(sys.argv[1]).hostname or "").strip().lower()
+if host == "localhost":
+    raise SystemExit(0)
+try:
+    raise SystemExit(0 if ipaddress.ip_address(host).is_loopback else 1)
+except ValueError:
+    raise SystemExit(1)
+PY
+}
+require_loopback_url "$GAME_URL" || { echo "error: live race URL must be loopback" >&2; exit 2; }
+GAME_URL="$(python3 - "$GAME_URL" <<'PY'
+import sys
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+parts = urlsplit(sys.argv[1])
+query = dict(parse_qsl(parts.query, keep_blank_values=True))
+query.update({"test_api": "1", "hosted_test_login": "1", "render_mode": "viewer"})
+print(urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment)))
+PY
+)"
+
+active_tab_id() {
+  ab_read_retry "$SESSION" tab list --json | python3 -c '
+import json, sys
+data = json.load(sys.stdin)
+tabs = data.get("tabs", data if isinstance(data, list) else [])
+active = next((tab for tab in tabs if tab.get("active") or tab.get("isActive")), None)
+if not active:
+    raise SystemExit("active tab unavailable")
+print(active.get("tabId") or active.get("id") or active.get("targetId") or "")
+'
+}
+
+select_tab() {
+  ab_run "$SESSION" tab "$1" >/dev/null
+}
+
+wait_js() {
+  local expression="$1"
+  local attempts=100
+  local value
+  while (( attempts > 0 )); do
+    value="$(ab_read_retry "$SESSION" eval "$expression" 2>/dev/null || true)"
+    case "$value" in true|\"true\") return 0 ;; esac
+    sleep 0.2
+    attempts=$((attempts - 1))
+  done
+  return 1
+}
+
 # Browser opens are action-bearing and intentionally use ab_open directly.
-ab_open "$SESSION_A" 1 "$GAME_URL"
-ab_open "$SESSION_B" 1 "$GAME_URL"
+ab_open "$SESSION" 1 "$GAME_URL"
+TAB_A="$(active_tab_id)"
+wait_js 'typeof window.__AW_TEST__ === "object"' || { echo "error: actor A test API unavailable" >&2; exit 1; }
+ab_run "$SESSION" click '[data-auth-action="test-login"]' >/dev/null
+wait_js 'window.__AW_TEST__.getState()?.authReady === true' || { echo "error: actor A hosted test login unavailable" >&2; exit 1; }
+handoff_descriptor="$(ab_read_retry "$SESSION" eval 'window.__AW_TEST__.offerBrowserRaceIdentityForTest()')"
+
+ACTOR_B_URL="$(python3 - "$GAME_URL" <<'PY'
+import sys
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+parts = urlsplit(sys.argv[1])
+query = dict(parse_qsl(parts.query, keep_blank_values=True))
+query.update({"connect": "0", "hosted_bootstrap": "0"})
+print(urlunsplit((parts.scheme, parts.netloc, parts.path, urlencode(query), parts.fragment)))
+PY
+)"
+ab_run "$SESSION" tab new "$ACTOR_B_URL" >/dev/null
+TAB_B="$(active_tab_id)"
+wait_js 'typeof window.__AW_TEST__ === "object"' || { echo "error: actor B test API unavailable" >&2; exit 1; }
+descriptor_json="$(python3 - "$handoff_descriptor" <<'PY'
+import json, sys
+value = json.loads(sys.argv[1])
+print(json.dumps(value, separators=(",", ":")))
+PY
+)"
+ab_read_retry "$SESSION" eval "window.__AW_TEST__.claimBrowserRaceIdentityForTest(${descriptor_json})" >/dev/null
+ab_run "$SESSION" eval 'window.__AW_TEST__.connectBrowserRaceActorForTest()' >/dev/null
 
 # Reads and diagnostics may use the read-only retry helper. No prompt
 # operation is issued until the auth owner supplies a concrete race protocol.
 read_state() {
-  local session="$1"
-  ab_read_retry "$session" eval --stdin <<'JS'
+  local tab_id="$1"
+  select_tab "$tab_id"
+  ab_read_retry "$SESSION" eval --stdin <<'JS'
 window.__AW_TEST__?.getState?.() ?? null
 JS
 }
 
 REQUEST_ID_A="${RUN_ID}-actor-a-not-issued"
 REQUEST_ID_B="${RUN_ID}-actor-b-not-issued"
-state_a="$(read_state "$SESSION_A")"
-state_b="$(read_state "$SESSION_B")"
+state_a="$(read_state "$TAB_A")"
+state_b="$(read_state "$TAB_B")"
 write_safe_state "$state_a" "$ARTIFACT_DIR_A/state-safe.json"
 write_safe_state "$state_b" "$ARTIFACT_DIR_B/state-safe.json"
-write_actor_receipt "A" "$ARTIFACT_DIR_A" "$SESSION_A" "$REQUEST_ID_A"
-write_actor_receipt "B" "$ARTIFACT_DIR_B" "$SESSION_B" "$REQUEST_ID_B"
+write_actor_receipt "A" "$ARTIFACT_DIR_A" "$SESSION" "$REQUEST_ID_A"
+write_actor_receipt "B" "$ARTIFACT_DIR_B" "$SESSION" "$REQUEST_ID_B"
 write_manifest
 echo "race live setup completed without prompt submission; acceptance remains blocked on auth-boundary ownership"

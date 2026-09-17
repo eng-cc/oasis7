@@ -10,6 +10,7 @@ import { createViewerControlLossModule } from "./viewer_control_loss_module.js";
 import { resetHostedLoginChallenge as resetHostedLoginChallengeState } from "./viewer_hosted_login_state_module.js";
 import { createViewerLocalePreferencesModule } from "./viewer_locale_preferences_module.js";
 import { createViewerBrowserPersistenceModule } from "./viewer_browser_persistence_module.js";
+import { createViewerBrowserRaceHandoffModule } from "./viewer_browser_race_handoff_module.js";
 import { createViewerWorldScaleModule } from "./viewer_world_scale_module.js";
 import { createRefineQuotePreflightStateModule } from "./refine_quote_preflight_state.js";
 import { createProductValidationQuoteIntegration } from "./product_validation_quote_integration.js";
@@ -76,6 +77,8 @@ let requestId = 0;
 let authNonceCounter = 0;
 let viewerPromptControlModule = null;
 let viewerControlLossModule = null;
+const viewerBrowserRaceHandoffModule = createViewerBrowserRaceHandoffModule();
+let browserRaceIdentityOffer = null;
 let semanticSendLoop = null;
 const pendingControlFeedback = new Map();
 const pendingSemanticCommands = [];
@@ -423,6 +426,59 @@ function nextRequestId() {
 function nextAuthNonce() {
   authNonceCounter += 1;
   return Date.now() + authNonceCounter;
+}
+
+function requireBrowserRaceHandoff() {
+  if (!isTestApiEnabled() || !viewerBrowserRaceHandoffModule.enabled) {
+    throw new Error("browser race identity handoff requires loopback test_api=1&hosted_test_login=1");
+  }
+}
+
+function offerBrowserRaceIdentityForTest() {
+  requireBrowserRaceHandoff();
+  if (!authHasSigningKeyMaterial(state.auth) || state.auth.source !== "hosted_test_login") {
+    throw new Error("browser race identity offer requires an active hosted test-login signing identity");
+  }
+  browserRaceIdentityOffer?.dispose?.();
+  browserRaceIdentityOffer = viewerBrowserRaceHandoffModule.offerKeyMaterial({
+    publicKey: state.auth.publicKey,
+    privateKey: state.auth.privateKey,
+  });
+  return clone(browserRaceIdentityOffer.descriptor);
+}
+
+async function claimBrowserRaceIdentityForTest(descriptor) {
+  requireBrowserRaceHandoff();
+  if (!state.auth?.available || state.auth.source !== "hosted_browser_storage") {
+    throw new Error("browser race identity claim requires the stored hosted test-login session");
+  }
+  const keyMaterial = await viewerBrowserRaceHandoffModule.claimOffer(descriptor);
+  state.auth.publicKey = keyMaterial.publicKey;
+  state.auth.privateKey = keyMaterial.privateKey;
+  state.auth.source = "hosted_test_login";
+  state.auth.loginChannel = "test";
+  state.auth.registrationStatus = "issued";
+  state.auth.runtimeStatus = "race_identity_ready";
+  state.auth.error = null;
+  // Per-tab counters otherwise begin at the same values.  Keep actor B in a
+  // disjoint range without exposing or changing the signed request format.
+  requestId = Math.max(requestId, 1_000_000);
+  authNonceCounter = Math.max(authNonceCounter, 1_000_000);
+  render();
+  return {
+    ok: true,
+    playerId: state.auth.playerId,
+    source: state.auth.source,
+  };
+}
+
+function connectBrowserRaceActorForTest() {
+  requireBrowserRaceHandoff();
+  if (!authHasSigningKeyMaterial(state.auth)) {
+    throw new Error("browser race actor connect requires claimed signing key material");
+  }
+  connect();
+  return { ok: true };
 }
 
 const viewerAgentChatAuthModule = createViewerAgentChatAuthModule({ buildAuthEnvelope, nextAuthNonce, signAuthPayload, state });
@@ -4274,6 +4330,9 @@ function installTestApi() {
     expireHostedRuntimeSyncTimeoutForTest,
     expirePendingPromptControlAckTimeoutForTest,
     expirePendingGameplayActionAckTimeoutForTest,
+    offerBrowserRaceIdentityForTest,
+    claimBrowserRaceIdentityForTest,
+    connectBrowserRaceActorForTest,
     reportFatalError,
   };
 }

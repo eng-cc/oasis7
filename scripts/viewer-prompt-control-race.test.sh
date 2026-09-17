@@ -60,15 +60,15 @@ PY
   fi
 fi
 
-# Minimal two-owned-session surface.  These are deliberately structural
-# contracts only: no dual-actor authorization/eligibility assertion is made
-# until the runtime auth boundary is provided by the owning specialist.
-require_text "$race_runner" 'SESSION_A=' 'explicit actor A session'
-require_text "$race_runner" 'SESSION_B=' 'explicit actor B session'
+# Minimal same-identity two-tab surface. These are deliberately structural
+# contracts only: live race eligibility still requires ordinary signed UI
+# actions and authoritative result evidence.
+require_text "$race_runner" 'SESSION=' 'single owned browser session'
+require_text "$race_runner" 'TAB_A=' 'explicit actor A tab'
+require_text "$race_runner" 'TAB_B=' 'explicit actor B tab'
 require_text "$race_runner" 'ARTIFACT_DIR_A=' 'separate actor A artifact directory'
 require_text "$race_runner" 'ARTIFACT_DIR_B=' 'separate actor B artifact directory'
-require_text "$race_runner" 'ab_session_cleanup "$SESSION_A"' 'actor A owned-session cleanup'
-require_text "$race_runner" 'ab_session_cleanup "$SESSION_B"' 'actor B owned-session cleanup'
+require_text "$race_runner" 'ab_session_cleanup "$SESSION"' 'shared owned-session cleanup'
 require_text "$race_runner" 'ab_read_retry' 'read-only retry helper'
 require_text "$race_runner" 'write_safe_state' 'per-actor safe state capture'
 require_text "$race_runner" 'request_id' 'request correlation field'
