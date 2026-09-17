@@ -1,6 +1,6 @@
 # Engineering Workflow Source of Truth
-Version: **v1.15.4**
-Last Updated: **2026-09-16**
+Version: **v1.15.5**
+Last Updated: **2026-09-17**
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
 Mandatory rule:
@@ -32,7 +32,7 @@ For a cross-loop finding that requires action, the record MUST retain a stable s
 - Required-gate changed-path planning is config-driven through `scripts/ci-required-scope.v2.json`; the planner is the only mapping authority for GitHub, local preflight, and CI receipts. Rules union matching gates, `full` dominates, known documentation paths may select no Rust gates, and unmatched/unresolvable paths select full scope. Compile-metrics implementation/scripts use the dedicated `compile_metrics` capability and run only the focused compile-metrics contract; `.github/workflows/compile-metrics.yml`, shared planner/config files, and other production workflow changes remain `full`. Invalid configuration fails the planner before CI execution.
 - Canonical specialist role-card changes under `.agents/roles/<role>.md` select `codex_agent_config_validation` because those cards are the adapter projection source; `.agents/roles/templates/**` remains documentation-only.
 - <a id="stable-required-gate-wait"></a>Active PR/CI handling may use short one-shot checks. Once one current-HEAD read confirms that only a stable long-running required check or `required-gate` wait remains, the human-operated TPM on a Codex surface must stop polling in the active turn, yield it, and schedule a task-bound continuation/heartbeat for roughly ten minutes later. Repeating the same unchanged read, status query, agent-list, terminal poll, or wait call in that active turn is a workflow violation; a timeout without a meaningful state change is still unchanged state. Each wake performs one batched current-HEAD gate read. Unchanged state stays quiet and schedules the next heartbeat; any meaningful gate, HEAD, review, comment, thread, hold, query-certainty, or operator-input change cancels the stable cadence and immediately resumes normal gate handling. This continuation is not an unattended production supervisor. A non-Codex fallback must be finite, bounded, run outside model-turn polling where possible, and return control with a resumable wait instead of polling forever.
-
+- An absent GitHub Codex review is never a wait condition. After PR publication, do not add a grace period, heartbeat, repeated poll, or merge delay solely to see whether Codex posts a review. Each otherwise-authorized merge attempt performs one fresh batched live read and triages any review material that already exists; material arriving later never retroactively invalidates a completed merge.
 <a id="capability-and-ownership"></a>
 ## Capability status
 **Current:** TPM is the accountable workflow coordinator / integrator. It advances the canonical lifecycle explicitly with repo helpers and professional subagent slices. The production supervisor is blocked; no current surface can run intake through merge and cleanup unattended.
@@ -125,7 +125,7 @@ pagination, policy-discovery, or evidence-readback uncertainty fails closed.
 Actionable comments require a current-head disposition; acknowledgements and
 status chatter do not block. `REVIEW_REQUIRED` and `BEHIND` alone are
 informational.
-
+The gate does not wait for a GitHub Codex review absent from that fresh read. For post-publication GitHub feedback, only a credible `P0` finding caused or exposed by the current PR diff requires repair in this PR. `P0` is review-finding severity (an immediate merge-safety risk such as a critical correctness, security, data-loss, or unrecoverable-regression defect), not GitHub Project scheduling `Priority`. Lower-severity or out-of-scope findings require no code/doc change; record `non_actionable` or `rejected_with_evidence`, and create no follow-up without separate authorization. Requested-change state or required thread resolution may still require reviewer/admin disposition or thread-resolution action under live repository policy, but that administrative clearance does not make repair mandatory. Required checks, mergeability, holds, readback certainty, and pre-PR repo-owned role review remain unchanged.
 A successful gate emits a trusted receipt bound to issuer, repository, PR,
 head, observation time, and gate epoch. Holds and dispositions are accepted
 only from verified GitHub-backed evidence. When GitHub reports the current head
@@ -190,7 +190,7 @@ flowchart TD
   X --> J
   Q --> Y[Promote draft\nPR becomes ready and enters pr_watch]
   Y --> N{PR purpose / merge hold?}
-  N -- normal --> O[PR Watch/Fix/Merge Gate\nchecks + mergeability + all comment surfaces]
+  N -- normal --> O[PR Watch/Fix/Merge Gate\nchecks + mergeability + present comment surfaces]
   N -- packaging --> P[Manual CI Hold\nrecord purpose + wait for operator/user]
   N -- user hold --> U[User-requested Merge Hold\nrecord authority + resume criterion]
   O --> V[Merge receipt -> task done\nmain sync -> safe-cleanup receipt]
@@ -201,7 +201,7 @@ flowchart TD
   I -->|fail| K[Rollback: debug/fix/replan]
   K --> E
   M -->|findings require changes| K
-  O -->|PR check/requested-changes/comment failure| L[Review Fix Loop]
+  O -->|PR check failure or current-change P0 finding| L[Review Fix Loop]
   L --> I
 ```
 ### 1.1 Skill Map by Phase
@@ -736,9 +736,9 @@ Select every involved reviewer through the [specialist review role selection](#s
 
 #### Review feedback triage <a id="review-feedback-triage"></a>
 
-Review requires professional assessment, not automatic adoption of every suggestion. Verify each comment against the current diff, effective contract and actual consumers; judge impact, confidence, regression risk, scope and expected benefit relative to implementation and verification cost. A priority label, including `P2`, does not by itself require a change or establish that an issue is safe to leave unresolved. Confirmed correctness defects, material regressions and violations of the actual task or effective contract must be resolved before merge, with focused evidence. Investigate uncertainty proportionately before deciding; a hypothetical concern is not automatically a confirmed blocker. Reject an incorrect or stale premise with concrete evidence. Style preferences and adjacent improvements require a demonstrated benefit rather than automatic acceptance; fix the valid part of a partially valid comment without absorbing unrelated work.
+Review requires professional assessment, not automatic adoption of every suggestion. Verify each post-publication GitHub comment against the current diff, effective contract and actual consumers; judge impact, confidence, regression risk and scope. Do not wait for an absent GitHub Codex review. Only a credible P0 finding caused or exposed by the current PR diff requires repair in this PR, with focused evidence. Lower-severity findings and findings outside the current change receive an evidence-backed no-change disposition; they do not expand the task or authorize follow-up work. A Project priority label is scheduling metadata and is not review-finding severity. Investigate uncertainty proportionately before deciding; a hypothetical concern is not automatically a P0 blocker. Reject an incorrect or stale premise with concrete evidence. This post-PR policy does not weaken the pre-PR role-finding resolution contract, required checks, mergeability, holds, or live repository-policy clearance.
 
-Before a repair loop begins, every structured role finding MUST carry a typed `triage` object with `classification=blocking|nonblocking` and a non-empty evidence basis. Missing, malformed, or unknown classification fails closed. A `blocking` finding requires a repair or an evidence-backed rejection; it may not be cleared with `non_actionable`. A `nonblocking` finding may use the existing evidence-backed `non_actionable` disposition or be deferred with its rationale and residual-risk/revisit condition. This classification does not lower required checks, role coverage, exact-head identity, or merge authority.
+Before a repair loop begins, every structured pre-PR role finding MUST carry a typed `triage` object with `classification=blocking|nonblocking` and a non-empty evidence basis. Missing, malformed, or unknown classification fails closed. A `blocking` pre-PR role finding requires a repair or an evidence-backed rejection; it may not be cleared with `non_actionable`. A `nonblocking` role finding may use the existing evidence-backed `non_actionable` disposition or be deferred with its rationale and residual-risk/revisit condition. Post-PR GitHub comments use the P0/current-change boundary above. Neither classification lowers required checks, role coverage, exact-head identity, or merge authority.
 
 A nonblocking improvement may remain unchanged in this PR when its benefit is low relative to cost, or it falls outside the authorized scope. Record a concise rationale and residual risk in the existing task/review evidence; for material follow-up, identify the responsible role and the condition that would justify revisiting it. Small preferences need no separate task or elaborate follow-up record. Deferral does not authorize another task, and cost or scope cannot excuse a real merge blocker.
 

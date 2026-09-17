@@ -27,11 +27,11 @@ Use this skill when:
    - misunderstanding or stale assumption
    Each structured finding must also declare `triage.classification` (`blocking` or `nonblocking`) and a non-empty evidence basis; missing or unknown triage fails closed.
 3. Verify the comment against the current diff, effective contract and actual consumers. Assess impact, confidence, regression risk, scope, benefit and verification cost; `P2` alone does not decide whether to change anything. For an incremental plan, use its bound role obligation: `full_review` assesses the delta, while `impact_confirmation` confirms no material impact within the recorded scope digest. Unknown impact, new required roles, or authority/policy drift escalates to full review.
-4. Fix confirmed correctness defects, material regressions and actual contract violations before merge. For incorrect/stale premises, preferences or nonblocking improvements, apply the canonical triage rule and choose a minimal fix or an evidence-backed no-change decision. A `blocking` finding cannot use `non_actionable`; it requires repair or evidence-backed rejection. Cost or scope cannot excuse a real blocker. Batch only compatible accepted repairs that share the current source scope and can use one focused verification and push/CI cycle; a newly discovered blocker remains in scope.
+4. For post-publication GitHub feedback, repair only credible P0 findings caused or exposed by the current PR diff. Treat lower-severity and out-of-scope comments as no-change dispositions with evidence; do not expand the task or create follow-up work without separate authorization. Project `Priority` is not review-finding severity. The stricter structured pre-PR role-finding contract remains unchanged. Batch only compatible accepted P0 repairs that share the current source scope and can use one focused verification and push/CI cycle.
 5. Run focused checks for a repair batch; for a no-change decision, record the supporting evidence, rationale, residual risk, responsible role and revisit condition. A nonblocking `non_actionable` disposition must retain that rationale and revisit evidence. Do not create a task for every nit or start follow-up work without authorization. There is no arbitrary cycle cap. After a push changes the source head, prior review returns and plans are context only; current-head CI and the complete required role review must run again, with impacted roles in `full_review` and unaffected roles providing bound `impact_confirmation` unless escalation requires full review.
 6. Push only when a code change is needed (including documentation edits); then resolve the thread after the relevant verification. For a stale or incorrect comment with no code change, record an evidence-backed disposition before resolving it. Use the same path for justified nonblocking no-change decisions. Formal role findings still require the canonical immutable return and authorized resolution manifest; a thread disposition does not replace them.
 7. Re-check overall PR state separately.
-8. For normal PRs, continue watching required checks, requested changes, comments/threads, and mergeability after the fix; `REVIEW_REQUIRED` is informational and does not block by itself. If everything passes, merge and clean up through the finishing branch workflow.
+8. For normal PRs, take one fresh batched gate read when otherwise ready to merge. Do not add a grace period, heartbeat, repeated poll, or merge delay solely for an absent GitHub Codex review. Process review material present in that read under the P0/current-change rule, while preserving required checks, mergeability, holds, and any administrative disposition/thread clearance required by live repository policy. `REVIEW_REQUIRED` is informational and does not block by itself. If everything passes, merge and clean up through the finishing branch workflow.
 
 ## Oasis7 GitHub Loop
 
@@ -47,7 +47,7 @@ Use it to inventory unresolved threads. After a code fix is pushed, or an eviden
 - `mergeStateStatus`
 - required checks
 
-Treat `REVIEW_REQUIRED` as a status signal to report, not as merge-blocking by itself. The approval-only admin path needs no additional authorization; follow the fresh live gate in [the canonical policy](../../../doc/engineering/workflow/source-of-truth.md#ready-and-done). Requested changes, actionable comments, unresolved blocking threads, failed checks, non-mergeable state, or non-review-approval merge API/branch-protection rejection remain blockers.
+Treat `REVIEW_REQUIRED` as a status signal to report, not as merge-blocking by itself. The approval-only admin path needs no additional authorization; follow the fresh live gate in [the canonical policy](../../../doc/engineering/workflow/source-of-truth.md#ready-and-done). Do not wait specifically for GitHub Codex review. Requested changes or unresolved threads may still require evidence-backed administrative clearance, but only current-change P0 findings mandate repair; failed checks, non-mergeable state, active holds, or non-review-approval merge API/branch-protection rejection remain blockers.
 
 If the PR purpose decision is `manual_packaging_ci_hold`, do not convert packaging-job completion into merge readiness by itself. Resume the normal watch/fix/merge path only after the operator/user says the manual packaging CI purpose is complete.
 
@@ -67,7 +67,7 @@ If the PR purpose decision is `manual_packaging_ci_hold`, do not convert packagi
 ## Known Failure Modes
 
 - Accepting every comment or `P2` label without assessing the current diff, contract, impact and cost.
-- Using low benefit, scope or `non_actionable` to hide a confirmed merge blocker.
+- Misclassifying a current-change P0 as lower severity or out of scope to bypass repair.
 - Resolving a thread before the targeted verification, required code push, or evidence-backed no-change disposition.
 - Treating thread resolution as proof that the whole PR is merge-ready.
 - Letting a review fix broaden into unrelated cleanup or silently revert sibling/user changes.

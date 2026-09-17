@@ -474,6 +474,18 @@ class WorkflowDocumentationContract(unittest.TestCase):
         )
         self.assertNotIn("explicitly authorizes skipping", skill)
 
+    def test_post_pr_codex_review_has_no_wait_and_only_current_change_p0_requires_repair(self) -> None:
+        source = re.sub(r"\s+", " ", SOURCE.read_text(encoding="utf-8").lower())
+        receiving = re.sub(
+            r"\s+", " ", RECEIVING_CODE_REVIEW_SKILL.read_text(encoding="utf-8").lower()
+        )
+        finishing = re.sub(r"\s+", " ", FINISHING.read_text(encoding="utf-8").lower())
+        for text in (source, receiving, finishing):
+            self.assertIn("do not wait", text)
+            self.assertRegex(text, r"current[- ]change.{0,80}p0|p0.{0,80}current[- ]change")
+        self.assertIn("project scheduling `priority`", source)
+        self.assertIn("pre-pr repo-owned role review remain unchanged", source)
+
     def test_prepare_task_pr_help_matches_approval_only_admin_merge_policy(self) -> None:
         """The operator-facing helper must link to, not add, approval-only authority."""
         help_text = subprocess.run(
