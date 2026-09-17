@@ -15,7 +15,8 @@
 - 批准目标语义要求 Cargo manifest 与解析后的 `cargo metadata` 图确定 package identity，而不是从 `crates/<name>` 路径猜测；普通 Rust code PR 只能涉及一个 package（含其 source/tests/fixtures/examples/binaries 与 package-local manifest），CI/harness PR 不改变 business package，product/system-document PR 不含 code。
 - 批准目标语义的 exact integration 以 `H`（source head）、`B`（target commit）和 `T`（tested tree）绑定，按真实的 `B -> T` impact 选择，而不是用 `B..H` 代替；planner 还必须冻结 package、rules、profiles、commands/results、toolchain、targets/features 与 policy version。
 - `integration_revalidation` 只有在 trusted analysis 证明 impact-scoped 足够时才适用；unknown impact 与 high-risk API/default/feature/dependency、ABI/signature、state-root/persistence/consensus 等 profile 进入 `full_escalation`。取消、超时、缺失或 unexpected skip 都是阻断条件，selection 不得削弱 high-risk 或 readiness gate。
-- 当前实现边界必须单独保留：`scripts/plan-rust-required-scope.py` 仍按 changed paths 与 config glob rules 规划 capability；它的 `scope=full` 只是 required tier 内的 fail-closed 扩张，不等于选择 `full` tier，也不证明 package-aware `H/B/T` enforcement 已经存在。本次文档同步不宣称该目标语义已由 planner 或 CI 强制执行。
+- V0 activation boundary：write/migration boundaries、high-risk escalation 与 fail-closed behavior 立即生效；reduced package-aware `integration_revalidation` 只有在 trusted merged producer、receipt、gate implementation 被显式激活后才可用。在此之前，当前 conservative/full behavior 保持权威。
+- 当前实现边界必须单独保留：`scripts/plan-rust-required-scope.py` 仍按 changed paths 与 config glob rules 规划 capability；它的 `scope=full` 只是 required tier 内的 fail-closed 扩张，不等于选择 `full` tier，也不证明 package-aware `H/B/T` enforcement 已经存在。本次文档同步不宣称该目标语义已由 planner 或 CI 强制执行；这也是 `PRD-TESTING-CI-TIERED-004` 的当前 negative assertion。
 
 ## 1. Executive Summary
 - Problem Statement: CI 必须先以最小充分覆盖拦截改动引入的缺陷；若普通 PR 与发布/高风险回归共用 full，会拉长反馈，但仅以速度剪裁又会漏掉应当阻断的影响面。
@@ -46,11 +47,12 @@
   - PRD-TESTING-CI-TIERED-001: As a 开发者, I want ordinary commits to run no validation, so that CI and frozen-head readiness remain the authoritative gates.
   - PRD-TESTING-CI-TIERED-002: As a CI 维护者, I want one unified test entrypoint with tier flags, so that policy drift is reduced.
   - PRD-TESTING-CI-TIERED-003: As a 发布负责人, I want daily full regression preserved, so that deep regressions are still caught.
+  - PRD-TESTING-CI-TIERED-004: As a CI 维护者, I want package-aware reduced integration revalidation to remain disabled until its trusted producer/receipt/gate is explicitly activated, so that current conservative/full behavior remains authoritative and cannot be self-authorized.
 - Critical User Flows:
   1. Flow-TIERED-001: `本地提交 -> legacy pre-commit no-op -> 成功返回`
   2. Flow-TIERED-002: `push/PR -> planner 基于 changed paths 规划 required scope -> workflow 执行命中的 required 组件 -> 决定是否可合入`
   3. Flow-TIERED-003: `每日定时 -> workflow 执行 full -> 生成重型回归结果`
-  4. Flow-TIERED-004（批准目标语义，尚非当前 planner enforcement）: `解析 H/B/T -> 由 Cargo metadata 确定 package identity -> 计算 B -> T impact -> 选择 impact-scoped integration_revalidation 或 full_escalation`
+  4. Flow-TIERED-004（批准目标语义；显式 activation 前保守/full 行为生效）: `解析 H/B/T -> 由 Cargo metadata 确定 package identity -> 计算 B -> T impact -> trusted producer/receipt/gate 与 explicit activation 通过后选择 impact-scoped integration_revalidation，否则进入 full_escalation`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
@@ -71,6 +73,7 @@
   - AC-9: full escalation preflight 对缺失/非法输入或 actual head 与 expected head 不一致 fail-closed；通过 preflight 后无论 full 成败都上传绑定 run/head/conclusion 的 `oasis7-full-escalation-receipt-v1`，且 full 失败保持 job failure。
   - AC-10: 本 PRD 必须保留当前 path-based planner implementation 与批准目标语义的显式边界；不得把当前 changed-path 选择器描述为 package-aware `H/B/T` enforcement。
   - AC-11: 批准目标验收口径必须可追溯到 package identity、`H/B/T`、`B -> T` impact、`integration_revalidation` 与 high-risk/unknown-impact `full_escalation`，且不降低既有 readiness/high-risk gate。
+  - AC-12: 在 trusted merged producer、receipt、gate implementation 与显式 activation 具备前，package-aware reduced `integration_revalidation` 必须保持未激活；当前 path-based conservative/full behavior 的 negative assertion 必须保留，且 write/migration、high-risk 与 fail-closed obligations 不得被削弱。
 - Non-Goals:
   - 不做 case-level / flaky-aware 的动态测试选择，也不把本地显式 `./scripts/ci-tests.sh required` 改成 changed-path 按需运行。
   - 不做缓存、并行矩阵、runner 基础设施优化。
@@ -83,7 +86,8 @@
 ## 4. Technical Specifications
 - Architecture Overview: 普通 commit 与验证解耦；impact-scoped required 是 ordinary-PR 的 premerge 最小 blocking set，full 是 release/high-risk/history/signal/schedule 升级；frozen-head Pre-PR Ready、CI required gate 与定时 full 回归继续使用统一测试入口。
 - Approved target contract (canonical, not an enforcement claim): package identity comes from Cargo metadata; exact integration binds `H`/`B`/`T` and selects the real `B -> T` impact; `integration_revalidation` is allowed only for trusted impact-scoped analysis, while unknown/high-risk impact requires `full_escalation`.
-- Current implementation status (observed): the current planner remains changed-path/config-rule based. Its fail-closed `scope=full` fallback is required-tier coverage expansion, not the `full` tier and not evidence that the approved package-aware target is enforced.
+- Activation boundary (current): write/migration boundaries, high-risk escalation, and fail-closed behavior are normative now. The reduced package-aware `integration_revalidation` route remains inactive until a trusted merged producer, receipt, and gate implementation is explicitly activated; current conservative/full behavior remains authoritative beforehand.
+- Current implementation status (observed): the current planner remains changed-path/config-rule based. Its fail-closed `scope=full` fallback is required-tier coverage expansion, not the `full` tier and not evidence that the approved package-aware target is enforced; this is the negative assertion for `PRD-TESTING-CI-TIERED-004`.
 - Integration Points:
   - `scripts/ci-tests.sh`
   - `scripts/pre-commit.sh`
@@ -124,6 +128,7 @@
 | PRD-TESTING-CI-TIERED-001 | T1/T2 | no-op contract + `test_tier_required` | `bash scripts/pre-commit.test.sh` 验证普通 commit 兼容入口不执行检查；CI required 与 frozen-head readiness evidence 验证 authoritative gates | 本地提交反馈效率与门禁归属 |
 | PRD-TESTING-CI-TIERED-002 | T2/T3/rust-required-gate-ondemand-scope/required-gate-ondemand-launcher-web-build | `test_tier_required` | 脚本参数、changed-path planner、launcher Web build planner 输出与 workflow 分流检查 | CI 门禁一致性 |
 | PRD-TESTING-CI-TIERED-003 | T3/T4/rust-required-gate-ondemand-scope/required-gate-ondemand-launcher-web-build | `test_tier_required` + `test_tier_full` | required-gate scope 剪裁验证、launcher Web build 命中/未命中回归，以及 schedule full 回归与结果审查 | 发布前深度回归覆盖 |
+| PRD-TESTING-CI-TIERED-004 | V0 documentation boundary / future package-aware integration activation | governance + future trusted integration evidence | Current negative assertion: `scripts/plan-rust-required-scope.py` remains path/config based and its `scope=full` is not package-aware `H/B/T` enforcement; future activation requires trusted Cargo metadata, `H/B/T` impact, producer/receipt/gate identity, high-risk escalation, and fail-closed evidence on the merged policy | V0 task evidence now; future trusted CI receipt and activation record before reduced `integration_revalidation` is enabled |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
