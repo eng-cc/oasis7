@@ -51,9 +51,9 @@ restricted
 --local-test-provider-authority
 local-test-provider-authority.json
 --local-test-provider-wasm
-.tmp/wasm-build-suite/local-test-provider/module.runtime.local-test-provider.wasm
+.tmp/wasm-build-suite/module.runtime.local-test-provider.wasm
 --local-test-provider-metadata
-.tmp/wasm-build-suite/local-test-provider/module.runtime.local-test-provider.metadata.json
+.tmp/wasm-build-suite/module.runtime.local-test-provider.metadata.json
 --local-test-provider-agent-id
 starter-agent-0
 --local-test-provider-owner-binding

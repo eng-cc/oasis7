@@ -89,8 +89,8 @@ if ! [[ "$STARTUP_TIMEOUT" =~ ^[1-9][0-9]*$ && "$ACTION_TIMEOUT_MS" =~ ^[1-9][0-
 fi
 
 LOCAL_PROVIDER_AUTHORITY="$OUT_DIR/runtime/local-test-provider-authority.json"
-LOCAL_PROVIDER_WASM="$ROOT_DIR/.tmp/wasm-build-suite/local-test-provider/module.runtime.local-test-provider.wasm"
-LOCAL_PROVIDER_METADATA="$ROOT_DIR/.tmp/wasm-build-suite/local-test-provider/module.runtime.local-test-provider.metadata.json"
+LOCAL_PROVIDER_WASM="$ROOT_DIR/.tmp/wasm-build-suite/module.runtime.local-test-provider.wasm"
+LOCAL_PROVIDER_METADATA="$ROOT_DIR/.tmp/wasm-build-suite/module.runtime.local-test-provider.metadata.json"
 
 if (( FULL_GAMEPLAY == 1 )); then
   if [[ ! -f "$LOCAL_PROVIDER_WASM" ]]; then
