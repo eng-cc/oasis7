@@ -511,7 +511,7 @@
     },
     {
       "path": "doc/game/gameplay/gameplay-indirect-control-agency-contract.design.md",
-      "content_sha256": "a4d5e8c8a61e89d3b8df8e07300e02ebb277ee8cffad140cb271762d57cf3eb9",
+      "content_sha256": "2ed27d105041e3cf59318bfeec191701f85ab96bb2d38b8bbe8a2eb8148c035c",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -525,7 +525,7 @@
     },
     {
       "path": "doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md",
-      "content_sha256": "57681d95a3cc0eb76a5283ac87f01e0e26f5a9549eca93da97caa141cf9c796c",
+      "content_sha256": "8436636ec4b5ec26df2c73e514832284346af2ee2aee81ecf185c1c702db3e7e",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -623,7 +623,7 @@
     },
     {
       "path": "doc/game/prd.index.md",
-      "content_sha256": "4088b5e68ae4f85d3d76c636477ba7a1454ce1991e0a3d5f0ece34f94b2cfb35",
+      "content_sha256": "1e651a70b6beae58941b78f0610b57cb939205a535f351aa7d04e9ed94f50bfc",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -2401,7 +2401,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md",
-      "content_sha256": "90e5c6c5e982e1b63be2b75959606f3a36dcd15c2342bcd8fd30f8f0f7c5ec56",
+      "content_sha256": "e43fffa3a1f59377b707b4f53bb4eee2415e55049178c73ee23ffef6c12d126d",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -4949,7 +4949,7 @@
     },
     {
       "path": "doc/world-runtime/prd.index.md",
-      "content_sha256": "1e17b20bc7bb28181edd223b77dbadfafa65c013f792dc0ab1f635d5df3f0adb",
+      "content_sha256": "dfe576a4278aa4b57ffdcfb4ee31ed7f3865b7c7887c35c8bc10043f0d971340",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -4998,6 +4998,20 @@
       "authority_layer": "professional_domain",
       "semantic_decision_owner": "runtime_engineer",
       "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "world-runtime-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md",
+      "content_sha256": "2c834c705631be727451339f7e3281c9c9dfd38aa47839ad8ef34b1cff0d054b",
+      "registry_type": "professional_domain",
+      "structural_owner": "runtime_engineer",
+      "authority_entry": "doc/world-runtime/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "runtime_engineer",
+      "object_kind": "design",
       "lifecycle_candidate": "active_candidate",
       "inventory_disposition": "retain_for_owner_review",
       "routing_batch": "world-runtime-corpus-review",

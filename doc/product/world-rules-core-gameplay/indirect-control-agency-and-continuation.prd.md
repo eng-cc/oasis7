@@ -14,9 +14,9 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
-- 专业系统设计：跨 runtime、Agent、Viewer/API 与 QA 的技术边界由 [`DES-GAME-IA`](../../game/gameplay/gameplay-indirect-control-agency-contract.design.md) 承接；该专业 design 不改变本产品专题无需复制产品 design 的判定。
+- 产品设计：玩家体验与失败恢复由 [`Gameplay 间接控制 agency 合同设计`](../../game/gameplay/gameplay-indirect-control-agency-contract.design.md) 承接；专业系统设计：跨 runtime、Agent、Viewer/API 与 QA 的技术边界由 [`DES-WR-IA`](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md) 承接。
 - 设计判定 task issue：#3680。
-- 设计适用性理由：本 PRD 直接承载产品承诺与 REQ/AC，无需复制一份产品 design；专业系统设计负责 runtime、Agent、Viewer/API 与 QA 的跨域技术边界和验证映射。
+- 设计适用性理由：本 PRD 直接承载产品承诺与 REQ/AC；现有 gameplay product design 负责玩家流程与体验表达，专业系统设计负责 runtime、Agent、Viewer/API 与 QA 的跨域技术边界和验证映射。
 - 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品承诺
 

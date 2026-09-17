@@ -31,7 +31,8 @@ class PolicyTests(unittest.TestCase):
     def test_real_gameplay_document_ownership(self):
         policy=json.loads((HERE / "loop-policy.v1.json").read_text())
         self.assertEqual(self.api.classify_path("doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md",policy),"product")
-        self.assertEqual(self.api.classify_path("doc/game/gameplay/gameplay-indirect-control-agency-contract.design.md",policy),"system")
+        self.assertEqual(self.api.classify_path("doc/game/gameplay/gameplay-indirect-control-agency-contract.design.md",policy),"product")
+        self.assertEqual(self.api.classify_path("doc/world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md",policy),"system")
         self.assertEqual(self.api.classify_path("doc/world-runtime/design.md",policy),"system")
         self.assertIsNone(self.api.classify_path("doc/game/design.md",policy))
 

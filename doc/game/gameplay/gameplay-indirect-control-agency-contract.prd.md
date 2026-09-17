@@ -1,6 +1,6 @@
 # Gameplay 间接控制 agency 合同 PRD
 
-- 对应系统设计：[`DES-GAME-IA`](gameplay-indirect-control-agency-contract.design.md)；长期玩家承诺仍由产品分册承载，本文继续拥有 `PRD-GAME-014` 的 gameplay guarantee、字段语义、状态与失败签名，系统设计承接跨 runtime、Agent、Viewer/API 与 QA 的技术边界和验证映射。
+- 对应产品设计：[`Gameplay 间接控制 agency 合同设计`](gameplay-indirect-control-agency-contract.design.md)；对应专业系统设计：[`DES-WR-IA`](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md)。长期玩家承诺仍由产品分册承载，本文继续拥有 `PRD-GAME-014` 的 gameplay guarantee、字段语义、状态与失败签名，专业系统设计承接跨 runtime、Agent、Viewer/API 与 QA 的技术边界和验证映射。
 - 可变执行状态: 对应 GitHub Project task 与 issue evidence comments
 - 产品层长期承诺: [`doc/product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md`](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md)；本文继续拥有保证项字段、状态与失败签名，以及 gameplay、runtime、Viewer/API、Agent 和 QA 的专业合同与任务证据。
 - 产品叶子入口：[`REQ-WR-IA-001`](../../product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md#req-wr-ia-001)；本文件保留字段、状态、失败签名与专业证据权威。
