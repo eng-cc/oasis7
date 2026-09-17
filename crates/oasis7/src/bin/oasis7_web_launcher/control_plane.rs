@@ -990,7 +990,7 @@ pub(super) fn build_chain_runtime_args(config: &LauncherConfig) -> Result<Vec<St
         "--execution-world-dir".to_string(),
         execution_world_dir,
         "--node-role".to_string(),
-        chain_role,
+        chain_role.clone(),
         "--p2p-user-mode".to_string(),
         chain_p2p_user_mode,
         "--node-tick-ms".to_string(),
@@ -1035,7 +1035,111 @@ pub(super) fn build_chain_runtime_args(config: &LauncherConfig) -> Result<Vec<St
         args.push("--replication-network-peer".to_string());
         args.push(peer);
     }
+    if let Some(registry_path) =
+        observer_registry_path_from_manifest(network_tier_manifest.as_str(), chain_role.as_str())
+    {
+        args.push("--genesis-validator-registry".to_string());
+        args.push(registry_path);
+    }
     Ok(args)
+}
+
+fn observer_registry_path_from_manifest(manifest_path: &str, chain_role: &str) -> Option<String> {
+    if chain_role != "observer" {
+        return None;
+    }
+    let manifest_path = Path::new(manifest_path.trim());
+    let manifest_bytes = std::fs::read(manifest_path).ok()?;
+    let manifest: serde_json::Value = serde_json::from_slice(manifest_bytes.as_slice()).ok()?;
+    if manifest.get("tier").and_then(serde_json::Value::as_str) != Some("public_testnet")
+        || manifest
+            .get("validator_policy")
+            .and_then(serde_json::Value::as_object)
+            .and_then(|policy| policy.get("allow_observer_nodes"))
+            != Some(&serde_json::Value::Bool(true))
+    {
+        return None;
+    }
+    let registry_ref = manifest
+        .get("deployment_validator_registry")
+        .and_then(serde_json::Value::as_object)
+        .and_then(|binding| binding.get("ref"))
+        .and_then(serde_json::Value::as_str)?;
+    let registry_ref_path = Path::new(registry_ref);
+    if registry_ref_path.is_absolute()
+        || registry_ref_path.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::CurDir | std::path::Component::ParentDir
+            )
+        })
+    {
+        return None;
+    }
+    let registry_name = registry_ref_path.file_name()?.to_str()?;
+    if registry_name.is_empty() {
+        return None;
+    }
+    Some(
+        manifest_path
+            .parent()
+            .unwrap_or_else(|| Path::new("."))
+            .join(registry_name)
+            .to_string_lossy()
+            .into_owned(),
+    )
+}
+
+#[cfg(test)]
+mod observer_registry_launcher_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicU64, Ordering};
+
+    static TEMP_DIR_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+    fn fixture_dir() -> std::path::PathBuf {
+        let base = std::env::temp_dir();
+        for _ in 0..64 {
+            let sequence = TEMP_DIR_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+            let path = base.join(format!(
+                "oasis7-web-launcher-observer-authority-{}-{sequence}",
+                std::process::id()
+            ));
+            match std::fs::create_dir(path.as_path()) {
+                Ok(()) => return path,
+                Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(error) => panic!("create fixture directory failed: {error}"),
+            }
+        }
+        panic!("create fixture directory exhausted retries");
+    }
+    #[test]
+    fn observer_manifest_forwards_bound_registry_to_runtime() {
+        let root = fixture_dir();
+        let manifest = root.join("manifest.json");
+        let registry = root.join("observer-registry.json");
+        std::fs::write(&registry, b"{}\n").expect("write registry fixture");
+        std::fs::write(
+            &manifest,
+            br#"{
+                "tier":"public_testnet",
+                "validator_policy":{"allow_observer_nodes":true},
+                "deployment_validator_registry":{"ref":"config/observer-registry.json"}
+            }"#,
+        )
+        .expect("write manifest fixture");
+        let config = LauncherConfig {
+            deployment_mode: "trusted_local_only".to_string(),
+            chain_node_role: "observer".to_string(),
+            chain_network_tier_manifest: manifest.to_string_lossy().into_owned(),
+            ..LauncherConfig::default()
+        };
+        let args = build_chain_runtime_args(&config).expect("observer args");
+        let registry_arg = args
+            .windows(2)
+            .find(|pair| pair[0] == "--genesis-validator-registry")
+            .expect("bound registry argument");
+        assert_eq!(registry_arg[1], registry.to_string_lossy());
+    }
 }
 
 pub(super) fn finalize_chain_start_outcome(

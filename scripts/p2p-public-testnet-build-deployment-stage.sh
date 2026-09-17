@@ -224,6 +224,18 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+has_validator_47=0
+if [[ "$sequencer_node_id" == "$VALIDATOR_47_NODE_ID" || "$storage_node_id" == "$VALIDATOR_47_NODE_ID" ]]; then
+  has_validator_47=1
+fi
+if ((${#extra_validators[@]} > 0)); then
+  for extra_validator in "${extra_validators[@]}"; do
+    if [[ "$extra_validator" == "$VALIDATOR_47_NODE_ID:"* ]]; then
+      has_validator_47=1
+    fi
+  done
+fi
+
 require_command jq
 require_command python3
 require_command shasum
@@ -236,13 +248,14 @@ require_file "$runtime_build_ref"
 require_file "$bootstrap_peers_file"
 require_file "$base_genesis"
 require_file "$base_manifest"
-require_file "$TRIAD_INVENTORY_PATH"
-[[ ! -L "$TRIAD_INVENTORY_PATH" ]] || die "triad inventory authority must not be a symlink"
-triad_inventory_sha256=$(sha256_file "$TRIAD_INVENTORY_PATH")
 triad_bootstrap_peer_sha256=$(sha256_file "$bootstrap_peers_file")
-[[ "$triad_inventory_sha256" == "$TRIAD_INVENTORY_SHA256" ]] \
-  || die "triad inventory is not the canonical governed authority"
-python3 - "$TRIAD_INVENTORY_PATH" <<'PY'
+if [[ $has_validator_47 -eq 1 ]]; then
+  require_file "$TRIAD_INVENTORY_PATH"
+  [[ ! -L "$TRIAD_INVENTORY_PATH" ]] || die "triad inventory authority must not be a symlink"
+  triad_inventory_sha256=$(sha256_file "$TRIAD_INVENTORY_PATH")
+  [[ "$triad_inventory_sha256" == "$TRIAD_INVENTORY_SHA256" ]] \
+    || die "triad inventory is not the canonical governed authority"
+  python3 - "$TRIAD_INVENTORY_PATH" <<'PY'
 import json
 import pathlib
 import sys
@@ -269,6 +282,7 @@ for key, expected_value in expected.items():
     if validator.get(key) != expected_value:
         raise SystemExit(f"triad inventory validator-47 {key} mismatch")
 PY
+fi
 if [[ -n "$validator_pair_provenance_ref" ]]; then
   require_file "$validator_pair_provenance_ref"
 fi
@@ -327,12 +341,6 @@ if ((${#extra_validators[@]} > 0)); then
   done
 fi
 
-has_validator_47=0
-for validator_spec in "${validator_specs[@]}"; do
-  if [[ "$validator_spec" == "$VALIDATOR_47_NODE_ID:"* ]]; then
-    has_validator_47=1
-  fi
-done
 if [[ $has_validator_47 -eq 1 && -z "$validator_47_identity_dir" ]]; then
   die "validator-47 deployment stage requires --validator-47-identity-dir"
 fi
@@ -561,11 +569,21 @@ node_env_path="$out_dir/config/node.env"
 deployment_truth_md="$out_dir/deployment-truth.md"
 temp_genesis="$out_dir/.tmp-genesis.json"
 
+stage_inventory_ref=""
+stage_inventory_sha256=""
+
 cp "$bootstrap_peers_file" "$bootstrap_out"
 cp "$bootstrap_out" "$out_dir/config/doc/testing/evidence/"
-cp "$TRIAD_INVENTORY_PATH" "$inventory_out"
-cp "$TRIAD_INVENTORY_PATH" "$out_dir/config/doc/testing/evidence/"
-cp "$TRIAD_SOURCE_REGISTRY_PATH" "$out_dir/config/doc/testing/evidence/"
+if [[ $has_validator_47 -eq 1 ]]; then
+  # The fixed inventory and its source registry are authority artifacts only
+  # for the exact governed triad validated above. Pair-only and arbitrary
+  # extra-validator stages must not carry them as misleading authority.
+  cp "$TRIAD_INVENTORY_PATH" "$inventory_out"
+  cp "$TRIAD_INVENTORY_PATH" "$out_dir/config/doc/testing/evidence/"
+  cp "$TRIAD_SOURCE_REGISTRY_PATH" "$out_dir/config/doc/testing/evidence/"
+  stage_inventory_ref="$TRIAD_INVENTORY_RELATIVE"
+  stage_inventory_sha256="$triad_inventory_sha256"
+fi
 
 python3 - "$registry_path" "$quorum_numerator" "$quorum_denominator" \
   "$governance_signer_count" "$governance_threshold" "$governance_threshold_bps" \
@@ -920,7 +938,7 @@ cp "$manifest_path" "$out_dir/config/doc/testing/evidence/"
   --world-scenario asteroid_fragment_bootstrap \
   --allow-overwrite >/dev/null
 
-python3 - "$deployment_truth_md" "$runtime_build_ref" "$bootstrap_out" "$TRIAD_INVENTORY_RELATIVE" "$triad_inventory_sha256" "$triad_bootstrap_peer_sha256" "${validator_specs[@]}" <<'PY'
+python3 - "$deployment_truth_md" "$runtime_build_ref" "$bootstrap_out" "$stage_inventory_ref" "$stage_inventory_sha256" "$triad_bootstrap_peer_sha256" "${validator_specs[@]}" <<'PY'
 import pathlib
 import sys
 
@@ -937,14 +955,18 @@ for spec in specs:
     stake = rest[0] if rest else "100"
     validator_lines.append(f"  - `{node_id}` -> `{public_key}` (stake `{stake}`)")
 
+authority_lines = ""
+if inventory_ref:
+    authority_lines = (
+        f"- Deployment inventory authority: `{inventory_ref}`\n"
+        f"- Deployment inventory sha256: `{inventory_sha256}`\n"
+    )
 content = f"""# Deployment Truth
 
 - Runtime build: `{runtime_build_ref}`
 - Bootstrap peers file: `{bootstrap_peers_file}`
 - Bootstrap peers sha256: `{bootstrap_peer_sha256}`
-- Deployment inventory authority: `{inventory_ref}`
-- Deployment inventory sha256: `{inventory_sha256}`
-- Generated map sidecar: `generated-world/generated-scenario-world`
+{authority_lines}- Generated map sidecar: `generated-world/generated-scenario-world`
 - Generated map provenance: `generated-world/world-generation-provenance.json`
 - Validator signer truth:
 {chr(10).join(validator_lines)}
@@ -1069,7 +1091,7 @@ cp "$bundle_path" "$out_dir/config/doc/testing/evidence/"
   --world-dir "$out_dir/generated-world/world" \
   --merged-public-manifest "$out_dir/generated-world/merged-public-manifest-entries.json" >/dev/null
 
-python3 - "$base_manifest" "$manifest_path" "$bundle_path" "$genesis_path" "$bootstrap_out" "$registry_path" "$TRIAD_INVENTORY_RELATIVE" "$triad_inventory_sha256" "$triad_bootstrap_peer_sha256" <<'PY'
+python3 - "$base_manifest" "$manifest_path" "$bundle_path" "$genesis_path" "$bootstrap_out" "$registry_path" "$stage_inventory_ref" "$stage_inventory_sha256" "$triad_bootstrap_peer_sha256" "$has_validator_47" <<'PY'
 import hashlib
 import json
 import pathlib
@@ -1084,14 +1106,11 @@ registry_path = pathlib.Path(sys.argv[6])
 inventory_ref = sys.argv[7]
 inventory_sha256 = sys.argv[8]
 bootstrap_peer_sha256 = sys.argv[9]
+is_triad = sys.argv[10] == "1"
 generated_registry_sha256 = hashlib.sha256(registry_path.read_bytes()).hexdigest()
 
 payload = json.loads(base_manifest.read_text(encoding="utf-8"))
 registry = json.loads(registry_path.read_text(encoding="utf-8"))
-is_triad = any(
-    isinstance(item, dict) and item.get("node_id") == "triad-testnet-validator-47"
-    for item in registry.get("validators", [])
-)
 canonical_registry = {
     "signer_bindings": {
         f"governance.finality.v1.{item['node_id']}": str(item["finality_signer_public_key"]).lower()
@@ -1116,19 +1135,19 @@ payload["runtime_refs"]["generated_world_sidecar_ref"] = "generated-world/genera
 payload["runtime_refs"]["world_generation_provenance_ref"] = "generated-world/world-generation-provenance.json"
 payload.setdefault("validator_policy", {})
 payload["validator_policy"]["target_validator_count"] = len(registry.get("validators", []))
-payload["deployment_inventory"] = {
-    "ref": inventory_ref,
-    "sha256": inventory_sha256,
-}
 payload["bootstrap_peer_authority"] = {
     "ref": bootstrap_path.name,
     "sha256": bootstrap_peer_sha256,
 }
+payload["deployment_validator_registry"] = {
+    "ref": f"config/{registry_path.name}",
+    "sha256": generated_registry_sha256,
+    "semantic_sha256": generated_registry_semantic_sha256,
+}
 if is_triad:
-    payload["deployment_validator_registry"] = {
-        "ref": f"config/{registry_path.name}",
-        "sha256": generated_registry_sha256,
-        "semantic_sha256": generated_registry_semantic_sha256,
+    payload["deployment_inventory"] = {
+        "ref": inventory_ref,
+        "sha256": inventory_sha256,
     }
 manifest_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
 PY
@@ -1137,8 +1156,7 @@ cp "$manifest_path" "$out_dir/config/doc/testing/evidence/"
 # A triad stage carries the complete validator-47 host contract.  Pair-only
 # stages intentionally keep their historical shape; they do not get a
 # validator-47 node.env that could be mistaken for a third validator.
-if jq -e --arg node "$VALIDATOR_47_NODE_ID" \
-  '[.validators[] | select(.node_id == $node)] | length == 1' "$registry_path" >/dev/null; then
+if [[ $has_validator_47 -eq 1 ]]; then
   python3 - "$TRIAD_INVENTORY_PATH" "$registry_path" "$manifest_path" "$node_env_path" "$triad_inventory_sha256" "$identity_key_sha256" "$identity_receipt_sha256" \
     "$VALIDATOR_47_CONFIG_PATH" "$VALIDATOR_47_EXECUTION_RECORDS_DIR" "$VALIDATOR_47_STORAGE_ROOT" \
     "$VALIDATOR_47_STORAGE_PROFILE" "$VALIDATOR_47_NODE_TICK_MS" \
