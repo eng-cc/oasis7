@@ -306,6 +306,12 @@ if [[ "${1:-}" == "eval" ]]; then
       exit 29
     fi
     printf '%s\n' 'true'
+  elif [[ "$script" == '(() => { const s = window.__AW_TEST__.getState(); return s?.authRegistrationStatus === "issued" && s?.authRuntimeStatus === "issued"; })()' ]]; then
+    if [[ "${VIEWER_PROMPT_FIXTURE_ALREADY_REGISTERED:-0}" == "1" ]]; then
+      printf '%s\n' 'false'
+    else
+      printf '%s\n' 'true'
+    fi
   elif [[ "$script" == *'starter_oc_required_gate'* && "$script" == *'Claim Starter OC'* ]]; then
     if [[ "${VIEWER_PROMPT_FIXTURE_STARTER_OC_ONBOARDING:-0}" == "1" ]]; then
       printf '%s\n' 'true'
@@ -427,6 +433,22 @@ test "$(<"$starter_oc_action_count_file")" = 1
 test -f "$starter_oc_ack_marker"
 test -f "$claim_ack_marker"
 rg -Fq '[action:claim first agent action]' "$claim_out/agent-browser.log"
+
+# The visible test-login action may finish server-side registration before the
+# runner observes its first auth state.  In that case the registration hook
+# must not be invoked a second time.
+already_registered_out="$tmp_root/already-registered-login"
+already_registered_count="$tmp_root/already-registered-session-registration-count"
+VIEWER_PROMPT_FIXTURE_ALREADY_REGISTERED=1 \
+  VIEWER_PROMPT_FIXTURE_SESSION_REGISTRATION_COUNT="$already_registered_count" \
+  OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=fixture \
+  OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY=fixture \
+  OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=fixture \
+  PATH="$fake_bin:$PATH" "$runner" \
+  --headed --test-login --url http://127.0.0.1:9 --out-dir "$already_registered_out"
+if [[ -f "$already_registered_count" ]]; then
+  test "$(<"$already_registered_count")" = 0
+fi
 
 claim_fail_out="$tmp_root/claim-first-agent-failure"
 claim_fail_count="$tmp_root/claim-first-agent-failure-count"

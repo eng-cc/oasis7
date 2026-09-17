@@ -782,9 +782,22 @@ wait_for_webgl2
 wait_for_cli_stage "test-api" wait --fn 'typeof window.__AW_TEST__ === "object"'
 wait_for_cli_stage "test-login selector" wait --fn "Boolean(document.querySelector('[data-auth-action=\"test-login\"]'))"
 run_visible_action "test-login action" click '[data-auth-action="test-login"]'
-wait_for_js_true '(() => { const s = window.__AW_TEST__.getState(); return s?.authReady === true && s?.authRegistrationStatus === "issued" && s?.authRuntimeStatus === "issued"; })()' "hosted test-login auth issuance"
-register_hosted_player_session
-wait_for_js_true '(() => { const s = window.__AW_TEST__.getState(); return s?.authReady === true && s?.authRegistrationStatus === "registered" && s?.authRuntimeStatus === "registered_unbound" && s?.authBoundAgentId == null && s?.authSessionEpoch != null; })()' "hosted player session registration"
+wait_for_js_true '(() => { const s = window.__AW_TEST__.getState(); const issued = s?.authRegistrationStatus === "issued" && s?.authRuntimeStatus === "issued"; const registered = s?.authRegistrationStatus === "registered" && ["registered", "registered_unbound"].includes(s?.authRuntimeStatus) && s?.authSessionEpoch != null; return s?.authReady === true && (issued || registered); })()' "hosted test-login auth readiness"
+registration_required="$(ab_read_eval "$SESSION" '(() => { const s = window.__AW_TEST__.getState(); return s?.authRegistrationStatus === "issued" && s?.authRuntimeStatus === "issued"; })()' 2>/dev/null || true)"
+case "$registration_required" in
+  true|\"true\")
+    register_hosted_player_session
+    ;;
+  false|\"false\")
+    printf '[action:hosted player session registration action] skipped; test-login already registered the session\n' >>"$AB_LOG"
+    ;;
+  *)
+    capture_failure_diagnostics "hosted player session registration decision"
+    echo "error: hosted player session registration state was unavailable (phase: hosted player session registration decision)" >&2
+    exit 1
+    ;;
+esac
+wait_for_js_true '(() => { const s = window.__AW_TEST__.getState(); return s?.authReady === true && s?.authRegistrationStatus === "registered" && ["registered", "registered_unbound"].includes(s?.authRuntimeStatus) && s?.authSessionEpoch != null; })()' "hosted player session registration"
 
 AGENT_ID_JSON="$(json_quote "$AGENT_ID")"
 maybe_claim_first_agent "$AGENT_ID_JSON"
