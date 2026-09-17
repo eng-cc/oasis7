@@ -5005,7 +5005,7 @@
     },
     {
       "path": "doc/world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md",
-      "content_sha256": "90ded44b0c551d9b737a8791116015308e5b63b3ea3a71cbc59b698ecdcf2c68",
+      "content_sha256": "6dcdd95e6ca88b155c29b08788ff12b9e29c1376dc8150fb4e3d39d00613f402",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
