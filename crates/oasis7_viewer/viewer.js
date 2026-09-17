@@ -6956,7 +6956,7 @@ function promptDraftValuesForRequest(request) {
 function reconcilePendingPromptAuthoritativeRefresh(snapshot) {
   return viewerPromptControlModule?.reconcilePendingAuthoritativeRefresh(snapshot) === true;
 }
-function applySelection(selection) {
+function applySelection(selection, options = {}) {
   if (!selection) return null;
   const kind = String(selection.kind || "").toLowerCase();
   const id = String(selection.id || "");
@@ -6975,7 +6975,7 @@ function applySelection(selection) {
   state.selectedKind = kind;
   state.selectedId = id;
   state.selectedObject = object;
-  syncAgentInteractionDrafts(true);
+  syncAgentInteractionDrafts(options.preserveInteractionDrafts !== true);
   render();
   return { kind, id };
 }
@@ -7594,7 +7594,7 @@ function handleSnapshot(snapshot) {
       applySelection({ kind: "location", id: locations[0].id });
     }
   } else if (state.selectedKind && state.selectedId) {
-    if (!applySelection({ kind: state.selectedKind, id: state.selectedId })) {
+    if (!applySelection({ kind: state.selectedKind, id: state.selectedId }, { preserveInteractionDrafts: true })) {
       state.selectedKind = null;
       state.selectedId = null;
       state.selectedObject = null;

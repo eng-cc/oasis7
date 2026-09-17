@@ -594,4 +594,59 @@ function buildBoundTaskGame076ScenarioSnapshot(options) {
   assert.match(core.state.lastControlFeedback.effect, /no visible world delta/i);
 }
 
+{
+  const snapshotWithProfiles = (version, agent0Goal) => ({
+    time: version,
+    model: {
+      agents: {
+        "agent-0": { id: "agent-0", location_id: "loc-0", resources: { energy: version } },
+        "agent-1": { id: "agent-1", location_id: "loc-0", resources: {} },
+      },
+      locations: { "loc-0": { id: "loc-0", name: "Loc 0", resources: {} } },
+      agent_prompt_profiles: {
+        "agent-0": {
+          agent_id: "agent-0",
+          version,
+          system_prompt_override: `system-${version}`,
+          short_term_goal_override: agent0Goal,
+          long_term_goal_override: `long-${version}`,
+        },
+        "agent-1": {
+          agent_id: "agent-1",
+          version: 3,
+          system_prompt_override: "agent-1-system",
+          short_term_goal_override: "agent-1-goal",
+          long_term_goal_override: "agent-1-long",
+        },
+      },
+    },
+  });
+
+  core.injectSnapshot(snapshotWithProfiles(1, "authoritative-v1"));
+  core.applySelection({ kind: "agent", id: "agent-0" });
+  core.state.promptDraft.shortTermGoal = "dirty-player-goal";
+  core.state.promptDraft.dirty = true;
+  core.state.chatDraft.message = "dirty player chat";
+  core.state.chatDraft.dirty = true;
+
+  core.injectSnapshot(snapshotWithProfiles(2, "authoritative-v2"));
+  assert.equal(core.state.selectedObject.resources.energy, 2, "same-selection snapshot still refreshes selected object");
+  assert.equal(core.state.promptDraft.shortTermGoal, "dirty-player-goal", "same-selection snapshot preserves dirty prompt draft");
+  assert.equal(core.state.promptDraft.dirty, true);
+  assert.equal(core.state.chatDraft.message, "dirty player chat", "same-selection snapshot preserves dirty chat draft");
+  assert.equal(core.state.chatDraft.dirty, true);
+
+  core.applySelection({ kind: "agent", id: "agent-1" });
+  assert.equal(core.state.promptDraft.shortTermGoal, "agent-1-goal", "explicit selection resets prompt draft to selected agent authority");
+  assert.equal(core.state.promptDraft.dirty, false);
+  assert.equal(core.state.chatDraft.message, "", "explicit selection resets chat draft for a different agent");
+  assert.equal(core.state.chatDraft.dirty, false);
+
+  core.applySelection({ kind: "agent", id: "agent-0" });
+  core.state.promptDraft.dirty = false;
+  core.injectSnapshot(snapshotWithProfiles(4, "authoritative-v4"));
+  assert.equal(core.state.promptDraft.shortTermGoal, "authoritative-v4", "clean draft still reconciles from authoritative snapshot");
+  assert.equal(core.state.promptDraft.currentVersion, 4);
+}
+
 console.log("software-safe feedback contract tests passed");
