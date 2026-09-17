@@ -142,7 +142,7 @@ ab_read_retryable_error() {
     "$output" == *"daemon may be busy"* || \
     "$output" == *"daemon ... unresponsive"* || \
     "$output" == *"ECONNRESET"* || \
-    "$output" == *"socket"* ]] 
+    "$output" == *"socket"* ]]
 }
 
 # Retry only read-oriented commands.  Callers must not use this wrapper for
