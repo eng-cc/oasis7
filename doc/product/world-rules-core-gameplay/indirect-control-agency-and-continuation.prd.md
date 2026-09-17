@@ -14,9 +14,10 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
-- 产品设计：玩家体验与失败恢复由 [`Gameplay 间接控制 agency 合同设计`](../../game/gameplay/gameplay-indirect-control-agency-contract.design.md) 承接；专业系统设计：跨 runtime、Agent、Viewer/API 与 QA 的技术边界由 [`DES-WR-IA`](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md) 承接。
+- 产品权威边界：本 PRD 是本专题唯一的产品权威，直接承载玩家价值、产品承诺、REQ/AC 与组合验收；本专题不设置配对产品 design。其他专业 PRD 或 design 只是依赖，不重定义本文的产品语义。
+- 专业合同委托：[`PRD-GAME-014`](../../game/gameplay/gameplay-indirect-control-agency-contract.prd.md) 继续拥有玩法保证、字段/状态/失败签名与专业验收；[`DES-WR-IA`](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md) 仅承接跨 runtime、Agent、Viewer/API 与 QA 的技术边界和验证映射。上述专业文档不把实现状态、任务或证据迁入本文，也不能替代本文的产品 authority。
 - 设计判定 task issue：#3680。
-- 设计适用性理由：本 PRD 直接承载产品承诺与 REQ/AC；现有 gameplay product design 负责玩家流程与体验表达，专业系统设计负责 runtime、Agent、Viewer/API 与 QA 的跨域技术边界和验证映射。
+- 设计适用性理由：本 PRD 已直接承载产品承诺与 REQ/AC；独立 design 不增加新的信息分层、交互状态编排或策略取舍，专业文档只保留其各自的玩法和技术合同。
 - 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品承诺
 
