@@ -197,6 +197,188 @@ verify_bundle() {
   [[ "$runtime_sum" == "$expected_sum" ]] || die "BUILDINFO governed runtime checksum mismatch"
 }
 
+validate_world_handoff_integrity() {
+  local bundle_path=$1
+  local payload_dir=$2
+  local sidecar_dir=$3
+  local provenance_path=$4
+  local merged_manifest_path=$5
+  local world_layout=$6
+  local phase=$7
+
+  python3 - "$bundle_path" "$payload_dir" "$sidecar_dir" "$provenance_path" \
+    "$merged_manifest_path" "$world_layout" "$phase" <<'PY'
+import hashlib
+import json
+import os
+import stat
+import sys
+from pathlib import Path
+
+bundle_path, payload_dir, sidecar_dir, provenance_path, merged_manifest_path, world_layout, phase = sys.argv[1:]
+
+def fail(message):
+    raise SystemExit(message)
+
+def regular_file(path, label):
+    candidate = Path(path)
+    try:
+        metadata = candidate.lstat()
+    except OSError:
+        fail(f"{label} is missing: {candidate}")
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+        fail(f"{label} must be a regular non-symlink file: {candidate}")
+    return candidate
+
+def tree_files(root, label, excluded=()):
+    root = Path(root)
+    excluded = tuple(Path(path) for path in excluded)
+    try:
+        root_metadata = root.lstat()
+    except OSError:
+        fail(f"{label} is missing: {root}")
+    if stat.S_ISLNK(root_metadata.st_mode) or not stat.S_ISDIR(root_metadata.st_mode):
+        fail(f"{label} must be a regular non-symlink directory: {root}")
+    pending = [root]
+    files = []
+    while pending:
+        current = pending.pop()
+        try:
+            entries = sorted(os.scandir(current), key=lambda entry: entry.name)
+        except OSError as error:
+            fail(f"cannot enumerate {label}: {current}: {error}")
+        for entry in entries:
+            candidate = Path(entry.path)
+            if any(candidate == skipped or skipped in candidate.parents for skipped in excluded):
+                continue
+            try:
+                metadata = entry.stat(follow_symlinks=False)
+            except OSError as error:
+                fail(f"cannot inspect {label} member {candidate}: {error}")
+            if stat.S_ISLNK(metadata.st_mode):
+                fail(f"recursive symlink is forbidden in {label}: {candidate}")
+            if stat.S_ISDIR(metadata.st_mode):
+                pending.append(candidate)
+            elif stat.S_ISREG(metadata.st_mode):
+                files.append(candidate)
+            else:
+                fail(f"non-regular member is forbidden in {label}: {candidate}")
+    return sorted(files, key=lambda item: item.relative_to(root).as_posix())
+
+def file_sha256(path):
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+def tree_metadata(root, label, excluded=()):
+    files = tree_files(root, label, excluded)
+    digest = hashlib.sha256()
+    total_bytes = 0
+    for path in files:
+        relative = path.relative_to(root).as_posix()
+        child_digest = file_sha256(path)
+        size = path.stat().st_size
+        digest.update(relative.encode("utf-8"))
+        digest.update(b"\0")
+        digest.update(child_digest.encode("ascii"))
+        digest.update(b"\0")
+        digest.update(str(size).encode("ascii"))
+        digest.update(b"\n")
+        total_bytes += size
+    return digest.hexdigest(), len(files), total_bytes
+
+def require_digest(value, label):
+    if not isinstance(value, str) or len(value) != 64 or any(ch not in "0123456789abcdef" for ch in value):
+        fail(f"{label} must be a lowercase SHA-256 digest")
+    return value
+
+def validate_tree(root, expected, label, excluded=()):
+    if not isinstance(expected, dict) or expected.get("kind") != "directory":
+        fail(f"bundle {label} metadata must describe a directory")
+    expected_digest = require_digest(expected.get("sha256_tree"), f"bundle {label}.sha256_tree")
+    current_digest, current_count, current_bytes = tree_metadata(Path(root), label, excluded)
+    if current_digest != expected_digest:
+        fail(f"{label} sha256_tree mismatch: bundle={expected_digest} current={current_digest}")
+    if expected.get("file_count") != current_count:
+        fail(f"{label} file_count mismatch: bundle={expected.get('file_count')} current={current_count}")
+    if expected.get("total_bytes") != current_bytes:
+        fail(f"{label} total_bytes mismatch: bundle={expected.get('total_bytes')} current={current_bytes}")
+
+def validate_file(path, expected, label):
+    if not isinstance(expected, dict) or expected.get("kind") != "file":
+        fail(f"bundle {label} metadata must describe a file")
+    expected_digest = require_digest(expected.get("sha256"), f"bundle {label}.sha256")
+    candidate = regular_file(path, label)
+    current_digest = file_sha256(candidate)
+    if current_digest != expected_digest:
+        fail(f"{label} sha256 mismatch: bundle={expected_digest} current={current_digest}")
+    if expected.get("size_bytes") != candidate.stat().st_size:
+        fail(f"{label} size mismatch: bundle={expected.get('size_bytes')} current={candidate.stat().st_size}")
+
+bundle = json.loads(regular_file(bundle_path, "bootstrap bundle").read_text(encoding="utf-8"))
+if not isinstance(bundle, dict):
+    fail("bootstrap bundle must be a JSON object")
+
+# Legacy callers (and pre-bundle fixture inputs) have no release-candidate
+# world metadata. Keep those explicitly unversioned inputs compatible, but a
+# governed release-candidate bundle can never accept the canonical nested
+# stage without the complete binding and merged public-manifest handoff.
+world_metadata = bundle.get("world_snapshot")
+governed_bundle = bundle.get("schema_version") == "oasis7.release_candidate_bundle.v1"
+if world_layout == "nested_stage" and governed_bundle and not isinstance(world_metadata, dict):
+    fail("nested generated-world handoff requires bundle world_snapshot metadata")
+if world_metadata is None:
+    sys.exit(0)
+
+required_payload = (
+    "snapshot.json",
+    "journal.json",
+    "journal.segments.json",
+    "snapshot.manifest.json",
+    "module_registry.json",
+)
+payload = Path(payload_dir)
+for name in required_payload:
+    regular_file(payload / name, f"generated world {name}")
+sidecar = Path(sidecar_dir)
+for name in ("snapshot.json", "journal.json"):
+    regular_file(sidecar / name, f"generated world sidecar {name}")
+provenance = regular_file(provenance_path, "world-generation provenance")
+try:
+    provenance_data = json.loads(provenance.read_text(encoding="utf-8"))
+except (OSError, UnicodeError, json.JSONDecodeError) as error:
+    fail(f"world-generation provenance is malformed: {error}")
+if not isinstance(provenance_data, dict):
+    fail("world-generation provenance must be a JSON object")
+
+if world_layout == "nested_stage" and phase == "input":
+    merged = regular_file(merged_manifest_path, "merged public manifest")
+    try:
+        merged_data = json.loads(merged.read_text(encoding="utf-8"))
+    except (OSError, UnicodeError, json.JSONDecodeError) as error:
+        fail(f"merged public manifest is malformed: {error}")
+    if not isinstance(merged_data, list) or not merged_data:
+        fail("merged public manifest must be a non-empty array")
+    if provenance_data.get("public_manifest_sha256") != file_sha256(merged):
+        fail("world-generation provenance public manifest digest mismatch")
+    if provenance_data.get("public_manifest_entry_count") != len(merged_data):
+        fail("world-generation provenance public manifest entry count mismatch")
+
+materialized_world_exclusions = ()
+if phase == "materialized" and world_layout == "nested_stage":
+    # The installed stack flattens the canonical nested world into
+    # staged-world/ while retaining the sidecar/provenance siblings at their
+    # governed paths.  Bind the payload tree to the source world subtree only;
+    # validate the two sibling authorities independently below.
+    materialized_world_exclusions = (sidecar, provenance)
+validate_tree(payload, world_metadata, "world_snapshot", materialized_world_exclusions)
+validate_tree(sidecar, bundle.get("generated_world_sidecar"), "generated_world_sidecar")
+validate_file(provenance, bundle.get("world_generation_provenance"), "world_generation_provenance")
+PY
+}
+
 validate_validator_47_stage() {
   local inventory_path="$config_dir/$TRIAD_INVENTORY_FILE"
   local bootstrap_peer_path="$config_dir/public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt"
@@ -569,13 +751,15 @@ receipt=$(absolute_path "$receipt")
 world_payload_dir="$world_dir"
 world_provenance_path="$world_dir/world-generation-provenance.json"
 world_sidecar_dir="$world_dir/generated-scenario-world"
+world_merged_manifest_path=""
 world_layout="direct_world"
-if [[ -e "$world_dir/world" ]]; then
+if [[ -e "$world_dir/world" || -L "$world_dir/world" ]]; then
   [[ -d "$world_dir/world" && ! -L "$world_dir/world" ]] \
     || die "generated-world/world must be a regular directory"
   [[ ! -e "$world_dir/snapshot.json" ]] \
     || die "ambiguous generated-world layout: both root snapshot.json and world/snapshot.json exist"
   world_payload_dir="$world_dir/world"
+  world_merged_manifest_path="$world_dir/merged-public-manifest-entries.json"
   world_layout="nested_stage"
 fi
 if [[ ${OASIS7_TEST_ONLY:-} == 1 ]]; then
@@ -649,6 +833,16 @@ else
   [[ -z "$identity_dir" ]] || die "--identity-dir is only valid for validator-47"
   triad_inventory_sha256=""
 fi
+
+# The stage handoff is a three-part authority boundary. Validate the complete
+# nested world/sidecar/provenance tree against the release-candidate bundle
+# before creating the fresh stack, and again after materialization. This
+# rejects partial, stale, tampered, symlinked, and special-file inputs before
+# any package move, identity provisioning, or unit rendering can occur.
+validate_world_handoff_integrity \
+  "$config_dir/public-testnet-governed-bootstrap-bundle-2026-06-06.json" \
+  "$world_payload_dir" "$world_sidecar_dir" "$world_provenance_path" \
+  "$world_merged_manifest_path" "$world_layout" input
 
 [[ ! -e "$stack_root" ]] || [[ -d "$stack_root" && -z "$(find "$stack_root" -mindepth 1 -print -quit)" ]] \
   || die "stack root must be empty: $stack_root"
@@ -742,6 +936,10 @@ if [[ "$world_layout" == nested_stage ]]; then
 else
   cp -a "$world_dir/." "$stack_root/staged-world/"
 fi
+validate_world_handoff_integrity \
+  "$stack_root/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json" \
+  "$stack_root/staged-world" "$stack_root/staged-world/generated-scenario-world" \
+  "$stack_root/staged-world/world-generation-provenance.json" "" "$world_layout" materialized
 if [[ "$node_id" == "$VALIDATOR_47_NODE_ID" ]]; then
   # Import the already-staged identity byte-for-byte.  This path is deliberately
   # separate from the governed config stage so a stale pair key cannot be

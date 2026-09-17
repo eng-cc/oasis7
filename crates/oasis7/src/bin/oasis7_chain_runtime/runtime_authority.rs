@@ -4,7 +4,10 @@ use oasis7_node::NodeRole;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::fs;
-use std::path::Path;
+use std::io::ErrorKind;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[path = "runtime_authority_observer.rs"]
 mod observer;
@@ -14,6 +17,8 @@ const MANAGED_TRIAD_NODE_IDS: [&str; 3] = [
     "triad-testnet-storage",
     "triad-testnet-validator-47",
 ];
+
+static AUTHORITY_PREFLIGHT_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
 /// Immutable deployment authority facts captured from the inputs used by this
 /// runtime instance.  This is deliberately separate from NodeSnapshot: the
@@ -138,6 +143,11 @@ pub(super) fn load_runtime_authority_binding_for_node_with_world_id(
             );
         }
         (Some(registry_path), Some(inventory_path)) => {
+            if !node_id.is_empty() && !is_managed_triad_node_id(node_id) {
+                return Err(format!(
+                    "full deployment authority requires a canonical managed triad identity, got {node_id}"
+                ));
+            }
             let loaded = loaded_network_tier_manifest.ok_or_else(|| {
                 "deployment authority binding requires --network-tier-manifest".to_string()
             })?;
@@ -301,8 +311,18 @@ pub(super) fn load_authority_world(
     execution_world_dir: &Path,
     effective_world_id: &str,
 ) -> Result<RuntimeWorld, String> {
-    let world = super::execution_bridge::load_execution_world(execution_world_dir)?;
+    let has_persisted_state = authority_world_has_persisted_state(execution_world_dir);
+    let world = if has_persisted_state {
+        load_authority_world_from_isolated_copy(execution_world_dir)?
+    } else {
+        super::execution_bridge::load_execution_world(execution_world_dir)?
+    };
     let persisted_world_id = world.chain_resource_manifest().world_id.as_str();
+    if has_persisted_state && persisted_world_id == "unbound" {
+        return Err(
+            "persisted execution world has an unbound world id; public-testnet authority requires a fresh world or an explicitly bound persisted world".to_string(),
+        );
+    }
     if persisted_world_id != "unbound" && persisted_world_id != effective_world_id {
         return Err(format!(
             "persisted execution world id does not match effective runtime world id: expected={} actual={}",
@@ -310,6 +330,129 @@ pub(super) fn load_authority_world(
         ));
     }
     Ok(world)
+}
+
+fn authority_world_has_persisted_state(execution_world_dir: &Path) -> bool {
+    [
+        "snapshot.json",
+        "journal.json",
+        "snapshot.manifest.json",
+        "journal.segments.json",
+        ".distfs-state",
+    ]
+    .iter()
+    .any(|name| fs::symlink_metadata(execution_world_dir.join(name)).is_ok())
+}
+
+fn load_authority_world_from_isolated_copy(
+    execution_world_dir: &Path,
+) -> Result<RuntimeWorld, String> {
+    let isolated_dir = create_authority_preflight_dir()?;
+    let load_result = copy_authority_world_tree(execution_world_dir, isolated_dir.as_path())
+        .and_then(|()| super::execution_bridge::load_execution_world(isolated_dir.as_path()));
+    let cleanup_result = fs::remove_dir_all(isolated_dir.as_path()).map_err(|err| {
+        format!(
+            "remove isolated authority world copy {} failed: {err}",
+            isolated_dir.display()
+        )
+    });
+    match (load_result, cleanup_result) {
+        (Ok(world), Ok(())) => Ok(world),
+        (Err(load_error), Ok(())) => Err(load_error),
+        (Ok(_), Err(cleanup_error)) => Err(cleanup_error),
+        (Err(load_error), Err(cleanup_error)) => Err(format!(
+            "{load_error}; cleanup also failed: {cleanup_error}"
+        )),
+    }
+}
+
+fn create_authority_preflight_dir() -> Result<PathBuf, String> {
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|err| format!("read authority preflight clock failed: {err}"))?
+        .as_nanos();
+    let process_id = std::process::id();
+    for _ in 0..64 {
+        let sequence = AUTHORITY_PREFLIGHT_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+        let path = std::env::temp_dir().join(format!(
+            "oasis7-runtime-authority-preflight-{process_id}-{timestamp}-{sequence}"
+        ));
+        match fs::create_dir(path.as_path()) {
+            Ok(()) => return Ok(path),
+            Err(error) if error.kind() == ErrorKind::AlreadyExists => continue,
+            Err(error) => {
+                return Err(format!(
+                    "create isolated authority world copy {} failed: {error}",
+                    path.display()
+                ));
+            }
+        }
+    }
+    Err("create isolated authority world copy exhausted collision retries".to_string())
+}
+
+fn copy_authority_world_tree(source: &Path, destination: &Path) -> Result<(), String> {
+    let source_type = fs::symlink_metadata(source).map_err(|err| {
+        format!(
+            "inspect persisted execution world {} failed: {err}",
+            source.display()
+        )
+    })?;
+    if source_type.file_type().is_symlink() || !source_type.is_dir() {
+        return Err(format!(
+            "persisted execution world {} must be a non-symlink directory",
+            source.display()
+        ));
+    }
+    for entry in fs::read_dir(source).map_err(|err| {
+        format!(
+            "read persisted execution world {} failed: {err}",
+            source.display()
+        )
+    })? {
+        let entry = entry.map_err(|err| {
+            format!(
+                "read persisted execution world entry {} failed: {err}",
+                source.display()
+            )
+        })?;
+        let source_path = entry.path();
+        let destination_path = destination.join(entry.file_name());
+        let file_type = entry.file_type().map_err(|err| {
+            format!(
+                "inspect persisted execution world entry {} failed: {err}",
+                source_path.display()
+            )
+        })?;
+        if file_type.is_symlink() {
+            return Err(format!(
+                "persisted execution world contains unsupported symlink {}",
+                source_path.display()
+            ));
+        }
+        if file_type.is_dir() {
+            fs::create_dir(destination_path.as_path()).map_err(|err| {
+                format!(
+                    "create isolated authority world directory {} failed: {err}",
+                    destination_path.display()
+                )
+            })?;
+            copy_authority_world_tree(source_path.as_path(), destination_path.as_path())?;
+        } else if file_type.is_file() {
+            fs::copy(source_path.as_path(), destination_path.as_path()).map_err(|err| {
+                format!(
+                    "copy persisted execution world file {} failed: {err}",
+                    source_path.display()
+                )
+            })?;
+        } else {
+            return Err(format!(
+                "persisted execution world contains unsupported entry {}",
+                source_path.display()
+            ));
+        }
+    }
+    Ok(())
 }
 
 #[derive(Debug)]

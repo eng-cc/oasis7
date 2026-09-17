@@ -11,6 +11,7 @@ Usage:
     --sequencer-env <path> \
     --storage-env <path> \
     --manifest-path <path> \
+    [--deployment-inventory <path>] \
     [--out <path>]
 
   ./scripts/p2p-public-testnet-local-observer-sync.sh apply \
@@ -18,6 +19,7 @@ Usage:
     --sequencer-env <path> \
     --storage-env <path> \
     --manifest-path <path> \
+    [--deployment-inventory <path>] \
     [--manifest-source <path>] \
     [--manifest-dest <path>] \
     [--start-script-source <path>] \
@@ -35,7 +37,10 @@ Description:
   manifest, and deployment-authority settings with the governed contract.
   apply mode generates a validator registry as a one-time adapter from legacy
   ECS NODE_VALIDATORS_CSV / NODE_VALIDATOR_SIGNERS_CSV, then binds and
-  localizes its exact raw and semantic digest in the observer manifest.
+  localizes its exact raw and semantic digest in the observer manifest. A
+  three-validator rollout must also pass the matching deployment inventory;
+  the inventory is consumed as an input authority check and is never emitted
+  into the non-managed observer env.
   Non-managed observers use this manifest-bound registry authority only;
   managed triad identities retain the separate complete deployment inventory
   requirement enforced by the launcher/runtime.
@@ -44,7 +49,7 @@ Description:
   to point at those local copies. reset-state backs up and clears the local
   observer's replicated execution state, storage root, simulator mirror, and
   bridge state so a drifted pre-sync history can be rebuilt from the current
-  two-validator network contract. Recovery must then start the observer and use
+  validator deployment contract. Recovery must then start the observer and use
   signed replication checkpoint sync. The former seed-from-remote mode is
   disabled because a live filesystem copy cannot bind the execution world,
   records, storage, replication, simulator mirror, and bridge state to one
@@ -60,6 +65,14 @@ die() {
 require_file() {
   local path=$1
   [[ -f "$path" ]] || die "missing file: $path"
+}
+
+absolute_path() {
+  python3 - "$1" <<'PY'
+import os
+import sys
+print(os.path.abspath(os.path.expanduser(sys.argv[1])))
+PY
 }
 
 raw_value() {
@@ -198,8 +211,9 @@ resolve_repo_ref() {
 
 manifest_authority_metadata() {
   local manifest_path=$1
+  local deployment_inventory_path=${2:-}
 
-  python3 - "$manifest_path" "$repo_root" <<'PY'
+  python3 - "$manifest_path" "$repo_root" "$deployment_inventory_path" <<'PY'
 import hashlib
 import json
 import os
@@ -209,6 +223,7 @@ import sys
 
 manifest_path = pathlib.Path(sys.argv[1]).resolve()
 repo_root = pathlib.Path(sys.argv[2]).resolve()
+deployment_inventory_path = pathlib.Path(sys.argv[3]).resolve() if sys.argv[3] else None
 manifest_dir = manifest_path.parent
 
 def fail(message):
@@ -236,6 +251,19 @@ except (OSError, json.JSONDecodeError) as exc:
     fail(f"cannot read public-testnet manifest authority: {manifest_path}: {exc}")
 if manifest.get("tier") != "public_testnet":
     fail("local observer deployment authority requires tier=public_testnet")
+
+# Preserve the rollout gate even when the manifest-bound registry source is
+# temporarily unavailable (for example, before apply has localized it beside
+# the observer stack). A manifest advertising three validators must never be
+# silently evaluated as a legacy pair, and the operator should get the
+# actionable missing-inventory failure first.
+declared_policy = manifest.get("validator_policy")
+if (
+    isinstance(declared_policy, dict)
+    and declared_policy.get("target_validator_count") == 3
+    and deployment_inventory_path is None
+):
+    fail("three-validator observer rollout requires --deployment-inventory")
 
 registry_binding = manifest.get("deployment_validator_registry")
 if not isinstance(registry_binding, dict):
@@ -319,12 +347,66 @@ target_validator_count = policy.get("target_validator_count")
 if isinstance(target_validator_count, bool) or not isinstance(target_validator_count, int) or target_validator_count != len(validators):
     fail("public-testnet observer registry count does not match manifest authority")
 
+if len(validators) == 3:
+    if deployment_inventory_path is None:
+        fail("three-validator observer rollout requires --deployment-inventory")
+    if deployment_inventory_path.is_symlink() or not deployment_inventory_path.is_file():
+        fail(f"observer deployment inventory must be a regular file: {deployment_inventory_path}")
+    actual_inventory_sha = hashlib.sha256(deployment_inventory_path.read_bytes()).hexdigest()
+    try:
+        inventory = json.loads(deployment_inventory_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        fail(f"cannot read observer deployment inventory: {deployment_inventory_path}: {exc}")
+    if not isinstance(inventory, dict):
+        fail("observer deployment inventory must be an object")
+    if inventory.get("schema_version") != "oasis7.public_testnet_validator_triad_inventory.v1":
+        fail("three-validator observer rollout requires the governed triad inventory")
+    if inventory.get("network_tier") != "public_testnet" or inventory.get("topology") != "three_equal_validator":
+        fail("observer deployment inventory network/topology mismatch")
+    authority = inventory.get("authority")
+    inventory_nodes = inventory.get("nodes")
+    if not isinstance(authority, dict) or not isinstance(inventory_nodes, dict):
+        fail("observer deployment inventory authority/nodes are missing")
+    if len(inventory_nodes) != len(validators) or any(
+        not isinstance(item, dict) or not isinstance(item.get("node_id"), str)
+        for item in inventory_nodes.values()
+    ):
+        fail("observer deployment inventory nodes are malformed")
+    if authority.get("generated_registry_sha256") != registry_sha.lower():
+        fail("observer deployment inventory generated registry digest does not match rollout registry")
+    if authority.get("generated_registry_semantic_sha256") != registry_semantic_sha.lower():
+        fail("observer deployment inventory generated registry semantic digest does not match rollout registry")
+    expected_node_ids = {item["node_id"] for item in validators}
+    inventory_node_ids = {
+        item.get("node_id") for item in inventory_nodes.values()
+        if isinstance(item, dict) and isinstance(item.get("node_id"), str)
+    }
+    if inventory_node_ids != expected_node_ids:
+        fail("observer deployment inventory validator identities do not match rollout registry")
+    print(
+        "\t".join(
+            (
+                registry_ref,
+                registry_sha.lower(),
+                registry_semantic_sha.lower(),
+                str(len(validators)),
+                actual_inventory_sha,
+            )
+        )
+    )
+    raise SystemExit(0)
+
+if deployment_inventory_path is not None:
+    fail("deployment inventory is only valid for an exact three-validator rollout")
+
 print(
     "\t".join(
         (
             registry_ref,
             registry_sha.lower(),
             registry_semantic_sha.lower(),
+            str(len(validators)),
+            "",
         )
     )
 )
@@ -338,14 +420,18 @@ render_env() {
   local manifest_path=$4
   local emit_genesis_registry_path=${5:-0}
   local authority_manifest_path=${6:-$manifest_path}
+  local deployment_inventory_path=${7:-}
 
   require_file "$authority_manifest_path"
   local authority_metadata authority_registry_ref authority_registry_sha authority_registry_semantic_sha
-  authority_metadata=$(manifest_authority_metadata "$authority_manifest_path") || die "$authority_metadata"
+  authority_metadata=$(manifest_authority_metadata "$authority_manifest_path" "$deployment_inventory_path") || die "$authority_metadata"
+  local authority_validator_count authority_inventory_sha
   IFS=$'\t' read -r \
     authority_registry_ref \
     authority_registry_sha \
-    authority_registry_semantic_sha <<<"$authority_metadata"
+    authority_registry_semantic_sha \
+    authority_validator_count \
+    authority_inventory_sha <<<"$authority_metadata"
 
   local seq_world_id storage_world_id
   seq_world_id=$(required_value "$sequencer_env" WORLD_ID)
@@ -578,7 +664,7 @@ write_rendered_env() {
   fi
 
   mkdir -p "$(dirname "$out_path")"
-  printf '%s' "$rendered" > "$out_path"
+  printf '%s\n' "$rendered" > "$out_path"
 }
 
 backup_and_remove_path() {
@@ -1186,6 +1272,7 @@ local_env=""
 sequencer_env=""
 storage_env=""
 manifest_path=""
+deployment_inventory_path=""
 out_path="-"
 manifest_source=""
 manifest_dest=""
@@ -1211,6 +1298,10 @@ while (( $# > 0 )); do
       ;;
     --manifest-path)
       manifest_path=${2:-}
+      shift 2
+      ;;
+    --deployment-inventory)
+      deployment_inventory_path=${2:-}
       shift 2
       ;;
     --out)
@@ -1255,6 +1346,12 @@ while (( $# > 0 )); do
   esac
 done
 
+if [[ -n "$deployment_inventory_path" ]]; then
+  deployment_inventory_path=$(absolute_path "$deployment_inventory_path")
+  require_file "$deployment_inventory_path"
+  [[ ! -L "$deployment_inventory_path" ]] || die "deployment inventory must not be a symlink"
+fi
+
 case "$mode" in
   render|apply)
     [[ -n "$local_env" ]] || die "--local-env is required"
@@ -1267,7 +1364,7 @@ case "$mode" in
     require_file "$storage_env"
 
     if [[ "$mode" == "render" ]]; then
-      rendered_env=$(render_env "$local_env" "$sequencer_env" "$storage_env" "$manifest_path" 0)
+      rendered_env=$(render_env "$local_env" "$sequencer_env" "$storage_env" "$manifest_path" 0 "$manifest_path" "$deployment_inventory_path")
       write_rendered_env "$rendered_env" "$out_path"
       exit 0
     fi
@@ -1309,7 +1406,7 @@ case "$mode" in
     if [[ -n "$manifest_source" ]]; then
       rendered_manifest_path="$manifest_dest"
     fi
-    rendered_env=$(render_env "$local_env" "$sequencer_env" "$storage_env" "$rendered_manifest_path" 1 "$authority_manifest_path")
+    rendered_env=$(render_env "$local_env" "$sequencer_env" "$storage_env" "$rendered_manifest_path" 1 "$authority_manifest_path" "$deployment_inventory_path")
     if [[ -z "$start_script_dest" ]]; then
       start_script_dest="$local_stack_root/bin/start-node.sh"
     fi
@@ -1332,7 +1429,7 @@ case "$mode" in
 
     cp "$local_env" "$backup_dir/node.env.before"
     tmp_env="$backup_dir/node.env.rendered"
-    printf '%s' "$rendered_env" > "$tmp_env"
+    printf '%s\n' "$rendered_env" > "$tmp_env"
     cp "$tmp_env" "$local_env"
 
     if [[ -n "$manifest_source" ]]; then

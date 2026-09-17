@@ -568,6 +568,14 @@ class ThirdValidatorRuntimeStatusContractTest(unittest.TestCase):
         statuses["sequencer-204"]["validator"]["inventory_sha256"] = "0" * 64
         self.assert_identity_rejected(statuses, "inventory_identity_mismatch")
 
+    def test_absent_inventory_is_not_encoded_as_an_empty_ready_binding(self) -> None:
+        """Missing deployment authority must remain visibly non-ready."""
+        statuses = {name: projected_status(name) for name in NODE_IDS}
+        for status in statuses.values():
+            status["validator"]["inventory_ref"] = ""
+            status["validator"]["inventory_sha256"] = ""
+        self.assert_identity_rejected(statuses, "inventory_identity_missing")
+
     def test_wrong_signer_binding_is_not_triad_ready(self) -> None:
         statuses = {name: projected_status(name) for name in NODE_IDS}
         statuses["storage-205"]["validator"]["signer_public_key_hex"] = "0" * 64

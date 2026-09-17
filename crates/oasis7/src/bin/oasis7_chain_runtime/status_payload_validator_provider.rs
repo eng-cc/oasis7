@@ -82,8 +82,12 @@ pub(crate) fn build_chain_validator_status(
         registry_sha256: authority_binding.map(|binding| binding.registry_sha256.clone()),
         registry_semantic_sha256: authority_binding
             .map(|binding| binding.registry_semantic_sha256.clone()),
-        inventory_ref: authority_binding.map(|binding| binding.inventory_ref.clone()),
-        inventory_sha256: authority_binding.map(|binding| binding.inventory_sha256.clone()),
+        inventory_ref: authority_binding.and_then(|binding| {
+            (!binding.inventory_ref.is_empty()).then(|| binding.inventory_ref.clone())
+        }),
+        inventory_sha256: authority_binding.and_then(|binding| {
+            (!binding.inventory_sha256.is_empty()).then(|| binding.inventory_sha256.clone())
+        }),
     }
 }
 
@@ -264,7 +268,9 @@ pub(crate) struct ChainValidatorStatus {
     pub(crate) registry_ref: Option<String>,
     pub(crate) registry_sha256: Option<String>,
     pub(crate) registry_semantic_sha256: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) inventory_ref: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) inventory_sha256: Option<String>,
 }
 
@@ -422,6 +428,40 @@ mod tests {
             last_gc_error: None,
             degraded_reason: None,
         }
+    }
+
+    #[test]
+    fn observer_status_omits_inventory_authority_when_not_bound() {
+        let snapshot = NodeSnapshot {
+            node_id: "triad-testnet-local".to_string(),
+            player_id: "observer-player".to_string(),
+            world_id: "oasis7-public-testnet-governed-20260606".to_string(),
+            role: NodeRole::Observer,
+            replication_enabled: false,
+            running: true,
+            tick_count: 1,
+            last_tick_unix_ms: Some(1_700_000_000_000),
+            consensus: NodeConsensusSnapshot::default(),
+            consensus_progress_observer_error: None,
+            last_error: None,
+        };
+        let authority = RuntimeAuthorityBinding {
+            registry_ref: "config/observer-registry.json".to_string(),
+            registry_sha256: "registry-sha256".to_string(),
+            registry_semantic_sha256: "registry-semantic-sha256".to_string(),
+            inventory_ref: String::new(),
+            inventory_sha256: String::new(),
+            validator_signer_public_keys: BTreeMap::new(),
+            validator_stakes: BTreeMap::new(),
+            validator_47_provider_peer_id: None,
+        };
+
+        let projected = build_chain_validator_status(&snapshot, Some(&authority));
+        assert_eq!(projected.inventory_ref, None);
+        assert_eq!(projected.inventory_sha256, None);
+        let serialized = serde_json::to_value(&projected).expect("serialize observer status");
+        assert!(serialized.get("inventory_ref").is_none());
+        assert!(serialized.get("inventory_sha256").is_none());
     }
 
     #[test]

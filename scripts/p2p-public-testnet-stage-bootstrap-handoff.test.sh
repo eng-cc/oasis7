@@ -266,6 +266,30 @@ bootstrap_with_stage() {
     --receipt "$target_receipt"
 }
 
+expect_bootstrap_rejects_stage() {
+  local label=$1 source_stage=$2 target_root=$3
+  local output="$TMP_DIR/$label.out"
+  set +e
+  bootstrap_with_stage \
+    "$target_root" \
+    "$TMP_DIR/$label-systemd" \
+    "$TMP_DIR/$label-receipt.json" \
+    "$source_stage" >"$output" 2>&1
+  bootstrap_rc=$?
+  set -e
+  if [[ "$bootstrap_rc" -eq 0 ]]; then
+    cat "$output" >&2
+    fail "$label: bootstrap accepted a malformed nested stage"
+  fi
+  if [[ -e "$target_root" ]]; then
+    fail "$label: target root was materialized after rejection"
+  fi
+  if [[ -e "$TMP_DIR/$label-systemd" ]]; then
+    fail "$label: systemd unit directory was materialized after rejection"
+  fi
+  printf 'ok: rejected malformed stage %s before materialization\n' "$label"
+}
+
 # The generated stage must be directly consumable.  This is the positive
 # stage->bootstrap handoff and also proves the generated world path contract.
 bootstrap_root="$TMP_DIR/bootstrapped-opt/oasis7/p2p-testnet"
@@ -306,6 +330,42 @@ jq -e \
 cmp -s "$identity_dir/node-keypair.toml" "$bootstrap_root/config/node-keypair.toml"
 cmp -s "$identity_dir/identity-receipt.json" "$bootstrap_root/config/identity-receipt.json"
 test ! -e "$TMP_DIR/systemctl.log"
+
+# The nested handoff is a content-addressed stage, not merely a directory
+# shape. Bootstrap must validate the complete world/sidecar/provenance
+# closure before creating either the stack root or a unit directory.
+tampered_world_stage="$TMP_DIR/stage-tampered-world"
+cp -a "$triad_stage" "$tampered_world_stage"
+printf '{"tampered":true}\n' >>"$tampered_world_stage/generated-world/world/snapshot.json"
+expect_bootstrap_rejects_stage \
+  nested-content-tamper "$tampered_world_stage" \
+  "$TMP_DIR/nested-content-tamper-opt/oasis7/p2p-testnet"
+
+partial_sidecar_stage="$TMP_DIR/stage-partial-sidecar"
+cp -a "$triad_stage" "$partial_sidecar_stage"
+rm -f "$partial_sidecar_stage/generated-world/generated-scenario-world/journal.json"
+expect_bootstrap_rejects_stage \
+  nested-sidecar-partial "$partial_sidecar_stage" \
+  "$TMP_DIR/nested-sidecar-partial-opt/oasis7/p2p-testnet"
+
+drifted_provenance_stage="$TMP_DIR/stage-drifted-provenance"
+cp -a "$triad_stage" "$drifted_provenance_stage"
+jq '.scenario_id = "tampered_scenario"' \
+  "$drifted_provenance_stage/generated-world/world-generation-provenance.json" \
+  >"$TMP_DIR/drifted-provenance.json"
+mv "$TMP_DIR/drifted-provenance.json" \
+  "$drifted_provenance_stage/generated-world/world-generation-provenance.json"
+expect_bootstrap_rejects_stage \
+  nested-provenance-drift "$drifted_provenance_stage" \
+  "$TMP_DIR/nested-provenance-drift-opt/oasis7/p2p-testnet"
+
+recursive_symlink_stage="$TMP_DIR/stage-recursive-symlink"
+cp -a "$triad_stage" "$recursive_symlink_stage"
+mkdir -p "$recursive_symlink_stage/generated-world/world/nested"
+ln -s ../nested "$recursive_symlink_stage/generated-world/world/nested/loop"
+expect_bootstrap_rejects_stage \
+  nested-recursive-symlink "$recursive_symlink_stage" \
+  "$TMP_DIR/nested-recursive-symlink-opt/oasis7/p2p-testnet"
 
 # Bootstrap must reject explicit stale world identity and role drift before
 # creating a target root.  These are source-stage mutations, not host actions.

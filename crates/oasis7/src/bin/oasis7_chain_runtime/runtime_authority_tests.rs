@@ -242,6 +242,37 @@ fn save_authority_world(world: &RuntimeWorld, world_dir: &Path) {
         .expect("save authority world");
 }
 
+fn persisted_tree_bytes(root: &Path) -> BTreeMap<String, Vec<u8>> {
+    fn collect(root: &Path, path: &Path, files: &mut BTreeMap<String, Vec<u8>>) {
+        for entry in fs::read_dir(path).expect("read persisted tree") {
+            let entry = entry.expect("read persisted tree entry");
+            let entry_path = entry.path();
+            let file_type = entry.file_type().expect("read persisted tree file type");
+            if file_type.is_dir() {
+                collect(root, entry_path.as_path(), files);
+            } else {
+                assert!(
+                    file_type.is_file(),
+                    "persisted tree contains unsupported entry"
+                );
+                let relative = entry_path
+                    .strip_prefix(root)
+                    .expect("persisted tree relative path")
+                    .to_string_lossy()
+                    .into_owned();
+                files.insert(
+                    relative,
+                    fs::read(entry_path.as_path()).expect("read persisted tree file"),
+                );
+            }
+        }
+    }
+
+    let mut files = BTreeMap::new();
+    collect(root, root, &mut files);
+    files
+}
+
 #[test]
 fn captures_actual_refs_and_file_digests() {
     let (registry, inventory, manifest_path) = write_authority_fixture();
@@ -355,8 +386,7 @@ fn rejects_inventory_digest_drift_without_mutating_existing_world() {
         .set_governance_finality_signer_registry(explicit_registry)
         .expect("set persisted effective registry");
     save_authority_world(&world, world_dir.as_path());
-    let snapshot_before = fs::read(world_dir.join("snapshot.json")).expect("read snapshot");
-    let journal_before = fs::read(world_dir.join("journal.json")).expect("read journal");
+    let persisted_tree_before = persisted_tree_bytes(world_dir.as_path());
 
     let manifest = fs::read_to_string(manifest_path.as_path()).expect("read manifest");
     fs::write(
@@ -380,12 +410,9 @@ fn rejects_inventory_digest_drift_without_mutating_existing_world() {
     .expect_err("digest drift must fail before world bootstrap mutation");
     assert!(error.contains("digest mismatch"));
     assert_eq!(
-        snapshot_before,
-        fs::read(world_dir.join("snapshot.json")).expect("read snapshot after rejection")
-    );
-    assert_eq!(
-        journal_before,
-        fs::read(world_dir.join("journal.json")).expect("read journal after rejection")
+        persisted_tree_before,
+        persisted_tree_bytes(world_dir.as_path()),
+        "authority rejection must not mutate any persisted world file"
     );
 }
 
@@ -594,8 +621,7 @@ fn observer_registry_authority_survives_persisted_world_restart_without_mutation
         .set_governance_finality_signer_registry(explicit_registry)
         .expect("set persisted observer registry");
     save_authority_world(&world, world_dir.as_path());
-    let snapshot_before = fs::read(world_dir.join("snapshot.json")).expect("read snapshot");
-    let journal_before = fs::read(world_dir.join("journal.json")).expect("read journal");
+    let persisted_tree_before = persisted_tree_bytes(world_dir.as_path());
 
     let mut loaded = loaded_manifest(manifest_path.as_path());
     loaded.manifest.validator_policy.target_validator_count = 2;
@@ -611,13 +637,69 @@ fn observer_registry_authority_survives_persisted_world_restart_without_mutation
     .expect("observer authority binding");
     assert_eq!(binding.validator_stakes.len(), 2);
     assert_eq!(
-        snapshot_before,
-        fs::read(world_dir.join("snapshot.json")).expect("snapshot after restart")
+        persisted_tree_before,
+        persisted_tree_bytes(world_dir.as_path()),
+        "authority restart must not mutate any persisted world file"
     );
-    assert_eq!(
-        journal_before,
-        fs::read(world_dir.join("journal.json")).expect("journal after restart")
+}
+
+#[test]
+fn rejects_foreign_node_id_with_governed_triad_inventory() {
+    let (registry, inventory, manifest_path) = write_authority_fixture();
+    let error = load_runtime_authority_binding_for_node(
+        manifest_path
+            .parent()
+            .expect("fixture root")
+            .join("world")
+            .as_path(),
+        "triad-testnet-validator-47-shadow",
+        NodeRole::Storage,
+        Some(registry.as_path()),
+        Some(inventory.as_path()),
+        Some(&loaded_manifest(manifest_path.as_path())),
+    )
+    .expect_err("foreign node identity must not use governed triad inventory authority");
+    assert!(
+        error.contains("managed triad identity"),
+        "unexpected error: {error}"
     );
+}
+
+#[test]
+fn rejects_persisted_unbound_world_for_public_testnet_authority() {
+    let (registry, inventory, manifest_path) = write_authority_fixture();
+    let world_dir = manifest_path.parent().expect("fixture root").join("world");
+    let explicit_registry =
+        super::super::governance_registry::load_genesis_finality_registry(registry.as_path())
+            .expect("load fixture registry");
+    let mut world = RuntimeWorld::new_production_hardened();
+    world
+        .set_governance_finality_signer_registry(explicit_registry)
+        .expect("set persisted effective registry");
+    world
+        .save_to_dir(world_dir.as_path())
+        .expect("save legacy unbound world");
+    fs::remove_dir_all(world_dir.join(".distfs-state")).expect("remove sidecar for legacy fixture");
+    let snapshot_path = world_dir.join("snapshot.json");
+    let mut snapshot: serde_json::Value =
+        serde_json::from_slice(&fs::read(snapshot_path.as_path()).expect("read snapshot"))
+            .expect("parse snapshot");
+    snapshot["chain_resource_manifest"]["world_id"] =
+        serde_json::Value::String("unbound".to_string());
+    fs::write(
+        snapshot_path.as_path(),
+        serde_json::to_vec_pretty(&snapshot).expect("encode unbound snapshot"),
+    )
+    .expect("write unbound snapshot");
+
+    let error = load_runtime_authority_binding(
+        world_dir.as_path(),
+        Some(registry.as_path()),
+        Some(inventory.as_path()),
+        Some(&loaded_manifest(manifest_path.as_path())),
+    )
+    .expect_err("persisted unbound world must not enter public-testnet authority");
+    assert!(error.contains("unbound"), "unexpected error: {error}");
 }
 
 #[test]
@@ -688,6 +770,7 @@ fn rejects_authority_when_persisted_world_id_does_not_match_inventory() {
             "fixture-generation",
         )
         .expect("save fixture world");
+    let persisted_tree_before = persisted_tree_bytes(world_dir.as_path());
 
     let error = load_runtime_authority_binding(
         world_dir.as_path(),
@@ -697,6 +780,11 @@ fn rejects_authority_when_persisted_world_id_does_not_match_inventory() {
     )
     .expect_err("persisted world identity drift must fail closed");
     assert!(error.contains("world id"), "unexpected error: {error}");
+    assert_eq!(
+        persisted_tree_before,
+        persisted_tree_bytes(world_dir.as_path()),
+        "persisted world identity rejection must not mutate any persisted world file"
+    );
 }
 
 #[test]

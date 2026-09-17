@@ -21,7 +21,8 @@ if [[ "$test_case" == "all" ]]; then
     corrupt_tree_total_bytes \
     legacy_manifest \
     completed_backup_reuse_fails_closed \
-    seed_from_remote_rejects_cross_surface_checkpoint_drift; do
+    seed_from_remote_rejects_cross_surface_checkpoint_drift \
+    triad_rollout_requires_validator_truth; do
     OASIS7_OBSERVER_SYNC_TEST_CASE="$test_case" bash "$0"
   done
   echo "ok: local observer sync accepts sequencer/storage validator env pair"
@@ -40,7 +41,8 @@ if [[ "$test_case" != "canonical_layout" \
   && "$test_case" != "corrupt_tree_total_bytes" \
   && "$test_case" != "legacy_manifest" \
   && "$test_case" != "completed_backup_reuse_fails_closed" \
-  && "$test_case" != "seed_from_remote_rejects_cross_surface_checkpoint_drift" ]]; then
+  && "$test_case" != "seed_from_remote_rejects_cross_surface_checkpoint_drift" \
+  && "$test_case" != "triad_rollout_requires_validator_truth" ]]; then
   echo "unknown observer sync test case: $test_case" >&2
   exit 2
 fi
@@ -192,6 +194,10 @@ EOF
   test ! -e "$tmp_dir/backup"
   echo "ok: observer seed rejects cross-surface checkpoint drift"
   exit 0
+fi
+
+if [[ "$test_case" == "triad_rollout_requires_validator_truth" ]]; then
+  exec bash "$repo_root/scripts/p2p-public-testnet-observer-triad-rollout.test.sh"
 fi
 
 if [[ "$test_case" == "reset_owned_restore_retry_path_shim" ]]; then
