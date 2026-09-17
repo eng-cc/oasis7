@@ -34,7 +34,7 @@ GitHub Project 只投影可管理字段，不能覆盖 Issue 或 cache 中的细
 | PR 或非 PR 交付 | 交付叶子任务的仓库或验证链 | GitHub PR 或现行非 PR evidence path |
 | 组合验收 | 对同一候选版本和范围判断完整能力 | GitHub task evidence 与适用 QA/专业产物 |
 
-每个叶子任务 MUST 有一个 outcome owner role、一个稳定 `Task UID` 和现行 workflow 规定的 canonical worktree/PR chain。协作 slice 可以提出发现或交付局部义务，但不改变唯一 owner。TPM 负责 task truth、dispatch、集成顺序和主链；专业角色负责其领域判断；QA 负责可验证性与发布判断的专业收口；repository health 负责组织、引用、证据边界和债务判断；涉及公开说明时由相应 LiveOps/community 角色参与。角色名或模板填写不自动产生独立评审、准入或发布权限。
+每个叶子任务 MUST 有一个 outcome owner role、一个稳定 `Task UID` 和现行 workflow 规定的 canonical worktree/PR chain。普通单叶子只维护自己的 Issue/PR/evidence，不因缺少组合义务而创建协调 Issue；一个叶子也不能关闭组合义务。协作 slice 可以提出发现或交付局部义务，但不改变唯一 owner。TPM 负责 task truth、dispatch、集成顺序和主链；专业角色负责其领域判断；QA 负责可验证性与发布判断的专业收口；repository health 负责组织、引用、证据边界和债务判断；涉及公开说明时由相应 LiveOps/community 角色参与。角色名或模板填写不自动产生独立评审、准入或发布权限。
 
 ## 3. 固定输入与证据身份
 
@@ -46,7 +46,7 @@ GitHub Project 只投影可管理字段，不能覆盖 Issue 或 cache 中的细
 | 任务消费版本 | 获批准且固定的产品/系统合同、发布记录、不可变内容与 consumed clauses | 浮动 `main`、分支名或 `latest` |
 | 验收候选版本 | 实际测试的 source/integration identity、配置、环境和入口 | 任意历史 green、文档 active 或 Issue closed |
 
-在有效机制支持时，复用现行 `input_contracts` 的 `contract_id`、`revision`、`contract_digest`、`publication_ref` 和 `consumed_clauses`；同时记录任务实际需要的 `acceptance_refs`。在未激活或不支持的环境，把这些语义放在可读 Issue/evidence 中，但不得用手工 JSON、front matter 或“已评审”文字伪造 adapter 绑定或消费资格。
+在有效机制支持时，复用现行 `input_contracts` 的 `contract_id`、`revision`、`contract_digest`、`publication_ref` 和 `consumed_clauses`；同时记录任务实际需要的 `acceptance_refs`。`revision` 只承载合同/发布 schema 规定的版本（当前 task input 要求整数时不得填 Git SHA）；源码或文档快照另用 `source_commit`/`source_head_oid`，候选集成另用 `integration_base_oid`/`tested_tree_oid`。在未激活或不支持的环境，把这些语义放在可读 Issue/evidence 中，但不得用手工 JSON、front matter 或“已评审”文字伪造 adapter 绑定或消费资格。
 
 跨文件消费的条款、REQ/AC 或设计义务必须记录为继承自冻结合同/发布记录的不可变 contract/publication repository（当前 canonical `eng-cc/oasis7`）加能在固定内容中唯一解析的 repository-relative `path#fragment`，并在每个消费者匹配；局部标识只在同一文件且无歧义时适用。合同 digest 固定内容身份，但不替代条款定位；移动或改名必须保留映射或正式处置，不能隐式取当前仓库。
 
@@ -116,7 +116,7 @@ GitHub Project 只投影可管理字段，不能覆盖 Issue 或 cache 中的细
 
 ## 8. 三-loop 消费与交付边界
 
-本节只是文档和记录的兼容边界。三-loop 的 policy、schema、adapter、资格与手动启用状态由 workflow source of truth 管理；候选设计、代码合并和明确 enablement 是不同事件。未激活时按现行 legacy workflow 工作，不能仅填写 `loop` 就绕过现有门禁。
+本节只是文档和记录的兼容边界。三-loop 的 policy、schema、adapter、资格与手动启用状态由 workflow source of truth 管理；候选设计、代码合并和明确 enablement 是不同事件。未激活时按现行 legacy workflow 工作，不能仅填写 `loop` 就绕过现有门禁。迁移是有授权的逐条旧/新 authority 映射、消费者修复、历史快照保留和回退记录；enablement 是兼容 helper/checker 通过负向测试、实际 readback、限定范围和回退审查后才由现行升级流程授予新任务资格。规范文档合入、helper 合入、结构检查通过或迁移演示本身都不触发 enablement，在途任务也不静默切换合同。
 
 | 交付类别 | 维护的权威内容 | 不得顺手修改 |
 | --- | --- | --- |
@@ -159,9 +159,13 @@ GitHub Project 只投影可管理字段，不能覆盖 Issue 或 cache 中的细
 
 需要处置的跨 loop 反馈必须形成可回读的关系：用现有 Issue comment、artifact、path#fragment 或等价 evidence identity 稳定定位原始发现（可在本记录内使用局部标签，不要求新的全局 ID 或第二台账），并记录接收 owner、处置 authority/approval owner、处置结论及依据、已授权的任务/合同修订或明确不修改决定、对消费者的阻断影响，以及解除阻断或关闭的证据。反馈记录本身不创建或启动下一个任务；未获得授权的阻断项继续留在当前协调记录的未完成义务中。此处是记录要求，不是新增状态或自动调度器。
 
-需要反向查询受影响消费者时，从现有合同绑定和 Task evidence 按需生成只读追踪视图，标明查询范围和未读取部分；不得维护另一份手工消费者清单或把该视图当作第二任务真值。
+需要反向查询受影响消费者时，从现有合同绑定和 Task evidence 按需生成只读追踪视图，标明查询范围和未读取部分；不得维护另一份手工消费者清单或把该视图当作第二任务真值。消费检查只覆盖当前记录明确声明的 path/fragment、合同发布身份和直接承接关系；缺失、重复、歧义、越界或未回读的引用阻断当前消费/组合，不扩展为无界历史迁移。实际 authority 由冻结内容、canonical Issue/comment readback 和当前权限/资格证明，cache、mutable URL、当前 main 或自签 digest 不能替代。
 
-新增或实质修改的 PM/系统内容及 trace records 的 changed-scope gate 将在本次实现完成后适用；未触达的 legacy content 保持在强制迁移范围之外。当前仍按人工内容规则和现有结构/link checks 维护，不因此宣称 metadata parser、semantic checker、Project field 或其他机械校验已经实现；后续只有在代表性文档和明确 owner/授权到位后，才可由 source-of-truth-first 变更实现机械校验，并补充正反例与迁移边界。
+新增或实质修改的 PM/系统内容及 trace records 只在 C1/C2/C3 兼容实现、负向测试、实际 readback 与现行启用授权全部到位后，才纳入新的 changed-scope/consumption gate；未触达的 legacy content 保持在强制迁移范围之外。当前已有 parser、checker 和测试只证明其现行受限能力，不证明新的不可变身份、实际技术 authority、被消费旧条款或生命周期接线已实现/启用；后续只有在代表性文档和明确 owner/授权到位后，才可由 source-of-truth-first 变更扩大机械校验，并补充正反例与迁移边界。
+
+### 10.1 C1/C2/C3 固定交接与验收
+
+后续实现不得自行扩写本规范的输入。C1 固定消费四份 S1 治理文档、`oasis7.loop-change/v1`/`oasis7.loop-task/v1` 的当前版本与完整/节选示例规则；验收引用身份/合同 `revision`/源码 OID 分离、typed applicability/N/A、单叶/组合边界、legacy 兼容和可定位负例。C2 只消费 C1 已合入的引用解析接口；验收实际技术 authority、声明消费闭包、changed-scope、rename/delete/重复 anchor 和 bounded legacy 检查。C3 只消费 C1/C2 固定接口以及有效 task binding/policy/CI identity；验收所有生命周期入口复用同一关系、Issue/Project/cache round-trip 不丢字段、组合证据缺失持续阻断、单叶不被迫建立第二台账。三者均须以各自的兼容实现、负向测试和真实 readback 证明后，才可按 workflow 另行限定启用；此规范本身不授权迁移、创建任务或后台 dispatch。
 
 ## 11. 可复用记录模板
 
