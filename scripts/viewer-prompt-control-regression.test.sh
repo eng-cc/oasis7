@@ -165,6 +165,8 @@ run_strong_auth_contract_checks() {
   fi
 
   require_strong_auth_text 'registerPlayerSessionForTest(null)' 'permitted hosted session-registration hook'
+  require_strong_auth_text 'registerPlayerSessionForTest(${agent_id_json}, {forceRebind: true})' 'post-onboarding force-rebind hook'
+  require_strong_auth_text 'post-onboarding auth binding rebind action' 'post-onboarding force-rebind diagnostics'
   require_strong_auth_text 'hosted player session registration action' 'session-registration action phase label'
   require_strong_auth_text 'registered_unbound' 'unbound runtime registration wait'
   if rg -n 'ab_read_eval.*registerPlayerSessionForTest' "$runner"; then
@@ -306,6 +308,21 @@ if [[ "${1:-}" == "eval" ]]; then
       exit 29
     fi
     printf '%s\n' 'true'
+  elif [[ "$script" == *'registerPlayerSessionForTest('* && "$script" == *'{forceRebind: true}'* ]]; then
+    if [[ -n "${VIEWER_PROMPT_FIXTURE_FORCE_REBIND_COUNT:-}" ]]; then
+      force_rebind_count=0
+      if [[ -f "$VIEWER_PROMPT_FIXTURE_FORCE_REBIND_COUNT" ]]; then
+        force_rebind_count=$(<"$VIEWER_PROMPT_FIXTURE_FORCE_REBIND_COUNT")
+      fi
+      printf '%s\n' "$((force_rebind_count + 1))" >"$VIEWER_PROMPT_FIXTURE_FORCE_REBIND_COUNT"
+    fi
+    printf '%s\n' 'true'
+  elif [[ "$script" == *'authBoundAgentId'* && "$script" == *'authBindingEpoch == null'* ]]; then
+    if [[ "${VIEWER_PROMPT_FIXTURE_BINDING_EPOCH_MISSING:-0}" == "1" ]]; then
+      printf '%s\n' 'true'
+    else
+      printf '%s\n' 'false'
+    fi
   elif [[ "$script" == '(() => { const s = window.__AW_TEST__.getState(); return s?.authRegistrationStatus === "issued" && s?.authRuntimeStatus === "issued"; })()' ]]; then
     if [[ "${VIEWER_PROMPT_FIXTURE_ALREADY_REGISTERED:-0}" == "1" ]]; then
       printf '%s\n' 'false'
@@ -433,6 +450,37 @@ test "$(<"$starter_oc_action_count_file")" = 1
 test -f "$starter_oc_ack_marker"
 test -f "$claim_ack_marker"
 rg -Fq '[action:claim first agent action]' "$claim_out/agent-browser.log"
+
+# Gameplay onboarding may bind the claimed agent before publishing a binding
+# epoch.  The runner must repair that precise state once, through the existing
+# non-retrying session registration hook, then resume protocol readiness.
+force_rebind_out="$tmp_root/post-onboarding-force-rebind"
+force_rebind_count="$tmp_root/post-onboarding-force-rebind-count"
+VIEWER_PROMPT_FIXTURE_ALREADY_REGISTERED=1 \
+  VIEWER_PROMPT_FIXTURE_BINDING_EPOCH_MISSING=1 \
+  VIEWER_PROMPT_FIXTURE_FORCE_REBIND_COUNT="$force_rebind_count" \
+  OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=fixture \
+  OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY=fixture \
+  OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=fixture \
+  PATH="$fake_bin:$PATH" "$runner" \
+  --headed --test-login --url http://127.0.0.1:9 --out-dir "$force_rebind_out"
+test -f "$force_rebind_count"
+test "$(<"$force_rebind_count")" = 1
+rg -Fq '[action:post-onboarding auth binding rebind action] completed' "$force_rebind_out/agent-browser.log"
+
+force_rebind_skip_out="$tmp_root/post-onboarding-force-rebind-skip"
+force_rebind_skip_count="$tmp_root/post-onboarding-force-rebind-skip-count"
+VIEWER_PROMPT_FIXTURE_ALREADY_REGISTERED=1 \
+  VIEWER_PROMPT_FIXTURE_FORCE_REBIND_COUNT="$force_rebind_skip_count" \
+  OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=fixture \
+  OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY=fixture \
+  OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=fixture \
+  PATH="$fake_bin:$PATH" "$runner" \
+  --headed --test-login --url http://127.0.0.1:9 --out-dir "$force_rebind_skip_out"
+if [[ -f "$force_rebind_skip_count" ]]; then
+  test "$(<"$force_rebind_skip_count")" = 0
+fi
+rg -Fq '[action:post-onboarding auth binding rebind action] skipped; binding epoch already present or agent not bound' "$force_rebind_skip_out/agent-browser.log"
 
 # The visible test-login action may finish server-side registration before the
 # runner observes its first auth state.  In that case the registration hook

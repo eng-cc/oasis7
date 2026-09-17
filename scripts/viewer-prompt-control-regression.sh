@@ -495,6 +495,37 @@ register_hosted_player_session() {
   return "$result"
 }
 
+maybe_rebind_post_onboarding_session() {
+  local agent_id_json="$1"
+  local rebind_required
+  local result
+  rebind_required="$(ab_read_eval "$SESSION" "(() => { const s = window.__AW_TEST__.getState(); return s?.authBoundAgentId === ${agent_id_json} && s?.authBindingEpoch == null; })()" 2>/dev/null || true)"
+  case "$rebind_required" in
+    true|\"true\")
+      # This is an action-bearing session setup call.  Never retry it: the
+      # first request may have committed even if browser transport failed.
+      if ab_eval "$SESSION" "window.__AW_TEST__.registerPlayerSessionForTest(${agent_id_json}, {forceRebind: true})" >>"$AB_LOG" 2>&1; then
+        printf '[action:post-onboarding auth binding rebind action] completed\n' >>"$AB_LOG"
+        return 0
+      else
+        result=$?
+      fi
+      printf '[action:post-onboarding auth binding rebind action] command failed (exit=%s)\n' "$result" >>"$AB_LOG"
+      capture_failure_diagnostics "post-onboarding auth binding rebind action"
+      echo "error: post-onboarding auth binding rebind action failed (phase: post-onboarding auth binding rebind action; diagnostics: ${OUT_DIR}/failure-$(diagnostic_slug "post-onboarding auth binding rebind action")-*)" >&2
+      return "$result"
+      ;;
+    false|\"false\")
+      printf '[action:post-onboarding auth binding rebind action] skipped; binding epoch already present or agent not bound\n' >>"$AB_LOG"
+      ;;
+    *)
+      capture_failure_diagnostics "post-onboarding auth binding rebind decision"
+      echo "error: post-onboarding auth binding rebind state was unavailable (phase: post-onboarding auth binding rebind decision; diagnostics: ${OUT_DIR}/failure-$(diagnostic_slug "post-onboarding auth binding rebind decision")-*)" >&2
+      return 1
+      ;;
+  esac
+}
+
 maybe_claim_first_agent() {
   local agent_selector_json="$1"
   local empty_world
@@ -558,8 +589,8 @@ maybe_claim_starter_oc() {
   wait_for_js_true \
     '(() => { const s = window.__AW_TEST__.getState(); const f = s?.lastGameplayActionFeedback; return f?.kind === "gameplay_action" && f?.action === "claim_starter_oc" && f?.stage === "ack" && f?.accepted === true && f?.response?.action_id === "claim_starter_oc"; })()' \
     "claim starter oc gameplay authority ack"
-  wait_for_js_true "(() => { const s = window.__AW_TEST__.getState(); const p = s?.viewerProtocol || {}; return !document.querySelector('[data-viewer-fixture-state=\"starter_oc_required_gate\"]') && Boolean(document.querySelector('#prompt-short')) && s?.authBoundAgentId === ${agent_id_json} && s?.authBindingEpoch != null && p?.negotiated === true && Array.isArray(p?.capabilities) && p.capabilities.includes('prompt_control_result_v1'); })()" \
-    "starter OC overlay dismissal and control readiness"
+  wait_for_js_true "(() => { const s = window.__AW_TEST__.getState(); return !document.querySelector('[data-viewer-fixture-state=\"starter_oc_required_gate\"]') && Boolean(document.querySelector('#prompt-short')) && s?.authBoundAgentId === ${agent_id_json}; })()" \
+    "starter OC overlay dismissal and agent binding"
 }
 
 wait_for_js_true() {
@@ -806,6 +837,7 @@ if (( FIRST_AGENT_CLAIM_PERFORMED == 0 )); then
   wait_for_js_true "(() => window.__AW_TEST__.getState()?.selectedId === ${AGENT_ID_JSON})()" "exact agent selection"
 fi
 maybe_claim_starter_oc "$AGENT_ID_JSON"
+maybe_rebind_post_onboarding_session "$AGENT_ID_JSON"
 
 wait_for_js_true "(() => { const s = window.__AW_TEST__.getState(); const p = s?.viewerProtocol || {}; return s?.authReady === true && s?.authRegistrationStatus === \"registered\" && [\"registered\", \"registered_unbound\"].includes(s?.authRuntimeStatus) && s?.authBoundAgentId === ${AGENT_ID_JSON} && s?.authSessionEpoch != null && s?.authBindingEpoch != null && p?.negotiated === true && Array.isArray(p?.capabilities) && p.capabilities.includes(\"prompt_control_result_v1\") && String(p?.authorityEpoch || \"\").length > 0; })()" "auth binding and prompt-result protocol readiness"
 
