@@ -305,7 +305,7 @@ manifest = {
     "network_id": network_id,
     "chain_id": chain_id,
     "runtime_refs": {
-        "release_candidate_bundle_ref": release_candidate_bundle_ref,
+        "release_candidate_bundle_ref": manifest_relative_file_ref(release_candidate_bundle_ref),
         "genesis_ref": manifest_relative_file_ref(genesis_ref),
         "bootstrap_peer_ref": manifest_relative_file_ref(bootstrap_peer_ref),
     },
