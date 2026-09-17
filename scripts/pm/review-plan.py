@@ -574,6 +574,35 @@ def source_review_input(root: Path, path: str, *, task_uid: str, head: str,
     return identity, applicability
 
 
+def derived_source_review_input(root: Path, *, task_uid: str, head: str,
+                                comparison_oid: str, roles: list[str],
+                                impact_projection: dict[str, Any],
+                                bootstrap_epoch: int | None) -> tuple[dict[str, Any], dict[str, Any]]:
+    mapping = load_json(root / ".pm/github-project-sync/tasks.json")
+    task = (mapping.get("tasks") or {}).get(task_uid) or {}
+    epoch = bootstrap_epoch or task.get("bootstrap_epoch")
+    repository = task.get("repository") or (mapping.get("project") or {}).get("repo")
+    pr_number = task.get("pr_number")
+    if type(epoch) is not int or epoch < 1 or not repository or type(pr_number) is not int or pr_number < 1:
+        raise ContractError("default v2 source plan requires task bootstrap epoch, repository and PR number")
+    digest = lambda value: hashlib.sha256(json.dumps(
+        value, sort_keys=True, separators=(",", ":")
+    ).encode()).hexdigest()
+    identity_module = load_identity_module()
+    identity = identity_module.source_review_identity(
+        task_uid=task_uid, bootstrap_epoch=epoch, repository=repository, pr_number=pr_number,
+        source_head_oid=head, source_scope_oid=comparison_oid,
+        changed_paths_digest=str(impact_projection["changed_paths_digest"]).removeprefix("sha256:"),
+        ordered_role_ids=roles, role_contract_digest=digest(roles),
+        review_policy_digest=digest({"schema": V2_SCHEMA, "change_class": impact_projection["change_class"]}),
+        input_contract_digest=str(impact_projection["projection_digest"]).removeprefix("sha256:"),
+    )
+    applicability_identity = identity_module.review_applicability_identity(identity)
+    return identity, {"identity": applicability_identity,
+                      "identity_digest": identity_module.review_applicability_digest(applicability_identity),
+                      "verified": True}
+
+
 def live_verify_v2_receipt(path: Path, receipt: dict[str, Any]) -> dict[str, Any]:
     """Re-read the live PR/check/artifact before freezing v2 integration identity."""
     helper = Path(__file__).with_name("ci-ready-receipt.py")
@@ -925,8 +954,6 @@ def main() -> int:
             }
             if args.evidence_digest:
                 raise ContractError("v2 review plan rejects legacy --evidence-digest; use --source-review-input or --ci-ready-receipt")
-            if not args.source_review_input and not args.ci_ready_receipt:
-                raise ContractError("v2 review plan requires --source-review-input or --ci-ready-receipt")
             if not args.impact_projection:
                 raise ContractError("v2 review plan requires --impact-projection")
             if args.ci_ready_receipt:
@@ -1004,6 +1031,12 @@ def main() -> int:
                 source_identity, applicability = source_review_input(
                     root, args.source_review_input, task_uid=args.task_uid, head=args.head,
                     comparison_oid=source_scope_oid, roles=roles, args=args,
+                )
+            elif receipt_value is None:
+                source_identity, applicability = derived_source_review_input(
+                    root, task_uid=args.task_uid, head=args.head, comparison_oid=source_scope_oid,
+                    roles=roles, impact_projection=impact_projection,
+                    bootstrap_epoch=args.bootstrap_epoch,
                 )
             else:
                 assert receipt_value is not None

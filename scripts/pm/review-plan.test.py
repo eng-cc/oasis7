@@ -35,7 +35,7 @@ class ReviewPlanTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         mapping = self.root / '.pm/github-project-sync'
         mapping.mkdir(parents=True)
-        (mapping / 'tasks.json').write_text(json.dumps({'tasks': {TASK: {'task_uid': TASK, 'repository': 'fixture/repo', 'issue_number': 1}}}))
+        (mapping / 'tasks.json').write_text(json.dumps({'tasks': {TASK: {'task_uid': TASK, 'repository': 'fixture/repo', 'issue_number': 1, 'pr_number': 2, 'bootstrap_epoch': 1}}}))
         fakebin = self.root / 'fakebin'
         fakebin.mkdir()
         gh = fakebin / 'gh'
@@ -210,6 +210,23 @@ class ReviewPlanTests(unittest.TestCase):
         self.assertEqual("separated", plan["effective_mode"]["source_review_mode"])
         self.assertIsNone(plan.get("integration_ci_identity"))
         self.assertEqual("pending", plan["integration_ci_status"])
+
+    def test_standard_entry_derives_source_identity_from_verified_projection(self) -> None:
+        projection_path = self.root / "standard-impact.json"
+        self.write_impact_projection(projection_path)
+        result = subprocess.run([
+            str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
+            "--head", self.head, "--impact-projection", str(projection_path),
+            "--change-class", "workflow-doc", "--comparison-ref", self.comparison_ref,
+            "--comparison-oid", self.comparison_oid,
+            "--out", str(self.root / "standard-v2-plan.json"),
+        ], text=True, capture_output=True)
+        self.assertEqual(0, result.returncode, result.stderr)
+        plan = json.loads(result.stdout)
+        self.assertEqual("oasis7-review-plan/v2", plan["schema"])
+        self.assertEqual("pending", plan["integration_ci_status"])
+        self.assertEqual(json.loads(projection_path.read_text())["projection_digest"],
+                         plan["impact_projection_digest"])
 
     def test_default_v2_entry_rejects_legacy_evidence_digest(self) -> None:
         result = subprocess.run(
