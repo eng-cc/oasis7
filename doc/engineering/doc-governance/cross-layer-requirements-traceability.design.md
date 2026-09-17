@@ -70,12 +70,12 @@ applicability: required # required | not_applicable
 trace:
   upstream_refs:
     - kind: professional_acceptance # product_requirement 适用于产品义务
+      applicability: required
       repository: eng-cc/oasis7
       path: doc/engineering/doc-governance/project-management-record-standard.design.md
       fragment: 3-固定输入与证据身份
       contract_id: engineering-project-management-record-standard
       revision: 1 # 合同 schema revision；不是 Git commit OID
-      source_commit: 51e3ea6a79b9e698f67cc7b6a25ab9e9d9829cd8
       contract_digest: sha256:af924078c204d31d8ae63ceddaa6920db723fe8b2dd557353ec6bd823381df11
       publication_ref:
         issue_number: 3706
@@ -96,6 +96,8 @@ acceptance_refs:
 ```
 
 `required=true` 是 `applicability=required` 的兼容别名。新建或实质修改的记录必须同时生成两者且值一致；既有记录缺少 `applicability` 时标记为 `legacy-unclassified`，不能静默解释成 required 或 N/A。
+
+上述 typed upstream 保持当前 `oasis7.loop-change/v1` 字段位置：`applicability` 在每个 upstream ref 上，合同版本由 `contract_id + revision + contract_digest + publication_ref` 绑定；不在 typed upstream ref 中新增 `source_commit`。协调记录自身的源快照 OID 继续使用现行 `coordination_ref.source_commit`，文档条款快照使用现行 contract/publication identity。C1 必须依此验证版本与 OID 分离，不得自行发明第三个字段位置；若未来需要在 typed upstream ref 上增加 OID，必须以新 schema revision 和单独兼容评审引入。
 
 跨文件引用必须同时包含 canonical repository `eng-cc/oasis7`、repository-relative path、稳定 fragment，以及适用的冻结 contract/publication identity。裸 `REQ-*`、`AC-*`、`DES-*`、浮动分支或只有文件路径的引用不能满足跨文件关系。
 
@@ -129,7 +131,7 @@ acceptance_refs:
 
 ## 6. Task 与 Aggregate Evidence 绑定
 
-每个 required obligation 必须恰好对应一个 aggregate evidence row。二者必须匹配：
+仅当变更已绑定冻结 coordinating record 并进入 aggregate candidate 时，该记录中的每个 required obligation 必须恰好对应一个 aggregate evidence row。该组合语境下二者必须匹配：
 
 - `obligation_id` 与 `mapping_slot`；
 - `owner_loop` 与 `owner_role`；
@@ -138,9 +140,9 @@ acceptance_refs:
 - source HEAD、integration/tested tree、配置、入口、环境和 evidence window；
 - acceptance 结果、失败或未覆盖范围。
 
-重复 slot、缺行、多行竞争同一 required obligation、owner 不一致或 evidence identity 不完整都必须失败。多个 leaf 可以有不同 source HEAD，但 aggregate 结论只能绑定一个实际组合验证过的 candidate。
+对该 aggregate candidate，重复 slot、缺行、多行竞争同一 required obligation、owner 不一致或 evidence identity 不完整都必须失败。多个 leaf 可以有不同 source HEAD，但 aggregate 结论只能绑定一个实际组合验证过的 candidate。
 
-普通单叶子是一个 owner、一个 Task UID、一个 scope 和自己的交付证据，只沿自己的 Issue/PR 链判定，不因为没有多义务记录而被迫新建协调 Issue；它不能声明组合完成。组合变更必须在首个叶子执行前绑定一个冻结协调记录，完整必需集合、mapping slot、候选选择规则和阻断反馈不可通过删除字段、空 `delivery_obligations` 或关闭某个叶子来降级；每个叶子只关闭自己的 obligation，aggregate 仍须逐项回读。
+普通单叶子是一个 owner、一个 Task UID、一个 scope 和自己的交付证据，只沿自己的 Issue/PR 链判定，不因为没有多义务记录而被迫新建协调 Issue、aggregate row、`oasis7.loop-leaf-result/v1`、等价审批或 candidate tuple；它不能声明组合完成。组合变更必须在首个叶子执行前绑定一个冻结协调记录，完整必需集合、mapping slot、候选选择规则和阻断反馈不可通过删除字段、空 `delivery_obligations` 或关闭某个叶子来降级；每个叶子只关闭自己的 obligation，aggregate 仍须逐项回读。
 
 ## 7. PM Projection 与 Round Trip
 
