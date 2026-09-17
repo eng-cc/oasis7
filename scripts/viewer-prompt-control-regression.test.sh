@@ -175,6 +175,9 @@ run_strong_auth_contract_checks() {
   require_strong_auth_text 'prompt overrides visibility action' 'visible prompt overrides toggle phase'
   require_strong_auth_text 'promptOverridesVisible === true' 'prompt overrides visible state readiness'
   require_strong_auth_text 'prompt overrides toggle visible and enabled' 'visible enabled prompt toggle readiness phase'
+  require_strong_auth_text 'apply authoritative version convergence' 'post-Apply authoritative version convergence gate'
+  require_strong_auth_text 'selectedPromptVersion' 'post-Apply selected version readback'
+  require_strong_auth_text 'r.version) > beforeVersion' 'Apply response version advancement gate'
   require_strong_auth_text 'details.command-surface__advanced-details > summary' 'exact advanced prompt disclosure DOM selector'
   require_strong_auth_text 'pre-prompt tab loss' 'distinct about:blank tab-loss diagnostic'
   if rg -Fq -- 'wait --text "Advanced Prompt Settings"' "$runner"; then
@@ -358,6 +361,20 @@ if [[ "${1:-}" == "eval" ]]; then
     else
       printf '%s\n' 'true'
     fi
+  elif [[ "$script" == *'selectedPromptVersion'* && "$script" == *'r.version) > beforeVersion'* ]]; then
+    convergence_read_count=0
+    if [[ -n "${VIEWER_PROMPT_FIXTURE_APPLY_CONVERGENCE_COUNT:-}" && -f "$VIEWER_PROMPT_FIXTURE_APPLY_CONVERGENCE_COUNT" ]]; then
+      convergence_read_count=$(<"$VIEWER_PROMPT_FIXTURE_APPLY_CONVERGENCE_COUNT")
+    fi
+    convergence_read_count=$((convergence_read_count + 1))
+    if [[ -n "${VIEWER_PROMPT_FIXTURE_APPLY_CONVERGENCE_COUNT:-}" ]]; then
+      printf '%s\n' "$convergence_read_count" >"$VIEWER_PROMPT_FIXTURE_APPLY_CONVERGENCE_COUNT"
+    fi
+    if [[ "${VIEWER_PROMPT_FIXTURE_LAG_APPLY_CONVERGENCE:-0}" == "1" && "$convergence_read_count" -lt 2 ]]; then
+      printf '%s\n' 'false'
+    else
+      printf '%s\n' 'true'
+    fi
   elif [[ "$script" == *'registerPlayerSessionForTest(null)'* ]]; then
     if [[ -n "${VIEWER_PROMPT_FIXTURE_SESSION_REGISTRATION_COUNT:-}" ]]; then
       registration_count=0
@@ -492,6 +509,7 @@ starter_oc_ack_marker="$tmp_root/claim-starter-oc-ack-seen"
 command_nav_count_file="$tmp_root/command-panel-nav-count"
 prompt_toggle_count_file="$tmp_root/prompt-overrides-toggle-count"
 advanced_disclosure_count_file="$tmp_root/advanced-disclosure-count"
+apply_convergence_count_file="$tmp_root/apply-version-convergence-count"
 VIEWER_PROMPT_FIXTURE_EMPTY_WORLD=1 \
   VIEWER_PROMPT_FIXTURE_STARTER_OC_ONBOARDING=1 \
   VIEWER_PROMPT_FIXTURE_CLAIM_ACTION_COUNT="$claim_count_file" \
@@ -506,6 +524,8 @@ VIEWER_PROMPT_FIXTURE_EMPTY_WORLD=1 \
   VIEWER_PROMPT_FIXTURE_REQUIRE_PROMPT_TOGGLE="$prompt_toggle_count_file" \
   VIEWER_PROMPT_FIXTURE_ADVANCED_DISCLOSURE_COUNT="$advanced_disclosure_count_file" \
   VIEWER_PROMPT_FIXTURE_REQUIRE_ADVANCED_DISCLOSURE="$advanced_disclosure_count_file" \
+  VIEWER_PROMPT_FIXTURE_LAG_APPLY_CONVERGENCE=1 \
+  VIEWER_PROMPT_FIXTURE_APPLY_CONVERGENCE_COUNT="$apply_convergence_count_file" \
   OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=fixture \
   OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY=fixture \
   OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=fixture \
@@ -527,6 +547,8 @@ test -f "$prompt_toggle_count_file"
 test "$(<"$prompt_toggle_count_file")" = 1
 test -f "$advanced_disclosure_count_file"
 test "$(<"$advanced_disclosure_count_file")" = 1
+test -f "$apply_convergence_count_file"
+test "$(<"$apply_convergence_count_file")" -ge 2
 rg -Fq '[action:claim first agent action]' "$claim_out/agent-browser.log"
 rg -Fq '[action:command panel navigation action]' "$claim_out/agent-browser.log"
 rg -Fq '[action:prompt overrides visibility action]' "$claim_out/agent-browser.log"

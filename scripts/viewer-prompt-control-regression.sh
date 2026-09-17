@@ -743,6 +743,13 @@ wait_for_prompt_feedback() {
   wait_for_js_true "$expression" "${mode} authority feedback" "$ACTION_TIMEOUT_MS"
 }
 
+wait_for_apply_version_convergence() {
+  local before_version="$1"
+  wait_for_js_true \
+    "(() => { const s = window.__AW_TEST__.getState(); const f = s?.lastPromptFeedback; const r = f?.response || {}; const beforeVersion = Number(${before_version}); return f?.action === 'prompt_apply' && f?.stage === 'applied' && Number(r.version) > beforeVersion && Number(s?.selectedPromptVersion) === Number(r.version); })()" \
+    "apply authoritative version convergence" "$ACTION_TIMEOUT_MS"
+}
+
 if [[ -z "$GAME_URL" ]]; then
   STACK_BOOTSTRAPPED=1
   if (( FULL_GAMEPLAY == 1 )); then
@@ -896,6 +903,7 @@ write_safe_state "$preview_state" "$OUT_DIR/state-after-preview.json"
 
 run_visible_action "apply action" click 'button[data-prompt-action="apply"]'
 wait_for_prompt_feedback apply
+wait_for_apply_version_convergence "$before_version"
 apply_state="$(state_raw)"
 write_safe_state "$apply_state" "$OUT_DIR/state-after-apply.json"
 
