@@ -31,14 +31,14 @@ When mergeStateStatus=BLOCKED is only missing review approval, the fresh live ga
 may emit `use_admin_merge: true` under standing policy; no additional authorization.
 See `doc/engineering/workflow/source-of-truth.md#ready-and-done`.
 Task-bound legacy `--create` is rejected before push or PR recording; use
-`--draft-candidate --create`, then promote only with `--promote-draft <fresh ci_ready_receipt.json>`
+`--draft-candidate --create --impact-projection <projection.json> --review-change-class <class>`, then promote only with `--promote-draft <fresh ci_ready_receipt.json>`
 after same-head CI and draft-state checks.
 
 Default conventions:
 - source branch: current branch
 - base branch: main
 - remote: origin
-- standard path: implementation-freeze commit -> ./scripts/prepare-task-pr.sh --draft-candidate --create -> start exact-head CI and local role-subagent review concurrently -> fail-closed CI/review join -> Pre-PR Ready -> ./scripts/prepare-task-pr.sh --promote-draft <fresh ci_ready_receipt.json> -> GitHub PR watch/fix/merge
+- standard path: implementation-freeze commit -> ./scripts/prepare-task-pr.sh --draft-candidate --create --impact-projection <projection.json> --review-change-class <class> -> start exact-head CI and local role-subagent review concurrently -> fail-closed CI/review join -> Pre-PR Ready -> ./scripts/prepare-task-pr.sh --promote-draft <fresh ci_ready_receipt.json> -> GitHub PR watch/fix/merge
 - optional evidence-only closeout: if review/evidence metadata needs a commit after the frozen head, allow only an evidence-only commit; if it changes HEAD, rerun exact-head CI and revalidate review applicability, regenerate the packet and ci_ready receipt for that head, and promote only with that new joined evidence
 
 Options:
@@ -1632,7 +1632,7 @@ LOCAL_ROLE_REVIEW_PLAN_SCHEMA="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "review
 LOCAL_ROLE_REVIEW_SOURCE_DIGEST="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "source_review_digest")"
 LOCAL_ROLE_REVIEW_INTEGRATION_DIGEST="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "integration_ci_digest")"
 if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" != "1" && "$LOCAL_ROLE_REVIEW_STATUS" == "passed" && -n "$LOCAL_ROLE_REVIEW_TASK_UID" ]]; then
-  die "legacy task-bound \`--create\` is rejected; use ./scripts/prepare-task-pr.sh --draft-candidate --create, then ./scripts/prepare-task-pr.sh --promote-draft <fresh ci_ready_receipt.json> after same-head CI and draft-state checks"
+  die "legacy task-bound \`--create\` is rejected; use ./scripts/prepare-task-pr.sh --draft-candidate --create --impact-projection <projection.json> --review-change-class <class>, then ./scripts/prepare-task-pr.sh --promote-draft <fresh ci_ready_receipt.json> after same-head CI and draft-state checks"
 fi
 if [[ "$DRAFT_CANDIDATE" == "1" ]]; then
   if [[ -n "$LOCAL_ROLE_REVIEW_TASK_UID" && "$LOCAL_ROLE_REVIEW_TASK_UID" != "$BOUND_TASK_UID" ]]; then

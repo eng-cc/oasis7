@@ -1392,6 +1392,9 @@ class WorkflowDocumentationContract(unittest.TestCase):
             check=True,
         ).stdout
         self.assertIn("legacy task-bound `--create` is rejected", help_text)
+        standard_v2 = "./scripts/prepare-task-pr.sh --draft-candidate --create --impact-projection <projection.json> --review-change-class <class>"
+        self.assertIn(standard_v2, help_text)
+        self.assertIn(standard_v2, PM_REPORTING.read_text(encoding="utf-8"))
 
         source = SOURCE.read_text(encoding="utf-8")
         finish = FINISHING.read_text(encoding="utf-8")

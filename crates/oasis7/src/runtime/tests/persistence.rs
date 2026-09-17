@@ -77,11 +77,6 @@ fn persist_and_restore_world() {
     assert_persistence_recovery_roundtrip();
 }
 
-#[test]
-fn persistence_recovery_roundtrip() {
-    assert_persistence_recovery_roundtrip();
-}
-
 fn assert_persistence_recovery_roundtrip() {
     let mut world = World::new();
     world.submit_action(Action::RegisterAgent {
