@@ -2310,14 +2310,32 @@ def command_refresh_task(args: argparse.Namespace) -> int:
         record["workflow_phase"] = pending_phase
         if isinstance(pending_intent, dict) and pending_intent.get("previous_status"):
             record["status"] = pending_intent["previous_status"]
-    task_worktree_authority = recover_non_pr_task_worktree_authority(
-        args.task_uid,
-        args.repo,
-        args.mapping,
-        live,
-        repository_identity,
-        existing,
-    )
+    # A default-worktree cache that already carries the complete identity-bound
+    # evidence binding is authoritative for this refresh.  Recovery from the
+    # registered task worktree is only needed when that projection is genuinely
+    # stale/incomplete; requiring the task-worktree mapping unconditionally
+    # would reject older but complete closeout caches (and fixtures that model
+    # that lifecycle).  preserve_identity_bound_cache still rechecks the
+    # cached path, content, and digest below.
+    cached_non_pr_binding_complete = all(
+        existing.get(key) not in (None, "")
+        for key in (
+            "completion_mode",
+            "non_pr_completion_evidence",
+            "non_pr_completion_evidence_file",
+            "non_pr_completion_evidence_sha256",
+        )
+    ) and str(existing.get("completion_mode") or "") == "non_pr_task"
+    task_worktree_authority = None
+    if not cached_non_pr_binding_complete:
+        task_worktree_authority = recover_non_pr_task_worktree_authority(
+            args.task_uid,
+            args.repo,
+            args.mapping,
+            live,
+            repository_identity,
+            existing,
+        )
     preserve_identity_bound_cache(
         args.task_uid, existing, live, record, repository_identity,
         task_worktree_authority,
