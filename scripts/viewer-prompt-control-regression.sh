@@ -615,6 +615,35 @@ wait_for_js_true() {
   return 1
 }
 
+wait_for_prompt_surface_continuity() {
+  local timeout_ms="${1:-$ACTION_TIMEOUT_MS}"
+  local timeout_secs=$(( (timeout_ms + 999) / 1000 ))
+  local deadline
+  local status=""
+  (( timeout_secs > 0 )) || timeout_secs=1
+  deadline=$((SECONDS + timeout_secs))
+  while (( SECONDS < deadline )); do
+    status="$(ab_read_eval "$SESSION" '(() => { const href = String(window.location.href || ""); if (href === "about:blank") return "tab_lost"; const summary = document.querySelector("details.command-surface__advanced-details > summary"); const prompt = document.querySelector("#prompt-short"); return summary && prompt ? "ready" : `prompt_surface_missing:${href}`; })()' 2>/dev/null || true)"
+    case "$status" in
+      ready|\"ready\")
+        printf '[prompt surface page continuity] exact prompt DOM ready\n' >>"$AB_LOG"
+        return 0
+        ;;
+      tab_lost|\"tab_lost\")
+        printf '[prompt surface page continuity] tab lost to about:blank\n' >>"$AB_LOG"
+        capture_failure_diagnostics "pre-prompt tab loss"
+        echo "error: pre-prompt tab loss detected: active page is about:blank (phase: pre-prompt tab loss; diagnostics: ${OUT_DIR}/failure-$(diagnostic_slug "pre-prompt tab loss")-*)" >&2
+        return 1
+        ;;
+    esac
+    sleep 0.2
+  done
+  printf '[prompt surface page continuity] exact prompt DOM missing; last status=%s\n' "${status:-<empty>}" >>"$AB_LOG"
+  capture_failure_diagnostics "prompt surface page continuity"
+  echo "error: prompt surface missing while page remained active (phase: prompt surface page continuity; last status: ${status:-<empty>}; diagnostics: ${OUT_DIR}/failure-$(diagnostic_slug "prompt surface page continuity")-*)" >&2
+  return 1
+}
+
 wait_for_domcontentloaded() {
   local result
   if wait_for_cli_stage "domcontentloaded" --defer-failure wait --load domcontentloaded; then
@@ -841,8 +870,7 @@ maybe_rebind_post_onboarding_session "$AGENT_ID_JSON"
 
 wait_for_js_true "(() => { const s = window.__AW_TEST__.getState(); const p = s?.viewerProtocol || {}; return s?.authReady === true && s?.authRegistrationStatus === \"registered\" && [\"registered\", \"registered_unbound\"].includes(s?.authRuntimeStatus) && s?.authBoundAgentId === ${AGENT_ID_JSON} && s?.authSessionEpoch != null && s?.authBindingEpoch != null && p?.negotiated === true && Array.isArray(p?.capabilities) && p.capabilities.includes(\"prompt_control_result_v1\") && String(p?.authorityEpoch || \"\").length > 0; })()" "auth binding and prompt-result protocol readiness"
 
-AGENT_BROWSER_DEFAULT_TIMEOUT="$ACTION_TIMEOUT_MS" \
-wait_for_cli_stage "advanced prompt text" wait --text "Advanced Prompt Settings"
+wait_for_prompt_surface_continuity "$ACTION_TIMEOUT_MS"
 run_visible_action "advanced prompt disclosure action" click 'details.command-surface__advanced-details > summary'
 wait_for_js_true 'Boolean(document.querySelector("details.command-surface__advanced-details[open]"))' "advanced prompt disclosure"
 wait_for_js_true 'Boolean(document.querySelector("#strong-auth-approval-code"))' "strong-auth approval input"

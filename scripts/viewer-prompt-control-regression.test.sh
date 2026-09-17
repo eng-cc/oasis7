@@ -167,6 +167,12 @@ run_strong_auth_contract_checks() {
   require_strong_auth_text 'registerPlayerSessionForTest(null)' 'permitted hosted session-registration hook'
   require_strong_auth_text 'registerPlayerSessionForTest(${agent_id_json}, {forceRebind: true})' 'post-onboarding force-rebind hook'
   require_strong_auth_text 'post-onboarding auth binding rebind action' 'post-onboarding force-rebind diagnostics'
+  require_strong_auth_text 'prompt surface page continuity' 'pre-prompt page-continuity guard'
+  require_strong_auth_text 'details.command-surface__advanced-details > summary' 'exact advanced prompt disclosure DOM selector'
+  require_strong_auth_text 'pre-prompt tab loss' 'distinct about:blank tab-loss diagnostic'
+  if rg -Fq -- 'wait --text "Advanced Prompt Settings"' "$runner"; then
+    strong_auth_contract_failures="${strong_auth_contract_failures}\n- prompt readiness must use exact DOM state, not broad text wait"
+  fi
   require_strong_auth_text 'hosted player session registration action' 'session-registration action phase label'
   require_strong_auth_text 'registered_unbound' 'unbound runtime registration wait'
   if rg -n 'ab_read_eval.*registerPlayerSessionForTest' "$runner"; then
@@ -295,6 +301,14 @@ if [[ "${1:-}" == "eval" ]]; then
       : >"$VIEWER_PROMPT_FIXTURE_FALLBACK_MARKER"
     fi
     printf '%s\n' 'true'
+  elif [[ "$script" == *'prompt_surface_missing:'* && "$script" == *'details.command-surface__advanced-details > summary'* ]]; then
+    if [[ "${VIEWER_PROMPT_FIXTURE_PRE_PROMPT_TAB_LOST:-0}" == "1" ]]; then
+      printf '%s\n' '"tab_lost"'
+    elif [[ "${VIEWER_PROMPT_FIXTURE_PRE_PROMPT_UI_MISSING:-0}" == "1" ]]; then
+      printf '%s\n' '"prompt_surface_missing:http://127.0.0.1:9/"'
+    else
+      printf '%s\n' '"ready"'
+    fi
   elif [[ "$script" == *'registerPlayerSessionForTest(null)'* ]]; then
     if [[ -n "${VIEWER_PROMPT_FIXTURE_SESSION_REGISTRATION_COUNT:-}" ]]; then
       registration_count=0
@@ -482,6 +496,27 @@ if [[ -f "$force_rebind_skip_count" ]]; then
 fi
 rg -Fq '[action:post-onboarding auth binding rebind action] skipped; binding epoch already present or agent not bound' "$force_rebind_skip_out/agent-browser.log"
 
+# A lost browser tab must fail before any prompt action and be distinguishable
+# from a live page whose exact prompt DOM simply did not become ready.
+tab_loss_out="$tmp_root/pre-prompt-tab-loss"
+set +e
+VIEWER_PROMPT_FIXTURE_ALREADY_REGISTERED=1 \
+  VIEWER_PROMPT_FIXTURE_PRE_PROMPT_TAB_LOST=1 \
+  OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=fixture \
+  OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY=fixture \
+  OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=fixture \
+  PATH="$fake_bin:$PATH" "$runner" \
+  --headed --test-login --url http://127.0.0.1:9 --out-dir "$tab_loss_out"
+tab_loss_rc=$?
+set -e
+test "$tab_loss_rc" -ne 0
+rg -Fq '[prompt surface page continuity] tab lost to about:blank' "$tab_loss_out/agent-browser.log"
+test -f "$tab_loss_out/failure-pre-prompt_tab_loss-tabs.json"
+if rg -Fq '[action:advanced prompt disclosure action]' "$tab_loss_out/agent-browser.log"; then
+  echo "advanced prompt action ran after pre-prompt tab loss" >&2
+  exit 1
+fi
+
 # The visible test-login action may finish server-side registration before the
 # runner observes its first auth state.  In that case the registration hook
 # must not be invoked a second time.
@@ -661,6 +696,8 @@ elif [[ "${1:-}" == "eval" && "${2:-}" == "--stdin" ]]; then
   script=$(cat)
   if [[ "$script" == 'window.__AW_TEST__.getState()' ]]; then
     printf '%s\n' '{"authReady":true,"authRegistrationStatus":"registered","authRuntimeStatus":"registered","authBoundAgentId":"agent-1","authSessionEpoch":1,"authBindingEpoch":1,"viewerProtocol":{"negotiated":true,"capabilities":["prompt_control_result_v1"],"authorityEpoch":"fixture-authority"},"selectedId":"agent-1","selectedPromptVersion":0,"lastPromptFeedback":null,"strongAuthLastGrantActionId":null,"strongAuthLastGrantError":null}'
+  elif [[ "$script" == *'prompt_surface_missing:'* && "$script" == *'details.command-surface__advanced-details > summary'* ]]; then
+    printf '%s\n' '"ready"'
   else
     printf '%s\n' 'true'
   fi
