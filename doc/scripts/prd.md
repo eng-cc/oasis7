@@ -60,6 +60,7 @@
 - 每个请求从绑定单一 task truth 的独立 task worktree 开始；复用必须有用户明确授权。Bootstrap 部分失败时必须保留已创建的 branch/worktree，并返回可执行的 refresh/retry 恢复指令。
 - 已完成工作默认通过 repository GitHub PR lifecycle 进入受保护 `main`，并使用 source-bound review evidence 与 canonical post-merge cleanup；具体状态、门禁和 receipt 规则只由 `doc/engineering/workflow/source-of-truth.md` 定义。
 - `land-task-worktree.sh` 仅保留为 local-only / fallback 兼容工具，不是默认最终集成路径，也不能绕过 canonical cleanup。
+- CI package scope 与 exact-integration 语义以 [workflow source of truth 的 canonical clause](../engineering/workflow/source-of-truth.md#cargo-package-scope-and-impact-scoped-verification) 为准；本 PRD 仅保留此链接，不重复定义该规则。
 
 ## 2. User Experience & Functionality
 - User Personas:
