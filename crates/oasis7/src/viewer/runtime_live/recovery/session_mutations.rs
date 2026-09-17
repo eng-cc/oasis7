@@ -85,6 +85,13 @@ impl ViewerRuntimeLiveServer {
         } else {
             Some(format!("snapshot_reload_required: {}", reasons.join("; ")))
         };
+        let bound_agent_id = self
+            .llm_sidecar
+            .bound_agent_for_player(player_id.as_str())
+            .map(ToOwned::to_owned);
+        let binding_epoch = bound_agent_id
+            .as_deref()
+            .map(|agent_id| self.prompt_control_authority.binding_epoch(agent_id));
 
         Ok(AuthoritativeRecoveryAck {
             status: AuthoritativeRecoveryStatus::CatchUpReady,
@@ -94,14 +101,11 @@ impl ViewerRuntimeLiveServer {
             log_cursor: cursor.log_cursor,
             stable_batch_id: cursor.stable_batch_id,
             player_id: Some(player_id),
-            agent_id: self
-                .llm_sidecar
-                .bound_agent_for_player(request.player_id.as_str())
-                .map(ToOwned::to_owned),
+            agent_id: bound_agent_id,
             session_pubkey,
             replaced_by_pubkey: None,
             session_epoch,
-            binding_epoch: None,
+            binding_epoch,
             message,
             revoke_reason: None,
             revoked_by: None,

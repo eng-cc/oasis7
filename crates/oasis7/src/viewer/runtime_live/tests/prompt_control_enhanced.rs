@@ -615,6 +615,310 @@ fn runtime_prompt_control_binding_loss_is_hidden_before_nonce_or_version() {
 }
 
 #[test]
+fn runtime_prompt_control_binding_loss_precedes_authority_and_version_mismatch() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(49);
+    let registration = register_runtime_session(
+        &mut server,
+        "player-binding-authority-race",
+        Some(agent_id.as_str()),
+        1,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let old_authority_epoch = server.prompt_control_authority.authority_epoch.clone();
+    let request = signed_prompt_control_apply_request(
+        crate::viewer::PromptControlApplyRequest {
+            agent_id: agent_id.clone(),
+            player_id: "player-binding-authority-race".to_string(),
+            // This must never be reached after binding loss.
+            expected_version: Some(999),
+            updated_by: Some("player-binding-authority-race".to_string()),
+            system_prompt_override: Some(Some("must stay unchanged".to_string())),
+            request_id: Some("binding-before-authority-race".to_string()),
+            session_epoch: registration.session_epoch,
+            binding_epoch: registration.binding_epoch,
+            expected_authority_epoch: Some(old_authority_epoch),
+            ..Default::default()
+        },
+        crate::viewer::PromptControlAuthIntent::Apply,
+        2,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+
+    let rebound = register_runtime_session_with_options(
+        &mut server,
+        "player-binding-authority-race",
+        Some(agent_id.as_str()),
+        true,
+        2,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        rebound.binding_epoch,
+        Some(registration.binding_epoch.unwrap_or_default() + 1)
+    );
+    // Simulate the same request crossing a runtime-authority fence after the
+    // binding was revoked/rebound. Binding loss must still win the redaction
+    // ordering, rather than being hidden as result_unknown.
+    server.prompt_control_authority.authority_epoch = "authority-after-binding-loss".to_string();
+
+    let negotiated = crate::viewer::protocol::NegotiatedViewerProtocol {
+        version: crate::viewer::VIEWER_PROTOCOL_VERSION,
+        capabilities: vec![crate::viewer::protocol::PROMPT_CONTROL_RESULT_CAPABILITY.to_string()],
+    };
+    let error = server
+        .handle_prompt_control_for_protocol(
+            crate::viewer::PromptControlCommand::Apply { request },
+            &negotiated,
+        )
+        .expect_err("binding loss must precede authority and version mismatch");
+    assert_eq!(error.code, "control_lost");
+    assert_eq!(error.reason_code.as_deref(), Some("control_lost"));
+    assert_eq!(
+        error.status,
+        Some(crate::viewer::protocol::PromptControlResultStatus::Blocked)
+    );
+    assert_eq!(
+        error.value_visibility,
+        Some(crate::viewer::protocol::PromptControlValueVisibility::Hidden)
+    );
+    assert_eq!(error.agent_id.as_deref(), Some(agent_id.as_str()));
+    assert!(error.player_id.is_none());
+    assert!(error.current_version.is_none());
+    assert!(error.digest.is_none());
+    assert_eq!(
+        server
+            .llm_sidecar
+            .player_auth_last_nonce
+            .get("player-binding-authority-race"),
+        Some(&2),
+        "rebind registration nonce is retained; rejected prompt must not consume nonce 3"
+    );
+    assert_eq!(server.prompt_control_authority.result_ledger.len(), 0);
+    assert!(server.llm_sidecar.prompt_profiles.is_empty());
+}
+
+#[test]
+fn runtime_prompt_control_conflicting_rebind_precedes_authority_and_version_mismatch() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (player_a_public_key, player_a_private_key) = test_signer(52);
+    let player_a_registration = register_runtime_session(
+        &mut server,
+        "player-conflict-a",
+        Some(agent_id.as_str()),
+        1,
+        player_a_public_key.as_str(),
+        player_a_private_key.as_str(),
+    );
+    let old_authority_epoch = server.prompt_control_authority.authority_epoch.clone();
+    let request = signed_prompt_control_apply_request(
+        crate::viewer::PromptControlApplyRequest {
+            agent_id: agent_id.clone(),
+            player_id: "player-conflict-a".to_string(),
+            expected_version: Some(999),
+            updated_by: Some("player-conflict-a".to_string()),
+            system_prompt_override: Some(Some(
+                "must not apply after conflicting rebind".to_string(),
+            )),
+            request_id: Some("conflicting-rebind-before-authority-race".to_string()),
+            session_epoch: player_a_registration.session_epoch,
+            binding_epoch: player_a_registration.binding_epoch,
+            expected_authority_epoch: Some(old_authority_epoch),
+            ..Default::default()
+        },
+        crate::viewer::PromptControlAuthIntent::Apply,
+        2,
+        player_a_public_key.as_str(),
+        player_a_private_key.as_str(),
+    );
+
+    let (player_b_public_key, player_b_private_key) = test_signer(53);
+    let player_b_registration = register_runtime_session_with_options(
+        &mut server,
+        "player-conflict-b",
+        Some(agent_id.as_str()),
+        true,
+        1,
+        player_b_public_key.as_str(),
+        player_b_private_key.as_str(),
+    );
+    assert_eq!(
+        player_b_registration.binding_epoch,
+        Some(player_a_registration.binding_epoch.unwrap_or_default() + 1)
+    );
+    assert_eq!(
+        server
+            .llm_sidecar
+            .agent_player_bindings
+            .get(agent_id.as_str()),
+        Some(&"player-conflict-b".to_string())
+    );
+    let pending_events_before_request = server.pending_virtual_events.len();
+    server.prompt_control_authority.authority_epoch =
+        "authority-after-conflicting-rebind".to_string();
+
+    let negotiated = crate::viewer::protocol::NegotiatedViewerProtocol {
+        version: crate::viewer::VIEWER_PROTOCOL_VERSION,
+        capabilities: vec![crate::viewer::protocol::PROMPT_CONTROL_RESULT_CAPABILITY.to_string()],
+    };
+    let error = server
+        .handle_prompt_control_for_protocol(
+            crate::viewer::PromptControlCommand::Apply { request },
+            &negotiated,
+        )
+        .expect_err("conflicting rebind must precede authority and version mismatch");
+    assert_eq!(error.code, "control_lost");
+    assert_eq!(error.reason_code.as_deref(), Some("control_lost"));
+    assert_eq!(
+        error.status,
+        Some(crate::viewer::protocol::PromptControlResultStatus::Blocked)
+    );
+    assert_eq!(
+        error.value_visibility,
+        Some(crate::viewer::protocol::PromptControlValueVisibility::Hidden)
+    );
+    assert_eq!(error.agent_id.as_deref(), Some(agent_id.as_str()));
+    assert!(error.player_id.is_none());
+    assert!(error.expected_version.is_none());
+    assert!(error.current_version.is_none());
+    assert!(error.digest.is_none());
+    assert!(error.operation_digest.is_none());
+    assert_eq!(
+        server
+            .llm_sidecar
+            .player_auth_last_nonce
+            .get("player-conflict-a"),
+        Some(&1),
+        "conflicting rebind rejection must not consume player A nonce 2"
+    );
+    assert_eq!(
+        server.pending_virtual_events.len(),
+        pending_events_before_request
+    );
+    assert_eq!(server.prompt_control_authority.result_ledger.len(), 0);
+    assert!(server.llm_sidecar.prompt_profiles.is_empty());
+}
+
+#[test]
+fn runtime_prompt_control_session_loss_precedes_authority_and_version_mismatch() {
+    let _guard = lock_test_llm_env();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm),
+    )
+    .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(50);
+    let registration = register_runtime_session(
+        &mut server,
+        "player-session-authority-race",
+        Some(agent_id.as_str()),
+        1,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let old_authority_epoch = server.prompt_control_authority.authority_epoch.clone();
+    let request = signed_prompt_control_apply_request(
+        crate::viewer::PromptControlApplyRequest {
+            agent_id: agent_id.clone(),
+            player_id: "player-session-authority-race".to_string(),
+            expected_version: Some(999),
+            updated_by: Some("player-session-authority-race".to_string()),
+            system_prompt_override: Some(Some("must stay unchanged".to_string())),
+            request_id: Some("session-before-authority-race".to_string()),
+            session_epoch: registration.session_epoch,
+            binding_epoch: registration.binding_epoch,
+            expected_authority_epoch: Some(old_authority_epoch),
+            ..Default::default()
+        },
+        crate::viewer::PromptControlAuthIntent::Apply,
+        2,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+
+    let (revoke_ack, emit_snapshot_after_ack) = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RevokeSession {
+            request: AuthoritativeSessionRevokeRequest {
+                player_id: "player-session-authority-race".to_string(),
+                session_pubkey: Some(public_key.clone()),
+                revoke_reason: "authority-ordering-test".to_string(),
+                revoked_by: Some("runtime-test".to_string()),
+            },
+        })
+        .expect("revoke session");
+    assert!(!emit_snapshot_after_ack);
+    assert_eq!(
+        revoke_ack.status,
+        AuthoritativeRecoveryStatus::SessionRevoked
+    );
+    server.prompt_control_authority.authority_epoch = "authority-after-session-loss".to_string();
+
+    let negotiated = crate::viewer::protocol::NegotiatedViewerProtocol {
+        version: crate::viewer::VIEWER_PROTOCOL_VERSION,
+        capabilities: vec![crate::viewer::protocol::PROMPT_CONTROL_RESULT_CAPABILITY.to_string()],
+    };
+    let error = server
+        .handle_prompt_control_for_protocol(
+            crate::viewer::PromptControlCommand::Apply { request },
+            &negotiated,
+        )
+        .expect_err("session loss must precede authority and version mismatch");
+    assert_eq!(error.code, "control_lost");
+    assert_eq!(error.reason_code.as_deref(), Some("control_lost"));
+    assert_eq!(
+        error.status,
+        Some(crate::viewer::protocol::PromptControlResultStatus::Blocked)
+    );
+    assert_eq!(
+        error.value_visibility,
+        Some(crate::viewer::protocol::PromptControlValueVisibility::Hidden)
+    );
+    assert_eq!(error.agent_id.as_deref(), Some(agent_id.as_str()));
+    assert!(error.player_id.is_none());
+    assert!(error.current_version.is_none());
+    assert!(error.digest.is_none());
+    assert!(server.llm_sidecar.prompt_profiles.is_empty());
+    assert_eq!(server.prompt_control_authority.result_ledger.len(), 0);
+}
+
+#[test]
 fn runtime_prompt_control_restart_fences_old_authority_result() {
     let _guard = lock_test_llm_env();
     let mut old_server = ViewerRuntimeLiveServer::new(

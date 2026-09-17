@@ -988,6 +988,120 @@ fn runtime_authoritative_recovery_reconnect_detects_reorg_epoch_mismatch() {
 }
 
 #[test]
+fn runtime_authoritative_reconnect_reads_binding_epoch_and_cannot_restore_revoked_binding() {
+    let mut server =
+        ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))
+            .expect("runtime server");
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(51);
+    let registration = register_runtime_session(
+        &mut server,
+        "player-reconnect-binding",
+        Some(agent_id.as_str()),
+        1,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    assert_eq!(
+        server
+            .llm_sidecar
+            .bound_agent_for_player("player-reconnect-binding"),
+        Some(agent_id.as_str())
+    );
+
+    let (reconnect_ack, emit_snapshot_after_ack) = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::ReconnectSync {
+            request: AuthoritativeReconnectSyncRequest {
+                player_id: "player-reconnect-binding".to_string(),
+                session_pubkey: Some(public_key.clone()),
+                last_known_log_cursor: None,
+                expected_reorg_epoch: Some(server.reorg_epoch),
+            },
+        })
+        .expect("bound session reconnect");
+    assert!(!emit_snapshot_after_ack);
+    assert_eq!(
+        reconnect_ack.status,
+        AuthoritativeRecoveryStatus::CatchUpReady
+    );
+    assert_eq!(
+        reconnect_ack.player_id.as_deref(),
+        Some("player-reconnect-binding")
+    );
+    assert_eq!(reconnect_ack.agent_id.as_deref(), Some(agent_id.as_str()));
+    assert_eq!(reconnect_ack.session_epoch, registration.session_epoch);
+    assert_eq!(
+        reconnect_ack.message.as_deref(),
+        Some("delta_replay_allowed")
+    );
+
+    let (revoke_ack, emit_snapshot_after_ack) = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RevokeSession {
+            request: AuthoritativeSessionRevokeRequest {
+                player_id: "player-reconnect-binding".to_string(),
+                session_pubkey: Some(public_key.clone()),
+                revoke_reason: "reconnect-binding-test".to_string(),
+                revoked_by: Some("runtime-test".to_string()),
+            },
+        })
+        .expect("revoke session");
+    assert!(!emit_snapshot_after_ack);
+    assert_eq!(
+        revoke_ack.status,
+        AuthoritativeRecoveryStatus::SessionRevoked
+    );
+    assert_eq!(
+        server
+            .llm_sidecar
+            .bound_agent_for_player("player-reconnect-binding"),
+        None,
+        "revocation must clear the old player/agent binding"
+    );
+
+    let revoked_reconnect = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::ReconnectSync {
+            request: AuthoritativeReconnectSyncRequest {
+                player_id: "player-reconnect-binding".to_string(),
+                session_pubkey: Some(public_key),
+                last_known_log_cursor: None,
+                expected_reorg_epoch: Some(server.reorg_epoch),
+            },
+        })
+        .expect_err("revoked session cannot reconnect using the old key");
+    assert_eq!(revoked_reconnect.code, "session_revoked");
+
+    let (anonymous_reconnect, emit_snapshot_after_ack) = server
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::ReconnectSync {
+            request: AuthoritativeReconnectSyncRequest {
+                player_id: "player-reconnect-binding".to_string(),
+                session_pubkey: None,
+                last_known_log_cursor: None,
+                expected_reorg_epoch: Some(server.reorg_epoch),
+            },
+        })
+        .expect("uncredentialed reconnect readback");
+    assert!(!emit_snapshot_after_ack);
+    assert_eq!(
+        anonymous_reconnect.status,
+        AuthoritativeRecoveryStatus::CatchUpReady
+    );
+    assert!(anonymous_reconnect.agent_id.is_none());
+    assert!(anonymous_reconnect.session_epoch.is_none());
+    assert!(anonymous_reconnect.binding_epoch.is_none());
+    assert_eq!(
+        reconnect_ack.binding_epoch, registration.binding_epoch,
+        "reconnect readback must carry the current binding epoch"
+    );
+}
+
+#[test]
 fn runtime_authoritative_recovery_rejects_checkpoint_after_replay_target_explicitly() {
     let mut server =
         ViewerRuntimeLiveServer::new(ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal))

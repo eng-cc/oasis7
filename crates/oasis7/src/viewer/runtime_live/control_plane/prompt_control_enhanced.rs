@@ -255,7 +255,27 @@ impl ViewerRuntimeLiveServer {
                     PromptControlResultStatus::Rejected,
                 )
             })?;
-        if expected_authority_epoch != self.prompt_control_authority.authority_epoch {
+        // A fresh authority has no live binding/session state to evaluate. In
+        // that restart-only case preserve the redacted result_unknown fence;
+        // when a binding or revoke record exists, continue so control_lost can
+        // take precedence over the stale authority epoch.
+        if expected_authority_epoch != self.prompt_control_authority.authority_epoch
+            && self
+                .llm_sidecar
+                .bound_agent_for_player(player_id.as_str())
+                .is_none()
+            && !self
+                .session_revoke_metadata
+                .contains_key(&session_revoke_metadata_key(
+                    player_id.as_str(),
+                    verified.public_key.as_str(),
+                ))
+            && !self
+                .llm_sidecar
+                .agent_player_bindings
+                .get(agent_id.as_str())
+                .is_some_and(|bound_player| bound_player != player_id.as_str())
+        {
             return Err(prompt_control_result_unknown_error(&request_id));
         }
         let current_session_epoch = self
@@ -306,6 +326,12 @@ impl ViewerRuntimeLiveServer {
                 player_id.as_str(),
             )
         })?;
+        // Session and binding loss are player-visible control loss. They must
+        // win over an authority fence so stale requests cannot be relabeled as
+        // result_unknown when the player no longer controls the Agent.
+        if expected_authority_epoch != self.prompt_control_authority.authority_epoch {
+            return Err(prompt_control_result_unknown_error(&request_id));
+        }
         let expected_version = request.expected_version.ok_or_else(|| {
             prompt_control_enhanced_error(
                 "expected_version_required",
@@ -769,7 +795,23 @@ impl ViewerRuntimeLiveServer {
                     PromptControlResultStatus::Rejected,
                 )
             })?;
-        if expected_authority_epoch != self.prompt_control_authority.authority_epoch {
+        if expected_authority_epoch != self.prompt_control_authority.authority_epoch
+            && self
+                .llm_sidecar
+                .bound_agent_for_player(player_id.as_str())
+                .is_none()
+            && !self
+                .session_revoke_metadata
+                .contains_key(&session_revoke_metadata_key(
+                    player_id.as_str(),
+                    verified.public_key.as_str(),
+                ))
+            && !self
+                .llm_sidecar
+                .agent_player_bindings
+                .get(agent_id.as_str())
+                .is_some_and(|bound_player| bound_player != player_id.as_str())
+        {
             return Err(prompt_control_result_unknown_error(&request_id));
         }
         let current_session_epoch = self
@@ -820,6 +862,9 @@ impl ViewerRuntimeLiveServer {
                 player_id.as_str(),
             )
         })?;
+        if expected_authority_epoch != self.prompt_control_authority.authority_epoch {
+            return Err(prompt_control_result_unknown_error(&request_id));
+        }
         let expected_version = request.expected_version.ok_or_else(|| {
             prompt_control_enhanced_error(
                 "expected_version_required",

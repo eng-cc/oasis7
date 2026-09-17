@@ -750,6 +750,13 @@ wait_for_apply_version_convergence() {
     "apply authoritative version convergence" "$ACTION_TIMEOUT_MS"
 }
 
+wait_for_rollback_version_convergence() {
+  local rollback_target_version="$1"
+  wait_for_js_true \
+    "(() => { const s = window.__AW_TEST__.getState(); const f = s?.lastPromptFeedback; const r = f?.response || {}; const rollbackTargetVersion = Number(${rollback_target_version}); return f?.action === 'prompt_rollback' && f?.stage === 'applied' && Number(r.rolled_back_to_version) === rollbackTargetVersion && Number(s?.selectedPromptVersion) === Number(r?.version); })()" \
+    "rollback authoritative version convergence" "$ACTION_TIMEOUT_MS"
+}
+
 if [[ -z "$GAME_URL" ]]; then
   STACK_BOOTSTRAPPED=1
   if (( FULL_GAMEPLAY == 1 )); then
@@ -910,6 +917,7 @@ write_safe_state "$apply_state" "$OUT_DIR/state-after-apply.json"
 run_visible_action "rollback target fill action" fill "#prompt-rollback-version" "$before_version"
 run_visible_action "rollback action" click 'button[data-prompt-action="rollback"]'
 wait_for_prompt_feedback rollback "$before_version"
+wait_for_rollback_version_convergence "$before_version"
 rollback_state="$(state_raw)"
 write_safe_state "$rollback_state" "$OUT_DIR/state-after-rollback.json"
 ab_screenshot "$SESSION" "$OUT_DIR/prompt-control.png" >/dev/null
