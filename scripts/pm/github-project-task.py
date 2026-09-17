@@ -1865,12 +1865,90 @@ def trace_projection_loss(task_uid: str, reason: str) -> None:
     die(f"trace-projection-loss: {task_uid}: {reason}")
 
 
+def recover_non_pr_task_worktree_authority(
+    task_uid: str,
+    repository: str,
+    mapping: str,
+    live: dict[str, Any],
+    repository_identity: dict[str, str],
+    existing: dict[str, Any],
+) -> dict[str, str] | None:
+    """Recover non-PR evidence from the registered task worktree only."""
+    mode = str(live.get("completion_mode") or existing.get("completion_mode") or "")
+    if mode != "non_pr_task":
+        return None
+
+    canonical = pathlib.Path(repository_identity["canonical_worktree"]).resolve()
+    task_mapping_path = mapping_path_for(canonical, mapping)
+    if not task_mapping_path.is_file():
+        trace_projection_loss(task_uid, "canonical task-worktree mapping is unavailable")
+    try:
+        task_mapping = load_mapping(task_mapping_path)
+    except (OSError, ValueError, json.JSONDecodeError):
+        trace_projection_loss(task_uid, "canonical task-worktree mapping cannot be read")
+    task_record = (task_mapping.get("tasks") or {}).get(task_uid)
+    if not isinstance(task_record, dict):
+        trace_projection_loss(task_uid, "canonical task-worktree task record is unavailable")
+
+    expected_identity = {
+        "task_uid": task_uid,
+        "repository": repository,
+        "canonical_worktree": str(canonical),
+        "task_branch": repository_identity["task_branch"],
+        "default_branch": repository_identity["default_branch"],
+        "issue_number": str(live.get("issue_number") or ""),
+        "issue_url": str(live.get("issue_url") or ""),
+    }
+    if not expected_identity["issue_number"] or not expected_identity["issue_url"]:
+        trace_projection_loss(task_uid, "live Issue identity is incomplete")
+    for key, expected in expected_identity.items():
+        actual = task_record.get(key)
+        if key == "canonical_worktree":
+            matches = bool(actual) and pathlib.Path(str(actual)).expanduser().resolve() == canonical
+        else:
+            matches = str(actual or "") == expected
+        if not matches:
+            trace_projection_loss(task_uid, f"canonical task-worktree {key} identity drift")
+
+    if str(task_record.get("completion_mode") or "") != "non_pr_task":
+        trace_projection_loss(task_uid, "canonical task-worktree completion mode is not non-PR")
+    evidence = task_record.get("non_pr_completion_evidence")
+    issue_evidence = live.get("non_pr_completion_evidence")
+    if evidence is None or issue_evidence is None or str(evidence) != str(issue_evidence):
+        trace_projection_loss(task_uid, "task-worktree evidence differs from Issue evidence")
+
+    evidence_file = str(task_record.get("non_pr_completion_evidence_file") or "")
+    expected_file = canonical / ".pm" / "scratch" / task_uid / "non-pr-completion-evidence.txt"
+    try:
+        actual_file = pathlib.Path(evidence_file).expanduser()
+        if not actual_file.is_absolute() or actual_file.resolve() != expected_file:
+            trace_projection_loss(task_uid, "task-worktree non-PR evidence path is not canonical")
+        if not actual_file.is_file():
+            trace_projection_loss(task_uid, "identity-bound non-PR evidence file is unavailable")
+        actual_text = actual_file.read_text(encoding="utf-8")
+        expected_text = str(evidence).rstrip("\n") + "\n"
+        if actual_text != expected_text:
+            trace_projection_loss(task_uid, "identity-bound non-PR evidence file differs from Issue evidence")
+        digest = str(task_record.get("non_pr_completion_evidence_sha256") or "")
+        if not re.fullmatch(r"[0-9a-f]{64}", digest):
+            trace_projection_loss(task_uid, "task-worktree non-PR evidence digest is malformed")
+        if hashlib.sha256(actual_file.read_bytes()).hexdigest() != digest:
+            trace_projection_loss(task_uid, "identity-bound non-PR evidence file digest mismatch")
+    except (OSError, UnicodeError):
+        trace_projection_loss(task_uid, "identity-bound non-PR evidence file cannot be read")
+    return {
+        "non_pr_completion_evidence_file": str(expected_file),
+        "non_pr_completion_evidence_sha256": digest,
+    }
+
+
 def preserve_identity_bound_cache(
     task_uid: str,
     existing: dict[str, Any],
     live: dict[str, Any],
     record: dict[str, Any],
     repository_identity: dict[str, str],
+    task_worktree_authority: dict[str, str] | None = None,
 ) -> None:
     """Retain local non-PR evidence only after checking its full binding."""
     cached_identity = {
@@ -1924,11 +2002,23 @@ def preserve_identity_bound_cache(
     cached_digest = str(cached_identity.get("non_pr_completion_evidence_sha256") or "")
     if live_digest and cached_digest and live_digest != cached_digest:
         trace_projection_loss(task_uid, "non-PR evidence digest disagrees between Issue and cache")
-    digest = live_digest or cached_digest
+    authority = task_worktree_authority or {}
+    authority_file = str(authority.get("non_pr_completion_evidence_file") or "")
+    authority_digest = str(authority.get("non_pr_completion_evidence_sha256") or "")
+    cached_file = str(cached_identity.get("non_pr_completion_evidence_file") or "")
+    if cached_digest and not cached_file:
+        trace_projection_loss(task_uid, "cached identity-bound non-PR evidence path is missing")
+    if cached_file and not cached_digest:
+        trace_projection_loss(task_uid, "cached identity-bound non-PR evidence digest is missing")
+    if cached_file and authority_file and pathlib.Path(cached_file).expanduser().resolve() != pathlib.Path(authority_file).resolve():
+        trace_projection_loss(task_uid, "cached and task-worktree non-PR evidence paths disagree")
+    if cached_digest and authority_digest and cached_digest != authority_digest:
+        trace_projection_loss(task_uid, "cached and task-worktree non-PR evidence digests disagree")
+    digest = live_digest or cached_digest or authority_digest
     if evidence and digest:
         record["non_pr_completion_evidence_sha256"] = digest
 
-    evidence_file = str(cached_identity.get("non_pr_completion_evidence_file") or "")
+    evidence_file = cached_file or authority_file
     requires_evidence = mode == "non_pr_task" and (
         str(record.get("status") or "") in {"done", "deferred"}
         or str(record.get("workflow_phase") or "") in TERMINAL_WORKFLOW_PHASES
@@ -1978,6 +2068,15 @@ def command_refresh_task(args: argparse.Namespace) -> int:
         die(f"refresh-task: authoritative GitHub issue not found for {args.task_uid}")
     if live.get("trace_projection_error"):
         trace_projection_loss(args.task_uid, str(live["trace_projection_error"]))
+    if existing.get("task_uid") not in (None, "", args.task_uid):
+        trace_projection_loss(args.task_uid, "cached task UID identity drift")
+    if existing.get("repository") not in (None, "", args.repo):
+        trace_projection_loss(args.task_uid, "cached repository identity drift")
+    for key in ("issue_number", "issue_url"):
+        cached_value = str(existing.get(key) or "")
+        live_value = str(live.get(key) or "")
+        if cached_value and live_value and cached_value != live_value:
+            trace_projection_loss(args.task_uid, f"cached and live Issue {key} identities disagree")
     if existing.get("loop_binding") is not None and live.get("loop_binding") is None:
         die("refresh-task: live loop binding disappeared; explicit reconciliation required")
     lineage_path = loop_lineage_path(root, args.task_uid)
@@ -1997,11 +2096,15 @@ def command_refresh_task(args: argparse.Namespace) -> int:
     # Resolve registered identity from task truth instead and fail closed when
     # live and cached task identities disagree.
     identity_candidates: list[dict[str, str]] = []
-    for hint in (
-        str(existing.get("canonical_worktree") or ""),
-        str(live.get("worktree_hint") or ""),
+    for label, hint in (
+        ("cached", str(existing.get("canonical_worktree") or "")),
+        ("live", str(live.get("worktree_hint") or "")),
     ):
-        if not hint or not pathlib.Path(hint).expanduser().exists():
+        if not hint:
+            continue
+        if not pathlib.Path(hint).expanduser().exists():
+            if label == "cached":
+                trace_projection_loss(args.task_uid, "cached canonical task worktree is unavailable")
             continue
         candidate = authoritative_repository_identity(root, args.repo, hint)
         if not any(
@@ -2207,8 +2310,17 @@ def command_refresh_task(args: argparse.Namespace) -> int:
         record["workflow_phase"] = pending_phase
         if isinstance(pending_intent, dict) and pending_intent.get("previous_status"):
             record["status"] = pending_intent["previous_status"]
+    task_worktree_authority = recover_non_pr_task_worktree_authority(
+        args.task_uid,
+        args.repo,
+        args.mapping,
+        live,
+        repository_identity,
+        existing,
+    )
     preserve_identity_bound_cache(
         args.task_uid, existing, live, record, repository_identity,
+        task_worktree_authority,
     )
     record["cache_refreshed_at"] = now()
     # Local cache identity is never accepted from stale issue/project/cache
