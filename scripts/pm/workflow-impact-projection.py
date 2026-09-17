@@ -156,9 +156,16 @@ def load_verified_projection(
         raise ProjectionError("impact projection must be an object")
     if value.get("schema") not in SUPPORTED_SCHEMAS:
         raise ProjectionError("impact projection schema is unsupported")
-    unknown = sorted(set(value) - PROJECTION_FIELDS)
-    if unknown:
-        raise ProjectionError("impact projection has unknown fields: " + ",".join(unknown))
+    actual_fields = set(value)
+    if actual_fields != PROJECTION_FIELDS:
+        unknown = sorted(actual_fields - PROJECTION_FIELDS)
+        missing = sorted(PROJECTION_FIELDS - actual_fields)
+        details = []
+        if unknown:
+            details.append("unknown=" + ",".join(unknown))
+        if missing:
+            details.append("missing=" + ",".join(missing))
+        raise ProjectionError("impact projection fields do not match schema: " + "; ".join(details))
     _require_identity_string(value.get("task_uid"), TASK_RE, "task_uid")
     _require_identity_string(value.get("source_head_oid"), OID_RE, "source_head_oid")
     _require_identity_string(value.get("scope_base_oid"), OID_RE, "scope_base_oid")
@@ -261,25 +268,48 @@ def normalize_manual_roles(value: object) -> list[str]:
     return roles
 
 
-def normalize_closure_status(value: object) -> dict[str, Optional[str]]:
+def normalize_closure_status(value: object, root: Path) -> dict[str, Any]:
     if isinstance(value, str):
         status = value
         reason: Optional[str] = None
+        evidence: object = []
     elif isinstance(value, dict):
-        unknown = sorted(set(value) - {"status", "reason"})
+        unknown = sorted(set(value) - {"status", "reason", "evidence"})
         if unknown:
             raise ProjectionError(
                 "closure_status has unsupported fields: " + ",".join(unknown)
             )
         status = value.get("status")
         reason = value.get("reason")
+        evidence = value.get("evidence", [])
     else:
         raise ProjectionError("closure_status must be a status string or object")
     if not isinstance(status, str) or not status.strip():
         raise ProjectionError("closure_status.status must be a non-empty string")
     if reason is not None and (not isinstance(reason, str) or not reason.strip()):
         raise ProjectionError("closure_status.reason must be non-empty when present")
-    return {"status": status, "reason": reason}
+    if not isinstance(evidence, list):
+        raise ProjectionError("closure_status.evidence must be an array")
+    verified_evidence = []
+    for index, item in enumerate(evidence):
+        if not isinstance(item, dict) or set(item) != {"path", "sha256"}:
+            raise ProjectionError(f"closure_status.evidence[{index}] must contain path and sha256")
+        relative = item.get("path")
+        digest = item.get("sha256")
+        if not isinstance(relative, str) or not relative or Path(relative).is_absolute() or ".." in Path(relative).parts:
+            raise ProjectionError(f"closure_status.evidence[{index}].path is invalid")
+        if not isinstance(digest, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+            raise ProjectionError(f"closure_status.evidence[{index}].sha256 is invalid")
+        path = (root / relative).resolve()
+        try:
+            path.relative_to(root.resolve())
+            actual = "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+        except (OSError, ValueError) as exc:
+            raise ProjectionError(f"closure_status.evidence[{index}] cannot be verified: {exc}") from exc
+        if actual != digest:
+            raise ProjectionError(f"closure_status.evidence[{index}] digest mismatch")
+        verified_evidence.append({"path": relative, "sha256": digest})
+    return {"status": status, "reason": reason, "evidence": verified_evidence}
 
 
 def load_input(path: Path) -> dict[str, Any]:
@@ -405,7 +435,7 @@ def build_projection(root: Path, value: dict[str, Any]) -> dict[str, Any]:
     consumed_contracts = normalize_items(value["consumed_contracts"], "consumed_contracts")
     public_semantics = normalize_items(value["public_semantics"], "public_semantics")
     affected_consumers = normalize_items(value["affected_consumers"], "affected_consumers")
-    closure_status = normalize_closure_status(value["closure_status"])
+    closure_status = normalize_closure_status(value["closure_status"], root)
     test_profile = value["test_profile"]
     if not isinstance(test_profile, str) or test_profile not in TEST_PROFILES:
         raise ProjectionError("test_profile must be required or full")
@@ -415,7 +445,7 @@ def build_projection(root: Path, value: dict[str, Any]) -> dict[str, Any]:
     declared_tests = sorted(set(str(item) for item in declared_tests))
     verification_affected = bool(value.get("verification_affected", False))
 
-    closure_verified = closure_status["status"] == "complete"
+    closure_verified = closure_status["status"] == "complete" and bool(closure_status["evidence"])
     escalation_reasons: list[str] = []
     if not closure_verified:
         escalation_reasons.append(

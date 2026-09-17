@@ -576,6 +576,16 @@ def can_reuse_source_review(
         return False
 
 
+def validate_review_applicability(source_identity: dict[str, Any],
+                                  applicability: dict[str, Any]) -> dict[str, Any]:
+    """Require the verified applicability record to derive from source identity."""
+    source = _validate_source_identity(source_identity)
+    verified = _verified_review_applicability(applicability)
+    if verified != review_applicability_identity(source):
+        raise ValueError("review applicability does not match source review identity")
+    return verified
+
+
 def review_evidence_identity(receipt: dict[str, Any]) -> dict[str, Any]:
     missing = [field for field in AUTHORITY_FIELDS if field not in receipt]
     if missing:

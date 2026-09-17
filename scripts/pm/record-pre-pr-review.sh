@@ -219,7 +219,7 @@ else:
     if evidence_digest != helper.source_review_digest(plan["source_review_identity"]):
         raise SystemExit("error: v2 source review digest mismatch")
     try:
-        helper._verified_review_applicability(plan.get("professional_review_applicability"))
+        helper.validate_review_applicability(plan.get("source_review_identity"), plan.get("professional_review_applicability"))
     except (TypeError, ValueError) as exc:
         raise SystemExit(f"error: v2 review applicability is invalid: {exc}")
     integration_identity = plan.get("integration_ci_identity")

@@ -581,6 +581,15 @@ def derived_source_review_input(root: Path, *, task_uid: str, head: str,
     mapping = load_json(root / ".pm/github-project-sync/tasks.json")
     task = (mapping.get("tasks") or {}).get(task_uid) or {}
     epoch = bootstrap_epoch or task.get("bootstrap_epoch")
+    if epoch is None:
+        snapshot_path = root / ".pm" / "scratch" / task_uid / "bootstrap-task-snapshot.json"
+        try:
+            snapshot = load_json(snapshot_path)
+        except (OSError, ValueError, ContractError) as exc:
+            raise ContractError(f"default v2 source plan cannot read bootstrap snapshot: {exc}") from exc
+        snapshot_task = snapshot.get("task") if isinstance(snapshot, dict) else None
+        if isinstance(snapshot_task, dict) and snapshot_task.get("uid") == task_uid:
+            epoch = snapshot_task.get("bootstrap_epoch")
     repository = task.get("repository") or (mapping.get("project") or {}).get("repo")
     pr_number = task.get("pr_number")
     if type(epoch) is not int or epoch < 1 or not repository or type(pr_number) is not int or pr_number < 1:
@@ -588,13 +597,30 @@ def derived_source_review_input(root: Path, *, task_uid: str, head: str,
     digest = lambda value: hashlib.sha256(json.dumps(
         value, sort_keys=True, separators=(",", ":")
     ).encode()).hexdigest()
+    def contract_digest(paths: list[Path]) -> str:
+        records = []
+        for path in paths:
+            try:
+                content = path.read_bytes()
+            except OSError as exc:
+                raise ContractError(f"cannot bind review contract {path}: {exc}") from exc
+            records.append({"path": str(path.relative_to(root)),
+                            "sha256": hashlib.sha256(content).hexdigest()})
+        return digest(records)
+    role_contract_digest = contract_digest([
+        root / ".agents" / "roles" / f"{role}.md" for role in roles
+    ])
+    review_policy_digest = contract_digest([
+        root / "doc/engineering/workflow/source-of-truth.md",
+        root / ".agents/skills/requesting-repo-owned-review/SKILL.md",
+    ])
     identity_module = load_identity_module()
     identity = identity_module.source_review_identity(
         task_uid=task_uid, bootstrap_epoch=epoch, repository=repository, pr_number=pr_number,
         source_head_oid=head, source_scope_oid=comparison_oid,
         changed_paths_digest=str(impact_projection["changed_paths_digest"]).removeprefix("sha256:"),
-        ordered_role_ids=roles, role_contract_digest=digest(roles),
-        review_policy_digest=digest({"schema": V2_SCHEMA, "change_class": impact_projection["change_class"]}),
+        ordered_role_ids=roles, role_contract_digest=role_contract_digest,
+        review_policy_digest=review_policy_digest,
         input_contract_digest=str(impact_projection["projection_digest"]).removeprefix("sha256:"),
     )
     applicability_identity = identity_module.review_applicability_identity(identity)
@@ -874,6 +900,7 @@ def plan_identity_v2(task_uid: str, head: str, comparison_ref: str, comparison_o
         "source_review_identity": source_identity,
         "source_review_digest": source_digest,
         "professional_review_applicability": applicability,
+        "impact_projection": impact_projection,
         "impact_projection_schema": impact_projection["schema"],
         "impact_projection_digest": impact_projection["projection_digest"],
         "impact_projection_test_profile": impact_projection["test_profile"],
@@ -1017,6 +1044,11 @@ def main() -> int:
                 )
             except (OSError, TypeError, ValueError, projection_module.ProjectionError) as exc:
                 raise ContractError(f"invalid --impact-projection: {exc}") from exc
+            if receipt_value is not None:
+                if receipt_value.get("impact_projection_digest") != impact_projection["projection_digest"]:
+                    raise ContractError("trusted CI receipt does not bind the review impact projection")
+                if receipt_value.get("impact_projection_planner_digest") != impact_projection["planner_digest"]:
+                    raise ContractError("trusted CI receipt planner does not bind the impact projection planner")
         impacted_roles = validate_impacted_roles(args.impacted_role, roles, bool(args.prior_review_plan))
         source_identity: dict[str, Any] | None = None
         integration_identity: dict[str, Any] | None = None
@@ -1091,6 +1123,10 @@ def main() -> int:
             if source_identity["changed_paths_digest"] not in {
                     projected_paths_digest, projected_paths_digest.removeprefix("sha256:")}:
                 raise ContractError("source review identity does not match impact projection changed paths")
+            projected_input_digest = str(impact_projection["projection_digest"])
+            if source_identity["input_contract_digest"] not in {
+                    projected_input_digest, projected_input_digest.removeprefix("sha256:")}:
+                raise ContractError("source review identity does not match impact projection input contract")
             identity_module = load_identity_module()
             identity = plan_identity_v2(
                 args.task_uid, args.head, comparison_ref, comparison_oid, roles, slices,

@@ -614,7 +614,7 @@ def review_admission(root: Path, packet_path: Path, plan_path: Path,
                     fail("v2 source-only plan must record pending integration CI")
             elif plan.get("integration_ci_digest") != helper.integration_ci_digest(integration_identity):
                 fail("v2 integration CI digest does not match its identity")
-            helper._verified_review_applicability(plan.get("professional_review_applicability"))
+            helper.validate_review_applicability(plan.get("source_review_identity"), plan.get("professional_review_applicability"))
             if not re.fullmatch(r"sha256:[0-9a-f]{64}", str(plan.get("impact_projection_digest", ""))):
                 fail("v2 review plan lacks a verified impact projection digest")
         except (TypeError, ValueError) as exc:

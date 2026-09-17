@@ -126,7 +126,7 @@ Use offline contract tests and temporary Git/fake-GitHub fault tests for mechani
 For a target advance after the source head was reviewed, explicitly request a new integration run using the existing local gh login:
 
 ```bash
-python3 <effective-tool-root>/scripts/pm/integration_ci.py dispatch --repository eng-cc/oasis7 --task-uid <TASK-UID> --pr-number <PR>
+python3 <effective-tool-root>/scripts/pm/integration_ci.py dispatch --repository eng-cc/oasis7 --task-uid <TASK-UID> --pr-number <PR> --impact-projection <projection.json>
 gh run list --repo eng-cc/oasis7 --workflow rust.yml --event workflow_dispatch
 python3 <effective-tool-root>/scripts/pm/ci-ready-receipt.py --repository eng-cc/oasis7 --task-uid <TASK-UID> --task-issue-number <ISSUE> --pr-number <PR> --check-app-id <LIVE-REQUIRED-APP-ID> --planner-digest auto --integration-run-id <NEW-RUN-ID> --json
 ```

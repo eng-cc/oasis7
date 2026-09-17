@@ -13,8 +13,8 @@ Usage: ./scripts/pm/workflow-behavior-eval.sh [--json]
 Run the repo-owned workflow behavior eval for the default oasis7 task chain:
   default-workflow-bootstrap -> new-task-worktree -> workflow-report
   -> repo-owned-workflow-router -> TPM coordinate/integrate only + professional role subagent dispatch
-  -> prepare-task-pr --draft-candidate --create -> exact-head CI -> role review
-  -> task-closeout -> prepare-task-pr --promote-draft -> PR CI/comment watch/fix
+  -> prepare-task-pr --draft-candidate --create -> concurrent exact-head CI + role review
+  -> fail-closed join -> task-closeout -> prepare-task-pr --promote-draft -> PR CI/comment watch/fix
   -> review-thread-closeout -> merge/cleanup
 
 This eval reuses isolated fixture tests and PM smokes so the main chain stays
@@ -801,19 +801,15 @@ scenarios = [
         ],
     },
     {
-        "id": "frozen_head_ci_review_staged_with_fail_closed_join",
-        "expected_route": "freeze -> trusted exact-head CI -> formal review -> current-identity join -> Pre-PR Ready/promotion (concurrent target staged)",
+        "id": "frozen_head_ci_review_concurrent_with_fail_closed_join",
+        "expected_route": "freeze -> concurrent trusted exact-head CI and formal review -> current-identity join -> Pre-PR Ready/promotion",
         "surface": "doc/engineering/workflow/source-of-truth.md",
         "required_markers": [
-            "Parallel verification and the fail-closed join (staged, not activated).",
-            "target contract permits trusted exact-head integration CI and independent formal",
-            "current formal v2 plan/admission helper still requires the trusted CI receipt",
-            "the active path remains CI then formal review",
-            "fail-closed join of both *current* identities",
-            "Missing, pending, uncertain, stale, drifted, wrong-head, wrong-base, failed or otherwise unreadable CI or review evidence blocks the join.",
-            "legacy `--evidence-digest` input is a",
-            "source-review applicability shadow decision is audit-only until",
-            "shared impact projection is one digest-bound projection",
+            "Parallel verification and fail-closed join.",
+            "trusted exact-head CI and role-complete professional review run concurrently",
+            "CI planning, role selection, review planning, closeout and promotion consume that projection",
+            "missing, pending, uncertain, stale, drifted, failed or unreadable evidence blocks the join",
+            "Explicit v1 remains read-only compatibility",
             "configuration generation\nthrough the real parser/admission path",
             "viewer through the runtime protocol",
             "persistence write through real recovery",
@@ -832,12 +828,10 @@ scenarios = [
             "Require each role to return `findings` or `no_findings`, plus `residual_risk`",
             "Require trusted runtime attestation only when operating the future unattended supervisor.",
             "Record plan/batch paths and digests in GitHub task issue evidence comments.",
-            "concurrent CI/review contract is staged but not activated",
-            "current formal v2 plan still requires the trusted exact-head CI receipt before dispatch",
-            "The target concurrent review branch remains capability-staged",
-            "dispatch formal review only after the trusted receipt creates the v2 plan",
-            "Pre-PR Ready and promotion require a fail-closed join of their current identities",
-            "legacy `--evidence-digest` input is compatibility/non-formal evidence only",
+            "dispatch the complete role batch while exact-head CI runs independently",
+            "CI planner, role selector, plan, admission and closeout must bind the same projection digest",
+            "Before Pre-PR Ready or promotion, perform the fail-closed",
+            "legacy `--evidence-digest` or audit-only shadow result never satisfies this",
         ],
     },
     {
@@ -1009,30 +1003,21 @@ scenarios = [
 ]
 
 review_skill = surfaces[".agents/skills/requesting-repo-owned-review/SKILL.md"]
-parallel_marker = "Parallel verification and the fail-closed join (staged, not activated)."
-join_marker = "Pre-PR Ready and promotion require a\nfail-closed join of their current identities"
+parallel_marker = "Parallel verification and fail-closed join."
+join_marker = "Before Pre-PR Ready or promotion, perform the fail-closed"
 if source_text.index(parallel_marker) >= source_text.index("<a id=\"post-pr-merge-ready-gate\">"):
     raise SystemExit("workflow-behavior-eval: parallel CI/review contract must precede post-PR gates")
 if (
     parallel_marker not in source_text
-    or "current formal v2 plan/admission helper still requires the trusted CI receipt" not in source_text
-    or "the active path remains CI then formal review" not in source_text
-    or "Missing, pending, uncertain, stale, drifted, wrong-head, wrong-base, failed or otherwise unreadable CI or review evidence blocks the join." not in source_text
+    or "trusted exact-head CI and role-complete professional review run concurrently" not in source_text
+    or "CI planning, role selection, review planning, closeout and promotion consume that projection" not in source_text
 ):
     raise SystemExit("workflow-behavior-eval: fail-closed parallel CI/review join contract is incomplete")
-if "concurrent CI/review contract is staged but not activated" not in review_skill:
-    raise SystemExit("workflow-behavior-eval: review skill does not expose staged CI/review scheduling")
-if "current formal v2 plan still requires the trusted exact-head CI receipt before dispatch" not in review_skill:
-    raise SystemExit("workflow-behavior-eval: review skill does not preserve the active CI-before-review boundary")
-if "The target concurrent review branch remains capability-staged" not in review_skill:
-    raise SystemExit("workflow-behavior-eval: review skill does not mark concurrent review as staged")
-if "dispatch formal review only after the trusted receipt creates the v2 plan" not in review_skill:
-    raise SystemExit("workflow-behavior-eval: review skill does not require receipt-before-formal-review dispatch")
+if "dispatch the complete role batch while exact-head CI runs independently" not in review_skill:
+    raise SystemExit("workflow-behavior-eval: review skill does not activate concurrent CI/review scheduling")
 if join_marker not in review_skill and "fail-closed\njoin against the current PR" not in review_skill:
     raise SystemExit("workflow-behavior-eval: review skill does not require the current-identity join")
-if "start the trusted exact-head integration-CI branch and the independent formal professional-review branch concurrently" in review_skill:
-    raise SystemExit("workflow-behavior-eval: review skill retains active concurrent dispatch while CI is pending")
-if "legacy `--evidence-digest` input is compatibility/non-formal evidence only" not in review_skill:
+if "legacy `--evidence-digest` or audit-only shadow result never satisfies this" not in review_skill:
     raise SystemExit("workflow-behavior-eval: legacy evidence-digest restriction is missing")
 
 evaluated: list[dict[str, object]] = []

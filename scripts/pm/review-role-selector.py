@@ -47,6 +47,9 @@ def main() -> int:
                         help="semicolon-delimited paths; explicit risk classes require doc-only scope")
     parser.add_argument("--impact-projection",
                         help="verified digest-bound workflow impact projection")
+    parser.add_argument("--task-uid")
+    parser.add_argument("--source-head-oid")
+    parser.add_argument("--scope-base-oid")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
     if args.manual_role and args.change_class not in {"unknown", "mixed"}:
@@ -67,7 +70,13 @@ def main() -> int:
         if args.changed_path_list is None:
             print("review-role-selector: impact projection requires --changed-path-list", file=sys.stderr)
             return 2
+        if not args.task_uid or not args.source_head_oid or not args.scope_base_oid:
+            print("review-role-selector: impact projection requires task/head/base identity", file=sys.stderr)
+            return 2
         projection_expected = {
+            "task_uid": args.task_uid,
+            "source_head_oid": args.source_head_oid,
+            "scope_base_oid": args.scope_base_oid,
             "changed_paths": [path.strip() for path in args.changed_path_list.split(";") if path.strip()],
             "change_class": args.change_class,
             "manual_roles": args.manual_role,

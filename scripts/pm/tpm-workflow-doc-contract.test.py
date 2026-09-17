@@ -1357,9 +1357,9 @@ class WorkflowDocumentationContract(unittest.TestCase):
         assert optional is not None
         for phrase in (
             "if it changes HEAD",
-            "rerun exact-head CI and local role review",
+            "rerun exact-head CI and revalidate review applicability",
             "regenerate the packet and ci_ready receipt",
-            "promote only with that new receipt",
+            "promote only with that new joined evidence",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, optional.group(1))

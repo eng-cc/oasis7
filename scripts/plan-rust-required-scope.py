@@ -11,13 +11,13 @@ FIELDS={"oasis7_required":"run_oasis7_required_tests","consensus":"run_consensus
 PLANNER_OUTPUT_FIELDS=set(FIELDS.values())|{"run_oasis7_net_libp2p_tests","run_viewer_wasm_check","run_pixel_world_bridge_wasm_check","run_rust_baseline"}
 def die(m): raise SystemExit("plan-rust-required-scope: "+m)
 
-def load_impact_projection(path, expected_paths):
+def load_impact_projection(path, expected):
   helper_path=Path(__file__).parent / "pm" / "workflow-impact-projection.py"
   spec=importlib.util.spec_from_file_location("oasis7_workflow_impact_projection", helper_path)
   if spec is None or spec.loader is None: die("impact projection adapter is unavailable")
   helper=importlib.util.module_from_spec(spec); spec.loader.exec_module(helper)
   try:
-    value=helper.load_verified_projection(path, expected={"changed_paths": expected_paths})
+    value=helper.load_verified_projection(path, expected=expected)
   except Exception as exc:
     die(f"impact projection is invalid: {exc}")
   return value
@@ -70,11 +70,19 @@ def git_paths(a):
     paths.extend(p if len(p)>1 else p[:1])
   return paths
 def main():
- p=argparse.ArgumentParser(); p.add_argument("--event-name",required=True);p.add_argument("--base-ref");p.add_argument("--head-ref");p.add_argument("--changed-path",action="append",default=[]);p.add_argument("--github-output");p.add_argument("--config",default=str(Path(__file__).with_name("ci-required-scope.v2.json")));p.add_argument("--impact-projection",help="verified digest-bound workflow impact projection");a=p.parse_args()
+ p=argparse.ArgumentParser(); p.add_argument("--event-name",required=True);p.add_argument("--base-ref");p.add_argument("--head-ref");p.add_argument("--task-uid");p.add_argument("--scope-base-oid");p.add_argument("--changed-path",action="append",default=[]);p.add_argument("--github-output");p.add_argument("--config",default=str(Path(__file__).with_name("ci-required-scope.v2.json")));p.add_argument("--impact-projection",help="verified digest-bound workflow impact projection");a=p.parse_args()
  c,digest=config(a.config); paths=a.changed_path or git_paths(a); projection=None
  if a.impact_projection:
   if paths is None: die("impact projection requires resolvable changed paths")
-  projection=load_impact_projection(a.impact_projection, paths)
+  if not a.task_uid or not a.head_ref or not a.scope_base_oid: die("impact projection requires --task-uid, --head-ref and --scope-base-oid")
+  if not a.changed_path:
+   try:
+    resolved_head=subprocess.check_output(["git","rev-parse",f"{a.head_ref}^{{commit}}"],text=True).strip()
+    resolved_base=subprocess.check_output(["git","rev-parse",f"{a.scope_base_oid}^{{commit}}"],text=True).strip()
+    merge_base=subprocess.check_output(["git","merge-base",a.scope_base_oid,a.head_ref],text=True).strip()
+   except Exception as exc: die(f"impact projection git identity cannot be verified: {exc}")
+   if resolved_head!=a.head_ref or resolved_base!=a.scope_base_oid or merge_base!=a.scope_base_oid: die("impact projection git head/base identity mismatch")
+  projection=load_impact_projection(a.impact_projection,{"task_uid":a.task_uid,"source_head_oid":a.head_ref,"scope_base_oid":a.scope_base_oid,"changed_paths":paths})
  full=a.event_name=="workflow_dispatch" or paths is None or (projection is not None and projection["test_profile"]=="full"); capabilities=set(); explicit_rust=False; reasons=["required_gate_baseline:always_on"]
  if paths is None: paths=[]; reasons.append("unresolvable_changed_paths")
  for path in paths:

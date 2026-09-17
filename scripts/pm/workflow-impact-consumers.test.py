@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import importlib.util
+import hashlib
 from pathlib import Path
 import subprocess
 import tempfile
@@ -15,6 +17,10 @@ PLANNER = ROOT / "scripts" / "plan-rust-required-scope.sh"
 SELECTOR = ROOT / "scripts" / "pm" / "review-role-selector.py"
 REVIEW_PLAN = ROOT / "scripts" / "pm" / "review-plan.py"
 CLOSEOUT = ROOT / "scripts" / "pm" / "task-closeout.sh"
+SPEC = importlib.util.spec_from_file_location("workflow_impact_projection", PROJECTION)
+assert SPEC is not None and SPEC.loader is not None
+WORKFLOW_IMPACT = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(WORKFLOW_IMPACT)
 
 
 class WorkflowImpactConsumersTests(unittest.TestCase):
@@ -32,7 +38,10 @@ class WorkflowImpactConsumersTests(unittest.TestCase):
             "consumed_contracts": [{"id": "workflow-contract", "revision": "v1"}],
             "public_semantics": [],
             "affected_consumers": ["required-ci"],
-            "closure_status": {"status": "complete", "reason": "verified"},
+            "closure_status": {"status": "complete", "reason": "verified", "evidence": [{
+                "path": "scripts/ci-required-scope.v2.json",
+                "sha256": "sha256:" + hashlib.sha256((ROOT / "scripts/ci-required-scope.v2.json").read_bytes()).hexdigest(),
+            }]},
         }
 
     def write_projection(self, directory: Path) -> Path:
@@ -59,11 +68,15 @@ class WorkflowImpactConsumersTests(unittest.TestCase):
             projection_path = self.write_projection(Path(raw))
             planner = self.run_consumer([
                 str(PLANNER), "--event-name", "pull_request",
+                "--task-uid", "task_" + "1" * 32,
+                "--head-ref", "a" * 40, "--scope-base-oid", "b" * 40,
                 "--changed-path", "doc/product/world-rules-core-gameplay.prd.md",
                 "--impact-projection", str(projection_path),
             ])
             selector = self.run_consumer([
                 str(SELECTOR), "--change-class", "workflow-doc",
+                "--task-uid", "task_" + "1" * 32,
+                "--source-head-oid", "a" * 40, "--scope-base-oid", "b" * 40,
                 "--changed-path-list", "doc/product/world-rules-core-gameplay.prd.md",
                 "--impact-projection", str(projection_path), "--json",
             ])
@@ -88,12 +101,16 @@ class WorkflowImpactConsumersTests(unittest.TestCase):
             projection_path.write_text(json.dumps(tampered), encoding="utf-8")
             planner = self.run_consumer([
                 str(PLANNER), "--event-name", "pull_request",
+                "--task-uid", "task_" + "1" * 32,
+                "--head-ref", "a" * 40, "--scope-base-oid", "b" * 40,
                 "--changed-path", "doc/product/world-rules-core-gameplay.prd.md",
                 "--impact-projection", str(projection_path),
             ], ok=False)
             self.assertIn("impact projection", planner.stderr.lower())
             selector = self.run_consumer([
                 str(SELECTOR), "--change-class", "workflow-doc",
+                "--task-uid", "task_" + "1" * 32,
+                "--source-head-oid", "a" * 40, "--scope-base-oid", "b" * 40,
                 "--changed-path-list", "doc/product/world-rules-core-gameplay.prd.md",
                 "--impact-projection", str(projection_path), "--json",
             ], ok=False)
@@ -109,10 +126,39 @@ class WorkflowImpactConsumersTests(unittest.TestCase):
             config_path.write_text(json.dumps(config), encoding="utf-8")
             planner = self.run_consumer([
                 str(PLANNER), "--event-name", "pull_request",
+                "--task-uid", "task_" + "1" * 32,
+                "--head-ref", "a" * 40, "--scope-base-oid", "b" * 40,
                 "--changed-path", "doc/product/world-rules-core-gameplay.prd.md",
                 "--config", str(config_path), "--impact-projection", str(projection_path),
             ], ok=False)
             self.assertIn("planner config identity", planner.stderr.lower())
+
+    def test_planner_and_selector_reject_stale_head_and_base_identity(self) -> None:
+        with tempfile.TemporaryDirectory() as raw:
+            projection_path = self.write_projection(Path(raw))
+            projection = json.loads(projection_path.read_text())
+            projection["source_head_oid"] = "c" * 40
+            projection["scope_base_oid"] = "d" * 40
+            projection["projection_digest"] = WORKFLOW_IMPACT.canonical_digest({
+                key: value for key, value in projection.items() if key != "projection_digest"
+            })
+            projection_path.write_text(json.dumps(projection))
+            planner = self.run_consumer([
+                str(PLANNER), "--event-name", "pull_request",
+                "--task-uid", "task_" + "1" * 32,
+                "--head-ref", "a" * 40, "--scope-base-oid", "b" * 40,
+                "--changed-path", "doc/product/world-rules-core-gameplay.prd.md",
+                "--impact-projection", str(projection_path),
+            ], ok=False)
+            self.assertIn("identity mismatch", planner.stderr.lower())
+            selector = self.run_consumer([
+                str(SELECTOR), "--change-class", "workflow-doc",
+                "--task-uid", "task_" + "1" * 32,
+                "--source-head-oid", "a" * 40, "--scope-base-oid", "b" * 40,
+                "--changed-path-list", "doc/product/world-rules-core-gameplay.prd.md",
+                "--impact-projection", str(projection_path), "--json",
+            ], ok=False)
+            self.assertIn("identity mismatch", selector.stderr.lower())
 
     def test_review_plan_and_closeout_expose_the_same_projection_contract(self) -> None:
         review_help = self.run_consumer([str(REVIEW_PLAN), "--help"])

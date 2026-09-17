@@ -26,6 +26,7 @@ class IntegrationTests(unittest.TestCase):
      for name in ('ci-tests.sh','viewer-dependency-preflight.sh'):
       shutil.copy2(repo/'scripts'/name,frozen/name)
      marker=temp/'observed'
+     (temp/'impact-projection.json').write_text('{}')
      (scripts/'ci-tests.sh').write_text('#!/bin/bash\nprintf candidate > "$OBSERVED"\nexit 0\n')
      (scripts/'ci-tests.sh').chmod(0o755)
      (scripts/'viewer-dependency-preflight.sh').write_text(candidate_preflight)
@@ -162,7 +163,7 @@ class ProvenanceTests(unittest.TestCase):
 
  def test_premerge_activation_cannot_dispatch_candidate(self):
   with patch.object(self.api,'gh',side_effect=[self.pr,self.pr,{'default_branch':'main'},{'content':'bm8gbW9kZQ=='}]),patch.object(self.api.subprocess,'run') as run:
-   with self.assertRaisesRegex(ValueError,'activation pending'):self.api.dispatch('owner/repo',self.uid,12)
+   with self.assertRaisesRegex(ValueError,'activation pending'):self.api.dispatch('owner/repo',self.uid,12,None)
    run.assert_not_called()
 
 if __name__=='__main__':unittest.main()

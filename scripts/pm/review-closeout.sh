@@ -92,7 +92,7 @@ if p.get("schema") == "oasis7-review-plan/v2":
  helper=importlib.util.module_from_spec(spec); spec.loader.exec_module(helper)
  if evidence_digest != helper.source_review_digest(p.get("source_review_identity")): raise SystemExit("review-closeout: v2 source review digest mismatch")
  try:
-  helper._verified_review_applicability(p.get("professional_review_applicability"))
+  helper.validate_review_applicability(p.get("source_review_identity"), p.get("professional_review_applicability"))
  except (TypeError, ValueError) as exc:
   raise SystemExit(f"review-closeout: v2 review applicability is invalid: {exc}")
  integration_identity = p.get("integration_ci_identity")

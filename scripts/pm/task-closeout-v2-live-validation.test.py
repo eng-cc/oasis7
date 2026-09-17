@@ -34,6 +34,7 @@ class TaskCloseoutV2LiveValidationTest(unittest.TestCase):
         (self.root / ".pm/github-project-sync").mkdir(parents=True)
         shutil.copy2(PM / "task-closeout.sh", self.root / "scripts/pm/task-closeout.sh")
         shutil.copy2(PM / "ci_ready_receipt_identity.py", self.root / "scripts/pm/ci_ready_receipt_identity.py")
+        shutil.copy2(PM / "workflow-impact-projection.py", self.root / "scripts/pm/workflow-impact-projection.py")
         shutil.copy2(PM / "bootstrap-task-snapshot.py", self.root / "scripts/pm/bootstrap-task-snapshot.py")
         subprocess.run(["git", "-C", str(self.root), "init", "-q", "-b", "main"], check=True)
         subprocess.run(["git", "-C", str(self.root), "config", "user.email", "fixture@example.invalid"], check=True)
@@ -153,6 +154,37 @@ print(json.dumps(receipt))
 
     def _write_v2_inputs(self):
         identity = load_identity_module(self.root / "scripts/pm/ci_ready_receipt_identity.py")
+        impact = load_identity_module(PM / "workflow-impact-projection.py")
+        planner_identity = {
+            "schema": "oasis7-required-plan-v1",
+            "planner_config_sha256": "sha256:" + "9" * 64,
+            "scope": "minimal",
+            "selected_capabilities": ["required_gate_baseline"],
+            "test_profile": "required",
+            "declared_tests": ["required_gate_baseline"],
+        }
+        projection = {
+            "schema": "oasis7-workflow-impact-projection/v2", "task_uid": UID,
+            "source_head_oid": self.head, "scope_base_oid": "b" * 40,
+            "changed_paths": ["tracked"], "changed_paths_digest": impact.canonical_digest(["tracked"]),
+            "change_class": "workflow-doc", "manual_roles": [], "domain_role": None,
+            "test_profile": "required", "declared_tests": ["required_gate_baseline"],
+            "consumed_contracts": ["workflow"], "public_semantics": [],
+            "affected_consumers": ["closeout"],
+            "closure_status": {"status": "complete", "reason": "fixture", "evidence": [{
+                "path": "tracked",
+                "sha256": "sha256:" + __import__('hashlib').sha256((self.root / "tracked").read_bytes()).hexdigest(),
+            }]},
+            "ci_scope": "minimal", "ci_capabilities": ["required_gate_baseline"],
+            "ci_reasons": ["required_gate_baseline:always_on"],
+            "review_roles": ["qa_engineer"], "ordered_role_ids": ["qa_engineer"],
+            "review_scope": "targeted", "review_escalated": False,
+            "review_reasons": ["fixture"], "planner_config_sha256": "sha256:" + "9" * 64,
+            "planner_identity": planner_identity,
+            "planner_digest": impact.canonical_digest(planner_identity),
+            "verification_affected": False,
+        }
+        projection["projection_digest"] = impact.canonical_digest(projection)
         source = identity.source_review_identity(
             task_uid=UID,
             bootstrap_epoch=1,
@@ -164,7 +196,7 @@ print(json.dumps(receipt))
             ordered_role_ids=["qa_engineer"],
             role_contract_digest="3" * 64,
             review_policy_digest="4" * 64,
-            input_contract_digest="5" * 64,
+            input_contract_digest=projection["projection_digest"].removeprefix("sha256:"),
         )
         receipt = {
             "receipt_type": "oasis7_ci_ready_receipt",
@@ -200,6 +232,7 @@ print(json.dumps(receipt))
             "schema": "oasis7-review-plan/v2",
             "task_uid": UID,
             "frozen_head": self.head,
+            "comparison_oid": "b" * 40,
             "roles": ["qa_engineer"],
             "source_review_identity": source,
             "source_review_digest": identity.source_review_digest(source),
@@ -209,7 +242,8 @@ print(json.dumps(receipt))
                 "verified": True,
             },
             "impact_projection_schema": "oasis7-workflow-impact-projection/v2",
-            "impact_projection_digest": "sha256:" + "8" * 64,
+            "impact_projection_digest": projection["projection_digest"],
+            "impact_projection": projection,
             "integration_ci_identity": integration,
             "integration_ci_digest": identity.integration_ci_digest(integration),
             "integration_ci_provenance": {

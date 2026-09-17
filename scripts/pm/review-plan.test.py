@@ -36,6 +36,16 @@ class ReviewPlanTests(unittest.TestCase):
         mapping = self.root / '.pm/github-project-sync'
         mapping.mkdir(parents=True)
         (mapping / 'tasks.json').write_text(json.dumps({'tasks': {TASK: {'task_uid': TASK, 'repository': 'fixture/repo', 'issue_number': 1, 'pr_number': 2, 'bootstrap_epoch': 1}}}))
+        for role in ("repository_health_engineer", "qa_engineer"):
+            role_path = self.root / ".agents/roles" / f"{role}.md"
+            role_path.parent.mkdir(parents=True, exist_ok=True)
+            role_path.write_text(f"# {role}\n")
+        policy = self.root / "doc/engineering/workflow/source-of-truth.md"
+        policy.parent.mkdir(parents=True, exist_ok=True)
+        policy.write_text("# workflow policy\n")
+        skill = self.root / ".agents/skills/requesting-repo-owned-review/SKILL.md"
+        skill.parent.mkdir(parents=True, exist_ok=True)
+        skill.write_text("# review skill\n")
         fakebin = self.root / 'fakebin'
         fakebin.mkdir()
         gh = fakebin / 'gh'
@@ -144,7 +154,10 @@ class ReviewPlanTests(unittest.TestCase):
             "test_profile": "required", "declared_tests": ["required_gate_baseline"],
             "consumed_contracts": ["workflow-contract"], "public_semantics": [],
             "affected_consumers": ["required-ci"],
-            "closure_status": {"status": "complete", "reason": "fixture"},
+            "closure_status": {"status": "complete", "reason": "fixture", "evidence": [{
+                "path": "README",
+                "sha256": "sha256:" + hashlib.sha256((self.root / "README").read_bytes()).hexdigest(),
+            }]},
         })
         path.write_text(json.dumps(projection), encoding="utf-8")
         return str(projection["changed_paths_digest"]).removeprefix("sha256:")
@@ -152,6 +165,7 @@ class ReviewPlanTests(unittest.TestCase):
     def write_source_review_input(self, path: Path, *, changed_paths_digest: str | None = None) -> Path:
         projection_path = path.with_name(path.stem + "-impact.json")
         projected_digest = self.write_impact_projection(projection_path)
+        projection_digest = json.loads(projection_path.read_text())["projection_digest"]
         changed_paths_digest = changed_paths_digest or projected_digest
         path.write_text(json.dumps({
             "schema": "oasis7-review-source-input/v1",
@@ -165,7 +179,7 @@ class ReviewPlanTests(unittest.TestCase):
             "ordered_role_ids": ["repository_health_engineer", "qa_engineer"],
             "role_contract_digest": "1" * 64,
             "review_policy_digest": "2" * 64,
-            "input_contract_digest": "3" * 64,
+            "input_contract_digest": projection_digest.removeprefix("sha256:"),
         }), encoding="utf-8")
         return projection_path
 
@@ -210,6 +224,23 @@ class ReviewPlanTests(unittest.TestCase):
         self.assertEqual("separated", plan["effective_mode"]["source_review_mode"])
         self.assertIsNone(plan.get("integration_ci_identity"))
         self.assertEqual("pending", plan["integration_ci_status"])
+
+    def test_explicit_source_input_must_bind_projection_digest(self) -> None:
+        input_path = self.root / "mismatched-source-input.json"
+        projection_path = self.write_source_review_input(input_path)
+        source = json.loads(input_path.read_text())
+        source["input_contract_digest"] = "3" * 64
+        input_path.write_text(json.dumps(source))
+        result = subprocess.run([
+            str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
+            "--head", self.head, "--source-review-input", str(input_path),
+            "--impact-projection", str(projection_path),
+            "--change-class", "workflow-doc", "--comparison-ref", self.comparison_ref,
+            "--comparison-oid", self.comparison_oid,
+            "--out", str(self.root / "mismatched-source-plan.json"),
+        ], text=True, capture_output=True)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("impact projection input contract", result.stderr)
 
     def test_standard_entry_derives_source_identity_from_verified_projection(self) -> None:
         projection_path = self.root / "standard-impact.json"

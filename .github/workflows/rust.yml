@@ -51,6 +51,10 @@ on:
         description: "Required for full_escalation: same-repository issue-comment evidence URL"
         required: false
         type: string
+      impact_projection_b64:
+        description: "Required for integration_revalidation: base64 encoded verified workflow impact projection"
+        required: false
+        type: string
 
 env:
   CARGO_TERM_COLOR: always
@@ -79,6 +83,23 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
+      - id: impact
+        name: Materialize PR workflow impact projection
+        if: github.event_name == 'pull_request'
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
+        run: |
+          python3 -I - <<'PY'
+          import base64, os, pathlib, re
+          matches=re.findall(r'<!-- oasis7-impact-projection-b64: ([A-Za-z0-9+/=]+|missing) -->',os.environ.get('PR_BODY',''))
+          if len(matches)>1:
+              raise SystemExit('pull request has duplicate workflow impact projection markers')
+          enabled=bool(matches and matches[0]!='missing')
+          if enabled:
+              pathlib.Path(os.environ['RUNNER_TEMP'],'impact-projection.json').write_bytes(base64.b64decode(matches[0],validate=True))
+          with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as output:
+              output.write(f'enabled={str(enabled).lower()}\n')
+          PY
       - id: integration
         name: Prepare exact manual integration from trusted default workflow
         if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
@@ -91,8 +112,14 @@ jobs:
           GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
         shell: bash
         run: |
-          mkdir -p "${RUNNER_TEMP}/integration-planner"
+          mkdir -p "${RUNNER_TEMP}/integration-planner/pm"
           cp scripts/plan-rust-required-scope.py scripts/ci-required-scope.v2.json scripts/ci-tests.sh scripts/viewer-dependency-preflight.sh "${RUNNER_TEMP}/integration-planner/"
+          cp scripts/pm/workflow-impact-projection.py "${RUNNER_TEMP}/integration-planner/pm/"
+          [[ -n '${{ inputs.impact_projection_b64 }}' ]] || {
+            echo "integration_revalidation requires impact_projection_b64" >&2
+            exit 1
+          }
+          printf '%s' '${{ inputs.impact_projection_b64 }}' | base64 --decode >"${RUNNER_TEMP}/impact-projection.json"
           cp scripts/pm/integration_ci.py "${RUNNER_TEMP}/integration_ci.py"
           python3 -I "${RUNNER_TEMP}/integration_ci.py" prepare --repository "${{ github.repository }}" \
             --task-uid "${INTEGRATION_UID}" --pr-number "${INTEGRATION_PR}" \
@@ -168,6 +195,8 @@ jobs:
 
       - id: scope
         name: Plan required gate scope
+        env:
+          PR_BODY: ${{ github.event.pull_request.body }}
         run: |
           base_ref=""
           head_ref="${GITHUB_SHA}"
@@ -185,13 +214,30 @@ jobs:
               ;;
           esac
           planner=(./scripts/plan-rust-required-scope.sh)
-          if [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]; then
+          impact_args=()
+          scope_base_oid="$(git merge-base "${base_ref}" "${head_ref}")"
+          if [[ "${GITHUB_EVENT_NAME}" == pull_request && -f "${RUNNER_TEMP}/impact-projection.json" ]]; then
+            task_uid="$(python3 - <<'PY'
+          import os,re
+          matches=re.findall(r'^Task: (task_[0-9a-f]{32})$',os.environ.get('PR_BODY',''),re.M)
+          if len(matches)!=1: raise SystemExit('pull request requires exactly one canonical Task UID')
+          print(matches[0])
+          PY
+            )"
+            impact_args=(--impact-projection "${RUNNER_TEMP}/impact-projection.json" --task-uid "${task_uid}" --scope-base-oid "${scope_base_oid}")
+          elif [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]; then
             planner=(python3 -I "${RUNNER_TEMP}/integration-planner/plan-rust-required-scope.py")
+            impact_args=(
+              --impact-projection "${RUNNER_TEMP}/impact-projection.json"
+              --task-uid "${{ inputs.task_uid }}"
+              --scope-base-oid "${scope_base_oid}"
+            )
           fi
           "${planner[@]}" \
             --event-name "${GITHUB_EVENT_NAME}" \
             --base-ref "${base_ref}" \
             --head-ref "${head_ref}" \
+            "${impact_args[@]}" \
             --github-output "${GITHUB_OUTPUT}"
           echo "base_oid=${base_ref}" >>"${GITHUB_OUTPUT}"
           echo "head_oid=${head_ref}" >>"${GITHUB_OUTPUT}"
@@ -251,6 +297,14 @@ jobs:
           if missing:
               raise SystemExit(f"missing required planner outputs: {', '.join(missing)}")
           planner={field:source[field] for field in fields}
+          if source.get("impact_projection_status") == "verified":
+              projection_fields=("impact_projection_schema", "impact_projection_digest",
+                                 "impact_projection_status", "test_profile", "declared_tests",
+                                 "planner_digest")
+              missing_projection=[field for field in projection_fields if not source.get(field)]
+              if missing_projection:
+                  raise SystemExit(f"missing impact projection outputs: {', '.join(missing_projection)}")
+              planner.update({field:source[field] for field in projection_fields})
           payload={
               "schema":"oasis7-required-plan-v1",
               "repository":os.environ["REPOSITORY"],
@@ -368,7 +422,9 @@ jobs:
           OASIS7_CI_RUN_RUST_BASELINE: ${{ steps.scope.outputs.run_rust_baseline }}
         run: |
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${INTEGRATION_MODE}" == "integration_revalidation" ]]; then
-            CI_VERBOSE=1 bash "${RUNNER_TEMP}/integration-planner/ci-tests.sh" required --repo-root "${GITHUB_WORKSPACE}"
+            CI_VERBOSE=1 bash "${RUNNER_TEMP}/integration-planner/ci-tests.sh" required --repo-root "${GITHUB_WORKSPACE}" --impact-projection "${RUNNER_TEMP}/impact-projection.json"
+          elif [[ "${GITHUB_EVENT_NAME}" == "pull_request" && -f "${RUNNER_TEMP}/impact-projection.json" ]]; then
+            CI_VERBOSE=1 ./scripts/ci-tests.sh required --impact-projection "${RUNNER_TEMP}/impact-projection.json"
           else
             CI_VERBOSE=1 ./scripts/ci-tests.sh required
           fi

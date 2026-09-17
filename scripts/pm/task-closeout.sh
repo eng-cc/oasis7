@@ -542,7 +542,7 @@ if plan.get('schema') == 'oasis7-review-plan/v2':
     helper=importlib.util.module_from_spec(spec); spec.loader.exec_module(helper)
     if plan.get('source_review_digest') != helper.source_review_digest(plan.get('source_review_identity')): raise SystemExit('v2 source review digest mismatch')
     try:
-        helper._verified_review_applicability(plan.get('professional_review_applicability'))
+        helper.validate_review_applicability(plan.get('source_review_identity'), plan.get('professional_review_applicability'))
     except (TypeError, ValueError) as exc:
         raise SystemExit(f'v2 review applicability is invalid: {exc}')
     impact_projection_digest = plan.get('impact_projection_digest')
@@ -551,6 +551,29 @@ if plan.get('schema') == 'oasis7-review-plan/v2':
         raise SystemExit('v2 review plan lacks a verified impact_projection_digest')
     if plan.get('impact_projection_schema') != 'oasis7-workflow-impact-projection/v2':
         raise SystemExit('v2 review plan impact projection schema is unsupported')
+    projection = plan.get('impact_projection')
+    if not isinstance(projection, dict):
+        raise SystemExit('v2 review plan lacks its verified impact projection')
+    projection_spec=importlib.util.spec_from_file_location('workflow_impact_projection', root/'scripts/pm/workflow-impact-projection.py')
+    if projection_spec is None or projection_spec.loader is None: raise SystemExit('cannot load impact projection helper')
+    projection_helper=importlib.util.module_from_spec(projection_spec); projection_spec.loader.exec_module(projection_helper)
+    import tempfile
+    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', suffix='.json') as projection_file:
+        json.dump(projection, projection_file); projection_file.flush()
+        try:
+            projection_helper.load_verified_projection(projection_file.name, expected={
+                'task_uid': task_uid,
+                'source_head_oid': plan.get('frozen_head'),
+                'scope_base_oid': plan.get('comparison_oid'),
+                'ordered_role_ids': plan.get('roles'),
+            })
+        except (OSError, TypeError, ValueError) as exc:
+            raise SystemExit(f'v2 review plan impact projection is invalid: {exc}')
+    if projection.get('projection_digest') != impact_projection_digest:
+        raise SystemExit('v2 review plan impact projection digest mismatch')
+    source_input_digest = str((plan.get('source_review_identity') or {}).get('input_contract_digest') or '')
+    if source_input_digest not in {impact_projection_digest, impact_projection_digest.removeprefix('sha256:')}:
+        raise SystemExit('v2 source review identity does not bind the impact projection')
     integration_identity = plan.get('integration_ci_identity')
     if integration_identity is None:
         if plan.get('integration_ci_digest') is not None or plan.get('integration_ci_' + 'pro' + 'venance') is not None:

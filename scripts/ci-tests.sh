@@ -347,7 +347,9 @@ spec.loader.exec_module(helper)
 projection = helper.load_verified_projection(projection_path)
 paths = projection["changed_paths"]
 planner = [str(root / "scripts" / "plan-rust-required-scope.sh"),
-           "--event-name", "pull_request", "--impact-projection", str(projection_path)]
+           "--event-name", "pull_request", "--impact-projection", str(projection_path),
+           "--task-uid", projection["task_uid"], "--head-ref", projection["source_head_oid"],
+           "--scope-base-oid", projection["scope_base_oid"]]
 for path in paths:
     planner.extend(("--changed-path", path))
 planner_result = subprocess.run(planner, cwd=root, text=True, capture_output=True)
@@ -357,6 +359,9 @@ planner_fields = dict(line.split("=", 1) for line in planner_result.stdout.split
 selector = [str(root / "scripts" / "pm" / "review-role-selector.py"),
             "--change-class", projection["change_class"],
             "--changed-path-list", ";".join(paths), "--impact-projection", str(projection_path), "--json"]
+selector.extend(("--task-uid", projection["task_uid"],
+                 "--source-head-oid", projection["source_head_oid"],
+                 "--scope-base-oid", projection["scope_base_oid"]))
 if projection.get("domain_role") is not None:
     selector.extend(("--domain-role", projection["domain_role"]))
 for role in projection["manual_roles"]:

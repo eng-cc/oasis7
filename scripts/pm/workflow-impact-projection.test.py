@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import importlib.util
+import hashlib
 from pathlib import Path
 import re
 import subprocess
@@ -12,6 +14,10 @@ import unittest
 
 SCRIPT = Path(__file__).with_name("workflow-impact-projection.py")
 ROOT = Path(__file__).parents[2]
+SPEC = importlib.util.spec_from_file_location("workflow_impact_projection", SCRIPT)
+assert SPEC is not None and SPEC.loader is not None
+WORKFLOW_IMPACT = importlib.util.module_from_spec(SPEC)
+SPEC.loader.exec_module(WORKFLOW_IMPACT)
 
 
 class WorkflowImpactProjectionTests(unittest.TestCase):
@@ -47,7 +53,10 @@ class WorkflowImpactProjectionTests(unittest.TestCase):
             "consumed_contracts": [{"id": "workflow-contract", "revision": "v1"}],
             "public_semantics": [],
             "affected_consumers": ["required-ci"],
-            "closure_status": {"status": "complete", "reason": "verified"},
+            "closure_status": {"status": "complete", "reason": "verified", "evidence": [{
+                "path": "scripts/ci-required-scope.v2.json",
+                "sha256": "sha256:" + hashlib.sha256((ROOT / "scripts/ci-required-scope.v2.json").read_bytes()).hexdigest(),
+            }]},
         }
 
     def test_complete_known_scope_derives_ci_and_review_obligations(self) -> None:
@@ -136,6 +145,18 @@ class WorkflowImpactProjectionTests(unittest.TestCase):
         del payload["consumed_contracts"]
         result = self.run_projection(payload, ok=False)
         self.assertIn("consumed_contracts", result.stderr)
+
+    def test_verified_loader_rejects_digest_valid_projection_with_missing_field(self) -> None:
+        projection = json.loads(self.run_projection(self.base_input()).stdout)
+        del projection["affected_consumers"]
+        projection["projection_digest"] = WORKFLOW_IMPACT.canonical_digest({
+            key: value for key, value in projection.items() if key != "projection_digest"
+        })
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "incomplete.json"
+            path.write_text(json.dumps(projection), encoding="utf-8")
+            with self.assertRaisesRegex(WORKFLOW_IMPACT.ProjectionError, "missing=affected_consumers"):
+                WORKFLOW_IMPACT.load_verified_projection(path)
 
     def test_missing_identity_and_test_contract_fields_fail_closed(self) -> None:
         for field in ("task_uid", "source_head_oid", "scope_base_oid", "test_profile", "declared_tests"):
