@@ -24,6 +24,14 @@ SOURCE_REVIEW_FIELDS = (
     "source_scope_oid", "changed_paths_digest", "ordered_role_ids",
     "role_contract_digest", "review_policy_digest", "input_contract_digest",
 )
+# These fields describe the professional-review applicability projection.  They
+# are deliberately separate from integration execution provenance: a target
+# advance can change the integration base while leaving this projection intact.
+REVIEW_APPLICABILITY_FIELDS = (
+    "changed_paths_digest", "ordered_role_ids", "role_contract_digest",
+    "review_policy_digest", "input_contract_digest",
+)
+SHADOW_REVIEW_SCHEMA = "oasis7-review-reuse-shadow/v1"
 INTEGRATION_CI_FIELDS = (
     "repository", "task_uid", "pr_number", "source_head_oid", "integration_base_oid",
     "workflow_ref", "workflow_sha", "request_id", "request_created_at", "run_id",
@@ -110,6 +118,51 @@ def _validate_source_identity(identity: Any) -> dict[str, Any]:
 
 def source_review_digest(identity: dict[str, Any]) -> str:
     canonical = json.dumps(_validate_source_identity(identity), sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(canonical).hexdigest()
+
+
+def review_applicability_identity(source_identity: dict[str, Any]) -> dict[str, Any]:
+    """Project source inputs that determine professional-review applicability.
+
+    This projection intentionally excludes integration execution fields such as
+    ``workflow_sha`` and ``tested_tree_oid``.  Those fields remain mandatory in
+    the complete integration identity and the shadow audit output, but they are
+    not evidence that the professional review's impact closure is unchanged.
+    """
+    source = _validate_source_identity(source_identity)
+    return {field: source[field] for field in REVIEW_APPLICABILITY_FIELDS}
+
+
+def _validate_review_applicability_identity(identity: Any) -> dict[str, Any]:
+    if not isinstance(identity, dict):
+        raise ValueError("review applicability identity must be an object")
+    missing = [field for field in REVIEW_APPLICABILITY_FIELDS if field not in identity]
+    if missing:
+        raise ValueError("review applicability identity is missing: " + ",".join(missing))
+    # Unknown projection members are unsafe: they may represent an unverified
+    # impact input and must not be silently dropped from the comparison.
+    unknown = sorted(set(identity) - set(REVIEW_APPLICABILITY_FIELDS))
+    if unknown:
+        raise ValueError("review applicability identity has unknown fields: " + ",".join(unknown))
+    result = {field: identity[field] for field in REVIEW_APPLICABILITY_FIELDS}
+    _require_digest(result["changed_paths_digest"], "changed_paths_digest")
+    _require_digest(result["role_contract_digest"], "role_contract_digest")
+    _require_digest(result["review_policy_digest"], "review_policy_digest")
+    _require_digest(result["input_contract_digest"], "input_contract_digest")
+    if (not isinstance(result["ordered_role_ids"], list)
+            or not result["ordered_role_ids"]
+            or any(not isinstance(role, str) or not role.strip()
+                   for role in result["ordered_role_ids"])
+            or len(set(result["ordered_role_ids"])) != len(result["ordered_role_ids"])):
+        raise ValueError("ordered_role_ids must be a non-empty unique role list")
+    return result
+
+
+def review_applicability_digest(identity: dict[str, Any]) -> str:
+    canonical = json.dumps(
+        _validate_review_applicability_identity(identity),
+        sort_keys=True, separators=(",", ":")
+    ).encode()
     return hashlib.sha256(canonical).hexdigest()
 
 
@@ -243,6 +296,199 @@ def integration_ci_digest(identity: dict[str, Any]) -> str:
         sort_keys=True, separators=(",", ":")
     ).encode()
     return hashlib.sha256(canonical).hexdigest()
+
+
+def _shadow_result(
+    *, reason: str, integration_provenance: str,
+    professional_review_applicability: str = "requires_full_review",
+    decision: str = "requires_full_review", accepted: dict[str, Any] | None = None,
+    latest: dict[str, Any] | None = None, fresh_trusted_ci: bool = False,
+) -> dict[str, Any]:
+    """Build the non-authoritative, machine-readable shadow result."""
+    result: dict[str, Any] = {
+        "schema": SHADOW_REVIEW_SCHEMA,
+        "authoritative": False,
+        "decision": decision,
+        "reason": reason,
+        "integration_provenance": integration_provenance,
+        "professional_review_applicability": professional_review_applicability,
+        "fresh_trusted_integration_ci": fresh_trusted_ci,
+        # Keep the complete execution identity visible to audit consumers.  In
+        # particular, workflow_sha and tested_tree_oid are never reduced to a
+        # path-overlap or source-only applicability check.
+        "audit_identity": (
+            {field: latest[field] for field in INTEGRATION_CI_FIELDS}
+            if latest is not None else None
+        ),
+    }
+    if accepted is not None:
+        result["accepted_integration_identity"] = {
+            field: accepted[field] for field in INTEGRATION_CI_FIELDS
+        }
+        result["accepted_integration_ci_digest"] = integration_ci_digest(accepted)
+    if latest is not None:
+        result["latest_integration_ci_digest"] = integration_ci_digest(latest)
+    return result
+
+
+def _verified_review_applicability(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise ValueError("review applicability evidence must be an object")
+    expected_fields = {"identity", "identity_digest", "verified"}
+    unknown = sorted(set(value) - expected_fields)
+    if unknown:
+        raise ValueError("review applicability evidence has unknown fields: " + ",".join(unknown))
+    if value.get("verified") is not True:
+        raise ValueError("review applicability identity is not independently verified")
+    identity = _validate_review_applicability_identity(value.get("identity"))
+    digest = value.get("identity_digest")
+    if digest != review_applicability_digest(identity):
+        raise ValueError("review applicability identity digest mismatch")
+    return identity
+
+
+def shadow_source_review_applicability(
+    plan: dict[str, Any], latest_receipt: dict[str, Any],
+    current_applicability: dict[str, Any] | None,
+) -> dict[str, Any]:
+    """Report a non-authorizing source-review reuse applicability decision.
+
+    The result intentionally exposes two independent dimensions.  Complete
+    integration provenance means the accepted and latest trusted receipts have
+    parseable, audit-complete identities.  Professional-review applicability is
+    reusable only when an independently verified applicability projection is
+    present in the plan and is unchanged in the current projection.  This
+    function is shadow-only: no promotion or closeout path calls it.
+    """
+    empty = _shadow_result(reason="integration_provenance_incomplete", integration_provenance="incomplete")
+    if not isinstance(plan, dict) or plan.get("schema") != SOURCE_REVIEW_SCHEMA:
+        return _shadow_result(
+            reason="unsupported_review_plan", integration_provenance="incomplete"
+        )
+
+    try:
+        source = _validate_source_identity(plan.get("source_review_identity"))
+        if plan.get("source_review_digest") != source_review_digest(source):
+            return _shadow_result(
+                reason="source_review_identity_invalid", integration_provenance="incomplete"
+            )
+        if plan.get("integration_ci_provenance") != {
+            "live_validation": "ci-ready-receipt-live",
+            "trusted_integration_artifact": True,
+        }:
+            return _shadow_result(
+                reason="integration_provenance_untrusted", integration_provenance="incomplete"
+            )
+        accepted = integration_ci_identity(plan.get("integration_ci_identity"))
+        if plan.get("integration_ci_digest") != integration_ci_digest(accepted):
+            return _shadow_result(
+                reason="integration_provenance_incomplete", integration_provenance="incomplete"
+            )
+    except (TypeError, ValueError, KeyError):
+        return empty
+
+    # Attestation and shape are checked independently of applicability.  A
+    # trusted but changed workflow/tree remains complete provenance and is then
+    # denied reuse by the applicability decision below.
+    if not has_live_integration_attestation(latest_receipt):
+        return _shadow_result(
+            reason="integration_provenance_untrusted", integration_provenance="incomplete",
+            accepted=accepted,
+        )
+    try:
+        latest = integration_ci_identity(latest_receipt)
+    except (TypeError, ValueError, KeyError):
+        return _shadow_result(
+            reason="integration_provenance_incomplete", integration_provenance="incomplete",
+            accepted=accepted,
+        )
+
+    provenance = _shadow_result(
+        reason="integration_ci_not_successful", integration_provenance="complete",
+        accepted=accepted, latest=latest,
+    )
+    for identity in (accepted, latest):
+        if (identity["repository"] != source["repository"]
+                or identity["task_uid"] != source["task_uid"]
+                or identity["pr_number"] != source["pr_number"]
+                or identity["source_head_oid"] != source["source_head_oid"]):
+            return _shadow_result(
+                reason="integration_provenance_identity_mismatch",
+                integration_provenance="complete", accepted=accepted, latest=latest,
+            )
+    if accepted["conclusion"] != "success" or latest["conclusion"] != "success":
+        return provenance
+
+    # A shadow result must still be based on a fresh trusted integration run.
+    # A changed target/base alone is not allowed to turn a replayed old receipt
+    # into fresh evidence; at least one dispatch/run/check identity must move.
+    freshness_fields = (
+        "request_id", "request_created_at", "run_id", "run_attempt", "check_run_id",
+    )
+    fresh = any(latest[field] != accepted[field] for field in freshness_fields)
+    if not fresh:
+        return _shadow_result(
+            reason="integration_provenance_not_fresh", integration_provenance="complete",
+            accepted=accepted, latest=latest,
+        )
+    provenance["fresh_trusted_integration_ci"] = True
+
+    if latest["workflow_sha"] != accepted["workflow_sha"]:
+        provenance.update(
+            reason="workflow_identity_changed",
+            professional_review_applicability="requires_full_review",
+        )
+        return provenance
+    if latest["tested_tree_oid"] != accepted["tested_tree_oid"]:
+        provenance.update(
+            reason="tested_tree_changed",
+            professional_review_applicability="requires_full_review",
+        )
+        return provenance
+
+    try:
+        accepted_applicability = _verified_review_applicability(
+            plan.get("professional_review_applicability")
+        )
+    except (TypeError, ValueError, KeyError):
+        provenance.update(
+            reason="applicability_identity_unknown",
+            professional_review_applicability="requires_full_review",
+        )
+        return provenance
+    if current_applicability is None:
+        provenance.update(
+            reason="applicability_identity_unknown",
+            professional_review_applicability="requires_full_review",
+        )
+        return provenance
+    try:
+        current = _verified_review_applicability(current_applicability)
+    except (TypeError, ValueError, KeyError) as exc:
+        reason = (
+            "applicability_identity_unverified"
+            if "not independently verified" in str(exc)
+            else "applicability_identity_unknown"
+        )
+        provenance.update(
+            reason=reason,
+            professional_review_applicability="requires_full_review",
+        )
+        return provenance
+    if current != accepted_applicability:
+        provenance.update(
+            reason="applicability_identity_changed",
+            professional_review_applicability="requires_full_review",
+        )
+        return provenance
+
+    target_advanced = latest["integration_base_oid"] != accepted["integration_base_oid"]
+    provenance.update(
+        reason=("target_base_only_advance" if target_advanced else "applicability_identity_unchanged"),
+        professional_review_applicability="unchanged",
+        decision="reusable_source_review",
+    )
+    return provenance
 
 
 def can_reuse_source_review(

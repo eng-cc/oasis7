@@ -31,6 +31,58 @@ CANONICAL_REVIEW_ROLES = {
 }
 
 
+def effective_mode(*, review_schema: str, loop_status: str,
+                   has_ci_ready_receipt: bool,
+                   trusted_integration_artifact: bool,
+                   incremental_review_context: bool = False) -> dict[str, object]:
+    """Describe the policy and review path that actually produced a plan.
+
+    This is a derived observability projection.  It is intentionally not part
+    of the immutable plan identity: adding the projection must not invalidate
+    existing v1 epochs, and old plans can still be reported with the current
+    compatibility classification.  The v2 branch remains opt-in and requires
+    the same trusted receipt checks as the plan producer itself.
+    """
+    if review_schema not in (SCHEMA, V2_SCHEMA):
+        raise ContractError(f"unsupported review schema for effective mode: {review_schema}")
+    if loop_status not in {"legacy", "passed"}:
+        raise ContractError(f"unsupported loop admission status for effective mode: {loop_status}")
+    if type(has_ci_ready_receipt) is not bool or type(trusted_integration_artifact) is not bool:
+        raise ContractError("effective mode receipt flags must be boolean")
+    if type(incremental_review_context) is not bool:
+        raise ContractError("effective mode incremental context flag must be boolean")
+
+    legacy_policy = loop_status == "legacy"
+    if review_schema == V2_SCHEMA:
+        if not has_ci_ready_receipt or not trusted_integration_artifact:
+            raise ContractError(
+                "v2 effective mode requires a trusted ci-ready receipt"
+            )
+        source_review = "separated"
+        integration_validation = "trusted_integration"
+        enabled = ["source_review_integration_separation"]
+        if incremental_review_context:
+            enabled.append("incremental_review_context")
+        fallback = "legacy_task_without_loop_binding" if legacy_policy else None
+    else:
+        source_review = "combined"
+        integration_validation = "receipt_bound" if has_ci_ready_receipt else "legacy_evidence"
+        enabled = []
+        fallback = (
+            "legacy_task_without_loop_binding"
+            if legacy_policy else "review_schema_v1_compatibility"
+        )
+
+    return {
+        "effective_policy": "legacy" if legacy_policy else "loop-bound",
+        "review_schema": review_schema,
+        "source_review_mode": source_review,
+        "integration_validation_mode": integration_validation,
+        "enabled_optimizations": enabled,
+        "fallback_reason": fallback,
+    }
+
+
 class ContractError(ValueError):
     pass
 
@@ -834,6 +886,16 @@ def main() -> int:
                                  roles, impacted_roles)
             if args.prior_review_plan else None
         )
+        effective_mode_value = effective_mode(
+            review_schema=args.review_schema,
+            loop_status=str(loop_admission.get("status")),
+            has_ci_ready_receipt=args.ci_ready_receipt is not None,
+            trusted_integration_artifact=(
+                receipt_value is not None
+                and load_identity_module().has_live_integration_attestation(receipt_value)
+            ),
+            incremental_review_context=incremental_context is not None,
+        )
         slices = expected_slices(args.task_uid, args.head, source_digest, comparison_ref, comparison_oid, roles)
         batch, batch_reused = ensure_batch(root, args.task_uid, args.head, source_digest, slices)
         epoch = str(batch["epoch"])
@@ -885,7 +947,11 @@ def main() -> int:
                     raise ContractError("existing review plan preflight does not match its immutable artifacts")
             if args.prior_review_plan and plan.get("incremental_review_context") != incremental_context:
                 raise ContractError("existing review plan incremental context does not match requested prior plan")
+            recorded_mode = plan.get("effective_mode")
+            if recorded_mode is not None and recorded_mode != effective_mode_value:
+                raise ContractError("existing review plan effective mode does not match current inputs")
             result: dict[str, object] = {**plan, "reused": True}
+            result["effective_mode"] = effective_mode_value
             if args.review_schema == V2_SCHEMA and receipt_value is not None:
                 result["latest_integration_ci_digest"] = load_identity_module().integration_ci_digest(
                     load_identity_module().integration_ci_identity(receipt_value)
@@ -893,6 +959,7 @@ def main() -> int:
         else:
             batch_path = Path(str(batch["batch_path"])).resolve()
             result = {"schema": args.review_schema, **identity, "epoch": epoch,
+                      "effective_mode": effective_mode_value,
                       "batch_path": str(batch_path), "collection_path": str(batch_path.with_name(f"{batch_path.stem}.collection.json")),
                       "packet_refs": packet_refs(args.task_uid, slices), "reused": batch_reused}
             if preflight_result is not None:

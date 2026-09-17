@@ -148,6 +148,62 @@ class ReviewPlanTests(unittest.TestCase):
         drifted = self.receipt_plan(changed, self.root / "receipt-changed-plan.json")
         self.assertNotEqual(first["epoch"], drifted["epoch"])
 
+    def test_standard_v1_plan_emits_machine_readable_effective_mode(self) -> None:
+        mode = self.plan()["effective_mode"]
+        self.assertEqual(
+            {
+                "effective_policy": "legacy",
+                "review_schema": "oasis7-review-plan/v1",
+                "source_review_mode": "combined",
+                "integration_validation_mode": "legacy_evidence",
+                "enabled_optimizations": [],
+                "fallback_reason": "legacy_task_without_loop_binding",
+            },
+            mode,
+        )
+
+    def test_v1_ci_receipt_path_reports_receipt_bound_validation(self) -> None:
+        receipt = self.root / "v1-effective-mode-receipt.json"
+        self.write_receipt(receipt, base_oid=self.comparison_oid, head_oid=self.head)
+        mode = self.receipt_plan(receipt, self.root / "v1-effective-mode-plan.json")["effective_mode"]
+        self.assertEqual("oasis7-review-plan/v1", mode["review_schema"])
+        self.assertEqual("combined", mode["source_review_mode"])
+        self.assertEqual("receipt_bound", mode["integration_validation_mode"])
+        self.assertEqual("legacy_task_without_loop_binding", mode["fallback_reason"])
+
+    def test_bound_v1_mode_reports_compatibility_fallback(self) -> None:
+        mode = REVIEW_PLAN.effective_mode(
+            review_schema=REVIEW_PLAN.SCHEMA,
+            loop_status="passed",
+            has_ci_ready_receipt=False,
+            trusted_integration_artifact=False,
+        )
+        self.assertEqual("loop-bound", mode["effective_policy"])
+        self.assertEqual("oasis7-review-plan/v1", mode["review_schema"])
+        self.assertEqual("combined", mode["source_review_mode"])
+        self.assertEqual("legacy_evidence", mode["integration_validation_mode"])
+        self.assertEqual([], mode["enabled_optimizations"])
+        self.assertEqual("review_schema_v1_compatibility", mode["fallback_reason"])
+
+    def test_v2_mode_reports_split_identity_optimization(self) -> None:
+        mode = REVIEW_PLAN.effective_mode(
+            review_schema=REVIEW_PLAN.V2_SCHEMA,
+            loop_status="passed",
+            has_ci_ready_receipt=True,
+            trusted_integration_artifact=True,
+        )
+        self.assertEqual(
+            {
+                "effective_policy": "loop-bound",
+                "review_schema": "oasis7-review-plan/v2",
+                "source_review_mode": "separated",
+                "integration_validation_mode": "trusted_integration",
+                "enabled_optimizations": ["source_review_integration_separation"],
+                "fallback_reason": None,
+            },
+            mode,
+        )
+
     def test_explicit_document_risk_class_selects_the_minimum_deterministic_roles(self) -> None:
         plan = self.plan()
         self.assertEqual(
