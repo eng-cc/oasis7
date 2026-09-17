@@ -171,6 +171,9 @@ run_strong_auth_contract_checks() {
   require_strong_auth_text 'a[href="#viewer-details-panel"]' 'visible Command panel navigation selector'
   require_strong_auth_text 'command panel navigation action' 'visible Command panel navigation phase'
   require_strong_auth_text 'section#viewer-details-panel[data-viewer-route-panel="command"]' 'exact Command route panel readiness'
+  require_strong_auth_text '[data-prompt-visibility-toggle="1"]' 'exact prompt overrides toggle selector'
+  require_strong_auth_text 'prompt overrides visibility action' 'visible prompt overrides toggle phase'
+  require_strong_auth_text 'promptOverridesVisible === true' 'prompt overrides visible state readiness'
   require_strong_auth_text 'details.command-surface__advanced-details > summary' 'exact advanced prompt disclosure DOM selector'
   require_strong_auth_text 'pre-prompt tab loss' 'distinct about:blank tab-loss diagnostic'
   if rg -Fq -- 'wait --text "Advanced Prompt Settings"' "$runner"; then
@@ -278,6 +281,14 @@ if [[ "${1:-}" == "click" && "${2:-}" == 'a[href="#viewer-details-panel"]' && -n
   printf '%s\n' "$((command_nav_count + 1))" >"$VIEWER_PROMPT_FIXTURE_COMMAND_NAV_COUNT"
   exit 0
 fi
+if [[ "${1:-}" == "click" && "${2:-}" == '[data-prompt-visibility-toggle="1"]' && -n "${VIEWER_PROMPT_FIXTURE_PROMPT_TOGGLE_COUNT:-}" ]]; then
+  prompt_toggle_count=0
+  if [[ -f "$VIEWER_PROMPT_FIXTURE_PROMPT_TOGGLE_COUNT" ]]; then
+    prompt_toggle_count=$(<"$VIEWER_PROMPT_FIXTURE_PROMPT_TOGGLE_COUNT")
+  fi
+  printf '%s\n' "$((prompt_toggle_count + 1))" >"$VIEWER_PROMPT_FIXTURE_PROMPT_TOGGLE_COUNT"
+  exit 0
+fi
 if [[ "${1:-}" == "click" && "${2:-}" == *'viewer-targets-panel'* && "${2:-}" == *'normalize-space'* && -n "${VIEWER_PROMPT_FIXTURE_CLAIM_ACTION_COUNT:-}" ]]; then
   claim_action_count=0
   if [[ -f "$VIEWER_PROMPT_FIXTURE_CLAIM_ACTION_COUNT" ]]; then
@@ -312,7 +323,7 @@ if [[ "${1:-}" == "eval" ]]; then
       : >"$VIEWER_PROMPT_FIXTURE_FALLBACK_MARKER"
     fi
     printf '%s\n' 'true'
-  elif [[ "$script" == *'prompt_surface_missing:'* && "$script" == *'details.command-surface__advanced-details > summary'* ]]; then
+  elif [[ "$script" == *'prompt_surface_missing:'* && "$script" == *'data-prompt-visibility-toggle'* ]]; then
     if [[ "${VIEWER_PROMPT_FIXTURE_PRE_PROMPT_TAB_LOST:-0}" == "1" ]]; then
       printf '%s\n' '"tab_lost"'
     elif [[ "${VIEWER_PROMPT_FIXTURE_PRE_PROMPT_UI_MISSING:-0}" == "1" ]]; then
@@ -321,6 +332,12 @@ if [[ "${1:-}" == "eval" ]]; then
       printf '%s\n' '"prompt_surface_missing:http://127.0.0.1:9/#viewer-targets-panel"'
     else
       printf '%s\n' '"ready"'
+    fi
+  elif [[ "$script" == *'promptOverridesVisible === true'* && "$script" == *'details.command-surface__advanced-details > summary'* ]]; then
+    if [[ -n "${VIEWER_PROMPT_FIXTURE_REQUIRE_PROMPT_TOGGLE:-}" && ! -f "$VIEWER_PROMPT_FIXTURE_REQUIRE_PROMPT_TOGGLE" ]]; then
+      printf '%s\n' 'false'
+    else
+      printf '%s\n' 'true'
     fi
   elif [[ "$script" == *'registerPlayerSessionForTest(null)'* ]]; then
     if [[ -n "${VIEWER_PROMPT_FIXTURE_SESSION_REGISTRATION_COUNT:-}" ]]; then
@@ -454,6 +471,7 @@ claim_ack_marker="$tmp_root/claim-first-agent-ack-seen"
 starter_oc_action_count_file="$tmp_root/claim-starter-oc-count"
 starter_oc_ack_marker="$tmp_root/claim-starter-oc-ack-seen"
 command_nav_count_file="$tmp_root/command-panel-nav-count"
+prompt_toggle_count_file="$tmp_root/prompt-overrides-toggle-count"
 VIEWER_PROMPT_FIXTURE_EMPTY_WORLD=1 \
   VIEWER_PROMPT_FIXTURE_STARTER_OC_ONBOARDING=1 \
   VIEWER_PROMPT_FIXTURE_CLAIM_ACTION_COUNT="$claim_count_file" \
@@ -464,6 +482,8 @@ VIEWER_PROMPT_FIXTURE_EMPTY_WORLD=1 \
   VIEWER_PROMPT_FIXTURE_CLAIM_ACK_MARKER="$claim_ack_marker" \
   VIEWER_PROMPT_FIXTURE_COMMAND_NAV_COUNT="$command_nav_count_file" \
   VIEWER_PROMPT_FIXTURE_REQUIRE_COMMAND_NAV="$command_nav_count_file" \
+  VIEWER_PROMPT_FIXTURE_PROMPT_TOGGLE_COUNT="$prompt_toggle_count_file" \
+  VIEWER_PROMPT_FIXTURE_REQUIRE_PROMPT_TOGGLE="$prompt_toggle_count_file" \
   OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=fixture \
   OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY=fixture \
   OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=fixture \
@@ -481,8 +501,11 @@ test -f "$starter_oc_ack_marker"
 test -f "$claim_ack_marker"
 test -f "$command_nav_count_file"
 test "$(<"$command_nav_count_file")" = 1
+test -f "$prompt_toggle_count_file"
+test "$(<"$prompt_toggle_count_file")" = 1
 rg -Fq '[action:claim first agent action]' "$claim_out/agent-browser.log"
 rg -Fq '[action:command panel navigation action]' "$claim_out/agent-browser.log"
+rg -Fq '[action:prompt overrides visibility action]' "$claim_out/agent-browser.log"
 
 # Gameplay onboarding may bind the claimed agent before publishing a binding
 # epoch.  The runner must repair that precise state once, through the existing
@@ -715,7 +738,7 @@ elif [[ "${1:-}" == "eval" && "${2:-}" == "--stdin" ]]; then
   script=$(cat)
   if [[ "$script" == 'window.__AW_TEST__.getState()' ]]; then
     printf '%s\n' '{"authReady":true,"authRegistrationStatus":"registered","authRuntimeStatus":"registered","authBoundAgentId":"agent-1","authSessionEpoch":1,"authBindingEpoch":1,"viewerProtocol":{"negotiated":true,"capabilities":["prompt_control_result_v1"],"authorityEpoch":"fixture-authority"},"selectedId":"agent-1","selectedPromptVersion":0,"lastPromptFeedback":null,"strongAuthLastGrantActionId":null,"strongAuthLastGrantError":null}'
-  elif [[ "$script" == *'prompt_surface_missing:'* && "$script" == *'details.command-surface__advanced-details > summary'* ]]; then
+  elif [[ "$script" == *'prompt_surface_missing:'* && "$script" == *'data-prompt-visibility-toggle'* ]]; then
     printf '%s\n' '"ready"'
   else
     printf '%s\n' 'true'
