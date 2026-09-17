@@ -593,6 +593,12 @@ raise SystemExit(0 if reference.search(body) and not auto_close.search(body) els
 PY
 }
 
+body_file_has_impact_projection() {
+  local body_file="$1"
+  local projection_b64="$2"
+  grep -Fqx "<!-- oasis7-impact-projection-b64: $projection_b64 -->" "$body_file"
+}
+
 local_role_review_status() {
   local source_worktree="$1"
   local source_branch="$2"
@@ -1867,6 +1873,9 @@ if [[ -n "$TASK_ISSUE_NUMBER" ]]; then
   if [[ -n "$BODY_FILE" ]]; then
     if ! body_file_has_task_reference "$BODY_FILE" "$TASK_ISSUE_NUMBER"; then
       die "--body-file must include a non-closing GitHub task reference and no auto-close keyword, for example: Refs #$TASK_ISSUE_NUMBER"
+    fi
+    if [[ -n "$IMPACT_PROJECTION_B64" ]] && ! body_file_has_impact_projection "$BODY_FILE" "$IMPACT_PROJECTION_B64"; then
+      die "--body-file must include the exact digest-bound impact projection marker for --impact-projection"
     fi
   else
     GENERATED_PR_BODY="Task: ${LOCAL_ROLE_REVIEW_TASK_UID:-unknown}

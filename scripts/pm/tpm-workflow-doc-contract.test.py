@@ -1392,6 +1392,15 @@ class WorkflowDocumentationContract(unittest.TestCase):
             check=True,
         ).stdout
         self.assertIn("legacy task-bound `--create` is rejected", help_text)
+
+        source = SOURCE.read_text(encoding="utf-8")
+        finish = FINISHING.read_text(encoding="utf-8")
+        for text in (source, finish):
+            self.assertIn("--draft-candidate --create --impact-projection <projection.json> --review-change-class <class>", text)
+
+        helper = PREPARE_TASK_PR.read_text(encoding="utf-8")
+        self.assertIn("body_file_has_impact_projection", helper)
+        self.assertIn("--body-file must include the exact digest-bound impact projection marker", helper)
         for path in (PM_README, SCRIPTS_PRD):
             with self.subTest(surface=path):
                 text = path.read_text(encoding="utf-8")

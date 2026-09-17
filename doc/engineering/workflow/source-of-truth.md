@@ -384,7 +384,7 @@ Deterministic script contract:
   a terminal closeout.
 
 `post-merge-finalize.py` remains the only `post_merge_done` writer; `non-merge-finalize.py` is the only `closed_without_merge` and non-merge Issue-close writer.
-- `scripts/pm/record-draft-freeze-evidence.py` is the canonical pre-draft identity producer; `./scripts/prepare-task-pr.sh --draft-candidate --create` requires its issue readback before consumer validation or side effects, then creates or resumes the frozen-head draft PR. Only `--promote-draft` after the trusted CI/review and `pre_pr_ready` checks moves
+- `scripts/pm/record-draft-freeze-evidence.py` is the canonical pre-draft identity producer; `./scripts/prepare-task-pr.sh --draft-candidate --create --impact-projection <projection.json> --review-change-class <class>` is the standard v2 entrypoint and requires its issue readback before consumer validation or side effects, then creates or resumes the frozen-head draft PR. An explicit `--body-file` must contain the exact digest-bound projection marker. Only `--promote-draft` after the trusted CI/review and `pre_pr_ready` checks moves
   the task to `pr_watch` when GitHub-backed mapping exists. PR creation is
   resumable: before creating, query all states using the exact head repository,
   head branch, and base branch. Reuse only an OPEN match and retry the missing
