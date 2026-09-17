@@ -186,6 +186,8 @@ if grep -q 'Deployment inventory authority' "$TMP_DIR/stage/deployment-truth.md"
 fi
 
 grep -q 'triad-testnet-fourth-local' "$TMP_DIR/stage/deployment-truth.md"
+grep -q 'Canonical bootstrap world: `generated-world/world`' "$TMP_DIR/stage/deployment-truth.md"
+grep -q 'Fresh-host bootstrap world input: `generated-world`' "$TMP_DIR/stage/deployment-truth.md"
 grep -q 'Generated map sidecar: `generated-world/generated-scenario-world`' "$TMP_DIR/stage/deployment-truth.md"
 grep -q 'Generated map provenance: `generated-world/world-generation-provenance.json`' "$TMP_DIR/stage/deployment-truth.md"
 

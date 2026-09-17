@@ -4,7 +4,9 @@ use oasis7::network_tier_manifest::{
     NetworkTierEndpointPolicy, NetworkTierManifest, NetworkTierPromotionPolicy,
     NetworkTierRuntimeRefs, NetworkTierTokenPolicy, NetworkTierValidatorPolicy,
 };
-use oasis7::runtime::{GovernanceFinalitySignerRegistry, World as RuntimeWorld};
+use oasis7::runtime::{
+    ChainResourceDerivationContext, GovernanceFinalitySignerRegistry, World as RuntimeWorld,
+};
 use std::collections::BTreeMap;
 use std::io::ErrorKind;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -221,6 +223,25 @@ fn write_observer_authority_fixture() -> (std::path::PathBuf, std::path::PathBuf
     (localized_registry, manifest_path)
 }
 
+fn save_authority_world(world: &RuntimeWorld, world_dir: &Path) {
+    world
+        .save_to_dir_with_chain_resource_context(
+            world_dir,
+            ChainResourceDerivationContext {
+                world_id: "oasis7-public-testnet-governed-20260606",
+                chain_id: "oasis7-public-testnet-governed-20260606",
+                genesis_ref: None,
+                created_at_height: 0,
+                manifest_height: 0,
+                commit_block_hash: None,
+                tick: 0,
+            },
+            "fixture-world-config",
+            "fixture-generation",
+        )
+        .expect("save authority world");
+}
+
 #[test]
 fn captures_actual_refs_and_file_digests() {
     let (registry, inventory, manifest_path) = write_authority_fixture();
@@ -333,7 +354,7 @@ fn rejects_inventory_digest_drift_without_mutating_existing_world() {
     world
         .set_governance_finality_signer_registry(explicit_registry)
         .expect("set persisted effective registry");
-    world.save_to_dir(world_dir.as_path()).expect("save world");
+    save_authority_world(&world, world_dir.as_path());
     let snapshot_before = fs::read(world_dir.join("snapshot.json")).expect("read snapshot");
     let journal_before = fs::read(world_dir.join("journal.json")).expect("read journal");
 
@@ -408,7 +429,7 @@ fn rejects_explicit_registry_that_does_not_match_persisted_effective_registry() 
             ]),
         })
         .expect("set persisted effective registry");
-    world.save_to_dir(world_dir.as_path()).expect("save world");
+    save_authority_world(&world, world_dir.as_path());
     let error = load_runtime_authority_binding(
         world_dir.as_path(),
         Some(registry.as_path()),
@@ -439,7 +460,7 @@ fn accepts_governed_registry_after_persisted_world_normalizes_threshold_bps() {
             .threshold_bps,
         6667
     );
-    world.save_to_dir(world_dir.as_path()).expect("save world");
+    save_authority_world(&world, world_dir.as_path());
 
     let expected_registry_semantic_sha256 = semantic_registry_sha256(
         &super::super::governance_registry::load_genesis_finality_registry(registry.as_path())
@@ -479,7 +500,12 @@ fn accepts_registry_only_authority_for_non_managed_observer() {
     )
     .expect("observer registry-only authority should pass")
     .expect("observer authority binding");
-    assert_eq!(binding.registry_ref, registry.to_string_lossy());
+    assert_eq!(
+        binding.registry_ref,
+        fs::canonicalize(registry.as_path())
+            .expect("canonical registry path")
+            .to_string_lossy()
+    );
     assert_eq!(binding.registry_sha256.len(), 64);
     assert_eq!(binding.registry_semantic_sha256.len(), 64);
     assert!(binding.inventory_ref.is_empty());
@@ -567,9 +593,7 @@ fn observer_registry_authority_survives_persisted_world_restart_without_mutation
     world
         .set_governance_finality_signer_registry(explicit_registry)
         .expect("set persisted observer registry");
-    world
-        .save_to_dir(world_dir.as_path())
-        .expect("save observer world");
+    save_authority_world(&world, world_dir.as_path());
     let snapshot_before = fs::read(world_dir.join("snapshot.json")).expect("read snapshot");
     let journal_before = fs::read(world_dir.join("journal.json")).expect("read journal");
 
@@ -594,4 +618,151 @@ fn observer_registry_authority_survives_persisted_world_restart_without_mutation
         journal_before,
         fs::read(world_dir.join("journal.json")).expect("journal after restart")
     );
+}
+
+#[test]
+fn accepts_observer_registry_path_after_canonicalization() {
+    let (registry, manifest_path) = write_observer_authority_fixture();
+    let mut loaded = loaded_manifest(manifest_path.as_path());
+    loaded.manifest.validator_policy.target_validator_count = 2;
+    let registry_name = registry.file_name().expect("registry name");
+    let noncanonical_registry = registry
+        .parent()
+        .expect("registry parent")
+        .join("..")
+        .join(
+            registry
+                .parent()
+                .expect("registry parent")
+                .file_name()
+                .expect("config name"),
+        )
+        .join(registry_name);
+
+    let binding = load_runtime_authority_binding_for_node(
+        manifest_path
+            .parent()
+            .expect("observer fixture root")
+            .join("world")
+            .as_path(),
+        "triad-testnet-local",
+        NodeRole::Observer,
+        Some(noncanonical_registry.as_path()),
+        None,
+        Some(&loaded),
+    )
+    .expect("canonicalized observer path should pass")
+    .expect("observer authority binding");
+    assert_eq!(
+        binding.registry_ref,
+        fs::canonicalize(registry.as_path())
+            .expect("canonical registry path")
+            .to_string_lossy()
+    );
+}
+
+#[test]
+fn rejects_authority_when_persisted_world_id_does_not_match_inventory() {
+    let (registry, inventory, manifest_path) = write_authority_fixture();
+    let world_dir = manifest_path.parent().expect("fixture root").join("world");
+    let explicit_registry =
+        super::super::governance_registry::load_genesis_finality_registry(registry.as_path())
+            .expect("load fixture registry");
+    let mut world = RuntimeWorld::new_production_hardened();
+    world
+        .set_governance_finality_signer_registry(explicit_registry)
+        .expect("set persisted effective registry");
+    world
+        .save_to_dir_with_chain_resource_context(
+            world_dir.as_path(),
+            ChainResourceDerivationContext {
+                world_id: "wrong-persisted-world",
+                chain_id: "oasis7-public-testnet-governed-20260606",
+                genesis_ref: None,
+                created_at_height: 0,
+                manifest_height: 0,
+                commit_block_hash: None,
+                tick: 0,
+            },
+            "fixture-world-config",
+            "fixture-generation",
+        )
+        .expect("save fixture world");
+
+    let error = load_runtime_authority_binding(
+        world_dir.as_path(),
+        Some(registry.as_path()),
+        Some(inventory.as_path()),
+        Some(&loaded_manifest(manifest_path.as_path())),
+    )
+    .expect_err("persisted world identity drift must fail closed");
+    assert!(error.contains("world id"), "unexpected error: {error}");
+}
+
+#[test]
+fn rejects_authority_when_effective_runtime_world_id_override_drifts() {
+    let (registry, inventory, manifest_path) = write_authority_fixture();
+    let error = load_runtime_authority_binding_for_node_with_world_id(
+        manifest_path
+            .parent()
+            .expect("fixture root")
+            .join("world")
+            .as_path(),
+        "triad-testnet-sequencer",
+        NodeRole::Sequencer,
+        "operator-selected-different-world",
+        Some(registry.as_path()),
+        Some(inventory.as_path()),
+        Some(&loaded_manifest(manifest_path.as_path())),
+    )
+    .expect_err("effective world-id override must not bypass governed authority");
+    assert!(
+        error.contains("effective runtime world id"),
+        "unexpected error: {error}"
+    );
+}
+
+#[test]
+fn rejects_managed_node_with_wrong_runtime_role() {
+    let (registry, inventory, manifest_path) = write_authority_fixture();
+    let error = load_runtime_authority_binding_for_node(
+        manifest_path
+            .parent()
+            .expect("fixture root")
+            .join("world")
+            .as_path(),
+        "triad-testnet-storage",
+        NodeRole::Sequencer,
+        Some(registry.as_path()),
+        Some(inventory.as_path()),
+        Some(&loaded_manifest(manifest_path.as_path())),
+    )
+    .expect_err("managed storage identity must not run as sequencer");
+    assert!(error.contains("runtime role"), "unexpected error: {error}");
+}
+
+#[test]
+fn accepts_managed_nodes_with_governed_runtime_roles() {
+    let (registry, inventory, manifest_path) = write_authority_fixture();
+    let loaded = loaded_manifest(manifest_path.as_path());
+    for (node_id, node_role) in [
+        ("triad-testnet-sequencer", NodeRole::Sequencer),
+        ("triad-testnet-storage", NodeRole::Storage),
+        ("triad-testnet-validator-47", NodeRole::Storage),
+    ] {
+        load_runtime_authority_binding_for_node(
+            manifest_path
+                .parent()
+                .expect("fixture root")
+                .join(node_id)
+                .as_path(),
+            node_id,
+            node_role,
+            Some(registry.as_path()),
+            Some(inventory.as_path()),
+            Some(&loaded),
+        )
+        .expect("governed managed role should pass")
+        .expect("managed authority binding");
+    }
 }

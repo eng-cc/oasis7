@@ -38,8 +38,15 @@ Description:
   The output directory contains:
     <out-dir>/config/
     <out-dir>/identity/ (validator-47 only; imported key and public receipt)
-    <out-dir>/generated-world/
+    <out-dir>/generated-world/world/ (canonical bootstrap execution world)
+    <out-dir>/generated-world/generated-scenario-world/ (world sidecar)
+    <out-dir>/generated-world/world-generation-provenance.json
     <out-dir>/deployment-truth.md
+
+  Pass <out-dir>/generated-world directly as --world-dir to
+  p2p-public-testnet-bootstrap-fresh-validator-host.sh.  Bootstrap consumes
+  this exact nested stage layout and flattens the canonical world into the
+  host's staged-world directory; do not hand-copy or rewrite the paths.
 EOF
 }
 
@@ -966,7 +973,9 @@ content = f"""# Deployment Truth
 - Runtime build: `{runtime_build_ref}`
 - Bootstrap peers file: `{bootstrap_peers_file}`
 - Bootstrap peers sha256: `{bootstrap_peer_sha256}`
-{authority_lines}- Generated map sidecar: `generated-world/generated-scenario-world`
+{authority_lines}- Canonical bootstrap world: `generated-world/world`
+- Fresh-host bootstrap world input: `generated-world`
+- Generated map sidecar: `generated-world/generated-scenario-world`
 - Generated map provenance: `generated-world/world-generation-provenance.json`
 - Validator signer truth:
 {chr(10).join(validator_lines)}

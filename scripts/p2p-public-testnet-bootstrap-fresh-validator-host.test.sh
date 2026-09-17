@@ -198,6 +198,63 @@ bootstrap() {
     --receipt "$receipt"
 }
 
+# The deployment-stage generator emits its canonical world under
+# generated-world/world, while the sidecar and provenance remain directly
+# under generated-world.  The documented handoff passes generated-world as
+# --world-dir; bootstrap must consume that exact output without a manual copy
+# or path rewrite.
+stage_handoff_dir="$TMP_DIR/stage/generated-world"
+stage_handoff_stack_root="$TMP_DIR/stage-handoff-opt/oasis7/p2p-testnet"
+stage_handoff_systemd_dir="$TMP_DIR/stage-handoff-systemd"
+stage_handoff_receipt="$TMP_DIR/stage-handoff-receipt.json"
+mkdir -p "$stage_handoff_dir/world" "$stage_handoff_systemd_dir"
+cp "$world_dir/snapshot.json" "$stage_handoff_dir/world/"
+cp -a "$world_dir/generated-scenario-world" "$stage_handoff_dir/"
+cp "$world_dir/world-generation-provenance.json" "$stage_handoff_dir/"
+bootstrap_with \
+  --stack-root "$stage_handoff_stack_root" \
+  --package-deb "$package_deb" \
+  --ops-tools-tar "$ops_tools_tar" \
+  --config-dir "$config_dir" \
+  --world-dir "$stage_handoff_dir" \
+  --node-id triad-testnet-sequencer \
+  --service-name oasis7-triad-sequencer.service \
+  --systemd-unit-dir "$stage_handoff_systemd_dir" \
+  --receipt "$stage_handoff_receipt"
+stage_handoff_stack_root_abs="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$stage_handoff_stack_root")"
+test -f "$stage_handoff_stack_root_abs/staged-world/snapshot.json"
+test -f "$stage_handoff_stack_root_abs/staged-world/world-generation-provenance.json"
+test -f "$stage_handoff_stack_root_abs/staged-world/generated-scenario-world/manifest.json"
+test ! -e "$stage_handoff_stack_root_abs/staged-world/world/snapshot.json"
+jq -e \
+  '.world.layout == "nested_stage"
+   and (.world.snapshot.path | endswith("/staged-world/snapshot.json"))
+   and (.world.provenance.path | endswith("/staged-world/world-generation-provenance.json"))' \
+  "$stage_handoff_receipt" >/dev/null
+
+# A stage root containing both the legacy direct-world snapshot and the
+# canonical nested snapshot is ambiguous.  Reject it before materializing a
+# stack so snapshot/provenance cannot be silently cross-paired.
+mixed_layout_dir="$TMP_DIR/mixed-generated-world"
+mixed_layout_stack_root="$TMP_DIR/mixed-layout-opt/oasis7/p2p-testnet"
+mkdir -p "$mixed_layout_dir/world"
+cp "$world_dir/snapshot.json" "$mixed_layout_dir/snapshot.json"
+cp "$world_dir/snapshot.json" "$mixed_layout_dir/world/snapshot.json"
+cp "$world_dir/world-generation-provenance.json" "$mixed_layout_dir/"
+cp -a "$world_dir/generated-scenario-world" "$mixed_layout_dir/"
+expect_fail \
+  "ambiguous generated-world layout" \
+  bootstrap_with \
+    --stack-root "$mixed_layout_stack_root" \
+    --package-deb "$package_deb" \
+    --ops-tools-tar "$ops_tools_tar" \
+    --config-dir "$config_dir" \
+    --world-dir "$mixed_layout_dir" \
+    --node-id triad-testnet-sequencer \
+    --service-name oasis7-triad-sequencer.service \
+    --receipt "$TMP_DIR/mixed-layout-receipt.json"
+test ! -e "$mixed_layout_stack_root"
+
 # Happy path: verified package, empty safe root, all C1 binaries, generated
 # local key, installed-but-not-started unit, and public-only provenance.
 bootstrap

@@ -10,6 +10,7 @@ use super::{
 
 pub(super) fn load_observer_registry_authority(
     execution_world_dir: &Path,
+    effective_world_id: &str,
     registry_path: &Path,
     loaded_network_tier_manifest: Option<&LoadedNetworkTierManifest>,
 ) -> Result<Option<RuntimeAuthorityBinding>, String> {
@@ -26,8 +27,14 @@ pub(super) fn load_observer_registry_authority(
         );
     }
 
-    let manifest_path = Path::new(loaded.source_path.as_str());
-    let manifest_bytes = fs::read(manifest_path).map_err(|err| {
+    let manifest_path = fs::canonicalize(Path::new(loaded.source_path.as_str())).map_err(|err| {
+        format!(
+            "canonicalize network-tier manifest {} for observer registry authority failed: {err}",
+            loaded.source_path
+        )
+    })?;
+    let registry_path = canonicalize_regular_file(registry_path, "genesis validator registry")?;
+    let manifest_bytes = fs::read(&manifest_path).map_err(|err| {
         format!(
             "read network-tier manifest {} for observer registry authority failed: {err}",
             manifest_path.display()
@@ -73,7 +80,7 @@ pub(super) fn load_observer_registry_authority(
         ));
     }
 
-    let registry_sha256 = sha256_regular_file(registry_path, "genesis validator registry")?;
+    let registry_sha256 = sha256_regular_file(&registry_path, "genesis validator registry")?;
     if registry_sha256 != expected_registry_sha256 {
         return Err(format!(
             "observer validator registry digest mismatch: manifest={} actual={} path={}",
@@ -83,7 +90,7 @@ pub(super) fn load_observer_registry_authority(
         ));
     }
     let explicit_registry =
-        super::super::governance_registry::load_genesis_finality_registry(registry_path)?;
+        super::super::governance_registry::load_genesis_finality_registry(&registry_path)?;
     if explicit_registry.slot_id != "governance.finality.v1" {
         return Err("observer validator registry slot_id is not canonical".to_string());
     }
@@ -108,7 +115,7 @@ pub(super) fn load_observer_registry_authority(
         ));
     }
 
-    let world = super::super::execution_bridge::load_execution_world(execution_world_dir)?;
+    let world = super::load_authority_world(execution_world_dir, effective_world_id)?;
     let effective_registry = world
         .resolve_governance_effective_finality_signer_registry()
         .map_err(|err| {
@@ -139,7 +146,7 @@ pub(super) fn load_observer_registry_authority(
         }
     }
 
-    let registry_ref = startup_ref(registry_path, "genesis validator registry")?;
+    let registry_ref = startup_ref(&registry_path, "genesis validator registry")?;
     Ok(Some(RuntimeAuthorityBinding {
         registry_ref,
         registry_sha256,
@@ -152,6 +159,12 @@ pub(super) fn load_observer_registry_authority(
         validator_stakes,
         validator_47_provider_peer_id: None,
     }))
+}
+
+fn canonicalize_regular_file(path: &Path, label: &str) -> Result<std::path::PathBuf, String> {
+    startup_ref(path, label)?;
+    fs::canonicalize(path)
+        .map_err(|err| format!("canonicalize {label} {} failed: {err}", path.display()))
 }
 
 fn authority_file_name(raw_ref: &str) -> Result<String, String> {

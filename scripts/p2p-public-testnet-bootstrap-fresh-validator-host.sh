@@ -44,7 +44,7 @@ Usage:
     --package-deb <oasis7-linux-x64.deb> \
     --ops-tools-tar <oasis7-linux-x64-ops-tools.tar.gz> \
     --config-dir <governed stage config directory> \
-    --world-dir <generated world directory> \
+    --world-dir <generated world directory or deployment-stage/generated-world> \
     [--identity-dir <already-staged validator-47 identity directory>] \
     --node-id triad-testnet-sequencer \
     --receipt <public receipt path>
@@ -559,6 +559,25 @@ if [[ -n "$identity_dir" ]]; then
   identity_dir=$(python3 -c 'import os,sys; print(os.path.abspath(os.path.expanduser(sys.argv[1])))' "$identity_dir")
 fi
 receipt=$(absolute_path "$receipt")
+
+# The governed deployment-stage generator keeps the canonical execution world
+# in generated-world/world, alongside generated-world/generated-scenario-world
+# and generated-world/world-generation-provenance.json.  Accept that exact
+# stage output as the handoff input while retaining the historical direct
+# world-dir shape used by older callers.  A mixed layout is ambiguous and must
+# fail closed rather than allowing snapshot/provenance to be cross-paired.
+world_payload_dir="$world_dir"
+world_provenance_path="$world_dir/world-generation-provenance.json"
+world_sidecar_dir="$world_dir/generated-scenario-world"
+world_layout="direct_world"
+if [[ -e "$world_dir/world" ]]; then
+  [[ -d "$world_dir/world" && ! -L "$world_dir/world" ]] \
+    || die "generated-world/world must be a regular directory"
+  [[ ! -e "$world_dir/snapshot.json" ]] \
+    || die "ambiguous generated-world layout: both root snapshot.json and world/snapshot.json exist"
+  world_payload_dir="$world_dir/world"
+  world_layout="nested_stage"
+fi
 if [[ ${OASIS7_TEST_ONLY:-} == 1 ]]; then
   [[ $allow_test_stack_root -eq 1 && -n "$test_root_prefix" ]] \
     || die "test mode requires --allow-test-stack-root and --test-root-prefix"
@@ -605,8 +624,9 @@ for source in \
   public-testnet-governed-bootstrap-genesis-2026-06-06.json \
   public-testnet-governed-bootstrap-validator-registry-2026-06-06.json \
   node.env; do require_file "$config_dir/$source"; done
-for source in snapshot.json world-generation-provenance.json; do require_file "$world_dir/$source"; done
-require_dir "$world_dir/generated-scenario-world"
+require_file "$world_payload_dir/snapshot.json"
+require_file "$world_provenance_path"
+require_dir "$world_sidecar_dir"
 jq -e . "$config_dir/public-testnet-governed-bootstrap-bundle-2026-06-06.json" >/dev/null \
   || die "config bundle JSON is malformed"
 jq -e . "$config_dir/public-testnet-governed-bootstrap-genesis-2026-06-06.json" >/dev/null \
@@ -715,7 +735,13 @@ release_dir="$stack_root/releases/$(sed -n 's/^package_version=//p' "$bundle_roo
 mv "$bundle_root" "$release_dir"
 ln -s "releases/$(basename "$release_dir")" "$stack_root/current"
 cp -a "$config_dir/." "$stack_root/config/"
-cp -a "$world_dir/." "$stack_root/staged-world/"
+if [[ "$world_layout" == nested_stage ]]; then
+  cp -a "$world_payload_dir/." "$stack_root/staged-world/"
+  cp -a "$world_sidecar_dir" "$stack_root/staged-world/"
+  cp "$world_provenance_path" "$stack_root/staged-world/"
+else
+  cp -a "$world_dir/." "$stack_root/staged-world/"
+fi
 if [[ "$node_id" == "$VALIDATOR_47_NODE_ID" ]]; then
   # Import the already-staged identity byte-for-byte.  This path is deliberately
   # separate from the governed config stage so a stale pair key cannot be
@@ -942,6 +968,7 @@ jq -n \
   --argjson config_genesis "$config_genesis_json" --argjson config_registry "$config_registry_json" \
   --argjson config_peers "$config_peers_json" --argjson config_node_env "$config_node_env_json" --argjson config_inventory "$config_inventory_json" \
   --argjson world_snapshot "$world_snapshot_json" --argjson world_provenance "$world_provenance_json" \
+  --arg world_layout "$world_layout" \
   --argjson buildinfo "$buildinfo_json" --argjson checksums "$checksums_json" \
   '{schema_version:"oasis7.fresh_validator_host_bootstrap.v1",generated_at:$time,
     stack_root:$root, no_service_started:true,
@@ -950,7 +977,7 @@ jq -n \
     node:{node_id:$node.node_id,public_key:$node.root_public_key,finality_public_key:$node.finality_public_key,libp2p_peer_id:$node.libp2p_peer_id,key:($key + {owner_valid:$key_owner_valid})},
     identity:{mode:$identity_import_mode,source_key_sha256:$identity_source_key_sha256,source_receipt_sha256:$identity_source_receipt_sha256,ownership_valid:$identity_ownership_valid,readback:$staged_identity_receipt},
     config:{node_env:$config_node_env,bundle:$config_bundle,manifest:$config_manifest,genesis:$config_genesis,validator_registry:$config_registry,bootstrap_peers:$config_peers,inventory:$config_inventory,inventory_ref:$inventory_ref,inventory_sha256:$inventory_sha256},
-    world:{snapshot:$world_snapshot,provenance:$world_provenance},
+    world:{layout:$world_layout,snapshot:$world_snapshot,provenance:$world_provenance},
     service:{name:$service_name,unit_path:$unit,unit_sha256:$unit_sha,active:$active,enabled:$enabled,unit_file_state:$unit_file_state,no_process:$no_process,no_listener:$no_listener,listeners:$listeners,readback:$readback,account:{uid:$service_uid,gid:$service_gid}}}' \
   >"$receipt"
 chmod 0600 "$receipt"

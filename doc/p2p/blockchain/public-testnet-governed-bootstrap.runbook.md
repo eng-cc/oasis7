@@ -1,5 +1,4 @@
 # Public Testnet Governed Bootstrap Runbook (2026-06-06)
-
 - 对应项目文档: GitHub Issue / GitHub Project
 - 关联证据:
   - `doc/testing/evidence/public-testnet-governed-bootstrap-manifest-2026-06-06.json`
@@ -14,7 +13,6 @@
 审计轮次: 2
 
 ## Stable authority and evidence boundary
-
 - This is the stable operator authority for public-testnet topology, deployment truth, rollout, rollback and recovery drills. The frozen bootstrap topology remains historical provenance; the managed-five-node inventory is an execution target only after a fresh Phase A truth capture. Neither records present fleet health or release readiness by itself.
 - Dated manifests, bundles, peer lists, package hashes, status snapshots and evidence files remain evidence-window inputs. Before each deployment, recovery update, or readiness assertion, operators must recapture the current deployment truth and bounded same-window health evidence; QA owns release-blocking verdicts and LiveOps/community owns external status or recovery wording.
 - Restart, port cleanup, reseed, data isolation and waiting for recovery may collect evidence or provide temporary recovery only. For peer-head drift, execution/resource divergence, signer/peer identity mismatch, or degraded replication, identify and repair the code, configuration, package, manifest, deployment artifact, or state-contract root cause before clean redeploy/rebuild; never treat an operational restart as the durable resolution.
@@ -39,7 +37,6 @@
 冻结的 governed bootstrap 拓扑仍是两台 validator 加两台 observer；当前 operator 部署清单在此基础上扩展为五个受管节点。部署/补更时必须以本节的当前 operator inventory 为准，不能从旧 `.tmp` bootstrap 目录推断节点数量。
 
 ### 2.1 Governed bootstrap topology
-
 | node_id | role | location | in validator set |
 | --- | --- | --- | --- |
 | `triad-testnet-sequencer` | validator / sequencer | ECS `39.104.204.172` | yes |
@@ -48,7 +45,6 @@
 | `triad-testnet-fourth-local` | observer | macOS local observer family | no |
 
 ### 2.2 Current operator inventory
-
 | node_id | role | host / lane | stack root | service manager | bounded evidence endpoint |
 | --- | --- | --- | --- | --- | --- |
 | `triad-testnet-sequencer` | validator / sequencer | `root@39.104.204.172` | `/opt/oasis7/p2p-testnet` | `oasis7-triad-sequencer.service` | `http://127.0.0.1:6631/v1/chain/rebuild-proof` + capability-gated identity-v2 four-command evidence |
@@ -73,7 +69,6 @@ exception that is not deployment or readiness evidence.
 Credential files may be used by an operator as local access aids, but this runbook only records target identities and never records secret values.
 
 ### 2.2.1 Bounded 204 proof and identity-v2 contract
-
 The 204 proof remains a bounded, same-window artifact. Identity-v2 evidence is
 separate and is not created by the proof verifier. The current required set is
 exactly `sequencer-204`, `storage-205`, `linux-lan-observer`,
@@ -138,7 +133,6 @@ above. This envelope is a node-signed bounded status receipt, not
 validator-quorum finality or a replacement for `WorldHeadProofV1`.
 
 ### 2.3 Stack roots and deprecated bootstrap dirs
-
 - ECS validator stack root: `/opt/oasis7/p2p-testnet`
 - Linux LAN observer stack root: `/opt/oasis7/p2p-testnet-local`
 - Windows observer stack root: `C:\oasis7-deploy`
@@ -203,7 +197,6 @@ validator-quorum finality or a replacement for `WorldHeadProofV1`.
    - 修复根因对应的代码、配置、包、manifest、部署产物或重建脚本。
    - 再按修复后的 canonical deployment truth 重新部署或从零重建受影响节点。
    - 重启服务、清理端口、手工 reseed、复制数据、或等待自愈只能作为取证/验证手段，不能替代根因修复，也不能作为“分叉已解决”的对外口径。
-
 ### 4.1 Runtime high-state sync contract
 `public_testnet` observer 的标准 attach 设计是不要求操作者预先提供 seed/state-sync 目录。新 observer 在发现远端链头远高于本地高度时，必须先尝试从 P2P replication 网络拉取一个受验证的高位 execution checkpoint，再从该 checkpoint 后继续 tail gap sync。
 
@@ -215,7 +208,6 @@ validator-quorum finality or a replacement for `WorldHeadProofV1`.
 4. 如果 advertised head 不是 checkpoint 高度，observer 可以安装 head 之前最近仍被保留且可验证的 checkpoint；安装后再由正常 gap sync 追尾。
 5. storage/full-storage provider 即使不是原始 sequencer writer，也必须能在 fetch-commit 响应中为本地 retained execution checkpoint 动态附加 checkpoint descriptor，并以自身 authorized replication writer 身份重新签发增强 commit message；否则只连到 storage peer 的冷 observer 无法获得可安装的高状态入口。
 6. 若保留窗口内没有可获取的 checkpoint，状态接口应继续报告 `state_sync_fallback_required=true`，此时才进入 break-glass seed/state-sync recovery。
-
 ## 5. Required Inputs
 开始前，操作者必须准备好以下输入：
 
@@ -265,13 +257,11 @@ phase、rollback/recovery、readiness 或 release 判断。
 9. Phase H: Failure handling and rollback
 
 任何 phase 未通过，不进入下一 phase。
-
 ## 7. Phase A - Preflight and Truth Capture
 ### Goal
 在任何 destructive 操作前，把本轮 live rebuild 真值先读出来并记下。
 
 ### Identity-v2 evidence preparation (capability-gated)
-
 The executor must first produce exact raw-v1 bytes, an unsigned deployment-truth template, context, and plan intent for each of the five managed nodes. Context and intent precede the payload and contain no receipt, signature, verdict, or final-plan digest. The governed sidecar is `scripts/p2p-public-testnet-identity-receipt-v2.py`; bridge mode accepts `--raw-v1`, `--template`, `--out`, `--context`, `--plan-intent`, `--trust-config`, `--provider-registry`, `--provider-ref`, `--signer-tool`, `--verifier-tool`, `--evidence-map-out`, and `--evidence-dir`, invokes the four fixed commands below, and retains exact evidence. Its legacy shape-only mode is not admission. The sequence below is the only approved argument shape; repeat it in one capture window. `<identity-v2-tool>` is a deployment-provided, independently pinned executable. Until the trust config, registry, provider, and verifier pins exist, this sequence is capability blocked.
 
 The planner handoff must include its exact `--identity-v2-evidence-map <verified-map.json>` option: `python3 scripts/p2p-public-testnet-full-network-clean-room.py --input <authenticated-five-node-truth-envelope> --identity-v2-evidence-map <verified-map.json> --out <plan.json> --json`. Every adapter invocation carrying identity-v2 inputs, including an `--apply` validation request, must include that exact map and `--identity-v2-mode current_admission`: `python3 scripts/p2p-public-testnet-full-network-clean-room-adapter.py --plan <plan.json> --authority <authority.json> --journal <journal.jsonl> --ledger <ledger.jsonl> --identity-v2-evidence-map <verified-map.json> --identity-v2-mode current_admission`. The current map path is validation-only and does not authorize execution; these placeholders are operator-bound artifacts, not live paths; the pair executor remains blocked until it consumes this retained map.
@@ -488,7 +478,6 @@ scripts/p2p-public-testnet-rebuild-validators.sh apply \
   --known-hosts <same-pinned-known-hosts> \
   --host-adapter <governed-host-adapter>
 ```
-
 #### External nonce-ledger deployment prerequisite
 
 Before any `human_direct_ssh`, `plan`, `apply`, `resume`, or `rollback`, provision this executor-owned external replay barrier: `/var/lib/oasis7/p2p-public-testnet/validator-pair-nonces.jsonl`.
@@ -511,7 +500,6 @@ scripts/p2p-public-testnet-rebuild-validators.sh human_direct_ssh \
 ```
 `human_direct_ssh` 不把 request envelope 当 authority，不接受 arbitrary adapter JSON 或 caller assertion；它必须在同一调用中 live-read GitHub authority，以固定 inventory/pin 观察两角色 `active=false`、`running=false` 与 bounded health/listener。供 `plan`/`apply` 使用的 executor-bound request 必须同时绑定同一个 `--consumer-impact-record` 文件的路径与 SHA-256（`impact_record_path` 与 `impact_record_sha256`）；executor 返回的 direct receipt digest 必须与该 CLI 文件逐字节一致，不能由 `validators_already_stopped`、status snapshot 或 persisted proof 推断。`impact=none` 仍须 direct read-only observation；旧 receipt、遗漏/重复/伪造/stale/binding-mismatch 均不得进入 destructive phase。
 `apply` 在任何 mutation 前必须在同一 executor 进程内重新读取 live authority 并 re-observe；不能复观测时 fail closed。跨进程时新进程必须重新取得 authority、读取固定 inventory/pins、建立 strict SSH、重新观察；持久化 proof/receipt 只供审计、故障追溯和 rollback 关联，永远不作授权。
-
 #### Crash recovery / resume
 
 如果 executor 在 transaction promotion、backup 或 staging 中途退出，使用下面的 copyable recovery operation；所有输入都必须显式提供，wrapper 不从 transaction、旧 proof 或输出目录猜测或回退：
@@ -619,9 +607,20 @@ those bytes exactly and validates the public finality key against the governed
 registry; it must not regenerate the identity.
 Add the inventory's validator-47 signer to the existing pair, then stage and read
 back the empty host with this explicit no-start contract:
+The following first two commands are the exact stage-to-bootstrap handoff. The
+stage's canonical execution world is
+`/srv/oasis7/stage/validator-47/generated-world/world/`; pass its containing
+`generated-world/` directory directly to bootstrap. Do not hand-copy the world
+or rewrite the generated sidecar/provenance paths. The bootstrap receipt records
+the consumed layout and remains a no-start artifact.
 ```bash
 ./scripts/p2p-public-testnet-build-deployment-stage.sh --runtime-build-ref /srv/oasis7/oasis7_chain_runtime --bootstrap-peers-file /srv/oasis7/bootstrap-peers.txt --sequencer-finality-public-key <sequencer-finality-public-key> --storage-finality-public-key <storage-finality-public-key> --extra-validator triad-testnet-validator-47:<validator-47-finality-public-key>:100 --validator-47-identity-dir /srv/oasis7/staged-validator-47-identity --out-dir /srv/oasis7/stage/validator-47
 ./scripts/p2p-public-testnet-bootstrap-fresh-validator-host.sh --package-deb /srv/oasis7/oasis7-linux-x64.deb --ops-tools-tar /srv/oasis7/oasis7-linux-x64-ops-tools.tar.gz --config-dir /srv/oasis7/stage/validator-47/config --world-dir /srv/oasis7/stage/validator-47/generated-world --identity-dir /srv/oasis7/stage/validator-47/identity --node-id triad-testnet-validator-47 --service-name oasis7-triad-validator-47.service --receipt /opt/oasis7/p2p-testnet/evidence/fresh-validator-host-bootstrap-receipt.json
+```
+
+The independent readback is a separate observation command and must run only
+after bootstrap returns successfully:
+```bash
 /opt/oasis7/p2p-testnet/current/bin/service-readback --read-only --role validator-47 --root /opt/oasis7/p2p-testnet --service oasis7-triad-validator-47.service
 ```
 Bootstrap renders but never enables or starts validator-47 and must prove

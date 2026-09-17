@@ -447,14 +447,16 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
     }
 
     config = apply_traffic_profile_to_node_config(config, &options)?;
-    let runtime_authority_binding = runtime_authority::load_runtime_authority_binding_for_node(
-        paths.execution_world_dir.as_path(),
-        options.node_id.as_str(),
-        options.node_role,
-        options.genesis_validator_registry_path.as_deref(),
-        options.deployment_inventory_path.as_deref(),
-        options.loaded_network_tier_manifest.as_ref(),
-    )?;
+    let runtime_authority_binding =
+        runtime_authority::load_runtime_authority_binding_for_node_with_world_id(
+            paths.execution_world_dir.as_path(),
+            options.node_id.as_str(),
+            options.node_role,
+            options.world_id.as_str(),
+            options.genesis_validator_registry_path.as_deref(),
+            options.deployment_inventory_path.as_deref(),
+            options.loaded_network_tier_manifest.as_ref(),
+        )?;
     governance_registry::ensure_world_governance_validator_registry(
         paths.execution_world_dir.as_path(),
         options.genesis_validator_registry_path.as_deref(),

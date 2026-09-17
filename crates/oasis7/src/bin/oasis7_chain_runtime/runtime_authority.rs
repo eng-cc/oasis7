@@ -1,5 +1,5 @@
 use oasis7::network_tier_manifest::LoadedNetworkTierManifest;
-use oasis7::runtime::GovernanceFinalitySignerRegistry;
+use oasis7::runtime::{GovernanceFinalitySignerRegistry, World as RuntimeWorld};
 use oasis7_node::NodeRole;
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -66,6 +66,43 @@ pub(super) fn load_runtime_authority_binding_for_node(
     inventory_path: Option<&Path>,
     loaded_network_tier_manifest: Option<&LoadedNetworkTierManifest>,
 ) -> Result<Option<RuntimeAuthorityBinding>, String> {
+    let default_world_id = loaded_network_tier_manifest
+        .map(|loaded| loaded.manifest.chain_id.as_str())
+        .unwrap_or_default();
+    load_runtime_authority_binding_for_node_with_world_id(
+        execution_world_dir,
+        node_id,
+        node_role,
+        default_world_id,
+        registry_path,
+        inventory_path,
+        loaded_network_tier_manifest,
+    )
+}
+
+pub(super) fn load_runtime_authority_binding_for_node_with_world_id(
+    execution_world_dir: &Path,
+    node_id: &str,
+    node_role: NodeRole,
+    effective_world_id: &str,
+    registry_path: Option<&Path>,
+    inventory_path: Option<&Path>,
+    loaded_network_tier_manifest: Option<&LoadedNetworkTierManifest>,
+) -> Result<Option<RuntimeAuthorityBinding>, String> {
+    if let Some(loaded) = loaded_network_tier_manifest {
+        validate_effective_world_id(effective_world_id, loaded)?;
+    }
+    if is_managed_triad_node_id(node_id)
+        && node_role == NodeRole::Observer
+        && registry_path.is_some()
+        && inventory_path.is_none()
+    {
+        return Err(
+            "managed triad startup requires --deployment-inventory for the effective node identity"
+                .to_string(),
+        );
+    }
+    validate_managed_node_role(node_id, node_role)?;
     if node_role == NodeRole::Observer
         && !is_managed_triad_node_id(node_id)
         && registry_path.is_some()
@@ -73,6 +110,7 @@ pub(super) fn load_runtime_authority_binding_for_node(
     {
         return observer::load_observer_registry_authority(
             execution_world_dir,
+            effective_world_id,
             registry_path.expect("registry path checked above"),
             loaded_network_tier_manifest,
         );
@@ -154,6 +192,7 @@ pub(super) fn load_runtime_authority_binding_for_node(
                 loaded,
                 inventory_ref.as_str(),
                 registry_path,
+                effective_world_id,
             )?;
             let registry_sha256 = sha256_regular_file(registry_path, "genesis validator registry")?;
             if registry_sha256 != inventory_authority.generated_registry_sha256 {
@@ -172,7 +211,7 @@ pub(super) fn load_runtime_authority_binding_for_node(
                 &canonical_explicit_registry,
                 &inventory_authority,
             )?;
-            let world = super::execution_bridge::load_execution_world(execution_world_dir)?;
+            let world = load_authority_world(execution_world_dir, effective_world_id)?;
             let effective_registry = world
                 .resolve_governance_effective_finality_signer_registry()
                 .map_err(|err| {
@@ -222,6 +261,57 @@ fn is_managed_triad_node_id(node_id: &str) -> bool {
     MANAGED_TRIAD_NODE_IDS.contains(&node_id)
 }
 
+fn validate_managed_node_role(node_id: &str, node_role: NodeRole) -> Result<(), String> {
+    let expected_role = match node_id {
+        "triad-testnet-sequencer" => Some(NodeRole::Sequencer),
+        "triad-testnet-storage" | "triad-testnet-validator-47" => Some(NodeRole::Storage),
+        _ => None,
+    };
+    if let Some(expected_role) = expected_role
+        && node_role != expected_role
+    {
+        return Err(format!(
+            "managed node identity {node_id} requires runtime role {expected_role:?}, got {node_role:?}"
+        ));
+    }
+    Ok(())
+}
+
+fn validate_effective_world_id(
+    effective_world_id: &str,
+    loaded: &LoadedNetworkTierManifest,
+) -> Result<(), String> {
+    if loaded.manifest.tier != "public_testnet" {
+        return Ok(());
+    }
+    let effective_world_id = effective_world_id.trim();
+    if effective_world_id.is_empty() {
+        return Err("public-testnet authority requires a non-empty effective world id".to_string());
+    }
+    if effective_world_id != loaded.manifest.chain_id {
+        return Err(format!(
+            "effective runtime world id does not match network-tier manifest chain_id: expected={} actual={}",
+            loaded.manifest.chain_id, effective_world_id
+        ));
+    }
+    Ok(())
+}
+
+pub(super) fn load_authority_world(
+    execution_world_dir: &Path,
+    effective_world_id: &str,
+) -> Result<RuntimeWorld, String> {
+    let world = super::execution_bridge::load_execution_world(execution_world_dir)?;
+    let persisted_world_id = world.chain_resource_manifest().world_id.as_str();
+    if persisted_world_id != "unbound" && persisted_world_id != effective_world_id {
+        return Err(format!(
+            "persisted execution world id does not match effective runtime world id: expected={} actual={}",
+            effective_world_id, persisted_world_id
+        ));
+    }
+    Ok(world)
+}
+
 #[derive(Debug)]
 struct InventoryAuthority {
     validator_signer_public_keys: BTreeMap<String, String>,
@@ -236,6 +326,7 @@ fn validate_inventory_against_manifest(
     loaded: &LoadedNetworkTierManifest,
     expected_inventory_ref: &str,
     registry_path: &Path,
+    effective_world_id: &str,
 ) -> Result<InventoryAuthority, String> {
     let object = inventory
         .as_object()
@@ -308,6 +399,12 @@ fn validate_inventory_against_manifest(
             "deployment inventory identity does not match the loaded network-tier manifest"
                 .to_string(),
         );
+    }
+    if expected_world_id != effective_world_id {
+        return Err(format!(
+            "deployment inventory world_id does not match effective runtime world id: expected={} actual={}",
+            expected_world_id, effective_world_id
+        ));
     }
     let manifest_bytes = fs::read(Path::new(loaded.source_path.as_str())).map_err(|err| {
         format!(

@@ -23,8 +23,10 @@ later inputs or hosts ready.
 - `oasis7-linux-x64-ops-tools.tar.gz` from the matching checksummed operator-tools artifact.
 - A governed stage `config/` containing the bootstrap bundle, genesis,
   validator registry, `node.env`, and the production manifest and bootstrap-peer inputs.
-- A governed stage `generated-world/` containing `snapshot.json`,
-  `world-generation-provenance.json`, and `generated-scenario-world/`.
+- A governed stage `generated-world/` containing the canonical execution world
+  at `world/`, plus `world-generation-provenance.json` and
+  `generated-scenario-world/`. Pass the `generated-world/` directory itself to
+  `--world-dir`; bootstrap consumes this exact stage output.
 
 Run as the host operator:
 
@@ -65,6 +67,11 @@ deployment registry has its own exact-byte `generated_registry_sha256` and
 canonical `generated_registry_semantic_sha256`; runtime status must report the
 generated digest, never the source-input digest.
 
+The following two commands are the exact stage-to-bootstrap handoff. They use
+the stage root as the bootstrap input; do not manually copy
+`generated-world/world/`, rewrite paths, or pair a snapshot with a different
+sidecar or provenance file.
+
 ```bash
 ./scripts/p2p-public-testnet-build-deployment-stage.sh \
   --runtime-build-ref /srv/oasis7/oasis7_chain_runtime \
@@ -84,7 +91,15 @@ generated digest, never the source-input digest.
   --node-id triad-testnet-validator-47 \
   --service-name oasis7-triad-validator-47.service \
   --receipt /opt/oasis7/p2p-testnet/evidence/fresh-validator-host-bootstrap-receipt.json
+```
 
+Bootstrap flattens the canonical stage `generated-world/world/` into the
+host's `staged-world/` while retaining the generated sidecar and provenance at
+that same staged-world root. The receipt records `world.layout=nested_stage`.
+
+The independent readback remains a separate observation command:
+
+```bash
 /opt/oasis7/p2p-testnet/current/bin/service-readback --read-only \
   --role validator-47 \
   --root /opt/oasis7/p2p-testnet \
