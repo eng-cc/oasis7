@@ -606,8 +606,17 @@ def review_admission(root: Path, packet_path: Path, plan_path: Path,
         try:
             if plan.get("source_review_digest") != helper.source_review_digest(plan.get("source_review_identity")):
                 fail("v2 source review digest does not match its identity")
-            if plan.get("integration_ci_digest") != helper.integration_ci_digest(plan.get("integration_ci_identity")):
+            integration_identity = plan.get("integration_ci_identity")
+            if integration_identity is None:
+                if plan.get("integration_ci_digest") is not None or plan.get("integration_ci_provenance") is not None:
+                    fail("v2 source-only plan has unexpected integration CI fields")
+                if plan.get("integration_ci_status") != "pending":
+                    fail("v2 source-only plan must record pending integration CI")
+            elif plan.get("integration_ci_digest") != helper.integration_ci_digest(integration_identity):
                 fail("v2 integration CI digest does not match its identity")
+            helper._verified_review_applicability(plan.get("professional_review_applicability"))
+            if not re.fullmatch(r"sha256:[0-9a-f]{64}", str(plan.get("impact_projection_digest", ""))):
+                fail("v2 review plan lacks a verified impact projection digest")
         except (TypeError, ValueError) as exc:
             fail(f"invalid v2 review identity: {exc}")
     snapshot = validate_bootstrap_snapshot(root, snapshot_path, task_uid)

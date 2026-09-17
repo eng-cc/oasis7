@@ -249,6 +249,11 @@ fn drain_upstream_lines(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::simulator::WorldScenario;
+    use crate::viewer::{
+        VIEWER_PROTOCOL_VERSION, ViewerRequest, ViewerResponse, ViewerRuntimeLiveServer,
+        ViewerRuntimeLiveServerConfig, ViewerStream,
+    };
     use std::sync::mpsc;
     use std::time::Instant;
     use tungstenite::connect;
@@ -444,6 +449,144 @@ mod tests {
         first_client.join().expect("join first client");
         second_client.join().expect("join second client");
         upstream_thread.join().expect("join upstream thread");
+    }
+
+    #[test]
+    fn bridge_forwards_viewer_protocol_to_live_runtime_entrypoint() {
+        // PG5 boundary contract: the Viewer-facing WebSocket entrypoint must carry
+        // the same protocol request into the production live runtime handler. This
+        // test deliberately starts both production servers and drives the wire DTOs
+        // through the bridge; no test-only runtime model or fake upstream is involved.
+        let runtime_listener = TcpListener::bind("127.0.0.1:0").expect("bind runtime listener");
+        let runtime_addr = runtime_listener.local_addr().expect("runtime address");
+        drop(runtime_listener);
+        let runtime_addr_string = runtime_addr.to_string();
+        thread::spawn(move || {
+            let server = ViewerRuntimeLiveServer::new(
+                ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+                    .with_bind_addr(runtime_addr_string),
+            )
+            .expect("create live runtime server");
+            server.run().expect("run live runtime server");
+        });
+        wait_for_listener(runtime_addr);
+
+        let bridge_listener = TcpListener::bind("127.0.0.1:0").expect("bind bridge listener");
+        let bridge_addr = bridge_listener.local_addr().expect("bridge address");
+        drop(bridge_listener);
+        let bridge_addr_string = bridge_addr.to_string();
+        let runtime_addr_string = runtime_addr.to_string();
+        thread::spawn(move || {
+            let bridge = ViewerWebBridge::new(ViewerWebBridgeConfig::new(
+                bridge_addr_string,
+                runtime_addr_string,
+            ));
+            bridge.run().expect("run viewer web bridge");
+        });
+        wait_for_listener(bridge_addr);
+
+        let url = format!("ws://{bridge_addr}");
+        let (mut client, _) = connect(url.as_str()).expect("connect viewer websocket");
+        match client.get_mut() {
+            MaybeTlsStream::Plain(stream) => stream
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .expect("set websocket read timeout"),
+            _ => panic!("test uses a plain ws:// client"),
+        }
+
+        let send = |client: &mut tungstenite::WebSocket<MaybeTlsStream<TcpStream>>,
+                    request: ViewerRequest| {
+            let payload = serde_json::to_string(&request).expect("encode viewer request");
+            client
+                .send(Message::Text(payload.into()))
+                .expect("send viewer request through bridge");
+        };
+        let read_response =
+            |client: &mut tungstenite::WebSocket<MaybeTlsStream<TcpStream>>| -> ViewerResponse {
+                let deadline = Instant::now() + Duration::from_secs(5);
+                loop {
+                    assert!(
+                        Instant::now() < deadline,
+                        "timed out waiting for live runtime response through bridge"
+                    );
+                    match client
+                        .read()
+                        .expect("read live runtime response through bridge")
+                    {
+                        Message::Text(text) => {
+                            return serde_json::from_str(text.as_ref())
+                                .expect("decode live runtime response through bridge");
+                        }
+                        Message::Binary(bytes) => {
+                            return serde_json::from_slice(bytes.as_ref())
+                                .expect("decode binary live runtime response through bridge");
+                        }
+                        Message::Ping(payload) => {
+                            client
+                                .send(Message::Pong(payload))
+                                .expect("reply to websocket ping");
+                        }
+                        Message::Pong(_) => {}
+                        Message::Close(frame) => {
+                            panic!("live runtime bridge closed before response: {frame:?}")
+                        }
+                        Message::Frame(_) => {}
+                    }
+                }
+            };
+
+        send(
+            &mut client,
+            ViewerRequest::HelloV2 {
+                client: "pg5-boundary-test".to_string(),
+                version: VIEWER_PROTOCOL_VERSION,
+                capabilities: Vec::new(),
+            },
+        );
+        let hello = read_response(&mut client);
+        match hello {
+            ViewerResponse::HelloAck {
+                control_profile,
+                version,
+                ..
+            } => {
+                assert_eq!(control_profile, crate::viewer::ViewerControlProfile::Live);
+                assert_eq!(version, VIEWER_PROTOCOL_VERSION);
+            }
+            other => panic!("expected live hello ack through bridge, got {other:?}"),
+        }
+
+        send(
+            &mut client,
+            ViewerRequest::Subscribe {
+                streams: vec![ViewerStream::Snapshot],
+                event_kinds: Vec::new(),
+            },
+        );
+        send(&mut client, ViewerRequest::RequestSnapshot);
+        let initial_snapshot = loop {
+            match read_response(&mut client) {
+                ViewerResponse::Snapshot { snapshot } => break snapshot,
+                ViewerResponse::AuthoritativeRecoveryAck { .. } => continue,
+                other => panic!("expected snapshot through bridge, got {other:?}"),
+            }
+        };
+        assert!(
+            initial_snapshot.runtime_snapshot.is_some(),
+            "live runtime snapshot must cross the Viewer bridge"
+        );
+        // Snapshot sync also emits recovery metadata on the live protocol. Consume
+        // that production response before closing the Viewer session so the
+        // bridge exercises the complete initial sync response sequence.
+        loop {
+            if matches!(
+                read_response(&mut client),
+                ViewerResponse::AuthoritativeRecoveryAck { .. }
+            ) {
+                break;
+            }
+        }
+        client.close(None).expect("close viewer websocket");
     }
 
     #[test]

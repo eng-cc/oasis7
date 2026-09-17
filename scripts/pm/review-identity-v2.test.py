@@ -83,6 +83,8 @@ def v2_plan(source, accepted, applicability=None):
         "schema": "oasis7-review-plan/v2",
         "source_review_identity": source,
         "source_review_digest": MODULE.source_review_digest(source),
+        "impact_projection_schema": "oasis7-workflow-impact-projection/v2",
+        "impact_projection_digest": "sha256:" + "9" * 64,
         "integration_ci_identity": accepted,
         "integration_ci_digest": MODULE.integration_ci_digest(accepted),
         "integration_ci_provenance": {
@@ -119,33 +121,86 @@ class ReviewIdentityV2Test(unittest.TestCase):
             "schema": "oasis7-review-plan/v2",
             "source_review_identity": source,
             "source_review_digest": MODULE.source_review_digest(source),
+            "impact_projection_schema": "oasis7-workflow-impact-projection/v2",
+            "impact_projection_digest": "sha256:" + "9" * 64,
             "integration_ci_identity": accepted,
             "integration_ci_digest": MODULE.integration_ci_digest(accepted),
             "integration_ci_provenance": {
                 "live_validation": "ci-ready-receipt-live",
                 "trusted_integration_artifact": True,
             },
+            "professional_review_applicability": verified_applicability(source),
         }
         latest = integration_receipt(request_id=14, request_created_at="2026-09-11T01:00:00Z",
                                      run_id=15, run_attempt=1, check_run_id=16,
                                      integration_base_oid="8" * 40)
         self.assertTrue(MODULE.can_reuse_source_review(plan, latest))
 
-    def test_changed_tree_or_ci_authority_requires_new_review(self):
+    def test_authoritative_reuse_allows_target_tree_change_when_applicability_is_unchanged(self):
+        source = MODULE.source_review_identity(**source_fields())
+        accepted = MODULE.integration_ci_identity(integration_receipt())
+        plan = v2_plan(source, accepted)
+        latest = integration_receipt(
+            request_id=14, request_created_at="2026-09-11T01:00:00Z",
+            run_id=15, run_attempt=1, check_run_id=16,
+            integration_base_oid="8" * 40, tested_tree_oid="6" * 40,
+        )
+        self.assertTrue(MODULE.can_reuse_source_review(plan, latest))
+
+    def test_authoritative_reuse_rejects_ordinary_rerun(self):
+        source = MODULE.source_review_identity(**source_fields())
+        accepted = MODULE.integration_ci_identity(integration_receipt())
+        plan = v2_plan(source, accepted)
+        self.assertFalse(MODULE.can_reuse_source_review(
+            plan, integration_receipt(run_attempt=2, check_run_id=99)
+        ))
+
+    def test_source_only_plan_accepts_first_trusted_integration_join(self):
+        source = MODULE.source_review_identity(**source_fields())
+        plan = {
+            "schema": "oasis7-review-plan/v2",
+            "source_review_identity": source,
+            "source_review_digest": MODULE.source_review_digest(source),
+            "impact_projection_schema": "oasis7-workflow-impact-projection/v2",
+            "impact_projection_digest": "sha256:" + "9" * 64,
+            "professional_review_applicability": verified_applicability(source),
+        }
+        self.assertTrue(MODULE.can_reuse_source_review(plan, integration_receipt()))
+
+    def test_authoritative_reuse_fails_closed_without_verified_applicability(self):
+        source = MODULE.source_review_identity(**source_fields())
+        accepted = MODULE.integration_ci_identity(integration_receipt())
+        plan = v2_plan(source, accepted)
+        del plan["professional_review_applicability"]
+        latest = integration_receipt(
+            request_id=14, request_created_at="2026-09-11T01:00:00Z",
+            run_id=15, run_attempt=1, check_run_id=16,
+        )
+        self.assertFalse(MODULE.can_reuse_source_review(plan, latest))
+
+    def test_changed_ci_authority_requires_new_review_but_tree_drift_is_reusable(self):
         source = MODULE.source_review_identity(**source_fields())
         accepted = MODULE.integration_ci_identity(integration_receipt())
         plan = {
             "schema": "oasis7-review-plan/v2",
             "source_review_identity": source,
             "source_review_digest": MODULE.source_review_digest(source),
+            "impact_projection_schema": "oasis7-workflow-impact-projection/v2",
+            "impact_projection_digest": "sha256:" + "9" * 64,
             "integration_ci_identity": accepted,
             "integration_ci_digest": MODULE.integration_ci_digest(accepted),
             "integration_ci_provenance": {
                 "live_validation": "ci-ready-receipt-live",
                 "trusted_integration_artifact": True,
             },
+            "professional_review_applicability": verified_applicability(source),
         }
-        self.assertFalse(MODULE.can_reuse_source_review(plan, integration_receipt(tested_tree_oid="6" * 40)))
+        self.assertTrue(MODULE.can_reuse_source_review(
+            plan, integration_receipt(
+                request_id=14, request_created_at="2026-09-11T01:00:00Z",
+                run_id=15, check_run_id=16, tested_tree_oid="6" * 40,
+            )
+        ))
         self.assertFalse(MODULE.can_reuse_source_review(plan, integration_receipt(workflow_sha="7" * 40)))
         self.assertFalse(MODULE.can_reuse_source_review(plan, integration_receipt(conclusion="failure")))
         plan["integration_ci_identity"]["conclusion"] = "failure"
@@ -165,6 +220,7 @@ class ReviewIdentityV2Test(unittest.TestCase):
                 "live_validation": "ci-ready-receipt-live",
                 "trusted_integration_artifact": True,
             },
+            "professional_review_applicability": verified_applicability(source),
         }
         forged = integration_receipt(live_validation=None, trusted_integration_artifact=False)
         self.assertFalse(MODULE.can_reuse_source_review(plan, forged))

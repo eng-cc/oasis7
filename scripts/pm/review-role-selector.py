@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import json
+from pathlib import Path
 import re
 import sys
 
@@ -22,6 +24,16 @@ CANONICAL_REVIEW_ROLES = {
 }
 
 
+def load_impact_projection(path, expected):
+    helper_path = Path(__file__).with_name("workflow-impact-projection.py")
+    spec = importlib.util.spec_from_file_location("oasis7_workflow_impact_projection", helper_path)
+    if spec is None or spec.loader is None:
+        raise ValueError("impact projection adapter is unavailable")
+    helper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper)
+    return helper.load_verified_projection(path, expected=expected)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--change-class", required=True,
@@ -33,6 +45,8 @@ def main() -> int:
     parser.add_argument("--verification-affected", action="store_true")
     parser.add_argument("--changed-path-list",
                         help="semicolon-delimited paths; explicit risk classes require doc-only scope")
+    parser.add_argument("--impact-projection",
+                        help="verified digest-bound workflow impact projection")
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
     if args.manual_role and args.change_class not in {"unknown", "mixed"}:
@@ -46,6 +60,24 @@ def main() -> int:
         if non_docs:
             print("review-role-selector: explicit change class requires documentation-only paths: "
                   + ",".join(non_docs), file=sys.stderr)
+            return 2
+    projection = None
+    projection_expected = {}
+    if args.impact_projection:
+        if args.changed_path_list is None:
+            print("review-role-selector: impact projection requires --changed-path-list", file=sys.stderr)
+            return 2
+        projection_expected = {
+            "changed_paths": [path.strip() for path in args.changed_path_list.split(";") if path.strip()],
+            "change_class": args.change_class,
+            "manual_roles": args.manual_role,
+            "verification_affected": args.verification_affected,
+        }
+        projection_expected["domain_role"] = args.domain_role
+        try:
+            projection = load_impact_projection(args.impact_projection, projection_expected)
+        except Exception as exc:
+            print(f"review-role-selector: impact projection is invalid: {exc}", file=sys.stderr)
             return 2
     if args.change_class in {"unknown", "mixed"}:
         if not args.manual_role:
@@ -62,6 +94,17 @@ def main() -> int:
             seen.add(role)
         payload = {"change_class": args.change_class, "roles": args.manual_role,
                    "selection_mode": "manual", "verification_affected": args.verification_affected}
+        if projection is not None:
+            if payload["roles"] != projection["ordered_role_ids"]:
+                print("review-role-selector: impact projection role identity mismatch", file=sys.stderr)
+                return 2
+            payload.update({"impact_projection_schema": projection["schema"],
+                            "impact_projection_digest": projection["projection_digest"],
+                            "impact_projection_status": "verified",
+                            "test_profile": projection["test_profile"],
+                            "declared_tests": projection["declared_tests"],
+                            "planner_config_sha256": projection["planner_config_sha256"],
+                            "planner_digest": projection["planner_digest"]})
         print(json.dumps(payload, sort_keys=True) if args.json else ",".join(args.manual_role))
         return 0
     roles = ["repository_health_engineer"]
@@ -81,6 +124,20 @@ def main() -> int:
             roles.append("qa_engineer")
     payload = {"change_class": args.change_class, "roles": roles, "selection_mode": "classified",
                "verification_affected": args.verification_affected}
+    if projection is not None:
+        if roles != projection["ordered_role_ids"]:
+            print("review-role-selector: impact projection role identity mismatch", file=sys.stderr)
+            return 2
+        if bool(projection.get("verification_affected")) != args.verification_affected:
+            print("review-role-selector: impact projection verification identity mismatch", file=sys.stderr)
+            return 2
+        payload.update({"impact_projection_schema": projection["schema"],
+                        "impact_projection_digest": projection["projection_digest"],
+                        "impact_projection_status": "verified",
+                        "test_profile": projection["test_profile"],
+                        "declared_tests": projection["declared_tests"],
+                        "planner_config_sha256": projection["planner_config_sha256"],
+                        "planner_digest": projection["planner_digest"]})
     print(json.dumps(payload, sort_keys=True) if args.json else ",".join(roles))
     return 0
 

@@ -45,6 +45,13 @@ INTEGRATION_REUSE_FIELDS = (
     "repository", "task_uid", "pr_number", "source_head_oid",
     "workflow_ref", "workflow_sha", "check_app_id", "planner_digest", "tested_tree_oid",
 )
+# Execution provenance remains an authority boundary, but target-derived tree
+# identity is not a professional-review applicability boundary.  A target
+# revalidation may therefore produce a different tested tree while retaining
+# the same trusted workflow/check/planner authority and source applicability.
+INTEGRATION_AUTHORITY_REUSE_FIELDS = tuple(
+    field for field in INTEGRATION_REUSE_FIELDS if field != "tested_tree_oid"
+)
 
 
 def _require_oid(value: Any, field: str) -> str:
@@ -494,32 +501,77 @@ def shadow_source_review_applicability(
 def can_reuse_source_review(
     plan: dict[str, Any], latest_receipt: dict[str, Any],
     current_source_identity: dict[str, Any] | None = None,
+    current_applicability: dict[str, Any] | None = None,
+    *, require_fresh_integration: bool = True,
 ) -> bool:
-    """Return whether latest integration proves safe v2 source-review reuse."""
+    """Return whether trusted integration proves safe source-review reuse.
+
+    ``tested_tree_oid`` belongs to integration execution provenance and is
+    retained in the receipt/audit digest, but it is not a source-review reuse
+    boundary.  Applicability is independently verified and digest-bound.  A
+    complete plan still requires a fresh integration identity on the
+    promotion/closeout path; ``require_fresh_integration=False`` is reserved
+    for idempotent plan lookup while creating or refreshing an immutable plan.
+    """
     try:
         if plan.get("schema") != SOURCE_REVIEW_SCHEMA:
-            return False
-        if plan.get("integration_ci_provenance") != {
-            "live_validation": "ci-ready-receipt-live",
-            "trusted_integration_artifact": True,
-        }:
             return False
         if not has_live_integration_attestation(latest_receipt):
             return False
         source = _validate_source_identity(plan.get("source_review_identity"))
         if plan.get("source_review_digest") != source_review_digest(source):
             return False
+        if plan.get("impact_projection_schema") != "oasis7-workflow-impact-projection/v2":
+            return False
+        if not isinstance(plan.get("impact_projection_digest"), str) or not re.fullmatch(
+                r"sha256:[0-9a-f]{64}", plan["impact_projection_digest"]):
+            return False
         if current_source_identity is not None and _validate_source_identity(current_source_identity) != source:
             return False
-        accepted = integration_ci_identity(plan.get("integration_ci_identity"))
-        if plan.get("integration_ci_digest") != integration_ci_digest(accepted):
+        accepted_raw = plan.get("integration_ci_identity")
+        accepted: dict[str, Any] | None = None
+        if accepted_raw is not None:
+            accepted = integration_ci_identity(accepted_raw)
+            if plan.get("integration_ci_digest") != integration_ci_digest(accepted):
+                return False
+            if accepted.get("conclusion") != "success":
+                return False
+        applicability = _verified_review_applicability(
+            plan.get("professional_review_applicability")
+        )
+        if applicability != review_applicability_identity(source):
             return False
-        if accepted.get("conclusion") != "success":
-            return False
+        if current_applicability is not None:
+            if _verified_review_applicability(current_applicability) != applicability:
+                return False
         latest = integration_ci_identity(latest_receipt)
         if latest.get("conclusion") != "success":
             return False
-        return all(latest.get(field) == accepted.get(field) for field in INTEGRATION_REUSE_FIELDS)
+        if (latest["repository"] != source["repository"]
+                or latest["task_uid"] != source["task_uid"]
+                or latest["pr_number"] != source["pr_number"]
+                or latest["source_head_oid"] != source["source_head_oid"]):
+            return False
+        if accepted is None:
+            # This is the first trusted integration join for a source-only
+            # plan. There is no prior execution identity to compare, but all
+            # receipt fields above are still shape- and provenance-validated.
+            return True
+        if not all(latest.get(field) == accepted.get(field)
+                   for field in INTEGRATION_AUTHORITY_REUSE_FIELDS):
+            return False
+        if latest == accepted:
+            # A plan created from this exact successful receipt may complete
+            # its first join idempotently; freshness is required only when a
+            # later integration identity asks to reuse the source review.
+            return True
+        if require_fresh_integration:
+            freshness_fields = (
+                "request_id", "request_created_at", "run_id",
+            )
+            if not any(latest.get(field) != accepted.get(field) for field in freshness_fields):
+                return False
+        return True
     except (TypeError, ValueError, KeyError):
         return False
 

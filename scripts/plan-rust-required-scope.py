@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Fail-closed config-driven required-gate planner."""
-import argparse, fnmatch, hashlib, json, re, subprocess, sys
+import argparse, fnmatch, hashlib, importlib.util, json, re, subprocess, sys
 from pathlib import Path
 
 CAPABILITIES=("oasis7_required","consensus","distfs","node","net","viewer_js_required","viewer_performance_report","pixel_world_bridge","launcher_web","workspace_support","scenario_regression","operational_contracts","packaging_contracts","workflow_governance","codex_agent_config_validation","compile_metrics","required_gate_baseline","site_quality")
@@ -10,6 +10,17 @@ CAPABILITIES=("oasis7_required","consensus","distfs","node","net","viewer_js_req
 FIELDS={"oasis7_required":"run_oasis7_required_tests","consensus":"run_consensus_tests","distfs":"run_distfs_tests","node":"run_oasis7_node_tests","net":"run_oasis7_net_tests","viewer_js_required":"run_viewer_contract_tests","viewer_performance_report":"run_viewer_perf_smoke","pixel_world_bridge":"run_pixel_world_bridge_lib_tests","launcher_web":"run_launcher_web_build","workspace_support":"run_oasis7_workspace_support_crate_tests","scenario_regression":"run_scenario_regression","operational_contracts":"run_operational_contracts","packaging_contracts":"run_operational_contracts","workflow_governance":"run_operational_contracts","codex_agent_config_validation":"run_codex_agent_config_validation","compile_metrics":"run_compile_metrics_contract_tests","required_gate_baseline":"run_required_gate_baseline","site_quality":"run_site_contract_tests"}
 PLANNER_OUTPUT_FIELDS=set(FIELDS.values())|{"run_oasis7_net_libp2p_tests","run_viewer_wasm_check","run_pixel_world_bridge_wasm_check","run_rust_baseline"}
 def die(m): raise SystemExit("plan-rust-required-scope: "+m)
+
+def load_impact_projection(path, expected_paths):
+  helper_path=Path(__file__).parent / "pm" / "workflow-impact-projection.py"
+  spec=importlib.util.spec_from_file_location("oasis7_workflow_impact_projection", helper_path)
+  if spec is None or spec.loader is None: die("impact projection adapter is unavailable")
+  helper=importlib.util.module_from_spec(spec); spec.loader.exec_module(helper)
+  try:
+    value=helper.load_verified_projection(path, expected={"changed_paths": expected_paths})
+  except Exception as exc:
+    die(f"impact projection is invalid: {exc}")
+  return value
 def config(path):
   try: raw=Path(path).read_bytes(); c=json.loads(raw)
   except Exception as e: die(f"invalid config: {e}")
@@ -59,8 +70,12 @@ def git_paths(a):
     paths.extend(p if len(p)>1 else p[:1])
   return paths
 def main():
- p=argparse.ArgumentParser(); p.add_argument("--event-name",required=True);p.add_argument("--base-ref");p.add_argument("--head-ref");p.add_argument("--changed-path",action="append",default=[]);p.add_argument("--github-output");p.add_argument("--config",default=str(Path(__file__).with_name("ci-required-scope.v2.json")));a=p.parse_args()
- c,digest=config(a.config); paths=a.changed_path or git_paths(a); full=a.event_name=="workflow_dispatch" or paths is None; capabilities=set(); explicit_rust=False; reasons=["required_gate_baseline:always_on"]
+ p=argparse.ArgumentParser(); p.add_argument("--event-name",required=True);p.add_argument("--base-ref");p.add_argument("--head-ref");p.add_argument("--changed-path",action="append",default=[]);p.add_argument("--github-output");p.add_argument("--config",default=str(Path(__file__).with_name("ci-required-scope.v2.json")));p.add_argument("--impact-projection",help="verified digest-bound workflow impact projection");a=p.parse_args()
+ c,digest=config(a.config); paths=a.changed_path or git_paths(a); projection=None
+ if a.impact_projection:
+  if paths is None: die("impact projection requires resolvable changed paths")
+  projection=load_impact_projection(a.impact_projection, paths)
+ full=a.event_name=="workflow_dispatch" or paths is None or (projection is not None and projection["test_profile"]=="full"); capabilities=set(); explicit_rust=False; reasons=["required_gate_baseline:always_on"]
  if paths is None: paths=[]; reasons.append("unresolvable_changed_paths")
  for path in paths:
   hits=[r for r in c["rules"] if any(fnmatch.fnmatchcase(path,x) for x in r["match"])]
@@ -77,6 +92,13 @@ def main():
  vals["run_required_gate_baseline"]="true"
  requires_rust=full or explicit_rust or bool(capabilities-{"workflow_governance","codex_agent_config_validation","compile_metrics","viewer_performance_report","operational_contracts","packaging_contracts","site_quality"})
  vals.update({"run_oasis7_net_libp2p_tests":vals["run_oasis7_net_tests"],"run_viewer_wasm_check":vals["run_viewer_contract_tests"],"run_pixel_world_bridge_wasm_check":vals["run_pixel_world_bridge_lib_tests"],"run_rust_baseline":"true" if requires_rust else "false","needs_rust_toolchain":"true" if requires_rust else "false","needs_node":"true" if capabilities & {"viewer_js_required","viewer_performance_report","launcher_web"} else "false","needs_system_deps":"true" if capabilities & {"oasis7_required","viewer_js_required","viewer_performance_report","pixel_world_bridge","launcher_web"} else "false","needs_wasm_target":"true" if capabilities & {"pixel_world_bridge","launcher_web"} else "false","needs_trunk":"true" if "launcher_web" in capabilities else "false","planner_config_sha256":digest,"selected_capabilities":";".join(sorted(capabilities or {"required_gate_baseline"})),"scope":"full" if full else ("targeted" if capabilities else "minimal"),"reason_summary":";".join(dict.fromkeys(reasons)),"changed_path_count":str(len(paths)),"changed_paths":";".join(paths)})
+ if projection is not None:
+  actual_capabilities=sorted(capabilities or {"required_gate_baseline"})
+  actual_scope=vals["scope"]
+  if projection["planner_config_sha256"] != digest: die("impact projection planner config identity mismatch")
+  if projection["ci_scope"] != actual_scope: die("impact projection planner scope identity mismatch")
+  if projection["ci_capabilities"] != actual_capabilities: die("impact projection planner capabilities identity mismatch")
+  vals.update({"impact_projection_schema":projection["schema"],"impact_projection_digest":projection["projection_digest"],"impact_projection_status":"verified","test_profile":projection["test_profile"],"declared_tests":";".join(projection["declared_tests"]),"planner_digest":projection["planner_digest"]})
  text="\n".join(f"{k}={v}" for k,v in vals.items())+"\n"
  if a.github_output: Path(a.github_output).open("a").write(text)
  else: print(text,end="")

@@ -195,6 +195,7 @@ print(json.dumps(receipt))
             "tested_tree_oid": "d" * 40,
         }
         integration = identity.integration_ci_identity(receipt)
+        applicability_identity = identity.review_applicability_identity(source)
         plan = {
             "schema": "oasis7-review-plan/v2",
             "task_uid": UID,
@@ -202,6 +203,13 @@ print(json.dumps(receipt))
             "roles": ["qa_engineer"],
             "source_review_identity": source,
             "source_review_digest": identity.source_review_digest(source),
+            "professional_review_applicability": {
+                "identity": applicability_identity,
+                "identity_digest": identity.review_applicability_digest(applicability_identity),
+                "verified": True,
+            },
+            "impact_projection_schema": "oasis7-workflow-impact-projection/v2",
+            "impact_projection_digest": "sha256:" + "8" * 64,
             "integration_ci_identity": integration,
             "integration_ci_digest": identity.integration_ci_digest(integration),
             "integration_ci_provenance": {
@@ -251,7 +259,7 @@ print(json.dumps(receipt))
         self.assertEqual((self.root / "ci-calls.log").read_text(), "called\n")
         self.assertEqual((self.root / "events.log").read_text(), "")
 
-    def test_newer_dispatch_tree_cannot_reuse_source_review(self):
+    def test_newer_explicit_dispatch_may_reuse_source_review_across_target_tree_drift(self):
         receipt = json.loads(self.receipt.read_text(encoding="utf-8"))
         receipt.update(
             {
@@ -264,9 +272,9 @@ print(json.dumps(receipt))
         )
         self.receipt.write_text(json.dumps(receipt), encoding="utf-8")
         result = self._run_closeout("changed-tree")
-        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual((self.root / "ci-calls.log").read_text(), "called\n")
-        self.assertEqual((self.root / "events.log").read_text(), "")
+        self.assertEqual((self.root / "events.log").read_text(), "claim\ntransition\n")
 
     def test_current_generation_allows_v2_closeout(self):
         result = self._run_closeout("same")

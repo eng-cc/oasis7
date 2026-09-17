@@ -82,6 +82,11 @@ assert_key_equals "$product_doc_output" needs_node false
 assert_key_matches "$product_doc_output" planner_config_sha256 '^sha256:[0-9a-f]{64}$'
 assert_reason_contains "$product_doc_output" "governance_doc:doc/product/world-rules-core-gameplay.prd.md"
 
+if ! "$ROOT_DIR/scripts/plan-rust-required-scope.sh" --help | grep -Fq -- '--impact-projection'; then
+  echo "required-scope planner must expose the digest-bound impact projection adapter" >&2
+  exit 1
+fi
+
 site_output="$(plan_for_path site/index.html)"
 assert_key_equals "$site_output" scope targeted
 assert_key_equals "$site_output" selected_capabilities site_quality

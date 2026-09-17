@@ -35,10 +35,15 @@ class WorkflowImpactProjectionTests(unittest.TestCase):
     @staticmethod
     def base_input() -> dict[str, object]:
         return {
+            "task_uid": "task_" + "1" * 32,
+            "source_head_oid": "a" * 40,
+            "scope_base_oid": "b" * 40,
             "changed_paths": ["doc/product/world-rules-core-gameplay.prd.md"],
             "change_class": "workflow-doc",
             "manual_roles": [],
             "domain_role": None,
+            "test_profile": "required",
+            "declared_tests": ["required_gate_baseline"],
             "consumed_contracts": [{"id": "workflow-contract", "revision": "v1"}],
             "public_semantics": [],
             "affected_consumers": ["required-ci"],
@@ -49,7 +54,15 @@ class WorkflowImpactProjectionTests(unittest.TestCase):
         first = json.loads(self.run_projection(self.base_input()).stdout)
         second = json.loads(self.run_projection(self.base_input()).stdout)
 
-        self.assertEqual("oasis7-workflow-impact-projection/v1", first["schema"])
+        self.assertEqual("oasis7-workflow-impact-projection/v2", first["schema"])
+        self.assertEqual("task_" + "1" * 32, first["task_uid"])
+        self.assertEqual("a" * 40, first["source_head_oid"])
+        self.assertEqual("b" * 40, first["scope_base_oid"])
+        self.assertEqual("required", first["test_profile"])
+        self.assertEqual(["required_gate_baseline"], first["declared_tests"])
+        self.assertRegex(first["planner_config_sha256"], r"^sha256:[0-9a-f]{64}$")
+        self.assertRegex(first["planner_digest"], r"^sha256:[0-9a-f]{64}$")
+        self.assertEqual(first["review_roles"], first["ordered_role_ids"])
         self.assertEqual("minimal", first["ci_scope"])
         self.assertEqual(["required_gate_baseline"], first["ci_capabilities"])
         self.assertEqual(
@@ -123,6 +136,20 @@ class WorkflowImpactProjectionTests(unittest.TestCase):
         del payload["consumed_contracts"]
         result = self.run_projection(payload, ok=False)
         self.assertIn("consumed_contracts", result.stderr)
+
+    def test_missing_identity_and_test_contract_fields_fail_closed(self) -> None:
+        for field in ("task_uid", "source_head_oid", "scope_base_oid", "test_profile", "declared_tests"):
+            with self.subTest(field=field):
+                payload = self.base_input()
+                del payload[field]
+                result = self.run_projection(payload, ok=False)
+                self.assertIn(field, result.stderr)
+
+    def test_unknown_test_profile_does_not_authorize_a_narrow_projection(self) -> None:
+        payload = self.base_input()
+        payload["test_profile"] = "unknown"
+        result = self.run_projection(payload, ok=False)
+        self.assertIn("test_profile", result.stderr)
 
 
 if __name__ == "__main__":

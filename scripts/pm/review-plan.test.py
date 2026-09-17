@@ -18,6 +18,12 @@ _SPEC = importlib.util.spec_from_file_location("review_plan_under_test", SCRIPT)
 assert _SPEC is not None and _SPEC.loader is not None
 REVIEW_PLAN = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(REVIEW_PLAN)
+_PROJECTION_SPEC = importlib.util.spec_from_file_location(
+    "workflow_impact_projection_under_test", Path(__file__).with_name("workflow-impact-projection.py")
+)
+assert _PROJECTION_SPEC and _PROJECTION_SPEC.loader
+WORKFLOW_IMPACT = importlib.util.module_from_spec(_PROJECTION_SPEC)
+_PROJECTION_SPEC.loader.exec_module(WORKFLOW_IMPACT)
 TASK = "task_" + "1" * 32
 EVIDENCE = "b" * 64
 COMPARISON_REF = "refs/remotes/origin/main"
@@ -63,6 +69,7 @@ class ReviewPlanTests(unittest.TestCase):
         result = subprocess.run(
              [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
               "--head", self.head, "--evidence-digest", EVIDENCE,
+             "--review-schema", REVIEW_PLAN.SCHEMA,
              "--change-class", "workflow-doc", "--comparison-ref", self.comparison_ref,
              "--comparison-oid", self.comparison_oid, "--out", str(self.out), *extra],
             text=True,
@@ -81,6 +88,7 @@ class ReviewPlanTests(unittest.TestCase):
         result = subprocess.run(
             [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK, "--head", self.head,
              "--ci-ready-receipt", str(receipt), "--change-class", "workflow-doc",
+             "--review-schema", REVIEW_PLAN.SCHEMA,
              "--comparison-ref", self.comparison_ref, "--comparison-oid", self.comparison_oid,
              "--out", str(out)], text=True, capture_output=True,
         )
@@ -127,6 +135,100 @@ class ReviewPlanTests(unittest.TestCase):
             "run_rust_baseline": True, "conclusion": "success",
             "observed_at": "2026-01-01T00:00:00Z",
         }))
+
+    def write_impact_projection(self, path: Path) -> str:
+        projection = WORKFLOW_IMPACT.build_projection(self.root, {
+            "task_uid": TASK, "source_head_oid": self.head,
+            "scope_base_oid": self.comparison_oid, "changed_paths": ["README"],
+            "change_class": "workflow-doc", "manual_roles": [], "domain_role": None,
+            "test_profile": "required", "declared_tests": ["required_gate_baseline"],
+            "consumed_contracts": ["workflow-contract"], "public_semantics": [],
+            "affected_consumers": ["required-ci"],
+            "closure_status": {"status": "complete", "reason": "fixture"},
+        })
+        path.write_text(json.dumps(projection), encoding="utf-8")
+        return str(projection["changed_paths_digest"]).removeprefix("sha256:")
+
+    def write_source_review_input(self, path: Path, *, changed_paths_digest: str | None = None) -> Path:
+        projection_path = path.with_name(path.stem + "-impact.json")
+        projected_digest = self.write_impact_projection(projection_path)
+        changed_paths_digest = changed_paths_digest or projected_digest
+        path.write_text(json.dumps({
+            "schema": "oasis7-review-source-input/v1",
+            "task_uid": TASK,
+            "bootstrap_epoch": 1,
+            "repository": "example/repo",
+            "pr_number": 2,
+            "source_head_oid": self.head,
+            "source_scope_oid": self.comparison_oid,
+            "changed_paths_digest": changed_paths_digest,
+            "ordered_role_ids": ["repository_health_engineer", "qa_engineer"],
+            "role_contract_digest": "1" * 64,
+            "review_policy_digest": "2" * 64,
+            "input_contract_digest": "3" * 64,
+        }), encoding="utf-8")
+        return projection_path
+
+    def source_plan(self, *, out: Path | None = None, input_path: Path | None = None,
+                    ok: bool = True) -> dict[str, object] | subprocess.CompletedProcess[str]:
+        input_path = input_path or (self.root / "source-review-input.json")
+        if not input_path.exists():
+            projection_path = self.write_source_review_input(input_path)
+        else:
+            projection_path = input_path.with_name(input_path.stem + "-impact.json")
+        command = [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
+                   "--head", self.head, "--review-schema", REVIEW_PLAN.V2_SCHEMA,
+                   "--source-review-input", str(input_path),
+                   "--impact-projection", str(projection_path),
+                   "--change-class", "workflow-doc", "--comparison-ref", self.comparison_ref,
+                   "--comparison-oid", self.comparison_oid,
+                   "--out", str(out or (self.root / "v2-source-plan.json"))]
+        result = subprocess.run(command, text=True, capture_output=True)
+        if not ok:
+            if result.returncode == 0:
+                self.fail(f"source plan unexpectedly passed: {result.stdout}")
+            return result
+        self.assertEqual(0, result.returncode, result.stderr)
+        return json.loads(result.stdout)
+
+    def test_default_entry_creates_v2_source_plan_before_ci(self) -> None:
+        input_path = self.root / "default-source-input.json"
+        projection_path = self.write_source_review_input(input_path)
+        result = subprocess.run(
+            [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
+             "--head", self.head, "--source-review-input", str(input_path),
+             "--impact-projection", str(projection_path),
+             "--change-class", "workflow-doc", "--comparison-ref", self.comparison_ref,
+             "--comparison-oid", self.comparison_oid,
+             "--out", str(self.root / "default-v2-plan.json")],
+            text=True, capture_output=True,
+        )
+        self.assertEqual(0, result.returncode, result.stderr)
+        plan = json.loads(result.stdout)
+        self.assertEqual(REVIEW_PLAN.V2_SCHEMA, plan["schema"])
+        self.assertEqual(REVIEW_PLAN.V2_SCHEMA, plan["effective_mode"]["review_schema"])
+        self.assertEqual("separated", plan["effective_mode"]["source_review_mode"])
+        self.assertIsNone(plan.get("integration_ci_identity"))
+        self.assertEqual("pending", plan["integration_ci_status"])
+
+    def test_default_v2_entry_rejects_legacy_evidence_digest(self) -> None:
+        result = subprocess.run(
+            [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
+             "--head", self.head, "--evidence-digest", EVIDENCE,
+             "--change-class", "workflow-doc", "--comparison-ref", self.comparison_ref,
+             "--comparison-oid", self.comparison_oid,
+             "--out", str(self.root / "legacy-default-plan.json")],
+            text=True, capture_output=True,
+        )
+        self.assertNotEqual(0, result.returncode)
+        self.assertRegex(result.stderr, r"source-review-input|legacy.*v2|CI receipt")
+
+    def test_v2_source_plan_reuses_only_its_immutable_source_identity(self) -> None:
+        first = self.source_plan()
+        retry = self.source_plan()
+        self.assertTrue(retry["reused"])
+        self.assertEqual(first["epoch"], retry["epoch"])
+        self.assertNotIn("integration_ci_identity", first)
 
     def test_ci_receipt_refresh_reuses_review_epoch_but_authority_drift_does_not(self) -> None:
         authority = {"receipt_type": "oasis7_ci_ready_receipt", "issuer": "github_live_query",
@@ -230,6 +332,7 @@ class ReviewPlanTests(unittest.TestCase):
         result = subprocess.run(
              [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
               "--head", self.head, "--evidence-digest", EVIDENCE,
+             "--review-schema", REVIEW_PLAN.SCHEMA,
              "--change-class", "workflow-doc", "--comparison-ref", self.comparison_ref,
              "--comparison-oid", self.comparison_oid, "--out", str(alternate_out)],
             text=True,
@@ -284,6 +387,7 @@ class ReviewPlanTests(unittest.TestCase):
                 result = subprocess.run(
                     [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
                      "--head", self.head, "--evidence-digest", EVIDENCE,
+                     "--review-schema", REVIEW_PLAN.SCHEMA,
                      "--change-class", "workflow-doc", "--comparison-ref", self.comparison_ref,
                      "--comparison-oid", self.comparison_oid, *args],
                     text=True,
@@ -314,6 +418,7 @@ class ReviewPlanTests(unittest.TestCase):
         result = subprocess.run(
             [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
              "--head", self.head, "--evidence-digest", EVIDENCE,
+             "--review-schema", REVIEW_PLAN.SCHEMA,
              "--change-class", "workflow-doc", "--comparison-ref", shorthand,
              "--comparison-oid", self.comparison_oid,
              "--out", str(self.root / "shorthand-comparison-plan.json")],
@@ -337,6 +442,7 @@ class ReviewPlanTests(unittest.TestCase):
         result = subprocess.run(
             [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
              "--head", self.head, "--evidence-digest", EVIDENCE,
+             "--review-schema", REVIEW_PLAN.SCHEMA,
              "--change-class", "workflow-doc", "--comparison-ref", "origin/main",
              "--out", str(out)],
             text=True,
@@ -397,6 +503,7 @@ class ReviewPlanTests(unittest.TestCase):
         result = subprocess.run(
             [str(SCRIPT), "--root", str(self.root), "--task-uid", TASK, "--head", self.head,
              "--ci-ready-receipt", str(receipt), "--change-class", "workflow-doc",
+             "--review-schema", REVIEW_PLAN.SCHEMA,
              "--comparison-ref", self.comparison_ref, "--out", str(self.out)],
             text=True, capture_output=True,
         )

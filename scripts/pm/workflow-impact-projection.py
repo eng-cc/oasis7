@@ -13,17 +13,27 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 import subprocess
 import sys
 from typing import Any, Optional
 
 
-SCHEMA = "oasis7-workflow-impact-projection/v1"
+SCHEMA = "oasis7-workflow-impact-projection/v2"
+SUPPORTED_SCHEMAS = {SCHEMA}
+TASK_RE = re.compile(r"task_[0-9a-f]{32}\Z")
+OID_RE = re.compile(r"[0-9a-f]{40,64}\Z")
+TEST_PROFILES = {"required", "full"}
 INPUT_FIELDS = {
+    "task_uid",
+    "source_head_oid",
+    "scope_base_oid",
     "changed_paths",
     "change_class",
     "manual_roles",
     "domain_role",
+    "test_profile",
+    "declared_tests",
     "consumed_contracts",
     "public_semantics",
     "affected_consumers",
@@ -45,6 +55,18 @@ class ProjectionError(ValueError):
     """An input or repository-owned helper contract cannot be trusted."""
 
 
+PROJECTION_FIELDS = {
+    "schema", "task_uid", "source_head_oid", "scope_base_oid",
+    "changed_paths", "changed_paths_digest", "change_class", "manual_roles",
+    "domain_role", "test_profile", "declared_tests", "consumed_contracts",
+    "public_semantics", "affected_consumers", "closure_status",
+    "ci_scope", "ci_capabilities", "ci_reasons", "review_roles",
+    "ordered_role_ids", "review_scope", "review_escalated", "review_reasons",
+    "planner_config_sha256", "planner_identity", "planner_digest",
+    "verification_affected", "projection_digest",
+}
+
+
 def canonical_bytes(value: object) -> bytes:
     return json.dumps(
         value, ensure_ascii=False, sort_keys=True, separators=(",", ":")
@@ -53,6 +75,124 @@ def canonical_bytes(value: object) -> bytes:
 
 def canonical_digest(value: object) -> str:
     return "sha256:" + hashlib.sha256(canonical_bytes(value)).hexdigest()
+
+
+def _require_identity_string(value: object, pattern: re.Pattern[str], field: str) -> str:
+    if not isinstance(value, str) or not pattern.fullmatch(value):
+        raise ProjectionError(f"{field} is not a valid immutable identity")
+    return value
+
+
+def _require_digest(value: object, field: str) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", value):
+        raise ProjectionError(f"{field} is not a valid SHA-256 digest")
+    return value
+
+
+def _validate_projection_digest(value: dict[str, Any]) -> None:
+    actual = value.get("projection_digest")
+    if actual is None:
+        raise ProjectionError("impact projection digest is missing")
+    body = {key: item for key, item in value.items() if key != "projection_digest"}
+    if actual != canonical_digest(body):
+        raise ProjectionError("impact projection digest mismatch")
+
+
+def _validate_planner_identity(value: dict[str, Any]) -> None:
+    planner = value.get("planner_identity")
+    if not isinstance(planner, dict):
+        raise ProjectionError("impact projection planner identity is missing")
+    expected = {"schema", "planner_config_sha256", "scope", "selected_capabilities",
+                "test_profile", "declared_tests"}
+    if set(planner) != expected:
+        raise ProjectionError("impact projection planner identity has unknown or missing fields")
+    if planner["schema"] != "oasis7-required-plan-v1":
+        raise ProjectionError("impact projection planner schema is unsupported")
+    _require_digest(planner["planner_config_sha256"], "planner_config_sha256")
+    if planner["scope"] not in {"minimal", "targeted", "full"}:
+        raise ProjectionError("impact projection planner scope is invalid")
+    if (not isinstance(planner["selected_capabilities"], list)
+            or planner["selected_capabilities"] != sorted(set(planner["selected_capabilities"]))
+            or any(not isinstance(item, str) or not item for item in planner["selected_capabilities"])):
+        raise ProjectionError("impact projection planner capabilities are invalid")
+    if planner["test_profile"] not in TEST_PROFILES:
+        raise ProjectionError("impact projection test profile is invalid")
+    if (not isinstance(planner["declared_tests"], list)
+            or planner["declared_tests"] != sorted(set(planner["declared_tests"]))
+            or any(not isinstance(item, str) or not item.strip() for item in planner["declared_tests"])):
+        raise ProjectionError("impact projection declared tests are invalid")
+    if planner["planner_config_sha256"] != value.get("planner_config_sha256"):
+        raise ProjectionError("impact projection planner config identity mismatch")
+    if planner["scope"] != value.get("ci_scope"):
+        raise ProjectionError("impact projection planner scope identity mismatch")
+    if planner["selected_capabilities"] != value.get("ci_capabilities"):
+        raise ProjectionError("impact projection planner capabilities identity mismatch")
+    if planner["test_profile"] != value.get("test_profile"):
+        raise ProjectionError("impact projection planner test profile identity mismatch")
+    if planner["declared_tests"] != value.get("declared_tests"):
+        raise ProjectionError("impact projection planner declared tests identity mismatch")
+    if value.get("planner_digest") != canonical_digest(planner):
+        raise ProjectionError("impact projection planner digest mismatch")
+
+
+def load_verified_projection(
+    path: Path | str,
+    *,
+    expected: Optional[dict[str, Any]] = None,
+) -> dict[str, Any]:
+    """Load one immutable projection and fail closed on any identity drift.
+
+    Consumers must call this function instead of decoding projection JSON
+    themselves.  ``expected`` may bind task/head/base/path/class/roles to the
+    caller's current identity.  A projection is never a source of authority by
+    itself; it only permits consumers to use the same already-derived scope.
+    """
+    projection_path = Path(path).resolve()
+    try:
+        value = json.loads(projection_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ProjectionError(f"cannot read valid impact projection: {exc}") from exc
+    if not isinstance(value, dict):
+        raise ProjectionError("impact projection must be an object")
+    if value.get("schema") not in SUPPORTED_SCHEMAS:
+        raise ProjectionError("impact projection schema is unsupported")
+    unknown = sorted(set(value) - PROJECTION_FIELDS)
+    if unknown:
+        raise ProjectionError("impact projection has unknown fields: " + ",".join(unknown))
+    _require_identity_string(value.get("task_uid"), TASK_RE, "task_uid")
+    _require_identity_string(value.get("source_head_oid"), OID_RE, "source_head_oid")
+    _require_identity_string(value.get("scope_base_oid"), OID_RE, "scope_base_oid")
+    paths = normalize_changed_paths(value.get("changed_paths"))
+    if value.get("changed_paths_digest") != canonical_digest(paths):
+        raise ProjectionError("impact projection changed paths digest mismatch")
+    if value.get("test_profile") not in TEST_PROFILES:
+        raise ProjectionError("impact projection test profile is invalid")
+    declared_tests = value.get("declared_tests")
+    if (not isinstance(declared_tests, list)
+            or not declared_tests
+            or declared_tests != sorted(set(declared_tests))
+            or any(not isinstance(item, str) or not item.strip() for item in declared_tests)):
+        raise ProjectionError("impact projection declared tests are invalid")
+    roles = value.get("review_roles")
+    if (not isinstance(roles, list) or not roles
+            or roles != value.get("ordered_role_ids")
+            or len(roles) != len(set(roles))
+            or any(not isinstance(role, str) or not role.strip() for role in roles)):
+        raise ProjectionError("impact projection ordered review roles are invalid")
+    _require_digest(value.get("planner_config_sha256"), "planner_config_sha256")
+    _validate_planner_identity(value)
+    _validate_projection_digest(value)
+    if expected:
+        for field in ("task_uid", "source_head_oid", "scope_base_oid", "change_class",
+                      "domain_role", "manual_roles", "verification_affected",
+                      "test_profile", "changed_paths_digest", "ordered_role_ids"):
+            if field in expected and value.get(field) != expected[field]:
+                raise ProjectionError(f"impact projection {field} identity mismatch")
+        if "changed_paths" in expected:
+            expected_paths = normalize_changed_paths(expected["changed_paths"])
+            if value["changed_paths"] != expected_paths:
+                raise ProjectionError("impact projection changed paths identity mismatch")
+    return value
 
 
 def unique_preserving_order(values: list[str]) -> list[str]:
@@ -245,6 +385,9 @@ def run_role_selector(
 
 
 def build_projection(root: Path, value: dict[str, Any]) -> dict[str, Any]:
+    task_uid = _require_identity_string(value["task_uid"], TASK_RE, "task_uid")
+    source_head_oid = _require_identity_string(value["source_head_oid"], OID_RE, "source_head_oid")
+    scope_base_oid = _require_identity_string(value["scope_base_oid"], OID_RE, "scope_base_oid")
     paths = normalize_changed_paths(value["changed_paths"])
     change_class = value["change_class"]
     if not isinstance(change_class, str) or change_class not in CHANGE_CLASSES:
@@ -263,6 +406,13 @@ def build_projection(root: Path, value: dict[str, Any]) -> dict[str, Any]:
     public_semantics = normalize_items(value["public_semantics"], "public_semantics")
     affected_consumers = normalize_items(value["affected_consumers"], "affected_consumers")
     closure_status = normalize_closure_status(value["closure_status"])
+    test_profile = value["test_profile"]
+    if not isinstance(test_profile, str) or test_profile not in TEST_PROFILES:
+        raise ProjectionError("test_profile must be required or full")
+    declared_tests = normalize_items(value["declared_tests"], "declared_tests")
+    if not declared_tests or any(not isinstance(item, str) for item in declared_tests):
+        raise ProjectionError("declared_tests must contain non-empty test names")
+    declared_tests = sorted(set(str(item) for item in declared_tests))
     verification_affected = bool(value.get("verification_affected", False))
 
     closure_verified = closure_status["status"] == "complete"
@@ -278,7 +428,7 @@ def build_projection(root: Path, value: dict[str, Any]) -> dict[str, Any]:
     if not paths:
         escalation_reasons.append("changed_paths_empty")
 
-    planner = run_scope_planner(root, paths, bool(escalation_reasons))
+    planner = run_scope_planner(root, paths, test_profile == "full" or bool(escalation_reasons))
     planner_reasons = [
         reason for reason in planner["reason_summary"].split(";") if reason
     ]
@@ -327,25 +477,46 @@ def build_projection(root: Path, value: dict[str, Any]) -> dict[str, Any]:
     ci_reasons = unique_preserving_order(planner_reasons + escalation_reasons)
     review_reasons = unique_preserving_order(review_reasons + escalation_reasons)
     escalated = bool(escalation_reasons)
+    ci_capabilities = sorted(
+        capability for capability in planner["selected_capabilities"].split(";") if capability
+    )
+    effective_test_profile = "full" if planner["scope"] == "full" else test_profile
+    planner_identity = {
+        "schema": "oasis7-required-plan-v1",
+        "planner_config_sha256": planner["planner_config_sha256"],
+        "scope": planner["scope"],
+        "selected_capabilities": ci_capabilities,
+        "test_profile": effective_test_profile,
+        "declared_tests": declared_tests,
+    }
     projection: dict[str, Any] = {
         "schema": SCHEMA,
+        "task_uid": task_uid,
+        "source_head_oid": source_head_oid,
+        "scope_base_oid": scope_base_oid,
         "changed_paths": paths,
+        "changed_paths_digest": canonical_digest(paths),
         "change_class": change_class,
         "manual_roles": manual_roles,
         "domain_role": domain_role,
+        "test_profile": effective_test_profile,
+        "declared_tests": declared_tests,
         "consumed_contracts": consumed_contracts,
         "public_semantics": public_semantics,
         "affected_consumers": affected_consumers,
         "closure_status": closure_status,
         "ci_scope": planner["scope"],
-        "ci_capabilities": sorted(
-            capability for capability in planner["selected_capabilities"].split(";") if capability
-        ),
+        "ci_capabilities": ci_capabilities,
         "ci_reasons": ci_reasons,
         "review_roles": review_roles,
+        "ordered_role_ids": review_roles,
         "review_scope": "full" if escalated else "targeted",
         "review_escalated": escalated,
         "review_reasons": review_reasons,
+        "planner_config_sha256": planner["planner_config_sha256"],
+        "planner_identity": planner_identity,
+        "planner_digest": canonical_digest(planner_identity),
+        "verification_affected": verification_affected,
     }
     projection["projection_digest"] = canonical_digest(projection)
     return projection

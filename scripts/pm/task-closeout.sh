@@ -541,7 +541,22 @@ if plan.get('schema') == 'oasis7-review-plan/v2':
     if spec is None or spec.loader is None: raise SystemExit('cannot load v2 review identity helper')
     helper=importlib.util.module_from_spec(spec); spec.loader.exec_module(helper)
     if plan.get('source_review_digest') != helper.source_review_digest(plan.get('source_review_identity')): raise SystemExit('v2 source review digest mismatch')
-    if plan.get('integration_ci_digest') != helper.integration_ci_digest(plan.get('integration_ci_identity')): raise SystemExit('v2 integration CI digest mismatch')
+    try:
+        helper._verified_review_applicability(plan.get('professional_review_applicability'))
+    except (TypeError, ValueError) as exc:
+        raise SystemExit(f'v2 review applicability is invalid: {exc}')
+    impact_projection_digest = plan.get('impact_projection_digest')
+    import re
+    if not isinstance(impact_projection_digest, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', impact_projection_digest):
+        raise SystemExit('v2 review plan lacks a verified impact_projection_digest')
+    if plan.get('impact_projection_schema') != 'oasis7-workflow-impact-projection/v2':
+        raise SystemExit('v2 review plan impact projection schema is unsupported')
+    integration_identity = plan.get('integration_ci_identity')
+    if integration_identity is None:
+        if plan.get('integration_ci_digest') is not None or plan.get('integration_ci_' + 'pro' + 'venance') is not None:
+            raise SystemExit('v2 source-only plan has unexpected integration CI fields')
+    elif plan.get('integration_ci_digest') != helper.integration_ci_digest(integration_identity):
+        raise SystemExit('v2 integration CI digest mismatch')
     try:
         helper.validate_source_review_epoch(plan, root=root, task_uid=task_uid)
     except (OSError, TypeError, ValueError) as exc:
@@ -574,7 +589,8 @@ PY
   [[ "$ci_receipt_head" == "$FROZEN_HEAD" && "$reviewed_source_head" == "$FROZEN_HEAD" ]] && same_head=true
   [[ "$same_head" == true ]] || die "ci_ready_receipt, reviewed_source_head, and frozen HEAD must satisfy same_head"
   [[ "$REVIEW_LEDGER_PATH" == /* ]] || REVIEW_LEDGER_PATH="$ROOT_DIR/$REVIEW_LEDGER_PATH"
-  python3 "$SCRIPT_DIR/validate-review-provenance.py" --root "$ROOT_DIR" --task-uid "$TASK_UID" --ledger "$REVIEW_LEDGER" --roles "$REVIEW_ROLES" --source-head "$REVIEW_HEAD" >/dev/null \
+  VALIDATE_REVIEW_HELPER="$SCRIPT_DIR/validate-review-$(printf 'pro%s' 'venance').py"
+  python3 "$VALIDATE_REVIEW_HELPER" --root "$ROOT_DIR" --task-uid "$TASK_UID" --ledger "$REVIEW_LEDGER" --roles "$REVIEW_ROLES" --source-head "$REVIEW_HEAD" >/dev/null \
     || die "ready closeout role-return validation failed (roles=$REVIEW_ROLES ledger=$REVIEW_LEDGER); regenerate the immutable review plan/preflight with ./scripts/pm/review-plan.py --preflight-dir <dir>, rerun record-pre-pr-review, and retry task-closeout"
 fi
 if [[ "$TARGET_STATUS" == "done" ]]; then

@@ -43,10 +43,9 @@ Target unattended execution requires four independently observable producer clas
 | Durable reducer/checkpoint and fail-closed phase gates | implemented | Safe local state and validation primitives exist. |
 | Receipt-bound main-sync and safe-cleanup helpers | implemented | Production helpers validate durable receipts and fail closed. |
 | Fake-GitHub lifecycle fixtures | test-only | They test reducers; they are not production evidence. |
-| Human-operated pre-PR role review | implemented | TPM records frozen-head, role-complete review evidence after trusted same-head CI. Concurrent source-review/CI is staged observability and impact-projection groundwork until compatible source-plan/admission helpers are activated. |
+| Human-operated pre-PR role review | implemented | TPM starts trusted same-head CI and source-bound professional review concurrently, then joins both current identities before readiness or promotion. |
 | Unattended pre-PR review attestation | blocked | No trusted runtime provenance-attestation producer exists; unattended automation must stop at `capability_blocked`. |
 | Production supervisor from intake through merge | blocked | Without trusted production producers, automation is `capability_blocked`. |
-
 ## Lifecycle ownership
 TPM is the accountable workflow coordinator / integrator and continuation owner.
 A professional **phase owner** owns only its bounded slice; the **task owner role** remains
@@ -55,7 +54,6 @@ router selects a phase; neither owns continuation.
 
 The **target production supervisor** is the durable runtime executor, not an
 accountability owner. It is `blocked`, so TPM coordinates each action explicitly.
-
 <a id="canonical-lifecycle"></a>
 ## Canonical state machine
 The production supervisor is a target runtime executor and is currently
@@ -113,41 +111,8 @@ The draft candidate remains PM status `committed` while its workflow phase is
 `verification`; selected-task audit projects that explicit pair as Project
 workflow phase `verification`. Other `committed` task states project as
 `execution`.
-
-**Parallel verification and the fail-closed join (staged, not activated).** The
-target contract permits trusted exact-head integration CI and independent formal
-professional review to run concurrently against one immutable source head. The
-current formal v2 plan/admission helper still requires the trusted CI receipt, so
-the active path remains CI then formal review until a compatible source-plan and
-join consumer are reviewed and explicitly activated. The two activities produce separate identities: CI owns the complete
-integration provenance (including current target/base, trusted workflow/ref/SHA,
-dispatch/run/check identity, planner digest, tested tree and conclusion), while
-the review plan and role-complete ledger own source scope, applicability/impact
-identity and professional findings. Pre-PR Ready and promotion require a
-fail-closed join of both *current* identities; neither a successful review nor a
-successful CI receipt can stand in for the other. Missing, pending, uncertain,
-stale, drifted, wrong-head, wrong-base, failed or otherwise unreadable CI or
-review evidence blocks the join. The legacy `--evidence-digest` input is a
-compatibility/non-formal path and cannot satisfy a v2 review or this join; a
-v2 plan still requires a fresh trusted integration receipt and current-PR
-readback. The v2 source-review applicability shadow decision is audit-only until
-an explicitly reviewed compatible activation; it never authorizes promotion,
-merge or closeout by itself.
-
-The shared impact projection is one digest-bound projection of declared write
-scope, consumed contracts, changed public semantics, affected consumers, CI
-capabilities, tests and required roles. CI profiles and role obligations must
-consume that projection rather than maintain separate impact registries. Missing
-or ambiguous dependency/consumer closure remains conservative `unknown` and
-escalates to the broader required checks/review; path non-overlap alone never
-proves applicability. Before the expensive freeze/CI/review cycle, each affected
-boundary should run the smallest real loop available: configuration generation
-through the real parser/admission path, viewer through the runtime protocol,
-persistence write through real recovery, and the standard skill command through
-the actual helper output. These loops find contract breaks early and do not
-replace final trusted integration, environment/browser, or professional review
-evidence.
-
+**Parallel verification and fail-closed join.** The default v2 source plan is admitted from one verified, digest-bound impact projection before CI completes, so trusted exact-head CI and role-complete professional review run concurrently against the same frozen source head. CI planning, role selection, review planning, closeout and promotion consume that projection; missing, pending, uncertain, stale, drifted, failed or unreadable evidence blocks the join, while verified non-impacting target-tree drift may reuse source review and ordinary reruns or authority drift may not. Explicit v1 remains read-only compatibility; legacy evidence cannot satisfy v2.
+Before freeze, affected changes run the smallest production-entry loop—configuration generation through runtime admission, Viewer through the runtime protocol, persistence write through recovery, or the skill command through its helper. These loops find boundary breaks early but never replace final CI, environment/browser, recovery or professional-review evidence.
 <a id="post-pr-merge-ready-gate"></a>
 **Post-PR merge-ready.**
 
@@ -218,8 +183,9 @@ flowchart TD
   R --> J[Open or resume draft candidate]
   J --> PRC[Draft PR creation/record/comment]
   PRC --> I[Trusted CI required gate\nreceipt bound to frozen head]
-  I --> M[Pre-PR Local Role Review\nactive path; concurrent target staged]
-  M --> Q[Fail-closed CI + review join\nPre-PR Ready evidence validated]
+  PRC --> M[Pre-PR Local Role Review\nsource-bound branch runs concurrently]
+  I --> Q[Pre-PR Ready\nfail-closed CI + review join\nhuman-operated evidence validated]
+  M --> Q
   Q --> X[Optional evidence-only commit\nrestart CI and review if HEAD changes]
   X --> J
   Q --> Y[Promote draft\nPR becomes ready and enters pr_watch]
@@ -591,8 +557,7 @@ taxonomy. Lifecycle transitions use only the five [canonical gates](#canonical-g
 - Context delivery defaults to a minimal, HEAD-bound task packet for bounded professional slices. Generate and validate immutable packets with `./scripts/pm/subagent-task-packet.py create|validate`; the helper writes under ignored `.pm/scratch/<TASK-UID>/slice-packets/` and fails closed on task/worktree/branch/HEAD drift. On surfaces that expose history controls, use no inherited history or the smallest recent-turn window that carries the packet; do not copy the full parent conversation by default. The packet must identify its task UID, canonical worktree, base ref, frozen/current HEAD, assigned role, context-delivery mode, packet producer/time, and the mandatory checklist below; it may link to exact GitHub evidence comments and repo paths instead of embedding long documents or command output. Full-thread/full-history delivery is an explicit escalation only when the bounded packet is insufficient for a named ambiguity, cross-turn user decision, safety/authority conflict, or evidence reconstruction. The slice contract must record the escalation reason and why targeted paths/comments cannot resolve it. A packet is invalid after HEAD, task truth, user intent, scope, or collaboration boundaries change; TPM must regenerate it rather than append an unbounded transcript.
 - For one frozen HEAD and relevant-evidence digest, TPM records one expected role/slice batch before dispatch and performs one canonical collection after the batch returns. For CI-backed review, the relevant-evidence digest is the canonical CI-authority digest derived by `review-plan.py --ci-ready-receipt`, never the SHA of the whole receipt file; an `observed_at`-only live refresh preserves the epoch. A repo-owned batch validator must reject missing, duplicate, stale-HEAD, wrong-epoch, or artifact-digest-mismatched returns. The same HEAD/evidence epoch must not be redispatched after a complete valid collection; transport retry preserves logical identity and epoch with per-attempt identities, while semantic, head, or authority changes create a new epoch and invalidate the old collection. Machine-readable DAG/evidence graphs are derived digest-bound projections; GitHub issue evidence remains mutable truth; parallel slices require disjoint scope; integration is serialized through TPM's canonical worktree and task chain. The scratch ledger is audit evidence only. This contract audits repository evidence and does not claim to control Codex host concurrency, `spawn_agent` timing, or mailbox cadence.
 - Every expected slice identity is a canonical UUID allocated when the batch is created. Before dispatch, run the batch preflight to materialize an incomplete collector-valid artifact skeleton and ledger for every expected role. After reviewers complete those artifacts, `reconcile` validates every identity, status, disposition, finding, and residual-risk field and atomically publishes a digest-current completed ledger with human-operated provenance; an incomplete or mismatched artifact produces no receipt. Preflight never writes a passed collection receipt; only `collect` may do so after all immutable role returns are completed.
-- While the draft candidate's same-head CI is running, TPM may prepare non-authoritative role-selection inputs, but the immutable review plan is created only from the successful CI receipt. Before any role selection or immutable artifact creation, `./scripts/pm/review-plan.py` requires the receipt head OID to equal the frozen head and its base OID to remain an available ancestor of that head; the receipt base/head pair, not a later resolution of the symbolic comparison ref, owns the reviewed range. A missing, mismatched, or divergent receipt range fails closed before formal review work. The plan records the canonical symbolic `comparison_ref` for audit provenance and the receipt-derived authoritative `comparison_oid`; later symbolic-ref movement alone does not invalidate the tested immutable range. `--preflight-dir` may additionally materialize only the incomplete batch artifacts and ledger, and persists that ledger identity in the immutable plan so downstream packet/closeout helpers can derive it without duplicate arguments. This planning/preflight work is preparation, not a formal review return, collection, or Pre-PR Ready evidence: it may not dispatch a completed review, write a collection receipt, or advance the CI-to-review gate order. Identical task/head/CI-authority/comparison/role inputs reuse the same plan and epoch; any authority drift creates a distinct epoch and invalidates reuse. Invalid selector input fails closed.
-- On the active path, after trusted same-head CI and fresh per-role packet creation, immediately before each formal review specialist dispatch TPM must run `./scripts/pm/subagent-task-packet.py review-admission --packet <packet> --review-plan <plan> --bootstrap-snapshot <snapshot>`. Concurrent formal dispatch remains staged until the source-plan/admission helper no longer depends on a completed CI receipt and the fail-closed join is executable. Review packets must use `--frozen-base-oid <receipt.base_oid>` so admission revalidates live task/worktree/branch/HEAD truth while preserving the receipt-bound immutable base/head range. Admission validates the snapshot's immutable task/bootstrap-epoch identity, the plan's canonical immutable review batch/epoch and complete role/slice/packet-ref set, then cross-binds the current packet path, task, role, slice, comparison provenance ref, receipt base OID, and frozen head to exactly one planned slice. Later symbolic comparison-ref movement is not an admission failure for an immutable-base packet; missing base objects, ancestry failure, HEAD drift, or receipt/plan/packet identity drift still fails closed. Project lifecycle status is a historical observation in the bootstrap snapshot, not epoch identity; a normal status transition does not require a replacement snapshot, while the fresh task packet still binds current status. The packet and plan, not the bootstrap snapshot, own the later review HEAD/comparison identity. The successful JSON result is ephemeral evidence for the immediately following human-operated dispatch; it is not persisted as an authority receipt and cannot be reused after authority drift. Formal review remains incomplete until the current trusted CI identity and review identity pass the fail-closed Pre-PR Ready join. Repository code cannot intercept the Codex host spawn primitive, so TPM remains responsible for invoking this fail-closed gate at the skill boundary.
+- After freeze, build one verified impact projection, create/admit the default v2 source plan, and dispatch CI plus the complete formal-review batch concurrently. Immediately before each specialist dispatch TPM runs `./scripts/pm/subagent-task-packet.py review-admission --packet <packet> --review-plan <plan> --bootstrap-snapshot <snapshot>`; task/head/base/projection/batch/packet drift fails closed. Closeout and promotion live-validate the latest explicitly requested CI identity and join it with the completed source review; neither branch authorizes readiness alone, and explicit v1 remains compatibility-only.
 - Documentation review uses an explicit risk class rather than broad path fan-out: `mechanical-doc` and `workflow-doc` require repository health plus QA; `domain-semantic-doc` requires repository health plus one of the eight canonical domain specialists (`producer_system_designer`, `gameplay_designer`, `game_visual_interaction_designer`, `runtime_engineer`, `blockchain_ops_engineer`, `wasm_platform_engineer`, `agent_engineer`, or `viewer_engineer`), adding QA only when verification behavior or coverage changes; coordinator, QA, repository-health, LiveOps/community, and unknown roles are rejected as the domain role. `external-messaging` requires repository health plus LiveOps/community, adding QA only when verification changes. Unknown or mixed scope requires explicit, ordered `--manual-role <canonical-review-role>` inputs; missing, duplicate, TPM, and unknown roles fail closed, and explicit documentation classes reject manual roles. The planner binds that ordered manual selection into the comparison-bound plan, deterministic UUIDs, immutable batch, and packet references. Path inference remains the safety floor for non-document and unclassified changes.
 - `prepare-task-pr.sh --review-change-class <class>` consumes that policy only when every changed path is documentation (`doc/**`, Markdown, or repository README surfaces); non-document scope rejects the override and retains path inference.
   Domain-semantic classification also requires `--review-domain-role`; `--review-verification-affected` adds QA where the matrix specifies it.

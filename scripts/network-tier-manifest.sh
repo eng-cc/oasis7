@@ -284,6 +284,20 @@ def parse_bool(raw: str) -> bool:
         return False
     raise SystemExit("invalid allow_observer_nodes: expected true or false")
 
+def manifest_relative_file_ref(raw: str) -> str:
+    """Serialize existing file refs so every consumer resolves from the manifest."""
+    candidate = pathlib.Path(raw)
+    if candidate.is_absolute():
+        return raw
+    manifest_relative = manifest_path.parent / candidate
+    if manifest_relative.exists():
+        resolved = manifest_relative.resolve()
+    else:
+        resolved = (pathlib.Path.cwd() / candidate).resolve()
+    if not resolved.is_file():
+        return raw
+    return os.path.relpath(resolved, manifest_path.parent)
+
 manifest = {
     "schema_version": "oasis7.network_tier_manifest.v1",
     "tier": tier,
@@ -292,8 +306,8 @@ manifest = {
     "chain_id": chain_id,
     "runtime_refs": {
         "release_candidate_bundle_ref": release_candidate_bundle_ref,
-        "genesis_ref": genesis_ref,
-        "bootstrap_peer_ref": bootstrap_peer_ref,
+        "genesis_ref": manifest_relative_file_ref(genesis_ref),
+        "bootstrap_peer_ref": manifest_relative_file_ref(bootstrap_peer_ref),
     },
     "endpoint_policy": {
         "rpc_ref": rpc_ref,
