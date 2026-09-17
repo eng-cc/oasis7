@@ -14,8 +14,10 @@
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
+- 产品权威边界：本 PRD 是本专题唯一的产品权威，直接承载玩家价值、产品承诺、REQ/AC 与组合验收；本专题不设置配对产品 design。其他专业 PRD 或 design 只是依赖，不重定义本文的产品语义。
+- 专业合同委托：[`PRD-GAME-014`](../../game/gameplay/gameplay-indirect-control-agency-contract.prd.md) 继续拥有玩法保证、字段/状态/失败签名与专业验收；[`DES-WR-IA`](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md) 仅承接跨 runtime、Agent、Viewer/API 与 QA 的技术边界和验证映射。上述专业文档不把实现状态、任务或证据迁入本文，也不能替代本文的产品 authority。
 - 设计判定 task issue：#3680。
-- 设计适用性理由：本 PRD 直接承载意图、Agent 自主行动、阻塞、回流和因果解释边界；Agent/Viewer 专业 authority 负责具体表达。
+- 设计适用性理由：本 PRD 已直接承载产品承诺与 REQ/AC；独立 design 不增加新的信息分层、交互状态编排或策略取舍，专业文档只保留其各自的玩法和技术合同。
 - 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品承诺
 
@@ -44,7 +46,7 @@
 | 玩家入口与 Agent | 正式入口能够表达同一意图、因果、干预和续接结果 | `world-simulator`、Agent 与 Viewer 专业文档定义 API/UI、记忆和交互实现 |
 | 验证 | 组合证据必须证明玩家能理解并继续决策 | `testing` 与 QA 权威拥有测试矩阵、命令、样本和当前 verdict |
 
-`PRD-GAME-014` 的长期产品承诺由本文承载；其专业合同以 [`gameplay-indirect-control-agency-contract.prd.md`](../../game/gameplay/gameplay-indirect-control-agency-contract.prd.md) 为主入口，继续拥有玩法保证、失败判据与专业验证。IA-1 至 IA-6 只裁定组合体验，不能替代该专业合同；本分册不复制其中的字段矩阵、状态 taxonomy、bounded-response 规则、API parity、失败签名或任务证据。
+`PRD-GAME-014` 的长期产品承诺由本文承载；其专业合同以 [`gameplay-indirect-control-agency-contract.prd.md`](../../game/gameplay/gameplay-indirect-control-agency-contract.prd.md) 为主入口，继续拥有玩法保证、失败判据与专业验证。IA-1 至 IA-7 只裁定组合体验，不能替代该专业合同；本分册不复制其中的字段矩阵、状态 taxonomy、bounded-response 规则、API parity、失败签名或任务证据。
 
 ## 4. 组合验收
 
