@@ -465,9 +465,13 @@ run_contract "$second_out"
 
 fallback_out="$tmp_root/domcontentloaded-fallback"
 fallback_marker="$tmp_root/domcontentloaded-fallback-seen"
-VIEWER_PROMPT_FIXTURE_FAIL_DOM_WAIT=1 \
+fallback_backend_requirement="VIEWER_PROMPT_FIXTURE_REQUIRE_EXPLICIT_GL=1"
+if [[ "$(uname -s)" == "Darwin" ]]; then
+  fallback_backend_requirement="VIEWER_PROMPT_FIXTURE_REQUIRE_METAL=1"
+fi
+env "$fallback_backend_requirement" \
+  VIEWER_PROMPT_FIXTURE_FAIL_DOM_WAIT=1 \
   VIEWER_PROMPT_FIXTURE_FALLBACK_MARKER="$fallback_marker" \
-  VIEWER_PROMPT_FIXTURE_REQUIRE_METAL=1 \
   OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=fixture \
   OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY=fixture \
   OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=fixture \
@@ -794,10 +798,10 @@ exit 0
 EOF
   chmod +x "$sandbox/scripts/run-launcher-stack.sh" "$sandbox/bin/agent-browser"
   set +e
-  VIEWER_PROMPT_FIXTURE_REQUIRE_HOSTED_ACCESS=1 \
+  env "$fallback_backend_requirement" \
+    VIEWER_PROMPT_FIXTURE_REQUIRE_HOSTED_ACCESS=1 \
     VIEWER_PROMPT_FIXTURE_REQUIRE_NO_PROXY=1 \
-    VIEWER_PROMPT_FIXTURE_REQUIRE_METAL=1 \
-  OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=fixture \
+    OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=fixture \
     OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY=fixture \
     OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=fixture \
     PATH="$sandbox/bin:$PATH" /bin/bash "$sandbox/scripts/viewer-prompt-control-regression.sh" \
