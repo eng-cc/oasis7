@@ -4,10 +4,16 @@ import { createViewerBrowserRaceHandoffModule } from "./viewer_browser_race_hand
 class FakeBroadcastChannel {
   static channels = new Map();
   static messages = [];
+  static closeCounts = new Map();
 
   static reset() {
     FakeBroadcastChannel.channels = new Map();
     FakeBroadcastChannel.messages = [];
+    FakeBroadcastChannel.closeCounts = new Map();
+  }
+
+  static closeCount(name) {
+    return FakeBroadcastChannel.closeCounts.get(name) || 0;
   }
 
   constructor(name) {
@@ -34,6 +40,10 @@ class FakeBroadcastChannel {
 
   close() {
     this.closed = true;
+    FakeBroadcastChannel.closeCounts.set(
+      this.name,
+      FakeBroadcastChannel.closeCount(this.name) + 1,
+    );
   }
 }
 
@@ -84,10 +94,21 @@ describe("viewer browser race handoff module", () => {
     expect(createHarness({ search: "?hosted_test_login=1" }).create().enabled).toBe(false);
   });
 
+  it("requires a player binding for every offered identity", () => {
+    const owner = createHarness().create();
+
+    expect(() => owner.offerKeyMaterial({
+      publicKey: "public-key",
+      privateKey: "private-key",
+      releaseToken: "release-token",
+      sessionEpoch: 7,
+    })).toThrowError(expect.objectContaining({ code: "key_material_missing" }));
+  });
+
   it("offers the same browser key once through a run-scoped channel without exposing it in metadata", async () => {
     const owner = createHarness().create();
     const recipient = createHarness().create();
-    const offer = owner.offerKeyMaterial({ publicKey: "public-key", privateKey: "private-key" });
+    const offer = owner.offerKeyMaterial({ publicKey: "public-key", privateKey: "private-key", releaseToken: "release-token", playerId: "player-1", sessionEpoch: 7 });
 
     expect(offer.descriptor).toMatchObject({
       origin: "http://127.0.0.1:4310",
@@ -96,25 +117,40 @@ describe("viewer browser race handoff module", () => {
     expect(offer.descriptor.channelName).toContain("oasis7.viewer.race-handoff.v1");
     expect(offer.descriptor.privateKey).toBeUndefined();
     expect(offer.descriptor.publicKey).toBeUndefined();
+    expect(offer.descriptor.releaseToken).toBeUndefined();
 
     const claimed = await recipient.claimOffer(offer.descriptor);
 
-    expect(claimed).toEqual({ publicKey: "public-key", privateKey: "private-key" });
+    expect(claimed).toEqual({
+      authorityEpoch: null,
+      bindingEpoch: null,
+      boundAgentId: null,
+      privateKey: "private-key",
+      publicKey: "public-key",
+      releaseToken: "release-token",
+      playerId: "player-1",
+      sessionEpoch: 7,
+    });
+    expect(FakeBroadcastChannel.closeCount(offer.descriptor.channelName)).toBe(2);
+    owner.dispose();
+    recipient.dispose();
+    expect(FakeBroadcastChannel.closeCount(offer.descriptor.channelName)).toBe(2);
     expect(FakeBroadcastChannel.messages.some(({ data }) => data.keyMaterial?.privateKey === "private-key")).toBe(true);
     expect(FakeBroadcastChannel.messages.some(({ data }) => data.keyMaterial?.publicKey === "public-key")).toBe(true);
+    expect(FakeBroadcastChannel.messages.some(({ data }) => data.keyMaterial?.releaseToken === "release-token")).toBe(true);
   });
 
   it("rejects a second claim and a tampered nonce as replay or nonce mismatch", async () => {
     const owner = createHarness().create();
     const recipient = createHarness().create();
-    const offer = owner.offerKeyMaterial({ publicKey: "public-key", privateKey: "private-key" });
+    const offer = owner.offerKeyMaterial({ publicKey: "public-key", privateKey: "private-key", releaseToken: "release-token", playerId: "player-1", sessionEpoch: 7 });
 
     await recipient.claimOffer(offer.descriptor);
     await expect(recipient.claimOffer(offer.descriptor)).rejects.toMatchObject({ code: "replay" });
 
     const secondOwner = createHarness().create();
     const secondRecipient = createHarness().create();
-    const secondOffer = secondOwner.offerKeyMaterial({ publicKey: "public-key-2", privateKey: "private-key-2" });
+    const secondOffer = secondOwner.offerKeyMaterial({ publicKey: "public-key-2", privateKey: "private-key-2", releaseToken: "release-token-2", playerId: "player-2", sessionEpoch: 8 });
     void secondOffer.waitForClaim().catch(() => {});
     await expect(secondRecipient.claimOffer({
       ...secondOffer.descriptor,
@@ -129,6 +165,7 @@ describe("viewer browser race handoff module", () => {
     const offer = owner.offerKeyMaterial({
       publicKey: "public-key",
       privateKey: "private-key",
+      releaseToken: "release-token", playerId: "player-1", sessionEpoch: 7,
       ttlMs: 20,
     });
 
@@ -145,7 +182,7 @@ describe("viewer browser race handoff module", () => {
   it("closes the channel and rejects pending work on dispose", async () => {
     const owner = createHarness().create();
     const recipient = createHarness().create();
-    const offer = owner.offerKeyMaterial({ publicKey: "public-key", privateKey: "private-key" });
+    const offer = owner.offerKeyMaterial({ publicKey: "public-key", privateKey: "private-key", releaseToken: "release-token", playerId: "player-1", sessionEpoch: 7 });
     void offer.waitForClaim().catch(() => {});
     const pendingClaim = recipient.claimOffer(offer.descriptor);
 

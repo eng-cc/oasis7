@@ -4084,6 +4084,7 @@ function createViewerBrowserRaceHandoffModule({
     locationOrigin && isLoopbackHostname$1(locationRef?.hostname) && isEnabledFlag(searchParams, "test_api") && isEnabledFlag(searchParams, "hosted_test_login") && typeof BroadcastChannelImpl === "function" && (typeof cryptoRef?.randomUUID === "function" || typeof cryptoRef?.getRandomValues === "function")
   );
   const activeEntries = /* @__PURE__ */ new Set();
+  const consumedDescriptors = /* @__PURE__ */ new Set();
   let disposed = false;
   function requireEnabled() {
     if (disposed) {
@@ -4141,6 +4142,7 @@ function createViewerBrowserRaceHandoffModule({
       return;
     }
     entry.settled = true;
+    activeEntries.delete(entry);
     if (entry.timer != null && typeof clearTimeoutImpl === "function") {
       clearTimeoutImpl(entry.timer);
     }
@@ -4166,9 +4168,9 @@ function createViewerBrowserRaceHandoffModule({
       }
     }, Math.max(0, delayMs));
   }
-  function offerKeyMaterial({ privateKey, publicKey, ttlMs } = {}) {
+  function offerKeyMaterial({ privateKey, publicKey, releaseToken, playerId, sessionEpoch, bindingEpoch, boundAgentId, authorityEpoch, ttlMs } = {}) {
     requireEnabled();
-    if (!String(privateKey || "").trim() || !String(publicKey || "").trim()) {
+    if (!String(privateKey || "").trim() || !String(publicKey || "").trim() || !String(releaseToken || "").trim() || !String(playerId || "").trim() || sessionEpoch == null) {
       throw handoffError("key_material_missing");
     }
     const descriptor = makeDescriptor(ttlMs);
@@ -4180,7 +4182,13 @@ function createViewerBrowserRaceHandoffModule({
       disposed: false,
       keyMaterial: {
         privateKey: String(privateKey),
-        publicKey: String(publicKey)
+        publicKey: String(publicKey),
+        releaseToken: String(releaseToken),
+        playerId: String(playerId),
+        sessionEpoch: Number(sessionEpoch),
+        bindingEpoch: bindingEpoch == null ? null : Number(bindingEpoch),
+        boundAgentId: String(boundAgentId || "") || null,
+        authorityEpoch: String(authorityEpoch || "") || null
       },
       settled: false,
       timer: null
@@ -4190,6 +4198,8 @@ function createViewerBrowserRaceHandoffModule({
     const claimed = new Promise((resolve, reject) => {
       resolveClaim = resolve;
       rejectClaim = reject;
+    });
+    void claimed.catch(() => {
     });
     entry.resolve = resolveClaim;
     entry.reject = rejectClaim;
@@ -4242,6 +4252,7 @@ function createViewerBrowserRaceHandoffModule({
         keyMaterial
       }));
       settleEntry(entry, "resolve", { claimNonce: data.claimNonce });
+      closeChannel(channel);
     };
     scheduleExpiry(entry, Number(descriptor.expiresAt) - Number(now()));
     return {
@@ -4271,6 +4282,10 @@ function createViewerBrowserRaceHandoffModule({
       validateDescriptor(descriptor);
     } catch (error) {
       return Promise.reject(error);
+    }
+    const descriptorKey = `${descriptor.origin}|${descriptor.channelName}|${descriptor.nonce}`;
+    if (consumedDescriptors.has(descriptorKey)) {
+      return Promise.reject(handoffError("replay"));
     }
     const channel = new BroadcastChannelImpl(descriptor.channelName);
     const claimNonce = randomToken(cryptoRef);
@@ -4311,12 +4326,19 @@ function createViewerBrowserRaceHandoffModule({
       }
       const keyMaterial = {
         privateKey: String(data.keyMaterial.privateKey || ""),
-        publicKey: String(data.keyMaterial.publicKey || "")
+        publicKey: String(data.keyMaterial.publicKey || ""),
+        releaseToken: String(data.keyMaterial.releaseToken || ""),
+        playerId: String(data.keyMaterial.playerId || ""),
+        sessionEpoch: data.keyMaterial.sessionEpoch == null ? null : Number(data.keyMaterial.sessionEpoch),
+        bindingEpoch: data.keyMaterial.bindingEpoch == null ? null : Number(data.keyMaterial.bindingEpoch),
+        boundAgentId: String(data.keyMaterial.boundAgentId || "") || null,
+        authorityEpoch: String(data.keyMaterial.authorityEpoch || "") || null
       };
-      if (!keyMaterial.privateKey || !keyMaterial.publicKey) {
+      if (!keyMaterial.privateKey || !keyMaterial.publicKey || !keyMaterial.releaseToken || !keyMaterial.playerId || keyMaterial.sessionEpoch == null) {
         rejectEntry(entry, "key_material_missing");
         return;
       }
+      consumedDescriptors.add(descriptorKey);
       settleEntry(entry, "resolve", keyMaterial);
       closeChannel(channel);
     };
@@ -4335,6 +4357,7 @@ function createViewerBrowserRaceHandoffModule({
       rejectEntry(entry, "disposed");
     }
     activeEntries.clear();
+    consumedDescriptors.clear();
   }
   return {
     enabled,
@@ -7015,7 +7038,13 @@ function offerBrowserRaceIdentityForTest() {
   browserRaceIdentityOffer?.dispose?.();
   browserRaceIdentityOffer = viewerBrowserRaceHandoffModule.offerKeyMaterial({
     publicKey: state.auth.publicKey,
-    privateKey: state.auth.privateKey
+    privateKey: state.auth.privateKey,
+    releaseToken: state.auth.releaseToken,
+    playerId: state.auth.playerId,
+    sessionEpoch: state.auth.sessionEpoch,
+    bindingEpoch: state.auth.bindingEpoch,
+    boundAgentId: state.auth.boundAgentId,
+    authorityEpoch: state.auth.authorityEpoch
   });
   return clone(browserRaceIdentityOffer.descriptor);
 }
@@ -7025,12 +7054,23 @@ async function claimBrowserRaceIdentityForTest(descriptor) {
     throw new Error("browser race identity claim requires the stored hosted test-login session");
   }
   const keyMaterial = await viewerBrowserRaceHandoffModule.claimOffer(descriptor);
+  const claimedPlayerId = String(keyMaterial.playerId || "").trim();
+  const currentPlayerId = String(state.auth.playerId || "").trim();
+  if (!claimedPlayerId || !currentPlayerId || claimedPlayerId !== currentPlayerId) {
+    throw new Error("browser race identity claim player binding mismatch");
+  }
   state.auth.publicKey = keyMaterial.publicKey;
   state.auth.privateKey = keyMaterial.privateKey;
+  state.auth.releaseToken = keyMaterial.releaseToken;
+  state.auth.sessionEpoch = keyMaterial.sessionEpoch;
+  state.auth.bindingEpoch = keyMaterial.bindingEpoch;
+  state.auth.boundAgentId = keyMaterial.boundAgentId;
+  state.auth.authorityEpoch = keyMaterial.authorityEpoch;
   state.auth.source = "hosted_test_login";
   state.auth.loginChannel = "test";
   state.auth.registrationStatus = "issued";
-  state.auth.runtimeStatus = "race_identity_ready";
+  state.auth.runtimeStatus = "issued";
+  state.auth.syncInFlight = false;
   state.auth.error = null;
   requestId = Math.max(requestId, 1e6);
   authNonceCounter = Math.max(authNonceCounter, 1e6);

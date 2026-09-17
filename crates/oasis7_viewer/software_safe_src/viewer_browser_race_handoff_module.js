@@ -63,6 +63,7 @@ export function createViewerBrowserRaceHandoffModule({
       && (typeof cryptoRef?.randomUUID === "function" || typeof cryptoRef?.getRandomValues === "function"),
   );
   const activeEntries = new Set();
+  const consumedDescriptors = new Set();
   let disposed = false;
 
   function requireEnabled() {
@@ -125,6 +126,7 @@ export function createViewerBrowserRaceHandoffModule({
       return;
     }
     entry.settled = true;
+    activeEntries.delete(entry);
     if (entry.timer != null && typeof clearTimeoutImpl === "function") {
       clearTimeoutImpl(entry.timer);
     }
@@ -153,9 +155,9 @@ export function createViewerBrowserRaceHandoffModule({
     }, Math.max(0, delayMs));
   }
 
-  function offerKeyMaterial({ privateKey, publicKey, ttlMs } = {}) {
+  function offerKeyMaterial({ privateKey, publicKey, releaseToken, playerId, sessionEpoch, bindingEpoch, boundAgentId, authorityEpoch, ttlMs } = {}) {
     requireEnabled();
-    if (!String(privateKey || "").trim() || !String(publicKey || "").trim()) {
+    if (!String(privateKey || "").trim() || !String(publicKey || "").trim() || !String(releaseToken || "").trim() || !String(playerId || "").trim() || sessionEpoch == null) {
       throw handoffError("key_material_missing");
     }
     const descriptor = makeDescriptor(ttlMs);
@@ -168,6 +170,12 @@ export function createViewerBrowserRaceHandoffModule({
       keyMaterial: {
         privateKey: String(privateKey),
         publicKey: String(publicKey),
+        releaseToken: String(releaseToken),
+        playerId: String(playerId),
+        sessionEpoch: Number(sessionEpoch),
+        bindingEpoch: bindingEpoch == null ? null : Number(bindingEpoch),
+        boundAgentId: String(boundAgentId || "") || null,
+        authorityEpoch: String(authorityEpoch || "") || null,
       },
       settled: false,
       timer: null,
@@ -178,6 +186,10 @@ export function createViewerBrowserRaceHandoffModule({
       resolveClaim = resolve;
       rejectClaim = reject;
     });
+    // An offer may legitimately expire without a caller awaiting the optional
+    // claim receipt. Mark that rejection as observed while preserving the
+    // original promise for callers that do await `waitForClaim()`.
+    void claimed.catch(() => {});
     entry.resolve = resolveClaim;
     entry.reject = rejectClaim;
     activeEntries.add(entry);
@@ -229,6 +241,7 @@ export function createViewerBrowserRaceHandoffModule({
         keyMaterial,
       }));
       settleEntry(entry, "resolve", { claimNonce: data.claimNonce });
+      closeChannel(channel);
     };
     scheduleExpiry(entry, Number(descriptor.expiresAt) - Number(now()));
     return {
@@ -259,6 +272,10 @@ export function createViewerBrowserRaceHandoffModule({
       validateDescriptor(descriptor);
     } catch (error) {
       return Promise.reject(error);
+    }
+    const descriptorKey = `${descriptor.origin}|${descriptor.channelName}|${descriptor.nonce}`;
+    if (consumedDescriptors.has(descriptorKey)) {
+      return Promise.reject(handoffError("replay"));
     }
     const channel = new BroadcastChannelImpl(descriptor.channelName);
     const claimNonce = randomToken(cryptoRef);
@@ -300,11 +317,18 @@ export function createViewerBrowserRaceHandoffModule({
       const keyMaterial = {
         privateKey: String(data.keyMaterial.privateKey || ""),
         publicKey: String(data.keyMaterial.publicKey || ""),
+        releaseToken: String(data.keyMaterial.releaseToken || ""),
+        playerId: String(data.keyMaterial.playerId || ""),
+        sessionEpoch: data.keyMaterial.sessionEpoch == null ? null : Number(data.keyMaterial.sessionEpoch),
+        bindingEpoch: data.keyMaterial.bindingEpoch == null ? null : Number(data.keyMaterial.bindingEpoch),
+        boundAgentId: String(data.keyMaterial.boundAgentId || "") || null,
+        authorityEpoch: String(data.keyMaterial.authorityEpoch || "") || null,
       };
-      if (!keyMaterial.privateKey || !keyMaterial.publicKey) {
+      if (!keyMaterial.privateKey || !keyMaterial.publicKey || !keyMaterial.releaseToken || !keyMaterial.playerId || keyMaterial.sessionEpoch == null) {
         rejectEntry(entry, "key_material_missing");
         return;
       }
+      consumedDescriptors.add(descriptorKey);
       settleEntry(entry, "resolve", keyMaterial);
       closeChannel(channel);
     };
@@ -324,6 +348,7 @@ export function createViewerBrowserRaceHandoffModule({
       rejectEntry(entry, "disposed");
     }
     activeEntries.clear();
+    consumedDescriptors.clear();
   }
 
   return {
