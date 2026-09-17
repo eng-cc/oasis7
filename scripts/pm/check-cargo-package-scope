@@ -1,0 +1,452 @@
+#!/usr/bin/env python3
+"""Fail-closed Cargo package-scope checker.
+
+The command intentionally has no authority to select a CI tier.  It reports
+whether a committed range is attributable to one Cargo package; callers may
+use it as an additional contract, but must retain the repository's existing
+required-test selection.  Package identity comes from ``cargo metadata`` for
+both ends of the committed range, never from a guessed directory convention.
+"""
+
+from __future__ import annotations
+
+import argparse
+import ast
+import io
+import json
+import os
+from pathlib import Path, PurePosixPath
+import re
+import subprocess
+import sys
+import tarfile
+import tempfile
+from typing import Any, Iterable
+
+
+POLICY_SCHEMA = "oasis7-cargo-package-scope-policy/v1"
+
+
+class ScopeError(Exception):
+    def __init__(self, reason: str, detail: str = "") -> None:
+        super().__init__(detail or reason)
+        self.reason = reason
+        self.detail = detail
+
+
+def git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
+    result = subprocess.run(
+        ["git", "-C", str(repo), *args],
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    if check and result.returncode != 0:
+        raise ScopeError("git_range_unavailable", result.stderr.strip() or "git command failed")
+    return result
+
+
+def git_blob(repo: Path, revision: str, path: str) -> bytes | None:
+    result = subprocess.run(
+        ["git", "-C", str(repo), "show", f"{revision}:{path}"],
+        check=False,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        return None
+    return result.stdout
+
+
+def changed_files(repo: Path, base: str, head: str) -> tuple[list[str], list[str]]:
+    result = git(repo, "diff", "--name-status", "--find-renames", "--find-copies", base, head)
+    paths: list[str] = []
+    rename_endpoints: list[str] = []
+    for line in result.stdout.splitlines():
+        fields = line.split("\t")
+        if not fields:
+            continue
+        status = fields[0]
+        if status.startswith(("R", "C")) and len(fields) >= 3:
+            old_path, new_path = fields[-2], fields[-1]
+            paths.extend((old_path, new_path))
+            if status.startswith("R"):
+                rename_endpoints.extend((old_path, new_path))
+        elif len(fields) >= 2:
+            paths.append(fields[-1])
+    return paths, rename_endpoints
+
+
+def safe_relative(path: str) -> str:
+    value = path.replace("\\", "/")
+    pure = PurePosixPath(value)
+    if pure.is_absolute() or ".." in pure.parts:
+        raise ScopeError("invalid_repository_path", f"path escapes repository: {path}")
+    return str(pure)
+
+
+def resolve_relative(source: str, target: str) -> str | None:
+    try:
+        value = PurePosixPath(source).parent.joinpath(target)
+    except Exception:
+        return None
+    parts: list[str] = []
+    for part in value.parts:
+        if part in ("", "."):
+            continue
+        if part == "..":
+            if not parts:
+                return None
+            parts.pop()
+        else:
+            parts.append(part)
+    return "/".join(parts)
+
+
+def parse_policy(repo: Path, base: str, policy_arg: str) -> tuple[str, dict[str, Any]]:
+    policy_path = Path(policy_arg)
+    if not policy_path.is_absolute():
+        policy_path = repo / policy_path
+    try:
+        relative = policy_path.resolve().relative_to(repo.resolve()).as_posix()
+    except ValueError as exc:
+        raise ScopeError("trusted_policy_unavailable", "policy must be inside repository") from exc
+    base_bytes = git_blob(repo, base, relative)
+    if base_bytes is None:
+        raise ScopeError("trusted_policy_unavailable", f"policy is absent from trusted base: {relative}")
+    try:
+        trusted = json.loads(base_bytes.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ScopeError("trusted_policy_invalid", f"trusted policy is not valid JSON: {relative}") from exc
+    current_bytes = policy_path.read_bytes() if policy_path.is_file() else None
+    if current_bytes is None or current_bytes != base_bytes:
+        raise ScopeError("policy_self_modification", f"policy differs from trusted base: {relative}")
+    if not isinstance(trusted, dict) or trusted.get("schema") != POLICY_SCHEMA:
+        raise ScopeError("trusted_policy_invalid", "unexpected policy schema")
+    if trusted.get("policy_version") != 1:
+        raise ScopeError("trusted_policy_invalid", "unsupported policy version")
+    protected = trusted.get("protected_paths")
+    if not isinstance(protected, list) or not all(isinstance(item, str) for item in protected):
+        raise ScopeError("trusted_policy_invalid", "protected_paths must be a string list")
+    return relative, trusted
+
+
+def extract_git_tree(repo: Path, revision: str, target: Path) -> None:
+    result = subprocess.run(
+        ["git", "-C", str(repo), "archive", "--format=tar", revision],
+        check=False,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        raise ScopeError("git_range_unavailable", result.stderr.decode(errors="replace"))
+    target.mkdir(parents=True, exist_ok=True)
+    try:
+        archive = tarfile.open(fileobj=io.BytesIO(result.stdout), mode="r:")
+        for member in archive.getmembers():
+            member_path = PurePosixPath(member.name)
+            if member_path.is_absolute() or ".." in member_path.parts:
+                raise ScopeError("git_range_unavailable", "unsafe path in git archive")
+        archive.extractall(target)
+    finally:
+        archive.close()
+
+
+def cargo_metadata(root: Path) -> dict[str, Any]:
+    result = subprocess.run(
+        ["cargo", "metadata", "--no-deps", "--format-version", "1", "--manifest-path", str(root / "Cargo.toml")],
+        cwd=root,
+        check=False,
+        text=True,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        raise ScopeError("cargo_metadata_unavailable", result.stderr.strip() or "cargo metadata failed")
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError as exc:
+        raise ScopeError("cargo_metadata_unavailable", "cargo metadata returned invalid JSON") from exc
+    if not isinstance(payload, dict) or not isinstance(payload.get("packages"), list):
+        raise ScopeError("cargo_metadata_unavailable", "cargo metadata omitted packages")
+    return payload
+
+
+def package_roots(root: Path, metadata: dict[str, Any]) -> dict[str, list[tuple[str, str]]]:
+    packages: dict[str, list[tuple[str, str]]] = {}
+    for package in metadata["packages"]:
+        if not isinstance(package, dict) or not isinstance(package.get("name"), str):
+            raise ScopeError("cargo_metadata_unavailable", "cargo metadata package is malformed")
+        name = package["name"]
+        manifest = Path(str(package.get("manifest_path", ""))).resolve()
+        try:
+            manifest_rel = manifest.relative_to(root.resolve()).as_posix()
+        except ValueError as exc:
+            raise ScopeError("cargo_metadata_unavailable", f"package manifest is outside checkout: {name}") from exc
+        roots = {(str(Path(manifest_rel).parent).replace("\\", "/"), manifest_rel)}
+        for target in package.get("targets", []):
+            if not isinstance(target, dict) or not target.get("src_path"):
+                continue
+            source = Path(str(target["src_path"])).resolve()
+            try:
+                source_rel = source.relative_to(root.resolve()).as_posix()
+            except ValueError:
+                continue
+            roots.add((str(Path(source_rel).parent).replace("\\", "/"), source_rel))
+        packages[name] = sorted(roots)
+    return packages
+
+
+def owner_for(path: str, packages: dict[str, list[tuple[str, str]]]) -> str | None:
+    candidate = PurePosixPath(path)
+    owners: list[tuple[int, str]] = []
+    for name, roots in packages.items():
+        for package_root, target in roots:
+            if path == target or candidate == PurePosixPath(package_root) or str(candidate).startswith(package_root + "/"):
+                owners.append((len(package_root), name))
+    if not owners:
+        return None
+    owners.sort(reverse=True)
+    if len({name for _, name in owners if _ == owners[0][0]}) > 1:
+        return None
+    return owners[0][1]
+
+
+def package_manifest_paths(packages: dict[str, list[tuple[str, str]]]) -> dict[str, str]:
+    return {
+        name: next(target for root, target in roots if target.endswith("Cargo.toml"))
+        for name, roots in packages.items()
+        if any(target.endswith("Cargo.toml") for _, target in roots)
+    }
+
+
+def workspace_members(text: str) -> set[str]:
+    match = re.search(r"(?ms)^\s*members\s*=\s*\[(.*?)\]", text)
+    if not match:
+        return set()
+    try:
+        value = ast.literal_eval("[" + match.group(1) + "]")
+    except (SyntaxError, ValueError):
+        return set()
+    return {str(item).replace("\\", "/") for item in value if isinstance(item, str)}
+
+
+def lock_records(text: str) -> dict[str, list[dict[str, str]]]:
+    records: dict[str, list[dict[str, str]]] = {}
+    current: dict[str, str] | None = None
+    in_package = False
+    for line in text.splitlines():
+        if line.strip() == "[[package]]":
+            if current and current.get("name"):
+                records.setdefault(current["name"], []).append(current)
+            current = {}
+            in_package = True
+            continue
+        if line.startswith("[[") or (line.startswith("[") and not line.startswith("[[")):
+            if current and current.get("name"):
+                records.setdefault(current["name"], []).append(current)
+            current = None
+            in_package = False
+            continue
+        if in_package and current is not None:
+            match = re.match(r'^\s*(name|version|source|checksum)\s*=\s*"([^"]*)"', line)
+            if match:
+                current[match.group(1)] = match.group(2)
+    if current and current.get("name"):
+        records.setdefault(current["name"], []).append(current)
+    return records
+
+
+def lock_change_names(repo: Path, base: str, head: str) -> set[str]:
+    old = git_blob(repo, base, "Cargo.lock") or b""
+    new = git_blob(repo, head, "Cargo.lock") or b""
+    before = lock_records(old.decode("utf-8", errors="replace"))
+    after = lock_records(new.decode("utf-8", errors="replace"))
+    return {name for name in set(before) | set(after) if before.get(name) != after.get(name)}
+
+
+def lock_diff_has_unattributable_lines(repo: Path, base: str, head: str) -> bool:
+    diff = git(repo, "diff", "--unified=0", base, head, "--", "Cargo.lock").stdout
+    for line in diff.splitlines():
+        if not line or line.startswith(("+++", "---", "@@")):
+            continue
+        if line[0] not in "+-":
+            continue
+        content = line[1:].strip()
+        if not content:
+            continue
+        if content == "[[package]]" or re.match(r"^(name|version|source|checksum)\s*=", content):
+            continue
+        if content.startswith("dependencies ="):
+            continue
+        return True
+    return False
+
+
+def root_manifest_is_mechanical(repo: Path, base: str, head: str, new_manifest_paths: set[str]) -> bool:
+    old_blob = git_blob(repo, base, "Cargo.toml")
+    new_blob = git_blob(repo, head, "Cargo.toml")
+    if old_blob is None or new_blob is None:
+        return False
+    old_members = workspace_members(old_blob.decode("utf-8", errors="replace"))
+    new_members = workspace_members(new_blob.decode("utf-8", errors="replace"))
+    if not new_members or not new_members.issuperset(old_members):
+        return False
+    added = new_members - old_members
+    if added != new_manifest_paths:
+        return False
+    diff = git(repo, "diff", "--unified=0", base, head, "--", "Cargo.toml").stdout
+    for line in diff.splitlines():
+        if not line or line.startswith(("+++", "---", "@@")) or line[0] not in "+-":
+            continue
+        if "members" not in line[1:]:
+            return False
+    return True
+
+
+def source_text(repo: Path, head: str, path: str) -> str:
+    blob = git_blob(repo, head, path)
+    if blob is None:
+        return ""
+    return blob.decode("utf-8", errors="replace")
+
+
+def check_cross_package_edges(
+    repo: Path,
+    head: str,
+    paths: Iterable[str],
+    packages: dict[str, list[tuple[str, str]]],
+) -> None:
+    for path in paths:
+        owner = owner_for(path, packages)
+        if owner is None or not path.endswith(".rs"):
+            continue
+        text = source_text(repo, head, path)
+        for pattern, reason in (
+            (r"\binclude!\s*\(\s*\"([^\"]+)\"", "cross_package_include"),
+            (r"#\s*\[\s*path\s*=\s*\"([^\"]+)\"", "cross_package_path"),
+        ):
+            for target in re.findall(pattern, text):
+                resolved = resolve_relative(path, target)
+                target_owner = owner_for(resolved, packages) if resolved else None
+                if target_owner is not None and target_owner != owner:
+                    raise ScopeError(reason, f"{path} reaches {resolved}")
+        if Path(path).name == "build.rs":
+            for target in re.findall(r"(?:fs::write|File::create|create_dir_all)\s*\(\s*\"([^\"]+)\"", text):
+                resolved = resolve_relative(path, target)
+                target_owner = owner_for(resolved, packages) if resolved else None
+                if target_owner is not None and target_owner != owner:
+                    raise ScopeError("cross_package_generated_output", f"{path} writes {resolved}")
+
+
+def evaluate(args: argparse.Namespace) -> dict[str, Any]:
+    repo = Path(args.repo_root).resolve()
+    if not repo.is_dir() or not (repo / ".git").exists():
+        raise ScopeError("invalid_repository", f"not a git checkout: {repo}")
+    paths, renames = changed_files(repo, args.base, args.head)
+    policy_path, policy = parse_policy(repo, args.base, args.policy)
+    protected = {safe_relative(path) for path in policy["protected_paths"]}
+    normalized_paths = [safe_relative(path) for path in paths]
+    if policy_path in normalized_paths or protected.intersection(normalized_paths):
+        raise ScopeError("policy_self_modification", "protected scope policy changed")
+    with tempfile.TemporaryDirectory(prefix="cargo-scope-base-") as base_dir:
+        base_root = Path(base_dir)
+        extract_git_tree(repo, args.base, base_root)
+        base_packages = package_roots(base_root, cargo_metadata(base_root))
+    head_packages = package_roots(repo, cargo_metadata(repo))
+    requested_primary = None if args.primary_package == "auto" else args.primary_package
+    if requested_primary is not None and requested_primary not in head_packages:
+        raise ScopeError("unknown_primary_package", args.primary_package)
+
+    base_package_names = set(base_packages)
+    head_package_names = set(head_packages)
+    added_names = head_package_names - base_package_names
+    package_owners: set[str] = set()
+    unowned_rust: list[str] = []
+    for path in normalized_paths:
+        if path in ("Cargo.toml", "Cargo.lock") or path == policy_path:
+            continue
+        owner = owner_for(path, head_packages) or owner_for(path, base_packages)
+        if owner is not None:
+            package_owners.add(owner)
+        elif path.endswith(".rs") or Path(path).name == "Cargo.toml":
+            unowned_rust.append(path)
+    if unowned_rust:
+        raise ScopeError("ambiguous_package_attribution", ", ".join(unowned_rust))
+
+    for old_path, new_path in zip(renames[::2], renames[1::2]):
+        old_owner = owner_for(old_path, base_packages)
+        new_owner = owner_for(new_path, head_packages)
+        if old_owner and new_owner and old_owner != new_owner:
+            raise ScopeError("cross_package_rename", f"{old_path} -> {new_path}")
+        if old_owner:
+            package_owners.add(old_owner)
+        if new_owner:
+            package_owners.add(new_owner)
+
+    if len(package_owners) > 1:
+        raise ScopeError("multiple_business_packages", ", ".join(sorted(package_owners)))
+    primary_package = requested_primary
+    if primary_package is None and package_owners:
+        primary_package = next(iter(package_owners))
+    if package_owners and package_owners != {primary_package}:
+        raise ScopeError("primary_package_mismatch", ", ".join(sorted(package_owners)))
+
+    root_manifest_changed = "Cargo.toml" in normalized_paths
+    root_lock_changed = "Cargo.lock" in normalized_paths
+    new_manifest_paths = {
+        str(Path(package_manifest_paths(head_packages)[name]).parent).replace("\\", "/")
+        for name in added_names
+        if name in package_manifest_paths(head_packages)
+    }
+    if root_manifest_changed:
+        if primary_package not in added_names or not root_manifest_is_mechanical(
+            repo, args.base, args.head, new_manifest_paths
+        ):
+            raise ScopeError("root_manifest_scope", "root Cargo.toml is not a mechanical new-package registration")
+        if new_manifest_paths != {str(Path(package_manifest_paths(head_packages)[primary_package]).parent).replace("\\", "/")}:
+            raise ScopeError("root_manifest_scope", "root manifest registers more than primary package")
+    if root_lock_changed:
+        if lock_diff_has_unattributable_lines(repo, args.base, args.head):
+            raise ScopeError("unattributable_lock_change", "Cargo.lock contains non-package or non-mechanical changes")
+        lock_names = lock_change_names(repo, args.base, args.head)
+        if not lock_names or primary_package is None or not lock_names.issubset({primary_package}):
+            raise ScopeError("unattributable_lock_change", ", ".join(sorted(lock_names)) or "unknown lock change")
+
+    check_cross_package_edges(repo, args.head, normalized_paths, head_packages)
+    return {
+        "status": "allowed",
+        "primary_package": primary_package,
+        "changed_paths": normalized_paths,
+        "changed_packages": sorted(package_owners),
+        "policy": policy_path,
+        "policy_version": policy["policy_version"],
+    }
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--repo-root", required=True)
+    parser.add_argument("--base", required=True)
+    parser.add_argument("--head", required=True)
+    parser.add_argument("--primary-package", required=True)
+    parser.add_argument("--policy", required=True)
+    parser.add_argument("--json", action="store_true")
+    args = parser.parse_args()
+    try:
+        payload = evaluate(args)
+    except ScopeError as exc:
+        payload = {"status": "rejected", "reason": exc.reason}
+        if exc.detail:
+            payload["detail"] = exc.detail
+        if args.json:
+            print(json.dumps(payload, sort_keys=True))
+        else:
+            print(f"rejected: {exc.reason}: {exc.detail}", file=sys.stderr)
+        return 1
+    if args.json:
+        print(json.dumps(payload, sort_keys=True))
+    else:
+        print(f"allowed: {args.primary_package}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

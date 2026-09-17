@@ -1451,6 +1451,9 @@ LOCAL_REQUIRED_REASON_SUMMARY=""
 LOCAL_REQUIRED_SELECTED_CAPABILITIES=""
 LOCAL_REQUIRED_PLANNER_CONFIG_SHA256=""
 LOCAL_REQUIRED_COMMAND=""
+CARGO_PACKAGE_SCOPE_STATUS="not_run"
+CARGO_PACKAGE_SCOPE_COMMAND=""
+CARGO_PACKAGE_SCOPE_REASON=""
 CLAIM_READY_COMMAND=""
 LOCAL_REQUIRED_EXTRA_COMMANDS=()
 
@@ -1569,6 +1572,71 @@ OASIS7_CI_RUN_RUST_BASELINE=$RUN_RUST_BASELINE \
       CLAIM_READY_COMMAND="$(render_cmd "./scripts/pm/claim-ready.sh" "--claim-type" "ready_for_pr" "--verification-profile" "repository_required")"
     fi
   fi
+fi
+
+# The package-scope result is an additive audit.  It never selects or removes
+# required tests.  The policy must already exist at the trusted comparison OID;
+# a policy introduced by this candidate cannot authorize its own enforcement.
+CARGO_PACKAGE_SCOPE_CHECKER="$SOURCE_WORKTREE/scripts/pm/check-cargo-package-scope"
+CARGO_PACKAGE_SCOPE_POLICY="$SOURCE_WORKTREE/.pm/cargo-package-scope-policy.json"
+CARGO_PACKAGE_SCOPE_RELEVANT="$(python3 - "$SOURCE_WORKTREE" "$COMPARISON_HEAD" "$SOURCE_HEAD" <<'PY'
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+base, head = sys.argv[2:]
+changed = subprocess.run(
+    ["git", "-C", str(root), "diff", "--name-only", base, head],
+    check=False,
+    text=True,
+    capture_output=True,
+).stdout.splitlines()
+if any(path in {"Cargo.toml", "Cargo.lock"} for path in changed):
+    print("1")
+    raise SystemExit(0)
+try:
+    metadata = json.loads(
+        subprocess.check_output(
+            ["cargo", "metadata", "--no-deps", "--format-version", "1", "--manifest-path", str(root / "Cargo.toml")],
+            cwd=root,
+            text=True,
+        )
+    )
+    package_roots = {
+        str(Path(str(package["manifest_path"])).resolve().parent.relative_to(root.resolve())).replace("\\", "/")
+        for package in metadata["packages"]
+    }
+except (OSError, subprocess.CalledProcessError, KeyError, json.JSONDecodeError, ValueError):
+    print("1")
+    raise SystemExit(0)
+print("1" if any(any(path == item or path.startswith(item + "/") for item in package_roots) for path in changed) else "0")
+PY
+)"
+if [[ "$CARGO_PACKAGE_SCOPE_RELEVANT" != "1" ]]; then
+  CARGO_PACKAGE_SCOPE_STATUS="skipped"
+  CARGO_PACKAGE_SCOPE_REASON="no_cargo_package_path_changed"
+elif [[ ! -x "$CARGO_PACKAGE_SCOPE_CHECKER" || ! -f "$CARGO_PACKAGE_SCOPE_POLICY" ]]; then
+  CARGO_PACKAGE_SCOPE_STATUS="unavailable"
+  CARGO_PACKAGE_SCOPE_REASON="checker_or_policy_unavailable"
+elif ! git -C "$SOURCE_WORKTREE" cat-file -e "${COMPARISON_HEAD}:.pm/cargo-package-scope-policy.json" 2>/dev/null; then
+  CARGO_PACKAGE_SCOPE_STATUS="skipped"
+  CARGO_PACKAGE_SCOPE_REASON="trusted_base_policy_unavailable"
+else
+  CARGO_PACKAGE_SCOPE_COMMAND="$(render_cmd python3 "$CARGO_PACKAGE_SCOPE_CHECKER" \
+    --repo-root "$SOURCE_WORKTREE" --base "$COMPARISON_HEAD" --head "$SOURCE_HEAD" \
+    --primary-package auto --policy "$CARGO_PACKAGE_SCOPE_POLICY" --json)"
+  if ! CARGO_PACKAGE_SCOPE_OUTPUT="$(cd "$SOURCE_WORKTREE" && python3 "$CARGO_PACKAGE_SCOPE_CHECKER" \
+    --repo-root "$SOURCE_WORKTREE" --base "$COMPARISON_HEAD" --head "$SOURCE_HEAD" \
+    --primary-package auto --policy "$CARGO_PACKAGE_SCOPE_POLICY" --json 2>&1)"; then
+    printf '%s\n' "$CARGO_PACKAGE_SCOPE_OUTPUT" >&2
+    die "Cargo package scope check failed for $COMPARISON_HEAD..$SOURCE_HEAD"
+  fi
+  CARGO_PACKAGE_SCOPE_STATUS="validated"
+  LOCAL_REQUIRED_EXTRA_COMMANDS+=("$CARGO_PACKAGE_SCOPE_COMMAND")
 fi
 
 REMOTE_SOURCE_REF=""
@@ -1931,7 +1999,7 @@ fi
 
 LOCAL_REQUIRED_EXTRA_COMMANDS_JOINED="$(printf '%s;' ${LOCAL_REQUIRED_EXTRA_COMMANDS[@]+"${LOCAL_REQUIRED_EXTRA_COMMANDS[@]}"})"
 SUMMARY_JSON="$(
-python3 - "$SOURCE_BRANCH" "$SOURCE_WORKTREE" "$SOURCE_HEAD" "$BASE_BRANCH" "$COMPARISON_REF" "$COMPARISON_HEAD" "$REMOTE_NAME" "$AHEAD_COUNT" "$BEHIND_COUNT" "$REBASE_REQUIRED" "$UPSTREAM_REF" "$LOCAL_ONLY_COUNT" "$REMOTE_ONLY_COUNT" "$CREATE_CMD_RENDERED" "$SYNC_CMD" "$CLEANUP_CMD_1" "$CLEANUP_CMD_2" "$PR_URL" "$LOCAL_REQUIRED_SCOPE" "$LOCAL_REQUIRED_CHANGED_PATH_COUNT" "$LOCAL_REQUIRED_CHANGED_PATHS" "$LOCAL_REQUIRED_REASON_SUMMARY" "$LOCAL_REQUIRED_COMMAND" "$CLAIM_READY_COMMAND" "$LOCAL_REQUIRED_EXTRA_COMMANDS_JOINED" "$LOCAL_ROLE_REVIEW_STATUS" "$LOCAL_ROLE_REVIEW_TASK_UID" "$LOCAL_ROLE_REVIEW_LOG_PATH" "$LOCAL_ROLE_REVIEW_REASON" "$LOCAL_ROLE_REVIEW_MISSING_MARKERS" "$LOCAL_ROLE_REVIEW_ROLES" "$LOCAL_ROLE_REVIEW_PACKAGE" "$LOCAL_ROLE_REVIEW_VERDICTS" "$LOCAL_ROLE_REVIEW_FINDINGS_DISPOSITION" "$LOCAL_ROLE_REVIEW_RESIDUAL_RISK" "$LOCAL_ROLE_REVIEW_SLICE_LEDGER" "$REQUIRED_REVIEW_ROLES" "$MISSING_REQUIRED_REVIEW_ROLES" "$LOCAL_ROLE_REVIEW_VERIFICATION_MATRIX" "$LOCAL_ROLE_REVIEW_VISUAL_EVIDENCE" "$LOCAL_ROLE_REVIEW_WASM_EVIDENCE" "$LOCAL_ROLE_REVIEW_OPS_EVIDENCE" "$LOCAL_ROLE_REVIEW_LIVEOPS_EVIDENCE" "$MISSING_SEMANTIC_REVIEW_EVIDENCE" "$LOCAL_REQUIRED_SELECTED_CAPABILITIES" "$LOCAL_REQUIRED_PLANNER_CONFIG_SHA256" <<'PY'
+python3 - "$SOURCE_BRANCH" "$SOURCE_WORKTREE" "$SOURCE_HEAD" "$BASE_BRANCH" "$COMPARISON_REF" "$COMPARISON_HEAD" "$REMOTE_NAME" "$AHEAD_COUNT" "$BEHIND_COUNT" "$REBASE_REQUIRED" "$UPSTREAM_REF" "$LOCAL_ONLY_COUNT" "$REMOTE_ONLY_COUNT" "$CREATE_CMD_RENDERED" "$SYNC_CMD" "$CLEANUP_CMD_1" "$CLEANUP_CMD_2" "$PR_URL" "$LOCAL_REQUIRED_SCOPE" "$LOCAL_REQUIRED_CHANGED_PATH_COUNT" "$LOCAL_REQUIRED_CHANGED_PATHS" "$LOCAL_REQUIRED_REASON_SUMMARY" "$LOCAL_REQUIRED_COMMAND" "$CLAIM_READY_COMMAND" "$LOCAL_REQUIRED_EXTRA_COMMANDS_JOINED" "$LOCAL_ROLE_REVIEW_STATUS" "$LOCAL_ROLE_REVIEW_TASK_UID" "$LOCAL_ROLE_REVIEW_LOG_PATH" "$LOCAL_ROLE_REVIEW_REASON" "$LOCAL_ROLE_REVIEW_MISSING_MARKERS" "$LOCAL_ROLE_REVIEW_ROLES" "$LOCAL_ROLE_REVIEW_PACKAGE" "$LOCAL_ROLE_REVIEW_VERDICTS" "$LOCAL_ROLE_REVIEW_FINDINGS_DISPOSITION" "$LOCAL_ROLE_REVIEW_RESIDUAL_RISK" "$LOCAL_ROLE_REVIEW_SLICE_LEDGER" "$REQUIRED_REVIEW_ROLES" "$MISSING_REQUIRED_REVIEW_ROLES" "$LOCAL_ROLE_REVIEW_VERIFICATION_MATRIX" "$LOCAL_ROLE_REVIEW_VISUAL_EVIDENCE" "$LOCAL_ROLE_REVIEW_WASM_EVIDENCE" "$LOCAL_ROLE_REVIEW_OPS_EVIDENCE" "$LOCAL_ROLE_REVIEW_LIVEOPS_EVIDENCE" "$MISSING_SEMANTIC_REVIEW_EVIDENCE" "$LOCAL_REQUIRED_SELECTED_CAPABILITIES" "$LOCAL_REQUIRED_PLANNER_CONFIG_SHA256" "$CARGO_PACKAGE_SCOPE_STATUS" "$CARGO_PACKAGE_SCOPE_COMMAND" "$CARGO_PACKAGE_SCOPE_REASON" <<'PY'
 from __future__ import annotations
 
 import json
@@ -1971,6 +2039,11 @@ payload = {
         "recommended_required_command": sys.argv[23] or None,
         "recommended_claim_ready_command": sys.argv[24] or None,
         "recommended_extra_commands": extra_commands,
+        "cargo_package_scope": {
+            "status": sys.argv[47] or None,
+            "command": sys.argv[48] or None,
+            "reason": sys.argv[49] or None,
+        },
         "selected_capabilities": sys.argv[45] or None,
         "planner_config_sha256": sys.argv[46] or None,
     },
@@ -2032,6 +2105,10 @@ echo
 echo "Local Required Validation:"
 echo "- scope: $LOCAL_REQUIRED_SCOPE"
 echo "- changed paths: $LOCAL_REQUIRED_CHANGED_PATH_COUNT"
+echo "- Cargo package scope: $CARGO_PACKAGE_SCOPE_STATUS"
+if [[ -n "$CARGO_PACKAGE_SCOPE_REASON" ]]; then
+  echo "- Cargo package scope reason: $CARGO_PACKAGE_SCOPE_REASON"
+fi
 if [[ -n "$LOCAL_REQUIRED_REASON_SUMMARY" ]]; then
   echo "- planner reason summary: $LOCAL_REQUIRED_REASON_SUMMARY"
   while IFS= read -r reason_item; do
