@@ -4366,6 +4366,86 @@ function createViewerBrowserRaceHandoffModule({
     offerKeyMaterial
   };
 }
+function createViewerBrowserRaceIdentityTestApi({
+  authHasSigningKeyMaterial: authHasSigningKeyMaterial2,
+  bumpRequestCounters,
+  clone: clone2,
+  connect: connect2,
+  isTestApiEnabled: isTestApiEnabled2,
+  render: render2,
+  state: state2,
+  viewerBrowserRaceHandoffModule = createViewerBrowserRaceHandoffModule()
+} = {}) {
+  let browserRaceIdentityOffer = null;
+  function requireBrowserRaceHandoff() {
+    if (!isTestApiEnabled2?.() || !viewerBrowserRaceHandoffModule.enabled) {
+      throw new Error("browser race identity handoff requires loopback test_api=1&hosted_test_login=1");
+    }
+  }
+  function offerBrowserRaceIdentityForTest() {
+    requireBrowserRaceHandoff();
+    if (!authHasSigningKeyMaterial2?.(state2.auth) || state2.auth.source !== "hosted_test_login") {
+      throw new Error("browser race identity offer requires an active hosted test-login signing identity");
+    }
+    browserRaceIdentityOffer?.dispose?.();
+    browserRaceIdentityOffer = viewerBrowserRaceHandoffModule.offerKeyMaterial({
+      publicKey: state2.auth.publicKey,
+      privateKey: state2.auth.privateKey,
+      releaseToken: state2.auth.releaseToken,
+      playerId: state2.auth.playerId,
+      sessionEpoch: state2.auth.sessionEpoch,
+      bindingEpoch: state2.auth.bindingEpoch,
+      boundAgentId: state2.auth.boundAgentId,
+      authorityEpoch: state2.auth.authorityEpoch
+    });
+    return clone2(browserRaceIdentityOffer.descriptor);
+  }
+  async function claimBrowserRaceIdentityForTest(descriptor) {
+    requireBrowserRaceHandoff();
+    if (!state2.auth?.available || state2.auth.source !== "hosted_browser_storage") {
+      throw new Error("browser race identity claim requires the stored hosted test-login session");
+    }
+    const keyMaterial = await viewerBrowserRaceHandoffModule.claimOffer(descriptor);
+    const claimedPlayerId = String(keyMaterial.playerId || "").trim();
+    const currentPlayerId = String(state2.auth.playerId || "").trim();
+    if (!claimedPlayerId || !currentPlayerId || claimedPlayerId !== currentPlayerId) {
+      throw new Error("browser race identity claim player binding mismatch");
+    }
+    state2.auth.publicKey = keyMaterial.publicKey;
+    state2.auth.privateKey = keyMaterial.privateKey;
+    state2.auth.releaseToken = keyMaterial.releaseToken;
+    state2.auth.sessionEpoch = keyMaterial.sessionEpoch;
+    state2.auth.bindingEpoch = keyMaterial.bindingEpoch;
+    state2.auth.boundAgentId = keyMaterial.boundAgentId;
+    state2.auth.authorityEpoch = keyMaterial.authorityEpoch;
+    state2.auth.source = "hosted_test_login";
+    state2.auth.loginChannel = "test";
+    state2.auth.registrationStatus = "issued";
+    state2.auth.runtimeStatus = "issued";
+    state2.auth.syncInFlight = false;
+    state2.auth.error = null;
+    bumpRequestCounters?.();
+    render2();
+    return {
+      ok: true,
+      playerId: state2.auth.playerId,
+      source: state2.auth.source
+    };
+  }
+  function connectBrowserRaceActorForTest() {
+    requireBrowserRaceHandoff();
+    if (!authHasSigningKeyMaterial2?.(state2.auth)) {
+      throw new Error("browser race actor connect requires claimed signing key material");
+    }
+    connect2();
+    return { ok: true };
+  }
+  return {
+    claimBrowserRaceIdentityForTest,
+    connectBrowserRaceActorForTest,
+    offerBrowserRaceIdentityForTest
+  };
+}
 function createViewerWorldScaleModule({
   documentRef,
   state: state2,
@@ -6695,8 +6775,6 @@ let requestId = 0;
 let authNonceCounter = 0;
 let viewerPromptControlModule = null;
 let viewerControlLossModule = null;
-const viewerBrowserRaceHandoffModule = createViewerBrowserRaceHandoffModule();
-let browserRaceIdentityOffer = null;
 let semanticSendLoop = null;
 const pendingControlFeedback = /* @__PURE__ */ new Map();
 const pendingSemanticCommands = [];
@@ -7024,70 +7102,6 @@ function nextRequestId() {
 function nextAuthNonce() {
   authNonceCounter += 1;
   return Date.now() + authNonceCounter;
-}
-function requireBrowserRaceHandoff() {
-  if (!isTestApiEnabled() || !viewerBrowserRaceHandoffModule.enabled) {
-    throw new Error("browser race identity handoff requires loopback test_api=1&hosted_test_login=1");
-  }
-}
-function offerBrowserRaceIdentityForTest() {
-  requireBrowserRaceHandoff();
-  if (!authHasSigningKeyMaterial(state.auth) || state.auth.source !== "hosted_test_login") {
-    throw new Error("browser race identity offer requires an active hosted test-login signing identity");
-  }
-  browserRaceIdentityOffer?.dispose?.();
-  browserRaceIdentityOffer = viewerBrowserRaceHandoffModule.offerKeyMaterial({
-    publicKey: state.auth.publicKey,
-    privateKey: state.auth.privateKey,
-    releaseToken: state.auth.releaseToken,
-    playerId: state.auth.playerId,
-    sessionEpoch: state.auth.sessionEpoch,
-    bindingEpoch: state.auth.bindingEpoch,
-    boundAgentId: state.auth.boundAgentId,
-    authorityEpoch: state.auth.authorityEpoch
-  });
-  return clone(browserRaceIdentityOffer.descriptor);
-}
-async function claimBrowserRaceIdentityForTest(descriptor) {
-  requireBrowserRaceHandoff();
-  if (!state.auth?.available || state.auth.source !== "hosted_browser_storage") {
-    throw new Error("browser race identity claim requires the stored hosted test-login session");
-  }
-  const keyMaterial = await viewerBrowserRaceHandoffModule.claimOffer(descriptor);
-  const claimedPlayerId = String(keyMaterial.playerId || "").trim();
-  const currentPlayerId = String(state.auth.playerId || "").trim();
-  if (!claimedPlayerId || !currentPlayerId || claimedPlayerId !== currentPlayerId) {
-    throw new Error("browser race identity claim player binding mismatch");
-  }
-  state.auth.publicKey = keyMaterial.publicKey;
-  state.auth.privateKey = keyMaterial.privateKey;
-  state.auth.releaseToken = keyMaterial.releaseToken;
-  state.auth.sessionEpoch = keyMaterial.sessionEpoch;
-  state.auth.bindingEpoch = keyMaterial.bindingEpoch;
-  state.auth.boundAgentId = keyMaterial.boundAgentId;
-  state.auth.authorityEpoch = keyMaterial.authorityEpoch;
-  state.auth.source = "hosted_test_login";
-  state.auth.loginChannel = "test";
-  state.auth.registrationStatus = "issued";
-  state.auth.runtimeStatus = "issued";
-  state.auth.syncInFlight = false;
-  state.auth.error = null;
-  requestId = Math.max(requestId, 1e6);
-  authNonceCounter = Math.max(authNonceCounter, 1e6);
-  render();
-  return {
-    ok: true,
-    playerId: state.auth.playerId,
-    source: state.auth.source
-  };
-}
-function connectBrowserRaceActorForTest() {
-  requireBrowserRaceHandoff();
-  if (!authHasSigningKeyMaterial(state.auth)) {
-    throw new Error("browser race actor connect requires claimed signing key material");
-  }
-  connect();
-  return { ok: true };
 }
 const viewerAgentChatAuthModule = createViewerAgentChatAuthModule({ buildAuthEnvelope, nextAuthNonce, signAuthPayload, state });
 function resetViewerProtocolForConnection() {
@@ -10614,12 +10628,24 @@ function installTestApi() {
     expireHostedRuntimeSyncTimeoutForTest,
     expirePendingPromptControlAckTimeoutForTest,
     expirePendingGameplayActionAckTimeoutForTest,
-    offerBrowserRaceIdentityForTest,
-    claimBrowserRaceIdentityForTest,
-    connectBrowserRaceActorForTest,
+    offerBrowserRaceIdentityForTest: viewerBrowserRaceIdentityTestApi.offerBrowserRaceIdentityForTest,
+    claimBrowserRaceIdentityForTest: viewerBrowserRaceIdentityTestApi.claimBrowserRaceIdentityForTest,
+    connectBrowserRaceActorForTest: viewerBrowserRaceIdentityTestApi.connectBrowserRaceActorForTest,
     reportFatalError
   };
 }
+const viewerBrowserRaceIdentityTestApi = createViewerBrowserRaceIdentityTestApi({
+  authHasSigningKeyMaterial,
+  clone,
+  connect,
+  isTestApiEnabled,
+  render,
+  state,
+  bumpRequestCounters() {
+    requestId = Math.max(requestId, 1e6);
+    authNonceCounter = Math.max(authNonceCounter, 1e6);
+  }
+});
 viewerControlLossModule = createViewerControlLossModule({ render, state });
 viewerPromptControlModule = createViewerPromptControlModule({
   applyPromptAckLocally,

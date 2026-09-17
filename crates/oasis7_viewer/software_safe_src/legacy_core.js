@@ -10,7 +10,7 @@ import { createViewerControlLossModule } from "./viewer_control_loss_module.js";
 import { resetHostedLoginChallenge as resetHostedLoginChallengeState } from "./viewer_hosted_login_state_module.js";
 import { createViewerLocalePreferencesModule } from "./viewer_locale_preferences_module.js";
 import { createViewerBrowserPersistenceModule } from "./viewer_browser_persistence_module.js";
-import { createViewerBrowserRaceHandoffModule } from "./viewer_browser_race_handoff_module.js";
+import { createViewerBrowserRaceIdentityTestApi } from "./viewer_browser_race_identity_test_api_module.js";
 import { createViewerWorldScaleModule } from "./viewer_world_scale_module.js";
 import { createRefineQuotePreflightStateModule } from "./refine_quote_preflight_state.js";
 import { createProductValidationQuoteIntegration } from "./product_validation_quote_integration.js";
@@ -77,8 +77,6 @@ let requestId = 0;
 let authNonceCounter = 0;
 let viewerPromptControlModule = null;
 let viewerControlLossModule = null;
-const viewerBrowserRaceHandoffModule = createViewerBrowserRaceHandoffModule();
-let browserRaceIdentityOffer = null;
 let semanticSendLoop = null;
 const pendingControlFeedback = new Map();
 const pendingSemanticCommands = [];
@@ -87,13 +85,9 @@ const elements = {};
 const renderHook = createViewerRenderHookRegistry();
 let bootstrapped = false; const worldFeedTransport = createWorldFeedTransport({ getSocket: () => socket, getState: () => state, render, requestSnapshot: () => requestSnapshotSafe(), sendJson });
 export const requestWorldFeed = (...args) => worldFeedTransport.requestWorldFeed(...args); export const reloadWorldFeedFromAuthoritativeSnapshot = (...args) => worldFeedTransport.reloadWorldFeedFromAuthoritativeSnapshot(...args);
-const HELLO_ACK_TIMEOUT_MS = 2000;
-const INITIAL_SNAPSHOT_RETRY_DELAY_MS = 1000;
-const INITIAL_SNAPSHOT_SLOW_RETRY_AFTER = 5;
-const INITIAL_SNAPSHOT_SLOW_RETRY_DELAY_MS = 5000;
-const EMPTY_ENTITY_SNAPSHOT_REFRESH_DELAY_MS = 2500;
-const FIRST_AGENT_CLAIM_AUTO_ADVANCE_DELAY_MS = 450;
-const FIRST_AGENT_CLAIM_AUTO_REFRESH_DELAY_MS = 1200;
+const HELLO_ACK_TIMEOUT_MS = 2000; const INITIAL_SNAPSHOT_RETRY_DELAY_MS = 1000; const INITIAL_SNAPSHOT_SLOW_RETRY_AFTER = 5;
+const INITIAL_SNAPSHOT_SLOW_RETRY_DELAY_MS = 5000; const EMPTY_ENTITY_SNAPSHOT_REFRESH_DELAY_MS = 2500;
+const FIRST_AGENT_CLAIM_AUTO_ADVANCE_DELAY_MS = 450; const FIRST_AGENT_CLAIM_AUTO_REFRESH_DELAY_MS = 1200;
 const SESSION_REGISTER_ACK_TIMEOUT_MS = 15000;
 const AGENT_CHAT_ACK_TIMEOUT_MS = 30000;
 const SEMANTIC_ACTION_ACK_TIMEOUT_MS = 30000;
@@ -426,76 +420,6 @@ function nextRequestId() {
 function nextAuthNonce() {
   authNonceCounter += 1;
   return Date.now() + authNonceCounter;
-}
-
-function requireBrowserRaceHandoff() {
-  if (!isTestApiEnabled() || !viewerBrowserRaceHandoffModule.enabled) {
-    throw new Error("browser race identity handoff requires loopback test_api=1&hosted_test_login=1");
-  }
-}
-
-function offerBrowserRaceIdentityForTest() {
-  requireBrowserRaceHandoff();
-  if (!authHasSigningKeyMaterial(state.auth) || state.auth.source !== "hosted_test_login") {
-    throw new Error("browser race identity offer requires an active hosted test-login signing identity");
-  }
-  browserRaceIdentityOffer?.dispose?.();
-  browserRaceIdentityOffer = viewerBrowserRaceHandoffModule.offerKeyMaterial({
-    publicKey: state.auth.publicKey,
-    privateKey: state.auth.privateKey,
-    releaseToken: state.auth.releaseToken,
-    playerId: state.auth.playerId,
-    sessionEpoch: state.auth.sessionEpoch,
-    bindingEpoch: state.auth.bindingEpoch,
-    boundAgentId: state.auth.boundAgentId,
-    authorityEpoch: state.auth.authorityEpoch,
-  });
-  return clone(browserRaceIdentityOffer.descriptor);
-}
-
-async function claimBrowserRaceIdentityForTest(descriptor) {
-  requireBrowserRaceHandoff();
-  if (!state.auth?.available || state.auth.source !== "hosted_browser_storage") {
-    throw new Error("browser race identity claim requires the stored hosted test-login session");
-  }
-  const keyMaterial = await viewerBrowserRaceHandoffModule.claimOffer(descriptor);
-  const claimedPlayerId = String(keyMaterial.playerId || "").trim();
-  const currentPlayerId = String(state.auth.playerId || "").trim();
-  if (!claimedPlayerId || !currentPlayerId || claimedPlayerId !== currentPlayerId) {
-    throw new Error("browser race identity claim player binding mismatch");
-  }
-  state.auth.publicKey = keyMaterial.publicKey;
-  state.auth.privateKey = keyMaterial.privateKey;
-  state.auth.releaseToken = keyMaterial.releaseToken;
-  state.auth.sessionEpoch = keyMaterial.sessionEpoch;
-  state.auth.bindingEpoch = keyMaterial.bindingEpoch;
-  state.auth.boundAgentId = keyMaterial.boundAgentId;
-  state.auth.authorityEpoch = keyMaterial.authorityEpoch;
-  state.auth.source = "hosted_test_login";
-  state.auth.loginChannel = "test";
-  state.auth.registrationStatus = "issued";
-  state.auth.runtimeStatus = "issued";
-  state.auth.syncInFlight = false;
-  state.auth.error = null;
-  // Per-tab counters otherwise begin at the same values.  Keep actor B in a
-  // disjoint range without exposing or changing the signed request format.
-  requestId = Math.max(requestId, 1_000_000);
-  authNonceCounter = Math.max(authNonceCounter, 1_000_000);
-  render();
-  return {
-    ok: true,
-    playerId: state.auth.playerId,
-    source: state.auth.source,
-  };
-}
-
-function connectBrowserRaceActorForTest() {
-  requireBrowserRaceHandoff();
-  if (!authHasSigningKeyMaterial(state.auth)) {
-    throw new Error("browser race actor connect requires claimed signing key material");
-  }
-  connect();
-  return { ok: true };
 }
 
 const viewerAgentChatAuthModule = createViewerAgentChatAuthModule({ buildAuthEnvelope, nextAuthNonce, signAuthPayload, state });
@@ -4347,12 +4271,12 @@ function installTestApi() {
     expireHostedRuntimeSyncTimeoutForTest,
     expirePendingPromptControlAckTimeoutForTest,
     expirePendingGameplayActionAckTimeoutForTest,
-    offerBrowserRaceIdentityForTest,
-    claimBrowserRaceIdentityForTest,
-    connectBrowserRaceActorForTest,
+    offerBrowserRaceIdentityForTest: viewerBrowserRaceIdentityTestApi.offerBrowserRaceIdentityForTest, claimBrowserRaceIdentityForTest: viewerBrowserRaceIdentityTestApi.claimBrowserRaceIdentityForTest, connectBrowserRaceActorForTest: viewerBrowserRaceIdentityTestApi.connectBrowserRaceActorForTest,
     reportFatalError,
   };
 }
+const viewerBrowserRaceIdentityTestApi = createViewerBrowserRaceIdentityTestApi({ authHasSigningKeyMaterial, clone, connect, isTestApiEnabled, render, state,
+  bumpRequestCounters() { requestId = Math.max(requestId, 1_000_000); authNonceCounter = Math.max(authNonceCounter, 1_000_000); } });
 
 viewerControlLossModule = createViewerControlLossModule({ render, state });
 viewerPromptControlModule = createViewerPromptControlModule({
