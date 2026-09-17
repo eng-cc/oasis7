@@ -140,6 +140,13 @@ def consumed_clause_ref_errors(reference, *, require_identity=False):
     if not isinstance(reference, dict):
         return ["consumed clause reference must be an object"]
     errors = []
+    for oid_field in ("source_commit", "source_head_oid"):
+        if oid_field in reference:
+            errors.append(
+                "identity-oid-placement: consumed clause "
+                + oid_field
+                + " belongs to the coordinating/source snapshot, not the clause reference"
+            )
     if reference.get("repository") != REPOSITORY:
         errors.append("consumed clause repository must be canonical")
     if not safe_path(reference.get("path")):

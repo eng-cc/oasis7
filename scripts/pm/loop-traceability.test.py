@@ -130,6 +130,9 @@ def _trace_na(owner_role, *, reason="This relation is outside the bounded change
 
 def _trace_ref(kind=None, *, path, fragment, clause_id):
     reference = _contract_ref(path=path, fragment=fragment, clause_id=clause_id)
+    # Typed upstream/system references use the bound contract's integer
+    # revision; legacy acceptance_refs retain their historical opaque spelling.
+    reference["revision"] = 1
     if kind is not None:
         reference["kind"] = kind
     reference["applicability"] = "required"
@@ -2220,6 +2223,15 @@ class TraceabilityTests(unittest.TestCase):
         self.assertEqual(result.get("status"), "passed", result)
         self.assertEqual(result.get("effective_tool_commit"), effective_tool_commit)
         self.assertEqual(result.get("record_source_commit"), SOURCE_OID)
+
+    def test_c1_new_policy_binding_requires_complete_immutable_policy_identity(self):
+        binding = self.refresh_record_binding(self.record)
+        binding["policy_digest"] = "sha256:" + "6" * 64
+        result = self.leaf(binding=binding)
+        self.assert_trace_blocked(result, "policy-identity-incomplete")
+        diagnostic = result["diagnostics"][0]
+        self.assertEqual(diagnostic["field"], "binding.policy_commit")
+        self.assertTrue(diagnostic["repair_hint"])
 
     def test_duplicate_coordination_comments_block_exact_readback(self):
         readers = FixtureReaders(self.record)

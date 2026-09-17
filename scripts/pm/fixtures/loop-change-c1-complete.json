@@ -1,0 +1,117 @@
+{
+  "schema": "oasis7.loop-change/v1",
+  "marker": "oasis7-loop-change-record",
+  "task_uid": "task_11111111111111111111111111111111",
+  "change_id": "change-c1-complete-fixture",
+  "coordination_ref": {
+    "repository": "eng-cc/oasis7",
+    "issue_number": 3730,
+    "comment_id": 999001,
+    "record_digest": "sha256:02f46e13b1904c2f05c38b5d394ee7482552f49c6a848850f1b6164a0a9e0cd6",
+    "source_commit": "c7d29a13452b4889fe022701509ea5c2204e9b07"
+  },
+  "required_obligations": [
+    {
+      "obligation_id": "C1-identity",
+      "mapping_slot": "c1-contract",
+      "required": true,
+      "applicability": "required",
+      "acceptance_refs": [
+        {
+          "repository": "eng-cc/oasis7",
+          "path": "doc/engineering/workflow/source-of-truth.md",
+          "fragment": "traceability-record-contract",
+          "clause_id": "C1-identity",
+          "contract_id": "engineering-workflow",
+          "revision": 1,
+          "contract_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+          "publication_ref": {
+            "repository": "eng-cc/oasis7",
+            "issue_number": 3724,
+            "comment_id": 999002
+          }
+        }
+      ],
+      "owner_loop": "code",
+      "owner_role": "repository_health_engineer",
+      "trace": {
+        "upstream_refs": [
+          {
+            "kind": "professional_acceptance",
+            "applicability": "required",
+            "repository": "eng-cc/oasis7",
+            "path": "doc/engineering/doc-governance/cross-layer-requirements-traceability.design.md",
+            "fragment": "4-canonical-trace-relation",
+            "clause_id": "C1-identity",
+            "contract_id": "engineering-cross-layer-traceability",
+            "revision": 1,
+            "contract_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+            "publication_ref": {
+              "repository": "eng-cc/oasis7",
+              "issue_number": 3724,
+              "comment_id": 999003
+            }
+          }
+        ],
+        "system_design": {
+          "applicability": "required",
+          "repository": "eng-cc/oasis7",
+          "path": "doc/engineering/doc-governance/system-design-writing-standard.design.md",
+          "fragment": "11-验证设计与可追溯性",
+          "clause_id": "C1-identity",
+          "contract_id": "engineering-system-design-writing-standard",
+          "revision": 1,
+          "contract_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+          "publication_ref": {
+            "repository": "eng-cc/oasis7",
+            "issue_number": 3724,
+            "comment_id": 999004
+          }
+        }
+      }
+    }
+  ],
+  "mapping_slots": [
+    {
+      "slot_id": "c1-contract",
+      "owner_loop": "code",
+      "owner_role": "repository_health_engineer",
+      "allowed_task_uids": ["task_11111111111111111111111111111111"]
+    }
+  ],
+  "candidate_selection": {
+    "comparable_fields": [
+      "change_id",
+      "source_head_oid",
+      "integration_base_oid",
+      "tested_tree_oid",
+      "configuration_digest",
+      "entry",
+      "environment",
+      "evidence_window",
+      "effective_policy_identity",
+      "effective_helper_identity",
+      "effective_workflow_identity",
+      "consumed_contracts"
+    ],
+    "required_integration_base_oid": "4e1eb57deae467a2f7846b35ec84545edfa601b6",
+    "required_tested_tree_oid": "c7d29a13452b4889fe022701509ea5c2204e9b07"
+  },
+  "consumed_clause_refs": [
+    {
+      "repository": "eng-cc/oasis7",
+      "path": "doc/engineering/workflow/source-of-truth.md",
+      "fragment": "traceability-record-contract",
+      "clause_id": "C1-identity",
+      "contract_id": "engineering-workflow",
+      "revision": 1,
+      "contract_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+      "publication_ref": {
+        "repository": "eng-cc/oasis7",
+        "issue_number": 3724,
+        "comment_id": 999002
+      }
+    }
+  ],
+  "feedback": []
+}
