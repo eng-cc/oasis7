@@ -31,7 +31,7 @@ def load_impact_projection(path, expected):
         raise ValueError("impact projection adapter is unavailable")
     helper = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(helper)
-    return helper.load_verified_projection(path, expected=expected)
+    return helper.load_verified_projection(path, expected=expected, repo_root=Path.cwd())
 
 
 def main() -> int:

@@ -92,6 +92,10 @@ bash "$ROOT_DIR/scripts/pm/claim-ready-ready-pr.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/workflow-lint.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/record-pre-pr-review.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/review-closeout-facade.test.sh" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/workflow-impact-projection.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/review-plan.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/subagent-task-packet.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/task-closeout-v2-live-validation.test.py" >/dev/null
 "$ROOT_DIR/scripts/pm/new-task-worktree-acceptance-pre-mutation.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/finalize-task-red.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/finalize-task.test.sh" >/dev/null
@@ -1163,6 +1167,17 @@ segments = [
         },
     },
     {
+        "id": "projected_v2_review_entrypoint",
+        "command": "python3 workflow-impact-projection.test.py && python3 review-plan.test.py && python3 subagent-task-packet.test.py && python3 task-closeout-v2-live-validation.test.py",
+        "status": "passed",
+        "evidence": {
+            "projection_to_plan": "passed",
+            "packet_admission": "passed",
+            "trusted_ci_review_join": "passed",
+            "compatibility_and_drift_rejection": "passed",
+        },
+    },
+    {
         "id": "pre_pr_review_packet_helper",
         "command": "./scripts/pm/record-pre-pr-review.test.sh",
         "status": "passed",
@@ -1190,7 +1205,7 @@ segments = [
 ]
 
 payload = {
-    "workflow_path": "default-workflow-bootstrap -> new-task-worktree -> workflow-report -> repo-owned-workflow-router -> TPM coordinate/integrate only + professional role subagent dispatch -> prepare-task-pr --draft-candidate --create -> exact-head CI -> role review -> task-closeout -> prepare-task-pr --promote-draft -> PR CI/comment watch/fix -> review-thread-closeout -> merge/cleanup",
+    "workflow_path": "default-workflow-bootstrap -> new-task-worktree -> workflow-report -> repo-owned-workflow-router -> TPM coordinate/integrate only + professional role subagent dispatch -> prepare-task-pr --draft-candidate --create with verified projection -> exact-head CI and role review concurrently -> fail-closed join -> task-closeout -> prepare-task-pr --promote-draft -> PR CI/comment watch/fix -> review-thread-closeout -> merge/cleanup",
     "fixture_scope": "repo-owned bootstrap/routing surface checks, isolated worktree bootstrap smoke, GitHub-backed PM runtime tests, and fake-gh PR helper tests",
     "expected_agent_behavior": [
         "every user request first routes through a repo-owned bootstrap surface rather than an external bootstrap",

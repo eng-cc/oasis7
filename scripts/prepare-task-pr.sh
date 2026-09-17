@@ -57,6 +57,7 @@ Options:
   --review-verification-affected Add QA for semantic/external doc verification changes
   --review-manual-role <role> Repeatable manual role for unknown or mixed review scope
   --impact-projection <path> Verified v2 projection shared by CI, role selection, review, and closeout
+  --legacy-review-v1      Explicit compatibility mode for an unprojected draft candidate
   --json                  Print machine-readable JSON summary only
   -h, --help              Show help
 
@@ -116,6 +117,7 @@ REVIEW_VERIFICATION_AFFECTED=0
 REVIEW_MANUAL_ROLES=()
 IMPACT_PROJECTION=""
 IMPACT_PROJECTION_B64=""
+LEGACY_REVIEW_V1=0
 POSITIONAL=()
 
 while [[ $# -gt 0 ]]; do
@@ -151,6 +153,7 @@ while [[ $# -gt 0 ]]; do
     --review-verification-affected) REVIEW_VERIFICATION_AFFECTED=1; shift ;;
     --review-manual-role) REVIEW_MANUAL_ROLES+=("${2:-}"); shift 2 ;;
     --impact-projection) IMPACT_PROJECTION="${2:-}"; shift 2 ;;
+    --legacy-review-v1) LEGACY_REVIEW_V1=1; shift ;;
     --json)
       OUTPUT_JSON=1
       shift
@@ -171,6 +174,9 @@ if [[ "${#POSITIONAL[@]}" -gt 1 ]]; then
 fi
 if [[ -n "$IMPACT_PROJECTION" && -z "$REVIEW_CHANGE_CLASS" ]]; then
   die "--impact-projection requires --review-change-class so role identity can be verified"
+fi
+if [[ -n "$IMPACT_PROJECTION" && "$LEGACY_REVIEW_V1" == "1" ]]; then
+  die "--impact-projection and --legacy-review-v1 are mutually exclusive"
 fi
 if [[ -n "$IMPACT_PROJECTION" ]]; then
   [[ -f "$IMPACT_PROJECTION" ]] || die "impact projection is not readable: $IMPACT_PROJECTION"
@@ -1447,6 +1453,9 @@ if [[ "$DRAFT_CANDIDATE" == "1" ]]; then
   BOUND_TASK_UID="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '1p')"
   BOUND_TASK_ISSUE_URL="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '2p')"
   BOUND_TASK_ISSUE_NUMBER="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '3p')"
+  if [[ -n "$BOUND_TASK_UID" && -z "$IMPACT_PROJECTION" && "$LEGACY_REVIEW_V1" != "1" ]]; then
+    die "task-bound draft candidate requires --impact-projection; pass --legacy-review-v1 only for an explicit compatibility migration"
+  fi
 fi
 
 read -r BEHIND_COUNT AHEAD_COUNT <<<"$(git rev-list --left-right --count "$COMPARISON_REF...$SOURCE_BRANCH")"

@@ -443,6 +443,10 @@ run_prepare() {
   local gh_log="$1"
   local git_log="$2"
   shift 2
+  local compatibility_args=()
+  if [[ "${TEST_PREPARE_USE_V1_COMPAT:-1}" == "1" ]]; then
+    compatibility_args+=(--legacy-review-v1)
+  fi
   : > "$gh_log"
   : > "$git_log"
   PATH="$TMPDIR/bin:$PATH" \
@@ -459,7 +463,7 @@ run_prepare() {
     TEST_PR_STATE_TSV="${TEST_PR_STATE_TSV:-}" \
     TEST_PR_BASE_REF="${TEST_PR_BASE_REF:-}" \
     TEST_GH_DEFAULT_BRANCH="${TEST_GH_DEFAULT_BRANCH-main}" \
-    "$ROOT_DIR/scripts/prepare-task-pr.sh" "$SMOKE_BRANCH" "$@"
+    "$ROOT_DIR/scripts/prepare-task-pr.sh" "$SMOKE_BRANCH" "${compatibility_args[@]}" "$@"
 }
 
 reset_smoke_branch_to_base() {

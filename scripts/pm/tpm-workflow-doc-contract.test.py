@@ -2171,6 +2171,13 @@ class WorkflowDocumentationContract(unittest.TestCase):
                 )
                 self.assertIn(option, result.stdout)
 
+    def test_task_bound_draft_defaults_to_projected_v2_with_explicit_v1_escape(self) -> None:
+        helper = PREPARE_TASK_PR.read_text(encoding="utf-8")
+        self.assertIn("--impact-projection <path>", helper)
+        self.assertIn("--legacy-review-v1", helper)
+        self.assertIn("task-bound draft candidate requires --impact-projection", helper)
+        self.assertIn("--impact-projection and --legacy-review-v1 are mutually exclusive", helper)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

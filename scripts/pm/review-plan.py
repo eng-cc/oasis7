@@ -666,6 +666,25 @@ def changed_paths_digest(path_list: str | None) -> str:
     return digest(sorted(paths))
 
 
+def frozen_changed_paths(root: Path, comparison_oid: str, head: str) -> list[str]:
+    """Derive the committed review scope from the frozen base and source head.
+
+    A projection is an optimization shared by CI and formal review, but it is
+    not allowed to define its own source scope.  Recompute the committed path
+    set here from the immutable OIDs so a stale, incomplete, or over-broad
+    projection cannot silently narrow or widen the review dispatch.
+    """
+    paths = [
+        line for line in git_text(
+            root, "diff", "--name-only", "--no-renames", comparison_oid, head
+        ).splitlines()
+        if line
+    ]
+    if len(paths) != len(set(paths)):
+        raise ContractError("frozen base..head changed path set contains duplicates")
+    return sorted(paths)
+
+
 def run_json(command: list[str]) -> dict[str, Any]:
     result = subprocess.run(command, text=True, capture_output=True)
     if result.returncode:
@@ -1041,9 +1060,24 @@ def main() -> int:
                         "change_class": args.change_class,
                         "ordered_role_ids": roles,
                     },
+                    repo_root=root,
                 )
             except (OSError, TypeError, ValueError, projection_module.ProjectionError) as exc:
                 raise ContractError(f"invalid --impact-projection: {exc}") from exc
+            derived_paths = frozen_changed_paths(root, comparison_oid, args.head)
+            if impact_projection["changed_paths"] != derived_paths:
+                projected_paths = impact_projection["changed_paths"]
+                missing = sorted(set(derived_paths) - set(projected_paths))
+                extra = sorted(set(projected_paths) - set(derived_paths))
+                details = []
+                if missing:
+                    details.append("missing=" + ",".join(missing))
+                if extra:
+                    details.append("extra=" + ",".join(extra))
+                raise ContractError(
+                    "impact projection changed paths do not match frozen base..head: "
+                    + ("; ".join(details) if details else "ordering differs")
+                )
             if receipt_value is not None:
                 if receipt_value.get("impact_projection_digest") != impact_projection["projection_digest"]:
                     raise ContractError("trusted CI receipt does not bind the review impact projection")

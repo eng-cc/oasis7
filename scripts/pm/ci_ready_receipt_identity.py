@@ -45,13 +45,19 @@ INTEGRATION_REUSE_FIELDS = (
     "repository", "task_uid", "pr_number", "source_head_oid",
     "workflow_ref", "workflow_sha", "check_app_id", "planner_digest", "tested_tree_oid",
 )
-# Execution provenance remains an authority boundary, but target-derived tree
-# identity is not a professional-review applicability boundary.  A target
-# revalidation may therefore produce a different tested tree while retaining
-# the same trusted workflow/check/planner authority and source applicability.
+# Projection metadata is the source-review boundary.  The complete integration
+# identity above remains in every receipt for execution audit, but its
+# run-specific workflow/planner/tree values must not silently invalidate a
+# source review whose independently verified applicability is unchanged.
 INTEGRATION_AUTHORITY_REUSE_FIELDS = tuple(
-    field for field in INTEGRATION_REUSE_FIELDS if field != "tested_tree_oid"
+    field for field in INTEGRATION_REUSE_FIELDS
+    if field not in {"workflow_sha", "planner_digest", "tested_tree_oid"}
 )
+PROJECTION_BINDING_FIELDS = (
+    "impact_projection_schema", "impact_projection_digest",
+    "impact_projection_planner_digest",
+)
+PROJECTION_SCHEMA = "oasis7-workflow-impact-projection/v2"
 
 
 def _require_oid(value: Any, field: str) -> str:
@@ -297,6 +303,38 @@ def has_live_integration_attestation(receipt: dict[str, Any]) -> bool:
     )
 
 
+def _require_projection_digest(value: Any, field: str) -> str:
+    if not isinstance(value, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", value):
+        raise ValueError(f"{field} must be a prefixed SHA-256 digest")
+    return value
+
+
+def _validate_projection_binding(
+    plan: dict[str, Any], receipt: dict[str, Any],
+) -> None:
+    """Bind a trusted receipt's selected obligations to the source-review plan.
+
+    The receipt's complete planner/run identity is execution evidence.  The
+    projection metadata is the smaller source-review applicability boundary and
+    must therefore be present and byte-for-byte equal in both records,
+    including for a source-only plan with no accepted integration identity.
+    """
+    if not isinstance(receipt, dict):
+        raise ValueError("integration CI receipt must be an object")
+    if plan.get("impact_projection_schema") != PROJECTION_SCHEMA:
+        raise ValueError("review plan impact projection schema is unsupported")
+    expected = {}
+    for field in PROJECTION_BINDING_FIELDS:
+        expected[field] = (
+            PROJECTION_SCHEMA
+            if field == "impact_projection_schema"
+            else _require_projection_digest(plan.get(field), field)
+        )
+    for field, value in expected.items():
+        if receipt.get(field) != value:
+            raise ValueError(f"integration CI receipt {field} does not bind review plan")
+
+
 def integration_ci_digest(identity: dict[str, Any]) -> str:
     canonical = json.dumps(
         {field: integration_ci_identity(identity)[field] for field in INTEGRATION_CI_FIELDS},
@@ -394,9 +432,9 @@ def shadow_source_review_applicability(
     except (TypeError, ValueError, KeyError):
         return empty
 
-    # Attestation and shape are checked independently of applicability.  A
-    # trusted but changed workflow/tree remains complete provenance and is then
-    # denied reuse by the applicability decision below.
+    # Attestation and shape are checked independently of applicability.  The
+    # workflow commit and tested tree remain visible in the execution audit;
+    # neither is itself a professional-review applicability boundary.
     if not has_live_integration_attestation(latest_receipt):
         return _shadow_result(
             reason="integration_provenance_untrusted", integration_provenance="incomplete",
@@ -439,19 +477,6 @@ def shadow_source_review_applicability(
             accepted=accepted, latest=latest,
         )
     provenance["fresh_trusted_integration_ci"] = True
-
-    if latest["workflow_sha"] != accepted["workflow_sha"]:
-        provenance.update(
-            reason="workflow_identity_changed",
-            professional_review_applicability="requires_full_review",
-        )
-        return provenance
-    if latest["tested_tree_oid"] != accepted["tested_tree_oid"]:
-        provenance.update(
-            reason="tested_tree_changed",
-            professional_review_applicability="requires_full_review",
-        )
-        return provenance
 
     try:
         accepted_applicability = _verified_review_applicability(
@@ -521,13 +546,11 @@ def can_reuse_source_review(
         source = _validate_source_identity(plan.get("source_review_identity"))
         if plan.get("source_review_digest") != source_review_digest(source):
             return False
-        if plan.get("impact_projection_schema") != "oasis7-workflow-impact-projection/v2":
-            return False
-        if not isinstance(plan.get("impact_projection_digest"), str) or not re.fullmatch(
-                r"sha256:[0-9a-f]{64}", plan["impact_projection_digest"]):
+        if plan.get("impact_projection_schema") != PROJECTION_SCHEMA:
             return False
         if current_source_identity is not None and _validate_source_identity(current_source_identity) != source:
             return False
+        _validate_projection_binding(plan, latest_receipt)
         accepted_raw = plan.get("integration_ci_identity")
         accepted: dict[str, Any] | None = None
         if accepted_raw is not None:

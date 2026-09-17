@@ -225,6 +225,9 @@ print(json.dumps(receipt))
             "run_id": 12,
             "run_attempt": 1,
             "tested_tree_oid": "d" * 40,
+            "impact_projection_schema": "oasis7-workflow-impact-projection/v2",
+            "impact_projection_digest": projection["projection_digest"],
+            "impact_projection_planner_digest": projection["planner_digest"],
         }
         integration = identity.integration_ci_identity(receipt)
         applicability_identity = identity.review_applicability_identity(source)
@@ -243,6 +246,7 @@ print(json.dumps(receipt))
             },
             "impact_projection_schema": "oasis7-workflow-impact-projection/v2",
             "impact_projection_digest": projection["projection_digest"],
+            "impact_projection_planner_digest": projection["planner_digest"],
             "impact_projection": projection,
             "integration_ci_identity": integration,
             "integration_ci_digest": identity.integration_ci_digest(integration),

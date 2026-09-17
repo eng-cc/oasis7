@@ -344,7 +344,7 @@ if spec is None or spec.loader is None:
     raise SystemExit("impact projection adapter is unavailable")
 helper = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(helper)
-projection = helper.load_verified_projection(projection_path)
+projection = helper.load_verified_projection(projection_path, repo_root=root)
 paths = projection["changed_paths"]
 planner = [str(root / "scripts" / "plan-rust-required-scope.sh"),
            "--event-name", "pull_request", "--impact-projection", str(projection_path),

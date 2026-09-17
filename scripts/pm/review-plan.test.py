@@ -147,9 +147,14 @@ class ReviewPlanTests(unittest.TestCase):
         }))
 
     def write_impact_projection(self, path: Path) -> str:
+        changed_paths = [
+            line for line in self.git(
+                "diff", "--name-only", "--no-renames", self.comparison_oid, self.head
+            ).splitlines() if line
+        ]
         projection = WORKFLOW_IMPACT.build_projection(self.root, {
             "task_uid": TASK, "source_head_oid": self.head,
-            "scope_base_oid": self.comparison_oid, "changed_paths": ["README"],
+            "scope_base_oid": self.comparison_oid, "changed_paths": changed_paths,
             "change_class": "workflow-doc", "manual_roles": [], "domain_role": None,
             "test_profile": "required", "declared_tests": ["required_gate_baseline"],
             "consumed_contracts": ["workflow-contract"], "public_semantics": [],
@@ -161,6 +166,23 @@ class ReviewPlanTests(unittest.TestCase):
         })
         path.write_text(json.dumps(projection), encoding="utf-8")
         return str(projection["changed_paths_digest"]).removeprefix("sha256:")
+
+    def rewrite_projection_paths(self, path: Path, changed_paths: list[str]) -> None:
+        projection = json.loads(path.read_text(encoding="utf-8"))
+        projection["changed_paths"] = sorted(changed_paths)
+        projection["changed_paths_digest"] = WORKFLOW_IMPACT.canonical_digest(
+            projection["changed_paths"]
+        )
+        projection.pop("projection_digest", None)
+        projection["projection_digest"] = WORKFLOW_IMPACT.canonical_digest(projection)
+        path.write_text(json.dumps(projection), encoding="utf-8")
+
+    def commit_source_change(self, relative_path: str, content: str = "change\n") -> None:
+        target = self.root / relative_path
+        target.write_text(content, encoding="utf-8")
+        self.git("add", relative_path)
+        self.git("commit", "-m", f"change {relative_path}")
+        self.head = self.git("rev-parse", "HEAD")
 
     def write_source_review_input(self, path: Path, *, changed_paths_digest: str | None = None) -> Path:
         projection_path = path.with_name(path.stem + "-impact.json")
@@ -258,6 +280,38 @@ class ReviewPlanTests(unittest.TestCase):
         self.assertEqual("pending", plan["integration_ci_status"])
         self.assertEqual(json.loads(projection_path.read_text())["projection_digest"],
                          plan["impact_projection_digest"])
+
+    def test_source_only_v2_rejects_incomplete_frozen_scope_projection(self) -> None:
+        self.commit_source_change("repair.md")
+        projection_path = self.root / "incomplete-impact.json"
+        self.write_impact_projection(projection_path)
+        self.rewrite_projection_paths(projection_path, [])
+        result = subprocess.run([
+            str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
+            "--head", self.head, "--impact-projection", str(projection_path),
+            "--change-class", "workflow-doc", "--comparison-ref", self.comparison_ref,
+            "--comparison-oid", self.comparison_oid,
+            "--out", str(self.root / "incomplete-v2-plan.json"),
+        ], text=True, capture_output=True)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("frozen base..head", result.stderr)
+        self.assertIn("missing=repair.md", result.stderr)
+
+    def test_source_only_v2_rejects_extra_projection_path(self) -> None:
+        self.commit_source_change("repair.md")
+        projection_path = self.root / "extra-impact.json"
+        self.write_impact_projection(projection_path)
+        self.rewrite_projection_paths(projection_path, ["repair.md", "phantom.md"])
+        result = subprocess.run([
+            str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
+            "--head", self.head, "--impact-projection", str(projection_path),
+            "--change-class", "workflow-doc", "--comparison-ref", self.comparison_ref,
+            "--comparison-oid", self.comparison_oid,
+            "--out", str(self.root / "extra-v2-plan.json"),
+        ], text=True, capture_output=True)
+        self.assertNotEqual(0, result.returncode)
+        self.assertIn("frozen base..head", result.stderr)
+        self.assertIn("extra=phantom.md", result.stderr)
 
     def test_default_v2_entry_rejects_legacy_evidence_digest(self) -> None:
         result = subprocess.run(

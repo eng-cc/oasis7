@@ -158,6 +158,18 @@ class WorkflowImpactProjectionTests(unittest.TestCase):
             with self.assertRaisesRegex(WORKFLOW_IMPACT.ProjectionError, "missing=affected_consumers"):
                 WORKFLOW_IMPACT.load_verified_projection(path)
 
+    def test_verified_loader_rechecks_closure_evidence_against_repository(self) -> None:
+        projection = json.loads(self.run_projection(self.base_input()).stdout)
+        projection["closure_status"]["evidence"][0]["sha256"] = "sha256:" + "0" * 64
+        projection["projection_digest"] = WORKFLOW_IMPACT.canonical_digest({
+            key: value for key, value in projection.items() if key != "projection_digest"
+        })
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "forged-closure.json"
+            path.write_text(json.dumps(projection), encoding="utf-8")
+            with self.assertRaisesRegex(WORKFLOW_IMPACT.ProjectionError, "evidence\[0\] digest mismatch"):
+                WORKFLOW_IMPACT.load_verified_projection(path, repo_root=ROOT)
+
     def test_missing_identity_and_test_contract_fields_fail_closed(self) -> None:
         for field in ("task_uid", "source_head_oid", "scope_base_oid", "test_profile", "declared_tests"):
             with self.subTest(field=field):

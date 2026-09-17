@@ -566,7 +566,7 @@ if plan.get('schema') == 'oasis7-review-plan/v2':
                 'source_head_oid': plan.get('frozen_head'),
                 'scope_base_oid': plan.get('comparison_oid'),
                 'ordered_role_ids': plan.get('roles'),
-            })
+            }, repo_root=root)
         except (OSError, TypeError, ValueError) as exc:
             raise SystemExit(f'v2 review plan impact projection is invalid: {exc}')
     if projection.get('projection_digest') != impact_projection_digest:
