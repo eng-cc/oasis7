@@ -16,7 +16,7 @@ strong_auth_contract_failures=""
 require_strong_auth_text() {
   local needle="$1"
   local label="$2"
-  if ! rg -Fq -- "$needle" "$runner"; then
+  if ! grep -Fq -- "$needle" "$runner"; then
     strong_auth_contract_failures="${strong_auth_contract_failures}\n- ${label}: missing ${needle}"
   fi
 }
@@ -24,7 +24,7 @@ require_strong_auth_text() {
 require_strong_auth_regex() {
   local pattern="$1"
   local label="$2"
-  if ! rg -q -- "$pattern" "$runner"; then
+  if ! grep -Eq -- "$pattern" "$runner"; then
     strong_auth_contract_failures="${strong_auth_contract_failures}\n- ${label}: missing /${pattern}/"
   fi
 }
@@ -33,7 +33,7 @@ run_full_gameplay_contract_checks() {
   local failures=""
   local required_text
   while IFS= read -r required_text; do
-    if ! rg -Fq -- "$required_text" "$runner"; then
+    if ! grep -Fq -- "$required_text" "$runner"; then
       failures="${failures}\n- missing ${required_text}"
     fi
   done <<'EOF'
@@ -69,13 +69,13 @@ capability_invocation_context
 local test provider artifact
 EOF
 
-  if rg -Fq -- 'PROVIDER_BOOTSTRAP_AUTHORITY_COUNT' "$runner"; then
+  if grep -Fq -- 'PROVIDER_BOOTSTRAP_AUTHORITY_COUNT' "$runner"; then
     failures="${failures}\n- full-gameplay readiness must not use PROVIDER_BOOTSTRAP_AUTHORITY_COUNT"
   fi
-  if ! rg -q -- '\[\[.*-f.*LOCAL_PROVIDER.*WASM|test -f.*LOCAL_PROVIDER.*WASM' "$runner"; then
+  if ! grep -Eq -- '\[\[.*-f.*LOCAL_PROVIDER.*WASM|test -f.*LOCAL_PROVIDER.*WASM' "$runner"; then
     failures="${failures}\n- missing fail-closed local provider WASM artifact check"
   fi
-  if ! rg -q -- '\[\[.*-f.*LOCAL_PROVIDER.*METADATA|test -f.*LOCAL_PROVIDER.*METADATA' "$runner"; then
+  if ! grep -Eq -- '\[\[.*-f.*LOCAL_PROVIDER.*METADATA|test -f.*LOCAL_PROVIDER.*METADATA' "$runner"; then
     failures="${failures}\n- missing fail-closed local provider metadata artifact check"
   fi
 
@@ -99,7 +99,7 @@ run_strong_auth_contract_checks() {
   require_strong_auth_text 'OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE' 'strong-auth approval environment'
   require_strong_auth_text "click '[data-auth-action=\"test-login\"]'" 'visible test-login action'
   require_strong_auth_regex 'data-agent-id.*AGENT_ID' 'exact AGENT_ID selection selector'
-  if rg -Fq -- "click '[data-pixel-world-agent-marker=\"true\"][data-agent-id]'" "$runner"; then
+  if grep -Fq -- "click '[data-pixel-world-agent-marker=\"true\"][data-agent-id]'" "$runner"; then
     strong_auth_contract_failures="${strong_auth_contract_failures}\n- selection must not click an arbitrary agent marker"
   fi
 
@@ -129,7 +129,7 @@ run_strong_auth_contract_checks() {
   require_strong_auth_text 'a[href="#viewer-targets-panel"]' 'visible targets-panel navigation action'
   require_strong_auth_text '//*[@id="viewer-targets-panel"]//button' 'targets-panel scoped claim XPath'
   require_strong_auth_text 'normalize-space' 'normalized claim CTA text matching'
-  if rg -n 'viewer-playthrough-action-claim-first-agent' "$runner"; then
+  if grep -En 'viewer-playthrough-action-claim-first-agent' "$runner"; then
     strong_auth_contract_failures="${strong_auth_contract_failures}\n- claim must not depend on the stale data-testid selector"
   fi
   require_strong_auth_text 'Claim Your First OC' 'starter OC onboarding heading'
@@ -137,18 +137,18 @@ run_strong_auth_contract_checks() {
   require_strong_auth_text 'claim_starter_oc' 'starter OC gameplay authority action'
   require_strong_auth_text 'starter_oc_required_gate' 'starter OC onboarding overlay scope'
   require_strong_auth_text 'overlay dismissal' 'starter OC overlay dismissal phase'
-  if rg -n 'viewer-playthrough-action-claim-starter-oc' "$runner"; then
+  if grep -En 'viewer-playthrough-action-claim-starter-oc' "$runner"; then
     strong_auth_contract_failures="${strong_auth_contract_failures}\n- starter OC claim must use scoped visible text/XPath, not a test id"
   fi
   require_strong_auth_text 'entityCounts' 'empty-world entity count gate'
   require_strong_auth_text 'lastGameplayActionFeedback' 'first-agent gameplay authority ack wait'
   require_strong_auth_text 'claim first agent action' 'first-agent claim action phase label'
-  if rg -n '__AW_TEST__\.(claim|sendGameplayAction)' "$runner"; then
+  if grep -En '__AW_TEST__\.(claim|sendGameplayAction)' "$runner"; then
     strong_auth_contract_failures="${strong_auth_contract_failures}\n- first-agent claim must use the visible button, not the test API"
   fi
   require_strong_auth_text 'run_visible_action' 'visible action failure wrapper'
   require_strong_auth_text 'test-login action' 'test-login action phase label'
-  if rg -n 'ab_cmd "\$SESSION" (click|fill).*\/dev\/null' "$runner"; then
+  if grep -En 'ab_cmd "\$SESSION" (click|fill).*\/dev\/null' "$runner"; then
     strong_auth_contract_failures="${strong_auth_contract_failures}\n- visible click/fill actions must not silently discard failures"
   fi
   require_strong_auth_text 'typeof window.__AW_TEST__ ===' 'test API readiness wait'
@@ -160,7 +160,7 @@ run_strong_auth_contract_checks() {
   require_strong_auth_text 'authBindingEpoch' 'binding epoch wait'
   require_strong_auth_text 'prompt_control_result_v1' 'prompt result protocol wait'
   require_strong_auth_text 'authorityEpoch' 'authority epoch wait'
-  if rg -Fq -- 'wait --load networkidle' "$runner"; then
+  if grep -Fq -- 'wait --load networkidle' "$runner"; then
     strong_auth_contract_failures="${strong_auth_contract_failures}\n- networkidle cannot be the sole long-lived Viewer readiness gate"
   fi
 
@@ -180,12 +180,12 @@ run_strong_auth_contract_checks() {
   require_strong_auth_text 'r.version) > beforeVersion' 'Apply response version advancement gate'
   require_strong_auth_text 'details.command-surface__advanced-details > summary' 'exact advanced prompt disclosure DOM selector'
   require_strong_auth_text 'pre-prompt tab loss' 'distinct about:blank tab-loss diagnostic'
-  if rg -Fq -- 'wait --text "Advanced Prompt Settings"' "$runner"; then
+  if grep -Fq -- 'wait --text "Advanced Prompt Settings"' "$runner"; then
     strong_auth_contract_failures="${strong_auth_contract_failures}\n- prompt readiness must use exact DOM state, not broad text wait"
   fi
   require_strong_auth_text 'hosted player session registration action' 'session-registration action phase label'
   require_strong_auth_text 'registered_unbound' 'unbound runtime registration wait'
-  if rg -n 'ab_read_eval.*registerPlayerSessionForTest' "$runner"; then
+  if grep -En 'ab_read_eval.*registerPlayerSessionForTest' "$runner"; then
     strong_auth_contract_failures="${strong_auth_contract_failures}\n- hosted session registration must use non-retrying ab_eval"
   fi
   require_strong_auth_text 'fill "#strong-auth-approval-code"' 'visible approval-code input'
@@ -475,7 +475,7 @@ VIEWER_PROMPT_FIXTURE_FAIL_DOM_WAIT=1 \
   --headed --test-login --url http://127.0.0.1:9 --out-dir "$fallback_out"
 test -f "$fallback_out/agent-browser.log"
 test -f "$fallback_marker"
-rg -Fq 'domcontentloaded fallback' "$fallback_out/agent-browser.log"
+grep -Fq 'domcontentloaded fallback' "$fallback_out/agent-browser.log"
 test -f "$fallback_out/failure-domcontentloaded-session-info.json"
 test -f "$fallback_out/failure-domcontentloaded-tabs.json"
 
@@ -496,7 +496,7 @@ set -e
 test "$action_failure_rc" -ne 0
 test -f "$action_count_file"
 test "$(<"$action_count_file")" = 1
-rg -Fq '[action:test-login action] command failed' "$action_failure_out/agent-browser.log"
+grep -Fq '[action:test-login action] command failed' "$action_failure_out/agent-browser.log"
 test -f "$action_failure_out/failure-test-login_action-session-info.json"
 
 claim_out="$tmp_root/claim-first-agent"
@@ -549,9 +549,9 @@ test -f "$advanced_disclosure_count_file"
 test "$(<"$advanced_disclosure_count_file")" = 1
 test -f "$apply_convergence_count_file"
 test "$(<"$apply_convergence_count_file")" -ge 2
-rg -Fq '[action:claim first agent action]' "$claim_out/agent-browser.log"
-rg -Fq '[action:command panel navigation action]' "$claim_out/agent-browser.log"
-rg -Fq '[action:prompt overrides visibility action]' "$claim_out/agent-browser.log"
+grep -Fq '[action:claim first agent action]' "$claim_out/agent-browser.log"
+grep -Fq '[action:command panel navigation action]' "$claim_out/agent-browser.log"
+grep -Fq '[action:prompt overrides visibility action]' "$claim_out/agent-browser.log"
 
 # Gameplay onboarding may bind the claimed agent before publishing a binding
 # epoch.  The runner must repair that precise state once, through the existing
@@ -568,7 +568,7 @@ VIEWER_PROMPT_FIXTURE_ALREADY_REGISTERED=1 \
   --headed --test-login --url http://127.0.0.1:9 --out-dir "$force_rebind_out"
 test -f "$force_rebind_count"
 test "$(<"$force_rebind_count")" = 1
-rg -Fq '[action:post-onboarding auth binding rebind action] completed' "$force_rebind_out/agent-browser.log"
+grep -Fq '[action:post-onboarding auth binding rebind action] completed' "$force_rebind_out/agent-browser.log"
 
 force_rebind_skip_out="$tmp_root/post-onboarding-force-rebind-skip"
 force_rebind_skip_count="$tmp_root/post-onboarding-force-rebind-skip-count"
@@ -582,7 +582,7 @@ VIEWER_PROMPT_FIXTURE_ALREADY_REGISTERED=1 \
 if [[ -f "$force_rebind_skip_count" ]]; then
   test "$(<"$force_rebind_skip_count")" = 0
 fi
-rg -Fq '[action:post-onboarding auth binding rebind action] skipped; binding epoch already present or agent not bound' "$force_rebind_skip_out/agent-browser.log"
+grep -Fq '[action:post-onboarding auth binding rebind action] skipped; binding epoch already present or agent not bound' "$force_rebind_skip_out/agent-browser.log"
 
 # A lost browser tab must fail before any prompt action and be distinguishable
 # from a live page whose exact prompt DOM simply did not become ready.
@@ -598,9 +598,9 @@ VIEWER_PROMPT_FIXTURE_ALREADY_REGISTERED=1 \
 tab_loss_rc=$?
 set -e
 test "$tab_loss_rc" -ne 0
-rg -Fq '[prompt surface page continuity] tab lost to about:blank' "$tab_loss_out/agent-browser.log"
+grep -Fq '[prompt surface page continuity] tab lost to about:blank' "$tab_loss_out/agent-browser.log"
 test -f "$tab_loss_out/failure-pre-prompt_tab_loss-tabs.json"
-if rg -Fq '[action:advanced prompt disclosure action]' "$tab_loss_out/agent-browser.log"; then
+if grep -Fq '[action:advanced prompt disclosure action]' "$tab_loss_out/agent-browser.log"; then
   echo "advanced prompt action ran after pre-prompt tab loss" >&2
   exit 1
 fi
@@ -709,15 +709,15 @@ if "$runner" --headless --contract-only --out-dir "$tmp_root/headless" >"$tmp_ro
 fi
 grep -Fq -- "--headed is required" "$tmp_root/headless.log"
 
-if rg -n 'sendPromptControl|__AW_TEST__\.sendPromptControl' "$runner"; then
+if grep -En 'sendPromptControl|__AW_TEST__\.sendPromptControl' "$runner"; then
   echo "runner must not replace visible prompt actions with sendPromptControl" >&2
   exit 1
 fi
-rg -Fq 'data-pixel-world-agent-marker' "$runner"
-rg -Fq 'fill "#prompt-short"' "$runner"
-rg -Fq 'button[data-prompt-action="preview"]' "$runner"
-rg -Fq 'button[data-prompt-action="apply"]' "$runner"
-rg -Fq 'button[data-prompt-action="rollback"]' "$runner"
+grep -Fq 'data-pixel-world-agent-marker' "$runner"
+grep -Fq 'fill "#prompt-short"' "$runner"
+grep -Fq 'button[data-prompt-action="preview"]' "$runner"
+grep -Fq 'button[data-prompt-action="apply"]' "$runner"
+grep -Fq 'button[data-prompt-action="rollback"]' "$runner"
 
 # macOS ships Bash 3.2, where set -u expands an empty array as unbound.
 # Exercise the real launch branch in a sandbox so no browser or provider is
@@ -811,6 +811,6 @@ EOF
     exit 1
   fi
 fi
-rg -Fq 'if ((${#STACK_ARGS[@]} > 0)); then' "$runner"
+grep -Fq 'if ((${#STACK_ARGS[@]} > 0)); then' "$runner"
 
 echo "viewer-prompt-control runner contract: passed"
