@@ -94,7 +94,7 @@ GitHub Project-backed PM truth lives in `doc/engineering/workflow/source-of-trut
 - 当前 diff 已形成 major feature、高风险收敛切片，或 commit 前 claim risk 明显偏高时：`.agents/skills/requesting-repo-owned-review/SKILL.md`
 - 接近完成、准备宣称“通过 / 完成 / 可提 PR”时：`.agents/skills/verification-before-completion/SKILL.md`
 - 已完成实现、准备 closeout / commit / PR 收口时：`.agents/skills/finishing-a-development-branch/SKILL.md`
-- PR 收到 review comments / requested changes，需要核实、修复、回证据并保持 thread resolution 与 merge readiness 分离时：`.agents/skills/receiving-code-review/SKILL.md`
+- PR 收到 review comments / requested changes，需要按“仅当前改动相关 P0 必须修复”核实和回证据，并保持行政 thread resolution 与 repair/merge readiness 分离时：`.agents/skills/receiving-code-review/SKILL.md`；不存在的 GitHub Codex review 不是等待条件。
 - 新增或修改本地 repo-owned skill、替换上游 skill 或调整 skill governance 时：`.agents/skills/writing-repo-owned-skills/SKILL.md`
 
 Specialist skills are domain-triggered through TPM routing or professional subagent slice planning. They are intentionally not mandatory phases in the default workflow chain. TPM routing is coordination only; specialist conclusions must be owned by the matching professional role slice. Professional slice contracts record intended model, actual dispatched model/reasoning or `inherited/unverified`, context delivery mode, and mandatory context checklist; default context delivery is a minimal task packet bound to the task UID and current/frozen HEAD, while full-thread/full-history delivery requires a recorded escalation reason.

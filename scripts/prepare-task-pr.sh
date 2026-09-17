@@ -23,6 +23,8 @@ Generated task PR bodies include a non-closing GitHub reference to the bound tas
 when a GitHub-backed task issue can be resolved. Explicit body files must carry
 the same reference and must not auto-close the task before terminal finalization.
 REVIEW_REQUIRED is reported as status but is not a blocking item by itself.
+An absent GitHub Codex review is not a wait condition. At merge time, use one
+fresh live gate read; only current-change P0 review findings mandate repair.
 mergeStateStatus=BEHIND is advisory by itself; if GitHub can still merge the PR
 cleanly, the workflow does not force a local rebase before merge.
 When mergeStateStatus=BLOCKED is only missing review approval, the fresh live gate

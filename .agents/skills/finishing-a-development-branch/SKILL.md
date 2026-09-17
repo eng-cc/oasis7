@@ -80,7 +80,7 @@ On a non-Codex surface, use the finite fallback:
 ./scripts/pm/pr-watch-loop.sh <pr-number> --task-uid <task_uid>
 ```
 
-Post-PR checks/comments/mergeability remain separate gates. All interpretations, retry loops, dispositions and merge authorization come from canonical gate definitions, not this skill.
+Post-PR checks/comments/mergeability remain separate gates. All interpretations, retry loops, dispositions and merge authorization come from canonical gate definitions, not this skill. Do not wait specifically for an absent GitHub Codex review; when otherwise merge-ready, perform the fresh live gate read immediately. Only a current-change P0 finding mandates repair; other present feedback follows the canonical evidence-backed no-change/administrative-clearance path.
 9. Before merge, follow the canonical [terminal-readiness preflight](../../../doc/engineering/workflow/source-of-truth.md#terminal-readiness-preflight) from the canonical default worktree. It must return `status: ready`, an empty `blockers` array, and the exact executable `next_command`; any identity mismatch must be repaired and reverified before merge:
 
 ```bash
