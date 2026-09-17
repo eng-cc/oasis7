@@ -623,10 +623,10 @@ wait_for_prompt_surface_continuity() {
   (( timeout_secs > 0 )) || timeout_secs=1
   deadline=$((SECONDS + timeout_secs))
   while (( SECONDS < deadline )); do
-    status="$(ab_read_eval "$SESSION" '(() => { const href = String(window.location.href || ""); if (href === "about:blank") return "tab_lost"; const panel = document.querySelector(`section#viewer-details-panel[data-viewer-route-panel="command"]`); const toggle = panel?.querySelector(`[data-prompt-visibility-toggle="1"]`); return panel && toggle ? "ready" : `prompt_surface_missing:${href}`; })()' 2>/dev/null || true)"
+    status="$(ab_read_eval "$SESSION" '(() => { const href = String(window.location.href || ""); if (href === "about:blank") return "tab_lost"; const panel = document.querySelector(`section#viewer-details-panel[data-viewer-route-panel="command"]`); const summary = panel?.querySelector("details.command-surface__advanced-details > summary"); return panel && summary ? "ready" : `prompt_surface_missing:${href}`; })()' 2>/dev/null || true)"
     case "$status" in
       ready|\"ready\")
-        printf '[prompt surface page continuity] command panel and prompt visibility toggle ready\n' >>"$AB_LOG"
+        printf '[prompt surface page continuity] command panel and Advanced summary ready\n' >>"$AB_LOG"
         return 0
         ;;
       tab_lost|\"tab_lost\")
@@ -872,11 +872,10 @@ wait_for_js_true "(() => { const s = window.__AW_TEST__.getState(); const p = s?
 
 run_visible_action "command panel navigation action" click 'a[href="#viewer-details-panel"]'
 wait_for_prompt_surface_continuity "$ACTION_TIMEOUT_MS"
-run_visible_action "prompt overrides visibility action" click '[data-prompt-visibility-toggle="1"]'
-wait_for_js_true '(() => { const s = window.__AW_TEST__.getState(); const panel = document.querySelector(`section#viewer-details-panel[data-viewer-route-panel="command"]`); return s?.promptOverridesVisible === true && Boolean(panel?.querySelector("details.command-surface__advanced-details > summary")) && Boolean(panel?.querySelector("#prompt-short")); })()' "prompt overrides visible state and exact prompt DOM"
 run_visible_action "advanced prompt disclosure action" click 'details.command-surface__advanced-details > summary'
-wait_for_js_true 'Boolean(document.querySelector("details.command-surface__advanced-details[open]"))' "advanced prompt disclosure"
-wait_for_js_true 'Boolean(document.querySelector("#strong-auth-approval-code"))' "strong-auth approval input"
+wait_for_js_true '(() => { const details = document.querySelector("details.command-surface__advanced-details[open]"); const toggle = details?.querySelector(`[data-prompt-visibility-toggle="1"]`); return Boolean(toggle && !toggle.disabled && toggle.getClientRects().length > 0); })()' "prompt overrides toggle visible and enabled"
+run_visible_action "prompt overrides visibility action" click '[data-prompt-visibility-toggle="1"]'
+wait_for_js_true '(() => { const s = window.__AW_TEST__.getState(); const panel = document.querySelector(`section#viewer-details-panel[data-viewer-route-panel="command"]`); return s?.promptOverridesVisible === true && Boolean(panel?.querySelector("#prompt-short")) && Boolean(panel?.querySelector("#strong-auth-approval-code")); })()' "prompt overrides visible state and exact prompt DOM"
 run_visible_action "strong-auth approval fill action" fill "#strong-auth-approval-code" "$OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE"
 run_visible_action "short-term goal fill action" fill "#prompt-short" "$PROMPT_GOAL"
 
