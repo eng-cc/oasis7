@@ -24,7 +24,7 @@
 - 设计承担的技术责任；
 - 与产品需求、专业规则、实现和证据的链接。
 
-需要更强追溯时，可以在人工可读的身份块记录 id、title、status、owner_role、module、upstream_refs、source_baseline、last_reviewed_at、review_evidence_ref 和 superseded_by。它们目前是写作信息，不是本次新增的机器 schema；status 只描述文档生命周期，不赋予运行时、workflow 或合同消费资格。
+需要更强追溯时，可以在人工可读的身份块记录 id、title、status、owner_role、module、upstream_refs、source_baseline、last_reviewed_at、review_evidence_ref 和 superseded_by。它们目前是写作信息，不是本次新增的机器 schema；status 只描述文档生命周期，不赋予运行时、workflow 或合同消费资格。语义身份是 canonical repository + path + fragment；合同版本使用其 schema 定义的 `revision`，源码或文档快照使用独立的 commit OID，不能把 SHA 填进要求整数的 task input `revision`。
 
 ### 1.2 非目标
 
@@ -50,7 +50,7 @@
 
 一条需求可以映射多个设计条款，一个设计条款也可以服务多个需求；每条关系都保留上述五列，不建立一对一文档或任务要求。外部 owner/dependency 不是本设计的隐含责任，排除范围也不能用空白代替。
 
-`path#fragment` 是被消费条款的身份，而不是可由上下文猜测的标签；完整身份还包括继承自冻结合同/发布记录的不可变 contract/publication repository（当前 canonical `eng-cc/oasis7`），并须在每个消费者匹配，不能隐式取当前仓库。固定合同、Task 或证据若跨文件消费本表关系，必须保留能够在固定内容中唯一解析的路径与 fragment；局部 `REQ-*`/`AC-*` 只有在同一文件内且无歧义时才可使用。文件或 anchor 迁移时记录旧到新的映射或明确处置，不能静默选择同名条款。
+`path#fragment` 是被消费条款的身份，而不是可由上下文猜测的标签；完整身份还包括继承自冻结合同/发布记录的不可变 contract/publication repository（当前 canonical `eng-cc/oasis7`），并须在每个消费者匹配，不能隐式取当前仓库。实际 authority 需由冻结发布内容、Issue/comment readback 与当前资格共同证明；当前工作树、浮动分支、`latest`、mutable URL、Project/cache 和作者自报 digest 不能替代它。固定合同、Task 或证据若跨文件消费本表关系，必须保留能够在固定内容中唯一解析的路径与 fragment；局部 `REQ-*`/`AC-*` 只有在同一文件内且无歧义时才可使用。文件或 anchor 迁移时记录旧到新的映射或明确处置，不能静默选择同名条款。消费者只读取声明的有限关系闭包，未声明、重复、歧义、越界或不能回读的条款阻断，不扩散为无界 legacy 迁移。
 
 ### 2.2 适用关系与显式 N/A
 
@@ -102,7 +102,7 @@
 | --- | --- | --- | --- | --- | --- |
 |  |  |  |  |  |  |
 
-任务输入合同沿用当前 binding 提供的 input_contracts、固定提交/发布记录和 acceptance references；本文不宣布这些字段已经由新的 parser 或 adapter 执行。不得只写不断变化的 main 路径作为 in-flight contract。
+任务输入合同沿用当前 binding 提供的 input_contracts、固定提交/发布记录和 acceptance references；本文不宣布这些字段已经由新的 parser 或 adapter 执行。`revision` 只承载合同/发布 schema 所规定的版本类型；`source_commit`、`source_head_oid` 与 integration/tested-tree OID 分别记录不可变快照和候选实现，互不替代。不得只写不断变化的 main 路径作为 in-flight contract。
 
 接口字段、schema、ABI 或协议变化必须说明消费者兼容、版本切换、旧数据/快照处理和验证入口。缺少实现或运行证据时写明未验证范围，不用“设计上支持”替代事实。
 
@@ -137,7 +137,7 @@
 
 说明旧消费者、旧数据/快照、版本切换、启用/禁用、迁移顺序、双读/双写（如有）和回滚限制。回滚必须指出回到哪个已知基线、哪些副作用无法撤销、何时需要人工处置。
 
-输入合同、协议、schema 或权限资格发生实质变化时，必须在当前 task evidence 建立新基线并重新评估下游；新 draft 不自动使旧的有效合同失效。迁移示范不等于已完成全量迁移。
+输入合同、协议、schema 或权限资格发生实质变化时，必须在当前 task evidence 建立新基线并重新评估下游；新 draft 不自动使旧的有效合同失效。迁移是经授权的逐条旧/新 authority 映射、消费者修复、历史快照保留和回退处置；启用是兼容实现与负向/真实 readback 通过后，按现行升级流程限定新任务资格。规范或 helper 合入、结构检查通过、迁移示范均不自动启用能力，也不把在途任务静默切换到新合同。
 
 ## 11. 验证设计与可追溯性
 
@@ -154,7 +154,7 @@
 
 ### 11.1 验证映射表
 
-该表是持久的设计验证计划，每行 MUST 把 typed `trace.upstream_refs`、`trace.system_design`（准确 `path#fragment` 或完整 N/A disposition）、设计义务和准确的测试/手册入口连起来。表中的 candidate/environment 要求或选择规则表达适用的候选选择规则、环境要求与能力边界；协调记录先冻结批准的必要集合、映射槽位和选择规则，不预先伪造未来 Task/contract/evidence identity；实际 candidate、source/integration/tested tree、通过/失败、退出码和产物必须在组合前写入当前 task evidence，缺失引用保持 pending 并阻断整体完成，不阻止已批准叶子执行，也不要求长期设计随每次代码迭代回写实际提交。只有描述已由证据证明的历史基线时，才保留明确标注的历史 candidate，并链接其对应 evidence。
+该表是持久的设计验证计划，每行 MUST 把 typed `trace.upstream_refs`、`trace.system_design`（准确 `path#fragment` 或完整 N/A disposition）、设计义务和准确的测试/手册入口连起来。表中的 candidate/environment 要求或选择规则表达适用的候选选择规则、环境要求与能力边界；协调记录先冻结批准的必要集合、映射槽位和选择规则，不预先伪造未来 Task/contract/evidence identity；实际 candidate、source/integration/tested tree、通过/失败、退出码和产物必须在组合前写入当前 task evidence，缺失引用保持 pending 并阻断整体完成，不阻止已批准叶子执行，也不要求长期设计随每次代码迭代回写实际提交。完整样例必须可由 C1 canonical fixture 自动校验；标为字段节选的示例只解释关系，不能满足结构或消费检查。只有描述已由证据证明的历史基线时，才保留明确标注的历史 candidate，并链接其对应 evidence。
 
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
@@ -173,6 +173,10 @@
 本规范当前交付：专业技术设计的十二段骨架、需求承接表、当前/目标/差距表、接口/质量/验证映射、固定输入和证据边界，以及附录模板。
 
 本规范当前不激活：机器可执行的 oasis7.doc/v1 metadata schema、metadata/lifecycle checker、新的 PM 或 loop 状态、新 Project 字段、scheduler/service、自动下游任务和代表性技术 pilot。changed-scope gate 在本次实现完成后适用于新增或实质修改的系统设计和 trace records；未触达的 legacy content 保持在强制迁移范围之外。本文的引用、验证计划和记录边界是内容契约，不等于 checker/schema 已实现或 loop 已启用；它们只有在各自 authority、adapter、检查范围和验证证据具备后才能单独采纳。这里的列举不是待办台账，也不改变当前 workflow。
+
+### 12.2 C1/C2/C3 固定交接
+
+后续代码叶子只能消费已冻结的 S1 文档版本。C1 输入为本规范、跨层追踪规范、PM 记录规范和 workflow traceability contract 的 immutable source identities，以及当前 loop schema 字段；验收为合同 `revision` 与源码 OID 分离、typed upstream/N/A、完整样例与节选边界、legacy 兼容和可定位负例。C2 输入为 C1 已合入的只读引用解析接口；验收为实际 system authority、path/fragment 消费闭包、changed-scope/rename/delete 与 bounded legacy 检查。C3 输入为 C1/C2 的固定接口、task binding、policy、CI identity 和 entrypoint；验收为创建/resume/发布/promotion/closeout/CI 复用同一 binding、单叶不被升级为组合、组合缺证据保持阻断、Issue/Project/cache round-trip 不丢字段。三者都必须分别通过兼容实现、负向测试和 live readback，才能进入另行授权的限定 enablement；本节不授权迁移或启用。
 
 ---
 
