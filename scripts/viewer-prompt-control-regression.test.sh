@@ -168,6 +168,9 @@ run_strong_auth_contract_checks() {
   require_strong_auth_text 'registerPlayerSessionForTest(${agent_id_json}, {forceRebind: true})' 'post-onboarding force-rebind hook'
   require_strong_auth_text 'post-onboarding auth binding rebind action' 'post-onboarding force-rebind diagnostics'
   require_strong_auth_text 'prompt surface page continuity' 'pre-prompt page-continuity guard'
+  require_strong_auth_text 'a[href="#viewer-details-panel"]' 'visible Command panel navigation selector'
+  require_strong_auth_text 'command panel navigation action' 'visible Command panel navigation phase'
+  require_strong_auth_text 'section#viewer-details-panel[data-viewer-route-panel="command"]' 'exact Command route panel readiness'
   require_strong_auth_text 'details.command-surface__advanced-details > summary' 'exact advanced prompt disclosure DOM selector'
   require_strong_auth_text 'pre-prompt tab loss' 'distinct about:blank tab-loss diagnostic'
   if rg -Fq -- 'wait --text "Advanced Prompt Settings"' "$runner"; then
@@ -267,6 +270,14 @@ if [[ "${1:-}" == "click" && "${2:-}" == 'a[href="#viewer-targets-panel"]' && -n
   printf '%s\n' "$((panel_nav_count + 1))" >"$VIEWER_PROMPT_FIXTURE_PANEL_NAV_COUNT"
   exit 0
 fi
+if [[ "${1:-}" == "click" && "${2:-}" == 'a[href="#viewer-details-panel"]' && -n "${VIEWER_PROMPT_FIXTURE_COMMAND_NAV_COUNT:-}" ]]; then
+  command_nav_count=0
+  if [[ -f "$VIEWER_PROMPT_FIXTURE_COMMAND_NAV_COUNT" ]]; then
+    command_nav_count=$(<"$VIEWER_PROMPT_FIXTURE_COMMAND_NAV_COUNT")
+  fi
+  printf '%s\n' "$((command_nav_count + 1))" >"$VIEWER_PROMPT_FIXTURE_COMMAND_NAV_COUNT"
+  exit 0
+fi
 if [[ "${1:-}" == "click" && "${2:-}" == *'viewer-targets-panel'* && "${2:-}" == *'normalize-space'* && -n "${VIEWER_PROMPT_FIXTURE_CLAIM_ACTION_COUNT:-}" ]]; then
   claim_action_count=0
   if [[ -f "$VIEWER_PROMPT_FIXTURE_CLAIM_ACTION_COUNT" ]]; then
@@ -306,6 +317,8 @@ if [[ "${1:-}" == "eval" ]]; then
       printf '%s\n' '"tab_lost"'
     elif [[ "${VIEWER_PROMPT_FIXTURE_PRE_PROMPT_UI_MISSING:-0}" == "1" ]]; then
       printf '%s\n' '"prompt_surface_missing:http://127.0.0.1:9/"'
+    elif [[ -n "${VIEWER_PROMPT_FIXTURE_REQUIRE_COMMAND_NAV:-}" && ! -f "$VIEWER_PROMPT_FIXTURE_REQUIRE_COMMAND_NAV" ]]; then
+      printf '%s\n' '"prompt_surface_missing:http://127.0.0.1:9/#viewer-targets-panel"'
     else
       printf '%s\n' '"ready"'
     fi
@@ -440,6 +453,7 @@ session_registration_count_file="$tmp_root/claim-first-agent-session-registratio
 claim_ack_marker="$tmp_root/claim-first-agent-ack-seen"
 starter_oc_action_count_file="$tmp_root/claim-starter-oc-count"
 starter_oc_ack_marker="$tmp_root/claim-starter-oc-ack-seen"
+command_nav_count_file="$tmp_root/command-panel-nav-count"
 VIEWER_PROMPT_FIXTURE_EMPTY_WORLD=1 \
   VIEWER_PROMPT_FIXTURE_STARTER_OC_ONBOARDING=1 \
   VIEWER_PROMPT_FIXTURE_CLAIM_ACTION_COUNT="$claim_count_file" \
@@ -448,6 +462,8 @@ VIEWER_PROMPT_FIXTURE_EMPTY_WORLD=1 \
   VIEWER_PROMPT_FIXTURE_STARTER_OC_ACTION_COUNT="$starter_oc_action_count_file" \
   VIEWER_PROMPT_FIXTURE_STARTER_OC_ACK_MARKER="$starter_oc_ack_marker" \
   VIEWER_PROMPT_FIXTURE_CLAIM_ACK_MARKER="$claim_ack_marker" \
+  VIEWER_PROMPT_FIXTURE_COMMAND_NAV_COUNT="$command_nav_count_file" \
+  VIEWER_PROMPT_FIXTURE_REQUIRE_COMMAND_NAV="$command_nav_count_file" \
   OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=fixture \
   OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY=fixture \
   OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=fixture \
@@ -463,7 +479,10 @@ test -f "$starter_oc_action_count_file"
 test "$(<"$starter_oc_action_count_file")" = 1
 test -f "$starter_oc_ack_marker"
 test -f "$claim_ack_marker"
+test -f "$command_nav_count_file"
+test "$(<"$command_nav_count_file")" = 1
 rg -Fq '[action:claim first agent action]' "$claim_out/agent-browser.log"
+rg -Fq '[action:command panel navigation action]' "$claim_out/agent-browser.log"
 
 # Gameplay onboarding may bind the claimed agent before publishing a binding
 # epoch.  The runner must repair that precise state once, through the existing

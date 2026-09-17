@@ -623,7 +623,7 @@ wait_for_prompt_surface_continuity() {
   (( timeout_secs > 0 )) || timeout_secs=1
   deadline=$((SECONDS + timeout_secs))
   while (( SECONDS < deadline )); do
-    status="$(ab_read_eval "$SESSION" '(() => { const href = String(window.location.href || ""); if (href === "about:blank") return "tab_lost"; const summary = document.querySelector("details.command-surface__advanced-details > summary"); const prompt = document.querySelector("#prompt-short"); return summary && prompt ? "ready" : `prompt_surface_missing:${href}`; })()' 2>/dev/null || true)"
+    status="$(ab_read_eval "$SESSION" '(() => { const href = String(window.location.href || ""); if (href === "about:blank") return "tab_lost"; const panel = document.querySelector(`section#viewer-details-panel[data-viewer-route-panel="command"]`); const summary = panel?.querySelector("details.command-surface__advanced-details > summary"); const prompt = panel?.querySelector("#prompt-short"); return panel && summary && prompt ? "ready" : `prompt_surface_missing:${href}`; })()' 2>/dev/null || true)"
     case "$status" in
       ready|\"ready\")
         printf '[prompt surface page continuity] exact prompt DOM ready\n' >>"$AB_LOG"
@@ -870,6 +870,7 @@ maybe_rebind_post_onboarding_session "$AGENT_ID_JSON"
 
 wait_for_js_true "(() => { const s = window.__AW_TEST__.getState(); const p = s?.viewerProtocol || {}; return s?.authReady === true && s?.authRegistrationStatus === \"registered\" && [\"registered\", \"registered_unbound\"].includes(s?.authRuntimeStatus) && s?.authBoundAgentId === ${AGENT_ID_JSON} && s?.authSessionEpoch != null && s?.authBindingEpoch != null && p?.negotiated === true && Array.isArray(p?.capabilities) && p.capabilities.includes(\"prompt_control_result_v1\") && String(p?.authorityEpoch || \"\").length > 0; })()" "auth binding and prompt-result protocol readiness"
 
+run_visible_action "command panel navigation action" click 'a[href="#viewer-details-panel"]'
 wait_for_prompt_surface_continuity "$ACTION_TIMEOUT_MS"
 run_visible_action "advanced prompt disclosure action" click 'details.command-surface__advanced-details > summary'
 wait_for_js_true 'Boolean(document.querySelector("details.command-surface__advanced-details[open]"))' "advanced prompt disclosure"
