@@ -17,7 +17,7 @@ def load_impact_projection(path, expected):
   if spec is None or spec.loader is None: die("impact projection adapter is unavailable")
   helper=importlib.util.module_from_spec(spec); spec.loader.exec_module(helper)
   try:
-    value=helper.load_verified_projection(path, expected=expected, repo_root=Path(__file__).resolve().parent.parent)
+    value=helper.load_verified_projection(path, expected=expected, repo_root=Path.cwd())
   except Exception as exc:
     die(f"impact projection is invalid: {exc}")
   return value

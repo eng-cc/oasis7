@@ -198,21 +198,6 @@ def load_verified_projection(
         raise ProjectionError("complete impact projection closure requires evidence")
     if not isinstance(evidence, list):
         raise ProjectionError("impact projection closure evidence is invalid")
-    if repo_root is not None:
-        root = Path(repo_root).resolve()
-        for index, item in enumerate(evidence):
-            if not isinstance(item, dict) or set(item) != {"path", "sha256"}:
-                raise ProjectionError(f"impact projection closure evidence[{index}] is invalid")
-            relative = item.get("path")
-            expected_digest = item.get("sha256")
-            if not isinstance(relative, str) or Path(relative).is_absolute() or ".." in Path(relative).parts:
-                raise ProjectionError(f"impact projection closure evidence[{index}] path is invalid")
-            try:
-                actual_digest = "sha256:" + hashlib.sha256((root / relative).read_bytes()).hexdigest()
-            except OSError as exc:
-                raise ProjectionError(f"impact projection closure evidence[{index}] cannot be read: {exc}") from exc
-            if actual_digest != expected_digest:
-                raise ProjectionError(f"impact projection closure evidence[{index}] digest mismatch")
     if expected:
         for field in ("task_uid", "source_head_oid", "scope_base_oid", "change_class",
                       "domain_role", "manual_roles", "verification_affected",
@@ -223,6 +208,34 @@ def load_verified_projection(
             expected_paths = normalize_changed_paths(expected["changed_paths"])
             if value["changed_paths"] != expected_paths:
                 raise ProjectionError("impact projection changed paths identity mismatch")
+    if repo_root is not None:
+        root = Path(repo_root).resolve()
+        source_head_oid = value["source_head_oid"]
+        for index, item in enumerate(evidence):
+            if not isinstance(item, dict) or set(item) != {"path", "sha256"}:
+                raise ProjectionError(f"impact projection closure evidence[{index}] is invalid")
+            relative = item.get("path")
+            expected_digest = item.get("sha256")
+            if not isinstance(relative, str) or Path(relative).is_absolute() or ".." in Path(relative).parts:
+                raise ProjectionError(f"impact projection closure evidence[{index}] path is invalid")
+            try:
+                result = subprocess.run(
+                    ["git", "show", f"{source_head_oid}:{relative}"],
+                    cwd=root,
+                    capture_output=True,
+                    check=False,
+                )
+            except OSError as exc:
+                raise ProjectionError(f"impact projection closure evidence[{index}] cannot be read: {exc}") from exc
+            if result.returncode != 0:
+                detail = result.stderr.decode("utf-8", errors="replace").strip()
+                raise ProjectionError(
+                    f"impact projection closure evidence[{index}] cannot be read from "
+                    f"source head {source_head_oid}: {detail}"
+                )
+            actual_digest = "sha256:" + hashlib.sha256(result.stdout).hexdigest()
+            if actual_digest != expected_digest:
+                raise ProjectionError(f"impact projection closure evidence[{index}] digest mismatch")
     return value
 
 

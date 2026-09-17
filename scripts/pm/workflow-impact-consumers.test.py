@@ -24,10 +24,16 @@ SPEC.loader.exec_module(WORKFLOW_IMPACT)
 
 
 class WorkflowImpactConsumersTests(unittest.TestCase):
+    @staticmethod
+    def source_head() -> str:
+        return subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True
+        ).stdout.strip()
+
     def input_payload(self) -> dict[str, object]:
         return {
             "task_uid": "task_" + "1" * 32,
-            "source_head_oid": "a" * 40,
+            "source_head_oid": self.source_head(),
             "scope_base_oid": "b" * 40,
             "changed_paths": ["doc/product/world-rules-core-gameplay.prd.md"],
             "change_class": "workflow-doc",
@@ -69,14 +75,14 @@ class WorkflowImpactConsumersTests(unittest.TestCase):
             planner = self.run_consumer([
                 str(PLANNER), "--event-name", "pull_request",
                 "--task-uid", "task_" + "1" * 32,
-                "--head-ref", "a" * 40, "--scope-base-oid", "b" * 40,
+                "--head-ref", self.source_head(), "--scope-base-oid", "b" * 40,
                 "--changed-path", "doc/product/world-rules-core-gameplay.prd.md",
                 "--impact-projection", str(projection_path),
             ])
             selector = self.run_consumer([
                 str(SELECTOR), "--change-class", "workflow-doc",
                 "--task-uid", "task_" + "1" * 32,
-                "--source-head-oid", "a" * 40, "--scope-base-oid", "b" * 40,
+                "--source-head-oid", self.source_head(), "--scope-base-oid", "b" * 40,
                 "--changed-path-list", "doc/product/world-rules-core-gameplay.prd.md",
                 "--impact-projection", str(projection_path), "--json",
             ])
@@ -102,7 +108,7 @@ class WorkflowImpactConsumersTests(unittest.TestCase):
             planner = self.run_consumer([
                 str(PLANNER), "--event-name", "pull_request",
                 "--task-uid", "task_" + "1" * 32,
-                "--head-ref", "a" * 40, "--scope-base-oid", "b" * 40,
+                "--head-ref", self.source_head(), "--scope-base-oid", "b" * 40,
                 "--changed-path", "doc/product/world-rules-core-gameplay.prd.md",
                 "--impact-projection", str(projection_path),
             ], ok=False)
@@ -110,7 +116,7 @@ class WorkflowImpactConsumersTests(unittest.TestCase):
             selector = self.run_consumer([
                 str(SELECTOR), "--change-class", "workflow-doc",
                 "--task-uid", "task_" + "1" * 32,
-                "--source-head-oid", "a" * 40, "--scope-base-oid", "b" * 40,
+                "--source-head-oid", self.source_head(), "--scope-base-oid", "b" * 40,
                 "--changed-path-list", "doc/product/world-rules-core-gameplay.prd.md",
                 "--impact-projection", str(projection_path), "--json",
             ], ok=False)
@@ -127,7 +133,7 @@ class WorkflowImpactConsumersTests(unittest.TestCase):
             planner = self.run_consumer([
                 str(PLANNER), "--event-name", "pull_request",
                 "--task-uid", "task_" + "1" * 32,
-                "--head-ref", "a" * 40, "--scope-base-oid", "b" * 40,
+                "--head-ref", self.source_head(), "--scope-base-oid", "b" * 40,
                 "--changed-path", "doc/product/world-rules-core-gameplay.prd.md",
                 "--config", str(config_path), "--impact-projection", str(projection_path),
             ], ok=False)
@@ -146,7 +152,7 @@ class WorkflowImpactConsumersTests(unittest.TestCase):
             planner = self.run_consumer([
                 str(PLANNER), "--event-name", "pull_request",
                 "--task-uid", "task_" + "1" * 32,
-                "--head-ref", "a" * 40, "--scope-base-oid", "b" * 40,
+                "--head-ref", self.source_head(), "--scope-base-oid", "b" * 40,
                 "--changed-path", "doc/product/world-rules-core-gameplay.prd.md",
                 "--impact-projection", str(projection_path),
             ], ok=False)
@@ -154,7 +160,7 @@ class WorkflowImpactConsumersTests(unittest.TestCase):
             selector = self.run_consumer([
                 str(SELECTOR), "--change-class", "workflow-doc",
                 "--task-uid", "task_" + "1" * 32,
-                "--source-head-oid", "a" * 40, "--scope-base-oid", "b" * 40,
+                "--source-head-oid", self.source_head(), "--scope-base-oid", "b" * 40,
                 "--changed-path-list", "doc/product/world-rules-core-gameplay.prd.md",
                 "--impact-projection", str(projection_path), "--json",
             ], ok=False)

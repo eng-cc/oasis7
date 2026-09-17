@@ -160,6 +160,9 @@ class WorkflowImpactProjectionTests(unittest.TestCase):
 
     def test_verified_loader_rechecks_closure_evidence_against_repository(self) -> None:
         projection = json.loads(self.run_projection(self.base_input()).stdout)
+        projection["source_head_oid"] = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True
+        ).stdout.strip()
         projection["closure_status"]["evidence"][0]["sha256"] = "sha256:" + "0" * 64
         projection["projection_digest"] = WORKFLOW_IMPACT.canonical_digest({
             key: value for key, value in projection.items() if key != "projection_digest"
@@ -169,6 +172,36 @@ class WorkflowImpactProjectionTests(unittest.TestCase):
             path.write_text(json.dumps(projection), encoding="utf-8")
             with self.assertRaisesRegex(WORKFLOW_IMPACT.ProjectionError, "evidence\[0\] digest mismatch"):
                 WORKFLOW_IMPACT.load_verified_projection(path, repo_root=ROOT)
+
+    def test_verified_loader_binds_closure_evidence_to_source_head_not_worktree(self) -> None:
+        projection = json.loads(self.run_projection(self.base_input()).stdout)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            subprocess.run(["git", "init", "-q"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=root, check=True)
+            subprocess.run(["git", "config", "user.name", "Test"], cwd=root, check=True)
+            evidence_path = root / "contract.txt"
+            evidence_path.write_text("frozen contract\n", encoding="utf-8")
+            subprocess.run(["git", "add", "contract.txt"], cwd=root, check=True)
+            subprocess.run(["git", "commit", "-qm", "frozen"], cwd=root, check=True)
+            source_head = subprocess.run(
+                ["git", "rev-parse", "HEAD"], cwd=root, text=True, capture_output=True, check=True
+            ).stdout.strip()
+            projection["source_head_oid"] = source_head
+            projection["closure_status"]["evidence"] = [{
+                "path": "contract.txt",
+                "sha256": "sha256:" + hashlib.sha256(b"frozen contract\n").hexdigest(),
+            }]
+            projection["projection_digest"] = WORKFLOW_IMPACT.canonical_digest({
+                key: value for key, value in projection.items() if key != "projection_digest"
+            })
+            projection_path = root / "projection.json"
+            projection_path.write_text(json.dumps(projection), encoding="utf-8")
+
+            evidence_path.write_text("candidate checkout drift\n", encoding="utf-8")
+
+            loaded = WORKFLOW_IMPACT.load_verified_projection(projection_path, repo_root=root)
+            self.assertEqual(source_head, loaded["source_head_oid"])
 
     def test_missing_identity_and_test_contract_fields_fail_closed(self) -> None:
         for field in ("task_uid", "source_head_oid", "scope_base_oid", "test_profile", "declared_tests"):

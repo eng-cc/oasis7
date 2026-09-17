@@ -26,7 +26,9 @@ class TargetedProjectionPromotionTests(unittest.TestCase):
   self.git('config','user.name','Test')
   self.git('config','user.email','test@example.invalid')
   (self.root/'README').write_text('base\n',encoding='utf-8')
-  self.git('add','README');self.git('commit','-qm','base')
+  (self.root/'scripts').mkdir()
+  shutil.copy2(HERE.parents[1]/'scripts/ci-required-scope.v2.json',self.root/'scripts/ci-required-scope.v2.json')
+  self.git('add','README','scripts/ci-required-scope.v2.json');self.git('commit','-qm','base')
   self.scope_base=self.git('rev-parse','HEAD')
   self.git('switch','-q','-c','source')
   self.changed_path='doc/product/world-rules-core-gameplay.prd.md'
