@@ -48,7 +48,9 @@ EOF
   if [[ -n "$manifest_path" ]]; then
     printf 'NETWORK_TIER_MANIFEST_PATH=%s\n' "$manifest_path" >>"$env_path"
     printf 'GENESIS_VALIDATOR_REGISTRY_PATH=%s\n' "$TMP_DIR/config/registry.json" >>"$env_path"
-    printf 'DEPLOYMENT_INVENTORY_PATH=%s\n' "${inventory_path:-$TMP_DIR/config/deployment-inventory.json}" >>"$env_path"
+    if [[ -n "$inventory_path" ]]; then
+      printf 'DEPLOYMENT_INVENTORY_PATH=%s\n' "$inventory_path" >>"$env_path"
+    fi
   fi
 }
 
@@ -79,8 +81,11 @@ printf '{}\n' >"$TMP_DIR/config/registry.json"
 write_env "$TMP_DIR/manifest.env" "$manifest_path" 0 "$inventory_path"
 manifest_output=$(APP_ROOT="$TMP_DIR" ENV_FILE="$TMP_DIR/manifest.env" OASIS7_NODE_START_DRY_RUN=1 "$ROOT_DIR/scripts/p2p-triad-node-start.sh")
 grep -q -- "--network-tier-manifest" <<<"$manifest_output"
-grep -q -- "--deployment-inventory" <<<"$manifest_output"
-grep -q -- "$inventory_path" <<<"$manifest_output"
+grep -q -- "--genesis-validator-registry" <<<"$manifest_output"
+if grep -q -- "--deployment-inventory" <<<"$manifest_output"; then
+  echo "non-managed public-testnet observer must not forward deployment inventory" >&2
+  exit 1
+fi
 grep -q -- "--pos-no-adaptive-tick-scheduler" <<<"$manifest_output"
 if grep -q -- "--replication-network-peer" <<<"$manifest_output"; then
   echo "manifest-backed start must not pass REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV" >&2
@@ -93,27 +98,37 @@ grep -q -- "--network-tier-manifest" <<<"$manifest_default_adaptive_output"
 grep -q -- "--pos-adaptive-tick-scheduler" <<<"$manifest_default_adaptive_output"
 
 write_env "$TMP_DIR/non-triad-public.env" "$manifest_path"
-sed -i.bak '/^DEPLOYMENT_INVENTORY_PATH=/d' "$TMP_DIR/non-triad-public.env"
-rm -f "$TMP_DIR/non-triad-public.env.bak"
 non_triad_public_output=$(APP_ROOT="$TMP_DIR" ENV_FILE="$TMP_DIR/non-triad-public.env" OASIS7_NODE_START_DRY_RUN=1 "$ROOT_DIR/scripts/p2p-triad-node-start.sh")
 grep -q -- "--network-tier-manifest" <<<"$non_triad_public_output"
+grep -q -- "--genesis-validator-registry" <<<"$non_triad_public_output"
 if grep -q -- "--deployment-inventory" <<<"$non_triad_public_output"; then
-  echo "non-triad public-testnet start must not invent a deployment inventory" >&2
+  echo "non-managed public-testnet observer must not forward deployment inventory" >&2
   exit 1
 fi
 
-write_env "$TMP_DIR/missing-inventory.env" "$manifest_path" 0 "$TMP_DIR/config/missing-inventory.json"
-if APP_ROOT="$TMP_DIR" ENV_FILE="$TMP_DIR/missing-inventory.env" OASIS7_NODE_START_DRY_RUN=1 "$ROOT_DIR/scripts/p2p-triad-node-start.sh" >/dev/null 2>&1; then
-  echo "manifest-backed start must reject a missing deployment inventory" >&2
+managed_with_inventory_env="$TMP_DIR/managed-with-inventory.env"
+sed 's/^NODE_ID=test-node$/NODE_ID=triad-testnet-storage/' "$TMP_DIR/manifest.env" >"$managed_with_inventory_env"
+managed_with_inventory_output=$(APP_ROOT="$TMP_DIR" ENV_FILE="$managed_with_inventory_env" OASIS7_NODE_START_DRY_RUN=1 "$ROOT_DIR/scripts/p2p-triad-node-start.sh")
+grep -q -- "--deployment-inventory" <<<"$managed_with_inventory_output"
+grep -q -- "$inventory_path" <<<"$managed_with_inventory_output"
+
+managed_missing_inventory_env="$TMP_DIR/managed-missing-inventory.env"
+sed 's/^NODE_ID=test-node$/NODE_ID=triad-testnet-storage/' "$TMP_DIR/non-triad-public.env" >"$managed_missing_inventory_env"
+if APP_ROOT="$TMP_DIR" ENV_FILE="$managed_missing_inventory_env" OASIS7_NODE_START_DRY_RUN=1 "$ROOT_DIR/scripts/p2p-triad-node-start.sh" >"$TMP_DIR/missing-inventory.out" 2>&1; then
+  echo "managed triad startup must reject a missing deployment inventory" >&2
   exit 1
 fi
+grep -q -- "managed triad startup requires DEPLOYMENT_INVENTORY_PATH" "$TMP_DIR/missing-inventory.out"
 
 ln -s "$inventory_path" "$TMP_DIR/config/symlink-inventory.json"
 write_env "$TMP_DIR/symlink-inventory.env" "$manifest_path" 0 "$TMP_DIR/config/symlink-inventory.json"
-if APP_ROOT="$TMP_DIR" ENV_FILE="$TMP_DIR/symlink-inventory.env" OASIS7_NODE_START_DRY_RUN=1 "$ROOT_DIR/scripts/p2p-triad-node-start.sh" >/dev/null 2>&1; then
-  echo "manifest-backed start must reject a symlinked deployment inventory" >&2
+sed -i.bak 's/^NODE_ID=test-node$/NODE_ID=triad-testnet-storage/' "$TMP_DIR/symlink-inventory.env"
+rm -f "$TMP_DIR/symlink-inventory.env.bak"
+if APP_ROOT="$TMP_DIR" ENV_FILE="$TMP_DIR/symlink-inventory.env" OASIS7_NODE_START_DRY_RUN=1 "$ROOT_DIR/scripts/p2p-triad-node-start.sh" >"$TMP_DIR/symlink-inventory.out" 2>&1; then
+  echo "managed triad startup must reject a symlinked deployment inventory" >&2
   exit 1
 fi
+grep -q -- "deployment inventory must be a regular non-symlink file" "$TMP_DIR/symlink-inventory.out"
 
 write_env "$TMP_DIR/legacy.env"
 legacy_output=$(APP_ROOT="$TMP_DIR" ENV_FILE="$TMP_DIR/legacy.env" OASIS7_NODE_START_DRY_RUN=1 "$ROOT_DIR/scripts/p2p-triad-node-start.sh")

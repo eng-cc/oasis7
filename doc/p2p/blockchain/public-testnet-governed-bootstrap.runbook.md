@@ -644,7 +644,7 @@ sequencer liveness 未通过时不得启动 storage，也不得开始恢复 obse
 
 ### Validator launch invariants
 1. `NETWORK_TIER_MANIFEST_PATH` 必须指向 governed bootstrap manifest
-2. `GENESIS_VALIDATOR_REGISTRY_PATH` 必须指向当前 deployment truth registry
+2. `GENESIS_VALIDATOR_REGISTRY_PATH` 必须指向 manifest 绑定的当前 deployment truth registry，并通过精确 ref、raw SHA-256 与 semantic SHA-256 校验；非 managed observer 不传 `DEPLOYMENT_INVENTORY_PATH`，managed triad identity 则必须另外提供 manifest 绑定的完整三-validator inventory 及其 SHA-256
 3. `EXECUTION_WORLD_DIR` 必须预先放好 deployment truth world
 4. runtime binary hash 必须与当前 staged package 一致
 5. world staging 必须是“单次传输 + 远端复制”，不能复用同一 stdin tar 流做双重解包
@@ -762,8 +762,8 @@ runtime signed V2 checkpoint protocol 必须生成完整且不可变的 recovery
 ### Required prep
 1. observer manifest 使用当前 deployment truth bootstrap peer ids；legacy/non-manifest observer env 若仍存在，必须标记为旁路兼容信息而不是 formal startup source
 2. observer env 使用当前 deployment truth writer allowlist；除 validator signer 外，必须包含会提供 retained execution checkpoint 的 storage/full-storage provider signer。fetch requester 不再需要逐个 observer 手动加 allowlist，只要 providers 运行的 runtime 对 `public_testnet` + `allow_observer_nodes=true` 开启开放签名读取策略
-3. observer manifest 指向当前 deployment truth genesis/manifest
-4. observer 的 `WORLD_ID`、governed registry/manifest、manifest bootstrap peers、remote writer allowlist、node identity、listen/status ports 必须全部来自当前 deployment truth
+3. observer manifest 指向当前 deployment truth genesis/manifest，并包含精确的 `deployment_validator_registry` ref、raw digest 与 semantic digest；`p2p-public-testnet-local-observer-sync.sh apply` 必须先把该不可变 registry 本地化到 observer config。managed triad 启动仍须额外满足完整 deployment inventory authority
+4. observer 的 `WORLD_ID`、governed registry/manifest 及 raw/semantic digest、manifest bootstrap peers、remote writer allowlist、node identity、listen/status ports 必须全部来自当前 deployment truth；managed triad 另须核对 inventory/digest
 5. systemd service unit 必须是当前 testnet observer unit；不得让旧 devnet/triad observer service 继续占用状态端口或被误当作 public testnet 节点
 6. observer state 可先 reset；正常路径不导入 seed bundle，启动后由 runtime 自动拉取受验证的 high-head replication checkpoint boundary，再执行 tail gap sync。若该路径 fail closed，则保持 no-start，消费 signed V2 checkpoint recovery artifact；不得从运行中的 validator live directory 导入。
 7. local observer 使用的 runtime/package hash 必须对齐当前本机 runtime 真值；不要直接复用 validator Linux package hash 去校验本地 macOS debug/release binary

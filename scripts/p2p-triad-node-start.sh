@@ -10,6 +10,15 @@ require_regular_file() {
   [[ -f "$path" ]] || { echo "$label must be a regular file: $path" >&2; exit 1; }
 }
 
+canonical_runtime_path() {
+  python3 - "$1" <<'PY'
+import os
+import sys
+
+print(os.path.realpath(sys.argv[1]))
+PY
+}
+
 require_regular_file "$ENV_FILE" "env file"
 
 source "$ENV_FILE"
@@ -34,12 +43,24 @@ BIN="${BIN:-$RELEASE_LINK/bin/oasis7_chain_runtime}"
 network_tier_manifest_path="${NETWORK_TIER_MANIFEST_PATH:-}"
 genesis_validator_registry_path="${GENESIS_VALIDATOR_REGISTRY_PATH:-}"
 deployment_inventory_path="${DEPLOYMENT_INVENTORY_PATH:-}"
+# Managed triad identity takes precedence over the declared role. Other public
+# observers use the manifest-bound registry authority and omit this inventory.
+managed_triad_node=0
+case "${NODE_ID:-}" in
+  triad-testnet-sequencer|triad-testnet-storage|triad-testnet-validator-47)
+    managed_triad_node=1
+    ;;
+esac
 if [[ -n "$deployment_inventory_path" ]]; then
   require_regular_file "$deployment_inventory_path" "deployment inventory"
 fi
+if (( managed_triad_node )) && [[ -z "$deployment_inventory_path" ]]; then
+  echo "managed triad startup requires DEPLOYMENT_INVENTORY_PATH" >&2
+  exit 2
+fi
 if [[ -n "$network_tier_manifest_path" || -n "$genesis_validator_registry_path" ]]; then
   [[ -n "$network_tier_manifest_path" ]] || {
-    echo "deployment inventory authority requires NETWORK_TIER_MANIFEST_PATH" >&2
+    echo "public-testnet registry authority requires NETWORK_TIER_MANIFEST_PATH" >&2
     exit 2
   }
   require_regular_file "$network_tier_manifest_path" "network-tier manifest"
@@ -48,17 +69,6 @@ if [[ -n "$network_tier_manifest_path" || -n "$genesis_validator_registry_path" 
     exit 2
   }
   require_regular_file "$genesis_validator_registry_path" "genesis validator registry"
-  # The managed triad stages carry an inventory authority. Other public-
-  # testnet producers (for example local observers) intentionally use the
-  # network manifest and registry without the triad-only inventory contract.
-  case "$NODE_ID" in
-    triad-testnet-sequencer|triad-testnet-storage|triad-testnet-validator-47)
-      [[ -n "$deployment_inventory_path" ]] || {
-        echo "managed triad startup requires DEPLOYMENT_INVENTORY_PATH" >&2
-        exit 2
-      }
-      ;;
-  esac
 fi
 
 mkdir -p \
@@ -225,7 +235,10 @@ if [[ -n "$network_tier_manifest_path" ]]; then
 fi
 
 if [[ -n "$genesis_validator_registry_path" ]]; then
-  cmd+=(--genesis-validator-registry "$genesis_validator_registry_path")
+  # LoadedNetworkTierManifest canonicalizes its manifest path. Pass the
+  # physical registry path too so macOS /var -> /private/var aliases cannot
+  # make an installed-beside-manifest authority appear detached.
+  cmd+=(--genesis-validator-registry "$(canonical_runtime_path "$genesis_validator_registry_path")")
 elif [[ -z "$network_tier_manifest_path" || "${ALLOW_LEGACY_NODE_VALIDATORS_CSV:-0}" == "1" ]]; then
   for validator in "${legacy_validators[@]-}"; do
     [[ -n "$validator" ]] && cmd+=(--node-validator "$validator")
@@ -236,7 +249,7 @@ elif [[ -z "$network_tier_manifest_path" || "${ALLOW_LEGACY_NODE_VALIDATORS_CSV:
   done
 fi
 
-if [[ -n "$deployment_inventory_path" ]]; then
+if (( managed_triad_node )) && [[ -n "$deployment_inventory_path" ]]; then
   cmd+=(--deployment-inventory "$deployment_inventory_path")
 fi
 
