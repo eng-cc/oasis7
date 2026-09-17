@@ -18,9 +18,20 @@ WORKFLOW = Path(__file__).resolve().parents[2] / '.github/workflows/rust.yml'
 
 
 class BootstrapFallback(unittest.TestCase):
+    @staticmethod
+    def fallback_block(source: str) -> tuple[str, str]:
+        match = re.search(
+            r'''(python3 -I - "\$\{\{ github\.repository \}\}" "\$\{\{ github\.event\.pull_request\.number \|\| inputs\.pr_number \}\}" <<'PY')\n(.*?)\n          PY''',
+            source,
+            re.S,
+        )
+        if match is None:
+            raise AssertionError("workflow legacy bootstrap fallback block is missing")
+        return match.groups()
+
     def execute(self, pr_body, *, hits=None, issue_body=None, comments=None, second_uid=OTHER):
         source = WORKFLOW.read_text()
-        code = re.search(r"<<'PY'\n(.*?)\n          PY", source, re.S)[1]
+        _, code = self.fallback_block(source)
         code = '\n'.join(line[10:] for line in code.splitlines())
         calls = []
 
@@ -120,7 +131,7 @@ class BootstrapFallback(unittest.TestCase):
 
     def test_actual_interpreter_excludes_candidate_stdlib_shadow(self):
         source = WORKFLOW.read_text()
-        invocation, block = re.search(r"(python3 [^\n]*) <<'PY'\n(.*?)\n          PY", source, re.S).groups()
+        invocation, block = self.fallback_block(source)
         self.assertTrue(invocation.startswith('python3 -I - '))
         code = '\n'.join(line[10:] for line in block.splitlines())
         with tempfile.TemporaryDirectory() as tmp:
