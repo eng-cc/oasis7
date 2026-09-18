@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import importlib.util, io, json, sys, tempfile, unittest, zipfile
+import base64, importlib.util, io, json, sys, tempfile, unittest, zipfile
 from contextlib import redirect_stdout, ExitStack
 from pathlib import Path
 from unittest.mock import patch
@@ -226,4 +226,42 @@ class ReceiptTest(unittest.TestCase):
         payload=envelope(**changed)
         with self.assertRaisesRegex(SystemExit,"mismatch|wrong|uncertain"):
           self.planner_from_artifact(payload=payload)
+  def test_pre_envelope_trusted_workflow_accepts_only_complete_full_coverage(self):
+    proof={"workflow_run_id":12345,"workflow_sha":"b"*40,
+      "workflow_ref":"eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main",
+      "run_attempt":1,"base_oid":"b"*40,"head_oid":"a"*40,"tested_tree_oid":"t"*40}
+    check=run(); check["details_url"]="https://github.com/eng-cc/oasis7/actions/runs/12345/job/9"
+    full=M.canonical_planner({**plan(),"scope":"full",**{field:"true" for field in M.RUN_FIELDS}})
+    workflow=base64.b64encode(b"name: Rust\n# trusted workflow before package profile envelope producer\n").decode()
+    def read(*args):
+      if "artifacts?" in args[-1]: return {"artifacts":[]}
+      if "/contents/.github/workflows/rust.yml?ref=" in args[-1]: return {"encoding":"base64","content":workflow}
+      raise AssertionError(args[-1])
+    with patch.object(M,"gh",side_effect=read):
+      disposition=M.cargo_package_profile_for_run(
+        "eng-cc/oasis7",check,proof,full,task_uid=UID,task_issue_number=1,pr_number=7)
+    self.assertEqual("legacy_required_coverage",disposition["execution_disposition"])
+    self.assertIs(disposition["disposition_validated"],True)
+    self.assertEqual("b"*40,disposition["workflow_sha"])
+    receipt=self.invoke_verify()
+    receipt.update(integration_run_id=12345,tested_tree_oid="t"*40,tested_commit_oid="c"*40,
+                   workflow_sha="b"*40,cargo_package_profile=disposition)
+    original=M.review_evidence_digest(receipt)
+    receipt["cargo_package_profile"]={**disposition,"workflow_sha":"d"*40}
+    self.assertNotEqual(original,M.review_evidence_digest(receipt))
+
+  def test_missing_envelope_fails_after_trusted_workflow_has_producer(self):
+    proof={"workflow_run_id":12345,"workflow_sha":"b"*40,
+      "workflow_ref":"eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main",
+      "run_attempt":1,"base_oid":"b"*40,"head_oid":"a"*40,"tested_tree_oid":"t"*40}
+    check=run()
+    full=M.canonical_planner({**plan(),"scope":"full",**{field:"true" for field in M.RUN_FIELDS}})
+    workflow=base64.b64encode(b"name: cargo-package-profile-envelope\n").decode()
+    def read(*args):
+      if "artifacts?" in args[-1]: return {"artifacts":[]}
+      return {"encoding":"base64","content":workflow}
+    with patch.object(M,"gh",side_effect=read):
+      with self.assertRaisesRegex(SystemExit,"envelope-capable|artifact missing"):
+        M.cargo_package_profile_for_run(
+          "eng-cc/oasis7",check,proof,full,task_uid=UID,task_issue_number=1,pr_number=7)
 if __name__=="__main__": unittest.main()
