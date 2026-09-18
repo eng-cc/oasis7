@@ -79,7 +79,7 @@ class WorkflowNextTest(unittest.TestCase):
         task.update(updates)
         self.mapping.write_text(json.dumps({"version": 1, "project": {"owner": "fixture", "number": 1}, "tasks": {UID: task}}))
 
-    def install_terminal_proof(self, phase: str) -> None:
+    def install_terminal_proof(self, phase: str, *, producer_shaped_merge: bool = False) -> None:
         receipt_root = self.root / ".git/oasis7-workflow-receipts" / UID
         receipt_root.mkdir(parents=True, exist_ok=True)
 
@@ -91,10 +91,23 @@ class WorkflowNextTest(unittest.TestCase):
         mapping = json.loads(self.mapping.read_text())
         task = mapping["tasks"][UID]
         if phase in {"task_done", "main_sync", "post_merge_done"}:
-            merge, merge_digest = write("merge-receipt.json", {
-                "receipt_type": "oasis7_merge_receipt", "task_uid": UID,
-                "repository": "fixture/repo", "pr_number": 7,
-            })
+            merge = {
+                "receipt_type": "oasis7_pr_merge",
+                "issuer": "github_live_query",
+                "evidence_mode": "production",
+                "repository": "fixture/repo",
+                "default_branch": "main",
+                "pr_number": task.get("pr_number") or 7,
+                "pr_url": task.get("pr_url") or "https://github.com/fixture/repo/pull/7",
+                "state": "MERGED",
+                "merged_at": "2026-08-30T00:00:00Z",
+                "head_oid": "a" * 40,
+                "base_ref": "main",
+                "observed_at": "2026-08-30T00:00:00Z",
+            }
+            if not producer_shaped_merge:
+                merge["task_uid"] = UID
+            merge, merge_digest = write("merge-receipt.json", merge)
             task.update({"merge_receipt": merge, "merge_receipt_sha256": merge_digest})
         if phase in {"main_sync", "post_merge_done"}:
             sync, sync_digest = write("main-sync-receipt.json", {
@@ -501,6 +514,79 @@ class WorkflowNextTest(unittest.TestCase):
         self.assertEqual(payload["next_action"], "completed", payload)
         self.assertEqual(payload["next_command"], [], payload)
         self.assertEqual(payload["blockers"], [], payload)
+
+    def test_producer_shaped_merge_receipt_without_task_uid_is_accepted(self) -> None:
+        self.write_mapping(
+            status="done", workflow_phase="post_merge_done",
+            pr_url="https://github.com/fixture/repo/pull/7", pr_number=7,
+        )
+        self.install_terminal_proof("post_merge_done", producer_shaped_merge=True)
+        code, payload = self.run_query()
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload["identity_status"], "bound", payload)
+        self.assertEqual(payload["next_action"], "completed", payload)
+        self.assertEqual(payload["blockers"], [], payload)
+
+    def test_producer_shaped_merge_keeps_digest_repository_pr_and_chain_guards(self) -> None:
+        cases = (
+            ("task_uid", "task_22222222222222222222222222222222", "task/repository identity drift"),
+            ("repository", "fixture/other-repo", "task/repository identity drift"),
+            ("pr_number", 8, "PR number identity drift"),
+            ("pr_url", "https://github.com/fixture/repo/pull/8", "PR URL identity drift"),
+        )
+        for field, value, marker in cases:
+            with self.subTest(field=field):
+                self.write_mapping(
+                    status="done", workflow_phase="post_merge_done",
+                    pr_url="https://github.com/fixture/repo/pull/7", pr_number=7,
+                )
+                self.install_terminal_proof("post_merge_done", producer_shaped_merge=True)
+                merge_path = self.root / ".git/oasis7-workflow-receipts" / UID / "merge-receipt.json"
+                merge = json.loads(merge_path.read_text())
+                merge[field] = value
+                merge_path.write_text(json.dumps(merge, sort_keys=True) + "\n")
+                mapping = json.loads(self.mapping.read_text())
+                mapping["tasks"][UID]["merge_receipt"] = merge
+                mapping["tasks"][UID]["merge_receipt_sha256"] = hashlib.sha256(
+                    merge_path.read_bytes()
+                ).hexdigest()
+                self.mapping.write_text(json.dumps(mapping))
+                code, payload = self.run_query()
+                self.assertNotEqual(code, 0, payload)
+                self.assertTrue(any(marker in item for item in payload["blockers"]), payload)
+
+        self.write_mapping(
+            status="done", workflow_phase="post_merge_done",
+            pr_url="https://github.com/fixture/repo/pull/7", pr_number=7,
+        )
+        self.install_terminal_proof("post_merge_done", producer_shaped_merge=True)
+        merge_path = self.root / ".git/oasis7-workflow-receipts" / UID / "merge-receipt.json"
+        merge = json.loads(merge_path.read_text())
+        merge["observed_at"] = "2026-08-30T00:00:01Z"
+        merge_path.write_text(json.dumps(merge, sort_keys=True) + "\n")
+        code, payload = self.run_query()
+        self.assertNotEqual(code, 0, payload)
+        self.assertTrue(any("merge digest mismatch" in item for item in payload["blockers"]), payload)
+
+        self.write_mapping(
+            status="done", workflow_phase="post_merge_done",
+            pr_url="https://github.com/fixture/repo/pull/7", pr_number=7,
+        )
+        self.install_terminal_proof("post_merge_done", producer_shaped_merge=True)
+        sync_path = self.root / ".git/oasis7-workflow-receipts" / UID / "main-sync-receipt.json"
+        sync = json.loads(sync_path.read_text())
+        sync["task_uid"] = "task_22222222222222222222222222222222"
+        sync_path.write_text(json.dumps(sync, sort_keys=True) + "\n")
+        mapping = json.loads(self.mapping.read_text())
+        mapping["tasks"][UID]["phase_receipts"]["main_sync"] = sync
+        mapping["tasks"][UID]["phase_receipt_sha256"]["main_sync"] = hashlib.sha256(
+            sync_path.read_bytes()
+        ).hexdigest()
+        self.mapping.write_text(json.dumps(mapping))
+        code, payload = self.run_query()
+        self.assertNotEqual(code, 0, payload)
+        self.assertTrue(any("main-sync receipt task/repository identity drift" in item
+                            for item in payload["blockers"]), payload)
 
 
 if __name__ == "__main__":

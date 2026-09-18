@@ -397,6 +397,30 @@ def verify_bound_json_file(
     return value
 
 
+def verify_merge_receipt_identity(
+    receipt: dict[str, Any],
+    task: dict[str, Any],
+    blockers: list[str],
+) -> None:
+    """Check task-bound merge identity without requiring a producer field.
+
+    The canonical PR merge producer binds repository and PR provenance, while
+    the task UID is bound by the task mapping and the downstream terminal
+    receipts.  Keep those independent authorities intact rather than requiring
+    a task_uid field that the producer does not emit.
+    """
+    if "task_uid" in receipt and receipt.get("task_uid") != task.get("task_uid"):
+        add_blocker(blockers, "stale identity: merge receipt task/repository identity drift")
+    if receipt.get("repository") != task.get("repository"):
+        add_blocker(blockers, "stale identity: merge receipt task/repository identity drift")
+    task_pr_number = str(task.get("pr_number") or "")
+    if task_pr_number and str(receipt.get("pr_number") or "") != task_pr_number:
+        add_blocker(blockers, "stale identity: merge receipt PR number identity drift")
+    task_pr_url = str(task.get("pr_url") or task.get("pull_request_url") or "")
+    if task_pr_url and receipt.get("pr_url") != task_pr_url:
+        add_blocker(blockers, "stale identity: merge receipt PR URL identity drift")
+
+
 def verify_terminal_proof(
     root: pathlib.Path,
     phase: str,
@@ -458,11 +482,8 @@ def verify_terminal_proof(
                     receipt_root / "merge-receipt.json", task.get("merge_receipt_sha256"),
                     merge, "merge", blockers, sources,
                 )
-                if receipt is not None and (
-                    receipt.get("task_uid") != task.get("task_uid")
-                    or receipt.get("repository") != task.get("repository")
-                ):
-                    add_blocker(blockers, "stale identity: merge receipt task/repository identity drift")
+                if receipt is not None:
+                    verify_merge_receipt_identity(receipt, task, blockers)
         return
 
     if phase in {"main_sync", "post_merge_done"}:
@@ -474,10 +495,8 @@ def verify_terminal_proof(
                 receipt_root / "merge-receipt.json", task.get("merge_receipt_sha256"),
                 merge, "merge", blockers, sources,
             )
-            if receipt is not None and (
-                    receipt.get("task_uid") != task.get("task_uid")
-                    or receipt.get("repository") != task.get("repository")):
-                add_blocker(blockers, "stale identity: merge receipt task/repository identity drift")
+            if receipt is not None:
+                verify_merge_receipt_identity(receipt, task, blockers)
     if phase in {"main_sync", "post_merge_done"}:
         sync = require_phase_receipt("main_sync", ("main-sync-receipt.json",))
         if sync is not None and (
