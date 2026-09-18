@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
+import re
 import subprocess
 import tarfile
 import tempfile
@@ -16,6 +17,7 @@ from typing import Any, Iterable
 SCHEMA = "oasis7-cargo-package-profile-plan/v1"
 SUPPORTED_TARGETS = {"native", "wasm32-unknown-unknown"}
 SUPPORTED_FEATURES = {"wasm", "libp2p", "wasmtime", "webgl2_runtime", "std"}
+MAX_INDEPENDENT_WORKSPACES = 128
 
 
 class PlanError(RuntimeError):
@@ -79,17 +81,54 @@ def _metadata(root: Path, manifest: Path | None = None) -> dict[str, Any]:
 
 def _metadata_with_independent_workspaces(root: Path) -> dict[str, Any]:
     primary = _metadata(root)
-    packages = list(primary["packages"])
+    packages = {str(package["manifest_path"]): package for package in primary["packages"]}
     oasis_metadata = (primary.get("metadata") or {}).get("oasis7") or {}
-    independent = oasis_metadata.get("independent_profile_workspaces") or []
-    if not isinstance(independent, list) or any(not isinstance(path, str) for path in independent):
+    configured = oasis_metadata.get("independent_profile_workspaces") or []
+    if not isinstance(configured, list) or any(not isinstance(path, str) for path in configured):
         raise PlanError("independent profile workspace configuration is invalid")
+    discovered = {
+        manifest.parent.relative_to(root).as_posix()
+        for pattern in (
+            "crates/oasis7_builtin_wasm_modules/*/Cargo.toml",
+            "tools/*/Cargo.toml",
+        )
+        for manifest in root.glob(pattern)
+        if "[workspace]" in manifest.read_text(encoding="utf-8", errors="replace")
+    }
+    independent = sorted(set(configured) | discovered)
+    if len(independent) > MAX_INDEPENDENT_WORKSPACES:
+        raise PlanError("independent profile workspace discovery budget exceeded")
     for relative in independent:
         manifest = root / relative / "Cargo.toml"
         if not manifest.is_file():
             raise PlanError(f"independent profile workspace is missing: {relative}")
-        packages.extend(_metadata(root / relative, manifest)["packages"])
-    return {"packages": packages}
+        try:
+            loaded = _metadata(root / relative, manifest)["packages"]
+        except PlanError:
+            text = manifest.read_text(encoding="utf-8")
+            name_match = re.search(r'(?ms)^\s*\[package\].*?^\s*name\s*=\s*"([^"]+)"', text)
+            if name_match is None:
+                raise
+            dependencies = [
+                {
+                    "name": match.group(1),
+                    "path": str((manifest.parent / match.group(2)).resolve()),
+                }
+                for match in re.finditer(
+                    r'(?m)^\s*([A-Za-z0-9_-]+)\s*=\s*\{[^\n}]*\bpath\s*=\s*"([^"]+)"[^\n}]*\}',
+                    text,
+                )
+            ]
+            loaded = [
+                {
+                    "name": name_match.group(1),
+                    "manifest_path": str(manifest.resolve()),
+                    "dependencies": dependencies,
+                }
+            ]
+        for package in loaded:
+            packages[str(package["manifest_path"])] = package
+    return {"packages": list(packages.values())}
 
 
 def _package_map(root: Path, metadata: dict[str, Any]) -> dict[str, str]:
@@ -113,6 +152,7 @@ def _owner(path: str, packages: dict[str, str]) -> str | None:
 
 def _edges(root: Path, metadata: dict[str, Any], packages: dict[str, str]) -> set[tuple[str, str]]:
     edges: set[tuple[str, str]] = set()
+    package_names = set(packages.values())
     for package in metadata["packages"]:
         for dependency in package.get("dependencies", []):
             raw = dependency.get("path")
@@ -123,6 +163,8 @@ def _edges(root: Path, metadata: dict[str, Any], packages: dict[str, str]) -> se
             except ValueError:
                 continue
             target = _owner(relative, packages)
+            if target is None and dependency.get("name") in package_names:
+                target = str(dependency["name"])
             if target and target != package["name"]:
                 edges.add((package["name"], target))
     return edges
