@@ -31,15 +31,15 @@ When mergeStateStatus=BLOCKED is only missing review approval, the fresh live ga
 may emit `use_admin_merge: true` under standing policy; no additional authorization.
 See `doc/engineering/workflow/source-of-truth.md#ready-and-done`.
 Task-bound legacy `--create` is rejected before push or PR recording; use
-`--draft-candidate --create`, then promote only with `--promote-draft <fresh ci_ready_receipt.json>`
+`--draft-candidate --create --impact-projection <projection.json> --review-change-class <class>`, then promote only with `--promote-draft <fresh ci_ready_receipt.json>`
 after same-head CI and draft-state checks.
 
 Default conventions:
 - source branch: current branch
 - base branch: main
 - remote: origin
-- standard path: implementation-freeze commit -> ./scripts/prepare-task-pr.sh --draft-candidate --create -> exact-head CI -> local role-subagent review -> Pre-PR Ready -> ./scripts/prepare-task-pr.sh --promote-draft <fresh ci_ready_receipt.json> -> GitHub PR watch/fix/merge
-- optional evidence-only closeout: if review/evidence metadata needs a commit after the frozen head, allow only an evidence-only commit; if it changes HEAD, rerun exact-head CI and local role review, regenerate the packet and ci_ready receipt for that head, and promote only with that new receipt
+- standard path: implementation-freeze commit -> ./scripts/prepare-task-pr.sh --draft-candidate --create --impact-projection <projection.json> --review-change-class <class> -> start exact-head CI and local role-subagent review concurrently -> fail-closed CI/review join -> Pre-PR Ready -> ./scripts/prepare-task-pr.sh --promote-draft <fresh ci_ready_receipt.json> -> GitHub PR watch/fix/merge
+- optional evidence-only closeout: if review/evidence metadata needs a commit after the frozen head, allow only an evidence-only commit; if it changes HEAD, rerun exact-head CI and revalidate review applicability, regenerate the packet and ci_ready receipt for that head, and promote only with that new joined evidence
 
 Options:
   --base <branch>         Base branch for the PR (default: main)
@@ -56,13 +56,15 @@ Options:
   --review-domain-role <role> Domain role for domain-semantic-doc
   --review-verification-affected Add QA for semantic/external doc verification changes
   --review-manual-role <role> Repeatable manual role for unknown or mixed review scope
+  --impact-projection <path> Verified v2 projection shared by CI, role selection, review, and closeout
+  --legacy-review-v1      Explicit compatibility mode for an unprojected draft candidate
   --json                  Print machine-readable JSON summary only
   -h, --help              Show help
 
 Examples:
   ./scripts/prepare-task-pr.sh
   ./scripts/prepare-task-pr.sh task/engineering-github-pr-landing-governance --json
-  ./scripts/prepare-task-pr.sh --draft-candidate --create
+  ./scripts/prepare-task-pr.sh --draft-candidate --create --review-change-class <class> --impact-projection <projection.json>
 USAGE
 }
 
@@ -113,6 +115,9 @@ REVIEW_CHANGE_CLASS=""
 REVIEW_DOMAIN_ROLE=""
 REVIEW_VERIFICATION_AFFECTED=0
 REVIEW_MANUAL_ROLES=()
+IMPACT_PROJECTION=""
+IMPACT_PROJECTION_B64=""
+LEGACY_REVIEW_V1=0
 POSITIONAL=()
 
 while [[ $# -gt 0 ]]; do
@@ -147,6 +152,8 @@ while [[ $# -gt 0 ]]; do
     --review-domain-role) REVIEW_DOMAIN_ROLE="${2:-}"; shift 2 ;;
     --review-verification-affected) REVIEW_VERIFICATION_AFFECTED=1; shift ;;
     --review-manual-role) REVIEW_MANUAL_ROLES+=("${2:-}"); shift 2 ;;
+    --impact-projection) IMPACT_PROJECTION="${2:-}"; shift 2 ;;
+    --legacy-review-v1) LEGACY_REVIEW_V1=1; shift ;;
     --json)
       OUTPUT_JSON=1
       shift
@@ -164,6 +171,17 @@ done
 
 if [[ "${#POSITIONAL[@]}" -gt 1 ]]; then
   die "expected at most one optional [source-branch]"
+fi
+if [[ -n "$IMPACT_PROJECTION" && -z "$REVIEW_CHANGE_CLASS" ]]; then
+  die "--impact-projection requires --review-change-class so role identity can be verified"
+fi
+if [[ -n "$IMPACT_PROJECTION" && "$LEGACY_REVIEW_V1" == "1" ]]; then
+  die "--impact-projection and --legacy-review-v1 are mutually exclusive"
+fi
+if [[ -n "$IMPACT_PROJECTION" ]]; then
+  [[ -f "$IMPACT_PROJECTION" ]] || die "impact projection is not readable: $IMPACT_PROJECTION"
+  IMPACT_PROJECTION="$(cd "$(dirname "$IMPACT_PROJECTION")" && pwd)/$(basename "$IMPACT_PROJECTION")"
+  IMPACT_PROJECTION_B64="$(base64 <"$IMPACT_PROJECTION" | tr -d '\n')"
 fi
 
 COMMON_GIT_DIR="$(cd "$(git rev-parse --git-common-dir)" && pwd -P)"
@@ -573,6 +591,12 @@ target = rf"(?:#\s*{issue_number}\b|[\w.-]+/[\w.-]+#\s*{issue_number}\b|https?:/
 auto_close = re.compile(rf"\b(close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+{target}", re.IGNORECASE)
 raise SystemExit(0 if reference.search(body) and not auto_close.search(body) else 1)
 PY
+}
+
+body_file_has_impact_projection() {
+  local body_file="$1"
+  local projection_b64="$2"
+  grep -Fqx "<!-- oasis7-impact-projection-b64: $projection_b64 -->" "$body_file"
 }
 
 local_role_review_status() {
@@ -1435,6 +1459,9 @@ if [[ "$DRAFT_CANDIDATE" == "1" ]]; then
   BOUND_TASK_UID="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '1p')"
   BOUND_TASK_ISSUE_URL="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '2p')"
   BOUND_TASK_ISSUE_NUMBER="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '3p')"
+  if [[ -n "$BOUND_TASK_UID" && -z "$IMPACT_PROJECTION" && "$LEGACY_REVIEW_V1" != "1" ]]; then
+    die "task-bound draft candidate requires --impact-projection; pass --legacy-review-v1 only for an explicit compatibility migration"
+  fi
 fi
 
 read -r BEHIND_COUNT AHEAD_COUNT <<<"$(git rev-list --left-right --count "$COMPARISON_REF...$SOURCE_BRANCH")"
@@ -1484,7 +1511,11 @@ LOCAL_REQUIRED_EXTRA_COMMANDS+=("$SYSTEM_DESIGN_TRACEABILITY_COMMAND")
 
 PLANNER_SCRIPT="$SOURCE_WORKTREE/scripts/plan-rust-required-scope.sh"
 if [[ -x "$PLANNER_SCRIPT" ]]; then
-  if RUST_SCOPE_OUTPUT="$(cd "$SOURCE_WORKTREE" && "$PLANNER_SCRIPT" --event-name pull_request --base-ref "$COMPARISON_REF" --head-ref "$SOURCE_BRANCH" 2>/dev/null)"; then
+  PLANNER_ARGS=(--event-name pull_request --base-ref "$COMPARISON_REF" --head-ref "$SOURCE_HEAD")
+  if [[ -n "$IMPACT_PROJECTION" ]]; then
+    PLANNER_ARGS+=(--impact-projection "$IMPACT_PROJECTION" --task-uid "$BOUND_TASK_UID" --scope-base-oid "$COMPARISON_HEAD")
+  fi
+  if RUST_SCOPE_OUTPUT="$(cd "$SOURCE_WORKTREE" && "$PLANNER_SCRIPT" "${PLANNER_ARGS[@]}" 2>/dev/null)"; then
     LOCAL_REQUIRED_SCOPE="$(plan_kv_get "$RUST_SCOPE_OUTPUT" "scope")"
     LOCAL_REQUIRED_SCOPE="${LOCAL_REQUIRED_SCOPE:-unavailable}"
     LOCAL_REQUIRED_CHANGED_PATH_COUNT="$(plan_kv_get "$RUST_SCOPE_OUTPUT" "changed_path_count")"
@@ -1669,7 +1700,7 @@ LOCAL_ROLE_REVIEW_PLAN_SCHEMA="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "review
 LOCAL_ROLE_REVIEW_SOURCE_DIGEST="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "source_review_digest")"
 LOCAL_ROLE_REVIEW_INTEGRATION_DIGEST="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "integration_ci_digest")"
 if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" != "1" && "$LOCAL_ROLE_REVIEW_STATUS" == "passed" && -n "$LOCAL_ROLE_REVIEW_TASK_UID" ]]; then
-  die "legacy task-bound \`--create\` is rejected; use ./scripts/prepare-task-pr.sh --draft-candidate --create, then ./scripts/prepare-task-pr.sh --promote-draft <fresh ci_ready_receipt.json> after same-head CI and draft-state checks"
+  die "legacy task-bound \`--create\` is rejected; use ./scripts/prepare-task-pr.sh --draft-candidate --create --impact-projection <projection.json> --review-change-class <class>, then ./scripts/prepare-task-pr.sh --promote-draft <fresh ci_ready_receipt.json> after same-head CI and draft-state checks"
 fi
 if [[ "$DRAFT_CANDIDATE" == "1" ]]; then
   if [[ -n "$LOCAL_ROLE_REVIEW_TASK_UID" && "$LOCAL_ROLE_REVIEW_TASK_UID" != "$BOUND_TASK_UID" ]]; then
@@ -1683,6 +1714,10 @@ fi
 REQUIRED_REVIEW_ROLES="$(required_review_roles_from_paths "$LOCAL_REQUIRED_CHANGED_PATHS")"
 if [[ -n "$REVIEW_CHANGE_CLASS" ]]; then
   ROLE_SELECTOR_ARGS=(--change-class "$REVIEW_CHANGE_CLASS" --changed-path-list "$LOCAL_REQUIRED_CHANGED_PATHS" --json)
+  if [[ -n "$IMPACT_PROJECTION" ]]; then
+    [[ -f "$IMPACT_PROJECTION" ]] || die "impact projection is not readable: $IMPACT_PROJECTION"
+    ROLE_SELECTOR_ARGS+=(--impact-projection "$IMPACT_PROJECTION" --task-uid "$BOUND_TASK_UID" --source-head-oid "$SOURCE_HEAD" --scope-base-oid "$COMPARISON_HEAD")
+  fi
   [[ -z "$REVIEW_DOMAIN_ROLE" ]] || ROLE_SELECTOR_ARGS+=(--domain-role "$REVIEW_DOMAIN_ROLE")
   [[ "$REVIEW_VERIFICATION_AFFECTED" == "0" ]] || ROLE_SELECTOR_ARGS+=(--verification-affected)
   if [[ "${#REVIEW_MANUAL_ROLES[@]}" -gt 0 ]]; then
@@ -1700,7 +1735,6 @@ MISSING_SEMANTIC_REVIEW_EVIDENCE="$(semantic_review_evidence_missing "$REQUIRED_
 if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" != "1" && "$LOCAL_ROLE_REVIEW_STATUS" != "passed" ]]; then
   die "missing passed pre-PR local role review evidence for $SOURCE_BRANCH at $SOURCE_HEAD ($LOCAL_ROLE_REVIEW_REASON; log: ${LOCAL_ROLE_REVIEW_LOG_PATH:-unknown}; missing: ${LOCAL_ROLE_REVIEW_MISSING_MARKERS:-unknown})"
 fi
-
 if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" != "1" && -n "$MISSING_REQUIRED_REVIEW_ROLES" ]]; then
   die "pre-PR local role review is missing required role(s) inferred from changed paths: $MISSING_REQUIRED_REVIEW_ROLES (present: ${LOCAL_ROLE_REVIEW_ROLES:-none}; required: $REQUIRED_REVIEW_ROLES)"
 fi
@@ -1908,10 +1942,15 @@ if [[ -n "$TASK_ISSUE_NUMBER" ]]; then
     if ! body_file_has_task_reference "$BODY_FILE" "$TASK_ISSUE_NUMBER"; then
       die "--body-file must include a non-closing GitHub task reference and no auto-close keyword, for example: Refs #$TASK_ISSUE_NUMBER"
     fi
+    if [[ -n "$IMPACT_PROJECTION_B64" ]] && ! body_file_has_impact_projection "$BODY_FILE" "$IMPACT_PROJECTION_B64"; then
+      die "--body-file must include the exact digest-bound impact projection marker for --impact-projection"
+    fi
   else
     GENERATED_PR_BODY="Task: ${LOCAL_ROLE_REVIEW_TASK_UID:-unknown}
 
 Refs #$TASK_ISSUE_NUMBER
+
+<!-- oasis7-impact-projection-b64: ${IMPACT_PROJECTION_B64:-missing} -->
 
 Generated by ./scripts/prepare-task-pr.sh."
   fi
@@ -1919,6 +1958,8 @@ elif [[ "$CREATE_PR" == "1" && -n "$LOCAL_ROLE_REVIEW_TASK_UID" ]]; then
   die "cannot resolve GitHub task issue number for $LOCAL_ROLE_REVIEW_TASK_UID; refusing to create a task PR without a task reference"
 elif [[ -n "$PR_TITLE" && -z "$BODY_FILE" ]]; then
   GENERATED_PR_BODY="Task: ${LOCAL_ROLE_REVIEW_TASK_UID:-unknown}
+
+<!-- oasis7-impact-projection-b64: ${IMPACT_PROJECTION_B64:-missing} -->
 
 Generated by ./scripts/prepare-task-pr.sh."
 fi

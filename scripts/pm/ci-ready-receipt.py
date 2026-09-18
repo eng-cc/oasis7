@@ -35,6 +35,14 @@ def canonical_planner(raw):
         raise SystemExit("ci-ready-receipt: uncertain invalid selected_capabilities")
     plan={"schema":PLAN_MARKER,"scope":str(raw["scope"]),"selected_capabilities":capabilities,"reason_summary":str(raw["reason_summary"]),"changed_path_count":changed,"planner_config_sha256":str(raw["planner_config_sha256"])}
     plan.update({k:str(raw[k]).lower()=="true" for k in RUN_FIELDS})
+    projection_fields=("impact_projection_schema","impact_projection_digest","impact_projection_status","test_profile","declared_tests","planner_digest")
+    present=[field for field in projection_fields if field in raw]
+    if present:
+        if len(present)!=len(projection_fields) or raw["impact_projection_schema"]!="oasis7-workflow-impact-projection/v2" or raw["impact_projection_status"]!="verified":
+            raise SystemExit("ci-ready-receipt: uncertain incomplete impact projection planner metadata")
+        if not re.fullmatch(r"sha256:[0-9a-f]{64}",str(raw["impact_projection_digest"])) or not re.fullmatch(r"sha256:[0-9a-f]{64}",str(raw["planner_digest"])):
+            raise SystemExit("ci-ready-receipt: uncertain invalid impact projection digest")
+        plan.update({"impact_projection_schema":raw["impact_projection_schema"],"impact_projection_digest":raw["impact_projection_digest"],"impact_projection_status":"verified","impact_projection_test_profile":raw["test_profile"],"impact_projection_declared_tests":str(raw["declared_tests"]).split(";") if raw["declared_tests"] else [],"impact_projection_planner_digest":raw["planner_digest"]})
     return plan
 
 def planner_from_run(run):
@@ -198,6 +206,8 @@ def main():
       "task_uid":a.task_uid,"task_issue_number":a.task_issue_number,"pr_number":a.pr_number,"base_oid":base_oid,"head_oid":head_oid,
       "check_name":a.check_name,"check_app_id":(run.get("app") or {}).get("id"),"check_run_id":run.get("id"),
       "planner_digest":trusted_planner_digest,"planner":planner,"planner_config_sha256":planner["planner_config_sha256"],"run_rust_baseline":planner["run_rust_baseline"],"conclusion":"success","observed_at":now()}
+    if planner.get("impact_projection_status") == "verified":
+        payload.update(impact_projection_schema=planner["impact_projection_schema"],impact_projection_digest=planner["impact_projection_digest"],impact_projection_planner_digest=planner["impact_projection_planner_digest"])
     if old is None or 'scope_base_oid' in old:
         payload['scope_base_oid'] = scope_base_for_run(a.repository, base_oid, head_oid)
         payload['integration_base_oid'] = base_oid

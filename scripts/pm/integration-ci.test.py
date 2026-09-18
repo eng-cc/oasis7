@@ -1,5 +1,6 @@
 """Manual integration revalidation uses current target and unchanged source."""
 import importlib.util
+import hashlib
 import json
 import io
 import zipfile
@@ -15,6 +16,96 @@ import shutil
 import textwrap
 
 HERE=Path(__file__).parent
+
+
+class TargetedProjectionPromotionTests(unittest.TestCase):
+ def setUp(self):
+  self.temp=tempfile.TemporaryDirectory()
+  self.root=Path(self.temp.name)
+  self.git('init','-q','-b','main')
+  self.git('config','user.name','Test')
+  self.git('config','user.email','test@example.invalid')
+  (self.root/'README').write_text('base\n',encoding='utf-8')
+  (self.root/'scripts').mkdir()
+  shutil.copy2(HERE.parents[1]/'scripts/ci-required-scope.v2.json',self.root/'scripts/ci-required-scope.v2.json')
+  self.git('add','README','scripts/ci-required-scope.v2.json');self.git('commit','-qm','base')
+  self.scope_base=self.git('rev-parse','HEAD')
+  self.git('switch','-q','-c','source')
+  self.changed_path='doc/product/world-rules-core-gameplay.prd.md'
+  changed=self.root/self.changed_path
+  changed.parent.mkdir(parents=True)
+  changed.write_text('source change\n',encoding='utf-8')
+  self.git('add',self.changed_path);self.git('commit','-qm','source')
+  self.source_head=self.git('rev-parse','HEAD')
+  self.git('switch','-q','--detach',self.scope_base)
+  (self.root/'target-only.txt').write_text('target advance\n',encoding='utf-8')
+  self.git('add','target-only.txt');self.git('commit','-qm','target advance')
+  self.integration_base=self.git('rev-parse','HEAD')
+  self.uid='task_'+'1'*32
+  payload={
+   'task_uid':self.uid,
+   'source_head_oid':self.source_head,
+   'scope_base_oid':self.scope_base,
+   'changed_paths':[self.changed_path],
+   'change_class':'workflow-doc',
+   'manual_roles':[],
+   'domain_role':None,
+   'test_profile':'required',
+   'declared_tests':['required_gate_baseline'],
+   'consumed_contracts':[{'id':'workflow-contract','revision':'v1'}],
+   'public_semantics':[],
+   'affected_consumers':['required-ci'],
+   'closure_status':{'status':'complete','reason':'verified','evidence':[{
+    'path':'scripts/ci-required-scope.v2.json',
+    'sha256':'sha256:'+hashlib.sha256((HERE.parents[1]/'scripts/ci-required-scope.v2.json').read_bytes()).hexdigest(),
+   }]},
+  }
+  input_path=self.root/'projection-input.json'
+  self.projection_path=self.root/'projection.json'
+  input_path.write_text(json.dumps(payload),encoding='utf-8')
+  result=subprocess.run([
+   str(HERE/'workflow-impact-projection.py'),'--root',str(HERE.parents[1]),
+   '--input',str(input_path),'--out',str(self.projection_path),
+  ],text=True,capture_output=True)
+  self.assertEqual(result.returncode,0,result.stderr)
+  self.projection=json.loads(self.projection_path.read_text(encoding='utf-8'))
+
+ def tearDown(self):
+  self.temp.cleanup()
+
+ def git(self,*args):
+  return subprocess.check_output(['git','-C',str(self.root),*args],text=True).strip()
+
+ def planner(self,event,base):
+  result=subprocess.run([
+   sys.executable,str(HERE.parents[1]/'scripts/plan-rust-required-scope.py'),
+   '--event-name',event,'--base-ref',base,'--head-ref',self.source_head,
+   '--task-uid',self.uid,'--scope-base-oid',self.scope_base,
+   '--impact-projection',str(self.projection_path),
+  ],cwd=self.root,text=True,capture_output=True)
+  self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+  return dict(line.split('=',1) for line in result.stdout.splitlines() if '=' in line)
+
+ def test_targeted_pr_projection_is_accepted_and_upgraded_by_trusted_integration(self):
+  pr=self.planner('pull_request',self.scope_base)
+  self.assertEqual(pr['scope'],'minimal')
+  self.assertEqual(pr['impact_projection_status'],'verified')
+  self.assertEqual(pr['impact_projection_digest'],self.projection['projection_digest'])
+
+  # The integration target has advanced with a target-only commit.  The
+  # trusted workflow must execute the full gate while retaining the source
+  # projection digest; comparing the projection to this broader diff would be
+  # both incorrect and unsafe.
+  integration=self.planner('workflow_dispatch',self.integration_base)
+  self.assertEqual(integration['scope'],'full')
+  self.assertEqual(integration['impact_projection_status'],'verified')
+  self.assertEqual(integration['impact_projection_digest'],self.projection['projection_digest'])
+  self.assertEqual(integration['test_profile'],'required')
+  self.assertEqual(integration['run_oasis7_required_tests'],'true')
+  self.assertEqual(integration['needs_rust_toolchain'],'true')
+  self.assertEqual(integration['changed_path_count'],'2')
+
+
 class IntegrationTests(unittest.TestCase):
  def test_required_workflow_uses_frozen_driver_and_preflight_on_candidate_root(self):
   for event in ('workflow_dispatch','pull_request','push'):
@@ -26,6 +117,7 @@ class IntegrationTests(unittest.TestCase):
      for name in ('ci-tests.sh','viewer-dependency-preflight.sh'):
       shutil.copy2(repo/'scripts'/name,frozen/name)
      marker=temp/'observed'
+     (temp/'impact-projection.json').write_text('{}')
      (scripts/'ci-tests.sh').write_text('#!/bin/bash\nprintf candidate > "$OBSERVED"\nexit 0\n')
      (scripts/'ci-tests.sh').chmod(0o755)
      (scripts/'viewer-dependency-preflight.sh').write_text(candidate_preflight)
@@ -162,7 +254,7 @@ class ProvenanceTests(unittest.TestCase):
 
  def test_premerge_activation_cannot_dispatch_candidate(self):
   with patch.object(self.api,'gh',side_effect=[self.pr,self.pr,{'default_branch':'main'},{'content':'bm8gbW9kZQ=='}]),patch.object(self.api.subprocess,'run') as run:
-   with self.assertRaisesRegex(ValueError,'activation pending'):self.api.dispatch('owner/repo',self.uid,12)
+   with self.assertRaisesRegex(ValueError,'activation pending'):self.api.dispatch('owner/repo',self.uid,12,None)
    run.assert_not_called()
 
 if __name__=='__main__':unittest.main()

@@ -8,7 +8,7 @@ tier="${1:-}"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/ci-tests.sh [commit|required|full|full-core|full-support] [--repo-root PATH]
+Usage: ./scripts/ci-tests.sh [commit|required|full|full-core|full-support] [--repo-root PATH] [--impact-projection PATH]
 
   commit        Run the lightweight local commit gate used by pre-commit.
   required      Run the explicit heavier required gate for local validation and PR gate.
@@ -25,11 +25,6 @@ if [[ $# -eq 0 ]]; then
   exit 2
 fi
 
-if [[ $# -ne 1 && !( $# -eq 3 && "$2" == "--repo-root" && -n "$3" ) ]]; then
-  usage
-  exit 1
-fi
-
 case "$tier" in
   commit|required|full|full-core|full-support) ;;
   *)
@@ -38,10 +33,31 @@ case "$tier" in
     ;;
 esac
 
-if [[ $# -eq 3 ]]; then
-  repo_root=$(cd "$3" && pwd)
-fi
+shift
+impact_projection=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --repo-root)
+      [[ $# -ge 2 && -n "$2" ]] || { usage; exit 1; }
+      repo_root=$(cd "$2" && pwd)
+      shift 2
+      ;;
+    --impact-projection)
+      [[ $# -ge 2 && -n "$2" ]] || { usage; exit 1; }
+      impact_projection="$2"
+      shift 2
+      ;;
+    *)
+      usage
+      exit 1
+      ;;
+  esac
+done
 cd "$repo_root"
+if [[ -n "$impact_projection" && ! -f "$impact_projection" ]]; then
+  echo "ci-tests: impact projection cannot be read: $impact_projection" >&2
+  exit 1
+fi
 # Keep sourced driver definitions with the driver, even when the tested tree differs.
 source "$driver_dir/viewer-dependency-preflight.sh"
 
@@ -305,6 +321,67 @@ run_system_design_traceability_tests() {
   run python3 ./scripts/system-design-traceability-check.test.py
 }
 
+run_workflow_impact_projection_contract_tests() {
+  run python3 ./scripts/pm/workflow-impact-projection.test.py
+  run python3 ./scripts/pm/workflow-impact-consumers.test.py
+}
+
+run_workflow_impact_projection_consumer() {
+  [[ -n "$impact_projection" ]] || return 0
+  run python3 - "$impact_projection" "$repo_root" <<'PY'
+import importlib.util
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+projection_path = Path(sys.argv[1]).resolve()
+root = Path(sys.argv[2]).resolve()
+spec = importlib.util.spec_from_file_location(
+    "oasis7_workflow_impact_projection", root / "scripts/pm" / "workflow-impact-projection.py"
+)
+if spec is None or spec.loader is None:
+    raise SystemExit("impact projection adapter is unavailable")
+helper = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(helper)
+projection = helper.load_verified_projection(projection_path, repo_root=root)
+paths = projection["changed_paths"]
+planner = [str(root / "scripts" / "plan-rust-required-scope.sh"),
+           "--event-name", "pull_request", "--impact-projection", str(projection_path),
+           "--task-uid", projection["task_uid"], "--head-ref", projection["source_head_oid"],
+           "--scope-base-oid", projection["scope_base_oid"]]
+for path in paths:
+    planner.extend(("--changed-path", path))
+planner_result = subprocess.run(planner, cwd=root, text=True, capture_output=True)
+if planner_result.returncode:
+    raise SystemExit(planner_result.stderr.strip() or "impact projection planner consumer failed")
+planner_fields = dict(line.split("=", 1) for line in planner_result.stdout.splitlines() if "=" in line)
+selector = [str(root / "scripts" / "pm" / "review-role-selector.py"),
+            "--change-class", projection["change_class"],
+            "--changed-path-list", ";".join(paths), "--impact-projection", str(projection_path), "--json"]
+selector.extend(("--task-uid", projection["task_uid"],
+                 "--source-head-oid", projection["source_head_oid"],
+                 "--scope-base-oid", projection["scope_base_oid"]))
+if projection.get("domain_role") is not None:
+    selector.extend(("--domain-role", projection["domain_role"]))
+for role in projection["manual_roles"]:
+    selector.extend(("--manual-role", role))
+if projection.get("verification_affected"):
+    selector.append("--verification-affected")
+selector_result = subprocess.run(selector, cwd=root, text=True, capture_output=True)
+if selector_result.returncode:
+    raise SystemExit(selector_result.stderr.strip() or "impact projection role consumer failed")
+selected = json.loads(selector_result.stdout)
+expected_digest = projection["projection_digest"]
+if planner_fields.get("impact_projection_digest") != expected_digest:
+    raise SystemExit("impact projection planner digest did not match the verified projection")
+if selected.get("impact_projection_digest") != expected_digest:
+    raise SystemExit("impact projection role digest did not match the verified projection")
+if planner_fields.get("impact_projection_status") != "verified" or selected.get("impact_projection_status") != "verified":
+    raise SystemExit("impact projection consumers did not report verified status")
+PY
+}
+
 product_doc_range() {
   local base_oid="${OASIS7_PRODUCT_DOC_BASE:-}"
   local head_oid="${OASIS7_PRODUCT_DOC_HEAD:-}"
@@ -439,6 +516,8 @@ run_required_gate_checks() {
   run_required_component "standalone tool lockfiles" "${OASIS7_CI_RUN_RUST_BASELINE:-}" "disabled_by_scope_planner" run_standalone_tool_lockfiles_checks
   run bash ./scripts/check-launcher-p2p-dependency-surface.test.sh
   run ./scripts/plan-rust-required-scope.test.sh
+  run_workflow_impact_projection_contract_tests
+  run_workflow_impact_projection_consumer
   run python3 ./scripts/pm/check-cargo-package-scope.test.py
   run_cargo_package_scope_check
   run ./scripts/rust-required-gate-compile-command-contract.test.sh

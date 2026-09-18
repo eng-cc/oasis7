@@ -187,7 +187,7 @@ class PacketTest(unittest.TestCase):
         path.write_text(json.dumps(plan), encoding="utf-8")
         return path
 
-    def create_v2_review_plan(self, packet_path: str, bootstrap_epoch: int) -> Path:
+    def create_v2_review_plan(self, packet_path: str, bootstrap_epoch: int, *, source_only: bool = False) -> Path:
         identity_spec = importlib.util.spec_from_file_location(
             "ci_ready_receipt_identity_for_test", SOURCE.with_name("ci_ready_receipt_identity.py")
         )
@@ -222,6 +222,7 @@ class PacketTest(unittest.TestCase):
         }
         integration = identity_module.integration_ci_identity(receipt)
         source_digest = identity_module.source_review_digest(source)
+        applicability_identity = identity_module.review_applicability_identity(source)
         expected_slices = sorted([
             {"role": "repository_health_engineer", "slice_id": "repository-health-review"},
             {"role": "qa_engineer", "slice_id": "qa-review"},
@@ -247,6 +248,13 @@ class PacketTest(unittest.TestCase):
             "relevant_evidence_digest": source_digest,
             "source_review_identity": source,
             "source_review_digest": source_digest,
+            "professional_review_applicability": {
+                "identity": applicability_identity,
+                "identity_digest": identity_module.review_applicability_digest(applicability_identity),
+                "verified": True,
+            },
+            "impact_projection_schema": "oasis7-workflow-impact-projection/v2",
+            "impact_projection_digest": "sha256:" + "6" * 64,
             "integration_ci_identity": integration,
             "integration_ci_digest": identity_module.integration_ci_digest(integration),
             "integration_ci_provenance": {
@@ -262,6 +270,11 @@ class PacketTest(unittest.TestCase):
                 {"role": "qa_engineer", "slice_id": "qa-review", "packet_ref": packet_path},
             ],
         }
+        if source_only:
+            for key in ("integration_ci_identity", "integration_ci_digest",
+                        "integration_ci_provenance", "integration_base_oid"):
+                plan.pop(key, None)
+            plan["integration_ci_status"] = "pending"
         path = self.repo / ".pm/scratch" / TASK_UID / "review-plans" / f"v2-{bootstrap_epoch}.json"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(plan), encoding="utf-8")
@@ -508,6 +521,13 @@ class PacketTest(unittest.TestCase):
         wrong_epoch = self.create_v2_review_plan(packet, bootstrap_epoch=2)
         rejected = self.review_admission(packet, wrong_epoch, snapshot, ok=False)
         self.assertIn("bootstrap epoch", rejected.stderr.lower())
+
+    def test_v2_source_only_plan_is_admitted_while_integration_ci_is_pending(self) -> None:
+        packet = self.invoke(self.create_args()).stdout.splitlines()[0]
+        snapshot = self.create_snapshot()
+        plan = self.create_v2_review_plan(packet, bootstrap_epoch=1, source_only=True)
+        admitted = self.review_admission(packet, plan, snapshot)
+        self.assertEqual("admitted", json.loads(admitted.stdout)["status"])
 
     def test_review_admission_invalidates_after_head_or_comparison_ref_changes(self) -> None:
         packet = self.invoke(self.create_args()).stdout.splitlines()[0]

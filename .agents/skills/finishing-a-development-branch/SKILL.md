@@ -25,7 +25,7 @@ For a finite multi-obligation change, before a leaf enters finish, read its coor
 ## Freeze-Commit Gates
 
 1. Freeze comparison ref and implementation head. Run `git diff --check <Comparison Ref>...<Source Head>`.
-2. Create/resume the CI candidate with `./scripts/prepare-task-pr.sh --draft-candidate --create`; the helper records and reads back canonical task/head/base identity on the bound issue before push or PR creation.
+2. Create/resume the CI candidate with `./scripts/prepare-task-pr.sh --draft-candidate --create --impact-projection <projection.json> --review-change-class <class>`; the helper records and reads back canonical task/head/base identity on the bound issue before push or PR creation. If `--body-file` is used, include the exact `oasis7-impact-projection-b64` marker bound to that projection.
 3. After the draft's exact-head `required-gate` succeeds, produce the trusted receipt explicitly:
 
 ```bash

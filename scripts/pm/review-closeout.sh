@@ -91,7 +91,16 @@ if p.get("schema") == "oasis7-review-plan/v2":
  if spec is None or spec.loader is None: raise SystemExit("review-closeout: cannot load v2 review identity helper")
  helper=importlib.util.module_from_spec(spec); spec.loader.exec_module(helper)
  if evidence_digest != helper.source_review_digest(p.get("source_review_identity")): raise SystemExit("review-closeout: v2 source review digest mismatch")
- if p.get("integration_ci_digest") != helper.integration_ci_digest(p.get("integration_ci_identity")): raise SystemExit("review-closeout: v2 integration CI digest mismatch")
+ try:
+  helper.validate_review_applicability(p.get("source_review_identity"), p.get("professional_review_applicability"))
+ except (TypeError, ValueError) as exc:
+  raise SystemExit(f"review-closeout: v2 review applicability is invalid: {exc}")
+ integration_identity = p.get("integration_ci_identity")
+ if integration_identity is None:
+  if p.get("integration_ci_digest") is not None or p.get("integration_ci_provenance") is not None:
+   raise SystemExit("review-closeout: v2 source-only plan has unexpected integration CI fields")
+ elif p.get("integration_ci_digest") != helper.integration_ci_digest(integration_identity):
+  raise SystemExit("review-closeout: v2 integration CI digest mismatch")
 preflight = p.get("preflight")
 if not isinstance(preflight, dict) or not isinstance(preflight.get("ledger_path"), str) or not preflight["ledger_path"].strip():
  raise SystemExit("review-closeout: review plan has no persisted preflight ledger")

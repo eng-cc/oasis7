@@ -94,4 +94,9 @@ class ReviewRoleSelectorTests(unittest.TestCase):
         )
         self.assertIn("manual role", error.lower())
 
+    def test_projection_consumer_option_is_part_of_the_role_selector_contract(self):
+        result = subprocess.run([str(SCRIPT), "--help"], text=True, capture_output=True)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertIn("--impact-projection", result.stdout)
+
 if __name__ == "__main__": unittest.main()

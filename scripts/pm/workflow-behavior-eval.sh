@@ -13,8 +13,8 @@ Usage: ./scripts/pm/workflow-behavior-eval.sh [--json]
 Run the repo-owned workflow behavior eval for the default oasis7 task chain:
   default-workflow-bootstrap -> new-task-worktree -> workflow-report
   -> repo-owned-workflow-router -> TPM coordinate/integrate only + professional role subagent dispatch
-  -> prepare-task-pr --draft-candidate --create -> exact-head CI -> role review
-  -> task-closeout -> prepare-task-pr --promote-draft -> PR CI/comment watch/fix
+  -> prepare-task-pr --draft-candidate --create -> concurrent exact-head CI + role review
+  -> fail-closed join -> task-closeout -> prepare-task-pr --promote-draft -> PR CI/comment watch/fix
   -> review-thread-closeout -> merge/cleanup
 
 This eval reuses isolated fixture tests and PM smokes so the main chain stays
@@ -92,6 +92,10 @@ bash "$ROOT_DIR/scripts/pm/claim-ready-ready-pr.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/workflow-lint.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/record-pre-pr-review.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/review-closeout-facade.test.sh" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/workflow-impact-projection.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/review-plan.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/subagent-task-packet.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/task-closeout-v2-live-validation.test.py" >/dev/null
 "$ROOT_DIR/scripts/pm/new-task-worktree-acceptance-pre-mutation.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/finalize-task-red.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/finalize-task.test.sh" >/dev/null
@@ -460,7 +464,7 @@ checks = [
     (
         root / ".agents/skills/requesting-repo-owned-review/SKILL.md",
         [
-            "Pre-PR local role review is required after the draft candidate has same-head CI evidence and before promotion",
+            "Pre-PR local role review is required for the frozen source head before promotion",
             "findings",
             "no_findings",
             "residual_risk",
@@ -801,6 +805,22 @@ scenarios = [
         ],
     },
     {
+        "id": "frozen_head_ci_review_concurrent_with_fail_closed_join",
+        "expected_route": "freeze -> concurrent trusted exact-head CI and formal review -> current-identity join -> Pre-PR Ready/promotion",
+        "surface": "doc/engineering/workflow/source-of-truth.md",
+        "required_markers": [
+            "Parallel verification and fail-closed join.",
+            "trusted exact-head CI and role-complete professional review run concurrently",
+            "CI planning, role selection, review planning, closeout and promotion consume that projection",
+            "missing, pending, uncertain, stale, drifted, failed or unreadable evidence blocks the join",
+            "Explicit v1 remains read-only compatibility",
+            "configuration generation\nthrough the real parser/admission path",
+            "viewer through the runtime protocol",
+            "persistence write through real recovery",
+            "standard skill command through\nthe actual helper output",
+        ],
+    },
+    {
         "id": "pre_pr_requires_repo_owned_role_review",
         "expected_route": "prepare-task-pr --draft-candidate --create -> exact-head CI -> requesting-repo-owned-review -> task-closeout -> prepare-task-pr --promote-draft -> GitHub PR watch/fix/merge",
         "surface": ".agents/skills/requesting-repo-owned-review/SKILL.md",
@@ -812,6 +832,10 @@ scenarios = [
             "Require each role to return `findings` or `no_findings`, plus `residual_risk`",
             "Require trusted runtime attestation only when operating the future unattended supervisor.",
             "Record plan/batch paths and digests in GitHub task issue evidence comments.",
+            "dispatch the complete role batch while exact-head CI runs independently",
+            "CI planner, role selector, plan, admission and closeout must bind the same projection digest",
+            "Before Pre-PR Ready or promotion, perform the fail-closed",
+            "legacy `--evidence-digest` or audit-only shadow result never satisfies this",
         ],
     },
     {
@@ -982,6 +1006,24 @@ scenarios = [
     },
 ]
 
+review_skill = surfaces[".agents/skills/requesting-repo-owned-review/SKILL.md"]
+parallel_marker = "Parallel verification and fail-closed join."
+join_marker = "Before Pre-PR Ready or promotion, perform the fail-closed"
+if source_text.index(parallel_marker) >= source_text.index("<a id=\"post-pr-merge-ready-gate\">"):
+    raise SystemExit("workflow-behavior-eval: parallel CI/review contract must precede post-PR gates")
+if (
+    parallel_marker not in source_text
+    or "trusted exact-head CI and role-complete professional review run concurrently" not in source_text
+    or "CI planning, role selection, review planning, closeout and promotion consume that projection" not in source_text
+):
+    raise SystemExit("workflow-behavior-eval: fail-closed parallel CI/review join contract is incomplete")
+if "dispatch the complete role batch while exact-head CI runs independently" not in review_skill:
+    raise SystemExit("workflow-behavior-eval: review skill does not activate concurrent CI/review scheduling")
+if join_marker not in review_skill and "fail-closed\njoin against the current PR" not in review_skill:
+    raise SystemExit("workflow-behavior-eval: review skill does not require the current-identity join")
+if "legacy `--evidence-digest` or audit-only shadow result never satisfies this" not in review_skill:
+    raise SystemExit("workflow-behavior-eval: legacy evidence-digest restriction is missing")
+
 evaluated: list[dict[str, object]] = []
 for scenario in scenarios:
     text = surfaces[scenario["surface"]]
@@ -1125,6 +1167,17 @@ segments = [
         },
     },
     {
+        "id": "projected_v2_review_entrypoint",
+        "command": "python3 workflow-impact-projection.test.py && python3 review-plan.test.py && python3 subagent-task-packet.test.py && python3 task-closeout-v2-live-validation.test.py",
+        "status": "passed",
+        "evidence": {
+            "projection_to_plan": "passed",
+            "packet_admission": "passed",
+            "trusted_ci_review_join": "passed",
+            "compatibility_and_drift_rejection": "passed",
+        },
+    },
+    {
         "id": "pre_pr_review_packet_helper",
         "command": "./scripts/pm/record-pre-pr-review.test.sh",
         "status": "passed",
@@ -1152,7 +1205,7 @@ segments = [
 ]
 
 payload = {
-    "workflow_path": "default-workflow-bootstrap -> new-task-worktree -> workflow-report -> repo-owned-workflow-router -> TPM coordinate/integrate only + professional role subagent dispatch -> prepare-task-pr --draft-candidate --create -> exact-head CI -> role review -> task-closeout -> prepare-task-pr --promote-draft -> PR CI/comment watch/fix -> review-thread-closeout -> merge/cleanup",
+    "workflow_path": "default-workflow-bootstrap -> new-task-worktree -> workflow-report -> repo-owned-workflow-router -> TPM coordinate/integrate only + professional role subagent dispatch -> prepare-task-pr --draft-candidate --create with verified projection -> exact-head CI and role review concurrently -> fail-closed join -> task-closeout -> prepare-task-pr --promote-draft -> PR CI/comment watch/fix -> review-thread-closeout -> merge/cleanup",
     "fixture_scope": "repo-owned bootstrap/routing surface checks, isolated worktree bootstrap smoke, GitHub-backed PM runtime tests, and fake-gh PR helper tests",
     "expected_agent_behavior": [
         "every user request first routes through a repo-owned bootstrap surface rather than an external bootstrap",

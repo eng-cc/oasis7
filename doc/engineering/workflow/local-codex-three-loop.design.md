@@ -26,6 +26,12 @@ Roles remain distinct from loops. TPM integrates; specialists decide within thei
 
 Each leaf binds one owner, loop, Task UID, canonical worktree/branch and PR chain. Client directory and thread are observations, not alternate task truth. GitHub Issue/Project remains authoritative, with `Loop` and optional navigational `Change ID` projected through the existing adapter. Legacy tasks lacking a loop remain legacy; refresh must not infer ownership from paths. Explicit loop/input/scope/acceptance migration creates a new evidence epoch.
 
+### 2.1 需求承接与分配表
+
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| [manual three-loop transition](source-of-truth.md#manual-three-loop-transition) | 本地手动三循环入口必须保留唯一 Task、worktree、owner 和 PR 主链，并将兼容迁移与当前有效能力分开。 | [manual execution boundary](#1-manual-execution-boundary) | `repository_health_engineer`; GitHub-backed task truth | 不激活 unattended supervisor，不以本设计替代 canonical workflow authority。 |
+
 ## 3. Data and helper surfaces
 
 The policy/contracts modules, schemas, manual facade, PM/bootstrap integration and three thin skills are implemented. Their mechanical tests do not activate the entry or establish native client compatibility. Reuse existing implementations rather than create parallel state stores.
@@ -111,6 +117,12 @@ Hosted `rust.yml` retains only repository `contents`, `issues` and `pull-request
 
 ## 7. Acceptance evidence
 
+### 11.1 验证映射表
+
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [manual three-loop transition](source-of-truth.md#manual-three-loop-transition) | [manual execution boundary](#1-manual-execution-boundary) | 验证标准入口保持 task/worktree/owner/PR 唯一绑定，并对未授权自动继续或兼容模式漂移 fail closed；在 required workflow-governance tier 的冻结 candidate 上执行。 | [`scripts/pm/task-closeout-v2-live-validation.test.py`](../../../scripts/pm/task-closeout-v2-live-validation.test.py) | GitHub task evidence, required CI planner artifact, role-complete review packet | 不证明 native client model activation、连续文件系统隔离或 unattended supervisor readiness。 |
+
 | IDs | Required observations |
 | --- | --- |
 | M01, M09, M10 | Independent task/worktree execution, same-loop concurrency without global lock, duplicate active writer rejected |
@@ -126,7 +138,7 @@ Use offline contract tests and temporary Git/fake-GitHub fault tests for mechani
 For a target advance after the source head was reviewed, explicitly request a new integration run using the existing local gh login:
 
 ```bash
-python3 <effective-tool-root>/scripts/pm/integration_ci.py dispatch --repository eng-cc/oasis7 --task-uid <TASK-UID> --pr-number <PR>
+python3 <effective-tool-root>/scripts/pm/integration_ci.py dispatch --repository eng-cc/oasis7 --task-uid <TASK-UID> --pr-number <PR> --impact-projection <projection.json>
 gh run list --repo eng-cc/oasis7 --workflow rust.yml --event workflow_dispatch
 python3 <effective-tool-root>/scripts/pm/ci-ready-receipt.py --repository eng-cc/oasis7 --task-uid <TASK-UID> --task-issue-number <ISSUE> --pr-number <PR> --check-app-id <LIVE-REQUIRED-APP-ID> --planner-digest auto --integration-run-id <NEW-RUN-ID> --json
 ```
