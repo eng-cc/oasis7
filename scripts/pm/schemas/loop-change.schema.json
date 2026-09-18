@@ -41,6 +41,7 @@
     },
     "path_ref": {
       "type": "object",
+      "not": {"anyOf": [{"required": ["source_commit"]}, {"required": ["source_head_oid"]}]},
       "required": ["repository", "path", "fragment"],
       "properties": {
         "repository": {"const": "eng-cc/oasis7"},
@@ -59,6 +60,7 @@
       "allOf": [
         {"$ref": "#/$defs/path_ref"}
       ],
+      "not": {"anyOf": [{"required": ["source_commit"]}, {"required": ["source_head_oid"]}]},
       "required": ["clause_id", "contract_id", "revision", "contract_digest", "publication_ref"],
       "properties": {
         "revision": {"type": "integer", "minimum": 1}
@@ -81,7 +83,8 @@
           }
         },
         {"$ref": "#/$defs/na_path_ref"}
-      ]
+      ],
+      "not": {"anyOf": [{"required": ["source_commit"]}, {"required": ["source_head_oid"]}]}
     },
     "na_path_ref": {
       "type": "object",
@@ -117,7 +120,7 @@
             "path": {"type": "string", "minLength": 1},
             "fragment": {"type": "string", "minLength": 1},
             "contract_id": {"type": "string", "minLength": 1},
-            "revision": {"anyOf": [{"type": "integer", "minimum": 1}, {"type": "string", "minLength": 1}]},
+            "revision": {"type": "integer", "minimum": 1},
             "contract_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
             "publication_ref": {"$ref": "#/$defs/publication_ref"}
           }
@@ -135,7 +138,8 @@
             }
           ]
         }
-      ]
+      ],
+      "not": {"anyOf": [{"required": ["source_commit"]}, {"required": ["source_head_oid"]}]}
     },
     "system_design_ref": {
       "allOf": [
@@ -149,7 +153,7 @@
             "fragment": {"type": "string", "minLength": 1},
             "clause_id": {"type": "string", "minLength": 1},
             "contract_id": {"type": "string", "minLength": 1},
-            "revision": {"anyOf": [{"type": "integer", "minimum": 1}, {"type": "string", "minLength": 1}]},
+            "revision": {"type": "integer", "minimum": 1},
             "contract_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
             "publication_ref": {"$ref": "#/$defs/publication_ref"},
             "reason": {"type": ["string", "null"]},
@@ -168,7 +172,8 @@
             {"$ref": "#/$defs/na_disposition"}
           ]
         }
-      ]
+      ],
+      "not": {"anyOf": [{"required": ["source_commit"]}, {"required": ["source_head_oid"]}]}
     },
     "obligation_trace": {
       "type": "object",

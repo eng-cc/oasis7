@@ -19,6 +19,7 @@ import re
 import subprocess
 from typing import Any, Callable
 
+from loop_contracts import consumed_clause_ref_errors
 from loop_contracts import contract_digest as published_contract_digest
 from loop_contracts import resolve_frozen_fragment
 from loop_approval_authority import MARKER as APPROVAL_AUTHORITY_MARKER
@@ -90,8 +91,189 @@ def evidence_digest(payload: dict[str, Any]) -> str:
     return canonical_digest(payload)
 
 
+DIAGNOSTIC_ERROR_CLASSES = (
+    "invalid_reference",
+    "revision_type_mismatch",
+    "source_snapshot_mismatch",
+    "legacy_compatibility",
+    "authority_unavailable",
+    "projection_absent",
+    "empty_projection",
+)
+
+
+_DIAGNOSTIC_ERROR_CLASS_BY_CODE = {
+    "trace-na-incomplete": "invalid_reference",
+    "trace-na-evidence-unresolved": "invalid_reference",
+    "trace-ref-unresolved": "invalid_reference",
+    "trace-required-alias-mismatch": "invalid_reference",
+    "trace-owner-mismatch": "invalid_reference",
+    "trace-upstream-missing": "projection_absent",
+    "trace-system-design-missing": "projection_absent",
+    "trace-slot-cardinality": "empty_projection",
+    "trace-evidence-identity": "source_snapshot_mismatch",
+    "trace-legacy-upgrade-required": "legacy_compatibility",
+    "trace-identity-oid-placement": "source_snapshot_mismatch",
+    "trace-revision-type": "revision_type_mismatch",
+    "identity-oid-placement": "source_snapshot_mismatch",
+    "policy-identity-incomplete": "source_snapshot_mismatch",
+    "policy-identity-mismatch": "source_snapshot_mismatch",
+}
+
+
+def _diagnostic_error_class(code: str, message: str) -> str:
+    """Return the closed C1 error-class vocabulary for one blocker.
+
+    Codes remain the detailed, backwards-compatible diagnostic identifiers.
+    This projection deliberately has a smaller vocabulary so C2/C3 can route
+    blockers without parsing human-oriented text or depending on every code
+    spelling.  Message checks cover generic validation errors that do not carry
+    a stable code prefix yet, while the final fallback remains a safe class.
+    """
+    text = message.lower()
+    if code == "trace-revision-type" or (
+        "revision" in text
+        and any(token in text for token in ("integer", "positive", "type", "invalid"))
+    ):
+        return "revision_type_mismatch"
+    if code in {"trace-identity-oid-placement", "identity-oid-placement"} or any(
+        token in text
+        for token in (
+            "source_commit",
+            "source commit",
+            "source_head",
+            "source head",
+            "source snapshot",
+            "source digest",
+            "record_digest",
+            "record digest",
+            "tested_tree",
+            "tested tree",
+        )
+    ) and any(token in text for token in ("mismatch", "invalid", "must", "does not", "disagree", "belongs")):
+        return "source_snapshot_mismatch"
+    if code == "trace-legacy-upgrade-required" or any(
+        token in text for token in ("legacy", "compatibility")
+    ):
+        return "legacy_compatibility"
+    if any(
+        token in text
+        for token in (
+            "authority reader",
+            "authority read",
+            "authority readback",
+            "live github authority",
+            "reader kind",
+            "server author unavailable",
+            "readback unavailable",
+        )
+    ) or ("unavailable" in text and "authority" in text):
+        return "authority_unavailable"
+    if code == "trace-upstream-missing" and any(
+        token in text for token in ("at least one", "non-empty", "empty")
+    ):
+        return "empty_projection"
+    if any(
+        token in text
+        for token in ("non-empty list", "empty projection", "composition evidence is empty", "no usable projection")
+    ):
+        return "empty_projection"
+    if code == "trace-slot-cardinality":
+        return "empty_projection"
+    if any(
+        token in text
+        for token in (
+            "projection missing",
+            "projection is missing",
+            "composition evidence missing",
+            "applicability_matrix missing",
+            "candidate field missing",
+            "required_obligations must",
+            "mapping_slots must",
+            "trace.upstream_refs is missing",
+            "system_design relation is missing",
+        )
+    ) or code in {"trace-upstream-missing", "trace-system-design-missing"}:
+        return "projection_absent"
+    return _DIAGNOSTIC_ERROR_CLASS_BY_CODE.get(code, "invalid_reference")
+
+
+def _diagnostic(error: Any) -> dict[str, Any]:
+    """Project a blocker into the stable C1 machine-readable error shape."""
+    message = str(error)
+    prefix = message.split(":", 1)[0].strip()
+    code = prefix if re.fullmatch(r"[a-z][a-z0-9_-]*", prefix) else "validation-error"
+    task_match = re.search(r"task_[0-9a-f]{32}", message)
+    obligation_match = re.search(r"\bobligation ([^:;]+)", message)
+    field_match = re.search(
+        r"\b(trace\.(?:[a-z_]+)(?:\[\d+\])?(?:\.[a-z_]+)?|"
+        r"binding\.(?:[a-z_]+)|coordination_ref\.(?:[a-z_]+)|"
+        r"consumed_clause_refs\[\d+\](?:\.[a-z_]+(?:\.[a-z_]+)?)?)(?=\s|$|[:;,])",
+        message,
+    )
+    repair_hint = TRACE_REPAIR_HINTS.get(code, "repair the field-local validation error")
+    return {
+        "code": code,
+        "error_class": _diagnostic_error_class(code, message),
+        "message": message,
+        "task_uid": task_match.group(0) if task_match else None,
+        "obligation_id": obligation_match.group(1).strip() if obligation_match else None,
+        "field": field_match.group(1) if field_match else None,
+        "repair_hint": repair_hint,
+    }
+
+
+def _compatibility_mode(record: Any) -> str:
+    """Distinguish explicitly traced current records from legacy records."""
+    if not isinstance(record, dict):
+        return "unknown"
+    obligations = record.get("required_obligations")
+    if isinstance(obligations, list) and any(
+        isinstance(item, dict) and ("applicability" in item or "trace" in item)
+        for item in obligations
+    ):
+        return "current"
+    return "legacy"
+
+
+def _policy_identity_errors(
+    binding: Any, effective_tool_commit: str | None,
+) -> tuple[list[str], str]:
+    """Require an immutable policy pair when a binding opts into new policy."""
+    if not isinstance(binding, dict):
+        return [], "legacy"
+    has_commit = "policy_commit" in binding
+    has_digest = "policy_digest" in binding
+    if not has_commit and not has_digest:
+        return [], "legacy"
+    errors: list[str] = []
+    policy_commit = binding.get("policy_commit")
+    policy_digest = binding.get("policy_digest")
+    if not isinstance(policy_commit, str) or not OID.fullmatch(policy_commit):
+        errors.append(
+            "policy-identity-incomplete: binding.policy_commit must be an immutable commit OID"
+        )
+    if not isinstance(policy_digest, str) or not DIGEST.fullmatch(policy_digest):
+        errors.append(
+            "policy-identity-incomplete: binding.policy_digest must be a sha256 digest"
+        )
+    if (
+        effective_tool_commit is not None
+        and isinstance(policy_commit, str)
+        and OID.fullmatch(policy_commit)
+        and policy_commit != effective_tool_commit
+    ):
+        errors.append(
+            "policy-identity-mismatch: binding.policy_commit does not match the effective tool commit"
+        )
+    return errors, "current"
+
+
 def _result(blockers: list[str], **fields: Any) -> dict[str, Any]:
-    return {"status": "blocked" if blockers else "passed", "blockers": blockers, **fields}
+    result = {"status": "blocked" if blockers else "passed", "blockers": blockers, **fields}
+    if blockers:
+        result["diagnostics"] = [_diagnostic(blocker) for blocker in blockers]
+    return result
 
 
 def _error_text(exc: BaseException) -> str:
@@ -319,6 +501,12 @@ TRACE_REPAIR_HINTS = {
     "trace-owner-mismatch": "align obligation and mapping-slot ownership",
     "trace-evidence-identity": "restore matching Task, evidence, and candidate identity",
     "trace-legacy-upgrade-required": "upgrade legacy obligations with explicit trace fields before aggregate admission",
+    "trace-identity-oid-placement": "keep source OIDs on the coordinating/source snapshot, not clause references",
+    "trace-revision-type": "set the typed contract revision to a positive integer",
+    "trace-na-evidence-identity": "keep N/A evidence to one canonical path/fragment or Issue/comment locator",
+    "identity-oid-placement": "keep source OIDs on the coordinating/source snapshot, not clause references",
+    "policy-identity-incomplete": "provide both immutable policy_commit and matching policy_digest",
+    "policy-identity-mismatch": "rebind policy_commit to the effective tool commit and recompute policy_digest",
 }
 
 
@@ -384,7 +572,20 @@ def _validate_na_evidence_locator(reference: Any, field: str) -> dict[str, Any]:
     if _is_path_evidence_locator(reference):
         if any(key in reference for key in ("issue_number", "comment_id")):
             raise TraceabilityError(f"{field} mixes path and Issue/comment identity")
+        unexpected = set(reference) - {"repository", "path", "fragment"}
+        if unexpected:
+            raise TraceabilityError(
+                f"trace-na-evidence-identity: {field} has unsupported fields: "
+                + ", ".join(sorted(unexpected))
+            )
         return _reference_value(reference, field)
+    if isinstance(reference, dict):
+        unexpected = set(reference) - {"repository", "issue_number", "comment_id"}
+        if unexpected:
+            raise TraceabilityError(
+                f"trace-na-evidence-identity: {field} has unsupported fields: "
+                + ", ".join(sorted(unexpected))
+            )
     return _authority_reference(reference, field)
 
 
@@ -486,7 +687,7 @@ def _validate_trace_reference(
         _reference_value(reference, field)
         if reference.get("repository") != REPOSITORY:
             raise TraceabilityError(f"{field} repository mismatch")
-        _validate_bound_identity(reference, field)
+        _validate_bound_identity(reference, field, strict_revision=True)
     except TraceabilityError as exc:
         errors.append(_trace_diagnostic("trace-ref-unresolved", obligation, _error_text(exc), record=record))
     return kind, errors
@@ -650,8 +851,38 @@ def _validate_record_shape(record: Any, *, require_trace: bool = False) -> list[
                         errors.append(_trace_diagnostic("trace-owner-mismatch", obligation, "mapping slot owner_loop does not match", record=record))
                     if slot.get("owner_role") != obligation.get("owner_role"):
                         errors.append(_trace_diagnostic("trace-owner-mismatch", obligation, "mapping slot owner_role does not match", record=record))
-    if "consumed_clause_refs" in record and not isinstance(record["consumed_clause_refs"], list):
-        errors.append("consumed_clause_refs must be a list when present")
+    if "consumed_clause_refs" in record:
+        consumed_clause_refs = record["consumed_clause_refs"]
+        if not isinstance(consumed_clause_refs, list):
+            errors.append("consumed_clause_refs must be a list when present")
+        else:
+            for index, reference in enumerate(consumed_clause_refs):
+                for error in consumed_clause_ref_errors(reference, require_identity=True):
+                    field = f"consumed_clause_refs[{index}]"
+                    code = "trace-ref-unresolved"
+                    if "source_commit" in error:
+                        field += ".source_commit"
+                        code = "trace-identity-oid-placement"
+                    elif "source_head_oid" in error:
+                        field += ".source_head_oid"
+                        code = "trace-identity-oid-placement"
+                    elif "revision" in error:
+                        field += ".revision"
+                        code = "trace-revision-type"
+                    elif "publication_ref.repository" in error:
+                        field += ".publication_ref.repository"
+                    elif "source_digest" in error:
+                        field += ".source_digest"
+                    elif "content_digest" in error:
+                        field += ".content_digest"
+                    errors.append(
+                        _trace_diagnostic(
+                            code,
+                            None,
+                            f"{field} consumed clause reference: {error}",
+                            record=record,
+                        )
+                    )
     feedback = record.get("feedback")
     if not isinstance(feedback, list):
         errors.append("feedback must be a list")
@@ -698,11 +929,18 @@ def _validate_bound_identity(reference: dict[str, Any], field: str, *, strict_re
     for key in ("contract_id", "revision", "contract_digest", "publication_ref", "clause_id"):
         if key not in reference:
             raise TraceabilityError(f"{field} missing inherited {key}")
+    for oid_field in ("source_commit", "source_head_oid"):
+        if oid_field in reference:
+            raise TraceabilityError(
+                f"trace-identity-oid-placement: {field} {oid_field} belongs to the record/source snapshot, not a clause reference"
+            )
     if not isinstance(reference["contract_id"], str) or not reference["contract_id"].strip():
         raise TraceabilityError(f"{field} contract_id is invalid")
     if strict_revision:
         if type(reference["revision"]) is not int or reference["revision"] < 1:
-            raise TraceabilityError(f"{field} revision must be a positive integer")
+            raise TraceabilityError(
+                f"trace-revision-type: {field} revision must be a positive integer"
+            )
     else:
         revision = reference["revision"]
         if type(revision) is int:
@@ -1003,8 +1241,11 @@ def validate_leaf(
             source_commit = record_source_commit
         _oid(effective_tool_commit, "effective_tool_commit")
         _oid(record_source_commit, "record_source_commit")
+        policy_errors, policy_mode = _policy_identity_errors(binding, effective_tool_commit)
+        if policy_errors:
+            return _result(policy_errors, compatibility_mode=policy_mode)
         if record is None and "coordination_ref" not in binding and not binding.get("delivery_obligations"):
-            return _result([], reader_kind=None, local_live_admission_required=False)
+            return _result([], compatibility_mode=policy_mode, reader_kind=None, local_live_admission_required=False)
         if record is None:
             if "coordination_ref" not in binding:
                 return _result(["coordinating record is required for bound leaf"])
@@ -1044,6 +1285,7 @@ def validate_leaf(
                     errors.append("in_flight input contract is revoked")
         return _result(
             errors,
+            compatibility_mode=policy_mode,
             reader_kind=getattr(authority_reader, "reader_kind", "fixture_authority"),
             effective_tool_commit=effective_tool_commit,
             record_source_commit=record_source_commit,
@@ -1778,7 +2020,9 @@ def _validate_live_leaf_results(
 def validate_record(record: Any, root: Path | str | None = None) -> dict[str, Any]:
     """Validate the side-effect-free record projection used by hosted CI."""
     del root  # The structural projection does not read the repository.
-    return _result(_validate_record_shape(record))
+    result = _result(_validate_record_shape(record))
+    result["compatibility_mode"] = _compatibility_mode(record)
+    return result
 
 
 def validate_candidate(

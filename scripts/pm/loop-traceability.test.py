@@ -130,6 +130,9 @@ def _trace_na(owner_role, *, reason="This relation is outside the bounded change
 
 def _trace_ref(kind=None, *, path, fragment, clause_id):
     reference = _contract_ref(path=path, fragment=fragment, clause_id=clause_id)
+    # Typed upstream/system references use the bound contract's integer
+    # revision; legacy acceptance_refs retain their historical opaque spelling.
+    reference["revision"] = 1
     if kind is not None:
         reference["kind"] = kind
     reference["applicability"] = "required"
@@ -1410,8 +1413,26 @@ class TraceabilityTests(unittest.TestCase):
     def test_qw2_2_bare_same_id_consumption_blocks_and_path_refs_pass(self):
         record = deepcopy(self.record)
         record["consumed_clause_refs"] = [
-            {"repository": REPOSITORY, "path": "doc/one.md", "fragment": "shared", "clause_id": "shared"},
-            {"repository": REPOSITORY, "path": "doc/two.md", "fragment": "shared", "clause_id": "shared"},
+            {
+                "repository": REPOSITORY,
+                "path": "doc/one.md",
+                "fragment": "shared",
+                "contract_id": "shared-contract",
+                "revision": 1,
+                "contract_digest": "sha256:" + "1" * 64,
+                "publication_ref": {"repository": REPOSITORY, "issue_number": 3671, "comment_id": 5636639918},
+                "clause_id": "shared",
+            },
+            {
+                "repository": REPOSITORY,
+                "path": "doc/two.md",
+                "fragment": "shared",
+                "contract_id": "shared-contract",
+                "revision": 1,
+                "contract_digest": "sha256:" + "1" * 64,
+                "publication_ref": {"repository": REPOSITORY, "issue_number": 3671, "comment_id": 5636639918},
+                "clause_id": "shared",
+            },
         ]
         record["required_obligations"][0]["acceptance_refs"] = ["shared"]
         result = self.leaf(record, self.refresh_record_binding(record))
@@ -2220,6 +2241,15 @@ class TraceabilityTests(unittest.TestCase):
         self.assertEqual(result.get("status"), "passed", result)
         self.assertEqual(result.get("effective_tool_commit"), effective_tool_commit)
         self.assertEqual(result.get("record_source_commit"), SOURCE_OID)
+
+    def test_c1_new_policy_binding_requires_complete_immutable_policy_identity(self):
+        binding = self.refresh_record_binding(self.record)
+        binding["policy_digest"] = "sha256:" + "6" * 64
+        result = self.leaf(binding=binding)
+        self.assert_trace_blocked(result, "policy-identity-incomplete")
+        diagnostic = result["diagnostics"][0]
+        self.assertEqual(diagnostic["field"], "binding.policy_commit")
+        self.assertTrue(diagnostic["repair_hint"])
 
     def test_duplicate_coordination_comments_block_exact_readback(self):
         readers = FixtureReaders(self.record)

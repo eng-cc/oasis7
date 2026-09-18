@@ -140,6 +140,13 @@ def consumed_clause_ref_errors(reference, *, require_identity=False):
     if not isinstance(reference, dict):
         return ["consumed clause reference must be an object"]
     errors = []
+    for oid_field in ("source_commit", "source_head_oid"):
+        if oid_field in reference:
+            errors.append(
+                "identity-oid-placement: consumed clause "
+                + oid_field
+                + " belongs to the coordinating/source snapshot, not the clause reference"
+            )
     if reference.get("repository") != REPOSITORY:
         errors.append("consumed clause repository must be canonical")
     if not safe_path(reference.get("path")):
@@ -158,8 +165,16 @@ def consumed_clause_ref_errors(reference, *, require_identity=False):
         publication = reference.get("publication_ref")
         if not isinstance(publication, dict) or any(type(publication.get(key)) is not int or publication[key] < 1 for key in ("issue_number", "comment_id")):
             errors.append("consumed clause publication_ref is required for bound input")
+        elif publication.get("repository") != REPOSITORY:
+            errors.append("consumed clause publication_ref.repository must be canonical")
     elif "contract_digest" in reference and (not isinstance(reference["contract_digest"], str) or not DIGEST.fullmatch(reference["contract_digest"])):
         errors.append("consumed clause contract_digest must be sha256")
+    for digest_field in ("source_digest", "content_digest"):
+        if digest_field in reference and (
+            not isinstance(reference[digest_field], str)
+            or not DIGEST.fullmatch(reference[digest_field])
+        ):
+            errors.append(f"consumed clause {digest_field} must be sha256")
     return errors
 
 
