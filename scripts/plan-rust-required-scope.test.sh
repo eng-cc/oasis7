@@ -61,6 +61,74 @@ assert_reason_absent() {
   fi
 }
 
+# Trusted integration revalidation plans the target/source execution range,
+# which may be broader than the immutable source projection after the target
+# advances. Keep the source projection identity while accepting that safe
+# capability expansion (minimal -> targeted here).
+integration_projection_dir="$(mktemp -d)"
+trap 'rm -rf "$integration_projection_dir"' EXIT
+python3 - "$ROOT_DIR" "$integration_projection_dir" <<'PY'
+import hashlib
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+directory = Path(sys.argv[2])
+head = subprocess.check_output(
+    ["git", "rev-parse", "HEAD"], cwd=root, text=True
+).strip()
+config = root / "scripts" / "ci-required-scope.v2.json"
+payload = {
+    "task_uid": "task_" + "1" * 32,
+    "source_head_oid": head,
+    "scope_base_oid": head,
+    "changed_paths": ["doc/product/world-rules-core-gameplay.prd.md"],
+    "change_class": "workflow-doc",
+    "manual_roles": [],
+    "domain_role": None,
+    "test_profile": "required",
+    "declared_tests": ["required_gate_baseline"],
+    "consumed_contracts": [{"id": "workflow-contract", "revision": "v1"}],
+    "public_semantics": [],
+    "affected_consumers": ["required-ci"],
+    "closure_status": {
+        "status": "complete",
+        "reason": "verified",
+        "evidence": [{
+            "path": "scripts/ci-required-scope.v2.json",
+            "sha256": "sha256:" + hashlib.sha256(config.read_bytes()).hexdigest(),
+        }],
+    },
+}
+input_path = directory / "projection-input.json"
+projection_path = directory / "projection.json"
+input_path.write_text(json.dumps(payload), encoding="utf-8")
+result = subprocess.run([
+    str(root / "scripts/pm/workflow-impact-projection.py"),
+    "--root", str(root), "--input", str(input_path), "--out", str(projection_path),
+], text=True, capture_output=True)
+if result.returncode:
+    raise SystemExit(result.stderr)
+PY
+integration_projection_path="$integration_projection_dir/projection.json"
+integration_head_oid="$(git -C "$ROOT_DIR" rev-parse HEAD)"
+integration_scope_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh \
+  --event-name workflow_dispatch \
+  --run-mode integration_revalidation \
+  --base-ref "$integration_head_oid" \
+  --head-ref "$integration_head_oid" \
+  --task-uid task_11111111111111111111111111111111 \
+  --scope-base-oid "$integration_head_oid" \
+  --changed-path doc/product/world-rules-core-gameplay.prd.md \
+  --changed-path crates/oasis7_consensus/src/lib.rs \
+  --impact-projection "$integration_projection_path")"
+assert_key_equals "$integration_scope_output" scope targeted
+assert_key_equals "$integration_scope_output" run_consensus_tests true
+assert_key_equals "$integration_scope_output" impact_projection_status verified
+assert_key_equals "$integration_scope_output" test_profile required
+
 assert_key_matches() {
   local output="$1"
   local key="$2"

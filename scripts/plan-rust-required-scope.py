@@ -119,13 +119,22 @@ def main():
   actual_capabilities=sorted(capabilities or {"required_gate_baseline"})
   actual_scope=vals["scope"]
   if projection["planner_config_sha256"] != digest: die("impact projection planner config identity mismatch")
+  integration_revalidation=(a.event_name=="workflow_dispatch" and a.run_mode=="integration_revalidation")
   # The source projection remains digest-bound evidence, while a trusted
   # integration revalidation intentionally upgrades its executed required-gate
   # scope to full.  Keep strict planner identity matching for PR/other events;
   # for workflow_dispatch, `scope=full` and the all-capability selector output
   # are the explicit execution record and the projection digest remains the
   # immutable source evidence link.
-  if a.run_mode != "full_escalation" and not (a.run_mode=="legacy" and a.event_name=="workflow_dispatch"):
+  if integration_revalidation:
+   scope_rank={"minimal":0,"targeted":1,"full":2}
+   projected_capabilities=set(projection["ci_capabilities"])-{"required_gate_baseline"}
+   executed_capabilities=set(actual_capabilities)-{"required_gate_baseline"}
+   if scope_rank[actual_scope] < scope_rank[projection["ci_scope"]]:
+    die("integration revalidation planner scope narrowed below source projection")
+   if not projected_capabilities.issubset(executed_capabilities):
+    die("integration revalidation planner capabilities narrowed below source projection")
+  elif a.run_mode != "full_escalation" and not (a.run_mode=="legacy" and a.event_name=="workflow_dispatch"):
    if projection["ci_scope"] != actual_scope: die("impact projection planner scope identity mismatch")
    if projection["ci_capabilities"] != actual_capabilities: die("impact projection planner capabilities identity mismatch")
   elif actual_scope != "full" or actual_capabilities != sorted(CAPABILITIES):
