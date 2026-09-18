@@ -114,6 +114,36 @@ if result.returncode:
 PY
 integration_projection_path="$integration_projection_dir/projection.json"
 integration_head_oid="$(git -C "$ROOT_DIR" rev-parse HEAD)"
+python3 - "$integration_projection_path" "$integration_projection_dir" <<'PY'
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+source = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+directory = Path(sys.argv[2])
+
+def digest(value):
+    return "sha256:" + hashlib.sha256(
+        json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+
+def write_variant(name, scope, capabilities):
+    value = json.loads(json.dumps(source))
+    value["ci_scope"] = scope
+    value["ci_capabilities"] = capabilities
+    value["planner_identity"]["scope"] = scope
+    value["planner_identity"]["selected_capabilities"] = capabilities
+    value["planner_digest"] = digest(value["planner_identity"])
+    value["projection_digest"] = digest({
+        key: item for key, item in value.items() if key != "projection_digest"
+    })
+    path = directory / name
+    path.write_text(json.dumps(value), encoding="utf-8")
+
+write_variant("scope-narrowed-projection.json", "targeted", ["required_gate_baseline"])
+write_variant("capability-narrowed-projection.json", "minimal", ["consensus"])
+PY
 integration_scope_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh \
   --event-name workflow_dispatch \
   --run-mode integration_revalidation \
@@ -128,6 +158,38 @@ assert_key_equals "$integration_scope_output" scope targeted
 assert_key_equals "$integration_scope_output" run_consensus_tests true
 assert_key_equals "$integration_scope_output" impact_projection_status verified
 assert_key_equals "$integration_scope_output" test_profile required
+
+assert_integration_rejection() {
+  local projection="$1"
+  local expected="$2"
+  local error_output="$integration_projection_dir/rejection.err"
+  if "$ROOT_DIR/scripts/plan-rust-required-scope.sh" \
+    --event-name workflow_dispatch \
+    --run-mode integration_revalidation \
+    --base-ref "$integration_head_oid" \
+    --head-ref "$integration_head_oid" \
+    --task-uid task_11111111111111111111111111111111 \
+    --scope-base-oid "$integration_head_oid" \
+    --changed-path doc/product/world-rules-core-gameplay.prd.md \
+    --impact-projection "$projection" \
+    >"$error_output" 2>&1; then
+    echo "expected integration planner rejection for $projection" >&2
+    cat "$error_output" >&2
+    exit 1
+  fi
+  if ! grep -Fq "$expected" "$error_output"; then
+    echo "expected integration planner error $expected, got:" >&2
+    cat "$error_output" >&2
+    exit 1
+  fi
+}
+
+assert_integration_rejection \
+  "$integration_projection_dir/scope-narrowed-projection.json" \
+  "integration revalidation planner scope narrowed below source projection"
+assert_integration_rejection \
+  "$integration_projection_dir/capability-narrowed-projection.json" \
+  "integration revalidation planner capabilities narrowed below source projection"
 
 assert_key_matches() {
   local output="$1"

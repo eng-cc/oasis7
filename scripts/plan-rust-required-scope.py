@@ -121,11 +121,11 @@ def main():
   if projection["planner_config_sha256"] != digest: die("impact projection planner config identity mismatch")
   integration_revalidation=(a.event_name=="workflow_dispatch" and a.run_mode=="integration_revalidation")
   # The source projection remains digest-bound evidence, while a trusted
-  # integration revalidation intentionally upgrades its executed required-gate
-  # scope to full.  Keep strict planner identity matching for PR/other events;
-  # for workflow_dispatch, `scope=full` and the all-capability selector output
-  # are the explicit execution record and the projection digest remains the
-  # immutable source evidence link.
+  # integration revalidation may expand its executed required-gate scope to
+  # include target-only changes. Keep strict planner identity matching for
+  # PR/other events; integration revalidation is accepted only when its
+  # executed scope and capabilities are monotonic supersets of the source
+  # projection.
   if integration_revalidation:
    scope_rank={"minimal":0,"targeted":1,"full":2}
    projected_capabilities=set(projection["ci_capabilities"])-{"required_gate_baseline"}
