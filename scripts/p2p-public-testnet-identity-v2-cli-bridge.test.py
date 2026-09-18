@@ -98,6 +98,7 @@ class IdentityV2FixtureLifecycleRegressionTests(unittest.TestCase):
 
     def test_baseline_fixture_modules_are_loaded_once_per_worker(self) -> None:
         """Two bridge cases must share one baseline module initialization."""
+        _FIXTURE_MODULE_CACHE.clear()
         _FIXTURE_MODULE_LOAD_COUNTS.clear()
         suite = unittest.TestSuite(
             [
@@ -115,8 +116,8 @@ class IdentityV2FixtureLifecycleRegressionTests(unittest.TestCase):
             for path in expected_fixture_paths
         }
         self.assertTrue(
-            all(count <= 1 for count in observed.values()),
-            "immutable baseline fixture modules were dynamically reloaded per test: "
+            all(count == 1 for count in observed.values()),
+            "immutable baseline fixture modules were not loaded exactly once per worker: "
             f"{observed}",
         )
 
