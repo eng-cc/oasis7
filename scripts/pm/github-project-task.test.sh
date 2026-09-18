@@ -316,6 +316,8 @@ PY
 printf 'committed\n' >"$GH_PROJECT_STATE_FILE"
 printf 'In Progress\n' >"$GH_PROJECT_STATUS_STATE_FILE"
 printf 'execution\n' >"$GH_PROJECT_PHASE_STATE_FILE"
+PRIMARY_GH_MAPPING_PATH="$GH_MAPPING_PATH"
+export GH_MAPPING_PATH="$MOVE_PHASE_ROOT/.pm/github-project-sync/tasks.json"
 set +e
 python3 "$TMPDIR/github-project-task.py" move-task "$MOVE_PHASE_ROOT" \
   --repo eng-cc/oasis7 \
@@ -326,6 +328,7 @@ python3 "$TMPDIR/github-project-task.py" move-task "$MOVE_PHASE_ROOT" \
   --json >"$TMPDIR/move-phase.json" 2>"$TMPDIR/move-phase.err"
 MOVE_PHASE_STATUS=$?
 set -e
+export GH_MAPPING_PATH="$PRIMARY_GH_MAPPING_PATH"
 if [[ "$MOVE_PHASE_STATUS" != "0" ]]; then
   echo "github-project-task.test: move-task phase mapping fixture unexpectedly failed" >&2
   cat "$TMPDIR/move-phase.err" >&2
@@ -760,6 +763,7 @@ cat > "$PARTIAL_ROOT/.pm/github-project-sync/tasks.json" <<JSON
 }
 JSON
 
+export GH_MAPPING_PATH="$PARTIAL_ROOT/.pm/github-project-sync/tasks.json"
 python3 "$TMPDIR/github-project-task.py" move-task "$PARTIAL_ROOT" \
   --repo eng-cc/oasis7 \
   --project-owner eng-cc \
@@ -787,6 +791,7 @@ assert "project item-list 1 --owner eng-cc --limit 1000 --format json" in calls,
 assert "issue close 2004 -R eng-cc/oasis7 --reason completed" not in calls, calls
 assert "- status: `done`" in edited_body, edited_body
 PY
+export GH_MAPPING_PATH="$PRIMARY_GH_MAPPING_PATH"
 
 NOOP_PROJECT_ROOT="$TMPDIR/noop-project"
 NOOP_UID="task_55555555555555555555555555555555"
@@ -823,6 +828,7 @@ cat > "$NOOP_PROJECT_ROOT/.pm/github-project-sync/tasks.json" <<JSON
 }
 JSON
 
+export GH_MAPPING_PATH="$NOOP_PROJECT_ROOT/.pm/github-project-sync/tasks.json"
 set +e
 python3 "$TMPDIR/github-project-task.py" move-task "$NOOP_PROJECT_ROOT" \
   --repo eng-cc/oasis7 \
@@ -833,6 +839,7 @@ python3 "$TMPDIR/github-project-task.py" move-task "$NOOP_PROJECT_ROOT" \
   --json > "$TMPDIR/noop-project-done.json" 2>"$TMPDIR/noop-project-done.err"
 NOOP_PROJECT_DONE_STATUS=$?
 set -e
+export GH_MAPPING_PATH="$PRIMARY_GH_MAPPING_PATH"
 if [[ "$NOOP_PROJECT_DONE_STATUS" != "0" ]]; then
   echo "github-project-task.test: intermediate task_done must not require terminal Project fields" >&2
   cat "$TMPDIR/noop-project-done.err" >&2
@@ -879,6 +886,7 @@ cat > "$MISSING_OPTION_ROOT/.pm/github-project-sync/tasks.json" <<JSON
 }
 JSON
 
+export GH_MAPPING_PATH="$MISSING_OPTION_ROOT/.pm/github-project-sync/tasks.json"
 set +e
 python3 "$TMPDIR/github-project-task.py" move-task "$MISSING_OPTION_ROOT" \
   --repo eng-cc/oasis7 \
@@ -917,6 +925,7 @@ if ! python3 "$TMPDIR/github-project-task.py" closeout-task "$MISSING_OPTION_ROO
   cat "$TMPDIR/missing-option-closeout.err" >&2
   exit 1
 fi
+export GH_MAPPING_PATH="$PRIMARY_GH_MAPPING_PATH"
 python3 - "$MISSING_OPTION_ROOT/.pm/github-project-sync/tasks.json" "$MISSING_OPTION_UID" "$TMPDIR/missing-option-closeout.json" <<'PY'
 import json,sys
 record=json.load(open(sys.argv[1],encoding="utf-8"))["tasks"][sys.argv[2]]

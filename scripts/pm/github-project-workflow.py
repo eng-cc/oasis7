@@ -232,7 +232,7 @@ def consumption_summary(task: dict[str, Any], blockers: list[str]) -> dict[str, 
     if not isinstance(candidate, dict):
         candidate = task.get("traceability_candidate") if isinstance(task.get("traceability_candidate"), dict) else {}
     inputs = binding.get("input_contracts") if isinstance(binding.get("input_contracts"), list) else []
-    obligations = record.get("obligations")
+    obligations = record.get("required_obligations")
     if not isinstance(obligations, list):
         obligations = binding.get("delivery_obligations") if isinstance(binding.get("delivery_obligations"), list) else []
     verified_results = candidate.get("verified_results")

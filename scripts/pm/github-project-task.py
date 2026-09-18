@@ -37,6 +37,13 @@ issue_authoritative_keys = frozenset(
         "last_closed_at", "claim_verifications",
     }
 )
+traceability_context_keys = frozenset(
+    {
+        "traceability_mode", "coordination_ref", "traceability_record",
+        "coordination_record", "traceability_candidate", "aggregate_candidate",
+    }
+)
+traceability_issue_keys = frozenset({"loop_binding", *traceability_context_keys})
 project_lifecycle_keys = frozenset({"status", "workflow_phase"})
 identity_bound_cache_keys = frozenset(
     {
@@ -125,6 +132,7 @@ def merge_task_mapping(
     task_uid: str,
     record: dict[str, Any],
     project: dict[str, Any] | None = None,
+    clear_keys: frozenset[str] = frozenset(),
 ) -> None:
     """Reload under lock and merge only one task, preventing lost updates."""
     def update(latest: dict[str, Any]) -> None:
@@ -136,6 +144,10 @@ def merge_task_mapping(
                     latest_project[key] = value
             latest["project"] = latest_project
         latest_record = dict((latest.setdefault("tasks", {}).get(task_uid) or {}))
+        for key in clear_keys:
+            if key not in traceability_context_keys:
+                die(f"merge_task_mapping: refusing to clear non-context key {key}")
+            latest_record.pop(key, None)
         for key, value in record.items():
             if key in {"claim_verifications", "evidence_comments"}:
                 merged = list(latest_record.get(key) or [])
@@ -147,6 +159,34 @@ def merge_task_mapping(
                 latest_record[key] = value
         latest["tasks"][task_uid] = latest_record
     durable_store.transact_json(path, update, {"version": 1, "tasks": {}})
+
+
+def synchronize_live_issue_traceability(
+    repo: str,
+    task_uid: str,
+    record: dict[str, Any],
+    *,
+    live: dict[str, Any] | None = None,
+    explicit_updates: frozenset[str] = frozenset(),
+) -> frozenset[str]:
+    """Overlay Issue-authoritative traceability and report deleted context keys."""
+    authoritative = live if live is not None else github_issue_record(repo, task_uid)
+    if not authoritative:
+        die(f"traceability sync: authoritative GitHub issue not found for {task_uid}")
+    if authoritative.get("trace_projection_error"):
+        trace_projection_loss(task_uid, str(authoritative["trace_projection_error"]))
+    clear_keys = frozenset(
+        key for key in traceability_context_keys
+        if key not in explicit_updates and key not in authoritative
+    )
+    for key in traceability_issue_keys:
+        if key in explicit_updates:
+            continue
+        if key in authoritative:
+            record[key] = authoritative[key]
+        elif key in traceability_context_keys:
+            record.pop(key, None)
+    return clear_keys
 
 
 def atomic_json(path: pathlib.Path, payload: dict[str, Any]) -> None:
@@ -1079,6 +1119,10 @@ def command_bind_loop(args: argparse.Namespace) -> int:
             updated["bootstrap_base_oid"] = json.loads(snapshot_path.read_text())["git"]["base"]["oid"]
         except (OSError, ValueError, KeyError):
             die("existing task binding needs its immutable bootstrap snapshot base")
+    cleared_traceability = synchronize_live_issue_traceability(
+        args.repo, args.task_uid, updated, live=live,
+        explicit_updates=frozenset({"loop_binding"}),
+    )
     task = task_from_record(args.task_uid, updated)
     # The facade's inherited OS reservation covers preflight and this writer.
     # Register only at the mutation boundary; a preflight error is not an
@@ -1103,7 +1147,7 @@ def command_bind_loop(args: argparse.Namespace) -> int:
     before_write()
     update_project_fields(args, task, str(record["project_item_id"]))
     ensure_loop_history(args.repo, int(record["issue_number"]), binding)
-    merge_task_mapping(mapping_path, args.task_uid, updated)
+    merge_task_mapping(mapping_path, args.task_uid, updated, clear_keys=cleared_traceability)
     if args.migrate_epoch:
         snapshot_path = pathlib.Path(record["canonical_worktree"]) / ".pm/scratch" / args.task_uid / "bootstrap-task-snapshot.json"
         saved = json.loads(snapshot_path.read_text())
@@ -1574,6 +1618,9 @@ def command_classify_non_pr_task(args: argparse.Namespace) -> int:
         evidence_file.read_bytes()
     ).hexdigest()
     updated["updated_at"] = now()
+    cleared_traceability = synchronize_live_issue_traceability(
+        args.repo, args.task_uid, updated, live=live,
+    )
     task = task_from_record(args.task_uid, updated)
     update_issue_body(args.repo, int(live["issue_number"]), task)
     comment_url = verified_issue_comment(
@@ -1594,7 +1641,7 @@ def command_classify_non_pr_task(args: argparse.Namespace) -> int:
     )
     updated["last_evidence_at"] = now()
     updated.setdefault("evidence_comments", []).append(comment_url)
-    merge_task_mapping(mapping_path, args.task_uid, updated)
+    merge_task_mapping(mapping_path, args.task_uid, updated, clear_keys=cleared_traceability)
     payload = {
         "status": "ok",
         "task_uid": args.task_uid,
@@ -1704,12 +1751,13 @@ def command_move_task(args: argparse.Namespace) -> int:
     record["status"] = args.to_status
     record["workflow_phase"] = load_sync_module().workflow_phase_for(args.to_status)
     record["updated_at"] = now()
+    cleared_traceability = synchronize_live_issue_traceability(args.repo, args.task_uid, record)
     task = task_from_record(args.task_uid, record)
     updated_fields = 0
     if args.to_status != "done" and record.get("project_item_id"):
         updated_fields = update_project_fields(args, task, str(record["project_item_id"]))
     update_issue_body(args.repo, int(record["issue_number"]), task)
-    merge_task_mapping(mapping_path, args.task_uid, record)
+    merge_task_mapping(mapping_path, args.task_uid, record, clear_keys=cleared_traceability)
     payload = {
         "task_uid": args.task_uid,
         "previous_status": previous,
@@ -1751,6 +1799,7 @@ def command_closeout_task(args: argparse.Namespace) -> int:
         else "pre_pr_ready"
     )
     record["workflow_phase"] = terminal_phase
+    cleared_traceability = synchronize_live_issue_traceability(args.repo, args.task_uid, record)
     task = task_from_record(args.task_uid, record)
     evidence_fields = {
         "Workflow Phase": terminal_phase,
@@ -1804,7 +1853,13 @@ def command_closeout_task(args: argparse.Namespace) -> int:
             cache_patch["merge_receipt_sha256"] = record["merge_receipt_sha256"]
         if record.get("project_item_id"):
             cache_patch["project_item_id"] = record["project_item_id"]
-        merge_task_mapping(mapping_path, args.task_uid, cache_patch)
+        for key in traceability_issue_keys:
+            if key in record:
+                cache_patch[key] = record[key]
+        merge_task_mapping(
+            mapping_path, args.task_uid, cache_patch,
+            clear_keys=cleared_traceability,
+        )
     payload = {
         "task_uid": args.task_uid,
         "previous_status": previous,
@@ -2393,7 +2448,11 @@ def command_refresh_task(args: argparse.Namespace) -> int:
             "repo": args.repo,
             "id": live_project_identity["id"],
         }
-    merge_task_mapping(mapping_path, args.task_uid, record, project=project_patch)
+    cleared_traceability = frozenset(key for key in traceability_context_keys if key not in live)
+    merge_task_mapping(
+        mapping_path, args.task_uid, record, project=project_patch,
+        clear_keys=cleared_traceability,
+    )
     committed = (load_mapping(mapping_path).get("tasks") or {}).get(args.task_uid) or record
     payload = {
         "status": "refreshed",
@@ -2440,6 +2499,7 @@ def command_record_pr(args: argparse.Namespace) -> int:
         "recorded_at": now(),
     })
     record["updated_at"] = now()
+    cleared_traceability = synchronize_live_issue_traceability(args.repo, args.task_uid, record)
     task = task_from_record(args.task_uid, record)
     updated_fields = 0
     if record.get("project_item_id"):
@@ -2475,7 +2535,7 @@ def command_record_pr(args: argparse.Namespace) -> int:
         ),
     )
     record.setdefault("evidence_comments", []).append(comment_url)
-    merge_task_mapping(mapping_path, args.task_uid, record)
+    merge_task_mapping(mapping_path, args.task_uid, record, clear_keys=cleared_traceability)
     payload = {
         "task_uid": args.task_uid,
         "previous_status": previous,
@@ -2525,8 +2585,9 @@ def command_set_merge_hold(args: argparse.Namespace) -> int:
     record["merge_hold"] = hold
     record.setdefault("evidence_comments", []).append(comment_url)
     record["updated_at"] = now()
+    cleared_traceability = synchronize_live_issue_traceability(args.repo, args.task_uid, record)
     update_issue_body(args.repo, int(record["issue_number"]), task_from_record(args.task_uid, record))
-    merge_task_mapping(mapping_path, args.task_uid, record)
+    merge_task_mapping(mapping_path, args.task_uid, record, clear_keys=cleared_traceability)
     print(json.dumps({"task_uid": args.task_uid, "merge_hold": hold, "comment_url": comment_url}, indent=2, sort_keys=True) if args.json else f"set-merge-hold: {hold['kind']}")
     return 0
 

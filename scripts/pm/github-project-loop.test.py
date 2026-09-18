@@ -165,7 +165,7 @@ class LoopTransport(unittest.TestCase):
 
     def test_consumption_summary_is_derived_and_marks_unread_scope(self):
         task = dict(loop_binding=BINDING, traceability_record={
-            'obligations': [{'id': 'aggregate'}],
+            'required_obligations': [{'id': 'aggregate'}],
             'affected_consumers': [{'task_uid': 'task_' + 'e' * 32}],
         }, aggregate_candidate={'verified_results': [{'id': 'leaf-a', 'status': 'passed'}]})
         summary = WORKFLOW.consumption_summary(task, ['fixture blocker'])
@@ -175,6 +175,39 @@ class LoopTransport(unittest.TestCase):
         self.assertEqual(summary['verified_results'][0]['status'], 'passed')
         self.assertEqual(summary['blockers'], ['fixture blocker'])
         self.assertEqual(summary['unread_scope'], ['input_contracts'])
+
+    def test_mapping_refresh_clears_deleted_traceability_context(self):
+        with tempfile.TemporaryDirectory() as directory:
+            mapping = pathlib.Path(directory) / 'tasks.json'
+            mapping.write_text(json.dumps({'tasks': {UID: dict(TRACEABILITY_CONTEXT)}}))
+            TASK.merge_task_mapping(
+                mapping, UID, {'status': 'committed'},
+                clear_keys=frozenset(TRACEABILITY_CONTEXT),
+            )
+            refreshed = json.loads(mapping.read_text())['tasks'][UID]
+            self.assertEqual(refreshed['status'], 'committed')
+            self.assertTrue(all(key not in refreshed for key in TRACEABILITY_CONTEXT))
+
+    def test_lifecycle_writer_uses_live_traceability_without_overwriting_binding(self):
+        cached = {'loop_binding': BINDING, **TRACEABILITY_CONTEXT}
+        live_binding = dict(BINDING, change_id='live-change')
+        live = {'loop_binding': live_binding, 'coordination_ref': {'issue_number': 99}}
+        cleared = TASK.synchronize_live_issue_traceability('eng-cc/oasis7', UID, cached, live=live)
+        self.assertEqual(cached['loop_binding'], live_binding)
+        self.assertEqual(cached['coordination_ref'], {'issue_number': 99})
+        self.assertEqual(cleared, frozenset(set(TRACEABILITY_CONTEXT) - {'coordination_ref'}))
+        self.assertTrue(all(key not in cached for key in cleared))
+
+    def test_binding_writer_preserves_explicit_binding_but_syncs_live_context(self):
+        proposed = dict(BINDING, bootstrap_epoch=2)
+        cached = {'loop_binding': proposed, **TRACEABILITY_CONTEXT}
+        live = {'loop_binding': BINDING, 'coordination_ref': {'issue_number': 99}}
+        TASK.synchronize_live_issue_traceability(
+            'eng-cc/oasis7', UID, cached, live=live,
+            explicit_updates=frozenset({'loop_binding'}),
+        )
+        self.assertEqual(cached['loop_binding'], proposed)
+        self.assertEqual(cached['coordination_ref'], {'issue_number': 99})
 
     def test_live_traceability_deletion_never_falls_back_to_cache(self):
         errors = WORKFLOW.traceability_projection_errors(
