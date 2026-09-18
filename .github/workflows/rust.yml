@@ -215,6 +215,7 @@ jobs:
           esac
           planner=(./scripts/plan-rust-required-scope.sh)
           impact_args=()
+          run_mode_args=()
           scope_base_oid="$(git merge-base "${base_ref}" "${head_ref}")"
           if [[ "${GITHUB_EVENT_NAME}" == pull_request && -f "${RUNNER_TEMP}/impact-projection.json" ]]; then
             authority_dir="${RUNNER_TEMP}/required-base-authority"
@@ -234,6 +235,7 @@ jobs:
             impact_args=(--impact-projection "${RUNNER_TEMP}/impact-projection.json" --task-uid "${task_uid}" --scope-base-oid "${scope_base_oid}")
           elif [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]; then
             planner=(python3 -I "${RUNNER_TEMP}/integration-planner/plan-rust-required-scope.py")
+            run_mode_args=(--run-mode "${{ inputs.run_mode }}")
             impact_args=(
               --impact-projection "${RUNNER_TEMP}/impact-projection.json"
               --task-uid "${{ inputs.task_uid }}"
@@ -242,7 +244,7 @@ jobs:
           fi
           "${planner[@]}" \
             --event-name "${GITHUB_EVENT_NAME}" \
-            --run-mode "${{ github.event_name == 'workflow_dispatch' && inputs.run_mode || 'legacy' }}" \
+            "${run_mode_args[@]}" \
             --base-ref "${base_ref}" \
             --head-ref "${head_ref}" \
             "${impact_args[@]}" \
