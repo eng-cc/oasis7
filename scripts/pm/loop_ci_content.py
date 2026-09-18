@@ -3,7 +3,13 @@ import json
 import importlib
 import subprocess
 
-from loop_contracts import MARKER, REPOSITORY, contract_digest, validate_contract_record
+from loop_contracts import (
+    MARKER,
+    REPOSITORY,
+    contract_digest,
+    validate_consumed_clause_refs,
+    validate_contract_record,
+)
 from loop_policy import scope_context, validate_binding, validate_scope, validate_tool_root
 
 
@@ -107,6 +113,8 @@ def validate_ci_content(tool_root, root, binding, base, head, repository, reader
 
     def inspect(reference):
         ref = reference['publication_ref']
+        if ref.get('repository', REPOSITORY) != REPOSITORY:
+            raise ValueError('published contract repository identity mismatch')
         key = (reference['contract_id'], reference['revision'])
         if key in active:
             raise ValueError('cyclic immutable contract references')
@@ -125,9 +133,24 @@ def validate_ci_content(tool_root, root, binding, base, head, repository, reader
         if (pr.get('base', {}).get('repo') or {}).get('full_name') != repository:
             raise ValueError('contract approval repository mismatch')
         blockers.extend(validate_contract_record(contract, root, {'number': pr.get('number'), 'merged': pr.get('merged'), 'head': pr.get('head', {}).get('sha'), 'merge_commit': pr.get('merge_commit_sha')}))
-        clauses = {clause for item in contract.get('content_refs', []) for clause in item.get('clauses', [])}
-        if not reference.get('consumed_clauses') or any(clause not in clauses for clause in reference['consumed_clauses']):
-            raise ValueError('unapproved consumed contract clause')
+        clause_reference = dict(reference)
+        if 'consumed_clause_refs' not in clause_reference and binding.get('consumed_clause_refs') is not None:
+            if len(binding.get('input_contracts', [])) != 1:
+                raise ValueError('binding consumed clause refs require one input contract')
+            clause_reference['consumed_clause_refs'] = binding['consumed_clause_refs']
+        bound = (
+            binding.get('coordination_ref') is not None
+            or 'consumed_clause_refs' in reference
+            or 'consumed_clause_refs' in binding
+        )
+        blockers.extend(
+            validate_consumed_clause_refs(
+                contract,
+                clause_reference,
+                root=root,
+                bound=bound,
+            )
+        )
         if binding['target_delivery'] not in contract.get('scope', []):
             raise ValueError('contract content does not cover target delivery')
         if key not in visited:
