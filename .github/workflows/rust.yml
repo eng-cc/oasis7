@@ -218,10 +218,11 @@ jobs:
           scope_base_oid="$(git merge-base "${base_ref}" "${head_ref}")"
           if [[ "${GITHUB_EVENT_NAME}" == pull_request && -f "${RUNNER_TEMP}/impact-projection.json" ]]; then
             authority_dir="${RUNNER_TEMP}/required-base-authority"
-            mkdir -p "${authority_dir}"
+            mkdir -p "${authority_dir}/pm"
             git show "${base_ref}:scripts/plan-rust-required-scope.py" >"${authority_dir}/plan-rust-required-scope.py"
             git show "${base_ref}:scripts/ci-required-scope.v2.json" >"${authority_dir}/ci-required-scope.v2.json"
             git show "${base_ref}:scripts/ci-tests.sh" >"${authority_dir}/ci-tests.sh"
+            git show "${base_ref}:scripts/pm/workflow-impact-projection.py" >"${authority_dir}/pm/workflow-impact-projection.py"
             planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py")
             task_uid="$(python3 - <<'PY'
           import os,re
