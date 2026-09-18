@@ -417,6 +417,7 @@ jobs:
         run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
       - name: Run required test tier
         env:
+          GH_TOKEN: ${{ github.token }}
           INTEGRATION_MODE: ${{ inputs.run_mode }}
           OASIS7_PRODUCT_DOC_BASE: ${{ steps.scope.outputs.source_scope_base }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ steps.scope.outputs.head_oid }}

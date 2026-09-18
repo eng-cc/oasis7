@@ -90,6 +90,23 @@ class CargoPackageProfileEnvelopeRED(unittest.TestCase):
             with self.subTest(ci_ready_field=field):
                 self.assertIn(field, receipt_source)
 
+    def test_envelope_lookup_step_exports_repository_scoped_github_token(self) -> None:
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        required = workflow.split("  required-gate:", 1)[1].split(
+            "  windows-package-rollout-behavior:", 1
+        )[0]
+        profile_step = required.split(
+            "      - name: Run required test tier\n", 1
+        )[1].split("\n      - name:", 1)[0]
+        env_block = profile_step.split("        env:\n", 1)[1].split(
+            "\n        run:", 1
+        )[0]
+        self.assertIn(
+            "GH_TOKEN: ${{ github.token }}",
+            env_block,
+            "the envelope lookup requires the repository-scoped workflow token",
+        )
+
     def test_ci_ready_rejects_detached_cross_run_or_digest_mismatch_profile_receipt(self) -> None:
         case = self.receipt_tests.ReceiptTest("test_success")
         mutations = {
