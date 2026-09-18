@@ -303,6 +303,9 @@ declared_aggregate = (
     or task.get('traceability_mode') == 'aggregate'
     or task.get('completion_mode') == 'aggregate'
     or record_declares_aggregate(declared_record)
+    or record_declares_aggregate(record)
+    or bool(candidate_arg)
+    or declared_candidate is not None
 )
 live_mode = (selected_task.get('traceability_mode')
              or selected_task.get('completion_mode')

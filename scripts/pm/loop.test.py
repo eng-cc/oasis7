@@ -48,6 +48,10 @@ def receipt_fixture(task_uid, repository, issue_number, pr_number, pr_url):
     return {'merge': merge, 'main_sync': main_sync, 'terminal': terminal, 'ledger': ledger, 'tombstone': tombstone}
 
 class LoopTests(unittest.TestCase):
+    def test_publication_uses_new_task_contract_eligibility(self):
+        self.assertEqual(module.admission_purpose('publish-contract'), 'new_tasks')
+        self.assertEqual(module.admission_purpose('resume-check'), 'in_flight')
+
     def dependency_command(self, command, bodies, *, search=None, terminal_pass=True):
         uid, dependency_uid = 'task_' + 'a' * 32, 'task_' + 'b' * 32
         task = {'task_uid': uid, 'repository': 'fixture/repo', 'loop_binding': {'task_uid': uid, 'dependencies': [dependency_uid]}}

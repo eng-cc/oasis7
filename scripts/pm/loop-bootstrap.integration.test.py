@@ -122,8 +122,11 @@ class BootstrapEndToEnd(unittest.TestCase):
             state = temp / 'github.json'
             env = dict(os.environ, PATH=str(binary)+os.pathsep+os.environ['PATH'], FAKE_GH_STATE=str(state),
                        TEST_SHARED_TARGET=str(temp/'target'), PYTHONDONTWRITEBYTECODE='1')
-            binding = dict(schema='oasis7.loop-task/v1',task_uid=UID,change_id='change-fixture',loop='code',owner_role='repository_health_engineer',bootstrap_epoch=1,
-                manual_request_ref='message:1',request_key='request:1',write_scope=['scripts/**'],out_of_scope=[],input_contracts=[],acceptance_refs=['M06'],dependencies=[],
+            # Bootstrap mechanics are loop-agnostic.  Use a system-loop fixture
+            # so this suite does not counterfeit the technical input that a
+            # newly admitted code task is now required to consume.
+            binding = dict(schema='oasis7.loop-task/v1',task_uid=UID,change_id='change-fixture',loop='system',owner_role='repository_health_engineer',bootstrap_epoch=1,
+                manual_request_ref='message:1',request_key='request:1',write_scope=['doc/**'],out_of_scope=[],input_contracts=[],acceptance_refs=['M06'],dependencies=[],
                 target_delivery='fixture',policy_digest='sha256:'+hashlib.sha256((root/'scripts/pm/loop-policy.v1.json').read_bytes()).hexdigest(),policy_commit=base)
             source = temp / 'binding.json'; source.write_text(json.dumps(binding))
             start = root
@@ -139,7 +142,7 @@ class BootstrapEndToEnd(unittest.TestCase):
             target = temp / 'task'
             command = ['bash','scripts/new-task-worktree.sh','engineering','loop-test','--path',str(target),'--branch','codex/loop-test',
                 '--pm-owner-role','repository_health_engineer','--pm-title','fixture','--pm-source-ref','fixture','--pm-acceptance','M06',
-                '--pm-loop','code','--pm-loop-binding',str(source),'--pm-request-key','request:1','--pm-manual-request-ref','message:1','--json']
+                '--pm-loop','system','--pm-loop-binding',str(source),'--pm-request-key','request:1','--pm-manual-request-ref','message:1','--json']
             if loss:
                 env['FAKE_LOSS']='1'
             if lifecycle:
@@ -232,12 +235,12 @@ class BootstrapEndToEnd(unittest.TestCase):
             retry = subprocess.run(command,cwd=target,env=env,text=True,capture_output=True)
             self.assertEqual(retry.returncode,0,retry.stderr)
             self.assertEqual(json.loads(retry.stdout)['pm']['task_uid'],UID)
-            resume = subprocess.run(['bash','scripts/new-task-worktree.sh','--pm-task-uid',UID,'--pm-loop','code','--pm-manual-request-ref','message:2'],cwd=target,env=env,text=True,capture_output=True)
+            resume = subprocess.run(['bash','scripts/new-task-worktree.sh','--pm-task-uid',UID,'--pm-loop','system','--pm-manual-request-ref','message:2'],cwd=target,env=env,text=True,capture_output=True)
             self.assertEqual(resume.returncode,0,resume.stderr)
             self.assertEqual(json.loads(resume.stdout)['pm']['task_uid'],UID)
             self.assertEqual(json.loads(state.read_text())['creates'],1)
-            self.assertEqual(json.loads(state.read_text())['fields']['Loop'],'code')
-            revised = dict(binding, bootstrap_epoch=2, write_scope=['scripts/pm/**'])
+            self.assertEqual(json.loads(state.read_text())['fields']['Loop'],'system')
+            revised = dict(binding, bootstrap_epoch=2, write_scope=['doc/engineering/**'])
             source.write_text(json.dumps(revised))
             bind_command = ['python3',str(target/'scripts/pm/github-project-task.py'),'bind-loop',str(target),
                             '--task-uid',UID,'--loop-binding',str(source),'--manual-request-ref','message:3','--json']

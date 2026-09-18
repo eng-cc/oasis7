@@ -19,6 +19,10 @@ TRACEABILITY_BOUNDARY_COMMANDS = {
 }
 
 
+def admission_purpose(command):
+    return 'new_tasks' if command == 'publish-contract' else 'in_flight'
+
+
 def _git(root, *args):
     return subprocess.check_output(['git', '-C', str(root), *args], text=True).strip()
 
@@ -439,7 +443,10 @@ def main():
                         mutation=continuation_readback,
                     )
             else:
-                result = validate_task(root, task, args.tool_root, args.base, args.head)
+                result = validate_task(
+                    root, task, args.tool_root, args.base, args.head,
+                    purpose=admission_purpose(args.command),
+                )
                 if result['status'] in ('passed', 'legacy') and args.command == 'recover':
                     with Reservation(common_dir(root), args.task_uid, (task.get('loop_binding') or {}).get('write_scope', []), recovery=True) as reservation:
                         result.update(reconcile(common_dir(root), args.task_uid, root, args.tool_root, reservation_fd=reservation.handle.fileno()))
