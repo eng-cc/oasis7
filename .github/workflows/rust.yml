@@ -217,6 +217,12 @@ jobs:
           impact_args=()
           scope_base_oid="$(git merge-base "${base_ref}" "${head_ref}")"
           if [[ "${GITHUB_EVENT_NAME}" == pull_request && -f "${RUNNER_TEMP}/impact-projection.json" ]]; then
+            authority_dir="${RUNNER_TEMP}/required-base-authority"
+            mkdir -p "${authority_dir}"
+            git show "${base_ref}:scripts/plan-rust-required-scope.py" >"${authority_dir}/plan-rust-required-scope.py"
+            git show "${base_ref}:scripts/ci-required-scope.v2.json" >"${authority_dir}/ci-required-scope.v2.json"
+            git show "${base_ref}:scripts/ci-tests.sh" >"${authority_dir}/ci-tests.sh"
+            planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py")
             task_uid="$(python3 - <<'PY'
           import os,re
           matches=re.findall(r'^Task: (task_[0-9a-f]{32})$',os.environ.get('PR_BODY',''),re.M)
@@ -239,8 +245,13 @@ jobs:
             --head-ref "${head_ref}" \
             "${impact_args[@]}" \
             --github-output "${GITHUB_OUTPUT}"
+          source_scope_base="$(git merge-base "${base_ref}" "${head_ref}")"
           echo "base_oid=${base_ref}" >>"${GITHUB_OUTPUT}"
+          echo "integration_base_oid=${base_ref}" >>"${GITHUB_OUTPUT}"
           echo "head_oid=${head_ref}" >>"${GITHUB_OUTPUT}"
+          echo "source_scope_base=${source_scope_base}" >>"${GITHUB_OUTPUT}"
+          echo "integration_base=${base_ref}" >>"${GITHUB_OUTPUT}"
+          echo "source_head=${head_ref}" >>"${GITHUB_OUTPUT}"
       - name: Report planned scope
         run: |
           echo "scope=${{ steps.scope.outputs.scope }}"
@@ -285,6 +296,7 @@ jobs:
           source=json.loads(os.environ["PLAN_JSON"])
           fields=(
               "scope", "selected_capabilities", "reason_summary", "changed_path_count",
+              "source_scope_base", "integration_base", "source_head",
               "run_oasis7_required_tests", "run_consensus_tests", "run_distfs_tests",
               "run_oasis7_node_tests", "run_oasis7_net_tests", "run_oasis7_net_libp2p_tests",
               "run_viewer_contract_tests", "run_viewer_wasm_check", "run_viewer_perf_smoke",
@@ -311,6 +323,7 @@ jobs:
               "workflow_run_id":int(os.environ["WORKFLOW_RUN_ID"]),
               "head_oid":source["head_oid"],
               "base_oid":source["base_oid"],
+              "integration_base_oid":source["integration_base_oid"],
               "check_name":"required-gate",
               "planner":planner,
           }
@@ -399,7 +412,7 @@ jobs:
       - name: Run required test tier
         env:
           INTEGRATION_MODE: ${{ inputs.run_mode }}
-          OASIS7_PRODUCT_DOC_BASE: ${{ steps.scope.outputs.base_oid }}
+          OASIS7_PRODUCT_DOC_BASE: ${{ steps.scope.outputs.source_scope_base }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ steps.scope.outputs.head_oid }}
           OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS: ${{ steps.scope.outputs.run_oasis7_required_tests }}
           OASIS7_CI_RUN_CONSENSUS_TESTS: ${{ steps.scope.outputs.run_consensus_tests }}
@@ -420,9 +433,24 @@ jobs:
           OASIS7_CI_RUN_CODEX_AGENT_CONFIG_VALIDATION: ${{ steps.scope.outputs.run_codex_agent_config_validation }}
           OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS: ${{ steps.scope.outputs.run_compile_metrics_contract_tests }}
           OASIS7_CI_RUN_RUST_BASELINE: ${{ steps.scope.outputs.run_rust_baseline }}
-          OASIS7_CARGO_SCOPE_BASE: ${{ steps.scope.outputs.base_oid }}
+          OASIS7_CARGO_SCOPE_BASE: ${{ steps.scope.outputs.source_scope_base }}
           OASIS7_CARGO_SCOPE_HEAD: ${{ steps.scope.outputs.head_oid }}
         run: |
+          trusted_checker="${RUNNER_TEMP}/trusted-check-cargo-package-scope"
+          trusted_profile_planner="${RUNNER_TEMP}/trusted-cargo-package-profile-planner.py"
+          trusted_profile_driver="${RUNNER_TEMP}/trusted-cargo-package-profile-driver.py"
+          if [[ -n "${OASIS7_CARGO_SCOPE_BASE:-}" ]] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+            git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/check-cargo-package-scope" >"${trusted_checker}"
+            chmod +x "${trusted_checker}"
+            export OASIS7_CARGO_SCOPE_CHECKER="${trusted_checker}"
+            if git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/cargo_package_profile_planner.py" >"${trusted_profile_planner}" 2>/dev/null &&
+               git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/cargo_package_profile_driver.py" >"${trusted_profile_driver}" 2>/dev/null; then
+              export OASIS7_CARGO_PROFILE_PLANNER="${trusted_profile_planner}"
+              export OASIS7_CARGO_PROFILE_DRIVER="${trusted_profile_driver}"
+              export OASIS7_CARGO_PROFILE_INTEGRATION_BASE="${{ steps.scope.outputs.integration_base_oid }}"
+              export OASIS7_CARGO_PROFILE_SOURCE_HEAD="${OASIS7_CARGO_SCOPE_HEAD}"
+            fi
+          fi
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${INTEGRATION_MODE}" == "integration_revalidation" ]]; then
             CI_VERBOSE=1 bash "${RUNNER_TEMP}/integration-planner/ci-tests.sh" required --repo-root "${GITHUB_WORKSPACE}" --impact-projection "${RUNNER_TEMP}/impact-projection.json"
           elif [[ "${GITHUB_EVENT_NAME}" == "pull_request" && -f "${RUNNER_TEMP}/impact-projection.json" ]]; then

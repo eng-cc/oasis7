@@ -72,6 +72,10 @@ def git_paths(a):
 def main():
  p=argparse.ArgumentParser(); p.add_argument("--event-name",required=True);p.add_argument("--base-ref");p.add_argument("--head-ref");p.add_argument("--task-uid");p.add_argument("--scope-base-oid");p.add_argument("--changed-path",action="append",default=[]);p.add_argument("--github-output");p.add_argument("--config",default=str(Path(__file__).with_name("ci-required-scope.v2.json")));p.add_argument("--impact-projection",help="verified digest-bound workflow impact projection");a=p.parse_args()
  c,digest=config(a.config); paths=a.changed_path or git_paths(a); projection=None
+ source_scope_base=""
+ if a.base_ref and a.head_ref:
+  try: source_scope_base=subprocess.check_output(["git","merge-base",a.base_ref,a.head_ref],text=True).strip()
+  except Exception: source_scope_base=""
  if a.impact_projection:
   if paths is None: die("impact projection requires resolvable changed paths")
   if not a.task_uid or not a.head_ref or not a.scope_base_oid: die("impact projection requires --task-uid, --head-ref and --scope-base-oid")
@@ -93,6 +97,8 @@ def main():
    projection_expected["changed_paths"]=paths
   projection=load_impact_projection(a.impact_projection,projection_expected)
  full=a.event_name=="workflow_dispatch" or paths is None or (projection is not None and projection["test_profile"]=="full"); capabilities=set(); explicit_rust=False; reasons=["required_gate_baseline:always_on"]
+ if a.base_ref and a.head_ref and not source_scope_base:
+  full=True; reasons.append("unresolvable_source_scope_base")
  if paths is None: paths=[]; reasons.append("unresolvable_changed_paths")
  for path in paths:
   hits=[r for r in c["rules"] if any(fnmatch.fnmatchcase(path,x) for x in r["match"])]
@@ -108,7 +114,7 @@ def main():
  vals.update({FIELDS[x]:"true" for x in capabilities})
  vals["run_required_gate_baseline"]="true"
  requires_rust=full or explicit_rust or bool(capabilities-{"workflow_governance","codex_agent_config_validation","compile_metrics","viewer_performance_report","operational_contracts","packaging_contracts","site_quality"})
- vals.update({"run_oasis7_net_libp2p_tests":vals["run_oasis7_net_tests"],"run_viewer_wasm_check":vals["run_viewer_contract_tests"],"run_pixel_world_bridge_wasm_check":vals["run_pixel_world_bridge_lib_tests"],"run_rust_baseline":"true" if requires_rust else "false","needs_rust_toolchain":"true" if requires_rust else "false","needs_node":"true" if capabilities & {"viewer_js_required","viewer_performance_report","launcher_web"} else "false","needs_system_deps":"true" if capabilities & {"oasis7_required","viewer_js_required","viewer_performance_report","pixel_world_bridge","launcher_web"} else "false","needs_wasm_target":"true" if capabilities & {"pixel_world_bridge","launcher_web"} else "false","needs_trunk":"true" if "launcher_web" in capabilities else "false","planner_config_sha256":digest,"selected_capabilities":";".join(sorted(capabilities or {"required_gate_baseline"})),"scope":"full" if full else ("targeted" if capabilities else "minimal"),"reason_summary":";".join(dict.fromkeys(reasons)),"changed_path_count":str(len(paths)),"changed_paths":";".join(paths)})
+ vals.update({"run_oasis7_net_libp2p_tests":vals["run_oasis7_net_tests"],"run_viewer_wasm_check":vals["run_viewer_contract_tests"],"run_pixel_world_bridge_wasm_check":vals["run_pixel_world_bridge_lib_tests"],"run_rust_baseline":"true" if requires_rust else "false","needs_rust_toolchain":"true" if requires_rust else "false","needs_node":"true" if capabilities & {"viewer_js_required","viewer_performance_report","launcher_web"} else "false","needs_system_deps":"true" if capabilities & {"oasis7_required","viewer_js_required","viewer_performance_report","pixel_world_bridge","launcher_web"} else "false","needs_wasm_target":"true" if capabilities & {"pixel_world_bridge","launcher_web"} else "false","needs_trunk":"true" if "launcher_web" in capabilities else "false","planner_config_sha256":digest,"source_scope_base":source_scope_base,"integration_base":a.base_ref or "","source_head":a.head_ref or "HEAD","selected_capabilities":";".join(sorted(capabilities or {"required_gate_baseline"})),"scope":"full" if full else ("targeted" if capabilities else "minimal"),"reason_summary":";".join(dict.fromkeys(reasons)),"changed_path_count":str(len(paths)),"changed_paths":";".join(paths)})
  if projection is not None:
   actual_capabilities=sorted(capabilities or {"required_gate_baseline"})
   actual_scope=vals["scope"]
