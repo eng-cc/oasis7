@@ -27,6 +27,10 @@ def load_identity_module(path: Path):
 
 
 class TaskCloseoutV2LiveValidationTest(unittest.TestCase):
+    def test_receipt_refresh_does_not_expand_an_empty_array_under_nounset(self):
+        source = (PM / "task-closeout.sh").read_text(encoding="utf-8")
+        self.assertNotIn('${CI_RECEIPT_ARGS[@]}', source)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name) / "fixture"

@@ -686,18 +686,25 @@ PY
     CI_CHECK_APP="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])[4])' "$CI_IDENTITY_JSON")"
     CI_PLANNER_DIGEST="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])[5])' "$CI_IDENTITY_JSON")"
     CI_INTEGRATION_RUN_ID="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])[6])' "$CI_IDENTITY_JSON")"
-    CI_RECEIPT_ARGS=()
     if [[ "$REVIEW_PLAN_SCHEMA" == "oasis7-review-plan/v2" ]]; then
       [[ "$CI_INTEGRATION_RUN_ID" =~ ^[0-9]+$ ]] || die "v2 ci-ready receipt lacks the current integration request/run identity"
-      CI_RECEIPT_ARGS+=(--integration-run-id "$CI_INTEGRATION_RUN_ID")
+      python3 "$SCRIPT_DIR/ci-ready-receipt.py" \
+        --repository "$CI_REPOSITORY" --task-uid "$TASK_UID" \
+        --task-issue-number "$CI_TASK_ISSUE" --pr-number "$CI_PR_NUMBER" \
+        --check-name "$CI_CHECK_NAME" --check-app-id "$CI_CHECK_APP" \
+        --planner-digest "$CI_PLANNER_DIGEST" --receipt "$CI_READY_RECEIPT" \
+        --refresh-same-identity --integration-run-id "$CI_INTEGRATION_RUN_ID" \
+        --json >"$REFRESHED_CI_READY_RECEIPT" \
+        || die "stale ci-ready receipt failed same-identity refresh"
+    else
+      python3 "$SCRIPT_DIR/ci-ready-receipt.py" \
+        --repository "$CI_REPOSITORY" --task-uid "$TASK_UID" \
+        --task-issue-number "$CI_TASK_ISSUE" --pr-number "$CI_PR_NUMBER" \
+        --check-name "$CI_CHECK_NAME" --check-app-id "$CI_CHECK_APP" \
+        --planner-digest "$CI_PLANNER_DIGEST" --receipt "$CI_READY_RECEIPT" \
+        --refresh-same-identity --json >"$REFRESHED_CI_READY_RECEIPT" \
+        || die "stale ci-ready receipt failed same-identity refresh"
     fi
-    python3 "$SCRIPT_DIR/ci-ready-receipt.py" \
-      --repository "$CI_REPOSITORY" --task-uid "$TASK_UID" \
-      --task-issue-number "$CI_TASK_ISSUE" --pr-number "$CI_PR_NUMBER" \
-      --check-name "$CI_CHECK_NAME" --check-app-id "$CI_CHECK_APP" \
-      --planner-digest "$CI_PLANNER_DIGEST" --receipt "$CI_READY_RECEIPT" \
-      --refresh-same-identity "${CI_RECEIPT_ARGS[@]}" --json >"$REFRESHED_CI_READY_RECEIPT" \
-      || die "stale ci-ready receipt failed same-identity refresh"
     CI_READY_RECEIPT="$REFRESHED_CI_READY_RECEIPT"
   fi
 fi
