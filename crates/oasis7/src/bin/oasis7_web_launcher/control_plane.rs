@@ -938,7 +938,7 @@ pub(super) fn build_chain_runtime_args(config: &LauncherConfig) -> Result<Vec<St
     if chain_node_id.is_empty() {
         return Err("chain node id cannot be empty".to_string());
     }
-    let chain_role = parse_chain_role(config.chain_node_role.as_str())?;
+    let chain_role = effective_chain_runtime_role(config)?;
     let chain_p2p_user_mode = parse_chain_p2p_user_mode(config.chain_p2p_user_mode.as_str())?;
     if chain_p2p_user_mode == "public_entry" && !config.chain_p2p_accept_public_entry {
         return Err(
@@ -1080,14 +1080,26 @@ fn observer_registry_path_from_manifest(manifest_path: &str, chain_role: &str) -
     if registry_name.is_empty() {
         return None;
     }
-    Some(
-        manifest_path
-            .parent()
-            .unwrap_or_else(|| Path::new("."))
-            .join(registry_name)
-            .to_string_lossy()
-            .into_owned(),
-    )
+    let registry_path = manifest_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(registry_name);
+    registry_path
+        .is_file()
+        .then(|| registry_path.to_string_lossy().into_owned())
+}
+
+fn effective_chain_runtime_role(config: &LauncherConfig) -> Result<String, String> {
+    let role = parse_chain_role(config.chain_node_role.as_str())?;
+    if canonical_chain_network_tier(config.chain_network_tier.as_str()) == Some("public_testnet")
+        && role == "sequencer"
+    {
+        // The web launcher has no managed-triad inventory input.  Keep its
+        // public-testnet lane on the non-managed observer contract; managed
+        // identities still fail closed in runtime authority preflight.
+        return Ok("observer".to_string());
+    }
+    Ok(role)
 }
 
 #[cfg(test)]
@@ -1139,6 +1151,103 @@ mod observer_registry_launcher_tests {
             .find(|pair| pair[0] == "--genesis-validator-registry")
             .expect("bound registry argument");
         assert_eq!(registry_arg[1], registry.to_string_lossy());
+    }
+
+    #[test]
+    fn public_testnet_default_lane_uses_non_managed_observer_authority() {
+        let root = fixture_dir();
+        let manifest = root.join("manifest.json");
+        let registry = root.join("observer-registry.json");
+        std::fs::write(&registry, b"{}\n").expect("write registry fixture");
+        std::fs::write(
+            &manifest,
+            br#"{
+                "tier":"public_testnet",
+                "validator_policy":{"allow_observer_nodes":true},
+                "deployment_validator_registry":{"ref":"config/observer-registry.json"}
+            }"#,
+        )
+        .expect("write manifest fixture");
+        let config = LauncherConfig {
+            deployment_mode: "trusted_local_only".to_string(),
+            chain_network_tier: "public_testnet".to_string(),
+            chain_node_role: "sequencer".to_string(),
+            chain_network_tier_manifest: manifest.to_string_lossy().into_owned(),
+            ..LauncherConfig::default()
+        };
+
+        let args = build_chain_runtime_args(&config).expect("public testnet args");
+        let role_arg = args
+            .windows(2)
+            .find(|pair| pair[0] == "--node-role")
+            .expect("node role argument");
+        assert_eq!(role_arg[1], "observer");
+        let registry_arg = args
+            .windows(2)
+            .find(|pair| pair[0] == "--genesis-validator-registry")
+            .expect("bound registry argument");
+        assert_eq!(registry_arg[1], registry.to_string_lossy());
+    }
+
+    #[test]
+    fn shipped_public_testnet_template_binds_adjacent_triad_registry() {
+        let manifest = repo_root_dir().join(PUBLIC_TESTNET_NETWORK_TIER_MANIFEST);
+        let registry = manifest
+            .parent()
+            .expect("template parent")
+            .join("public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json");
+        let loaded = LoadedNetworkTierManifest::load(manifest.as_path())
+            .expect("shipped public testnet template should load");
+        assert_eq!(loaded.manifest.validator_policy.target_validator_count, 3);
+
+        let config = LauncherConfig {
+            deployment_mode: "trusted_local_only".to_string(),
+            chain_network_tier: "public_testnet".to_string(),
+            chain_node_role: "sequencer".to_string(),
+            chain_network_tier_manifest: manifest.to_string_lossy().into_owned(),
+            ..LauncherConfig::default()
+        };
+        let args = build_chain_runtime_args(&config).expect("shipped template args");
+        assert!(
+            args.windows(2)
+                .any(|pair| { pair[0] == "--node-role" && pair[1] == "observer" })
+        );
+        assert!(args.windows(2).any(|pair| {
+            pair[0] == "--genesis-validator-registry" && pair[1] == registry.to_string_lossy()
+        }));
+    }
+
+    #[test]
+    fn missing_public_testnet_registry_is_not_synthesized() {
+        let root = fixture_dir();
+        let manifest = root.join("manifest.json");
+        std::fs::write(
+            &manifest,
+            br#"{
+                "tier":"public_testnet",
+                "validator_policy":{"allow_observer_nodes":true},
+                "deployment_validator_registry":{
+                    "ref":"missing-registry.json",
+                    "sha256":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                    "semantic_sha256":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                }
+            }"#,
+        )
+        .expect("write manifest fixture");
+        let config = LauncherConfig {
+            deployment_mode: "trusted_local_only".to_string(),
+            chain_network_tier: "public_testnet".to_string(),
+            chain_node_role: "sequencer".to_string(),
+            chain_network_tier_manifest: manifest.to_string_lossy().into_owned(),
+            ..LauncherConfig::default()
+        };
+
+        let args = build_chain_runtime_args(&config).expect("public testnet args");
+        assert!(
+            args.windows(2)
+                .any(|pair| { pair[0] == "--node-role" && pair[1] == "observer" })
+        );
+        assert!(!args.iter().any(|arg| arg == "--genesis-validator-registry"));
     }
 }
 
