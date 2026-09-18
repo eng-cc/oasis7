@@ -266,6 +266,8 @@ run_oasis7_viewer_software_safe_feedback_contract_tests() {
   run ./scripts/agent-browser-viewer-dist-freshness-test.sh
   run bash ./scripts/agent-browser-lifecycle-contract.test.sh
   run bash ./scripts/viewer-prompt-control-regression.test.sh
+  run bash ./scripts/viewer-prompt-control-race.test.sh
+  run bash ./scripts/viewer-prompt-control-race-identity.test.sh
   run node --test crates/oasis7_viewer/scripts/agent-browser-visual-runner-lifecycle.test.mjs
   run ./scripts/bundle-freshness-lib.test.sh
   run npm --prefix crates/oasis7_viewer run test:ui
