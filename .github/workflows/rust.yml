@@ -366,6 +366,8 @@ jobs:
           OASIS7_CI_RUN_CODEX_AGENT_CONFIG_VALIDATION: ${{ steps.scope.outputs.run_codex_agent_config_validation }}
           OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS: ${{ steps.scope.outputs.run_compile_metrics_contract_tests }}
           OASIS7_CI_RUN_RUST_BASELINE: ${{ steps.scope.outputs.run_rust_baseline }}
+          OASIS7_CARGO_SCOPE_BASE: ${{ steps.scope.outputs.base_oid }}
+          OASIS7_CARGO_SCOPE_HEAD: ${{ steps.scope.outputs.head_oid }}
         run: |
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${INTEGRATION_MODE}" == "integration_revalidation" ]]; then
             CI_VERBOSE=1 bash "${RUNNER_TEMP}/integration-planner/ci-tests.sh" required --repo-root "${GITHUB_WORKSPACE}"

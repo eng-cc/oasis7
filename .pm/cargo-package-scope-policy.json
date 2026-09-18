@@ -1,0 +1,7 @@
+{
+  "schema": "oasis7-cargo-package-scope-policy/v1",
+  "policy_version": 1,
+  "protected_paths": [
+    ".pm/cargo-package-scope-policy.json"
+  ]
+}
