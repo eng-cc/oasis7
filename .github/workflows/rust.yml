@@ -511,7 +511,7 @@ jobs:
               --source-head "${OASIS7_CARGO_PROFILE_SOURCE_HEAD}" \
               --tested-tree "${OASIS7_CARGO_PROFILE_TESTED_TREE}" \
               >"${profile_output}/cargo-package-profile-receipt.json"
-            python3 -I - "${OASIS7_CARGO_PROFILE_PLAN}" "${OASIS7_CARGO_PROFILE_RESULTS}" \
+            GH_TOKEN="${{ github.token }}" python3 -I - "${OASIS7_CARGO_PROFILE_PLAN}" "${OASIS7_CARGO_PROFILE_RESULTS}" \
               "${profile_output}/cargo-package-profile-receipt.json" \
               "${profile_output}/cargo-package-profile-envelope.json" <<'PY'
           import hashlib, json, os, pathlib, subprocess, sys
