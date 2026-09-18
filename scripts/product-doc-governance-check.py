@@ -19,9 +19,9 @@ except RuntimeError as exc:
 @dataclass(frozen=True)
 class ProductModule:
     slug: str
-    name: str
     prd_id: str
     authorities: tuple[str, ...]
+    accepted_names: tuple[str, ...]
 
     @property
     def path(self) -> str:
@@ -31,13 +31,28 @@ class ProductModule:
 MODULES = (
     ProductModule(
         "world-rules-core-gameplay",
-        "世界规则与核心玩法",
         "PRD-PRODUCT-001",
         ("doc/game/prd.md", "doc/world-runtime/prd.md", "doc/world-simulator/prd.md", "doc/p2p/prd.md"),
+        ("世界规则与核心玩法", "世界规则与玩法系统"),
     ),
-    ProductModule("world-infrastructure", "大世界基础设施", "PRD-PRODUCT-002", ("doc/game/prd.md", "doc/world-runtime/prd.md", "doc/p2p/prd.md")),
-    ProductModule("agents-world-simulation", "智能体与世界模拟", "PRD-PRODUCT-003", ("doc/world-simulator/prd.md",)),
-    ProductModule("player-entry-distribution", "玩家入口与发行", "PRD-PRODUCT-004", ("README.md", "doc/world-simulator/prd.md")),
+    ProductModule(
+        "world-infrastructure",
+        "PRD-PRODUCT-002",
+        ("doc/game/prd.md", "doc/world-runtime/prd.md", "doc/p2p/prd.md"),
+        ("大世界基础设施", "权威世界基础设施"),
+    ),
+    ProductModule(
+        "agents-world-simulation",
+        "PRD-PRODUCT-003",
+        ("doc/world-simulator/prd.md",),
+        ("智能体与世界模拟", "智能体、世界模拟与交互"),
+    ),
+    ProductModule(
+        "player-entry-distribution",
+        "PRD-PRODUCT-004",
+        ("README.md", "doc/world-simulator/prd.md"),
+        ("玩家入口与发行", "玩家接入与发行"),
+    ),
 )
 LIFECYCLES = {"proposed", "draft", "active", "superseded", "retired"}
 RESERVED_PRODUCT_IDENTITY_METADATA = (
@@ -173,9 +188,20 @@ def check(root: Path) -> list[str]:
     landing = landing_path.read_text(encoding="utf-8")
     row_re = re.compile(r"^\|\s*([^|]+?)\s*\|\s*\[[^]]+\]\(([^)]+)\)\s*\|", re.MULTILINE)
     rows = [(name.strip(), target.strip()) for name, target in row_re.findall(landing)]
-    expected_rows = [(module.name, f"{module.slug}/prd.md") for module in MODULES]
-    if rows != expected_rows:
-        fail(errors, "entry-contract", f"expected exact four-row manifest {expected_rows!r}, got {rows!r}")
+    if len(rows) != len(MODULES):
+        fail(errors, "entry-contract", f"expected exact four-row manifest, got {rows!r}")
+    for index, module in enumerate(MODULES):
+        if index >= len(rows):
+            break
+        actual_name, actual_target = rows[index]
+        expected_target = f"{module.slug}/prd.md"
+        if actual_name not in module.accepted_names or actual_target != expected_target:
+            fail(
+                errors,
+                "entry-contract",
+                f"row {index + 1} expected name in {module.accepted_names!r} and target {expected_target!r}, "
+                f"got {(actual_name, actual_target)!r}",
+            )
     if len({target for _, target in rows}) != len(rows):
         fail(errors, "entry-duplicate", "product entry targets must be unique")
 
@@ -196,8 +222,14 @@ def check(root: Path) -> list[str]:
         if not path.is_file():
             continue
         text = path.read_text(encoding="utf-8")
+        actual_name = metadata(text, "产品模块")
+        if actual_name not in module.accepted_names:
+            fail(
+                errors,
+                "metadata-contract",
+                f"{module.path}: 产品模块 expected one of {module.accepted_names!r}, got {actual_name!r}",
+            )
         expected_metadata = {
-            "产品模块": module.name,
             "产品模块 slug": module.slug,
             "产品层唯一 PRD": module.path,
             "产品模块总入口": "doc/product/README.md",
