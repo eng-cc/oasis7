@@ -12,6 +12,8 @@ source/integration/tested-tree identity and a zero exit status.
 from __future__ import annotations
 
 import importlib.util
+import hashlib
+import json
 from pathlib import Path
 import unittest
 
@@ -65,6 +67,11 @@ class CargoPackageProfileDriverContract(unittest.TestCase):
                 },
             ],
         }
+        unsigned = dict(self.plan)
+        unsigned.pop("plan_id", None)
+        self.plan["plan_id"] = "sha256:" + hashlib.sha256(
+            json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
 
     def _result(self, item_id: str, **overrides: object) -> dict[str, object]:
         result: dict[str, object] = {

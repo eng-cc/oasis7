@@ -7,6 +7,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import re
 from typing import Any, Iterable
 
 
@@ -28,14 +29,15 @@ def validate_planned_items(
     if plan.get("schema") != SCHEMA:
         raise DriverError("unknown plan schema")
     plan_id = plan.get("plan_id")
-    if isinstance(plan_id, str) and plan_id.startswith("sha256:"):
-        unsigned = dict(plan)
-        unsigned.pop("plan_id", None)
-        expected_plan_id = "sha256:" + hashlib.sha256(
-            json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode("utf-8")
-        ).hexdigest()
-        if plan_id != expected_plan_id:
-            raise DriverError("plan_id digest is forged or does not bind plan content")
+    if not isinstance(plan_id, str) or re.fullmatch(r"sha256:[0-9a-f]{64}", plan_id) is None:
+        raise DriverError("plan_id must be a sha256 digest bound to plan content")
+    unsigned = dict(plan)
+    unsigned.pop("plan_id", None)
+    expected_plan_id = "sha256:" + hashlib.sha256(
+        json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    if plan_id != expected_plan_id:
+        raise DriverError("plan_id digest is forged or does not bind plan content")
     expected_identity = {
         "integration_base": integration_base,
         "source_head": source_head,

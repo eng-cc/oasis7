@@ -252,6 +252,7 @@ def plan_package_profiles(
         affected.update(consumers)
         consumer_frontier = consumers
     normalized_profiles, escalation_reasons = _profiles(profiles)
+    executable_packages = set(tested_packages.values())
     items = [] if escalation_reasons else [
         {
             "id": f"{package}-{profile['id']}",
@@ -261,8 +262,21 @@ def plan_package_profiles(
             "features": profile["features"],
         }
         for package in sorted(affected)
+        if package in executable_packages
         for profile in normalized_profiles
     ]
+    if escalation_reasons:
+        execution_disposition = "full_escalation"
+        disposition_validated = True
+    elif not items:
+        # The legacy required tier remains mandatory while package/profile
+        # activation is guarded.  An empty reduced plan is therefore an
+        # explicit, validated hand-off to that coverage, not an implicit pass.
+        execution_disposition = "legacy_required_coverage"
+        disposition_validated = True
+    else:
+        execution_disposition = "planned_items"
+        disposition_validated = False
     plan: dict[str, Any] = {
         "schema": SCHEMA,
         "source_scope_base": source_scope_base,
@@ -277,8 +291,8 @@ def plan_package_profiles(
         "items": items,
         "scope": "full" if escalation_reasons else "targeted",
         "escalation_reasons": escalation_reasons,
-        "execution_disposition": "full_escalation" if escalation_reasons else "planned_items",
-        "disposition_validated": bool(escalation_reasons),
+        "execution_disposition": execution_disposition,
+        "disposition_validated": disposition_validated,
         "trusted_authority": {"policy": policy_path, "checker": checker_path},
     }
     identity = json.dumps(plan, sort_keys=True, separators=(",", ":")).encode("utf-8")

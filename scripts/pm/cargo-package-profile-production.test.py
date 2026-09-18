@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -35,6 +36,11 @@ class CargoPackageProfileProductionContract(unittest.TestCase):
             "items": [],
         }
         plan.update(extra)
+        unsigned = dict(plan)
+        unsigned.pop("plan_id", None)
+        plan["plan_id"] = "sha256:" + hashlib.sha256(
+            json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
         return plan
 
     def _validate(self, plan: dict[str, object]) -> dict[str, object]:
