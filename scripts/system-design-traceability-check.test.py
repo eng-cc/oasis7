@@ -608,6 +608,26 @@ def scenario_authority_only_prompt_control_change_rechecks_current_consumer() ->
         shutil.rmtree(root)
 
 
+def scenario_authority_only_root_prd_prompt_control_change_rechecks_consumer() -> None:
+    root, _initial_base, _head = make_repo()
+    try:
+        authority = root / "doc/world-simulator/prd.md"
+        authority.parent.mkdir(parents=True)
+        authority.write_text(PRODUCT_TEXT, encoding="utf-8")
+        (root / DESIGN).write_text(
+            DESIGN_HEADER.replace("../product/sample.prd.md", "../world-simulator/prd.md"),
+            encoding="utf-8",
+        )
+        fixture_base = commit(root, "add root professional PromptControl authority")
+        authority.write_text(PRODUCT_TEXT.replace("req-sample", "req-renamed"), encoding="utf-8")
+        head = commit(root, "change root PromptControl authority anchor")
+        code, output = run_checker(root, fixture_base, head)
+        assert code == 1, output
+        assert "trace-ref-unresolved" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
 def scenario_authority_rename_and_delete_fail_closed() -> None:
     for action in ("rename", "delete"):
         root, base, _head = make_repo()
@@ -690,6 +710,7 @@ def main() -> None:
         scenario_committed_validation_symlink_sources_fail_closed,
         scenario_untouched_legacy_design_is_excluded,
         scenario_authority_only_prompt_control_change_rechecks_current_consumer,
+        scenario_authority_only_root_prd_prompt_control_change_rechecks_consumer,
         scenario_authority_rename_and_delete_fail_closed,
         scenario_worktree_authority_only_change_rechecks_current_consumer,
         scenario_untouched_legacy_consumer_is_excluded_from_authority_change,

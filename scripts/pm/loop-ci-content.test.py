@@ -143,5 +143,28 @@ class ContentTests(unittest.TestCase):
         result = self.check()
         self.assertEqual(result['status'], 'blocked', result)
 
+    def test_qualified_consumed_clause_refs_require_declared_fragment(self):
+        self.contract['content_refs'][0].pop('fragment')
+        self.reference.pop('consumed_clauses')
+        self.reference['contract_digest'] = contract_digest(self.contract)
+        self.reference['consumed_clause_refs'] = [self.qualified_reference()]
+        result = self.check()
+        self.assertEqual(result['status'], 'blocked', result)
+
+    def test_qualified_consumed_clause_refs_accept_clause_specific_fragment_fallback(self):
+        self.contract['content_refs'][0].pop('fragment')
+        self.contract['content_refs'][0]['fragments'] = {'a': 'a'}
+        self.reference.pop('consumed_clauses')
+        self.reference['contract_digest'] = contract_digest(self.contract)
+        self.reference['consumed_clause_refs'] = [self.qualified_reference()]
+        result = self.check()
+        self.assertEqual(result['status'], 'passed', result)
+
+    def test_legacy_bare_consumed_clause_remains_compatible_without_fragment(self):
+        self.contract['content_refs'][0].pop('fragment')
+        self.reference['contract_digest'] = contract_digest(self.contract)
+        result = self.check()
+        self.assertEqual(result['status'], 'passed', result)
+
 
 if __name__=='__main__': unittest.main()

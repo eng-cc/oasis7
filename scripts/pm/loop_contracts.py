@@ -277,6 +277,10 @@ def validate_consumed_clause_refs(
                 continue
             if declared_fragment is not None and item.get("fragment") != declared_fragment:
                 errors.append(f"consumed clause fragment mismatch: {item.get('path')}#{item.get('fragment')}")
+            elif bound and declared_fragment is None:
+                errors.append(
+                    f"consumed clause fragment is not declared for {item.get('path')}#{clause_id}"
+                )
             if bound:
                 if item.get("contract_id") != reference.get("contract_id"):
                     errors.append(f"consumed clause contract identity mismatch: {item.get('path')}#{item.get('fragment')}")

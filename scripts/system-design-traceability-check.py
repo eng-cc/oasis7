@@ -31,6 +31,7 @@ except RuntimeError as exc:
 
 DESIGN_SUFFIX = ".design.md"
 AUTHORITY_SUFFIXES = (".prd.md", DESIGN_SUFFIX)
+AUTHORITY_ROOT_BASENAMES = frozenset({"prd.md", "design.md"})
 PRODUCT_ROOT = Path("doc/product")
 DESIGN_STANDARD_EXCLUSIONS = frozenset(
     {
@@ -127,7 +128,7 @@ def is_traceability_authority_path(path: str) -> bool:
     normalized = Path(path).as_posix()
     return (
         normalized.startswith("doc/")
-        and normalized.endswith(AUTHORITY_SUFFIXES)
+        and (normalized.endswith(AUTHORITY_SUFFIXES) or Path(normalized).name in AUTHORITY_ROOT_BASENAMES)
         and normalized not in DESIGN_STANDARD_EXCLUSIONS
     )
 
