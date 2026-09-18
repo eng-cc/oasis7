@@ -179,6 +179,22 @@ class C1RedTests(unittest.TestCase):
             errors,
         )
 
+    def test_hosted_record_rejects_consumed_clause_source_oid(self):
+        record = deepcopy(self.record)
+        record["consumed_clause_refs"][0]["source_commit"] = "b" * 40
+        result = TRACE.validate_record(_refresh_digest(record))
+        self.assertEqual(result.get("status"), "blocked", result)
+        self.assertIn("source_commit", "\n".join(result.get("blockers", [])))
+
+    def test_hosted_record_rejects_consumed_clause_non_integer_revision(self):
+        record = deepcopy(self.record)
+        record["consumed_clause_refs"][0]["revision"] = "1"
+        result = TRACE.validate_record(_refresh_digest(record))
+        self.assertEqual(result.get("status"), "blocked", result)
+        blockers = "\n".join(result.get("blockers", []))
+        self.assertIn("consumed_clause_refs[0]", blockers)
+        self.assertIn("revision", blockers)
+
     def test_schema_keeps_typed_revision_integer_and_oid_out_of_clause_refs(self):
         schema = json.loads(
             (HERE / "schemas" / "loop-change.schema.json").read_text(encoding="utf-8")

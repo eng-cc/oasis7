@@ -19,6 +19,7 @@ import re
 import subprocess
 from typing import Any, Callable
 
+from loop_contracts import consumed_clause_ref_errors
 from loop_contracts import contract_digest as published_contract_digest
 from loop_contracts import resolve_frozen_fragment
 from loop_approval_authority import MARKER as APPROVAL_AUTHORITY_MARKER
@@ -849,8 +850,16 @@ def _validate_record_shape(record: Any, *, require_trace: bool = False) -> list[
                         errors.append(_trace_diagnostic("trace-owner-mismatch", obligation, "mapping slot owner_loop does not match", record=record))
                     if slot.get("owner_role") != obligation.get("owner_role"):
                         errors.append(_trace_diagnostic("trace-owner-mismatch", obligation, "mapping slot owner_role does not match", record=record))
-    if "consumed_clause_refs" in record and not isinstance(record["consumed_clause_refs"], list):
-        errors.append("consumed_clause_refs must be a list when present")
+    if "consumed_clause_refs" in record:
+        consumed_clause_refs = record["consumed_clause_refs"]
+        if not isinstance(consumed_clause_refs, list):
+            errors.append("consumed_clause_refs must be a list when present")
+        else:
+            for index, reference in enumerate(consumed_clause_refs):
+                errors.extend(
+                    f"consumed_clause_refs[{index}] consumed clause reference: {error}"
+                    for error in consumed_clause_ref_errors(reference, require_identity=True)
+                )
     feedback = record.get("feedback")
     if not isinstance(feedback, list):
         errors.append("feedback must be a list")

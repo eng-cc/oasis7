@@ -1413,8 +1413,26 @@ class TraceabilityTests(unittest.TestCase):
     def test_qw2_2_bare_same_id_consumption_blocks_and_path_refs_pass(self):
         record = deepcopy(self.record)
         record["consumed_clause_refs"] = [
-            {"repository": REPOSITORY, "path": "doc/one.md", "fragment": "shared", "clause_id": "shared"},
-            {"repository": REPOSITORY, "path": "doc/two.md", "fragment": "shared", "clause_id": "shared"},
+            {
+                "repository": REPOSITORY,
+                "path": "doc/one.md",
+                "fragment": "shared",
+                "contract_id": "shared-contract",
+                "revision": 1,
+                "contract_digest": "sha256:" + "1" * 64,
+                "publication_ref": {"repository": REPOSITORY, "issue_number": 3671, "comment_id": 5636639918},
+                "clause_id": "shared",
+            },
+            {
+                "repository": REPOSITORY,
+                "path": "doc/two.md",
+                "fragment": "shared",
+                "contract_id": "shared-contract",
+                "revision": 1,
+                "contract_digest": "sha256:" + "1" * 64,
+                "publication_ref": {"repository": REPOSITORY, "issue_number": 3671, "comment_id": 5636639918},
+                "clause_id": "shared",
+            },
         ]
         record["required_obligations"][0]["acceptance_refs"] = ["shared"]
         result = self.leaf(record, self.refresh_record_binding(record))
