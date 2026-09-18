@@ -440,6 +440,15 @@ jobs:
           git show "${{ steps.scope.outputs.source_scope_base }}:scripts/pm/check-cargo-package-scope" >"${trusted_checker}"
           chmod +x "${trusted_checker}"
           export OASIS7_CARGO_SCOPE_CHECKER="${trusted_checker}"
+          trusted_profile_planner="${RUNNER_TEMP}/trusted-cargo-package-profile-planner.py"
+          trusted_profile_driver="${RUNNER_TEMP}/trusted-cargo-package-profile-driver.py"
+          if git show "${{ steps.scope.outputs.source_scope_base }}:scripts/pm/cargo_package_profile_planner.py" >"${trusted_profile_planner}" 2>/dev/null &&
+             git show "${{ steps.scope.outputs.source_scope_base }}:scripts/pm/cargo_package_profile_driver.py" >"${trusted_profile_driver}" 2>/dev/null; then
+            export OASIS7_CARGO_PROFILE_PLANNER="${trusted_profile_planner}"
+            export OASIS7_CARGO_PROFILE_DRIVER="${trusted_profile_driver}"
+            export OASIS7_CARGO_PROFILE_INTEGRATION_BASE="${{ steps.scope.outputs.integration_base_oid }}"
+            export OASIS7_CARGO_PROFILE_SOURCE_HEAD="${{ steps.scope.outputs.head_oid }}"
+          fi
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${INTEGRATION_MODE}" == "integration_revalidation" ]]; then
             CI_VERBOSE=1 bash "${RUNNER_TEMP}/integration-planner/ci-tests.sh" required --repo-root "${GITHUB_WORKSPACE}" --impact-projection "${RUNNER_TEMP}/impact-projection.json"
           elif [[ "${GITHUB_EVENT_NAME}" == "pull_request" && -f "${RUNNER_TEMP}/impact-projection.json" ]]; then

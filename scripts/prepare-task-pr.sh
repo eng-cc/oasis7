@@ -1674,6 +1674,35 @@ else
   CARGO_PACKAGE_SCOPE_STATUS="validated"
   LOCAL_REQUIRED_EXTRA_COMMANDS+=("$CARGO_PACKAGE_SCOPE_COMMAND")
 fi
+if [[ "${OASIS7_CARGO_PROFILE_OPT_IN:-false}" == "true" ]]; then
+  CARGO_PROFILE_PLANNER="$CARGO_PACKAGE_SCOPE_AUTHORITY_DIR/cargo_package_profile_planner.py"
+  CARGO_PROFILE_DRIVER="$CARGO_PACKAGE_SCOPE_AUTHORITY_DIR/cargo_package_profile_driver.py"
+  CARGO_PROFILE_PLAN="$CARGO_PACKAGE_SCOPE_AUTHORITY_DIR/plan.json"
+  CARGO_PROFILE_RESULTS="${OASIS7_CARGO_PROFILE_RESULTS:-}"
+  [[ -n "$CARGO_PROFILE_RESULTS" && -f "$CARGO_PROFILE_RESULTS" ]] \
+    || die "Cargo package profile opt-in requires OASIS7_CARGO_PROFILE_RESULTS"
+  git -C "$SOURCE_WORKTREE" show "${SOURCE_SCOPE_BASE}:scripts/pm/cargo_package_profile_planner.py" >"$CARGO_PROFILE_PLANNER" 2>/dev/null \
+    || die "trusted base Cargo package profile planner is unavailable"
+  git -C "$SOURCE_WORKTREE" show "${SOURCE_SCOPE_BASE}:scripts/pm/cargo_package_profile_driver.py" >"$CARGO_PROFILE_DRIVER" 2>/dev/null \
+    || die "trusted base Cargo package profile driver is unavailable"
+  python3 "$CARGO_PROFILE_PLANNER" \
+    --repo-root "$SOURCE_WORKTREE" \
+    --integration-base "$COMPARISON_HEAD" \
+    --source-head "$SOURCE_HEAD" \
+    --policy .pm/cargo-package-scope-policy.json \
+    --checker scripts/pm/check-cargo-package-scope \
+    --profile "${OASIS7_CARGO_PROFILE_PROFILE:-native}" \
+    --output "$CARGO_PROFILE_PLAN" \
+    || die "trusted Cargo package profile planning failed"
+  CARGO_PROFILE_TESTED_TREE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tested_tree"])' "$CARGO_PROFILE_PLAN")"
+  python3 "$CARGO_PROFILE_DRIVER" \
+    --plan "$CARGO_PROFILE_PLAN" \
+    --results "$CARGO_PROFILE_RESULTS" \
+    --integration-base "$COMPARISON_HEAD" \
+    --source-head "$SOURCE_HEAD" \
+    --tested-tree "$CARGO_PROFILE_TESTED_TREE" \
+    || die "Cargo package profile completion validation failed"
+fi
 rm -rf "$CARGO_PACKAGE_SCOPE_AUTHORITY_DIR"
 
 REMOTE_SOURCE_REF=""

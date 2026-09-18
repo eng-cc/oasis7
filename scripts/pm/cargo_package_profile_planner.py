@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
@@ -201,3 +202,39 @@ def plan_package_profiles(
     identity = json.dumps(plan, sort_keys=True, separators=(",", ":")).encode("utf-8")
     plan["plan_id"] = "sha256:" + hashlib.sha256(identity).hexdigest()
     return plan
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--repo-root", required=True)
+    parser.add_argument("--integration-base", required=True)
+    parser.add_argument("--source-head", required=True)
+    parser.add_argument("--policy", required=True)
+    parser.add_argument("--checker", required=True)
+    parser.add_argument("--profile", action="append", required=True)
+    parser.add_argument("--output")
+    args = parser.parse_args()
+    profiles: list[Any] = []
+    for raw in args.profile:
+        try:
+            profiles.append(json.loads(raw))
+        except json.JSONDecodeError:
+            profiles.append(raw)
+    plan = plan_package_profiles(
+        args.repo_root,
+        integration_base=args.integration_base,
+        source_head=args.source_head,
+        policy_path=args.policy,
+        checker_path=args.checker,
+        profiles=profiles,
+    )
+    rendered = json.dumps(plan, sort_keys=True, separators=(",", ":")) + "\n"
+    if args.output:
+        Path(args.output).write_text(rendered, encoding="utf-8")
+    else:
+        print(rendered, end="")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

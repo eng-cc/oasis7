@@ -489,6 +489,30 @@ run_cargo_package_scope_check() {
 run_cargo_package_profile_completion_check() {
   local plan="${OASIS7_CARGO_PROFILE_PLAN:-}"
   local results="${OASIS7_CARGO_PROFILE_RESULTS:-}"
+  local generated_plan=""
+  if [[ "${OASIS7_CARGO_PROFILE_OPT_IN:-false}" == "true" ]]; then
+    local planner="${OASIS7_CARGO_PROFILE_PLANNER:-./scripts/pm/cargo_package_profile_planner.py}"
+    [[ -f "$planner" && -n "$results" && \
+       -n "${OASIS7_CARGO_PROFILE_INTEGRATION_BASE:-}" && \
+       -n "${OASIS7_CARGO_PROFILE_SOURCE_HEAD:-}" ]] || {
+      echo "error: opt-in Cargo package profile planning requires trusted planner, results, integration base, and source head" >&2
+      return 1
+    }
+    generated_plan="$(mktemp)"
+    if ! python3 "$planner" \
+      --repo-root "$repo_root" \
+      --integration-base "$OASIS7_CARGO_PROFILE_INTEGRATION_BASE" \
+      --source-head "$OASIS7_CARGO_PROFILE_SOURCE_HEAD" \
+      --policy .pm/cargo-package-scope-policy.json \
+      --checker scripts/pm/check-cargo-package-scope \
+      --profile "${OASIS7_CARGO_PROFILE_PROFILE:-native}" \
+      --output "$generated_plan"; then
+      rm -f "$generated_plan"
+      return 1
+    fi
+    plan="$generated_plan"
+    OASIS7_CARGO_PROFILE_TESTED_TREE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tested_tree"])' "$plan")"
+  fi
   if [[ -z "$plan" && -z "$results" ]]; then
     echo "skip: Cargo package profile completion reason=package_profile_plan_not_activated claim_boundary=legacy_required_coverage_only"
     return 0
@@ -503,12 +527,16 @@ run_cargo_package_profile_completion_check() {
     echo "error: Cargo package profile completion identity is incomplete" >&2
     return 1
   }
-  run python3 ./scripts/pm/cargo_package_profile_driver.py \
+  local driver="${OASIS7_CARGO_PROFILE_DRIVER:-./scripts/pm/cargo_package_profile_driver.py}"
+  local result=0
+  run python3 "$driver" \
     --plan "$plan" \
     --results "$results" \
     --integration-base "$OASIS7_CARGO_PROFILE_INTEGRATION_BASE" \
     --source-head "$OASIS7_CARGO_PROFILE_SOURCE_HEAD" \
-    --tested-tree "$OASIS7_CARGO_PROFILE_TESTED_TREE"
+    --tested-tree "$OASIS7_CARGO_PROFILE_TESTED_TREE" || result=$?
+  [[ -z "$generated_plan" ]] || rm -f "$generated_plan"
+  return "$result"
 }
 
 run_required_gate_checks() {

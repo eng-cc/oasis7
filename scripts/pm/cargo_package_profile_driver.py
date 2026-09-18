@@ -41,6 +41,22 @@ def validate_planned_items(
         raise DriverError("duplicate or invalid planned items")
     if not isinstance(items, list) or [item.get("id") for item in items] != selected:
         raise DriverError("planned item inventory mismatch")
+    if not selected:
+        disposition = plan.get("execution_disposition")
+        if disposition not in {"legacy_required_coverage", "full_escalation"}:
+            raise DriverError("empty planned items require an explicit legacy/full disposition")
+        if plan.get("disposition_validated") is not True:
+            raise DriverError("empty planned item disposition is not validated")
+        result_list = list(results)
+        if result_list:
+            raise DriverError("unknown results for explicit empty-plan disposition")
+        return {
+            "status": "passed",
+            "plan_id": plan.get("plan_id"),
+            "completed_items": [],
+            "execution_disposition": disposition,
+            **expected_identity,
+        }
 
     by_id: dict[str, dict[str, Any]] = {}
     for result in results:
