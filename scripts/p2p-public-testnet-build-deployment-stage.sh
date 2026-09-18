@@ -561,7 +561,21 @@ if runtime_receipt.get("peer_id") != receipt["libp2p_peer_id"]:
 PY
 fi
 
-out_dir=$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).expanduser().resolve())' "$out_dir")
+out_dir=$(python3 - "$out_dir" <<'PY'
+import pathlib
+import sys
+
+requested = pathlib.Path(sys.argv[1]).expanduser()
+absolute = requested if requested.is_absolute() else pathlib.Path.cwd() / requested
+if absolute.is_symlink():
+    raise SystemExit(f"refusing symlinked output path: {requested}")
+resolved = absolute.resolve()
+cwd = pathlib.Path.cwd().resolve()
+if resolved == pathlib.Path(resolved.anchor) or resolved == cwd or resolved in cwd.parents:
+    raise SystemExit(f"refusing unsafe output path: {requested}")
+print(resolved)
+PY
+)
 rm -rf "$out_dir"
 mkdir -p "$out_dir/config/doc/testing/evidence" "$out_dir/generated-world"
 
@@ -984,12 +998,22 @@ path.write_text(content, encoding="utf-8")
 PY
 
 if [[ $has_validator_47 -eq 1 ]]; then
-  cat >>"$deployment_truth_md" <<EOF
-- Validator-47 identity import: `identity/$VALIDATOR_47_IDENTITY_KEY_FILE` (bytes copied from the already-staged source; no key regeneration)
-- Validator-47 identity key sha256: `$identity_key_sha256`
-- Validator-47 identity public receipt: `identity/$VALIDATOR_47_IDENTITY_RECEIPT_FILE`
-- Validator-47 identity receipt sha256: `$identity_receipt_sha256`
-EOF
+  python3 - "$deployment_truth_md" "$VALIDATOR_47_IDENTITY_KEY_FILE" "$identity_key_sha256" \
+    "$VALIDATOR_47_IDENTITY_RECEIPT_FILE" "$identity_receipt_sha256" <<'PY'
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+key_file, key_sha256, receipt_file, receipt_sha256 = sys.argv[2:]
+with path.open("a", encoding="utf-8") as handle:
+    handle.write(
+        f"- Validator-47 identity import: `identity/{key_file}` "
+        "(bytes copied from the already-staged source; no key regeneration)\n"
+        f"- Validator-47 identity key sha256: `{key_sha256}`\n"
+        f"- Validator-47 identity public receipt: `identity/{receipt_file}`\n"
+        f"- Validator-47 identity receipt sha256: `{receipt_sha256}`\n"
+    )
+PY
 fi
 
 if [[ -n "$validator_pair_provenance_ref" ]]; then

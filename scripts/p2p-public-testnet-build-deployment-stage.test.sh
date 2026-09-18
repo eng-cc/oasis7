@@ -97,6 +97,26 @@ PY
   --extra-validator triad-testnet-fourth-local:f640bc1ceb82b261baf51ab1504a2dc4c10901873252e67551dcfe1f5b7b21af:100 \
   --out-dir "$TMP_DIR/stage" >/dev/null
 
+mkdir -p "$TMP_DIR/unsafe-dot" "$TMP_DIR/symlink-target"
+printf 'preserve\n' >"$TMP_DIR/symlink-target/sentinel"
+ln -s "$TMP_DIR/symlink-target" "$TMP_DIR/symlink-stage"
+assert_fails_containing "refusing unsafe output path" \
+  bash -c 'cd "$1" && shift && "$@"' _ "$TMP_DIR/unsafe-dot" \
+  "$ROOT_DIR/scripts/p2p-public-testnet-build-deployment-stage.sh" \
+  --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
+  --bootstrap-peers-file "$TMP_DIR/bootstrap-peers.txt" \
+  --sequencer-finality-public-key 65c27d898af9c528ebd6a3762373faef110bb7bb515dfa88c447f292474aac16 \
+  --storage-finality-public-key 858e97be96f238ef3f6e07ec36d4ba5f503755ecb232d06a80ef1ab8aaca44f6 \
+  --out-dir .
+assert_fails_containing "refusing symlinked output path" \
+  "$ROOT_DIR/scripts/p2p-public-testnet-build-deployment-stage.sh" \
+  --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
+  --bootstrap-peers-file "$TMP_DIR/bootstrap-peers.txt" \
+  --sequencer-finality-public-key 65c27d898af9c528ebd6a3762373faef110bb7bb515dfa88c447f292474aac16 \
+  --storage-finality-public-key 858e97be96f238ef3f6e07ec36d4ba5f503755ecb232d06a80ef1ab8aaca44f6 \
+  --out-dir "$TMP_DIR/symlink-stage"
+test -f "$TMP_DIR/symlink-target/sentinel"
+
 test -f "$TMP_DIR/stage/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json"
 test -f "$TMP_DIR/stage/config/public-testnet-governance-public-signers-deployment-2026-06-06.json"
 test -f "$TMP_DIR/stage/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json"
@@ -247,6 +267,12 @@ triad_stage="$TMP_DIR/stage-triad"
   --out-dir "$triad_stage" >/dev/null
 test -f "$triad_stage/config/public-testnet-validator-triad-inventory.v1.json"
 test -f "$triad_stage/config/doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json"
+grep -Fqx -- '- Validator-47 identity import: `identity/node-keypair.toml` (bytes copied from the already-staged source; no key regeneration)' "$triad_stage/deployment-truth.md"
+expected_identity_key_sha=$(shasum -a 256 "$validator47_identity/node-keypair.toml" | awk '{print $1}')
+expected_identity_receipt_sha=$(shasum -a 256 "$validator47_identity/identity-receipt.json" | awk '{print $1}')
+grep -Fqx -- "- Validator-47 identity key sha256: \`$expected_identity_key_sha\`" "$triad_stage/deployment-truth.md"
+grep -Fqx -- '- Validator-47 identity public receipt: `identity/identity-receipt.json`' "$triad_stage/deployment-truth.md"
+grep -Fqx -- "- Validator-47 identity receipt sha256: \`$expected_identity_receipt_sha\`" "$triad_stage/deployment-truth.md"
 triad_inventory_sha=$(shasum -a 256 "$ROOT_DIR/scripts/public-testnet-validator-triad-inventory.v1.json" | awk '{print $1}')
 jq -e --arg sha "$triad_inventory_sha" '
   .deployment_inventory.ref == "scripts/public-testnet-validator-triad-inventory.v1.json"
