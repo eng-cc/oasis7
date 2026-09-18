@@ -125,11 +125,11 @@ def main():
   # for workflow_dispatch, `scope=full` and the all-capability selector output
   # are the explicit execution record and the projection digest remains the
   # immutable source evidence link.
-  if a.run_mode != "full_escalation" and not (a.run_mode=="legacy" and a.event_name=="workflow_dispatch"):
+  if a.run_mode not in {"integration_revalidation", "full_escalation"} and not (a.run_mode=="legacy" and a.event_name=="workflow_dispatch"):
    if projection["ci_scope"] != actual_scope: die("impact projection planner scope identity mismatch")
    if projection["ci_capabilities"] != actual_capabilities: die("impact projection planner capabilities identity mismatch")
   elif actual_scope != "full" or actual_capabilities != sorted(CAPABILITIES):
-   die("full escalation impact projection execution scope is not full")
+   die("integration revalidation/full escalation impact projection execution scope is not full")
   vals.update({"impact_projection_schema":projection["schema"],"impact_projection_digest":projection["projection_digest"],"impact_projection_status":"verified","test_profile":projection["test_profile"],"declared_tests":";".join(projection["declared_tests"]),"planner_digest":projection["planner_digest"]})
  text="\n".join(f"{k}={v}" for k,v in vals.items())+"\n"
  if a.github_output: Path(a.github_output).open("a").write(text)
