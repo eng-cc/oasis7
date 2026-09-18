@@ -841,6 +841,45 @@ if "cannot record and read back canonical draft_candidate frozen identity" not i
     raise SystemExit(f"unexpected producer failure: {stderr}")
 PY
 
+# A stale package projection must not override the live Issue authority.
+stale_package_base="$SOURCE_HEAD"
+python3 - "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" "$TASK_UID" <<'PY'
+import json
+import sys
+
+path, task_uid = sys.argv[1:]
+data = json.loads(open(path, encoding="utf-8").read())
+data["tasks"][task_uid]["primary_package"] = "cached-package"
+open(path, "w", encoding="utf-8").write(json.dumps(data) + "\n")
+PY
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add -f .pm/github-project-sync/tasks.json
+"$REAL_GIT" -C "$SMOKE_WORKTREE" \
+  -c user.name="oasis7 smoke" \
+  -c user.email="smoke@example.invalid" \
+  -c commit.gpgsign=false \
+  commit --no-verify -m "test: stale primary package cache" >/dev/null
+SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+stale_package_body="$TMPDIR/stale-package-body.json"
+stale_package_comments="$TMPDIR/stale-package-comments.json"
+printf '{"body":"<!-- oasis7-pm-task -->\\ntask_uid: %s\\n\\nTask metadata:\\n- primary_package: `live-package`\\n","number":123,"title":"fixture","url":"https://github.com/example/oasis7/issues/123"}\n' "$TASK_UID" >"$stale_package_body"
+cat >"$stale_package_comments" <<EOF
+{"comments":[{"body":"<!-- oasis7-pm-evidence -->\\nTask UID: $TASK_UID\\nSource Worktree: $SMOKE_WORKTREE_CANONICAL\\nSource Branch: $SMOKE_BRANCH\\nSource Head: $SOURCE_HEAD\\nComparison Ref: refs/remotes/origin/main\\nComparison OID: $COMPARISON_OID\\n"}]}
+EOF
+stale_package_log="$TMPDIR/gh-stale-package.log"
+stale_package_git_log="$TMPDIR/git-stale-package.log"
+if TEST_GH_PERSIST_COMMENT=0 TEST_GH_ISSUE_BODY_JSON="$stale_package_body" TEST_GH_ISSUE_VIEW_JSON="$stale_package_comments" \
+  run_prepare "$stale_package_log" "$stale_package_git_log" --draft-candidate \
+  >"$TMPDIR/stale-package.out" 2>"$TMPDIR/stale-package.err"; then
+  echo "expected stale primary_package cache to fail closed" >&2
+  exit 1
+fi
+if ! grep -q "primary_package cache differs from live Issue" "$TMPDIR/stale-package.err"; then
+  cat "$TMPDIR/stale-package.err" >&2
+  exit 1
+fi
+"$REAL_GIT" -C "$SMOKE_WORKTREE" reset --hard "$stale_package_base" >/dev/null
+SOURCE_HEAD="$stale_package_base"
+
 draft_log="$TMPDIR/gh-draft-candidate.log"
 draft_git_log="$TMPDIR/git-draft-candidate.log"
 draft_out="$TMPDIR/draft-candidate.out"

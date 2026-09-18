@@ -1356,6 +1356,21 @@ try:
     import base64
     live_issue = json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo_name}/issues/{issue_number}'], text=True))
     live_body = live_issue.get('body', '')
+    if not isinstance(live_body, str):
+        fail('live Issue body is not text')
+    package_lines = re.findall(r'^- primary_package:.*$', live_body, re.MULTILINE)
+    package_matches = re.findall(r'^- primary_package: `([^`]+)`$', live_body, re.MULTILINE)
+    if 'primary_package:' in live_body and (len(package_lines) != 1 or len(package_matches) != 1):
+        fail('malformed live primary_package')
+    live_primary_package = package_matches[0].strip() if package_matches else ''
+    if live_primary_package and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*', live_primary_package) is None:
+        fail(f'live primary_package is invalid: {live_primary_package}')
+    mapped_primary_package = str(record.get('primary_package') or '').strip()
+    if mapped_primary_package != live_primary_package:
+        fail(
+            'primary_package cache differs from live Issue: '
+            f"{mapped_primary_package or '<missing>'} != {live_primary_package or '<missing>'}"
+        )
     matches = re.findall(r'^- loop_binding_b64: `([^`]+)`$', live_body, re.MULTILINE)
     if 'loop_binding_b64:' in live_body:
         if len(matches) != 1: fail('malformed live loop binding')
