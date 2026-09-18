@@ -31,6 +31,13 @@ class TaskCloseoutV2LiveValidationTest(unittest.TestCase):
         source = (PM / "task-closeout.sh").read_text(encoding="utf-8")
         self.assertNotIn('${CI_RECEIPT_ARGS[@]}', source)
 
+    def test_nested_traceability_record_cannot_hide_aggregate_mode(self):
+        source = (PM / "task-closeout.sh").read_text(encoding="utf-8")
+        self.assertIn("def record_declares_aggregate(value):", source)
+        self.assertIn("or record_declares_aggregate(declared_record)", source)
+        self.assertIn("or record_declares_aggregate(record)", source)
+        self.assertIn("or declared_candidate is not None", source)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name) / "fixture"

@@ -18,6 +18,7 @@ def module(name):
 
 TASK = module('github-project-task')
 SYNC = module('github-project-sync')
+WORKFLOW = module('github-project-workflow')
 UID = 'task_' + 'a' * 32
 BINDING = dict(schema='oasis7.loop-task/v1', task_uid=UID, change_id='change-1', loop='code',
                owner_role='repository_health_engineer', bootstrap_epoch=1, manual_request_ref='user-message:1',
@@ -25,6 +26,14 @@ BINDING = dict(schema='oasis7.loop-task/v1', task_uid=UID, change_id='change-1',
                input_contracts=[], acceptance_refs=['M06'], dependencies=[], target_delivery='test',
                policy_digest='sha256:' + 'b' * 64, policy_commit='c' * 40,
                delivery_obligations=[{'id': 'manual', 'status': 'pending'}])
+TRACEABILITY_CONTEXT = {
+    'traceability_mode': 'aggregate',
+    'coordination_ref': {'task_uid': 'task_' + 'd' * 32, 'issue_number': 42},
+    'traceability_record': {'mode': 'aggregate', 'obligations': [{'id': 'verify'}]},
+    'coordination_record': {'publication_ref': {'issue_number': 42, 'comment_id': 7}},
+    'traceability_candidate': {'status': 'verified'},
+    'aggregate_candidate': {'status': 'pending'},
+}
 
 class LoopTransport(unittest.TestCase):
     def test_dependency_readiness_requires_merged_terminal(self):
@@ -134,10 +143,95 @@ class LoopTransport(unittest.TestCase):
         parsed = TASK.issue_task_fields(TASK.issue_body(TASK.task_from_record(UID, record)))
         self.assertEqual(parsed.get('loop_binding'), BINDING)
 
+    def test_roundtrip_preserves_issue_authoritative_traceability_context(self):
+        record = dict(owner_role=BINDING['owner_role'], loop_binding=BINDING, **TRACEABILITY_CONTEXT)
+        body = TASK.issue_body(TASK.task_from_record(UID, record))
+        parsed = TASK.issue_task_fields(body)
+        self.assertEqual(
+            {key: parsed.get(key) for key in TRACEABILITY_CONTEXT},
+            TRACEABILITY_CONTEXT,
+        )
+        live = WORKFLOW.normalized_issue_traceability(body)
+        self.assertEqual(live.get('loop_binding'), BINDING)
+        self.assertEqual(
+            {key: live.get(key) for key in TRACEABILITY_CONTEXT},
+            TRACEABILITY_CONTEXT,
+        )
+
     def test_legacy_has_no_synthesized_binding(self):
         parsed = TASK.issue_task_fields(TASK.issue_body(TASK.task_from_record(UID, {})))
         self.assertNotIn('loop_binding', parsed)
         self.assertNotIn('Loop', SYNC.project_field_values({}))
+
+    def test_consumption_summary_is_derived_and_marks_unread_scope(self):
+        task = dict(loop_binding=BINDING, traceability_record={
+            'required_obligations': [{'id': 'aggregate'}],
+            'affected_consumers': [{'task_uid': 'task_' + 'e' * 32}],
+        }, aggregate_candidate={'verified_results': [{'id': 'leaf-a', 'status': 'passed'}]})
+        summary = WORKFLOW.consumption_summary(task, ['fixture blocker'])
+        self.assertTrue(summary['derived'])
+        self.assertEqual(summary['inputs'], [])
+        self.assertEqual(summary['obligations'], [{'id': 'aggregate'}])
+        self.assertEqual(summary['verified_results'][0]['status'], 'passed')
+        self.assertEqual(summary['blockers'], ['fixture blocker'])
+        self.assertEqual(summary['unread_scope'], ['input_contracts'])
+
+    def test_mapping_refresh_clears_deleted_traceability_context(self):
+        with tempfile.TemporaryDirectory() as directory:
+            mapping = pathlib.Path(directory) / 'tasks.json'
+            mapping.write_text(json.dumps({'tasks': {UID: dict(TRACEABILITY_CONTEXT)}}))
+            TASK.merge_task_mapping(
+                mapping, UID, {'status': 'committed'},
+                clear_keys=frozenset(TRACEABILITY_CONTEXT),
+            )
+            refreshed = json.loads(mapping.read_text())['tasks'][UID]
+            self.assertEqual(refreshed['status'], 'committed')
+            self.assertTrue(all(key not in refreshed for key in TRACEABILITY_CONTEXT))
+
+    def test_lifecycle_writer_uses_live_traceability_without_overwriting_binding(self):
+        cached = {'loop_binding': BINDING, **TRACEABILITY_CONTEXT}
+        live = {'loop_binding': BINDING, 'coordination_ref': {'issue_number': 99}}
+        cleared = TASK.synchronize_live_issue_traceability('eng-cc/oasis7', UID, cached, live=live)
+        self.assertEqual(cached['loop_binding'], BINDING)
+        self.assertEqual(cached['coordination_ref'], {'issue_number': 99})
+        self.assertEqual(cleared, frozenset(set(TRACEABILITY_CONTEXT) - {'coordination_ref'}))
+        self.assertTrue(all(key not in cached for key in cleared))
+
+    def test_binding_writer_preserves_explicit_binding_but_syncs_live_context(self):
+        proposed = dict(BINDING, bootstrap_epoch=2)
+        cached = {'loop_binding': proposed, **TRACEABILITY_CONTEXT}
+        live = {'loop_binding': BINDING, 'coordination_ref': {'issue_number': 99}}
+        TASK.synchronize_live_issue_traceability(
+            'eng-cc/oasis7', UID, cached, live=live,
+            explicit_updates=frozenset({'loop_binding'}),
+        )
+        self.assertEqual(cached['loop_binding'], proposed)
+        self.assertEqual(cached['coordination_ref'], {'issue_number': 99})
+
+    def test_lifecycle_writer_fails_closed_when_live_binding_disappears(self):
+        cached = {'loop_binding': BINDING, **TRACEABILITY_CONTEXT}
+        with self.assertRaisesRegex(SystemExit, 'live loop binding disappeared'):
+            TASK.synchronize_live_issue_traceability(
+                'eng-cc/oasis7', UID, cached, live={'coordination_ref': {'issue_number': 99}},
+            )
+
+    def test_lifecycle_writer_rejects_live_binding_drift(self):
+        cached = {'loop_binding': BINDING, **TRACEABILITY_CONTEXT}
+        drifted = dict(BINDING, change_id='drifted')
+        with self.assertRaisesRegex(SystemExit, 'differs from cached immutable binding'):
+            TASK.synchronize_live_issue_traceability(
+                'eng-cc/oasis7', UID, cached, live={'loop_binding': drifted},
+            )
+
+    def test_live_traceability_deletion_never_falls_back_to_cache(self):
+        errors = WORKFLOW.traceability_projection_errors(
+            UID,
+            {'loop_binding': BINDING, **TRACEABILITY_CONTEXT},
+            {},
+        )
+        self.assertEqual(len(errors), 1 + len(TRACEABILITY_CONTEXT))
+        self.assertTrue(all('live ' in error and 'projection is missing' in error for error in errors))
+        self.assertEqual(WORKFLOW.authoritative_selected_traceability({}), {})
 
     def test_project_navigation(self):
         fields = SYNC.project_field_values(dict(loop_binding=BINDING))
