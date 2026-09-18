@@ -176,6 +176,16 @@ class LoopTransport(unittest.TestCase):
         self.assertEqual(summary['blockers'], ['fixture blocker'])
         self.assertEqual(summary['unread_scope'], ['input_contracts'])
 
+    def test_live_traceability_deletion_never_falls_back_to_cache(self):
+        errors = WORKFLOW.traceability_projection_errors(
+            UID,
+            {'loop_binding': BINDING, **TRACEABILITY_CONTEXT},
+            {},
+        )
+        self.assertEqual(len(errors), 1 + len(TRACEABILITY_CONTEXT))
+        self.assertTrue(all('live ' in error and 'projection is missing' in error for error in errors))
+        self.assertEqual(WORKFLOW.authoritative_selected_traceability({}), {})
+
     def test_project_navigation(self):
         fields = SYNC.project_field_values(dict(loop_binding=BINDING))
         self.assertEqual(fields.get('Loop'), 'code')

@@ -259,6 +259,34 @@ def consumption_summary(task: dict[str, Any], blockers: list[str]) -> dict[str, 
     }
 
 
+TRACEABILITY_CONTEXT_KEYS = (
+    "loop_binding", "traceability_mode", "coordination_ref", "traceability_record",
+    "coordination_record", "traceability_candidate", "aggregate_candidate",
+)
+
+
+def traceability_projection_errors(uid: str, cached: dict[str, Any], live: dict[str, Any]) -> list[str]:
+    """Reject deletion or drift of Issue-authoritative traceability fields."""
+    errors: list[str] = []
+    for key in TRACEABILITY_CONTEXT_KEYS:
+        if cached.get(key) is None:
+            continue
+        if key not in live:
+            errors.append(
+                f"{uid}: live {key} projection is missing; refresh explicitly from authoritative GitHub issue"
+            )
+        elif cached.get(key) != live.get(key):
+            errors.append(
+                f"{uid}: cached {key} drift; refresh explicitly from authoritative GitHub issue"
+            )
+    return errors
+
+
+def authoritative_selected_traceability(live: dict[str, Any]) -> dict[str, Any]:
+    """Project selected-task traceability exclusively from the bounded live Issue read."""
+    return {key: live[key] for key in TRACEABILITY_CONTEXT_KEYS if key in live}
+
+
 def read_canonical_non_pr_evidence(
     task_uid: str, record: dict[str, Any]
 ) -> tuple[bytes | None, str | None]:
@@ -841,16 +869,7 @@ def command_audit(args: argparse.Namespace) -> int:
                 errors.append(
                     f"{uid}: cached {key} drift; refresh explicitly from authoritative GitHub issue"
                 )
-        for key in (
-            "loop_binding", "traceability_mode", "coordination_ref", "traceability_record",
-            "coordination_record", "traceability_candidate", "aggregate_candidate",
-        ):
-            if key not in live_traceability or key not in record:
-                continue
-            if record.get(key) != live_traceability.get(key):
-                errors.append(
-                    f"{uid}: cached {key} drift; refresh explicitly from authoritative GitHub issue"
-                )
+        errors.extend(traceability_projection_errors(uid, record, live_traceability))
         live_evidence_present = "non_pr_completion_evidence" in live_traceability
         live_digest_present = (
             "non_pr_completion_evidence_sha256" in live_traceability
@@ -975,28 +994,14 @@ def command_audit(args: argparse.Namespace) -> int:
         for key in (
             "owner_role",
             "change_id",
-            "traceability_mode",
             "completion_mode",
-            "coordination_ref",
-            "traceability_record",
-            "coordination_record",
-            "traceability_candidate",
-            "aggregate_candidate",
             "doc_refs",
             "related_prd",
             "non_pr_completion_evidence_sha256",
         ):
             if key in task and task[key] is not None:
                 selected_task[key] = task[key]
-        for key in (
-            "traceability_mode", "coordination_ref", "traceability_record",
-            "coordination_record", "traceability_candidate", "aggregate_candidate",
-        ):
-            if key in live_task:
-                selected_task[key] = live_task[key]
-        binding = live_task.get("loop_binding", task.get("loop_binding"))
-        if isinstance(binding, dict):
-            selected_task["loop_binding"] = binding
+        selected_task.update(authoritative_selected_traceability(live_task))
     result = {
         "status": "failed" if errors else "ok",
         "project_owner": args.project_owner,
