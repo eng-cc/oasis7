@@ -67,6 +67,35 @@ if python3 "$HELPER" validate "${COMMON[@]}" --trigger schedule >"$TMP_DIR/trigg
 fi
 grep -F 'trigger must be workflow_dispatch' "$TMP_DIR/trigger.err"
 
+failed=0
+expect_trusted_identity_failure() {
+  local label="$1"
+  shift
+  if GITHUB_REF=refs/heads/main GITHUB_SHA="$HEAD" python3 "$HELPER" validate "${COMMON[@]}" "$@" >"$TMP_DIR/${label}.out" 2>"$TMP_DIR/${label}.err"; then
+    echo "expected trusted full-escalation identity rejection: ${label}" >&2
+    failed=1
+  else
+    echo "observed trusted full-escalation rejection: ${label}"
+  fi
+}
+
+expect_trusted_identity_failure untrusted-ref \
+  --ref refs/heads/untrusted-candidate
+expect_trusted_identity_failure wrong-workflow-commit \
+  --workflow-commit ffffffffffffffffffffffffffffffffffffffff
+expect_trusted_identity_failure wrong-pr \
+  --pr-number 9999
+expect_trusted_identity_failure wrong-source-head \
+  --expected-head ffffffffffffffffffffffffffffffffffffffff \
+  --actual-head ffffffffffffffffffffffffffffffffffffffff
+expect_trusted_identity_failure wrong-repository \
+  --repository other/repo \
+  --evidence-url https://github.com/other/repo/issues/2832#issuecomment-123
+
+if [[ "$failed" -ne 0 ]]; then
+  exit 1
+fi
+
 WORKFLOW="$ROOT_DIR/.github/workflows/rust.yml"
 grep -Fq "if: github.event_name == 'schedule'" "$WORKFLOW"
 grep -Fq "if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'full_escalation'" "$WORKFLOW"
