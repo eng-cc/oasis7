@@ -252,6 +252,17 @@ class ProvenanceTests(unittest.TestCase):
   self.assertLess(required.index('Upload required planner artifact'),required.index('Install pinned Rust toolchains'))
   self.assertLess(required.index('cp scripts/plan-rust-required-scope.py'),required.index('integration_ci.py" prepare'))
 
+ def test_pull_request_base_planner_bundle_includes_impact_helper(self):
+  workflow=(HERE.parents[1]/'.github/workflows/rust.yml').read_text()
+  required=workflow[workflow.index('  required-gate:'):workflow.index('  windows-package-rollout-behavior:')]
+  mkdir='mkdir -p "${authority_dir}/pm"'
+  helper='git show "${base_ref}:scripts/pm/workflow-impact-projection.py" >"${authority_dir}/pm/workflow-impact-projection.py"'
+  planner='planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py")'
+  self.assertIn(mkdir,required)
+  self.assertIn(helper,required)
+  self.assertLess(required.index(mkdir),required.index(helper))
+  self.assertLess(required.index(helper),required.index(planner))
+
  def test_premerge_activation_cannot_dispatch_candidate(self):
   with patch.object(self.api,'gh',side_effect=[self.pr,self.pr,{'default_branch':'main'},{'content':'bm8gbW9kZQ=='}]),patch.object(self.api.subprocess,'run') as run:
    with self.assertRaisesRegex(ValueError,'activation pending'):self.api.dispatch('owner/repo',self.uid,12,None)
