@@ -232,7 +232,8 @@ class ReceiptTest(unittest.TestCase):
       "run_attempt":1,"base_oid":"b"*40,"head_oid":"a"*40,"tested_tree_oid":"t"*40}
     check=run(); check["details_url"]="https://github.com/eng-cc/oasis7/actions/runs/12345/job/9"
     full=M.canonical_planner({**plan(),"scope":"full",**{field:"true" for field in M.RUN_FIELDS}})
-    workflow=base64.b64encode(b"name: Rust\n# trusted workflow before package profile envelope producer\n").decode()
+    encoded=base64.b64encode(b"name: Rust\n# trusted workflow before package profile envelope producer\n").decode()
+    workflow="\n".join(encoded[index:index+12] for index in range(0,len(encoded),12))+"\n"
     def read(*args):
       if "artifacts?" in args[-1]: return {"artifacts":[]}
       if "/contents/.github/workflows/rust.yml?ref=" in args[-1]: return {"encoding":"base64","content":workflow}
@@ -249,6 +250,11 @@ class ReceiptTest(unittest.TestCase):
     original=M.review_evidence_digest(receipt)
     receipt["cargo_package_profile"]={**disposition,"workflow_sha":"d"*40}
     self.assertNotEqual(original,M.review_evidence_digest(receipt))
+
+  def test_trusted_workflow_source_rejects_non_base64_after_whitespace_normalization(self):
+    with patch.object(M,"gh",return_value={"encoding":"base64","content":"bmFtZTogUnVzdAo=\n!"}):
+      with self.assertRaisesRegex(SystemExit,"malformed"):
+        M._trusted_workflow_source("eng-cc/oasis7","b"*40)
 
   def test_missing_envelope_fails_after_trusted_workflow_has_producer(self):
     proof={"workflow_run_id":12345,"workflow_sha":"b"*40,

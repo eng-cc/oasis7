@@ -115,7 +115,10 @@ def _trusted_workflow_source(repository, workflow_sha):
     response=gh("api",f"repos/{repository}/contents/.github/workflows/rust.yml?ref={workflow_sha}")
     if response.get("encoding")!="base64" or not isinstance(response.get("content"),str):
         raise SystemExit("ci-ready-receipt: trusted workflow source is unavailable")
-    try: return base64.b64decode(response["content"],validate=True)
+    # GitHub's Contents API line-wraps base64.  Remove only JSON-decoded ASCII
+    # whitespace, then retain strict alphabet/padding validation.
+    normalized="".join(response["content"].split())
+    try: return base64.b64decode(normalized,validate=True)
     except Exception as exc: raise SystemExit(f"ci-ready-receipt: trusted workflow source is malformed: {exc}")
 
 def cargo_package_profile_for_run(repository, check_run, proof, planner, *, task_uid, task_issue_number, pr_number):
