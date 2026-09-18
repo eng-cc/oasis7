@@ -90,6 +90,113 @@ def evidence_digest(payload: dict[str, Any]) -> str:
     return canonical_digest(payload)
 
 
+DIAGNOSTIC_ERROR_CLASSES = (
+    "invalid_reference",
+    "revision_type_mismatch",
+    "source_snapshot_mismatch",
+    "legacy_compatibility",
+    "authority_unavailable",
+    "projection_absent",
+    "empty_projection",
+)
+
+
+_DIAGNOSTIC_ERROR_CLASS_BY_CODE = {
+    "trace-na-incomplete": "invalid_reference",
+    "trace-na-evidence-unresolved": "invalid_reference",
+    "trace-ref-unresolved": "invalid_reference",
+    "trace-required-alias-mismatch": "invalid_reference",
+    "trace-owner-mismatch": "invalid_reference",
+    "trace-upstream-missing": "projection_absent",
+    "trace-system-design-missing": "projection_absent",
+    "trace-slot-cardinality": "empty_projection",
+    "trace-evidence-identity": "source_snapshot_mismatch",
+    "trace-legacy-upgrade-required": "legacy_compatibility",
+    "trace-identity-oid-placement": "source_snapshot_mismatch",
+    "trace-revision-type": "revision_type_mismatch",
+    "identity-oid-placement": "source_snapshot_mismatch",
+    "policy-identity-incomplete": "source_snapshot_mismatch",
+    "policy-identity-mismatch": "source_snapshot_mismatch",
+}
+
+
+def _diagnostic_error_class(code: str, message: str) -> str:
+    """Return the closed C1 error-class vocabulary for one blocker.
+
+    Codes remain the detailed, backwards-compatible diagnostic identifiers.
+    This projection deliberately has a smaller vocabulary so C2/C3 can route
+    blockers without parsing human-oriented text or depending on every code
+    spelling.  Message checks cover generic validation errors that do not carry
+    a stable code prefix yet, while the final fallback remains a safe class.
+    """
+    text = message.lower()
+    if code == "trace-revision-type" or (
+        "revision" in text
+        and any(token in text for token in ("integer", "positive", "type", "invalid"))
+    ):
+        return "revision_type_mismatch"
+    if code in {"trace-identity-oid-placement", "identity-oid-placement"} or any(
+        token in text
+        for token in (
+            "source_commit",
+            "source commit",
+            "source_head",
+            "source head",
+            "source snapshot",
+            "source digest",
+            "record_digest",
+            "record digest",
+            "tested_tree",
+            "tested tree",
+        )
+    ) and any(token in text for token in ("mismatch", "invalid", "must", "does not", "disagree", "belongs")):
+        return "source_snapshot_mismatch"
+    if code == "trace-legacy-upgrade-required" or any(
+        token in text for token in ("legacy", "compatibility")
+    ):
+        return "legacy_compatibility"
+    if any(
+        token in text
+        for token in (
+            "authority reader",
+            "authority read",
+            "authority readback",
+            "live github authority",
+            "reader kind",
+            "server author unavailable",
+            "readback unavailable",
+        )
+    ) or ("unavailable" in text and "authority" in text):
+        return "authority_unavailable"
+    if code == "trace-upstream-missing" and any(
+        token in text for token in ("at least one", "non-empty", "empty")
+    ):
+        return "empty_projection"
+    if any(
+        token in text
+        for token in ("non-empty list", "empty projection", "composition evidence is empty", "no usable projection")
+    ):
+        return "empty_projection"
+    if code == "trace-slot-cardinality":
+        return "empty_projection"
+    if any(
+        token in text
+        for token in (
+            "projection missing",
+            "projection is missing",
+            "composition evidence missing",
+            "applicability_matrix missing",
+            "candidate field missing",
+            "required_obligations must",
+            "mapping_slots must",
+            "trace.upstream_refs is missing",
+            "system_design relation is missing",
+        )
+    ) or code in {"trace-upstream-missing", "trace-system-design-missing"}:
+        return "projection_absent"
+    return _DIAGNOSTIC_ERROR_CLASS_BY_CODE.get(code, "invalid_reference")
+
+
 def _diagnostic(error: Any) -> dict[str, Any]:
     """Project a blocker into the stable C1 machine-readable error shape."""
     message = str(error)
@@ -105,6 +212,7 @@ def _diagnostic(error: Any) -> dict[str, Any]:
     repair_hint = TRACE_REPAIR_HINTS.get(code, "repair the field-local validation error")
     return {
         "code": code,
+        "error_class": _diagnostic_error_class(code, message),
         "message": message,
         "task_uid": task_match.group(0) if task_match else None,
         "obligation_id": obligation_match.group(1).strip() if obligation_match else None,

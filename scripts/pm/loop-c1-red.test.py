@@ -78,6 +78,70 @@ class C1RedTests(unittest.TestCase):
         self.assertEqual(diagnostics[0]["field"], "trace.upstream_refs[0]")
         self.assertTrue(diagnostics[0]["repair_hint"], diagnostics)
 
+    def test_diagnostics_expose_the_closed_c1_error_class_vocabulary(self):
+        task_uid = self.record["task_uid"]
+        cases = (
+            (
+                "trace-ref-unresolved: record {task} change @ eng-cc/oasis7#3730/comment/1 "
+                "obligation C1-identity: trace.upstream_refs[0] repository mismatch",
+                "invalid_reference",
+            ),
+            (
+                "trace-revision-type: record {task} change @ eng-cc/oasis7#3730/comment/1 "
+                "obligation C1-identity: trace.upstream_refs[0] revision must be a positive integer",
+                "revision_type_mismatch",
+            ),
+            (
+                "trace-identity-oid-placement: record {task} change @ eng-cc/oasis7#3730/comment/1 "
+                "obligation C1-identity: trace.upstream_refs[0] source_commit belongs to the source snapshot",
+                "source_snapshot_mismatch",
+            ),
+            (
+                "trace-legacy-upgrade-required: record {task} change @ eng-cc/oasis7#3730/comment/1 "
+                "obligation C1-identity: legacy obligations require explicit traces",
+                "legacy_compatibility",
+            ),
+            (
+                "live-authority-read: record {task} change @ eng-cc/oasis7#3730/comment/1 "
+                "obligation C1-identity: authority reader readback unavailable",
+                "authority_unavailable",
+            ),
+            (
+                "validation-error: record {task} change @ eng-cc/oasis7#3730/comment/1 "
+                "obligation C1-identity: composition evidence missing",
+                "projection_absent",
+            ),
+            (
+                "validation-error: record {task} change @ eng-cc/oasis7#3730/comment/1 "
+                "obligation C1-identity: required_obligations must be a non-empty list",
+                "empty_projection",
+            ),
+        )
+        for template, expected_class in cases:
+            with self.subTest(expected_class=expected_class):
+                diagnostic = TRACE._diagnostic(template.format(task=task_uid))
+                self.assertEqual(diagnostic["error_class"], expected_class, diagnostic)
+                self.assertTrue(diagnostic["code"], diagnostic)
+                self.assertEqual(diagnostic["message"].split(":", 1)[0], diagnostic["code"])
+                self.assertEqual(diagnostic["task_uid"], task_uid)
+                self.assertEqual(diagnostic["obligation_id"], "C1-identity")
+                self.assertTrue(diagnostic["repair_hint"], diagnostic)
+
+    def test_error_class_projection_preserves_existing_diagnostic_fields(self):
+        message = (
+            f"trace-ref-unresolved: record {self.record['task_uid']} change @ "
+            "eng-cc/oasis7#3730/comment/1 obligation C1-identity: "
+            "trace.upstream_refs[0] repository mismatch; repair: rebind the relation"
+        )
+        diagnostic = TRACE._diagnostic(message)
+        self.assertEqual(diagnostic["code"], "trace-ref-unresolved")
+        self.assertEqual(diagnostic["message"], message)
+        self.assertEqual(diagnostic["task_uid"], self.record["task_uid"])
+        self.assertEqual(diagnostic["obligation_id"], "C1-identity")
+        self.assertEqual(diagnostic["field"], "trace.upstream_refs[0]")
+        self.assertTrue(diagnostic["repair_hint"], diagnostic)
+        self.assertEqual(diagnostic["error_class"], "invalid_reference")
+
     def test_legacy_fixture_remains_explicitly_readable(self):
         legacy = deepcopy(self.record)
         for obligation in legacy["required_obligations"]:
