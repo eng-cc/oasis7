@@ -194,6 +194,41 @@ class C1RedTests(unittest.TestCase):
         blockers = "\n".join(result.get("blockers", []))
         self.assertIn("consumed_clause_refs[0]", blockers)
         self.assertIn("revision", blockers)
+        diagnostic = result["diagnostics"][0]
+        self.assertEqual(diagnostic["error_class"], "revision_type_mismatch")
+        self.assertEqual(diagnostic["field"], "consumed_clause_refs[0].revision")
+        self.assertEqual(diagnostic["task_uid"], record["task_uid"])
+
+    def test_hosted_record_rejects_consumed_clause_publication_repository_drift(self):
+        for repository in (None, "foreign/repo"):
+            with self.subTest(repository=repository):
+                record = deepcopy(self.record)
+                publication = record["consumed_clause_refs"][0]["publication_ref"]
+                if repository is None:
+                    publication.pop("repository")
+                else:
+                    publication["repository"] = repository
+                result = TRACE.validate_record(_refresh_digest(record))
+                self.assertEqual(result.get("status"), "blocked", result)
+                diagnostic = result["diagnostics"][0]
+                self.assertEqual(diagnostic["error_class"], "invalid_reference")
+                self.assertEqual(
+                    diagnostic["field"],
+                    "consumed_clause_refs[0].publication_ref.repository",
+                )
+
+    def test_hosted_record_rejects_malformed_consumed_clause_digests(self):
+        for field in ("source_digest", "content_digest"):
+            with self.subTest(field=field):
+                record = deepcopy(self.record)
+                record["consumed_clause_refs"][0][field] = "not-a-digest"
+                result = TRACE.validate_record(_refresh_digest(record))
+                self.assertEqual(result.get("status"), "blocked", result)
+                diagnostic = result["diagnostics"][0]
+                self.assertEqual(diagnostic["error_class"], "invalid_reference")
+                self.assertEqual(
+                    diagnostic["field"], f"consumed_clause_refs[0].{field}"
+                )
 
     def test_schema_keeps_typed_revision_integer_and_oid_out_of_clause_refs(self):
         schema = json.loads(

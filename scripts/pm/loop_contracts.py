@@ -165,8 +165,16 @@ def consumed_clause_ref_errors(reference, *, require_identity=False):
         publication = reference.get("publication_ref")
         if not isinstance(publication, dict) or any(type(publication.get(key)) is not int or publication[key] < 1 for key in ("issue_number", "comment_id")):
             errors.append("consumed clause publication_ref is required for bound input")
+        elif publication.get("repository") != REPOSITORY:
+            errors.append("consumed clause publication_ref.repository must be canonical")
     elif "contract_digest" in reference and (not isinstance(reference["contract_digest"], str) or not DIGEST.fullmatch(reference["contract_digest"])):
         errors.append("consumed clause contract_digest must be sha256")
+    for digest_field in ("source_digest", "content_digest"):
+        if digest_field in reference and (
+            not isinstance(reference[digest_field], str)
+            or not DIGEST.fullmatch(reference[digest_field])
+        ):
+            errors.append(f"consumed clause {digest_field} must be sha256")
     return errors
 
 

@@ -207,7 +207,8 @@ def _diagnostic(error: Any) -> dict[str, Any]:
     obligation_match = re.search(r"\bobligation ([^:;]+)", message)
     field_match = re.search(
         r"\b(trace\.(?:[a-z_]+)(?:\[\d+\])?(?:\.[a-z_]+)?|"
-        r"binding\.(?:[a-z_]+)|coordination_ref\.(?:[a-z_]+))(?=\s|$|[:;,])",
+        r"binding\.(?:[a-z_]+)|coordination_ref\.(?:[a-z_]+)|"
+        r"consumed_clause_refs\[\d+\](?:\.[a-z_]+(?:\.[a-z_]+)?)?)(?=\s|$|[:;,])",
         message,
     )
     repair_hint = TRACE_REPAIR_HINTS.get(code, "repair the field-local validation error")
@@ -856,10 +857,32 @@ def _validate_record_shape(record: Any, *, require_trace: bool = False) -> list[
             errors.append("consumed_clause_refs must be a list when present")
         else:
             for index, reference in enumerate(consumed_clause_refs):
-                errors.extend(
-                    f"consumed_clause_refs[{index}] consumed clause reference: {error}"
-                    for error in consumed_clause_ref_errors(reference, require_identity=True)
-                )
+                for error in consumed_clause_ref_errors(reference, require_identity=True):
+                    field = f"consumed_clause_refs[{index}]"
+                    code = "trace-ref-unresolved"
+                    if "source_commit" in error:
+                        field += ".source_commit"
+                        code = "trace-identity-oid-placement"
+                    elif "source_head_oid" in error:
+                        field += ".source_head_oid"
+                        code = "trace-identity-oid-placement"
+                    elif "revision" in error:
+                        field += ".revision"
+                        code = "trace-revision-type"
+                    elif "publication_ref.repository" in error:
+                        field += ".publication_ref.repository"
+                    elif "source_digest" in error:
+                        field += ".source_digest"
+                    elif "content_digest" in error:
+                        field += ".content_digest"
+                    errors.append(
+                        _trace_diagnostic(
+                            code,
+                            None,
+                            f"{field} consumed clause reference: {error}",
+                            record=record,
+                        )
+                    )
     feedback = record.get("feedback")
     if not isinstance(feedback, list):
         errors.append("feedback must be a list")
