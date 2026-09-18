@@ -11,6 +11,7 @@ Usage:
     --sequencer-env <path> \
     --storage-env <path> \
     --manifest-path <path> \
+    [--deployment-inventory <path>] \
     [--out <path>]
 
   ./scripts/p2p-public-testnet-local-observer-sync.sh apply \
@@ -18,6 +19,7 @@ Usage:
     --sequencer-env <path> \
     --storage-env <path> \
     --manifest-path <path> \
+    [--deployment-inventory <path>] \
     [--manifest-source <path>] \
     [--manifest-dest <path>] \
     [--start-script-source <path>] \
@@ -30,19 +32,24 @@ Usage:
 
 Description:
   Derive the local public_testnet observer env contract from the current
-  two-validator ECS env files. The rendered env preserves local-only binds,
+  validator ECS env files. The rendered env preserves local-only binds,
   storage paths, and player-entry settings, while replacing bootstrap-peer,
-  manifest, and genesis validator registry settings with the live ECS contract.
-  apply mode writes GENESIS_VALIDATOR_REGISTRY_PATH and generates that genesis
-  registry as a one-time migration adapter from legacy ECS NODE_VALIDATORS_CSV
-  / NODE_VALIDATOR_SIGNERS_CSV. Runtime canonical validator truth remains the
-  genesis/world-state registry, not the legacy CSV env.
+  manifest, and deployment-authority settings with the governed contract.
+  apply mode generates a validator registry as a one-time adapter from legacy
+  ECS NODE_VALIDATORS_CSV / NODE_VALIDATOR_SIGNERS_CSV, then binds and
+  localizes its exact raw and semantic digest in the observer manifest. A
+  three-validator rollout must also pass the matching deployment inventory;
+  the inventory is consumed as an input authority check and is never emitted
+  into the non-managed observer env.
+  Non-managed observers use this manifest-bound registry authority only;
+  managed triad identities retain the separate complete deployment inventory
+  requirement enforced by the launcher/runtime.
   When apply mode installs a manifest source from the repo, it also localizes
   runtime_refs files into the target config directory and rewrites the manifest
   to point at those local copies. reset-state backs up and clears the local
   observer's replicated execution state, storage root, simulator mirror, and
   bridge state so a drifted pre-sync history can be rebuilt from the current
-  two-validator network contract. Recovery must then start the observer and use
+  validator deployment contract. Recovery must then start the observer and use
   signed replication checkpoint sync. The former seed-from-remote mode is
   disabled because a live filesystem copy cannot bind the execution world,
   records, storage, replication, simulator mirror, and bridge state to one
@@ -58,6 +65,14 @@ die() {
 require_file() {
   local path=$1
   [[ -f "$path" ]] || die "missing file: $path"
+}
+
+absolute_path() {
+  python3 - "$1" <<'PY'
+import os
+import sys
+print(os.path.abspath(os.path.expanduser(sys.argv[1])))
+PY
 }
 
 raw_value() {
@@ -194,12 +209,229 @@ resolve_repo_ref() {
   fi
 }
 
+manifest_authority_metadata() {
+  local manifest_path=$1
+  local deployment_inventory_path=${2:-}
+
+  python3 - "$manifest_path" "$repo_root" "$deployment_inventory_path" <<'PY'
+import hashlib
+import json
+import os
+import pathlib
+import re
+import sys
+
+manifest_path = pathlib.Path(sys.argv[1]).resolve()
+repo_root = pathlib.Path(sys.argv[2]).resolve()
+deployment_inventory_path = pathlib.Path(sys.argv[3]).resolve() if sys.argv[3] else None
+manifest_dir = manifest_path.parent
+
+def fail(message):
+    raise SystemExit(message)
+
+def resolve_ref(raw_ref, label):
+    if not isinstance(raw_ref, str) or not raw_ref.strip():
+        fail(f"manifest deployment authority ref is missing for {label}")
+    if os.path.isabs(raw_ref):
+        candidates = (pathlib.Path(raw_ref),)
+    else:
+        candidates = (
+            manifest_dir / raw_ref,
+            manifest_dir.parent / raw_ref,
+            repo_root / raw_ref,
+        )
+    for candidate in candidates:
+        if candidate.is_file() and not candidate.is_symlink():
+            return candidate.resolve()
+    fail(f"missing manifest deployment authority source for {label}: {candidates[0]}")
+
+try:
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+except (OSError, json.JSONDecodeError) as exc:
+    fail(f"cannot read public-testnet manifest authority: {manifest_path}: {exc}")
+if manifest.get("tier") != "public_testnet":
+    fail("local observer deployment authority requires tier=public_testnet")
+
+# Preserve the rollout gate even when the manifest-bound registry source is
+# temporarily unavailable (for example, before apply has localized it beside
+# the observer stack). A manifest advertising three validators must never be
+# silently evaluated as a legacy pair, and the operator should get the
+# actionable missing-inventory failure first.
+declared_policy = manifest.get("validator_policy")
+if (
+    isinstance(declared_policy, dict)
+    and declared_policy.get("target_validator_count") == 3
+    and deployment_inventory_path is None
+):
+    fail("three-validator observer rollout requires --deployment-inventory")
+
+registry_binding = manifest.get("deployment_validator_registry")
+if not isinstance(registry_binding, dict):
+    fail("public-testnet manifest is missing deployment_validator_registry authority binding")
+
+registry_ref = registry_binding.get("ref")
+registry_sha = registry_binding.get("sha256")
+registry_semantic_sha = registry_binding.get("semantic_sha256")
+if not isinstance(registry_ref, str) or not registry_ref.strip():
+    fail("public-testnet manifest deployment_validator_registry.ref is missing")
+if not isinstance(registry_sha, str) or len(registry_sha) != 64:
+    fail("public-testnet manifest deployment_validator_registry.sha256 is malformed")
+if not isinstance(registry_semantic_sha, str) or len(registry_semantic_sha) != 64:
+    fail("public-testnet manifest deployment_validator_registry.semantic_sha256 is malformed")
+registry_source = resolve_ref(registry_ref, "deployment_validator_registry")
+actual_registry_sha = hashlib.sha256(registry_source.read_bytes()).hexdigest()
+if actual_registry_sha != registry_sha.lower():
+    fail(
+        "public-testnet validator registry digest mismatch: "
+        f"manifest={registry_sha} actual={actual_registry_sha}"
+    )
+try:
+    registry = json.loads(registry_source.read_text(encoding="utf-8"))
+except (OSError, json.JSONDecodeError) as exc:
+    fail(f"cannot read public-testnet validator registry: {registry_source}: {exc}")
+if not isinstance(registry, dict):
+    fail("public-testnet validator registry must be an object")
+if registry.get("slot_id") != "governance.finality.v1":
+    fail("public-testnet validator registry slot_id is not canonical")
+validators = registry.get("validators")
+if not isinstance(validators, list) or not validators:
+    fail("public-testnet validator registry validators are missing")
+threshold = registry.get("threshold")
+if isinstance(threshold, bool) or not isinstance(threshold, int) or threshold <= 0:
+    fail("public-testnet validator registry threshold must be positive")
+if threshold > len(validators):
+    fail("public-testnet validator registry threshold exceeds signer count")
+seen_node_ids = set()
+for index, item in enumerate(validators):
+    if not isinstance(item, dict):
+        fail(f"public-testnet validator registry entry {index} must be an object")
+    node_id = item.get("node_id")
+    signer = item.get("finality_signer_public_key")
+    if not isinstance(node_id, str) or not node_id or node_id in seen_node_ids:
+        fail(f"public-testnet validator registry entry {index} has an invalid or duplicate node_id")
+    if not isinstance(signer, str) or not signer:
+        fail(f"public-testnet validator registry entry {index} signer is missing")
+    if item.get("scheme") != "ed25519":
+        fail(f"public-testnet validator registry entry {index} scheme must be ed25519")
+    if not re.fullmatch(r"[0-9a-fA-F]{64}", signer):
+        fail(f"public-testnet validator registry entry {index} signer is malformed")
+    stake = item.get("stake")
+    if isinstance(stake, bool) or not isinstance(stake, int) or stake <= 0:
+        fail(f"public-testnet validator registry entry {index} stake must be positive")
+    seen_node_ids.add(node_id)
+canonical = {
+    "signer_bindings": {
+        f"governance.finality.v1.{item['node_id']}": str(item["finality_signer_public_key"]).lower()
+        for item in validators
+    },
+    "slot_id": registry.get("slot_id"),
+    "threshold": registry.get("threshold"),
+    "threshold_bps": registry.get("threshold_bps"),
+    "validator_stakes": {
+        f"governance.finality.v1.{item['node_id']}": item["stake"]
+        for item in validators
+    },
+}
+actual_registry_semantic_sha = hashlib.sha256(
+    json.dumps(canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+).hexdigest()
+if actual_registry_semantic_sha != registry_semantic_sha.lower():
+    fail("public-testnet validator registry semantic digest does not match manifest authority")
+policy = manifest.get("validator_policy")
+if not isinstance(policy, dict):
+    fail("public-testnet observer authority requires validator_policy")
+allow_observer_nodes = policy.get("allow_observer_nodes")
+if allow_observer_nodes is not True:
+    fail("public-testnet observer authority requires validator_policy.allow_observer_nodes=true")
+target_validator_count = policy.get("target_validator_count")
+if isinstance(target_validator_count, bool) or not isinstance(target_validator_count, int) or target_validator_count != len(validators):
+    fail("public-testnet observer registry count does not match manifest authority")
+
+if len(validators) == 3:
+    if deployment_inventory_path is None:
+        fail("three-validator observer rollout requires --deployment-inventory")
+    if deployment_inventory_path.is_symlink() or not deployment_inventory_path.is_file():
+        fail(f"observer deployment inventory must be a regular file: {deployment_inventory_path}")
+    actual_inventory_sha = hashlib.sha256(deployment_inventory_path.read_bytes()).hexdigest()
+    try:
+        inventory = json.loads(deployment_inventory_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        fail(f"cannot read observer deployment inventory: {deployment_inventory_path}: {exc}")
+    if not isinstance(inventory, dict):
+        fail("observer deployment inventory must be an object")
+    if inventory.get("schema_version") != "oasis7.public_testnet_validator_triad_inventory.v1":
+        fail("three-validator observer rollout requires the governed triad inventory")
+    if inventory.get("network_tier") != "public_testnet" or inventory.get("topology") != "three_equal_validator":
+        fail("observer deployment inventory network/topology mismatch")
+    authority = inventory.get("authority")
+    inventory_nodes = inventory.get("nodes")
+    if not isinstance(authority, dict) or not isinstance(inventory_nodes, dict):
+        fail("observer deployment inventory authority/nodes are missing")
+    if len(inventory_nodes) != len(validators) or any(
+        not isinstance(item, dict) or not isinstance(item.get("node_id"), str)
+        for item in inventory_nodes.values()
+    ):
+        fail("observer deployment inventory nodes are malformed")
+    if authority.get("generated_registry_sha256") != registry_sha.lower():
+        fail("observer deployment inventory generated registry digest does not match rollout registry")
+    if authority.get("generated_registry_semantic_sha256") != registry_semantic_sha.lower():
+        fail("observer deployment inventory generated registry semantic digest does not match rollout registry")
+    expected_node_ids = {item["node_id"] for item in validators}
+    inventory_node_ids = {
+        item.get("node_id") for item in inventory_nodes.values()
+        if isinstance(item, dict) and isinstance(item.get("node_id"), str)
+    }
+    if inventory_node_ids != expected_node_ids:
+        fail("observer deployment inventory validator identities do not match rollout registry")
+    print(
+        "\t".join(
+            (
+                registry_ref,
+                registry_sha.lower(),
+                registry_semantic_sha.lower(),
+                str(len(validators)),
+                actual_inventory_sha,
+            )
+        )
+    )
+    raise SystemExit(0)
+
+if deployment_inventory_path is not None:
+    fail("deployment inventory is only valid for an exact three-validator rollout")
+
+print(
+    "\t".join(
+        (
+            registry_ref,
+            registry_sha.lower(),
+            registry_semantic_sha.lower(),
+            str(len(validators)),
+            "",
+        )
+    )
+)
+PY
+}
+
 render_env() {
   local local_env=$1
   local sequencer_env=$2
   local storage_env=$3
   local manifest_path=$4
   local emit_genesis_registry_path=${5:-0}
+  local authority_manifest_path=${6:-$manifest_path}
+  local deployment_inventory_path=${7:-}
+
+  require_file "$authority_manifest_path"
+  local authority_metadata authority_registry_ref authority_registry_sha authority_registry_semantic_sha
+  authority_metadata=$(manifest_authority_metadata "$authority_manifest_path" "$deployment_inventory_path") || die "$authority_metadata"
+  local authority_validator_count authority_inventory_sha
+  IFS=$'\t' read -r \
+    authority_registry_ref \
+    authority_registry_sha \
+    authority_registry_semantic_sha \
+    authority_validator_count \
+    authority_inventory_sha <<<"$authority_metadata"
 
   local seq_world_id storage_world_id
   seq_world_id=$(required_value "$sequencer_env" WORLD_ID)
@@ -231,7 +463,7 @@ render_env() {
   local_stack_root=$(required_value "$local_env" STACK_ROOT)
   local_runtime_root=$(optional_resolved_env_value "$local_env" RUNTIME_ROOT)
   local_replication_root=$(optional_resolved_env_value "$local_env" REPLICATION_ROOT)
-  genesis_validator_registry_path="$local_stack_root/config/genesis-validator-registry.json"
+  genesis_validator_registry_path="$local_stack_root/config/$(basename "$authority_registry_ref")"
 
   local player_entry_enable player_entry_http_bind player_entry_http_port
   local player_entry_web_bind player_entry_viewer_bind player_entry_deployment_mode
@@ -283,9 +515,11 @@ TRAFFIC_MONITOR_OUTPUT_DIR=$(required_value "$local_env" TRAFFIC_MONITOR_OUTPUT_
 TRAFFIC_PROFILE=$(required_value "$local_env" TRAFFIC_PROFILE)
 POS_SLOT_CLOCK_GENESIS_UNIX_MS=$pos_slot_clock_genesis
 EOF
-  if [[ "$emit_genesis_registry_path" == "1" ]]; then
-    printf 'GENESIS_VALIDATOR_REGISTRY_PATH=%s\n' "$genesis_validator_registry_path"
-  fi
+  # Render and apply both emit the complete manifest-bound registry contract.
+  # In render mode this path is prospective until apply localizes the file.
+  printf 'GENESIS_VALIDATOR_REGISTRY_PATH=%s\n' "$genesis_validator_registry_path"
+  printf 'GENESIS_VALIDATOR_REGISTRY_SHA256=%s\n' "$authority_registry_sha"
+  printf 'GENESIS_VALIDATOR_REGISTRY_SEMANTIC_SHA256=%s\n' "$authority_registry_semantic_sha"
   append_if_present PLAYER_ENTRY_ENABLE "$player_entry_enable"
   append_if_present PLAYER_ENTRY_HTTP_BIND "$player_entry_http_bind"
   append_if_present PLAYER_ENTRY_HTTP_PORT "$player_entry_http_port"
@@ -333,7 +567,7 @@ for raw in os.environ["SIGNERS_CSV"].split(","):
     key_hex = key_hex.strip()
     if not node_id or len(key_hex) != 64 or any(ch not in "0123456789abcdefABCDEF" for ch in key_hex):
         sys.exit(f"invalid signer entry: {raw}")
-    signers[node_id] = key_hex
+    signers[node_id] = key_hex.lower()
 
 missing = sorted(set(validators) - set(signers))
 extra = sorted(set(signers) - set(validators))
@@ -363,6 +597,63 @@ print(json.dumps(doc, indent=2, sort_keys=True))
 PY
 }
 
+registry_semantic_sha256() {
+  local registry_path=$1
+  python3 - "$registry_path" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+
+registry = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+validators = registry.get("validators")
+if not isinstance(validators, list) or not validators:
+    raise SystemExit("validator registry validators are missing")
+canonical = {
+    "signer_bindings": {
+        f"governance.finality.v1.{item['node_id']}": str(item["finality_signer_public_key"]).lower()
+        for item in validators
+    },
+    "slot_id": registry.get("slot_id"),
+    "threshold": registry.get("threshold"),
+    "threshold_bps": registry.get("threshold_bps"),
+    "validator_stakes": {
+        f"governance.finality.v1.{item['node_id']}": item["stake"]
+        for item in validators
+    },
+}
+print(hashlib.sha256(json.dumps(canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()).hexdigest())
+PY
+}
+
+write_manifest_registry_binding() {
+  local manifest_source=$1
+  local manifest_dest=$2
+  local registry_ref=$3
+  local registry_sha=$4
+  local registry_semantic_sha=$5
+
+  python3 - "$manifest_source" "$manifest_dest" "$registry_ref" "$registry_sha" "$registry_semantic_sha" <<'PY'
+import json
+import pathlib
+import sys
+
+source, destination, registry_ref, registry_sha, registry_semantic_sha = sys.argv[1:]
+manifest = json.loads(pathlib.Path(source).read_text(encoding="utf-8"))
+if manifest.get("tier") != "public_testnet":
+    raise SystemExit("local observer manifest must declare tier=public_testnet")
+policy = manifest.get("validator_policy")
+if not isinstance(policy, dict) or policy.get("allow_observer_nodes") is not True:
+    raise SystemExit("local observer manifest must allow observer nodes")
+manifest["deployment_validator_registry"] = {
+    "ref": registry_ref,
+    "sha256": registry_sha,
+    "semantic_sha256": registry_semantic_sha,
+}
+pathlib.Path(destination).write_text(json.dumps(manifest, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
+PY
+}
+
 write_rendered_env() {
   local rendered=$1
   local out_path=$2
@@ -373,7 +664,7 @@ write_rendered_env() {
   fi
 
   mkdir -p "$(dirname "$out_path")"
-  printf '%s' "$rendered" > "$out_path"
+  printf '%s\n' "$rendered" > "$out_path"
 }
 
 backup_and_remove_path() {
@@ -708,20 +999,23 @@ localize_manifest_runtime_refs() {
   local manifest_dest=$2
   local governance_stage=${3:-}
   local preflight_only=${4:-0}
+  local source_context_dir=${5:-$(dirname "$manifest_source")}
 
-  python3 - "$manifest_source" "$manifest_dest" "$repo_root" "$governance_stage" "$preflight_only" <<'PY'
+  python3 - "$manifest_source" "$manifest_dest" "$repo_root" "$governance_stage" "$preflight_only" "$source_context_dir" <<'PY'
+import hashlib
 import json
 import os
 import shutil
 import sys
 
-manifest_source, manifest_dest, repo_root, governance_stage, preflight_only = sys.argv[1:6]
+manifest_source, manifest_dest, repo_root, governance_stage, preflight_only, source_context_dir = sys.argv[1:7]
 manifest_dest = os.path.abspath(manifest_dest)
 manifest_dir = os.path.dirname(manifest_dest)
 manifest_source = os.path.abspath(manifest_source)
 manifest_source_dir = os.path.dirname(manifest_source)
+source_context_dir = os.path.abspath(source_context_dir or manifest_source_dir)
 
-def resolve_ref(raw_ref, context_dir=manifest_source_dir):
+def resolve_ref(raw_ref, context_dir=source_context_dir):
     if os.path.isabs(raw_ref):
         return raw_ref
     candidates = [
@@ -738,6 +1032,36 @@ with open(manifest_source, "r", encoding="utf-8") as fh:
     data = json.load(fh)
 
 runtime_refs = data.get("runtime_refs", {})
+
+authority_sources = {}
+for key in ("deployment_validator_registry",):
+    binding = data.get(key)
+    if not isinstance(binding, dict):
+        raise SystemExit(f"manifest is missing {key} authority binding")
+    raw_ref = binding.get("ref")
+    expected_sha = binding.get("sha256")
+    if not isinstance(raw_ref, str) or not raw_ref:
+        raise SystemExit(f"manifest {key}.ref is missing")
+    if not isinstance(expected_sha, str) or len(expected_sha) != 64:
+        raise SystemExit(f"manifest {key}.sha256 is malformed")
+    # The authority binding is rewritten into the temporary authority stage,
+    # while runtime refs intentionally resolve from the original source
+    # manifest. Keep those contexts separate so a generated stage registry is
+    # never looked up under source_config/config, without weakening its digest
+    # check.
+    source = os.path.abspath(resolve_ref(raw_ref, manifest_source_dir))
+    if not os.path.isfile(source) or os.path.islink(source):
+        raise SystemExit(f"missing manifest deployment authority source for {key}: {source}")
+    actual_sha = hashlib.sha256(open(source, "rb").read()).hexdigest()
+    if actual_sha != expected_sha.lower():
+        raise SystemExit(
+            f"manifest {key} digest mismatch: expected={expected_sha} actual={actual_sha}"
+        )
+    target_name = os.path.basename(os.path.normpath(raw_ref))
+    if not target_name or target_name in (".", os.path.sep):
+        raise SystemExit(f"invalid manifest deployment authority ref for {key}: {raw_ref}")
+    target = os.path.abspath(os.path.join(manifest_dir, target_name))
+    authority_sources[key] = (source, target)
 
 def confined_manifest_target_ref(raw_ref, key):
     if not isinstance(raw_ref, str) or not raw_ref:
@@ -774,6 +1098,11 @@ for key in ("generated_world_sidecar_ref", "world_generation_provenance_ref"):
 
 if preflight_only == "1":
     raise SystemExit(0)
+
+for source, target in authority_sources.values():
+    os.makedirs(os.path.dirname(target), exist_ok=True)
+    if source != target:
+        shutil.copy2(source, target)
 
 localized_sources = {}
 for key in ("release_candidate_bundle_ref", "genesis_ref", "bootstrap_peer_ref"):
@@ -943,6 +1272,7 @@ local_env=""
 sequencer_env=""
 storage_env=""
 manifest_path=""
+deployment_inventory_path=""
 out_path="-"
 manifest_source=""
 manifest_dest=""
@@ -968,6 +1298,10 @@ while (( $# > 0 )); do
       ;;
     --manifest-path)
       manifest_path=${2:-}
+      shift 2
+      ;;
+    --deployment-inventory)
+      deployment_inventory_path=${2:-}
       shift 2
       ;;
     --out)
@@ -1012,6 +1346,12 @@ while (( $# > 0 )); do
   esac
 done
 
+if [[ -n "$deployment_inventory_path" ]]; then
+  deployment_inventory_path=$(absolute_path "$deployment_inventory_path")
+  require_file "$deployment_inventory_path"
+  [[ ! -L "$deployment_inventory_path" ]] || die "deployment inventory must not be a symlink"
+fi
+
 case "$mode" in
   render|apply)
     [[ -n "$local_env" ]] || die "--local-env is required"
@@ -1024,7 +1364,7 @@ case "$mode" in
     require_file "$storage_env"
 
     if [[ "$mode" == "render" ]]; then
-      rendered_env=$(render_env "$local_env" "$sequencer_env" "$storage_env" "$manifest_path" 0)
+      rendered_env=$(render_env "$local_env" "$sequencer_env" "$storage_env" "$manifest_path" 0 "$manifest_path" "$deployment_inventory_path")
       write_rendered_env "$rendered_env" "$out_path"
       exit 0
     fi
@@ -1038,11 +1378,35 @@ case "$mode" in
     seq_signers=$(required_value "$sequencer_env" NODE_VALIDATOR_SIGNERS_CSV)
     storage_signers=$(required_value "$storage_env" NODE_VALIDATOR_SIGNERS_CSV)
     [[ "$seq_signers" == "$storage_signers" ]] || die "legacy NODE_VALIDATOR_SIGNERS_CSV mismatch between ECS env files"
-    genesis_validator_registry_path="$local_stack_root/config/genesis-validator-registry.json"
-    rendered_env=$(render_env "$local_env" "$sequencer_env" "$storage_env" "$manifest_path" 1)
-    if [[ -z "$manifest_dest" && -n "$manifest_source" ]]; then
-      manifest_dest=$manifest_path
+    if [[ -n "$manifest_source" ]]; then
+      require_file "$manifest_source"
+      authority_source_manifest="$manifest_source"
+    else
+      authority_source_manifest="$manifest_path"
+      require_file "$authority_source_manifest"
     fi
+    authority_stage=$(mktemp -d "${TMPDIR:-/tmp}/oasis7-observer-authority-stage.XXXXXX")
+    trap 'rm -rf "${authority_stage:-}"' EXIT
+    mkdir -p "$authority_stage/config"
+    generated_registry_path="$authority_stage/config/genesis-validator-registry.json"
+    write_genesis_validator_registry "$seq_validators" "$seq_signers" "$generated_registry_path"
+    generated_registry_sha=$(shasum -a 256 "$generated_registry_path" | awk '{print $1}')
+    generated_registry_semantic_sha=$(registry_semantic_sha256 "$generated_registry_path")
+    authority_manifest_path="$authority_stage/manifest.json"
+    write_manifest_registry_binding \
+      "$authority_source_manifest" \
+      "$authority_manifest_path" \
+      "config/genesis-validator-registry.json" \
+      "$generated_registry_sha" \
+      "$generated_registry_semantic_sha"
+    rendered_manifest_path="$manifest_path"
+    if [[ -n "$manifest_source" && -z "$manifest_dest" ]]; then
+      manifest_dest="$manifest_path"
+    fi
+    if [[ -n "$manifest_source" ]]; then
+      rendered_manifest_path="$manifest_dest"
+    fi
+    rendered_env=$(render_env "$local_env" "$sequencer_env" "$storage_env" "$rendered_manifest_path" 1 "$authority_manifest_path" "$deployment_inventory_path")
     if [[ -z "$start_script_dest" ]]; then
       start_script_dest="$local_stack_root/bin/start-node.sh"
     fi
@@ -1054,7 +1418,8 @@ case "$mode" in
     if [[ -n "$manifest_source" ]]; then
       require_file "$manifest_source"
       [[ -n "$manifest_dest" ]] || die "--manifest-dest is required when --manifest-source is set"
-      localize_manifest_runtime_refs "$manifest_source" "$manifest_dest" "" 1
+      localize_manifest_runtime_refs \
+        "$authority_manifest_path" "$manifest_dest" "" 1 "$(dirname "$manifest_source")"
       governance_stage=$(mktemp -d "${TMPDIR:-/tmp}/oasis7-observer-governance-stage.XXXXXX")
       trap 'rm -rf "${governance_stage:-}"' EXIT
       preflight_manifest_governance_refs "$manifest_source" "$governance_stage"
@@ -1064,19 +1429,30 @@ case "$mode" in
 
     cp "$local_env" "$backup_dir/node.env.before"
     tmp_env="$backup_dir/node.env.rendered"
-    printf '%s' "$rendered_env" > "$tmp_env"
+    printf '%s\n' "$rendered_env" > "$tmp_env"
     cp "$tmp_env" "$local_env"
-    write_genesis_validator_registry \
-      "$seq_validators" \
-      "$seq_signers" \
-      "$genesis_validator_registry_path"
 
     if [[ -n "$manifest_source" ]]; then
       mkdir -p "$(dirname "$manifest_dest")"
       if [[ -f "$manifest_dest" ]]; then
         cp "$manifest_dest" "$backup_dir/$(basename "$manifest_dest").before"
       fi
-      localize_manifest_runtime_refs "$manifest_source" "$manifest_dest" "$governance_stage"
+      localize_manifest_runtime_refs \
+        "$authority_manifest_path" "$manifest_dest" "$governance_stage" 0 "$(dirname "$manifest_source")"
+    else
+      mkdir -p "$local_stack_root/config"
+      if [[ -f "$manifest_path" ]]; then
+        cp "$manifest_path" "$backup_dir/$(basename "$manifest_path").before"
+      fi
+      cp "$generated_registry_path" "$local_stack_root/config/genesis-validator-registry.json"
+      bound_manifest_backup="$backup_dir/$(basename "$manifest_path").bound"
+      write_manifest_registry_binding \
+        "$manifest_path" \
+        "$bound_manifest_backup" \
+        "config/genesis-validator-registry.json" \
+        "$generated_registry_sha" \
+        "$generated_registry_semantic_sha"
+      mv "$bound_manifest_backup" "$manifest_path"
     fi
 
     if [[ -n "$start_script_dest" ]]; then
@@ -1091,7 +1467,7 @@ case "$mode" in
     if [[ -n "$manifest_source" ]]; then
       printf 'installed manifest to %s\n' "$manifest_dest"
     fi
-    printf 'installed genesis validator registry to %s\n' "$genesis_validator_registry_path"
+    printf 'installed manifest-bound validator registry under %s/config\n' "$local_stack_root"
     if [[ -n "$start_script_dest" ]]; then
       printf 'installed start script to %s\n' "$start_script_dest"
     fi

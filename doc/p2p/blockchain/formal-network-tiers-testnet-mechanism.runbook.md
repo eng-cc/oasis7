@@ -167,7 +167,7 @@
 ```
 
 该入口的 evidence 必须同时说明：
-- 本机节点使用的 manifest / `world_id` / `chain_id` / genesis / bootstrap peers。
+- 本机节点使用的 manifest / `world_id` / `chain_id` / genesis / bootstrap peers；非 managed observer 的 manifest 必须绑定当前 validator registry 的精确 ref、raw SHA-256 与 semantic SHA-256，observer sync/apply 必须把该 registry 及其 digest 一起写入本机 env/config。managed triad 节点另须使用完整 deployment inventory。
 - 本机节点健康、已连接 testnet peers，且 height/head 持续推进。
 - hosted-login / launcher / viewer / pure API 指向该节点 world state。
 - 若只完成账号登录 smoke 或本地 hosted-public-join UI smoke，不得写成已接入 `public_testnet` 大世界。

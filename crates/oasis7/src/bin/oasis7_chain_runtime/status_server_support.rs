@@ -81,6 +81,7 @@ pub(super) fn start_chain_status_server(
     reward_runtime_metrics: SharedRewardRuntimeMetrics,
     storage_metrics: storage_metrics::SharedStorageMetrics,
     feedback_submit_signer: FeedbackSubmitSigner,
+    runtime_authority_binding: Option<super::runtime_authority::RuntimeAuthorityBinding>,
 ) -> Result<ChainStatusServer, String> {
     let listener = TcpListener::bind((host, port))
         .map_err(|err| format!("failed to bind status server at {host}:{port}: {err}"))?;
@@ -109,6 +110,7 @@ pub(super) fn start_chain_status_server(
             reward_runtime_metrics,
             storage_metrics,
             feedback_submit_signer,
+            runtime_authority_binding,
         ) {
             let _ = error_tx.send(err);
         }
@@ -152,6 +154,7 @@ fn run_chain_status_server_loop(
     reward_runtime_metrics: SharedRewardRuntimeMetrics,
     storage_metrics: storage_metrics::SharedStorageMetrics,
     feedback_submit_signer: FeedbackSubmitSigner,
+    runtime_authority_binding: Option<super::runtime_authority::RuntimeAuthorityBinding>,
 ) -> Result<(), String> {
     loop {
         match stop_rx.try_recv() {
@@ -175,6 +178,7 @@ fn run_chain_status_server_loop(
                 let reward_runtime_metrics = Arc::clone(&reward_runtime_metrics);
                 let storage_metrics = Arc::clone(&storage_metrics);
                 let feedback_submit_signer = feedback_submit_signer.clone();
+                let runtime_authority_binding = runtime_authority_binding.clone();
                 thread::spawn(move || {
                     if let Err(err) = handle_chain_status_connection(
                         stream,
@@ -192,6 +196,7 @@ fn run_chain_status_server_loop(
                         reward_runtime_metrics,
                         storage_metrics,
                         &feedback_submit_signer,
+                        runtime_authority_binding.as_ref(),
                     ) {
                         let stderr_message =
                             format!("warning: chain status connection failed: {err}");
@@ -229,6 +234,7 @@ fn handle_chain_status_connection(
     reward_runtime_metrics: SharedRewardRuntimeMetrics,
     storage_metrics: storage_metrics::SharedStorageMetrics,
     feedback_submit_signer: &FeedbackSubmitSigner,
+    runtime_authority_binding: Option<&super::runtime_authority::RuntimeAuthorityBinding>,
 ) -> Result<(), String> {
     stream
         .set_nonblocking(false)
@@ -423,26 +429,31 @@ fn handle_chain_status_connection(
             let replication_debug_status =
                 build_chain_replication_debug_status(replication_network.as_ref());
             let transactions = transfer_submit_api::build_chain_transfer_metrics_status(&runtime)?;
-            let payload = super::status_payload::build_chain_status_payload_with_storage_root(
-                snapshot,
-                execution_world_dir,
-                Some(execution_records_dir),
-                Some(execution_storage_root),
-                loaded_network_tier_manifest,
-                &p2p_recommendation,
-                applied_effective_user_mode,
-                effective_p2p_policy,
-                &live_snapshot,
-                p2p_detection,
-                release_security_policy.clone(),
-                snapshot_metrics(&reward_runtime_metrics),
-                storage_metrics::snapshot_storage_metrics(&storage_metrics),
-                build_chain_wasm_status(),
-                build_chain_runtime_perf_snapshot(loaded_network_tier_manifest, options.node_role),
-                build_chain_traffic_status(replication_network.as_ref(), udp_gossip_traffic),
-                transactions,
-                replication_debug_status,
-            );
+            let payload =
+                super::status_payload::build_chain_status_payload_with_storage_root_and_authority(
+                    snapshot,
+                    execution_world_dir,
+                    Some(execution_records_dir),
+                    Some(execution_storage_root),
+                    loaded_network_tier_manifest,
+                    &p2p_recommendation,
+                    applied_effective_user_mode,
+                    effective_p2p_policy,
+                    &live_snapshot,
+                    p2p_detection,
+                    release_security_policy.clone(),
+                    snapshot_metrics(&reward_runtime_metrics),
+                    storage_metrics::snapshot_storage_metrics(&storage_metrics),
+                    build_chain_wasm_status(),
+                    build_chain_runtime_perf_snapshot(
+                        loaded_network_tier_manifest,
+                        options.node_role,
+                    ),
+                    build_chain_traffic_status(replication_network.as_ref(), udp_gossip_traffic),
+                    transactions,
+                    replication_debug_status,
+                    runtime_authority_binding,
+                );
             let body = serde_json::to_vec_pretty(&payload)
                 .map_err(|err| format!("failed to encode status payload: {err}"))?;
             write_json_response(&mut stream, 200, body.as_slice(), head_only)

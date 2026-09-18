@@ -2,6 +2,7 @@ use super::execution_bridge::{
     ExecutionBridgeCommitTimingSnapshot, snapshot_execution_bridge_commit_timing,
 };
 use super::p2p_status::peer_reachability_as_str;
+use super::runtime_authority::RuntimeAuthorityBinding;
 use super::runtime_status_util::{consensus_status_to_string, now_unix_ms};
 use super::storage_metrics;
 use super::traffic_status::ChainTrafficStatus;
@@ -29,7 +30,9 @@ mod status_payload_network_tier;
 mod status_payload_publication;
 #[path = "status_payload_runtime_errors.rs"]
 mod status_payload_runtime_errors;
-use status_payload_chain_proof::{ChainProofStatus, build_chain_proof_status};
+#[path = "status_payload_validator_provider.rs"]
+mod status_payload_validator_provider;
+use status_payload_chain_proof::build_chain_proof_status;
 use status_payload_consensus::{
     ChainConsensusStatus, ChainPendingConsensusActionsStatus, ChainPendingProposalStatus,
 };
@@ -47,6 +50,9 @@ use status_payload_publication::{
     enforce_retained_publication_proof, push_publication_or_divergence_alert,
 };
 use status_payload_runtime_errors::push_runtime_error_alerts;
+pub(super) use status_payload_validator_provider::{
+    ChainStatusResponse, build_chain_provider_status, build_chain_validator_status,
+};
 #[path = "status_payload_observability.rs"]
 mod status_payload_observability;
 #[path = "status_payload_state_sync.rs"]
@@ -69,9 +75,7 @@ use status_payload_state_sync::{
 };
 #[path = "status_payload_world_resource.rs"]
 mod status_payload_world_resource;
-use status_payload_world_resource::{
-    ChainWorldResourceStatus, build_world_resource_status_with_authoritative_execution,
-};
+use status_payload_world_resource::build_world_resource_status_with_authoritative_execution;
 #[path = "status_payload_p2p.rs"]
 mod status_payload_p2p;
 pub(super) use status_payload_p2p::{
@@ -92,42 +96,6 @@ const MODULE_TICK_SLOW_ROUTE_MIN_SAMPLES: u64 = 4;
 const MODULE_TICK_SLOW_ROUTE_RATIO_PPM: u64 = 50_000;
 const UDP_GOSSIP_SEND_FAILURE_MIN_ATTEMPTS: u64 = 4;
 const UDP_GOSSIP_SEND_FAILURE_RATIO_PPM: u64 = 50_000;
-
-#[derive(Debug, Serialize)]
-pub(super) struct ChainStatusResponse {
-    pub(super) ok: bool,
-    pub(super) observed_at_unix_ms: i64,
-    pub(super) node_id: String,
-    pub(super) world_id: String,
-    pub(super) role: String,
-    pub(super) running: bool,
-    pub(super) liveness: ChainLivenessStatus,
-    pub(super) readiness: ChainReadinessStatus,
-    pub(super) sync: ChainSyncStatus,
-    pub(super) worker_poll_count: u64,
-    pub(super) tick_count: u64,
-    pub(super) last_tick_unix_ms: Option<i64>,
-    pub(super) consensus: ChainConsensusStatus,
-    pub(super) chain_proof: ChainProofStatus,
-    pub(super) consensus_progress_observer_error: Option<String>,
-    pub(super) last_error: Option<String>,
-    pub(super) execution_world_dir: String,
-    pub(super) network_tier: Option<ChainNetworkTierStatus>,
-    pub(super) world_resource: ChainWorldResourceStatus,
-    pub(super) p2p: ChainP2pStatus,
-    pub(super) observability: ChainNodeObservabilityStatus,
-    pub(super) release_security_policy: ReleaseSecurityPolicy,
-    pub(super) reward_runtime: super::reward_runtime_worker::RewardRuntimeMetricsSnapshot,
-    pub(super) storage: storage_metrics::StorageMetricsSnapshot,
-    pub(super) wasm: ChainWasmStatus,
-    pub(super) runtime_perf: Option<RuntimePerfSnapshot>,
-    pub(super) traffic: ChainTrafficStatus,
-    pub(super) transactions: super::transfer_submit_api::ChainTransferMetricsStatus,
-    pub(super) replication: super::ChainReplicationDebugStatus,
-    pub(super) execution_bridge_commit_timing: ExecutionBridgeCommitTimingSnapshot,
-    pub(super) module_tick_routing: ChainModuleTickRoutingStatus,
-}
-
 #[derive(Debug, Serialize)]
 pub(super) struct ChainNodeObservabilityStatus {
     pub(super) status: String,
@@ -838,6 +806,50 @@ pub(super) fn build_chain_status_payload_with_storage_root(
     transactions: super::transfer_submit_api::ChainTransferMetricsStatus,
     replication: super::ChainReplicationDebugStatus,
 ) -> ChainStatusResponse {
+    build_chain_status_payload_with_storage_root_and_authority(
+        snapshot,
+        execution_world_dir,
+        execution_records_dir,
+        execution_storage_root,
+        loaded_network_tier_manifest,
+        live_p2p_recommendation,
+        applied_effective_user_mode,
+        effective_p2p_policy,
+        live_snapshot,
+        p2p_detection,
+        release_security_policy,
+        reward_runtime_metrics,
+        storage_metrics,
+        wasm,
+        runtime_perf,
+        traffic,
+        transactions,
+        replication,
+        None,
+    )
+}
+
+pub(super) fn build_chain_status_payload_with_storage_root_and_authority(
+    snapshot: NodeSnapshot,
+    execution_world_dir: &Path,
+    execution_records_dir: Option<&Path>,
+    execution_storage_root: Option<&Path>,
+    loaded_network_tier_manifest: Option<&LoadedNetworkTierManifest>,
+    live_p2p_recommendation: &NodeUserModeRecommendation,
+    applied_effective_user_mode: Option<String>,
+    effective_p2p_policy: NodeNetworkPolicy,
+    live_snapshot: &Libp2pReachabilitySnapshot,
+    p2p_detection: NodeReachabilityAutoDetection,
+    release_security_policy: ReleaseSecurityPolicy,
+    reward_runtime_metrics: super::reward_runtime_worker::RewardRuntimeMetricsSnapshot,
+    storage_metrics: storage_metrics::StorageMetricsSnapshot,
+    wasm: ChainWasmStatus,
+    runtime_perf: Option<RuntimePerfSnapshot>,
+    traffic: ChainTrafficStatus,
+    transactions: super::transfer_submit_api::ChainTransferMetricsStatus,
+    replication: super::ChainReplicationDebugStatus,
+    authority_binding: Option<&RuntimeAuthorityBinding>,
+) -> ChainStatusResponse {
     let observed_at_unix_ms = now_unix_ms();
     let p2p = build_chain_p2p_status(
         live_p2p_recommendation,
@@ -962,6 +974,15 @@ pub(super) fn build_chain_status_payload_with_storage_root(
         loaded_network_tier_manifest,
     );
     let chain_proof = build_chain_proof_status(execution_records_dir, execution_storage_root);
+    let validator = build_chain_validator_status(&snapshot, authority_binding);
+    let provider = build_chain_provider_status(
+        &snapshot,
+        &world_resource,
+        &chain_proof,
+        &storage_metrics,
+        &replication,
+        authority_binding,
+    );
     let execution_bridge_commit_timing = snapshot_execution_bridge_commit_timing();
     let pending_proposal = snapshot
         .consensus
@@ -1164,5 +1185,7 @@ pub(super) fn build_chain_status_payload_with_storage_root(
         replication,
         execution_bridge_commit_timing,
         module_tick_routing,
+        validator,
+        provider,
     }
 }

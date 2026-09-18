@@ -21,7 +21,8 @@ if [[ "$test_case" == "all" ]]; then
     corrupt_tree_total_bytes \
     legacy_manifest \
     completed_backup_reuse_fails_closed \
-    seed_from_remote_rejects_cross_surface_checkpoint_drift; do
+    seed_from_remote_rejects_cross_surface_checkpoint_drift \
+    triad_rollout_requires_validator_truth; do
     OASIS7_OBSERVER_SYNC_TEST_CASE="$test_case" bash "$0"
   done
   echo "ok: local observer sync accepts sequencer/storage validator env pair"
@@ -40,7 +41,8 @@ if [[ "$test_case" != "canonical_layout" \
   && "$test_case" != "corrupt_tree_total_bytes" \
   && "$test_case" != "legacy_manifest" \
   && "$test_case" != "completed_backup_reuse_fails_closed" \
-  && "$test_case" != "seed_from_remote_rejects_cross_surface_checkpoint_drift" ]]; then
+  && "$test_case" != "seed_from_remote_rejects_cross_surface_checkpoint_drift" \
+  && "$test_case" != "triad_rollout_requires_validator_truth" ]]; then
   echo "unknown observer sync test case: $test_case" >&2
   exit 2
 fi
@@ -192,6 +194,10 @@ EOF
   test ! -e "$tmp_dir/backup"
   echo "ok: observer seed rejects cross-surface checkpoint drift"
   exit 0
+fi
+
+if [[ "$test_case" == "triad_rollout_requires_validator_truth" ]]; then
+  exec bash "$repo_root/scripts/p2p-public-testnet-observer-triad-rollout.test.sh"
 fi
 
 if [[ "$test_case" == "reset_owned_restore_retry_path_shim" ]]; then
@@ -398,9 +404,84 @@ NODE_VALIDATORS_CSV=triad-testnet-sequencer:100,triad-testnet-storage:50
 NODE_VALIDATOR_SIGNERS_CSV=triad-testnet-sequencer:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa,triad-testnet-storage:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb
 EOF
 
+authority_registry_path="$local_stack/config/genesis-validator-registry.json"
+mkdir -p "$local_stack/config"
+python3 - "$authority_registry_path" <<'PY'
+import json
+import pathlib
+import sys
+
+registry_path = pathlib.Path(sys.argv[1])
+validators = [
+    {
+        "node_id": "triad-testnet-sequencer",
+        "scheme": "ed25519",
+        "finality_signer_public_key": "a" * 64,
+        "stake": 100,
+    },
+    {
+        "node_id": "triad-testnet-storage",
+        "scheme": "ed25519",
+        "finality_signer_public_key": "b" * 64,
+        "stake": 50,
+    },
+]
+registry_path.write_text(
+    json.dumps(
+        {
+            "slot_id": "governance.finality.v1",
+            "threshold": 2,
+            "threshold_bps": 0,
+            "validators": validators,
+        },
+        ensure_ascii=True,
+        indent=2,
+        sort_keys=True,
+    )
+    + "\n",
+    encoding="utf-8",
+)
+PY
+authority_registry_sha=$(shasum -a 256 "$authority_registry_path" | awk '{print $1}')
+authority_registry_semantic_sha=$(python3 - "$authority_registry_path" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+
+registry = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+canonical = {
+    "signer_bindings": {
+        f"governance.finality.v1.{item['node_id']}": str(item["finality_signer_public_key"]).lower()
+        for item in registry["validators"]
+    },
+    "slot_id": registry["slot_id"],
+    "threshold": registry["threshold"],
+    "threshold_bps": registry["threshold_bps"],
+    "validator_stakes": {
+        f"governance.finality.v1.{item['node_id']}": item["stake"]
+        for item in registry["validators"]
+    },
+}
+print(hashlib.sha256(json.dumps(canonical, sort_keys=True, separators=(",", ":")).encode()).hexdigest())
+PY
+)
+
 cat >"$manifest_path" <<EOF
 {
-  "network_id": "public_testnet",
+  "schema_version": "oasis7.network_tier_manifest.v1",
+  "tier": "public_testnet",
+  "network_id": "oasis7-public-testnet-governed-20260606",
+  "chain_id": "oasis7-public-testnet-governed-20260606",
+  "validator_policy": {
+    "target_validator_count": 2,
+    "allow_observer_nodes": true
+  },
+  "deployment_validator_registry": {
+    "ref": "config/genesis-validator-registry.json",
+    "sha256": "$authority_registry_sha",
+    "semantic_sha256": "$authority_registry_semantic_sha"
+  },
   "runtime_refs": {
     "release_candidate_bundle_ref": "governed-bundle.json",
     "generated_world_sidecar_ref": "$sidecar_ref",
@@ -439,6 +520,41 @@ grep -Eq '^REPLICATION_ROOT=.*/replication-root$' "$rendered_env"
 grep -q '^NODE_GOSSIP_PEERS_CSV=39.104.204.172:6731,39.104.205.67:6732$' "$rendered_env"
 grep -q '^REPLICATION_NETWORK_BOOTSTRAP_PEERS_CSV=/ip4/39.104.205.67/tcp/6832/p2p/12D3KooWAuNCCEDu7CdUUDwALuAhuLekZHgVWxAYp4Ag5ti79fJj,/ip4/39.104.204.172/tcp/6831/p2p/12D3KooWMyPapumCaTABq27umWdHqXDr8AoTse21eMVnXeJEsbNp$' "$rendered_env"
 grep -q '^REPLICATION_REMOTE_WRITERS_CSV=bb,cc,aa$' "$rendered_env"
+grep -q "^GENESIS_VALIDATOR_REGISTRY_PATH=$authority_registry_path$" "$rendered_env"
+grep -q "^GENESIS_VALIDATOR_REGISTRY_SHA256=$authority_registry_sha$" "$rendered_env"
+grep -q "^GENESIS_VALIDATOR_REGISTRY_SEMANTIC_SHA256=$authority_registry_semantic_sha$" "$rendered_env"
+if grep -q '^DEPLOYMENT_INVENTORY_PATH=' "$rendered_env"; then
+  echo "registry-only observer render must not emit deployment inventory" >&2
+  exit 1
+fi
+
+apply_backup="$tmp_dir/apply-backup"
+expected_registry_path="$tmp_dir/expected-registry.json"
+cp "$authority_registry_path" "$expected_registry_path"
+./scripts/p2p-public-testnet-local-observer-sync.sh apply \
+  --local-env "$tmp_dir/local.env" \
+  --sequencer-env "$tmp_dir/sequencer.env" \
+  --storage-env "$tmp_dir/storage.env" \
+  --manifest-path "$manifest_path" \
+  --backup-dir "$apply_backup" >/dev/null
+grep -q "^GENESIS_VALIDATOR_REGISTRY_PATH=$authority_registry_path$" "$tmp_dir/local.env"
+if grep -q '^DEPLOYMENT_INVENTORY_PATH=' "$tmp_dir/local.env"; then
+  echo "registry-only observer apply must not emit deployment inventory" >&2
+  exit 1
+fi
+cmp -s "$expected_registry_path" "$authority_registry_path"
+python3 - "$manifest_path" "$authority_registry_sha" "$authority_registry_semantic_sha" <<'PY'
+import json
+import pathlib
+import sys
+
+manifest = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert manifest["deployment_validator_registry"] == {
+    "ref": "config/genesis-validator-registry.json",
+    "sha256": sys.argv[2],
+    "semantic_sha256": sys.argv[3],
+}
+PY
 
 sync_help="$tmp_dir/observer-sync-help.txt"
 ./scripts/p2p-public-testnet-local-observer-sync.sh render --help >"$sync_help"
@@ -536,6 +652,11 @@ if [[ "$test_case" == "governance_refs_localized" \
   build_evidence="$build_worktree/doc/testing/evidence"
   localized_config="$tmp_dir/localized-observer/config"
   mkdir -p "$build_config" "$build_evidence" "$localized_config"
+  cp "$authority_registry_path" "$build_config/genesis-validator-registry.json"
+  cp "$bundle_path" "$build_config/governed-bundle.json"
+  mkdir -p "$build_config/$(dirname "$sidecar_ref")" "$build_config/$(dirname "$provenance_ref")"
+  cp -R "$sidecar_path" "$build_config/$sidecar_ref"
+  cp "$provenance_path" "$build_config/$provenance_ref"
 
   for evidence_name in \
     governance-public-signers.json \
@@ -560,15 +681,42 @@ if [[ "$test_case" == "governance_refs_localized" \
 EOF
   cat >"$build_config/manifest.json" <<EOF
 {
-  "network_id": "public_testnet",
+  "schema_version": "oasis7.network_tier_manifest.v1",
+  "tier": "public_testnet",
+  "network_id": "oasis7-public-testnet-governed-20260606",
+  "chain_id": "oasis7-public-testnet-governed-20260606",
+  "validator_policy": {
+    "target_validator_count": 2,
+    "allow_observer_nodes": true
+  },
+  "deployment_validator_registry": {
+    "ref": "genesis-validator-registry.json",
+    "sha256": "$authority_registry_sha",
+    "semantic_sha256": "$authority_registry_semantic_sha"
+  },
   "runtime_refs": {
-    "release_candidate_bundle_ref": "$bundle_path",
-    "genesis_ref": "$build_config/genesis.json",
-    "generated_world_sidecar_ref": "$sidecar_path",
-    "world_generation_provenance_ref": "$provenance_path"
+    "release_candidate_bundle_ref": "governed-bundle.json",
+    "genesis_ref": "genesis.json",
+    "generated_world_sidecar_ref": "$sidecar_ref",
+    "world_generation_provenance_ref": "$provenance_ref"
   }
 }
 EOF
+  python3 - "$build_config/governed-bundle.json" "$sidecar_ref" "$provenance_ref" "$build_config" <<'PY'
+import json
+import pathlib
+import sys
+
+bundle_path, sidecar_ref, provenance_ref, build_config = sys.argv[1:]
+bundle = json.loads(pathlib.Path(bundle_path).read_text(encoding="utf-8"))
+bundle["generated_world_sidecar"].update(
+    {"ref": sidecar_ref, "resolved_path": str(pathlib.Path(build_config, sidecar_ref))}
+)
+bundle["world_generation_provenance"].update(
+    {"ref": provenance_ref, "resolved_path": str(pathlib.Path(build_config, provenance_ref))}
+)
+pathlib.Path(bundle_path).write_text(json.dumps(bundle, indent=2) + "\n", encoding="utf-8")
+PY
 
   localized_manifest="$localized_config/manifest.json"
   if [[ "$test_case" == "governance_missing_source_no_mutation" ]]; then
@@ -683,6 +831,20 @@ PY
 
   apply_localization
   localized_genesis="$localized_config/genesis.json"
+  localized_registry="$localized_config/genesis-validator-registry.json"
+  cmp -s "$authority_registry_path" "$localized_registry"
+  python3 - "$localized_config/manifest.json" "$authority_registry_sha" "$authority_registry_semantic_sha" <<'PY'
+import json
+import pathlib
+import sys
+
+manifest = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert manifest["deployment_validator_registry"] == {
+    "ref": "config/genesis-validator-registry.json",
+    "sha256": sys.argv[2],
+    "semantic_sha256": sys.argv[3],
+}
+PY
   first_sha=$(shasum -a 256 "$localized_genesis" | awk '{print $1}')
   apply_localization
   test "$(shasum -a 256 "$localized_genesis" | awk '{print $1}')" = "$first_sha"

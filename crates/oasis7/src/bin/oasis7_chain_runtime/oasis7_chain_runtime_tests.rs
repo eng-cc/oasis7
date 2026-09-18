@@ -97,6 +97,7 @@ fn parse_options_defaults() {
     assert!(options.replication_network_bootstrap_peers.is_empty());
     assert!(options.replication_remote_writer_public_keys.is_empty());
     assert!(options.provider_backed_bootstrap_authority_paths.is_empty());
+    assert!(options.deployment_inventory_path.is_none());
     assert!(options.runtime_root.is_none());
     assert!(options.replication_root.is_none());
     assert_eq!(options.p2p_max_ipv4_subnet_active_peers, None);
@@ -144,6 +145,8 @@ fn parse_options_reads_custom_values() {
             "authority-a.json",
             "--provider-bootstrap-authority",
             "authority-b.json",
+            "--deployment-inventory",
+            "custom/inventory.json",
             "--runtime-root",
             "custom/runtime",
             "--replication-root",
@@ -192,6 +195,13 @@ fn parse_options_reads_custom_values() {
             Path::new("authority-a.json").to_path_buf(),
             Path::new("authority-b.json").to_path_buf(),
         ]
+    );
+    assert_eq!(
+        options
+            .deployment_inventory_path
+            .as_ref()
+            .map(|path| path.to_string_lossy().to_string()),
+        Some("custom/inventory.json".to_string())
     );
     assert_eq!(
         options
