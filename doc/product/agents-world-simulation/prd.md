@@ -32,7 +32,7 @@ Agent 的意图在进入世界后必须经过统一权威裁决；并发冲突�
 
 ## 2. 范围与玩家边界
 
-覆盖可重现场景、Agent/LLM provider 权威、世界事件流、主 Web 界面、Launcher 转移和交互反馈。玩家可以观察、发起被允许的意图并看到权威结果；不能把 mock、本地演示或未授权 provider 输出当作世界状态。
+覆盖可重现场景、Agent/LLM provider 权威、世界事件流、进入世界后的主 Web 界面、交互连续性和反馈。玩家可以观察、发起被允许的意图并看到权威结果；不能把 mock、本地演示或未授权 provider 输出当作世界状态。下载、启动、模式选择、真实后端核验、升级与重新进入由 [`玩家接入与发行`](../player-entry-distribution/prd.md) 主责，本模块只消费这些入口提供的世界上下文并保证进入后的语义连续。
 
 Agent 可以基于世界观测、工业物流、市场、风险与治理约束形成计划，但这些输入可能延迟、过期或不完整；当其影响当前决策时，产品必须区分当前事实与陈旧/不确定情报，并允许刷新、纠正或重排，不能把缓存信息伪装成实时真值。
 
@@ -56,7 +56,7 @@ Agent 不得绕过世界规则与基础设施约束；当工业、市场或治�
 
 产品 PRD 不改写具体模式、API、UI 或 provider 选择；冲突时由对应 `agent_engineer`、`viewer_engineer` 或 runtime owner 与产品 owner 共同裁决。
 
-相邻产品组合依赖：[`doc/product/world-infrastructure/prd.md`](../world-infrastructure/prd.md) 定义工业经济底座的产品承诺；本模块消费该承诺形成 Agent 端到端模拟，但不能以相邻产品 PRD 代替 game/runtime/world-simulator 的专业规则与验证证据。
+相邻产品组合依赖：工业、市场、物流和治理的产品语义由 [`世界规则与玩法系统`](../world-rules-core-gameplay/prd.md) 拥有；[`权威世界基础设施`](../world-infrastructure/prd.md) 提供最终性、确定性执行与状态连续性保证；本模块消费两者形成可解释的 Agent 决策与反馈闭环，但不能以相邻产品 PRD 代替 `game` / `runtime` / `world-simulator` 的专业规则与验证证据。
 
 ## 4. 路线图
 
