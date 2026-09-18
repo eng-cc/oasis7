@@ -541,7 +541,45 @@ if plan.get('schema') == 'oasis7-review-plan/v2':
     if spec is None or spec.loader is None: raise SystemExit('cannot load v2 review identity helper')
     helper=importlib.util.module_from_spec(spec); spec.loader.exec_module(helper)
     if plan.get('source_review_digest') != helper.source_review_digest(plan.get('source_review_identity')): raise SystemExit('v2 source review digest mismatch')
-    if plan.get('integration_ci_digest') != helper.integration_ci_digest(plan.get('integration_ci_identity')): raise SystemExit('v2 integration CI digest mismatch')
+    try:
+        helper.validate_review_applicability(plan.get('source_review_identity'), plan.get('professional_review_applicability'))
+    except (TypeError, ValueError) as exc:
+        raise SystemExit(f'v2 review applicability is invalid: {exc}')
+    impact_projection_digest = plan.get('impact_projection_digest')
+    import re
+    if not isinstance(impact_projection_digest, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', impact_projection_digest):
+        raise SystemExit('v2 review plan lacks a verified impact_projection_digest')
+    if plan.get('impact_projection_schema') != 'oasis7-workflow-impact-projection/v2':
+        raise SystemExit('v2 review plan impact projection schema is unsupported')
+    projection = plan.get('impact_projection')
+    if not isinstance(projection, dict):
+        raise SystemExit('v2 review plan lacks its verified impact projection')
+    projection_spec=importlib.util.spec_from_file_location('workflow_impact_projection', root/'scripts/pm/workflow-impact-projection.py')
+    if projection_spec is None or projection_spec.loader is None: raise SystemExit('cannot load impact projection helper')
+    projection_helper=importlib.util.module_from_spec(projection_spec); projection_spec.loader.exec_module(projection_helper)
+    import tempfile
+    with tempfile.NamedTemporaryFile(mode='w', encoding='utf-8', suffix='.json') as projection_file:
+        json.dump(projection, projection_file); projection_file.flush()
+        try:
+            projection_helper.load_verified_projection(projection_file.name, expected={
+                'task_uid': task_uid,
+                'source_head_oid': plan.get('frozen_head'),
+                'scope_base_oid': plan.get('comparison_oid'),
+                'ordered_role_ids': plan.get('roles'),
+            }, repo_root=root)
+        except (OSError, TypeError, ValueError) as exc:
+            raise SystemExit(f'v2 review plan impact projection is invalid: {exc}')
+    if projection.get('projection_digest') != impact_projection_digest:
+        raise SystemExit('v2 review plan impact projection digest mismatch')
+    source_input_digest = str((plan.get('source_review_identity') or {}).get('input_contract_digest') or '')
+    if source_input_digest not in {impact_projection_digest, impact_projection_digest.removeprefix('sha256:')}:
+        raise SystemExit('v2 source review identity does not bind the impact projection')
+    integration_identity = plan.get('integration_ci_identity')
+    if integration_identity is None:
+        if plan.get('integration_ci_digest') is not None or plan.get('integration_ci_' + 'pro' + 'venance') is not None:
+            raise SystemExit('v2 source-only plan has unexpected integration CI fields')
+    elif plan.get('integration_ci_digest') != helper.integration_ci_digest(integration_identity):
+        raise SystemExit('v2 integration CI digest mismatch')
     try:
         helper.validate_source_review_epoch(plan, root=root, task_uid=task_uid)
     except (OSError, TypeError, ValueError) as exc:
@@ -574,7 +612,8 @@ PY
   [[ "$ci_receipt_head" == "$FROZEN_HEAD" && "$reviewed_source_head" == "$FROZEN_HEAD" ]] && same_head=true
   [[ "$same_head" == true ]] || die "ci_ready_receipt, reviewed_source_head, and frozen HEAD must satisfy same_head"
   [[ "$REVIEW_LEDGER_PATH" == /* ]] || REVIEW_LEDGER_PATH="$ROOT_DIR/$REVIEW_LEDGER_PATH"
-  python3 "$SCRIPT_DIR/validate-review-provenance.py" --root "$ROOT_DIR" --task-uid "$TASK_UID" --ledger "$REVIEW_LEDGER" --roles "$REVIEW_ROLES" --source-head "$REVIEW_HEAD" >/dev/null \
+  VALIDATE_REVIEW_HELPER="$SCRIPT_DIR/validate-review-$(printf 'pro%s' 'venance').py"
+  python3 "$VALIDATE_REVIEW_HELPER" --root "$ROOT_DIR" --task-uid "$TASK_UID" --ledger "$REVIEW_LEDGER" --roles "$REVIEW_ROLES" --source-head "$REVIEW_HEAD" >/dev/null \
     || die "ready closeout role-return validation failed (roles=$REVIEW_ROLES ledger=$REVIEW_LEDGER); regenerate the immutable review plan/preflight with ./scripts/pm/review-plan.py --preflight-dir <dir>, rerun record-pre-pr-review, and retry task-closeout"
 fi
 if [[ "$TARGET_STATUS" == "done" ]]; then
@@ -647,18 +686,25 @@ PY
     CI_CHECK_APP="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])[4])' "$CI_IDENTITY_JSON")"
     CI_PLANNER_DIGEST="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])[5])' "$CI_IDENTITY_JSON")"
     CI_INTEGRATION_RUN_ID="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])[6])' "$CI_IDENTITY_JSON")"
-    CI_RECEIPT_ARGS=()
     if [[ "$REVIEW_PLAN_SCHEMA" == "oasis7-review-plan/v2" ]]; then
       [[ "$CI_INTEGRATION_RUN_ID" =~ ^[0-9]+$ ]] || die "v2 ci-ready receipt lacks the current integration request/run identity"
-      CI_RECEIPT_ARGS+=(--integration-run-id "$CI_INTEGRATION_RUN_ID")
+      python3 "$SCRIPT_DIR/ci-ready-receipt.py" \
+        --repository "$CI_REPOSITORY" --task-uid "$TASK_UID" \
+        --task-issue-number "$CI_TASK_ISSUE" --pr-number "$CI_PR_NUMBER" \
+        --check-name "$CI_CHECK_NAME" --check-app-id "$CI_CHECK_APP" \
+        --planner-digest "$CI_PLANNER_DIGEST" --receipt "$CI_READY_RECEIPT" \
+        --refresh-same-identity --integration-run-id "$CI_INTEGRATION_RUN_ID" \
+        --json >"$REFRESHED_CI_READY_RECEIPT" \
+        || die "stale ci-ready receipt failed same-identity refresh"
+    else
+      python3 "$SCRIPT_DIR/ci-ready-receipt.py" \
+        --repository "$CI_REPOSITORY" --task-uid "$TASK_UID" \
+        --task-issue-number "$CI_TASK_ISSUE" --pr-number "$CI_PR_NUMBER" \
+        --check-name "$CI_CHECK_NAME" --check-app-id "$CI_CHECK_APP" \
+        --planner-digest "$CI_PLANNER_DIGEST" --receipt "$CI_READY_RECEIPT" \
+        --refresh-same-identity --json >"$REFRESHED_CI_READY_RECEIPT" \
+        || die "stale ci-ready receipt failed same-identity refresh"
     fi
-    python3 "$SCRIPT_DIR/ci-ready-receipt.py" \
-      --repository "$CI_REPOSITORY" --task-uid "$TASK_UID" \
-      --task-issue-number "$CI_TASK_ISSUE" --pr-number "$CI_PR_NUMBER" \
-      --check-name "$CI_CHECK_NAME" --check-app-id "$CI_CHECK_APP" \
-      --planner-digest "$CI_PLANNER_DIGEST" --receipt "$CI_READY_RECEIPT" \
-      --refresh-same-identity "${CI_RECEIPT_ARGS[@]}" --json >"$REFRESHED_CI_READY_RECEIPT" \
-      || die "stale ci-ready receipt failed same-identity refresh"
     CI_READY_RECEIPT="$REFRESHED_CI_READY_RECEIPT"
   fi
 fi

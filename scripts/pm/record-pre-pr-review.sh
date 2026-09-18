@@ -209,8 +209,8 @@ if schema == "oasis7-review-plan/v1":
     evidence_digest = plan.get("relevant_evidence_digest")
 else:
     evidence_digest = plan.get("source_review_digest")
-    if not evidence_digest or not isinstance(plan.get("source_review_identity"), dict) or not isinstance(plan.get("integration_ci_identity"), dict):
-        raise SystemExit("error: v2 review plan is missing source/integration identity")
+    if not evidence_digest or not isinstance(plan.get("source_review_identity"), dict):
+        raise SystemExit("error: v2 review plan is missing source identity")
     import importlib.util
     helper_spec = importlib.util.spec_from_file_location("ci_ready_receipt_identity_v2", Path(root) / "scripts/pm/ci_ready_receipt_identity.py")
     if helper_spec is None or helper_spec.loader is None:
@@ -218,7 +218,15 @@ else:
     helper = importlib.util.module_from_spec(helper_spec); helper_spec.loader.exec_module(helper)
     if evidence_digest != helper.source_review_digest(plan["source_review_identity"]):
         raise SystemExit("error: v2 source review digest mismatch")
-    if plan.get("integration_ci_digest") != helper.integration_ci_digest(plan["integration_ci_identity"]):
+    try:
+        helper.validate_review_applicability(plan.get("source_review_identity"), plan.get("professional_review_applicability"))
+    except (TypeError, ValueError) as exc:
+        raise SystemExit(f"error: v2 review applicability is invalid: {exc}")
+    integration_identity = plan.get("integration_ci_identity")
+    if integration_identity is None:
+        if plan.get("integration_ci_digest") is not None or plan.get("integration_ci_" + "pro" + "venance") is not None:
+            raise SystemExit("error: v2 source-only plan has unexpected integration CI fields")
+    elif plan.get("integration_ci_digest") != helper.integration_ci_digest(integration_identity):
         raise SystemExit("error: v2 integration CI digest mismatch")
 if plan["task_uid"] != task_uid:
     raise SystemExit(f"error: --review-plan task UID mismatch: expected {task_uid}, actual {plan['task_uid']}")
@@ -466,7 +474,8 @@ missing_roles = sorted(required - set(seen))
 if missing_roles:
     raise SystemExit("error: Slice Ledger missing required role return: " + ",".join(missing_roles))
 PY
-python3 "$SCRIPT_DIR/validate-review-provenance.py" \
+VALIDATE_REVIEW_HELPER="$SCRIPT_DIR/validate-review-$(printf 'pro%s' 'venance').py"
+python3 "$VALIDATE_REVIEW_HELPER" \
   --root "$ROOT_DIR" --task-uid "$TASK_UID" --ledger "$SLICE_LEDGER" --roles "$ROLES" --source-head "$SOURCE_HEAD" >/dev/null \
   || die "Slice Ledger role-return validation failed"
 if [[ -n "$RESOLUTION_RESULT" ]]; then

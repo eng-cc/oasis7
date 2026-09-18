@@ -1357,9 +1357,9 @@ class WorkflowDocumentationContract(unittest.TestCase):
         assert optional is not None
         for phrase in (
             "if it changes HEAD",
-            "rerun exact-head CI and local role review",
+            "rerun exact-head CI and revalidate review applicability",
             "regenerate the packet and ci_ready receipt",
-            "promote only with that new receipt",
+            "promote only with that new joined evidence",
         ):
             with self.subTest(phrase=phrase):
                 self.assertIn(phrase, optional.group(1))
@@ -1392,6 +1392,18 @@ class WorkflowDocumentationContract(unittest.TestCase):
             check=True,
         ).stdout
         self.assertIn("legacy task-bound `--create` is rejected", help_text)
+        standard_v2 = "./scripts/prepare-task-pr.sh --draft-candidate --create --impact-projection <projection.json> --review-change-class <class>"
+        self.assertIn(standard_v2, help_text)
+        self.assertIn(standard_v2, PM_REPORTING.read_text(encoding="utf-8"))
+
+        source = SOURCE.read_text(encoding="utf-8")
+        finish = FINISHING.read_text(encoding="utf-8")
+        for text in (source, finish):
+            self.assertIn("--draft-candidate --create --impact-projection <projection.json> --review-change-class <class>", text)
+
+        helper = PREPARE_TASK_PR.read_text(encoding="utf-8")
+        self.assertIn("body_file_has_impact_projection", helper)
+        self.assertIn("--body-file must include the exact digest-bound impact projection marker", helper)
         for path in (PM_README, SCRIPTS_PRD):
             with self.subTest(surface=path):
                 text = path.read_text(encoding="utf-8")
@@ -2170,6 +2182,13 @@ class WorkflowDocumentationContract(unittest.TestCase):
                     check=True,
                 )
                 self.assertIn(option, result.stdout)
+
+    def test_task_bound_draft_defaults_to_projected_v2_with_explicit_v1_escape(self) -> None:
+        helper = PREPARE_TASK_PR.read_text(encoding="utf-8")
+        self.assertIn("--impact-projection <path>", helper)
+        self.assertIn("--legacy-review-v1", helper)
+        self.assertIn("task-bound draft candidate requires --impact-projection", helper)
+        self.assertIn("--impact-projection and --legacy-review-v1 are mutually exclusive", helper)
 
 
 if __name__ == "__main__":

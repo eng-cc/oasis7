@@ -120,7 +120,7 @@ def prepare(root,repository,uid,number,base,head):
     result.update(task_uid=uid,pr_number=int(number),workflow_sha=base,workflow_ref=f'{repository}/{WORKFLOW}@refs/heads/{branch}',integration_mode='integration_revalidation')
     return result
 
-def dispatch(repository,uid,number):
+def dispatch(repository,uid,number,impact_projection):
     pr=gh('api',f'repos/{repository}/pulls/{number}')
     base,head=pr['base']['sha'],pr['head']['sha']
     _,branch=identity(repository,uid,number,base,head)
@@ -128,7 +128,11 @@ def dispatch(repository,uid,number):
     workflow=base64.b64decode(source['content']).decode()
     if 'integration_revalidation' not in workflow:
         raise ValueError('activation pending: default-branch workflow lacks integration_revalidation; candidate workflow cannot authorize itself')
-    subprocess.run(['gh','workflow','run','rust.yml','--repo',repository,'--ref',branch,'-f','run_mode=integration_revalidation','-f',f'task_uid={uid}','-f',f'pr_number={number}','-f',f'expected_head={head}','-f',f'integration_base={base}'],check=True)
+    projection_path=Path(impact_projection or '')
+    if not projection_path.is_file():
+        raise ValueError('integration dispatch requires a readable impact projection')
+    projection_b64=base64.b64encode(projection_path.read_bytes()).decode()
+    subprocess.run(['gh','workflow','run','rust.yml','--repo',repository,'--ref',branch,'-f','run_mode=integration_revalidation','-f',f'task_uid={uid}','-f',f'pr_number={number}','-f',f'expected_head={head}','-f',f'integration_base={base}','-f',f'impact_projection_b64={projection_b64}'],check=True)
     return {'status':'requested','base_oid':base,'head_oid':head,'next_command':f'gh run list --repo {repository} --workflow rust.yml --event workflow_dispatch'}
 
 def verified_run(repository,uid,number,base,head,run_id,app_id):
@@ -162,9 +166,10 @@ def main():
     parser.add_argument('command',choices=['dispatch','prepare'])
     parser.add_argument('--repository',required=True);parser.add_argument('--task-uid',required=True);parser.add_argument('--pr-number',required=True,type=int)
     parser.add_argument('--base');parser.add_argument('--head');parser.add_argument('--root',default='.');parser.add_argument('--output')
+    parser.add_argument('--impact-projection')
     a=parser.parse_args()
     try:
-        result=dispatch(a.repository,a.task_uid,a.pr_number) if a.command=='dispatch' else prepare(Path(a.root),a.repository,a.task_uid,a.pr_number,a.base,a.head)
+        result=dispatch(a.repository,a.task_uid,a.pr_number,a.impact_projection) if a.command=='dispatch' else prepare(Path(a.root),a.repository,a.task_uid,a.pr_number,a.base,a.head)
         if a.output: Path(a.output).write_text(json.dumps(result))
         print(json.dumps(result))
     except (ValueError,KeyError,OSError,subprocess.SubprocessError) as exc:

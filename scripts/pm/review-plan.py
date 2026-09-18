@@ -31,6 +31,63 @@ CANONICAL_REVIEW_ROLES = {
 }
 
 
+def effective_mode(*, review_schema: str, loop_status: str,
+                   has_ci_ready_receipt: bool,
+                   trusted_integration_artifact: bool,
+                   incremental_review_context: bool = False) -> dict[str, object]:
+    """Describe the policy and review path that actually produced a plan.
+
+    This is a derived observability projection.  It is intentionally not part
+    of the immutable plan identity: adding the projection must not invalidate
+    existing v1 epochs, and old plans can still be reported with the current
+    compatibility classification.  The v2 branch remains opt-in and requires
+    the same trusted receipt checks as the plan producer itself.
+    """
+    if review_schema not in (SCHEMA, V2_SCHEMA):
+        raise ContractError(f"unsupported review schema for effective mode: {review_schema}")
+    if loop_status not in {"legacy", "passed"}:
+        raise ContractError(f"unsupported loop admission status for effective mode: {loop_status}")
+    if type(has_ci_ready_receipt) is not bool or type(trusted_integration_artifact) is not bool:
+        raise ContractError("effective mode receipt flags must be boolean")
+    if type(incremental_review_context) is not bool:
+        raise ContractError("effective mode incremental context flag must be boolean")
+
+    legacy_policy = loop_status == "legacy"
+    if review_schema == V2_SCHEMA:
+        if trusted_integration_artifact and not has_ci_ready_receipt:
+            raise ContractError("v2 effective mode cannot attest integration without a ci-ready receipt")
+        if has_ci_ready_receipt and not trusted_integration_artifact:
+            raise ContractError(
+                "v2 effective mode requires a trusted ci-ready receipt"
+            )
+        source_review = "separated"
+        integration_validation = (
+            "trusted_integration" if has_ci_ready_receipt
+            else "pending_trusted_integration"
+        )
+        enabled = ["source_review_integration_separation"]
+        if incremental_review_context:
+            enabled.append("incremental_review_context")
+        fallback = "legacy_task_without_loop_binding" if legacy_policy else None
+    else:
+        source_review = "combined"
+        integration_validation = "receipt_bound" if has_ci_ready_receipt else "legacy_evidence"
+        enabled = []
+        fallback = (
+            "legacy_task_without_loop_binding"
+            if legacy_policy else "review_schema_v1_compatibility"
+        )
+
+    return {
+        "effective_policy": "legacy" if legacy_policy else "loop-bound",
+        "review_schema": review_schema,
+        "source_review_mode": source_review,
+        "integration_validation_mode": integration_validation,
+        "enabled_optimizations": enabled,
+        "fallback_reason": fallback,
+    }
+
+
 class ContractError(ValueError):
     pass
 
@@ -268,14 +325,22 @@ def validate_prior_plan(root: Path, path: Path, task_uid: str) -> tuple[dict[str
         try:
             if plan.get("source_review_digest") != identity_module.source_review_digest(plan.get("source_review_identity")):
                 raise ContractError("prior v2 source review digest is invalid")
-            if plan.get("integration_ci_digest") != identity_module.integration_ci_digest(plan.get("integration_ci_identity")):
+            integration_identity = plan.get("integration_ci_identity")
+            if integration_identity is None:
+                if plan.get("integration_ci_digest") is not None or plan.get("integration_ci_provenance") is not None:
+                    raise ContractError("prior v2 source-only plan has unexpected integration CI fields")
+            elif plan.get("integration_ci_digest") != identity_module.integration_ci_digest(integration_identity):
                 raise ContractError("prior v2 integration CI digest is invalid")
+            identity_module._verified_review_applicability(
+                plan.get("professional_review_applicability")
+            )
         except (TypeError, ValueError) as exc:
             raise ContractError(f"prior v2 review identity is invalid: {exc}") from exc
         if prior_digest != plan.get("source_review_digest"):
             raise ContractError("prior v2 evidence digest does not match source review digest")
-        provenance = plan.get("integration_ci_provenance")
-        if provenance != {"live_validation": "ci-ready-receipt-live", "trusted_integration_artifact": True}:
+        if integration_identity is not None and plan.get("integration_ci_provenance") != {
+            "live_validation": "ci-ready-receipt-live", "trusted_integration_artifact": True
+        }:
             raise ContractError("prior v2 integration provenance is not trusted")
     return plan, sha256_bytes(resolved.read_bytes()), {
         "path": collection_path.relative_to(root).as_posix(),
@@ -425,6 +490,145 @@ def load_identity_module() -> Any:
     return module
 
 
+def load_impact_projection_module() -> Any:
+    module_path = Path(__file__).with_name("workflow-impact-projection.py")
+    spec = importlib.util.spec_from_file_location("workflow_impact_projection", module_path)
+    if spec is None or spec.loader is None:
+        raise ContractError("cannot load workflow impact projection helper")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def resolve_repo_owned_json(root: Path, raw_path: str, label: str) -> dict[str, Any]:
+    """Load a JSON object that is part of the current task/repository evidence."""
+    candidate = Path(raw_path).expanduser()
+    if not candidate.is_absolute():
+        candidate = root / candidate
+    try:
+        resolved = candidate.resolve(strict=True)
+        resolved.relative_to(root.resolve())
+    except (OSError, ValueError) as exc:
+        raise ContractError(f"{label} must resolve inside the repository: {raw_path}") from exc
+    return load_json(resolved)
+
+
+def source_review_input(root: Path, path: str, *, task_uid: str, head: str,
+                        comparison_oid: str, roles: list[str], args: argparse.Namespace
+                        ) -> tuple[dict[str, Any], dict[str, Any]]:
+    """Validate source-review inputs before integration CI exists."""
+    value = resolve_repo_owned_json(root, path, "--source-review-input")
+    if value.get("schema") != "oasis7-review-source-input/v1":
+        raise ContractError("--source-review-input has an unsupported schema")
+    raw_identity = value.get("source_review_identity", value)
+    if not isinstance(raw_identity, dict):
+        raise ContractError("--source-review-input source_review_identity must be an object")
+    identity_module = load_identity_module()
+    try:
+        identity = identity_module.source_review_identity(
+            **{field: raw_identity.get(field) for field in identity_module.SOURCE_REVIEW_FIELDS}
+        )
+    except (TypeError, ValueError) as exc:
+        raise ContractError(f"invalid --source-review-input source identity: {exc}") from exc
+    if identity["task_uid"] != task_uid or identity["source_head_oid"] != head:
+        raise ContractError("--source-review-input task/source head does not match the requested plan")
+    if identity["source_scope_oid"] != comparison_oid:
+        raise ContractError("--source-review-input source scope does not match comparison OID")
+    if identity["ordered_role_ids"] != roles:
+        raise ContractError("--source-review-input ordered roles do not match role selector output")
+    for name, expected in (
+        ("bootstrap_epoch", args.bootstrap_epoch),
+        ("role_contract_digest", args.role_contract_digest),
+        ("review_policy_digest", args.review_policy_digest),
+        ("input_contract_digest", args.input_contract_digest),
+    ):
+        if expected is not None and identity[name] != expected:
+            raise ContractError(f"--{name.replace('_', '-')} does not match --source-review-input")
+
+    supplied_applicability = value.get("professional_review_applicability")
+    if supplied_applicability is None:
+        applicability_identity = identity_module.review_applicability_identity(identity)
+        applicability = {
+            "identity": applicability_identity,
+            "identity_digest": identity_module.review_applicability_digest(applicability_identity),
+            "verified": True,
+        }
+    else:
+        if not isinstance(supplied_applicability, dict) or supplied_applicability.get("verified") is not True:
+            raise ContractError("--source-review-input applicability must be independently verified")
+        try:
+            applicability_identity = identity_module._validate_review_applicability_identity(
+                supplied_applicability.get("identity")
+            )
+        except (TypeError, ValueError) as exc:
+            raise ContractError(f"invalid --source-review-input applicability: {exc}") from exc
+        if supplied_applicability.get("identity_digest") != identity_module.review_applicability_digest(applicability_identity):
+            raise ContractError("--source-review-input applicability digest mismatch")
+        if applicability_identity != identity_module.review_applicability_identity(identity):
+            raise ContractError("--source-review-input applicability is not bound to source identity")
+        applicability = {
+            "identity": applicability_identity,
+            "identity_digest": supplied_applicability["identity_digest"],
+            "verified": True,
+        }
+    return identity, applicability
+
+
+def derived_source_review_input(root: Path, *, task_uid: str, head: str,
+                                comparison_oid: str, roles: list[str],
+                                impact_projection: dict[str, Any],
+                                bootstrap_epoch: int | None) -> tuple[dict[str, Any], dict[str, Any]]:
+    mapping = load_json(root / ".pm/github-project-sync/tasks.json")
+    task = (mapping.get("tasks") or {}).get(task_uid) or {}
+    epoch = bootstrap_epoch or task.get("bootstrap_epoch")
+    if epoch is None:
+        snapshot_path = root / ".pm" / "scratch" / task_uid / "bootstrap-task-snapshot.json"
+        try:
+            snapshot = load_json(snapshot_path)
+        except (OSError, ValueError, ContractError) as exc:
+            raise ContractError(f"default v2 source plan cannot read bootstrap snapshot: {exc}") from exc
+        snapshot_task = snapshot.get("task") if isinstance(snapshot, dict) else None
+        if isinstance(snapshot_task, dict) and snapshot_task.get("uid") == task_uid:
+            epoch = snapshot_task.get("bootstrap_epoch")
+    repository = task.get("repository") or (mapping.get("project") or {}).get("repo")
+    pr_number = task.get("pr_number")
+    if type(epoch) is not int or epoch < 1 or not repository or type(pr_number) is not int or pr_number < 1:
+        raise ContractError("default v2 source plan requires task bootstrap epoch, repository and PR number")
+    digest = lambda value: hashlib.sha256(json.dumps(
+        value, sort_keys=True, separators=(",", ":")
+    ).encode()).hexdigest()
+    def contract_digest(paths: list[Path]) -> str:
+        records = []
+        for path in paths:
+            try:
+                content = path.read_bytes()
+            except OSError as exc:
+                raise ContractError(f"cannot bind review contract {path}: {exc}") from exc
+            records.append({"path": str(path.relative_to(root)),
+                            "sha256": hashlib.sha256(content).hexdigest()})
+        return digest(records)
+    role_contract_digest = contract_digest([
+        root / ".agents" / "roles" / f"{role}.md" for role in roles
+    ])
+    review_policy_digest = contract_digest([
+        root / "doc/engineering/workflow/source-of-truth.md",
+        root / ".agents/skills/requesting-repo-owned-review/SKILL.md",
+    ])
+    identity_module = load_identity_module()
+    identity = identity_module.source_review_identity(
+        task_uid=task_uid, bootstrap_epoch=epoch, repository=repository, pr_number=pr_number,
+        source_head_oid=head, source_scope_oid=comparison_oid,
+        changed_paths_digest=str(impact_projection["changed_paths_digest"]).removeprefix("sha256:"),
+        ordered_role_ids=roles, role_contract_digest=role_contract_digest,
+        review_policy_digest=review_policy_digest,
+        input_contract_digest=str(impact_projection["projection_digest"]).removeprefix("sha256:"),
+    )
+    applicability_identity = identity_module.review_applicability_identity(identity)
+    return identity, {"identity": applicability_identity,
+                      "identity_digest": identity_module.review_applicability_digest(applicability_identity),
+                      "verified": True}
+
+
 def live_verify_v2_receipt(path: Path, receipt: dict[str, Any]) -> dict[str, Any]:
     """Re-read the live PR/check/artifact before freezing v2 integration identity."""
     helper = Path(__file__).with_name("ci-ready-receipt.py")
@@ -460,6 +664,25 @@ def changed_paths_digest(path_list: str | None) -> str:
     if len(paths) != len(set(paths)):
         raise ContractError("changed path list contains duplicates")
     return digest(sorted(paths))
+
+
+def frozen_changed_paths(root: Path, comparison_oid: str, head: str) -> list[str]:
+    """Derive the committed review scope from the frozen base and source head.
+
+    A projection is an optimization shared by CI and formal review, but it is
+    not allowed to define its own source scope.  Recompute the committed path
+    set here from the immutable OIDs so a stale, incomplete, or over-broad
+    projection cannot silently narrow or widen the review dispatch.
+    """
+    paths = [
+        line for line in git_text(
+            root, "diff", "--name-only", "--no-renames", comparison_oid, head
+        ).splitlines()
+        if line
+    ]
+    if len(paths) != len(set(paths)):
+        raise ContractError("frozen base..head changed path set contains duplicates")
+    return sorted(paths)
 
 
 def run_json(command: list[str]) -> dict[str, Any]:
@@ -687,24 +910,38 @@ def plan_identity(task_uid: str, head: str, evidence_digest: str, comparison_ref
 
 def plan_identity_v2(task_uid: str, head: str, comparison_ref: str, comparison_oid: str,
                      roles: list[str], slices: list[dict[str, str]], source_identity: dict[str, Any],
-                     source_digest: str, integration_identity: dict[str, Any],
-                     integration_digest: str) -> dict[str, object]:
-    return {
+                     source_digest: str, integration_identity: dict[str, Any] | None,
+                     integration_digest: str | None,
+                     applicability: dict[str, Any], impact_projection: dict[str, Any]) -> dict[str, object]:
+    result: dict[str, object] = {
         "task_uid": task_uid, "frozen_head": head,
         "relevant_evidence_digest": source_digest,
         "source_review_identity": source_identity,
         "source_review_digest": source_digest,
-        "integration_ci_identity": integration_identity,
-        "integration_ci_digest": integration_digest,
-        "integration_ci_provenance": {
-            "live_validation": "ci-ready-receipt-live",
-            "trusted_integration_artifact": True,
-        },
+        "professional_review_applicability": applicability,
+        "impact_projection": impact_projection,
+        "impact_projection_schema": impact_projection["schema"],
+        "impact_projection_digest": impact_projection["projection_digest"],
+        "impact_projection_test_profile": impact_projection["test_profile"],
+        "impact_projection_declared_tests": impact_projection["declared_tests"],
+        "impact_projection_planner_digest": impact_projection["planner_digest"],
         "source_scope_oid": source_identity["source_scope_oid"],
-        "integration_base_oid": integration_identity["integration_base_oid"],
         "comparison_ref": comparison_ref, "comparison_oid": comparison_oid,
         "roles": roles, "expected_slices": slices,
     }
+    if integration_identity is None:
+        result["integration_ci_status"] = "pending"
+    else:
+        result.update({
+            "integration_ci_identity": integration_identity,
+            "integration_ci_digest": integration_digest,
+            "integration_ci_provenance": {
+                "live_validation": "ci-ready-receipt-live",
+                "trusted_integration_artifact": True,
+            },
+            "integration_base_oid": integration_identity["integration_base_oid"],
+        })
+    return result
 
 
 def write_plan(path: Path, plan: dict[str, object]) -> None:
@@ -722,9 +959,11 @@ def main() -> int:
     parser.add_argument("--root", default=".")
     parser.add_argument("--task-uid", required=True)
     parser.add_argument("--head", required=True)
-    evidence = parser.add_mutually_exclusive_group(required=True)
+    evidence = parser.add_mutually_exclusive_group(required=False)
     evidence.add_argument("--evidence-digest")
     evidence.add_argument("--ci-ready-receipt")
+    evidence.add_argument("--source-review-input")
+    parser.add_argument("--impact-projection", help="verified shared CI/review impact projection")
     parser.add_argument("--comparison-ref", required=True)
     parser.add_argument("--comparison-oid", help="optional assertion; must equal the resolved comparison ref OID")
     parser.add_argument("--change-class", required=True,
@@ -736,7 +975,7 @@ def main() -> int:
     parser.add_argument("--changed-path-list")
     parser.add_argument("--preflight-dir")
     parser.add_argument("--out")
-    parser.add_argument("--review-schema", choices=(SCHEMA, V2_SCHEMA), default=SCHEMA)
+    parser.add_argument("--review-schema", choices=(SCHEMA, V2_SCHEMA), default=V2_SCHEMA)
     parser.add_argument("--bootstrap-epoch", type=int)
     parser.add_argument("--source-scope-oid")
     parser.add_argument("--changed-paths-digest")
@@ -754,18 +993,27 @@ def main() -> int:
             raise ContractError("--head must be a 40-64 character lowercase hex object id")
         if args.review_schema == V2_SCHEMA:
             required_v2 = {
-                "--ci-ready-receipt": args.ci_ready_receipt,
                 "--bootstrap-epoch": args.bootstrap_epoch,
                 "--role-contract-digest": args.role_contract_digest,
                 "--review-policy-digest": args.review_policy_digest,
                 "--input-contract-digest": args.input_contract_digest,
             }
-            missing_v2 = [name for name, value in required_v2.items() if not value]
-            if missing_v2:
-                raise ContractError("v2 review plan requires " + ", ".join(missing_v2))
+            if args.evidence_digest:
+                raise ContractError("v2 review plan rejects legacy --evidence-digest; use --source-review-input or --ci-ready-receipt")
+            if not args.impact_projection:
+                raise ContractError("v2 review plan requires --impact-projection")
+            if args.ci_ready_receipt:
+                missing_v2 = [name for name, value in required_v2.items() if not value]
+                if missing_v2:
+                    raise ContractError("v2 review plan with CI receipt requires " + ", ".join(missing_v2))
+        elif args.source_review_input:
+            raise ContractError("--source-review-input is only valid for a v2 review plan")
+        elif not args.evidence_digest and not args.ci_ready_receipt:
+            raise ContractError("v1 review plan requires --evidence-digest or --ci-ready-receipt")
         receipt_comparison_oid: str | None = None
         integration_base_oid: str | None = None
         receipt_value: dict[str, Any] | None = None
+        root = Path(args.root).resolve()
         if args.ci_ready_receipt:
             receipt_value = load_json(Path(args.ci_ready_receipt).resolve())
             if args.review_schema == V2_SCHEMA:
@@ -773,13 +1021,12 @@ def main() -> int:
             evidence_digest, receipt_comparison_oid, integration_base_oid = ci_receipt_authority(
                 Path(args.ci_ready_receipt).resolve(), args.task_uid, args.head
             )
-        else:
+        elif args.evidence_digest:
             evidence_digest = args.evidence_digest
-        if not isinstance(evidence_digest, str) or not SHA_RE.fullmatch(evidence_digest):
-            raise ContractError("--evidence-digest must be a lowercase SHA-256")
+        else:
+            evidence_digest = None
         if args.comparison_oid is not None and not HEAD_RE.fullmatch(args.comparison_oid):
             raise ContractError("--comparison-oid must be a 40-64 character lowercase hex object id")
-        root = Path(args.root).resolve()
         comparison_ref = canonicalize_comparison_ref(root, args.comparison_ref)
         if receipt_comparison_oid is not None:
             if args.comparison_oid is not None and args.comparison_oid != receipt_comparison_oid:
@@ -800,50 +1047,127 @@ def main() -> int:
         except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as exc:
             raise ContractError(str(exc)) from exc
         roles = selector_roles(args)
+        impact_projection: dict[str, Any] | None = None
+        if args.review_schema == V2_SCHEMA:
+            projection_module = load_impact_projection_module()
+            try:
+                impact_projection = projection_module.load_verified_projection(
+                    args.impact_projection,
+                    expected={
+                        "task_uid": args.task_uid,
+                        "source_head_oid": args.head,
+                        "scope_base_oid": comparison_oid,
+                        "change_class": args.change_class,
+                        "ordered_role_ids": roles,
+                    },
+                    repo_root=root,
+                )
+            except (OSError, TypeError, ValueError, projection_module.ProjectionError) as exc:
+                raise ContractError(f"invalid --impact-projection: {exc}") from exc
+            derived_paths = frozen_changed_paths(root, comparison_oid, args.head)
+            if impact_projection["changed_paths"] != derived_paths:
+                projected_paths = impact_projection["changed_paths"]
+                missing = sorted(set(derived_paths) - set(projected_paths))
+                extra = sorted(set(projected_paths) - set(derived_paths))
+                details = []
+                if missing:
+                    details.append("missing=" + ",".join(missing))
+                if extra:
+                    details.append("extra=" + ",".join(extra))
+                raise ContractError(
+                    "impact projection changed paths do not match frozen base..head: "
+                    + ("; ".join(details) if details else "ordering differs")
+                )
+            if receipt_value is not None:
+                if receipt_value.get("impact_projection_digest") != impact_projection["projection_digest"]:
+                    raise ContractError("trusted CI receipt does not bind the review impact projection")
+                if receipt_value.get("impact_projection_planner_digest") != impact_projection["planner_digest"]:
+                    raise ContractError("trusted CI receipt planner does not bind the impact projection planner")
         impacted_roles = validate_impacted_roles(args.impacted_role, roles, bool(args.prior_review_plan))
         source_identity: dict[str, Any] | None = None
         integration_identity: dict[str, Any] | None = None
         source_digest = evidence_digest
+        applicability: dict[str, Any] | None = None
         if args.review_schema == V2_SCHEMA:
-            assert receipt_value is not None
             identity_module = load_identity_module()
-            if not identity_module.has_live_integration_attestation(receipt_value):
-                raise ContractError("v2 review plan requires a live ci-ready receipt with trusted integration artifact provenance")
             if args.source_scope_oid is not None and args.source_scope_oid != comparison_oid:
                 raise ContractError("--source-scope-oid must equal the immutable comparison OID")
             source_scope_oid = args.source_scope_oid or comparison_oid
-            path_digest = args.changed_paths_digest or changed_paths_digest(args.changed_path_list)
-            try:
-                source_identity = identity_module.source_review_identity(
-                    task_uid=args.task_uid, bootstrap_epoch=args.bootstrap_epoch,
-                    repository=receipt_value.get("repository"), pr_number=receipt_value.get("pr_number"),
-                    source_head_oid=args.head, source_scope_oid=source_scope_oid,
-                    changed_paths_digest=path_digest, ordered_role_ids=roles,
-                    role_contract_digest=args.role_contract_digest,
-                    review_policy_digest=args.review_policy_digest,
-                    input_contract_digest=args.input_contract_digest,
+            if args.source_review_input:
+                source_identity, applicability = source_review_input(
+                    root, args.source_review_input, task_uid=args.task_uid, head=args.head,
+                    comparison_oid=source_scope_oid, roles=roles, args=args,
                 )
-                integration_identity = identity_module.integration_ci_identity(receipt_value)
-            except (TypeError, ValueError) as exc:
-                raise ContractError(f"invalid v2 review identity: {exc}") from exc
-            if integration_identity["source_head_oid"] != args.head or integration_identity["task_uid"] != args.task_uid:
-                raise ContractError("v2 integration CI identity does not match task/source head")
+            elif receipt_value is None:
+                source_identity, applicability = derived_source_review_input(
+                    root, task_uid=args.task_uid, head=args.head, comparison_oid=source_scope_oid,
+                    roles=roles, impact_projection=impact_projection,
+                    bootstrap_epoch=args.bootstrap_epoch,
+                )
+            else:
+                assert receipt_value is not None
+                if not identity_module.has_live_integration_attestation(receipt_value):
+                    raise ContractError("v2 review plan requires a live ci-ready receipt with trusted integration artifact provenance")
+                path_digest = args.changed_paths_digest or changed_paths_digest(args.changed_path_list)
+                try:
+                    source_identity = identity_module.source_review_identity(
+                        task_uid=args.task_uid, bootstrap_epoch=args.bootstrap_epoch,
+                        repository=receipt_value.get("repository"), pr_number=receipt_value.get("pr_number"),
+                        source_head_oid=args.head, source_scope_oid=source_scope_oid,
+                        changed_paths_digest=path_digest, ordered_role_ids=roles,
+                        role_contract_digest=args.role_contract_digest,
+                        review_policy_digest=args.review_policy_digest,
+                        input_contract_digest=args.input_contract_digest,
+                    )
+                    integration_identity = identity_module.integration_ci_identity(receipt_value)
+                except (TypeError, ValueError) as exc:
+                    raise ContractError(f"invalid v2 review identity: {exc}") from exc
+                if integration_identity["source_head_oid"] != args.head or integration_identity["task_uid"] != args.task_uid:
+                    raise ContractError("v2 integration CI identity does not match task/source head")
+                applicability_identity = identity_module.review_applicability_identity(source_identity)
+                applicability = {
+                    "identity": applicability_identity,
+                    "identity_digest": identity_module.review_applicability_digest(applicability_identity),
+                    "verified": True,
+                }
             source_digest = identity_module.source_review_digest(source_identity)
+        if not isinstance(source_digest, str) or not SHA_RE.fullmatch(source_digest):
+            raise ContractError("review plan evidence/source digest is missing or invalid")
         incremental_context = (
             prior_review_context(root, args.prior_review_plan, args.task_uid, args.head,
                                  roles, impacted_roles)
             if args.prior_review_plan else None
         )
+        effective_mode_value = effective_mode(
+            review_schema=args.review_schema,
+            loop_status=str(loop_admission.get("status")),
+            has_ci_ready_receipt=args.ci_ready_receipt is not None,
+            trusted_integration_artifact=(
+                receipt_value is not None
+                and load_identity_module().has_live_integration_attestation(receipt_value)
+            ),
+            incremental_review_context=incremental_context is not None,
+        )
         slices = expected_slices(args.task_uid, args.head, source_digest, comparison_ref, comparison_oid, roles)
         batch, batch_reused = ensure_batch(root, args.task_uid, args.head, source_digest, slices)
         epoch = str(batch["epoch"])
         if args.review_schema == V2_SCHEMA:
-            assert source_identity is not None and integration_identity is not None
+            assert source_identity is not None and applicability is not None and impact_projection is not None
+            projected_paths_digest = str(impact_projection["changed_paths_digest"])
+            if source_identity["changed_paths_digest"] not in {
+                    projected_paths_digest, projected_paths_digest.removeprefix("sha256:")}:
+                raise ContractError("source review identity does not match impact projection changed paths")
+            projected_input_digest = str(impact_projection["projection_digest"])
+            if source_identity["input_contract_digest"] not in {
+                    projected_input_digest, projected_input_digest.removeprefix("sha256:")}:
+                raise ContractError("source review identity does not match impact projection input contract")
             identity_module = load_identity_module()
             identity = plan_identity_v2(
                 args.task_uid, args.head, comparison_ref, comparison_oid, roles, slices,
                 source_identity, source_digest, integration_identity,
-                identity_module.integration_ci_digest(integration_identity),
+                (identity_module.integration_ci_digest(integration_identity)
+                 if integration_identity is not None else None),
+                applicability, impact_projection,
             )
         else:
             identity = plan_identity(args.task_uid, args.head, evidence_digest,
@@ -865,10 +1189,14 @@ def main() -> int:
                 if plan.get("schema") != V2_SCHEMA or plan.get("epoch") != epoch:
                     raise ContractError(f"existing review plan does not match immutable v2 inputs: {plan_path}")
                 identity_module = load_identity_module()
-                if not identity_module.can_reuse_source_review(plan, receipt_value or {}):
+                if receipt_value is not None and not identity_module.can_reuse_source_review(
+                        plan, receipt_value, require_fresh_integration=False):
                     raise ContractError("existing v2 review plan cannot reuse source review: fresh integration tree or authority changed")
                 for key in ("task_uid", "frozen_head", "source_review_identity", "source_review_digest",
-                            "source_scope_oid", "comparison_ref", "comparison_oid", "roles", "expected_slices"):
+                            "source_scope_oid", "comparison_ref", "comparison_oid", "roles", "expected_slices",
+                            "impact_projection_schema", "impact_projection_digest",
+                            "impact_projection_test_profile", "impact_projection_declared_tests",
+                            "impact_projection_planner_digest"):
                     if plan.get(key) != identity.get(key):
                         raise ContractError(f"existing review plan does not match immutable source inputs: {plan_path}")
             elif plan.get("schema") != SCHEMA or {key: plan.get(key) for key in identity} != identity or plan.get("epoch") != epoch:
@@ -885,7 +1213,20 @@ def main() -> int:
                     raise ContractError("existing review plan preflight does not match its immutable artifacts")
             if args.prior_review_plan and plan.get("incremental_review_context") != incremental_context:
                 raise ContractError("existing review plan incremental context does not match requested prior plan")
+            recorded_mode = plan.get("effective_mode")
+            mode_transition = (
+                recorded_mode is not None
+                and args.review_schema == V2_SCHEMA
+                and recorded_mode.get("review_schema") == V2_SCHEMA
+                and recorded_mode.get("effective_policy") == effective_mode_value.get("effective_policy")
+                and recorded_mode.get("source_review_mode") == effective_mode_value.get("source_review_mode")
+                and recorded_mode.get("enabled_optimizations") == effective_mode_value.get("enabled_optimizations")
+                and recorded_mode.get("fallback_reason") == effective_mode_value.get("fallback_reason")
+            )
+            if recorded_mode is not None and recorded_mode != effective_mode_value and not mode_transition:
+                raise ContractError("existing review plan effective mode does not match current inputs")
             result: dict[str, object] = {**plan, "reused": True}
+            result["effective_mode"] = effective_mode_value
             if args.review_schema == V2_SCHEMA and receipt_value is not None:
                 result["latest_integration_ci_digest"] = load_identity_module().integration_ci_digest(
                     load_identity_module().integration_ci_identity(receipt_value)
@@ -893,6 +1234,7 @@ def main() -> int:
         else:
             batch_path = Path(str(batch["batch_path"])).resolve()
             result = {"schema": args.review_schema, **identity, "epoch": epoch,
+                      "effective_mode": effective_mode_value,
                       "batch_path": str(batch_path), "collection_path": str(batch_path.with_name(f"{batch_path.stem}.collection.json")),
                       "packet_refs": packet_refs(args.task_uid, slices), "reused": batch_reused}
             if preflight_result is not None:

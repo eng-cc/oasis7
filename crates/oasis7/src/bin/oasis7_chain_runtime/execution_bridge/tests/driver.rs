@@ -21,14 +21,31 @@ use oasis7_wasm_abi::ModuleCallFailure;
 use oasis7_wasm_executor::FixedSandbox;
 
 #[test]
-fn execution_world_persistence_roundtrip() {
+fn chain_runtime_persistence_recovery_roundtrip() {
     let dir = temp_dir("execution-world");
     let world_dir = dir.join("world");
-    let world = RuntimeWorld::new();
+    let mut world = RuntimeWorld::new();
+    world.submit_action(RuntimeAction::RegisterAgent {
+        agent_id: "recovery-agent".to_string(),
+        pos: oasis7::geometry::GeoPos::new(1, 2, 3),
+    });
+    world.step().expect("commit pre-recovery action");
 
     persist_execution_world(world_dir.as_path(), &world).expect("persist world");
-    let loaded = load_execution_world(world_dir.as_path()).expect("load world");
-    assert_eq!(loaded.journal().len(), world.journal().len());
+    let mut recovered = load_execution_world(world_dir.as_path()).expect("recover world");
+    assert_eq!(recovered.state().time, world.state().time);
+    assert_eq!(recovered.state().agents, world.state().agents);
+    assert_eq!(
+        recovered.tick_consensus_records(),
+        world.tick_consensus_records()
+    );
+
+    recovered.submit_action(RuntimeAction::RegisterAgent {
+        agent_id: "post-recovery-agent".to_string(),
+        pos: oasis7::geometry::GeoPos::new(4, 5, 6),
+    });
+    recovered.step().expect("continue recovered runtime");
+    assert!(recovered.state().agents.contains_key("post-recovery-agent"));
 
     let _ = fs::remove_dir_all(dir);
 }

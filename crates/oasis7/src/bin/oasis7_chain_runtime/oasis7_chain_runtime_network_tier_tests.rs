@@ -16,6 +16,9 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+#[path = "oasis7_chain_runtime_network_tier_generated_manifest_tests.rs"]
+mod generated_manifest_tests;
+
 static TEST_TEMP_DIR_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 fn temp_dir(label: &str) -> PathBuf {

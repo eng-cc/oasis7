@@ -1138,7 +1138,7 @@ claim_verify_items = [item for item in workflow_close["checklist"] if item.get("
 if claim_verify_items[0].get("command") != "./scripts/pm/claim-ready.sh --claim-type ready_for_pr --verify-command '<fresh verification command>'":
     raise SystemExit("workflow close checklist should point to claim-ready helper with an explicit verification placeholder")
 prepare_items = [item for item in workflow_close["checklist"] if item.get("id") == "prepare-pr-review"]
-if prepare_items[0].get("command") != "./scripts/prepare-task-pr.sh --draft-candidate --create":
+if prepare_items[0].get("command") != "./scripts/prepare-task-pr.sh --draft-candidate --create --impact-projection <projection.json> --review-change-class <class>":
     raise SystemExit("workflow close PR review checklist should point to draft-candidate creation")
 prepare_summary = prepare_items[0].get("summary", "")
 if "Pre-PR Local Role Review: passed" not in prepare_summary:
