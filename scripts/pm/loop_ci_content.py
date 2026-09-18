@@ -113,6 +113,8 @@ def validate_ci_content(tool_root, root, binding, base, head, repository, reader
 
     def inspect(reference):
         ref = reference['publication_ref']
+        if not isinstance(ref, dict):
+            raise ValueError('published contract publication_ref must be an object')
         if ref.get('repository', REPOSITORY) != REPOSITORY:
             raise ValueError('published contract repository identity mismatch')
         key = (reference['contract_id'], reference['revision'])

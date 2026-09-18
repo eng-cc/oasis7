@@ -91,6 +91,13 @@ class ContentTests(unittest.TestCase):
         result = validate_ci_content(self.root,self.root,self.binding,self.base,self.base,'eng-cc/oasis7',reader)
         self.assertEqual(result['status'],'blocked',result)
 
+    def test_malformed_upstream_publication_ref_blocks_without_traceback(self):
+        self.contract['upstream_contracts'] = [dict(self.reference, publication_ref='malformed')]
+        self.reference['contract_digest'] = contract_digest(self.contract)
+        result = self.check()
+        self.assertEqual(result['status'], 'blocked', result)
+        self.assertIn('publication_ref', ';'.join(result['blockers']))
+
     def test_equivalent_revision_at_two_publications_remains_valid(self):
         self.binding['input_contracts'].append(dict(self.reference,publication_ref={'issue_number':1,'comment_id':4}))
         def reader(repo,path):
