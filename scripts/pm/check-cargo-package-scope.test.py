@@ -261,6 +261,19 @@ enabled = true
 
         self._assert_rejected(repo, base, "alpha", mutate, "cross_package_path")
 
+    def test_cross_package_dev_dependency_is_rejected(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            manifest = root / "crates/alpha/Cargo.toml"
+            manifest.write_text(
+                manifest.read_text(encoding="utf-8")
+                + '\n[dev-dependencies]\nbeta = { path = "../beta" }\n',
+                encoding="utf-8",
+            )
+
+        self._assert_rejected(repo, base, "alpha", mutate, "cross_package_dependency")
+
     def test_generated_output_into_another_package_is_rejected(self) -> None:
         repo, base = self._fixture()
 

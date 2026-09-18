@@ -217,6 +217,28 @@ def package_manifest_paths(packages: dict[str, list[tuple[str, str]]]) -> dict[s
     }
 
 
+def cross_package_dependency_edges(
+    root: Path,
+    metadata: dict[str, Any],
+    packages: dict[str, list[tuple[str, str]]],
+) -> set[tuple[str, str, str]]:
+    edges: set[tuple[str, str, str]] = set()
+    for package in metadata["packages"]:
+        source = package["name"]
+        for dependency in package.get("dependencies", []):
+            if not isinstance(dependency, dict) or not dependency.get("path"):
+                continue
+            dependency_path = Path(str(dependency["path"])).resolve()
+            try:
+                dependency_rel = dependency_path.relative_to(root.resolve()).as_posix()
+            except ValueError:
+                continue
+            target = owner_for(dependency_rel, packages)
+            if target is not None and target != source:
+                edges.add((source, target, str(dependency.get("kind") or "normal")))
+    return edges
+
+
 def workspace_members(text: str) -> set[str]:
     match = re.search(r"(?ms)^\s*members\s*=\s*\[(.*?)\]", text)
     if not match:
@@ -346,11 +368,26 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
     normalized_paths = [safe_relative(path) for path in paths]
     if policy_path in normalized_paths or protected.intersection(normalized_paths):
         raise ScopeError("policy_self_modification", "protected scope policy changed")
-    with tempfile.TemporaryDirectory(prefix="cargo-scope-base-") as base_dir:
+    with tempfile.TemporaryDirectory(prefix="cargo-scope-base-") as base_dir, tempfile.TemporaryDirectory(
+        prefix="cargo-scope-head-"
+    ) as head_dir:
         base_root = Path(base_dir)
+        head_root = Path(head_dir)
         extract_git_tree(repo, args.base, base_root)
-        base_packages = package_roots(base_root, cargo_metadata(base_root))
-    head_packages = package_roots(repo, cargo_metadata(repo))
+        extract_git_tree(repo, args.head, head_root)
+        base_metadata = cargo_metadata(base_root)
+        head_metadata = cargo_metadata(head_root)
+        base_packages = package_roots(base_root, base_metadata)
+        head_packages = package_roots(head_root, head_metadata)
+        added_dependency_edges = cross_package_dependency_edges(
+            head_root, head_metadata, head_packages
+        ) - cross_package_dependency_edges(base_root, base_metadata, base_packages)
+    if added_dependency_edges:
+        detail = ", ".join(
+            f"{source} -[{kind}]-> {target}"
+            for source, target, kind in sorted(added_dependency_edges)
+        )
+        raise ScopeError("cross_package_dependency", detail)
     requested_primary = None if args.primary_package == "auto" else args.primary_package
     if requested_primary is not None and requested_primary not in head_packages:
         raise ScopeError("unknown_primary_package", args.primary_package)
