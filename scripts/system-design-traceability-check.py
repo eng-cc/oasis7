@@ -30,6 +30,8 @@ except RuntimeError as exc:
 
 
 DESIGN_SUFFIX = ".design.md"
+AUTHORITY_SUFFIXES = (".prd.md", DESIGN_SUFFIX)
+AUTHORITY_ROOT_BASENAMES = frozenset({"prd.md", "design.md"})
 PRODUCT_ROOT = Path("doc/product")
 DESIGN_STANDARD_EXCLUSIONS = frozenset(
     {
@@ -112,6 +114,21 @@ def is_system_design_path(path: str) -> bool:
     return (
         normalized.endswith(DESIGN_SUFFIX)
         and not normalized.startswith(f"{PRODUCT_ROOT.as_posix()}/")
+        and normalized not in DESIGN_STANDARD_EXCLUSIONS
+    )
+
+
+def is_traceability_authority_path(path: str) -> bool:
+    """Return whether a changed document can be consumed as an authority.
+
+    This is deliberately a path-level classification, not a caller-provided
+    review class.  Product PRDs and professional design/PRD documents are
+    the only bounded authority endpoints considered by reverse selection.
+    """
+    normalized = Path(path).as_posix()
+    return (
+        normalized.startswith("doc/")
+        and (normalized.endswith(AUTHORITY_SUFFIXES) or Path(normalized).name in AUTHORITY_ROOT_BASENAMES)
         and normalized not in DESIGN_STANDARD_EXCLUSIONS
     )
 
@@ -277,6 +294,26 @@ def worktree_overlay(root: Path, checkout_head: str) -> dict[str, str]:
     return overlay
 
 
+def worktree_authority_overlay(root: Path, checkout_head: str) -> dict[str, str]:
+    """Return worktree changes without rename coalescing.
+
+    A rename is intentionally represented as a deleted old endpoint and an
+    added new endpoint so consumers of either frozen path are re-evaluated.
+    """
+    overlay = parse_name_status(
+        run_git(root, "diff", "--name-status", "--no-renames", checkout_head, "--", ".")
+    )
+    overlay.update(
+        parse_name_status(
+            run_git(root, "diff", "--cached", "--name-status", "--no-renames", checkout_head, "--", ".")
+        )
+    )
+    for path in run_git(root, "ls-files", "--others", "--exclude-standard", "--", ".").splitlines():
+        if path.strip():
+            overlay[path.strip()] = "??"
+    return overlay
+
+
 def changed_system_design_paths(
     root: Path,
     base: str,
@@ -320,6 +357,122 @@ def changed_system_design_paths(
         if status.startswith(("A", "R", "C", "??")) or normalized_for_change(old_text) != normalized_for_change(new_text):
             selected.append(target)
     return selected
+
+
+def changed_authority_paths(
+    root: Path,
+    base: str,
+    head: str,
+    include_worktree: bool,
+) -> list[str]:
+    """Select changed authority endpoints, preserving both rename endpoints."""
+    base_oid = resolve_commit(root, base, "base")
+    head_oid = resolve_commit(root, head, "head")
+    source_base = run_git(root, "merge-base", base_oid, head_oid).strip()
+    if not source_base:
+        raise ValueError(f"base/head have no merge-base: {base_oid} {head_oid}")
+    changed = parse_name_status(
+        run_git(root, "diff", "--name-status", "--no-renames", source_base, head_oid, "--", ".")
+    )
+    checkout_head = ""
+    if include_worktree:
+        checkout_head = run_git(root, "rev-parse", "--verify", "HEAD^{commit}").strip()
+        changed.update(worktree_authority_overlay(root, checkout_head))
+
+    selected: list[str] = []
+    for path, status in sorted(changed.items()):
+        if not is_traceability_authority_path(path):
+            continue
+        old_text = git_text(root, source_base, path)
+        if status.startswith("D"):
+            selected.append(path)
+            continue
+        new_text = worktree_file_text(root, checkout_head, path) if include_worktree else git_text(root, head_oid, path)
+        if new_text is None:
+            selected.append(path)
+        elif status.startswith(("A", "R", "C", "??")) or normalized_for_change(old_text) != normalized_for_change(new_text):
+            selected.append(path)
+    return selected
+
+
+def current_design_paths(root: Path, head: str, include_worktree: bool, checkout_head: str) -> list[Path]:
+    """Enumerate current design consumers without broadening to arbitrary docs."""
+    paths = {
+        line.strip()
+        for line in run_git(root, "ls-tree", "-r", "--name-only", head).splitlines()
+        if line.strip() and line.strip().endswith(DESIGN_SUFFIX)
+    }
+    if include_worktree:
+        paths.update(
+            path
+            for path, status in worktree_authority_overlay(root, checkout_head).items()
+            if not status.startswith("D") and path.endswith(DESIGN_SUFFIX)
+        )
+    return [root / path for path in sorted(paths) if is_system_design_path(path)]
+
+
+def is_traceability_consumer(text: str) -> bool:
+    """Recognize a current structured consumer while excluding legacy prose."""
+    demand = table_after_heading(text, DEMAND_HEADING)
+    validation = table_after_heading(text, VALIDATION_HEADING)
+    return bool(
+        (demand is not None and demand.rows)
+        or (validation is not None and validation.rows)
+    )
+
+
+def references_authority(
+    root: Path,
+    design: Path,
+    text: str,
+    authority_paths: set[str],
+    *,
+    follow_symlinks: bool,
+) -> bool:
+    """Match exact repository-relative link endpoints, including deleted ones."""
+    for node in parse_markdown_links(without_html_comments(text)):
+        target, _fragment = split_link_target(node.target)
+        if not target or external_target(target):
+            continue
+        resolved = resolve_target(root, design, target, follow_symlinks=follow_symlinks)
+        if resolved is None:
+            continue
+        try:
+            relative = resolved.relative_to(root).as_posix()
+        except ValueError:
+            continue
+        if relative in authority_paths:
+            return True
+    return False
+
+
+def authority_impacted_design_paths(
+    root: Path,
+    head: str,
+    authority_paths: list[str],
+    *,
+    include_worktree: bool,
+    checkout_head: str,
+    read_target: TargetTextReader,
+) -> list[Path]:
+    """Reverse-select bounded, structured consumers of changed authorities."""
+    impacted: list[Path] = []
+    changed = set(authority_paths)
+    if not changed:
+        return impacted
+    for design in current_design_paths(root, head, include_worktree, checkout_head):
+        text = read_target(design)
+        if text is None or not is_traceability_consumer(text):
+            continue
+        if references_authority(
+            root,
+            design,
+            text,
+            changed,
+            follow_symlinks=include_worktree,
+        ):
+            impacted.append(design)
+    return impacted
 
 
 def visible_lines(text: str) -> list[tuple[int, str]]:
@@ -885,13 +1038,10 @@ def main() -> int:
         base = resolve_commit(root, args.base, "base")
         head = resolve_commit(root, args.head, "head")
         selected = changed_system_design_paths(root, base, head, args.worktree)
+        checkout_head = run_git(root, "rev-parse", "--verify", "HEAD^{commit}").strip() if args.worktree else ""
     except ValueError as exc:
         print(f"system-design-traceability: error: {exc}")
         return 2
-    if not selected:
-        print("system-design-traceability: checked 0: reason=no new or substantive system-design changes in selected range")
-        return 0
-    checkout_head = run_git(root, "rev-parse", "--verify", "HEAD^{commit}").strip() if args.worktree else ""
 
     def read_target(target: Path) -> str | None:
         if args.worktree:
@@ -905,6 +1055,26 @@ def main() -> int:
         except ValueError:
             return None
         return committed_target_text(root, head, target)
+
+    try:
+        authority_paths = changed_authority_paths(root, base, head, args.worktree)
+        selected.extend(
+            authority_impacted_design_paths(
+                root,
+                head,
+                authority_paths,
+                include_worktree=args.worktree,
+                checkout_head=checkout_head,
+                read_target=read_target,
+            )
+        )
+    except ValueError as exc:
+        print(f"system-design-traceability: error: {exc}")
+        return 2
+    selected = sorted(set(selected), key=lambda path: path.relative_to(root).as_posix())
+    if not selected:
+        print("system-design-traceability: checked 0: reason=no new or substantive system-design changes in selected range")
+        return 0
 
     errors: list[str] = []
     for path in selected:

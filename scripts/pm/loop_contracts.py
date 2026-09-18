@@ -277,6 +277,10 @@ def validate_consumed_clause_refs(
                 continue
             if declared_fragment is not None and item.get("fragment") != declared_fragment:
                 errors.append(f"consumed clause fragment mismatch: {item.get('path')}#{item.get('fragment')}")
+            elif bound and declared_fragment is None:
+                errors.append(
+                    f"consumed clause fragment is not declared for {item.get('path')}#{clause_id}"
+                )
             if bound:
                 if item.get("contract_id") != reference.get("contract_id"):
                     errors.append(f"consumed clause contract identity mismatch: {item.get('path')}#{item.get('fragment')}")
@@ -293,6 +297,13 @@ def validate_consumed_clause_refs(
                         expected = declaration.get("sha256")
                         if isinstance(expected, str) and "sha256:" + hashlib.sha256(raw).hexdigest() != expected:
                             errors.append(f"approved/published content mismatch: {item['path']}")
+                        actual = "sha256:" + hashlib.sha256(raw).hexdigest()
+                        for digest_field in ("source_digest", "content_digest"):
+                            declared = item.get(digest_field)
+                            if declared is not None and declared != actual:
+                                errors.append(
+                                    f"consumed clause {digest_field} mismatch: {item['path']}#{item['fragment']}"
+                                )
                     except (ValueError, OSError) as exc:
                         errors.append(str(exc))
         if bare is not None:

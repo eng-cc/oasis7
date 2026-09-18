@@ -18,12 +18,13 @@ class ContentTests(unittest.TestCase):
         self.root = Path(self.tmp.name)
         shutil.copytree(Path(__file__).parent, self.root / 'scripts/pm', ignore=shutil.ignore_patterns('__pycache__'))
         (self.root / '.gitignore').write_text('__pycache__/\n')
-        self.spec = self.root / 'doc/engineering/spec.md'; self.spec.parent.mkdir(parents=True); self.spec.write_text('approved')
+        self.spec = self.root / 'doc/engineering/spec.md'; self.spec.parent.mkdir(parents=True); self.spec.write_text('<a id="a"></a>\napproved')
         self.git('init', '-q'); self.git('config', 'user.name', 'Fixture'); self.git('config', 'user.email', 'fixture@example.invalid')
         self.git('add', '.'); self.git('commit', '-qm', 'effective')
         self.base = self.git('rev-parse', 'HEAD'); self.git('update-ref', 'refs/remotes/origin/main', self.base)
-        self.contract = dict(schema='oasis7.loop-contract/v1', contract_id='S', revision=1, owner_loop='system', source_head=self.base, merged_head=self.base, approval_ref={'repository':'eng-cc/oasis7','pr_number':2}, content_refs=[{'path':'doc/engineering/spec.md','sha256':'sha256:'+hashlib.sha256(b'approved').hexdigest(),'clauses':['a']}], upstream_contracts=[], scope=['pilot'], eligibility={'new_tasks':False,'in_flight':False,'release':False})
-        self.reference = dict(contract_id='S',revision=1,contract_digest=contract_digest(self.contract),publication_ref={'issue_number':1,'comment_id':3},consumed_clauses=['a'])
+        self.spec_digest = 'sha256:'+hashlib.sha256(self.spec.read_bytes()).hexdigest()
+        self.contract = dict(schema='oasis7.loop-contract/v1', contract_id='S', revision=1, owner_loop='system', source_head=self.base, merged_head=self.base, approval_ref={'repository':'eng-cc/oasis7','pr_number':2}, content_refs=[{'path':'doc/engineering/spec.md','fragment':'a','sha256':self.spec_digest,'clauses':['a']}], upstream_contracts=[], scope=['pilot'], eligibility={'new_tasks':False,'in_flight':False,'release':False})
+        self.reference = dict(contract_id='S',revision=1,contract_digest=contract_digest(self.contract),publication_ref={'repository':'eng-cc/oasis7','issue_number':1,'comment_id':3},consumed_clauses=['a'])
         self.binding = dict(schema='oasis7.loop-task/v1',task_uid='task_'+'a'*32,change_id='c',loop='system',owner_role='repository_health_engineer',bootstrap_epoch=1,manual_request_ref='user',request_key='r',write_scope=['doc/engineering/**'],out_of_scope=[],input_contracts=[self.reference],acceptance_refs=['a'],dependencies=[],target_delivery='pilot',policy_commit=self.base,policy_digest='sha256:'+hashlib.sha256((self.root/'scripts/pm/loop-policy.v1.json').read_bytes()).hexdigest())
         self.calls=[]
 
@@ -90,6 +91,13 @@ class ContentTests(unittest.TestCase):
         result = validate_ci_content(self.root,self.root,self.binding,self.base,self.base,'eng-cc/oasis7',reader)
         self.assertEqual(result['status'],'blocked',result)
 
+    def test_malformed_upstream_publication_ref_blocks_without_traceback(self):
+        self.contract['upstream_contracts'] = [dict(self.reference, publication_ref='malformed')]
+        self.reference['contract_digest'] = contract_digest(self.contract)
+        result = self.check()
+        self.assertEqual(result['status'], 'blocked', result)
+        self.assertIn('publication_ref', ';'.join(result['blockers']))
+
     def test_equivalent_revision_at_two_publications_remains_valid(self):
         self.binding['input_contracts'].append(dict(self.reference,publication_ref={'issue_number':1,'comment_id':4}))
         def reader(repo,path):
@@ -107,6 +115,63 @@ class ContentTests(unittest.TestCase):
             return self.reader(repo,path)
         result = validate_ci_content(self.root,self.root,self.binding,self.base,self.base,'eng-cc/oasis7',reader)
         self.assertEqual(result['status'],'blocked',result)
+
+    def qualified_reference(self, **overrides):
+        qualified = dict(
+            clause_id='a',
+            path='doc/engineering/spec.md',
+            fragment='a',
+            repository='eng-cc/oasis7',
+            contract_id='S',
+            revision=1,
+            contract_digest=contract_digest(self.contract),
+            publication_ref={'repository':'eng-cc/oasis7','issue_number':1,'comment_id':3},
+            source_digest=self.spec_digest,
+            content_digest=self.spec_digest,
+        )
+        qualified.update(overrides)
+        return qualified
+
+    def test_qualified_consumed_clause_refs_pass_hosted(self):
+        self.reference.pop('consumed_clauses')
+        self.reference['consumed_clause_refs'] = [self.qualified_reference()]
+        result = self.check()
+        self.assertEqual(result['status'], 'passed', result)
+
+    def test_qualified_consumed_clause_refs_validate_frozen_digest(self):
+        self.reference.pop('consumed_clauses')
+        self.reference['consumed_clause_refs'] = [self.qualified_reference(source_digest='sha256:' + '0' * 64)]
+        result = self.check()
+        self.assertEqual(result['status'], 'blocked', result)
+
+    def test_qualified_consumed_clause_refs_validate_frozen_anchor(self):
+        self.reference.pop('consumed_clauses')
+        self.reference['consumed_clause_refs'] = [self.qualified_reference(fragment='missing')]
+        result = self.check()
+        self.assertEqual(result['status'], 'blocked', result)
+
+    def test_qualified_consumed_clause_refs_require_declared_fragment(self):
+        self.contract['content_refs'][0].pop('fragment')
+        self.reference.pop('consumed_clauses')
+        self.reference['contract_digest'] = contract_digest(self.contract)
+        self.reference['consumed_clause_refs'] = [self.qualified_reference()]
+        result = self.check()
+        self.assertEqual(result['status'], 'blocked', result)
+
+    def test_qualified_consumed_clause_refs_accept_clause_specific_fragment_fallback(self):
+        self.contract['content_refs'][0].pop('fragment')
+        self.contract['content_refs'][0]['fragments'] = {'a': 'a'}
+        self.reference.pop('consumed_clauses')
+        self.reference['contract_digest'] = contract_digest(self.contract)
+        self.reference['consumed_clause_refs'] = [self.qualified_reference()]
+        result = self.check()
+        self.assertEqual(result['status'], 'passed', result)
+
+    def test_legacy_bare_consumed_clause_remains_compatible_without_fragment(self):
+        self.contract['content_refs'][0].pop('fragment')
+        self.reference['contract_digest'] = contract_digest(self.contract)
+        result = self.check()
+        self.assertEqual(result['status'], 'passed', result)
 
 
 if __name__=='__main__': unittest.main()

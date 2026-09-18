@@ -574,6 +574,100 @@ def scenario_untouched_legacy_design_is_excluded() -> None:
         shutil.rmtree(root)
 
 
+def run_checker(root: Path, base: str, head: str, *, worktree: bool = False) -> tuple[int, str]:
+    command = [
+            sys.executable,
+            str(CHECKER),
+            "--repo-root",
+            str(root),
+            "--base",
+            base,
+            "--head",
+            head,
+        ]
+    if worktree:
+        command.append("--worktree")
+    result = subprocess.run(
+        command,
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode, result.stdout + result.stderr
+
+
+def scenario_authority_only_prompt_control_change_rechecks_current_consumer() -> None:
+    root, base, _head = make_repo()
+    try:
+        (root / PRODUCT).write_text(PRODUCT_TEXT.replace("req-sample", "req-renamed"), encoding="utf-8")
+        head = commit(root, "change prompt control authority anchor")
+        code, output = run_checker(root, base, head)
+        assert code == 1, output
+        assert "trace-ref-unresolved" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_authority_only_root_prd_prompt_control_change_rechecks_consumer() -> None:
+    root, _initial_base, _head = make_repo()
+    try:
+        authority = root / "doc/world-simulator/prd.md"
+        authority.parent.mkdir(parents=True)
+        authority.write_text(PRODUCT_TEXT, encoding="utf-8")
+        (root / DESIGN).write_text(
+            DESIGN_HEADER.replace("../product/sample.prd.md", "../world-simulator/prd.md"),
+            encoding="utf-8",
+        )
+        fixture_base = commit(root, "add root professional PromptControl authority")
+        authority.write_text(PRODUCT_TEXT.replace("req-sample", "req-renamed"), encoding="utf-8")
+        head = commit(root, "change root PromptControl authority anchor")
+        code, output = run_checker(root, fixture_base, head)
+        assert code == 1, output
+        assert "trace-ref-unresolved" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_authority_rename_and_delete_fail_closed() -> None:
+    for action in ("rename", "delete"):
+        root, base, _head = make_repo()
+        try:
+            if action == "rename":
+                run_git(root, "mv", PRODUCT, "doc/product/renamed.prd.md")
+            else:
+                (root / PRODUCT).unlink()
+            head = commit(root, f"{action} authority endpoint")
+            code, output = run_checker(root, base, head)
+            assert code == 1, output
+            assert "reference target is missing" in output, output
+        finally:
+            shutil.rmtree(root)
+
+
+def scenario_worktree_authority_only_change_rechecks_current_consumer() -> None:
+    root, base, _head = make_repo()
+    try:
+        (root / PRODUCT).write_text(PRODUCT_TEXT.replace("req-sample", "req-renamed"), encoding="utf-8")
+        code, output = run_checker(root, base, base, worktree=True)
+        assert code == 1, output
+        assert "trace-ref-unresolved" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
+def scenario_untouched_legacy_consumer_is_excluded_from_authority_change() -> None:
+    legacy = "# legacy design\n\n[old requirement](../product/sample.prd.md#req-sample)\n"
+    root, base, _head = make_repo(design_text=legacy)
+    try:
+        (root / PRODUCT).write_text(PRODUCT_TEXT.replace("req-sample", "req-renamed"), encoding="utf-8")
+        head = commit(root, "change authority with legacy consumer")
+        code, output = run_checker(root, base, head)
+        assert code == 0, output
+        assert "checked 0" in output, output
+    finally:
+        shutil.rmtree(root)
+
+
 def scenario_partial_or_malformed_range_is_rejected() -> None:
     module = load_checker()
     root, base, _head = make_repo(design_text=None)
@@ -615,6 +709,11 @@ def main() -> None:
         scenario_duplicate_validation_rows_fail_cardinality,
         scenario_committed_validation_symlink_sources_fail_closed,
         scenario_untouched_legacy_design_is_excluded,
+        scenario_authority_only_prompt_control_change_rechecks_current_consumer,
+        scenario_authority_only_root_prd_prompt_control_change_rechecks_consumer,
+        scenario_authority_rename_and_delete_fail_closed,
+        scenario_worktree_authority_only_change_rechecks_current_consumer,
+        scenario_untouched_legacy_consumer_is_excluded_from_authority_change,
         scenario_partial_or_malformed_range_is_rejected,
     )
     for scenario in scenarios:
