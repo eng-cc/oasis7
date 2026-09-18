@@ -32,7 +32,7 @@ Agent 的意图在进入世界后必须经过统一权威裁决；并发冲突�
 
 ## 2. 范围与玩家边界
 
-覆盖可重现场景、Agent/LLM provider 权威、世界事件流、主 Web 界面、Launcher 转移和交互反馈。玩家可以观察、发起被允许的意图并看到权威结果；不能把 mock、本地演示或未授权 provider 输出当作世界状态。
+覆盖可重现场景、Agent/LLM provider 权威、世界事件流、进入世界后的主 Web 界面、交互连续性和反馈。玩家可以观察、发起被允许的意图并看到权威结果；不能把 mock、本地演示或未授权 provider 输出当作世界状态。下载、启动、模式选择、真实后端核验、升级与重新进入由 [`玩家接入与发行`](../player-entry-distribution/prd.md) 主责，本模块只消费这些入口提供的世界上下文并保证进入后的语义连续。
 
 Agent 可以基于世界观测、工业物流、市场、风险与治理约束形成计划，但这些输入可能延迟、过期或不完整；当其影响当前决策时，产品必须区分当前事实与陈旧/不确定情报，并允许刷新、纠正或重排，不能把缓存信息伪装成实时真值。
 
@@ -56,7 +56,7 @@ Agent 不得绕过世界规则与基础设施约束；当工业、市场或治�
 
 产品 PRD 不改写具体模式、API、UI 或 provider 选择；冲突时由对应 `agent_engineer`、`viewer_engineer` 或 runtime owner 与产品 owner 共同裁决。
 
-相邻产品组合依赖：[`doc/product/world-infrastructure/prd.md`](../world-infrastructure/prd.md) 定义工业经济底座的产品承诺；本模块消费该承诺形成 Agent 端到端模拟，但不能以相邻产品 PRD 代替 game/runtime/world-simulator 的专业规则与验证证据。
+相邻产品组合依赖：工业、市场、物流和治理的产品语义由 [`世界规则与玩法系统`](../world-rules-core-gameplay/prd.md) 拥有；[`权威世界基础设施`](../world-infrastructure/prd.md) 提供最终性、确定性执行与状态连续性保证；本模块消费两者形成可解释的 Agent 决策与反馈闭环，但不能以相邻产品 PRD 代替 `game` / `runtime` / `world-simulator` 的专业规则与验证证据。
 
 ## 4. 路线图
 
@@ -90,7 +90,7 @@ Agent 不得绕过世界规则与基础设施约束；当工业、市场或治�
 | SC-4 | qa_engineer | PRD-WORLD_SIMULATOR-020-031 | `doc/world-simulator/prd.md` | 模式、转移与多入口 claim 回归 | test_tier_required |
 | SC-5 | runtime_engineer / agent_engineer / gameplay_designer / viewer_engineer / qa_engineer | PRD-WORLD_SIMULATOR-001 / PRD-WORLD_RUNTIME-001 / PRD-GAME-008 / PRD-TESTING-003 | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/game/prd.md`; `doc/testing/prd.md` | 等价重排序、冲突、重复投递、重试与 replay 的 accepted/rejected 集合、单次效果，以及 Viewer/pure API 解释一致性证据，包含 S6 玩家 surface 核对 | test_tier_full |
 | SC-6 | agent_engineer / viewer_engineer | PRD-WORLD_SIMULATOR-016 | `doc/world-simulator/prd.md` | 观测新鲜度、不确定性与刷新/纠正/重排路径证据，包含正式玩家 surface 的 S6 交互闭环 | test_tier_required |
-| SC-7 | agent_engineer / gameplay_designer / runtime_engineer / viewer_engineer | PRD-WORLD_SIMULATOR-001 / PRD-WORLD_SIMULATOR-016 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 | `doc/world-simulator/prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md` | Agent 工业约束到权威后果与玩家反馈的端到端证据；相邻产品组合承诺由 `doc/product/world-infrastructure/prd.md` 提供 | test_tier_required |
+| SC-7 | agent_engineer / gameplay_designer / runtime_engineer / viewer_engineer | PRD-WORLD_SIMULATOR-001 / PRD-WORLD_SIMULATOR-016 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 | `doc/world-simulator/prd.md`; `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/product/world-rules-core-gameplay/prd.md`; `doc/product/world-infrastructure/prd.md` | Agent 工业约束到权威后果与玩家反馈的端到端证据；工业、市场、物流和治理的产品语义由 `doc/product/world-rules-core-gameplay/prd.md` 提供，`doc/product/world-infrastructure/prd.md` 仅提供最终性、确定性执行与状态连续性保证 | test_tier_required |
 | SC-8 | producer_system_designer / gameplay_designer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-011 / PRD-WORLD_SIMULATOR-016 / PRD-WORLD_SIMULATOR-039 / PRD-TESTING-003 | `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 账号绑定/认领可读性、首次承诺与持续维护选择、受限启动帮助边界，以及无法维持时的恢复/释放/重规划玩家 surface 证据；不复制数值、字段或状态机 | test_tier_required |
 | SC-9 | producer_system_designer / agent_engineer / viewer_engineer / qa_engineer | PRD-WORLD_SIMULATOR-016 / PRD-WORLD_SIMULATOR-039 / PRD-TESTING-003 | `doc/product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 对话、草稿、默认/override、accepted/applied/rejected/blocked 与窄屏可达性对账 | test_tier_required |
 | SC-10 | producer_system_designer / viewer_engineer / qa_engineer | PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/product/agents-world-simulation/player-readable-surface-continuity.prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | desktop、窄屏/低高度、双语 fallback 与断连恢复中的决策锚点、权威结果和下一步对账 | test_tier_required |
