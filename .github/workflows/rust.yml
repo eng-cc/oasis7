@@ -439,7 +439,7 @@ jobs:
           trusted_checker="${RUNNER_TEMP}/trusted-check-cargo-package-scope"
           trusted_profile_planner="${RUNNER_TEMP}/trusted-cargo-package-profile-planner.py"
           trusted_profile_driver="${RUNNER_TEMP}/trusted-cargo-package-profile-driver.py"
-          if [[ -n "${OASIS7_CARGO_SCOPE_BASE:-}" ]]; then
+          if [[ -n "${OASIS7_CARGO_SCOPE_BASE:-}" ]] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
             git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/check-cargo-package-scope" >"${trusted_checker}"
             chmod +x "${trusted_checker}"
             export OASIS7_CARGO_SCOPE_CHECKER="${trusted_checker}"
