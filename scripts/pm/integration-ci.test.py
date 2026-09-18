@@ -128,7 +128,12 @@ class IntegrationTests(unittest.TestCase):
      run=step.split('        run:',1)[1]
      command=textwrap.dedent(run.split('\n',1)[1]) if run.startswith(' |') else run.strip()
      env={**os.environ,'RUNNER_TEMP':str(temp),'GITHUB_WORKSPACE':str(candidate),
-          'GITHUB_EVENT_NAME':event,'INTEGRATION_MODE':'integration_revalidation','OBSERVED':str(marker)}
+          'GITHUB_EVENT_NAME':event,'INTEGRATION_MODE':'integration_revalidation','OBSERVED':str(marker),
+          # This contract isolates frozen driver/preflight routing.  Required CI
+          # itself exports package-profile activation identity; do not leak that
+          # unrelated outer workflow state into this intentionally non-Git fixture.
+          'OASIS7_CARGO_SCOPE_BASE':'','OASIS7_CARGO_SCOPE_HEAD':'',
+          'OASIS7_CARGO_PROFILE_PLANNER':'','OASIS7_CARGO_PROFILE_DRIVER':''}
      result=subprocess.run(['bash','-euo','pipefail','-c',command],cwd=candidate,env=env,text=True,capture_output=True)
      if event=='workflow_dispatch':
       self.assertEqual(result.returncode,37,result.stdout+result.stderr)
