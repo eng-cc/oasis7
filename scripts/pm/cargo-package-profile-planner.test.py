@@ -20,6 +20,8 @@ The planner contract is:
 * native, WASM, feature, target, and unknown-impact boundaries are explicit.
 * consumer closure reaches a fixed point over the source and tested trees,
   including root packages and configured independent tool workspaces.
+* bounded production-style independent roots remain discoverable even when
+  candidate workspace metadata omits their configuration.
 * unknown/full escalation carries an explicit validated disposition instead of
   pretending that a partial item list is safe.
 """
@@ -403,6 +405,50 @@ resolver = "2"
             ),
         )
         for package in ("builtin_modules", "wasm_build_suite", "wasm_module_observe"):
+            self.assertIn(package, plan["affected_packages"])
+
+    def test_deterministic_independent_roots_survive_candidate_metadata_omission(self) -> None:
+        temp = tempfile.TemporaryDirectory(prefix="cargo-package-profile-root-discovery-")
+        root = Path(temp.name)
+        self.addCleanup(temp.cleanup)
+        self._write(
+            root,
+            "Cargo.toml",
+            '[workspace]\nmembers = ["crates/core"]\nresolver = "2"\n\n'
+            '[workspace.metadata.oasis7]\n'
+            'independent_profile_workspaces = ["tools/wasm_build_suite"]\n',
+        )
+        self._package(root, "core")
+        self._write(
+            root,
+            "tools/wasm_build_suite/Cargo.toml",
+            '[package]\nname = "wasm_build_suite"\nversion = "0.1.0"\nedition = "2021"\n\n'
+            '[dependencies]\ncore = { path = "../../crates/core" }\n\n[workspace]\n',
+        )
+        self._write(root, "tools/wasm_build_suite/src/lib.rs", "pub fn wasm_build_suite() -> u8 { 1 }\n")
+        trusted_base = self._init_authority(root)
+
+        git(root, "switch", "-c", "source", trusted_base)
+        self._write(
+            root,
+            "Cargo.toml",
+            '[workspace]\nmembers = ["crates/core"]\nresolver = "2"\n',
+        )
+        for path, name in (
+            ("crates/oasis7_builtin_wasm_modules/m1_demo", "builtin_demo"),
+            ("tools/wasm_module_observe", "wasm_module_observe"),
+        ):
+            self._write(
+                root,
+                f"{path}/Cargo.toml",
+                f'[package]\nname = "{name}"\nversion = "0.1.0"\nedition = "2021"\n\n'
+                '[dependencies]\ncore = { path = "../../core" }\n\n[workspace]\n',
+            )
+            self._write(root, f"{path}/src/lib.rs", f"pub fn {name}() -> u8 {{ 1 }}\n")
+        (root / "crates/core/src/lib.rs").write_text("pub fn core() -> u8 { 2 }\n", encoding="utf-8")
+        source_head = self._commit(root, "omit metadata but change core")
+        plan = self._plan(root, trusted_base, source_head, profiles=("native",))
+        for package in ("builtin_demo", "wasm_build_suite", "wasm_module_observe"):
             self.assertIn(package, plan["affected_packages"])
 
 
