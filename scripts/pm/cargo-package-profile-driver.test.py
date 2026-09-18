@@ -152,6 +152,13 @@ class CargoPackageProfileDriverContract(unittest.TestCase):
                 integration_base="c" * 40,
             )
 
+    def test_forged_plan_id_fails_closed_even_when_items_and_identity_match(self) -> None:
+        self.plan["plan_id"] = "sha256:forged-plan"
+        with self.assertRaisesRegex(Exception, "plan.?id|digest|forged"):
+            self._validate(
+                [self._result("alpha-native"), self._result("alpha-wasm")]
+            )
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -18,6 +18,10 @@ The planner contract is:
 * package/profile selection is deterministic and does not silently select
   the legacy workspace_support aggregate;
 * native, WASM, feature, target, and unknown-impact boundaries are explicit.
+* consumer closure reaches a fixed point over the source and tested trees,
+  including root packages and configured independent tool workspaces.
+* unknown/full escalation carries an explicit validated disposition instead of
+  pretending that a partial item list is safe.
 """
 
 from __future__ import annotations
@@ -145,6 +149,37 @@ resolver = "2"
         source_head = git(root, "rev-parse", "HEAD")
         return temp, root, trusted_base, integration_base, source_head
 
+    def _init_authority(self, root: Path) -> str:
+        self._write(
+            root,
+            ".pm/cargo-package-scope-policy.json",
+            json.dumps(
+                {
+                    "schema": "oasis7-cargo-package-scope-policy/v1",
+                    "policy_version": 1,
+                    "protected_paths": [
+                        ".pm/cargo-package-scope-policy.json",
+                        "scripts/pm/check-cargo-package-scope",
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+        )
+        self._write(root, "scripts/pm/check-cargo-package-scope", "#!/bin/sh\necho trusted-checker\n")
+        (root / "scripts/pm/check-cargo-package-scope").chmod(0o755)
+        git(root, "init", "-q", "-b", "main")
+        git(root, "config", "user.email", "qa@example.invalid")
+        git(root, "config", "user.name", "C2 QA")
+        git(root, "add", "-A")
+        git(root, "commit", "-qm", "trusted base")
+        return git(root, "rev-parse", "HEAD")
+
+    def _commit(self, root: Path, message: str) -> str:
+        git(root, "add", "-A")
+        git(root, "commit", "-qm", message)
+        return git(root, "rev-parse", "HEAD")
+
     def _plan(self, root: Path, integration_base: str, source_head: str, **kwargs):
         return self.api.plan_package_profiles(
             root,
@@ -237,6 +272,138 @@ resolver = "2"
         )
         self.assertEqual("full", plan["scope"])
         self.assertIn("unknown", plan["escalation_reasons"])
+        self.assertEqual([], plan["selected_items"])
+        self.assertEqual([], plan["items"])
+        self.assertEqual("full_escalation", plan["execution_disposition"])
+        self.assertIs(plan["disposition_validated"], True)
+
+    def test_fixed_point_transitive_consumers_include_all_reverse_dependents(self) -> None:
+        temp = tempfile.TemporaryDirectory(prefix="cargo-package-profile-transitive-")
+        root = Path(temp.name)
+        self.addCleanup(temp.cleanup)
+        self._write(
+            root,
+            "Cargo.toml",
+            '[workspace]\nmembers = ["crates/alpha", "crates/beta", "crates/gamma"]\nresolver = "2"\n',
+        )
+        self._package(root, "alpha")
+        self._package(root, "beta", '[dependencies]\nalpha = { path = "../alpha" }\n')
+        self._package(root, "gamma", '[dependencies]\nbeta = { path = "../beta" }\n')
+        trusted_base = self._init_authority(root)
+
+        git(root, "switch", "-c", "integration")
+        (root / "crates/gamma/src/lib.rs").write_text("pub fn gamma() -> u8 { 2 }\n", encoding="utf-8")
+        integration_base = self._commit(root, "integration-only change")
+
+        git(root, "switch", "-c", "source", trusted_base)
+        (root / "crates/alpha/src/lib.rs").write_text("pub fn alpha() -> u8 { 2 }\n", encoding="utf-8")
+        source_head = self._commit(root, "change dependency root")
+        plan = self._plan(root, integration_base, source_head, profiles=("native",))
+        self.assertEqual(["alpha", "beta", "gamma"], plan["affected_packages"])
+
+    def test_tested_tree_only_consumer_edge_is_selected(self) -> None:
+        temp = tempfile.TemporaryDirectory(prefix="cargo-package-profile-tested-tree-")
+        root = Path(temp.name)
+        self.addCleanup(temp.cleanup)
+        self._write(
+            root,
+            "Cargo.toml",
+            '[workspace]\nmembers = ["crates/alpha"]\nresolver = "2"\n',
+        )
+        self._package(root, "alpha")
+        trusted_base = self._init_authority(root)
+
+        git(root, "switch", "-c", "integration")
+        self._write(
+            root,
+            "Cargo.toml",
+            '[workspace]\nmembers = ["crates/alpha", "crates/integration_consumer"]\nresolver = "2"\n',
+        )
+        self._package(
+            root,
+            "integration_consumer",
+            '[dependencies]\nalpha = { path = "../alpha" }\n',
+        )
+        integration_base = self._commit(root, "add integration consumer")
+
+        git(root, "switch", "-c", "source", trusted_base)
+        (root / "crates/alpha/src/lib.rs").write_text("pub fn alpha() -> u8 { 2 }\n", encoding="utf-8")
+        source_head = self._commit(root, "change source package")
+        plan = self._plan(root, integration_base, source_head, profiles=("native",))
+        self.assertIn("integration_consumer", plan["affected_packages"])
+
+    def test_root_package_owns_root_manifest_and_sources(self) -> None:
+        temp = tempfile.TemporaryDirectory(prefix="cargo-package-profile-root-")
+        root = Path(temp.name)
+        self.addCleanup(temp.cleanup)
+        self._write(
+            root,
+            "Cargo.toml",
+            '[package]\nname = "root_app"\nversion = "0.1.0"\nedition = "2021"\n\n'
+            '[workspace]\nmembers = ["crates/alpha"]\nresolver = "2"\n',
+        )
+        self._write(root, "src/lib.rs", "pub fn root_app() -> u8 { 1 }\n")
+        self._package(root, "alpha")
+        trusted_base = self._init_authority(root)
+
+        git(root, "switch", "-c", "integration")
+        (root / "crates/alpha/src/lib.rs").write_text("pub fn alpha() -> u8 { 2 }\n", encoding="utf-8")
+        integration_base = self._commit(root, "integration-only change")
+
+        git(root, "switch", "-c", "source", trusted_base)
+        (root / "src/lib.rs").write_text("pub fn root_app() -> u8 { 2 }\n", encoding="utf-8")
+        source_head = self._commit(root, "change root package")
+        plan = self._plan(root, integration_base, source_head, profiles=("native",))
+        self.assertIn("root_app", plan["changed_packages"])
+        self.assertIn("root_app", plan["affected_packages"])
+
+    def test_configured_independent_wasm_and_tool_workspaces_are_consumers(self) -> None:
+        temp = tempfile.TemporaryDirectory(prefix="cargo-package-profile-independent-")
+        root = Path(temp.name)
+        self.addCleanup(temp.cleanup)
+        self._write(
+            root,
+            "Cargo.toml",
+            '[workspace]\nmembers = ["crates/core"]\nresolver = "2"\n\n'
+            '[workspace.metadata.oasis7]\n'
+            'independent_profile_workspaces = ["tools/builtin_modules", '
+            '"tools/wasm_build_suite", "tools/wasm_module_observe"]\n',
+        )
+        self._package(root, "core")
+        for path, name in (
+            ("tools/builtin_modules", "builtin_modules"),
+            ("tools/wasm_build_suite", "wasm_build_suite"),
+            ("tools/wasm_module_observe", "wasm_module_observe"),
+        ):
+            self._write(
+                root,
+                f"{path}/Cargo.toml",
+                f'[package]\nname = "{name}"\nversion = "0.1.0"\nedition = "2021"\n\n'
+                '[dependencies]\ncore = { path = "../../crates/core" }\n\n[workspace]\n',
+            )
+            self._write(root, f"{path}/src/lib.rs", f"pub fn {name}() -> u8 {{ 1 }}\n")
+        trusted_base = self._init_authority(root)
+
+        git(root, "switch", "-c", "integration")
+        (root / "tools/wasm_build_suite/src/lib.rs").write_text(
+            "pub fn wasm_build_suite() -> u8 { 2 }\n", encoding="utf-8"
+        )
+        integration_base = self._commit(root, "integration-only tool change")
+
+        git(root, "switch", "-c", "source", trusted_base)
+        (root / "crates/core/src/lib.rs").write_text("pub fn core() -> u8 { 2 }\n", encoding="utf-8")
+        source_head = self._commit(root, "change core package")
+        plan = self._plan(
+            root,
+            integration_base,
+            source_head,
+            profiles=(
+                {"id": "native", "target": "native", "features": []},
+                {"id": "wasm", "target": "wasm32-unknown-unknown", "features": ["wasm"]},
+            ),
+        )
+        for package in ("builtin_modules", "wasm_build_suite", "wasm_module_observe"):
+            self.assertIn(package, plan["affected_packages"])
 
 
 if __name__ == "__main__":
