@@ -13,7 +13,7 @@
 | 最终中文名称 | 稳定身份（不可变） | P0 兼容期 active 标签 | 核心问题与产品职责 |
 | --- | --- | --- | --- |
 | **世界规则与玩法系统** | `world-rules-core-gameplay` / `PRD-PRODUCT-001` | `世界规则与核心玩法` | 玩家在世界中能做什么、付出什么、获得什么；定义世界规则的产品约束、玩家目标、核心循环、成长、资源/工业/经济、组织/区域/冲突/治理等长期玩法。 |
-| **权威世界基础设施** | `world-infrastructure` / `PRD-PRODUCT-002` | `大世界基础设施` | 世界如何保持唯一、确定、持久、可验证、可恢复；定义最终性、权威历史、状态可用性、确定性执行、版本兼容与恢复的产品保证，不拥有工业、市场、区域或玩家循环语义。 |
+| **权威世界基础设施** | `world-infrastructure` / `PRD-PRODUCT-002` | `大世界基础设施` | 世界如何保持唯一、确定、持久、可验证、可恢复；定义最终性、权威历史、状态可用性、确定性执行、版本兼容与恢复的产品保证，不拥有工业规则、经济语义、市场、区域或玩家循环；技术执行保证见 [`权威世界基础设施 PRD`](world-infrastructure/prd.md)。 |
 | **智能体、世界模拟与交互** | `agents-world-simulation` / `PRD-PRODUCT-003` | `智能体与世界模拟` | Agent 如何理解和行动、玩家如何观察和干预；定义 Agent/provider、目标与委托、记忆/学习、世界观测、模拟反馈，以及进入世界后的 Viewer、世界舞台和玩家交互体验。 |
 | **玩家接入与发行** | `player-entry-distribution` / `PRD-PRODUCT-004` | `玩家入口与发行` | 玩家如何了解、进入并持续使用受支持产品路径；定义发现、访问模式、账户/会话、安装升级、发行沟通、可选服务与世界外参与反馈，不拥有世界内成长或权力。 |
 
@@ -40,7 +40,7 @@
 - **P0（本切片）**：冻结上表的四域标签、条款主责和迁移范围；保持四个 slug、四个 `Product PRD-ID`、现有 active 身份字段、根 SC/REQ/AC 与 checker 合同；不切换正式入口名称，不改 checker，不搬专题，不改 runtime、WASM、Agent、Viewer、玩法数值或公开 claim。
 - **C0（系统设计/代码）**：仅在单独批准的兼容任务中，让 checker 对每个稳定身份接受明确的旧名/新名映射；映射必须仍然只允许这四个 slug/ID，不能退化为任意名称或任意模块数。C0 完成前不修改上表的兼容期 active 标签。
 - **P1（产品）**：C0 通过后再按集成顺序更新入口、四根 PRD 的标题/职责声明、专题所属声明与错误依赖引用；只做分类、命名和引用收敛，不夹带玩法、经济平衡、实现或发行状态变化。
-- **P2（产品，按专题分片）**：按“源条款 → 目标条款/锚点 → 未接收语义 → 接收 owner → 删除条件”逐项迁移：`world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md` 与 `agents-world-simulation/agent-authority-ownership-and-accountability.prd.md` 的 Agent 资产/自治条款；`player-entry-distribution/free-entry-world-progression-and-recognition.prd.md` 的免费进入与世界成长条款；`world-infrastructure/` 下四个 `superseded` 治理/工业/区域/连续性来源；Viewer/Launcher 边界及 `world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md` 的产品证据职责。保留现有 REQ/AC 可追溯性；源文件只有在语义完整接收、专业权威仍可达且活跃引用修复后才可删除。过程记录继续写入 GitHub task truth，不在仓库新增 migration ledger。
+- **P2（产品，按专题分片）**：按“源条款 → 目标条款/锚点 → 未接收语义 → 接收 owner → 删除条件”逐项迁移：`world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md` 与 `agents-world-simulation/agent-authority-ownership-and-accountability.prd.md` 的 Agent 资产/自治条款；`player-entry-distribution/free-entry-world-progression-and-recognition.prd.md` 的免费进入与世界成长条款；基础设施迁移债务中的三个 `superseded` 来源（`global-governance-organization-continuity-and-constitutional-guardrails.prd.md`、`governed-industry-market-and-emergency-supply.prd.md`、`regional-charter-tenure-and-public-funding.prd.md`）及一个 `retired` 来源（`world-continuity-governance-and-recovery.prd.md`）；Viewer/Launcher 边界及 `world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md` 的产品证据职责。保留现有 REQ/AC 可追溯性；源文件只有在语义完整接收、专业权威仍可达且活跃引用修复后才可删除。过程记录继续写入 GitHub task truth，不在仓库新增 migration ledger。
 - **兼容前置**：每个名称或迁移任务都必须先验证稳定 slug/ID、旧名/新名映射、根身份和 checker 规则；跨模块引用闭合、重复 authority 消除、源/目标与失败恢复语义完成对账后，才能进入下一阶段。`superseded` 不等于已迁移完成，也不等于可直接删除。
 - **本次改造非目标**：不新增第五模块，不改目录 slug 或 Product PRD-ID，不批量重构 crate/工程目录，不修改 checker/scripts，不改变世界规则实现、数值平衡、视觉交互、WASM/Agent/runtime 合同，不把文档归属或局部检查通过宣称为能力已实现、测试已通过或发布状态升级。
 
