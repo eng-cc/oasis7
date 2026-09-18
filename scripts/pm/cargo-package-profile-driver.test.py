@@ -12,6 +12,8 @@ source/integration/tested-tree identity and a zero exit status.
 from __future__ import annotations
 
 import importlib.util
+import hashlib
+import json
 from pathlib import Path
 import unittest
 
@@ -47,6 +49,11 @@ class CargoPackageProfileDriverContract(unittest.TestCase):
             "integration_base": self.integration_base,
             "source_head": self.source_head,
             "tested_tree": self.tested_tree,
+            "trusted_authority": {
+                "policy_sha256": "sha256:" + "1" * 64,
+                "planner_sha256": "sha256:" + "2" * 64,
+                "toolchain": "rust-toolchain.toml@sha256:" + "3" * 64,
+            },
             "selected_items": ["alpha-native", "alpha-wasm"],
             "items": [
                 {
@@ -55,6 +62,7 @@ class CargoPackageProfileDriverContract(unittest.TestCase):
                     "profile": "native",
                     "target": "native",
                     "features": [],
+                    "command": ["cargo", "test", "-p", "alpha"],
                 },
                 {
                     "id": "alpha-wasm",
@@ -62,9 +70,19 @@ class CargoPackageProfileDriverContract(unittest.TestCase):
                     "profile": "wasm",
                     "target": "wasm32-unknown-unknown",
                     "features": ["wasm"],
+                    "command": ["cargo", "check", "-p", "alpha", "--target", "wasm32-unknown-unknown", "--features", "wasm"],
                 },
             ],
         }
+        for item in self.plan["items"]:
+            item["command_digest"] = "sha256:" + hashlib.sha256(
+                json.dumps(item["command"], sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+        unsigned = dict(self.plan)
+        unsigned.pop("plan_id", None)
+        self.plan["plan_id"] = "sha256:" + hashlib.sha256(
+            json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
 
     def _result(self, item_id: str, **overrides: object) -> dict[str, object]:
         result: dict[str, object] = {
@@ -75,6 +93,16 @@ class CargoPackageProfileDriverContract(unittest.TestCase):
             "integration_base": self.integration_base,
             "tested_tree": self.tested_tree,
         }
+        item = next(
+            (item for item in self.plan["items"] if item["id"] == item_id),
+            self.plan["items"][0],
+        )
+        result.update(
+            plan_id=self.plan["plan_id"],
+            command_digest=item["command_digest"],
+            toolchain=self.plan["trusted_authority"]["toolchain"],
+            profile={field: item[field] for field in ("package", "profile", "target", "features")},
+        )
         result.update(overrides)
         return result
 

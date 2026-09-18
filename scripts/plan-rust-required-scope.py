@@ -70,7 +70,7 @@ def git_paths(a):
     paths.extend(p if len(p)>1 else p[:1])
   return paths
 def main():
- p=argparse.ArgumentParser(); p.add_argument("--event-name",required=True);p.add_argument("--base-ref");p.add_argument("--head-ref");p.add_argument("--task-uid");p.add_argument("--scope-base-oid");p.add_argument("--changed-path",action="append",default=[]);p.add_argument("--github-output");p.add_argument("--config",default=str(Path(__file__).with_name("ci-required-scope.v2.json")));p.add_argument("--impact-projection",help="verified digest-bound workflow impact projection");a=p.parse_args()
+ p=argparse.ArgumentParser(); p.add_argument("--event-name",required=True);p.add_argument("--run-mode",choices=("legacy","integration_revalidation","full_escalation"),default="legacy");p.add_argument("--base-ref");p.add_argument("--head-ref");p.add_argument("--task-uid");p.add_argument("--scope-base-oid");p.add_argument("--changed-path",action="append",default=[]);p.add_argument("--github-output");p.add_argument("--config",default=str(Path(__file__).with_name("ci-required-scope.v2.json")));p.add_argument("--impact-projection",help="verified digest-bound workflow impact projection");a=p.parse_args()
  c,digest=config(a.config); paths=a.changed_path or git_paths(a); projection=None
  source_scope_base=""
  if a.base_ref and a.head_ref:
@@ -96,7 +96,7 @@ def main():
   if a.event_name != "workflow_dispatch":
    projection_expected["changed_paths"]=paths
   projection=load_impact_projection(a.impact_projection,projection_expected)
- full=a.event_name=="workflow_dispatch" or paths is None or (projection is not None and projection["test_profile"]=="full"); capabilities=set(); explicit_rust=False; reasons=["required_gate_baseline:always_on"]
+ full=a.run_mode=="full_escalation" or (a.run_mode=="legacy" and a.event_name=="workflow_dispatch") or paths is None or (projection is not None and projection["test_profile"]=="full"); capabilities=set(); explicit_rust=False; reasons=["required_gate_baseline:always_on"]
  if a.base_ref and a.head_ref and not source_scope_base:
   full=True; reasons.append("unresolvable_source_scope_base")
  if paths is None: paths=[]; reasons.append("unresolvable_changed_paths")
@@ -125,11 +125,11 @@ def main():
   # for workflow_dispatch, `scope=full` and the all-capability selector output
   # are the explicit execution record and the projection digest remains the
   # immutable source evidence link.
-  if a.event_name != "workflow_dispatch":
+  if a.run_mode != "full_escalation" and not (a.run_mode=="legacy" and a.event_name=="workflow_dispatch"):
    if projection["ci_scope"] != actual_scope: die("impact projection planner scope identity mismatch")
    if projection["ci_capabilities"] != actual_capabilities: die("impact projection planner capabilities identity mismatch")
   elif actual_scope != "full" or actual_capabilities != sorted(CAPABILITIES):
-   die("workflow_dispatch impact projection execution scope is not full")
+   die("full escalation impact projection execution scope is not full")
   vals.update({"impact_projection_schema":projection["schema"],"impact_projection_digest":projection["projection_digest"],"impact_projection_status":"verified","test_profile":projection["test_profile"],"declared_tests":";".join(projection["declared_tests"]),"planner_digest":projection["planner_digest"]})
  text="\n".join(f"{k}={v}" for k,v in vals.items())+"\n"
  if a.github_output: Path(a.github_output).open("a").write(text)

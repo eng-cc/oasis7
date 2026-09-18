@@ -73,6 +73,8 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
+      checks: read
       contents: read
       issues: read
       pull-requests: read
@@ -215,6 +217,7 @@ jobs:
           esac
           planner=(./scripts/plan-rust-required-scope.sh)
           impact_args=()
+          run_mode_args=()
           scope_base_oid="$(git merge-base "${base_ref}" "${head_ref}")"
           if [[ "${GITHUB_EVENT_NAME}" == pull_request && -f "${RUNNER_TEMP}/impact-projection.json" ]]; then
             authority_dir="${RUNNER_TEMP}/required-base-authority"
@@ -234,6 +237,7 @@ jobs:
             impact_args=(--impact-projection "${RUNNER_TEMP}/impact-projection.json" --task-uid "${task_uid}" --scope-base-oid "${scope_base_oid}")
           elif [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]; then
             planner=(python3 -I "${RUNNER_TEMP}/integration-planner/plan-rust-required-scope.py")
+            run_mode_args=(--run-mode "${{ inputs.run_mode }}")
             impact_args=(
               --impact-projection "${RUNNER_TEMP}/impact-projection.json"
               --task-uid "${{ inputs.task_uid }}"
@@ -242,6 +246,7 @@ jobs:
           fi
           "${planner[@]}" \
             --event-name "${GITHUB_EVENT_NAME}" \
+            "${run_mode_args[@]}" \
             --base-ref "${base_ref}" \
             --head-ref "${head_ref}" \
             "${impact_args[@]}" \
@@ -438,13 +443,16 @@ jobs:
           OASIS7_CARGO_SCOPE_HEAD: ${{ steps.scope.outputs.head_oid }}
         run: |
           trusted_checker="${RUNNER_TEMP}/trusted-check-cargo-package-scope"
-          trusted_profile_planner="${RUNNER_TEMP}/trusted-cargo-package-profile-planner.py"
-          trusted_profile_driver="${RUNNER_TEMP}/trusted-cargo-package-profile-driver.py"
+          trusted_profile_authority="${RUNNER_TEMP}/trusted-cargo-profile-authority"
+          trusted_profile_planner="${trusted_profile_authority}/cargo_package_profile_planner.py"
+          trusted_profile_driver="${trusted_profile_authority}/cargo_package_profile_driver.py"
           if [[ -n "${OASIS7_CARGO_SCOPE_BASE:-}" ]] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
             git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/check-cargo-package-scope" >"${trusted_checker}"
             chmod +x "${trusted_checker}"
             export OASIS7_CARGO_SCOPE_CHECKER="${trusted_checker}"
-            if git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/cargo_package_profile_planner.py" >"${trusted_profile_planner}" 2>/dev/null &&
+            mkdir -p "${trusted_profile_authority}/pm"
+            if git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/workflow-impact-projection.py" >"${trusted_profile_authority}/pm/workflow-impact-projection.py" 2>/dev/null &&
+               git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/cargo_package_profile_planner.py" >"${trusted_profile_planner}" 2>/dev/null &&
                git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/cargo_package_profile_driver.py" >"${trusted_profile_driver}" 2>/dev/null; then
               export OASIS7_CARGO_PROFILE_PLANNER="${trusted_profile_planner}"
               export OASIS7_CARGO_PROFILE_DRIVER="${trusted_profile_driver}"
@@ -453,12 +461,123 @@ jobs:
             fi
           fi
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${INTEGRATION_MODE}" == "integration_revalidation" ]]; then
+            if [[ -n "${OASIS7_CARGO_SCOPE_BASE:-}" ]]; then
+              [[ -n "${OASIS7_CARGO_PROFILE_PLANNER:-}" && -n "${OASIS7_CARGO_PROFILE_DRIVER:-}" ]] || {
+                echo "trusted Cargo package profile authority is unavailable" >&2
+                exit 1
+              }
+            profile_output="${GITHUB_WORKSPACE}/output/cargo-package-profile"
+            mkdir -p "${profile_output}"
+            export OASIS7_CARGO_PROFILE_OPT_IN=true
+            export OASIS7_CARGO_PROFILE_PLAN="${profile_output}/cargo-package-profile-plan.json"
+            export OASIS7_CARGO_PROFILE_RESULTS="${profile_output}/cargo-package-profile-results.json"
+            python3 "${OASIS7_CARGO_PROFILE_PLANNER}" \
+              --repo-root "${GITHUB_WORKSPACE}" \
+              --integration-base "${OASIS7_CARGO_PROFILE_INTEGRATION_BASE}" \
+              --source-head "${OASIS7_CARGO_PROFILE_SOURCE_HEAD}" \
+              --policy .pm/cargo-package-scope-policy.json \
+              --checker scripts/pm/check-cargo-package-scope \
+              --profile native --output "${OASIS7_CARGO_PROFILE_PLAN}"
+            export OASIS7_CARGO_PROFILE_TESTED_TREE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tested_tree"])' "${OASIS7_CARGO_PROFILE_PLAN}")"
+            # Receipt identity order: integration_base, source_head, tested_tree.
+            python3 -I - "${OASIS7_CARGO_PROFILE_PLAN}" "${OASIS7_CARGO_PROFILE_RESULTS}" <<'PY'
+          import json, os, pathlib, subprocess, sys
+          plan_path, results_path = map(pathlib.Path, sys.argv[1:])
+          plan = json.loads(plan_path.read_text(encoding="utf-8"))
+          results = []
+          for item in plan["items"]:
+              command = item.get("command")
+              if not isinstance(command, list) or not command or command[0] != "cargo" or any(not isinstance(value, str) for value in command):
+                  raise SystemExit("trusted planner emitted an invalid command argv")
+              environment = dict(os.environ)
+              environment.pop("RUSTC_WRAPPER", None)
+              completed = subprocess.run(command, env=environment, check=False)
+              results.append({
+                  "item_id": item["id"], "status": "passed" if completed.returncode == 0 else "failed",
+                  "exit_code": completed.returncode, "plan_id": plan["plan_id"],
+                  "command_digest": item["command_digest"],
+                  "toolchain": plan["trusted_authority"]["toolchain"],
+                  "profile": {field: item[field] for field in ("package", "profile", "target", "features")},
+                  "integration_base": plan["integration_base"], "source_head": plan["source_head"],
+                  "tested_tree": plan["tested_tree"],
+              })
+              if completed.returncode != 0:
+                  break
+          results_path.write_text(json.dumps(results, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+          PY
+            python3 "${OASIS7_CARGO_PROFILE_DRIVER}" \
+              --plan "${OASIS7_CARGO_PROFILE_PLAN}" --results "${OASIS7_CARGO_PROFILE_RESULTS}" \
+              --integration-base "${OASIS7_CARGO_PROFILE_INTEGRATION_BASE}" \
+              --source-head "${OASIS7_CARGO_PROFILE_SOURCE_HEAD}" \
+              --tested-tree "${OASIS7_CARGO_PROFILE_TESTED_TREE}" \
+              >"${profile_output}/cargo-package-profile-receipt.json"
+            python3 -I - "${OASIS7_CARGO_PROFILE_PLAN}" "${OASIS7_CARGO_PROFILE_RESULTS}" \
+              "${profile_output}/cargo-package-profile-receipt.json" \
+              "${profile_output}/cargo-package-profile-envelope.json" <<'PY'
+          import hashlib, json, os, pathlib, subprocess, sys
+          plan_path, results_path, receipt_path, envelope_path = map(pathlib.Path, sys.argv[1:])
+          plan = json.loads(plan_path.read_text(encoding="utf-8"))
+          checks = json.loads(subprocess.check_output([
+              "gh", "api", f"repos/{os.environ['GITHUB_REPOSITORY']}/commits/{os.environ['GITHUB_SHA']}/check-runs?per_page=100"
+          ], text=True)).get("check_runs", [])
+          matches = [check for check in checks
+                     if check.get("name") == "required-gate"
+                     and f"/actions/runs/{os.environ['GITHUB_RUN_ID']}" in str(check.get("details_url") or "")]
+          if len(matches) != 1:
+              raise SystemExit("exact required-gate check run identity is unavailable")
+          check = matches[0]
+          digest = lambda path: "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+          envelope = {
+              "schema": "oasis7-cargo-package-profile-envelope/v1",
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "task_uid": "${{ inputs.task_uid }}", "pr_number": int("${{ inputs.pr_number }}"),
+              "workflow_ref": os.environ["GITHUB_WORKFLOW_REF"],
+              "workflow_sha": os.environ["GITHUB_WORKFLOW_SHA"],
+              "run_id": int(os.environ["GITHUB_RUN_ID"]),
+              "run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
+              "check_name": "required-gate", "check_app_id": int(check["app"]["id"]),
+              "check_run_id": int(check["id"]),
+              "integration_base": plan["integration_base"], "source_head": plan["source_head"],
+              "tested_tree": plan["tested_tree"], "plan_digest": digest(plan_path),
+              "results_digest": digest(results_path), "receipt_digest": digest(receipt_path),
+          }
+          envelope_path.write_text(json.dumps(envelope, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+          PY
+            fi
             CI_VERBOSE=1 bash "${RUNNER_TEMP}/integration-planner/ci-tests.sh" required --repo-root "${GITHUB_WORKSPACE}" --impact-projection "${RUNNER_TEMP}/impact-projection.json"
           elif [[ "${GITHUB_EVENT_NAME}" == "pull_request" && -f "${RUNNER_TEMP}/impact-projection.json" ]]; then
             CI_VERBOSE=1 ./scripts/ci-tests.sh required --impact-projection "${RUNNER_TEMP}/impact-projection.json"
           else
             CI_VERBOSE=1 ./scripts/ci-tests.sh required
           fi
+      - name: Upload Cargo package profile plan
+        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
+        uses: actions/upload-artifact@v7
+        with:
+          name: cargo-package-profile-plan
+          path: output/cargo-package-profile/cargo-package-profile-plan.json
+          if-no-files-found: error
+      - name: Upload Cargo package profile results
+        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
+        uses: actions/upload-artifact@v7
+        with:
+          name: cargo-package-profile-results
+          path: output/cargo-package-profile/cargo-package-profile-results.json
+          if-no-files-found: error
+      - name: Upload Cargo package profile receipt
+        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
+        uses: actions/upload-artifact@v7
+        with:
+          name: cargo-package-profile-receipt
+          path: output/cargo-package-profile/cargo-package-profile-receipt.json
+          if-no-files-found: error
+      - name: Upload Cargo package profile envelope
+        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
+        uses: actions/upload-artifact@v7
+        with:
+          name: cargo-package-profile-envelope
+          path: output/cargo-package-profile/cargo-package-profile-envelope.json
+          if-no-files-found: error
       - name: Upload selected Viewer performance evidence
         if: ${{ always() && steps.scope.outputs.run_viewer_perf_smoke == 'true' }}
         uses: actions/upload-artifact@v7
@@ -673,6 +792,7 @@ jobs:
       - id: preflight
         name: Validate human-authorized full escalation
         env:
+          GH_TOKEN: ${{ github.token }}
           TASK_UID: ${{ inputs.task_uid }}
           PR_NUMBER: ${{ inputs.pr_number }}
           EXPECTED_HEAD: ${{ inputs.expected_head }}
@@ -681,6 +801,29 @@ jobs:
         run: |
           actual_head="$(git rev-parse HEAD)"
           started_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          python3 -I - <<'PY'
+          import json, os, re, subprocess
+          repo=os.environ["GITHUB_REPOSITORY"]
+          repository=json.loads(subprocess.check_output(["gh","api",f"repos/{repo}"],text=True))
+          default=repository.get("default_branch")
+          if os.environ["GITHUB_REF"] != f"refs/heads/{default}" or os.environ["GITHUB_WORKFLOW_SHA"] != os.environ["GITHUB_SHA"]:
+              raise SystemExit("full escalation must execute trusted current default-branch workflow authority")
+          pr=json.loads(subprocess.check_output(["gh","api",f"repos/{repo}/pulls/{os.environ['PR_NUMBER']}"],text=True))
+          if (pr.get("state") != "open" or pr.get("merged")
+              or (pr.get("base") or {}).get("ref") != default
+              or (pr.get("base") or {}).get("sha") != os.environ["GITHUB_SHA"]
+              or (pr.get("head") or {}).get("sha") != os.environ["EXPECTED_HEAD"]):
+              raise SystemExit("full escalation live PR source/target identity mismatch")
+          refs=re.findall(r"(?:Refs|Fixes|Closes)\s+#([0-9]+)",pr.get("body") or "",re.I)
+          if len(refs) != 1:
+              raise SystemExit("full escalation requires one reciprocal task Issue")
+          issue=json.loads(subprocess.check_output(["gh","api",f"repos/{repo}/issues/{refs[0]}"],text=True))
+          body=(issue.get("body") or "").replace("\r\n","\n")
+          if re.findall(r"^task_uid: (task_[0-9a-f]{32})$",body,re.M) != [os.environ["TASK_UID"]]:
+              raise SystemExit("full escalation live task UID mismatch")
+          if re.findall(r"^- pr_number: `([0-9]+)`$",body,re.M) != [os.environ["PR_NUMBER"]]:
+              raise SystemExit("full escalation live task/PR binding mismatch")
+          PY
           python3 ./scripts/full-escalation-receipt.py validate \
             --trigger "${GITHUB_EVENT_NAME}" --repository "${GITHUB_REPOSITORY}" \
             --run-id "${GITHUB_RUN_ID}" --run-attempt "${GITHUB_RUN_ATTEMPT}" --actor "${GITHUB_ACTOR}" \
