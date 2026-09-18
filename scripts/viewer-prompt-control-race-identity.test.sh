@@ -16,7 +16,7 @@ require_text() {
   local label="$3"
   if [[ ! -f "$file" ]]; then
     failures+=$'\n- '"$label: missing file $file"
-  elif ! rg -Fq -- "$needle" "$file"; then
+  elif ! grep -Fq -- "$needle" "$file"; then
     failures+=$'\n- '"$label: missing $needle"
   fi
 }
@@ -31,7 +31,7 @@ require_any_text() {
   fi
   local needle
   for needle in "$@"; do
-    if rg -Fq -- "$needle" "$file"; then
+    if grep -Fq -- "$needle" "$file"; then
       return
     fi
   done
@@ -48,7 +48,7 @@ require_text "$race_runner" 'tab new' 'same-origin second tab creation'
 require_text "$race_runner" 'TAB_A' 'actor A tab selection'
 require_text "$race_runner" 'TAB_B' 'actor B tab selection'
 
-if [[ -f "$race_runner" ]] && rg -n 'SESSION_A=|SESSION_B=' "$race_runner"; then
+if [[ -f "$race_runner" ]] && grep -En 'SESSION_A=|SESSION_B=' "$race_runner"; then
   failures+=$'\n- same-key proof must not create independent SESSION_A/SESSION_B browser sessions'
 fi
 
@@ -76,7 +76,7 @@ require_text "$viewer_core" 'connectBrowserRaceActorForTest' 'recipient connects
 require_text "$viewer_core" '1_000_000' 'disjoint actor B request and nonce range'
 
 if [[ -f "$handoff_source" ]]; then
-  if rg -n 'localStorage|sessionStorage|location\.(search|href)|console\.(log|warn|error)' "$handoff_source"; then
+  if grep -En 'localStorage|sessionStorage|location\.(search|href)|console\.(log|warn|error)' "$handoff_source"; then
     failures+=$'\n- handoff implementation must not persist, put in URL, or log key material'
   fi
 fi

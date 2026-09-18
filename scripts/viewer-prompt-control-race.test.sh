@@ -15,7 +15,7 @@ require_text() {
   local label="$3"
   if [[ ! -f "$file" ]]; then
     failures+=$'\n- '"$label: missing file $file"
-  elif ! rg -Fq -- "$needle" "$file"; then
+  elif ! grep -Fq -- "$needle" "$file"; then
     failures+=$'\n- '"$label: missing $needle"
   fi
 }
@@ -26,7 +26,7 @@ require_regex() {
   local label="$3"
   if [[ ! -f "$file" ]]; then
     failures+=$'\n- '"$label: missing file $file"
-  elif ! rg -q -- "$pattern" "$file"; then
+  elif ! grep -Eq -- "$pattern" "$file"; then
     failures+=$'\n- '"$label: missing /$pattern/"
   fi
 }
@@ -100,7 +100,7 @@ require_text "$race_runner" 'operation_digest' 'operation receipt evidence'
 
 # Each actor must submit Apply through its pinned visible browser control.
 if [[ -f "$race_runner" ]]; then
-  apply_clicks=$(rg -F -c 'button[data-prompt-action="apply"]' "$race_runner" || true)
+  apply_clicks=$(grep -F -c 'button[data-prompt-action="apply"]' "$race_runner" || true)
   if [[ "${apply_clicks:-0}" -lt 2 ]]; then
     failures+=$'\n- live race must issue two visible Apply clicks (one per tab)'
   fi
@@ -128,10 +128,10 @@ require_text "$race_runner" 'response_sessions' 'response session evidence'
 require_text "$race_runner" 'response_bindings' 'response binding evidence'
 
 if [[ -f "$race_runner" ]]; then
-  if rg -n 'ab_read_retry[^\n]*(click|fill|submit|sendPromptControl)|ab_read_retry[^\n]*__AW_TEST__\.sendPromptControl' "$race_runner"; then
+  if grep -En 'ab_read_retry.*(click|fill|submit|sendPromptControl)|ab_read_retry.*__AW_TEST__\.sendPromptControl' "$race_runner"; then
     failures+=$'\n- action-bearing prompt operations must not use the read retry helper'
   fi
-  if rg -n 'sendPromptControl|__AW_TEST__\.sendPromptControl' "$race_runner"; then
+  if grep -En 'sendPromptControl|__AW_TEST__\.sendPromptControl' "$race_runner"; then
     failures+=$'\n- prompt submission must remain a visible browser action, not a test API call'
   fi
 fi
