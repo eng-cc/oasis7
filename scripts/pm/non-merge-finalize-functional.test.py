@@ -408,6 +408,44 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         )
         return task_worktree, mapping_paths[0], evidence_path
 
+    def stale_default_non_pr_worktrees(self, evidence: str) -> tuple[Path, Path, Path]:
+        """Build the C0 state before task-worktree non-PR classification."""
+        task_worktree, default_mapping_path, evidence_path = self.registered_non_pr_worktrees(evidence)
+        task_mapping_path = task_worktree / ".pm/github-project-sync/tasks.json"
+        for mapping_path in (default_mapping_path, task_mapping_path):
+            mapping = self.read_json(mapping_path)
+            record = mapping["tasks"][UID]
+            for key in (
+                "completion_mode",
+                "non_pr_completion_evidence",
+                "non_pr_completion_evidence_file",
+                "non_pr_completion_evidence_sha256",
+            ):
+                record.pop(key, None)
+            mapping_path.write_text(json.dumps(mapping, sort_keys=True) + "\n", encoding="utf-8")
+        evidence_path.unlink()
+        return task_worktree, default_mapping_path, evidence_path
+
+    def complete_stale_default_non_pr_closeout(self, evidence: str) -> tuple[Path, Path, Path]:
+        task_worktree, default_mapping_path, evidence_path = self.stale_default_non_pr_worktrees(evidence)
+        classified = self.classify_non_pr(evidence, repo_root=task_worktree)
+        self.assertEqual(classified.returncode, 0, classified.stderr)
+        claim = json.dumps({
+            "claim_type": "task_complete", "status": "verified",
+            "allowed_to_claim": True, "verification_exit_code": 0,
+            "verified_at": "2026-09-17T00:00:00+08:00",
+        })
+        closeout = subprocess.run([
+            sys.executable, str(PROJECT_TASK), "closeout-task", str(task_worktree),
+            "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
+            "--to-status", "done", "--claim-json", claim, "--json",
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+        self.assertEqual(closeout.returncode, 0, closeout.stderr)
+        default_record = self.read_json(default_mapping_path)["tasks"][UID]
+        self.assertNotIn("non_pr_completion_evidence_file", default_record)
+        self.assertNotIn("non_pr_completion_evidence_sha256", default_record)
+        return task_worktree, default_mapping_path, evidence_path
+
     def reset_runtime(self) -> None:
         """Reset mutable fake-remote and receipt state for another reason."""
         for path, value in (
@@ -1634,6 +1672,98 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(finalized.returncode, 0, finalized.stderr)
         self.assertEqual(self.read_json(self.closes), ["completed"])
         self.assertEqual(len(self.read_json(self.comments)), 3)
+
+    def test_stale_default_refresh_recovers_task_worktree_non_pr_closeout(self) -> None:
+        """C0: classification/closeout in the task worktree must repair a stale default cache."""
+        evidence = "stale default mapping fixture: no PR is required"
+        task_worktree, default_mapping_path, evidence_path = self.complete_stale_default_non_pr_closeout(evidence)
+
+        refreshed = subprocess.run([
+            sys.executable, str(PROJECT_TASK), "refresh-task", str(self.root),
+            "--repo", REPO, "--project-owner", "fixture", "--project-number", "1",
+            "--task-uid", UID, "--json",
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+        self.assertEqual(refreshed.returncode, 0, refreshed.stderr)
+
+        task_record = self.read_json(task_worktree / ".pm/github-project-sync/tasks.json")["tasks"][UID]
+        default_record = self.read_json(default_mapping_path)["tasks"][UID]
+        self.assertEqual(default_record["status"], "done")
+        self.assertEqual(default_record["workflow_phase"], "task_done")
+        self.assertEqual(default_record["completion_mode"], "non_pr_task")
+        self.assertEqual(default_record["non_pr_completion_evidence"], evidence)
+        self.assertEqual(default_record["non_pr_completion_evidence_file"], str(evidence_path.resolve()))
+        self.assertEqual(
+            default_record["non_pr_completion_evidence_sha256"],
+            hashlib.sha256(evidence_path.read_bytes()).hexdigest(),
+        )
+        self.assertEqual(default_record["last_closed_at"], task_record["last_closed_at"])
+        self.assertEqual(default_record["claim_verifications"], task_record["claim_verifications"])
+
+        finalized = self.invoke("non_pr_completed", evidence_path, repo_root=self.root)
+        self.assertEqual(finalized.returncode, 0, finalized.stderr)
+        self.assertEqual(self.read_json(self.closes), ["completed"])
+
+    def test_stale_default_refresh_rejects_task_worktree_content_tamper(self) -> None:
+        evidence = "stale content tamper fixture: no PR is required"
+        _task_worktree, _default_mapping_path, evidence_path = self.complete_stale_default_non_pr_closeout(evidence)
+        evidence_path.write_text("tampered task-worktree evidence\n", encoding="utf-8")
+
+        refreshed = subprocess.run([
+            sys.executable, str(PROJECT_TASK), "refresh-task", str(self.root),
+            "--repo", REPO, "--project-owner", "fixture", "--project-number", "1",
+            "--task-uid", UID, "--json",
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+        self.assertNotEqual(refreshed.returncode, 0)
+        self.assertRegex(refreshed.stderr, r"trace-projection-loss.*evidence file differs from Issue evidence")
+
+    def test_stale_default_refresh_rejects_task_worktree_digest_tamper(self) -> None:
+        evidence = "stale digest tamper fixture: no PR is required"
+        _task_worktree, _default_mapping_path, evidence_path = self.complete_stale_default_non_pr_closeout(evidence)
+        body = self.issue_body.read_text(encoding="utf-8")
+        body = re.sub(
+            r"^- non_pr_completion_evidence_sha256: `[^`]+`$",
+            "- non_pr_completion_evidence_sha256: `" + ("0" * 64) + "`",
+            body,
+            flags=re.MULTILINE,
+        )
+        self.issue_body.write_text(body, encoding="utf-8")
+
+        refreshed = subprocess.run([
+            sys.executable, str(PROJECT_TASK), "refresh-task", str(self.root),
+            "--repo", REPO, "--project-owner", "fixture", "--project-number", "1",
+            "--task-uid", UID, "--json",
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+        self.assertNotEqual(refreshed.returncode, 0)
+        self.assertRegex(refreshed.stderr, r"trace-projection-loss.*evidence file digest mismatch")
+        self.assertTrue(evidence_path.is_file())
+
+    def test_stale_default_refresh_rejects_missing_task_worktree_evidence_path(self) -> None:
+        evidence = "stale path tamper fixture: no PR is required"
+        _task_worktree, _default_mapping_path, evidence_path = self.complete_stale_default_non_pr_closeout(evidence)
+        evidence_path.unlink()
+
+        refreshed = subprocess.run([
+            sys.executable, str(PROJECT_TASK), "refresh-task", str(self.root),
+            "--repo", REPO, "--project-owner", "fixture", "--project-number", "1",
+            "--task-uid", UID, "--json",
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+        self.assertNotEqual(refreshed.returncode, 0)
+        self.assertRegex(refreshed.stderr, r"trace-projection-loss.*evidence file is unavailable")
+
+    def test_stale_default_refresh_rejects_default_cache_identity_drift(self) -> None:
+        evidence = "stale identity tamper fixture: no PR is required"
+        _task_worktree, default_mapping_path, _evidence_path = self.complete_stale_default_non_pr_closeout(evidence)
+        mapping = self.read_json(default_mapping_path)
+        mapping["tasks"][UID]["canonical_worktree"] = str(Path(self.tmp.name) / "missing-task-worktree")
+        default_mapping_path.write_text(json.dumps(mapping, sort_keys=True) + "\n", encoding="utf-8")
+
+        refreshed = subprocess.run([
+            sys.executable, str(PROJECT_TASK), "refresh-task", str(self.root),
+            "--repo", REPO, "--project-owner", "fixture", "--project-number", "1",
+            "--task-uid", UID, "--json",
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+        self.assertNotEqual(refreshed.returncode, 0)
+        self.assertRegex(refreshed.stderr, r"trace-projection-loss|canonical task worktree|identity")
 
     def test_registered_default_refresh_then_non_pr_terminal_closure(self) -> None:
         """Prove the full task-worktree -> default-worktree terminal path."""
