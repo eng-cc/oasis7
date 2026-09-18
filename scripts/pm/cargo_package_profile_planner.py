@@ -61,9 +61,12 @@ def _extract(repo: Path, oid: str, destination: Path) -> None:
             tar.extractall(destination)
 
 
-def _metadata(root: Path) -> dict[str, Any]:
+def _metadata(root: Path, manifest: Path | None = None) -> dict[str, Any]:
+    command = ["cargo", "metadata", "--no-deps", "--format-version", "1"]
+    if manifest is not None:
+        command.extend(("--manifest-path", str(manifest)))
     result = subprocess.run(
-        ["cargo", "metadata", "--no-deps", "--format-version", "1"],
+        command,
         cwd=root,
         capture_output=True,
         text=True,
@@ -74,17 +77,37 @@ def _metadata(root: Path) -> dict[str, Any]:
     return json.loads(result.stdout)
 
 
+def _metadata_with_independent_workspaces(root: Path) -> dict[str, Any]:
+    primary = _metadata(root)
+    packages = list(primary["packages"])
+    oasis_metadata = (primary.get("metadata") or {}).get("oasis7") or {}
+    independent = oasis_metadata.get("independent_profile_workspaces") or []
+    if not isinstance(independent, list) or any(not isinstance(path, str) for path in independent):
+        raise PlanError("independent profile workspace configuration is invalid")
+    for relative in independent:
+        manifest = root / relative / "Cargo.toml"
+        if not manifest.is_file():
+            raise PlanError(f"independent profile workspace is missing: {relative}")
+        packages.extend(_metadata(root / relative, manifest)["packages"])
+    return {"packages": packages}
+
+
 def _package_map(root: Path, metadata: dict[str, Any]) -> dict[str, str]:
     result: dict[str, str] = {}
     for package in metadata["packages"]:
         manifest = Path(package["manifest_path"]).resolve()
         relative = manifest.relative_to(root.resolve()).as_posix()
-        result[str(Path(relative).parent).replace("\\", "/")] = package["name"]
+        package_root = str(Path(relative).parent).replace("\\", "/")
+        result["" if package_root == "." else package_root] = package["name"]
     return result
 
 
 def _owner(path: str, packages: dict[str, str]) -> str | None:
-    matches = [(len(root), name) for root, name in packages.items() if path == root or path.startswith(root + "/")]
+    matches = [
+        (len(root), name)
+        for root, name in packages.items()
+        if not root or path == root or path.startswith(root + "/")
+    ]
     return max(matches)[1] if matches else None
 
 
@@ -152,27 +175,42 @@ def plan_package_profiles(
 
     with tempfile.TemporaryDirectory(prefix="cargo-profile-base-") as base_dir, tempfile.TemporaryDirectory(
         prefix="cargo-profile-head-"
-    ) as head_dir:
-        base_root, head_root = Path(base_dir), Path(head_dir)
+    ) as head_dir, tempfile.TemporaryDirectory(prefix="cargo-profile-tested-") as tested_dir:
+        base_root, head_root, tested_root = Path(base_dir), Path(head_dir), Path(tested_dir)
         _extract(repo, source_scope_base, base_root)
         _extract(repo, source_head, head_root)
-        base_metadata, head_metadata = _metadata(base_root), _metadata(head_root)
-        base_packages, head_packages = _package_map(base_root, base_metadata), _package_map(head_root, head_metadata)
+        _extract(repo, tested_tree, tested_root)
+        base_metadata = _metadata_with_independent_workspaces(base_root)
+        head_metadata = _metadata_with_independent_workspaces(head_root)
+        tested_metadata = _metadata_with_independent_workspaces(tested_root)
+        base_packages = _package_map(base_root, base_metadata)
+        head_packages = _package_map(head_root, head_metadata)
+        tested_packages = _package_map(tested_root, tested_metadata)
         union_packages = dict(base_packages)
         union_packages.update(head_packages)
+        union_packages.update(tested_packages)
         changed_packages = sorted(
             {owner for path in changed_names if (owner := _owner(path, union_packages))}
         )
         union_edges = _edges(base_root, base_metadata, base_packages) | _edges(
             head_root, head_metadata, head_packages
-        )
+        ) | _edges(tested_root, tested_metadata, tested_packages)
 
     affected = set(changed_packages)
     for source, target in union_edges:
-        if source in changed_packages or target in changed_packages:
-            affected.update((source, target))
+        if source in changed_packages:
+            affected.add(target)
+    consumer_frontier = set(changed_packages)
+    while consumer_frontier:
+        consumers = {
+            source
+            for source, target in union_edges
+            if target in consumer_frontier and source not in affected
+        }
+        affected.update(consumers)
+        consumer_frontier = consumers
     normalized_profiles, escalation_reasons = _profiles(profiles)
-    items = [
+    items = [] if escalation_reasons else [
         {
             "id": f"{package}-{profile['id']}",
             "package": package,
@@ -197,6 +235,8 @@ def plan_package_profiles(
         "items": items,
         "scope": "full" if escalation_reasons else "targeted",
         "escalation_reasons": escalation_reasons,
+        "execution_disposition": "full_escalation" if escalation_reasons else "planned_items",
+        "disposition_validated": bool(escalation_reasons),
         "trusted_authority": {"policy": policy_path, "checker": checker_path},
     }
     identity = json.dumps(plan, sort_keys=True, separators=(",", ":")).encode("utf-8")

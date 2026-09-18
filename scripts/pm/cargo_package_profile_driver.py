@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Iterable
@@ -26,6 +27,15 @@ def validate_planned_items(
 ) -> dict[str, Any]:
     if plan.get("schema") != SCHEMA:
         raise DriverError("unknown plan schema")
+    plan_id = plan.get("plan_id")
+    if isinstance(plan_id, str) and plan_id.startswith("sha256:"):
+        unsigned = dict(plan)
+        unsigned.pop("plan_id", None)
+        expected_plan_id = "sha256:" + hashlib.sha256(
+            json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+        if plan_id != expected_plan_id:
+            raise DriverError("plan_id digest is forged or does not bind plan content")
     expected_identity = {
         "integration_base": integration_base,
         "source_head": source_head,
