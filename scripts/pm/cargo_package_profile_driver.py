@@ -38,6 +38,14 @@ def validate_planned_items(
     ).hexdigest()
     if plan_id != expected_plan_id:
         raise DriverError("plan_id digest is forged or does not bind plan content")
+    primary_package = plan.get("primary_package")
+    if primary_package is not None:
+        if not isinstance(primary_package, str) or re.fullmatch(
+            r"[A-Za-z0-9][A-Za-z0-9_-]*\Z", primary_package
+        ) is None:
+            raise DriverError("primary_package is invalid")
+        if plan.get("changed_packages") != [primary_package]:
+            raise DriverError("primary package mismatch with changed package identity")
     expected_identity = {
         "integration_base": integration_base,
         "source_head": source_head,

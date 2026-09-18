@@ -1382,6 +1382,10 @@ except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as exc:
 print(task_uid)
 print(issue_url)
 print(issue_number)
+primary_package = str(record.get("primary_package") or "").strip()
+if primary_package and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", primary_package) is None:
+    fail(f"mapped primary_package is invalid: {primary_package}")
+print(primary_package)
 PY
 }
 
@@ -1447,6 +1451,7 @@ BOUND_TASK_FIELDS=""
 BOUND_TASK_UID=""
 BOUND_TASK_ISSUE_URL=""
 BOUND_TASK_ISSUE_NUMBER=""
+BOUND_TASK_PRIMARY_PACKAGE=""
 if [[ "$DRAFT_CANDIDATE" == "1" ]]; then
   DRAFT_FREEZE_EVIDENCE_HELPER="${PREPARE_TASK_PR_DRAFT_FREEZE_EVIDENCE_PATH:-$SOURCE_WORKTREE/scripts/pm/record-draft-freeze-evidence.py}"
   python3 "$DRAFT_FREEZE_EVIDENCE_HELPER" --worktree "$SOURCE_WORKTREE" \
@@ -1459,6 +1464,7 @@ if [[ "$DRAFT_CANDIDATE" == "1" ]]; then
   BOUND_TASK_UID="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '1p')"
   BOUND_TASK_ISSUE_URL="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '2p')"
   BOUND_TASK_ISSUE_NUMBER="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '3p')"
+  BOUND_TASK_PRIMARY_PACKAGE="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '4p')"
   if [[ -n "$BOUND_TASK_UID" && -z "$IMPACT_PROJECTION" && "$LEGACY_REVIEW_V1" != "1" ]]; then
     die "task-bound draft candidate requires --impact-projection; pass --legacy-review-v1 only for an explicit compatibility migration"
   fi
@@ -1481,6 +1487,7 @@ LOCAL_REQUIRED_COMMAND=""
 CARGO_PACKAGE_SCOPE_STATUS="not_run"
 CARGO_PACKAGE_SCOPE_COMMAND=""
 CARGO_PACKAGE_SCOPE_REASON=""
+CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE=""
 CLAIM_READY_COMMAND=""
 LOCAL_REQUIRED_EXTRA_COMMANDS=()
 
@@ -1671,6 +1678,18 @@ else
     printf '%s\n' "$CARGO_PACKAGE_SCOPE_OUTPUT" >&2
     die "Cargo package scope check failed for $SOURCE_SCOPE_BASE..$SOURCE_HEAD"
   fi
+  CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("primary_package") or "")' <<<"$CARGO_PACKAGE_SCOPE_OUTPUT")" \
+    || die "Cargo package scope output is malformed"
+  # A canonical task binding is available only for the draft-candidate path.
+  # Ordinary local required-validation reads may inspect a Cargo diff without
+  # selecting a task; keep those reads usable while making task-bound PR
+  # preparation fail closed on missing or mismatched package intent.
+  if [[ -n "$CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE" && -n "$BOUND_TASK_UID" ]]; then
+    [[ -n "$BOUND_TASK_PRIMARY_PACKAGE" ]] \
+      || die "Cargo diff changes one business package ($CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE) but canonical task primary_package is missing"
+    [[ "$BOUND_TASK_PRIMARY_PACKAGE" == "$CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE" ]] \
+      || die "canonical task primary_package ($BOUND_TASK_PRIMARY_PACKAGE) differs from actual Cargo package ($CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE)"
+  fi
   CARGO_PACKAGE_SCOPE_STATUS="validated"
   LOCAL_REQUIRED_EXTRA_COMMANDS+=("$CARGO_PACKAGE_SCOPE_COMMAND")
 fi
@@ -1685,14 +1704,18 @@ if [[ "${OASIS7_CARGO_PROFILE_OPT_IN:-false}" == "true" ]]; then
     || die "trusted base Cargo package profile planner is unavailable"
   git -C "$SOURCE_WORKTREE" show "${SOURCE_SCOPE_BASE}:scripts/pm/cargo_package_profile_driver.py" >"$CARGO_PROFILE_DRIVER" 2>/dev/null \
     || die "trusted base Cargo package profile driver is unavailable"
-  python3 "$CARGO_PROFILE_PLANNER" \
+  CARGO_PROFILE_COMMAND=(python3 "$CARGO_PROFILE_PLANNER" \
     --repo-root "$SOURCE_WORKTREE" \
     --integration-base "$COMPARISON_HEAD" \
     --source-head "$SOURCE_HEAD" \
     --policy .pm/cargo-package-scope-policy.json \
     --checker scripts/pm/check-cargo-package-scope \
     --profile "${OASIS7_CARGO_PROFILE_PROFILE:-native}" \
-    --output "$CARGO_PROFILE_PLAN" \
+    --output "$CARGO_PROFILE_PLAN")
+  if [[ -n "$CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE" ]]; then
+    CARGO_PROFILE_COMMAND+=(--primary-package "$CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE")
+  fi
+  "${CARGO_PROFILE_COMMAND[@]}" \
     || die "trusted Cargo package profile planning failed"
   CARGO_PROFILE_TESTED_TREE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tested_tree"])' "$CARGO_PROFILE_PLAN")"
   python3 "$CARGO_PROFILE_DRIVER" \

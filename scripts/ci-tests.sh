@@ -470,6 +470,7 @@ run_cargo_package_scope_check() {
   local head_oid="${OASIS7_CARGO_SCOPE_HEAD:-}"
   local checker="${OASIS7_CARGO_SCOPE_CHECKER:-./scripts/pm/check-cargo-package-scope}"
   local policy="./.pm/cargo-package-scope-policy.json"
+  local primary_package="${OASIS7_CARGO_PRIMARY_PACKAGE:-auto}"
   if [[ -z "$base_oid" || -z "$head_oid" ]]; then
     echo "skip: Cargo package scope audit reason=trusted_base_head_not_provided claim_boundary=contract_suite_only"
     return 0
@@ -486,7 +487,7 @@ run_cargo_package_scope_check() {
     --repo-root "$repo_root" \
     --base "$base_oid" \
     --head "$head_oid" \
-    --primary-package auto \
+    --primary-package "$primary_package" \
     --policy "$repo_root/$policy" \
     --json
 }
@@ -504,14 +505,18 @@ run_cargo_package_profile_completion_check() {
       return 1
     }
     generated_plan="$(mktemp)"
-    if ! python3 "$planner" \
+    profile_plan_command=(python3 "$planner" \
       --repo-root "$repo_root" \
       --integration-base "$OASIS7_CARGO_PROFILE_INTEGRATION_BASE" \
       --source-head "$OASIS7_CARGO_PROFILE_SOURCE_HEAD" \
       --policy .pm/cargo-package-scope-policy.json \
       --checker scripts/pm/check-cargo-package-scope \
       --profile "${OASIS7_CARGO_PROFILE_PROFILE:-native}" \
-      --output "$generated_plan"; then
+      --output "$generated_plan")
+    if [[ -n "${OASIS7_CARGO_PRIMARY_PACKAGE:-}" ]]; then
+      profile_plan_command+=(--primary-package "$OASIS7_CARGO_PRIMARY_PACKAGE")
+    fi
+    if ! "${profile_plan_command[@]}"; then
       rm -f "$generated_plan"
       return 1
     fi

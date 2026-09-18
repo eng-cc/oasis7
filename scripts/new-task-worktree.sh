@@ -36,6 +36,8 @@ Options:
   --pm-owner-role <role>  Create the GitHub-backed task in the target worktree,
                           move it to committed, and record workflow start with this owner role
   --pm-title <title>      Required when using --pm-owner-role
+  --pm-primary-package <name>
+                          Declared Cargo package for the GitHub-backed task
   --pm-task-uid <uid>     Resume the exact existing task; never creates a replacement
   --pm-loop <loop>        Manual product/system/code binding (requires frozen binding)
   --pm-loop-binding <file> Frozen oasis7.loop-task/v1 JSON binding
@@ -53,7 +55,7 @@ Options:
 Examples:
   ./scripts/new-task-worktree.sh scripts task-worktree-bootstrap
   ./scripts/new-task-worktree.sh scripts task-worktree-bootstrap --init-docs
-  ./scripts/new-task-worktree.sh engineering task-worktree-pm-bootstrap --pm-owner-role tpm --pm-title "atomic task worktree bootstrap" --pm-source-ref doc/engineering/prd.md
+  ./scripts/new-task-worktree.sh engineering task-worktree-pm-bootstrap --pm-owner-role tpm --pm-title "atomic task worktree bootstrap" --pm-primary-package oasis7 --pm-source-ref doc/engineering/prd.md
   ./scripts/new-task-worktree.sh viewer hud-redesign --base main
   ./scripts/new-task-worktree.sh p2p hosted-flow --json --path ../worktrees/oasis7-codex-p2p-hosted-flow
   ./scripts/new-task-worktree.sh viewer hud-redesign --with-harness
@@ -73,6 +75,7 @@ WORKTREES_ROOT=""
 PM_BOOTSTRAP=0
 PM_OWNER_ROLE=""
 PM_TITLE=""
+PM_PRIMARY_PACKAGE=""
 PM_PRIORITY="P2"
 PM_EXISTING_UID=""
 PM_LOOP=""
@@ -129,6 +132,11 @@ while [[ $# -gt 0 ]]; do
     --pm-title)
       PM_BOOTSTRAP=1
       PM_TITLE="${2:-}"
+      shift 2
+      ;;
+    --pm-primary-package)
+      PM_BOOTSTRAP=1
+      PM_PRIMARY_PACKAGE="${2:-}"
       shift 2
       ;;
     --pm-priority)
@@ -561,6 +569,9 @@ if [[ "$PM_BOOTSTRAP" == "1" ]]; then
     --module "$MODULE_SLUG"
     --priority "$PM_PRIORITY"
   )
+  if [[ -n "$PM_PRIMARY_PACKAGE" ]]; then
+    NEW_TASK_CMD+=(--primary-package "$PM_PRIMARY_PACKAGE")
+  fi
   for source_ref in "${PM_SOURCE_REFS[@]}"; do
     NEW_TASK_CMD+=(--source-ref "$source_ref")
   done

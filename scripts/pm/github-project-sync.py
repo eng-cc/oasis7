@@ -36,6 +36,7 @@ FIELD_NAMES = {
     "last_pm_update": "Last PM Update",
     "loop": "Loop",
     "change_id": "Change ID",
+    "primary_package": "Primary Package",
 }
 SINGLE_SELECT_FIELDS = {
     "Status",
@@ -48,6 +49,7 @@ SINGLE_SELECT_FIELDS = {
     "Loop",
 }
 TASK_UID_RE = re.compile(r"task_uid:\s*(task_[0-9a-f]{32})")
+PRIMARY_PACKAGE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*\Z")
 ISSUE_URL_RE = re.compile(r"/issues/(\d+)(?:$|[?#])")
 RECOVERY_BATCH_SIZE = 10
 _PROJECT_CONTEXT_CACHE: dict[tuple[str, int], tuple[str, dict[str, dict[str, Any]]]] = {}
@@ -56,6 +58,16 @@ _PROJECT_CONTEXT_CACHE: dict[tuple[str, int], tuple[str, dict[str, dict[str, Any
 def die(message: str) -> None:
     print(message, file=sys.stderr)
     raise SystemExit(1)
+
+
+def primary_package_value(task: OrderedDict[str, Any]) -> str | None:
+    value = task.get("primary_package")
+    if value in (None, ""):
+        return None
+    package = str(value).strip()
+    if PRIMARY_PACKAGE_RE.fullmatch(package) is None:
+        die("primary_package is not a valid declared Cargo package name")
+    return package
 
 
 def parse_scalar(value: str) -> Any:
@@ -543,6 +555,9 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
         f"- priority: `{task.get('priority')}`",
         f"- worktree_hint: `{task.get('worktree_hint') or ''}`",
     ]
+    package = primary_package_value(task)
+    if package is not None:
+        lines.append(f"- primary_package: `{package}`")
     source_refs = task.get("source_refs") or []
     if source_refs:
         lines.append("")
@@ -577,6 +592,9 @@ def project_field_values(task: OrderedDict[str, Any]) -> dict[str, str]:
         "Test Tier Required": "n/a",
         "Last PM Update": first_date(task.get("updated_at")),
     }
+    package = primary_package_value(task)
+    if package is not None:
+        result["Primary Package"] = package
     if task.get("loop_binding") is not None:
         binding = task["loop_binding"]
         result.update({"Loop": str(binding.get("loop") or ""), "Change ID": str(binding.get("change_id") or "")})
@@ -889,6 +907,8 @@ def main(argv: list[str] | None = None) -> int:
                         "module": task.get("module") or "",
                         "owner_role": task.get("owner_role"),
                         "worktree_hint": task.get("worktree_hint") or "",
+                        **({"primary_package": task["primary_package"]}
+                           if task.get("primary_package") not in (None, "") else {}),
                         "execution_log_path": task.get("execution_log_path") or "",
                         "last_synced_at": datetime.now().astimezone().isoformat(timespec="seconds"),
                     }
@@ -898,6 +918,8 @@ def main(argv: list[str] | None = None) -> int:
                 )
                 if task.get("loop_binding") is not None:
                     live_record["loop_binding"] = task["loop_binding"]
+                if primary_package_value(task) is None:
+                    live_record.pop("primary_package", None)
                 if content_id:
                     live_record["content_id"] = content_id
                 persist_mapping(mapping_path, mapping)
@@ -998,6 +1020,8 @@ def main(argv: list[str] | None = None) -> int:
                 "module": task.get("module") or "",
                 "owner_role": task.get("owner_role"),
                 "worktree_hint": task.get("worktree_hint") or "",
+                **({"primary_package": task["primary_package"]}
+                   if task.get("primary_package") not in (None, "") else {}),
                 "execution_log_path": task.get("execution_log_path") or "",
                 "last_synced_at": datetime.now().astimezone().isoformat(timespec="seconds"),
             }
@@ -1007,6 +1031,8 @@ def main(argv: list[str] | None = None) -> int:
         )
         if task.get("loop_binding") is not None:
             record["loop_binding"] = task["loop_binding"]
+        if primary_package_value(task) is None:
+            record.pop("primary_package", None)
         persist_mapping(mapping_path, mapping)
         summary["tasks"].append(
             {

@@ -108,7 +108,7 @@ class AdmissionTests(unittest.TestCase):
             binding = {'task_uid':UID,'request_key':'request:1','owner_role':'repository_health_engineer'}
             path=root/'binding.json'; path.write_text(json.dumps(binding))
             args=task.build_parser().parse_args(['new-task',str(root),'--title','fixture','--owner-role','repository_health_engineer',
-                '--source-ref','test','--acceptance','test','--loop-binding',str(path),'--request-key','request:1','--bootstrap-base-oid','b'*40])
+                '--source-ref','test','--acceptance','test','--primary-package','oasis7','--loop-binding',str(path),'--request-key','request:1','--bootstrap-base-oid','b'*40])
             def read(args):
                 if args[1:3] == ['issue','list']: return json.dumps([{'number':1},{'number':2}])
                 return json.dumps({'number':int(args[3]),'body':f'task_uid: {UID}' if args[3]=='1' else f'mentions {UID}'})
@@ -123,7 +123,7 @@ class AdmissionTests(unittest.TestCase):
             root = Path(directory)
             binding = {'task_uid':UID,'request_key':'request:1','owner_role':'repository_health_engineer'}
             path = root/'binding.json'; path.write_text(json.dumps(binding))
-            command = ['new-task',str(root),'--title','fixture','--owner-role','repository_health_engineer','--source-ref','test','--acceptance','test']
+            command = ['new-task',str(root),'--title','fixture','--owner-role','repository_health_engineer','--source-ref','test','--acceptance','test','--primary-package','oasis7']
             if not random_uid:
                 command += ['--loop-binding',str(path),'--request-key','request:1','--bootstrap-base-oid','b'*40]
             args = task.build_parser().parse_args(command)

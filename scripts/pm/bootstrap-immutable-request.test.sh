@@ -41,6 +41,7 @@ set +e
 GH_CALLED="$TMPDIR/gh-called" PATH="$TMPDIR/bin:$PATH" python3 "$ROOT_DIR/scripts/pm/github-project-task.py" new-task "$FIXTURE_ROOT" \
   --repo "$REPO" --project-owner eng-cc --project-number 1 \
   --owner-role "$OWNER" --title "$TITLE" --module engineering --priority P2 \
+  --primary-package oasis7 \
   --source-ref doc/engineering/project.md --acceptance 'original acceptance' \
   --source-signal signal-new --source-type bug --severity high \
   --doc-ref doc/new.md --related-prd prd-new --handoff-to repository_health_engineer \

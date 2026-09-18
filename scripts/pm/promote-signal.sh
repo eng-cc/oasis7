@@ -25,6 +25,7 @@ Optional:
   --create-task               Also create a candidate task
   --title <title>             Task title; defaults to summary
   --owner-role <role>         Task owner; defaults to role_hint
+  --primary-package <name>    Declared Cargo package for the candidate task
   --priority <P0|P1|P2|P3>    Task priority; defaults from severity
   --doc-ref <path>            Related formal doc; repeatable
   --related-prd <path>        Related PRD; repeatable
@@ -52,6 +53,7 @@ SUMMARY=""
 CREATE_TASK=0
 TASK_TITLE=""
 OWNER_ROLE=""
+PRIMARY_PACKAGE=""
 PRIORITY=""
 WORKTREE_HINT=""
 OUTPUT_JSON=0
@@ -96,6 +98,10 @@ while [[ $# -gt 0 ]]; do
       ;;
     --owner-role)
       OWNER_ROLE="${2:-}"
+      shift 2
+      ;;
+    --primary-package)
+      PRIMARY_PACKAGE="${2:-}"
       shift 2
       ;;
     --priority)
@@ -273,6 +279,9 @@ if [[ "$CREATE_TASK" == "1" ]]; then
     --source-ref "$INTAKE_URL"
     --json
   )
+  if [[ -n "$PRIMARY_PACKAGE" ]]; then
+    TASK_ARGS+=(--primary-package "$PRIMARY_PACKAGE")
+  fi
 
   if [[ "${#DOC_REFS[@]}" -gt 0 ]]; then
     for doc_ref in "${DOC_REFS[@]}"; do

@@ -463,7 +463,7 @@ def main() -> int:
     parser.add_argument("--repo-root", required=True)
     parser.add_argument("--base", required=True)
     parser.add_argument("--head", required=True)
-    parser.add_argument("--primary-package", required=True)
+    parser.add_argument("--primary-package", default="auto")
     parser.add_argument("--policy", required=True)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()

@@ -213,11 +213,13 @@ EOF
 chmod +x "$TMPDIR/bin/gh"
 
 write_task_binding() {
+  local primary_package="${1:-}"
   mkdir -p "$SMOKE_WORKTREE/.pm/tasks"
   cat > "$SMOKE_WORKTREE/.pm/tasks/$TASK_UID.yaml" <<EOF
 task_uid: $TASK_UID
 title: "prepare task pr role review fixture"
 owner_role: tpm
+$(if [[ -n "$primary_package" ]]; then printf 'primary_package: %s\n' "$primary_package"; fi)
 worktree_hint: $SMOKE_WORKTREE_CANONICAL
 execution_log_path: .pm/tasks/$TASK_UID.execution.md
 status: committed
@@ -481,6 +483,7 @@ reset_project_mapping_after_record_pr() {
 
 write_changed_path_fixture() {
   local changed_path="$1"
+  local primary_package="${2:-}"
   mkdir -p "$SMOKE_WORKTREE/$(dirname "$changed_path")"
   printf '\n// prepare-task-pr local required command fixture\n' >> "$SMOKE_WORKTREE/$changed_path"
   "$REAL_GIT" -C "$SMOKE_WORKTREE" add "$changed_path"
@@ -490,7 +493,7 @@ write_changed_path_fixture() {
     -c commit.gpgsign=false \
     commit --no-verify -m "test: local required command fixture" >/dev/null
   SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
-  write_task_binding
+  write_task_binding "$primary_package"
   write_project_trace
   write_role_review_packet "$SOURCE_HEAD" "no_findings"
   commit_fixture_evidence
@@ -2095,7 +2098,7 @@ if review["status"] != "passed":
 PY
 
 reset_smoke_branch_to_base
-write_changed_path_fixture "crates/oasis7_node/src/network_bridge.rs"
+write_changed_path_fixture "crates/oasis7_node/src/network_bridge.rs" "oasis7_node"
 node_required_json="$TMPDIR/node-required.json"
 run_prepare "$TMPDIR/gh-node-required.log" "$TMPDIR/git-node-required.log" --json >"$node_required_json"
 
@@ -2126,7 +2129,7 @@ if "node:crates/oasis7_node/src/network_bridge.rs" not in reason:
 PY
 
 reset_smoke_branch_to_base
-write_changed_path_fixture "crates/oasis7_net/src/lib.rs"
+write_changed_path_fixture "crates/oasis7_net/src/lib.rs" "oasis7_net"
 net_required_json="$TMPDIR/net-required.json"
 run_prepare "$TMPDIR/gh-net-required.log" "$TMPDIR/git-net-required.log" --json >"$net_required_json"
 
@@ -2156,7 +2159,7 @@ if "net:crates/oasis7_net/src/lib.rs" not in reason:
 PY
 
 reset_smoke_branch_to_base
-write_changed_path_fixture "crates/oasis7_viewer/src/lib.rs"
+write_changed_path_fixture "crates/oasis7_viewer/src/lib.rs" "oasis7_viewer"
 viewer_required_json="$TMPDIR/viewer-required.json"
 run_prepare "$TMPDIR/gh-viewer-required.log" "$TMPDIR/git-viewer-required.log" --json >"$viewer_required_json"
 

@@ -138,7 +138,7 @@ class BootstrapEndToEnd(unittest.TestCase):
                 expected_base = git('rev-parse','HEAD')
             target = temp / 'task'
             command = ['bash','scripts/new-task-worktree.sh','engineering','loop-test','--path',str(target),'--branch','codex/loop-test',
-                '--pm-owner-role','repository_health_engineer','--pm-title','fixture','--pm-source-ref','fixture','--pm-acceptance','M06',
+                '--pm-owner-role','repository_health_engineer','--pm-title','fixture','--pm-primary-package','oasis7','--pm-source-ref','fixture','--pm-acceptance','M06',
                 '--pm-loop','code','--pm-loop-binding',str(source),'--pm-request-key','request:1','--pm-manual-request-ref','message:1','--json']
             if loss:
                 env['FAKE_LOSS']='1'

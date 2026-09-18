@@ -209,7 +209,12 @@ def plan_package_profiles(
     policy_path: str,
     checker_path: str,
     profiles: Iterable[Any],
+    primary_package: str | None = None,
 ) -> dict[str, Any]:
+    if primary_package is not None:
+        primary_package = str(primary_package).strip()
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*\Z", primary_package) is None:
+            raise PlanError("primary package is invalid")
     repo = Path(repo_root).resolve()
     source_scope_base = _git(repo, "merge-base", integration_base, source_head).strip()
     tested_tree = _git(repo, "merge-tree", "--write-tree", integration_base, source_head).strip()
@@ -242,6 +247,14 @@ def plan_package_profiles(
         changed_packages = sorted(
             {owner for path in changed_names if (owner := _owner(path, union_packages))}
         )
+        if primary_package is not None:
+            declared_packages = set(union_packages.values())
+            if primary_package not in declared_packages:
+                raise PlanError("primary package is not declared by Cargo metadata")
+            if changed_packages != [primary_package]:
+                raise PlanError(
+                    "primary package mismatch: Cargo diff does not equal the declared package"
+                )
         union_edges = _edges(base_root, base_metadata, base_packages) | _edges(
             head_root, head_metadata, head_packages
         ) | _edges(tested_root, tested_metadata, tested_packages)
@@ -330,6 +343,8 @@ def plan_package_profiles(
             ),
         },
     }
+    if primary_package is not None:
+        plan["primary_package"] = primary_package
     identity = json.dumps(plan, sort_keys=True, separators=(",", ":")).encode("utf-8")
     plan["plan_id"] = "sha256:" + hashlib.sha256(identity).hexdigest()
     return plan
@@ -343,6 +358,7 @@ def main() -> int:
     parser.add_argument("--policy", required=True)
     parser.add_argument("--checker", required=True)
     parser.add_argument("--profile", action="append", required=True)
+    parser.add_argument("--primary-package")
     parser.add_argument("--output")
     args = parser.parse_args()
     profiles: list[Any] = []
@@ -358,6 +374,7 @@ def main() -> int:
         policy_path=args.policy,
         checker_path=args.checker,
         profiles=profiles,
+        primary_package=args.primary_package,
     )
     rendered = json.dumps(plan, sort_keys=True, separators=(",", ":")) + "\n"
     if args.output:
