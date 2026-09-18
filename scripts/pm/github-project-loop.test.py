@@ -190,10 +190,9 @@ class LoopTransport(unittest.TestCase):
 
     def test_lifecycle_writer_uses_live_traceability_without_overwriting_binding(self):
         cached = {'loop_binding': BINDING, **TRACEABILITY_CONTEXT}
-        live_binding = dict(BINDING, change_id='live-change')
-        live = {'loop_binding': live_binding, 'coordination_ref': {'issue_number': 99}}
+        live = {'loop_binding': BINDING, 'coordination_ref': {'issue_number': 99}}
         cleared = TASK.synchronize_live_issue_traceability('eng-cc/oasis7', UID, cached, live=live)
-        self.assertEqual(cached['loop_binding'], live_binding)
+        self.assertEqual(cached['loop_binding'], BINDING)
         self.assertEqual(cached['coordination_ref'], {'issue_number': 99})
         self.assertEqual(cleared, frozenset(set(TRACEABILITY_CONTEXT) - {'coordination_ref'}))
         self.assertTrue(all(key not in cached for key in cleared))
@@ -208,6 +207,21 @@ class LoopTransport(unittest.TestCase):
         )
         self.assertEqual(cached['loop_binding'], proposed)
         self.assertEqual(cached['coordination_ref'], {'issue_number': 99})
+
+    def test_lifecycle_writer_fails_closed_when_live_binding_disappears(self):
+        cached = {'loop_binding': BINDING, **TRACEABILITY_CONTEXT}
+        with self.assertRaisesRegex(SystemExit, 'live loop binding disappeared'):
+            TASK.synchronize_live_issue_traceability(
+                'eng-cc/oasis7', UID, cached, live={'coordination_ref': {'issue_number': 99}},
+            )
+
+    def test_lifecycle_writer_rejects_live_binding_drift(self):
+        cached = {'loop_binding': BINDING, **TRACEABILITY_CONTEXT}
+        drifted = dict(BINDING, change_id='drifted')
+        with self.assertRaisesRegex(SystemExit, 'differs from cached immutable binding'):
+            TASK.synchronize_live_issue_traceability(
+                'eng-cc/oasis7', UID, cached, live={'loop_binding': drifted},
+            )
 
     def test_live_traceability_deletion_never_falls_back_to_cache(self):
         errors = WORKFLOW.traceability_projection_errors(

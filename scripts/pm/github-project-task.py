@@ -175,6 +175,13 @@ def synchronize_live_issue_traceability(
         die(f"traceability sync: authoritative GitHub issue not found for {task_uid}")
     if authoritative.get("trace_projection_error"):
         trace_projection_loss(task_uid, str(authoritative["trace_projection_error"]))
+    if "loop_binding" not in explicit_updates:
+        cached_binding = record.get("loop_binding")
+        live_binding = authoritative.get("loop_binding")
+        if cached_binding is not None and live_binding is None:
+            die("traceability sync: live loop binding disappeared; explicit reconciliation required")
+        if cached_binding is not None and live_binding != cached_binding:
+            die("traceability sync: live loop binding differs from cached immutable binding")
     clear_keys = frozenset(
         key for key in traceability_context_keys
         if key not in explicit_updates and key not in authoritative
