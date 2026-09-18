@@ -68,7 +68,21 @@ def main():
             module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
             from loop_policy import scope_context
             context = scope_context(root, args.base, args.head)
-            result = module.validate_task(root, {**task, 'repository': repository}, tool, context['scope_base_oid'], args.head)
+            def validated_admission():
+                return module.validate_task(
+                    root, {**task, 'repository': repository}, tool,
+                    context['scope_base_oid'], args.head,
+                )
+            result = module.pre_mutation_admission(
+                'promotion',
+                binding=binding,
+                target_root=root,
+                effective_tool_root=tool,
+                source_commit=commit,
+                effective_tool_commit=commit,
+                record_source_commit=(binding.get('coordination_ref') or {}).get('source_commit'),
+                mutation=validated_admission,
+            )
             result['scope_context'] = context
         print(json.dumps(result, sort_keys=True))
         return 0 if result['status'] in ('passed', 'legacy') else 2

@@ -18,6 +18,7 @@ def module(name):
 
 TASK = module('github-project-task')
 SYNC = module('github-project-sync')
+WORKFLOW = module('github-project-workflow')
 UID = 'task_' + 'a' * 32
 BINDING = dict(schema='oasis7.loop-task/v1', task_uid=UID, change_id='change-1', loop='code',
                owner_role='repository_health_engineer', bootstrap_epoch=1, manual_request_ref='user-message:1',
@@ -25,6 +26,14 @@ BINDING = dict(schema='oasis7.loop-task/v1', task_uid=UID, change_id='change-1',
                input_contracts=[], acceptance_refs=['M06'], dependencies=[], target_delivery='test',
                policy_digest='sha256:' + 'b' * 64, policy_commit='c' * 40,
                delivery_obligations=[{'id': 'manual', 'status': 'pending'}])
+TRACEABILITY_CONTEXT = {
+    'traceability_mode': 'aggregate',
+    'coordination_ref': {'task_uid': 'task_' + 'd' * 32, 'issue_number': 42},
+    'traceability_record': {'mode': 'aggregate', 'obligations': [{'id': 'verify'}]},
+    'coordination_record': {'publication_ref': {'issue_number': 42, 'comment_id': 7}},
+    'traceability_candidate': {'status': 'verified'},
+    'aggregate_candidate': {'status': 'pending'},
+}
 
 class LoopTransport(unittest.TestCase):
     def test_dependency_readiness_requires_merged_terminal(self):
@@ -134,10 +143,38 @@ class LoopTransport(unittest.TestCase):
         parsed = TASK.issue_task_fields(TASK.issue_body(TASK.task_from_record(UID, record)))
         self.assertEqual(parsed.get('loop_binding'), BINDING)
 
+    def test_roundtrip_preserves_issue_authoritative_traceability_context(self):
+        record = dict(owner_role=BINDING['owner_role'], loop_binding=BINDING, **TRACEABILITY_CONTEXT)
+        body = TASK.issue_body(TASK.task_from_record(UID, record))
+        parsed = TASK.issue_task_fields(body)
+        self.assertEqual(
+            {key: parsed.get(key) for key in TRACEABILITY_CONTEXT},
+            TRACEABILITY_CONTEXT,
+        )
+        live = WORKFLOW.normalized_issue_traceability(body)
+        self.assertEqual(live.get('loop_binding'), BINDING)
+        self.assertEqual(
+            {key: live.get(key) for key in TRACEABILITY_CONTEXT},
+            TRACEABILITY_CONTEXT,
+        )
+
     def test_legacy_has_no_synthesized_binding(self):
         parsed = TASK.issue_task_fields(TASK.issue_body(TASK.task_from_record(UID, {})))
         self.assertNotIn('loop_binding', parsed)
         self.assertNotIn('Loop', SYNC.project_field_values({}))
+
+    def test_consumption_summary_is_derived_and_marks_unread_scope(self):
+        task = dict(loop_binding=BINDING, traceability_record={
+            'obligations': [{'id': 'aggregate'}],
+            'affected_consumers': [{'task_uid': 'task_' + 'e' * 32}],
+        }, aggregate_candidate={'verified_results': [{'id': 'leaf-a', 'status': 'passed'}]})
+        summary = WORKFLOW.consumption_summary(task, ['fixture blocker'])
+        self.assertTrue(summary['derived'])
+        self.assertEqual(summary['inputs'], [])
+        self.assertEqual(summary['obligations'], [{'id': 'aggregate'}])
+        self.assertEqual(summary['verified_results'][0]['status'], 'passed')
+        self.assertEqual(summary['blockers'], ['fixture blocker'])
+        self.assertEqual(summary['unread_scope'], ['input_contracts'])
 
     def test_project_navigation(self):
         fields = SYNC.project_field_values(dict(loop_binding=BINDING))

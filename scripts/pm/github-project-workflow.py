@@ -157,6 +157,44 @@ def normalized_issue_traceability(body: str) -> dict[str, Any]:
     """Extract Issue-authoritative trace fields for bounded audit comparison."""
     body = body.replace("\r\n", "\n")
     fields: dict[str, Any] = {}
+    binding_matches = re.findall(r"^- loop_binding_b64: `([^`]+)`$", body, re.MULTILINE)
+    if "loop_binding_b64:" in body:
+        if len(binding_matches) != 1:
+            fields["trace_projection_error"] = "trace-projection-loss: loop binding is malformed or duplicated"
+            return fields
+        try:
+            encoded = binding_matches[0]
+            binding = json.loads(base64.b64decode(
+                encoded + "=" * (-len(encoded) % 4), altchars=b"-_", validate=True,
+            ).decode("utf-8"))
+            if not isinstance(binding, dict):
+                raise ValueError("loop binding must be an object")
+            fields["loop_binding"] = binding
+        except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            fields["trace_projection_error"] = f"trace-projection-loss: malformed loop binding: {exc}"
+            return fields
+    context_matches = re.findall(r"^- traceability_context_b64: `([^`]+)`$", body, re.MULTILINE)
+    if "traceability_context_b64:" in body:
+        if len(context_matches) != 1:
+            fields["trace_projection_error"] = "trace-projection-loss: traceability context is malformed or duplicated"
+            return fields
+        try:
+            encoded = context_matches[0]
+            context = json.loads(base64.b64decode(
+                encoded + "=" * (-len(encoded) % 4), altchars=b"-_", validate=True,
+            ).decode("utf-8"))
+            if not isinstance(context, dict):
+                raise ValueError("traceability context must be an object")
+            allowed = {
+                "traceability_mode", "coordination_ref", "traceability_record",
+                "coordination_record", "traceability_candidate", "aggregate_candidate",
+            }
+            if set(context) - allowed:
+                raise ValueError("traceability context contains unknown fields")
+            fields.update(context)
+        except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            fields["trace_projection_error"] = f"trace-projection-loss: malformed traceability context: {exc}"
+            return fields
     for key in ("workflow_phase", "completion_mode", "non_pr_completion_evidence_sha256"):
         match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
         if match:
@@ -182,6 +220,43 @@ def normalized_issue_traceability(body: str) -> dict[str, Any]:
 def canonical_non_pr_evidence_digest(value: object) -> str:
     """Return the digest used by the canonical non-PR evidence file."""
     return hashlib.sha256((str(value) + "\n").encode("utf-8")).hexdigest()
+
+
+def consumption_summary(task: dict[str, Any], blockers: list[str]) -> dict[str, Any]:
+    """Build a disposable read-only view from the selected authoritative record."""
+    binding = task.get("loop_binding") if isinstance(task.get("loop_binding"), dict) else {}
+    record = task.get("traceability_record")
+    if not isinstance(record, dict):
+        record = task.get("coordination_record") if isinstance(task.get("coordination_record"), dict) else {}
+    candidate = task.get("aggregate_candidate")
+    if not isinstance(candidate, dict):
+        candidate = task.get("traceability_candidate") if isinstance(task.get("traceability_candidate"), dict) else {}
+    inputs = binding.get("input_contracts") if isinstance(binding.get("input_contracts"), list) else []
+    obligations = record.get("obligations")
+    if not isinstance(obligations, list):
+        obligations = binding.get("delivery_obligations") if isinstance(binding.get("delivery_obligations"), list) else []
+    verified_results = candidate.get("verified_results")
+    if not isinstance(verified_results, list):
+        verified_results = candidate.get("results") if isinstance(candidate.get("results"), list) else []
+    affected = record.get("affected_consumers")
+    if not isinstance(affected, list):
+        affected = record.get("reverse_consumers") if isinstance(record.get("reverse_consumers"), list) else []
+    unread: list[str] = []
+    if not inputs:
+        unread.append("input_contracts")
+    if not obligations:
+        unread.append("obligations")
+    if not affected:
+        unread.append("affected_consumers")
+    return {
+        "inputs": inputs,
+        "obligations": obligations,
+        "verified_results": verified_results,
+        "blockers": list(blockers),
+        "affected_consumers": affected,
+        "unread_scope": unread,
+        "derived": True,
+    }
 
 
 def read_canonical_non_pr_evidence(
@@ -668,6 +743,7 @@ def command_audit(args: argparse.Namespace) -> int:
 
     errors: list[str] = []
     warnings: list[str] = []
+    live_traceability_by_task: dict[str, dict[str, Any]] = {}
     if not canonical_project_owner:
         errors.append("canonical mapping missing project owner")
     elif str(args.project_owner or "") != canonical_project_owner:
@@ -738,6 +814,7 @@ def command_audit(args: argparse.Namespace) -> int:
         if cached_acceptance != live_acceptance:
             errors.append(f"{uid}: cached acceptance drift; refresh explicitly from authoritative GitHub issue")
         live_traceability = normalized_issue_traceability(body)
+        live_traceability_by_task[uid] = live_traceability
         trace_projection_error = live_traceability.get("trace_projection_error")
         if trace_projection_error:
             errors.append(f"{uid}: {trace_projection_error}")
@@ -761,6 +838,16 @@ def command_audit(args: argparse.Namespace) -> int:
             cached_value = str(record.get(key) or "")
             live_value = str(live_traceability.get(key) or "")
             if cached_value != live_value:
+                errors.append(
+                    f"{uid}: cached {key} drift; refresh explicitly from authoritative GitHub issue"
+                )
+        for key in (
+            "loop_binding", "traceability_mode", "coordination_ref", "traceability_record",
+            "coordination_record", "traceability_candidate", "aggregate_candidate",
+        ):
+            if key not in live_traceability or key not in record:
+                continue
+            if record.get(key) != live_traceability.get(key):
                 errors.append(
                     f"{uid}: cached {key} drift; refresh explicitly from authoritative GitHub issue"
                 )
@@ -876,6 +963,7 @@ def command_audit(args: argparse.Namespace) -> int:
     selected_task = None
     if task_uid and task_uid in tasks:
         task = tasks[task_uid]
+        live_task = live_traceability_by_task.get(task_uid, {})
         selected_task = {
             "task_uid": task_uid,
             "target": str(task.get("status") or ""),
@@ -900,8 +988,15 @@ def command_audit(args: argparse.Namespace) -> int:
         ):
             if key in task and task[key] is not None:
                 selected_task[key] = task[key]
-        if isinstance(task.get("loop_binding"), dict):
-            selected_task["loop_binding"] = task["loop_binding"]
+        for key in (
+            "traceability_mode", "coordination_ref", "traceability_record",
+            "coordination_record", "traceability_candidate", "aggregate_candidate",
+        ):
+            if key in live_task:
+                selected_task[key] = live_task[key]
+        binding = live_task.get("loop_binding", task.get("loop_binding"))
+        if isinstance(binding, dict):
+            selected_task["loop_binding"] = binding
     result = {
         "status": "failed" if errors else "ok",
         "project_owner": args.project_owner,
@@ -916,6 +1011,8 @@ def command_audit(args: argparse.Namespace) -> int:
         "warnings": warnings,
     }
     if selected_task is not None:
+        selected_blockers = [error for error in errors if error.startswith(f"{task_uid}:")]
+        selected_task["consumption_summary"] = consumption_summary(selected_task, selected_blockers)
         result["selected_task"] = selected_task
     if args.json:
         print(json.dumps(result, indent=2, sort_keys=True))

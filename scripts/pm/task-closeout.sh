@@ -259,6 +259,16 @@ declared_candidate = (selected_task.get('traceability_candidate')
                       or selected_task.get('aggregate_candidate')
                       or task.get('traceability_candidate')
                       or task.get('aggregate_candidate'))
+def record_declares_aggregate(value):
+    if not isinstance(value, dict):
+        return False
+    return (
+        value.get('mode') == 'aggregate'
+        or value.get('traceability_mode') == 'aggregate'
+        or value.get('completion_mode') == 'aggregate'
+        or value.get('aggregate_candidate') is not None
+        or value.get('aggregate_obligations') is not None
+    )
 record = None
 if record_arg:
     try:
@@ -292,6 +302,7 @@ declared_aggregate = (
     or selected_context.get('completion_mode') == 'aggregate'
     or task.get('traceability_mode') == 'aggregate'
     or task.get('completion_mode') == 'aggregate'
+    or record_declares_aggregate(declared_record)
 )
 live_mode = (selected_task.get('traceability_mode')
              or selected_task.get('completion_mode')

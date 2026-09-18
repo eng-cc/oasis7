@@ -30,6 +30,8 @@ issue_authoritative_keys = frozenset(
         "status", "workflow_phase", "priority", "worktree_hint", "source_signal",
         "source_type", "severity", "pr_url", "pr_number", "merge_hold",
         "loop_binding", "bootstrap_base_oid", "completion_mode",
+        "traceability_mode", "coordination_ref", "traceability_record",
+        "coordination_record", "traceability_candidate", "aggregate_candidate",
         "non_pr_completion_evidence", "non_pr_completion_evidence_sha256",
         "source_refs", "doc_refs", "related_prd", "acceptance",
         "last_closed_at", "claim_verifications",
@@ -426,6 +428,26 @@ def issue_task_fields(body: str) -> dict[str, Any]:
         except (ValueError, UnicodeError) as exc:
             die(f"invalid loop binding: {exc}")
         fields["loop_binding"] = binding
+    context_matches = re.findall(r"^- traceability_context_b64: `([^`]+)`$", body, re.MULTILINE)
+    if "traceability_context_b64:" in body:
+        if len(context_matches) != 1:
+            die("traceability context is malformed or duplicated")
+        try:
+            encoded = context_matches[0]
+            context = json.loads(base64.b64decode(
+                encoded + "=" * (-len(encoded) % 4), altchars=b"-_", validate=True,
+            ).decode("utf-8"))
+            if not isinstance(context, dict):
+                raise ValueError("traceability context must be an object")
+            allowed = {
+                "traceability_mode", "coordination_ref", "traceability_record",
+                "coordination_record", "traceability_candidate", "aggregate_candidate",
+            }
+            if set(context) - allowed:
+                raise ValueError("traceability context contains unknown fields")
+        except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+            die(f"invalid traceability context: {exc}")
+        fields.update(context)
     for key in ("owner_role", "module", "status", "workflow_phase", "priority", "worktree_hint", "source_signal", "source_type", "severity", "completion_mode", "bootstrap_base_oid", "non_pr_completion_evidence_sha256", "last_closed_at"):
         match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
         if match:
@@ -589,6 +611,12 @@ def task_from_record(uid: str, record: dict[str, Any]) -> OrderedDict[str, Any]:
             ("loop_binding", record.get("loop_binding")),
             ("bootstrap_base_oid", record.get("bootstrap_base_oid")),
             ("completion_mode", record.get("completion_mode") or ""),
+            ("traceability_mode", record.get("traceability_mode")),
+            ("coordination_ref", record.get("coordination_ref")),
+            ("traceability_record", record.get("traceability_record")),
+            ("coordination_record", record.get("coordination_record")),
+            ("traceability_candidate", record.get("traceability_candidate")),
+            ("aggregate_candidate", record.get("aggregate_candidate")),
             ("non_pr_completion_evidence", record.get("non_pr_completion_evidence") or ""),
             ("non_pr_completion_evidence_file", record.get("non_pr_completion_evidence_file") or ""),
             ("non_pr_completion_evidence_sha256", record.get("non_pr_completion_evidence_sha256") or ""),
@@ -631,6 +659,19 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
         lines.append(f"- loop_binding_b64: `{encoded}`")
         if task.get("bootstrap_base_oid"):
             lines.append(f"- bootstrap_base_oid: `{task['bootstrap_base_oid']}`")
+    traceability_context = {
+        key: task[key]
+        for key in (
+            "traceability_mode", "coordination_ref", "traceability_record",
+            "coordination_record", "traceability_candidate", "aggregate_candidate",
+        )
+        if task.get(key) is not None
+    }
+    if traceability_context:
+        encoded = base64.urlsafe_b64encode(json.dumps(
+            traceability_context, sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+        ).encode("utf-8")).decode("ascii").rstrip("=")
+        lines.append(f"- traceability_context_b64: `{encoded}`")
     if task.get("pr_url"):
         lines.append(f"- pr_url: `{task.get('pr_url')}`")
     if task.get("pr_number"):
