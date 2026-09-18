@@ -1200,7 +1200,7 @@ if triad_rollout:
     if triad_inventory_path.is_symlink() or not triad_inventory_path.is_file():
         raise SystemExit(f'missing regular triad deployment inventory: {triad_inventory_path}')
     inventory_sha256 = hashlib.sha256(triad_inventory_path.read_bytes()).hexdigest()
-    if inventory_sha256 != '3313a899630e3013d623adfee252556a124c25d059406bcf98a541ae2fcdacd5':
+    if inventory_sha256 != 'b983bd9df4f29bf7a0e32dd9d1d56323d85d16d4cf572c10bc8c567908565739':
         raise SystemExit('triad deployment inventory is not the canonical governed authority')
     inventory_data = json.loads(triad_inventory_path.read_text(encoding='utf-8'))
     if inventory_data.get('schema_version') != 'oasis7.public_testnet_validator_triad_inventory.v1':

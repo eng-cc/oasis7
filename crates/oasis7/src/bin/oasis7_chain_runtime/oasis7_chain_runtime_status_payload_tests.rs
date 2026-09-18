@@ -34,7 +34,7 @@ const TEST_MODULE_ARTIFACT_SIGNER_NODE_ID: &str = "test.module.release.signer";
 #[test]
 fn validator_status_projection_uses_authoritative_consensus_identity() {
     let node_id = "triad-testnet-validator-47".to_string();
-    let signer = "cf8c9c2b5637d20d0efa585f0fb7f503b19a1aaba02fb807637e67ed40919fc2".to_string();
+    let signer = "302e6f629a3d148623fb96ef5dad4ef9530e1e5f56d095d9c59d76ce530c1f73".to_string();
     let mut consensus = NodeConsensusSnapshot::default();
     consensus.validator_stakes.insert(node_id.clone(), 100);
     consensus.validator_set_hash = "validator-set-hash".to_string();
