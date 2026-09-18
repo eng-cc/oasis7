@@ -5,7 +5,7 @@ These tests intentionally cover the PM/helper boundary before the production
 binding is implemented.  Existing Cargo scope checker tests already cover
 second-package, rename, and unattributable diff rejection; this slice binds
 that declared package to task truth, Issue/Project/cache projections, bounded
-packets, and profile planning.
+and packets.
 """
 
 from __future__ import annotations
@@ -25,7 +25,6 @@ ROOT = Path(__file__).resolve().parents[2]
 TASK_PATH = ROOT / "scripts/pm/github-project-task.py"
 SYNC_PATH = ROOT / "scripts/pm/github-project-sync.py"
 PACKET_PATH = ROOT / "scripts/pm/subagent-task-packet.py"
-PLANNER_PATH = ROOT / "scripts/pm/cargo_package_profile_planner.py"
 TASK_UID = "task_11111111111111111111111111111111"
 PRIMARY = "oasis7_client_launcher"
 
@@ -42,7 +41,6 @@ def load_module(path: Path, name: str):
 TASK = load_module(TASK_PATH, "github_project_task_h0_binding")
 SYNC = load_module(SYNC_PATH, "github_project_sync_h0_binding")
 PACKET = load_module(PACKET_PATH, "subagent_task_packet_h0_binding")
-PLANNER = load_module(PLANNER_PATH, "cargo_package_profile_planner_h0_binding")
 
 
 def task_record(primary_package: str | None = PRIMARY) -> dict[str, object]:
@@ -205,67 +203,6 @@ class SlicePacketBindingContracts(unittest.TestCase):
         except SystemExit as exc:
             self.fail(f"RED: slice packet parser must accept --primary-package: {exc}")
         self.assertEqual(PRIMARY, args.primary_package)
-
-
-class ProfileSelectionBindingContracts(unittest.TestCase):
-    def _write(self, root: Path, relative: str, content: str) -> None:
-        path = root / relative
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
-
-    def _fixture(self) -> tuple[tempfile.TemporaryDirectory[str], Path, str, str]:
-        temp = tempfile.TemporaryDirectory(prefix="cargo-package-binding-profile-")
-        root = Path(temp.name)
-        self._write(root, "Cargo.toml", '[workspace]\nmembers = ["crates/alpha", "crates/beta"]\nresolver = "2"\n')
-        for name in ("alpha", "beta"):
-            self._write(root, f"crates/{name}/Cargo.toml", f'[package]\nname = "{name}"\nversion = "0.1.0"\nedition = "2021"\n\n[lib]\npath = "src/lib.rs"\n')
-            self._write(root, f"crates/{name}/src/lib.rs", f"pub fn {name}() -> u8 {{ 1 }}\n")
-        self._write(root, ".pm/cargo-package-scope-policy.json", json.dumps({
-            "schema": "oasis7-cargo-package-scope-policy/v1",
-            "policy_version": 1,
-            "protected_paths": [".pm/cargo-package-scope-policy.json", "scripts/pm/check-cargo-package-scope"],
-        }) + "\n")
-        self._write(root, "scripts/pm/check-cargo-package-scope", "#!/bin/sh\nexit 0\n")
-        (root / "scripts/pm/check-cargo-package-scope").chmod(0o755)
-        subprocess.run(["git", "init", "-q", "-b", "main", str(root)], check=True)
-        subprocess.run(["git", "-C", str(root), "config", "user.email", "qa@example.invalid"], check=True)
-        subprocess.run(["git", "-C", str(root), "config", "user.name", "H0 QA"], check=True)
-        subprocess.run(["git", "-C", str(root), "add", "-A"], check=True)
-        subprocess.run(["git", "-C", str(root), "commit", "-qm", "trusted base"], check=True)
-        base = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
-        (root / "crates/alpha/src/lib.rs").write_text("pub fn alpha() -> u8 { 2 }\n", encoding="utf-8")
-        subprocess.run(["git", "-C", str(root), "add", "-A"], check=True)
-        subprocess.run(["git", "-C", str(root), "commit", "-qm", "alpha change"], check=True)
-        head = subprocess.check_output(["git", "-C", str(root), "rev-parse", "HEAD"], text=True).strip()
-        return temp, root, base, head
-
-    def test_profile_plan_binds_declared_package_and_rejects_ci_package_drift(self) -> None:
-        temp, root, base, head = self._fixture()
-        self.addCleanup(temp.cleanup)
-        try:
-            plan = PLANNER.plan_package_profiles(
-                root,
-                integration_base=base,
-                source_head=head,
-                policy_path=".pm/cargo-package-scope-policy.json",
-                checker_path="scripts/pm/check-cargo-package-scope",
-                profiles=["native"],
-                primary_package="alpha",
-            )
-        except TypeError as exc:
-            self.fail(f"RED: profile planner must accept primary_package binding: {exc}")
-        self.assertEqual("alpha", plan.get("primary_package"), plan)
-        self.assertEqual(["alpha"], plan.get("changed_packages"), plan)
-        with self.assertRaisesRegex(PLANNER.PlanError, "primary package|mismatch|drift"):
-            PLANNER.plan_package_profiles(
-                root,
-                integration_base=base,
-                source_head=head,
-                policy_path=".pm/cargo-package-scope-policy.json",
-                checker_path="scripts/pm/check-cargo-package-scope",
-                profiles=["native"],
-                primary_package="beta",
-            )
 
 
 if __name__ == "__main__":

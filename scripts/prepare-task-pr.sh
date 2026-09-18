@@ -1719,18 +1719,14 @@ if [[ "${OASIS7_CARGO_PROFILE_OPT_IN:-false}" == "true" ]]; then
     || die "trusted base Cargo package profile planner is unavailable"
   git -C "$SOURCE_WORKTREE" show "${SOURCE_SCOPE_BASE}:scripts/pm/cargo_package_profile_driver.py" >"$CARGO_PROFILE_DRIVER" 2>/dev/null \
     || die "trusted base Cargo package profile driver is unavailable"
-  CARGO_PROFILE_COMMAND=(python3 "$CARGO_PROFILE_PLANNER" \
+  python3 "$CARGO_PROFILE_PLANNER" \
     --repo-root "$SOURCE_WORKTREE" \
     --integration-base "$COMPARISON_HEAD" \
     --source-head "$SOURCE_HEAD" \
     --policy .pm/cargo-package-scope-policy.json \
     --checker scripts/pm/check-cargo-package-scope \
     --profile "${OASIS7_CARGO_PROFILE_PROFILE:-native}" \
-    --output "$CARGO_PROFILE_PLAN")
-  if [[ -n "$CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE" ]]; then
-    CARGO_PROFILE_COMMAND+=(--primary-package "$CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE")
-  fi
-  "${CARGO_PROFILE_COMMAND[@]}" \
+    --output "$CARGO_PROFILE_PLAN" \
     || die "trusted Cargo package profile planning failed"
   CARGO_PROFILE_TESTED_TREE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tested_tree"])' "$CARGO_PROFILE_PLAN")"
   python3 "$CARGO_PROFILE_DRIVER" \

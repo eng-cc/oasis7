@@ -505,18 +505,14 @@ run_cargo_package_profile_completion_check() {
       return 1
     }
     generated_plan="$(mktemp)"
-    profile_plan_command=(python3 "$planner" \
+    if ! python3 "$planner" \
       --repo-root "$repo_root" \
       --integration-base "$OASIS7_CARGO_PROFILE_INTEGRATION_BASE" \
       --source-head "$OASIS7_CARGO_PROFILE_SOURCE_HEAD" \
       --policy .pm/cargo-package-scope-policy.json \
       --checker scripts/pm/check-cargo-package-scope \
       --profile "${OASIS7_CARGO_PROFILE_PROFILE:-native}" \
-      --output "$generated_plan")
-    if [[ -n "${OASIS7_CARGO_PRIMARY_PACKAGE:-}" ]]; then
-      profile_plan_command+=(--primary-package "$OASIS7_CARGO_PRIMARY_PACKAGE")
-    fi
-    if ! "${profile_plan_command[@]}"; then
+      --output "$generated_plan"; then
       rm -f "$generated_plan"
       return 1
     fi
