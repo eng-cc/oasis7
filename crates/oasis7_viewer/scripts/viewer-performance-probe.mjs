@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, extname, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
+import { createOwnedSessionLifecycle } from "./agent-browser-visual-runner-lifecycle.mjs";
 import {
   VIEWER_PERF_PROFILES,
   buildViewerPerformanceMarkdown,
@@ -50,6 +51,13 @@ function resolveAgentBrowserInvocation() {
 }
 
 const agentBrowserInvocation = resolveAgentBrowserInvocation();
+const browserLifecycle = createOwnedSessionLifecycle({
+  command: agentBrowserInvocation.command,
+  prefixArgs: agentBrowserInvocation.prefixArgs,
+  session,
+});
+const closeBrowser = browserLifecycle.close;
+const prepareBrowserSession = browserLifecycle.prepare;
 
 function positiveInteger(value, fallback) {
   const numeric = Number(value);
@@ -276,14 +284,6 @@ async function runAgentBrowserJson(args, options = {}) {
 async function evalJson(source, options = {}) {
   const data = await runAgentBrowserJson(["eval", "--stdin"], { input: source, ...options });
   return typeof data.result === "string" ? JSON.parse(data.result) : data.result;
-}
-
-function closeBrowser() {
-  spawnSync(
-    agentBrowserInvocation.command,
-    [...agentBrowserInvocation.prefixArgs, "--session", session, "close"],
-    { stdio: "ignore", timeout: 10_000 },
-  );
 }
 
 function processSnapshot() {
@@ -529,7 +529,7 @@ try {
   const address = server.address();
   const url = `http://127.0.0.1:${address.port}/viewer.html?test_api=1&connect=0&locale=en&hosted_bootstrap=0&t=${Date.now()}`;
 
-  closeBrowser();
+  prepareBrowserSession();
   const cpuProcessBaseline = processSnapshot();
   console.log(`opening viewer performance probe: ${url}`);
   await runAgentBrowserJson(["open", url], { timeout: 120_000 });

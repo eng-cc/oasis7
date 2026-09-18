@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, extname, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
+import { createOwnedSessionLifecycle } from "./agent-browser-visual-runner-lifecycle.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const viewerRoot = resolve(scriptDir, "..");
@@ -183,12 +184,9 @@ async function evalJson(source) {
   return result;
 }
 
-function closeBrowser() {
-  spawnSync(agentBrowserBin, ["--session", session, "close"], {
-    stdio: "ignore",
-    timeout: 10_000,
-  });
-}
+const browserLifecycle = createOwnedSessionLifecycle({ command: agentBrowserBin, session });
+const closeBrowser = browserLifecycle.close;
+const prepareBrowserSession = browserLifecycle.prepare;
 
 function visualProbeScript(options = {}) {
   const shellLiteProbe = options.shellLiteOnly === true ? "true" : "false";
@@ -1128,7 +1126,7 @@ try {
   const address = server.address();
   const url = `http://127.0.0.1:${address.port}/viewer.html?test_api=1&connect=0&locale=en&viewer_visual_fixture=shell_selected_blocker&pixel_world_visual_fixture=selected_blocker&t=${Date.now()}`;
 
-  closeBrowser();
+  prepareBrowserSession();
   if (shellLiteOnly) {
     await runShellLiteOnlyMode(url);
     summary.url = url;

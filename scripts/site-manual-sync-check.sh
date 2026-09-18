@@ -12,18 +12,28 @@ MIRROR_MANUALS=(
 
 SOURCE_REQUIRED_PATTERNS=(
   'command -v agent-browser >/dev/null || { echo "missing agent-browser" >&2; exit 1; }'
-  'agent-browser --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&render_mode=viewer&test_api=1"'
-  'agent-browser snapshot -i'
+  'AB_SESSION="$(agent-browser session id --scope worktree --prefix viewer)"'
+  'agent-browser --session "$AB_SESSION" --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&render_mode=viewer&test_api=1"'
+  'agent-browser --session "$AB_SESSION" wait --load domcontentloaded'
+  'agent-browser --session "$AB_SESSION" snapshot -i'
+  'agent-browser --session "$AB_SESSION" close'
 )
 
 MIRROR_REQUIRED_PATTERNS=(
   'command -v agent-browser >/dev/null || { echo "missing agent-browser" >&2; exit 1; }'
-  'agent-browser --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&amp;render_mode=viewer&amp;test_api=1"'
-  'agent-browser snapshot -i'
+  'AB_SESSION="$(agent-browser session id --scope worktree --prefix viewer)"'
+  'agent-browser --session "$AB_SESSION" --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&amp;render_mode=viewer&amp;test_api=1"'
+  'agent-browser --session "$AB_SESSION" wait --load domcontentloaded'
+  'agent-browser --session "$AB_SESSION" snapshot -i'
+  'agent-browser --session "$AB_SESSION" close'
 )
 
 FORBIDDEN_PATTERNS=(
   'export REPO_ROOT="$(pwd)"'
+  'agent-browser close-all'
+  'agent-browser --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&render_mode=viewer&test_api=1"'
+  'agent-browser --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&amp;render_mode=viewer&amp;test_api=1"'
+  'agent-browser wait --load networkidle'
 )
 
 MIRROR_REFERENCE_FORBIDDEN_PATTERNS=(

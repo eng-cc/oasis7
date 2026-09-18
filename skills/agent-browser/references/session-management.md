@@ -1,193 +1,90 @@
 # Session Management
 
-Multiple isolated browser sessions with state persistence and concurrent browsing.
+This reference follows the `agent-browser 0.37.1` session API. When the CLI version differs, first load its bundled guide with `agent-browser skills get core --full`.
 
-**Related**: [authentication.md](authentication.md) for login patterns, [SKILL.md](../SKILL.md) for quick start.
+## Ownership contract
 
-## Contents
-
-- [Named Sessions](#named-sessions)
-- [Session Isolation Properties](#session-isolation-properties)
-- [Session State Persistence](#session-state-persistence)
-- [Common Patterns](#common-patterns)
-- [Default Session](#default-session)
-- [Session Cleanup](#session-cleanup)
-- [Best Practices](#best-practices)
-
-## Named Sessions
-
-Use `--session` flag to isolate browser contexts:
+Every browser run creates an isolated, worktree-scoped named session. The creator owns its lifecycle and is the only actor allowed to close it.
 
 ```bash
-# Session 1: Authentication flow
-agent-browser --session auth open https://app.example.com/login
-
-# Session 2: Public browsing (separate cookies, storage)
-agent-browser --session public open https://example.com
-
-# Commands are isolated by session
-agent-browser --session auth fill @e1 "user@example.com"
-agent-browser --session public get text body
+AB_SESSION="$(agent-browser session id --scope worktree --prefix web-check)"
+export AB_SESSION
+ab() { agent-browser --session "$AB_SESSION" "$@"; }
+ab session info --json
 ```
 
-## Session Isolation Properties
+Pass the session explicitly on every command. The ambient session environment is useful for the wrapper, but it is not a substitute for recording the generated id. Use a distinct prefix for each parallel actor or run.
 
-Each session has independent:
-- Cookies
-- LocalStorage / SessionStorage
-- IndexedDB
-- Cache
-- Browsing history
-- Open tabs
-
-## Session State Persistence
-
-### Save Session State
+## Inspect active sessions
 
 ```bash
-# Save cookies, storage, and auth state
-agent-browser state save /path/to/auth-state.json
+agent-browser session list --json
+agent-browser --session "$AB_SESSION" session info --json
 ```
 
-### Load Session State
+`session list` is an inspection operation. Do not guess ownership from a name, reuse another actor's id, or terminate sessions listed by another actor.
+
+## Start and wait
 
 ```bash
-# Restore saved state
-agent-browser state load /path/to/auth-state.json
-
-# Continue with authenticated session
-agent-browser open https://app.example.com/dashboard
+ab --headed open "https://app.example.com"
+ab wait --load domcontentloaded
+ab wait --fn "window.appReady === true"
+ab snapshot -i
 ```
 
-### State File Contents
+Use `wait --text` when visible text is the contract. For long-lived applications, use an application signal after `domcontentloaded`; network-idle is not a sufficient universal readiness condition.
 
-```json
-{
-  "cookies": [...],
-  "localStorage": {...},
-  "sessionStorage": {...},
-  "origins": [...]
+## Explicit cleanup
+
+Headed sessions are not covered by ordinary idle cleanup. Each script must install a scoped trap:
+
+```bash
+cleanup() {
+  local status=$?
+  trap - EXIT INT TERM
+  ab close >/dev/null 2>&1 || true
+  exit "$status"
 }
+trap cleanup EXIT INT TERM
 ```
 
-## Common Patterns
+The trap must be installed after `$AB_SESSION` and `ab()` are defined. Never call a global close operation: it can destroy sessions belonging to unrelated worktrees or agents.
 
-### Authenticated Session Reuse
+## Persistent login with restore
+
+One-shot checks should use a fresh session. For deliberate persistence, use the restore flags with the same named session and a post-restore assertion:
 
 ```bash
-#!/bin/bash
-# Save login state once, reuse many times
-
-STATE_FILE="/tmp/auth-state.json"
-
-# Check if we have saved state
-if [[ -f "$STATE_FILE" ]]; then
-    agent-browser state load "$STATE_FILE"
-    agent-browser open https://app.example.com/dashboard
-else
-    # Perform login
-    agent-browser open https://app.example.com/login
-    agent-browser snapshot -i
-    agent-browser fill @e1 "$USERNAME"
-    agent-browser fill @e2 "$PASSWORD"
-    agent-browser click @e3
-    agent-browser wait --load networkidle
-
-    # Save for future use
-    agent-browser state save "$STATE_FILE"
-fi
+ab --restore --restore-save auto \
+  --restore-check-url '**/dashboard' \
+  open "https://app.example.com/dashboard"
+ab wait --load domcontentloaded
+ab wait --text "Dashboard"
 ```
 
-### Concurrent Scraping
+Other supported checks are `--restore-check-text` and `--restore-check-fn`. Keep credentials in Auth Vault when possible. Do not introduce JSON cookie/storage files as a new primary workflow; inspect an old file only as sensitive, compatibility evidence outside the repository.
+
+## Parallel sessions and CDP tabs
 
 ```bash
-#!/bin/bash
-# Scrape multiple sites concurrently
-
-# Start all sessions
-agent-browser --session site1 open https://site1.com &
-agent-browser --session site2 open https://site2.com &
-agent-browser --session site3 open https://site3.com &
-wait
-
-# Extract from each
-agent-browser --session site1 get text body > site1.txt
-agent-browser --session site2 get text body > site2.txt
-agent-browser --session site3 get text body > site3.txt
-
-# Cleanup
-agent-browser --session site1 close
-agent-browser --session site2 close
-agent-browser --session site3 close
+FIRST="$(agent-browser session id --scope worktree --prefix actor-a)"
+SECOND="$(agent-browser session id --scope worktree --prefix actor-b)"
+agent-browser --session "$FIRST" open https://site-a.example
+agent-browser --session "$SECOND" open https://site-b.example
+agent-browser session list --json
 ```
 
-### A/B Testing Sessions
+When a run intentionally shares an existing CDP tab, select it once with `--pin-tab` and retain the same owned session. Do not rely on tab fallback to cross session boundaries.
 
-```bash
-# Test different user experiences
-agent-browser --session variant-a open "https://app.com?variant=a"
-agent-browser --session variant-b open "https://app.com?variant=b"
+## Failure handling
 
-# Compare
-agent-browser --session variant-a screenshot /tmp/variant-a.png
-agent-browser --session variant-b screenshot /tmp/variant-b.png
-```
+For daemon or IPC errors, preserve `session info --json` and command output, inspect the active list, and rebuild only the owned session. Do not replay a non-idempotent click or submission after an uncertain result. Re-run `agent-browser doctor --offline --quick --json` after repair; use `--fix` only when destructive local repair is explicitly in scope.
 
-## Default Session
+## Prohibited patterns
 
-When `--session` is omitted, commands use the default session:
-
-```bash
-# These use the same default session
-agent-browser open https://example.com
-agent-browser snapshot -i
-agent-browser close  # Closes default session
-```
-
-## Session Cleanup
-
-```bash
-# Close specific session
-agent-browser --session auth close
-
-# List active sessions
-agent-browser session list
-```
-
-## Best Practices
-
-### 1. Name Sessions Semantically
-
-```bash
-# GOOD: Clear purpose
-agent-browser --session github-auth open https://github.com
-agent-browser --session docs-scrape open https://docs.example.com
-
-# AVOID: Generic names
-agent-browser --session s1 open https://github.com
-```
-
-### 2. Always Clean Up
-
-```bash
-# Close sessions when done
-agent-browser --session auth close
-agent-browser --session scrape close
-```
-
-### 3. Handle State Files Securely
-
-```bash
-# Don't commit state files (contain auth tokens!)
-echo "*.auth-state.json" >> .gitignore
-
-# Delete after use
-rm /tmp/auth-state.json
-```
-
-### 4. Timeout Long Sessions
-
-```bash
-# Set timeout for automated scripts
-timeout 60 agent-browser --session long-task get text body
-```
+- Do not omit `--session` from a live command.
+- Do not use an unnamed or ambient default browser session.
+- Do not use the legacy session-name flag; generate ids with `session id` instead.
+- Do not invoke the close command with its global all-sessions option.
+- Do not use unversioned `npx agent-browser` as a fallback for the repo-owned CLI.

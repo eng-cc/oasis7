@@ -2,6 +2,14 @@
 
 Login flows, session persistence, OAuth, 2FA, and authenticated browsing.
 
+All examples assume an owned named session has already been established with
+`export AGENT_BROWSER_SESSION="$(agent-browser session id --scope worktree --prefix auth)"`.
+Install an `EXIT INT TERM` trap that runs `agent-browser close` for that exact
+session; never use the default session or the global multi-session close mode. Prefer `--restore
+--restore-save auto` plus a restore check for new persistent-login flows. The
+explicit `state save/load` examples below are compatibility recipes for cases
+that must exchange a concrete state file.
+
 **Related**: [session-management.md](session-management.md) for state persistence details, [SKILL.md](../SKILL.md) for quick start.
 
 ## Contents

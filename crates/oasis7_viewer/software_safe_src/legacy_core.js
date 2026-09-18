@@ -10,6 +10,7 @@ import { createViewerControlLossModule } from "./viewer_control_loss_module.js";
 import { resetHostedLoginChallenge as resetHostedLoginChallengeState } from "./viewer_hosted_login_state_module.js";
 import { createViewerLocalePreferencesModule } from "./viewer_locale_preferences_module.js";
 import { createViewerBrowserPersistenceModule } from "./viewer_browser_persistence_module.js";
+import { createViewerBrowserRaceIdentityTestApi } from "./viewer_browser_race_identity_test_api_module.js";
 import { createViewerWorldScaleModule } from "./viewer_world_scale_module.js";
 import { createRefineQuotePreflightStateModule } from "./refine_quote_preflight_state.js";
 import { createProductValidationQuoteIntegration } from "./product_validation_quote_integration.js";
@@ -84,13 +85,9 @@ const elements = {};
 const renderHook = createViewerRenderHookRegistry();
 let bootstrapped = false; const worldFeedTransport = createWorldFeedTransport({ getSocket: () => socket, getState: () => state, render, requestSnapshot: () => requestSnapshotSafe(), sendJson });
 export const requestWorldFeed = (...args) => worldFeedTransport.requestWorldFeed(...args); export const reloadWorldFeedFromAuthoritativeSnapshot = (...args) => worldFeedTransport.reloadWorldFeedFromAuthoritativeSnapshot(...args);
-const HELLO_ACK_TIMEOUT_MS = 2000;
-const INITIAL_SNAPSHOT_RETRY_DELAY_MS = 1000;
-const INITIAL_SNAPSHOT_SLOW_RETRY_AFTER = 5;
-const INITIAL_SNAPSHOT_SLOW_RETRY_DELAY_MS = 5000;
-const EMPTY_ENTITY_SNAPSHOT_REFRESH_DELAY_MS = 2500;
-const FIRST_AGENT_CLAIM_AUTO_ADVANCE_DELAY_MS = 450;
-const FIRST_AGENT_CLAIM_AUTO_REFRESH_DELAY_MS = 1200;
+const HELLO_ACK_TIMEOUT_MS = 2000; const INITIAL_SNAPSHOT_RETRY_DELAY_MS = 1000; const INITIAL_SNAPSHOT_SLOW_RETRY_AFTER = 5;
+const INITIAL_SNAPSHOT_SLOW_RETRY_DELAY_MS = 5000; const EMPTY_ENTITY_SNAPSHOT_REFRESH_DELAY_MS = 2500;
+const FIRST_AGENT_CLAIM_AUTO_ADVANCE_DELAY_MS = 450; const FIRST_AGENT_CLAIM_AUTO_REFRESH_DELAY_MS = 1200;
 const SESSION_REGISTER_ACK_TIMEOUT_MS = 15000;
 const AGENT_CHAT_ACK_TIMEOUT_MS = 30000;
 const SEMANTIC_ACTION_ACK_TIMEOUT_MS = 30000;
@@ -691,7 +688,7 @@ function reconcilePendingPromptAuthoritativeRefresh(snapshot) {
   return viewerPromptControlModule?.reconcilePendingAuthoritativeRefresh(snapshot) === true;
 }
 
-function applySelection(selection) {
+function applySelection(selection, options = {}) {
   if (!selection) return null;
   const kind = String(selection.kind || "").toLowerCase();
   const id = String(selection.id || "");
@@ -710,7 +707,7 @@ function applySelection(selection) {
   state.selectedKind = kind;
   state.selectedId = id;
   state.selectedObject = object;
-  syncAgentInteractionDrafts(true);
+  syncAgentInteractionDrafts(options.preserveInteractionDrafts !== true);
   render();
   return { kind, id };
 }
@@ -1397,7 +1394,7 @@ function handleSnapshot(snapshot) {
       applySelection({ kind: "location", id: locations[0].id });
     }
   } else if (state.selectedKind && state.selectedId) {
-    if (!applySelection({ kind: state.selectedKind, id: state.selectedId })) { state.selectedKind = null; state.selectedId = null; state.selectedObject = null; syncAgentInteractionDrafts(true); }
+    if (!applySelection({ kind: state.selectedKind, id: state.selectedId }, { preserveInteractionDrafts: true })) { state.selectedKind = null; state.selectedId = null; state.selectedObject = null; syncAgentInteractionDrafts(true); }
   }
   hydrateChatHistoryFromStorage();
   syncAgentInteractionDrafts(reconcilePendingPromptAuthoritativeRefresh(snapshot));
@@ -4274,9 +4271,12 @@ function installTestApi() {
     expireHostedRuntimeSyncTimeoutForTest,
     expirePendingPromptControlAckTimeoutForTest,
     expirePendingGameplayActionAckTimeoutForTest,
+    offerBrowserRaceIdentityForTest: viewerBrowserRaceIdentityTestApi.offerBrowserRaceIdentityForTest, claimBrowserRaceIdentityForTest: viewerBrowserRaceIdentityTestApi.claimBrowserRaceIdentityForTest, connectBrowserRaceActorForTest: viewerBrowserRaceIdentityTestApi.connectBrowserRaceActorForTest,
     reportFatalError,
   };
 }
+const viewerBrowserRaceIdentityTestApi = createViewerBrowserRaceIdentityTestApi({ authHasSigningKeyMaterial, clone, connect, isTestApiEnabled, render, state,
+  bumpRequestCounters() { requestId = Math.max(requestId, 1_000_000); authNonceCounter = Math.max(authNonceCounter, 1_000_000); } });
 
 viewerControlLossModule = createViewerControlLossModule({ render, state });
 viewerPromptControlModule = createViewerPromptControlModule({

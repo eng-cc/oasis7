@@ -2,6 +2,11 @@
 
 Proxy configuration for geo-testing, rate limiting avoidance, and corporate environments.
 
+All examples assume an owned named session exported through
+`AGENT_BROWSER_SESSION` and scoped `EXIT INT TERM` cleanup. Create a fresh
+session when changing launch-affecting proxy options; never use the default
+session or global multi-session cleanup.
+
 **Related**: [commands.md](commands.md) for global options, [SKILL.md](../SKILL.md) for quick start.
 
 ## Contents

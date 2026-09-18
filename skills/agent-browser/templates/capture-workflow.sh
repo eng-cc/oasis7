@@ -1,6 +1,6 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Template: Content Capture Workflow
-# Purpose: Extract content from web pages (text, screenshots, PDF)
+# Purpose: Extract content from a web page with an owned, disposable session
 # Usage: ./capture-workflow.sh <url> [output-dir]
 #
 # Outputs:
@@ -9,60 +9,70 @@
 #   - page-text.txt: All text content
 #   - page.pdf: PDF version
 #
-# Optional: Load auth state for protected pages
+# Optional environment:
+#   AB_RESTORE=1 restores cookies/storage for this named session
+#   AB_RESTORE_CHECK_URL, AB_RESTORE_CHECK_TEXT, AB_RESTORE_CHECK_FN add a restore check
 
 set -euo pipefail
 
 TARGET_URL="${1:?Usage: $0 <url> [output-dir]}"
 OUTPUT_DIR="${2:-.}"
 
-echo "Capturing: $TARGET_URL"
+command -v agent-browser >/dev/null || { echo "missing agent-browser" >&2; exit 1; }
+agent-browser --version
+agent-browser doctor --offline --quick --json
+
+AB_SESSION="$(agent-browser session id --scope worktree --prefix capture)"
+export AB_SESSION
+ab() { agent-browser --session "$AB_SESSION" "$@"; }
+
+cleanup() {
+  local status=$?
+  trap - EXIT INT TERM
+  ab close >/dev/null 2>&1 || true
+  exit "$status"
+}
+trap cleanup EXIT INT TERM
+
 mkdir -p "$OUTPUT_DIR"
 
-# Optional: Load authentication state
-# if [[ -f "./auth-state.json" ]]; then
-#     echo "Loading authentication state..."
-#     agent-browser state load "./auth-state.json"
-# fi
+RESTORE_ARGS=()
+if [[ "${AB_RESTORE:-0}" == "1" ]]; then
+  RESTORE_ARGS+=(--restore --restore-save auto)
+  [[ -n "${AB_RESTORE_CHECK_URL:-}" ]] && RESTORE_ARGS+=(--restore-check-url "$AB_RESTORE_CHECK_URL")
+  [[ -n "${AB_RESTORE_CHECK_TEXT:-}" ]] && RESTORE_ARGS+=(--restore-check-text "$AB_RESTORE_CHECK_TEXT")
+  [[ -n "${AB_RESTORE_CHECK_FN:-}" ]] && RESTORE_ARGS+=(--restore-check-fn "$AB_RESTORE_CHECK_FN")
+fi
 
-# Navigate to target
-agent-browser open "$TARGET_URL"
-agent-browser wait --load networkidle
+echo "Capturing: $TARGET_URL"
+ab "${RESTORE_ARGS[@]}" open "$TARGET_URL"
+ab wait --load domcontentloaded
 
 # Get metadata
-TITLE=$(agent-browser get title)
-URL=$(agent-browser get url)
+TITLE="$(ab get title)"
+URL="$(ab get url)"
 echo "Title: $TITLE"
 echo "URL: $URL"
 
 # Capture full page screenshot
-agent-browser screenshot --full "$OUTPUT_DIR/page-full.png"
+ab screenshot --full "$OUTPUT_DIR/page-full.png"
 echo "Saved: $OUTPUT_DIR/page-full.png"
 
 # Get page structure with refs
-agent-browser snapshot -i > "$OUTPUT_DIR/page-structure.txt"
+ab snapshot -i > "$OUTPUT_DIR/page-structure.txt"
 echo "Saved: $OUTPUT_DIR/page-structure.txt"
 
 # Extract all text content
-agent-browser get text body > "$OUTPUT_DIR/page-text.txt"
+ab get text body > "$OUTPUT_DIR/page-text.txt"
 echo "Saved: $OUTPUT_DIR/page-text.txt"
 
 # Save as PDF
-agent-browser pdf "$OUTPUT_DIR/page.pdf"
+ab pdf "$OUTPUT_DIR/page.pdf"
 echo "Saved: $OUTPUT_DIR/page.pdf"
 
-# Optional: Extract specific elements using refs from structure
-# agent-browser get text @e5 > "$OUTPUT_DIR/main-content.txt"
-
-# Optional: Handle infinite scroll pages
-# for i in {1..5}; do
-#     agent-browser scroll down 1000
-#     agent-browser wait 1000
-# done
-# agent-browser screenshot --full "$OUTPUT_DIR/page-scrolled.png"
-
-# Cleanup
-agent-browser close
+# Optional: use a domain-specific signal before a second capture.
+# ab wait --text "Ready"
+# ab wait --fn "window.appReady === true"
 
 echo ""
 echo "Capture complete:"

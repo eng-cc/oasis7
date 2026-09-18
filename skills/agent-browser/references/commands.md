@@ -2,6 +2,13 @@
 
 Complete reference for all agent-browser commands. For quick start and common patterns, see SKILL.md.
 
+This is a command catalogue, not a lifecycle recipe. Before using any example,
+set an owned named session with `agent-browser session id --scope worktree`,
+export it as `AGENT_BROWSER_SESSION`, and install scoped `EXIT INT TERM`
+cleanup. Never run these examples in the default session or use global multi-session cleanup.
+Use `agent-browser skills get core --full` as the version-matched authority if
+this catalogue differs from the installed CLI.
+
 ## Navigation
 
 ```bash

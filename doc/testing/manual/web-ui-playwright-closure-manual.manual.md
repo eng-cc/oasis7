@@ -85,6 +85,17 @@ output/playwright/viewer-real-agent-chat/<run-id>/playwright/browser-console.log
 | PWT-006 | Diagnostics And Recovery | planned | 覆盖连接异常、provider blocker、重试/刷新后的可理解报错 |
 | PWT-007 | Pure API / Viewer Parity Spot | planned | 用同一场景交叉验证 Viewer UI 操作和 pure API 观测一致性 |
 
+### PWT-004 当前状态（2026-09-17）
+
+本轮仅达到 local contract green：本地模块、合同和构建检查通过，不构成真实玩家流程或
+`AC-PROMPT-009` 的验收结论。Canonical gpt-5.5 Responses preflight 当前观测为 HTTP 403
+`bad_response_status_code`，且没有 hello/tool-call；因此当前是 provider-deferred 状态，不能记录
+provider PASS，也不能据此宣称 PWT-004 live headed gameplay 成功。
+
+Live headed gameplay 保持 blocked。待 proxy/provider route 恢复后，按 LetAI 环境 runbook
+只执行一次 canonical Responses preflight，确认结构化 hello/tool-call 成功，再进入 headed
+PWT-004；preflight 与 browser acceptance 必须分别留存证据。
+
 ## 新增用例规则
 
 每个新 Playwright 实跑用例必须满足：

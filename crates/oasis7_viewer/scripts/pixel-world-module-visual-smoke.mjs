@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, extname, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "node:child_process";
+import { createOwnedSessionLifecycle } from "./agent-browser-visual-runner-lifecycle.mjs";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const viewerRoot = resolve(scriptDir, "..");
@@ -62,7 +63,9 @@ function serveFile(request, response) {
   if (!relative(viewerRoot, filePath) || relative(viewerRoot, filePath).startsWith("..")) { response.writeHead(403); response.end("forbidden"); return; }
   try { if (!statSync(filePath).isFile()) throw new Error("not file"); response.writeHead(200, { "Content-Type": contentType(filePath), "Cache-Control": "no-store" }); response.end(readFileSync(filePath)); } catch { response.writeHead(404); response.end("not found"); }
 }
-function closeBrowser() { spawnSync(browser, ["--session", session, "close"], { stdio: "ignore", timeout: 10_000 }); }
+const browserLifecycle = createOwnedSessionLifecycle({ command: browser, session });
+const closeBrowser = browserLifecycle.close;
+const prepareBrowserSession = browserLifecycle.prepare;
 function runBrowser(args, input) { return new Promise((resolveRun, rejectRun) => { const child = spawn(browser, ["--session", session, ...args], { stdio: ["pipe", "pipe", "pipe"] }); let stdout = ""; let stderr = ""; child.stdout.setEncoding("utf8"); child.stderr.setEncoding("utf8"); child.stdout.on("data", (chunk) => { stdout += chunk; }); child.stderr.on("data", (chunk) => { stderr += chunk; }); child.on("error", rejectRun); child.on("close", (code) => code === 0 ? resolveRun(stdout) : rejectRun(new Error(`${args.join(" ")} failed\n${stdout}\n${stderr}`))); child.stdin.end(input); }); }
 async function browserJson(args, input) { const result = JSON.parse(await runBrowser(["--json", ...args], input)); if (!result.success) fail(result.error || "browser JSON failure"); return result.data; }
 async function evalJson(script) { const data = await browserJson(["eval", "--stdin"], script); return typeof data.result === "string" ? JSON.parse(data.result) : data.result; }
@@ -254,7 +257,7 @@ try {
   const address = server.address();
   const url = `http://127.0.0.1:${address.port}/viewer.html?test_api=1&connect=0&locale=en&pixel_world_visual_fixture=module_visual_entities`;
   summary.url = url;
-  closeBrowser();
+  prepareBrowserSession();
   await browserJson(["open", url]);
   for (const [name, width, height] of [["desktop", 1440, 900], ["narrow", 390, 844]]) {
     if (name !== "desktop") await browserJson(["open", url]);

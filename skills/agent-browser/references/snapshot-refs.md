@@ -2,6 +2,11 @@
 
 Compact element references that reduce context usage dramatically for AI agents.
 
+All examples assume an owned named session exported through
+`AGENT_BROWSER_SESSION` and scoped `EXIT INT TERM` cleanup. Never use the
+default session or global multi-session cleanup; refs remain local to the named session and
+become stale after page changes.
+
 **Related**: [commands.md](commands.md) for full command reference, [SKILL.md](../SKILL.md) for quick start.
 
 ## Contents

@@ -632,6 +632,8 @@ viewer_web_wrapper_output="$(plan_for_paths \
   scripts/viewer-dependency-preflight.sh \
   scripts/viewer-dependency-preflight.test.sh \
   scripts/viewer-pixel-world-fragment-visual-smoke.sh \
+  scripts/viewer-prompt-control-regression.sh \
+  scripts/viewer-prompt-control-regression.test.sh \
   scripts/agent-browser-lib.sh \
   scripts/agent-browser-viewer-dist-freshness-test.sh \
   scripts/bundle-freshness-lib.sh \
@@ -647,6 +649,8 @@ assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/
 assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/viewer-dependency-preflight.sh"
 assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/viewer-dependency-preflight.test.sh"
 assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/viewer-pixel-world-fragment-visual-smoke.sh"
+assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/viewer-prompt-control-regression.sh"
+assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/viewer-prompt-control-regression.test.sh"
 assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/agent-browser-lib.sh"
 assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/agent-browser-viewer-dist-freshness-test.sh"
 assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/bundle-freshness-lib.sh"

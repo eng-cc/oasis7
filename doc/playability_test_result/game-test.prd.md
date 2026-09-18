@@ -26,6 +26,22 @@
 
 ## `agent-browser` 进入游戏
 ```bash
-AGENT_BROWSER_SESSION=game-test-open \
-agent-browser --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&test_api=1"
+set -euo pipefail
+command -v agent-browser >/dev/null || { echo "missing agent-browser" >&2; exit 1; }
+agent-browser --version
+agent-browser doctor --offline --quick --json
+AGENT_BROWSER_SESSION="$(agent-browser session id --scope worktree --prefix game-test)"
+export AGENT_BROWSER_SESSION
+cleanup() {
+  local status=$?
+  trap - EXIT INT TERM
+  agent-browser --session "$AGENT_BROWSER_SESSION" close >/dev/null 2>&1 || true
+  exit "$status"
+}
+trap cleanup EXIT INT TERM
+agent-browser --session "$AGENT_BROWSER_SESSION" --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&test_api=1"
+agent-browser --session "$AGENT_BROWSER_SESSION" wait --load domcontentloaded
+agent-browser --session "$AGENT_BROWSER_SESSION" wait --fn "typeof window.__AW_TEST__ === 'object'"
+agent-browser --session "$AGENT_BROWSER_SESSION" session info --json
+agent-browser --session "$AGENT_BROWSER_SESSION" snapshot -i
 ```

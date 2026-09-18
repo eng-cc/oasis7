@@ -1,76 +1,72 @@
-#!/bin/bash
+#!/usr/bin/env bash
 # Template: Authenticated Session Workflow
-# Purpose: Login once, save state, reuse for subsequent runs
-# Usage: ./authenticated-session.sh <login-url> [state-file]
+# Purpose: Login once, auto-restore a named session, and verify the restored URL
+# Usage: ./authenticated-session.sh <login-url> <authenticated-url>
 #
-# RECOMMENDED: Use the auth vault instead of this template:
-#   echo "<pass>" | agent-browser auth save myapp --url <login-url> --username <user> --password-stdin
+# Auth Vault is preferred when a reusable credential profile is available:
+#   agent-browser auth save myapp --url <login-url> --username <user> --password-stdin
 #   agent-browser auth login myapp
-# The auth vault stores credentials securely and the LLM never sees passwords.
+# This template is for a flow whose form refs still need local customization.
 #
 # Environment variables:
 #   APP_USERNAME - Login username/email
 #   APP_PASSWORD - Login password
-#
-# Two modes:
-#   1. Discovery mode (default): Shows form structure so you can identify refs
-#   2. Login mode: Performs actual login after you update the refs
-#
-# Setup steps:
-#   1. Run once to see form structure (discovery mode)
-#   2. Update refs in LOGIN FLOW section below
-#   3. Set APP_USERNAME and APP_PASSWORD
-#   4. Delete the DISCOVERY section
+#   AB_SESSION_PREFIX - Optional purpose prefix (default: authenticated)
+#   RESTORE_CHECK_URL - Optional glob overriding the authenticated URL check
 
 set -euo pipefail
 
-LOGIN_URL="${1:?Usage: $0 <login-url> [state-file]}"
-STATE_FILE="${2:-./auth-state.json}"
+LOGIN_URL="${1:?Usage: $0 <login-url> <authenticated-url>}"
+AUTHENTICATED_URL="${2:?Usage: $0 <login-url> <authenticated-url>}"
+SESSION_PREFIX="${AB_SESSION_PREFIX:-authenticated}"
+RESTORE_CHECK_URL="${RESTORE_CHECK_URL:-$AUTHENTICATED_URL}"
 
-echo "Authentication workflow: $LOGIN_URL"
+command -v agent-browser >/dev/null || { echo "missing agent-browser" >&2; exit 1; }
+agent-browser --version
+agent-browser doctor --offline --quick --json
 
-# ================================================================
-# SAVED STATE: Skip login if valid saved state exists
-# ================================================================
-if [[ -f "$STATE_FILE" ]]; then
-    echo "Loading saved state from $STATE_FILE..."
-    if agent-browser --state "$STATE_FILE" open "$LOGIN_URL" 2>/dev/null; then
-        agent-browser wait --load networkidle
+AB_SESSION="$(agent-browser session id --scope worktree --prefix "$SESSION_PREFIX")"
+export AB_SESSION
+ab() { agent-browser --session "$AB_SESSION" "$@"; }
 
-        CURRENT_URL=$(agent-browser get url)
-        if [[ "$CURRENT_URL" != *"login"* ]] && [[ "$CURRENT_URL" != *"signin"* ]]; then
-            echo "Session restored successfully"
-            agent-browser snapshot -i
-            exit 0
-        fi
-        echo "Session expired, performing fresh login..."
-        agent-browser close 2>/dev/null || true
-    else
-        echo "Failed to load state, re-authenticating..."
-    fi
-    rm -f "$STATE_FILE"
+cleanup() {
+  local status=$?
+  trap - EXIT INT TERM
+  ab close >/dev/null 2>&1 || true
+  exit "$status"
+}
+trap cleanup EXIT INT TERM
+
+echo "Trying to restore owned session $AB_SESSION..."
+if ab --restore --restore-save auto \
+  --restore-check-url "$RESTORE_CHECK_URL" \
+  open "$AUTHENTICATED_URL"; then
+  ab wait --load domcontentloaded
+  CURRENT_URL="$(ab get url)"
+  if [[ "$CURRENT_URL" != *"login"* ]] && [[ "$CURRENT_URL" != *"signin"* ]]; then
+    echo "Session restored successfully"
+    ab session info --json
+    ab snapshot -i
+    exit 0
+  fi
 fi
 
-# ================================================================
-# DISCOVERY MODE: Shows form structure (delete after setup)
-# ================================================================
-echo "Opening login page..."
-agent-browser open "$LOGIN_URL"
-agent-browser wait --load networkidle
+echo "Opening login page for a fresh authentication flow..."
+ab --restore --restore-save auto open "$LOGIN_URL"
+ab wait --load domcontentloaded
 
 echo ""
 echo "Login form structure:"
 echo "---"
-agent-browser snapshot -i
+ab snapshot -i
 echo "---"
 echo ""
 echo "Next steps:"
 echo "  1. Note the refs: username=@e?, password=@e?, submit=@e?"
 echo "  2. Update the LOGIN FLOW section below with your refs"
 echo "  3. Set: export APP_USERNAME='...' APP_PASSWORD='...'"
-echo "  4. Delete this DISCOVERY MODE section"
+echo "  4. Re-run after enabling the customized LOGIN FLOW"
 echo ""
-agent-browser close
 exit 0
 
 # ================================================================
@@ -79,27 +75,28 @@ exit 0
 # : "${APP_USERNAME:?Set APP_USERNAME environment variable}"
 # : "${APP_PASSWORD:?Set APP_PASSWORD environment variable}"
 #
-# agent-browser open "$LOGIN_URL"
-# agent-browser wait --load networkidle
-# agent-browser snapshot -i
+# ab --restore --restore-save auto open "$LOGIN_URL"
+# ab wait --load domcontentloaded
+# ab snapshot -i
 #
 # # Fill credentials (update refs to match your form)
-# agent-browser fill @e1 "$APP_USERNAME"
-# agent-browser fill @e2 "$APP_PASSWORD"
-# agent-browser click @e3
-# agent-browser wait --load networkidle
+# ab fill @e1 "$APP_USERNAME"
+# ab fill @e2 "$APP_PASSWORD"
+# ab click @e3
+# ab wait --url "$RESTORE_CHECK_URL"
 #
-# # Verify login succeeded
-# FINAL_URL=$(agent-browser get url)
+# FINAL_URL="$(ab get url)"
 # if [[ "$FINAL_URL" == *"login"* ]] || [[ "$FINAL_URL" == *"signin"* ]]; then
-#     echo "Login failed - still on login page"
-#     agent-browser screenshot /tmp/login-failed.png
-#     agent-browser close
-#     exit 1
+#   echo "Login failed - still on login page" >&2
+#   ab screenshot /tmp/login-failed.png
+#   exit 1
 # fi
 #
-# # Save state for future runs
-# echo "Saving state to $STATE_FILE"
-# agent-browser state save "$STATE_FILE"
+# # Re-open through restore so the check is explicit and auto-save remains owned.
+# ab --restore --restore-save auto \
+#   --restore-check-url "$RESTORE_CHECK_URL" \
+#   open "$AUTHENTICATED_URL"
+# ab wait --load domcontentloaded
 # echo "Login successful"
-# agent-browser snapshot -i
+# ab session info --json
+# ab snapshot -i

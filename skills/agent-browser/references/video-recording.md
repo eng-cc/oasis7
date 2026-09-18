@@ -2,6 +2,11 @@
 
 Capture browser automation as video for debugging, documentation, or verification.
 
+All examples assume an owned named session exported through
+`AGENT_BROWSER_SESSION` and scoped `EXIT INT TERM` cleanup. Stop recording
+before closing that exact session; never use the default session or global
+multi-session cleanup.
+
 **Related**: [commands.md](commands.md) for full command reference, [SKILL.md](../SKILL.md) for quick start.
 
 ## Contents

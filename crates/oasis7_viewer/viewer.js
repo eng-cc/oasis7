@@ -4033,6 +4033,419 @@ function createViewerBrowserPersistenceModule({
     setChatHistory: setChatHistory2
   };
 }
+const HANDOFF_SCHEMA = "oasis7.viewer.race-handoff/v1";
+const CHANNEL_PREFIX = "oasis7.viewer.race-handoff.v1";
+const DEFAULT_TTL_MS = 3e4;
+function isEnabledFlag(searchParams, name) {
+  const value2 = String(searchParams.get(name) || "").trim().toLowerCase();
+  return value2 === "1" || value2 === "true" || value2 === "yes" || value2 === "on";
+}
+function isLoopbackHostname$1(hostname) {
+  const host = String(hostname || "").trim().toLowerCase().replace(/^\[|\]$/g, "");
+  return host === "localhost" || host === "::1" || /^127(?:\.\d{1,3}){3}$/.test(host);
+}
+function handoffError(code) {
+  const error = new Error(`browser race handoff ${code}`);
+  error.code = code;
+  return error;
+}
+function asPositiveTtl(value2) {
+  const ttl = Number(value2);
+  return Number.isFinite(ttl) && ttl > 0 ? ttl : DEFAULT_TTL_MS;
+}
+function randomToken(cryptoRef) {
+  if (typeof cryptoRef?.randomUUID === "function") {
+    return String(cryptoRef.randomUUID());
+  }
+  if (typeof cryptoRef?.getRandomValues === "function") {
+    const bytes = new Uint8Array(24);
+    cryptoRef.getRandomValues(bytes);
+    return Array.from(bytes, (value2) => value2.toString(16).padStart(2, "0")).join("");
+  }
+  throw handoffError("randomness_unavailable");
+}
+function closeChannel(channel) {
+  try {
+    channel?.close?.();
+  } catch (_) {
+  }
+}
+function createViewerBrowserRaceHandoffModule({
+  BroadcastChannelImpl = globalThis.BroadcastChannel,
+  clearTimeoutImpl = globalThis.clearTimeout,
+  cryptoRef = globalThis.crypto,
+  locationRef = globalThis.location,
+  now = () => Date.now(),
+  setTimeoutImpl = globalThis.setTimeout
+} = {}) {
+  const locationOrigin = String(locationRef?.origin || "").trim();
+  const searchParams = new URLSearchParams(String(locationRef?.search || ""));
+  const enabled = Boolean(
+    locationOrigin && isLoopbackHostname$1(locationRef?.hostname) && isEnabledFlag(searchParams, "test_api") && isEnabledFlag(searchParams, "hosted_test_login") && typeof BroadcastChannelImpl === "function" && (typeof cryptoRef?.randomUUID === "function" || typeof cryptoRef?.getRandomValues === "function")
+  );
+  const activeEntries = /* @__PURE__ */ new Set();
+  const consumedDescriptors = /* @__PURE__ */ new Set();
+  let disposed = false;
+  function requireEnabled() {
+    if (disposed) {
+      throw handoffError("disposed");
+    }
+    if (!enabled) {
+      throw handoffError("disabled");
+    }
+  }
+  function makeDescriptor(ttlMs) {
+    const nonce = randomToken(cryptoRef);
+    const channelToken = randomToken(cryptoRef);
+    const expiresAt = Number(now()) + asPositiveTtl(ttlMs);
+    return Object.freeze({
+      channelName: `${CHANNEL_PREFIX}:${channelToken}`,
+      expiresAt,
+      nonce,
+      origin: locationOrigin,
+      schema: HANDOFF_SCHEMA
+    });
+  }
+  function validateDescriptor(descriptor) {
+    if (!descriptor || descriptor.schema !== HANDOFF_SCHEMA) {
+      throw handoffError("schema_mismatch");
+    }
+    if (descriptor.origin !== locationOrigin) {
+      throw handoffError("origin_mismatch");
+    }
+    if (typeof descriptor.channelName !== "string" || !descriptor.channelName.startsWith(`${CHANNEL_PREFIX}:`)) {
+      throw handoffError("channel_mismatch");
+    }
+    if (typeof descriptor.nonce !== "string" || descriptor.nonce.length < 16) {
+      throw handoffError("nonce_mismatch");
+    }
+    if (!Number.isFinite(Number(descriptor.expiresAt))) {
+      throw handoffError("expiry_invalid");
+    }
+    if (Number(now()) >= Number(descriptor.expiresAt)) {
+      throw handoffError("expired");
+    }
+  }
+  function makeEnvelope(descriptor, type, fields = {}) {
+    return {
+      channelName: descriptor.channelName,
+      expiresAt: descriptor.expiresAt,
+      nonce: descriptor.nonce,
+      origin: locationOrigin,
+      schema: HANDOFF_SCHEMA,
+      type,
+      ...fields
+    };
+  }
+  function settleEntry(entry, kind, value2) {
+    if (entry.settled) {
+      return;
+    }
+    entry.settled = true;
+    activeEntries.delete(entry);
+    if (entry.timer != null && typeof clearTimeoutImpl === "function") {
+      clearTimeoutImpl(entry.timer);
+    }
+    if (kind === "resolve") {
+      entry.resolve(value2);
+    } else {
+      entry.reject(value2);
+    }
+  }
+  function rejectEntry(entry, code) {
+    settleEntry(entry, "reject", handoffError(code));
+    closeChannel(entry.channel);
+  }
+  function scheduleExpiry(entry, delayMs) {
+    if (typeof setTimeoutImpl !== "function") {
+      return;
+    }
+    entry.timer = setTimeoutImpl(() => {
+      if (!entry.settled) {
+        entry.consumed = true;
+        entry.keyMaterial = null;
+        rejectEntry(entry, "expired");
+      }
+    }, Math.max(0, delayMs));
+  }
+  function offerKeyMaterial({ privateKey, publicKey, releaseToken, playerId, sessionEpoch, bindingEpoch, boundAgentId, authorityEpoch, ttlMs } = {}) {
+    requireEnabled();
+    if (!String(privateKey || "").trim() || !String(publicKey || "").trim() || !String(releaseToken || "").trim() || !String(playerId || "").trim() || sessionEpoch == null) {
+      throw handoffError("key_material_missing");
+    }
+    const descriptor = makeDescriptor(ttlMs);
+    const channel = new BroadcastChannelImpl(descriptor.channelName);
+    const entry = {
+      channel,
+      consumed: false,
+      descriptor,
+      disposed: false,
+      keyMaterial: {
+        privateKey: String(privateKey),
+        publicKey: String(publicKey),
+        releaseToken: String(releaseToken),
+        playerId: String(playerId),
+        sessionEpoch: Number(sessionEpoch),
+        bindingEpoch: bindingEpoch == null ? null : Number(bindingEpoch),
+        boundAgentId: String(boundAgentId || "") || null,
+        authorityEpoch: String(authorityEpoch || "") || null
+      },
+      settled: false,
+      timer: null
+    };
+    let resolveClaim;
+    let rejectClaim;
+    const claimed = new Promise((resolve, reject) => {
+      resolveClaim = resolve;
+      rejectClaim = reject;
+    });
+    void claimed.catch(() => {
+    });
+    entry.resolve = resolveClaim;
+    entry.reject = rejectClaim;
+    activeEntries.add(entry);
+    channel.onmessage = ({ data }) => {
+      if (entry.disposed || !data || data.schema !== HANDOFF_SCHEMA || data.type !== "claim") {
+        return;
+      }
+      const rejectClaimMessage = (code) => {
+        try {
+          channel.postMessage(makeEnvelope(descriptor, "reject", {
+            claimNonce: data.claimNonce || null,
+            code
+          }));
+        } catch (_) {
+        }
+      };
+      if (data.origin !== locationOrigin) {
+        rejectClaimMessage("origin_mismatch");
+        return;
+      }
+      if (data.channelName !== descriptor.channelName) {
+        rejectClaimMessage("channel_mismatch");
+        return;
+      }
+      if (data.nonce !== descriptor.nonce) {
+        rejectClaimMessage("nonce_mismatch");
+        return;
+      }
+      if (Number(now()) >= Number(descriptor.expiresAt)) {
+        entry.consumed = true;
+        entry.keyMaterial = null;
+        rejectClaimMessage("expired");
+        rejectEntry(entry, "expired");
+        return;
+      }
+      if (entry.consumed) {
+        rejectClaimMessage("replay");
+        return;
+      }
+      if (typeof data.claimNonce !== "string" || data.claimNonce.length < 16) {
+        rejectClaimMessage("claim_nonce_invalid");
+        return;
+      }
+      entry.consumed = true;
+      const keyMaterial = entry.keyMaterial;
+      entry.keyMaterial = null;
+      channel.postMessage(makeEnvelope(descriptor, "offer", {
+        claimNonce: data.claimNonce,
+        keyMaterial
+      }));
+      settleEntry(entry, "resolve", { claimNonce: data.claimNonce });
+      closeChannel(channel);
+    };
+    scheduleExpiry(entry, Number(descriptor.expiresAt) - Number(now()));
+    return {
+      descriptor,
+      get disposed() {
+        return entry.disposed;
+      },
+      dispose() {
+        if (entry.disposed) {
+          return;
+        }
+        entry.disposed = true;
+        entry.keyMaterial = null;
+        rejectEntry(entry, "disposed");
+      },
+      waitForClaim() {
+        return claimed;
+      }
+    };
+  }
+  function claimOffer(descriptor) {
+    if (disposed) {
+      return Promise.reject(handoffError("disposed"));
+    }
+    try {
+      requireEnabled();
+      validateDescriptor(descriptor);
+    } catch (error) {
+      return Promise.reject(error);
+    }
+    const descriptorKey = `${descriptor.origin}|${descriptor.channelName}|${descriptor.nonce}`;
+    if (consumedDescriptors.has(descriptorKey)) {
+      return Promise.reject(handoffError("replay"));
+    }
+    const channel = new BroadcastChannelImpl(descriptor.channelName);
+    const claimNonce = randomToken(cryptoRef);
+    const entry = {
+      channel,
+      disposed: false,
+      reject: null,
+      resolve: null,
+      settled: false,
+      timer: null
+    };
+    const claimed = new Promise((resolve, reject) => {
+      entry.resolve = resolve;
+      entry.reject = reject;
+    });
+    activeEntries.add(entry);
+    channel.onmessage = ({ data }) => {
+      if (entry.disposed || !data || data.schema !== HANDOFF_SCHEMA) {
+        return;
+      }
+      if (data.origin !== locationOrigin || data.channelName !== descriptor.channelName || data.nonce !== descriptor.nonce) {
+        return;
+      }
+      if (data.claimNonce !== claimNonce) {
+        return;
+      }
+      if (data.type === "reject") {
+        rejectEntry(entry, data.code || "rejected");
+        return;
+      }
+      if (data.type !== "offer" || !data.keyMaterial) {
+        rejectEntry(entry, "key_material_missing");
+        return;
+      }
+      if (Number(now()) >= Number(descriptor.expiresAt)) {
+        rejectEntry(entry, "expired");
+        return;
+      }
+      const keyMaterial = {
+        privateKey: String(data.keyMaterial.privateKey || ""),
+        publicKey: String(data.keyMaterial.publicKey || ""),
+        releaseToken: String(data.keyMaterial.releaseToken || ""),
+        playerId: String(data.keyMaterial.playerId || ""),
+        sessionEpoch: data.keyMaterial.sessionEpoch == null ? null : Number(data.keyMaterial.sessionEpoch),
+        bindingEpoch: data.keyMaterial.bindingEpoch == null ? null : Number(data.keyMaterial.bindingEpoch),
+        boundAgentId: String(data.keyMaterial.boundAgentId || "") || null,
+        authorityEpoch: String(data.keyMaterial.authorityEpoch || "") || null
+      };
+      if (!keyMaterial.privateKey || !keyMaterial.publicKey || !keyMaterial.releaseToken || !keyMaterial.playerId || keyMaterial.sessionEpoch == null) {
+        rejectEntry(entry, "key_material_missing");
+        return;
+      }
+      consumedDescriptors.add(descriptorKey);
+      settleEntry(entry, "resolve", keyMaterial);
+      closeChannel(channel);
+    };
+    scheduleExpiry(entry, Number(descriptor.expiresAt) - Number(now()));
+    channel.postMessage(makeEnvelope(descriptor, "claim", { claimNonce }));
+    return claimed;
+  }
+  function dispose2() {
+    if (disposed) {
+      return;
+    }
+    disposed = true;
+    for (const entry of [...activeEntries]) {
+      entry.disposed = true;
+      entry.keyMaterial = null;
+      rejectEntry(entry, "disposed");
+    }
+    activeEntries.clear();
+    consumedDescriptors.clear();
+  }
+  return {
+    enabled,
+    claimOffer,
+    dispose: dispose2,
+    offerKeyMaterial
+  };
+}
+function createViewerBrowserRaceIdentityTestApi({
+  authHasSigningKeyMaterial: authHasSigningKeyMaterial2,
+  bumpRequestCounters,
+  clone: clone2,
+  connect: connect2,
+  isTestApiEnabled: isTestApiEnabled2,
+  render: render2,
+  state: state2,
+  viewerBrowserRaceHandoffModule = createViewerBrowserRaceHandoffModule()
+} = {}) {
+  let browserRaceIdentityOffer = null;
+  function requireBrowserRaceHandoff() {
+    if (!isTestApiEnabled2?.() || !viewerBrowserRaceHandoffModule.enabled) {
+      throw new Error("browser race identity handoff requires loopback test_api=1&hosted_test_login=1");
+    }
+  }
+  function offerBrowserRaceIdentityForTest() {
+    requireBrowserRaceHandoff();
+    if (!authHasSigningKeyMaterial2?.(state2.auth) || state2.auth.source !== "hosted_test_login") {
+      throw new Error("browser race identity offer requires an active hosted test-login signing identity");
+    }
+    browserRaceIdentityOffer?.dispose?.();
+    browserRaceIdentityOffer = viewerBrowserRaceHandoffModule.offerKeyMaterial({
+      publicKey: state2.auth.publicKey,
+      privateKey: state2.auth.privateKey,
+      releaseToken: state2.auth.releaseToken,
+      playerId: state2.auth.playerId,
+      sessionEpoch: state2.auth.sessionEpoch,
+      bindingEpoch: state2.auth.bindingEpoch,
+      boundAgentId: state2.auth.boundAgentId,
+      authorityEpoch: state2.auth.authorityEpoch
+    });
+    return clone2(browserRaceIdentityOffer.descriptor);
+  }
+  async function claimBrowserRaceIdentityForTest(descriptor) {
+    requireBrowserRaceHandoff();
+    if (!state2.auth?.available || state2.auth.source !== "hosted_browser_storage") {
+      throw new Error("browser race identity claim requires the stored hosted test-login session");
+    }
+    const keyMaterial = await viewerBrowserRaceHandoffModule.claimOffer(descriptor);
+    const claimedPlayerId = String(keyMaterial.playerId || "").trim();
+    const currentPlayerId = String(state2.auth.playerId || "").trim();
+    if (!claimedPlayerId || !currentPlayerId || claimedPlayerId !== currentPlayerId) {
+      throw new Error("browser race identity claim player binding mismatch");
+    }
+    state2.auth.publicKey = keyMaterial.publicKey;
+    state2.auth.privateKey = keyMaterial.privateKey;
+    state2.auth.releaseToken = keyMaterial.releaseToken;
+    state2.auth.sessionEpoch = keyMaterial.sessionEpoch;
+    state2.auth.bindingEpoch = keyMaterial.bindingEpoch;
+    state2.auth.boundAgentId = keyMaterial.boundAgentId;
+    state2.auth.authorityEpoch = keyMaterial.authorityEpoch;
+    state2.auth.source = "hosted_test_login";
+    state2.auth.loginChannel = "test";
+    state2.auth.registrationStatus = "issued";
+    state2.auth.runtimeStatus = "issued";
+    state2.auth.syncInFlight = false;
+    state2.auth.error = null;
+    bumpRequestCounters?.();
+    render2();
+    return {
+      ok: true,
+      playerId: state2.auth.playerId,
+      source: state2.auth.source
+    };
+  }
+  function connectBrowserRaceActorForTest() {
+    requireBrowserRaceHandoff();
+    if (!authHasSigningKeyMaterial2?.(state2.auth)) {
+      throw new Error("browser race actor connect requires claimed signing key material");
+    }
+    connect2();
+    return { ok: true };
+  }
+  return {
+    claimBrowserRaceIdentityForTest,
+    connectBrowserRaceActorForTest,
+    offerBrowserRaceIdentityForTest
+  };
+}
 function createViewerWorldScaleModule({
   documentRef,
   state: state2,
@@ -6956,7 +7369,7 @@ function promptDraftValuesForRequest(request) {
 function reconcilePendingPromptAuthoritativeRefresh(snapshot) {
   return viewerPromptControlModule?.reconcilePendingAuthoritativeRefresh(snapshot) === true;
 }
-function applySelection(selection) {
+function applySelection(selection, options = {}) {
   if (!selection) return null;
   const kind = String(selection.kind || "").toLowerCase();
   const id = String(selection.id || "");
@@ -6975,7 +7388,7 @@ function applySelection(selection) {
   state.selectedKind = kind;
   state.selectedId = id;
   state.selectedObject = object;
-  syncAgentInteractionDrafts(true);
+  syncAgentInteractionDrafts(options.preserveInteractionDrafts !== true);
   render();
   return { kind, id };
 }
@@ -7594,7 +8007,7 @@ function handleSnapshot(snapshot) {
       applySelection({ kind: "location", id: locations[0].id });
     }
   } else if (state.selectedKind && state.selectedId) {
-    if (!applySelection({ kind: state.selectedKind, id: state.selectedId })) {
+    if (!applySelection({ kind: state.selectedKind, id: state.selectedId }, { preserveInteractionDrafts: true })) {
       state.selectedKind = null;
       state.selectedId = null;
       state.selectedObject = null;
@@ -10215,9 +10628,24 @@ function installTestApi() {
     expireHostedRuntimeSyncTimeoutForTest,
     expirePendingPromptControlAckTimeoutForTest,
     expirePendingGameplayActionAckTimeoutForTest,
+    offerBrowserRaceIdentityForTest: viewerBrowserRaceIdentityTestApi.offerBrowserRaceIdentityForTest,
+    claimBrowserRaceIdentityForTest: viewerBrowserRaceIdentityTestApi.claimBrowserRaceIdentityForTest,
+    connectBrowserRaceActorForTest: viewerBrowserRaceIdentityTestApi.connectBrowserRaceActorForTest,
     reportFatalError
   };
 }
+const viewerBrowserRaceIdentityTestApi = createViewerBrowserRaceIdentityTestApi({
+  authHasSigningKeyMaterial,
+  clone,
+  connect,
+  isTestApiEnabled,
+  render,
+  state,
+  bumpRequestCounters() {
+    requestId = Math.max(requestId, 1e6);
+    authNonceCounter = Math.max(authNonceCounter, 1e6);
+  }
+});
 viewerControlLossModule = createViewerControlLossModule({ render, state });
 viewerPromptControlModule = createViewerPromptControlModule({
   applyPromptAckLocally,

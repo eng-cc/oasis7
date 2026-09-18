@@ -390,6 +390,13 @@ export no_proxy="127.0.0.1,localhost,::1${no_proxy:+,$no_proxy}"
 export NO_PROXY="$no_proxy"
 ```
 
+PWT-004/hosted strong-auth runner 注意：LetAI provider probe 与 launcher/runtime（包括
+`scripts/viewer-prompt-control-regression.sh`）必须从同一 shell 启动，并显式继承 operator-approved
+的 `http_proxy`/`HTTP_PROXY`、`https_proxy`/`HTTPS_PROXY` 与 `all_proxy`/`ALL_PROXY`；`NO_PROXY`
+（以及 `no_proxy`）必须含 `127.0.0.1,localhost,::1`，以保护本地 launcher/viewer/runtime。直连
+Cloudflare `403` 后 SDK 出现的 `decode_error` 只是代理遗漏的二次症状：先在同一 shell 经代理重试，
+不能先充值、换 token/model 或 API path。代理地址和凭据只来自 operator 私有环境，不写入文档。
+
 然后按一次性、低成本顺序操作，不要扫遍历史模型或无限重试付费请求：
 
 1. 先把来源文件规范化到私有 run 目录；已有 inference token 只会被安全复制，平台 key 或 ambiguous `Key` 则按 helper 规则生成/保留 project token：

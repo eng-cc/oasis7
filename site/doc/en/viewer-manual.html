@@ -81,16 +81,29 @@
           <li><code>./scripts/viewer-software-safe-chat-regression.sh --headed</code></li>
         </ul>
         <p>For a manual capture pass:</p>
-        <pre><code>command -v agent-browser >/dev/null || { echo "missing agent-browser" >&2; exit 1; }
+        <p>Verify <code>agent-browser 0.37.1</code> with <code>--version</code> and run <code>doctor --offline --quick --json</code> first. Create a worktree-scoped named session for each run, record diagnostics with <code>session info/list --json</code> when needed, and close only the session owned by that run.</p>
+        <pre><code>set -euo pipefail
+command -v agent-browser >/dev/null || { echo "missing agent-browser" >&2; exit 1; }
+agent-browser --version
+agent-browser doctor --offline --quick --json
+AB_SESSION="$(agent-browser session id --scope worktree --prefix viewer)"
+export AB_SESSION
+cleanup() {
+  local status=$?
+  trap - EXIT INT TERM
+  agent-browser --session "$AB_SESSION" close &gt;/dev/null 2&gt;&amp;1 || true
+  exit "$status"
+}
+trap cleanup EXIT INT TERM
 mkdir -p output/playwright/viewer
-agent-browser close-all || true
-agent-browser --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&amp;render_mode=viewer&amp;test_api=1"
-agent-browser wait --load networkidle
-agent-browser snapshot -i
-agent-browser eval "JSON.stringify(window.__AW_TEST__?.getState?.() ?? null)"
-agent-browser console | tee output/playwright/viewer/console.log
-agent-browser screenshot output/playwright/viewer/viewer-web.png
-agent-browser close</code></pre>
+agent-browser --session "$AB_SESSION" --headed open "http://127.0.0.1:4173/?ws=ws://127.0.0.1:5011&amp;render_mode=viewer&amp;test_api=1"
+agent-browser --session "$AB_SESSION" wait --load domcontentloaded
+agent-browser --session "$AB_SESSION" wait --fn "typeof window.__AW_TEST__ === 'object'"
+agent-browser --session "$AB_SESSION" session info --json | tee output/playwright/viewer/session-info.json
+agent-browser --session "$AB_SESSION" snapshot -i
+agent-browser --session "$AB_SESSION" eval "JSON.stringify(window.__AW_TEST__?.getState?.() ?? null)"
+agent-browser --session "$AB_SESSION" console | tee output/playwright/viewer/console.log
+agent-browser --session "$AB_SESSION" screenshot output/playwright/viewer/viewer-web.png</code></pre>
         <p>Minimum pass criteria: the page loads, <code>__AW_TEST__</code> is available, <code>renderMode=viewer</code> (or the compatibility alias <code>software_safe</code>), and screenshot/log artifacts are produced.</p>
       </section>
 

@@ -2,6 +2,10 @@
 
 Capture Chrome DevTools performance profiles during browser automation for performance analysis.
 
+All examples assume an owned named session exported through
+`AGENT_BROWSER_SESSION` and an `EXIT INT TERM` trap that closes only that
+session. Never profile in the shared default session or use global multi-session cleanup.
+
 **Related**: [commands.md](commands.md) for full command reference, [SKILL.md](../SKILL.md) for quick start.
 
 ## Contents
