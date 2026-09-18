@@ -47,6 +47,10 @@ class IngressTests(unittest.TestCase):
         promotion = source[source.index('promote_draft ci_ready_receipt authority does not match'):]
         self.assertLess(promotion.index('loop-local-gate.py'), promotion.index('gh pr ready'))
 
+    def test_local_promotion_gate_reuses_bound_traceability_admission(self):
+        source = Path(__file__).with_name('loop-local-gate.py').read_text()
+        self.assertIn("module.pre_mutation_admission(\n                'promotion'", source)
+
 
     def test_direct_local_legacy_gate_requires_canonical_uid(self):
         import importlib.util, json, sys, io

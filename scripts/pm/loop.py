@@ -14,7 +14,13 @@ from loop_recovery import Busy, Reservation, common_dir, recovery_status, reconc
 from loop_gate import live_binding
 
 
-TRACEABILITY_BOUNDARY_COMMANDS = {'bind', 'resume-check', 'doctor'}
+TRACEABILITY_BOUNDARY_COMMANDS = {
+    'bind', 'resume-check', 'doctor', 'publish-contract', 'promotion', 'merge',
+}
+
+
+def admission_purpose(command):
+    return 'new_tasks' if command == 'publish-contract' else 'in_flight'
 
 
 def _git(root, *args):
@@ -437,7 +443,10 @@ def main():
                         mutation=continuation_readback,
                     )
             else:
-                result = validate_task(root, task, args.tool_root, args.base, args.head)
+                result = validate_task(
+                    root, task, args.tool_root, args.base, args.head,
+                    purpose=admission_purpose(args.command),
+                )
                 if result['status'] in ('passed', 'legacy') and args.command == 'recover':
                     with Reservation(common_dir(root), args.task_uid, (task.get('loop_binding') or {}).get('write_scope', []), recovery=True) as reservation:
                         result.update(reconcile(common_dir(root), args.task_uid, root, args.tool_root, reservation_fd=reservation.handle.fileno()))
@@ -453,9 +462,31 @@ def main():
                     def before_write():
                         record_action(common_dir(root), args.task_uid, action)
                         started.append(True)
-                    result = validator.publish_contract(args.tool_root, root, {**task['loop_binding'], 'issue_number': task['issue_number']}, contract, before_write=before_write)
-                    if result.get('status') == 'passed' and started:
-                        record_action(common_dir(root), args.task_uid, {**action, 'reconciled': True, 'readback_evidence': result})
+                    def publish_mutation():
+                        published = validator.publish_contract(
+                            args.tool_root, root,
+                            {**task['loop_binding'], 'issue_number': task['issue_number']},
+                            contract, before_write=before_write,
+                        )
+                        if published.get('status') == 'passed' and started:
+                            record_action(common_dir(root), args.task_uid, {
+                                **action, 'reconciled': True, 'readback_evidence': published,
+                            })
+                        return published
+                    binding = task['loop_binding']
+                    result = pre_mutation_admission(
+                        'publish-contract',
+                        binding=binding,
+                        target_root=root,
+                        effective_tool_root=args.tool_root,
+                        source_commit=binding.get('policy_commit'),
+                        effective_tool_commit=binding.get('policy_commit'),
+                        record_source_commit=(binding.get('coordination_ref') or {}).get('source_commit'),
+                        traceability_loader=lambda effective_root, commit: _traceability_adapter(
+                            effective_root, root, binding, commit
+                        ),
+                        mutation=publish_mutation,
+                    )
         print(json.dumps(result, sort_keys=True))
         return 0 if result.get('status') in ('passed', 'legacy', 'bound', 'can_continue', 'task_terminal') else 2
     except (OSError, ValueError, KeyError, TypeError, Busy, subprocess.CalledProcessError) as exc:

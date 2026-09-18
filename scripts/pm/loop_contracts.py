@@ -535,6 +535,8 @@ def validate_contracts(tool_root,target_repo_root,binding,authority_reader=None,
         return result(["unknown consumption purpose"])
     if not isinstance(binding,dict) or not isinstance(binding.get("input_contracts"),list):
         return result(["input_contracts list required"])
+    if purpose == "new_tasks" and binding.get("loop") == "code" and not binding["input_contracts"]:
+        return result(["new code tasks require at least one technical input contract"])
     reader=authority_reader or GitHubAuthority(target_repo_root)
     visited=set()
     active=set()

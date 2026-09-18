@@ -1312,7 +1312,7 @@ def preflight_leaf(
     helper commit and the coordinating record source commit are independent;
     ``source_commit`` remains a compatibility alias for the former.
     """
-    if command not in {"bind", "resume-check", "doctor"}:
+    if command not in {"bind", "resume-check", "doctor", "publish-contract", "promotion", "merge"}:
         return _result(["unsupported traceability preflight command: " + str(command)])
     if not isinstance(binding, dict) or not isinstance(binding.get("coordination_ref"), dict):
         return _result(["coordinating record is required for bound leaf"])

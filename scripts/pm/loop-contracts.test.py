@@ -114,6 +114,25 @@ class ContractTests(unittest.TestCase):
         self.assertEqual(self.check()["status"],"passed")
         self.assertEqual(self.check("new_tasks")["status"],"blocked")
 
+    def test_new_code_task_requires_a_technical_input(self):
+        binding = {"loop": "code", "input_contracts": [], "target_delivery": "pilot"}
+        result = self.api.validate_contracts(
+            self.root, self.root, binding,
+            authority_reader=lambda ref: copy.deepcopy(self.record),
+            purpose="new_tasks",
+        )
+        self.assertEqual(result["status"], "blocked")
+        self.assertIn("new code tasks require at least one technical input contract", result["blockers"])
+
+    def test_existing_code_task_keeps_empty_input_compatibility(self):
+        binding = {"loop": "code", "input_contracts": [], "target_delivery": "pilot"}
+        result = self.api.validate_contracts(
+            self.root, self.root, binding,
+            authority_reader=lambda ref: copy.deepcopy(self.record),
+            purpose="in_flight",
+        )
+        self.assertEqual(result["status"], "passed")
+
     def test_forged_local_approval_is_ignored(self):
         self.ref["approved"]=True
         self.record["permission"]="write"
