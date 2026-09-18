@@ -55,6 +55,12 @@ for key, value in expected.items():
         raise SystemExit(f"receipt {key} mismatch: {receipt.get(key)!r}")
 PY
 
+SOURCE_HEAD="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+GITHUB_REF=refs/heads/main GITHUB_SHA="$HEAD" GITHUB_REPOSITORY=eng-cc/oasis7 \
+  python3 "$HELPER" validate "${COMMON[@]}" \
+    --ref refs/heads/main --expected-head "$SOURCE_HEAD" \
+    --actual-head "$HEAD" --workflow-commit "$HEAD"
+
 if python3 "$HELPER" validate "${COMMON[@]}" --actual-head ffffffffffffffffffffffffffffffffffffffff >"$TMP_DIR/mismatch.out" 2>"$TMP_DIR/mismatch.err"; then
   echo "expected mismatched head to fail before full execution" >&2
   exit 1
