@@ -2,7 +2,7 @@
 
 ## 文档身份
 
-- 所属产品模块：智能体与世界模拟
+- 所属产品模块：智能体、世界模拟与交互
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`

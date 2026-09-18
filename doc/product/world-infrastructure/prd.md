@@ -1,8 +1,8 @@
-# 大世界基础设施 PRD
+# 权威世界基础设施 PRD
 
 ## 文档身份
 
-- 产品模块：大世界基础设施
+- 产品模块：权威世界基础设施
 - 产品模块 slug：`world-infrastructure`
 - 产品层唯一 PRD：`doc/product/world-infrastructure/prd.md`
 - 产品模块总入口：`doc/product/README.md`
@@ -13,13 +13,13 @@
 - 后继文档：`无`
 - 下层专业域：[`doc/game/prd.md`](../../game/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
-本文只承载产品承诺、范围 taxonomy、跨域 authority 与组合验收。专业域 PRD 继续拥有各自规则、实现契约、PRD-ID 和测试证据；任何下层专题都不得再自称“大世界基础设施”的并列产品总入口。
+本文只承载产品承诺、范围 taxonomy、跨域 authority 与组合验收。专业域 PRD 继续拥有各自规则、实现契约、PRD-ID 和测试证据；任何下层专题都不得再自称“权威世界基础设施”的并列产品总入口。
 
 ## 1. 产品承诺
 
-大世界基础设施是 oasis7 的区块链/分布式系统与确定性世界运行时基础。它提供一个可验证的权威世界历史：共识最终性决定何时提交，网络和存储复制并提供 hash-bound 状态材料，确定性执行把已排序输入转成世界状态，恢复重建同一历史而非第二个世界。
+权威世界基础设施是 oasis7 的区块链/分布式系统与确定性世界运行时基础。它提供一个可验证的权威世界历史：共识最终性决定何时提交，网络和存储复制并提供 hash-bound 状态材料，确定性执行把已排序输入转成世界状态，恢复重建同一历史而非第二个世界。
 
-它是下层 provider，而不是设施、市场、区域、frontier、组织治理或玩家循环的产品入口。世界规则与核心玩法、智能体与世界模拟、玩家入口与发行在此基础上组合各自产品语义；它们都不能借由本模块的技术能力直接扩张为权威写入权。
+它是下层 provider，而不是设施、市场、区域、frontier、组织治理或玩家循环的产品入口。世界规则与玩法系统、智能体、世界模拟与交互、玩家接入与发行在此基础上组合各自产品语义；它们都不能借由本模块的技术能力直接扩张为权威写入权。
 
 ## 2. 范围
 
@@ -33,7 +33,7 @@
 ### 非权威迁移索引
 
 - [`世界连续性与恢复（历史引用）`](world-continuity-governance-and-recovery.prd.md)：已退休的旧路径，保留仅为存量专业链接；不构成 active authority 或验收。
-- [`区域 charter/tenure（待迁移）`](regional-charter-tenure-and-public-funding.prd.md)、[`工业/市场（待迁移）`](governed-industry-market-and-emergency-supply.prd.md) 与 [`普通治理（部分待迁移）`](global-governance-organization-continuity-and-constitutional-guardrails.prd.md) 都是 `superseded` 迁移债务：各页迁移头记录接收 owner、已吸收切片与删除条件，内容仍可供接收模块 owner 迁移，但这些路径不再构成本模块产品 authority、路线图、active topic 或验收。原 frontier 与区域能力/扩展迁移债务已由世界规则与核心玩法吸收，不再保留在本模块索引。
+- [`区域 charter/tenure（待迁移）`](regional-charter-tenure-and-public-funding.prd.md)、[`工业/市场（待迁移）`](governed-industry-market-and-emergency-supply.prd.md) 与 [`普通治理（部分待迁移）`](global-governance-organization-continuity-and-constitutional-guardrails.prd.md) 都是 `superseded` 迁移债务：各页迁移头记录接收 owner、已吸收切片与删除条件，内容仍可供接收模块 owner 迁移，但这些路径不再构成本模块产品 authority、路线图、active topic 或验收。原 frontier 与区域能力/扩展迁移债务已由世界规则与玩法系统吸收，不再保留在本模块索引。
 
 此前的区域设施、市场/工业、charter、frontier 与普通治理分册已从本模块退休：它们是上层 gameplay/world-rule 产品语义，不能再作为基础设施的 taxonomy 或验收门槛。对应专业域与其他产品模块继续拥有其规则、实现合同和现状证据；本次退休不宣称这些能力已迁移、实现或公开可用。
 
@@ -97,7 +97,7 @@
 
 ### 工业流水线的跨域执行边界
 
-工厂、配方、原材料和物流不是四条可以各自结算、最后再拼成“生产完成”的本地流程。它们只有在同一条可验证世界历史中形成一条因果流水线时，才可以产生玩家或 Agent 能据此行动的工业结果。本节只定义基础设施与工业消费者之间的组合边界，不定义配方比例、产能、价格、物流算法、排队或玩家体验；工业生命周期与材料适用性仍由 [`世界规则与核心玩法`](../world-rules-core-gameplay/prd.md) 及其链接的 M4 / runtime 专业合同拥有。
+工厂、配方、原材料和物流不是四条可以各自结算、最后再拼成“生产完成”的本地流程。它们只有在同一条可验证世界历史中形成一条因果流水线时，才可以产生玩家或 Agent 能据此行动的工业结果。本节只定义基础设施与工业消费者之间的组合边界，不定义配方比例、产能、价格、物流算法、排队或玩家体验；工业生命周期与材料适用性仍由 [`世界规则与玩法系统`](../world-rules-core-gameplay/prd.md) 及其链接的 M4 / runtime 专业合同拥有。
 
 - **单一流水线身份：** 在工业动作跨过“已接受”边界时，权威世界必须为该次操作建立一个不可变的 root identity，并将它绑定到同一 `world_id`、当前版本化执行规则和 parent committed state。工厂能力/位置、配方版本、原料来源与目标账本、物流 path/edge 以及其 revision/segment 只作为该 root 的可追溯上下文；具体字段、事件和 receipt schema 由 [`world-runtime industrial execution status and authority matrix`](../../world-runtime/prd.md#industrial-execution-status-and-authority-matrix) 定义，产品层不复制 schema。
 - **跨阶段守恒：** 工厂启动、配方输入 join、原料 handoff、运输/到达、buffer 或产物交付等 child effect 必须保留 root、所属 revision/segment 与直接 parent/child 关系。首个不可逆 input sink、运输/目的账本 credit 或产出进度前，root、版本、来源/目的地或 parent 关系缺失、冲突或无法验证时，必须原子 fail closed；预览、推荐、pending 或本地排队不得产生上述世界效果。

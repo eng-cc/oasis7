@@ -2,7 +2,7 @@
 
 ## 文档身份
 
-- 所属产品模块：大世界基础设施
+- 所属产品模块：权威世界基础设施
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`

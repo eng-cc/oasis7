@@ -2,7 +2,7 @@
 
 ## 文档身份
 
-- 所属产品模块：大世界基础设施
+- 所属产品模块：权威世界基础设施
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
@@ -170,7 +170,7 @@ BFT 实现样例证明符合产品最终性条件的 commit certificate 才能�
 
 ## 8. Non-Goals
 
-- 不定义区域设施、市场、工业、charter、frontier、普通治理或玩家资源经济；这些是世界规则与核心玩法模块的产品语义。
+- 不定义区域设施、市场、工业、charter、frontier、普通治理或玩家资源经济；这些是世界规则与玩法系统模块的产品语义。
 - 不定义 deterministic world runtime 的规则解释；该上层基础子层由本模块的执行专题和 `doc/world-runtime/` 专业权威承载。
 - 不定义共识/存储/网络实现或当前运维、发布与公开状态。
 

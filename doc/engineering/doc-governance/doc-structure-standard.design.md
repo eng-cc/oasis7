@@ -145,7 +145,7 @@ doc/product/<module>/
 - 产品模块 PRD 拥有产品承诺、范围、跨域组合、非目标和端到端成功标准。
 - 专业域 `prd.md` 拥有该域规则、实现合同、专业 PRD-ID 和测试机制；`design.md` 拥有技术 How。
 - 任务、状态和证据仍由各域 GitHub Issue（任务与证据） 与 GitHub-backed task truth 承载，产品 PRD 不维护实现任务表。
-- 根 `README.md` 拥有公开的当前状态与 claim envelope；“玩家入口与发行”PRD 只组合发现、访问、安装和验证体验。
+- 根 `README.md` 拥有公开的当前状态与 claim envelope；“玩家接入与发行”PRD 只组合发现、访问、安装和验证体验。
 
 冲突时，产品 PRD 对用户价值、产品范围和端到端结果拥有裁决权；专业域 PRD 对其拥有的规则与
 技术合同拥有裁决权。若产品承诺与可实现性冲突，必须建立显式跨域决策或 GitHub-backed task，不得在任一文档中

@@ -2,7 +2,7 @@
 
 ## 文档身份
 
-- 所属产品模块：玩家入口与发行
+- 所属产品模块：玩家接入与发行
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 配对产品设计：[`local-launch-session-continuity-and-recovery.design.md`](local-launch-session-continuity-and-recovery.design.md)
 - 生命周期：`active`

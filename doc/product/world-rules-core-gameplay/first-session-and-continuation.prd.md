@@ -2,7 +2,7 @@
 
 ## 文档身份
 
-- 所属产品模块：世界规则与核心玩法
+- 所属产品模块：世界规则与玩法系统
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 配对产品 design：[`first-session-and-continuation.design.md`](first-session-and-continuation.design.md)
 - 生命周期：`active`
@@ -148,7 +148,7 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 - 适用条件：系统准备把预设工业目标作为首局引导脊柱或当前主推荐。
 - 要求：系统必须先以同一份 fresh authority snapshot 通过 `Starter Industrial Feasibility Gate`，并只返回 `candidate_available` 或 `no_safe_starter_chain`；闸门不得扣资源、锁定库存/容量、排程或发放成长奖励。
 - 上位承诺：2.2.2、FS-7、FS-15。
-- 专业权威：[`世界规则与核心玩法 PRD`](prd.md) 的 starter feasibility 合同、[`gameplay` 专业设计](../../game/gameplay/gameplay-top-level-design.prd.md) 与 [`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md)。
+- 专业权威：[`世界规则与玩法系统 PRD`](prd.md) 的 starter feasibility 合同、[`gameplay` 专业设计](../../game/gameplay/gameplay-top-level-design.prd.md) 与 [`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md)。
 - 验收：AC-FIRST-INDUSTRIAL-001、AC-FIRST-INDUSTRIAL-002。
 
 <a id="req-first-industrial-002"></a>
@@ -211,7 +211,7 @@ walkthrough 中的“获取/精炼原料”不是一个点击动作，而是一�
 - 适用条件：玩家完成代表性首局工业阶段成果或安全结束不可达目标。
 - 要求：入口必须呈现已形成的能力或世界后果、当前主目标、主要 blocker 与可执行下一步；首次持续能力必须与一次动作成功、首局信任和后续分支分别判定，不得用静态总结或无限等待代替承接。
 - 上位承诺：1、3、4、FS-3、FS-4、FS-5、FS-8、FS-12。
-- 专业权威：[`世界规则与核心玩法 PRD`](prd.md)、本分册后引导章节和 [`可玩性证据与 claim 边界`](playability-evidence-and-claim-boundaries.prd.md)。
+- 专业权威：[`世界规则与玩法系统 PRD`](prd.md)、本分册后引导章节和 [`可玩性证据与 claim 边界`](playability-evidence-and-claim-boundaries.prd.md)。
 - 验收：AC-FIRST-INDUSTRIAL-004。
 
 ### 2.2.4 首个工业闭环验收场景

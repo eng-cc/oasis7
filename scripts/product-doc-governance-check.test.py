@@ -105,31 +105,59 @@ def replace_all(path: Path, before: str, after: str) -> None:
     path.write_text(text.replace(before, after), encoding="utf-8")
 
 
+def replace_from_current_name(path: Path, candidates: tuple[str, str], before_suffix: str, after: str) -> None:
+    text = path.read_text(encoding="utf-8")
+    for current_name in candidates:
+        before = f"{before_suffix}{current_name}"
+        if before in text:
+            path.write_text(text.replace(before, f"{before_suffix}{after}", 1), encoding="utf-8")
+            return
+    raise AssertionError(f"fixture source missing any current name {candidates!r} in {path}")
+
+
+def replace_manifest_module_name(
+    path: Path, slug: str, candidates: tuple[str, str], name: str
+) -> None:
+    text = path.read_text(encoding="utf-8")
+    for current_name in candidates:
+        before = f"| {current_name} | [`doc/product/{slug}/prd.md`]("
+        if before in text:
+            after = f"| {name} | [`doc/product/{slug}/prd.md`]("
+            path.write_text(text.replace(before, after, 1), encoding="utf-8")
+            return
+    raise AssertionError(f"fixture manifest missing any current name {candidates!r} for {slug}")
+
+
 def set_module_display_name(root: Path, module: tuple[str, str, str, str], name: str) -> None:
-    """Set one module's manifest and canonical-root display name in a fixture."""
-    slug, _prd_id, legacy_name, _final_name = module
+    """Set one module's manifest and canonical-root display name from either P1/C0 source spelling."""
+    slug, _prd_id, legacy_name, final_name = module
+    current_names = (legacy_name, final_name)
     manifest = root / "doc/product/README.md"
-    replace(
-        manifest,
-        f"| {legacy_name} | [`doc/product/{slug}/prd.md`](",
-        f"| {name} | [`doc/product/{slug}/prd.md`](",
-    )
-    replace(
+    replace_manifest_module_name(manifest, slug, current_names, name)
+    replace_from_current_name(
         root / f"doc/product/{slug}/prd.md",
-        f"# {legacy_name} PRD",
-        f"# {name} PRD",
+        current_names,
+        "# ",
+        f"{name} PRD",
     )
-    replace(
+    replace_from_current_name(
         root / f"doc/product/{slug}/prd.md",
-        f"- 产品模块：{legacy_name}",
-        f"- 产品模块：{name}",
+        current_names,
+        "- 产品模块：",
+        name,
     )
 
 
 def set_all_module_display_names(root: Path) -> None:
-    """Switch every landing row, module heading, and root metadata label to P0 names."""
+    """Switch every landing row, root heading, and metadata label to P1 names."""
     for module in MODULE_NAME_COMPATIBILITY:
         set_module_display_name(root, module, module[3])
+
+
+def set_all_module_legacy_names(root: Path) -> None:
+    """Switch every landing row, root heading, and metadata label to C0 names."""
+    for module in MODULE_NAME_COMPATIBILITY:
+        set_module_display_name(root, module, module[2])
 
 
 def add_fenced_identity_pseudo_content(root: Path, module: tuple[str, str, str, str]) -> None:
@@ -222,9 +250,12 @@ def main() -> None:
     finally:
         shutil.rmtree(root)
 
-    # The unchanged fixture above proves all four legacy labels.  This fixture
+    # The unchanged P1 fixture proves all four final labels.  This scenario
     # switches every landing row, root heading, and 产品模块 metadata label to
-    # its explicit P0-final name and must remain accepted by C0.
+    # its explicit C0 legacy name and must remain accepted for compatibility.
+    scenario(None, set_all_module_legacy_names)
+
+    # The same helper must also preserve an explicit all-final positive case.
     scenario(None, set_all_module_display_names)
 
     # Arbitrary names and another module's name are not compatibility aliases.
@@ -283,8 +314,8 @@ def main() -> None:
         "entry-contract",
         lambda root: replace(
             root / "doc/product/README.md",
-            "| 玩家入口与发行 |",
-            "| 第五个产品 | [`doc/product/fifth/prd.md`](fifth/prd.md) | 非法。 |\n| 玩家入口与发行 |",
+            "| 玩家接入与发行 |",
+            "| 第五个产品 | [`doc/product/fifth/prd.md`](fifth/prd.md) | 非法。 |\n| 玩家接入与发行 |",
         ),
     )
     scenario(

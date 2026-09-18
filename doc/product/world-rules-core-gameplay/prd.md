@@ -1,8 +1,8 @@
-# 世界规则与核心玩法 PRD
+# 世界规则与玩法系统 PRD
 
 ## 文档身份
 
-- 产品模块：世界规则与核心玩法
+- 产品模块：世界规则与玩法系统
 - 产品模块 slug：`world-rules-core-gameplay`
 - 产品层唯一 PRD：`doc/product/world-rules-core-gameplay/prd.md`
 - 产品模块总入口：`doc/product/README.md`
