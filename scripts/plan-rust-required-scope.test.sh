@@ -1140,6 +1140,19 @@ if [[ "$integration_source_scope" != targeted ]]; then
   echo "expected immutable source projection to remain targeted, got $integration_source_scope" >&2
   exit 1
 fi
+integration_targeted_output="$("$ROOT_DIR/scripts/plan-rust-required-scope.sh" \
+  --event-name workflow_dispatch \
+  --run-mode integration_revalidation \
+  --base-ref "$integration_base" \
+  --head-ref "$integration_head" \
+  --task-uid task_22222222222222222222222222222222 \
+  --scope-base-oid "$integration_base" \
+  --impact-projection "$integration_projection" \
+  --changed-path scripts/pm/workflow-next.py)"
+assert_key_equals "$integration_targeted_output" scope targeted
+assert_key_equals "$integration_targeted_output" selected_capabilities workflow_governance
+assert_key_equals "$integration_targeted_output" impact_projection_status verified
+assert_key_equals "$integration_targeted_output" impact_projection_digest "$integration_projection_digest"
 integration_output="$("$ROOT_DIR/scripts/plan-rust-required-scope.sh" \
   --event-name workflow_dispatch \
   --run-mode integration_revalidation \

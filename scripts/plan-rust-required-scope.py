@@ -120,16 +120,18 @@ def main():
   actual_scope=vals["scope"]
   if projection["planner_config_sha256"] != digest: die("impact projection planner config identity mismatch")
   # The source projection remains digest-bound evidence, while a trusted
-  # integration revalidation intentionally upgrades its executed required-gate
-  # scope to full.  Keep strict planner identity matching for PR/other events;
-  # for workflow_dispatch, `scope=full` and the all-capability selector output
-  # are the explicit execution record and the projection digest remains the
-  # immutable source evidence link.
-  if a.run_mode not in {"integration_revalidation", "full_escalation"} and not (a.run_mode=="legacy" and a.event_name=="workflow_dispatch"):
+  # integration revalidation may retain the source projection's targeted or
+  # minimal scope, but target-only paths can widen its executed gate to full.
+  # In that case require the full capability set; full escalation and legacy
+  # workflow dispatch are always full-only.  The projection digest remains the
+  # immutable source evidence link in every mode.
+  full_only_mode = a.run_mode=="full_escalation" or (a.run_mode=="legacy" and a.event_name=="workflow_dispatch")
+  integration_widened_to_full = a.run_mode=="integration_revalidation" and actual_scope=="full"
+  if not full_only_mode and not integration_widened_to_full:
    if projection["ci_scope"] != actual_scope: die("impact projection planner scope identity mismatch")
    if projection["ci_capabilities"] != actual_capabilities: die("impact projection planner capabilities identity mismatch")
   elif actual_scope != "full" or actual_capabilities != sorted(CAPABILITIES):
-   die("integration revalidation/full escalation impact projection execution scope is not full")
+   die("full-only impact projection execution scope is not full")
   vals.update({"impact_projection_schema":projection["schema"],"impact_projection_digest":projection["projection_digest"],"impact_projection_status":"verified","test_profile":projection["test_profile"],"declared_tests":";".join(projection["declared_tests"]),"planner_digest":projection["planner_digest"]})
  text="\n".join(f"{k}={v}" for k,v in vals.items())+"\n"
  if a.github_output: Path(a.github_output).open("a").write(text)
