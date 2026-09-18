@@ -226,12 +226,34 @@ class ProvenanceTests(unittest.TestCase):
   self.payload['planner']=planner
   raw=io.BytesIO()
   with zipfile.ZipFile(raw,'w') as archive:archive.writestr(self.api.ARTIFACT+'.json',json.dumps(self.payload))
+  profile_payloads={
+   'plan':b'{"plan":true}\n','results':b'[]\n','receipt':b'{"status":"passed"}\n',
+  }
+  envelope={
+   'schema':'oasis7-cargo-package-profile-envelope/v1','repository':'owner/repo',
+   'task_uid':self.uid,'pr_number':12,
+   'workflow_ref':self.payload['workflow_ref'],'workflow_sha':self.base,
+   'run_id':9,'run_attempt':1,'check_name':'required-gate','check_app_id':42,'check_run_id':10,
+   'integration_base':self.base,'source_head':self.head,'tested_tree':self.payload['tested_tree_oid'],
+  }
+  for key,value in profile_payloads.items():
+   envelope[key+'_digest']='sha256:'+hashlib.sha256(value).hexdigest()
+  profile_payloads['envelope']=(json.dumps(envelope)+'\n').encode()
+  artifact_names={11:self.api.ARTIFACT,21:'cargo-package-profile-envelope',22:'cargo-package-profile-plan',23:'cargo-package-profile-results',24:'cargo-package-profile-receipt'}
   def reader(*args):
    if '/compare/' in args[-1]:return {'merge_base_commit':{'sha':self.payload['scope_base_oid']}}
+   if 'artifacts?' in args[-1]:return {'artifacts':[{'id':identifier,'name':name,'expired':False,'workflow_run':{'id':9}} for identifier,name in artifact_names.items()]}
    return self.read(*args)
+  def profile_artifact(repository,identifier):
+   if identifier==11:return raw.getvalue()
+   key={21:'envelope',22:'plan',23:'results',24:'receipt'}[identifier]
+   member=receipt.PROFILE_ARTIFACTS[key][1]
+   zipped=io.BytesIO()
+   with zipfile.ZipFile(zipped,'w') as archive:archive.writestr(member,profile_payloads[key])
+   return zipped.getvalue()
   output=io.StringIO()
   argv=['ci-ready-receipt.py','--repository','owner/repo','--task-uid',self.uid,'--task-issue-number','1','--pr-number','12','--check-app-id','42','--planner-digest','auto','--integration-run-id','9']
-  with patch.dict(sys.modules,{'integration_ci':self.api}),patch.object(self.api,'gh',side_effect=reader),patch.object(receipt,'gh',side_effect=reader),patch.object(self.api.subprocess,'check_output',return_value=raw.getvalue()),patch.object(sys,'argv',argv),redirect_stdout(output):
+  with patch.dict(sys.modules,{'integration_ci':self.api}),patch.object(self.api,'gh',side_effect=reader),patch.object(receipt,'gh',side_effect=reader),patch.object(receipt,'artifact_bytes',side_effect=profile_artifact),patch.object(self.api.subprocess,'check_output',return_value=raw.getvalue()),patch.object(sys,'argv',argv),redirect_stdout(output):
    receipt.main()
   result=json.loads(output.getvalue())
   self.assertEqual(result['integration_run_id'],9)

@@ -8,6 +8,12 @@ FAIL_STATES = ("stale", "wrong_head", "wrong_app", "superseded", "cancelled", "u
 PLAN_MARKER="oasis7-required-plan-v1"
 PLAN_ARTIFACT=PLAN_MARKER
 PLAN_MEMBER=f"{PLAN_MARKER}.json"
+PROFILE_ARTIFACTS={
+    "envelope": ("cargo-package-profile-envelope", "cargo-package-profile-envelope.json"),
+    "plan": ("cargo-package-profile-plan", "cargo-package-profile-plan.json"),
+    "results": ("cargo-package-profile-results", "cargo-package-profile-results.json"),
+    "receipt": ("cargo-package-profile-receipt", "cargo-package-profile-receipt.json"),
+}
 # Keep every planner gate selector in the receipt authority digest, including
 # non-Rust governance gates that do not appear in the Rust test matrix.
 RUN_FIELDS=(
@@ -104,6 +110,52 @@ def planner_for_run(repository, check_run, *, base_oid, head_oid):
     if not isinstance(envelope.get("planner"),dict):
         raise SystemExit("ci-ready-receipt: uncertain incomplete planner artifact envelope")
     return canonical_planner(envelope["planner"])
+
+def cargo_package_profile_for_run(repository, check_run, proof, *, task_uid, task_issue_number, pr_number):
+    workflow_run_id=int(proof.get("workflow_run_id") or 0)
+    if workflow_run_id < 1:
+        raise SystemExit("ci-ready-receipt: package profile workflow run identity missing")
+    artifacts=[]
+    for page in range(1,101):
+        response=gh("api",f"repos/{repository}/actions/runs/{workflow_run_id}/artifacts?per_page=100&page={page}")
+        batch=response.get("artifacts",[]); artifacts.extend(batch)
+        if len(batch)<100: break
+    else: raise SystemExit("ci-ready-receipt: package profile artifact pagination overflow")
+    payloads={}
+    for key,(artifact_name,member_name) in PROFILE_ARTIFACTS.items():
+        matches=[item for item in artifacts if item.get("name")==artifact_name]
+        if len(matches)!=1 or matches[0].get("expired"):
+            raise SystemExit(f"ci-ready-receipt: package profile artifact missing, ambiguous, or expired: {artifact_name}")
+        artifact=matches[0]
+        if int((artifact.get("workflow_run") or {}).get("id") or 0)!=workflow_run_id:
+            raise SystemExit("ci-ready-receipt: package profile artifact belongs to wrong run")
+        try:
+            with zipfile.ZipFile(io.BytesIO(artifact_bytes(repository,artifact["id"]))) as archive:
+                if archive.namelist()!=[member_name]: raise ValueError("unexpected archive members")
+                payloads[key]=archive.read(member_name)
+        except Exception as exc:
+            raise SystemExit(f"ci-ready-receipt: malformed package profile artifact: {exc}")
+    try: envelope=json.loads(payloads["envelope"])
+    except Exception as exc: raise SystemExit(f"ci-ready-receipt: malformed package profile envelope: {exc}")
+    expected={
+      "schema":"oasis7-cargo-package-profile-envelope/v1","repository":repository,
+      "task_uid":task_uid,"pr_number":pr_number,"workflow_ref":proof.get("workflow_ref"),
+      "workflow_sha":proof.get("workflow_sha"),"run_id":workflow_run_id,
+      "run_attempt":proof.get("run_attempt"),"check_name":check_run.get("name"),
+      "check_app_id":(check_run.get("app") or {}).get("id"),"check_run_id":check_run.get("id"),
+      "integration_base":proof.get("base_oid"),"source_head":proof.get("head_oid"),
+      "tested_tree":proof.get("tested_tree_oid"),
+    }
+    if "task_issue_number" in envelope: expected["task_issue_number"]=task_issue_number
+    for key,value in expected.items():
+        if envelope.get(key)!=value:
+            raise SystemExit(f"ci-ready-receipt: package profile identity mismatch: {key}")
+    digest_fields={"plan":"plan_digest","results":"results_digest","receipt":"receipt_digest"}
+    for key,digest_field in digest_fields.items():
+        expected_digest="sha256:"+hashlib.sha256(payloads[key]).hexdigest()
+        if envelope.get(digest_field)!=expected_digest:
+            raise SystemExit(f"ci-ready-receipt: package profile digest mismatch: {key}")
+    return envelope
 
 def now(): return dt.datetime.now(dt.timezone.utc).isoformat()
 
@@ -216,6 +268,11 @@ def main():
         payload.update(integration_run_id=proof['workflow_run_id'],tested_tree_oid=proof['tested_tree_oid'],tested_commit_oid=proof['tested_commit_oid'],workflow_sha=proof['workflow_sha'])
         if old is None or any(key in old for key in ('request_id', 'workflow_ref', 'run_attempt')):
             payload.update(workflow_ref=proof['workflow_ref'],request_id=proof['request_id'],request_created_at=proof['request_created_at'],run_id=proof['run_id'],run_attempt=proof['run_attempt'],live_validation='ci-ready-receipt-live',trusted_integration_artifact=True)
+        payload["cargo_package_profile"]=cargo_package_profile_for_run(
+            a.repository,run,proof,task_uid=a.task_uid,
+            task_issue_number=a.task_issue_number,pr_number=a.pr_number)
+    elif old is not None and "cargo_package_profile" in old:
+        raise ValueError("ci-ready-receipt: package profile evidence is detached from a trusted integration run")
     payload["review_evidence_digest"]=review_evidence_digest(payload)
     if old is not None:
         for key,val in payload.items():

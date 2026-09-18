@@ -73,6 +73,8 @@ jobs:
     if: github.event_name == 'push' || github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')
     runs-on: ubuntu-24.04
     permissions:
+      actions: read
+      checks: read
       contents: read
       issues: read
       pull-requests: read
@@ -509,6 +511,38 @@ jobs:
               --source-head "${OASIS7_CARGO_PROFILE_SOURCE_HEAD}" \
               --tested-tree "${OASIS7_CARGO_PROFILE_TESTED_TREE}" \
               >"${profile_output}/cargo-package-profile-receipt.json"
+            python3 -I - "${OASIS7_CARGO_PROFILE_PLAN}" "${OASIS7_CARGO_PROFILE_RESULTS}" \
+              "${profile_output}/cargo-package-profile-receipt.json" \
+              "${profile_output}/cargo-package-profile-envelope.json" <<'PY'
+          import hashlib, json, os, pathlib, subprocess, sys
+          plan_path, results_path, receipt_path, envelope_path = map(pathlib.Path, sys.argv[1:])
+          plan = json.loads(plan_path.read_text(encoding="utf-8"))
+          checks = json.loads(subprocess.check_output([
+              "gh", "api", f"repos/{os.environ['GITHUB_REPOSITORY']}/commits/{os.environ['GITHUB_SHA']}/check-runs?per_page=100"
+          ], text=True)).get("check_runs", [])
+          matches = [check for check in checks
+                     if check.get("name") == "required-gate"
+                     and f"/actions/runs/{os.environ['GITHUB_RUN_ID']}" in str(check.get("details_url") or "")]
+          if len(matches) != 1:
+              raise SystemExit("exact required-gate check run identity is unavailable")
+          check = matches[0]
+          digest = lambda path: "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+          envelope = {
+              "schema": "oasis7-cargo-package-profile-envelope/v1",
+              "repository": os.environ["GITHUB_REPOSITORY"],
+              "task_uid": "${{ inputs.task_uid }}", "pr_number": int("${{ inputs.pr_number }}"),
+              "workflow_ref": os.environ["GITHUB_WORKFLOW_REF"],
+              "workflow_sha": os.environ["GITHUB_WORKFLOW_SHA"],
+              "run_id": int(os.environ["GITHUB_RUN_ID"]),
+              "run_attempt": int(os.environ["GITHUB_RUN_ATTEMPT"]),
+              "check_name": "required-gate", "check_app_id": int(check["app"]["id"]),
+              "check_run_id": int(check["id"]),
+              "integration_base": plan["integration_base"], "source_head": plan["source_head"],
+              "tested_tree": plan["tested_tree"], "plan_digest": digest(plan_path),
+              "results_digest": digest(results_path), "receipt_digest": digest(receipt_path),
+          }
+          envelope_path.write_text(json.dumps(envelope, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+          PY
             fi
             CI_VERBOSE=1 bash "${RUNNER_TEMP}/integration-planner/ci-tests.sh" required --repo-root "${GITHUB_WORKSPACE}" --impact-projection "${RUNNER_TEMP}/impact-projection.json"
           elif [[ "${GITHUB_EVENT_NAME}" == "pull_request" && -f "${RUNNER_TEMP}/impact-projection.json" ]]; then
@@ -536,6 +570,13 @@ jobs:
         with:
           name: cargo-package-profile-receipt
           path: output/cargo-package-profile/cargo-package-profile-receipt.json
+          if-no-files-found: error
+      - name: Upload Cargo package profile envelope
+        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
+        uses: actions/upload-artifact@v7
+        with:
+          name: cargo-package-profile-envelope
+          path: output/cargo-package-profile/cargo-package-profile-envelope.json
           if-no-files-found: error
       - name: Upload selected Viewer performance evidence
         if: ${{ always() && steps.scope.outputs.run_viewer_perf_smoke == 'true' }}
@@ -751,6 +792,7 @@ jobs:
       - id: preflight
         name: Validate human-authorized full escalation
         env:
+          GH_TOKEN: ${{ github.token }}
           TASK_UID: ${{ inputs.task_uid }}
           PR_NUMBER: ${{ inputs.pr_number }}
           EXPECTED_HEAD: ${{ inputs.expected_head }}
@@ -759,6 +801,29 @@ jobs:
         run: |
           actual_head="$(git rev-parse HEAD)"
           started_at="$(date -u +'%Y-%m-%dT%H:%M:%SZ')"
+          python3 -I - <<'PY'
+          import json, os, re, subprocess
+          repo=os.environ["GITHUB_REPOSITORY"]
+          repository=json.loads(subprocess.check_output(["gh","api",f"repos/{repo}"],text=True))
+          default=repository.get("default_branch")
+          if os.environ["GITHUB_REF"] != f"refs/heads/{default}" or os.environ["GITHUB_WORKFLOW_SHA"] != os.environ["GITHUB_SHA"]:
+              raise SystemExit("full escalation must execute trusted current default-branch workflow authority")
+          pr=json.loads(subprocess.check_output(["gh","api",f"repos/{repo}/pulls/{os.environ['PR_NUMBER']}"],text=True))
+          if (pr.get("state") != "open" or pr.get("merged")
+              or (pr.get("base") or {}).get("ref") != default
+              or (pr.get("base") or {}).get("sha") != os.environ["GITHUB_SHA"]
+              or (pr.get("head") or {}).get("sha") != os.environ["EXPECTED_HEAD"]):
+              raise SystemExit("full escalation live PR source/target identity mismatch")
+          refs=re.findall(r"(?:Refs|Fixes|Closes)\s+#([0-9]+)",pr.get("body") or "",re.I)
+          if len(refs) != 1:
+              raise SystemExit("full escalation requires one reciprocal task Issue")
+          issue=json.loads(subprocess.check_output(["gh","api",f"repos/{repo}/issues/{refs[0]}"],text=True))
+          body=(issue.get("body") or "").replace("\r\n","\n")
+          if re.findall(r"^task_uid: (task_[0-9a-f]{32})$",body,re.M) != [os.environ["TASK_UID"]]:
+              raise SystemExit("full escalation live task UID mismatch")
+          if re.findall(r"^- pr_number: `([0-9]+)`$",body,re.M) != [os.environ["PR_NUMBER"]]:
+              raise SystemExit("full escalation live task/PR binding mismatch")
+          PY
           python3 ./scripts/full-escalation-receipt.py validate \
             --trigger "${GITHUB_EVENT_NAME}" --repository "${GITHUB_REPOSITORY}" \
             --run-id "${GITHUB_RUN_ID}" --run-attempt "${GITHUB_RUN_ATTEMPT}" --actor "${GITHUB_ACTOR}" \

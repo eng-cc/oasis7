@@ -3,6 +3,7 @@
 import argparse
 import datetime as dt
 import json
+import os
 import re
 from pathlib import Path
 
@@ -50,6 +51,17 @@ def validate(args):
             die(f"{name} must be a lowercase git object id")
     if args.expected_head != args.actual_head:
         die("expected_head does not match actual_head")
+    trusted_ref = os.environ.get("GITHUB_REF")
+    trusted_sha = os.environ.get("GITHUB_SHA")
+    trusted_repository = os.environ.get("GITHUB_REPOSITORY")
+    if trusted_ref and args.ref != trusted_ref:
+        die("ref does not match trusted default-branch workflow authority")
+    if trusted_sha and args.workflow_commit != trusted_sha:
+        die("workflow_commit does not match executed workflow authority")
+    if trusted_sha and args.actual_head != args.workflow_commit:
+        die("actual_head does not match executed workflow authority")
+    if trusted_repository and args.repository != trusted_repository:
+        die("repository does not match executed workflow authority")
     if args.command != FULL_COMMAND:
         die("command must bind the canonical full test command")
     started = valid_timestamp(args.started_at, "started_at")
