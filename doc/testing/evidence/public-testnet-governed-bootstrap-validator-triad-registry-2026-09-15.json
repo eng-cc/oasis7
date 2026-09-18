@@ -1,0 +1,42 @@
+{
+  "schema_version": "oasis7.public_testnet_validator_triad_registry.v1",
+  "network_tier": "public_testnet",
+  "topology": "three_equal_validator",
+  "slot_id": "governance.finality.v1",
+  "threshold": 2,
+  "threshold_bps": 0,
+  "quorum": {
+    "numerator": 2,
+    "denominator": 3,
+    "total_stake": 300,
+    "required_stake": 200
+  },
+  "governance": {
+    "signer_count": 3,
+    "threshold": 2,
+    "threshold_bps": 6667
+  },
+  "validators": [
+    {
+      "node_id": "triad-testnet-sequencer",
+      "scheme": "ed25519",
+      "finality_signer_public_key": "e01e5c34dee2da3087653bc4cec02be01632f56250a800994c96ea44ae6f3690",
+      "stake": 100
+    },
+    {
+      "node_id": "triad-testnet-storage",
+      "scheme": "ed25519",
+      "finality_signer_public_key": "1f530cae002d7adb9a6c3dd8f4bc861226f112f88fdd252b28b6494019e21c33",
+      "stake": 100
+    },
+    {
+      "node_id": "triad-testnet-validator-47",
+      "scheme": "ed25519",
+      "finality_public_key": "cf8c9c2b5637d20d0efa585f0fb7f503b19a1aaba02fb807637e67ed40919fc2",
+      "finality_signer_public_key": "cf8c9c2b5637d20d0efa585f0fb7f503b19a1aaba02fb807637e67ed40919fc2",
+      "stake": 100,
+      "root_public_key": "b21137667506c6c9d5eb30e2cefac73950396d1a58e70665cfdb5afec8943ec6",
+      "libp2p_peer_id": "12D3KooWCdQLY6Qm9sWqPqEhJTmPdY3Ykw1w5QnTh7qmSgYDazQZ"
+    }
+  ]
+}

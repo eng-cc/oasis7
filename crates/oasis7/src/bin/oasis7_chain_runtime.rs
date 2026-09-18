@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 use std::env;
-use std::fs;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream, UdpSocket};
 use std::path::{Path, PathBuf};
@@ -80,6 +79,10 @@ mod rebuild_status_tests;
 mod reward_runtime_settlement;
 #[path = "oasis7_chain_runtime/reward_runtime_worker.rs"]
 mod reward_runtime_worker;
+#[path = "oasis7_chain_runtime/runtime_authority.rs"]
+mod runtime_authority;
+#[path = "oasis7_chain_runtime/runtime_file_io.rs"]
+mod runtime_file_io;
 #[path = "oasis7_chain_runtime/runtime_status_util.rs"]
 mod runtime_status_util;
 #[path = "oasis7_chain_runtime/startup_reconcile.rs"]
@@ -124,6 +127,7 @@ use reward_runtime_worker::{
     RewardRuntimeWorkerConfig, SharedRewardRuntimeMetrics, init_shared_metrics, poll_worker_error,
     snapshot_metrics, start_reward_runtime_worker, stop_reward_runtime_worker,
 };
+pub(crate) use runtime_file_io::write_bytes_atomic;
 #[cfg(test)]
 use status_payload::build_chain_status_payload;
 #[cfg(test)]
@@ -443,6 +447,16 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
     }
 
     config = apply_traffic_profile_to_node_config(config, &options)?;
+    let runtime_authority_binding =
+        runtime_authority::load_runtime_authority_binding_for_node_with_world_id(
+            paths.execution_world_dir.as_path(),
+            options.node_id.as_str(),
+            options.node_role,
+            options.world_id.as_str(),
+            options.genesis_validator_registry_path.as_deref(),
+            options.deployment_inventory_path.as_deref(),
+            options.loaded_network_tier_manifest.as_ref(),
+        )?;
     governance_registry::ensure_world_governance_validator_registry(
         paths.execution_world_dir.as_path(),
         options.genesis_validator_registry_path.as_deref(),
@@ -671,6 +685,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
         Arc::clone(&reward_runtime_metrics),
         Arc::clone(&storage_metrics),
         feedback_submit_signer,
+        runtime_authority_binding,
     )?;
 
     runtime_status_util::print_runtime_ready_summary(
@@ -1128,27 +1143,6 @@ fn build_validator_signer_public_keys(
         }
     }
     Ok(bindings)
-}
-
-#[allow(dead_code)]
-fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent)
-                .map_err(|err| format!("create state dir {} failed: {}", parent.display(), err))?;
-        }
-    }
-    let temp_path = path.with_extension("json.tmp");
-    fs::write(&temp_path, bytes)
-        .map_err(|err| format!("write state temp {} failed: {}", temp_path.display(), err))?;
-    fs::rename(&temp_path, path).map_err(|err| {
-        format!(
-            "rename state temp {} -> {} failed: {}",
-            temp_path.display(),
-            path.display(),
-            err
-        )
-    })
 }
 
 #[cfg(test)]

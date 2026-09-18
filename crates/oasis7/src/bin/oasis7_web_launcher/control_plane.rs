@@ -938,7 +938,7 @@ pub(super) fn build_chain_runtime_args(config: &LauncherConfig) -> Result<Vec<St
     if chain_node_id.is_empty() {
         return Err("chain node id cannot be empty".to_string());
     }
-    let chain_role = parse_chain_role(config.chain_node_role.as_str())?;
+    let chain_role = effective_chain_runtime_role(config)?;
     let chain_p2p_user_mode = parse_chain_p2p_user_mode(config.chain_p2p_user_mode.as_str())?;
     if chain_p2p_user_mode == "public_entry" && !config.chain_p2p_accept_public_entry {
         return Err(
@@ -990,7 +990,7 @@ pub(super) fn build_chain_runtime_args(config: &LauncherConfig) -> Result<Vec<St
         "--execution-world-dir".to_string(),
         execution_world_dir,
         "--node-role".to_string(),
-        chain_role,
+        chain_role.clone(),
         "--p2p-user-mode".to_string(),
         chain_p2p_user_mode,
         "--node-tick-ms".to_string(),
@@ -1035,8 +1035,76 @@ pub(super) fn build_chain_runtime_args(config: &LauncherConfig) -> Result<Vec<St
         args.push("--replication-network-peer".to_string());
         args.push(peer);
     }
+    if let Some(registry_path) =
+        observer_registry_path_from_manifest(network_tier_manifest.as_str(), chain_role.as_str())
+    {
+        args.push("--genesis-validator-registry".to_string());
+        args.push(registry_path);
+    }
     Ok(args)
 }
+
+fn observer_registry_path_from_manifest(manifest_path: &str, chain_role: &str) -> Option<String> {
+    if chain_role != "observer" {
+        return None;
+    }
+    let manifest_path = Path::new(manifest_path.trim());
+    let manifest_bytes = std::fs::read(manifest_path).ok()?;
+    let manifest: serde_json::Value = serde_json::from_slice(manifest_bytes.as_slice()).ok()?;
+    if manifest.get("tier").and_then(serde_json::Value::as_str) != Some("public_testnet")
+        || manifest
+            .get("validator_policy")
+            .and_then(serde_json::Value::as_object)
+            .and_then(|policy| policy.get("allow_observer_nodes"))
+            != Some(&serde_json::Value::Bool(true))
+    {
+        return None;
+    }
+    let registry_ref = manifest
+        .get("deployment_validator_registry")
+        .and_then(serde_json::Value::as_object)
+        .and_then(|binding| binding.get("ref"))
+        .and_then(serde_json::Value::as_str)?;
+    let registry_ref_path = Path::new(registry_ref);
+    if registry_ref_path.is_absolute()
+        || registry_ref_path.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::CurDir | std::path::Component::ParentDir
+            )
+        })
+    {
+        return None;
+    }
+    let registry_name = registry_ref_path.file_name()?.to_str()?;
+    if registry_name.is_empty() {
+        return None;
+    }
+    let registry_path = manifest_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(registry_name);
+    registry_path
+        .is_file()
+        .then(|| registry_path.to_string_lossy().into_owned())
+}
+
+fn effective_chain_runtime_role(config: &LauncherConfig) -> Result<String, String> {
+    let role = parse_chain_role(config.chain_node_role.as_str())?;
+    if canonical_chain_network_tier(config.chain_network_tier.as_str()) == Some("public_testnet")
+        && role == "sequencer"
+    {
+        // The web launcher has no managed-triad inventory input.  Keep its
+        // public-testnet lane on the non-managed observer contract; managed
+        // identities still fail closed in runtime authority preflight.
+        return Ok("observer".to_string());
+    }
+    Ok(role)
+}
+
+#[cfg(test)]
+#[path = "control_plane/observer_registry_launcher_tests.rs"]
+mod observer_registry_launcher_tests;
 
 pub(super) fn finalize_chain_start_outcome(
     state: &ServiceState,

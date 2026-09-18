@@ -1171,6 +1171,58 @@ validators = registry_data.get('validators')
 if not isinstance(validators, list) or not validators:
     raise SystemExit(f'GENESIS_VALIDATOR_REGISTRY_PATH has no validators: {registry_path}')
 
+registry_sha256 = hashlib.sha256(registry_path.read_bytes()).hexdigest()
+registry_canonical = {
+    'signer_bindings': {
+        'governance.finality.v1.{}'.format(item['node_id']): str(item['finality_signer_public_key']).lower()
+        for item in validators
+    },
+    'slot_id': registry_data.get('slot_id'),
+    'threshold': registry_data.get('threshold'),
+    'threshold_bps': registry_data.get('threshold_bps'),
+    'validator_stakes': {
+        'governance.finality.v1.{}'.format(item['node_id']): item['stake']
+        for item in validators
+    },
+}
+registry_semantic_sha256 = hashlib.sha256(
+    json.dumps(registry_canonical, ensure_ascii=False, sort_keys=True, separators=(',', ':')).encode()
+).hexdigest()
+
+# A pair rebuild can be the staging boundary for the exact governed triad.
+# In that mode every existing managed node must receive the same triad
+# inventory and digest.  Never borrow validator-47's node.env: the inventory
+# is an authority artifact, while each existing host keeps its own role/env.
+triad_inventory_path = config_dir / 'public-testnet-validator-triad-inventory.v1.json'
+triad_rollout = len(validators) == 3
+inventory_sha256 = ''
+if triad_rollout:
+    if triad_inventory_path.is_symlink() or not triad_inventory_path.is_file():
+        raise SystemExit(f'missing regular triad deployment inventory: {triad_inventory_path}')
+    inventory_sha256 = hashlib.sha256(triad_inventory_path.read_bytes()).hexdigest()
+    if inventory_sha256 != '3313a899630e3013d623adfee252556a124c25d059406bcf98a541ae2fcdacd5':
+        raise SystemExit('triad deployment inventory is not the canonical governed authority')
+    inventory_data = json.loads(triad_inventory_path.read_text(encoding='utf-8'))
+    if inventory_data.get('schema_version') != 'oasis7.public_testnet_validator_triad_inventory.v1':
+        raise SystemExit('triad deployment inventory schema mismatch')
+    if inventory_data.get('network_tier') != 'public_testnet' or inventory_data.get('topology') != 'three_equal_validator':
+        raise SystemExit('triad deployment inventory network/topology mismatch')
+    inventory_authority = inventory_data.get('authority')
+    inventory_nodes = inventory_data.get('nodes')
+    if not isinstance(inventory_authority, dict) or not isinstance(inventory_nodes, dict):
+        raise SystemExit('triad deployment inventory authority/nodes are missing')
+    if inventory_authority.get('generated_registry_sha256') != registry_sha256:
+        raise SystemExit('triad deployment inventory generated registry digest mismatch')
+    if inventory_authority.get('generated_registry_semantic_sha256') != registry_semantic_sha256:
+        raise SystemExit('triad deployment inventory generated registry semantic digest mismatch')
+    registry_node_ids = {item.get('node_id') for item in validators}
+    inventory_node_ids = {
+        item.get('node_id') for item in inventory_nodes.values()
+        if isinstance(item, dict) and isinstance(item.get('node_id'), str)
+    }
+    if inventory_node_ids != registry_node_ids:
+        raise SystemExit('triad deployment inventory validator identities mismatch')
+
 signer_pairs = []
 for validator in validators:
     node_id = validator.get('node_id')
@@ -1191,12 +1243,64 @@ for line in lines:
     elif line.startswith('POS_ADAPTIVE_TICK_SCHEDULER='):
         rendered.append('POS_ADAPTIVE_TICK_SCHEDULER=1')
         rewrote_adaptive_tick_scheduler = True
+    elif line.startswith('DEPLOYMENT_INVENTORY_PATH=') or line.startswith('DEPLOYMENT_INVENTORY_SHA256='):
+        # Pair-era env files may contain stale inventory claims.  Remove them
+        # unless this exact three-validator handoff has been validated below.
+        continue
+    elif line.startswith('GENESIS_VALIDATOR_REGISTRY_SHA256=') or line.startswith('GENESIS_VALIDATOR_REGISTRY_SEMANTIC_SHA256='):
+        # Replace stale pair-era registry claims only after triad validation.
+        if triad_rollout:
+            continue
+        rendered.append(line)
+    elif line.startswith('P2P_NODE_ROLE=') and triad_rollout:
+        continue
     else:
         rendered.append(line)
 if not rewrote_signers:
     rendered.append(f'NODE_VALIDATOR_SIGNERS_CSV={signers_csv}')
 if not rewrote_adaptive_tick_scheduler:
     rendered.append('POS_ADAPTIVE_TICK_SCHEDULER=1')
+if triad_rollout:
+    expected_registry_path = config_dir / 'public-testnet-governed-bootstrap-validator-registry-2026-06-06.json'
+    if registry_path.is_symlink() or registry_path.resolve() != expected_registry_path.resolve():
+        raise SystemExit(
+            'triad pair rebuild must use the staged governed validator registry path; '
+            f'got {registry_path}'
+        )
+    node_id = env_values.get('NODE_ID')
+    expected_node_ids = {
+        'triad-testnet-sequencer',
+        'triad-testnet-storage',
+    }
+    if node_id not in expected_node_ids:
+        raise SystemExit(
+            'triad pair rebuild must update only sequencer/storage node.env; '
+            f'got NODE_ID={node_id!r}'
+        )
+    expected_role = 'storage' if node_id == 'triad-testnet-storage' else 'sequencer'
+    expected_p2p_role = 'full_storage' if expected_role == 'storage' else 'sequencer'
+    if env_values.get('NODE_ROLE') != expected_role:
+        raise SystemExit(
+            'triad pair rebuild must preserve the existing node role contract; '
+            f'expected NODE_ROLE={expected_role!r}, got {env_values.get("NODE_ROLE")!r}'
+        )
+    if env_values.get('P2P_NODE_ROLE') not in (None, expected_p2p_role):
+        raise SystemExit(
+            'triad pair rebuild found an incompatible P2P_NODE_ROLE; '
+            f'expected {expected_p2p_role!r}, got {env_values.get("P2P_NODE_ROLE")!r}'
+        )
+    expected_inventory_node = (
+        inventory_nodes.get('sequencer-204')
+        if node_id == 'triad-testnet-sequencer'
+        else inventory_nodes.get('storage-205')
+    )
+    if not isinstance(expected_inventory_node, dict) or expected_inventory_node.get('node_id') != node_id:
+        raise SystemExit(f'triad deployment inventory does not bind {node_id}')
+    rendered.append(f'GENESIS_VALIDATOR_REGISTRY_SHA256={registry_sha256}')
+    rendered.append(f'GENESIS_VALIDATOR_REGISTRY_SEMANTIC_SHA256={registry_semantic_sha256}')
+    rendered.append(f'P2P_NODE_ROLE={expected_p2p_role}')
+    rendered.append('DEPLOYMENT_INVENTORY_PATH=config/public-testnet-validator-triad-inventory.v1.json')
+    rendered.append(f'DEPLOYMENT_INVENTORY_SHA256={inventory_sha256}')
 env_path.write_text('\\n'.join(rendered) + '\\n', encoding='utf-8')
 
 digest = hashlib.sha256()

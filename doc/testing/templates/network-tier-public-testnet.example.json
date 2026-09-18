@@ -6,8 +6,8 @@
   "chain_id": "oasis7-public-testnet-example",
   "runtime_refs": {
     "release_candidate_bundle_ref": "output/release-candidates/public-testnet-example.json",
-    "genesis_ref": "doc/testing/templates/public-testnet-genesis.example.json",
-    "bootstrap_peer_ref": "doc/testing/templates/public-testnet-bootstrap.example.txt"
+    "genesis_ref": "public-testnet-genesis.example.json",
+    "bootstrap_peer_ref": "public-testnet-bootstrap.example.txt"
   },
   "signer_truth_refs": {
     "governance_public_manifest_ref": "doc/testing/evidence/public-testnet-governance-public-signers-2026-06-05.json",
@@ -22,8 +22,13 @@
   "validator_policy": {
     "governance_mode": "governance_registry",
     "validator_admission": "allowlist_or_governed_candidate",
-    "target_validator_count": 2,
+    "target_validator_count": 3,
     "allow_observer_nodes": true
+  },
+  "deployment_validator_registry": {
+    "ref": "public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json",
+    "sha256": "a6bfa524e32f2f54c4665d58f18e87b5fa21845e17c14269be1cb1f978adb50f",
+    "semantic_sha256": "aa6f6f7f367470d3b2c7282d489422d3eef14370446aa1fe8420fc94d776950d"
   },
   "token_policy": {
     "symbol": "OC",

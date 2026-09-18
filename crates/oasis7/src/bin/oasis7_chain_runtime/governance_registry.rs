@@ -305,7 +305,7 @@ fn import_genesis_validator_registry(
     })
 }
 
-fn load_genesis_finality_registry(
+pub(super) fn load_genesis_finality_registry(
     manifest_path: &Path,
 ) -> Result<GovernanceFinalitySignerRegistry, String> {
     let manifest_bytes = std::fs::read(manifest_path).map_err(|err| {

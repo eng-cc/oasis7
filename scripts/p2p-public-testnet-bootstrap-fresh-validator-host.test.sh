@@ -52,14 +52,20 @@ done
 cat >"$ops_bundle_dir/bin/service-readback" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
-printf '%s\n' '{"schema_version":"oasis7.human_direct_ssh_readback.v1","active":false,"running":false,"service_state":"stopped","independently_observed":true,"listeners":[]}'
+if [[ -n "${OASIS7_TEST_READBACK_LOG:-}" ]]; then
+  printf '%s\n' "$*" >>"$OASIS7_TEST_READBACK_LOG"
+fi
+printf '%s\n' '{"schema_version":"oasis7.human_direct_ssh_readback.v1","active":false,"running":false,"service_state":"stopped","independently_observed":true,"unit_file_state":"disabled","no_process":true,"no_listener":true,"listeners":[]}'
 SH
 chmod +x "$ops_bundle_dir/bin/service-readback"
 cat >"$bundle_dir/bin/oasis7_chain_runtime" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 
-[[ "${1:-}" == "provision-identity" ]] || exit 64
+if [[ -n "${OASIS7_TEST_RUNTIME_LOG:-}" ]]; then
+  printf '%s\n' "${1:-}" >>"$OASIS7_TEST_RUNTIME_LOG"
+fi
+command_name=${1:-}
 shift
 config_dir=""
 node_id=""
@@ -71,12 +77,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 [[ "$config_dir" == /* && -n "$node_id" ]] || exit 64
-mkdir -p "$config_dir"
 key_path="$config_dir/node-keypair.toml"
-umask 077
-printf 'fixture-key-file-only\n' >"$key_path"
-chmod 600 "$key_path"
-python3 - "$config_dir" "$node_id" "$key_path" <<'PY'
+if [[ "$command_name" == provision-identity ]]; then
+  mkdir -p "$config_dir"
+  umask 077
+  printf 'fixture-key-file-only\n' >"$key_path"
+  chmod 600 "$key_path"
+  python3 - "$config_dir" "$node_id" "$key_path" <<'PY'
 import json
 import pathlib
 import sys
@@ -94,6 +101,35 @@ print(json.dumps({
     "node_keypair_config_mode": "0600",
 }, sort_keys=True))
 PY
+elif [[ "$command_name" == identity-receipt ]]; then
+  test -f "$key_path"
+  peer_id=${OASIS7_TEST_RUNTIME_PEER_ID:-validator-47-peer}
+  python3 - "$config_dir" "$node_id" "$key_path" "$peer_id" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+
+config_dir = pathlib.Path(sys.argv[1]).resolve()
+node_id = sys.argv[2]
+key_path = pathlib.Path(sys.argv[3]).resolve()
+peer_id = sys.argv[4]
+metadata = key_path.stat()
+print(json.dumps({
+    "schema_version": "oasis7.identity_receipt.v1",
+    "node_id": node_id,
+    "peer_id": peer_id,
+    "key_path": str(key_path),
+    "key_sha256": hashlib.sha256(key_path.read_bytes()).hexdigest(),
+    "key_size_bytes": metadata.st_size,
+    "key_mode": 384,
+    "key_uid": metadata.st_uid,
+    "key_gid": metadata.st_gid,
+}, sort_keys=True))
+PY
+else
+  exit 64
+fi
 SH
 chmod +x "$bundle_dir/bin/oasis7_chain_runtime"
 runtime_sha="$(shasum -a 256 "$bundle_dir/bin/oasis7_chain_runtime" | awk '{print $1}')"
@@ -124,6 +160,8 @@ cp -a "$2.root/." "$3/"
 SH
 chmod +x "$TMP_DIR/fake-bin/dpkg-deb"
 export PATH="$TMP_DIR/fake-bin:$PATH"
+export OASIS7_TEST_RUNTIME_LOG="$TMP_DIR/runtime-commands.log"
+export OASIS7_TEST_READBACK_LOG="$TMP_DIR/service-readback.log"
 
 cat >"$config_dir/public-testnet-governed-bootstrap-bundle-2026-06-06.json" <<EOF
 {"git_commit":"abcdef1234567890abcdef1234567890abcdef12","runtime_build":{"git_commit":"abcdef1234567890abcdef1234567890abcdef12","sha256":"$runtime_sha","size_bytes":$runtime_size}}
@@ -160,6 +198,63 @@ bootstrap() {
     --receipt "$receipt"
 }
 
+# The deployment-stage generator emits its canonical world under
+# generated-world/world, while the sidecar and provenance remain directly
+# under generated-world.  The documented handoff passes generated-world as
+# --world-dir; bootstrap must consume that exact output without a manual copy
+# or path rewrite.
+stage_handoff_dir="$TMP_DIR/stage/generated-world"
+stage_handoff_stack_root="$TMP_DIR/stage-handoff-opt/oasis7/p2p-testnet"
+stage_handoff_systemd_dir="$TMP_DIR/stage-handoff-systemd"
+stage_handoff_receipt="$TMP_DIR/stage-handoff-receipt.json"
+mkdir -p "$stage_handoff_dir/world" "$stage_handoff_systemd_dir"
+cp "$world_dir/snapshot.json" "$stage_handoff_dir/world/"
+cp -a "$world_dir/generated-scenario-world" "$stage_handoff_dir/"
+cp "$world_dir/world-generation-provenance.json" "$stage_handoff_dir/"
+bootstrap_with \
+  --stack-root "$stage_handoff_stack_root" \
+  --package-deb "$package_deb" \
+  --ops-tools-tar "$ops_tools_tar" \
+  --config-dir "$config_dir" \
+  --world-dir "$stage_handoff_dir" \
+  --node-id triad-testnet-sequencer \
+  --service-name oasis7-triad-sequencer.service \
+  --systemd-unit-dir "$stage_handoff_systemd_dir" \
+  --receipt "$stage_handoff_receipt"
+stage_handoff_stack_root_abs="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$stage_handoff_stack_root")"
+test -f "$stage_handoff_stack_root_abs/staged-world/snapshot.json"
+test -f "$stage_handoff_stack_root_abs/staged-world/world-generation-provenance.json"
+test -f "$stage_handoff_stack_root_abs/staged-world/generated-scenario-world/manifest.json"
+test ! -e "$stage_handoff_stack_root_abs/staged-world/world/snapshot.json"
+jq -e \
+  '.world.layout == "nested_stage"
+   and (.world.snapshot.path | endswith("/staged-world/snapshot.json"))
+   and (.world.provenance.path | endswith("/staged-world/world-generation-provenance.json"))' \
+  "$stage_handoff_receipt" >/dev/null
+
+# A stage root containing both the legacy direct-world snapshot and the
+# canonical nested snapshot is ambiguous.  Reject it before materializing a
+# stack so snapshot/provenance cannot be silently cross-paired.
+mixed_layout_dir="$TMP_DIR/mixed-generated-world"
+mixed_layout_stack_root="$TMP_DIR/mixed-layout-opt/oasis7/p2p-testnet"
+mkdir -p "$mixed_layout_dir/world"
+cp "$world_dir/snapshot.json" "$mixed_layout_dir/snapshot.json"
+cp "$world_dir/snapshot.json" "$mixed_layout_dir/world/snapshot.json"
+cp "$world_dir/world-generation-provenance.json" "$mixed_layout_dir/"
+cp -a "$world_dir/generated-scenario-world" "$mixed_layout_dir/"
+expect_fail \
+  "ambiguous generated-world layout" \
+  bootstrap_with \
+    --stack-root "$mixed_layout_stack_root" \
+    --package-deb "$package_deb" \
+    --ops-tools-tar "$ops_tools_tar" \
+    --config-dir "$config_dir" \
+    --world-dir "$mixed_layout_dir" \
+    --node-id triad-testnet-sequencer \
+    --service-name oasis7-triad-sequencer.service \
+    --receipt "$TMP_DIR/mixed-layout-receipt.json"
+test ! -e "$mixed_layout_stack_root"
+
 # Happy path: verified package, empty safe root, all C1 binaries, generated
 # local key, installed-but-not-started unit, and public-only provenance.
 bootstrap
@@ -193,6 +288,195 @@ jq -e \
    and (.node.public_key | type == "string" and length > 0)
    and ((tostring | test("private|secret"; "i")) | not)' \
   "$receipt" >/dev/null
+
+# Validator-47 imports an identity staged by a prior no-start operation.  The
+# import must preserve key bytes, validate the public finality identity against
+# the governed registry before creating the target root, and use the runtime's
+# read-only identity-receipt command instead of provision-identity.
+validator47_config="$TMP_DIR/validator47-config"
+validator47_identity="$TMP_DIR/validator47-identity"
+validator47_stack_root="$TMP_DIR/validator47-opt/oasis7/p2p-testnet"
+validator47_systemd_dir="$TMP_DIR/validator47-systemd"
+validator47_receipt="$TMP_DIR/validator47-receipt.json"
+mkdir -p "$validator47_config/doc/testing/evidence" "$validator47_identity" "$validator47_systemd_dir"
+chmod 0700 "$validator47_identity"
+cp -a "$config_dir/." "$validator47_config/"
+cp "$ROOT_DIR/scripts/public-testnet-validator-triad-inventory.v1.json" \
+  "$validator47_config/public-testnet-validator-triad-inventory.v1.json"
+cp "$ROOT_DIR/doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-bootstrap-peers-2026-09-15.txt" \
+  "$validator47_config/public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt"
+triad_inventory_sha256="$(shasum -a 256 "$validator47_config/public-testnet-validator-triad-inventory.v1.json" | awk '{print $1}')"
+python3 - "$validator47_config/public-testnet-validator-triad-inventory.v1.json" \
+  "$validator47_config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json" <<'PY'
+import json
+import pathlib
+import sys
+
+inventory = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+validators = []
+for name in ("sequencer-204", "storage-205", "validator-47"):
+    node = inventory["nodes"][name]
+    entry = {
+        "node_id": node["node_id"],
+        "scheme": "ed25519",
+        "finality_signer_public_key": node["finality_signer_public_key"],
+        "stake": node["stake"],
+    }
+    if name == "validator-47":
+        entry.update({field: node[field] for field in ("root_public_key", "finality_public_key", "libp2p_peer_id")})
+    validators.append(entry)
+payload = {
+    "slot_id": "governance.finality.v1",
+    "threshold": 2,
+    "threshold_bps": 0,
+    "quorum": {"numerator": 2, "denominator": 3, "total_stake": 300, "required_stake": 200},
+    "governance": {"signer_count": 3, "threshold": 2, "threshold_bps": 6667},
+    "validators": validators,
+}
+pathlib.Path(sys.argv[2]).write_text(json.dumps(payload, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
+PY
+validator47_finality_key="$(jq -r '.validators[] | select(.node_id == "triad-testnet-validator-47") | .finality_signer_public_key' "$validator47_config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json")"
+validator47_root_key="$(jq -r '.nodes["validator-47"].root_public_key' "$validator47_config/public-testnet-validator-triad-inventory.v1.json")"
+validator47_peer_id="$(jq -r '.nodes["validator-47"].libp2p_peer_id' "$validator47_config/public-testnet-validator-triad-inventory.v1.json")"
+validator47_key="$validator47_identity/node-keypair.toml"
+validator47_public_receipt="$validator47_identity/identity-receipt.json"
+printf 'already-staged-validator-47-key\n' >"$validator47_key"
+chmod 0600 "$validator47_key"
+cat >"$validator47_public_receipt" <<EOF
+{"schema_version":"oasis7.identity_provision.v1","node_id":"triad-testnet-validator-47","root_public_key":"$validator47_root_key","finality_public_key":"$validator47_finality_key","libp2p_peer_id":"$validator47_peer_id"}
+EOF
+chmod 0600 "$validator47_public_receipt"
+validator47_key_sha256="$(shasum -a 256 "$validator47_key" | awk '{print $1}')"
+validator47_receipt_sha256="$(shasum -a 256 "$validator47_public_receipt" | awk '{print $1}')"
+cat >"$validator47_config/public-testnet-governed-bootstrap-manifest-2026-06-06.json" <<EOF
+{"network_id":"oasis7-public-testnet-governed-20260606","chain_id":"oasis7-public-testnet-governed-20260606","tier":"public_testnet","deployment_inventory":{"ref":"scripts/public-testnet-validator-triad-inventory.v1.json","sha256":"$triad_inventory_sha256"},"bootstrap_peer_authority":{"ref":"public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt","sha256":"c7d0b977937adb5d27733ed0ad3e2212ccd0f3ac1b2273214e8cc57df110e5d6"},"deployment_validator_registry":{"ref":"config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json","sha256":"8bfb4411f3895ab5f1a2a3de1bcaa08ce97567202d4198444b323ef437a88f78","semantic_sha256":"aa6f6f7f367470d3b2c7282d489422d3eef14370446aa1fe8420fc94d776950d"}}
+EOF
+cat >"$validator47_config/node.env" <<EOF
+NODE_ID=triad-testnet-validator-47
+NODE_ROLE=storage
+P2P_NODE_ROLE=full_storage
+STATUS_BIND=0.0.0.0:6634
+NODE_GOSSIP_BIND=0.0.0.0:6834
+REPLICATION_NETWORK_LISTEN_ADDRS_CSV=/ip4/0.0.0.0/tcp/6834
+CHECKPOINT_PROVIDER=1
+FULL_STORAGE_PROVIDER=1
+WORLD_ID=oasis7-public-testnet-governed-20260606
+NETWORK_TIER_MANIFEST_PATH=config/public-testnet-governed-bootstrap-manifest-2026-06-06.json
+GENESIS_VALIDATOR_REGISTRY_PATH=config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json
+GENESIS_VALIDATOR_REGISTRY_SHA256=8bfb4411f3895ab5f1a2a3de1bcaa08ce97567202d4198444b323ef437a88f78
+GENESIS_VALIDATOR_REGISTRY_SEMANTIC_SHA256=aa6f6f7f367470d3b2c7282d489422d3eef14370446aa1fe8420fc94d776950d
+EXECUTION_WORLD_DIR=staged-world
+DEPLOYMENT_INVENTORY_PATH=config/public-testnet-validator-triad-inventory.v1.json
+DEPLOYMENT_INVENTORY_SHA256=$triad_inventory_sha256
+BOOTSTRAP_PEER_PATH=config/public-testnet-governed-bootstrap-bootstrap-peers-2026-06-06.txt
+BOOTSTRAP_PEER_SHA256=c7d0b977937adb5d27733ed0ad3e2212ccd0f3ac1b2273214e8cc57df110e5d6
+IDENTITY_KEY_PATH=config/node-keypair.toml
+IDENTITY_RECEIPT_PATH=config/identity-receipt.json
+IDENTITY_KEY_SHA256=$validator47_key_sha256
+IDENTITY_RECEIPT_SHA256=$validator47_receipt_sha256
+EOF
+
+# A missing or drifted public replication listener must fail before any new
+# stack root is materialized.  Keep the valid staged source for the happy path
+# below and exercise each invalid variant in an isolated root.
+validator47_node_env_valid="$TMP_DIR/validator47-node.env.valid"
+cp "$validator47_config/node.env" "$validator47_node_env_valid"
+export OASIS7_TEST_RUNTIME_PEER_ID="$validator47_peer_id"
+sed -i.bak '/^REPLICATION_NETWORK_LISTEN_ADDRS_CSV=/d' "$validator47_config/node.env"
+rm -f "$validator47_config/node.env.bak"
+expect_fail "validator-47 node.env REPLICATION_NETWORK_LISTEN_ADDRS_CSV mismatch" env OASIS7_TEST_ONLY=1 "$BOOTSTRAP" \
+  --allow-test-stack-root --test-root-prefix "$TMP_DIR" \
+  --systemd-unit-dir "$TMP_DIR/validator47-missing-listener-systemd" \
+  --stack-root "$TMP_DIR/validator47-missing-listener-opt/oasis7/p2p-testnet" \
+  --package-deb "$package_deb" --ops-tools-tar "$ops_tools_tar" \
+  --config-dir "$validator47_config" --world-dir "$world_dir" \
+  --identity-dir "$validator47_identity" --node-id triad-testnet-validator-47 \
+  --service-name oasis7-triad-validator-47.service \
+  --receipt "$TMP_DIR/validator47-missing-listener-receipt.json"
+test ! -e "$TMP_DIR/validator47-missing-listener-opt/oasis7/p2p-testnet"
+cp "$validator47_node_env_valid" "$validator47_config/node.env"
+
+sed -i.bak 's#^REPLICATION_NETWORK_LISTEN_ADDRS_CSV=.*#REPLICATION_NETWORK_LISTEN_ADDRS_CSV=/ip4/0.0.0.0/tcp/6835#' \
+  "$validator47_config/node.env"
+rm -f "$validator47_config/node.env.bak"
+expect_fail "validator-47 node.env REPLICATION_NETWORK_LISTEN_ADDRS_CSV mismatch" env OASIS7_TEST_ONLY=1 "$BOOTSTRAP" \
+  --allow-test-stack-root --test-root-prefix "$TMP_DIR" \
+  --systemd-unit-dir "$TMP_DIR/validator47-drifted-listener-systemd" \
+  --stack-root "$TMP_DIR/validator47-drifted-listener-opt/oasis7/p2p-testnet" \
+  --package-deb "$package_deb" --ops-tools-tar "$ops_tools_tar" \
+  --config-dir "$validator47_config" --world-dir "$world_dir" \
+  --identity-dir "$validator47_identity" --node-id triad-testnet-validator-47 \
+  --service-name oasis7-triad-validator-47.service \
+  --receipt "$TMP_DIR/validator47-drifted-listener-receipt.json"
+test ! -e "$TMP_DIR/validator47-drifted-listener-opt/oasis7/p2p-testnet"
+cp "$validator47_node_env_valid" "$validator47_config/node.env"
+
+baseline_runtime_commands="$(wc -l <"$OASIS7_TEST_RUNTIME_LOG" | tr -d ' ')"
+export OASIS7_TEST_RUNTIME_PEER_ID="$validator47_peer_id"
+OASIS7_TEST_ONLY=1 "$BOOTSTRAP" \
+  --allow-test-stack-root \
+  --test-root-prefix "$TMP_DIR" \
+  --systemd-unit-dir "$validator47_systemd_dir" \
+  --stack-root "$validator47_stack_root" \
+  --package-deb "$package_deb" \
+  --ops-tools-tar "$ops_tools_tar" \
+  --config-dir "$validator47_config" \
+  --world-dir "$world_dir" \
+  --identity-dir "$validator47_identity" \
+  --node-id triad-testnet-validator-47 \
+  --service-name oasis7-triad-validator-47.service \
+  --receipt "$validator47_receipt" >/dev/null
+test -f "$validator47_stack_root/config/node-keypair.toml"
+cmp -s "$validator47_identity/node-keypair.toml" "$validator47_stack_root/config/node-keypair.toml" \
+  || fail "validator-47 imported key bytes changed"
+test "$(python3 -c 'import os,stat,sys; print(oct(stat.S_IMODE(os.lstat(sys.argv[1]).st_mode))[2:])' "$validator47_stack_root/config/node-keypair.toml")" = 600
+test "$(python3 -c 'import os,stat,sys; print(oct(stat.S_IMODE(os.lstat(sys.argv[1]).st_mode))[2:])' "$validator47_stack_root/config/identity-receipt.json")" = 600
+jq -e \
+  --arg key_sha "$validator47_key_sha256" \
+  '.identity.mode == "imported"
+   and .identity.ownership_valid == true
+   and .identity.source_key_sha256 == $key_sha
+   and .no_service_started == true
+   and ((tostring | test("private_key|secret"; "i")) | not)' \
+  "$validator47_receipt" >/dev/null
+test -s "$OASIS7_TEST_READBACK_LOG"
+validator47_stack_root_abs="$(python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$validator47_stack_root")"
+grep -Fq -- "--read-only --role validator-47 --root $validator47_stack_root_abs --service oasis7-triad-validator-47.service" "$OASIS7_TEST_READBACK_LOG"
+jq -e \
+  '.service.unit_file_state == "disabled"
+   and .service.no_process == true
+   and .service.no_listener == true
+   and .service.listeners == []' \
+  "$validator47_receipt" >/dev/null
+test "$(tail -n +$((baseline_runtime_commands + 1)) "$OASIS7_TEST_RUNTIME_LOG" | grep -c '^provision-identity$' || true)" = 0
+test "$(tail -n +$((baseline_runtime_commands + 1)) "$OASIS7_TEST_RUNTIME_LOG" | grep -c '^identity-receipt$' || true)" = 2
+
+# A public identity mismatch must fail before the new stack root is
+# materialized; the already-running pair and the staged source remain intact.
+cp "$validator47_public_receipt" "$TMP_DIR/validator47-public-receipt.valid"
+sed "s/$validator47_finality_key/dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd/" \
+  "$validator47_public_receipt" >"$TMP_DIR/validator47-public-receipt.bad"
+mv "$TMP_DIR/validator47-public-receipt.bad" "$validator47_public_receipt"
+chmod 0600 "$validator47_public_receipt"
+validator47_bad_receipt_sha256="$(shasum -a 256 "$validator47_public_receipt" | awk '{print $1}')"
+sed -i.bak "s/^IDENTITY_RECEIPT_SHA256=.*/IDENTITY_RECEIPT_SHA256=$validator47_bad_receipt_sha256/" \
+  "$validator47_config/node.env"
+rm -f "$validator47_config/node.env.bak"
+expect_fail "does not match governed inventory" env OASIS7_TEST_ONLY=1 "$BOOTSTRAP" \
+  --allow-test-stack-root --test-root-prefix "$TMP_DIR" \
+  --systemd-unit-dir "$TMP_DIR/validator47-mismatch-systemd" \
+  --stack-root "$TMP_DIR/validator47-mismatch-opt/oasis7/p2p-testnet" \
+  --package-deb "$package_deb" --ops-tools-tar "$ops_tools_tar" \
+  --config-dir "$validator47_config" --world-dir "$world_dir" \
+  --identity-dir "$validator47_identity" --node-id triad-testnet-validator-47 \
+  --service-name oasis7-triad-validator-47.service \
+  --receipt "$TMP_DIR/validator47-mismatch-receipt.json"
+test ! -e "$TMP_DIR/validator47-mismatch-opt/oasis7/p2p-testnet"
+mv "$TMP_DIR/validator47-public-receipt.valid" "$validator47_public_receipt"
+chmod 0600 "$validator47_public_receipt"
+sed -i.bak "s/^IDENTITY_RECEIPT_SHA256=.*/IDENTITY_RECEIPT_SHA256=$validator47_receipt_sha256/" \
+  "$validator47_config/node.env"
+rm -f "$validator47_config/node.env.bak"
 
 # The exact local paths required by existing pair-rebuild C1 preflight are
 # present and the repair binary advertises the flag that C1 executes.

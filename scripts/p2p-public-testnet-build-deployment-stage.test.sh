@@ -50,6 +50,45 @@ assert_fails_containing() {
   fi
 }
 
+assert_registry_binding() {
+  local manifest_path="$1"
+  local registry_path="$2"
+  python3 - "$manifest_path" "$registry_path" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+
+manifest_path = pathlib.Path(sys.argv[1])
+registry_path = pathlib.Path(sys.argv[2])
+manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+registry = json.loads(registry_path.read_text(encoding="utf-8"))
+binding = manifest.get("deployment_validator_registry")
+expected = {
+    "ref": f"config/{registry_path.name}",
+    "sha256": hashlib.sha256(registry_path.read_bytes()).hexdigest(),
+}
+canonical = {
+    "signer_bindings": {
+        f"governance.finality.v1.{item['node_id']}": str(item["finality_signer_public_key"]).lower()
+        for item in registry["validators"]
+    },
+    "slot_id": registry["slot_id"],
+    "threshold": registry["threshold"],
+    "threshold_bps": registry["threshold_bps"],
+    "validator_stakes": {
+        f"governance.finality.v1.{item['node_id']}": item["stake"]
+        for item in registry["validators"]
+    },
+}
+expected["semantic_sha256"] = hashlib.sha256(
+    json.dumps(canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+).hexdigest()
+if binding != expected:
+    raise SystemExit(f"registry authority binding mismatch: expected={expected} actual={binding}")
+PY
+}
+
 "$ROOT_DIR/scripts/p2p-public-testnet-build-deployment-stage.sh" \
   --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
   --bootstrap-peers-file "$TMP_DIR/bootstrap-peers.txt" \
@@ -57,6 +96,26 @@ assert_fails_containing() {
   --storage-finality-public-key 858e97be96f238ef3f6e07ec36d4ba5f503755ecb232d06a80ef1ab8aaca44f6 \
   --extra-validator triad-testnet-fourth-local:f640bc1ceb82b261baf51ab1504a2dc4c10901873252e67551dcfe1f5b7b21af:100 \
   --out-dir "$TMP_DIR/stage" >/dev/null
+
+mkdir -p "$TMP_DIR/unsafe-dot" "$TMP_DIR/symlink-target"
+printf 'preserve\n' >"$TMP_DIR/symlink-target/sentinel"
+ln -s "$TMP_DIR/symlink-target" "$TMP_DIR/symlink-stage"
+assert_fails_containing "refusing unsafe output path" \
+  bash -c 'cd "$1" && shift && "$@"' _ "$TMP_DIR/unsafe-dot" \
+  "$ROOT_DIR/scripts/p2p-public-testnet-build-deployment-stage.sh" \
+  --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
+  --bootstrap-peers-file "$TMP_DIR/bootstrap-peers.txt" \
+  --sequencer-finality-public-key 65c27d898af9c528ebd6a3762373faef110bb7bb515dfa88c447f292474aac16 \
+  --storage-finality-public-key 858e97be96f238ef3f6e07ec36d4ba5f503755ecb232d06a80ef1ab8aaca44f6 \
+  --out-dir .
+assert_fails_containing "refusing symlinked output path" \
+  "$ROOT_DIR/scripts/p2p-public-testnet-build-deployment-stage.sh" \
+  --runtime-build-ref "$TMP_DIR/oasis7_chain_runtime" \
+  --bootstrap-peers-file "$TMP_DIR/bootstrap-peers.txt" \
+  --sequencer-finality-public-key 65c27d898af9c528ebd6a3762373faef110bb7bb515dfa88c447f292474aac16 \
+  --storage-finality-public-key 858e97be96f238ef3f6e07ec36d4ba5f503755ecb232d06a80ef1ab8aaca44f6 \
+  --out-dir "$TMP_DIR/symlink-stage"
+test -f "$TMP_DIR/symlink-target/sentinel"
 
 test -f "$TMP_DIR/stage/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json"
 test -f "$TMP_DIR/stage/config/public-testnet-governance-public-signers-deployment-2026-06-06.json"
@@ -125,9 +184,133 @@ jq -e '
   and .validator_policy.target_validator_count == 3
 ' "$TMP_DIR/stage/config/public-testnet-governed-bootstrap-manifest-2026-06-06.json" >/dev/null
 
+# An arbitrary extra-validator stage must not carry the fixed governed triad
+# inventory or advertise that inventory as its deployment authority.
+if [[ -e "$TMP_DIR/stage/config/public-testnet-validator-triad-inventory.v1.json" || \
+  -e "$TMP_DIR/stage/config/doc/testing/evidence/public-testnet-validator-triad-inventory.v1.json" || \
+  -e "$TMP_DIR/stage/config/doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json" ]]; then
+  echo "arbitrary stage must not emit fixed triad inventory" >&2
+  exit 1
+fi
+if jq -e 'has("deployment_inventory")' \
+  "$TMP_DIR/stage/config/public-testnet-governed-bootstrap-manifest-2026-06-06.json" >/dev/null; then
+  echo "arbitrary stage must not advertise fixed triad deployment inventory" >&2
+  exit 1
+fi
+assert_registry_binding \
+  "$TMP_DIR/stage/config/public-testnet-governed-bootstrap-manifest-2026-06-06.json" \
+  "$TMP_DIR/stage/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json"
+if grep -q 'Deployment inventory authority' "$TMP_DIR/stage/deployment-truth.md"; then
+  echo "arbitrary stage deployment truth must not claim fixed triad inventory" >&2
+  exit 1
+fi
+
 grep -q 'triad-testnet-fourth-local' "$TMP_DIR/stage/deployment-truth.md"
+grep -q 'Canonical bootstrap world: `generated-world/world`' "$TMP_DIR/stage/deployment-truth.md"
+grep -q 'Fresh-host bootstrap world input: `generated-world`' "$TMP_DIR/stage/deployment-truth.md"
 grep -q 'Generated map sidecar: `generated-world/generated-scenario-world`' "$TMP_DIR/stage/deployment-truth.md"
 grep -q 'Generated map provenance: `generated-world/world-generation-provenance.json`' "$TMP_DIR/stage/deployment-truth.md"
+
+# A triad stage must carry every variable that p2p-triad-node-start.sh expands
+# without a fallback.  Exercise the real stage generator and an isolated
+# launcher dry-run so this contract cannot regress to pair-only node.env.
+validator47_identity="$TMP_DIR/validator-47-identity"
+mkdir -p "$validator47_identity"
+chmod 700 "$validator47_identity"
+printf 'already-staged-validator-47-key\n' >"$validator47_identity/node-keypair.toml"
+chmod 600 "$validator47_identity/node-keypair.toml"
+validator47_root_key=$(jq -r '.nodes["validator-47"].root_public_key' "$ROOT_DIR/scripts/public-testnet-validator-triad-inventory.v1.json")
+validator47_finality_key=$(jq -r '.nodes["validator-47"].finality_public_key' "$ROOT_DIR/scripts/public-testnet-validator-triad-inventory.v1.json")
+validator47_peer_id=$(jq -r '.nodes["validator-47"].libp2p_peer_id' "$ROOT_DIR/scripts/public-testnet-validator-triad-inventory.v1.json")
+cat >"$validator47_identity/identity-receipt.json" <<EOF
+{"schema_version":"oasis7.identity_provision.v1","node_id":"triad-testnet-validator-47","root_public_key":"$validator47_root_key","finality_public_key":"$validator47_finality_key","libp2p_peer_id":"$validator47_peer_id"}
+EOF
+chmod 600 "$validator47_identity/identity-receipt.json"
+cat >"$TMP_DIR/validator-47-runtime" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+[[ "${1:-}" == identity-receipt ]] || exit 64
+config_dir="${3:?}"
+node_id="${5:?}"
+python3 - "$config_dir" "$node_id" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+
+config_dir = pathlib.Path(sys.argv[1])
+node_id = sys.argv[2]
+key_path = config_dir / "node-keypair.toml"
+receipt = json.loads((config_dir / "identity-receipt.json").read_text(encoding="utf-8"))
+print(json.dumps({
+    "schema_version": "oasis7.identity_receipt.v1",
+    "node_id": node_id,
+    "peer_id": receipt["libp2p_peer_id"],
+    "key_path": str(key_path),
+    "key_sha256": hashlib.sha256(key_path.read_bytes()).hexdigest(),
+    "key_size_bytes": key_path.stat().st_size,
+    "key_mode": 384,
+    "key_uid": key_path.stat().st_uid,
+    "key_gid": key_path.stat().st_gid,
+}))
+PY
+EOF
+chmod 755 "$TMP_DIR/validator-47-runtime"
+triad_stage="$TMP_DIR/stage-triad"
+"$ROOT_DIR/scripts/p2p-public-testnet-build-deployment-stage.sh" \
+  --runtime-build-ref "$TMP_DIR/validator-47-runtime" \
+  --bootstrap-peers-file "$ROOT_DIR/doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-bootstrap-peers-2026-09-15.txt" \
+  --sequencer-finality-public-key "$(jq -r '.nodes["sequencer-204"].finality_signer_public_key' "$ROOT_DIR/scripts/public-testnet-validator-triad-inventory.v1.json")" \
+  --storage-finality-public-key "$(jq -r '.nodes["storage-205"].finality_signer_public_key' "$ROOT_DIR/scripts/public-testnet-validator-triad-inventory.v1.json")" \
+  --extra-validator "triad-testnet-validator-47:$validator47_finality_key:100" \
+  --validator-47-identity-dir "$validator47_identity" \
+  --out-dir "$triad_stage" >/dev/null
+test -f "$triad_stage/config/public-testnet-validator-triad-inventory.v1.json"
+test -f "$triad_stage/config/doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json"
+grep -Fqx -- '- Validator-47 identity import: `identity/node-keypair.toml` (bytes copied from the already-staged source; no key regeneration)' "$triad_stage/deployment-truth.md"
+expected_identity_key_sha=$(shasum -a 256 "$validator47_identity/node-keypair.toml" | awk '{print $1}')
+expected_identity_receipt_sha=$(shasum -a 256 "$validator47_identity/identity-receipt.json" | awk '{print $1}')
+grep -Fqx -- "- Validator-47 identity key sha256: \`$expected_identity_key_sha\`" "$triad_stage/deployment-truth.md"
+grep -Fqx -- '- Validator-47 identity public receipt: `identity/identity-receipt.json`' "$triad_stage/deployment-truth.md"
+grep -Fqx -- "- Validator-47 identity receipt sha256: \`$expected_identity_receipt_sha\`" "$triad_stage/deployment-truth.md"
+triad_inventory_sha=$(shasum -a 256 "$ROOT_DIR/scripts/public-testnet-validator-triad-inventory.v1.json" | awk '{print $1}')
+jq -e --arg sha "$triad_inventory_sha" '
+  .deployment_inventory.ref == "scripts/public-testnet-validator-triad-inventory.v1.json"
+  and .deployment_inventory.sha256 == $sha
+  and .deployment_validator_registry.ref == "config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json"
+' "$triad_stage/config/public-testnet-governed-bootstrap-manifest-2026-06-06.json" >/dev/null
+assert_registry_binding \
+  "$triad_stage/config/public-testnet-governed-bootstrap-manifest-2026-06-06.json" \
+  "$triad_stage/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json"
+triad_env="$triad_stage/config/node.env"
+for required_env in \
+  CONFIG_PATH EXECUTION_WORLD_DIR EXECUTION_RECORDS_DIR STORAGE_ROOT STORAGE_PROFILE \
+  NODE_TICK_MS POS_SLOT_DURATION_MS POS_TICKS_PER_SLOT POS_PROPOSAL_TICK_PHASE \
+  POS_MAX_PAST_SLOT_LAG REWARD_RUNTIME_EPOCH_DURATION_SECS REWARD_POINTS_PER_CREDIT \
+  NODE_GOSSIP_BIND REPLICATION_NETWORK_LISTEN_ADDRS_CSV; do
+  grep -q "^${required_env}=" "$triad_env" || {
+    echo "triad node.env missing launcher variable: $required_env" >&2
+    exit 1
+  }
+done
+grep -qx 'CONFIG_PATH=config/node-keypair.toml' "$triad_env"
+grep -qx 'EXECUTION_WORLD_DIR=staged-world' "$triad_env"
+grep -qx 'EXECUTION_RECORDS_DIR=data/execution-records' "$triad_env"
+grep -qx 'STORAGE_ROOT=data/storage' "$triad_env"
+grep -qx 'STORAGE_PROFILE=release_default' "$triad_env"
+grep -qx 'POS_SLOT_DURATION_MS=8000' "$triad_env"
+grep -qx 'POS_TICKS_PER_SLOT=10' "$triad_env"
+grep -qx 'POS_PROPOSAL_TICK_PHASE=9' "$triad_env"
+grep -qx 'POS_MAX_PAST_SLOT_LAG=256' "$triad_env"
+grep -qx 'REPLICATION_NETWORK_LISTEN_ADDRS_CSV=/ip4/0.0.0.0/tcp/6834' "$triad_env"
+(
+  cd "$triad_stage"
+  APP_ROOT="$PWD" ENV_FILE="$PWD/config/node.env" BIN="$TMP_DIR/validator-47-runtime" \
+    OASIS7_NODE_START_DRY_RUN=1 bash "$ROOT_DIR/scripts/p2p-triad-node-start.sh" \
+    >"$TMP_DIR/triad-launcher-dry-run.out"
+)
+grep -q '^runtime command:' "$TMP_DIR/triad-launcher-dry-run.out"
+grep -Eq -- '--replication-network-listen[[:space:]]+/ip4/0\.0\.0\.0/tcp/6834' "$TMP_DIR/triad-launcher-dry-run.out"
 
 # Optional pair provenance is absent in the first invocation above and must be
 # forwarded/validated when explicitly supplied in this second invocation.
@@ -189,6 +372,24 @@ jq -e '.validator_pair_provenance.sha256 != null' \
 jq -e '.validator_pair_provenance.resolved_path | contains("stage-with-provenance/config/doc/testing/evidence/")' \
   "$TMP_DIR/stage-with-provenance/config/public-testnet-governed-bootstrap-bundle-2026-06-06.json" >/dev/null
 grep -q 'Validator pair provenance:' "$TMP_DIR/stage-with-provenance/deployment-truth.md"
+if [[ -e "$TMP_DIR/stage-with-provenance/config/public-testnet-validator-triad-inventory.v1.json" || \
+  -e "$TMP_DIR/stage-with-provenance/config/doc/testing/evidence/public-testnet-validator-triad-inventory.v1.json" || \
+  -e "$TMP_DIR/stage-with-provenance/config/doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json" ]]; then
+  echo "pair-only stage must not emit fixed triad inventory" >&2
+  exit 1
+fi
+if jq -e 'has("deployment_inventory")' \
+  "$TMP_DIR/stage-with-provenance/config/public-testnet-governed-bootstrap-manifest-2026-06-06.json" >/dev/null; then
+  echo "pair-only stage must not advertise fixed triad deployment inventory" >&2
+  exit 1
+fi
+assert_registry_binding \
+  "$TMP_DIR/stage-with-provenance/config/public-testnet-governed-bootstrap-manifest-2026-06-06.json" \
+  "$TMP_DIR/stage-with-provenance/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json"
+if grep -q 'Deployment inventory authority' "$TMP_DIR/stage-with-provenance/deployment-truth.md"; then
+  echo "pair-only stage deployment truth must not claim fixed triad inventory" >&2
+  exit 1
+fi
 # The staged receipt must retain detached verification after its source receipt
 # and detached files leave the temporary input directory.
 rm -f "$TMP_DIR/pair-provenance.json" "$TMP_DIR/pair-signature.bin" "$TMP_DIR/attestor-public.pem"
@@ -253,6 +454,24 @@ jq -e '
   (.validators | length) == 4
   and .threshold == 3
 ' "$TMP_DIR/stage-four-validators/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json" >/dev/null
+if [[ -e "$TMP_DIR/stage-four-validators/config/public-testnet-validator-triad-inventory.v1.json" || \
+  -e "$TMP_DIR/stage-four-validators/config/doc/testing/evidence/public-testnet-validator-triad-inventory.v1.json" || \
+  -e "$TMP_DIR/stage-four-validators/config/doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json" ]]; then
+  echo "four-validator stage must not emit fixed triad inventory" >&2
+  exit 1
+fi
+if jq -e 'has("deployment_inventory")' \
+  "$TMP_DIR/stage-four-validators/config/public-testnet-governed-bootstrap-manifest-2026-06-06.json" >/dev/null; then
+  echo "four-validator stage must not advertise fixed triad deployment inventory" >&2
+  exit 1
+fi
+assert_registry_binding \
+  "$TMP_DIR/stage-four-validators/config/public-testnet-governed-bootstrap-manifest-2026-06-06.json" \
+  "$TMP_DIR/stage-four-validators/config/public-testnet-governed-bootstrap-validator-registry-2026-06-06.json"
+if grep -q 'Deployment inventory authority' "$TMP_DIR/stage-four-validators/deployment-truth.md"; then
+  echo "four-validator stage deployment truth must not claim fixed triad inventory" >&2
+  exit 1
+fi
 
 assert_fails_containing \
   'duplicate validator node_id `triad-testnet-sequencer`' \
