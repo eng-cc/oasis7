@@ -460,6 +460,32 @@ run_standalone_tool_lockfiles_checks() {
   run ./scripts/check-standalone-tool-lockfiles.sh
 }
 
+run_cargo_package_scope_check() {
+  local base_oid="${OASIS7_CARGO_SCOPE_BASE:-}"
+  local head_oid="${OASIS7_CARGO_SCOPE_HEAD:-}"
+  local checker="./scripts/pm/check-cargo-package-scope"
+  local policy="./.pm/cargo-package-scope-policy.json"
+  if [[ -z "$base_oid" || -z "$head_oid" ]]; then
+    echo "skip: Cargo package scope audit reason=trusted_base_head_not_provided claim_boundary=contract_suite_only"
+    return 0
+  fi
+  if [[ ! -x "$checker" || ! -f "$policy" ]]; then
+    echo "skip: Cargo package scope audit reason=checker_or_policy_unavailable claim_boundary=contract_suite_only"
+    return 0
+  fi
+  if ! git cat-file -e "${base_oid}:.pm/cargo-package-scope-policy.json" 2>/dev/null; then
+    echo "skip: Cargo package scope audit reason=trusted_base_policy_unavailable claim_boundary=contract_suite_only"
+    return 0
+  fi
+  run python3 "$checker" \
+    --repo-root "$repo_root" \
+    --base "$base_oid" \
+    --head "$head_oid" \
+    --primary-package auto \
+    --policy "$repo_root/$policy" \
+    --json
+}
+
 run_required_gate_checks() {
   run_product_doc_governance_check
   run python3 ./scripts/product-doc-governance-check.test.py
@@ -492,6 +518,8 @@ run_required_gate_checks() {
   run ./scripts/plan-rust-required-scope.test.sh
   run_workflow_impact_projection_contract_tests
   run_workflow_impact_projection_consumer
+  run python3 ./scripts/pm/check-cargo-package-scope.test.py
+  run_cargo_package_scope_check
   run ./scripts/rust-required-gate-compile-command-contract.test.sh
   run bash ./scripts/rust-full-tier-trunk-prerequisite-contract.test.sh
   run ./scripts/unified-world-code-terminology-scan.test.sh

@@ -9,7 +9,7 @@
 - 生命周期权威：[workflow source of truth](../workflow/source-of-truth.md#traceability-record-contract)
 - 配套规范：[系统设计写作规范](system-design-writing-standard.design.md)、[项目管理记录规范](project-management-record-standard.design.md)、[产品文档规范](product-documentation-standard.design.md)
 
-本文定义产品或专业要求、系统设计义务、GitHub Task 与实际证据之间的最小闭环。它复用现有 `oasis7.loop-change/v1` 协调记录，不创建第二台账、第四 loop、新 Project taxonomy 或新的 Product PRD-ID。
+本文定义产品或专业要求、系统设计义务、GitHub Task 与实际证据之间的最小闭环。它复用现有 `oasis7.loop-change/v1` 协调记录，不创建第二台账、第四 loop、新 Project taxonomy 或新的 Product PRD-ID。本文的 YAML/JSON 片段若标为“字段节选”只用于解释字段关系，不能作为完整记录或 evidence；标为“完整样例”时必须可由 C1 的 canonical fixture 自动校验。S1 只冻结这一区分与消费边界，不预先引用尚不存在的 fixture。
 
 <a id="traceability-goals"></a>
 ## 1. 问题与目标
@@ -43,7 +43,7 @@
 
 | 事实 | 唯一可写 authority | 本闭环中的作用 |
 | --- | --- | --- |
-| 产品价值、范围、玩家承诺、产品 AC | `doc/product/` 对应 PRD | 提供稳定上游 requirement |
+| 产品价值、范围、玩家承诺、产品 AC | workflow 当前声明的 product authority；新内容使用 `doc/product/` 四模块树，未迁移 legacy 仍使用其现行路径 | 提供稳定上游 requirement；不因未迁移路径否定旧批准输入 |
 | 专业规则与接受条件 | 专业域 PRD/规则文档 | 为纯工程或专业变更提供稳定上游 acceptance |
 | 技术合同、边界、状态、迁移与验证设计 | 专业系统设计 | 提供稳定 system-design obligation |
 | Task UID、scope、执行、实际候选与 evidence | GitHub Issue evidence | 绑定本次交付事实 |
@@ -52,22 +52,30 @@
 
 若上游产品承诺与系统可实现性冲突，当前协调 Issue 必须记录冲突、裁决 owner、影响和处置；任一消费者不得静默改写另一 authority。
 
+### 3.1 实际 authority 与有限消费
+
+引用身份和内容资格是两项独立检查。`repository + path + fragment` 是语义定位；冻结合同的 `contract_id + revision + contract_digest + publication_ref` 是合同版本身份；`source_commit`、`source_head_oid` 或等价 OID 只定位实际源码/文档快照。`revision` 遵循所消费 schema 的类型（例如合同版本为正整数），不得把 Git SHA 静默写入要求整数的 task input `revision`；OID 也不能替代条款 fragment。
+
+实际 authority 必须由 canonical repository 的冻结发布内容和可回读的 Issue/comment 身份共同证明。当前工作树文本、`latest`、浮动分支、可变 URL、Project/cache 字段、作者自报 digest 或本地 JSON 都只是线索，不能授予消费资格。消费者只解析本记录声明的 `trace`/`consumed_clause_refs` 关系闭包，逐条确认 path/fragment、合同发布身份和适用 owner；缺失、重复、歧义、越界或无法回读的引用阻断该消费，但不要求扫描或迁移无关 legacy。
+
 ## 4. Canonical Trace Relation
 
 唯一协调记录继续使用 `oasis7.loop-change/v1`。每个 `required_obligations[]` 元素表示一个可独立判定的 obligation，并增加下列语义：
 
 ```yaml
+# 字段节选（不是完整 oasis7.loop-change/v1 记录；不能直接作为 C1 通过样例）
 obligation_id: stable-local-id
 required: true
 applicability: required # required | not_applicable
 trace:
   upstream_refs:
     - kind: professional_acceptance # product_requirement 适用于产品义务
+      applicability: required
       repository: eng-cc/oasis7
       path: doc/engineering/doc-governance/project-management-record-standard.design.md
       fragment: 3-固定输入与证据身份
       contract_id: engineering-project-management-record-standard
-      revision: 51e3ea6a79b9e698f67cc7b6a25ab9e9d9829cd8
+      revision: 1 # 合同 schema revision；不是 Git commit OID
       contract_digest: sha256:af924078c204d31d8ae63ceddaa6920db723fe8b2dd557353ec6bd823381df11
       publication_ref:
         issue_number: 3706
@@ -77,9 +85,9 @@ trace:
     repository: eng-cc/oasis7
     path: doc/engineering/doc-governance/system-design-writing-standard.design.md
     fragment: 11-验证设计与可追溯性
-    reason: null
+    reason: <仅在 not_applicable 分支填写；此字段节选未展开>
     owner_role: repository_health_engineer
-    evidence_ref: null
+    evidence_ref: <仅在 not_applicable 分支填写；此字段节选未展开>
 mapping_slot: stable-slot
 owner_loop: code
 owner_role: repository_health_engineer
@@ -89,7 +97,11 @@ acceptance_refs:
 
 `required=true` 是 `applicability=required` 的兼容别名。新建或实质修改的记录必须同时生成两者且值一致；既有记录缺少 `applicability` 时标记为 `legacy-unclassified`，不能静默解释成 required 或 N/A。
 
+上述 typed upstream 保持当前 `oasis7.loop-change/v1` 字段位置：`applicability` 在每个 upstream ref 上，合同版本由 `contract_id + revision + contract_digest + publication_ref` 绑定；不在 typed upstream ref 中新增 `source_commit`。协调记录自身的源快照 OID 继续使用现行 `coordination_ref.source_commit`，文档条款快照使用现行 contract/publication identity。C1 必须依此验证版本与 OID 分离，不得自行发明第三个字段位置；若未来需要在 typed upstream ref 上增加 OID，必须以新 schema revision 和单独兼容评审引入。
+
 跨文件引用必须同时包含 canonical repository `eng-cc/oasis7`、repository-relative path、稳定 fragment，以及适用的冻结 contract/publication identity。裸 `REQ-*`、`AC-*`、`DES-*`、浮动分支或只有文件路径的引用不能满足跨文件关系。
+
+完整样例必须包含 schema/marker、Task UID、协调记录 authority、每项 obligation 的 typed upstream/system trace、`applicability` 与兼容 `required`、映射槽位、候选选择规则和反馈链；其中所有必填引用均须有可回读身份，不能用 `null`、占位符或节选字段冒充完整记录。未来 C1 的完整 fixture 是唯一可执行样例来源，文档片段不得另维护一套 digest 或字段默认值。
 
 ## 5. Applicability 与显式 N/A
 
@@ -119,7 +131,7 @@ acceptance_refs:
 
 ## 6. Task 与 Aggregate Evidence 绑定
 
-每个 required obligation 必须恰好对应一个 aggregate evidence row。二者必须匹配：
+仅当变更已绑定冻结 coordinating record 并进入 aggregate candidate 时，该记录中的每个 required obligation 必须恰好对应一个 aggregate evidence row。该组合语境下二者必须匹配：
 
 - `obligation_id` 与 `mapping_slot`；
 - `owner_loop` 与 `owner_role`；
@@ -128,7 +140,9 @@ acceptance_refs:
 - source HEAD、integration/tested tree、配置、入口、环境和 evidence window；
 - acceptance 结果、失败或未覆盖范围。
 
-重复 slot、缺行、多行竞争同一 required obligation、owner 不一致或 evidence identity 不完整都必须失败。多个 leaf 可以有不同 source HEAD，但 aggregate 结论只能绑定一个实际组合验证过的 candidate。
+对该 aggregate candidate，重复 slot、缺行、多行竞争同一 required obligation、owner 不一致或 evidence identity 不完整都必须失败。多个 leaf 可以有不同 source HEAD，但 aggregate 结论只能绑定一个实际组合验证过的 candidate。
+
+普通单叶子是一个 owner、一个 Task UID、一个 scope 和自己的交付证据，只沿自己的 Issue/PR 链判定，不因为没有多义务记录而被迫新建协调 Issue、aggregate row、`oasis7.loop-leaf-result/v1`、等价审批或 candidate tuple；它不能声明组合完成。组合变更必须在首个叶子执行前绑定一个冻结协调记录，完整必需集合、mapping slot、候选选择规则和阻断反馈不可通过删除字段、空 `delivery_obligations` 或关闭某个叶子来降级；每个叶子只关闭自己的 obligation，aggregate 仍须逐项回读。
 
 ## 7. PM Projection 与 Round Trip
 
@@ -184,6 +198,8 @@ Checker 必须输出稳定、可定位的诊断，至少区分：
 5. 增加 focused regression 与默认 worktree non-PR integration test；
 6. 由 repository health、producer/system 与 QA 按冻结 HEAD 审查。
 
+本次 S1 为后续实现冻结以下只读交接：C1 只消费本四份规范的冻结提交、`oasis7.loop-change/v1`/`oasis7.loop-task/v1` 当前字段及本节完整/节选定义，验收身份/版本分离、typed applicability、完整样例与负向诊断且不重解释 legacy；C2 只消费 C1 已合入的引用解析/校验接口，验收实际技术权威、声明消费闭包、changed-scope 与 bounded legacy 关系，不能以改后缀逃逸；C3 只消费 C1/C2 的固定接口、当前 task binding/policy/CI identity，验收创建、resume、发布、promotion、closeout 与 CI 使用同一 binding、保留 round-trip/aggregate 阻断且不自授权。三者都必须在各自兼容实现、负向测试和真实 readback 完成后，另经现行 upgrade/enablement 流程才可启用。
+
 ## 11. 验收与验证
 
 ### 11.1 验证映射表
@@ -214,10 +230,12 @@ Checker 必须输出稳定、可定位的诊断，至少区分：
 
 ## 12. 风险、回滚与未决边界
 
-- **过度门禁风险**：用 changed-scope 和显式 applicability 限制影响，不全仓迁移。
+- **过度门禁风险**：用 changed-scope、声明消费闭包和显式 applicability 限制影响，不全仓迁移。
 - **双重 authority 风险**：schema 只表达引用关系，不复制产品、系统或 evidence 正文。
 - **Project 粗粒度覆盖风险**：refresh 按字段 authority 合并，细粒度终态只能由 canonical receipt writer 更新。
 - **旧记录歧义风险**：缺失 applicability 保持 `legacy-unclassified`，触达时升级，不静默默认。
 - **误报语义正确风险**：自动检查只验证身份、路径、关系和完整性；专业语义仍由匹配角色审查。
+
+- **迁移/启用混淆风险**：迁移是经授权的旧条款到新权威的逐条映射、消费者修复和历史快照保留；启用是兼容 helper/checker 已通过负向测试、真实 readback 和限定范围回退审查后，按现行升级流程允许新任务消费。S1 的规范合入、C1/C2/C3 的实现合入或一份绿色文档检查都不自动执行迁移或启用。legacy 在途任务继续消费其已批准不可变输入，除非有新 epoch 与明确迁移处置。
 
 若新增字段或 changed-scope gate 导致现有合法工作流无法启动，回滚仅撤销本变更新增的 admission wiring，并保留 Issue/cache round-trip 数据修复；不得恢复会丢失终态或 evidence 的旧 refresh 行为。
