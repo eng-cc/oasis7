@@ -12,6 +12,7 @@ network is involved.
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import importlib.util
 import json
@@ -38,13 +39,25 @@ PLANNER_TEST = ROOT / "scripts" / "p2p-public-testnet-full-network-clean-room.te
 ADAPTER_TEST = ROOT / "scripts" / "p2p-public-testnet-full-network-clean-room-adapter.test.py"
 
 
+_FIXTURE_MODULE_LOAD_COUNTS: dict[str, int] = {}
+_FIXTURE_MODULE_CACHE: dict[str, Any] = {}
+
+
 def load_module(name: str, path: Path) -> Any:
+    resolved_path = str(path.resolve())
+    if resolved_path in {str(TOOL_TEST.resolve()), str(PLANNER_TEST.resolve())}:
+        cached = _FIXTURE_MODULE_CACHE.get(resolved_path)
+        if cached is not None:
+            return cached
+        _FIXTURE_MODULE_LOAD_COUNTS[resolved_path] = _FIXTURE_MODULE_LOAD_COUNTS.get(resolved_path, 0) + 1
     spec = importlib.util.spec_from_file_location(name, path)
     if spec is None or spec.loader is None:
         raise AssertionError(f"cannot load {path}")
     module = importlib.util.module_from_spec(spec)
     sys.modules[name] = module
     spec.loader.exec_module(module)
+    if resolved_path in {str(TOOL_TEST.resolve()), str(PLANNER_TEST.resolve())}:
+        _FIXTURE_MODULE_CACHE[resolved_path] = module
     return module
 
 
@@ -78,6 +91,34 @@ V2_ARTIFACT_FIELDS = (
 
 def clean_env() -> dict[str, str]:
     return {"PATH": os.environ.get("PATH", ""), "PYTHONIOENCODING": "utf-8"}
+
+
+class IdentityV2FixtureLifecycleRegressionTests(unittest.TestCase):
+    """Guard the expensive immutable baseline fixture lifecycle."""
+
+    def test_baseline_fixture_modules_are_loaded_once_per_worker(self) -> None:
+        """Two bridge cases must share one baseline module initialization."""
+        _FIXTURE_MODULE_LOAD_COUNTS.clear()
+        suite = unittest.TestSuite(
+            [
+                IdentityV2CliBridgeTests("test_planner_rejects_missing_v2_retained_artifact"),
+                IdentityV2CliBridgeTests("test_planner_rejects_tampered_v2_retained_artifact_digest"),
+            ]
+        )
+        result = unittest.TestResult()
+        suite.run(result)
+        self.assertTrue(result.wasSuccessful(), result.errors + result.failures)
+
+        expected_fixture_paths = (TOOL_TEST, PLANNER_TEST)
+        observed = {
+            str(path.resolve()): _FIXTURE_MODULE_LOAD_COUNTS.get(str(path.resolve()), 0)
+            for path in expected_fixture_paths
+        }
+        self.assertTrue(
+            all(count <= 1 for count in observed.values()),
+            "immutable baseline fixture modules were dynamically reloaded per test: "
+            f"{observed}",
+        )
 
 
 class SidecarVerifierBoundaryTests(unittest.TestCase):
@@ -145,33 +186,167 @@ class SidecarVerifierBoundaryTests(unittest.TestCase):
 class IdentityV2CliBridgeTests(unittest.TestCase):
     """Process-level RED tests for the proposed CLI contract."""
 
+    _baseline_signing = None
+    _baseline_signing_module = None
+    _baseline_planner_module = None
+    _baseline_planner_class = None
+    _baseline_artifacts = None
+    _baseline_request = None
+
+    @classmethod
+    def setUpClass(cls) -> None:
+        """Prepare real-crypto fixture state once, then clone it per test."""
+        if cls._baseline_signing is not None:
+            return
+
+        cls._baseline_signing_module = load_module(
+            "identity_v2_signing_tool_contract", TOOL_TEST
+        )
+        cls._baseline_planner_module = load_module(
+            "full_network_clean_room_contract", PLANNER_TEST
+        )
+        cls._baseline_planner_class = cls._baseline_planner_module.FullNetworkCleanRoomPlanTests
+        cls._baseline_planner_class.setUpClass()
+        cls._baseline_signing = cls._baseline_planner_class._baseline_signing
+        cls._baseline_artifacts = copy.deepcopy(
+            cls._baseline_planner_class._baseline_builder._baseline_artifacts
+        )
+        cls._baseline_request = copy.deepcopy(cls._baseline_planner_class._baseline_request)
+
+    @classmethod
+    def tearDownClass(cls) -> None:
+        if cls._baseline_planner_class is not None:
+            cls._baseline_planner_class.tearDownClass()
+        cls._baseline_signing = None
+        cls._baseline_signing_module = None
+        cls._baseline_planner_module = None
+        cls._baseline_planner_class = None
+        cls._baseline_artifacts = None
+        cls._baseline_request = None
+
+    @classmethod
+    def _clone_signing_fixture(cls, destination: Path) -> Any:
+        """Copy immutable authority inputs and mutable outputs into a private root."""
+        baseline = cls._baseline_signing
+        source_root = baseline.root
+        shutil.copytree(source_root, destination)
+        shared_authority = {
+            "trust",
+            "registry",
+            "public_key",
+            "public_key_pem",
+            "private_key",
+            "provider",
+            "verifier",
+            "governance_root",
+            "peer_registry",
+        }
+
+        fixture = cls._baseline_signing_module.IdentityV2SigningToolContractTests("runTest")
+        for name, value in vars(baseline).items():
+            if name == "temp":
+                continue
+            if name == "verifier_invocation_marker":
+                value = destination / "verifier-invoked.marker"
+            elif name in shared_authority:
+                # These files are immutable baseline authority material.  Keep
+                # their original paths so copied signed artifacts retain the
+                # exact authority digests they were generated against.
+                pass
+            if isinstance(value, Path):
+                if name not in shared_authority and name != "verifier_invocation_marker":
+                    try:
+                        value = destination / value.relative_to(source_root)
+                    except ValueError:
+                        pass
+            else:
+                value = copy.deepcopy(value)
+            setattr(fixture, name, value)
+        fixture.root = destination
+        fixture.temp = None
+        private_verifier = destination / "pinned-verifier.py"
+        private_verifier.write_bytes(
+            baseline.verifier.read_bytes().replace(
+                str(baseline.verifier_invocation_marker).encode(),
+                str(fixture.verifier_invocation_marker).encode(),
+            )
+        )
+        private_verifier.chmod(baseline.verifier.stat().st_mode)
+        fixture.verifier = private_verifier
+        private_registry = destination / "identity-v2-provider-registry.json"
+        registry = json.loads(baseline.registry.read_text(encoding="utf-8"))
+        registry["verifier"]["executable_path"] = str(private_verifier)
+        registry["verifier"]["executable_sha256"] = digest_bytes(private_verifier.read_bytes())
+        write_json(private_registry, registry)
+        fixture.registry = private_registry
+        fixture.verifier_invocation_marker.unlink(missing_ok=True)
+        return fixture
+
+    @classmethod
+    def _copy_baseline_artifacts(
+        cls, destination: Path, *, registry_path: Path, verifier_path: Path
+    ) -> dict[str, dict[str, Path]]:
+        artifacts: dict[str, dict[str, Path]] = {}
+        registry_digest = digest_bytes(registry_path.read_bytes())
+        verifier_digest = digest_bytes(verifier_path.read_bytes())
+        for name, source_values in cls._baseline_artifacts.items():
+            copied: dict[str, Path] = {}
+            for field in V2_ARTIFACT_FIELDS:
+                source = source_values[field]
+                target = destination / f"{name}.{field}"
+                shutil.copyfile(source, target)
+                target.chmod(0o600)
+                copied[field] = target
+            copied["template"] = destination / f"{name}.template"
+            unsigned = json.loads(source_values["unsigned_envelope"].read_text(encoding="utf-8"))
+            template = {
+                field: value
+                for field, value in unsigned.items()
+                if field
+                not in {
+                    "signature_hex",
+                    "canonical_digest",
+                    "authenticated",
+                    "verified",
+                    "historical_only",
+                    "apply_authorized",
+                }
+            }
+            write_json(copied["template"], template)
+            copied["template"].chmod(0o600)
+            copied["verified_envelope"] = copied["signed_envelope"]
+            verification = json.loads(copied["verification"].read_text(encoding="utf-8"))
+            verification["provider_registry_sha256"] = registry_digest
+            verification["verifier_executable_sha256"] = verifier_digest
+            write_json(copied["verification"], verification)
+            artifacts[name] = copied
+        return artifacts
+
     def setUp(self) -> None:
+        type(self).setUpClass()
         self.temp = tempfile.TemporaryDirectory(prefix="oasis7-identity-v2-bridge-")
         self.root = Path(self.temp.name)
 
         # Reuse the approved S2 fixture harness only to make real, independently
         # verified Ed25519 artifacts.  It patches authority constants in child
         # processes, never in production and never through an offline bypass.
-        signing_module = load_module("identity_v2_signing_tool_contract", TOOL_TEST)
-        planner_module = load_module("full_network_clean_room_contract", PLANNER_TEST)
-        self.signing = signing_module.IdentityV2SigningToolContractTests("runTest")
-        self.signing.setUp()
-        self.planner = planner_module.FullNetworkCleanRoomPlanTests("runTest")
-        self.planner.setUp()
-        shutil.copyfile(self.planner.module._peer_registry_authority().REGISTRY_PATH, self.signing.peer_registry)
-        self.signing.peer_registry.chmod(0o600)
-        self.request = self.planner._input()
+        self.signing = type(self)._clone_signing_fixture(self.root / "signing")
+        self.planner = type(self)._baseline_planner_class("runTest")
+        self.planner.module = type(self)._baseline_planner_module.load_module()
+        self.request = copy.deepcopy(type(self)._baseline_request)
 
         self._align_signing_context()
-        self.artifacts = self._make_signed_artifacts()
+        self.artifacts = type(self)._copy_baseline_artifacts(
+            self.root,
+            registry_path=self.signing.registry,
+            verifier_path=self.signing.verifier,
+        )
         self.evidence_map = self._write_evidence_map()
         self.input_path = self.root / "clean-room-input.json"
         write_json(self.input_path, self.request)
         self.authority_path = self.root / "authority.json"
 
     def tearDown(self) -> None:
-        self.planner.tearDown()
-        self.signing.tearDown()
         self.temp.cleanup()
 
     def _align_signing_context(self) -> None:
