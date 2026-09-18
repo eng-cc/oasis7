@@ -417,7 +417,6 @@ jobs:
         run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
       - name: Run required test tier
         env:
-          GH_TOKEN: ${{ github.token }}
           INTEGRATION_MODE: ${{ inputs.run_mode }}
           OASIS7_PRODUCT_DOC_BASE: ${{ steps.scope.outputs.source_scope_base }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ steps.scope.outputs.head_oid }}
@@ -512,7 +511,7 @@ jobs:
               --source-head "${OASIS7_CARGO_PROFILE_SOURCE_HEAD}" \
               --tested-tree "${OASIS7_CARGO_PROFILE_TESTED_TREE}" \
               >"${profile_output}/cargo-package-profile-receipt.json"
-            python3 -I - "${OASIS7_CARGO_PROFILE_PLAN}" "${OASIS7_CARGO_PROFILE_RESULTS}" \
+            GH_TOKEN="${{ github.token }}" python3 -I - "${OASIS7_CARGO_PROFILE_PLAN}" "${OASIS7_CARGO_PROFILE_RESULTS}" \
               "${profile_output}/cargo-package-profile-receipt.json" \
               "${profile_output}/cargo-package-profile-envelope.json" <<'PY'
           import hashlib, json, os, pathlib, subprocess, sys
