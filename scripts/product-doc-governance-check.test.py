@@ -33,6 +33,36 @@ COPY_PATHS = (
     "doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md",
 )
 
+# The slug and Product PRD-ID are the stable identity.  During C0 each identity
+# deliberately accepts only these two display-name spellings; the following
+# tests are the executable compatibility contract for that window.
+MODULE_NAME_COMPATIBILITY = (
+    (
+        "world-rules-core-gameplay",
+        "PRD-PRODUCT-001",
+        "世界规则与核心玩法",
+        "世界规则与玩法系统",
+    ),
+    (
+        "world-infrastructure",
+        "PRD-PRODUCT-002",
+        "大世界基础设施",
+        "权威世界基础设施",
+    ),
+    (
+        "agents-world-simulation",
+        "PRD-PRODUCT-003",
+        "智能体与世界模拟",
+        "智能体、世界模拟与交互",
+    ),
+    (
+        "player-entry-distribution",
+        "PRD-PRODUCT-004",
+        "玩家入口与发行",
+        "玩家接入与发行",
+    ),
+)
+
 
 def make_fixture() -> Path:
     root = Path(tempfile.mkdtemp(prefix="oasis7-product-doc-fixture-"))
@@ -73,6 +103,50 @@ def replace_all(path: Path, before: str, after: str) -> None:
     text = path.read_text(encoding="utf-8")
     assert before in text, f"fixture source missing {before!r} in {path}"
     path.write_text(text.replace(before, after), encoding="utf-8")
+
+
+def set_module_display_name(root: Path, module: tuple[str, str, str, str], name: str) -> None:
+    """Set one module's manifest and canonical-root display name in a fixture."""
+    slug, _prd_id, legacy_name, _final_name = module
+    manifest = root / "doc/product/README.md"
+    replace(
+        manifest,
+        f"| {legacy_name} | [`doc/product/{slug}/prd.md`](",
+        f"| {name} | [`doc/product/{slug}/prd.md`](",
+    )
+    replace(
+        root / f"doc/product/{slug}/prd.md",
+        f"# {legacy_name} PRD",
+        f"# {name} PRD",
+    )
+    replace(
+        root / f"doc/product/{slug}/prd.md",
+        f"- 产品模块：{legacy_name}",
+        f"- 产品模块：{name}",
+    )
+
+
+def set_all_module_display_names(root: Path) -> None:
+    """Switch every landing row, module heading, and root metadata label to P0 names."""
+    for module in MODULE_NAME_COMPATIBILITY:
+        set_module_display_name(root, module, module[3])
+
+
+def add_fenced_identity_pseudo_content(root: Path, module: tuple[str, str, str, str]) -> None:
+    """Add name/identity-looking prose outside canonical roots; it must be ignored."""
+    slug, prd_id, _legacy_name, final_name = module
+    path = root / "doc/core/prd.md"
+    path.write_text(
+        path.read_text(encoding="utf-8")
+        + (
+            "\n```markdown\n"
+            f"- 产品模块：{final_name}\n"
+            f"- 产品模块 slug：`{slug}`\n"
+            f"- Product PRD-ID：`{prd_id}`\n"
+            "```\n"
+        ),
+        encoding="utf-8",
+    )
 
 
 def remove_paired_design_links(root: Path, *, fence: str | None = None) -> None:
@@ -147,6 +221,54 @@ def main() -> None:
         assert_access_mode_consolidated(root)
     finally:
         shutil.rmtree(root)
+
+    # The unchanged fixture above proves all four legacy labels.  This fixture
+    # switches every landing row, root heading, and 产品模块 metadata label to
+    # its explicit P0-final name and must remain accepted by C0.
+    scenario(None, set_all_module_display_names)
+
+    # Arbitrary names and another module's name are not compatibility aliases.
+    scenario(
+        "entry-contract",
+        lambda root: set_module_display_name(root, MODULE_NAME_COMPATIBILITY[0], "任意产品模块名称"),
+    )
+    scenario(
+        "entry-contract",
+        lambda root: (
+            set_module_display_name(root, MODULE_NAME_COMPATIBILITY[0], MODULE_NAME_COMPATIBILITY[1][3]),
+            set_module_display_name(root, MODULE_NAME_COMPATIBILITY[1], MODULE_NAME_COMPATIBILITY[0][3]),
+        ),
+    )
+
+    # A display-name match never overrides the stable slug or Product PRD-ID.
+    module = MODULE_NAME_COMPATIBILITY[0]
+    slug, prd_id, _legacy_name, final_name = module
+    scenario(
+        "metadata-contract",
+        lambda root: (
+            set_module_display_name(root, module, final_name),
+            replace(
+                root / f"doc/product/{slug}/prd.md",
+                f"- 产品模块 slug：`{slug}`",
+                f"- 产品模块 slug：`{MODULE_NAME_COMPATIBILITY[1][0]}`",
+            ),
+        ),
+    )
+    scenario(
+        "metadata-contract",
+        lambda root: (
+            set_module_display_name(root, module, final_name),
+            replace(
+                root / f"doc/product/{slug}/prd.md",
+                f"- Product PRD-ID：`{prd_id}`",
+                f"- Product PRD-ID：`{MODULE_NAME_COMPATIBILITY[1][1]}`",
+            ),
+        ),
+    )
+
+    # Name/identity-looking fenced prose in a non-canonical document remains
+    # pseudo-content and must not satisfy or violate the module contract.
+    scenario(None, lambda root: add_fenced_identity_pseudo_content(root, MODULE_NAME_COMPATIBILITY[0]))
 
     scenario(
         "retired-project-ledger",
