@@ -463,7 +463,7 @@ run_standalone_tool_lockfiles_checks() {
 run_cargo_package_scope_check() {
   local base_oid="${OASIS7_CARGO_SCOPE_BASE:-}"
   local head_oid="${OASIS7_CARGO_SCOPE_HEAD:-}"
-  local checker="./scripts/pm/check-cargo-package-scope"
+  local checker="${OASIS7_CARGO_SCOPE_CHECKER:-./scripts/pm/check-cargo-package-scope}"
   local policy="./.pm/cargo-package-scope-policy.json"
   if [[ -z "$base_oid" || -z "$head_oid" ]]; then
     echo "skip: Cargo package scope audit reason=trusted_base_head_not_provided claim_boundary=contract_suite_only"
@@ -484,6 +484,31 @@ run_cargo_package_scope_check() {
     --primary-package auto \
     --policy "$repo_root/$policy" \
     --json
+}
+
+run_cargo_package_profile_completion_check() {
+  local plan="${OASIS7_CARGO_PROFILE_PLAN:-}"
+  local results="${OASIS7_CARGO_PROFILE_RESULTS:-}"
+  if [[ -z "$plan" && -z "$results" ]]; then
+    echo "skip: Cargo package profile completion reason=package_profile_plan_not_activated claim_boundary=legacy_required_coverage_only"
+    return 0
+  fi
+  [[ -n "$plan" && -n "$results" ]] || {
+    echo "error: Cargo package profile plan and results must be supplied together" >&2
+    return 1
+  }
+  [[ -n "${OASIS7_CARGO_PROFILE_INTEGRATION_BASE:-}" && \
+     -n "${OASIS7_CARGO_PROFILE_SOURCE_HEAD:-}" && \
+     -n "${OASIS7_CARGO_PROFILE_TESTED_TREE:-}" ]] || {
+    echo "error: Cargo package profile completion identity is incomplete" >&2
+    return 1
+  }
+  run python3 ./scripts/pm/cargo_package_profile_driver.py \
+    --plan "$plan" \
+    --results "$results" \
+    --integration-base "$OASIS7_CARGO_PROFILE_INTEGRATION_BASE" \
+    --source-head "$OASIS7_CARGO_PROFILE_SOURCE_HEAD" \
+    --tested-tree "$OASIS7_CARGO_PROFILE_TESTED_TREE"
 }
 
 run_required_gate_checks() {
@@ -520,6 +545,7 @@ run_required_gate_checks() {
   run_workflow_impact_projection_consumer
   run python3 ./scripts/pm/check-cargo-package-scope.test.py
   run_cargo_package_scope_check
+  run_cargo_package_profile_completion_check
   run ./scripts/rust-required-gate-compile-command-contract.test.sh
   run bash ./scripts/rust-full-tier-trunk-prerequisite-contract.test.sh
   run ./scripts/unified-world-code-terminology-scan.test.sh

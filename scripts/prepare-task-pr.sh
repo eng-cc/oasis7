@@ -1608,7 +1608,10 @@ fi
 # The package-scope result is an additive audit.  It never selects or removes
 # required tests.  The policy must already exist at the trusted comparison OID;
 # a policy introduced by this candidate cannot authorize its own enforcement.
-CARGO_PACKAGE_SCOPE_CHECKER="$SOURCE_WORKTREE/scripts/pm/check-cargo-package-scope"
+CARGO_PACKAGE_SCOPE_AUTHORITY_DIR="$(mktemp -d)"
+SOURCE_SCOPE_BASE="$(git -C "$SOURCE_WORKTREE" merge-base "$COMPARISON_HEAD" "$SOURCE_HEAD")" \
+  || die "Cargo package scope source merge-base is unavailable"
+CARGO_PACKAGE_SCOPE_CHECKER="$CARGO_PACKAGE_SCOPE_AUTHORITY_DIR/check-cargo-package-scope"
 CARGO_PACKAGE_SCOPE_POLICY="$SOURCE_WORKTREE/.pm/cargo-package-scope-policy.json"
 CARGO_PACKAGE_SCOPE_RELEVANT="$(python3 - "$SOURCE_WORKTREE" "$COMPARISON_HEAD" "$SOURCE_HEAD" <<'PY'
 from __future__ import annotations
@@ -1650,25 +1653,28 @@ PY
 if [[ "$CARGO_PACKAGE_SCOPE_RELEVANT" != "1" ]]; then
   CARGO_PACKAGE_SCOPE_STATUS="skipped"
   CARGO_PACKAGE_SCOPE_REASON="no_cargo_package_path_changed"
-elif [[ ! -x "$CARGO_PACKAGE_SCOPE_CHECKER" || ! -f "$CARGO_PACKAGE_SCOPE_POLICY" ]]; then
+elif [[ ! -f "$CARGO_PACKAGE_SCOPE_POLICY" ]]; then
   CARGO_PACKAGE_SCOPE_STATUS="unavailable"
   CARGO_PACKAGE_SCOPE_REASON="checker_or_policy_unavailable"
-elif ! git -C "$SOURCE_WORKTREE" cat-file -e "${COMPARISON_HEAD}:.pm/cargo-package-scope-policy.json" 2>/dev/null; then
+elif ! git -C "$SOURCE_WORKTREE" cat-file -e "${SOURCE_SCOPE_BASE}:.pm/cargo-package-scope-policy.json" 2>/dev/null || \
+     ! git -C "$SOURCE_WORKTREE" show "${SOURCE_SCOPE_BASE}:scripts/pm/check-cargo-package-scope" >"$CARGO_PACKAGE_SCOPE_CHECKER" 2>/dev/null; then
   CARGO_PACKAGE_SCOPE_STATUS="skipped"
   CARGO_PACKAGE_SCOPE_REASON="trusted_base_policy_unavailable"
 else
+  chmod +x "$CARGO_PACKAGE_SCOPE_CHECKER"
   CARGO_PACKAGE_SCOPE_COMMAND="$(render_cmd python3 "$CARGO_PACKAGE_SCOPE_CHECKER" \
-    --repo-root "$SOURCE_WORKTREE" --base "$COMPARISON_HEAD" --head "$SOURCE_HEAD" \
+    --repo-root "$SOURCE_WORKTREE" --base "$SOURCE_SCOPE_BASE" --head "$SOURCE_HEAD" \
     --primary-package auto --policy "$CARGO_PACKAGE_SCOPE_POLICY" --json)"
   if ! CARGO_PACKAGE_SCOPE_OUTPUT="$(cd "$SOURCE_WORKTREE" && python3 "$CARGO_PACKAGE_SCOPE_CHECKER" \
-    --repo-root "$SOURCE_WORKTREE" --base "$COMPARISON_HEAD" --head "$SOURCE_HEAD" \
+    --repo-root "$SOURCE_WORKTREE" --base "$SOURCE_SCOPE_BASE" --head "$SOURCE_HEAD" \
     --primary-package auto --policy "$CARGO_PACKAGE_SCOPE_POLICY" --json 2>&1)"; then
     printf '%s\n' "$CARGO_PACKAGE_SCOPE_OUTPUT" >&2
-    die "Cargo package scope check failed for $COMPARISON_HEAD..$SOURCE_HEAD"
+    die "Cargo package scope check failed for $SOURCE_SCOPE_BASE..$SOURCE_HEAD"
   fi
   CARGO_PACKAGE_SCOPE_STATUS="validated"
   LOCAL_REQUIRED_EXTRA_COMMANDS+=("$CARGO_PACKAGE_SCOPE_COMMAND")
 fi
+rm -rf "$CARGO_PACKAGE_SCOPE_AUTHORITY_DIR"
 
 REMOTE_SOURCE_REF=""
 if git show-ref --verify --quiet "refs/remotes/$REMOTE_NAME/$SOURCE_BRANCH"; then
