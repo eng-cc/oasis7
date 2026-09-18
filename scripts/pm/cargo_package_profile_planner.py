@@ -43,6 +43,14 @@ def _blob(repo: Path, oid: str, path: str) -> bytes:
     return result.stdout
 
 
+def _digest_bytes(value: bytes) -> str:
+    return "sha256:" + hashlib.sha256(value).hexdigest()
+
+
+def _json_digest(value: Any) -> str:
+    return _digest_bytes(json.dumps(value, sort_keys=True, separators=(",", ":")).encode())
+
+
 def _extract(repo: Path, oid: str, destination: Path) -> None:
     archive = subprocess.run(
         ["git", "-C", str(repo), "archive", "--format=tar", oid],
@@ -253,18 +261,31 @@ def plan_package_profiles(
         consumer_frontier = consumers
     normalized_profiles, escalation_reasons = _profiles(profiles)
     executable_packages = set(tested_packages.values())
-    items = [] if escalation_reasons else [
-        {
-            "id": f"{package}-{profile['id']}",
-            "package": package,
-            "profile": profile["id"],
-            "target": profile["target"],
-            "features": profile["features"],
-        }
-        for package in sorted(affected)
-        if package in executable_packages
-        for profile in normalized_profiles
-    ]
+    tested_package_roots = {name: root for root, name in tested_packages.items()}
+    items = []
+    if not escalation_reasons:
+        for package in sorted(affected):
+            if package not in executable_packages:
+                continue
+            for profile in normalized_profiles:
+                manifest = str(Path(tested_package_roots[package]) / "Cargo.toml")
+                command = [
+                    "cargo", "test" if profile["target"] == "native" else "check",
+                    "--manifest-path", manifest, "-p", package,
+                ]
+                if profile["target"] != "native":
+                    command.extend(("--target", profile["target"]))
+                if profile["features"]:
+                    command.extend(("--features", ",".join(profile["features"])))
+                items.append({
+                    "id": f"{package}-{profile['id']}",
+                    "package": package,
+                    "profile": profile["id"],
+                    "target": profile["target"],
+                    "features": profile["features"],
+                    "command": command,
+                    "command_digest": _json_digest(command),
+                })
     if escalation_reasons:
         execution_disposition = "full_escalation"
         disposition_validated = True
@@ -293,7 +314,21 @@ def plan_package_profiles(
         "escalation_reasons": escalation_reasons,
         "execution_disposition": execution_disposition,
         "disposition_validated": disposition_validated,
-        "trusted_authority": {"policy": policy_path, "checker": checker_path},
+        "trusted_authority": {
+            "policy": policy_path,
+            "checker": checker_path,
+            "policy_sha256": _digest_bytes(_blob(repo, source_scope_base, policy_path)),
+            "planner_sha256": _digest_bytes(Path(__file__).read_bytes()),
+            "profile_config_sha256": _json_digest(normalized_profiles),
+            "toolchain": "rust-toolchain.toml@" + (
+                _digest_bytes(_blob(repo, source_scope_base, "rust-toolchain.toml"))
+                if subprocess.run(
+                    ["git", "-C", str(repo), "cat-file", "-e", f"{source_scope_base}:rust-toolchain.toml"],
+                    capture_output=True,
+                ).returncode == 0
+                else "absent"
+            ),
+        },
     }
     identity = json.dumps(plan, sort_keys=True, separators=(",", ":")).encode("utf-8")
     plan["plan_id"] = "sha256:" + hashlib.sha256(identity).hexdigest()

@@ -121,6 +121,7 @@ path = "src/lib.rs"
         )
 
     def _base_plan(self, **overrides: object) -> dict[str, object]:
+        command = ["cargo", "test", "-p", "alpha"]
         plan: dict[str, object] = {
             "schema": "oasis7-cargo-package-profile-plan/v1",
             "plan_id": "not-a-digest",
@@ -128,6 +129,11 @@ path = "src/lib.rs"
             "integration_base": "b" * 40,
             "source_head": "h" * 40,
             "tested_tree": "t" * 40,
+            "trusted_authority": {
+                "policy_sha256": "sha256:" + "1" * 64,
+                "planner_sha256": "sha256:" + "2" * 64,
+                "toolchain": "rust-toolchain.toml@sha256:" + "3" * 64,
+            },
             "selected_items": ["alpha-native"],
             "items": [
                 {
@@ -136,6 +142,10 @@ path = "src/lib.rs"
                     "profile": "native",
                     "target": "native",
                     "features": [],
+                    "command": command,
+                    "command_digest": "sha256:" + hashlib.sha256(
+                        json.dumps(command, sort_keys=True, separators=(",", ":")).encode()
+                    ).hexdigest(),
                 }
             ],
         }
@@ -143,6 +153,8 @@ path = "src/lib.rs"
         return plan
 
     def _result(self, item_id: str = "alpha-native", **overrides: object) -> dict[str, object]:
+        unsigned_plan = self._base_plan()
+        unsigned_plan.pop("plan_id", None)
         result: dict[str, object] = {
             "item_id": item_id,
             "status": "passed",
@@ -150,6 +162,16 @@ path = "src/lib.rs"
             "source_head": "h" * 40,
             "integration_base": "b" * 40,
             "tested_tree": "t" * 40,
+            "plan_id": "sha256:" + hashlib.sha256(
+                json.dumps(unsigned_plan, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest(),
+            "command_digest": "sha256:" + hashlib.sha256(
+                json.dumps(["cargo", "test", "-p", "alpha"], sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest(),
+            "toolchain": "rust-toolchain.toml@sha256:" + "3" * 64,
+            "profile": {
+                "package": "alpha", "profile": "native", "target": "native", "features": []
+            },
         }
         result.update(overrides)
         return result

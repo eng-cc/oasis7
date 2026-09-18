@@ -32,6 +32,11 @@ class CargoPackageProfileProductionContract(unittest.TestCase):
             "integration_base": "b" * 40,
             "source_head": "h" * 40,
             "tested_tree": "t" * 40,
+            "trusted_authority": {
+                "policy_sha256": "sha256:" + "1" * 64,
+                "planner_sha256": "sha256:" + "2" * 64,
+                "toolchain": "rust-toolchain.toml@sha256:" + "3" * 64,
+            },
             "selected_items": [],
             "items": [],
         }
@@ -59,13 +64,20 @@ class CargoPackageProfileProductionContract(unittest.TestCase):
     def test_empty_plan_requires_validated_legacy_or_full_disposition(self) -> None:
         with self.assertRaisesRegex(Exception, "validated"):
             self._validate(self._plan(execution_disposition="legacy_required_coverage"))
+        with self.assertRaisesRegex(Exception, "full|receipt"):
+            self._validate(
+                self._plan(
+                    execution_disposition="full_escalation",
+                    disposition_validated=True,
+                )
+            )
         receipt = self._validate(
             self._plan(
-                execution_disposition="full_escalation",
+                execution_disposition="legacy_required_coverage",
                 disposition_validated=True,
             )
         )
-        self.assertEqual("full_escalation", receipt["execution_disposition"])
+        self.assertEqual("legacy_required_coverage", receipt["execution_disposition"])
 
     def test_opt_in_cli_path_produces_and_validates_real_receipt(self) -> None:
         with tempfile.TemporaryDirectory(prefix="cargo-profile-production-") as raw:
@@ -120,14 +132,18 @@ class CargoPackageProfileProductionContract(unittest.TestCase):
                 json.dumps(
                     [
                         {
-                            "item_id": item_id,
+                            "item_id": item["id"],
                             "status": "passed",
                             "exit_code": 0,
                             "integration_base": base,
                             "source_head": head,
                             "tested_tree": plan["tested_tree"],
+                            "plan_id": plan["plan_id"],
+                            "command_digest": item["command_digest"],
+                            "toolchain": plan["trusted_authority"]["toolchain"],
+                            "profile": {field: item[field] for field in ("package", "profile", "target", "features")},
                         }
-                        for item_id in plan["selected_items"]
+                        for item in plan["items"]
                     ]
                 ),
                 encoding="utf-8",

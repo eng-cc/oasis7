@@ -457,12 +457,84 @@ jobs:
             fi
           fi
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${INTEGRATION_MODE}" == "integration_revalidation" ]]; then
+            if [[ -n "${OASIS7_CARGO_SCOPE_BASE:-}" ]]; then
+              [[ -n "${OASIS7_CARGO_PROFILE_PLANNER:-}" && -n "${OASIS7_CARGO_PROFILE_DRIVER:-}" ]] || {
+                echo "trusted Cargo package profile authority is unavailable" >&2
+                exit 1
+              }
+            profile_output="${GITHUB_WORKSPACE}/output/cargo-package-profile"
+            mkdir -p "${profile_output}"
+            export OASIS7_CARGO_PROFILE_OPT_IN=true
+            export OASIS7_CARGO_PROFILE_PLAN="${profile_output}/cargo-package-profile-plan.json"
+            export OASIS7_CARGO_PROFILE_RESULTS="${profile_output}/cargo-package-profile-results.json"
+            python3 "${OASIS7_CARGO_PROFILE_PLANNER}" \
+              --repo-root "${GITHUB_WORKSPACE}" \
+              --integration-base "${OASIS7_CARGO_PROFILE_INTEGRATION_BASE}" \
+              --source-head "${OASIS7_CARGO_PROFILE_SOURCE_HEAD}" \
+              --policy .pm/cargo-package-scope-policy.json \
+              --checker scripts/pm/check-cargo-package-scope \
+              --profile native --output "${OASIS7_CARGO_PROFILE_PLAN}"
+            export OASIS7_CARGO_PROFILE_TESTED_TREE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tested_tree"])' "${OASIS7_CARGO_PROFILE_PLAN}")"
+            # Receipt identity order: integration_base, source_head, tested_tree.
+            python3 -I - "${OASIS7_CARGO_PROFILE_PLAN}" "${OASIS7_CARGO_PROFILE_RESULTS}" <<'PY'
+          import json, os, pathlib, subprocess, sys
+          plan_path, results_path = map(pathlib.Path, sys.argv[1:])
+          plan = json.loads(plan_path.read_text(encoding="utf-8"))
+          results = []
+          for item in plan["items"]:
+              command = item.get("command")
+              if not isinstance(command, list) or not command or command[0] != "cargo" or any(not isinstance(value, str) for value in command):
+                  raise SystemExit("trusted planner emitted an invalid command argv")
+              environment = dict(os.environ)
+              environment.pop("RUSTC_WRAPPER", None)
+              completed = subprocess.run(command, env=environment, check=False)
+              results.append({
+                  "item_id": item["id"], "status": "passed" if completed.returncode == 0 else "failed",
+                  "exit_code": completed.returncode, "plan_id": plan["plan_id"],
+                  "command_digest": item["command_digest"],
+                  "toolchain": plan["trusted_authority"]["toolchain"],
+                  "profile": {field: item[field] for field in ("package", "profile", "target", "features")},
+                  "integration_base": plan["integration_base"], "source_head": plan["source_head"],
+                  "tested_tree": plan["tested_tree"],
+              })
+              if completed.returncode != 0:
+                  break
+          results_path.write_text(json.dumps(results, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
+          PY
+            python3 "${OASIS7_CARGO_PROFILE_DRIVER}" \
+              --plan "${OASIS7_CARGO_PROFILE_PLAN}" --results "${OASIS7_CARGO_PROFILE_RESULTS}" \
+              --integration-base "${OASIS7_CARGO_PROFILE_INTEGRATION_BASE}" \
+              --source-head "${OASIS7_CARGO_PROFILE_SOURCE_HEAD}" \
+              --tested-tree "${OASIS7_CARGO_PROFILE_TESTED_TREE}" \
+              >"${profile_output}/cargo-package-profile-receipt.json"
+            fi
             CI_VERBOSE=1 bash "${RUNNER_TEMP}/integration-planner/ci-tests.sh" required --repo-root "${GITHUB_WORKSPACE}" --impact-projection "${RUNNER_TEMP}/impact-projection.json"
           elif [[ "${GITHUB_EVENT_NAME}" == "pull_request" && -f "${RUNNER_TEMP}/impact-projection.json" ]]; then
             CI_VERBOSE=1 ./scripts/ci-tests.sh required --impact-projection "${RUNNER_TEMP}/impact-projection.json"
           else
             CI_VERBOSE=1 ./scripts/ci-tests.sh required
           fi
+      - name: Upload Cargo package profile plan
+        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
+        uses: actions/upload-artifact@v7
+        with:
+          name: cargo-package-profile-plan
+          path: output/cargo-package-profile/cargo-package-profile-plan.json
+          if-no-files-found: error
+      - name: Upload Cargo package profile results
+        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
+        uses: actions/upload-artifact@v7
+        with:
+          name: cargo-package-profile-results
+          path: output/cargo-package-profile/cargo-package-profile-results.json
+          if-no-files-found: error
+      - name: Upload Cargo package profile receipt
+        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
+        uses: actions/upload-artifact@v7
+        with:
+          name: cargo-package-profile-receipt
+          path: output/cargo-package-profile/cargo-package-profile-receipt.json
+          if-no-files-found: error
       - name: Upload selected Viewer performance evidence
         if: ${{ always() && steps.scope.outputs.run_viewer_perf_smoke == 'true' }}
         uses: actions/upload-artifact@v7
