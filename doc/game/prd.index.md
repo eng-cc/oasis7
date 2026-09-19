@@ -1,6 +1,6 @@
 # game PRD 文件级索引
 
-区域与工业玩法阅读顺序：先从 `doc/product/README.md` 选择“世界规则与玩法系统”，再读对应产品专题；区域 charter、tenure 与公共融资下钻到 `PRD-GAME-017`，可编程区域设施下钻到 `PRD-GAME-016`，工业创建、跨区市场与结算下钻到 `PRD-GAME-018`。这些 game 专题分别拥有各自声明范围，不形成第五产品模块或并列产品入口。
+区域、治理与工业玩法阅读顺序：先从 `doc/product/README.md` 选择“世界规则与玩法系统”，再读对应产品专题；区域 charter、tenure 与公共融资下钻到 `PRD-GAME-017`，普通治理主体与 OC 权利边界下钻到 `PRD-GAME-019`，可编程区域设施下钻到 `PRD-GAME-016`，工业创建、跨区市场与结算下钻到 `PRD-GAME-018`。这些 game 专题分别拥有各自声明范围，不形成第五产品模块或并列产品入口。
 审计轮次: 12
 
 更新时间：2026-07-06
@@ -22,6 +22,7 @@
 - 想先回答“1cm 物理世界”和“当前为什么不是 Minecraft 式逐块玩法”之间的边界：先读 `doc/product/world-rules-core-gameplay/prd.md` 的产品承诺，再读 `doc/game/gameplay/gameplay-top-level-design.prd.md` 的玩法合同
 - 想先回答“可编程区域设施如何作为中后期区域专业化能力落地，而不变成自由建造或任意 WASM 上传”：先读 `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md`
 - 想先回答“区域 charter、tenure 与公共融资如何成为有边界、可恢复且不封锁独立路线的玩家循环”：先读 `doc/product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md`，再读 `doc/game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md`
+- 想先回答“普通治理主体如何聚合、委托、纠错，以及 OC 转让为什么不能旁路事项权利”：先读 `doc/product/world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md` 的 `GCB-004/005`，再读 `doc/game/gameplay/gameplay-ordinary-governance-subject-and-oc-rights-contract.prd.md`
 - 想先看访问模式、受控试玩与 release readiness：读 `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`；当前执行状态由 GitHub task truth 与对应 evidence 确认。
 - 想继续按文件名、专题或补充材料下钻：使用下方热点子域导航与补充入口；当前文件库存统一以 `./scripts/doc-inventory-report.sh` 为准，本页不维护容易漂移的数量快照
 
@@ -49,6 +50,7 @@
 - `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md`：近期高频经济规则与 token 成本边界主入口。
 - `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md`：WASM-backed 可编程区域设施、micro_depot quote/receipt、upkeep 与区域专业化边界主入口。
 - `doc/game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md`：`PRD-GAME-017` 区域 charter 提案/审查、双资格、退化恢复、tenure 长期规划、服务费/公共 levy 玩家合同主入口；产品承诺仍由 `governed-regional-capabilities-and-extensions.prd.md` 拥有。
+- `doc/game/gameplay/gameplay-ordinary-governance-subject-and-oc-rights-contract.prd.md`：`PRD-GAME-019` 普通治理主体聚合、锁定/委托/实际控制人封顶、最小公开审计、重复主体纠错/申诉、事项快照、OC 外部转让与单向非治理额度桥玩家合同；产品承诺仍由 `governed-common-decisions-and-constitutional-boundaries.prd.md` 的 `GCB-004/005` 拥有。
 - `doc/game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md`：`PRD-GAME-018` 工业提案/模拟/试点/治理准入、创作者许可/开放、OC/世界资格分离、跨区发现/物理交付/escrow 里程碑与争议恢复玩家合同主入口；当前消费 `GR-002/003`、工业需求/生产交付结算与常态市场专题，superseded 产品源只作 AC-1 至 AC-4 provenance，OC/世界资格产品依赖仍未决。
 - `doc/game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md`：restricted grant 发放、撤销、过期与 incident 处理 runbook。
 
@@ -84,6 +86,7 @@
 | `doc/game/gameplay/gameplay-top-level-design.prd.md` | `doc/game/gameplay/gameplay-top-level-design.design.md` |
 | `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md` | `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.design.md` |
 | `doc/game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md` | PRD-only；本专题只承载区域制度的玩家动作、机会成本、失败恢复、申诉与验收，不新增实现结构 |
+| `doc/game/gameplay/gameplay-ordinary-governance-subject-and-oc-rights-contract.prd.md` | PRD-only；本专题只承载普通治理主体、事项权利与 OC 分离的玩家动作、机会成本、失败恢复与验收，不新增实现结构 |
 
 ## 历史 closure / provenance 入口
 | 历史 closure 专题 | 当前追溯入口 |
