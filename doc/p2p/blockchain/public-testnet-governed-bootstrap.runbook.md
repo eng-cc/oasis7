@@ -569,6 +569,8 @@ consumer-impact record 通过后，selected staggered executor 必须先进入 `
 
 The canonical pair transaction remains the authority-bound evidence and recovery surface for a full-pair operation, but must not be mixed with this live staggered cutover. The selected path is `scripts/p2p-public-testnet-rebuild-validators.sh`; its receipt contract below is the required one-member-at-a-time evidence. Do not invoke full-pair `apply` for this triad cutover: its stopped-pair admission contract is a different operation and violates the live-peer invariant below.
 
+For this cutover, every governed `plan`, `apply`, `resume`, and `rollback` invocation must pass `--execution-mode triad_staggered`. The wrapper dispatches that mode to the repository-owned staggered executor; the legacy positional SSH form remains audit-only and is never a fallback for a governed transaction. The host adapter owns the target-specific stop/reset/stage/start/readback callback after the executor has captured a read-only backup, so no local pair reset may run while the target is live.
+
 ### C2. Reset one validator at a time
 以下 stop 是 live authority 下由人类按成员分别执行的动作；一次只处理当前成员，另一成员必须保持 running。`human_direct_ssh` executor 只在当前成员 stop 后 read-only 复观测，再允许受治理 destructive reset：
 
