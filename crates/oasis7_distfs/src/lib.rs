@@ -392,10 +392,10 @@ impl LocalCasStore {
         }
         file_index.increment_content_hash_ref_count(metadata.content_hash.as_str());
         self.save_file_index(&file_index)?;
-        if let Some(replaced_hash) = replaced_hash {
-            if replaced_hash != metadata.content_hash {
-                self.remove_blob_if_unreferenced_in_index(&file_index, replaced_hash.as_str())?;
-            }
+        if let Some(replaced_hash) = replaced_hash
+            && replaced_hash != metadata.content_hash
+        {
+            self.remove_blob_if_unreferenced_in_index(&file_index, replaced_hash.as_str())?;
         }
         Ok(metadata)
     }
@@ -621,10 +621,10 @@ impl FileStore for LocalCasStore {
         }
         file_index.increment_content_hash_ref_count(metadata.content_hash.as_str());
         self.save_file_index(&file_index)?;
-        if let Some(replaced_hash) = replaced_hash {
-            if replaced_hash != metadata.content_hash {
-                self.remove_blob_if_unreferenced_in_index(&file_index, replaced_hash.as_str())?;
-            }
+        if let Some(replaced_hash) = replaced_hash
+            && replaced_hash != metadata.content_hash
+        {
+            self.remove_blob_if_unreferenced_in_index(&file_index, replaced_hash.as_str())?;
         }
         Ok(metadata)
     }
@@ -797,15 +797,15 @@ pub fn assemble_journal<E: DeserializeOwned>(
                 ),
             });
         }
-        if let Some(expected) = expected_next {
-            if first_id != expected {
-                return Err(WorldError::DistributedValidationFailed {
-                    reason: format!(
-                        "journal discontinuity: expected={}, got={}",
-                        expected, first_id
-                    ),
-                });
-            }
+        if let Some(expected) = expected_next
+            && first_id != expected
+        {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: format!(
+                    "journal discontinuity: expected={}, got={}",
+                    expected, first_id
+                ),
+            });
         }
         expected_next = last_id.checked_add(1);
 
