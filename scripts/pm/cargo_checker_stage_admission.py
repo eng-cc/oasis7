@@ -236,6 +236,10 @@ def _verify_live_integration_run(repository: str, parsed: dict[str, Any]) -> Non
         raise AdmissionError("planner integration required-gate identity is missing or ambiguous")
     check = matches[0]
     app_id = ((check.get("app") or {}).get("id"))
+    if check.get("status") != "completed" or check.get("conclusion") != "success":
+        raise AdmissionError(
+            "planner integration required-gate is not completed successfully"
+        )
     if not isinstance(app_id, int) or app_id <= 0 or check.get("head_sha") != run.get("head_sha"):
         raise AdmissionError("planner integration required-gate identity is invalid")
     artifacts = _read_profile_artifacts(repository, run_id)

@@ -210,6 +210,7 @@ def _authority_api():
             return {"check_runs": [{
                 "id": CHECK_RUN_ID, "name": "required-gate", "head_sha": CHECKER_BASE,
                 "details_url": f"https://github.com/{REPOSITORY}/actions/runs/{INTEGRATION_RUN}/job/1",
+                "status": "completed", "conclusion": "success",
                 "app": {"id": 15368, "slug": "github-actions"},
             }]}
         if "/commits/" in path:
@@ -232,6 +233,22 @@ class CheckerStageAdmissionTest(unittest.TestCase):
         self.profile_patch = patch.object(MODULE, "_read_profile_artifacts", return_value=_profile_artifacts())
         self.profile_patch.start()
         self.addCleanup(self.profile_patch.stop)
+
+    def test_workflow_checker_route_does_not_depend_on_optional_impact_marker(self):
+        workflow = (Path(__file__).parents[2] / ".github/workflows/rust.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("id: checker-stage", workflow)
+        self.assertIn('git diff --name-only "${CHECKER_BASE_SHA}" "${CHECKER_HEAD_SHA}"', workflow)
+        self.assertIn("issues/3827", workflow)
+        self.assertIn(
+            "OASIS7_CARGO_STAGE_PR_NUMBER: ${{ steps.checker-stage.outputs.pr_number }}",
+            workflow,
+        )
+        self.assertNotIn(
+            "steps.scope.outputs.task_uid == 'task_be264ac2833044969d3c2c50b2b83cea'",
+            workflow,
+        )
 
     def test_authority_chain_reads_both_fixed_live_server_readbacks(self):
         with patch.object(MODULE, "gh_api", side_effect=_authority_api()):
@@ -507,6 +524,33 @@ class CheckerStageAdmissionTest(unittest.TestCase):
         with patch.object(MODULE, "gh_api", side_effect=missing_verification):
             with self.assertRaisesRegex(MODULE.AdmissionError, "verification"):
                 MODULE.verify_authority_chain(REPOSITORY)
+
+    def test_authority_chain_rejects_missing_pending_or_failed_required_gate(self):
+        for status, conclusion in ((None, None), ("in_progress", None), ("completed", "failure")):
+            api = _authority_api()
+            original = api
+
+            def tampered_check(path, status=status, conclusion=conclusion):
+                response = original(path)
+                if "/check-runs?" in path:
+                    response = dict(response)
+                    check = dict(response["check_runs"][0])
+                    if status is None:
+                        check.pop("status", None)
+                    else:
+                        check["status"] = status
+                    if conclusion is None:
+                        check.pop("conclusion", None)
+                    else:
+                        check["conclusion"] = conclusion
+                    response["check_runs"] = [check]
+                return response
+
+            with self.subTest(status=status, conclusion=conclusion), patch.object(
+                MODULE, "gh_api", side_effect=tampered_check
+            ):
+                with self.assertRaisesRegex(MODULE.AdmissionError, "completed successfully"):
+                    MODULE.verify_authority_chain(REPOSITORY)
 
     def test_preflight_binds_scope_and_command_digest(self):
         self.assertTrue(hasattr(MODULE, "build_preflight"))
