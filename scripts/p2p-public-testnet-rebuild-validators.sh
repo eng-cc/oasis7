@@ -11,7 +11,7 @@ Governed transaction contract (current path):
     --trust-root <provenance-trust-root.json> \
     --identity-receipts <validator-identity-receipts.json> \
     --sequencer-rebuild-proof <signed-204-rebuild-proof.json> \
-    --consumer-impact-record <record.json> \
+    --consumer-impact-record <path> \
     --human-direct-ssh-request <executor-bound-human-stop-request.json> \
     --known-hosts <pinned-known-hosts> \
     --quiescence-transaction-id <bounded-quiescence-id> \

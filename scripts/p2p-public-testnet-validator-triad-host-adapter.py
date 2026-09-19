@@ -71,9 +71,20 @@ HEX64 = re.compile(r"^[0-9a-fA-F]{64}$")
 SAFE_VERSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.+:~-]*$")
 
 
+class AdapterExit(SystemExit):
+    """Fail closed with a stable process exit code and inspectable reason."""
+
+    def __init__(self, message: str):
+        self.message = message
+        super().__init__(2)
+
+    def __str__(self) -> str:
+        return self.message
+
+
 def fail(message: str) -> NoReturn:
     print(f"error: triad host adapter: {message}", file=sys.stderr)
-    raise SystemExit(2)
+    raise AdapterExit(message)
 
 
 def load_executor() -> Any:
@@ -159,21 +170,29 @@ def validate_identity_v2(transaction: dict[str, Any]) -> None:
     admission = proof.get("identity_v2") if isinstance(proof, dict) else None
     if not isinstance(admission, dict) or admission.get("verified") is not True:
         fail("capability_blocked: identity-v2 admission is unavailable or unverified")
-    if admission.get("status") not in (None, "verified"):
+    if admission.get("status") != "verified":
         fail("capability_blocked: identity-v2 admission status is not verified")
     receipts = admission.get("receipts")
-    if receipts is not None:
-        if not isinstance(receipts, list) or not receipts:
-            fail("capability_blocked: identity-v2 receipts are malformed")
-        for item in receipts:
-            if not isinstance(item, dict) or not isinstance(item.get("path"), str):
-                fail("capability_blocked: identity-v2 receipt path is missing")
-            path = regular_file(Path(item["path"]), "identity-v2 receipt")
-            value = load_json(path, "identity-v2 receipt")
-            if value.get("schema_version") != "oasis7.identity_receipt.v2" or value.get("verified") is not True or value.get("authenticated") is not True:
-                fail("capability_blocked: identity-v2 receipt is not authenticated and verified")
-            if item.get("sha256") is not None and item["sha256"] != sha256_file(path):
-                fail("capability_blocked: identity-v2 receipt digest mismatch")
+    if not isinstance(receipts, list) or not receipts:
+        fail("capability_blocked: authenticated identity-v2 receipts are required")
+    for item in receipts:
+        if not isinstance(item, dict) or not isinstance(item.get("path"), str):
+            fail("capability_blocked: identity-v2 receipt path is missing")
+        if not isinstance(item.get("sha256"), str) or not HEX64.fullmatch(item["sha256"]):
+            fail("capability_blocked: identity-v2 receipt digest is missing")
+        path = regular_file(Path(item["path"]), "identity-v2 receipt")
+        if item["sha256"].lower() != sha256_file(path):
+            fail("capability_blocked: identity-v2 receipt digest mismatch")
+        value = load_json(path, "identity-v2 receipt")
+        if value.get("schema_version") != "oasis7.identity_v2_verification_receipt.v1":
+            fail("capability_blocked: identity-v2 receipt schema is not the governed verification receipt")
+        if (
+            value.get("mode") != "current_admission"
+            or value.get("verified") is not True
+            or value.get("apply_authorized") is not True
+            or value.get("historical_only") is not False
+        ):
+            fail("capability_blocked: identity-v2 receipt is not current-admission evidence")
 
 
 def load_inventory() -> tuple[dict[str, Any], Path]:
@@ -273,6 +292,50 @@ def validate_governed(transaction: dict[str, Any]) -> dict[str, Path]:
             actual = EXECUTOR.inventory_tree(path)
             if actual.get("sha256") != expected and actual.get("sha256_tree") != expected:
                 fail(f"governed {key} tree digest mismatch")
+        if key == "registry":
+            if sha256_file(path) != TRIAD_GENERATED_REGISTRY_SHA256:
+                fail("triad governed registry digest is not the fixed generated value")
+            registry = load_json(path, "triad governed registry")
+            validators = registry.get("validators")
+            expected_ids = {
+                "triad-testnet-storage",
+                "triad-testnet-sequencer",
+                "triad-testnet-validator-47",
+            }
+            if not isinstance(validators, list) or len(validators) != 3:
+                fail("triad governed registry must contain exactly three validators")
+            actual_ids = {
+                item.get("node_id")
+                for item in validators
+                if isinstance(item, dict) and isinstance(item.get("node_id"), str)
+            }
+            if len(actual_ids) != 3 or actual_ids != expected_ids:
+                fail("triad governed registry must contain exactly three validators")
+            if any(
+                not isinstance(item, dict)
+                or not isinstance(item.get("finality_signer_public_key"), str)
+                or not isinstance(item.get("stake"), int)
+                for item in validators
+            ):
+                fail("triad governed registry validator bindings are incomplete")
+            canonical = {
+                "signer_bindings": {
+                    f"governance.finality.v1.{item['node_id']}": str(item["finality_signer_public_key"]).lower()
+                    for item in validators
+                },
+                "slot_id": registry.get("slot_id"),
+                "threshold": registry.get("threshold"),
+                "threshold_bps": registry.get("threshold_bps"),
+                "validator_stakes": {
+                    f"governance.finality.v1.{item['node_id']}": item["stake"]
+                    for item in validators
+                },
+            }
+            semantic = hashlib.sha256(
+                json.dumps(canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+            if semantic != TRIAD_GENERATED_REGISTRY_SEMANTIC_SHA256:
+                fail("triad governed registry semantic digest is not the fixed generated value")
         result[key] = path
     return result
 
@@ -425,6 +488,13 @@ def readback(transport: FixedSSH, inventory: dict[str, Any], role: str) -> dict[
 
 def observe_node(transport: FixedSSH, inventory: dict[str, Any], role: str, plan_root: str, *, running: bool) -> dict[str, Any]:
     value = readback(transport, inventory, role)
+    required_health = ("healthz_ok", "ready", "last_error", "nrestarts", "oom_panic_segfault")
+    if any(key not in value for key in required_health):
+        fail(f"remote health evidence is incomplete for {role}")
+    if value.get("healthz_ok") is not True or value.get("ready") is not True or value.get("last_error") is not None:
+        fail(f"remote health readiness gate failed for {role}")
+    if value.get("nrestarts") != 0 or value.get("oom_panic_segfault") is not False:
+        fail(f"remote health restart/crash gate failed for {role}")
     expected_state = (value.get("active") is True and value.get("running") is True and value.get("service_state") == "running")
     if expected_state != running:
         fail(f"remote service state gate failed for {role}")
@@ -440,9 +510,11 @@ def observe_node(transport: FixedSSH, inventory: dict[str, Any], role: str, plan
         "listeners": [str(item) for item in value.get("listeners", [])],
         "runtime_sha256": runtime,
         "runtime_size_bytes": None,
-        "healthz_ok": running,
-        "nrestarts": 0,
-        "oom_panic_segfault": False,
+        "healthz_ok": value["healthz_ok"],
+        "ready": value["ready"],
+        "last_error": value["last_error"],
+        "nrestarts": value["nrestarts"],
+        "oom_panic_segfault": value["oom_panic_segfault"],
         "full_chain_status_called": False,
     }
 
@@ -461,7 +533,13 @@ def parse_markers(output: str) -> dict[str, Any]:
             parsed["runtime"][role] = digest.strip()
         elif line.startswith("OASIS7_HEALTH\t"):
             _, role, status = line.split("\t", 2)
-            parsed["health"][role] = status.strip() == "ok"
+            try:
+                health = json.loads(status)
+            except json.JSONDecodeError:
+                fail("remote adapter emitted malformed health evidence")
+            if not isinstance(health, dict):
+                fail("remote adapter emitted non-object health evidence")
+            parsed["health"][role] = health
         elif line.startswith("OASIS7_STOPPED\t"):
             try:
                 parsed["stopped"] = json.loads(line.split("\t", 1)[1])
@@ -484,6 +562,8 @@ def control_script(transaction: dict[str, Any], phase: str, package: dict[str, A
     service = str(node.get("service") or ("oasis7-triad-storage.service" if role == "storage-205" else "oasis7-triad-sequencer.service"))
     if service not in {"oasis7-triad-storage.service", "oasis7-triad-sequencer.service"}:
         fail("transaction service binding is not fixed")
+    if isinstance(transaction.get("backup"), dict):
+        require_remote_backup(transaction, role)
     entries: list[tuple[Path, str]] = []
     for helper in (
         "p2p-public-testnet-package-node-upgrade.sh",
@@ -525,19 +605,38 @@ root={shlex.quote(STACK_ROOT)}
 service={shlex.quote(service)}
 role={role_literal}
 phase={phase_literal}
-emit_stopped() {{
+verify_stopped() {{
   value=$("$root/current/bin/service-readback" --read-only --role "$role" --root "$root" --service "$service")
   printf 'OASIS7_STOPPED\\t%s\\n' "$value"
+  python3 - "$value" <<'PY'
+import json, sys
+value = json.loads(sys.argv[1])
+if value.get('active') is not False or value.get('running') is not False or value.get('service_state') != 'stopped' or value.get('independently_observed') is not True:
+    raise SystemExit('service_state stop proof is not verified')
+PY
 }}
 emit_final() {{
   value=$("$root/current/bin/service-readback" --read-only --role "$role" --root "$root" --service "$service")
   printf 'OASIS7_READBACK\\t%s\\t%s\\n' "$role" "$value"
   printf 'OASIS7_RUNTIME\\t%s\\t%s\\n' "$role" "$(sha256sum "$root/current/bin/oasis7_chain_runtime" | awk '{{print $1}}')"
-  curl --fail --silent --show-error --max-time 5 {shlex.quote(health_url)} >/dev/null
-  printf 'OASIS7_HEALTH\\t%s\\tok\\n' "$role"
+  health=$(curl --fail --silent --show-error --max-time 5 {shlex.quote(health_url)})
+  health=$(HEALTH_JSON="$health" python3 - <<'PY'
+import json, os
+value = json.loads(os.environ['HEALTH_JSON'])
+required = ('ok', 'ready', 'last_error', 'nrestarts', 'oom_panic_segfault')
+if any(key not in value for key in required):
+    raise SystemExit('health evidence is incomplete')
+if value['ok'] is not True or value['ready'] is not True or value['last_error'] is not None:
+    raise SystemExit('health readiness gate failed')
+if value['nrestarts'] != 0 or value['oom_panic_segfault'] is not False:
+    raise SystemExit('health restart/crash gate failed')
+print(json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(',', ':')))
+PY
+  )
+  printf 'OASIS7_HEALTH\\t%s\\t%s\\n' "$role" "$health"
 }}
-systemctl stop "$service" || true
-emit_stopped
+systemctl stop "$service"
+verify_stopped
 if [[ "$phase" == "staggered-rollback" ]]; then
   for surface in {reset}; do
     path="$root/$surface"
@@ -646,6 +745,35 @@ def base_receipt(transaction: dict[str, Any], phase: str) -> dict[str, Any]:
     }
 
 
+def require_remote_backup(transaction: dict[str, Any], role: str) -> None:
+    """Require an executor-produced receipt bound to the remote mutation host.
+
+    The adapter cannot safely infer a remote backup from local filesystem
+    paths.  Until the executor records this explicit binding, the governed
+    route remains capability-blocked before any archive or control script is
+    created.
+    """
+    backup = transaction.get("backup")
+    entry = backup.get(role) if isinstance(backup, dict) else None
+    if not isinstance(entry, dict) or entry.get("remote_target") is not True:
+        fail(f"capability_blocked: remote backup evidence is required before {role} mutation")
+    expected = EXECUTOR.HUMAN_DIRECT_SSH_CANONICAL[role]
+    if entry.get("remote_host") != expected["host"] or entry.get("remote_root") != STACK_ROOT:
+        fail(f"capability_blocked: remote backup host/root binding is not fixed for {role}")
+    manifest_sha256 = entry.get("manifest_sha256")
+    if not isinstance(manifest_sha256, str) or not HEX64.fullmatch(manifest_sha256):
+        fail(f"capability_blocked: remote backup manifest digest is missing for {role}")
+    capacity = entry.get("capacity")
+    if (
+        not isinstance(capacity, dict)
+        or capacity.get("verified") is not True
+        or not isinstance(capacity.get("available_bytes"), int)
+        or not isinstance(capacity.get("required_bytes"), int)
+        or capacity["available_bytes"] < capacity["required_bytes"]
+    ):
+        fail(f"capability_blocked: remote backup capacity evidence is missing for {role}")
+
+
 def run_phase(transaction: dict[str, Any], phase: str) -> dict[str, Any]:
     inventory, known_hosts, package, governed = validate_transaction(transaction, phase)
     fds = credential_fds()
@@ -673,6 +801,7 @@ def run_phase(transaction: dict[str, Any], phase: str) -> dict[str, Any]:
             failed = completed[-1]
         if failed not in MUTATION_ORDER:
             fail("rollback target role is not transaction-bound")
+        require_remote_backup(transaction, failed)
         peer = "sequencer-204" if failed == "storage-205" else "storage-205"
         peer_before = observe_node(transport, inventory, peer, str(plan_nodes[peer]["root"]), running=True)
         script, entries = control_script(transaction, phase, package, governed, failed)
@@ -693,6 +822,7 @@ def run_phase(transaction: dict[str, Any], phase: str) -> dict[str, Any]:
         return receipt
     target = "storage-205" if phase == "staggered-storage" else "sequencer-204"
     peer = "sequencer-204" if target == "storage-205" else "storage-205"
+    require_remote_backup(transaction, target)
     peer_before = observe_node(transport, inventory, peer, str(plan_nodes[peer]["root"]), running=True)
     script, entries = control_script(transaction, phase, package, governed, target)
     markers = parse_markers(transport.archive(target, script, entries))
@@ -705,8 +835,12 @@ def run_phase(transaction: dict[str, Any], phase: str) -> dict[str, Any]:
     payload = markers.get("readbacks", {}).get(alias)
     runtime = markers.get("runtime", {}).get(alias)
     health = markers.get("health", {}).get(alias)
-    if not isinstance(payload, dict) or not isinstance(runtime, str) or health is not True:
+    if not isinstance(payload, dict) or not isinstance(runtime, str) or not isinstance(health, dict):
         fail("target post-start readback is incomplete")
+    if health.get("ok") is not True or health.get("ready") is not True or health.get("last_error") is not None:
+        fail("target health readiness gate failed")
+    if health.get("nrestarts") != 0 or health.get("oom_panic_segfault") is not False:
+        fail("target health restart/crash gate failed")
     if payload.get("active") is not True or payload.get("running") is not True or payload.get("service_state") != "running":
         fail("target readiness readback failed")
     listeners = {str(item) for item in payload.get("listeners", [])}
@@ -715,8 +849,10 @@ def run_phase(transaction: dict[str, Any], phase: str) -> dict[str, Any]:
     target_node = {
         "role": target, "root": str(plan_nodes[target]["root"]), "active": True,
         "running": True, "service_state": "running", "independently_observed": True,
-        "listeners": sorted(listeners), "runtime_sha256": runtime, "healthz_ok": True,
-        "nrestarts": 0, "oom_panic_segfault": False, "full_chain_status_called": False,
+        "listeners": sorted(listeners), "runtime_sha256": runtime, "healthz_ok": health["ok"],
+        "ready": health["ready"], "last_error": health["last_error"],
+        "nrestarts": health["nrestarts"], "oom_panic_segfault": health["oom_panic_segfault"],
+        "full_chain_status_called": False,
         "post_delete_absence": {"absent": True, "target_set": list(RESET_SURFACES), "target_set_sha256": EXECUTOR.reset_surface_digest()},
     }
     if runtime != transaction["package"].get("runtime_sha256"):

@@ -2109,6 +2109,16 @@ def _direct_reobserve_from_args(args: argparse.Namespace) -> dict[str, Any]:
     known_hosts = getattr(args, "known_hosts", None)
     if not isinstance(known_hosts, str) or not known_hosts.strip():
         fail("plan/apply requires the canonical pinned known-hosts file for direct re-observation")
+    # Adapter-only descriptors authenticate the governed host adapter and must
+    # never silently become credentials for the executor-owned direct SSH
+    # observation.  Resume therefore fails before opening the direct callback
+    # unless its own explicit environment/FD seam is present.
+    credential_env = getattr(args, "credential_env", None)
+    credential_fd = getattr(args, "credential_fd", None)
+    has_direct_env = isinstance(credential_env, str) and bool(credential_env.strip())
+    has_direct_fd = isinstance(credential_fd, int) and credential_fd > 2
+    if not has_direct_env and not has_direct_fd:
+        fail("plan/apply direct re-observation requires an explicit direct credential seam")
     # The direct provider writes only audit material to an isolated temporary
     # directory.  The returned in-memory receipt is the gate; no persisted
     # proof is read back into this process or used as authority.
