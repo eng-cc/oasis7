@@ -99,8 +99,7 @@ impl ClientLauncherApp {
                                     egui::Button::new(self.tr("下一页", "Next")),
                                 )
                                 .clicked()
-                            {
-                                if let Some(next_cursor) = self
+                                && let Some(next_cursor) = self
                                     .explorer_panel_state
                                     .p1
                                     .mempool_response
@@ -110,7 +109,6 @@ impl ClientLauncherApp {
                                     self.explorer_panel_state.p1.mempool_cursor = next_cursor;
                                     self.explorer_panel_state.p1.pending_mempool_refresh = true;
                                 }
-                            }
                         });
 
                         {

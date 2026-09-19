@@ -541,11 +541,10 @@ impl ClientLauncherApp {
                     if ui
                         .add_enabled(!next_disabled, egui::Button::new(self.tr("下一页", "Next")))
                         .clicked()
+                        && let Some(next_cursor) = self.explorer_panel_state.blocks_next_cursor
                     {
-                        if let Some(next_cursor) = self.explorer_panel_state.blocks_next_cursor {
-                            self.explorer_panel_state.blocks_cursor = next_cursor;
-                            self.explorer_panel_state.pending_blocks_refresh = true;
-                        }
+                        self.explorer_panel_state.blocks_cursor = next_cursor;
+                        self.explorer_panel_state.pending_blocks_refresh = true;
                     }
                     Self::explorer_status_chip(
                         ui,
@@ -788,11 +787,10 @@ impl ClientLauncherApp {
                     if ui
                         .add_enabled(!next_disabled, egui::Button::new(self.tr("下一页", "Next")))
                         .clicked()
+                        && let Some(next_cursor) = self.explorer_panel_state.txs_next_cursor
                     {
-                        if let Some(next_cursor) = self.explorer_panel_state.txs_next_cursor {
-                            self.explorer_panel_state.txs_cursor = next_cursor;
-                            self.explorer_panel_state.pending_txs_refresh = true;
-                        }
+                        self.explorer_panel_state.txs_cursor = next_cursor;
+                        self.explorer_panel_state.pending_txs_refresh = true;
                     }
                     Self::explorer_status_chip(
                         ui,
