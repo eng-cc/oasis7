@@ -2517,6 +2517,12 @@ def command_record_pr(args: argparse.Namespace) -> int:
     previous = str(record.get("status") or "")
     previous_phase = str(record.get("workflow_phase") or "")
     is_draft_candidate = bool(getattr(args, "draft_candidate", False))
+    if not re.fullmatch(
+        rf"https://github\.com/{re.escape(args.repo)}/pull/[1-9][0-9]*(?:[?#].*)?",
+        args.pr_url,
+        re.IGNORECASE,
+    ):
+        die("record-pr: PR URL repository mismatch or malformed PR URL")
     existing_pr_urls = [str(record[key]) for key in ("pr_url", "pull_request_url") if record.get(key)]
     existing_pr_number = record.get("pr_number")
     requested_pr_number = pr_number_from_url(args.pr_url)

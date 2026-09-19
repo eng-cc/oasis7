@@ -191,6 +191,28 @@ class MoveTaskLifecycleContract(unittest.TestCase):
             comment.assert_not_called()
             update_project.assert_not_called()
 
+    def test_record_pr_rejects_foreign_repository_url_with_matching_number(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            record = mapping_record(status="ready", phase="pre_pr_ready")
+            record["pr_number"] = 2001
+            mapping_path = self.write_mapping(root, record)
+            before = self.digest(mapping_path)
+            request = record_pr_args(root)
+            request.pr_url = "https://github.com/other/repo/pull/2001"
+            with (
+                mock.patch.object(MODULE, "synchronize_live_issue_traceability", return_value=[]),
+                mock.patch.object(MODULE, "update_issue_body") as update_issue,
+                mock.patch.object(MODULE, "issue_comment") as comment,
+                mock.patch.object(MODULE, "update_project_fields") as update_project,
+            ):
+                with self.assertRaisesRegex(MODULE._CommandExit, "PR URL repository mismatch"):
+                    MODULE.command_record_pr(request)
+            self.assertEqual(before, self.digest(mapping_path))
+            update_issue.assert_not_called()
+            comment.assert_not_called()
+            update_project.assert_not_called()
+
     def test_record_pr_cannot_rewrite_terminal_task(self) -> None:
         for phase in ("post_merge_done", "closed_without_merge"):
             with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
