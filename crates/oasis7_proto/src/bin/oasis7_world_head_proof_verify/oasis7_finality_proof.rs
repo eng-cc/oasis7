@@ -117,28 +117,28 @@ pub(crate) fn verify_finality_proof_path(
     };
     proof.validate_contract()?;
     let proof_hash = proof.proof_hash()?;
-    if let Some(expected) = expect_hash {
-        if proof_hash != expected {
-            return Err(format!(
-                "finality proof hash mismatch: expected={expected} actual={proof_hash}"
-            ));
-        }
+    if let Some(expected) = expect_hash
+        && proof_hash != expected
+    {
+        return Err(format!(
+            "finality proof hash mismatch: expected={expected} actual={proof_hash}"
+        ));
     }
-    if let Some(expected) = expect_world_id {
-        if proof.world_id != expected {
-            return Err(format!(
-                "finality proof world_id mismatch: expected={expected} actual={}",
-                proof.world_id
-            ));
-        }
+    if let Some(expected) = expect_world_id
+        && proof.world_id != expected
+    {
+        return Err(format!(
+            "finality proof world_id mismatch: expected={expected} actual={}",
+            proof.world_id
+        ));
     }
-    if let Some(expected) = expect_height {
-        if proof.to_height != expected {
-            return Err(format!(
-                "finality proof to_height mismatch: expected={expected} actual={}",
-                proof.to_height
-            ));
-        }
+    if let Some(expected) = expect_height
+        && proof.to_height != expected
+    {
+        return Err(format!(
+            "finality proof to_height mismatch: expected={expected} actual={}",
+            proof.to_height
+        ));
     }
     let transition_governance_hashes = proof
         .validator_set_transitions
