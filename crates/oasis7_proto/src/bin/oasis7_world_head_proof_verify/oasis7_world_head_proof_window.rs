@@ -162,21 +162,21 @@ pub(crate) fn verify_proof_window(
             manifest.from_height, manifest.to_height
         ));
     }
-    if let Some(expected) = expectations.expect_from_height {
-        if manifest.from_height != expected {
-            return Err(format!(
-                "proof window from_height mismatch: expected={} actual={}",
-                expected, manifest.from_height
-            ));
-        }
+    if let Some(expected) = expectations.expect_from_height
+        && manifest.from_height != expected
+    {
+        return Err(format!(
+            "proof window from_height mismatch: expected={} actual={}",
+            expected, manifest.from_height
+        ));
     }
-    if let Some(expected) = expectations.expect_to_height.or(expectations.expect_height) {
-        if manifest.to_height != expected {
-            return Err(format!(
-                "proof window to_height mismatch: expected={} actual={}",
-                expected, manifest.to_height
-            ));
-        }
+    if let Some(expected) = expectations.expect_to_height.or(expectations.expect_height)
+        && manifest.to_height != expected
+    {
+        return Err(format!(
+            "proof window to_height mismatch: expected={} actual={}",
+            expected, manifest.to_height
+        ));
     }
     if let Some(expected) = expectations.expect_anchor_hash {
         let anchor = manifest
@@ -203,12 +203,12 @@ pub(crate) fn verify_proof_window(
         proof.validate_contract()?;
         validate_window_consensus(&proof)?;
         let proof_hash = proof.proof_hash()?;
-        if let Some(expected_hash) = entry.expect_hash.as_deref() {
-            if proof_hash != expected_hash {
-                return Err(format!(
-                    "proof window entry {index} hash mismatch: expected={expected_hash} actual={proof_hash}"
-                ));
-            }
+        if let Some(expected_hash) = entry.expect_hash.as_deref()
+            && proof_hash != expected_hash
+        {
+            return Err(format!(
+                "proof window entry {index} hash mismatch: expected={expected_hash} actual={proof_hash}"
+            ));
         }
         if entry.proof_ref.trim().is_empty() {
             return Err(format!("proof window entry {index} proof_ref missing"));
@@ -222,13 +222,13 @@ pub(crate) fn verify_proof_window(
                 proof.height, world_id, proof.world_id
             ));
         }
-        if let Some(expected) = expectations.expect_world_id {
-            if proof.world_id != expected {
-                return Err(format!(
-                    "proof window expected world_id mismatch at height {}: expected={} actual={}",
-                    proof.height, expected, proof.world_id
-                ));
-            }
+        if let Some(expected) = expectations.expect_world_id
+            && proof.world_id != expected
+        {
+            return Err(format!(
+                "proof window expected world_id mismatch at height {}: expected={} actual={}",
+                proof.height, expected, proof.world_id
+            ));
         }
         let expected_height = manifest.from_height + index as u64;
         if proof.height != expected_height {
