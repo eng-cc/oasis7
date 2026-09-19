@@ -5,6 +5,7 @@ usage() {
   cat <<'EOF'
 Governed transaction contract (current path):
   ./scripts/p2p-public-testnet-rebuild-validators.sh plan \
+    --execution-mode triad_staggered \
     --package-dir <verified-package-dir> \
     --provenance <verified-pair-provenance.json> \
     --trust-root <provenance-trust-root.json> \
@@ -23,10 +24,12 @@ Governed transaction contract (current path):
    audit-routing locator when the direct request flags are unavailable; it is
    never an admission authority.)
   ./scripts/p2p-public-testnet-rebuild-validators.sh apply \
+    --execution-mode triad_staggered \
     --transaction <transaction-dir>/transaction.json \
     --host-adapter <governed-host-adapter>
   OASIS7_VALIDATOR_PAIR_NONCE_LEDGER=/var/lib/oasis7/p2p-public-testnet/validator-pair-nonces.jsonl \
   ./scripts/p2p-public-testnet-rebuild-validators.sh resume \
+    --execution-mode triad_staggered \
     --transaction <transaction-dir>/transaction.json \
     --host-adapter <governed-host-adapter> \
     --human-direct-ssh-request <fresh-live-human-stop-request.json> \
@@ -39,6 +42,7 @@ Governed transaction contract (current path):
     --out-dir <quiescence-dir> \
     [--credential-env <temporary-env-name> | --credential-fd <temporary-fd>]
   ./scripts/p2p-public-testnet-rebuild-validators.sh rollback \
+    --execution-mode triad_staggered \
     --transaction <transaction-dir>/transaction.json \
     --host-adapter <governed-host-adapter>
 
@@ -65,29 +69,25 @@ JSON cannot establish host-state authority. Use `human_direct_ssh` for the
 bounded, read-only stop evidence path. It never preflights, resets, stages,
 starts, or mutates observer state.
 
-Historical SSH audit path (not the current governed transaction contract):
-  ./scripts/p2p-public-testnet-rebuild-validators.sh \
-    --config-dir <path> \
-    --world-dir <path> \
-    --consumer-impact-record <path> \
-    --sequencer-ssh-host <user@host> \
-    --sequencer-sshpass-env <env-name> \
-    --sequencer-service <name> \
-    --sequencer-status-url <url> \
-    --storage-ssh-host <user@host> \
-    --storage-sshpass-env <env-name> \
-    --storage-service <name> \
-    --storage-status-url <url> \
-    [--stack-root <path>] \
-    [--out-dir <path>] \
-    [--poll-attempts <n>] \
-    [--poll-sleep-seconds <n>] \
-    [--disable-ssh-multiplex]
+The historical positional SSH rebuild path is retired and fail-closed. Its
+former `--config-dir`, `--world-dir`, `--sequencer-ssh-host`,
+`--sequencer-sshpass-env`, `--storage-ssh-host`, and
+`--storage-sshpass-env` arguments remain source-visible only so old receipts
+and audit tooling can identify the retired contract; this wrapper will never
+execute that destructive path. Historical receipts are forensic evidence only.
 
 Description:
-  Safely rebuild the validator pair in this order:
-  consumer-impact gate -> preflight both -> reset both -> stage both -> sequencer liveness -> storage.
-  Capture live status evidence after both validators restart.
+  Safely rebuild the validator pair with a staggered cutover:
+  consumer-impact gate -> preflight both/live baseline ->
+  storage reset/stage/start/readback while sequencer remains live ->
+  sequencer reset/stage/start/readback while storage remains live ->
+  final pair readiness.
+  At most one existing validator is stopped at any point. A failed member is
+  left stopped after target-only cleanup; its live peer is never stopped as
+  rollback. Capture live status evidence after every member transition.
+  The governed triad_staggered receipt must prove
+  max_simultaneously_stopped_validators=1 and never falls back to historical
+  SSH arguments.
 
   The consumer-impact record must be valid JSON with impact set to active,
   none, or unknown; evidence_source; an RFC3339 timestamp
@@ -123,6 +123,7 @@ require_file() {
 
 require_resume_inputs() {
   local transaction=""
+  local execution_mode=""
   local host_adapter=""
   local direct_request=""
   local known_hosts=""
@@ -130,6 +131,13 @@ require_resume_inputs() {
   local credential_fd=""
   while (($#)); do
     case "$1" in
+      --execution-mode)
+        [[ $# -ge 2 && -n "$2" ]] || die "resume requires a value for --execution-mode"
+        [[ -z "$execution_mode" ]] || die "resume received duplicate --execution-mode"
+        [[ "$2" = "pair" || "$2" = "triad_staggered" ]] || die "resume --execution-mode must be pair or triad_staggered"
+        execution_mode=$2
+        shift 2
+        ;;
       --transaction)
         [[ $# -ge 2 && -n "$2" ]] || die "resume requires a value for --transaction"
         [[ -z "$transaction" ]] || die "resume received duplicate --transaction"
@@ -420,44 +428,53 @@ def node_contracts() -> dict[str, object]:
             "observer_equivalents_not_mutated_by_pair_transaction": True,
             "status": "required_at_apply" if mode == "plan" else "receipt_bound",
         }
+        triad_mode = value.get("execution_mode", "pair") == "triad_staggered"
+        completed_roles = value.get("staggered_completed_roles", [])
+        if not isinstance(completed_roles, list):
+            completed_roles = []
         if mode not in {"plan", "quiesce", "human_direct_ssh"}:
             staged = value.get("staged", {}) if isinstance(value.get("staged"), dict) else {}
             observed = staged.get(role, {}).get("post_delete_absence") if isinstance(staged.get(role), dict) else None
             if not isinstance(observed, dict):
-                raise SystemExit(f"missing post-delete absence receipt for {role}")
-            if observed.get("absent") is not True or observed.get("target_set") != list(RESET_TARGETS) or observed.get("target_set_sha256") != reset_target_digest():
+                if not triad_mode or role in completed_roles:
+                    raise SystemExit(f"missing post-delete absence receipt for {role}")
+                post_delete_proof["status"] = "not_run"
+            elif observed.get("absent") is not True or observed.get("target_set") != list(RESET_TARGETS) or observed.get("target_set_sha256") != reset_target_digest():
                 raise SystemExit(f"post-delete absence target binding mismatch for {role}")
-            post_delete_proof["receipt"] = observed
+            else:
+                post_delete_proof["receipt"] = observed
         backup_receipt = None
         backups = value.get("backup", {}) if isinstance(value.get("backup"), dict) else {}
         if mode not in {"plan", "quiesce", "human_direct_ssh"}:
             observed_backup = backups.get(role) if isinstance(backups.get(role), dict) else None
             if not isinstance(observed_backup, dict):
-                raise SystemExit(f"missing forensic backup receipt for {role}")
-            manifest_path = observed_backup.get("manifest")
-            backup_root = observed_backup.get("backup_root")
-            manifest_sha256 = observed_backup.get("manifest_sha256")
-            if not isinstance(manifest_path, str) or not isinstance(backup_root, str) or not isinstance(manifest_sha256, str):
-                raise SystemExit(f"incomplete forensic backup receipt for {role}")
-            manifest_file = Path(manifest_path)
-            backup_root_path = Path(backup_root).resolve()
-            if manifest_file.is_symlink() or not manifest_file.is_file() or manifest_file.resolve().parent != backup_root_path:
-                raise SystemExit(f"forensic backup manifest path binding mismatch for {role}")
-            if sha256_file(manifest_file) != manifest_sha256.lower():
-                raise SystemExit(f"forensic backup manifest digest mismatch for {role}")
-            if backup_root_path.parent != root / "backups":
-                raise SystemExit(f"forensic backup root binding mismatch for {role}")
-            backup_receipt = {
-                "backup_root": str(backup_root_path),
-                "backup_manifest_sha256": manifest_sha256,
-                "backup_inventory": value.get("capacity", {}).get(role, {}).get("inventory", {}),
-                "backup_capacity": value.get("capacity", {}).get(role, {}),
-                "backup_non_seed": {
-                    "forensic_only": True,
-                    "seed_eligible": False,
-                    "restore_deleted_chain_state": False,
-                },
-            }
+                if not triad_mode or role in completed_roles or role in staged:
+                    raise SystemExit(f"missing forensic backup receipt for {role}")
+            else:
+                manifest_path = observed_backup.get("manifest")
+                backup_root = observed_backup.get("backup_root")
+                manifest_sha256 = observed_backup.get("manifest_sha256")
+                if not isinstance(manifest_path, str) or not isinstance(backup_root, str) or not isinstance(manifest_sha256, str):
+                    raise SystemExit(f"incomplete forensic backup receipt for {role}")
+                manifest_file = Path(manifest_path)
+                backup_root_path = Path(backup_root).resolve()
+                if manifest_file.is_symlink() or not manifest_file.is_file() or manifest_file.resolve().parent != backup_root_path:
+                    raise SystemExit(f"forensic backup manifest path binding mismatch for {role}")
+                if sha256_file(manifest_file) != manifest_sha256.lower():
+                    raise SystemExit(f"forensic backup manifest digest mismatch for {role}")
+                if backup_root_path.parent != root / "backups":
+                    raise SystemExit(f"forensic backup root binding mismatch for {role}")
+                backup_receipt = {
+                    "backup_root": str(backup_root_path),
+                    "backup_manifest_sha256": manifest_sha256,
+                    "backup_inventory": value.get("capacity", {}).get(role, {}).get("inventory", {}),
+                    "backup_capacity": value.get("capacity", {}).get(role, {}),
+                    "backup_non_seed": {
+                        "forensic_only": True,
+                        "seed_eligible": False,
+                        "restore_deleted_chain_state": False,
+                    },
+                }
         result[role] = {
             "role": role,
             "platform": node.get("transport", "unknown"),
@@ -493,7 +510,15 @@ def node_contracts() -> dict[str, object]:
             "stopped_quiescence_proof": {
                 "required": True,
                 "remote_activity": "executor-owned-direct-ssh-read-only" if mode in {"plan", "human_direct_ssh"} else False,
-                "proof": "repository-owned executor identity binds fixed direct-SSH read-only quiescence to role, digest, active=false,running=false before reset",
+                "observation_state": value.get("proof", {}).get(
+                    "baseline_observation_state",
+                    value.get("observation_state", "stopped"),
+                ),
+                "proof": (
+                    "repository-owned executor identity binds fixed direct-SSH read-only live baseline to role, digest, active=true,running=true before each target reset"
+                    if value.get("execution_mode", "pair") == "triad_staggered"
+                    else "repository-owned executor identity binds fixed direct-SSH read-only quiescence to role, digest, active=false,running=false before reset"
+                ),
             },
         }
         if backup_receipt is not None:
@@ -506,6 +531,7 @@ contract.update(
     {
         "schema_version": "oasis7.validator_pair_rebuild_receipt_contract.v1",
         "mode": mode,
+        "execution_mode": value.get("execution_mode", "pair"),
         "mutation_order": value.get("mutation_order", ["storage-205", "sequencer-204"]),
         "startup_order": value.get("startup_order", ["sequencer-204", "storage-205"]),
         "nodes": node_contracts(),
@@ -528,6 +554,8 @@ contract.update(
             "start": "sequencer-then-storage-host-receipt-required",
             "same_window_fleet_health": "same host-receipt captured_at window required",
         },
+        "executor_live_observations": value.get("staggered_live_observations", {}),
+        "executor_rollback_observations": value.get("staggered_rollback_observations", {}),
         "rollback_boundary": {
             "schema_version": "oasis7.validator_pair_rebuild_rollback_boundary.v1",
             "restore_deleted_chain_state": False,
@@ -537,6 +565,41 @@ contract.update(
         },
     }
 )
+if contract["execution_mode"] == "triad_staggered":
+    requested_execution_mode = cli_value("--execution-mode")
+    if requested_execution_mode and requested_execution_mode != contract["execution_mode"]:
+        raise SystemExit("executor receipt execution mode differs from requested execution mode")
+    phase_order = value.get("phase_order", contract.get("phase_order"))
+    if phase_order is None:
+        phase_order = ["staggered-preflight", "staggered-storage", "staggered-sequencer"]
+    expected_phase_order = ["staggered-preflight", "staggered-storage", "staggered-sequencer"]
+    if mode == "rollback":
+        expected_phase_order.append("staggered-rollback")
+    if phase_order != expected_phase_order:
+        raise SystemExit("triad staggered phase order is not deterministic")
+    max_stopped = value.get(
+        "max_simultaneously_stopped_validators",
+        value.get("pair_preservation", {}).get("max_simultaneously_stopped_validators", 1),
+    )
+    if max_stopped != 1:
+        raise SystemExit("triad staggered receipt violates max_simultaneously_stopped_validators=1")
+    contract["pair_preservation"] = {
+        "max_simultaneously_stopped_validators": 1,
+        "member_order": ["storage-205", "sequencer-204"],
+        "live_peer_readback_before_each_reset": True,
+        "rebuilt_member_readback_before_next_reset": True,
+        "rollback": "target_only_cleanup_and_preserve_live_peer",
+        "historical_ssh_fallback": False,
+    }
+    contract.update(
+        {
+            "max_simultaneously_stopped_validators": 1,
+            "phase_order": phase_order,
+            "historical_ssh_fallback": False,
+        }
+    )
+elif cli_value("--execution-mode") and cli_value("--execution-mode") != contract["execution_mode"]:
+    raise SystemExit("executor receipt execution mode differs from requested execution mode")
 # Keep the provenance names machine-checkable even when the signed receipt's
 # governed map uses a different internal key order.
 governed = value.get("network", {}).get("governed", {})
@@ -609,9 +672,15 @@ print(output)
 PY
 }
 
-# New governed modes are explicit subcommands.  Legacy invocations retain the
-# historical SSH fixture contract and are intentionally not used for a current
-# destructive rebuild.
+# New governed modes are explicit subcommands.  The former positional SSH
+# rebuild path is retained below only as unreachable legacy source for audit
+# fixtures; fail closed before its parser so it cannot stop, reset, stage, or
+# start a live node.
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
 case "${1:-}" in
   plan|apply|rollback|quiesce|human_direct_ssh)
     receipt_contract_envelope "$@"
@@ -643,6 +712,11 @@ case "${1:-}" in
     exit $?
     ;;
 esac
+
+if [[ $# -eq 0 ]]; then
+  die "a governed subcommand is required; the legacy destructive SSH rebuild path is retired"
+fi
+die "legacy destructive SSH rebuild invocation is retired and fail-closed; use the governed plan/apply/resume/rollback path"
 
 CONFIG_DIR=""
 WORLD_DIR=""
@@ -1011,6 +1085,126 @@ poll_status_with_check() {
   return 1
 }
 
+write_staggered_recovery_receipt() {
+  local failed_role=$1
+  local phase=$2
+  local message=$3
+  local preserved_role=$4
+  local cleanup_status=${5:-completed}
+  jq -n \
+    --arg mode "staggered" \
+    --arg failed_role "$failed_role" \
+    --arg phase "$phase" \
+    --arg message "$message" \
+    --arg preserved_role "$preserved_role" \
+    --arg cleanup_status "$cleanup_status" \
+    --arg out_dir "$OUT_DIR" \
+    --argjson max_stopped 1 \
+    ' {
+        schema_version: "oasis7.validator_pair_staggered_recovery.v1",
+        mode: $mode,
+        failed_role: $failed_role,
+        failed_phase: $phase,
+        failure: $message,
+        preserved_live_peer: $preserved_role,
+        max_simultaneously_stopped_validators: $max_stopped,
+        rollback: {
+          action: "target_only_cleanup_and_preserve_live_peer",
+          cleanup_status: $cleanup_status,
+          restore_deleted_chain_state: false,
+          restore_old_node_state: false,
+          requires_fresh_clean_stage: true,
+          validator_47_no_start_unchanged: true
+        },
+        recovery_artifact_dir: $out_dir
+      }' >"$OUT_DIR/staggered-recovery.json"
+}
+
+staggered_role_host() {
+  case "$1" in
+    sequencer) printf '%s\n' "$SEQUENCER_SSH_HOST" ;;
+    storage) printf '%s\n' "$STORAGE_SSH_HOST" ;;
+    *) die "unknown staggered role: $1" ;;
+  esac
+}
+
+staggered_role_control_path() {
+  case "$1" in
+    sequencer) printf '%s\n' "$SEQUENCER_CONTROL_PATH" ;;
+    storage) printf '%s\n' "$STORAGE_CONTROL_PATH" ;;
+    *) die "unknown staggered role: $1" ;;
+  esac
+}
+
+staggered_role_service() {
+  case "$1" in
+    sequencer) printf '%s\n' "$SEQUENCER_SERVICE" ;;
+    storage) printf '%s\n' "$STORAGE_SERVICE" ;;
+    *) die "unknown staggered role: $1" ;;
+  esac
+}
+
+staggered_role_status_url() {
+  case "$1" in
+    sequencer) printf '%s\n' "$SEQUENCER_STATUS_URL" ;;
+    storage) printf '%s\n' "$STORAGE_STATUS_URL" ;;
+    *) die "unknown staggered role: $1" ;;
+  esac
+}
+
+staggered_peer_role() {
+  case "$1" in
+    sequencer) printf '%s\n' storage ;;
+    storage) printf '%s\n' sequencer ;;
+    *) die "unknown staggered role: $1" ;;
+  esac
+}
+
+staggered_readback_peer() {
+  local role=$1
+  local peer
+  peer=$(staggered_peer_role "$role")
+  local peer_url
+  peer_url=$(staggered_role_status_url "$peer")
+  local peer_path="$OUT_DIR/staggered-${peer}-before-${role}.json"
+  poll_status_with_check "$peer_url" "$peer_path" \
+    "${peer} live peer readback before ${role} cutover" json_liveness_ok
+}
+
+staggered_sequencer_ready() {
+  json_sequencer_ok "$1"
+}
+
+staggered_storage_ready() {
+  json_storage_ok "$1"
+}
+
+staggered_abort() {
+  local role=$1
+  local phase=$2
+  local message=$3
+  local cleanup_target=${4:-1}
+  local peer
+  peer=$(staggered_peer_role "$role")
+  local cleanup_status="not_required"
+  if [[ "$cleanup_target" == 1 ]]; then
+    local host control_path service
+    host=$(staggered_role_host "$role")
+    control_path=$(staggered_role_control_path "$role")
+    service=$(staggered_role_service "$role")
+    if cleanup_host_processes "$host" "$control_path" "$service"; then
+      cleanup_status="completed"
+    else
+      cleanup_status="failed"
+    fi
+  fi
+  write_staggered_recovery_receipt "$role" "$phase" "$message" "$peer" "$cleanup_status"
+  if [[ "$cleanup_status" == failed ]]; then
+    die "$message; target-only cleanup failed; see $OUT_DIR/staggered-recovery.json"
+  fi
+  die "$message; ${peer} was preserved live; see $OUT_DIR/staggered-recovery.json"
+}
+
 repair_rebuild_log_value() {
   local log_path=$1
   local key=$2
@@ -1027,9 +1221,18 @@ validate_repair_rebuild_log() {
   journal_events=$(repair_rebuild_log_value "$log_path" "journal_events")
   tick_consensus_records=$(repair_rebuild_log_value "$log_path" "tick_consensus_records")
 
-  [[ "$world_time" == "0" ]] || die "$label repair rebuild produced world_time=$world_time, expected 0"
-  [[ "$journal_events" == "0" ]] || die "$label repair rebuild produced journal_events=$journal_events, expected 0"
-  [[ "$tick_consensus_records" == "0" ]] || die "$label repair rebuild produced tick_consensus_records=$tick_consensus_records, expected 0"
+  if [[ "$world_time" != "0" ]]; then
+    printf 'error: %s repair rebuild produced world_time=%s, expected 0\n' "$label" "$world_time" >&2
+    return 1
+  fi
+  if [[ "$journal_events" != "0" ]]; then
+    printf 'error: %s repair rebuild produced journal_events=%s, expected 0\n' "$label" "$journal_events" >&2
+    return 1
+  fi
+  if [[ "$tick_consensus_records" != "0" ]]; then
+    printf 'error: %s repair rebuild produced tick_consensus_records=%s, expected 0\n' "$label" "$tick_consensus_records" >&2
+    return 1
+  fi
 }
 
 run_repair_rebuild_host() {
@@ -1043,10 +1246,13 @@ run_repair_rebuild_host() {
     "'$STACK_ROOT/current/bin/oasis7_world_repair_rebuild' --generated-world-dir '$STACK_ROOT/staged-world' --output-world-dir '$STACK_ROOT/data/execution-world' --world-id '$WORLD_RESOURCE_WORLD_ID' --chain-id '$WORLD_RESOURCE_CHAIN_ID' --resource-commit-height 0 --resource-commit-hash genesis" \
     >"$repair_log" 2>&1; then
     cat "$repair_log" >&2 || true
-    die "$label repair rebuild failed"
+    printf 'error: %s repair rebuild failed\n' "$label" >&2
+    return 1
   fi
   cat "$repair_log" >&2
-  validate_repair_rebuild_log "$repair_log" "$label"
+  if ! validate_repair_rebuild_log "$repair_log" "$label"; then
+    return 1
+  fi
   ssh_run "$host" "$control_path" "cat > '$remote_log'" <"$repair_log"
 }
 
@@ -1087,7 +1293,9 @@ stage_host() {
     | ssh_run "$host" "$control_path" "tar -C '$STACK_ROOT/staged-world' -xf -"
   ssh_run "$host" "$control_path" \
     "find '$STACK_ROOT/staged-world' \\( -name '._*' -o -name '.DS_Store' \\) -delete"
-  run_repair_rebuild_host "$host" "$control_path" "$label"
+  if ! run_repair_rebuild_host "$host" "$control_path" "$label"; then
+    return 1
+  fi
   ssh_run "$host" "$control_path" \
     "cp -R '$STACK_ROOT/staged-world/generated-scenario-world' '$STACK_ROOT/data/execution-world/generated-scenario-world' && cp '$STACK_ROOT/staged-world/world-generation-provenance.json' '$STACK_ROOT/data/execution-world/world-generation-provenance.json'"
 
@@ -1200,7 +1408,7 @@ if triad_rollout:
     if triad_inventory_path.is_symlink() or not triad_inventory_path.is_file():
         raise SystemExit(f'missing regular triad deployment inventory: {triad_inventory_path}')
     inventory_sha256 = hashlib.sha256(triad_inventory_path.read_bytes()).hexdigest()
-    if inventory_sha256 != '3313a899630e3013d623adfee252556a124c25d059406bcf98a541ae2fcdacd5':
+    if inventory_sha256 != 'b983bd9df4f29bf7a0e32dd9d1d56323d85d16d4cf572c10bc8c567908565739':
         raise SystemExit('triad deployment inventory is not the canonical governed authority')
     inventory_data = json.loads(triad_inventory_path.read_text(encoding='utf-8'))
     if inventory_data.get('schema_version') != 'oasis7.public_testnet_validator_triad_inventory.v1':
@@ -1609,57 +1817,66 @@ start_host() {
   ssh_run "$host" "$control_path" "systemctl unmask '$service' || true; systemctl reset-failed '$service' || true; systemctl start '$service'"
 }
 
-cleanup_after_failed_start() {
-  local label=$1
-  local out_path=$2
-  if ! cleanup_started_hosts; then
-    die "$label failed checks after restart and cleanup failed; see $out_path"
-  fi
-  die "$label failed checks after restart; see $out_path"
-}
-
-SEQUENCER_STARTED=0
-STORAGE_STARTED=0
-
-cleanup_started_hosts() {
-  local ok=0
-  if [[ "$SEQUENCER_STARTED" == 1 ]]; then
-    cleanup_host_processes "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE" || ok=1
-  fi
-  if [[ "$STORAGE_STARTED" == 1 ]]; then
-    cleanup_host_processes "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "$STORAGE_SERVICE" || ok=1
-  fi
-  return "$ok"
-}
-
 preflight_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH"
 preflight_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH"
 
-reset_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE"
-reset_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "$STORAGE_SERVICE"
-
-stage_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "sequencer"
-stage_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "storage"
-
-SEQUENCER_STARTED=1
-if ! start_host "$SEQUENCER_SSH_HOST" "$SEQUENCER_CONTROL_PATH" "$SEQUENCER_SERVICE"; then
-  cleanup_after_failed_start "sequencer start" "$OUT_DIR/sequencer-liveness.json"
+# Capture a live baseline before the first destructive action. This hard gate
+# prevents an already-stopped peer from being taken down as well: every
+# staggered transaction starts with both existing validators observable as live.
+if ! poll_status_with_check "$SEQUENCER_STATUS_URL" "$OUT_DIR/staggered-preflight-sequencer.json" \
+  "sequencer preflight liveness" json_liveness_ok; then
+  write_staggered_recovery_receipt "sequencer" "preflight_liveness" \
+    "sequencer preflight liveness readback failed" "storage" "not_required"
+  die "sequencer preflight liveness failed; no validator was mutated; see $OUT_DIR/staggered-recovery.json"
+fi
+if ! poll_status_with_check "$STORAGE_STATUS_URL" "$OUT_DIR/staggered-preflight-storage.json" \
+  "storage preflight liveness" json_liveness_ok; then
+  write_staggered_recovery_receipt "storage" "preflight_liveness" \
+    "storage preflight liveness readback failed" "sequencer" "not_required"
+  die "storage preflight liveness failed; no validator was mutated; see $OUT_DIR/staggered-recovery.json"
 fi
 
-poll_status_with_check "$SEQUENCER_STATUS_URL" "$OUT_DIR/sequencer-liveness.json" "sequencer liveness" json_liveness_ok \
-  || cleanup_after_failed_start "sequencer liveness" "$OUT_DIR/sequencer-liveness.json"
+# Mutate one member at a time. storage-205 goes first so the current
+# sequencer remains the live producer while storage is rebuilt. Before each
+# reset, the other member is read back again; after each start, the rebuilt
+# member is read back before the next member may be touched.
+for staggered_role in storage sequencer; do
+  if ! staggered_readback_peer "$staggered_role"; then
+    staggered_abort "$staggered_role" "peer_readback_before_reset" \
+      "$(staggered_peer_role "$staggered_role") was not live before ${staggered_role} reset" 0
+  fi
 
-STORAGE_STARTED=1
-if ! start_host "$STORAGE_SSH_HOST" "$STORAGE_CONTROL_PATH" "$STORAGE_SERVICE"; then
-  cleanup_after_failed_start "storage start" "$OUT_DIR/storage-liveness.json"
-fi
+  staggered_host=$(staggered_role_host "$staggered_role")
+  staggered_control_path=$(staggered_role_control_path "$staggered_role")
+  staggered_service=$(staggered_role_service "$staggered_role")
+  if ! reset_host "$staggered_host" "$staggered_control_path" "$staggered_service"; then
+    staggered_abort "$staggered_role" "reset" \
+      "${staggered_role} reset failed" 1
+  fi
+  if ! stage_host "$staggered_host" "$staggered_control_path" "$staggered_role"; then
+    staggered_abort "$staggered_role" "stage" \
+      "${staggered_role} stage failed" 1
+  fi
 
-poll_status_with_check "$STORAGE_STATUS_URL" "$OUT_DIR/storage-liveness.json" "storage liveness" json_liveness_ok \
-  || cleanup_after_failed_start "storage liveness" "$OUT_DIR/storage-liveness.json"
+  if ! start_host "$staggered_host" "$staggered_control_path" "$staggered_service"; then
+    staggered_abort "$staggered_role" "start" \
+      "${staggered_role} start failed" 1
+  fi
+  staggered_status_url=$(staggered_role_status_url "$staggered_role")
+  staggered_readiness_check="staggered_${staggered_role}_ready"
+  if ! poll_status_with_check "$staggered_status_url" "$OUT_DIR/staggered-${staggered_role}-liveness.json" \
+    "${staggered_role} readiness readback" "$staggered_readiness_check"; then
+    staggered_abort "$staggered_role" "readiness_readback" \
+      "${staggered_role} readiness readback failed" 1
+  fi
+done
+
 poll_status_with_check "$SEQUENCER_STATUS_URL" "$OUT_DIR/sequencer-status.json" "sequencer readiness" json_sequencer_ok \
-  || cleanup_after_failed_start "sequencer readiness" "$OUT_DIR/sequencer-status.json"
+  || staggered_abort "sequencer" "final_sequencer_readiness" \
+    "sequencer readiness failed after staggered cutover" 1
 poll_status_with_check "$STORAGE_STATUS_URL" "$OUT_DIR/storage-status.json" "storage readiness" json_storage_ok \
-  || cleanup_after_failed_start "storage readiness" "$OUT_DIR/storage-status.json"
+  || staggered_abort "storage" "final_storage_readiness" \
+    "storage readiness failed after staggered cutover" 1
 
 jq -n \
   --arg config_dir "$CONFIG_DIR" \
@@ -1669,10 +1886,25 @@ jq -n \
   --arg storage_status_url "$STORAGE_STATUS_URL" \
   --arg sequencer_repair_rebuild_log "$OUT_DIR/sequencer-repair-rebuild.log" \
   --arg storage_repair_rebuild_log "$OUT_DIR/storage-repair-rebuild.log" \
+  --argjson staggered_member_order '["storage", "sequencer"]' \
   --slurpfile sequencer "$OUT_DIR/sequencer-status.json" \
   --slurpfile storage "$OUT_DIR/storage-status.json" \
   '
     {
+      execution_mode: "staggered",
+      staggered_member_order: $staggered_member_order,
+      pair_preservation: {
+        max_simultaneously_stopped_validators: 1,
+        live_peer_readback_before_each_reset: true,
+        rebuilt_member_readback_before_next_reset: true
+      },
+      rollback_boundary: {
+        restore_deleted_chain_state: false,
+        restore_old_node_state: false,
+        failure_action: "target_only_cleanup_and_preserve_live_peer",
+        requires_fresh_clean_stage: true,
+        validator_47_no_start_unchanged: true
+      },
       config_dir: $config_dir,
       world_dir: $world_dir,
       stack_root: $stack_root,
