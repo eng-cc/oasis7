@@ -71,8 +71,8 @@ Agent-facing 专业执行合同继续消费 `small_player_lane_id`、`leverage_c
 1. `review_recognition_evidence`：玩家能看到认可所依据的相称世界事实或可复核的审核/治理决定，以及来源、地点/作用域、用途、开始与到期边界和适用的复核/申诉入口。单次行动成功、推荐或历史记录本身不能跳过事实/审核边界。
 2. `preview_opportunity`：资格、邀请、推荐和预览只说明可以考虑或尝试的下一步，不产生世界资格、容量、排队顺位、优先级或其他效果。预览必须让玩家知道用途、作用域、期限、主要限制、当前 blocker 和失败后的替代方向。
 3. `submit_opportunity`：提交绑定当下可复核且当前有效的 `permission/authorization`、来源、作用域、用途、期限、资格、容量和反滥用条件；在权威结果前保持 `pending`。有界 hold/排队只能表达暂时待决，不等于已经分配、已经成功或获得排他权。
-4. `settle_once`：结算前重新读取当前事实与当前 `permission/authorization`；只有一份当前有效 receipt 才能形成一次可使用的有限机会。若权限/授权缺失、被撤销或已过期，不能产生 receipt 或任何世界效果，必须保持待决或拒绝/释放并说明原因与独立下一步。receipt 至少能追溯认可来源、地点/作用域、容量单位、期限和实际世界效果，但不冻结字段名或 schema。认可不自动变成资产、OC、治理权、区域控制、全局权力或下一次行动成功。
-5. `recover_or_appeal`：容量、资格、期限、来源、当前 `permission/authorization` 或反滥用事实变化时，玩家看到重新报价/拒绝/释放/继续待决的原因和下一步；系统不得自动重提、续期、跨区域携带或用历史认可补签。提交后权限/授权缺失、被撤销或已过期时，不产生 receipt/世界效果，保留历史并回到独立行动、补证、替代路线、repair/rebuild/pivot、恢复或申诉。
+4. `settle_once`：结算前重新读取当前事实与当前 `permission/authorization`；只有一份当前有效 receipt 才能形成一次可使用的有限机会。若提交后权限/授权缺失、被撤销或已过期，该旧 `pending` 必须先失效并转为拒绝、释放或过期之一，不能继续保持可结算状态，也不能产生 receipt 或任何世界效果；结果要说明原因与独立下一步。其他权限仍有效、仅因容量或资格等条件待决的请求，可以按既有规则继续保持 `pending`。receipt 至少能追溯认可来源、地点/作用域、容量单位、期限和实际世界效果，但不冻结字段名或 schema。认可不自动变成资产、OC、治理权、区域控制、全局权力或下一次行动成功。
+5. `recover_or_appeal`：容量、资格、期限、来源、当前 `permission/authorization` 或反滥用事实变化时，玩家看到重新报价/拒绝/释放/继续待决的原因和下一步；系统不得自动重提、续期、跨区域携带或用历史认可补签。提交后权限/授权缺失、被撤销或已过期时，旧 `pending` 只能拒绝、释放或过期，不产生 receipt/世界效果并保留历史；若权限后来恢复，必须重新校验当前权限及其他条件并由玩家显式新提交，绝不自动重提。玩家仍可回到独立行动、补证、替代路线、repair/rebuild/pivot、恢复或申诉。
 6. `bounded_abuse_review`：由本叶子 generic recognition 派生的认可/机会不可出售、出租、转让、拆分、叠加或由代理/组织代持。该 generic 规则不覆盖 [`FI-002 pioneer priority`](../../product/world-rules-core-gameplay/frontier-expansion-and-world-information-boundaries.prd.md#req-wr-fi-002) 在其专门范围、条件与 authority 下允许的可转让性，也不重定义 FI-002 的资格、期限或重验条件。伪造、刷取、重复申领、循环背书、付费换取或批量自动化只能按预声明且可复核的审核/处置规则处理；未经审核的怀疑不得直接惩罚。处置必须说明事实类别、当前效果、复核路径和再次取得资格的条件。
 
 情境声誉、pioneer priority 与区域设施容量分别回链 CR-003、FI-002 与 GR-001；本叶子可以消费这些窄范围 authority 的结果，但不得重新定义、扩张或互相转译它们。
@@ -99,7 +99,7 @@ Agent-facing 专业执行合同继续消费 `small_player_lane_id`、`leverage_c
 - **AC-RO-04 receipt 至多一次与竞争申领**：给定同一成熟世界作用域内一个只能分配一次的 scarce opportunity，以及两个 distinct 且当前 permission/authorization、资格与其他适用条件均有效的 eligible contenders；当两者提交、并发、重连或 retry 竞争该机会时，只有一个当前有效 receipt 可以产生一次可使用机会。获胜者之外的请求必须保持待决或原子拒绝/释放，说明冲突原因与独立下一步；不得产生第二次分配、隐藏优先级、隐藏 charge 或其他第二次世界效果。该规则也适用于 replay，但不改写 FI-002 专门 authority 下的 pioneer priority transfer 条件。
 
 <a id="ac-ro-05"></a>
-- **AC-RO-05 结算前重验**：来源、作用域、当前 `permission/authorization`、资格、容量、期限或反滥用事实变化时，系统必须重新校验；权限/授权缺失、撤销或过期时不得产生 receipt 或世界效果，必须保持待决或拒绝/释放并给出原因与独立下一步。不得自动重提、续期、跨区域携带或使用历史认可补签。
+- **AC-RO-05 结算前重验**：来源、作用域、当前 `permission/authorization`、资格、容量、期限或反滥用事实变化时，系统必须重新校验；若提交后权限/授权缺失、撤销或过期，旧 `pending` 必须失效并拒绝、释放或过期，不得产生 receipt 或世界效果，也不得继续保持可结算状态，且要给出原因与独立下一步。权限后来恢复时，必须再次重验当前权限与其他条件并显式新提交，不得自动重提；其他权限仍有效、仅因容量或资格变化的合法 `pending` 可按既有规则继续待决。不得自动续期、跨区域携带或使用历史认可补签。
 
 <a id="ac-ro-06"></a>
 - **AC-RO-06 失效与恢复**：到期、拒绝、暂停、撤销或申诉结果保留历史，停止未来效果，并提供独立行动、补证、替代路线、repair/rebuild/pivot、恢复或复核下一步；失效认可不得封锁独立基线或静默重试。
