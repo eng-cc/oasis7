@@ -31,6 +31,11 @@ mod response_worker_tests;
 mod subscribe_ack_tests;
 mod transport_path_refresh_tests;
 
+mod transport_retry_tests {
+    use super::*;
+    include!("transport_retry_tests.rs");
+}
+
 pub(super) fn signed_discovery_peer_record(
     keypair: &Keypair,
     discovery_sources: Vec<crate::dht::PeerDiscoverySource>,

@@ -1197,5 +1197,3 @@ impl Libp2pNetwork {
 }
 #[cfg(test)]
 mod tests;
-#[cfg(test)]
-mod transport_retry_tests;
