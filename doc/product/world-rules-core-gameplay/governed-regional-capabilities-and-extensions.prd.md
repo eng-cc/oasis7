@@ -7,7 +7,7 @@
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
 - Last reviewed：2026-09-13
-- 专业域权威：[`区域设施合同`](../../game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md)、[`玩家发布实体合同`](../../world-runtime/module/player-published-entities.prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
+- 专业域权威：[`区域 charter/tenure/融资玩法合同`](../../game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md)、[`区域设施合同`](../../game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md)、[`玩家发布实体合同`](../../world-runtime/module/player-published-entities.prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
 本文承载区域 charter、地点 tenure、公共融资、受治理的区域设施与工业能力扩展的长期产品承诺：玩家以有限、可读和可审计的方式改变局部世界，授权创作者也只能经治理把新的可用能力接入同一权威世界。它不把每项设施或每个制成品写成独立产品入口，也不冻结实现合同、数值或当前可用性。
 
@@ -42,7 +42,7 @@
 
 持续失去服务、维护、能力、正当性或 charter 条件时，区域依次进入观察与恢复、暂停高影响权限，再在无法恢复时解散并回归未成熟区域；一次短时失败不抹去合法历史。受影响者须看到触发事实、当前限制、恢复条件、异议/申诉与下一决策点。适用 bond 按已公开规则处理；设施、Agent、tenure、个人/组织身份、合同和历史 receipt 保留可审计身份，经规则化迁移、回收、重建或权利处理，不得静默没收或删除。技术停机、未审计处罚和运维便利不得伪装成有效 charter 解除；组织资产的连续性顺序另见[组织连续性](organization-continuity-dissolution-and-dormancy-protection.prd.md)。
 
-地点是公共世界与通行权之上的可审计经营/建设 tenure，而不是可永续主权化的土地。玩家或组织可以取得、依维护和实际使用续期、按规则转让；仅到期、长期闲置、明确违约或预定义公共必要性可触发收回，且须有通知、理由、申诉，以及适用的迁移、可回收拆除或规则化补偿。竞争、区域退化或公共必要性不能自动取消未经规则化处理的资产、身份和历史；地点与设施不得用于囤地、驱逐或封路。
+地点是公共世界与通行权之上的可审计经营/建设 tenure，而不是可永续主权化的土地。玩家或组织可以取得、依维护和实际使用续期、按规则转让；取得与续期时须能读到建设/服务用途、维护及实际使用条件、可规划的时间范围、续期/转让边界和改变条件，使长期经营计划可理解，但不保证未来资源、收益或永久排他权。仅到期、长期闲置、明确违约或预定义公共必要性可触发收回，且须有通知、理由、申诉，以及适用的迁移、可回收拆除或规则化补偿。竞争、区域退化或公共必要性不能自动取消未经规则化处理的资产、身份、合同和历史；地点与设施不得用于囤地、驱逐或封路。
 
 可排他设施/服务主要由透明的使用费、服务费、维护费或自愿合约筹资，付费人可读收益对象、用途、成本、服务范围和退出/替代路径。只有明确不可排他、跨受益范围的公共品才可使用 charter 预授权的区域 levy，并同时受目的绑定、受益范围、预算/费率上限、期限、公开账目和定期复核约束。levy 不是一般财富征收、隐蔽补贴、加入组织/专业化/独立路线的默认前置；无效、过期、越界或未经审计的征费不产生扣减、欠费、资格或通行限制等世界效果。常态与紧急市场边界另见[市场专题](market-normal-state-and-emergency-supply.prd.md)，后者不代替区域 levy 的主责。
 
@@ -111,7 +111,7 @@
 ### REQ-WR-GR-004：区域成立或调整须有能力与边界证据及分层审查
 
 - 要求：提案人提供空间锚定边界、持续设施/物流/服务能力、需求/交付、Agent/资源、边界理由及 bond；本地审查、邻区异议和全局宪制/反圈地复核各守其作用范围。批准不预留权力，当前条件失效时不得部分成立。
-- 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
+- 专业权威：[`PRD-GAME-017`](../../game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md#ac-game-017-01)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 - 验收：[AC-WR-GR-004](#ac-wr-gr-004)
 
 <a id="ac-wr-gr-004"></a>
@@ -126,7 +126,7 @@
 ### REQ-WR-GR-005：成熟区域须双资格约束且权限不外溢
 
 - 要求：受限 OC/委托/控制人资格和持续本地贡献共同约束 charter 日常决策；任何一侧都不能凭短时资本、到访或头衔独揽控制，基本通行与独立恢复不受任意排他。受保护事项遵守独立宪制轨道。
-- 专业权威：[`共同决策边界`](governed-common-decisions-and-constitutional-boundaries.prd.md)、[`doc/game/prd.md`](../../game/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
+- 专业权威：[`PRD-GAME-017`](../../game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md#ac-game-017-02)、[`共同决策边界`](governed-common-decisions-and-constitutional-boundaries.prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 - 验收：[AC-WR-GR-005](#ac-wr-gr-005)
 
 <a id="ac-wr-gr-005"></a>
@@ -141,7 +141,7 @@
 ### REQ-WR-GR-006：区域退化分阶段恢复且保留资产历史
 
 - 要求：持续退化先观察与恢复、再暂停高影响权限，无法恢复才解散回归未成熟；bond、设施、Agent、tenure、身份、合同和 receipt 依已公开规则处理，提供触发、限制、恢复、异议/申诉和下一步，不因短时失败或技术停机静默清除。
-- 专业权威：[`组织连续性`](organization-continuity-dissolution-and-dormancy-protection.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
+- 专业权威：[`PRD-GAME-017`](../../game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md#ac-game-017-03)、[`组织连续性`](organization-continuity-dissolution-and-dormancy-protection.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 - 验收：[AC-WR-GR-006](#ac-wr-gr-006)
 
 <a id="ac-wr-gr-006"></a>
@@ -155,23 +155,23 @@
 <a id="req-wr-gr-007"></a>
 ### REQ-WR-GR-007：地点 tenure 是可收回的建设权而非主权
 
-- 要求：取得、维护续期、规则化转让和限定触发的收回均可审计；到期、长期闲置、违约或预定义公共必要性下的收回须通知、理由、申诉及适用迁移/回收/补偿，公共通行和既有资产身份不能静默取消。
-- 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
+- 要求：tenure 支持建设、服务和可读的长期规划；取得、维护续期、规则化转让和限定触发的收回均可审计，规划不构成资源/收益保证或永久主权；到期、长期闲置、违约或预定义公共必要性下的收回须通知、理由、申诉及适用迁移/回收/补偿，公共通行和既有资产身份合同不能静默取消。
+- 专业权威：[`PRD-GAME-017`](../../game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md#ac-game-017-04)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 - 验收：[AC-WR-GR-007](#ac-wr-gr-007)
 
 <a id="ac-wr-gr-007"></a>
 ### AC-WR-GR-007：tenure 转让及收回不没收或封路
 
 - 覆盖要求：REQ-WR-GR-007
-- 给定：正常取得/续期/转让、到期或违约收回、区域退化、竞争和公共必要性样例。
+- 给定：正常取得/续期/转让、建设/服务的长期规划与维护取舍、到期或违约收回、区域退化、竞争和公共必要性样例。
 - 当：地点权利变化、申请重试或通行受影响。
-- 则：只有规则化结果确认权利变化且不能重复转让/没收；适用通知、申诉、迁移/可回收拆除/补偿可追溯，原有设施、Agent、身份、合同和通行不会被静默删除或任意阻断。
+- 则：玩家能读懂规划时间范围、用途、续期条件和收回风险但不误以为取得永久主权或未来资源；只有规则化结果确认权利变化且不能重复转让/没收；适用通知、申诉、迁移/可回收拆除/补偿可追溯，原有设施、Agent、身份、合同和通行不会被静默删除或任意阻断。
 
 <a id="req-wr-gr-008"></a>
 ### REQ-WR-GR-008：服务费与公共 levy 必须区分并有界
 
 - 要求：可排他服务以透明使用/维护费或自愿合同为主；不可排他公共品 levy 仅在 charter 预授权、目的与受益范围、上限、期限、公开账目和复核均有效时成立；无效征费不得扣减、产生欠费或限制资格/通行。
-- 专业权威：[`共同决策边界`](governed-common-decisions-and-constitutional-boundaries.prd.md)、[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
+- 专业权威：[`PRD-GAME-017`](../../game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md#ac-game-017-05)、[`共同决策边界`](governed-common-decisions-and-constitutional-boundaries.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 - 验收：[AC-WR-GR-008](#ac-wr-gr-008)
 
 <a id="ac-wr-gr-008"></a>
@@ -217,9 +217,9 @@
 | GR-5 | producer_system_designer / qa_engineer | PRD-TESTING-003 | 同候选跨域组合审计 | test_tier_full |
 | GR-6 | gameplay_designer / runtime_engineer / wasm_platform_engineer / viewer_engineer / qa_engineer | PRD-GAME-016 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-010 / PRD-TESTING-003 | 报价后状态变化、扩展授权失效后的待决发布/激活、重复/过期/重连/跨入口提交与待决表达的负例证据 | test_tier_required |
 | GR-7 | producer_system_designer / gameplay_designer / runtime_engineer / wasm_platform_engineer / blockchain_ops_engineer / viewer_engineer / qa_engineer | PRD-GAME-016 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-010 / PRD-WORLD_RUNTIME-012 / PRD-P2P-002 / PRD-TESTING-003 | 已生效扩展的撤销/到期/收缩/替代样例：授权结果声明及组合边界、不完整变更无效、历史 receipt 连续性、替代授权的单一可执行范围与原子交接、旧授权待决请求处置、已被限制/退出/未重新授权的能力无新增效果、受限或退出中的最小动作、去重/恢复负例及正式玩家 surface 的状态与下一步可读性；`test_tier_required` 覆盖授权结果、替代交接、无新增效果和玩家可读状态，`test_tier_full` 覆盖依赖、持久化、replay/去重、恢复与跨节点一致性 | test_tier_full |
-| GR-8 / [AC-WR-GR-004](#ac-wr-gr-004) / [AC-WR-GR-005](#ac-wr-gr-005) | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-015 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | 成立/调整边界与能力证据、分层异议/反圈地、双资格与通行/权利负例，同候选验证 | test_tier_full |
-| GR-9 / [AC-WR-GR-006](#ac-wr-gr-006) / [AC-WR-GR-007](#ac-wr-gr-007) | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / viewer_engineer / qa_engineer | PRD-GAME-015 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | 区域退化/暂停/解散、bond、tenure 收回/转让、通行、资产与身份历史的 receipt、申诉、恢复和重复提交负例，同候选验证 | test_tier_full |
-| GR-9 / [AC-WR-GR-008](#ac-wr-gr-008) | producer_system_designer / gameplay_designer / runtime_engineer / qa_engineer | PRD-GAME-015 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | 排他服务费与不可排他 levy 的受益、用途、上限、期限、账目、复核及无效扣费/欠费负例，同候选验证 | test_tier_required |
+| GR-8 / [AC-WR-GR-004](#ac-wr-gr-004) / [AC-WR-GR-005](#ac-wr-gr-005) | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-017 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | 成立/调整边界与能力证据、分层异议/反圈地、双资格与通行/权利负例，同候选验证 | test_tier_full |
+| GR-9 / [AC-WR-GR-006](#ac-wr-gr-006) / [AC-WR-GR-007](#ac-wr-gr-007) | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / viewer_engineer / qa_engineer | PRD-GAME-017 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | 区域退化/暂停/解散、bond、tenure 收回/转让和可读长期规划、通行、资产与身份历史的 receipt、申诉、恢复和重复提交负例，同候选验证 | test_tier_full |
+| GR-9 / [AC-WR-GR-008](#ac-wr-gr-008) | producer_system_designer / gameplay_designer / runtime_engineer / qa_engineer | PRD-GAME-017 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | 排他服务费与不可排他 levy 的受益、用途、上限、期限、账目、复核及无效扣费/欠费负例，同候选验证 | test_tier_required |
 
 ## 5. Non-Goals
 
@@ -236,8 +236,8 @@
 | [REQ-WR-GR-001](#req-wr-gr-001) / [AC-WR-GR-001](#ac-wr-gr-001) | `producer_system_designer` | [`区域设施合同`](../../game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md#目标)、[`玩家发布实体合同`](../../world-runtime/module/player-published-entities.prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-WR-GR-002](#req-wr-gr-002) / [AC-WR-GR-002](#ac-wr-gr-002) | `producer_system_designer` | [`区域设施合同`](../../game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md#目标)、[`玩家发布实体合同`](../../world-runtime/module/player-published-entities.prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-WR-GR-003](#req-wr-gr-003) / [AC-WR-GR-003](#ac-wr-gr-003) | `producer_system_designer` | [`区域设施合同`](../../game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md#目标)、[`玩家发布实体合同`](../../world-runtime/module/player-published-entities.prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
-| [REQ-WR-GR-004](#req-wr-gr-004) / [AC-WR-GR-004](#ac-wr-gr-004) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#目标)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 原区域 charter 成立项的能力/边界/bond 与分层审查、异议及失效负例 | `test_tier_full` |
-| [REQ-WR-GR-005](#req-wr-gr-005) / [AC-WR-GR-005](#ac-wr-gr-005) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#目标)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 原区域 charter 成熟治理项的双资格、权限边界、通行和反圈地负例 | `test_tier_full` |
-| [REQ-WR-GR-006](#req-wr-gr-006) / [AC-WR-GR-006](#ac-wr-gr-006) | `producer_system_designer` | [`doc/world-runtime/prd.md`](../../world-runtime/prd.md#目标)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 原区域 charter 退化项的恢复、bond、身份/receipt 和申诉负例 | `test_tier_full` |
-| [REQ-WR-GR-007](#req-wr-gr-007) / [AC-WR-GR-007](#ac-wr-gr-007) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#目标)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 原区域 charter 地点项的 tenure 取得/续期/转让/收回、通知申诉、通行和补偿负例 | `test_tier_full` |
-| [REQ-WR-GR-008](#req-wr-gr-008) / [AC-WR-GR-008](#ac-wr-gr-008) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#目标)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 原区域 charter 融资项的服务费/levy、无效扣费、退出和独立路线负例 | `test_tier_required` |
+| [REQ-WR-GR-004](#req-wr-gr-004) / [AC-WR-GR-004](#ac-wr-gr-004) | `producer_system_designer` | [`PRD-GAME-017`](../../game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md#ac-game-017-01)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 原区域 charter 成立项的能力/边界/bond 与分层审查、异议及失效负例 | `test_tier_full` |
+| [REQ-WR-GR-005](#req-wr-gr-005) / [AC-WR-GR-005](#ac-wr-gr-005) | `producer_system_designer` | [`PRD-GAME-017`](../../game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md#ac-game-017-02)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 原区域 charter 成熟治理项的双资格、权限边界、通行和反圈地负例 | `test_tier_full` |
+| [REQ-WR-GR-006](#req-wr-gr-006) / [AC-WR-GR-006](#ac-wr-gr-006) | `producer_system_designer` | [`PRD-GAME-017`](../../game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md#ac-game-017-03)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 原区域 charter 退化项的恢复、bond、身份/receipt 和申诉负例 | `test_tier_full` |
+| [REQ-WR-GR-007](#req-wr-gr-007) / [AC-WR-GR-007](#ac-wr-gr-007) | `producer_system_designer` | [`PRD-GAME-017`](../../game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md#ac-game-017-04)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 原区域 charter 地点项的 tenure 长期规划/取得/续期/转让/收回、通知申诉、通行和补偿负例 | `test_tier_full` |
+| [REQ-WR-GR-008](#req-wr-gr-008) / [AC-WR-GR-008](#ac-wr-gr-008) | `producer_system_designer` | [`PRD-GAME-017`](../../game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md#ac-game-017-05)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 原区域 charter 融资项的服务费/levy、无效扣费、退出和独立路线负例 | `test_tier_required` |
