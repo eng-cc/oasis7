@@ -4,6 +4,10 @@ use super::*;
 mod prompt_control_enhanced_rollback;
 
 impl ViewerRuntimeLiveServer {
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     pub(in crate::viewer::runtime_live) fn handle_prompt_control_for_protocol(
         &mut self,
         command: PromptControlCommand,
@@ -148,6 +152,10 @@ impl ViewerRuntimeLiveServer {
         )
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     fn handle_enhanced_prompt_apply(
         &mut self,
         request: PromptControlApplyRequest,
@@ -273,11 +281,11 @@ impl ViewerRuntimeLiveServer {
                     player_id.as_str(),
                     verified.public_key.as_str(),
                 ))
-            && !self
+            && self
                 .llm_sidecar
                 .agent_player_bindings
                 .get(agent_id.as_str())
-                .is_some_and(|bound_player| bound_player != player_id.as_str())
+                .is_none_or(|bound_player| bound_player == player_id.as_str())
         {
             return Err(prompt_control_result_unknown_error(&request_id));
         }

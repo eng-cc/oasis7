@@ -13,6 +13,10 @@ const EDGE_EXPIRE_REASON_TTL: &str = "ttl_expired";
 const EDGE_EXPIRE_REASON_BACKING_FACT_INACTIVE: &str = "backing_fact_inactive";
 
 impl WorldKernel {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable social command seam preserves deterministic quote inputs."
+    )]
     pub fn quote_publish_social_fact(
         &self,
         actor: &ResourceOwner,
@@ -327,6 +331,10 @@ impl WorldKernel {
         })
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable social command seam preserves deterministic quote inputs."
+    )]
     pub fn quote_declare_social_edge(
         &self,
         declarer: &ResourceOwner,
@@ -393,6 +401,10 @@ impl WorldKernel {
         })
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable social command seam preserves deterministic state-transition inputs."
+    )]
     pub(super) fn apply_publish_social_fact(
         &mut self,
         actor: ResourceOwner,
@@ -411,10 +423,10 @@ impl WorldKernel {
         if let Err(reason) = self.ensure_owner_exists(&subject) {
             return WorldEventKind::ActionRejected { reason };
         }
-        if let Some(owner) = &object {
-            if let Err(reason) = self.ensure_owner_exists(owner) {
-                return WorldEventKind::ActionRejected { reason };
-            }
+        if let Some(owner) = &object
+            && let Err(reason) = self.ensure_owner_exists(owner)
+        {
+            return WorldEventKind::ActionRejected { reason };
         }
 
         let schema_id = schema_id.trim().to_string();
@@ -441,20 +453,20 @@ impl WorldKernel {
             }
         }
 
-        if let Some(ticks) = ttl_ticks {
-            if ticks == 0 {
-                return WorldEventKind::ActionRejected {
-                    reason: RejectReason::InvalidAmount { amount: 0 },
-                };
-            }
+        if let Some(ticks) = ttl_ticks
+            && ticks == 0
+        {
+            return WorldEventKind::ActionRejected {
+                reason: RejectReason::InvalidAmount { amount: 0 },
+            };
         }
         if let Err(reason) = validate_social_stake(stake.as_ref()) {
             return WorldEventKind::ActionRejected { reason };
         }
-        if let Some(stake_value) = stake.as_ref() {
-            if let Err(reason) = self.lock_social_stake(&actor, stake_value) {
-                return WorldEventKind::ActionRejected { reason };
-            }
+        if let Some(stake_value) = stake.as_ref()
+            && let Err(reason) = self.lock_social_stake(&actor, stake_value)
+        {
+            return WorldEventKind::ActionRejected { reason };
         }
 
         let fact_id = self.model.next_social_fact_id.max(1);
@@ -499,10 +511,10 @@ impl WorldKernel {
         if let Err(reason) = validate_social_stake(stake.as_ref()) {
             return WorldEventKind::ActionRejected { reason };
         }
-        if let Some(stake_value) = stake.as_ref() {
-            if let Err(reason) = self.lock_social_stake(&challenger, stake_value) {
-                return WorldEventKind::ActionRejected { reason };
-            }
+        if let Some(stake_value) = stake.as_ref()
+            && let Err(reason) = self.lock_social_stake(&challenger, stake_value)
+        {
+            return WorldEventKind::ActionRejected { reason };
         }
 
         let now = self.time;
@@ -644,6 +656,10 @@ impl WorldKernel {
         }
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable social command seam preserves deterministic state-transition inputs."
+    )]
     pub(super) fn apply_declare_social_edge(
         &mut self,
         declarer: ResourceOwner,
@@ -692,12 +708,12 @@ impl WorldKernel {
                 ));
             }
         }
-        if let Some(ticks) = ttl_ticks {
-            if ticks == 0 {
-                return WorldEventKind::ActionRejected {
-                    reason: RejectReason::InvalidAmount { amount: 0 },
-                };
-            }
+        if let Some(ticks) = ttl_ticks
+            && ticks == 0
+        {
+            return WorldEventKind::ActionRejected {
+                reason: RejectReason::InvalidAmount { amount: 0 },
+            };
         }
 
         let edge_id = self.model.next_social_edge_id.max(1);
@@ -1029,10 +1045,10 @@ impl WorldKernel {
         if let Some(stake) = fact.stake.take() {
             self.release_social_stake(&fact.actor, stake)?;
         }
-        if let Some(challenge) = fact.challenge.as_mut() {
-            if let Some(stake) = challenge.stake.take() {
-                self.release_social_stake(&challenge.challenger, stake)?;
-            }
+        if let Some(challenge) = fact.challenge.as_mut()
+            && let Some(stake) = challenge.stake.take()
+        {
+            self.release_social_stake(&challenge.challenger, stake)?;
         }
         Ok(())
     }
@@ -1062,10 +1078,10 @@ impl WorldKernel {
                 if let Some(stake) = actor_stake {
                     self.slash_social_stake_to_pool(stake)?;
                 }
-                if let Some(challenge) = fact.challenge.as_ref() {
-                    if let Some(stake) = challenger_stake {
-                        self.release_social_stake(&challenge.challenger, stake)?;
-                    }
+                if let Some(challenge) = fact.challenge.as_ref()
+                    && let Some(stake) = challenger_stake
+                {
+                    self.release_social_stake(&challenge.challenger, stake)?;
                 }
                 fact.lifecycle = SocialFactLifecycleState::Retracted;
             }

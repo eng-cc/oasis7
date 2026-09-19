@@ -44,7 +44,6 @@ fn runtime_prompt_control_enhanced_apply_is_idempotent_per_authority_epoch() {
         session_epoch: registration.session_epoch,
         binding_epoch: registration.binding_epoch,
         expected_authority_epoch: Some(authority_epoch.clone()),
-        ..Default::default()
     };
     request = signed_prompt_control_apply_request(
         request,
@@ -163,7 +162,7 @@ fn runtime_prompt_control_selected_capability_rejects_legacy_shaped_requests() {
         .cloned()
         .expect("seed agent");
     let (public_key, private_key) = test_signer(47);
-    let registration = register_runtime_session(
+    let _registration = register_runtime_session(
         &mut server,
         "player-shape",
         Some(agent_id.as_str()),

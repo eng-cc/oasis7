@@ -67,12 +67,12 @@ fn resolve_viewer_static_dir_candidate_for_launcher(
 
     if user_path.is_relative() {
         let launcher_bin = launcher_bin.trim();
-        if !launcher_bin.is_empty() {
-            if let Some(bin_dir) = Path::new(launcher_bin).parent() {
-                let sibling_candidate = bin_dir.join("..").join(&user_path);
-                if sibling_candidate.is_dir() {
-                    return Some(sibling_candidate);
-                }
+        if !launcher_bin.is_empty()
+            && let Some(bin_dir) = Path::new(launcher_bin).parent()
+        {
+            let sibling_candidate = bin_dir.join("..").join(&user_path);
+            if sibling_candidate.is_dir() {
+                return Some(sibling_candidate);
             }
         }
     }
@@ -84,28 +84,26 @@ pub(super) fn resolve_viewer_static_dir_for_launcher(
     raw: &str,
     launcher_bin: &str,
 ) -> Option<std::path::PathBuf> {
-    if raw == DEFAULT_VIEWER_STATIC_DIR {
-        if let Some(override_path) =
+    if raw == DEFAULT_VIEWER_STATIC_DIR
+        && let Some(override_path) =
             resolve_viewer_static_env_override(std::env::var(GAME_STATIC_DIR_ENV).ok())
-        {
-            return resolve_viewer_static_dir_candidate_for_launcher(
-                override_path.as_str(),
-                launcher_bin,
-            );
-        }
+    {
+        return resolve_viewer_static_dir_candidate_for_launcher(
+            override_path.as_str(),
+            launcher_bin,
+        );
     }
 
     if let Some(dir) = resolve_viewer_static_dir_candidate_for_launcher(raw, launcher_bin) {
         return Some(dir);
     }
 
-    if raw == DEFAULT_VIEWER_STATIC_DIR {
-        if let Some(dev_fallback) = viewer_dev_dist_candidates()
+    if raw == DEFAULT_VIEWER_STATIC_DIR
+        && let Some(dev_fallback) = viewer_dev_dist_candidates()
             .into_iter()
             .find(|candidate| candidate.is_dir())
-        {
-            return Some(dev_fallback);
-        }
+    {
+        return Some(dev_fallback);
     }
 
     None

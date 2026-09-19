@@ -1,6 +1,5 @@
 //! P1 RED fixtures for terminal retention, checkpoint/GC pins and expiry.
 
-use super::super::*;
 use crate::runtime::{
     CognitionRetentionStore, RetentionExecutionProbe, RetentionGcReport, RetentionRecordV1,
     RetentionReplayRequestV1,

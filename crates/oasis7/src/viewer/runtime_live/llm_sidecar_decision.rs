@@ -1,3 +1,4 @@
+#[cfg(target_arch = "wasm32")]
 use super::super::decision_trace::{is_budget_exhausted_wait, is_trace_only_overflow};
 use super::*;
 
@@ -133,6 +134,12 @@ impl RuntimeLlmSidecar {
                 }
             }
         }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            self.shadow_kernel = Some(kernel);
+            None
+        }
+        #[cfg(target_arch = "wasm32")]
         let runner = match self.runner.as_mut() {
             Some(runner) => runner,
             None => {
@@ -143,125 +150,121 @@ impl RuntimeLlmSidecar {
                 ));
             }
         };
+        #[cfg(target_arch = "wasm32")]
         let result: Option<crate::simulator::AgentTickResult> = match runner {
-            #[cfg(target_arch = "wasm32")]
             RuntimeDecisionRunner::Builtin(runner) => {
                 let result = runner.tick_decide_only(&mut kernel);
                 sync_llm_runner_long_term_memory(&mut kernel, runner);
                 result
             }
-            #[cfg(not(target_arch = "wasm32"))]
-            RuntimeDecisionRunner::Builtin(_) | RuntimeDecisionRunner::ProviderBacked(_) => {
-                unreachable!("native decisions are polled through AsyncAgentRunner")
-            }
-            #[cfg(target_arch = "wasm32")]
             RuntimeDecisionRunner::ProviderBacked(runner) => runner.tick_decide_only(&mut kernel),
         };
-        self.shadow_kernel = Some(kernel);
-        let Some(tick) = result else {
-            return None;
-        };
         #[cfg(target_arch = "wasm32")]
-        let provider_response =
-            if let Some(RuntimeDecisionRunner::ProviderBacked(runner)) = self.runner.as_mut() {
-                runner
-                    .get_mut(tick.agent_id.as_str())
-                    .and_then(|agent| agent.behavior.take_continuous_response_context())
-            } else {
-                None
+        {
+            self.shadow_kernel = Some(kernel);
+            let Some(tick) = result else {
+                return None;
             };
-        #[cfg(not(target_arch = "wasm32"))]
-        let provider_response = None;
-        #[cfg(target_arch = "wasm32")]
-        let memory_write_intents =
-            if let Some(RuntimeDecisionRunner::ProviderBacked(runner)) = self.runner.as_mut() {
-                runner
-                    .get_mut(tick.agent_id.as_str())
-                    .map(|agent| agent.behavior.take_memory_write_intents())
-                    .unwrap_or_default()
-            } else {
-                Vec::new()
-            };
-        #[cfg(not(target_arch = "wasm32"))]
-        let memory_write_intents = Vec::new();
-        let cognition = self
-            .provider_contexts
-            .get(tick.agent_id.as_str())
-            .cloned()
-            .zip(provider_response)
-            .map(|(request, response)| RuntimeProviderActionContext {
-                request,
-                response,
-                cognition_lease: self.provider_cognition_lease(tick.agent_id.as_str()),
-                memory_write_intents: memory_write_intents.clone(),
-            });
-        if let Some(cognition) = cognition.as_ref() {
-            if tick.decision_trace.as_ref().is_none_or(|trace| {
-                trace.parse_error.is_none()
-                    && (trace.llm_error.is_none()
-                        || is_trace_only_overflow(trace)
-                        || is_budget_exhausted_wait(trace))
-            }) {
-                self.provider_active_turns
-                    .insert(tick.agent_id.clone(), cognition.request.clone());
-                match &tick.decision {
-                    AgentDecision::Wait => {
-                        #[cfg(target_arch = "wasm32")]
-                        tracing::warn!(
-                            agent_id = tick.agent_id.as_str(),
-                            "WASM ProviderBacked Wait uses the compatibility timer; native Runtime durable continuation admission is not available on this lane"
-                        );
-                        self.schedule_provider_wait(tick.agent_id.as_str(), world.state().time, 1);
-                    }
-                    AgentDecision::WaitTicks(ticks) => {
-                        #[cfg(target_arch = "wasm32")]
-                        tracing::warn!(
-                            agent_id = tick.agent_id.as_str(),
-                            "WASM ProviderBacked WaitTicks uses the compatibility timer; native Runtime durable continuation admission is not available on this lane"
-                        );
-                        self.schedule_provider_wait(
-                            tick.agent_id.as_str(),
-                            world.state().time,
-                            *ticks,
-                        );
-                    }
-                    AgentDecision::Act(_) => {
-                        #[cfg(target_arch = "wasm32")]
-                        if let Some(RuntimeDecisionRunner::ProviderBacked(runner)) =
-                            self.runner.as_mut()
-                        {
-                            if let Some(agent) = runner.get_mut(tick.agent_id.as_str()) {
-                                // Runtime receipt/disposition closes an action
-                                // turn; no local retry may re-enter it early.
-                                agent.wait_until = Some(u64::MAX);
+            let provider_response =
+                if let Some(RuntimeDecisionRunner::ProviderBacked(runner)) = self.runner.as_mut() {
+                    runner
+                        .get_mut(tick.agent_id.as_str())
+                        .and_then(|agent| agent.behavior.take_continuous_response_context())
+                } else {
+                    None
+                };
+            let memory_write_intents =
+                if let Some(RuntimeDecisionRunner::ProviderBacked(runner)) = self.runner.as_mut() {
+                    runner
+                        .get_mut(tick.agent_id.as_str())
+                        .map(|agent| agent.behavior.take_memory_write_intents())
+                        .unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
+            let cognition = self
+                .provider_contexts
+                .get(tick.agent_id.as_str())
+                .cloned()
+                .zip(provider_response)
+                .map(|(request, response)| RuntimeProviderActionContext {
+                    request,
+                    response,
+                    cognition_lease: self.provider_cognition_lease(tick.agent_id.as_str()),
+                    memory_write_intents: memory_write_intents.clone(),
+                });
+            if let Some(cognition) = cognition.as_ref() {
+                if tick.decision_trace.as_ref().is_none_or(|trace| {
+                    trace.parse_error.is_none()
+                        && (trace.llm_error.is_none()
+                            || is_trace_only_overflow(trace)
+                            || is_budget_exhausted_wait(trace))
+                }) {
+                    self.provider_active_turns
+                        .insert(tick.agent_id.clone(), cognition.request.clone());
+                    match &tick.decision {
+                        AgentDecision::Wait => {
+                            #[cfg(target_arch = "wasm32")]
+                            tracing::warn!(
+                                agent_id = tick.agent_id.as_str(),
+                                "WASM ProviderBacked Wait uses the compatibility timer; native Runtime durable continuation admission is not available on this lane"
+                            );
+                            self.schedule_provider_wait(
+                                tick.agent_id.as_str(),
+                                world.state().time,
+                                1,
+                            );
+                        }
+                        AgentDecision::WaitTicks(ticks) => {
+                            #[cfg(target_arch = "wasm32")]
+                            tracing::warn!(
+                                agent_id = tick.agent_id.as_str(),
+                                "WASM ProviderBacked WaitTicks uses the compatibility timer; native Runtime durable continuation admission is not available on this lane"
+                            );
+                            self.schedule_provider_wait(
+                                tick.agent_id.as_str(),
+                                world.state().time,
+                                *ticks,
+                            );
+                        }
+                        AgentDecision::Act(_) => {
+                            #[cfg(target_arch = "wasm32")]
+                            if let Some(RuntimeDecisionRunner::ProviderBacked(runner)) =
+                                self.runner.as_mut()
+                            {
+                                if let Some(agent) = runner.get_mut(tick.agent_id.as_str()) {
+                                    // Runtime receipt/disposition closes an action
+                                    // turn; no local retry may re-enter it early.
+                                    agent.wait_until = Some(u64::MAX);
+                                }
                             }
                         }
+                        AgentDecision::Query(_) | AgentDecision::ModuleCommand { .. } => {}
                     }
-                    AgentDecision::Query(_) | AgentDecision::ModuleCommand { .. } => {}
+                }
+            } else if tick
+                .decision_trace
+                .as_ref()
+                .is_some_and(provider_trace_retryable)
+            {
+                if let Some(context) = self.provider_contexts.get(tick.agent_id.as_str()).cloned() {
+                    if context.request_context.transport_attempt < MAX_PROVIDER_TRANSPORT_ATTEMPTS {
+                        self.provider_retry_contexts
+                            .insert(tick.agent_id.clone(), context);
+                        self.persist_provider_lineage_best_effort();
+                    } else {
+                        self.mark_provider_transport_exhausted(tick.agent_id.clone());
+                    }
                 }
             }
-        } else if tick
-            .decision_trace
-            .as_ref()
-            .is_some_and(provider_trace_retryable)
-        {
-            if let Some(context) = self.provider_contexts.get(tick.agent_id.as_str()).cloned() {
-                if context.request_context.transport_attempt < MAX_PROVIDER_TRANSPORT_ATTEMPTS {
-                    self.provider_retry_contexts
-                        .insert(tick.agent_id.clone(), context);
-                    self.persist_provider_lineage_best_effort();
-                } else {
-                    self.mark_provider_transport_exhausted(tick.agent_id.clone());
-                }
-            }
+            Some(RuntimeLlmDecision {
+                agent_id: tick.agent_id,
+                decision: tick.decision,
+                decision_trace: tick.decision_trace,
+                cognition,
+                memory_write_intents,
+                continuation_admitted: false,
+            })
         }
-        Some(RuntimeLlmDecision {
-            agent_id: tick.agent_id,
-            decision: tick.decision,
-            decision_trace: tick.decision_trace,
-            cognition,
-            memory_write_intents,
-            continuation_admitted: false,
-        })
     }
 }

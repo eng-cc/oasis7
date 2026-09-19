@@ -248,7 +248,7 @@ fn runtime_schedule_recipe_quote_matches_recipe_started_duration_for_same_snapsh
             ready_at,
             ..
         }) => {
-            assert_eq!(i64::from(*power_required), quote.electricity_cost);
+            assert_eq!((*power_required), quote.electricity_cost);
             assert_eq!(power_owner_agent_id.as_deref(), Some(agent_id.as_str()));
             assert_eq!(
                 consume

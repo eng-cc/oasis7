@@ -1,8 +1,10 @@
 use oasis7_proto::viewer as proto;
 
+#[cfg(test)]
+use crate::simulator::WorldEventKind;
 use crate::simulator::{
     AgentDecisionTrace, ChunkCoord, FragmentRefillPreview, RunnerMetrics, WorldEvent,
-    WorldEventKind, WorldSnapshot, WorldTime,
+    WorldSnapshot, WorldTime,
 };
 
 mod event_kind_match;
@@ -32,6 +34,8 @@ mod capability_tests {
     }
 }
 
+#[cfg(test)]
+pub use proto::RollbackApprovalSignature;
 pub use proto::{
     AdjudicateSocialFactQuotePreflight, AdjudicateSocialFactQuoteRequest, AgentChatError,
     AgentChatRequest, AuthoritativeBatchFinality, AuthoritativeChallengeAck,
@@ -63,20 +67,19 @@ pub use proto::{
     PromptControlRollbackRequest, PromptControlValueVisibility, PublishSocialFactQuotePreflight,
     PublishSocialFactQuoteRequest, PublishSocialFactQuoteStake,
     REVOKE_SOCIAL_FACT_QUOTE_CAPABILITY, RefineQuotePreflight, RefineQuoteRequest,
-    RevokeSocialFactQuotePreflight, RevokeSocialFactQuoteRequest, RollbackApprovalSignature,
-    RollbackAttributionResolution, RollbackAttributionResolutionRequest, RollbackAuthorityRole,
-    RollbackAuthorizationEnvelope, RollbackCheckpointRef, RollbackCompensationTransitionRequest,
-    RollbackIntent, RollbackOperatorAuthorization, RollbackReceiptAccessRequest,
-    RollbackReplayTarget, RollbackSourceEventRef, RollbackStrictAuditEvidence,
-    ScheduleRecipeQuotePreflight, ScheduleRecipeQuoteRequest, SocialAdjudicationDecision,
-    SocialContactQuotePreflight, SocialContactQuoteRequest, TransferMaterialPriority,
-    TransferMaterialQuotePreflight, TransferMaterialQuoteRequest, VIEWER_PROTOCOL_VERSION,
-    ViewerControl, ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerStream,
-    WORLD_FEED_SCHEMA_VERSION, WarDeclarationQuotePreflight, WarDeclarationQuoteRequest,
-    WorldFeedEnvelope, WorldFeedEvent, WorldFeedGapReason, WorldFeedMajorEvent,
-    WorldFeedMajorEventAnchor, WorldFeedMajorEventCausalReference, WorldFeedMajorEventIdentity,
-    WorldFeedMajorEventPosition, WorldFeedMajorEventSource, WorldFeedStatus,
-    WorldFeedUnavailableReason,
+    RevokeSocialFactQuotePreflight, RevokeSocialFactQuoteRequest, RollbackAttributionResolution,
+    RollbackAttributionResolutionRequest, RollbackAuthorityRole, RollbackAuthorizationEnvelope,
+    RollbackCheckpointRef, RollbackCompensationTransitionRequest, RollbackIntent,
+    RollbackOperatorAuthorization, RollbackReceiptAccessRequest, RollbackReplayTarget,
+    RollbackSourceEventRef, RollbackStrictAuditEvidence, ScheduleRecipeQuotePreflight,
+    ScheduleRecipeQuoteRequest, SocialAdjudicationDecision, SocialContactQuotePreflight,
+    SocialContactQuoteRequest, TransferMaterialPriority, TransferMaterialQuotePreflight,
+    TransferMaterialQuoteRequest, VIEWER_PROTOCOL_VERSION, ViewerControl, ViewerControlProfile,
+    ViewerEventKind, ViewerRequest, ViewerStream, WORLD_FEED_SCHEMA_VERSION,
+    WarDeclarationQuotePreflight, WarDeclarationQuoteRequest, WorldFeedEnvelope, WorldFeedEvent,
+    WorldFeedGapReason, WorldFeedMajorEvent, WorldFeedMajorEventAnchor,
+    WorldFeedMajorEventCausalReference, WorldFeedMajorEventIdentity, WorldFeedMajorEventPosition,
+    WorldFeedMajorEventSource, WorldFeedStatus, WorldFeedUnavailableReason,
 };
 
 pub type ViewerResponse =

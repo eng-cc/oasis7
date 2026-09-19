@@ -723,7 +723,7 @@ fn run_execution_bridge_incremental_retention_maintenance_inner(
 
     if gc_allowed
         && checkpoint_interval_heights > 0
-        && record.height % checkpoint_interval_heights == 0
+        && record.height.is_multiple_of(checkpoint_interval_heights)
     {
         let retained_span =
             checkpoint_interval_heights.saturating_mul(checkpoint_keep_latest.max(1) as u64);
@@ -905,7 +905,7 @@ pub(super) fn maybe_persist_execution_checkpoint_for_record(
 ) -> Result<Option<String>, String> {
     if checkpoint_interval_heights == 0
         || record.height == 0
-        || record.height % checkpoint_interval_heights != 0
+        || !record.height.is_multiple_of(checkpoint_interval_heights)
     {
         return Ok(None);
     }

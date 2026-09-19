@@ -70,6 +70,10 @@ fn kernel_snapshot_roundtrip_preserves_intel_ttl_configuration() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn kernel_snapshot_roundtrip_keeps_fragment_profile() {
     let mut config = WorldConfig::default();
     config.space = SpaceConfig {
@@ -233,6 +237,10 @@ fn snapshot_version_validation_rejects_unknown() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn journal_version_validation_rejects_unknown() {
     let mut journal = WorldJournal::default();
     journal.version = JOURNAL_VERSION.saturating_add(1);
@@ -644,6 +652,10 @@ fn snapshot_player_gameplay_execution_state_backfills_from_legacy_fields() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn journal_version_validation_accepts_legacy() {
     let mut journal = WorldJournal::default();
     journal.version = JOURNAL_VERSION.saturating_sub(1);
@@ -651,6 +663,10 @@ fn journal_version_validation_accepts_legacy() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn initialize_kernel_records_chunk_generated_init_events() {
     let mut config = WorldConfig::default();
     config.asteroid_fragment.base_density_per_km3 = 0.0;
@@ -687,6 +703,10 @@ fn initialize_kernel_records_chunk_generated_init_events() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn chain_resource_snapshot_records_generated_chunk_and_latest_delta() {
     let mut config = WorldConfig::default();
     config.asteroid_fragment.base_density_per_km3 = 0.0;
@@ -721,6 +741,10 @@ fn chain_resource_snapshot_records_generated_chunk_and_latest_delta() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn replay_from_snapshot_rebuilds_and_validates_chunk_generated_events() {
     let mut config = WorldConfig::default();
     config.move_cost_per_km_electricity = 0;
@@ -824,6 +848,10 @@ fn kernel_replay_from_snapshot() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn replay_from_snapshot_applies_compound_refined_event() {
     let mut config = WorldConfig::default();
     config.economy.refine_electricity_cost_per_kg = 3;
@@ -880,6 +908,10 @@ fn replay_from_snapshot_applies_compound_refined_event() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn replay_from_snapshot_applies_compound_mined_event() {
     let mut config = WorldConfig::default();
     config.economy.mine_electricity_cost_per_kg = 2;
@@ -988,6 +1020,10 @@ fn replay_from_snapshot_applies_debug_resource_granted_event() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn replay_with_budget_caps_keeps_chunk_generated_consistent() {
     let mut config = WorldConfig::default();
     config.move_cost_per_km_electricity = 0;
@@ -1052,6 +1088,10 @@ fn replay_with_budget_caps_keeps_chunk_generated_consistent() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn replay_from_snapshot_applies_fragment_replenished_event() {
     let mut config = WorldConfig::default();
     config.asteroid_fragment.base_density_per_km3 = 0.0;

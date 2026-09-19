@@ -402,9 +402,9 @@ impl World {
         let mut expired = Vec::new();
         for continuation in &mut continuations {
             if Self::is_terminal_continuation_status(continuation.status)
-                || !continuation
+                || continuation
                     .valid_until_tick
-                    .is_some_and(|valid_until| tick > valid_until)
+                    .is_none_or(|valid_until| tick <= valid_until)
             {
                 continue;
             }

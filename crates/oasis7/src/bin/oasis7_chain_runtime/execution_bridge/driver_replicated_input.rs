@@ -9,6 +9,10 @@ use oasis7_node::{
     validate_replicated_execution_input_actions,
 };
 
+#[expect(
+    clippy::type_complexity,
+    reason = "Stable callback and channel topology remains explicit at this integration seam."
+)]
 pub(super) fn decode_committed_actions(
     context: &NodeExecutionCommitContext,
 ) -> Result<

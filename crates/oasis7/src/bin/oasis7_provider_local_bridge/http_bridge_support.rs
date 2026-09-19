@@ -197,10 +197,10 @@ fn read_http_request(stream: &mut TcpStream) -> Result<RecordedHttpRequest, Stri
                     .unwrap_or(0);
             }
         }
-        if let Some(boundary) = header_end {
-            if buffer.len() >= boundary + 4 + content_length {
-                break;
-            }
+        if let Some(boundary) = header_end
+            && buffer.len() >= boundary + 4 + content_length
+        {
+            break;
         }
     }
 

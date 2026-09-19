@@ -282,31 +282,29 @@ impl World {
         if let (Some(identity), Some(attestation)) = (
             request.manifest.artifact_identity.as_ref(),
             eligible_attestations.first(),
-        ) {
-            if attestation.source_hash != identity.source_hash
-                || attestation.build_manifest_hash != identity.build_manifest_hash
-                || attestation.wasm_hash != request.manifest.wasm_hash
-            {
-                self.append_event(
-                    WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec![format!(
-                                "module release apply rejected: attestation receipt identity mismatch request_id={} expected_wasm_hash={} actual_wasm_hash={} expected_source_hash={} actual_source_hash={} expected_build_manifest_hash={} actual_build_manifest_hash={}",
-                                request_id,
-                                request.manifest.wasm_hash,
-                                attestation.wasm_hash,
-                                identity.source_hash,
-                                attestation.source_hash,
-                                identity.build_manifest_hash,
-                                attestation.build_manifest_hash
-                            )],
-                        },
-                    }),
-                    Some(CausedBy::Action(action_id)),
-                )?;
-                return Ok(true);
-            }
+        ) && (attestation.source_hash != identity.source_hash
+            || attestation.build_manifest_hash != identity.build_manifest_hash
+            || attestation.wasm_hash != request.manifest.wasm_hash)
+        {
+            self.append_event(
+                WorldEventBody::Domain(DomainEvent::ActionRejected {
+                    action_id,
+                    reason: RejectReason::RuleDenied {
+                        notes: vec![format!(
+                            "module release apply rejected: attestation receipt identity mismatch request_id={} expected_wasm_hash={} actual_wasm_hash={} expected_source_hash={} actual_source_hash={} expected_build_manifest_hash={} actual_build_manifest_hash={}",
+                            request_id,
+                            request.manifest.wasm_hash,
+                            attestation.wasm_hash,
+                            identity.source_hash,
+                            attestation.source_hash,
+                            identity.build_manifest_hash,
+                            attestation.build_manifest_hash
+                        )],
+                    },
+                }),
+                Some(CausedBy::Action(action_id)),
+            )?;
+            return Ok(true);
         }
         if let Err(reason) = self.validate_module_release_profile_changes(&request.profile_changes)
         {

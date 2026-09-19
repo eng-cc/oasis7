@@ -658,6 +658,10 @@ impl World {
         )
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Rollback candidate inputs bind snapshot, journal, authorization, and reconciliation state explicitly."
+    )]
     fn rollback_to_snapshot_candidate(
         &mut self,
         snapshot: Snapshot,
@@ -834,6 +838,10 @@ impl World {
         )
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Rollback v2 preserves the stable authorization and canonical-payload API."
+    )]
     pub(crate) fn rollback_to_snapshot_with_reconciliation_v2(
         &mut self,
         snapshot: Snapshot,
@@ -855,6 +863,10 @@ impl World {
         )
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Rollback reconciliation payload keeps each durable recovery input explicit."
+    )]
     fn rollback_to_snapshot_with_reconciliation_payload(
         &mut self,
         snapshot: Snapshot,
@@ -914,6 +926,10 @@ impl World {
         Ok(())
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Authorization verification receives the complete signed rollback context explicitly."
+    )]
     fn verify_rollback_authorization(
         &self,
         snapshot: &Snapshot,

@@ -5,7 +5,6 @@
 //! marker is not an effect, a committed marker is the sole recovery anchor,
 //! and a contradictory marker can only produce a quarantined pending head.
 
-use super::super::*;
 use crate::runtime::{
     CognitionCrashPrefix, CognitionRecovery, CognitionRecoveryFixture, CognitionRecoveryProbe,
     WorldCommitRecordV1, WorldRootViewV1,

@@ -1,6 +1,10 @@
 use super::*;
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Scenario fixture mutates only the fields under test."
+)]
 fn asteroid_fragment_generator_handles_extreme_radius_density_and_spacing() {
     let space = SpaceConfig {
         width_cm: 100_000,
@@ -36,6 +40,10 @@ fn asteroid_fragment_generator_handles_extreme_radius_density_and_spacing() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Scenario fixture mutates only the fields under test."
+)]
 fn world_init_survives_extreme_fragment_generation_with_budget_caps() {
     let mut config = WorldConfig::default();
     config.space = SpaceConfig {

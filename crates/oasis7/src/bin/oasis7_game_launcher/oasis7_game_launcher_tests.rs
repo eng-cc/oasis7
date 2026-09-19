@@ -552,6 +552,10 @@ fn parse_options_rejects_local_test_authority_for_provider_backed_lane() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn builtin_viewer_live_env_applies_default_llm_timeout_when_parent_is_unset() {
     let mut options = CliOptions::default();
     options.agent_decision_source = BUILTIN_LLM_DECISION_SOURCE.to_string();
@@ -571,6 +575,10 @@ fn builtin_viewer_live_env_applies_default_llm_timeout_when_parent_is_unset() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn builtin_viewer_live_env_preserves_explicit_parent_llm_timeout() {
     let mut options = CliOptions::default();
     options.agent_decision_source = BUILTIN_LLM_DECISION_SOURCE.to_string();
@@ -582,6 +590,10 @@ fn builtin_viewer_live_env_preserves_explicit_parent_llm_timeout() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn builtin_viewer_live_env_skips_default_llm_timeout_when_repo_config_exists() {
     let mut options = CliOptions::default();
     options.agent_decision_source = BUILTIN_LLM_DECISION_SOURCE.to_string();
@@ -593,6 +605,10 @@ fn builtin_viewer_live_env_skips_default_llm_timeout_when_repo_config_exists() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn provider_backed_viewer_live_env_sets_provider_specific_overrides_without_builtin_llm_timeout() {
     let mut options = CliOptions::default();
     options.agent_decision_source = PROVIDER_BACKED_DECISION_SOURCE.to_string();
@@ -658,6 +674,10 @@ fn provider_backed_viewer_live_env_sets_provider_specific_overrides_without_buil
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn provider_backed_viewer_live_env_preserves_local_mock_backend() {
     let mut options = CliOptions::default();
     options.agent_decision_source = PROVIDER_BACKED_DECISION_SOURCE.to_string();
@@ -703,6 +723,10 @@ fn build_viewer_live_command_wires_agent_chat_echo_flag_from_env() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn build_viewer_live_command_wires_auto_play_flags() {
     let options = CliOptions::default();
     let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
@@ -716,6 +740,10 @@ fn build_viewer_live_command_wires_auto_play_flags() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn build_viewer_live_command_wires_debug_scenario_opt_in() {
     let mut options = CliOptions::default();
     options.scenario = "llm_bootstrap".to_string();
@@ -730,6 +758,10 @@ fn build_viewer_live_command_wires_debug_scenario_opt_in() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn build_viewer_live_command_wires_generated_world_dir() {
     let mut options = CliOptions::default();
     options.generated_world_dir = "output/public-testnet/generated-world".to_string();

@@ -6,6 +6,10 @@ pub struct CommittedAuthoritativeRecoveryGeneration {
     pub recovery_metadata: Vec<u8>,
 }
 
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Committed recovery generations retain the stable in-memory recovery API; boxing would alter callers."
+)]
 pub enum AuthoritativeRecoveryCommitStatus {
     Committed(CommittedAuthoritativeRecoveryGeneration),
     NotCommitted {

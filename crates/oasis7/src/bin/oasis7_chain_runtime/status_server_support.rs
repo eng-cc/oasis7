@@ -64,6 +64,10 @@ pub(super) struct ChainBalancesResponse {
     pub(super) recent_reward_mint_records: Vec<NodeRewardMintRecord>,
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Stable protocol and runtime seam keeps independently validated inputs explicit."
+)]
 pub(super) fn start_chain_status_server(
     host: &str,
     port: u16,
@@ -137,6 +141,10 @@ fn build_chain_runtime_perf_snapshot(
     )
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Stable protocol and runtime seam keeps independently validated inputs explicit."
+)]
 fn run_chain_status_server_loop(
     listener: TcpListener,
     stop_rx: Receiver<()>,
@@ -218,6 +226,10 @@ fn run_chain_status_server_loop(
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Stable protocol and runtime seam keeps independently validated inputs explicit."
+)]
 fn handle_chain_status_connection(
     mut stream: TcpStream,
     runtime: Arc<Mutex<NodeRuntime>>,
@@ -742,10 +754,10 @@ pub(super) fn poll_chain_status_server_error(
             "status server channel disconnected unexpectedly".to_string(),
         )),
         Err(TryRecvError::Empty) => {
-            if let Some(handle) = server.join_handle.as_ref() {
-                if handle.is_finished() {
-                    return Ok(Some("status server exited unexpectedly".to_string()));
-                }
+            if let Some(handle) = server.join_handle.as_ref()
+                && handle.is_finished()
+            {
+                return Ok(Some("status server exited unexpectedly".to_string()));
             }
             Ok(None)
         }

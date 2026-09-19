@@ -12,15 +12,14 @@ use super::{AgentInvocation, AgentInvocationOutput, DEFAULT_PROVIDER_AGENT_PROFI
 
 pub(super) fn deterministic_mock_decision(request: &DecisionRequest) -> ProviderDecision {
     let agent_id = request.observation.agent_id.clone();
-    if action_catalog_contains(&request.observation.action_catalog, "move_agent") {
-        if let Some(to) =
+    if action_catalog_contains(&request.observation.action_catalog, "move_agent")
+        && let Some(to) =
             nearest_reachable_non_current_location_id(&request.observation.observation)
-        {
-            return ProviderDecision::Act {
-                action_ref: "move_agent".to_string(),
-                action: Action::MoveAgent { agent_id, to },
-            };
-        }
+    {
+        return ProviderDecision::Act {
+            action_ref: "move_agent".to_string(),
+            action: Action::MoveAgent { agent_id, to },
+        };
     }
     if action_catalog_contains(&request.observation.action_catalog, "inspect_target") {
         if let Some(target) = request.observation.observation.interaction_targets.first() {
@@ -245,7 +244,7 @@ pub(super) fn timeout_seconds_from_budget(timeout_budget_ms: u64) -> u64 {
     let timeout_budget_ms = timeout_budget_ms
         .max(1000)
         .max(minimum_provider_timeout_ms());
-    ((timeout_budget_ms + 999) / 1000).max(1)
+    timeout_budget_ms.div_ceil(1000).max(1)
 }
 
 pub(super) fn build_gateway_agent_params(

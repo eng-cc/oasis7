@@ -18,6 +18,10 @@ fn parse_options_accepts_provider_lineage_store() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn build_viewer_live_command_wires_provider_lineage_store() {
     let mut options = CliOptions::default();
     options.provider_lineage_store = "/var/lib/oasis7/provider-lineage.json".to_string();

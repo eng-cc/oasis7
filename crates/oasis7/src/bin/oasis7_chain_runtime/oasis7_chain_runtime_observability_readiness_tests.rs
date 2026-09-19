@@ -17,6 +17,10 @@ use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn build_chain_status_payload_allows_genesis_self_head_cold_start() {
     let mut consensus = NodeConsensusSnapshot::default();
     consensus.committed_height = 0;
@@ -102,6 +106,10 @@ fn build_chain_status_payload_allows_genesis_self_head_cold_start() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn build_chain_status_payload_allows_clean_genesis_cold_start() {
     let mut consensus = NodeConsensusSnapshot::default();
     consensus.committed_height = 0;
@@ -185,6 +193,10 @@ fn build_chain_status_payload_allows_clean_genesis_cold_start() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn build_chain_status_payload_blocks_isolated_genesis_validator() {
     let mut consensus = NodeConsensusSnapshot::default();
     consensus.committed_height = 0;
@@ -252,6 +264,10 @@ fn build_chain_status_payload_blocks_isolated_genesis_validator() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn build_chain_status_payload_tolerates_noisy_external_peer_with_healthy_validator_path() {
     let mut consensus = NodeConsensusSnapshot::default();
     consensus.committed_height = 10;
@@ -364,6 +380,10 @@ fn build_chain_status_payload_tolerates_noisy_external_peer_with_healthy_validat
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn readiness_failed_gates_excludes_warning_when_critical_alert_blocks() {
     let mut consensus = NodeConsensusSnapshot::default();
     consensus.committed_height = 0;
@@ -435,6 +455,14 @@ mod publication_support;
 use publication_support::*;
 
 #[test]
+#[expect(
+    clippy::enum_variant_names,
+    reason = "Local readiness scenario variants intentionally share a state suffix for table readability."
+)]
+#[expect(
+    clippy::type_complexity,
+    reason = "Boundary mutation table keeps each named snapshot mutation visible beside its scenario label."
+)]
 fn public_testnet_sequencer_publication_grace_requires_complete_one_block_parent_quorum() {
     #[derive(Clone, Copy)]
     enum Expected {
@@ -712,6 +740,10 @@ fn public_testnet_sequencer_publication_grace_requires_complete_one_block_parent
     );
 }
 #[test]
+#[expect(
+    clippy::enum_variant_names,
+    reason = "Local readiness scenario variants intentionally share a state suffix for table readability."
+)]
 fn public_testnet_sequencer_publication_grace_tracks_lag_episode_not_latest_commit() {
     #[derive(Clone, Copy)]
     enum Expected {

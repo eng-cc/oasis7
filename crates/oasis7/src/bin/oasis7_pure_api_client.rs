@@ -448,6 +448,10 @@ struct ViewerConnection {
     hello_ack: Value,
 }
 
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Stable runtime enum preserves established variant payload ownership and wire behavior."
+)]
 enum ReadResponseOutcome {
     Response(CollectedResponse),
     TimedOut,

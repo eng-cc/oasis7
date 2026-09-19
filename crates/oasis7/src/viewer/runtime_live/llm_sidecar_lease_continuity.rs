@@ -27,7 +27,7 @@ impl RuntimeLlmSidecar {
             .filter_map(|(agent_id, lease)| {
                 (lease.status == CognitionLeaseStatusV1::Reserved
                     && economy.leases.get(lease.lease_id.as_str()) == Some(lease))
-                .then(|| agent_id.clone())
+                .then_some(agent_id.clone())
             })
             .collect()
     }

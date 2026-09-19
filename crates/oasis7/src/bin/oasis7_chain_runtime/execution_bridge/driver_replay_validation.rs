@@ -135,7 +135,7 @@ impl NodeRuntimeExecutionDriver {
                 payload_hash: action.payload_hash.clone(),
             })
             .collect();
-        committed_actions.sort_by(|left, right| left.action_id.cmp(&right.action_id));
+        committed_actions.sort_by_key(|left| left.action_id);
         if external_effect.committed_actions != committed_actions {
             return Err(format!(
                 "execution driver equal-height V3 committed_actions mismatch at height {}",

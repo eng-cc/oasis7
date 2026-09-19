@@ -405,8 +405,7 @@ impl RuntimeLlmSidecar {
                                 resumed
                                     .replanned_continuation
                                     .as_ref()
-                                    .map(|_| runtime_continuation.clone())
-                                    .flatten(),
+                                    .and_then(|_| runtime_continuation.clone()),
                             )
                             .map_err(|error| {
                                 format!(
@@ -517,6 +516,10 @@ impl RuntimeLlmSidecar {
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Provider context construction preserves the stable request identity components"
+)]
 fn build_provider_context(
     session_id: &str,
     sequence: u64,
@@ -618,11 +621,9 @@ fn build_provider_context(
         capability_invocation_context_digest,
         memory_snapshot_digest: Digest32::from(memory_snapshot.digest.clone()),
         goal_snapshot_digest: Digest32::from(goal_snapshot.digest.clone()),
-        continuation_digest: Digest32::from(
-            continuation
-                .map(|value| h_v1("oasis7.cognition.continuation.v1", value))
-                .unwrap_or_else(|| h_v1("oasis7.cognition.continuation.v1", &Value::Null)),
-        ),
+        continuation_digest: continuation
+            .map(|value| h_v1("oasis7.cognition.continuation.v1", value))
+            .unwrap_or_else(|| h_v1("oasis7.cognition.continuation.v1", &Value::Null)),
         adapter_protocol_version: PROVIDER_ADAPTER_PROTOCOL_VERSION.to_string(),
         budget_contract: BudgetContractV1 {
             max_latency_ms: settings.decision_timeout_ms,
@@ -918,6 +919,10 @@ fn provider_capability_context(
 }
 
 #[cfg(test)]
+#[expect(
+    clippy::items_after_test_module,
+    reason = "Cognition tests stay adjacent to the provider-context seam they exercise"
+)]
 mod tests {
     use super::*;
 

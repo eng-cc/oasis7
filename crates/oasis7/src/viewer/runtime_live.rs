@@ -471,11 +471,11 @@ impl ViewerRuntimeLiveServer {
                 Ok(0) => return Ok(()),
                 Ok(_) => {
                     let trimmed = line.trim();
-                    if !trimmed.is_empty() {
-                        if let Ok(request) = serde_json::from_str::<ViewerRequest>(trimmed) {
-                            let mut server = lock_shared_server(&shared)?;
-                            server.handle_request(request, &mut session, &mut writer)?;
-                        }
+                    if !trimmed.is_empty()
+                        && let Ok(request) = serde_json::from_str::<ViewerRequest>(trimmed)
+                    {
+                        let mut server = lock_shared_server(&shared)?;
+                        server.handle_request(request, &mut session, &mut writer)?;
                     }
                 }
                 Err(err) if is_timeout_error(&err) => {}
@@ -495,18 +495,17 @@ impl ViewerRuntimeLiveServer {
                 && chain_link_enabled
                 && session.initial_snapshot_sent
                 && session.should_poll_chain(chain_poll_interval)
-            {
-                if let Err(err) = Self::sync_chain_linked_runtime_minimized_lock(
+                && let Err(err) = Self::sync_chain_linked_runtime_minimized_lock(
                     &shared,
                     &mut session,
                     &mut writer,
-                ) {
-                    emit_stderr_or_event(
-                        Level::WARN,
-                        format!("viewer runtime live: chain sync skipped: {err:?}").as_str(),
-                        "viewer runtime live chain sync skipped",
-                    );
-                }
+                )
+            {
+                emit_stderr_or_event(
+                    Level::WARN,
+                    format!("viewer runtime live: chain sync skipped: {err:?}").as_str(),
+                    "viewer runtime live chain sync skipped",
+                );
             }
 
             let mut server = lock_shared_server(&shared)?;
@@ -531,10 +530,10 @@ impl ViewerRuntimeLiveServer {
                 Ok(0) => return Ok(()),
                 Ok(_) => {
                     let trimmed = line.trim();
-                    if !trimmed.is_empty() {
-                        if let Ok(request) = serde_json::from_str::<ViewerRequest>(trimmed) {
-                            self.handle_request(request, &mut session, &mut writer)?;
-                        }
+                    if !trimmed.is_empty()
+                        && let Ok(request) = serde_json::from_str::<ViewerRequest>(trimmed)
+                    {
+                        self.handle_request(request, &mut session, &mut writer)?;
                     }
                 }
                 Err(err) if is_timeout_error(&err) => {}
@@ -546,14 +545,13 @@ impl ViewerRuntimeLiveServer {
                 && self.chain_link_enabled()
                 && session.initial_snapshot_sent
                 && session.should_poll_chain(self.config.chain_poll_interval)
+                && let Err(err) = self.sync_chain_linked_runtime(&mut session, &mut writer)
             {
-                if let Err(err) = self.sync_chain_linked_runtime(&mut session, &mut writer) {
-                    emit_stderr_or_event(
-                        Level::WARN,
-                        format!("viewer runtime live: chain sync skipped: {err:?}").as_str(),
-                        "viewer runtime live chain sync skipped",
-                    );
-                }
+                emit_stderr_or_event(
+                    Level::WARN,
+                    format!("viewer runtime live: chain sync skipped: {err:?}").as_str(),
+                    "viewer runtime live chain sync skipped",
+                );
             }
 
             if self.authoritative_recovery_write_fence.is_none() {
@@ -690,12 +688,14 @@ impl ViewerRuntimeLiveServer {
                 };
             }
             ViewerRequest::RequestSnapshot => {
-                if self.chain_link_enabled() && !session.initial_snapshot_sent {
-                    if let Err(err) = self.prime_chain_linked_runtime_for_snapshot() {
-                        if self.config.chain_link_policy == ChainLinkPolicy::Enforcing {
-                            return Err(err);
-                        }
-                        emit_stderr_or_event(
+                if self.chain_link_enabled()
+                    && !session.initial_snapshot_sent
+                    && let Err(err) = self.prime_chain_linked_runtime_for_snapshot()
+                {
+                    if self.config.chain_link_policy == ChainLinkPolicy::Enforcing {
+                        return Err(err);
+                    }
+                    emit_stderr_or_event(
                             Level::WARN,
                             format!(
                                 "viewer runtime live: initial chain sync skipped before snapshot: {err:?}"
@@ -703,7 +703,6 @@ impl ViewerRuntimeLiveServer {
                             .as_str(),
                             "viewer runtime live initial chain sync skipped",
                         );
-                    }
                 }
                 if session.wants_initial_snapshot() {
                     let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
@@ -999,8 +998,8 @@ impl ViewerRuntimeLiveServer {
                                     .to_string()
                             });
                             let reason = append_decision_upstream_trace(reason, &trace);
-                            if decision_trace_provider_error_retryable(&trace).unwrap_or(true) {
-                                if self.tolerate_background_play_gameplay_block(
+                            if decision_trace_provider_error_retryable(&trace).unwrap_or(true)
+                                && self.tolerate_background_play_gameplay_block(
                                     session,
                                     writer,
                                     action,
@@ -1012,7 +1011,6 @@ impl ViewerRuntimeLiveServer {
                                 )? {
                                     return Ok(());
                                 }
-                            }
                             return self.block_gameplay_control(
                                 session,
                                 writer,
@@ -1028,22 +1026,22 @@ impl ViewerRuntimeLiveServer {
                     }
                 }
             }
-            if self.should_advance_compatibility_tick(iteration_logical_time) {
-                if let Err(error) = self.world.step() {
-                    let (delta_logical_time, delta_event_seq) =
-                        self.control_completion_delta(baseline_logical_time, baseline_event_seq);
-                    return self.block_runtime_control(
-                        session,
-                        writer,
-                        action,
-                        "runtime step aborted because world advance failed",
-                        ViewerRuntimeLiveServerError::Runtime(error),
-                        request_id,
-                        delta_logical_time,
-                        delta_event_seq,
-                        true,
-                    );
-                }
+            if self.should_advance_compatibility_tick(iteration_logical_time)
+                && let Err(error) = self.world.step()
+            {
+                let (delta_logical_time, delta_event_seq) =
+                    self.control_completion_delta(baseline_logical_time, baseline_event_seq);
+                return self.block_runtime_control(
+                    session,
+                    writer,
+                    action,
+                    "runtime step aborted because world advance failed",
+                    ViewerRuntimeLiveServerError::Runtime(error),
+                    request_id,
+                    delta_logical_time,
+                    delta_event_seq,
+                    true,
+                );
             }
             self.sync_runtime_wake_projection()?;
             session.transient_play_failures = 0;
@@ -1110,10 +1108,10 @@ impl ViewerRuntimeLiveServer {
                         );
                     }
                 };
-            if let Some(trace) = decision_trace {
-                if session.explicitly_subscribed_to(ViewerStream::Events) {
-                    send_response(writer, &ViewerResponse::DecisionTrace { trace })?;
-                }
+            if let Some(trace) = decision_trace
+                && session.explicitly_subscribed_to(ViewerStream::Events)
+            {
+                send_response(writer, &ViewerResponse::DecisionTrace { trace })?;
             }
 
             if session.explicitly_subscribed_to(ViewerStream::Events)

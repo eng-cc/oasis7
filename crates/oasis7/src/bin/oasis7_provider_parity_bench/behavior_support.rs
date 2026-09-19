@@ -165,10 +165,10 @@ pub(super) fn classify_trace_error(
     trace: Option<&AgentDecisionTrace>,
     action_result: Option<&ActionResult>,
 ) -> Option<String> {
-    if let Some(result) = action_result {
-        if !result.success {
-            return Some("action_rejected".to_string());
-        }
+    if let Some(result) = action_result
+        && !result.success
+    {
+        return Some("action_rejected".to_string());
     }
     let err =
         trace.and_then(|value| value.llm_error.as_deref().or(value.parse_error.as_deref()))?;

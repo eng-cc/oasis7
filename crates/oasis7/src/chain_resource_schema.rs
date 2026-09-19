@@ -326,7 +326,7 @@ impl ChainResourceManifest {
                 .map(|entry| entry.fragment_refs.clone())
                 .unwrap_or_default();
             let chunk_budget = previous_entry.as_ref().map_or_else(
-                || crate::simulator::ChunkResourceBudget::default(),
+                crate::simulator::ChunkResourceBudget::default,
                 |entry| crate::simulator::ChunkResourceBudget {
                     total_by_element_g: entry.total_by_element_g.clone(),
                     remaining_by_element_g: entry.remaining_by_element_g.clone(),

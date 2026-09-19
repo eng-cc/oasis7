@@ -80,7 +80,7 @@ impl ViewerRuntimeLiveServer {
         player_id
             .trim()
             .starts_with(LOCAL_TEST_PLAYER_ID_PREFIX)
-            .then(|| self.smelter_affordability_debug_agent_id.as_deref())
+            .then_some(self.smelter_affordability_debug_agent_id.as_deref())
             .flatten()
     }
 }

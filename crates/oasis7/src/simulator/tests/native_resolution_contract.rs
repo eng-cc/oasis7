@@ -49,6 +49,10 @@ fn chunk_grid_native_resolution_matches_runtime_constants() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn asteroid_fragment_native_resolution_matches_config_defaults_and_sanitization() {
     let voxel = native_resolution_by_subsystem("asteroid-fragment-voxel")
         .expect("asteroid-fragment-voxel declared");
@@ -81,6 +85,10 @@ fn asteroid_fragment_native_resolution_matches_config_defaults_and_sanitization(
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn distance_bucket_declarations_match_runtime_round_up_behavior() {
     for subsystem_id in ["movement-energy-cost", "power-transfer-distance"] {
         let declaration =

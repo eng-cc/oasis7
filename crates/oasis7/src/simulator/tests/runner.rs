@@ -37,17 +37,17 @@ impl AgentBehavior for PatrolAgent {
             .iter()
             .find(|loc| loc.distance_cm == 0);
 
-        if let Some(current) = current_location {
-            if &current.location_id == target_id {
-                self.current_target_index =
-                    (self.current_target_index + 1) % self.target_locations.len();
-                let next_target = &self.target_locations[self.current_target_index];
+        if let Some(current) = current_location
+            && &current.location_id == target_id
+        {
+            self.current_target_index =
+                (self.current_target_index + 1) % self.target_locations.len();
+            let next_target = &self.target_locations[self.current_target_index];
 
-                return AgentDecision::Act(Action::MoveAgent {
-                    agent_id: self.id.clone(),
-                    to: next_target.clone(),
-                });
-            }
+            return AgentDecision::Act(Action::MoveAgent {
+                agent_id: self.id.clone(),
+                to: next_target.clone(),
+            });
         }
 
         AgentDecision::Act(Action::MoveAgent {

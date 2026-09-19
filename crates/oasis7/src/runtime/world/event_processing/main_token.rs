@@ -740,18 +740,18 @@ impl World {
                 },
             };
         }
-        if let Some(max_supply) = next.max_supply {
-            if max_supply < self.state.main_token_supply.total_supply {
-                return DomainEvent::ActionRejected {
-                    action_id,
-                    reason: RejectReason::RuleDenied {
-                        notes: vec![format!(
-                            "update main token policy rejected: max_supply cannot be below total_supply (max={} total={})",
-                            max_supply, self.state.main_token_supply.total_supply
-                        )],
-                    },
-                };
-            }
+        if let Some(max_supply) = next.max_supply
+            && max_supply < self.state.main_token_supply.total_supply
+        {
+            return DomainEvent::ActionRejected {
+                action_id,
+                reason: RejectReason::RuleDenied {
+                    notes: vec![format!(
+                        "update main token policy rejected: max_supply cannot be below total_supply (max={} total={})",
+                        max_supply, self.state.main_token_supply.total_supply
+                    )],
+                },
+            };
         }
 
         let effective_epoch = self

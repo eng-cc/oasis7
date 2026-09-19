@@ -1,6 +1,5 @@
 //! Focused Agent-side admission tests for Runtime-owned cognition leases.
 
-use super::*;
 use crate::runtime::{
     CognitionLeaseQuoteV1, CognitionLeaseRequestV1, CognitionLeaseStatusV1, CognitionLeaseV1, World,
 };

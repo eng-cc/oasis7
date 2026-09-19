@@ -210,25 +210,23 @@ impl ActiveExecuteUntil {
                 ExecuteUntilEventKind::HarvestYieldBelow => {
                     if let (Some(amount), Some(value_lte)) =
                         (self.last_harvest_amount, condition.value_lte)
+                        && amount <= value_lte
                     {
-                        if amount <= value_lte {
-                            return Err(format!(
-                                "until.event harvest_yield_below matched: amount={}, threshold={}",
-                                amount, value_lte
-                            ));
-                        }
+                        return Err(format!(
+                            "until.event harvest_yield_below matched: amount={}, threshold={}",
+                            amount, value_lte
+                        ));
                     }
                 }
                 ExecuteUntilEventKind::HarvestAvailableBelow => {
                     if let (Some(available), Some(value_lte)) =
                         (self.last_harvest_available, condition.value_lte)
+                        && available <= value_lte
                     {
-                        if available <= value_lte {
-                            return Err(format!(
-                                "until.event harvest_available_below matched: available={}, threshold={}",
-                                available, value_lte
-                            ));
-                        }
+                        return Err(format!(
+                            "until.event harvest_available_below matched: available={}, threshold={}",
+                            available, value_lte
+                        ));
                     }
                 }
             }

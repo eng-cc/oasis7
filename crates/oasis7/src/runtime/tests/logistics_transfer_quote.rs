@@ -4,6 +4,10 @@ use crate::runtime::{
     MaterialTransitPriority, MaterialTransportLossClass, RejectReason, World, WorldEventBody,
 };
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Logistics quote fixture keeps route protocol fields explicit at call sites."
+)]
 fn register_route(
     world: &mut World,
     requester_agent_id: &str,
@@ -308,7 +312,7 @@ fn route_aware_transfer_quote_matches_explicit_two_hop_action_without_mutation()
     let mut world = World::new();
     let requester = "route-quote-operator";
     let source = MaterialLedgerId::site("route-quote-source");
-    let relay = MaterialLedgerId::site("route-quote-relay");
+    let _relay = MaterialLedgerId::site("route-quote-relay");
     let destination = MaterialLedgerId::site("route-quote-destination");
     world.submit_action(Action::RegisterAgent {
         agent_id: requester.to_string(),
@@ -659,7 +663,10 @@ fn legacy_route_id_tuple_mismatch_is_rejected_by_quote_and_action() {
         )
         .expect("singleton explicit path uses route-derived distance");
     assert_eq!(explicit_path_quote.distance_km, 100);
-    assert_eq!(explicit_path_quote.route_ids, [route_id.clone()]);
+    assert_eq!(
+        explicit_path_quote.route_ids,
+        std::slice::from_ref(&route_id)
+    );
 
     let state_before_quote = world.snapshot();
     let quote_reason = world
@@ -801,7 +808,7 @@ fn malformed_or_disconnected_paths_precede_capacity_fallback() {
     let mut world = World::new();
     let requester = "path-precedence-operator";
     let source = MaterialLedgerId::site("path-precedence-source");
-    let relay = MaterialLedgerId::site("path-precedence-relay");
+    let _relay = MaterialLedgerId::site("path-precedence-relay");
     let destination = MaterialLedgerId::site("path-precedence-destination");
     world.submit_action(Action::RegisterAgent {
         agent_id: requester.to_string(),

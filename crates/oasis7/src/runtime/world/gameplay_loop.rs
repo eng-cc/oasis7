@@ -388,10 +388,11 @@ impl World {
         due_keys
             .into_iter()
             .filter_map(|proposal_key| {
-                let Some(proposal) = self.state.governance_proposals.get(&proposal_key).cloned()
-                else {
-                    return None;
-                };
+                let proposal = self
+                    .state
+                    .governance_proposals
+                    .get(&proposal_key)
+                    .cloned()?;
                 let vote_state = self.state.governance_votes.get(&proposal_key);
                 let total_weight = vote_state.map(|value| value.total_weight).unwrap_or(0);
                 let (winning_option, winning_weight) = vote_state
@@ -453,7 +454,7 @@ impl World {
             .crises
             .values()
             .any(|crisis| crisis.status == CrisisStatus::Active);
-        if !has_active_crisis && now > 0 && now % CRISIS_AUTO_INTERVAL_TICKS == 0 {
+        if !has_active_crisis && now > 0 && now.is_multiple_of(CRISIS_AUTO_INTERVAL_TICKS) {
             let sequence = now / CRISIS_AUTO_INTERVAL_TICKS;
             let severity = ((sequence % 3) + 1) as u32;
             let kind = match severity {

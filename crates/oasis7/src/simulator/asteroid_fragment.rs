@@ -16,7 +16,7 @@ pub fn generate_fragments(
     config: &AsteroidFragmentConfig,
 ) -> Vec<Location> {
     let mut rng = Lcg::new(seed);
-    let voxel_cm = (config.voxel_size_km as i64).max(1) * 100_000;
+    let voxel_cm = config.voxel_size_km.max(1) * 100_000;
     let voxels_x = ((space.width_cm + voxel_cm - 1) / voxel_cm).max(1);
     let voxels_y = ((space.depth_cm + voxel_cm - 1) / voxel_cm).max(1);
     let voxels_z = ((space.height_cm + voxel_cm - 1) / voxel_cm).max(1);
@@ -130,6 +130,10 @@ pub fn generate_fragments(
     locations
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Stable fragment-generation seam keeps deterministic placement inputs explicit."
+)]
 fn try_place_fragment(
     rng: &mut Lcg,
     x_range: (f64, f64),

@@ -2,6 +2,10 @@ use super::*;
 use serde::ser::SerializeStruct;
 
 #[derive(Debug)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Prepared events carry stable persistence payloads; boxing a variant would change the internal replay handoff shape."
+)]
 pub(crate) enum PreparedIndustryHistoryEvent {
     AgentLocation(DomainEvent, String, AgentLocationAuthorityV1),
     LocationAnchor(DomainEvent, String, LocationAnchorV1),

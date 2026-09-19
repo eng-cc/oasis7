@@ -14,6 +14,10 @@ pub(super) struct PromptControlResultLedgerEntry {
     pub(super) receipt: PromptControlLedgerReceipt,
 }
 
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Prompt-control replay lookup carries the stable typed receipt envelope"
+)]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum PromptControlLedgerLookup {
     Missing,

@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use super::effect::{EffectIntent, OriginKind};
 
 /// A set of policy rules for effect authorization.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct PolicySet {
     pub rules: Vec<PolicyRule>,
 }
@@ -36,12 +36,6 @@ impl PolicySet {
     }
 }
 
-impl Default for PolicySet {
-    fn default() -> Self {
-        Self { rules: Vec::new() }
-    }
-}
-
 /// A single policy rule.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PolicyRule {
@@ -59,20 +53,20 @@ pub struct PolicyWhen {
 
 impl PolicyWhen {
     pub fn matches(&self, intent: &EffectIntent) -> bool {
-        if let Some(effect_kind) = &self.effect_kind {
-            if effect_kind != &intent.kind {
-                return false;
-            }
+        if let Some(effect_kind) = &self.effect_kind
+            && effect_kind != &intent.kind
+        {
+            return false;
         }
-        if let Some(origin_kind) = &self.origin_kind {
-            if origin_kind != &OriginKind::from_origin(&intent.origin) {
-                return false;
-            }
+        if let Some(origin_kind) = &self.origin_kind
+            && origin_kind != &OriginKind::from_origin(&intent.origin)
+        {
+            return false;
         }
-        if let Some(cap_name) = &self.cap_name {
-            if cap_name != &intent.cap_ref {
-                return false;
-            }
+        if let Some(cap_name) = &self.cap_name
+            && cap_name != &intent.cap_ref
+        {
+            return false;
         }
         true
     }

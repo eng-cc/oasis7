@@ -32,7 +32,7 @@ const MAX_FEEDBACK_REPLAY_ENTRIES: usize = 8;
 /// A wire digest.  The newtype keeps the wire representation as the familiar
 /// `blake3:<64 lowercase hex>` string while preventing accidental mixing with
 /// ordinary provider identifiers in typed APIs.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(transparent)]
 pub struct Digest32(pub String);
 
@@ -71,12 +71,6 @@ impl From<String> for Digest32 {
 impl From<&str> for Digest32 {
     fn from(value: &str) -> Self {
         Self(value.to_string())
-    }
-}
-
-impl Default for Digest32 {
-    fn default() -> Self {
-        Self(String::new())
     }
 }
 
@@ -919,15 +913,13 @@ impl AgentCognitionStore {
                 }
                 if let Some((previous_id, previous_digest)) =
                     partition.digest_by_seq.get(&feedback.feedback_seq)
+                    && (previous_id != &feedback.feedback_id
+                        || previous_digest != &feedback_digest_value)
                 {
-                    if previous_id != &feedback.feedback_id
-                        || previous_digest != &feedback_digest_value
-                    {
-                        return Err(CognitionError::new(
-                            "feedback_identity_collision",
-                            "feedback_seq was reused with a different envelope",
-                        ));
-                    }
+                    return Err(CognitionError::new(
+                        "feedback_identity_collision",
+                        "feedback_seq was reused with a different envelope",
+                    ));
                 }
             }
             return Err(CognitionError::new(

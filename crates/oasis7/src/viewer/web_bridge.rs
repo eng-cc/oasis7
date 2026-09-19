@@ -73,15 +73,15 @@ impl ViewerWebBridge {
             let config = self.config.clone();
             thread::spawn(move || {
                 let bridge = ViewerWebBridge::new(config);
-                if let Err(err) = bridge.serve_stream(stream) {
-                    if !is_expected_bridge_disconnect(&err) {
-                        let stderr_message = format!("viewer web bridge error: {err:?}");
-                        emit_stderr_or_event(
-                            Level::WARN,
-                            stderr_message.as_str(),
-                            "viewer web bridge session failed",
-                        );
-                    }
+                if let Err(err) = bridge.serve_stream(stream)
+                    && !is_expected_bridge_disconnect(&err)
+                {
+                    let stderr_message = format!("viewer web bridge error: {err:?}");
+                    emit_stderr_or_event(
+                        Level::WARN,
+                        stderr_message.as_str(),
+                        "viewer web bridge session failed",
+                    );
                 }
             });
         }

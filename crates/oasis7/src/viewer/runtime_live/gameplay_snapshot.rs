@@ -315,6 +315,10 @@ fn latest_fresh_requester_failure_disposition<'a>(
             .then_some(disposition)
         })
 }
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Player gameplay snapshot construction maps the stable observable DTO fields"
+)]
 pub(super) fn build_player_gameplay_snapshot(
     state: &WorldState,
     controlled_agent_id: Option<&str>,
@@ -510,22 +514,21 @@ pub(super) fn build_player_gameplay_snapshot(
         && !has_recipe_running
         && !has_first_output
         && latest_blocker.is_none()
-    {
-        if let Some((blocker_kind, blocker_detail, next_step_hint)) =
+        && let Some((blocker_kind, blocker_detail, next_step_hint)) =
             first_session_runtime_sync_blocker(recent_feedback)
-        {
-            let disabled_reason =
+    {
+        let disabled_reason =
                 "committed runtime sync is unavailable; refresh the snapshot or repair runtime bootstrap first"
                     .to_string();
-            for action in &mut available_actions {
-                if action.protocol_action == "request_snapshot"
-                    || (state.agents.is_empty() && action.action_id == ACTION_CLAIM_FIRST_AGENT)
-                {
-                    continue;
-                }
-                action.disabled_reason = Some(disabled_reason.clone());
+        for action in &mut available_actions {
+            if action.protocol_action == "request_snapshot"
+                || (state.agents.is_empty() && action.action_id == ACTION_CLAIM_FIRST_AGENT)
+            {
+                continue;
             }
-            return finalize(PlayerGameplaySnapshot {
+            action.disabled_reason = Some(disabled_reason.clone());
+        }
+        return finalize(PlayerGameplaySnapshot {
                 stage_id: PlayerGameplayStageId::FirstSessionLoop,
                 stage_status: PlayerGameplayStageStatus::Blocked,
                 execution_state: PlayerGameplayExecutionState::Executing,
@@ -584,8 +587,7 @@ pub(super) fn build_player_gameplay_snapshot(
                 factory_production_failure_disposition: None,
                 recovery_options: Vec::new(),
                 fine_grain_action_translation: None,
-            });
-        }
+        });
     }
     if !has_confirmed_world_progress
         && !has_material_flow

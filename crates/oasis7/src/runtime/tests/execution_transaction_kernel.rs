@@ -49,7 +49,7 @@ fn staged_scalar_and_map_mutations_are_invisible_until_commit() {
 
 #[test]
 fn abort_discards_staged_scalar_and_map_mutations() {
-    let mut canonical = canonical_state();
+    let canonical = canonical_state();
     let before = canonical.clone();
     let mut transaction = ExecutionTransaction::begin(&canonical, base_head(4));
 

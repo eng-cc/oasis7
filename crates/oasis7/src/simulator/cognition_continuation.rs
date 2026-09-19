@@ -546,6 +546,10 @@ impl ContinuationHarness {
         .to_string()
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable continuation handle seam preserves canonical gameplay identity inputs."
+    )]
     fn handle_for(
         &self,
         proposal: ContinuationProposalV1,

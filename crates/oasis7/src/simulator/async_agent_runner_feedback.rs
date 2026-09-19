@@ -30,6 +30,7 @@ impl RuntimeReceiptReadbackHandleV1 {
     /// verified the receipt and response identity. It is crate-visible so a
     /// Runtime adapter can implement the verifier without exposing a public
     /// authority-fabricating constructor to provider callers.
+    #[cfg(test)]
     pub(crate) fn from_verified(
         receipt: &RuntimeReceiptLineageV1,
         response_identity: &ResponseArtifactIdentityV1,

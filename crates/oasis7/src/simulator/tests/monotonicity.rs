@@ -68,6 +68,10 @@ fn harvest_radiation_available_decreases_with_distance() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn harvest_radiation_amount_does_not_increase_when_overheated() {
     let mut config = WorldConfig::default();
     config.physics.radiation_floor = 0;

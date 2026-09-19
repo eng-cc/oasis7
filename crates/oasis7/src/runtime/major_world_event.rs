@@ -279,6 +279,7 @@ pub struct MajorWorldEventProjection {
 /// order.  Equivalent duplicate event ids are deduplicated; a materially
 /// conflicting payload for one identity is rejected rather than selecting an
 /// arbitrary duplicate.
+#[cfg(test)]
 pub(crate) fn project_major_world_events(
     events: &[WorldEvent],
     context: &MajorWorldEventProjectionContext,
@@ -402,6 +403,7 @@ fn unique_events_and_conflicted_crises(
 #[derive(Default)]
 struct CrisisHistoryIndex {
     by_crisis: BTreeMap<String, CrisisHistoryMetadata>,
+    #[cfg(test)]
     indexed_event_count: usize,
 }
 
@@ -420,6 +422,7 @@ struct CrisisSpawnMetadata {
 impl CrisisHistoryIndex {
     fn build(events: &[&WorldEvent]) -> Self {
         let mut index = Self {
+            #[cfg(test)]
             indexed_event_count: events.len(),
             ..Self::default()
         };

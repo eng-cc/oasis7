@@ -625,6 +625,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::field_reassign_with_default,
+        reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+    )]
     fn storage_score_uses_sqrt_curve_with_availability() {
         let mut config = NodePointsConfig::default();
         config.epoch_pool_points = 100;
@@ -722,6 +726,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::field_reassign_with_default,
+        reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+    )]
     fn uses_default_weights_when_input_weights_are_all_zero() {
         let mut config = NodePointsConfig::default();
         config.epoch_pool_points = 100;
@@ -755,6 +763,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::field_reassign_with_default,
+        reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+    )]
     fn multi_node_closure_rewards_compute_and_storage_with_penalty() {
         let mut config = NodePointsConfig::default();
         config.epoch_pool_points = 1000;
@@ -856,6 +868,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::field_reassign_with_default,
+        reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+    )]
     fn storage_system_pool_distributes_with_challenge_threshold() {
         let mut config = NodePointsConfig::default();
         config.epoch_pool_points = 0;
@@ -889,6 +905,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::field_reassign_with_default,
+        reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+    )]
     fn storage_system_pool_requires_minimum_checks() {
         let mut config = NodePointsConfig::default();
         config.epoch_pool_points = 0;
@@ -917,6 +937,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::field_reassign_with_default,
+        reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+    )]
     fn storage_system_pool_caps_rewardable_storage_by_stake_ratio() {
         let mut config = NodePointsConfig::default();
         config.epoch_pool_points = 0;
@@ -951,6 +975,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::field_reassign_with_default,
+        reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+    )]
     fn uptime_score_uses_challenge_ratio_with_threshold() {
         let mut config = NodePointsConfig::default();
         config.epoch_pool_points = 100;
@@ -983,6 +1011,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::field_reassign_with_default,
+        reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+    )]
     fn uptime_score_falls_back_to_uptime_seconds_when_no_checks() {
         let mut config = NodePointsConfig::default();
         config.epoch_pool_points = 10;
@@ -1053,6 +1085,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::field_reassign_with_default,
+        reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+    )]
     fn settle_epoch_rejects_total_distributed_overflow_without_state_mutation() {
         let mut config = NodePointsConfig::default();
         config.epoch_pool_points = u64::MAX;

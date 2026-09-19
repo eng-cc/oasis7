@@ -23,7 +23,7 @@ use super::world_model::{
     Agent, BoundaryReservation, ChunkState, Location, SpaceConfig, WorldConfig, WorldModel,
 };
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct WorldInitConfig {
     pub seed: u64,
@@ -33,20 +33,6 @@ pub struct WorldInitConfig {
     pub agents: AgentSpawnConfig,
     pub power_plants: Vec<PowerPlantSeedConfig>,
     pub module_visual_entities: Vec<ModuleVisualEntity>,
-}
-
-impl Default for WorldInitConfig {
-    fn default() -> Self {
-        Self {
-            seed: 0,
-            origin: OriginLocationConfig::default(),
-            locations: Vec::new(),
-            asteroid_fragment: AsteroidFragmentInitConfig::default(),
-            agents: AgentSpawnConfig::default(),
-            power_plants: Vec::new(),
-            module_visual_entities: Vec::new(),
-        }
-    }
 }
 
 impl WorldInitConfig {
@@ -113,7 +99,7 @@ impl OriginLocationConfig {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct LocationSeedConfig {
     pub location_id: LocationId,
@@ -121,18 +107,6 @@ pub struct LocationSeedConfig {
     pub pos: Option<GeoPos>,
     pub profile: LocationProfile,
     pub resources: ResourceStock,
-}
-
-impl Default for LocationSeedConfig {
-    fn default() -> Self {
-        Self {
-            location_id: String::new(),
-            name: String::new(),
-            pos: None,
-            profile: LocationProfile::default(),
-            resources: ResourceStock::default(),
-        }
-    }
 }
 
 impl LocationSeedConfig {
@@ -166,10 +140,10 @@ impl Default for AsteroidFragmentInitConfig {
 
 impl AsteroidFragmentInitConfig {
     pub fn sanitized(mut self) -> Self {
-        if let Some(spacing) = self.min_fragment_spacing_cm {
-            if spacing < 0 {
-                self.min_fragment_spacing_cm = Some(0);
-            }
+        if let Some(spacing) = self.min_fragment_spacing_cm
+            && spacing < 0
+        {
+            self.min_fragment_spacing_cm = Some(0);
         }
         self.bootstrap_chunks.sort();
         self.bootstrap_chunks.dedup();
@@ -1061,7 +1035,7 @@ fn ensure_non_negative_amount(field: &str, amount: i64) -> Result<(), WorldInitE
 }
 
 fn ensure_valid_ratio(field: &str, value: f64) -> Result<(), WorldInitError> {
-    if !value.is_finite() || value < 0.0 || value > 1.0 {
+    if !value.is_finite() || !(0.0..=1.0).contains(&value) {
         return Err(WorldInitError::InvalidFacilityRatio {
             field: field.to_string(),
             value,

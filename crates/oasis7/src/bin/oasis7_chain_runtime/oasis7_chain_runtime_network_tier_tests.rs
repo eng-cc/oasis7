@@ -571,6 +571,10 @@ fn status_payload_exposes_loaded_network_tier_manifest() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn public_testnet_validator_network_head_uses_manifest_quorum() {
     let runtime_sha256 = current_test_binary_sha256();
     let (dir, manifest_path) = write_test_network_tier_manifest(runtime_sha256.as_str());
@@ -618,6 +622,10 @@ fn public_testnet_validator_network_head_uses_manifest_quorum() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn public_testnet_validator_genesis_cold_start_uses_self_head() {
     let runtime_sha256 = current_test_binary_sha256();
     let (dir, manifest_path) = write_test_network_tier_manifest(runtime_sha256.as_str());
@@ -690,6 +698,10 @@ fn public_testnet_observer_clean_start_waits_for_peer_head() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn public_testnet_validator_network_head_prefers_highest_quorum_bucket() {
     let runtime_sha256 = current_test_binary_sha256();
     let (dir, manifest_path) = write_test_network_tier_manifest(runtime_sha256.as_str());
@@ -734,6 +746,10 @@ fn public_testnet_validator_network_head_prefers_highest_quorum_bucket() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn public_testnet_validator_accepts_old_peer_heads_that_match_current_local_head() {
     let runtime_sha256 = current_test_binary_sha256();
     let (dir, manifest_path) = write_test_network_tier_manifest(runtime_sha256.as_str());
@@ -781,6 +797,10 @@ fn public_testnet_validator_accepts_old_peer_heads_that_match_current_local_head
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn public_testnet_validator_keeps_old_peer_heads_stale_when_local_head_differs() {
     let runtime_sha256 = current_test_binary_sha256();
     let (dir, manifest_path) = write_test_network_tier_manifest(runtime_sha256.as_str());
@@ -827,6 +847,10 @@ fn public_testnet_validator_keeps_old_peer_heads_stale_when_local_head_differs()
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn public_testnet_validator_keeps_old_peer_heads_stale_when_execution_binding_differs() {
     let runtime_sha256 = current_test_binary_sha256();
     let (dir, manifest_path) = write_test_network_tier_manifest(runtime_sha256.as_str());
@@ -873,6 +897,10 @@ fn public_testnet_validator_keeps_old_peer_heads_stale_when_execution_binding_di
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn public_testnet_validator_keeps_old_peer_heads_stale_while_local_node_is_catching_up() {
     let runtime_sha256 = current_test_binary_sha256();
     let (dir, manifest_path) = write_test_network_tier_manifest(runtime_sha256.as_str());
@@ -952,6 +980,10 @@ fn local_devnet_network_head_honors_zero_peer_quorum() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn mainnet_validator_network_head_uses_stake_weighted_quorum() {
     let runtime_sha256 = current_test_binary_sha256();
     let (dir, manifest_path) =
@@ -1004,6 +1036,10 @@ fn mainnet_validator_network_head_uses_stake_weighted_quorum() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn mainnet_validator_keeps_old_peer_heads_stale_even_when_they_match_current_local_head() {
     let runtime_sha256 = current_test_binary_sha256();
     let (dir, manifest_path) =
@@ -1060,6 +1096,10 @@ fn mainnet_validator_keeps_old_peer_heads_stale_even_when_they_match_current_loc
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn mainnet_validator_readiness_blocks_when_stake_mapping_is_unavailable() {
     let runtime_sha256 = current_test_binary_sha256();
     let (dir, manifest_path) =
@@ -1120,6 +1160,10 @@ fn mainnet_validator_readiness_blocks_when_stake_mapping_is_unavailable() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn mainnet_sync_lag_stalls_after_policy_window() {
     let runtime_sha256 = current_test_binary_sha256();
     let (dir, manifest_path) =

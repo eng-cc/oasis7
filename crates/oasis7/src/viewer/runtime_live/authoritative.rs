@@ -553,16 +553,6 @@ impl ViewerRuntimeLiveServer {
         }
     }
 
-    pub(super) fn prune_stable_checkpoints_after_batch(&mut self, batch_id: &str) {
-        if let Some(index) = self
-            .stable_checkpoints
-            .iter()
-            .position(|entry| entry.batch_id == batch_id)
-        {
-            self.stable_checkpoints.truncate(index.saturating_add(1));
-        }
-    }
-
     pub(super) fn rebuild_settlement_ranking_gate(&mut self) {
         let mut gate = RuntimeSettlementRankingGate::default();
         for batch in &self.authoritative_batches {

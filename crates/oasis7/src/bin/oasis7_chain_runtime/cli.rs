@@ -860,25 +860,25 @@ fn validate_network_tier_bundle_artifact(
                     actual_tree.sha256_tree
                 ));
             }
-            if let Some(expected_file_count) = artifact.file_count {
-                if expected_file_count != actual_tree.file_count {
-                    return Err(format!(
-                        "network tier release_candidate_bundle_ref {} {label} file_count drift: bundle={} current={}",
-                        bundle_path.display(),
-                        expected_file_count,
-                        actual_tree.file_count
-                    ));
-                }
+            if let Some(expected_file_count) = artifact.file_count
+                && expected_file_count != actual_tree.file_count
+            {
+                return Err(format!(
+                    "network tier release_candidate_bundle_ref {} {label} file_count drift: bundle={} current={}",
+                    bundle_path.display(),
+                    expected_file_count,
+                    actual_tree.file_count
+                ));
             }
-            if let Some(expected_total_bytes) = artifact.total_bytes {
-                if expected_total_bytes != actual_tree.total_bytes {
-                    return Err(format!(
-                        "network tier release_candidate_bundle_ref {} {label} total_bytes drift: bundle={} current={}",
-                        bundle_path.display(),
-                        expected_total_bytes,
-                        actual_tree.total_bytes
-                    ));
-                }
+            if let Some(expected_total_bytes) = artifact.total_bytes
+                && expected_total_bytes != actual_tree.total_bytes
+            {
+                return Err(format!(
+                    "network tier release_candidate_bundle_ref {} {label} total_bytes drift: bundle={} current={}",
+                    bundle_path.display(),
+                    expected_total_bytes,
+                    actual_tree.total_bytes
+                ));
             }
         }
         _ => {}

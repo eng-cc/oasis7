@@ -1,6 +1,10 @@
 use super::*;
 
 impl ViewerRuntimeLiveServer {
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     pub(super) fn handle_enhanced_prompt_rollback(
         &mut self,
         request: PromptControlRollbackRequest,
@@ -112,11 +116,11 @@ impl ViewerRuntimeLiveServer {
                     player_id.as_str(),
                     verified.public_key.as_str(),
                 ))
-            && !self
+            && self
                 .llm_sidecar
                 .agent_player_bindings
                 .get(agent_id.as_str())
-                .is_some_and(|bound_player| bound_player != player_id.as_str())
+                .is_none_or(|bound_player| bound_player == player_id.as_str())
         {
             return Err(prompt_control_result_unknown_error(&request_id));
         }

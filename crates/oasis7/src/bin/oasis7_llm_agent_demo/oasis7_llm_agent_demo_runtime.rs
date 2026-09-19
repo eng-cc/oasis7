@@ -448,8 +448,8 @@ fn resolve_provider_loopback_transport_timeout_ms(options: &CliOptions) -> u64 {
 
 fn write_report_json(path: &str, run_report: &DemoRunReport) -> Result<(), String> {
     let report_path = Path::new(path);
-    if let Some(parent) = report_path.parent() {
-        if !parent.as_os_str().is_empty() {
+    if let Some(parent) = report_path.parent()
+        && !parent.as_os_str().is_empty() {
             fs::create_dir_all(parent).map_err(|err| {
                 format!(
                     "failed to create report directory {}: {err}",
@@ -457,7 +457,6 @@ fn write_report_json(path: &str, run_report: &DemoRunReport) -> Result<(), Strin
                 )
             })?;
         }
-    }
 
     let content = serde_json::to_string_pretty(run_report)
         .map_err(|err| format!("failed to serialize report json: {err}"))?;

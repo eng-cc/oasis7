@@ -12,6 +12,10 @@ fn is_budget_exhausted_wait(trace: &AgentDecisionTrace) -> bool {
             .any(|step| step.step_type == "budget_admission" && step.status == "denied")
 }
 
+#[expect(
+    clippy::result_large_err,
+    reason = "Stable actor completion seam returns the full deterministic turn outcome."
+)]
 pub(super) fn normalize_completion(
     completion: ActorCompletion,
 ) -> Result<ActorCompletion, AsyncAgentTurnOutcome> {

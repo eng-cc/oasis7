@@ -731,8 +731,8 @@ fn hosted_registration_grant_rotates_reload_key_without_requiring_login() {
         .state()
         .agents
         .keys()
-        .cloned()
         .take(2)
+        .cloned()
         .collect();
     assert_eq!(agent_ids.len(), 2, "two bases must seed two agents");
     let agent_id = agent_ids[0].clone();

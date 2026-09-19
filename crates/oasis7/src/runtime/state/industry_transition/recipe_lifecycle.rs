@@ -394,12 +394,12 @@ impl PreparedRecipeLifecycle {
             logistics_route_ids: logistics_route_ids.clone(),
             logistics_path_ids: logistics_path_ids.clone(),
         };
-        if let Some(existing) = state.recipe_completion_receipts.get(job_id) {
-            if existing != &completion_receipt {
-                return Err(invalid(format!(
-                    "recipe completion conflicts with persisted receipt: job_id={job_id}"
-                )));
-            }
+        if let Some(existing) = state.recipe_completion_receipts.get(job_id)
+            && existing != &completion_receipt
+        {
+            return Err(invalid(format!(
+                "recipe completion conflicts with persisted receipt: job_id={job_id}"
+            )));
         }
         if state.settled_recipe_job_ids.contains(job_id) {
             return Ok(Self::idempotent(

@@ -441,13 +441,11 @@ impl ViewerRuntimeLiveServer {
             .saturating_sub(baseline_logical_time);
         let delta_event_seq =
             latest_runtime_event_seq(&prepared.world).saturating_sub(baseline_event_seq);
-        if delta_logical_time == 0 && delta_event_seq == 0 {
-            if !materially_different_world {
-                return Ok(ChainLinkedRuntimeDispatch {
-                    advanced: false,
-                    responses: Vec::new(),
-                });
-            }
+        if delta_logical_time == 0 && delta_event_seq == 0 && !materially_different_world {
+            return Ok(ChainLinkedRuntimeDispatch {
+                advanced: false,
+                responses: Vec::new(),
+            });
         }
 
         if prepared.committed_height == 0

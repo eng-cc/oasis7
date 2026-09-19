@@ -7,9 +7,11 @@ use crate::runtime::{
     FactoryProfileV1, FactorySiteAuthorityV1, LocationAnchorV1,
     MajorWorldEventVisibilityPermission, MaterialLedgerId,
 };
+#[cfg(test)]
+use crate::simulator::RuntimePerfHealth;
 use crate::simulator::runtime_perf::unsupported_runtime_perf_snapshot;
 use crate::simulator::{
-    ChunkRuntimeConfig, Location, RuntimePerfHealth, RuntimePerfSnapshot, WorldKernel, WorldModel,
+    ChunkRuntimeConfig, Location, RuntimePerfSnapshot, WorldKernel, WorldModel,
 };
 use crate::viewer::gameplay_actions::{
     FACTORY_ASSEMBLER_MK1, FACTORY_SMELTER_MK1, STARTER_INDUSTRIAL_ELECTRICITY,
@@ -294,10 +296,10 @@ impl RuntimeLiveSession {
 
     pub(super) fn should_emit_background_snapshot(&mut self, interval: Duration) -> bool {
         let now = Instant::now();
-        if let Some(next_snapshot_at) = self.next_background_snapshot_at {
-            if now < next_snapshot_at {
-                return false;
-            }
+        if let Some(next_snapshot_at) = self.next_background_snapshot_at
+            && now < next_snapshot_at
+        {
+            return false;
         }
         self.next_background_snapshot_at = Some(now + interval);
         true
@@ -305,16 +307,17 @@ impl RuntimeLiveSession {
 
     pub(super) fn should_poll_chain(&mut self, interval: Duration) -> bool {
         let now = Instant::now();
-        if let Some(next_poll_at) = self.next_chain_poll_at {
-            if now < next_poll_at {
-                return false;
-            }
+        if let Some(next_poll_at) = self.next_chain_poll_at
+            && now < next_poll_at
+        {
+            return false;
         }
         self.next_chain_poll_at = Some(now + interval);
         true
     }
 }
 
+#[cfg(test)]
 pub(super) fn bootstrap_runtime_world(
     scenario: WorldScenario,
 ) -> Result<(RuntimeWorld, WorldConfig), String> {
@@ -339,7 +342,7 @@ pub(super) fn bootstrap_runtime_live_world(
         return Ok((world, snapshot_config, Some(seed_model), chunk_runtime));
     }
 
-    match config.scenario.clone() {
+    match config.scenario {
         Some(scenario) => {
             let (world, snapshot_config, chunk_runtime) =
                 bootstrap_runtime_world_with_chunk_runtime(scenario)?;

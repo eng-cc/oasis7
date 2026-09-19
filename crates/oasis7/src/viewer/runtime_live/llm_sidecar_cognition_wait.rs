@@ -12,6 +12,20 @@ enum ProviderWaitFault {
     PersistenceBlocker = 7,
 }
 
+#[cfg(not(test))]
+impl ProviderWaitFault {
+    const ALL: [Self; 8] = [
+        Self::None,
+        Self::Projection,
+        Self::Release,
+        Self::Runtime,
+        Self::Harness,
+        Self::Actor,
+        Self::Persistence,
+        Self::PersistenceBlocker,
+    ];
+}
+
 #[cfg(test)]
 fn provider_wait_fault() -> ProviderWaitFault {
     match std::env::var("OASIS7_TEST_PROVIDER_WAIT_FAULT").as_deref() {
@@ -28,6 +42,9 @@ fn provider_wait_fault() -> ProviderWaitFault {
 
 #[cfg(not(test))]
 fn provider_wait_fault() -> ProviderWaitFault {
+    // Keep the complete fault taxonomy type-checked in production even though
+    // fault injection itself is test-only.
+    let _ = ProviderWaitFault::ALL;
     ProviderWaitFault::None
 }
 
@@ -203,35 +220,34 @@ fn compensate_provider_wait_admission(
         if matches!(
             fault,
             ProviderWaitFault::Persistence | ProviderWaitFault::PersistenceBlocker
-        ) {
-            if let Err(error) = sidecar.install_test_provider_lineage_checkpoint_blocker() {
-                compensation_errors.push(format!(
-                    "provider Wait test checkpoint blocker setup failed: {error}"
-                ));
-            }
+        ) && let Err(error) = sidecar.install_test_provider_lineage_checkpoint_blocker()
+        {
+            compensation_errors.push(format!(
+                "provider Wait test checkpoint blocker setup failed: {error}"
+            ));
         }
     }
-    if compensation_errors.is_empty() {
-        if let Some(lease) = lease_backup.as_ref() {
-            if let Err(error) = sidecar.validate_provider_cognition_lease_for_request(
-                world,
-                request.agent_subject.as_str(),
-                request,
-                lease,
-                "settle",
-            ) {
-                compensation_errors.push(format!(
-                    "provider Wait cognition lease settlement validation failed: {error}"
-                ));
-            } else if let Err(error) =
-                world.settle_cognition_lease(lease.lease_id.as_str(), lease.reserved_amount)
-            {
-                compensation_errors.push(format!(
-                    "provider Wait cognition lease settlement failed: {error:?}"
-                ));
-            } else {
-                sidecar.clear_provider_cognition_lease(request.agent_subject.as_str());
-            }
+    if compensation_errors.is_empty()
+        && let Some(lease) = lease_backup.as_ref()
+    {
+        if let Err(error) = sidecar.validate_provider_cognition_lease_for_request(
+            world,
+            request.agent_subject.as_str(),
+            request,
+            lease,
+            "settle",
+        ) {
+            compensation_errors.push(format!(
+                "provider Wait cognition lease settlement validation failed: {error}"
+            ));
+        } else if let Err(error) =
+            world.settle_cognition_lease(lease.lease_id.as_str(), lease.reserved_amount)
+        {
+            compensation_errors.push(format!(
+                "provider Wait cognition lease settlement failed: {error:?}"
+            ));
+        } else {
+            sidecar.clear_provider_cognition_lease(request.agent_subject.as_str());
         }
     }
     if compensation_errors.is_empty() {

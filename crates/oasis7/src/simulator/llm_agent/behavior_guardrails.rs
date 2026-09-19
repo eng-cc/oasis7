@@ -281,24 +281,24 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
                     }
                 }
 
-                if let Some(current_location_id) = inferred_current_location_id.as_deref() {
-                    if current_location_id != location_id.as_str() {
-                        let (move_action, move_note) =
-                            self.guarded_move_to_location(location_id.as_str(), observation);
-                        let mut notes = mine_notes;
-                        notes.push(format!(
+                if let Some(current_location_id) = inferred_current_location_id.as_deref()
+                    && current_location_id != location_id.as_str()
+                {
+                    let (move_action, move_note) =
+                        self.guarded_move_to_location(location_id.as_str(), observation);
+                    let mut notes = mine_notes;
+                    notes.push(format!(
                             "mine_compound location precheck rerouted to move_agent: current_location={} mine_location={}",
                             current_location_id, location_id
                         ));
-                        if let Some(move_note) = move_note {
-                            notes.push(move_note);
-                        }
-                        return self.guard_move_action_with_electricity(
-                            move_action,
-                            observation,
-                            notes,
-                        );
+                    if let Some(move_note) = move_note {
+                        notes.push(move_note);
                     }
+                    return self.guard_move_action_with_electricity(
+                        move_action,
+                        observation,
+                        notes,
+                    );
                 }
 
                 (
@@ -383,23 +383,23 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
                     }
                 }
 
-                if let Some(current_location_id) = inferred_current_location_id.as_deref() {
-                    if current_location_id != location_id.as_str() {
-                        let (move_action, move_note) =
-                            self.guarded_move_to_location(location_id.as_str(), observation);
-                        build_notes.push(format!(
+                if let Some(current_location_id) = inferred_current_location_id.as_deref()
+                    && current_location_id != location_id.as_str()
+                {
+                    let (move_action, move_note) =
+                        self.guarded_move_to_location(location_id.as_str(), observation);
+                    build_notes.push(format!(
                             "build_factory location precheck rerouted to move_agent: current_location={} target_location={}",
                             current_location_id, location_id
                         ));
-                        if let Some(move_note) = move_note {
-                            build_notes.push(move_note);
-                        }
-                        return self.guard_move_action_with_electricity(
-                            move_action,
-                            observation,
-                            build_notes,
-                        );
+                    if let Some(move_note) = move_note {
+                        build_notes.push(move_note);
                     }
+                    return self.guard_move_action_with_electricity(
+                        move_action,
+                        observation,
+                        build_notes,
+                    );
                 }
 
                 if let Some(existing_factory_id) = self.resolve_existing_factory_id_for_build(
@@ -628,25 +628,46 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
                     }
                 }
 
-                if self.recipe_coverage.is_completed(recipe_id.as_str()) {
-                    if let Some(factory_kind) = self
+                if self.recipe_coverage.is_completed(recipe_id.as_str())
+                    && let Some(factory_kind) = self
                         .known_factory_kind_for_id(factory_id.as_str())
                         .or_else(|| {
                             Self::required_factory_kind_for_recipe(recipe_id.as_str())
                                 .map(str::to_string)
                         })
+                {
+                    if let Some(next_recipe_id) = self
+                        .recipe_coverage
+                        .next_uncovered_recipe_for_factory_kind_excluding(
+                            factory_kind.as_str(),
+                            recipe_id.as_str(),
+                        )
                     {
-                        if let Some(next_recipe_id) = self
-                            .recipe_coverage
-                            .next_uncovered_recipe_for_factory_kind_excluding(
-                                factory_kind.as_str(),
-                                recipe_id.as_str(),
-                            )
-                        {
-                            schedule_notes.push(format!(
+                        schedule_notes.push(format!(
                                 "schedule_recipe coverage hard-switch applied: completed_recipe={} -> next_uncovered_recipe={} switch_factory_id={} target_factory_kind={}",
                                 recipe_id, next_recipe_id, factory_id, factory_kind
                             ));
+                        recipe_id = next_recipe_id;
+                        if let Some(next_cost_per_batch) =
+                            Self::default_recipe_hardware_cost_per_batch(recipe_id.as_str())
+                        {
+                            cost_per_batch = next_cost_per_batch;
+                        }
+                        electricity_cost_per_batch =
+                            Self::default_recipe_electricity_cost_per_batch(recipe_id.as_str())
+                                .unwrap_or(0);
+                    } else if let Some((next_recipe_id, required_factory_kind)) =
+                        self.next_missing_recipe_requirement()
+                        && required_factory_kind != factory_kind
+                    {
+                        if let Some(next_factory_id) =
+                            self.canonical_factory_id_for_kind(required_factory_kind.as_str())
+                        {
+                            schedule_notes.push(format!(
+                                        "schedule_recipe coverage hard-switch applied: completed_recipe={} -> next_uncovered_recipe={} switch_factory_id={} target_factory_kind={}",
+                                        recipe_id, next_recipe_id, next_factory_id, required_factory_kind
+                                    ));
+                            factory_id = next_factory_id;
                             recipe_id = next_recipe_id;
                             if let Some(next_cost_per_batch) =
                                 Self::default_recipe_hardware_cost_per_batch(recipe_id.as_str())
@@ -656,79 +677,47 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
                             electricity_cost_per_batch =
                                 Self::default_recipe_electricity_cost_per_batch(recipe_id.as_str())
                                     .unwrap_or(0);
-                        } else if let Some((next_recipe_id, required_factory_kind)) =
-                            self.next_missing_recipe_requirement()
+                        } else if let Some(current_location_id) =
+                            Self::current_location_id_from_observation(observation)
                         {
-                            if required_factory_kind != factory_kind {
-                                if let Some(next_factory_id) = self
-                                    .canonical_factory_id_for_kind(required_factory_kind.as_str())
-                                {
-                                    schedule_notes.push(format!(
-                                        "schedule_recipe coverage hard-switch applied: completed_recipe={} -> next_uncovered_recipe={} switch_factory_id={} target_factory_kind={}",
-                                        recipe_id, next_recipe_id, next_factory_id, required_factory_kind
-                                    ));
-                                    factory_id = next_factory_id;
-                                    recipe_id = next_recipe_id;
-                                    if let Some(next_cost_per_batch) =
-                                        Self::default_recipe_hardware_cost_per_batch(
-                                            recipe_id.as_str(),
-                                        )
-                                    {
-                                        cost_per_batch = next_cost_per_batch;
-                                    }
-                                    electricity_cost_per_batch =
-                                        Self::default_recipe_electricity_cost_per_batch(
-                                            recipe_id.as_str(),
-                                        )
-                                        .unwrap_or(0);
-                                } else if let Some(current_location_id) =
-                                    Self::current_location_id_from_observation(observation)
-                                {
-                                    let mut notes = schedule_notes.clone();
-                                    notes.push(format!(
+                            let mut notes = schedule_notes.clone();
+                            notes.push(format!(
                                         "schedule_recipe coverage hard-switch rerouted to build_factory: completed_recipe={} next_uncovered_recipe={} required_factory_kind={} build_location={}",
                                         recipe_id, next_recipe_id, required_factory_kind, current_location_id
                                     ));
-                                    return (
-                                        Action::BuildFactory {
-                                            owner,
-                                            location_id: current_location_id.to_string(),
-                                            factory_id: required_factory_kind.clone(),
-                                            factory_kind: required_factory_kind,
-                                        },
-                                        Some(notes.join("; ")),
-                                    );
-                                }
-                            }
+                            return (
+                                Action::BuildFactory {
+                                    owner,
+                                    location_id: current_location_id.to_string(),
+                                    factory_id: required_factory_kind.clone(),
+                                    factory_kind: required_factory_kind,
+                                },
+                                Some(notes.join("; ")),
+                            );
                         }
                     }
                 }
                 if let Some(factory_location_id) =
                     self.known_factory_locations.get(factory_id.as_str())
-                {
-                    if let Some(current_location_id) =
+                    && let Some(current_location_id) =
                         Self::current_location_id_from_observation(observation)
-                    {
-                        if current_location_id != factory_location_id {
-                            let (move_action, move_note) = self.guarded_move_to_location(
-                                factory_location_id.as_str(),
-                                observation,
-                            );
-                            let mut notes = schedule_notes.clone();
-                            notes.push(format!(
+                    && current_location_id != factory_location_id
+                {
+                    let (move_action, move_note) =
+                        self.guarded_move_to_location(factory_location_id.as_str(), observation);
+                    let mut notes = schedule_notes.clone();
+                    notes.push(format!(
                                 "schedule_recipe factory location precheck rerouted to move_agent: current_location={} factory_location={}",
                                 current_location_id, factory_location_id
                             ));
-                            if let Some(move_note) = move_note {
-                                notes.push(move_note);
-                            }
-                            return self.guard_move_action_with_electricity(
-                                move_action,
-                                observation,
-                                notes,
-                            );
-                        }
+                    if let Some(move_note) = move_note {
+                        notes.push(move_note);
                     }
+                    return self.guard_move_action_with_electricity(
+                        move_action,
+                        observation,
+                        notes,
+                    );
                 }
 
                 let available_hardware = observation.self_resources.get(ResourceKind::Data);
@@ -740,16 +729,16 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
                     let target_recovery_mass_g = hardware_shortfall
                         .saturating_mul(DEFAULT_REFINE_RECOVERY_MASS_G_PER_HARDWARE)
                         .max(DEFAULT_REFINE_RECOVERY_MASS_G_PER_HARDWARE);
-                    let recovery_mass_g = target_recovery_mass_g
-                        .min(DEFAULT_MINE_COMPOUND_MAX_PER_ACTION_G)
-                        .max(DEFAULT_REFINE_RECOVERY_MASS_G_PER_HARDWARE);
+                    let recovery_mass_g = target_recovery_mass_g.clamp(
+                        DEFAULT_REFINE_RECOVERY_MASS_G_PER_HARDWARE,
+                        DEFAULT_MINE_COMPOUND_MAX_PER_ACTION_G,
+                    );
                     let capped_from = (target_recovery_mass_g > recovery_mass_g)
                         .then_some(target_recovery_mass_g);
                     let missing_compound_g = recovery_mass_g.saturating_sub(available_compound);
                     if missing_compound_g > 0 {
-                        let mine_mass_g = missing_compound_g
-                            .min(DEFAULT_MINE_COMPOUND_MAX_PER_ACTION_G)
-                            .max(1);
+                        let mine_mass_g =
+                            missing_compound_g.clamp(1, DEFAULT_MINE_COMPOUND_MAX_PER_ACTION_G);
                         let mine_required_electricity = ((mine_mass_g + 999) / 1000)
                             .saturating_mul(DEFAULT_MINE_ELECTRICITY_COST_PER_KG);
                         if available_electricity >= mine_required_electricity {

@@ -9,6 +9,10 @@ use crate::simulator::WorldTime;
 const LOCATION_ELECTRICITY_POOL_REMOVED_NOTE: &str = "location electricity pool removed";
 
 impl WorldKernel {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable replay seam preserves the serialized power-order event fields."
+    )]
     pub(super) fn replay_power_order_placed(
         &mut self,
         event_time: WorldTime,

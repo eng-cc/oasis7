@@ -79,6 +79,10 @@ pub struct ModuleRuntimeChargeEvent {
 /// replay a journal tail after an older snapshot without re-running a module
 /// or accepting a second nonce.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Capability journal events preserve the stable persisted wire shape for replay compatibility."
+)]
 #[serde(tag = "type", content = "data")]
 pub enum CapabilityAuthorizationEvent {
     /// Legacy record-only authority admission. Recovery intentionally rejects
@@ -147,6 +151,10 @@ pub enum CapabilityAuthorizationEvent {
 
 /// The body/payload of a world event.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "World event bodies preserve the stable persisted event envelope for replay compatibility."
+)]
 #[serde(tag = "kind", content = "payload")]
 pub enum WorldEventBody {
     Domain(DomainEvent),

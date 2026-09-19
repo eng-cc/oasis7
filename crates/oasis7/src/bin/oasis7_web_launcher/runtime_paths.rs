@@ -13,10 +13,10 @@ pub(super) fn resolve_oasis7_game_launcher_binary() -> PathBuf {
         return PathBuf::from(path);
     }
 
-    if let Ok(current_exe) = env::current_exe() {
-        if let Some(bin_dir) = current_exe.parent() {
-            return bin_dir.join(binary_name("oasis7_game_launcher"));
-        }
+    if let Ok(current_exe) = env::current_exe()
+        && let Some(bin_dir) = current_exe.parent()
+    {
+        return bin_dir.join(binary_name("oasis7_game_launcher"));
     }
 
     PathBuf::from(binary_name("oasis7_game_launcher"))
@@ -29,10 +29,10 @@ pub(super) fn resolve_oasis7_chain_runtime_binary() -> PathBuf {
         return PathBuf::from(path);
     }
 
-    if let Ok(current_exe) = env::current_exe() {
-        if let Some(bin_dir) = current_exe.parent() {
-            return bin_dir.join(binary_name("oasis7_chain_runtime"));
-        }
+    if let Ok(current_exe) = env::current_exe()
+        && let Some(bin_dir) = current_exe.parent()
+    {
+        return bin_dir.join(binary_name("oasis7_chain_runtime"));
     }
 
     PathBuf::from(binary_name("oasis7_chain_runtime"))
@@ -44,11 +44,11 @@ pub(super) fn resolve_static_dir_path(default_viewer_static_dir: &str) -> PathBu
     }
 
     let mut candidates = Vec::new();
-    if let Ok(current_exe) = env::current_exe() {
-        if let Some(bin_dir) = current_exe.parent() {
-            candidates.push(bin_dir.join("..").join("web"));
-            candidates.push(bin_dir.join("..").join("..").join("web"));
-        }
+    if let Ok(current_exe) = env::current_exe()
+        && let Some(bin_dir) = current_exe.parent()
+    {
+        candidates.push(bin_dir.join("..").join("web"));
+        candidates.push(bin_dir.join("..").join("..").join("web"));
     }
     candidates.extend(viewer_dev_dist_candidates());
     candidates.push(PathBuf::from(default_viewer_static_dir));
@@ -73,10 +73,10 @@ pub(super) fn resolve_console_static_dir_path() -> PathBuf {
         return PathBuf::from(path);
     }
 
-    if let Ok(current_exe) = env::current_exe() {
-        if let Some(bin_dir) = current_exe.parent() {
-            return bin_dir.join("..").join(DEFAULT_CONSOLE_STATIC_DIR);
-        }
+    if let Ok(current_exe) = env::current_exe()
+        && let Some(bin_dir) = current_exe.parent()
+    {
+        return bin_dir.join("..").join(DEFAULT_CONSOLE_STATIC_DIR);
     }
 
     PathBuf::from(DEFAULT_CONSOLE_STATIC_DIR)

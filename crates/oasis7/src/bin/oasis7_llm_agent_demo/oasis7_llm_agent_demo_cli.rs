@@ -154,6 +154,10 @@ impl DecisionSource {
     }
 }
 
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Stable runtime enum preserves established variant payload ownership and wire behavior."
+)]
 enum DemoAgentBehavior {
     Llm(LlmAgentBehavior<OpenAiChatCompletionClient>),
     ProviderBacked {
@@ -505,17 +509,17 @@ impl DemoRunReport {
     }
 
     fn finalize(&mut self) {
-        if self.trace_counts.traces > 0 {
-            self.trace_counts.llm_input_chars_avg =
-                self.trace_counts.llm_input_chars_total / self.trace_counts.traces;
-        }
-        if self.active_ticks > 0 {
-            self.trace_counts.llm_skipped_tick_ratio_ppm = self
-                .trace_counts
-                .llm_skipped_ticks
-                .saturating_mul(1_000_000)
-                / self.active_ticks;
-        }
+        self.trace_counts.llm_input_chars_avg = self
+            .trace_counts
+            .llm_input_chars_total
+            .checked_div(self.trace_counts.traces)
+            .unwrap_or(0);
+        self.trace_counts.llm_skipped_tick_ratio_ppm = self
+            .trace_counts
+            .llm_skipped_ticks
+            .saturating_mul(1_000_000)
+            .checked_div(self.active_ticks)
+            .unwrap_or(0);
     }
 }
 

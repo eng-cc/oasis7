@@ -1,6 +1,10 @@
 use super::*;
 
 impl ViewerRuntimeLiveServer {
+    #[expect(
+        clippy::result_large_err,
+        reason = "Recovery protocol errors preserve the stable typed error envelope"
+    )]
     pub(super) fn handle_reconnect_sync(
         &mut self,
         request: AuthoritativeReconnectSyncRequest,
@@ -114,6 +118,10 @@ impl ViewerRuntimeLiveServer {
         })
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Recovery protocol errors preserve the stable typed error envelope"
+    )]
     pub(super) fn revoke_session_key(
         &mut self,
         request: AuthoritativeSessionRevokeRequest,
@@ -189,6 +197,10 @@ impl ViewerRuntimeLiveServer {
         Ok(ack)
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Recovery protocol errors preserve the stable typed error envelope"
+    )]
     pub(super) fn rotate_session_key(
         &mut self,
         request: AuthoritativeSessionRotateRequest,

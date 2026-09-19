@@ -6,24 +6,26 @@ use super::support::{
     FORMAL_RELEASE_DEFAULT_BOOTSTRAP_AGENT_ID, formal_release_default_seed_location_for_pos,
 };
 use crate::geometry::space_distance_cm;
+#[cfg(test)]
+use crate::runtime::RejectReason as RuntimeRejectReason;
 use crate::runtime::{
-    AgentActivityStatus, DomainEvent as RuntimeDomainEvent, RejectReason as RuntimeRejectReason,
-    WorldEvent as RuntimeWorldEvent, WorldEventBody as RuntimeWorldEventBody,
+    AgentActivityStatus, DomainEvent as RuntimeDomainEvent, WorldEvent as RuntimeWorldEvent,
+    WorldEventBody as RuntimeWorldEventBody,
 };
+#[cfg(test)]
+use crate::simulator::RejectReason as SimulatorRejectReason;
 use crate::simulator::{
     Agent, AgentActivityProjectionV1, AgentExecutionDebugContext,
     DEFAULT_PROVIDER_ACTION_SCHEMA_VERSION, DEFAULT_PROVIDER_OBSERVATION_SCHEMA_VERSION, Factory,
-    Location, RejectReason as SimulatorRejectReason, ResourceOwner, WorldConfig, WorldEvent,
-    WorldEventKind, WorldModel, provider_phase1_required_actions,
-    provider_phase1_required_capabilities,
+    Location, ResourceOwner, WorldConfig, WorldEvent, WorldEventKind, WorldModel,
+    provider_phase1_required_actions, provider_phase1_required_capabilities,
 };
 use std::collections::BTreeMap;
 
-#[path = "mapping_helpers.rs"]
-mod mapping_helpers;
-pub(super) use mapping_helpers::runtime_event_kind_label;
 #[path = "mapping_events.rs"]
 mod mapping_events;
+#[path = "mapping_helpers.rs"]
+mod mapping_helpers;
 pub(super) use mapping_events::{
     action_accepted_player_feedback, fallback_non_empty, material_stack_summary,
     runtime_fallback_event_kind, runtime_reject_reason_to_simulator, runtime_structured_event,

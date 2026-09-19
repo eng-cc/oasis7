@@ -73,6 +73,7 @@ const PUBLIC_TESTNET_NETWORK_TIER_MANIFEST: &str =
 const MAINNET_NETWORK_TIER_MANIFEST: &str =
     "doc/testing/templates/network-tier-mainnet.example.json";
 const DEFAULT_CHAIN_NODE_TICK_MS: u64 = 200;
+#[cfg(test)]
 const LAUNCHER_AGENT_PROVIDER_FIELD_IDS: &[&str] = &[
     "agent_decision_source",
     "agent_provider_backend",
@@ -991,10 +992,10 @@ fn normalize_chain_network_tier_config(config: &mut LauncherConfig) -> Result<()
                 .to_string()
         })?;
     config.chain_network_tier = tier.to_string();
-    if config.chain_network_tier_manifest.trim().is_empty() {
-        if let Some(manifest) = resolve_known_network_tier_manifest(tier) {
-            config.chain_network_tier_manifest = manifest.to_string();
-        }
+    if config.chain_network_tier_manifest.trim().is_empty()
+        && let Some(manifest) = resolve_known_network_tier_manifest(tier)
+    {
+        config.chain_network_tier_manifest = manifest.to_string();
     }
     Ok(())
 }

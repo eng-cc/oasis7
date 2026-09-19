@@ -285,8 +285,8 @@ impl World {
     ) -> Result<TickConsensusRecord, WorldError> {
         let ordered_event_ids: Vec<WorldEventId> =
             tick_events.iter().map(|event| event.id).collect();
-        let ordered_action_ids = Self::extract_ordered_action_ids(&tick_events);
-        let events_hash = self.hash_tick_events(&tick_events)?;
+        let ordered_action_ids = Self::extract_ordered_action_ids(tick_events);
+        let events_hash = self.hash_tick_events(tick_events)?;
         let parent_hash = self.parent_hash_for_tick(tick);
         let executor_version = env!("CARGO_PKG_VERSION").to_string();
         let randomness_seed = Self::derive_tick_randomness_seed(parent_hash.as_str(), tick);
@@ -316,7 +316,7 @@ impl World {
             action_batch_hash: committed_context
                 .map(|context| Ok(context.action_root.clone()))
                 .unwrap_or_else(|| hash_json(&ordered_action_ids))?,
-            domain_events_hash: Self::hash_tick_domain_events(&tick_events)?,
+            domain_events_hash: Self::hash_tick_domain_events(tick_events)?,
             state_projection_hash: state_root,
         };
         let block = TickBlock {

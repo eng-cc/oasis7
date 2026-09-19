@@ -71,7 +71,7 @@ impl World {
         marker: WorldCommitRecordV1,
     ) -> Result<(), WorldError> {
         let _ = marker;
-        return Err(cognition_validation("legacy_commit_projection_fenced"));
+        Err(cognition_validation("legacy_commit_projection_fenced"))
     }
 
     pub fn project_runtime_receipt_lineage(

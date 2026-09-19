@@ -34,6 +34,10 @@ enum HostedStrongAuthActionGrantMode {
     Unsupported,
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Stable protocol and runtime seam keeps independently validated inputs explicit."
+)]
 pub(super) fn issue_hosted_strong_auth_grant(
     deployment_mode: DeploymentMode,
     player_id: &str,
