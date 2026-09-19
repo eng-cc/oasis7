@@ -182,6 +182,51 @@
 - 当：使用费或 levy 提交、到期、重连或重复执行。
 - 则：玩家能区分收益、用途、成本、期限与退出替代；有效项目按当前授权最多一次结算，无效者原子拒绝且不产生扣费、欠费、资格或通行限制，也不变成一般税收或独立成长门槛。
 
+<a id="req-wr-gr-009"></a>
+### REQ-WR-GR-009：工业能力必须经过提案、模拟、试点与治理准入
+
+- 要求：玩家或 Agent 提出的配方、材料、设施、模块或等价工业能力，必须依次经过可审计提案、同一权威输入下的确定性模拟、明确 scope/期限/资源上限/退出条件的原型或受限试点，以及有范围的治理准入。任何单一阶段都不取得世界写入权、默认全局可用性、永久许可或治理资格。
+- 专业权威：[`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md#ac-game-018-01)、[`玩家发布实体合同`](../../world-runtime/module/player-published-entities.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
+- 验收：[AC-WR-GR-009](#ac-wr-gr-009)
+
+<a id="ac-wr-gr-009"></a>
+### AC-WR-GR-009：提案阶段可区分且失败可恢复
+
+- 覆盖要求：REQ-WR-GR-009
+- 给定：一项新工业能力及可审计来源、假设、预期影响、风险、证据缺口和退出条件，另有模拟不一致、试点超出 scope/资源、准入拒绝或授权漂移的对照样例。
+- 当：玩家或 Agent 在提案、模拟、试点、准入之间选择继续、补证、缩小 scope、延期、停止、回退既有能力或重提。
+- 则：每阶段的成本、权限、投入/损失、当前范围、失败原因、下一复查和安全替代均可读；模拟与预览不产生世界效果，试点只产生受限 evidence，治理准入只产生声明范围内的一次结果。重复、重连、恢复和 replay 不重复扣材、不复制 evidence/准入或把技术构建、模型建议、投票支持和旧缓存伪装成已生效能力。
+
+<a id="req-wr-gr-010"></a>
+### REQ-WR-GR-010：创作者许可与开放必须有范围、期限和公共边界
+
+- 要求：获准工业能力的许可/版税/收益权必须声明适用能力、用途、区域、期限、维护责任、审计/争议和到期或开放条件；超出范围须重新准入，到期或公开条件达成后按规则开放。许可不能永久封锁、覆盖公共安全、玩家独立资产/身份或其他受保护权利。
+- 专业权威：[`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md#ac-game-018-02)、[`玩家发布实体合同`](../../world-runtime/module/player-published-entities.prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
+- 验收：[AC-WR-GR-010](#ac-wr-gr-010)
+
+<a id="ac-wr-gr-010"></a>
+### AC-WR-GR-010：许可到期或开放不形成永久垄断
+
+- 覆盖要求：REQ-WR-GR-010
+- 给定：一项具备用途/区域、期限、版税/收益、维护、撤销/争议和开放条件的许可，以及到期、开放条件满足、撤销、scope 收缩或收益/使用事实尚未确认的样例。
+- 当：玩家选择继续许可、续期、开放、替代路线或提出争议/重提，且重复、重连或旧请求再次到达。
+- 则：玩家能看到成本、义务、当前可用范围、失败原因和下一步；开放或到期按当前规则生效，不追溯抹除合法历史，但未绑定 verified receipt/escrow 里程碑不产生版税结算。旧缓存、待决请求和一次试点成功不延长、复制或追溯改写许可，且任何新效果都须重新通过当前授权。
+
+<a id="req-wr-gr-011"></a>
+### REQ-WR-GR-011：OC 链上转让与世界资格保持双向隔离
+
+- 要求：OC 的链上转让依链上资产规则处理，不因世界资格额外施加世界内转让限制；这不表示免手续费、免链上结算成本或宣称当前具备完整 fee execution，费用语义由 p2p/执行专业权威决定。锁定 OC、可撤回委托和实际控制人快照只能作为声明范围内的治理输入之一，仅当已声明的区域 charter/地方治理规则要求时，才与持续运营、维护或交付形成的本地贡献共同评估；工业提案/准入、普通市场合同和紧急保供不自动继承该双资格门槛，各依其 active 要求判断。OC 持有/转让不得自动取得世界资源、服务信用、库存、合同、市场信誉、工业作者身份、准入、区域 charter、tenure、levy、竞争、治理或紧急保供资格；反向地，世界内资源、信用、合同和资格也不自动成为 OC、可链上转让资产或可赎回外部价值。
+- 专业权威：[`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md#ac-game-018-03)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
+- 验收：[AC-WR-GR-011](#ac-wr-gr-011)
+
+<a id="ac-wr-gr-011"></a>
+### AC-WR-GR-011：OC 转让成功不旁路世界资格
+
+- 覆盖要求：REQ-WR-GR-011
+- 给定：OC 链上转让、世界资源/信用/合同、工业准入或区域资格的任一组合，以及一侧成功而另一侧条件不足、重连或重复提交的样例。
+- 当：玩家比较 `transfer_oc`、`qualify_world_capability`、`earn_world_credit` 或 `enter_contract`，或世界按治理输入重评资格。
+- 则：各动作的条件、成本、权限、成功/失败与下一步可区分；OC receipt 与世界资格/贡献记录分别保持，失败一侧不抹掉另一侧已确认事实，不产生自动资格、自动兑换、外部价值或绕过贡献/证据/准入的高影响权利。重复、过期、重连和 replay 至多产生各自一次效果。
+
 ## 3. 权威边界
 
 | 层级 | 本产品分册拥有 | 下层专业域拥有 |
@@ -206,6 +251,9 @@
 - GR-7：代表性已生效扩展在授权撤销、到期、收缩或替代时，授权决定明确其对既有能力的结果；未声明结果的变更不生效。历史 receipt 和已确认世界效果保持可追溯，既有能力不会借旧授权取得已被限制、退出或未重新授权的新能力；若进入限制或受控退出，只允许最小安全/价值保全/既有义务动作，并向受影响主体表达当前范围、真实状态和适用下一步。
 - GR-8：区域成立/调整的能力、空间与 bond 证据经过本地、邻区、全局的不同层次审查，成熟区域受资本/委托/控制人和持续贡献双资格约束；通行、独立恢复及宪制保护不被局部 charter 取消。
 - GR-9：持续退化依观察/恢复、权限暂停和解散/回归未成熟的阶段处理；地点 tenure 的取得、续期、转让、收回及适用补偿、公共服务融资的有效或无效结算，都保持身份、资产、历史、通知/申诉和下一步可追溯，且无重复/静默效果。
+- GR-10：工业能力创建必须区分可审计提案、确定性模拟、受限试点和治理准入；任何阶段都不直接取得默认世界能力，失败时保留成本、权限、原因、scope、下一复查和安全替代，重复/恢复不产生第二次世界效果。
+- GR-11：创作者许可/版税/收益权的用途、区域、期限、维护、争议、撤销和开放条件可读且有界；到期或开放不追溯改写合法历史，也不形成永久垄断，未绑定使用/交付事实的 receipt 不产生版税结算。
+- GR-12：OC 链上转让与世界内资源、信用、库存、合同、工业准入、区域资格和高影响权利保持双向隔离；锁定/委托/控制人等治理输入仍须与本地贡献共同评估，任一侧成功不得旁路另一侧条件或自动产生外部价值。
 
 ### 4.1 验收追踪
 
@@ -220,6 +268,9 @@
 | GR-8 / [AC-WR-GR-004](#ac-wr-gr-004) / [AC-WR-GR-005](#ac-wr-gr-005) | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-017 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | 成立/调整边界与能力证据、分层异议/反圈地、双资格与通行/权利负例，同候选验证 | test_tier_full |
 | GR-9 / [AC-WR-GR-006](#ac-wr-gr-006) / [AC-WR-GR-007](#ac-wr-gr-007) | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / viewer_engineer / qa_engineer | PRD-GAME-017 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | 区域退化/暂停/解散、bond、tenure 收回/转让和可读长期规划、通行、资产与身份历史的 receipt、申诉、恢复和重复提交负例，同候选验证 | test_tier_full |
 | GR-9 / [AC-WR-GR-008](#ac-wr-gr-008) | producer_system_designer / gameplay_designer / runtime_engineer / qa_engineer | PRD-GAME-017 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | 排他服务费与不可排他 levy 的受益、用途、上限、期限、账目、复核及无效扣费/欠费负例，同候选验证 | test_tier_required |
+| GR-10 / [AC-WR-GR-009](#ac-wr-gr-009) | producer_system_designer / gameplay_designer / runtime_engineer / wasm_platform_engineer / qa_engineer | PRD-GAME-018 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | 提案、确定性模拟、受限试点与准入分层，失败恢复、无旁路及重复效果负例 | test_tier_full |
+| GR-11 / [AC-WR-GR-010](#ac-wr-gr-010) | producer_system_designer / gameplay_designer / runtime_engineer / qa_engineer | PRD-GAME-018 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | 许可范围、期限、收益、争议、到期开放与无永久垄断、无未经验证版税结算负例 | test_tier_full |
+| GR-12 / [AC-WR-GR-011](#ac-wr-gr-011) | producer_system_designer / gameplay_designer / blockchain_ops_engineer / runtime_engineer / qa_engineer | PRD-GAME-018 / PRD-P2P-003 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | 链上转让与世界资格双向隔离、地方双资格适用范围、单侧失败与费用边界负例 | test_tier_full |
 
 ## 5. Non-Goals
 
@@ -241,3 +292,6 @@
 | [REQ-WR-GR-006](#req-wr-gr-006) / [AC-WR-GR-006](#ac-wr-gr-006) | `producer_system_designer` | [`PRD-GAME-017`](../../game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md#ac-game-017-03)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 原区域 charter 退化项的恢复、bond、身份/receipt 和申诉负例 | `test_tier_full` |
 | [REQ-WR-GR-007](#req-wr-gr-007) / [AC-WR-GR-007](#ac-wr-gr-007) | `producer_system_designer` | [`PRD-GAME-017`](../../game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md#ac-game-017-04)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 原区域 charter 地点项的 tenure 长期规划/取得/续期/转让/收回、通知申诉、通行和补偿负例 | `test_tier_full` |
 | [REQ-WR-GR-008](#req-wr-gr-008) / [AC-WR-GR-008](#ac-wr-gr-008) | `producer_system_designer` | [`PRD-GAME-017`](../../game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md#ac-game-017-05)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 原区域 charter 融资项的服务费/levy、无效扣费、退出和独立路线负例 | `test_tier_required` |
+| [REQ-WR-GR-009](#req-wr-gr-009) / [AC-WR-GR-009](#ac-wr-gr-009) | `producer_system_designer` | [`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md#ac-game-018-01)、[`玩家发布实体合同`](../../world-runtime/module/player-published-entities.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 提案→确定性模拟→受限试点→治理准入的阶段差异、成本/权限/失败恢复、无旁路及 exactly-once 负例 | `test_tier_full` |
+| [REQ-WR-GR-010](#req-wr-gr-010) / [AC-WR-GR-010](#ac-wr-gr-010) | `producer_system_designer` | [`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md#ac-game-018-02)、[`玩家发布实体合同`](../../world-runtime/module/player-published-entities.prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 许可/版税范围、期限、维护、争议、开放/撤销、到期与旧请求不延长/不复制的组合证据 | `test_tier_full` |
+| [REQ-WR-GR-011](#req-wr-gr-011) / [AC-WR-GR-011](#ac-wr-gr-011) | `producer_system_designer` | [`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md#ac-game-018-03)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | OC 链上转让与世界资格/记录双向隔离、治理输入与本地贡献边界、单侧失败及重复效果负例 | `test_tier_full` |

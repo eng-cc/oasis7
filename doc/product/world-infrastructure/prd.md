@@ -33,7 +33,7 @@
 ### 非权威迁移索引
 
 - [`世界连续性与恢复（历史引用）`](world-continuity-governance-and-recovery.prd.md)：已退休的旧路径，保留仅为存量专业链接；不构成 active authority 或验收。
-- 区域 charter、地点 tenure 与公共融资已由世界规则与玩法系统的区域专题接收，不构成本模块 authority。[`工业/市场（待迁移）`](governed-industry-market-and-emergency-supply.prd.md) 与 [`普通治理（部分待迁移）`](global-governance-organization-continuity-and-constitutional-guardrails.prd.md) 仍是 `superseded` 迁移债务：各页迁移头记录接收 owner、已吸收切片与删除条件，内容仍可供接收模块 owner 迁移，但这些路径不再构成本模块产品 authority、路线图、active topic 或验收。原 frontier 与区域能力/扩展迁移债务已由世界规则与玩法系统吸收，不再保留在本模块索引。
+- 区域 charter、地点 tenure 与公共融资已由世界规则与玩法系统的区域专题接收，不构成本模块 authority。工业/市场/保供产品语义已由世界规则与玩法系统接收；对应专题和稳定条款由该模块根入口列出，本模块不重复声明 authority。 [`工业/市场（迁移 provenance）`](governed-industry-market-and-emergency-supply.prd.md) 仍因专业 PRD-GAME-018 等活跃旧源 backlinks 暂存为 `superseded`，不构成本模块产品 authority、路线图、active topic 或验收，待 S1 引用修复后删除。[`普通治理（部分待迁移）`](global-governance-organization-continuity-and-constitutional-guardrails.prd.md) 仍是另一 `superseded` 迁移债务，各页迁移头记录接收 owner、已吸收切片与删除条件。原 frontier 与区域能力/扩展迁移债务已由世界规则与玩法系统吸收，不再保留在本模块索引。
 
 此前的区域设施、市场/工业、charter、frontier 与普通治理分册已从本模块退休：它们是上层 gameplay/world-rule 产品语义，不能再作为基础设施的 taxonomy 或验收门槛。对应专业域与其他产品模块继续拥有其规则、实现合同和现状证据；本次退休不宣称这些能力已迁移、实现或公开可用。
 
