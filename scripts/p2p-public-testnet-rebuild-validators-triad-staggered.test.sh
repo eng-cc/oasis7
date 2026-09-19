@@ -7,6 +7,7 @@ python3 - "$ROOT_DIR" <<'PY'
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 import subprocess
@@ -18,6 +19,18 @@ from pathlib import Path
 root = Path(sys.argv[1]).resolve()
 wrapper = root / "scripts" / "p2p-public-testnet-rebuild-validators.sh"
 executor = root / "scripts" / "p2p-public-testnet-validator-pair-rebuild.py"
+
+
+def load_executor_module():
+    spec = importlib.util.spec_from_file_location("triad_staggered_contract_executor", executor)
+    if spec is None or spec.loader is None:
+        raise SystemExit("unable to load governed triad executor")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+executor_module = load_executor_module()
 
 wrapper_source = wrapper.read_text(encoding="utf-8")
 executor_source = executor.read_text(encoding="utf-8")
@@ -74,6 +87,37 @@ def run(command: list[str], env: dict[str, str], label: str) -> dict[str, object
     if not isinstance(value, dict):
         raise SystemExit(f"{label} did not emit a JSON object")
     return value
+
+
+def canonical_digest(value: dict[str, object]) -> str:
+    return hashlib.sha256(
+        json.dumps(
+            {key: item for key, item in value.items() if key != "canonical_digest"},
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+
+
+TRIAD_ROLLBACK_CONTRACT = {
+    "strategy": "staggered-target-only-cleanup",
+    "required_on_gate_failure": True,
+    "target_only_cleanup": True,
+    "restore_deleted_chain_state": False,
+    "restore_only_forensic_snapshot": True,
+}
+
+
+def write_transaction(path: Path, *, phase: str, execution_mode: str = "triad_staggered") -> None:
+    value: dict[str, object] = {
+        "schema_version": "oasis7.validator_pair_rebuild_transaction.v1",
+        "execution_mode": execution_mode,
+        "phase": phase,
+        "rollback": dict(TRIAD_ROLLBACK_CONTRACT),
+    }
+    value["canonical_digest"] = canonical_digest(value)
+    path.write_text(json.dumps(value, sort_keys=True) + "\n", encoding="utf-8")
 
 
 def assert_triad_receipt(value: dict[str, object], route: str) -> None:
@@ -299,5 +343,260 @@ print(json.dumps(value, separators=(',', ':')))
     if rejected_pair.returncode == 0 or "mode" not in (rejected_pair.stderr + rejected_pair.stdout).lower():
         raise SystemExit("pair route accepted a receipt bound to triad_staggered mode")
 
-print("ok: governed triad_staggered route is mode-bound, ordered, max-one-stopped, and no-legacy-SSH")
+
+def assert_mode_mismatch_fails_before_callback() -> None:
+    """A caller-selected pair mode must fail before any adapter callback."""
+    with tempfile.TemporaryDirectory(prefix="oasis7-triad-mode-mismatch-") as temp_dir:
+        temp = Path(temp_dir)
+        request = temp / "request.json"
+        request.write_text("{}\n", encoding="utf-8")
+        known_hosts = temp / "known-hosts"
+        known_hosts.write_text("fixture\n", encoding="utf-8")
+        env = dict(os.environ)
+        env["OASIS7_VALIDATOR_PAIR_NONCE_LEDGER"] = str(temp / "nonce-ledger.jsonl")
+        env["O7_MODE_TEST_SECRET"] = "fixture-secret"
+        for requested_mode, persisted_mode in (
+            ("pair", "triad_staggered"),
+            ("triad_staggered", "pair"),
+        ):
+            transaction = temp / f"transaction-{requested_mode}-{persisted_mode}.json"
+            write_transaction(transaction, phase="planned", execution_mode=persisted_mode)
+            callback_log = temp / f"callback-{requested_mode}-{persisted_mode}.log"
+            adapter = temp / f"host-adapter-{requested_mode}-{persisted_mode}.py"
+            adapter.write_text(
+                "#!/usr/bin/env python3\n"
+                f"from pathlib import Path\nPath({str(callback_log)!r}).open('a', encoding='utf-8').write('callback\\n')\n"
+                "print('{}')\n",
+                encoding="utf-8",
+            )
+            adapter.chmod(0o755)
+            for route in ("apply", "resume", "rollback"):
+                command = [
+                    str(wrapper),
+                    route,
+                    "--execution-mode",
+                    requested_mode,
+                    "--transaction",
+                    str(transaction),
+                    "--host-adapter",
+                    str(adapter),
+                ]
+                if route == "resume":
+                    command.extend(
+                        [
+                            "--request",
+                            str(request),
+                            "--known-hosts",
+                            str(known_hosts),
+                            "--credential-env",
+                            "O7_MODE_TEST_SECRET",
+                        ]
+                    )
+                result = subprocess.run(command, text=True, capture_output=True, env=env, check=False)
+                combined = result.stderr + result.stdout
+                if result.returncode == 0 or "mode" not in combined.lower():
+                    raise SystemExit(
+                        f"{route} accepted or misreported explicit mode mismatch "
+                        f"requested={requested_mode} persisted={persisted_mode}: {combined}"
+                    )
+            if callback_log.exists() and callback_log.read_text(encoding="utf-8"):
+                raise SystemExit(
+                    f"mode mismatch invoked the host adapter before rejection "
+                    f"requested={requested_mode} persisted={persisted_mode}"
+                )
+
+
+def assert_executor_records_member_observations_around_callbacks() -> None:
+    """Each member callback must be bracketed by executor-owned observations."""
+    with tempfile.TemporaryDirectory(prefix="oasis7-triad-member-observation-") as temp_dir:
+        temp = Path(temp_dir)
+        roots = {role: temp / role for role in ("storage-205", "sequencer-204")}
+        for root_path in roots.values():
+            root_path.mkdir()
+        transaction = {
+            "execution_mode": "triad_staggered",
+            "transaction_id": "triad-observation-fixture",
+            "nodes": {role: {"root": str(root_path)} for role, root_path in roots.items()},
+            "capacity": {role: {} for role in roots},
+            "capacity_apply": None,
+            "backup": {},
+            "staged": {},
+            "staggered_completed_roles": [],
+        }
+        events: list[tuple[str, str]] = []
+        originals = {
+            "refresh_capacity": executor_module.refresh_capacity,
+            "snapshot_node": executor_module.snapshot_node,
+            "run_host_adapter": executor_module.run_host_adapter,
+            "_record_staggered_stage_receipt": executor_module._record_staggered_stage_receipt,
+            "_record_staggered_live_reobserve": executor_module._record_staggered_live_reobserve,
+            "write_json": executor_module.write_json,
+        }
+        executor_module.refresh_capacity = lambda root, capacity, role: {"role": role, "verified": True}
+        executor_module.snapshot_node = lambda node, transaction_id: {"role": node["root"], "snapshot": True}
+
+        def fake_adapter(adapter, path, value, phase):
+            events.append(("adapter", phase))
+            return {"phase": phase}
+
+        def fake_observe(value, direct_args, *, observation_key="initial"):
+            events.append(("observe", observation_key))
+            observations = value.setdefault("staggered_live_observations", {})
+            observations[observation_key] = {"observation_state": "live"}
+            return {"observation_state": "live"}
+
+        executor_module.run_host_adapter = fake_adapter
+        executor_module._record_staggered_stage_receipt = lambda value, role, receipt: None
+        executor_module._record_staggered_live_reobserve = fake_observe
+        executor_module.write_json = lambda path, value: None
+        try:
+            executor_module._continue_staggered_transaction(
+                transaction,
+                temp / "transaction.json",
+                temp / "host-adapter.py",
+                None,
+                fresh_direct_observation=False,
+            )
+        finally:
+            for name, value in originals.items():
+                setattr(executor_module, name, value)
+        expected = [
+            ("observe", "before-staggered-preflight"),
+            ("adapter", "staggered-preflight"),
+            ("observe", "before-staggered-storage"),
+            ("adapter", "staggered-storage"),
+            ("observe", "after-staggered-storage"),
+            ("observe", "before-staggered-sequencer"),
+            ("adapter", "staggered-sequencer"),
+            ("observe", "after-staggered-sequencer"),
+        ]
+        if events != expected:
+            raise SystemExit(f"executor member observation/callback ordering drifted: {events!r}")
+        if set(transaction.get("staggered_live_observations", {})) != {
+            "before-staggered-preflight",
+            "before-staggered-storage",
+            "after-staggered-storage",
+            "before-staggered-sequencer",
+            "after-staggered-sequencer",
+        }:
+            raise SystemExit("executor did not persist every per-phase live observation")
+
+
+def assert_executor_records_rollback_observations_before_and_after_callback() -> None:
+    """Rollback must independently observe the mixed state on both sides."""
+    with tempfile.TemporaryDirectory(prefix="oasis7-triad-rollback-observation-") as temp_dir:
+        temp = Path(temp_dir)
+        transaction = {
+            "schema_version": executor_module.SCHEMA,
+            "execution_mode": "triad_staggered",
+            "transaction_id": "triad-rollback-fixture",
+            "phase": "rollback_required",
+            "rollback": dict(TRIAD_ROLLBACK_CONTRACT),
+            "backup": {"storage-205": {"forensic": True}},
+            "staggered_active_role": "storage-205",
+        }
+        path = temp / "transaction.json"
+        transaction["canonical_digest"] = executor_module.canonical_digest(transaction)
+        path.write_text(json.dumps(transaction, sort_keys=True) + "\n", encoding="utf-8")
+        events: list[tuple[str, str]] = []
+        originals = {
+            "_validate_persisted_backup_refs": executor_module._validate_persisted_backup_refs,
+            "_validate_adapter_callback_state": executor_module._validate_adapter_callback_state,
+            "_record_staggered_rollback_reobserve": executor_module._record_staggered_rollback_reobserve,
+            "run_host_adapter": executor_module.run_host_adapter,
+            "write_json": executor_module.write_json,
+        }
+        executor_module._validate_persisted_backup_refs = lambda value: None
+        executor_module._validate_adapter_callback_state = lambda value: None
+
+        def fake_rollback_observe(value, direct_args, failed_role, *, observation_key="before"):
+            events.append(("observe", observation_key))
+            observations = value.setdefault("staggered_rollback_observations", {})
+            observations[observation_key] = {"observation_state": "mixed", "stopped_role": failed_role}
+            return {"observation_state": "mixed", "stopped_role": failed_role}
+
+        def fake_rollback_adapter(adapter, transaction_path, value, phase):
+            events.append(("adapter", phase))
+            return {"phase": phase}
+
+        executor_module._record_staggered_rollback_reobserve = fake_rollback_observe
+        executor_module.run_host_adapter = fake_rollback_adapter
+        executor_module.write_json = lambda path, value: None
+        try:
+            result = executor_module.rollback_staggered_transaction(
+                path,
+                temp / "host-adapter.py",
+                None,
+            )
+        finally:
+            for name, value in originals.items():
+                setattr(executor_module, name, value)
+        expected = [
+            ("observe", "before"),
+            ("adapter", "staggered-rollback"),
+            ("observe", "after"),
+        ]
+        if events != expected:
+            raise SystemExit(f"rollback observation/callback ordering drifted: {events!r}")
+        if set(result.get("staggered_rollback_observations", {})) != {"before", "after"}:
+            raise SystemExit("rollback did not persist both executor-owned observations")
+        if result.get("rollback", {}).get("strategy") != TRIAD_ROLLBACK_CONTRACT["strategy"]:
+            raise SystemExit("rollback result lost the triad target-only strategy")
+
+
+def assert_resume_accepts_persisted_member_phase_names() -> None:
+    """Persisted active-member phase names must be resumable past phase parsing."""
+    for phase in ("staggered_storage-205_in_progress", "staggered_sequencer-204_in_progress"):
+        with tempfile.TemporaryDirectory(prefix="oasis7-triad-resume-phase-") as temp_dir:
+            path = Path(temp_dir) / "transaction.json"
+            write_transaction(path, phase=phase)
+            try:
+                executor_module.resume_staggered_transaction(path, None, None)
+            except SystemExit as error:
+                message = str(error)
+                if "not resumable" in message:
+                    raise SystemExit(f"resume rejected persisted active-member phase {phase}: {message}") from error
+            else:
+                raise SystemExit(f"resume unexpectedly completed incomplete fixture phase {phase}")
+
+
+def assert_rollback_contract_is_target_only_and_non_restoring() -> None:
+    valid = {"rollback": dict(TRIAD_ROLLBACK_CONTRACT)}
+    executor_module._validate_staggered_rollback_contract(valid)
+    invalid = {"rollback": {**TRIAD_ROLLBACK_CONTRACT, "strategy": "same-filesystem-full-snapshot"}}
+    try:
+        executor_module._validate_staggered_rollback_contract(invalid)
+    except SystemExit as error:
+        if "target-only" not in str(error):
+            raise SystemExit(f"rollback contract rejected with an unrelated error: {error}") from error
+    else:
+        raise SystemExit("triad rollback accepted the pair full-snapshot strategy")
+
+
+def assert_legacy_destructive_entrypoint_fails_closed() -> None:
+    """The historical positional SSH route must not reach destructive parsing."""
+    with tempfile.TemporaryDirectory(prefix="oasis7-triad-legacy-route-") as temp_dir:
+        result = subprocess.run(
+            [str(wrapper), "--config-dir", str(Path(temp_dir) / "missing-config")],
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        message = (result.stderr + result.stdout).lower()
+        if result.returncode == 0 or not any(
+            marker in message for marker in ("legacy", "historical", "positional")
+        ) or not any(
+            word in message for word in ("disabled", "rejected", "unsupported", "fail closed", "fail-closed")
+        ):
+            raise SystemExit(f"legacy destructive entrypoint did not fail closed: {result.stderr}{result.stdout}")
+
+
+assert_mode_mismatch_fails_before_callback()
+assert_executor_records_member_observations_around_callbacks()
+assert_executor_records_rollback_observations_before_and_after_callback()
+assert_resume_accepts_persisted_member_phase_names()
+assert_rollback_contract_is_target_only_and_non_restoring()
+assert_legacy_destructive_entrypoint_fails_closed()
+
+print("ok: governed triad_staggered mode, observation, rollback, resume, and legacy-route contracts")
 PY
