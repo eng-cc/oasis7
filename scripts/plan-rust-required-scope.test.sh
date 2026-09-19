@@ -1077,4 +1077,124 @@ assert_key_equals "$net_output" run_oasis7_net_tests true
 assert_key_equals "$net_output" run_oasis7_net_libp2p_tests true
 assert_reason_contains "$net_output" "net:crates/oasis7_net/src/lib.rs"
 
+# Trusted integration revalidation executes against the current target plus
+# the unchanged source.  A target-only required-gate path can therefore widen
+# execution to full while the immutable source projection remains targeted.
+integration_tmp_dir="$(mktemp -d)"
+integration_input="$integration_tmp_dir/input.json"
+integration_projection="$integration_tmp_dir/projection.json"
+integration_tampered_projection="$integration_tmp_dir/tampered-projection.json"
+integration_head="$(git rev-parse HEAD)"
+integration_base="$(git rev-parse HEAD^)"
+python3 - "$ROOT_DIR" "$integration_head" "$integration_base" "$integration_input" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+
+root, head, base, output = map(pathlib.Path, sys.argv[1:])
+scope_config = root / "scripts/ci-required-scope.v2.json"
+evidence = {
+    "path": "scripts/ci-required-scope.v2.json",
+    "sha256": "sha256:" + hashlib.sha256(scope_config.read_bytes()).hexdigest(),
+}
+payload = {
+    "task_uid": "task_" + "2" * 32,
+    "source_head_oid": str(head),
+    "scope_base_oid": str(base),
+    "changed_paths": ["scripts/pm/workflow-next.py"],
+    "change_class": "unknown",
+    "manual_roles": ["repository_health_engineer", "qa_engineer"],
+    "domain_role": None,
+    "test_profile": "required",
+    "declared_tests": ["required_gate_baseline"],
+    "consumed_contracts": [{"id": "engineering-workflow-terminal-runbook", "revision": "current-main"}],
+    "public_semantics": ["terminal task cold-start recovery"],
+    "affected_consumers": ["scripts/pm/workflow-next.py"],
+    "closure_status": {
+        "status": "complete",
+        "reason": "focused integration scope regression",
+        "evidence": [evidence],
+    },
+    "verification_affected": False,
+}
+output.write_text(json.dumps(payload), encoding="utf-8")
+PY
+python3 "$ROOT_DIR/scripts/pm/workflow-impact-projection.py" \
+  --root "$ROOT_DIR" \
+  --input "$integration_input" \
+  --out "$integration_projection" >/dev/null
+integration_projection_digest="$(python3 - "$integration_projection" <<'PY'
+import json
+import sys
+print(json.load(open(sys.argv[1], encoding="utf-8"))["projection_digest"])
+PY
+)"
+integration_source_scope="$(python3 - "$integration_projection" <<'PY'
+import json
+import sys
+print(json.load(open(sys.argv[1], encoding="utf-8"))["ci_scope"])
+PY
+)"
+if [[ "$integration_source_scope" != targeted ]]; then
+  echo "expected immutable source projection to remain targeted, got $integration_source_scope" >&2
+  exit 1
+fi
+integration_targeted_output="$("$ROOT_DIR/scripts/plan-rust-required-scope.sh" \
+  --event-name workflow_dispatch \
+  --run-mode integration_revalidation \
+  --base-ref "$integration_base" \
+  --head-ref "$integration_head" \
+  --task-uid task_22222222222222222222222222222222 \
+  --scope-base-oid "$integration_base" \
+  --impact-projection "$integration_projection" \
+  --changed-path scripts/pm/workflow-next.py)"
+assert_key_equals "$integration_targeted_output" scope targeted
+assert_key_equals "$integration_targeted_output" selected_capabilities workflow_governance
+assert_key_equals "$integration_targeted_output" impact_projection_status verified
+assert_key_equals "$integration_targeted_output" impact_projection_digest "$integration_projection_digest"
+integration_output="$("$ROOT_DIR/scripts/plan-rust-required-scope.sh" \
+  --event-name workflow_dispatch \
+  --run-mode integration_revalidation \
+  --base-ref "$integration_base" \
+  --head-ref "$integration_head" \
+  --task-uid task_22222222222222222222222222222222 \
+  --scope-base-oid "$integration_base" \
+  --impact-projection "$integration_projection" \
+  --changed-path .github/workflows/rust.yml)"
+assert_key_equals "$integration_output" scope full
+assert_key_equals "$integration_output" impact_projection_status verified
+assert_key_equals "$integration_output" impact_projection_digest "$integration_projection_digest"
+assert_key_equals "$integration_output" selected_capabilities \
+  "$(value_for_key "$shared_required_output" selected_capabilities)"
+
+python3 - "$integration_projection" "$integration_tampered_projection" <<'PY'
+import json
+import sys
+
+source, destination = sys.argv[1:]
+projection = json.load(open(source, encoding="utf-8"))
+projection["public_semantics"].append("tampered")
+json.dump(projection, open(destination, "w", encoding="utf-8"))
+PY
+if "$ROOT_DIR/scripts/plan-rust-required-scope.sh" \
+  --event-name workflow_dispatch \
+  --run-mode integration_revalidation \
+  --base-ref "$integration_base" \
+  --head-ref "$integration_head" \
+  --task-uid task_22222222222222222222222222222222 \
+  --scope-base-oid "$integration_base" \
+  --impact-projection "$integration_tampered_projection" \
+  --changed-path .github/workflows/rust.yml \
+  >"$integration_tmp_dir/tampered.out" 2>"$integration_tmp_dir/tampered.err"; then
+  echo "expected integration planner to reject a tampered projection digest" >&2
+  exit 1
+fi
+if ! grep -Fq "impact projection digest mismatch" "$integration_tmp_dir/tampered.err"; then
+  echo "expected projection digest failure, got:" >&2
+  cat "$integration_tmp_dir/tampered.err" >&2
+  exit 1
+fi
+rm -rf "$integration_tmp_dir"
+
 echo "plan-rust-required-scope.test: OK"
