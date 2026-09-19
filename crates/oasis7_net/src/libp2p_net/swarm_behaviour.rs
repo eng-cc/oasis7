@@ -127,8 +127,10 @@ pub(super) fn build_swarm(
         request_response::Config::default().with_request_timeout(request_response_timeout),
     );
 
-    let mut store_config = MemoryStoreConfig::default();
-    store_config.max_provided_keys = KAD_MAX_PROVIDED_KEYS;
+    let store_config = MemoryStoreConfig {
+        max_provided_keys: KAD_MAX_PROVIDED_KEYS,
+        ..MemoryStoreConfig::default()
+    };
     let store = MemoryStore::with_config(peer_id, store_config);
     let kademlia = kad::Behaviour::new(peer_id, store);
     let (relay_transport, relay_client) = relay::client::new(peer_id);
@@ -218,7 +220,7 @@ pub(super) fn split_peer_id(mut addr: Multiaddr) -> (Option<PeerId>, Multiaddr) 
 pub(super) fn ensure_peer_id(mut addr: Multiaddr, peer_id: PeerId) -> Multiaddr {
     let needs_peer_id = !matches!(addr.iter().last(), Some(Protocol::P2p(_)));
     if needs_peer_id {
-        addr.push(Protocol::P2p(peer_id.into()));
+        addr.push(Protocol::P2p(peer_id));
     }
     addr
 }

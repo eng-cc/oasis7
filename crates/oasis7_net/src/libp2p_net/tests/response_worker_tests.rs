@@ -35,7 +35,7 @@ fn slow_blob_handler_does_not_block_head_or_commit_responses() {
         .into_iter()
         .next()
         .expect("server address")
-        .with(libp2p::multiaddr::Protocol::P2p(server.peer_id().into()));
+        .with(libp2p::multiaddr::Protocol::P2p(server.peer_id()));
     let (started_tx, started_rx) = mpsc::channel();
     server
         .register_handler(
@@ -115,7 +115,7 @@ fn slow_fetch_commit_handlers_do_not_block_fetch_commit_head() {
         .into_iter()
         .next()
         .expect("server address")
-        .with(libp2p::multiaddr::Protocol::P2p(server.peer_id().into()));
+        .with(libp2p::multiaddr::Protocol::P2p(server.peer_id()));
     let (started_tx, started_rx) = mpsc::channel();
     server
         .register_handler(
@@ -202,7 +202,7 @@ fn timed_out_slow_response_surfaces_as_retryable_transport_failure() {
         .into_iter()
         .next()
         .expect("server address")
-        .with(libp2p::multiaddr::Protocol::P2p(server.peer_id().into()));
+        .with(libp2p::multiaddr::Protocol::P2p(server.peer_id()));
     server
         .register_handler(
             FETCH_BLOB,
@@ -255,7 +255,7 @@ fn expired_queued_requests_skip_handlers_and_release_worker_capacity() {
         .into_iter()
         .next()
         .expect("server address")
-        .with(libp2p::multiaddr::Protocol::P2p(server.peer_id().into()));
+        .with(libp2p::multiaddr::Protocol::P2p(server.peer_id()));
     let (started_tx, started_rx) = mpsc::channel();
     let handler_count = Arc::clone(&started_slow_handlers);
     server
@@ -353,7 +353,7 @@ fn timed_out_handlers_keep_the_fixed_execution_pool_bounded_until_they_exit() {
         .into_iter()
         .next()
         .expect("server address")
-        .with(libp2p::multiaddr::Protocol::P2p(server.peer_id().into()));
+        .with(libp2p::multiaddr::Protocol::P2p(server.peer_id()));
     let (started_tx, started_rx) = mpsc::channel();
     server
         .register_handler(
@@ -430,7 +430,7 @@ fn saturated_blob_queue_returns_a_legacy_compatible_retryable_busy_response() {
         .into_iter()
         .next()
         .expect("server address")
-        .with(libp2p::multiaddr::Protocol::P2p(server.peer_id().into()));
+        .with(libp2p::multiaddr::Protocol::P2p(server.peer_id()));
     server
         .register_handler(
             FETCH_BLOB,
@@ -493,7 +493,7 @@ fn cooperative_blocked_blob_work_observes_deadline_and_lane_recovers() {
     );
     let server_addr = server.listening_addrs()[0]
         .clone()
-        .with(libp2p::multiaddr::Protocol::P2p(server.peer_id().into()));
+        .with(libp2p::multiaddr::Protocol::P2p(server.peer_id()));
     let cancelled = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let observed = Arc::clone(&cancelled);
     server
@@ -566,7 +566,7 @@ fn pre_admission_rejects_blob_requests_before_the_expensive_handler() {
         .into_iter()
         .next()
         .expect("server address")
-        .with(libp2p::multiaddr::Protocol::P2p(server.peer_id().into()));
+        .with(libp2p::multiaddr::Protocol::P2p(server.peer_id()));
     let runs = Arc::new(std::sync::atomic::AtomicUsize::new(0));
     let handler_runs = Arc::clone(&runs);
     server
