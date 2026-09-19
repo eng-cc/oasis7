@@ -222,8 +222,8 @@
 
 ### 6.3 未决问题与证据边界
 
-- 尚未决定：成熟世界三条推荐轴和 fresh mature-world sample 何时具备同一候选的 gameplay、runtime、Agent、Viewer 与 QA 证据；影响 MW-1 至 MW-10 的当前路线 verdict，决策负责角色为 `producer_system_designer` 联合 gameplay、runtime、Agent、Viewer 与 QA，触发条件是进入相应实现或公开 claim 审查前，解决前临时不承诺 mature-world 体验已通过。
-- 本分册证据只能证明指定成熟世界样本、入口、版本/窗口和环境中的成长与恢复行为；历史完成态、文档迁移或局部专业 green 不能证明真实留存、完整区域经济或发行 readiness。
+- 尚未决定：成熟世界三条推荐轴、MW-11 认可/机会样例和 fresh mature-world sample 何时具备同一候选的 gameplay、runtime、Agent、Viewer、blockchain 与 QA 证据；影响 MW-1 至 MW-11 的当前路线 verdict，决策负责角色为 `producer_system_designer` 联合 gameplay、runtime、Agent、Viewer、blockchain_ops_engineer 与 QA，触发条件是进入相应实现或公开 claim 审查前，解决前临时不承诺 mature-world 体验、认可/机会或相关链上证据已通过。
+- 本分册证据只能证明指定成熟世界样本、入口、版本/窗口和环境中的成长、认可/机会与恢复行为；历史完成态、文档迁移或局部专业 green 不能证明真实留存、完整区域经济、认可/机会闭合或发行 readiness。
 
 具体字段、状态转换、Agent 决策顺序、界面呈现和 pass/watch/block 证据由专业域文档与 GitHub task issue evidence 维护，不复制到本产品分册。
 
