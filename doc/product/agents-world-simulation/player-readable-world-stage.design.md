@@ -70,7 +70,7 @@ Agent Context Lite 的设计对象是“当前选中的一个 Agent”，不是�
    入口；否则说明不可用、待同步或应重新确认。选中、可见或视觉强调只帮助辨认，不授予控制。
 
 账号绑定、认领和当前控制资格沿用[`Agent 对话与 Prompt 控制`](agent-conversation-and-prompt-control.prd.md)
-与[`Agent 权限、资产与责任连续性`](agent-authority-ownership-and-accountability.prd.md)；本专题
+与[`Agent 自治、委托与责任连续性`](agent-authority-ownership-and-accountability.prd.md)；本专题
 不把 selection/visibility 变成控制 authority，也不把 global summary 变成 Agent 私有事实。
 
 该顺序可以跨舞台、目标、列表、详情或响应式 surface 保持，但不规定控件、栏位、动画、
