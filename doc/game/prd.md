@@ -65,6 +65,7 @@
 | PRD-GAME-016 | `micro_depot` 是第一个 WASM-backed 可编程区域设施：玩家通过小型、可审计、带 upkeep 的区域设施，改变一次 repair / logistics quote 并获得可追溯 receipt。 | `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md` | 区域专业化 / limited-scope regional influence 专题；不进入首 10 分钟新手循环，不开放自由建造、任意 WASM 上传或 global governance 权力；2026-07-08 `task_4ab03f9be0f847af9f36d963486055d5` 记录 install quote 缺少 break-even / ROI 判断。 |
 | PRD-GAME-017 | 区域 charter、地点 tenure 与公共融资的玩家合同：玩家能提交有证据的 charter、理解双资格与有限权限、在退化时恢复或申诉、为 tenure 做可读长期规划，并区分服务费与有界公共 levy。 | `doc/game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md` | 承接产品 `GR-004` 至 `GR-008` 的玩家动作、机会成本、失败恢复、申诉和可玩性验收；不扩展 `PRD-GAME-015`、不取代 `PRD-GAME-016`，不冻结 runtime/P2P、数值、UI 或 release claim。 |
 | PRD-GAME-018 | 工业能力从可审计提案、确定性模拟、受限试点走到有范围治理准入；跨区市场从带新鲜度的发现走到物理交付、目的地存储、escrow 里程碑与争议恢复；OC 链上转让与世界资格保持分离。 | `doc/game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md` | 消费 `GR-002/003`、工业需求/生产交付结算与常态市场产品 authority；superseded 工业/市场源只作 AC-1 至 AC-4 provenance。拥有玩家动作、机会成本、失败恢复与 parity 验收；OC/世界资格产品依赖仍未决，不冻结配方、价格、物流/结算算法、runtime/P2P、常态/危机保供或 release claim。 |
+| PRD-GAME-019 | 普通治理主体聚合、锁定/委托/实际控制人封顶、最小公开审计、重复主体纠错/申诉，以及事项快照、OC 外部转让和单向非治理额度桥的玩家合同。 | `doc/game/gameplay/gameplay-ordinary-governance-subject-and-oc-rights-contract.prd.md` | 承接产品 `GCB-004/005` 的玩家动作、取舍、失败恢复和 parity 验收；不重复 `PRD-GAME-017/018`，不冻结身份/链上/runtime 参数、数值、UI 或 release claim。 |
 
 ## 3. Player-Facing Authority Boundary
 - `doc/game/prd.md` 是活跃 gameplay baseline 与路由的唯一根入口：它维护 PRD-ID、每个专题的声明范围、默认首读路径以及当前状态应去哪里确认；不复制专题的完整规格。
@@ -96,6 +97,7 @@
   - `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md`
   - `doc/game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md`
   - `doc/game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md`
+  - `doc/game/gameplay/gameplay-ordinary-governance-subject-and-oc-rights-contract.prd.md`
   - `doc/game/gameplay/gameplay-top-level-design.prd.md`（early-retention 与生产排程报价专业合同）
 - Edge Cases & Error Handling:
   - 若根 PRD 与专题 PRD 冲突，按第 3 节的声明范围路由；不得用根入口摘要覆盖专题细节，也不得用专题细节夺取根入口的活跃路由或状态职责。
