@@ -5,6 +5,7 @@ usage() {
   cat <<'EOF'
 Governed transaction contract (current path):
   ./scripts/p2p-public-testnet-rebuild-validators.sh plan \
+    --execution-mode triad_staggered \
     --package-dir <verified-package-dir> \
     --provenance <verified-pair-provenance.json> \
     --trust-root <provenance-trust-root.json> \
@@ -23,10 +24,12 @@ Governed transaction contract (current path):
    audit-routing locator when the direct request flags are unavailable; it is
    never an admission authority.)
   ./scripts/p2p-public-testnet-rebuild-validators.sh apply \
+    --execution-mode triad_staggered \
     --transaction <transaction-dir>/transaction.json \
     --host-adapter <governed-host-adapter>
   OASIS7_VALIDATOR_PAIR_NONCE_LEDGER=/var/lib/oasis7/p2p-public-testnet/validator-pair-nonces.jsonl \
   ./scripts/p2p-public-testnet-rebuild-validators.sh resume \
+    --execution-mode triad_staggered \
     --transaction <transaction-dir>/transaction.json \
     --host-adapter <governed-host-adapter> \
     --human-direct-ssh-request <fresh-live-human-stop-request.json> \
@@ -39,6 +42,7 @@ Governed transaction contract (current path):
     --out-dir <quiescence-dir> \
     [--credential-env <temporary-env-name> | --credential-fd <temporary-fd>]
   ./scripts/p2p-public-testnet-rebuild-validators.sh rollback \
+    --execution-mode triad_staggered \
     --transaction <transaction-dir>/transaction.json \
     --host-adapter <governed-host-adapter>
 
@@ -93,6 +97,9 @@ Description:
   At most one existing validator is stopped at any point. A failed member is
   left stopped after target-only cleanup; its live peer is never stopped as
   rollback. Capture live status evidence after every member transition.
+  The governed triad_staggered receipt must prove
+  max_simultaneously_stopped_validators=1 and never falls back to historical
+  SSH arguments.
 
   The consumer-impact record must be valid JSON with impact set to active,
   none, or unknown; evidence_source; an RFC3339 timestamp
@@ -128,6 +135,7 @@ require_file() {
 
 require_resume_inputs() {
   local transaction=""
+  local execution_mode=""
   local host_adapter=""
   local direct_request=""
   local known_hosts=""
@@ -135,6 +143,13 @@ require_resume_inputs() {
   local credential_fd=""
   while (($#)); do
     case "$1" in
+      --execution-mode)
+        [[ $# -ge 2 && -n "$2" ]] || die "resume requires a value for --execution-mode"
+        [[ -z "$execution_mode" ]] || die "resume received duplicate --execution-mode"
+        [[ "$2" = "pair" || "$2" = "triad_staggered" ]] || die "resume --execution-mode must be pair or triad_staggered"
+        execution_mode=$2
+        shift 2
+        ;;
       --transaction)
         [[ $# -ge 2 && -n "$2" ]] || die "resume requires a value for --transaction"
         [[ -z "$transaction" ]] || die "resume received duplicate --transaction"
@@ -425,44 +440,53 @@ def node_contracts() -> dict[str, object]:
             "observer_equivalents_not_mutated_by_pair_transaction": True,
             "status": "required_at_apply" if mode == "plan" else "receipt_bound",
         }
+        triad_mode = value.get("execution_mode", "pair") == "triad_staggered"
+        completed_roles = value.get("staggered_completed_roles", [])
+        if not isinstance(completed_roles, list):
+            completed_roles = []
         if mode not in {"plan", "quiesce", "human_direct_ssh"}:
             staged = value.get("staged", {}) if isinstance(value.get("staged"), dict) else {}
             observed = staged.get(role, {}).get("post_delete_absence") if isinstance(staged.get(role), dict) else None
             if not isinstance(observed, dict):
-                raise SystemExit(f"missing post-delete absence receipt for {role}")
-            if observed.get("absent") is not True or observed.get("target_set") != list(RESET_TARGETS) or observed.get("target_set_sha256") != reset_target_digest():
+                if not triad_mode or role in completed_roles:
+                    raise SystemExit(f"missing post-delete absence receipt for {role}")
+                post_delete_proof["status"] = "not_run"
+            elif observed.get("absent") is not True or observed.get("target_set") != list(RESET_TARGETS) or observed.get("target_set_sha256") != reset_target_digest():
                 raise SystemExit(f"post-delete absence target binding mismatch for {role}")
-            post_delete_proof["receipt"] = observed
+            else:
+                post_delete_proof["receipt"] = observed
         backup_receipt = None
         backups = value.get("backup", {}) if isinstance(value.get("backup"), dict) else {}
         if mode not in {"plan", "quiesce", "human_direct_ssh"}:
             observed_backup = backups.get(role) if isinstance(backups.get(role), dict) else None
             if not isinstance(observed_backup, dict):
-                raise SystemExit(f"missing forensic backup receipt for {role}")
-            manifest_path = observed_backup.get("manifest")
-            backup_root = observed_backup.get("backup_root")
-            manifest_sha256 = observed_backup.get("manifest_sha256")
-            if not isinstance(manifest_path, str) or not isinstance(backup_root, str) or not isinstance(manifest_sha256, str):
-                raise SystemExit(f"incomplete forensic backup receipt for {role}")
-            manifest_file = Path(manifest_path)
-            backup_root_path = Path(backup_root).resolve()
-            if manifest_file.is_symlink() or not manifest_file.is_file() or manifest_file.resolve().parent != backup_root_path:
-                raise SystemExit(f"forensic backup manifest path binding mismatch for {role}")
-            if sha256_file(manifest_file) != manifest_sha256.lower():
-                raise SystemExit(f"forensic backup manifest digest mismatch for {role}")
-            if backup_root_path.parent != root / "backups":
-                raise SystemExit(f"forensic backup root binding mismatch for {role}")
-            backup_receipt = {
-                "backup_root": str(backup_root_path),
-                "backup_manifest_sha256": manifest_sha256,
-                "backup_inventory": value.get("capacity", {}).get(role, {}).get("inventory", {}),
-                "backup_capacity": value.get("capacity", {}).get(role, {}),
-                "backup_non_seed": {
-                    "forensic_only": True,
-                    "seed_eligible": False,
-                    "restore_deleted_chain_state": False,
-                },
-            }
+                if not triad_mode or role in completed_roles or role in staged:
+                    raise SystemExit(f"missing forensic backup receipt for {role}")
+            else:
+                manifest_path = observed_backup.get("manifest")
+                backup_root = observed_backup.get("backup_root")
+                manifest_sha256 = observed_backup.get("manifest_sha256")
+                if not isinstance(manifest_path, str) or not isinstance(backup_root, str) or not isinstance(manifest_sha256, str):
+                    raise SystemExit(f"incomplete forensic backup receipt for {role}")
+                manifest_file = Path(manifest_path)
+                backup_root_path = Path(backup_root).resolve()
+                if manifest_file.is_symlink() or not manifest_file.is_file() or manifest_file.resolve().parent != backup_root_path:
+                    raise SystemExit(f"forensic backup manifest path binding mismatch for {role}")
+                if sha256_file(manifest_file) != manifest_sha256.lower():
+                    raise SystemExit(f"forensic backup manifest digest mismatch for {role}")
+                if backup_root_path.parent != root / "backups":
+                    raise SystemExit(f"forensic backup root binding mismatch for {role}")
+                backup_receipt = {
+                    "backup_root": str(backup_root_path),
+                    "backup_manifest_sha256": manifest_sha256,
+                    "backup_inventory": value.get("capacity", {}).get(role, {}).get("inventory", {}),
+                    "backup_capacity": value.get("capacity", {}).get(role, {}),
+                    "backup_non_seed": {
+                        "forensic_only": True,
+                        "seed_eligible": False,
+                        "restore_deleted_chain_state": False,
+                    },
+                }
         result[role] = {
             "role": role,
             "platform": node.get("transport", "unknown"),
@@ -498,7 +522,15 @@ def node_contracts() -> dict[str, object]:
             "stopped_quiescence_proof": {
                 "required": True,
                 "remote_activity": "executor-owned-direct-ssh-read-only" if mode in {"plan", "human_direct_ssh"} else False,
-                "proof": "repository-owned executor identity binds fixed direct-SSH read-only quiescence to role, digest, active=false,running=false before reset",
+                "observation_state": value.get("proof", {}).get(
+                    "baseline_observation_state",
+                    value.get("observation_state", "stopped"),
+                ),
+                "proof": (
+                    "repository-owned executor identity binds fixed direct-SSH read-only live baseline to role, digest, active=true,running=true before each target reset"
+                    if value.get("execution_mode", "pair") == "triad_staggered"
+                    else "repository-owned executor identity binds fixed direct-SSH read-only quiescence to role, digest, active=false,running=false before reset"
+                ),
             },
         }
         if backup_receipt is not None:
@@ -511,6 +543,7 @@ contract.update(
     {
         "schema_version": "oasis7.validator_pair_rebuild_receipt_contract.v1",
         "mode": mode,
+        "execution_mode": value.get("execution_mode", "pair"),
         "mutation_order": value.get("mutation_order", ["storage-205", "sequencer-204"]),
         "startup_order": value.get("startup_order", ["sequencer-204", "storage-205"]),
         "nodes": node_contracts(),
@@ -542,6 +575,41 @@ contract.update(
         },
     }
 )
+if contract["execution_mode"] == "triad_staggered":
+    requested_execution_mode = cli_value("--execution-mode")
+    if requested_execution_mode and requested_execution_mode != contract["execution_mode"]:
+        raise SystemExit("executor receipt execution mode differs from requested execution mode")
+    phase_order = value.get("phase_order", contract.get("phase_order"))
+    if phase_order is None:
+        phase_order = ["staggered-preflight", "staggered-storage", "staggered-sequencer"]
+    expected_phase_order = ["staggered-preflight", "staggered-storage", "staggered-sequencer"]
+    if mode == "rollback":
+        expected_phase_order.append("staggered-rollback")
+    if phase_order != expected_phase_order:
+        raise SystemExit("triad staggered phase order is not deterministic")
+    max_stopped = value.get(
+        "max_simultaneously_stopped_validators",
+        value.get("pair_preservation", {}).get("max_simultaneously_stopped_validators", 1),
+    )
+    if max_stopped != 1:
+        raise SystemExit("triad staggered receipt violates max_simultaneously_stopped_validators=1")
+    contract["pair_preservation"] = {
+        "max_simultaneously_stopped_validators": 1,
+        "member_order": ["storage-205", "sequencer-204"],
+        "live_peer_readback_before_each_reset": True,
+        "rebuilt_member_readback_before_next_reset": True,
+        "rollback": "target_only_cleanup_and_preserve_live_peer",
+        "historical_ssh_fallback": False,
+    }
+    contract.update(
+        {
+            "max_simultaneously_stopped_validators": 1,
+            "phase_order": phase_order,
+            "historical_ssh_fallback": False,
+        }
+    )
+elif cli_value("--execution-mode") and cli_value("--execution-mode") != contract["execution_mode"]:
+    raise SystemExit("executor receipt execution mode differs from requested execution mode")
 # Keep the provenance names machine-checkable even when the signed receipt's
 # governed map uses a different internal key order.
 governed = value.get("network", {}).get("governed", {})

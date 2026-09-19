@@ -50,6 +50,14 @@ QUIESCENCE_PROOF_SCHEMA = "oasis7.validator_pair_rebuild_quiescence_proof.v1"
 QUIESCENCE_MAX_AGE_SECONDS = 300
 MUTATION_ORDER = ["storage-205", "sequencer-204"]
 STARTUP_ORDER = ["sequencer-204", "storage-205"]
+PAIR_EXECUTION_MODE = "pair"
+TRIAD_STAGGERED_EXECUTION_MODE = "triad_staggered"
+TRIAD_STAGGERED_PHASES = {
+    "staggered-preflight": "staggered_preflight_receipt",
+    "staggered-storage": "staggered_storage_receipt",
+    "staggered-sequencer": "staggered_sequencer_receipt",
+    "staggered-rollback": "staggered_rollback_receipt",
+}
 IDENTITY_METADATA_FIELDS = (
     "key_path",
     "key_sha256",
@@ -137,6 +145,7 @@ ADAPTER_CALLBACK_TARGETS = {
     "backup": "backup_receipt",
     "apply": "host_receipt",
     "rollback": "rollback_receipt",
+    **TRIAD_STAGGERED_PHASES,
 }
 
 
@@ -1259,13 +1268,25 @@ def _validate_direct_inventory_request(
         fail("human_direct_ssh process/listener command allowlist mismatch")
     if readback.get("service_readback_command") != SERVICE_READBACK_COMMAND:
         fail("human_direct_ssh service command allowlist mismatch")
+    observation_state = request.get("observation_state", "stopped")
+    if observation_state not in {"stopped", "live", "mixed"}:
+        fail("human_direct_ssh observation_state must be stopped, live, or mixed")
+    stopped_role = request.get("stopped_role")
+    if observation_state == "mixed" and stopped_role not in {"storage", "sequencer", "storage-205", "sequencer-204"}:
+        fail("mixed human_direct_ssh observation requires an explicit stopped_role")
     try:
         quiet_window = float(readback.get("quiet_window_seconds", HUMAN_DIRECT_SSH_QUIET_WINDOW_SECONDS))
     except (TypeError, ValueError):
         fail("human_direct_ssh quiet window is malformed")
     if not 0.1 <= quiet_window <= 30:
         fail("human_direct_ssh quiet window is outside the fixed bound")
-    return {"inventory_sha256": inventory_digest, "known_hosts": str(known_hosts.resolve()), "quiet_window": quiet_window}
+    return {
+        "inventory_sha256": inventory_digest,
+        "known_hosts": str(known_hosts.resolve()),
+        "quiet_window": quiet_window,
+        "observation_state": observation_state,
+        "stopped_role": stopped_role,
+    }
 
 
 def _github_response_items(value: Any) -> list[dict[str, Any]]:
@@ -1644,6 +1665,7 @@ def _direct_service_readback(
     known_hosts: Path,
     env: dict[str, str],
     use_credential: bool,
+    observation_state: str = "stopped",
 ) -> dict[str, Any]:
     command = f"{SERVICE_READBACK_COMMAND} --role {role} --root {shlex.quote(root)} --service {shlex.quote(service)}"
     raw = _direct_ssh_call(target, known_hosts, command, env, use_credential)
@@ -1655,16 +1677,26 @@ def _direct_service_readback(
         fail(f"human_direct_ssh service readback is malformed for {role}")
     if value.get("schema_version") not in {None, "oasis7.human_direct_ssh_readback.v1"}:
         fail(f"human_direct_ssh service readback schema is unsupported for {role}")
-    if value.get("active") is not False or value.get("running") is not False:
-        fail(f"human_direct_ssh active service detected for {role}")
-    if value.get("service_state") != "stopped":
-        fail(f"human_direct_ssh service is not stopped for {role}")
+    if observation_state == "stopped":
+        if value.get("active") is not False or value.get("running") is not False:
+            fail(f"human_direct_ssh active service detected for {role}")
+        if value.get("service_state") != "stopped":
+            fail(f"human_direct_ssh service is not stopped for {role}")
+    elif (
+        value.get("active") is not True
+        or value.get("running") is not True
+        or value.get("service_state") != "running"
+    ):
+        fail(f"human_direct_ssh live service readback failed for {role}")
     if value.get("independently_observed") is not True:
         fail(f"human_direct_ssh independent service observation is missing for {role}")
     listeners = value.get("listeners", [])
     if not isinstance(listeners, list):
         fail(f"human_direct_ssh listener readback is malformed for {role}")
-    return {"service_state": "stopped", "listeners": [str(item) for item in listeners]}
+    return {
+        "service_state": "running" if observation_state == "live" else "stopped",
+        "listeners": [str(item) for item in listeners],
+    }
 
 
 def _direct_observe_node(
@@ -1677,30 +1709,49 @@ def _direct_observe_node(
     known_hosts: Path,
     env: dict[str, str],
     use_credential: bool,
+    observation_state: str = "stopped",
 ) -> dict[str, Any]:
     service_value = _direct_service_readback(
-        request_role, target, root, service, known_hosts, env, use_credential
+        request_role,
+        target,
+        root,
+        service,
+        known_hosts,
+        env,
+        use_credential,
+        observation_state,
     )
     process_command = "ps -eo pid=,args="
     process_output = _direct_ssh_call(target, known_hosts, process_command, env, use_credential)
-    if re.search(r"oasis7_chain_runtime|start-node\.sh|" + re.escape(root), process_output, re.IGNORECASE):
+    process_present = bool(
+        re.search(r"oasis7_chain_runtime|start-node\.sh|" + re.escape(root), process_output, re.IGNORECASE)
+    )
+    if observation_state == "stopped" and process_present:
         fail(f"human_direct_ssh active process detected for {canonical_role}")
+    if observation_state == "live" and not process_present:
+        fail(f"human_direct_ssh live process readback failed for {canonical_role}")
     listener_command = "ss -ltn"
     listener_output = _direct_ssh_call(target, known_hosts, listener_command, env, use_credential)
     observed_ports = set(re.findall(r":([0-9]{1,5})(?:\s|$)", listener_output))
     canonical_listeners = sorted(ports.intersection(observed_ports))
-    if "LISTEN" in listener_output.upper() and canonical_listeners:
-        fail(f"human_direct_ssh active listener detected for {canonical_role}")
-    if set(service_value["listeners"]).intersection(ports):
-        fail(f"human_direct_ssh service readback reports an active listener for {canonical_role}")
+    service_listeners = set(service_value["listeners"]).intersection(ports)
+    if observation_state == "stopped":
+        if "LISTEN" in listener_output.upper() and canonical_listeners:
+            fail(f"human_direct_ssh active listener detected for {canonical_role}")
+        if service_listeners:
+            fail(f"human_direct_ssh service readback reports an active listener for {canonical_role}")
+    elif not canonical_listeners or not service_listeners:
+        fail(f"human_direct_ssh live listener readback failed for {canonical_role}")
+    active = observation_state == "live"
     return {
         "role": canonical_role,
         "root": root,
-        "active": False,
-        "running": False,
-        "service_state": "stopped",
+        "active": active,
+        "running": active,
+        "service_state": "running" if active else "stopped",
         "independently_observed": True,
-        "listeners": [],
+        "listeners": sorted(service_listeners if active else set()),
+        "observation_state": observation_state,
         "process_command": process_command,
         "listener_command": listener_command,
         "service_readback_command": f"{SERVICE_READBACK_COMMAND} --role {request_role} --root {shlex.quote(root)} --service {shlex.quote(service)}",
@@ -1708,7 +1759,7 @@ def _direct_observe_node(
             json.dumps(
                 {
                     "service": service_value,
-                    "stack_process_present": False,
+                    "stack_process_present": process_present,
                     "canonical_listener_ports": canonical_listeners,
                 },
                 ensure_ascii=True,
@@ -1742,6 +1793,7 @@ def run_human_direct_ssh(args: argparse.Namespace, *, emit: bool = True) -> dict
     known_hosts = _direct_canonical_known_hosts(args.known_hosts)
     known_hosts_arg = known_hosts
     inventory_binding = _validate_direct_inventory_request(request, inventory, known_hosts)
+    observation_state = inventory_binding["observation_state"]
     quiescence_id = request.get("quiescence_id", authority["transaction_id"])
     if not isinstance(quiescence_id, str) or quiescence_id != authority["transaction_id"]:
         fail("human_direct_ssh quiescence transaction binding mismatch")
@@ -1817,6 +1869,14 @@ def run_human_direct_ssh(args: argparse.Namespace, *, emit: bool = True) -> dict
     first: dict[str, dict[str, Any]] = {}
     for canonical_role in ("storage-205", "sequencer-204"):
         binding = host_bindings[canonical_role]
+        node_observation_state = observation_state
+        if observation_state == "mixed":
+            role_alias = {"storage-205": "storage", "sequencer-204": "sequencer"}[canonical_role]
+            node_observation_state = (
+                "stopped"
+                if inventory_binding["stopped_role"] in {canonical_role, role_alias}
+                else "live"
+            )
         first[canonical_role] = _direct_observe_node(
             canonical_role,
             binding["request_role"],
@@ -1827,11 +1887,20 @@ def run_human_direct_ssh(args: argparse.Namespace, *, emit: bool = True) -> dict
             known_hosts_arg,
             env,
             use_credential,
+            node_observation_state,
         )
     time.sleep(quiet_window)
     second: dict[str, dict[str, Any]] = {}
     for canonical_role in ("storage-205", "sequencer-204"):
         binding = host_bindings[canonical_role]
+        node_observation_state = observation_state
+        if observation_state == "mixed":
+            role_alias = {"storage-205": "storage", "sequencer-204": "sequencer"}[canonical_role]
+            node_observation_state = (
+                "stopped"
+                if inventory_binding["stopped_role"] in {canonical_role, role_alias}
+                else "live"
+            )
         second[canonical_role] = _direct_observe_node(
             canonical_role,
             binding["request_role"],
@@ -1842,6 +1911,7 @@ def run_human_direct_ssh(args: argparse.Namespace, *, emit: bool = True) -> dict
             known_hosts_arg,
             env,
             use_credential,
+            node_observation_state,
         )
     if first != second:
         fail("human_direct_ssh quiescence did not remain stable for the quiet window")
@@ -1855,6 +1925,8 @@ def run_human_direct_ssh(args: argparse.Namespace, *, emit: bool = True) -> dict
         "schema_version": HUMAN_DIRECT_SSH_SCHEMA,
         "phase": "quiesce",
         "mode": "human_direct_ssh",
+        "observation_state": observation_state,
+        "stopped_role": inventory_binding["stopped_role"],
         "provider": "executor-owned-direct-ssh",
         "operation": "quiesce-only",
         "task_uid": authority["task_uid"],
@@ -2844,7 +2916,12 @@ def validate_signed_gates(
     return {"identity_receipts": summaries, "sequencer_rebuild_proof": proof_summary}
 
 
-def build_plan(args: argparse.Namespace) -> dict[str, Any]:
+def _build_plan_for_mode(
+    args: argparse.Namespace,
+    execution_mode: str = PAIR_EXECUTION_MODE,
+) -> dict[str, Any]:
+    if execution_mode not in {PAIR_EXECUTION_MODE, TRIAD_STAGGERED_EXECUTION_MODE}:
+        fail(f"unsupported validator rebuild execution mode: {execution_mode}")
     package_dir = Path(args.package_dir).resolve()
     provenance_path = Path(args.provenance).resolve()
     helper = load_provenance_helper()
@@ -2877,6 +2954,13 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         fail("direct re-observation quiescence transaction binding mismatch")
     if direct_receipt.get("impact_record_sha256") != sha256_file(impact_path) or direct_receipt.get("impact") != impact["impact"]:
         fail("direct re-observation consumer-impact binding mismatch")
+    expected_observation_state = (
+        "live" if execution_mode == TRIAD_STAGGERED_EXECUTION_MODE else "stopped"
+    )
+    if direct_receipt.get("observation_state", "stopped") != expected_observation_state:
+        fail(
+            f"{execution_mode} plan requires executor-owned {expected_observation_state} baseline"
+        )
     stopped_proof = {
         "path": None,
         "sha256": None,
@@ -2916,9 +3000,12 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
     reject_full_status(args.sequencer_health_url, "health URL")
     plan: dict[str, Any] = {
         "schema_version": PLAN_SCHEMA,
+        "execution_mode": execution_mode,
         "phase": "planned",
         "mutation_order": MUTATION_ORDER,
-        "startup_order": STARTUP_ORDER,
+        "startup_order": (
+            MUTATION_ORDER if execution_mode == TRIAD_STAGGERED_EXECUTION_MODE else STARTUP_ORDER
+        ),
         "package": {
             "directory": str(package_dir),
             "provenance": str(provenance_path),
@@ -2945,6 +3032,7 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         "capacity": capacities,
         "proof": {
             "consumer_impact_record_path": str(impact_path),
+            "baseline_observation_state": direct_receipt.get("observation_state", "stopped"),
             "stopped_quiescence_proof_path": stopped_proof["path"],
             "stopped_quiescence_proof_sha256": stopped_proof["sha256"],
             "quiescence_id": stopped_proof["quiescence_id"],
@@ -2953,7 +3041,19 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
                 "quiescence_id": stopped_proof["quiescence_id"],
                 "request_digest": stopped_proof["request_digest"],
                 "impact_record_sha256": stopped_proof["impact_record_sha256"],
+                "observation_state": direct_receipt.get("observation_state", "stopped"),
             },
+            "live_baseline": (
+                {
+                    "verified": True,
+                    "observation_state": "live",
+                    "quiescence_id": direct_receipt["quiescence_id"],
+                    "request_digest": direct_receipt["request_digest"],
+                    "impact_record_sha256": direct_receipt["impact_record_sha256"],
+                }
+                if execution_mode == TRIAD_STAGGERED_EXECUTION_MODE
+                else None
+            ),
             "observer_mutation": False,
             "repository_executable": stopped_proof["repository_executable"],
             "direct_reobserve_required": True,
@@ -2979,10 +3079,24 @@ def build_plan(args: argparse.Namespace) -> dict[str, Any]:
         },
         "rollback": {"strategy": "same-filesystem-full-snapshot", "required_on_gate_failure": True},
     }
+    if execution_mode == TRIAD_STAGGERED_EXECUTION_MODE:
+        plan["pair_preservation"] = {
+            "max_simultaneously_stopped_validators": 1,
+            "member_order": ["storage-205", "sequencer-204"],
+            "live_peer_readback_before_each_reset": True,
+            "rebuilt_member_readback_before_next_reset": True,
+            "rollback": "target_only_cleanup_and_preserve_live_peer",
+        }
     plan["plan_digest"] = hashlib.sha256(
         json.dumps(plan, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()
     return plan
+
+
+def build_plan(args: argparse.Namespace) -> dict[str, Any]:
+    """Build an explicitly selected pair or governed triad-staggered plan."""
+    execution_mode = getattr(args, "execution_mode", PAIR_EXECUTION_MODE)
+    return _build_plan_for_mode(args, execution_mode)
 
 
 def _fsync_parent_directory(path: Path) -> None:
@@ -3193,7 +3307,7 @@ def install_local(node: dict[str, Any], plan: dict[str, Any], backup: dict[str, 
         "governed": staged,
         "governed_inventory": governed_inventory,
         "service_action": "local dry-run; service manager delegated to governed host adapter",
-        "startup_order_position": STARTUP_ORDER.index(node["role"]) + 1,
+        "startup_order_position": plan.get("startup_order", STARTUP_ORDER).index(node["role"]) + 1,
         "post_apply_gates": {
             "status": "deferred_to_governed_host_adapter",
             "healthz": "not_run_local",
@@ -3286,7 +3400,134 @@ def _bind_transaction_receipt(receipt: dict[str, Any], plan: dict[str, Any], pha
     return receipt
 
 
+def _validate_staggered_host_receipt(
+    receipt: dict[str, Any], plan: dict[str, Any], phase: str
+) -> dict[str, Any]:
+    """Validate the one-member-at-a-time adapter contract.
+
+    The adapter owns the remote stop/reset/stage/start operations.  The
+    executor owns the phase binding and rejects any receipt that cannot prove
+    that one member remained live while the other was cut over.
+    """
+    if plan.get("execution_mode") != TRIAD_STAGGERED_EXECUTION_MODE:
+        fail("staggered adapter receipt is only valid for triad_staggered plans")
+    if receipt.get("schema_version") not in {
+        "oasis7.validator_pair_rebuild_host_receipt.v1",
+        "oasis7.validator_pair_rebuild_host_receipt.v2",
+    }:
+        fail("staggered host adapter returned an unsupported receipt schema")
+    _validate_adapter_binding(receipt, plan, phase)
+    if receipt.get("phase") != phase:
+        fail(f"staggered host adapter phase receipt mismatch: expected {phase}")
+    if receipt.get("execution_mode") != TRIAD_STAGGERED_EXECUTION_MODE:
+        fail("staggered host adapter execution mode binding is missing")
+    if receipt.get("transaction_id") != plan.get("transaction_id"):
+        fail("staggered host adapter receipt transaction identity mismatch")
+    if receipt.get("mutation_order") != MUTATION_ORDER or receipt.get("startup_order") != plan.get("startup_order", STARTUP_ORDER):
+        fail("staggered host adapter receipt order mismatch")
+    if receipt.get("observer_mutation") is not False:
+        fail("staggered host adapter must prove observer_hold")
+    if receipt.get("max_simultaneously_stopped_validators") != 1:
+        fail("staggered host adapter must prove max_simultaneously_stopped_validators=1")
+    if not isinstance(receipt.get("identity_receipts"), list):
+        fail("staggered host adapter identity receipts are missing")
+    if not isinstance(receipt.get("sequencer_rebuild_proof"), dict):
+        fail("staggered host adapter signed 204 proof is missing")
+    nodes = receipt.get("nodes")
+    if not isinstance(nodes, dict) or set(nodes) != set(MUTATION_ORDER):
+        fail("staggered host adapter receipt must cover both validator roles")
+    for role in MUTATION_ORDER:
+        value = nodes[role]
+        expected = plan.get("nodes", {}).get(role)
+        if not isinstance(value, dict) or not isinstance(expected, dict):
+            fail(f"staggered host adapter node receipt is malformed for {role}")
+        if value.get("role") != role or value.get("root") != expected.get("root"):
+            fail(f"staggered host adapter role/root binding mismatch for {role}")
+        if value.get("independently_observed") is not True:
+            fail(f"staggered host adapter independent observation is missing for {role}")
+
+    if phase == "staggered-preflight":
+        if receipt.get("staggered_phase") != "preflight" or receipt.get("live_baseline") is not True:
+            fail("staggered preflight must prove the complete live baseline")
+        for role in MUTATION_ORDER:
+            value = nodes[role]
+            if value.get("active") is not True or value.get("running") is not True or value.get("service_state") != "running":
+                fail(f"staggered preflight requires live validator {role}")
+            if value.get("preflight_observer_mutation") is not False:
+                fail(f"staggered preflight must be read-only for {role}")
+            if value.get("healthz_ok") is not True or value.get("nrestarts") != 0 or value.get("oom_panic_segfault") is not False:
+                fail(f"staggered preflight health gates failed for {role}")
+            if role == "sequencer-204" and value.get("full_chain_status_called") is not False:
+                fail("staggered preflight must not call full 204 chain status")
+            if value.get("runtime_sha256") != plan.get("package", {}).get("runtime_sha256"):
+                fail(f"staggered preflight runtime binding is missing for {role}")
+            if set(value.get("listeners", [])) != set(EXPECTED_LISTENERS[role]):
+                fail(f"staggered preflight listener binding is incomplete for {role}")
+        return receipt
+
+    if phase in {"staggered-storage", "staggered-sequencer"}:
+        target = "storage-205" if phase == "staggered-storage" else "sequencer-204"
+        peer = "sequencer-204" if target == "storage-205" else "storage-205"
+        if receipt.get("staggered_phase") != "member_cutover":
+            fail("staggered member receipt phase is missing")
+        if receipt.get("target_role") != target or receipt.get("live_peer_role") != peer:
+            fail("staggered member receipt target/peer binding mismatch")
+        if receipt.get("live_peer_readback") is not True or receipt.get("rebuilt_member_readiness") is not True:
+            fail("staggered member receipt must prove peer liveness and target readiness")
+        target_value = nodes[target]
+        peer_value = nodes[peer]
+        if target_value.get("active") is not True or target_value.get("running") is not True or target_value.get("service_state") != "running":
+            fail(f"staggered target readiness is not proven for {target}")
+        if peer_value.get("active") is not True or peer_value.get("running") is not True or peer_value.get("service_state") != "running":
+            fail(f"staggered live peer is not proven for {peer}")
+        for role, value in ((target, target_value), (peer, peer_value)):
+            if value.get("runtime_sha256") != plan.get("package", {}).get("runtime_sha256"):
+                fail(f"staggered member runtime binding is missing for {role}")
+            if set(value.get("listeners", [])) != set(EXPECTED_LISTENERS[role]):
+                fail(f"staggered member listener binding is incomplete for {role}")
+            if value.get("healthz_ok") is not True or value.get("nrestarts") != 0 or value.get("oom_panic_segfault") is not False:
+                fail(f"staggered member health gates failed for {role}")
+            if role == "sequencer-204" and value.get("full_chain_status_called") is not False:
+                fail("staggered member receipt must not call full 204 chain status")
+        absence = target_value.get("post_delete_absence")
+        if (
+            not isinstance(absence, dict)
+            or absence.get("absent") is not True
+            or absence.get("target_set") != list(RESET_SURFACES)
+            or absence.get("target_set_sha256") != reset_surface_digest()
+        ):
+            fail(f"staggered target reset absence receipt is missing for {target}")
+        return receipt
+
+    if phase == "staggered-rollback":
+        failed_role = receipt.get("failed_role")
+        if failed_role not in MUTATION_ORDER or receipt.get("staggered_phase") != "target_only_cleanup":
+            fail("staggered rollback receipt failed role/phase binding")
+        peer = "sequencer-204" if failed_role == "storage-205" else "storage-205"
+        target_value = nodes[failed_role]
+        peer_value = nodes[peer]
+        if target_value.get("active") is not False or target_value.get("running") is not False or target_value.get("service_state") != "stopped":
+            fail(f"staggered rollback must leave failed target stopped: {failed_role}")
+        if peer_value.get("active") is not True or peer_value.get("running") is not True or peer_value.get("service_state") != "running":
+            fail(f"staggered rollback must preserve live peer: {peer}")
+        if peer_value.get("healthz_ok") is not True or peer_value.get("nrestarts") != 0 or peer_value.get("oom_panic_segfault") is not False:
+            fail(f"staggered rollback peer health gates failed for {peer}")
+        if peer == "sequencer-204" and peer_value.get("full_chain_status_called") is not False:
+            fail("staggered rollback must not call full 204 chain status on the live peer")
+        if receipt.get("target_only_cleanup") is not True or receipt.get("restore_deleted_chain_state") is not False:
+            fail("staggered rollback boundary is not target-only")
+        return receipt
+
+    fail(f"unsupported staggered adapter phase: {phase}")
+
+
 def validate_host_receipt(receipt: dict[str, Any], plan: dict[str, Any], phase: str) -> dict[str, Any]:
+    if phase in TRIAD_STAGGERED_PHASES:
+        return _validate_staggered_host_receipt(receipt, plan, phase)
+    if plan.get("execution_mode", PAIR_EXECUTION_MODE) != PAIR_EXECUTION_MODE:
+        fail("pair host receipt validation refuses a non-pair transaction")
+    if receipt.get("execution_mode", PAIR_EXECUTION_MODE) != PAIR_EXECUTION_MODE:
+        fail("pair host receipt execution mode binding is not pair")
     if receipt.get("schema_version") not in {"oasis7.validator_pair_rebuild_host_receipt.v1", "oasis7.validator_pair_rebuild_host_receipt.v2"}:
         fail("host adapter returned an unsupported receipt schema")
     _validate_adapter_binding(receipt, plan, phase)
@@ -3563,6 +3804,25 @@ def _validate_adapter_callback_state(transaction: dict[str, Any]) -> dict[str, A
     return state
 
 
+def _record_staggered_stage_receipt(
+    transaction: dict[str, Any], role: str, receipt: dict[str, Any]
+) -> None:
+    """Persist adapter-owned reset evidence without mutating a live target locally."""
+    nodes = receipt.get("nodes")
+    node = nodes.get(role) if isinstance(nodes, dict) else None
+    absence = node.get("post_delete_absence") if isinstance(node, dict) else None
+    if not isinstance(absence, dict):
+        fail(f"staggered adapter did not return post-delete receipt for {role}")
+    staged = transaction.get("staged")
+    if not isinstance(staged, dict):
+        staged = {}
+    staged[role] = {
+        "post_delete_absence": absence,
+        "service_action": "governed host adapter owns target reset/stage/start",
+    }
+    transaction["staged"] = staged
+
+
 def _record_adapter_callback_failure(
     transaction_path: Path, plan: dict[str, Any], phase: str, error: str
 ) -> None:
@@ -3677,7 +3937,38 @@ def _adopt_completed_adapter_callback(
         fail(f"completed host adapter callback conflicts with persisted {target}")
     transaction[target] = receipt
     transaction.pop("adapter_callback", None)
-    if phase == "preflight":
+    if phase in TRIAD_STAGGERED_PHASES:
+        if phase in {"staggered-storage", "staggered-sequencer"}:
+            _record_staggered_stage_receipt(
+                transaction,
+                _staggered_role_for_phase(phase),
+                receipt,
+            )
+        if phase == "staggered-preflight":
+            transaction["phase"] = "staggered_prepared"
+        elif phase == "staggered-storage":
+            completed = transaction.get("staggered_completed_roles")
+            if not isinstance(completed, list):
+                completed = []
+            if "storage-205" not in completed:
+                completed.append("storage-205")
+            transaction["staggered_completed_roles"] = completed
+            transaction["phase"] = "staggered_storage_applied"
+        elif phase == "staggered-sequencer":
+            completed = transaction.get("staggered_completed_roles")
+            if not isinstance(completed, list):
+                completed = []
+            if "sequencer-204" not in completed:
+                completed.append("sequencer-204")
+            transaction["staggered_completed_roles"] = completed
+            transaction["phase"] = "applied"
+            transaction["applied_at"] = state["completed_at"]
+            transaction["rollback"] = {
+                "strategy": "staggered-target-only-cleanup",
+                "required_on_gate_failure": True,
+                "status": "available",
+            }
+    elif phase == "preflight":
         transaction["phase"] = "prepared"
     elif phase == "backup":
         transaction["phase"] = "backed_up"
@@ -3976,6 +4267,146 @@ def _record_transaction_direct_reobserve(
     return direct_receipt
 
 
+def _record_staggered_live_reobserve(
+    transaction: dict[str, Any], direct_args: argparse.Namespace | None
+) -> dict[str, Any]:
+    """Re-authorize and observe both existing validators live before cutover."""
+    proof = transaction.get("proof")
+    if not isinstance(proof, dict) or proof.get("direct_reobserve_required") is not True:
+        fail("triad_staggered apply requires live direct re-observation")
+    request_value = getattr(direct_args, "human_direct_ssh_request", None) if direct_args is not None else None
+    known_hosts_value = getattr(direct_args, "known_hosts", None) if direct_args is not None else None
+    if not isinstance(request_value, str) or not request_value.strip():
+        request_value = proof.get("direct_request_path")
+    if not isinstance(known_hosts_value, str) or not known_hosts_value.strip():
+        known_hosts_value = proof.get("known_hosts_path")
+    if not isinstance(request_value, str) or not request_value.strip() or not isinstance(known_hosts_value, str) or not known_hosts_value.strip():
+        fail("triad_staggered apply requires live direct re-observation before mutation")
+    if direct_args is None:
+        direct_args = argparse.Namespace(
+            human_direct_ssh_request=request_value,
+            known_hosts=known_hosts_value,
+            credential_env=None,
+            credential_fd=None,
+        )
+    else:
+        direct_args.human_direct_ssh_request = request_value
+        direct_args.known_hosts = known_hosts_value
+    requested_path = _direct_regular_file(request_value, "triad_staggered direct request")
+    expected_path = Path(proof.get("direct_request_path", "")).expanduser().resolve()
+    if requested_path != expected_path or sha256_file(requested_path) != proof.get("direct_request_sha256"):
+        fail("triad_staggered direct request is not the request bound into the plan")
+    direct_receipt = _direct_reobserve_from_args(direct_args)
+    if direct_receipt.get("observation_state") != "live":
+        fail("triad_staggered direct baseline must prove both validators live")
+    if proof.get("baseline_observation_state") != "live":
+        fail("triad_staggered plan is not bound to a live baseline")
+    if direct_receipt.get("quiescence_id") != proof.get("quiescence_id"):
+        fail("triad_staggered direct re-observation quiescence binding mismatch")
+    impact_path_value = proof.get("consumer_impact_record_path")
+    if not isinstance(impact_path_value, str) or direct_receipt.get("impact_record_sha256") != sha256_file(Path(impact_path_value).resolve()):
+        fail("triad_staggered direct re-observation consumer-impact binding mismatch")
+    planned_request_digest = proof.get("stopped_quiescence", {}).get("request_digest")
+    if direct_receipt.get("request_digest") != planned_request_digest:
+        fail("triad_staggered direct re-observation request binding mismatch")
+    if direct_receipt.get("deployment_inventory_sha256") != proof.get("deployment_inventory_sha256"):
+        fail("triad_staggered direct re-observation inventory binding mismatch")
+    transaction["staggered_live_observation"] = _direct_observation_record(
+        direct_receipt, reauthorized=True
+    )
+    transaction["staggered_live_observation"]["observation_state"] = "live"
+    return direct_receipt
+
+
+def _staggered_role_for_phase(phase: str) -> str:
+    if phase == "staggered-storage":
+        return "storage-205"
+    if phase == "staggered-sequencer":
+        return "sequencer-204"
+    fail(f"unsupported triad_staggered member phase: {phase}")
+
+
+def _continue_staggered_transaction(
+    transaction: dict[str, Any],
+    path: Path,
+    host_adapter: Path,
+    direct_args: argparse.Namespace | None,
+    *,
+    fresh_direct_observation: bool,
+) -> dict[str, Any]:
+    if transaction.get("execution_mode") != TRIAD_STAGGERED_EXECUTION_MODE:
+        fail("staggered continuation requires a triad_staggered transaction")
+    if fresh_direct_observation:
+        _record_staggered_live_reobserve(transaction, direct_args)
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+
+    if not isinstance(transaction.get("capacity_apply"), dict):
+        transaction["capacity_apply"] = {
+            role: refresh_capacity(Path(transaction["nodes"][role]["root"]), transaction["capacity"][role], role)
+            for role in MUTATION_ORDER
+        }
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+
+    if not isinstance(transaction.get("staggered_preflight_receipt"), dict):
+        transaction["phase"] = "staggered_preflight"
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+        transaction["staggered_preflight_receipt"] = run_host_adapter(
+            host_adapter, path, transaction, "staggered-preflight"
+        )
+        transaction.pop("adapter_callback", None)
+        transaction["phase"] = "staggered_prepared"
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+
+    backups = transaction.get("backup") if isinstance(transaction.get("backup"), dict) else {}
+    staged = transaction.get("staged") if isinstance(transaction.get("staged"), dict) else {}
+    completed = transaction.get("staggered_completed_roles")
+    if not isinstance(completed, list):
+        completed = []
+    for role in MUTATION_ORDER:
+        if role in completed:
+            continue
+        transaction["staggered_active_role"] = role
+        transaction["phase"] = f"staggered_{role}_in_progress"
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+        if role not in backups:
+            # A live target may be snapshotted read-only, but its reset/stage
+            # surfaces must remain untouched until the target-specific
+            # governed adapter callback has taken ownership of the stop.
+            backups[role] = snapshot_node(transaction["nodes"][role], transaction["transaction_id"])
+            transaction["backup"] = backups
+            transaction["nodes"][role]["backup"] = backups[role]
+            transaction["canonical_digest"] = canonical_digest(transaction)
+            write_json(path, transaction)
+        phase = "staggered-storage" if role == "storage-205" else "staggered-sequencer"
+        transaction["phase"] = phase
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+        receipt = run_host_adapter(host_adapter, path, transaction, phase)
+        transaction.pop("adapter_callback", None)
+        transaction[f"{role}_staggered_receipt"] = receipt
+        _record_staggered_stage_receipt(transaction, role, receipt)
+        completed.append(role)
+        transaction["staggered_completed_roles"] = completed
+        transaction["phase"] = "staggered_storage_applied" if role == "storage-205" else "applied"
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+    transaction["phase"] = "applied"
+    transaction["staggered_active_role"] = None
+    transaction["rollback"] = {
+        "strategy": "staggered-target-only-cleanup",
+        "required_on_gate_failure": True,
+        "status": "available",
+    }
+    transaction["canonical_digest"] = canonical_digest(transaction)
+    write_json(path, transaction)
+    return transaction
+
+
 def _continue_transaction(
     transaction: dict[str, Any],
     path: Path,
@@ -3984,6 +4415,8 @@ def _continue_transaction(
     *,
     fresh_direct_observation: bool,
 ) -> dict[str, Any]:
+    if transaction.get("execution_mode", PAIR_EXECUTION_MODE) != PAIR_EXECUTION_MODE:
+        fail("pair continuation refuses a non-pair transaction; use the governed staggered route")
     if fresh_direct_observation:
         effective_direct_args = _resume_direct_args(transaction, direct_args)
         _record_transaction_direct_reobserve(transaction, effective_direct_args)
@@ -4074,6 +4507,11 @@ def resume_transaction(
         fail("unsupported transaction schema")
     if transaction.get("canonical_digest") != canonical_digest(transaction):
         fail("transaction canonical digest mismatch")
+    execution_mode = transaction.get("execution_mode", PAIR_EXECUTION_MODE)
+    if execution_mode == TRIAD_STAGGERED_EXECUTION_MODE:
+        return resume_staggered_transaction(path, host_adapter, direct_args)
+    if execution_mode != PAIR_EXECUTION_MODE:
+        fail(f"unsupported validator rebuild execution mode: {execution_mode}")
     phase = transaction.get("phase")
     if phase == "rolled_back":
         return transaction
@@ -4380,6 +4818,279 @@ def _validate_adapter_binding(receipt: dict[str, Any], plan: dict[str, Any], pha
         fail("host adapter receipt freshness is outside the current phase window")
 
 
+def _record_staggered_rollback_reobserve(
+    transaction: dict[str, Any],
+    direct_args: argparse.Namespace | None,
+    failed_role: str,
+) -> dict[str, Any]:
+    """Require a fresh mixed stopped-target/live-peer observation for rollback."""
+    if direct_args is None or not isinstance(getattr(direct_args, "human_direct_ssh_request", None), str):
+        fail("triad_staggered rollback requires a fresh mixed direct observation request")
+    direct_receipt = _direct_reobserve_from_args(direct_args)
+    if direct_receipt.get("observation_state") != "mixed":
+        fail("triad_staggered rollback requires observation_state=mixed")
+    proof = transaction.get("proof")
+    if not isinstance(proof, dict):
+        fail("triad_staggered rollback proof binding is missing")
+    if direct_receipt.get("quiescence_id") != proof.get("quiescence_id"):
+        fail("triad_staggered rollback quiescence binding mismatch")
+    if direct_receipt.get("deployment_inventory_sha256") != proof.get("deployment_inventory_sha256"):
+        fail("triad_staggered rollback inventory binding mismatch")
+    stopped_role = direct_receipt.get("stopped_role")
+    expected_alias = "storage" if failed_role == "storage-205" else "sequencer"
+    if stopped_role not in {failed_role, expected_alias}:
+        fail("triad_staggered rollback stopped_role does not match failed target")
+    impact_path_value = proof.get("consumer_impact_record_path") if isinstance(proof, dict) else None
+    if not isinstance(impact_path_value, str) or direct_receipt.get("impact_record_sha256") != sha256_file(Path(impact_path_value).resolve()):
+        fail("triad_staggered rollback consumer-impact binding mismatch")
+    transaction["staggered_rollback_observation"] = _direct_observation_record(
+        direct_receipt, reauthorized=True
+    )
+    transaction["staggered_rollback_observation"]["observation_state"] = "mixed"
+    transaction["staggered_rollback_observation"]["stopped_role"] = stopped_role
+    return direct_receipt
+
+
+def rollback_staggered_transaction(
+    path: Path,
+    host_adapter: Path | None = None,
+    direct_args: argparse.Namespace | None = None,
+) -> dict[str, Any]:
+    transaction = load_json(path, "transaction")
+    if transaction.get("schema_version") != SCHEMA:
+        fail("unsupported transaction schema")
+    if transaction.get("execution_mode") != TRIAD_STAGGERED_EXECUTION_MODE:
+        fail("rollback_staggered_transaction received a non-triad transaction")
+    if transaction.get("canonical_digest") != canonical_digest(transaction):
+        fail("transaction canonical digest mismatch")
+    if host_adapter is None:
+        fail("triad_staggered rollback requires a governed host adapter")
+    backups = transaction.get("backup")
+    if not isinstance(backups, dict) or not backups:
+        fail("triad_staggered rollback requires persisted backup receipts")
+    _validate_persisted_backup_refs(transaction)
+    callback_state = _validate_adapter_callback_state(transaction)
+    if callback_state is not None and callback_state["status"] == "in_flight":
+        fail("staggered rollback callback is ambiguous in-flight; explicit governed reconciliation is required")
+    if callback_state is not None and callback_state["status"] == "failed" and callback_state["phase"] == "staggered-rollback":
+        fail("staggered rollback callback previously failed; explicit governed reconciliation is required")
+    failed_role = transaction.get("staggered_active_role")
+    if failed_role not in MUTATION_ORDER:
+        completed = transaction.get("staggered_completed_roles")
+        failed_role = completed[-1] if isinstance(completed, list) and completed else None
+    if failed_role not in MUTATION_ORDER:
+        fail("triad_staggered rollback cannot identify a target-only cleanup role")
+    transaction["staggered_failed_role"] = failed_role
+    transaction["phase"] = "rollback_required"
+    transaction["canonical_digest"] = canonical_digest(transaction)
+    write_json(path, transaction)
+    try:
+        _record_staggered_rollback_reobserve(transaction, direct_args, failed_role)
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+        completed_rollback_callback = (
+            callback_state is not None
+            and callback_state["status"] == "completed"
+            and callback_state["phase"] == "staggered-rollback"
+        )
+        if completed_rollback_callback:
+            transaction["staggered_rollback_receipt"] = callback_state["receipt"]
+            transaction.pop("adapter_callback", None)
+        elif isinstance(transaction.get("staggered_rollback_receipt"), dict):
+            validate_host_receipt(transaction["staggered_rollback_receipt"], transaction, "staggered-rollback")
+        else:
+            transaction["staggered_rollback_receipt"] = run_host_adapter(
+                host_adapter, path, transaction, "staggered-rollback"
+            )
+            transaction.pop("adapter_callback", None)
+        if failed_role not in backups:
+            fail(f"staggered rollback backup missing for {failed_role}")
+        # The backup is forensic/non-seed evidence only.  Do not restore the
+        # old node root or deleted chain state: the adapter's target-only
+        # cleanup leaves the failed member stopped for a fresh clean stage,
+        # while the live peer remains untouched.
+        results = {
+            failed_role: {
+                "verified": True,
+                "forensic_backup_retained": True,
+                "restored_old_node_state": False,
+                "restore_deleted_chain_state": False,
+            }
+        }
+        transaction["phase"] = "rolled_back"
+        transaction["rollback"] = {
+            "strategy": "staggered-target-only-cleanup",
+            "status": "verified",
+            "failed_role": failed_role,
+            "target_only_cleanup": True,
+            "restore_deleted_chain_state": False,
+            "results": results,
+        }
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+        return transaction
+    except BaseException as error:
+        transaction["phase"] = "rollback_failed"
+        transaction["failure"] = str(error)
+        transaction["rollback"] = {
+            "strategy": "staggered-target-only-cleanup",
+            "status": "failed",
+            "failed_role": failed_role,
+            "errors": [str(error)],
+        }
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+        raise
+
+
+def apply_staggered_transaction(
+    path: Path,
+    host_adapter: Path | None = None,
+    direct_args: argparse.Namespace | None = None,
+) -> dict[str, Any]:
+    plan = load_json(path, "transaction")
+    if plan.get("schema_version") != PLAN_SCHEMA or plan.get("phase") != "planned":
+        fail("triad_staggered apply requires a planned validator-pair rebuild plan")
+    if plan.get("execution_mode") != TRIAD_STAGGERED_EXECUTION_MODE:
+        fail("triad_staggered apply requires execution_mode=triad_staggered")
+    expected_plan_digest = hashlib.sha256(
+        json.dumps(
+            {key: value for key, value in plan.items() if key != "plan_digest"},
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode()
+    ).hexdigest()
+    if plan.get("plan_digest") != expected_plan_digest:
+        fail("plan digest mismatch")
+    if host_adapter is None:
+        fail("triad_staggered apply requires a governed host adapter")
+    helper = load_provenance_helper()
+    package = plan.get("package")
+    try:
+        helper.validate_receipt(
+            Path(package["provenance"]),
+            Path(package["directory"]),
+            Path(plan["provenance"]["trusted_root"]["path"]),
+        )
+    except SystemExit as error:
+        fail(str(error).removeprefix("error: validator-pair provenance: "))
+    transaction: dict[str, Any] = dict(plan)
+    transaction["schema_version"] = SCHEMA
+    transaction["transaction_id"] = f"triad-staggered-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}-{uuid.uuid4().hex[:10]}"
+    transaction["created_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    transaction["phase"] = "prepared"
+    transaction["staggered_completed_roles"] = []
+    transaction["staggered_active_role"] = None
+    _record_staggered_live_reobserve(transaction, direct_args)
+    transaction["canonical_digest"] = canonical_digest(transaction)
+    write_json(path, transaction)
+    try:
+        return _continue_staggered_transaction(
+            transaction, path, host_adapter, direct_args, fresh_direct_observation=False
+        )
+    except BaseException as error:
+        backups = transaction.get("backup") if isinstance(transaction.get("backup"), dict) else {}
+        staged = transaction.get("staged") if isinstance(transaction.get("staged"), dict) else {}
+        if not backups and not staged and not isinstance(transaction.get("staggered_preflight_receipt"), dict):
+            transaction["phase"] = "preflight_failed"
+            transaction["failure"] = str(error)
+            transaction["canonical_digest"] = canonical_digest(transaction)
+            write_json(path, transaction)
+            raise
+        transaction["backup"] = backups
+        transaction["staged"] = staged
+        transaction["phase"] = "rollback_required"
+        transaction["failure"] = str(error)
+        transaction["staggered_failed_role"] = transaction.get("staggered_active_role")
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+        # The failed target may be stopped while its peer remains live.  Do not
+        # reuse the pair rollback path or infer a mixed state from the original
+        # live baseline; require an explicit fresh mixed observation instead.
+        raise
+
+
+def resume_staggered_transaction(
+    path: Path,
+    host_adapter: Path | None = None,
+    direct_args: argparse.Namespace | None = None,
+) -> dict[str, Any]:
+    """Resume only the governed one-member-at-a-time transaction path."""
+    transaction = load_json(path, "transaction")
+    if transaction.get("schema_version") != SCHEMA:
+        fail("unsupported transaction schema")
+    if transaction.get("execution_mode") != TRIAD_STAGGERED_EXECUTION_MODE:
+        fail("resume_staggered_transaction received a non-triad transaction")
+    if transaction.get("canonical_digest") != canonical_digest(transaction):
+        fail("transaction canonical digest mismatch")
+    phase = transaction.get("phase")
+    if phase == "rolled_back":
+        return transaction
+    allowed_phases = {
+        "prepared",
+        "staggered_preflight",
+        "staggered_prepared",
+        "staggered_storage_in_progress",
+        "staggered-storage",
+        "staggered_storage_applied",
+        "staggered_sequencer_in_progress",
+        "staggered-sequencer",
+        "applied",
+        "rollback_required",
+        "preflight_failed",
+        "rollback_failed",
+    }
+    if phase not in allowed_phases:
+        fail(f"triad_staggered transaction phase is not resumable: {phase}")
+    _validate_persisted_backup_refs(transaction)
+    callback_state = _validate_adapter_callback_state(transaction)
+    if callback_state is not None:
+        callback_phase = callback_state["phase"]
+        if callback_state["status"] == "in_flight":
+            fail("staggered host adapter callback is ambiguous in-flight; explicit governed reconciliation is required")
+        if callback_state["status"] == "failed" and phase != "rollback_required":
+            fail("staggered host adapter callback previously failed; explicit governed reconciliation is required")
+        if callback_state["status"] == "completed" and callback_phase != "staggered-rollback":
+            allowed_callback_phases = {
+                "staggered-preflight": {"staggered_preflight", "staggered-preflight"},
+                "staggered-storage": {"staggered-storage", "staggered_storage_in_progress"},
+                "staggered-sequencer": {"staggered-sequencer", "staggered_sequencer_in_progress"},
+            }
+            if phase not in allowed_callback_phases.get(callback_phase, set()):
+                fail("completed staggered host adapter callback phase does not match transaction phase")
+            transaction = _adopt_completed_adapter_callback(path, transaction, callback_state)
+            phase = transaction["phase"]
+    if phase == "rollback_required":
+        if host_adapter is None:
+            fail("rollback_required transaction requires explicit governed staggered rollback resume")
+        return rollback_staggered_transaction(path, host_adapter, direct_args)
+    if host_adapter is None:
+        fail("triad_staggered resume requires a governed host adapter")
+    try:
+        return _continue_staggered_transaction(
+            transaction,
+            path,
+            host_adapter,
+            direct_args,
+            fresh_direct_observation=True,
+        )
+    except BaseException as error:
+        backups = transaction.get("backup") if isinstance(transaction.get("backup"), dict) else {}
+        staged = transaction.get("staged") if isinstance(transaction.get("staged"), dict) else {}
+        transaction["backup"] = backups
+        transaction["staged"] = staged
+        if not backups and not staged and not isinstance(transaction.get("staggered_preflight_receipt"), dict):
+            transaction["phase"] = "preflight_failed"
+        else:
+            transaction["phase"] = "rollback_required"
+            transaction["staggered_failed_role"] = transaction.get("staggered_active_role")
+        transaction["failure"] = str(error)
+        transaction["canonical_digest"] = canonical_digest(transaction)
+        write_json(path, transaction)
+        raise
+
+
 def apply_transaction(
     path: Path,
     host_adapter: Path | None = None,
@@ -4393,6 +5104,11 @@ def apply_transaction(
     ).hexdigest()
     if plan.get("plan_digest") != expected_plan_digest:
         fail("plan digest mismatch")
+    execution_mode = plan.get("execution_mode", PAIR_EXECUTION_MODE)
+    if execution_mode == TRIAD_STAGGERED_EXECUTION_MODE:
+        return apply_staggered_transaction(path, host_adapter, direct_args)
+    if execution_mode != PAIR_EXECUTION_MODE:
+        fail(f"unsupported validator rebuild execution mode: {execution_mode}")
     if host_adapter is None:
         fail("apply requires a governed host adapter for startup and health gates")
     proof = plan.get("proof")
@@ -4532,6 +5248,11 @@ def rollback_transaction(
         fail("unsupported transaction schema")
     if transaction.get("canonical_digest") != canonical_digest(transaction):
         fail("transaction canonical digest mismatch")
+    execution_mode = transaction.get("execution_mode", PAIR_EXECUTION_MODE)
+    if execution_mode == TRIAD_STAGGERED_EXECUTION_MODE:
+        return rollback_staggered_transaction(path, host_adapter, direct_args)
+    if execution_mode != PAIR_EXECUTION_MODE:
+        fail(f"unsupported validator rebuild execution mode: {execution_mode}")
     backups = transaction.get("backup")
     if not isinstance(backups, dict):
         fail("transaction does not contain full backup receipts")
@@ -4600,6 +5321,11 @@ def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description=__doc__)
     sub = root.add_subparsers(dest="mode", required=True)
     plan = sub.add_parser("plan")
+    plan.add_argument(
+        "--execution-mode",
+        choices=(PAIR_EXECUTION_MODE, TRIAD_STAGGERED_EXECUTION_MODE),
+        default=PAIR_EXECUTION_MODE,
+    )
     plan.add_argument("--package-dir", required=True)
     plan.add_argument("--provenance", required=True)
     plan.add_argument("--trust-root", required=True)
@@ -4635,6 +5361,11 @@ def parser() -> argparse.ArgumentParser:
     direct.add_argument("--credential-env")
     direct.add_argument("--credential-fd", type=int)
     apply = sub.add_parser("apply")
+    apply.add_argument(
+        "--execution-mode",
+        choices=(PAIR_EXECUTION_MODE, TRIAD_STAGGERED_EXECUTION_MODE),
+        default=PAIR_EXECUTION_MODE,
+    )
     apply.add_argument("--transaction", required=True)
     apply.add_argument("--host-adapter")
     apply.add_argument("--human-direct-ssh-request", "--direct-request", "--request", dest="human_direct_ssh_request")
@@ -4642,6 +5373,11 @@ def parser() -> argparse.ArgumentParser:
     apply.add_argument("--credential-env")
     apply.add_argument("--credential-fd", type=int)
     rollback = sub.add_parser("rollback")
+    rollback.add_argument(
+        "--execution-mode",
+        choices=(PAIR_EXECUTION_MODE, TRIAD_STAGGERED_EXECUTION_MODE),
+        default=PAIR_EXECUTION_MODE,
+    )
     rollback.add_argument("--transaction", required=True)
     rollback.add_argument("--host-adapter", required=True)
     rollback.add_argument("--human-direct-ssh-request", "--direct-request", "--request", dest="human_direct_ssh_request")
@@ -4649,6 +5385,11 @@ def parser() -> argparse.ArgumentParser:
     rollback.add_argument("--credential-env")
     rollback.add_argument("--credential-fd", type=int)
     resume = sub.add_parser("resume")
+    resume.add_argument(
+        "--execution-mode",
+        choices=(PAIR_EXECUTION_MODE, TRIAD_STAGGERED_EXECUTION_MODE),
+        default=PAIR_EXECUTION_MODE,
+    )
     resume.add_argument("--transaction", required=True)
     resume.add_argument("--host-adapter")
     resume.add_argument("--human-direct-ssh-request", "--direct-request", "--request", dest="human_direct_ssh_request")
@@ -4671,12 +5412,15 @@ def main() -> int:
         print(json.dumps(plan, ensure_ascii=True, sort_keys=True))
     elif args.mode == "apply":
         host_adapter = Path(args.host_adapter).expanduser() if args.host_adapter else None
-        print(json.dumps(apply_transaction(Path(args.transaction).resolve(), host_adapter, args), ensure_ascii=True, sort_keys=True))
+        apply_fn = apply_staggered_transaction if args.execution_mode == TRIAD_STAGGERED_EXECUTION_MODE else apply_transaction
+        print(json.dumps(apply_fn(Path(args.transaction).resolve(), host_adapter, args), ensure_ascii=True, sort_keys=True))
     elif args.mode == "resume":
         host_adapter = Path(args.host_adapter).expanduser() if args.host_adapter else None
-        print(json.dumps(resume_transaction(Path(args.transaction).resolve(), host_adapter, args), ensure_ascii=True, sort_keys=True))
+        resume_fn = resume_staggered_transaction if args.execution_mode == TRIAD_STAGGERED_EXECUTION_MODE else resume_transaction
+        print(json.dumps(resume_fn(Path(args.transaction).resolve(), host_adapter, args), ensure_ascii=True, sort_keys=True))
     else:
-        print(json.dumps(rollback_transaction(Path(args.transaction).resolve(), Path(args.host_adapter).expanduser(), args), ensure_ascii=True, sort_keys=True))
+        rollback_fn = rollback_staggered_transaction if args.execution_mode == TRIAD_STAGGERED_EXECUTION_MODE else rollback_transaction
+        print(json.dumps(rollback_fn(Path(args.transaction).resolve(), Path(args.host_adapter).expanduser(), args), ensure_ascii=True, sort_keys=True))
     return 0
 
 
