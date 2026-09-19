@@ -6,10 +6,10 @@
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：2026-09-13
+- Last reviewed：2026-09-20
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
-本文定义普通共同治理可处理的有限事项，以及它与玩家基本保护、系统安全权威和宪制修订之间不可绕过的产品边界。它不定义资格、权重、阈值、锁定时长、身份技术、链上结构、runtime/P2P 状态机或当前可用性结论。
+本文定义普通共同治理可处理的有限事项，以及它与玩家基本保护、系统安全权威和宪制修订之间不可绕过的产品边界。本文同时接收 GG-2 的治理主体/控制权公平与 GG-3 的外部 OC、游戏内治理权分离语义，建立稳定的产品 REQ/AC；它不定义资格参数、权重、阈值、锁定时长、身份技术、隐私机制、链上结构、runtime/P2P 状态机或当前可用性结论。
 
 ## 设计适用性与生命周期闭合
 
@@ -34,6 +34,20 @@
 事项必须在提交时声明类别、目标、作用范围和授权来源。没有匹配白名单的事项不得以“其他”“紧急”“技术升级”或复合提案静默进入普通治理；系统只能原子拒绝，或明确路由到具备独立授权与验收的非普通轨道。拒绝与路由均不得产生部分世界效果、资金占用、资格变更或事实上的先行实施。
 
 普通治理不能自行扩展白名单或改变本节的分类规则。未来新增事项类别必须先通过适用的宪制流程，并保持本页的保护底线。
+
+### 2.1 治理主体资格与控制权公平
+
+普通治理必须以一个经验证的游戏账户作为治理主体，聚合该账户已批准的玩家身份、managed signer 与 external wallet bindings；这些绑定只用于确定同一主体的资格、委托与计票范围，不把 signer、custody、密钥或钱包控制权变成普通治理权限。普通玩家可以保持假名；只有在高影响资格需要防止重复控制或规避上限时，才允许消费私下最小化的控制关系断言，公开面不得泄露非必要个人数据。
+
+资格的产品边界由线性锁定 OC、明确范围内可撤销的委托与按实际控制人聚合后的影响上限共同构成。账户拆分、关联组织、短期循环转移或重复绑定不得制造额外普通治理影响；区域 charter 的本地双合法性仍需锁定 OC/委托/控制人上限与连续本地贡献共同成立，不由全局治理替代区域或受影响主体的有界权利。
+
+重复治理主体的 challenge 必须提供可理解的 review，以及按事实适用的 merge 或 revocation、计票 correction 与 appeal。纠正不得抹去原授权、投票、处理或 receipt 历史；公开结果应同时保留纠错理由、最终有效结果和可复核的因果链。本文冻结的是玩家可理解的资格与公平边界，不冻结阈值、身份技术、隐私证明、投票字段或控制人计算实现。
+
+### 2.2 外部 OC 与游戏内治理权分离
+
+OC 作为外部链上资产保持可自由转让；持有、转入或转出本身不自动取得、出售或保留游戏内普通治理、高影响资格、区域权利、世界资产或行动结果。游戏内治理权只来自特定事项的可审计锁定、snapshot 与明确退出/解除绑定过程；进入有效窗口后，外部转让、反向转移或解除绑定不得追溯改票、重复投票或让同一权利同时属于两个控制关系。
+
+既有 operator-managed 单向 `OC -> LetAI Run quota` 服务额度桥继续保持为非治理、非赎回路径；额度、`token_key` 或服务消费不得影响任何治理资格、权重、投票、委托或世界权利。本文只规定两侧不可互推的产品边界，不宣称链上交易、智能合约、桥接或游戏权利绑定已实现。
 
 ## 3. 不可由普通治理改写的保护
 
@@ -137,6 +151,41 @@
 - 当：执行闸门处理原请求及其重复请求。
 - 则：只有当前条件仍有效且范围匹配的请求可产生一次 receipt；其他请求原子拒绝、过期或保持待决，不能部分拨付、继承旧条件、取得第二次资金/权限/优先级。
 
+<a id="req-wr-gcb-004"></a>
+### REQ-WR-GCB-004：治理主体聚合与控制权公平必须可审计
+
+- 要求：经验证游戏账户聚合其已批准的玩家身份、managed signer 与 external wallet bindings 作为一个治理主体；线性锁定 OC、明确范围内可撤销委托与按实际控制人聚合后的影响上限共同防止账户/组织拆分、重复绑定或循环转移放大普通治理影响。普通假名得到保留，公开审计只暴露必要的委托关系、最终计票/结果与纠错因果；重复主体 challenge 必须有 review、merge 或 revocation、计票 correction 与 appeal，并保留原历史 receipt。
+- 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
+- 验收：[AC-WR-GCB-004](#ac-wr-gcb-004)
+
+<a id="ac-wr-gcb-004"></a>
+### AC-WR-GCB-004：重复主体不得扩大影响且纠错保留历史
+
+- 覆盖要求：REQ-WR-GCB-004
+- 给定：一个账户同时声明多个已批准绑定，或多个账户/组织通过拆分、委托、循环转移形成同一实际控制关系，并出现重复主体 challenge。
+- 当：系统评估普通治理资格、影响上限、公开审计与 challenge 处置。
+- 则：绑定聚合为一个治理主体；锁定 OC、范围内可撤销委托与控制人上限不因拆分或循环转移增加影响；公开结果可审计但不泄露非必要个人数据；challenge 有 review 及适用的 merge/revocation、计票 correction 与 appeal，纠错保留原授权、投票、receipt、理由和最终有效结果，不产生双计或第二次治理效果。
+
+<a id="req-wr-gcb-005"></a>
+### REQ-WR-GCB-005：外部 OC 转让不得旁路游戏内治理权边界
+
+- 要求：外部 OC 可转让，但持有、转入或转出不自动取得或保留游戏内普通治理权、高影响资格、区域权利、世界资产或行动结果；游戏内治理权只来自事项范围内可审计的锁定、snapshot 与退出/解除绑定。有效窗口后的转让或解除绑定不得追溯改票、双投或同时行使同一权利；既有 operator-managed 单向 `OC -> LetAI Run quota` 桥保持非治理、非赎回，额度、`token_key` 与服务消费不得影响治理资格。
+- 专业权威：[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
+- 验收：[AC-WR-GCB-005](#ac-wr-gcb-005)
+
+<a id="ac-wr-gcb-005"></a>
+### AC-WR-GCB-005：OC 转让、治理快照与额度桥保持隔离
+
+- 覆盖要求：REQ-WR-GCB-005
+- 给定：一次 OC 外部转让、一个已进入有效窗口的事项，以及一条额度桥绑定或服务消费记录。
+- 当：发生转让、反向转移、退出/解除绑定、重复投票或额度消费尝试。
+- 则：玩家能区分外部 OC receipt、事项范围内锁定/snapshot/退出状态和服务额度状态；转让或解除绑定不追溯改票、不产生双投或双重控制，不自动给予世界权利；额度桥仍只能单向提供服务额度，不能兑换 OC、影响治理资格/权重或产生游戏内治理效果。缺少专业 authority 时，结果保持待决、拒绝或 `incomplete/unknown/blocked`，不得以默认值补齐。
+
+## 6.3 迁移闭合与边界
+
+- GG-2 与 GG-3 的产品语义已由本页 GCB-004/005 接收；旧 [`全局治理、组织连续性与宪制护栏`](../world-infrastructure/global-governance-organization-continuity-and-constitutional-guardrails.prd.md) 只保留迁移 provenance，不再作为 active authority、路线图或验收入口。
+- 旧源在 S1 修复所有活跃专业引用、确认专业 authority 可达并通过治理/链接检查前继续保留；本页的稳定 REQ/AC、专业 authority 和本节边界不等于实现、当前可用性或发行 readiness。
+
 ## 7. 组合验收
 
 - GCB-1：白名单内的代表性政策、公共财库和既有 charter 日常事项能够进入普通治理；宪制、基本权利、安全、validator/finality、signer 与 custody 事项被原子拒绝或明确路由到非普通轨道，且不产生部分世界效果。
@@ -145,6 +194,8 @@
 - GCB-4：紧急 containment 只能限制扩散或维持其授权范围内的基本连续性，不能代替宪制修订、扩大白名单或暂停保护、审计与申诉。
 - GCB-5：受理、拒绝、路由、宪制待决与最终结果均保留授权、理由、范围、下一步和 receipt 因果；玩家不会把提案、投票、队列或界面状态误认为已生效世界事实。
 - GCB-6：一个已通过的代表性普通政策、财库或 charter 日常事项，在执行前遇到授权撤销/收缩、范围或前置条件变化、并发提交及重连/Agent 重试时，只有在执行时仍有效的事项可产生一次 receipt 支持的世界效果；其余请求不会部分执行、继承旧条件或产生第二次资源/权限/优先级。玩家能区分已通过、执行受阻/失效与已确认结果，并获得重新提交、等待、申诉或常态替代中的适用下一步。
+- GCB-7：代表性多绑定账户、拆分账户/组织、可撤销委托与重复主体 challenge 只能形成一个可审计治理主体；控制人聚合后的影响上限不因拆分或循环转移扩大，纠错保留原 receipt 与最终有效结果，公开审计不泄露非必要个人数据。
+- GCB-8：代表性 OC 外部转让、治理事项 snapshot/退出/解除绑定和额度桥消费保持分离；转让或解除绑定不能追溯改票或双投，单向额度桥不能兑换 OC、影响治理资格/权重或产生世界治理效果。
 
 ## 8. 验收追踪
 
@@ -154,11 +205,13 @@
 | GCB-3 / GCB-4 | producer_system_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 宪制条件全满足/缺失样例、紧急 containment 与宪制修订分离、无部分效果的确定性证据 | test_tier_full |
 | GCB-5 | producer_system_designer / gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 事项分类、受理/拒绝/路由/待决/结果的 receipt 因果及正式玩家 surface 可读性证据 | test_tier_full |
 | GCB-6 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / viewer_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | `test_tier_required` 覆盖执行前再校验、授权/范围失效、玩家状态区分与恢复下一步；`test_tier_full` 覆盖并发执行、Agent/重连重试、去重、replay 与恢复后的唯一 receipt/无第二次世界效果 | test_tier_full |
+| GCB-7 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 治理主体绑定聚合、实际控制人影响上限、最小数据公开审计、重复主体纠错/申诉与历史 receipt 证据 | test_tier_full |
+| GCB-8 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | OC 转让与治理快照/解除绑定的非追溯/非双投负例，以及单向非治理 quota bridge 隔离证据 | test_tier_full |
 
 ## 9. Non-Goals
 
-- 不定义治理资格、资产锁定、委托、实际控制人、身份聚合、隐私、权重、阈值、时钟或经济参数。
-- 不定义 OC 外部转让、游戏内权利绑定或既有 `OC -> LetAI Run quota` 桥。
+- 不定义治理资格的参数或实现机制，不定义资产锁定比例/期限、委托与控制人计算、身份聚合技术、隐私机制、权重、阈值、时钟或经济参数；GCB-004 只冻结产品边界与验收。
+- 不定义 OC 外部转让、游戏内权利绑定或既有 `OC -> LetAI Run quota` 桥的链上/服务实现；GCB-005 只冻结两侧不可互推的产品边界与负例。
 - 不实现投票、提案、宪制修订、申诉、runtime/P2P 状态机、validator/finality、signer 或 custody 操作。
 - 不把本文、历史证据或局部实现写成当前功能、preview readiness、主网、发行或公开 claim。
 
@@ -169,3 +222,5 @@
 | [REQ-WR-GCB-001](#req-wr-gcb-001) / [AC-WR-GCB-001](#ac-wr-gcb-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-WR-GCB-002](#req-wr-gcb-002) / [AC-WR-GCB-002](#ac-wr-gcb-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-WR-GCB-003](#req-wr-gcb-003) / [AC-WR-GCB-003](#ac-wr-gcb-003) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-GCB-004](#req-wr-gcb-004) / [AC-WR-GCB-004](#ac-wr-gcb-004) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 治理主体聚合、锁定/委托/控制人影响上限、最小数据公开审计、重复主体 review/merge/revocation/correction/appeal 与历史 receipt 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-GCB-005](#req-wr-gcb-005) / [AC-WR-GCB-005](#ac-wr-gcb-005) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | OC 外部转让与游戏内治理权的锁定/snapshot/退出隔离、不可追溯/不可双投与单向非治理 quota bridge 负例的可导航追踪证据 | `test_tier_required` |
