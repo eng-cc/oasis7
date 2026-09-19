@@ -1,7 +1,13 @@
 use crate::runtime;
 use crate::simulator::{Action as SimulatorAction, ActionSubmitter};
 use ed25519_dalek::{Signature, Signer, SigningKey, Verifier, VerifyingKey};
+use oasis7_client_api::MainTokenTransfer;
 use serde::{Deserialize, Serialize};
+
+pub use oasis7_client_api::{
+    MainTokenActionAuthProof, MainTokenActionAuthScheme, MainTokenActionParticipantSignature,
+    VerifiedMainTokenActionAuth,
+};
 
 const CONSENSUS_ACTION_PAYLOAD_ENVELOPE_VERSION: u8 = 1;
 const MAIN_TOKEN_ACTION_AUTH_PAYLOAD_VERSION: u8 = 1;
@@ -27,39 +33,6 @@ pub struct ConsensusActionPayloadEnvelope {
 #[serde(tag = "type", content = "data", rename_all = "snake_case")]
 pub enum ConsensusActionAuthEnvelope {
     MainTokenAction(MainTokenActionAuthProof),
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum MainTokenActionAuthScheme {
-    Ed25519,
-    ThresholdEd25519,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MainTokenActionParticipantSignature {
-    pub public_key: String,
-    pub signature: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct MainTokenActionAuthProof {
-    pub scheme: MainTokenActionAuthScheme,
-    pub account_id: String,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub public_key: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub signature: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub threshold: Option<u16>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub participant_signatures: Vec<MainTokenActionParticipantSignature>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VerifiedMainTokenActionAuth {
-    pub account_id: String,
-    pub signer_public_keys: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -108,7 +81,6 @@ struct MainTokenActionSigningEnvelope<'a> {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "type", content = "data")]
 enum MainTokenActionSigningPayload<'a> {
-    TransferMainToken(TransferMainTokenSigningData<'a>),
     ClaimMainTokenVesting(ClaimMainTokenVestingSigningData<'a>),
     InitializeMainTokenGenesis(InitializeMainTokenGenesisSigningData<'a>),
     DistributeMainTokenTreasury(DistributeMainTokenTreasurySigningData<'a>),
@@ -116,36 +88,6 @@ enum MainTokenActionSigningPayload<'a> {
     UpdateRestrictedStarterClaimAdminRegistry(
         UpdateRestrictedStarterClaimAdminRegistrySigningData<'a>,
     ),
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize)]
-struct TransferMainTokenSigningData<'a> {
-    from_account_id: &'a str,
-    to_account_id: &'a str,
-    amount: u64,
-    nonce: u64,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    asset_id: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    memo: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    chain_id: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    network_id: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tx_version: Option<u8>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    tx_type: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    valid_until_unix_ms: Option<i64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    max_fee: Option<u64>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    fee_asset_id: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    application_payload_hash: Option<&'a str>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    client_request_id: Option<&'a str>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -222,6 +164,86 @@ pub fn main_token_action_auth_required(action: &runtime::Action) -> bool {
     )
 }
 
+fn main_token_transfer_from_runtime_action(action: &runtime::Action) -> Option<MainTokenTransfer> {
+    let runtime::Action::TransferMainToken {
+        from_account_id,
+        to_account_id,
+        amount,
+        nonce,
+        asset_id,
+        memo,
+        chain_id,
+        network_id,
+        tx_version,
+        tx_type,
+        valid_until_unix_ms,
+        max_fee,
+        fee_asset_id,
+        application_payload_hash,
+        client_request_id,
+    } = action
+    else {
+        return None;
+    };
+    Some(MainTokenTransfer {
+        from_account_id: from_account_id.clone(),
+        to_account_id: to_account_id.clone(),
+        amount: *amount,
+        nonce: *nonce,
+        asset_id: asset_id.clone(),
+        memo: memo.clone(),
+        chain_id: chain_id.clone(),
+        network_id: network_id.clone(),
+        tx_version: *tx_version,
+        tx_type: tx_type.clone(),
+        valid_until_unix_ms: *valid_until_unix_ms,
+        max_fee: *max_fee,
+        fee_asset_id: fee_asset_id.clone(),
+        application_payload_hash: application_payload_hash.clone(),
+        client_request_id: client_request_id.clone(),
+    })
+}
+
+fn map_client_signing_error(
+    error: oasis7_client_api::ClientSigningError,
+) -> MainTokenActionAuthError {
+    match error {
+        oasis7_client_api::ClientSigningError::InvalidRequest(message) => {
+            MainTokenActionAuthError::InvalidRequest(message)
+        }
+        oasis7_client_api::ClientSigningError::InvalidSignature(message) => {
+            MainTokenActionAuthError::InvalidSignature(message)
+        }
+        oasis7_client_api::ClientSigningError::AccountMismatch(message) => {
+            MainTokenActionAuthError::AccountMismatch(message)
+        }
+    }
+}
+
+fn is_legacy_noncanonical_transfer_signing_account(
+    action: &runtime::Action,
+    account_id: &str,
+    signer_public_key_hex: &str,
+) -> bool {
+    let runtime::Action::TransferMainToken {
+        from_account_id, ..
+    } = action
+    else {
+        return false;
+    };
+    let account_id = account_id.trim();
+    const CANONICAL_ACCOUNT_PREFIX: &str = "oc:pk:";
+    let canonical_prefix = CANONICAL_ACCOUNT_PREFIX;
+    if account_id
+        .get(..canonical_prefix.len())
+        .is_some_and(|prefix| prefix.eq_ignore_ascii_case(canonical_prefix))
+    {
+        return false;
+    }
+    account_id == from_account_id.trim()
+        && account_id != runtime::main_token_account_id_from_node_public_key(signer_public_key_hex)
+}
+
 pub fn sign_main_token_runtime_action_auth(
     action: &runtime::Action,
     account_id: &str,
@@ -229,6 +251,24 @@ pub fn sign_main_token_runtime_action_auth(
     signer_private_key_hex: &str,
 ) -> Result<MainTokenActionAuthProof, MainTokenActionAuthError> {
     ensure_main_token_action_supported(action)?;
+    if let Some(transfer) = main_token_transfer_from_runtime_action(action) {
+        if !is_legacy_noncanonical_transfer_signing_account(
+            action,
+            account_id,
+            signer_public_key_hex,
+        ) {
+            return oasis7_client_api::sign_main_token_transfer(
+                &transfer,
+                account_id,
+                signer_public_key_hex,
+                signer_private_key_hex,
+            )
+            .map_err(map_client_signing_error);
+        }
+        // Keep the old signing-only compatibility path for callers that use
+        // player/agent account IDs instead of canonical oc:pk accounts. The
+        // verifier still enforces canonical account binding.
+    }
     let account_id = normalize_required_field(account_id, "main token auth account_id")?;
     let public_key =
         normalize_public_key_field(signer_public_key_hex, "main token auth signer public key")?;
@@ -316,6 +356,15 @@ pub fn verify_main_token_runtime_action_auth(
     proof: &MainTokenActionAuthProof,
 ) -> Result<VerifiedMainTokenActionAuth, MainTokenActionAuthError> {
     ensure_main_token_action_supported(action)?;
+    if let Some(transfer) = main_token_transfer_from_runtime_action(action) {
+        // A1 owns the single-signer transfer proof. Threshold proofs remain
+        // runtime-local because the client API deliberately does not model
+        // participant signatures or threshold policy.
+        if proof.scheme == MainTokenActionAuthScheme::Ed25519 {
+            return oasis7_client_api::verify_main_token_transfer_signature(&transfer, proof)
+                .map_err(map_client_signing_error);
+        }
+    }
     let account_id =
         normalize_required_field(proof.account_id.as_str(), "main token auth account_id")?;
     match proof.scheme {
@@ -444,6 +493,12 @@ fn build_main_token_action_signing_payload(
     account_id: &str,
     public_key: &str,
 ) -> Result<Vec<u8>, MainTokenActionAuthError> {
+    if let Some(transfer) = main_token_transfer_from_runtime_action(action) {
+        return oasis7_client_api::build_main_token_transfer_signing_payload(
+            &transfer, account_id, public_key,
+        )
+        .map_err(map_client_signing_error);
+    }
     let envelope = MainTokenActionSigningEnvelope {
         version: MAIN_TOKEN_ACTION_AUTH_PAYLOAD_VERSION,
         operation: main_token_action_operation(action)?,
@@ -462,41 +517,6 @@ fn build_main_token_action_signing_action(
     action: &runtime::Action,
 ) -> Result<MainTokenActionSigningPayload<'_>, MainTokenActionAuthError> {
     match action {
-        runtime::Action::TransferMainToken {
-            from_account_id,
-            to_account_id,
-            amount,
-            nonce,
-            asset_id,
-            memo,
-            chain_id,
-            network_id,
-            tx_version,
-            tx_type,
-            valid_until_unix_ms,
-            max_fee,
-            fee_asset_id,
-            application_payload_hash,
-            client_request_id,
-        } => Ok(MainTokenActionSigningPayload::TransferMainToken(
-            TransferMainTokenSigningData {
-                from_account_id: from_account_id.as_str(),
-                to_account_id: to_account_id.as_str(),
-                amount: *amount,
-                nonce: *nonce,
-                asset_id: asset_id.as_deref(),
-                memo: memo.as_deref(),
-                chain_id: chain_id.as_deref(),
-                network_id: network_id.as_deref(),
-                tx_version: *tx_version,
-                tx_type: tx_type.as_deref(),
-                valid_until_unix_ms: *valid_until_unix_ms,
-                max_fee: *max_fee,
-                fee_asset_id: fee_asset_id.as_deref(),
-                application_payload_hash: application_payload_hash.as_deref(),
-                client_request_id: client_request_id.as_deref(),
-            },
-        )),
         runtime::Action::ClaimMainTokenVesting {
             bucket_id,
             beneficiary,
@@ -798,4 +818,187 @@ fn decode_hex_array<const N: usize>(
     let mut fixed = [0_u8; N];
     fixed.copy_from_slice(bytes.as_slice());
     Ok(fixed)
+}
+
+#[cfg(test)]
+mod compatibility_tests {
+    use super::*;
+
+    const BROWSER_V1_PRIVATE_KEY: &str =
+        "c7a149783d4d97d4b36f6f97ae43eb71af7fe595b7f717d329c96be3e58fdc29";
+    const BROWSER_V1_PUBLIC_KEY: &str =
+        "fded5085f1e8099257b7bfb2346eb6bd4194c3351d8f97686b18cfcc5969e0a3";
+    const BROWSER_V1_SIGNATURE: &str = "octransferauth:v1:9200ab505c80b5d27fb1a4e79624a083f2047669404d8c7d562e7d6b7da9154fcf7b85e96ab4c02bd5f2910845e4a7ce791d87398e0e3b9004bb022749d6830b";
+    const V2_PRIVATE_KEY: &str = "1111111111111111111111111111111111111111111111111111111111111111";
+    const V2_PUBLIC_KEY: &str = "d04ab232742bb4ab3a1368bd4615e4e6d0224ab71a016baf8520a332c9778737";
+    const V2_TO_ACCOUNT: &str =
+        "oc:pk:204040e364c10f2bec9c1fe500a1cd4c247c89d650a01ed7e82caba867877c21";
+    const V2_SIGNATURE: &str = "octransferauth:v2:4c4a7f577c06ed0f1c07966b445de2b271201c779a3224fff4cd66d2ca413b1fbafa609c20023312abeba9a16cfbbc9418d03d2c810e5b3ae4aa20427cbaca0b";
+
+    fn browser_v1_action() -> runtime::Action {
+        runtime::Action::TransferMainToken {
+            from_account_id: format!("oc:pk:{BROWSER_V1_PUBLIC_KEY}"),
+            to_account_id: "oc:pk:1111111111111111111111111111111111111111111111111111111111111111"
+                .to_string(),
+            amount: 1,
+            nonce: 1,
+            asset_id: None,
+            memo: None,
+            chain_id: None,
+            network_id: None,
+            tx_version: None,
+            tx_type: None,
+            valid_until_unix_ms: None,
+            max_fee: None,
+            fee_asset_id: None,
+            application_payload_hash: None,
+            client_request_id: None,
+        }
+    }
+
+    fn v2_action() -> runtime::Action {
+        runtime::Action::TransferMainToken {
+            from_account_id: format!("oc:pk:{V2_PUBLIC_KEY}"),
+            to_account_id: V2_TO_ACCOUNT.to_string(),
+            amount: 9,
+            nonce: 4,
+            asset_id: Some("main_token".to_string()),
+            memo: Some("bridge:deposit:alpha".to_string()),
+            chain_id: Some("oasis7-main".to_string()),
+            network_id: Some("prod".to_string()),
+            tx_version: Some(2),
+            tx_type: Some("asset_transfer".to_string()),
+            valid_until_unix_ms: Some(1_900_000_000_000),
+            max_fee: Some(42),
+            fee_asset_id: Some("main_token".to_string()),
+            application_payload_hash: Some("sha256:payload-alpha".to_string()),
+            client_request_id: Some("client-alpha".to_string()),
+        }
+    }
+
+    #[test]
+    fn legacy_runtime_wrapper_preserves_browser_v1_vector() {
+        let action = browser_v1_action();
+        let account_id = format!("oc:pk:{BROWSER_V1_PUBLIC_KEY}");
+        let expected_payload = format!(
+            r#"{{"version":1,"operation":"transfer_main_token","account_id":"{account_id}","public_key":"{BROWSER_V1_PUBLIC_KEY}","action":{{"type":"TransferMainToken","data":{{"from_account_id":"{account_id}","to_account_id":"oc:pk:1111111111111111111111111111111111111111111111111111111111111111","amount":1,"nonce":1}}}}}}"#,
+        );
+        let payload = build_main_token_action_signing_payload(
+            &action,
+            account_id.as_str(),
+            BROWSER_V1_PUBLIC_KEY,
+        )
+        .expect("browser v1 payload");
+        assert_eq!(payload, expected_payload.as_bytes());
+
+        let proof = sign_main_token_runtime_action_auth(
+            &action,
+            account_id.as_str(),
+            BROWSER_V1_PUBLIC_KEY,
+            BROWSER_V1_PRIVATE_KEY,
+        )
+        .expect("browser v1 proof");
+        assert_eq!(proof.signature.as_deref(), Some(BROWSER_V1_SIGNATURE));
+        verify_main_token_runtime_action_auth(&action, &proof).expect("browser v1 verify");
+    }
+
+    #[test]
+    fn legacy_runtime_wrapper_keeps_noncanonical_signing_accounts_compatible() {
+        let action = runtime::Action::TransferMainToken {
+            from_account_id: "player:alice".to_string(),
+            to_account_id: "player:bob".to_string(),
+            amount: 9,
+            nonce: 8,
+            asset_id: None,
+            memo: None,
+            chain_id: None,
+            network_id: None,
+            tx_version: None,
+            tx_type: None,
+            valid_until_unix_ms: None,
+            max_fee: None,
+            fee_asset_id: None,
+            application_payload_hash: None,
+            client_request_id: None,
+        };
+        let proof = sign_main_token_runtime_action_auth(
+            &action,
+            "player:alice",
+            BROWSER_V1_PUBLIC_KEY,
+            BROWSER_V1_PRIVATE_KEY,
+        )
+        .expect("legacy noncanonical transfer signer");
+        assert_eq!(proof.account_id, "player:alice");
+        assert_eq!(proof.public_key.as_deref(), Some(BROWSER_V1_PUBLIC_KEY));
+        assert!(
+            proof
+                .signature
+                .as_deref()
+                .is_some_and(|signature| signature.starts_with("octransferauth:v1:"))
+        );
+    }
+
+    #[test]
+    fn canonical_transfer_signing_keeps_a1_account_binding() {
+        let action = browser_v1_action();
+        let account_id = format!("oc:pk:{BROWSER_V1_PUBLIC_KEY}");
+        let error = sign_main_token_runtime_action_auth(
+            &action,
+            account_id.as_str(),
+            V2_PUBLIC_KEY,
+            V2_PRIVATE_KEY,
+        )
+        .expect_err("canonical account must stay A1-bound");
+        assert!(matches!(
+            error,
+            MainTokenActionAuthError::AccountMismatch(_)
+        ));
+    }
+
+    #[test]
+    fn legacy_runtime_wrapper_preserves_contextual_v2_vector() {
+        let action = v2_action();
+        let account_id = format!("oc:pk:{V2_PUBLIC_KEY}");
+        let expected_payload = format!(
+            r#"{{"version":1,"operation":"transfer_main_token","account_id":"{account_id}","public_key":"{V2_PUBLIC_KEY}","action":{{"type":"TransferMainToken","data":{{"from_account_id":"{account_id}","to_account_id":"{V2_TO_ACCOUNT}","amount":9,"nonce":4,"asset_id":"main_token","memo":"bridge:deposit:alpha","chain_id":"oasis7-main","network_id":"prod","tx_version":2,"tx_type":"asset_transfer","valid_until_unix_ms":1900000000000,"max_fee":42,"fee_asset_id":"main_token","application_payload_hash":"sha256:payload-alpha","client_request_id":"client-alpha"}}}}}}"#,
+        );
+        let payload =
+            build_main_token_action_signing_payload(&action, account_id.as_str(), V2_PUBLIC_KEY)
+                .expect("v2 payload");
+        assert_eq!(payload, expected_payload.as_bytes());
+
+        let proof = sign_main_token_runtime_action_auth(
+            &action,
+            account_id.as_str(),
+            V2_PUBLIC_KEY,
+            V2_PRIVATE_KEY,
+        )
+        .expect("v2 proof");
+        assert_eq!(proof.signature.as_deref(), Some(V2_SIGNATURE));
+        verify_main_token_runtime_action_auth(&action, &proof).expect("v2 verify");
+    }
+
+    #[test]
+    fn legacy_runtime_wrapper_keeps_threshold_transfer_verification_local() {
+        let action = browser_v1_action();
+        let account_id = format!("oc:pk:{BROWSER_V1_PUBLIC_KEY}");
+        let proof = sign_threshold_main_token_runtime_action_auth(
+            &action,
+            account_id.as_str(),
+            2,
+            &[
+                (BROWSER_V1_PUBLIC_KEY, BROWSER_V1_PRIVATE_KEY),
+                (V2_PUBLIC_KEY, V2_PRIVATE_KEY),
+            ],
+        )
+        .expect("threshold transfer proof");
+        assert_eq!(proof.scheme, MainTokenActionAuthScheme::ThresholdEd25519);
+        let error = verify_main_token_runtime_action_auth(&action, &proof)
+            .expect_err("runtime threshold transfer binding remains explicit");
+        assert!(matches!(
+            error,
+            MainTokenActionAuthError::InvalidRequest(message)
+                if message == "main token auth public key is required for transfer binding"
+        ));
+    }
 }
