@@ -49,7 +49,7 @@
 | --- | --- | --- |
 | Prompt 交互 | [`Agent 对话与 Prompt 控制`](../../product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md) 与配对 design | 将原有控制权、草稿、接受/应用、外部变化和恢复义务落成稳定 REQ/AC 追踪 |
 | 首局与持续游玩 | [`首局与持续游玩`](../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md) | 完整接收“首个工业闭环 walkthrough”主题；保留原节点、阻塞、恢复、receipt、重复提交和双入口义务 |
-| 复杂玩法根 SC-31 | [`世界规则与核心玩法 PRD`](../../product/world-rules-core-gameplay/prd.md) 与 [`gameplay` 专业设计](../../game/gameplay/gameplay-top-level-design.prd.md) | 保留根 SC-31 的叶子拆分方向和专业边界；具体玩法语义由 gameplay 专业 authority 按长期治理与验收规则维护，本规范不将局部试点表述为完整迁移 |
+| 复杂玩法根 SC-31 | [`世界规则与玩法系统 PRD`](../../product/world-rules-core-gameplay/prd.md) 与 [`gameplay` 专业设计](../../game/gameplay/gameplay-top-level-design.prd.md) | 保留根 SC-31 的叶子拆分方向和专业边界；具体玩法语义由 gameplay 专业 authority 按长期治理与验收规则维护，本规范不将局部试点表述为完整迁移 |
 
 三类试点都必须保留原条款和专业引用。试点通过不代表其他产品主题已完成迁移，也不代表游戏当前可玩性、发行或运行时能力已经通过。
 

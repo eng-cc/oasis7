@@ -2,7 +2,7 @@
 
 ## 文档身份
 
-- 所属产品模块：世界规则与核心玩法
+- 所属产品模块：世界规则与玩法系统
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`

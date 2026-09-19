@@ -2,7 +2,7 @@
 
 ## 文档身份
 
-- 所属产品模块：大世界基础设施
+- 所属产品模块：权威世界基础设施
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`retired`
 - Owner role：`producer_system_designer`
@@ -11,14 +11,14 @@
 
 ## 迁移状态
 
-本页保留完整历史语义和验收，不能作为大世界基础设施的 active authority、路线图或验收入口。原第 2–3 节的唯一权威历史、确定性结果、checkpoint/replay/state-sync 与恢复语义，已分别映射到 [`分布式共识与状态可用性`](distributed-consensus-and-state-availability.prd.md) 的 DC-1/DC-2 和 [`确定性世界执行`](deterministic-world-execution.prd.md) 的 DE-1/DE-3；其实现/证据仍由 P2P/runtime authority 拥有。原第 5 节的系统性危机 containment、同一世界恢复项目与无选择性 bailout 语义，已由 [`区域冲突、软赛季与可恢复损失`](../world-rules-core-gameplay/chartered-conflict-soft-seasons-and-recovery.prd.md#6-系统性危机与恢复项目) 接收。原第 4–6 节其余玩家治理、惩罚/申诉和长期经济/发行产品语义尚未被接收模块完整吸收，仍是待迁移语义，接收 authority 为 [`世界规则与核心玩法`](../world-rules-core-gameplay/prd.md)。在对应 owner 回填剩余语义、验收和活跃引用前不得删除本页。
+本页保留完整历史语义和验收，不能作为权威世界基础设施的 active authority、路线图或验收入口。原第 2–3 节的唯一权威历史、确定性结果、checkpoint/replay/state-sync 与恢复语义，已分别映射到 [`分布式共识与状态可用性`](distributed-consensus-and-state-availability.prd.md) 的 DC-1/DC-2 和 [`确定性世界执行`](deterministic-world-execution.prd.md) 的 DE-1/DE-3；其实现/证据仍由 P2P/runtime authority 拥有。原第 5 节的系统性危机 containment、同一世界恢复项目与无选择性 bailout 语义，已由 [`区域冲突、软赛季与可恢复损失`](../world-rules-core-gameplay/chartered-conflict-soft-seasons-and-recovery.prd.md#6-系统性危机与恢复项目) 接收。原第 4–6 节其余玩家治理、惩罚/申诉和长期经济/发行产品语义尚未被接收模块完整吸收，仍是待迁移语义，接收 authority 为 [`世界规则与玩法系统`](../world-rules-core-gameplay/prd.md)。在对应 owner 回填剩余语义、验收和活跃引用前不得删除本页。
 
 
 本文是长期产品分册，承载统一持久世界在分布式运行、治理变化、故障与恢复中的产品承诺。它不定义证书字段、共识算法、拓扑、阈值、测试命令、运行手册或历史候选结论。
 
 ## 生命周期闭合
 
-- 接收 authority：[分布式共识与状态可用性](distributed-consensus-and-state-availability.prd.md#1-基础承诺)、[确定性世界执行](deterministic-world-execution.prd.md#1-执行与共识边界)、[区域冲突、软赛季与可恢复损失](../world-rules-core-gameplay/chartered-conflict-soft-seasons-and-recovery.prd.md#1-产品目标)以及 [世界规则与核心玩法](../world-rules-core-gameplay/prd.md#活跃产品专题)。
+- 接收 authority：[分布式共识与状态可用性](distributed-consensus-and-state-availability.prd.md#1-基础承诺)、[确定性世界执行](deterministic-world-execution.prd.md#1-执行与共识边界)、[区域冲突、软赛季与可恢复损失](../world-rules-core-gameplay/chartered-conflict-soft-seasons-and-recovery.prd.md#1-产品目标)以及 [世界规则与玩法系统](../world-rules-core-gameplay/prd.md#活跃产品专题)。
 - 剩余语义：原第 4–6 节的玩家治理、惩罚/申诉和长期经济/发行产品语义仍待世界规则接收；CR-1 至 CR-3 的基础执行语义已有接收路径，CR-4 至 CR-6 仍需按接收范围核对。
 - 稳定引用：本页保留 CR-1 至 CR-6、历史连续性和专业 authority 入口，并链接 [分布式共识与状态可用性](distributed-consensus-and-state-availability.prd.md#1-基础承诺)；本页不能作为 active authority 或当前 readiness 证据。
 - 删除条件：所有剩余语义完成接收、专业 authority 与历史引用可达、活跃引用修复且无未决迁移语义后，才可删除本页。
@@ -28,7 +28,7 @@
 
 ### 1.1 未决迁移问题与临时边界
 
-- 未决产品问题：第 4–6 节中尚未被接收模块完整吸收的玩家治理、惩罚/申诉和长期经济/发行语义，仍需由 [`世界规则与核心玩法`](../world-rules-core-gameplay/prd.md) owner 回填稳定追踪、验收和活跃引用。
+- 未决产品问题：第 4–6 节中尚未被接收模块完整吸收的玩家治理、惩罚/申诉和长期经济/发行语义，仍需由 [`世界规则与玩法系统`](../world-rules-core-gameplay/prd.md) owner 回填稳定追踪、验收和活跃引用。
 - 决策 role：`producer_system_designer` 负责历史语义接收与删除决定；`gameplay_designer` 负责玩家规则；`runtime_engineer`、`blockchain_ops_engineer` 与 `qa_engineer` 负责专业执行、分布式状态和证据边界。
 - 解决触发条件：接收模块完成语义回填、专业 authority 链接和活跃引用修复，并确认本页不再承担未迁移语义后，才可删除本页；在此之前保持 `retired`、只读和可审计历史。
 - 临时排除范围：本页不恢复为路线图或验收入口，不新增治理、惩罚、经济或发行能力，也不把历史材料表达为当前 readiness。

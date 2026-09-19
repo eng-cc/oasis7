@@ -6,16 +6,16 @@
 
 产品文档规范与可复用模板：[`product-documentation-standard.prd.md`](../engineering/doc-governance/product-documentation-standard.prd.md)、[`product-documentation-standard.design.md`](../engineering/doc-governance/product-documentation-standard.design.md)、[`product-documentation-standard.templates.md`](../engineering/doc-governance/product-documentation-standard.templates.md)。
 
-## P0 冻结：四域最终标签与职责边界
+## P1 生效：四域最终标签与职责边界
 
-本节冻结本次模块优化的产品决策，不提前切换 checker 当前要求的 active 身份字段。中文名称是面向读者的最终可读标签；目录 slug 和 `Product PRD-ID` 是稳定身份，P0 期间不得改变。现有入口表和四根 PRD 的 active 元数据仍使用兼容期旧名称，直到 C0 完成显式旧名/新名映射并由后续 P1 任务统一切换。
+本节承接 P0 冻结的产品决策；C0 已为四个稳定身份建立明确的旧名/新名兼容映射，现由 P1 将 active 产品表面统一切换为最终中文标签。目录 slug 和 `Product PRD-ID` 是稳定身份，不因本次展示名收敛改变。
 
-| 最终中文名称 | 稳定身份（不可变） | P0 兼容期 active 标签 | 核心问题与产品职责 |
+| 最终中文名称 | 稳定身份（不可变） | 当前 active 展示名 | 核心问题与产品职责 |
 | --- | --- | --- | --- |
-| **世界规则与玩法系统** | `world-rules-core-gameplay` / `PRD-PRODUCT-001` | `世界规则与核心玩法` | 玩家在世界中能做什么、付出什么、获得什么；定义世界规则的产品约束、玩家目标、核心循环、成长、资源/工业/经济、组织/区域/冲突/治理等长期玩法。 |
-| **权威世界基础设施** | `world-infrastructure` / `PRD-PRODUCT-002` | `大世界基础设施` | 世界如何保持唯一、确定、持久、可验证、可恢复；定义最终性、权威历史、状态可用性、确定性执行、版本兼容与恢复的产品保证，不拥有工业规则、经济语义、市场、区域或玩家循环；技术执行保证见 [`权威世界基础设施 PRD`](world-infrastructure/prd.md)。 |
-| **智能体、世界模拟与交互** | `agents-world-simulation` / `PRD-PRODUCT-003` | `智能体与世界模拟` | Agent 如何理解和行动、玩家如何观察和干预；定义 Agent/provider、目标与委托、记忆/学习、世界观测、模拟反馈，以及进入世界后的 Viewer、世界舞台和玩家交互体验。 |
-| **玩家接入与发行** | `player-entry-distribution` / `PRD-PRODUCT-004` | `玩家入口与发行` | 玩家如何了解、进入并持续使用受支持产品路径；定义发现、访问模式、账户/会话、安装升级、发行沟通、可选服务与世界外参与反馈，不拥有世界内成长或权力。 |
+| **世界规则与玩法系统** | `world-rules-core-gameplay` / `PRD-PRODUCT-001` | `世界规则与玩法系统` | 玩家在世界中能做什么、付出什么、获得什么；定义世界规则的产品约束、玩家目标、核心循环、成长、资源/工业/经济、组织/区域/冲突/治理等长期玩法。 |
+| **权威世界基础设施** | `world-infrastructure` / `PRD-PRODUCT-002` | `权威世界基础设施` | 世界如何保持唯一、确定、持久、可验证、可恢复；定义最终性、权威历史、状态可用性、确定性执行、版本兼容与恢复的产品保证，不拥有工业规则、经济语义、市场、区域或玩家循环；技术执行保证见 [`权威世界基础设施 PRD`](world-infrastructure/prd.md)。 |
+| **智能体、世界模拟与交互** | `agents-world-simulation` / `PRD-PRODUCT-003` | `智能体、世界模拟与交互` | Agent 如何理解和行动、玩家如何观察和干预；定义 Agent/provider、目标与委托、记忆/学习、世界观测、模拟反馈，以及进入世界后的 Viewer、世界舞台和玩家交互体验。 |
+| **玩家接入与发行** | `player-entry-distribution` / `PRD-PRODUCT-004` | `玩家接入与发行` | 玩家如何了解、进入并持续使用受支持产品路径；定义发现、访问模式、账户/会话、安装升级、发行沟通、可选服务与世界外参与反馈，不拥有世界内成长或权力。 |
 
 四域是不要求规模相等的职责域，不新增第五模块；`core`、`game`、`world-runtime`、`world-simulator`、`p2p`、`testing`、`engineering` 与 `site` 继续作为专业或治理域。产品语义可以跨域组合，但每一条规范性要求必须有一个主责条款；“主题出现在哪个模块”不等于“该模块拥有主题的全部语义”。
 
@@ -37,21 +37,21 @@
 
 ### P1/P2 迁移、兼容前置与非目标
 
-- **P0（本切片）**：冻结上表的四域标签、条款主责和迁移范围；保持四个 slug、四个 `Product PRD-ID`、现有 active 身份字段、根 SC/REQ/AC 与 checker 合同；不切换正式入口名称，不改 checker，不搬专题，不改 runtime、WASM、Agent、Viewer、玩法数值或公开 claim。
-- **C0（系统设计/代码）**：仅在单独批准的兼容任务中，让 checker 对每个稳定身份接受明确的旧名/新名映射；映射必须仍然只允许这四个 slug/ID，不能退化为任意名称或任意模块数。C0 完成前不修改上表的兼容期 active 标签。
-- **P1（产品）**：C0 通过后再按集成顺序更新入口、四根 PRD 的标题/职责声明、专题所属声明与错误依赖引用；只做分类、命名和引用收敛，不夹带玩法、经济平衡、实现或发行状态变化。
+- **P0（已完成）**：冻结四域标签、条款主责和迁移范围；保持四个 slug、四个 `Product PRD-ID`、根 SC/REQ/AC 与 checker 合同，不改变 runtime、WASM、Agent、Viewer、玩法数值或公开 claim。
+- **C0（已完成前置）**：checker 对每个稳定身份接受明确的旧名/新名映射；映射仍只允许这四个 slug/ID，不退化为任意名称或任意模块数。
+- **P1（本切片）**：按集成顺序更新入口、四根 PRD 的标题/职责声明、专题所属声明与错误依赖引用；只做分类、命名和引用收敛，不夹带玩法、经济平衡、实现或发行状态变化。
 - **P2（产品，按专题分片）**：按“源条款 → 目标条款/锚点 → 未接收语义 → 接收 owner → 删除条件”逐项迁移：`world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md` 与 `agents-world-simulation/agent-authority-ownership-and-accountability.prd.md` 的 Agent 资产/自治条款；`player-entry-distribution/free-entry-world-progression-and-recognition.prd.md` 的免费进入与世界成长条款；基础设施迁移债务中的三个 `superseded` 来源（`global-governance-organization-continuity-and-constitutional-guardrails.prd.md`、`governed-industry-market-and-emergency-supply.prd.md`、`regional-charter-tenure-and-public-funding.prd.md`）及一个 `retired` 来源（`world-continuity-governance-and-recovery.prd.md`）；Viewer/Launcher 边界及 `world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md` 的产品证据职责。保留现有 REQ/AC 可追溯性；源文件只有在语义完整接收、专业权威仍可达且活跃引用修复后才可删除。过程记录继续写入 GitHub task truth，不在仓库新增 migration ledger。
 - **兼容前置**：每个名称或迁移任务都必须先验证稳定 slug/ID、旧名/新名映射、根身份和 checker 规则；跨模块引用闭合、重复 authority 消除、源/目标与失败恢复语义完成对账后，才能进入下一阶段。`superseded` 不等于已迁移完成，也不等于可直接删除。
-- **本次改造非目标**：不新增第五模块，不改目录 slug 或 Product PRD-ID，不批量重构 crate/工程目录，不修改 checker/scripts，不改变世界规则实现、数值平衡、视觉交互、WASM/Agent/runtime 合同，不把文档归属或局部检查通过宣称为能力已实现、测试已通过或发布状态升级。
+- **本次改造非目标**：不新增第五模块，不改目录 slug 或 Product PRD-ID，不批量重构 crate/工程目录，不修改 checker 的生产验收规则；允许同步 fixture 测试以最终名称为默认，并保留旧名兼容覆盖。不改变世界规则实现、数值平衡、视觉交互、WASM/Agent/runtime 合同，不把文档归属或局部检查通过宣称为能力已实现、测试已通过或发布状态升级。
 
 ## 四大产品模块
 
 | 产品模块 | 唯一入口 | 产品职责 |
 | --- | --- | --- |
-| 世界规则与核心玩法 | [`doc/product/world-rules-core-gameplay/prd.md`](world-rules-core-gameplay/prd.md) | 定义玩家目标、核心循环、成长、资源压力与世界规则体验。 |
-| 大世界基础设施 | [`doc/product/world-infrastructure/prd.md`](world-infrastructure/prd.md) | 区块链/分布式系统与确定性世界运行时底座：最终性、权威状态、复制、存储、网络、恢复和版本化执行边界。 |
-| 智能体与世界模拟 | [`doc/product/agents-world-simulation/prd.md`](agents-world-simulation/prd.md) | 把场景、Agent/LLM 决策、世界状态与可交互模拟体验连接起来。 |
-| 玩家入口与发行 | [`doc/product/player-entry-distribution/prd.md`](player-entry-distribution/prd.md) | 统一玩家如何了解、进入、安装和验证当前有证据支持的技术预览及其公开边界。 |
+| 世界规则与玩法系统 | [`doc/product/world-rules-core-gameplay/prd.md`](world-rules-core-gameplay/prd.md) | 定义玩家目标、核心循环、成长、资源压力与世界规则体验。 |
+| 权威世界基础设施 | [`doc/product/world-infrastructure/prd.md`](world-infrastructure/prd.md) | 区块链/分布式系统与确定性世界运行时底座：最终性、权威状态、复制、存储、网络、恢复和版本化执行边界。 |
+| 智能体、世界模拟与交互 | [`doc/product/agents-world-simulation/prd.md`](agents-world-simulation/prd.md) | 把场景、Agent/LLM 决策、世界状态与可交互模拟体验连接起来。 |
+| 玩家接入与发行 | [`doc/product/player-entry-distribution/prd.md`](player-entry-distribution/prd.md) | 统一玩家如何了解、进入、安装和验证当前有证据支持的技术预览及其公开边界。 |
 
 每个产品模块以主 PRD 为权威入口，但不限于单个文件；可以按长期稳定的产品主题建立专题分册，形成“模块入口 → 主 PRD → 专题分册”的文档树。专题分册必须由模块入口可达并回链主 PRD，不得按日期或短期小功能拆成设计碎片。
 
@@ -84,9 +84,9 @@
 
 如果需要从产品承诺继续下钻到规则、实现契约或验证证据，按下表进入专业域权威：
 
-- 世界规则与核心玩法 → [`doc/game/prd.md`](../game/prd.md)
-- 大世界基础设施 → [`doc/p2p/prd.md`](../p2p/prd.md)、[`doc/world-runtime/prd.md`](../world-runtime/prd.md)、[`doc/testing/prd.md`](../testing/prd.md)
-- 智能体与世界模拟 → [`doc/world-simulator/prd.md`](../world-simulator/prd.md)
-- 玩家入口与发行 → [根 `README.md`](../../README.md)、[`doc/world-simulator/prd.md`](../world-simulator/prd.md)
+- 世界规则与玩法系统 → [`doc/game/prd.md`](../game/prd.md)
+- 权威世界基础设施 → [`doc/p2p/prd.md`](../p2p/prd.md)、[`doc/world-runtime/prd.md`](../world-runtime/prd.md)、[`doc/testing/prd.md`](../testing/prd.md)
+- 智能体、世界模拟与交互 → [`doc/world-simulator/prd.md`](../world-simulator/prd.md)
+- 玩家接入与发行 → [根 `README.md`](../../README.md)、[`doc/world-simulator/prd.md`](../world-simulator/prd.md)
 
 专业规则、实现合同、专业 PRD-ID 和测试机制由对应专业模块的 PRD 承载；技术 How 与工程实现由 design 承载；测试/运维由对应专业文档承载；任务、状态与过程证据只由 GitHub task issue evidence 承载。

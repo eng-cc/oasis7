@@ -1,8 +1,8 @@
-# 智能体与世界模拟 PRD
+# 智能体、世界模拟与交互 PRD
 
 ## 文档身份
 
-- 产品模块：智能体与世界模拟
+- 产品模块：智能体、世界模拟与交互
 - 产品模块 slug：`agents-world-simulation`
 - 产品层唯一 PRD：`doc/product/agents-world-simulation/prd.md`
 - 产品模块总入口：`doc/product/README.md`

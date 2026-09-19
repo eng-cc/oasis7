@@ -2,7 +2,7 @@
 
 ## 文档身份
 
-- 所属产品模块：大世界基础设施
+- 所属产品模块：权威世界基础设施
 - 上位产品 PRD：[prd.md](prd.md)
 - 生命周期：`superseded`
 - Owner role：`producer_system_designer`
@@ -11,14 +11,14 @@
 
 ## 迁移状态
 
-本页保留尚未完全吸收的工业扩展、结算资产、市场地理产品语义和验收，避免在迁移前丢失规则。它已不再是大世界基础设施的 active authority、路线图或验收入口：基础设施只提供最终性、权威状态、复制、存储、恢复和确定性执行边界。常态市场与紧急保供语义已迁入 [`常态市场与有界紧急保供`](../world-rules-core-gameplay/market-normal-state-and-emergency-supply.prd.md)；其余接收 authority 是 [`世界规则与核心玩法`](../world-rules-core-gameplay/prd.md)。owner 必须完成剩余语义回填和活跃引用修复后，才能删除本页。专业实现、数值、runtime/P2P 合同和当前公开 claim 仍由各自专业 authority 拥有。
+本页保留尚未完全吸收的工业扩展、结算资产、市场地理产品语义和验收，避免在迁移前丢失规则。它已不再是权威世界基础设施的 active authority、路线图或验收入口：基础设施只提供最终性、权威状态、复制、存储、恢复和确定性执行边界。常态市场与紧急保供语义已迁入 [`常态市场与有界紧急保供`](../world-rules-core-gameplay/market-normal-state-and-emergency-supply.prd.md)；其余接收 authority 是 [`世界规则与玩法系统`](../world-rules-core-gameplay/prd.md)。owner 必须完成剩余语义回填和活跃引用修复后，才能删除本页。专业实现、数值、runtime/P2P 合同和当前公开 claim 仍由各自专业 authority 拥有。
 
 
 本文定义基础工业规则与玩家/Agent 创造的受治理能力如何共同扩展世界，市场如何在全球发现和物理结算之间保持一致，以及常态价格和紧急保供的制度边界。它不定义配方、价格、税费、版税、汇率、订单簿、物流、escrow、危机阈值或任何 runtime/UI 实现。
 
 ## 生命周期闭合
 
-- 接收 authority：[常态市场与有界紧急保供](../world-rules-core-gameplay/market-normal-state-and-emergency-supply.prd.md#1-产品目标) 与 [世界规则与核心玩法](../world-rules-core-gameplay/prd.md#活跃产品专题)。
+- 接收 authority：[常态市场与有界紧急保供](../world-rules-core-gameplay/market-normal-state-and-emergency-supply.prd.md#1-产品目标) 与 [世界规则与玩法系统](../world-rules-core-gameplay/prd.md#活跃产品专题)。
 - 剩余语义：受治理工业提案、创作者许可/收益、市场发现与物理结算的产品边界及其验收仍需由接收专题或专业 authority 明确承接；常态/紧急保供已由接收专题拥有。
 - 稳定引用：本页保留原产品目标、验收和专业 authority 的历史定位，并以 [常态市场与有界紧急保供](../world-rules-core-gameplay/market-normal-state-and-emergency-supply.prd.md#1-产品目标) 作为当前下钻入口。
 - 删除条件：全部产品语义完成接收、专业实现/经济 authority 仍可达、活跃引用修复且无未决阻塞后，才可删除本页。
@@ -70,7 +70,7 @@
 
 ## 5.1 关键决策与未决迁移边界
 
-- 关键决策：工业、市场和紧急保供的玩家语义由世界规则与核心玩法模块接收；本页只保留迁移期间的产品语义记录，基础设施产品层继续负责最终性、权威状态、确定性执行和恢复边界。专业 runtime/P2P 合同仍由对应 authority 拥有，不在本页复制。
+- 关键决策：工业、市场和紧急保供的玩家语义由世界规则与玩法系统模块接收；本页只保留迁移期间的产品语义记录，基础设施产品层继续负责最终性、权威状态、确定性执行和恢复边界。专业 runtime/P2P 合同仍由对应 authority 拥有，不在本页复制。
 - 未决问题：接收 owner 仍需核对工业扩展、结算资产/OC 分离、跨区市场地理和危机保供的剩余条款、验收以及活跃引用是否全部回填；这些条款在接收完成前不得被表达为当前能力。
 - 决策 role 与触发条件：`producer_system_designer` 负责接收与删除决定，`gameplay_designer` 负责工业/市场规则，`runtime_engineer` 与 `blockchain_ops_engineer` 负责执行、分布式状态和证据边界；只有接收文档完成回填并修复引用后才可删除本页。
 - 临时排除范围：本页保持 `superseded` 和非权威状态，不新增配方、价格、支付、外部兑换、危机机制或发行 claim。

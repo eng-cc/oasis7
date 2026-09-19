@@ -22,7 +22,7 @@ Lifecycle: current controlled operator procedure; the date is its establishment 
 <a id="public-claim-boundary"></a>
 ## Public claim boundary
 
-本 runbook 是受控 restricted grant 的运营执行权威，不是公开发行公告，也不把一次成功执行变成普遍可用性或公开 entitlement。它必须遵守玩家入口与发行模块的 [`REQ-ENTRY-CLAIM-003`](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#req-entry-claim-003) 与 [`四层口径分离`](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#public-claim-four-layer-model)。
+本 runbook 是受控 restricted grant 的运营执行权威，不是公开发行公告，也不把一次成功执行变成普遍可用性或公开 entitlement。它必须遵守玩家接入与发行模块的 [`REQ-ENTRY-CLAIM-003`](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#req-entry-claim-003) 与 [`四层口径分离`](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#public-claim-four-layer-model)。
 
 - 当前事实（current fact）：本 runbook 只能记录某个具体窗口、账户、权限和 world-state 检查实际得到的结果；runbook 本身不证明已执行、已发布或所有玩家均可获得 grant。
 - 产品目标（product goal）：在受控窗口中让运营可以用正式 runtime 真值发放、检查、到期和撤销 restricted grant，并保持资金用途、权限、过期和回收可审计。

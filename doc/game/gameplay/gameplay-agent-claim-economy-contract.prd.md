@@ -9,7 +9,7 @@
 <a id="public-claim-boundary"></a>
 ## Public claim boundary
 
-本文件是 claim 经济规则的玩法专业权威，不是当前发行状态或公开可用性的证明。它消费玩家入口与发行模块的 [`REQ-ENTRY-CLAIM-003`](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#req-entry-claim-003) 与 [`四层口径分离`](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#public-claim-four-layer-model)。
+本文件是 claim 经济规则的玩法专业权威，不是当前发行状态或公开可用性的证明。它消费玩家接入与发行模块的 [`REQ-ENTRY-CLAIM-003`](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#req-entry-claim-003) 与 [`四层口径分离`](../../product/player-entry-distribution/release-communications-and-public-claims.prd.md#public-claim-four-layer-model)。
 
 - 当前事实（current fact）：本文件只能确认已写入并经专业审查的 claim 规则、约束和失败边界；它不能单独确认某个版本、模式、入口或受控 grant 当前已经部署、开放或可供公众使用。
 - 产品目标（product goal）：首个 claim 保持非零成本，受限 starter balance 只服务 `slot-1` 的窄用途，并保留 funding provenance、过期和回收边界。
