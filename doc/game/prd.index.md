@@ -1,6 +1,6 @@
 # game PRD 文件级索引
 
-区域玩法阅读顺序：先从 `doc/product/README.md` 选择“世界规则与玩法系统”，再读其 [`受治理的区域能力与扩展`](../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md) 产品专题；区域 charter、tenure 与公共融资下钻到 `PRD-GAME-017`，可编程区域设施再下钻到 `PRD-GAME-016` 的 `micro_depot` 专业合同。两份 game 专题分别拥有各自声明范围，不形成第五产品模块或并列产品入口。
+区域与工业玩法阅读顺序：先从 `doc/product/README.md` 选择“世界规则与玩法系统”，再读对应产品专题；区域 charter、tenure 与公共融资下钻到 `PRD-GAME-017`，可编程区域设施下钻到 `PRD-GAME-016`，工业创建、跨区市场与结算下钻到 `PRD-GAME-018`。这些 game 专题分别拥有各自声明范围，不形成第五产品模块或并列产品入口。
 审计轮次: 12
 
 更新时间：2026-07-06
@@ -49,6 +49,7 @@
 - `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md`：近期高频经济规则与 token 成本边界主入口。
 - `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md`：WASM-backed 可编程区域设施、micro_depot quote/receipt、upkeep 与区域专业化边界主入口。
 - `doc/game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md`：`PRD-GAME-017` 区域 charter 提案/审查、双资格、退化恢复、tenure 长期规划、服务费/公共 levy 玩家合同主入口；产品承诺仍由 `governed-regional-capabilities-and-extensions.prd.md` 拥有。
+- `doc/game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md`：`PRD-GAME-018` 工业提案/模拟/试点/治理准入、创作者许可/开放、OC/世界资格分离、跨区发现/物理交付/escrow 里程碑与争议恢复玩家合同主入口；当前消费 `GR-002/003`、工业需求/生产交付结算与常态市场专题，superseded 产品源只作 AC-1 至 AC-4 provenance，OC/世界资格产品依赖仍未决。
 - `doc/game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md`：restricted grant 发放、撤销、过期与 incident 处理 runbook。
 
 ## 默认阅读面边界
@@ -77,6 +78,7 @@
 | `doc/game/gameplay/gameplay-industrial-raw-material-qualification-substitution-contract.prd.md` | PRD-only；本专题只承载原材料适用性/替代的玩家投影、机会成本、恢复与验收，不新增实现结构 |
 | `doc/game/gameplay/gameplay-industrial-recipe-lifecycle-decision-contract.prd.md` | PRD-only；本专题只承载配方生命周期的玩家投影、旧工作处置与验收，不新增实现结构 |
 | `doc/game/gameplay/gameplay-industrial-representative-execution-walkthrough.prd.md` | PRD-only；本专题只承载代表性工业链的玩家顺序、取舍、恢复与验收，不新增实现结构 |
+| `doc/game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md` | PRD-only；本专题只承载工业创建、跨区市场与结算的玩家动作、机会成本、失败恢复与验收，不新增实现结构 |
 | `doc/game/gameplay/gameplay-industrial-starter-completion-contract.prd.md` | PRD-only；本专题只承载首产物完成边界、失败恢复与下一步动力，不新增实现结构 |
 | `doc/game/gameplay/gameplay-mature-world-progression-contract.prd.md` | PRD-only；本专题不新增接口、状态机、回滚或实现算法，后续引入实现结构时再补同名 design |
 | `doc/game/gameplay/gameplay-top-level-design.prd.md` | `doc/game/gameplay/gameplay-top-level-design.design.md` |

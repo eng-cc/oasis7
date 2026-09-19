@@ -8,6 +8,7 @@
 - 想确认间接控制为什么仍然应该让玩家感觉自己在控制：先读 `gameplay-indirect-control-agency-contract.prd.md`
 - 想确认成熟世界里小玩家/新玩家靠什么继续形成独立价值：先读 `../../product/world-rules-core-gameplay/mature-world-progression.prd.md`，再读 `gameplay-mature-world-progression-contract.prd.md` 的专业合同
 - 想确认区域 charter、tenure 与公共融资如何形成玩家可读、可恢复且不封锁独立路线的制度循环：先读 `../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md`，再读 `gameplay-regional-charter-tenure-funding-contract.prd.md`
+- 想确认工业能力如何从可审计提案走到确定性模拟、受限试点、治理准入与有期限开放，以及跨区市场如何从新鲜情报走到物理交付、escrow 里程碑和争议恢复：先读 `GR-002/003` 的 [`受治理的区域能力与扩展`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-002)、[`工业需求目标与生产交付结算`](../../product/world-rules-core-gameplay/industrial-demand-goals-and-settlement.prd.md) 与 [`常态市场与有界紧急保供`](../../product/world-rules-core-gameplay/market-normal-state-and-emergency-supply.prd.md)，再读 `gameplay-industrial-creation-and-cross-region-market-contract.prd.md`；superseded 工业/市场源只作迁移 provenance，OC/世界资格产品依赖仍未决
 - 想确认下游容量不足时如何暂停/降载上游、持有输出并恢复未决流水线：读 `gameplay-industrial-backpressure-recovery-contract.prd.md`
 - 想确认需求满足、取消、到期、未知或缩减后如何处置既有工业工作：读 `gameplay-industrial-demand-change-disposition-contract.prd.md`
 - 想确认工厂维护真值、计划停机、带风险运行与既有工作的恢复边界：读 `gameplay-industrial-maintenance-planned-downtime-contract.prd.md`
@@ -26,6 +27,7 @@
 - `gameplay-top-level-design.prd.md` 只拥有核心玩法骨架与 `PRD-GAME-012` early-retention 的详细合同；它不替代 `../prd.md` 的活跃路由/状态职责，也不覆盖其他 topic 或 `doc/product/` 的声明范围。
 - `gameplay-mature-world-progression-contract.prd.md` 拥有 `PRD-GAME-015` 的 lane、恢复、专业化、checkpoint 与 anti-grind 详细合同，并在 [generic mature-world recognition/opportunity leaf](./gameplay-mature-world-progression-contract.prd.md#prd-game-015-recognition-opportunity) 中承接 `REQ-WR-MW-004` / `MW-11` 的专业玩法语义；不新增 PRD-ID 或 authority，产品承诺仍由 mature-world 产品分册拥有。
 - `gameplay-regional-charter-tenure-funding-contract.prd.md` 拥有 `PRD-GAME-017` 的区域 charter 提案/审查、双资格、退化恢复、tenure 长期规划、服务费/公共 levy 玩家动作与验收；产品 `GR-004` 至 `GR-008` 仍由 `governed-regional-capabilities-and-extensions.prd.md` 拥有，runtime/P2P/QA 保留各自执行与验证 authority。
+- `gameplay-industrial-creation-and-cross-region-market-contract.prd.md` 拥有 `PRD-GAME-018` 的工业创建、许可/开放、OC/世界资格分离、跨区发现/物理交付/escrow 里程碑与争议恢复玩家合同；当前消费 `GR-002/003`、工业需求/生产交付结算与常态市场专题，superseded 工业/市场源只作 AC-1 至 AC-4 provenance，OC/世界资格产品依赖仍未决，常态/危机保供不在本合同重新定义。
 - GitHub Project task status 与 issue evidence comments 是 retention、preview、经济规则和放行门禁的执行状态入口。
 - `../prd.index.md` 是完整文件级索引，适合已知主题后按文件名查找。
 
