@@ -18,6 +18,11 @@ const DEFAULT_MAX_DEAD_LETTER_RECORDS_PER_STREAM: usize = 10_000;
 const DEFAULT_MAX_DELIVERY_METRICS_PER_STREAM: usize = 10_000;
 const DEAD_LETTER_ARCHIVE_COLD_SEGMENT_MAX_LINES: usize = 256;
 
+type DeadLetterRecords =
+    Arc<Mutex<BTreeMap<(String, String), Vec<MembershipRevocationAlertDeadLetterRecord>>>>;
+type DeliveryMetricsRecords =
+    Arc<Mutex<BTreeMap<(String, String), Vec<(i64, MembershipRevocationAlertDeliveryMetrics)>>>>;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MembershipRevocationDeadLetterRetention {
     pub max_dead_letter_records_per_stream: usize,
@@ -129,10 +134,8 @@ impl MembershipRevocationAlertDeadLetterStore for NoopMembershipRevocationAlertD
 
 #[derive(Debug, Clone)]
 pub struct InMemoryMembershipRevocationAlertDeadLetterStore {
-    records: Arc<Mutex<BTreeMap<(String, String), Vec<MembershipRevocationAlertDeadLetterRecord>>>>,
-    delivery_metrics: Arc<
-        Mutex<BTreeMap<(String, String), Vec<(i64, MembershipRevocationAlertDeliveryMetrics)>>>,
-    >,
+    records: DeadLetterRecords,
+    delivery_metrics: DeliveryMetricsRecords,
     retention: MembershipRevocationDeadLetterRetention,
 }
 
@@ -384,10 +387,10 @@ impl FileMembershipRevocationAlertDeadLetterStore {
 impl MembershipRevocationAlertDeadLetterStore for FileMembershipRevocationAlertDeadLetterStore {
     fn append(&self, record: &MembershipRevocationAlertDeadLetterRecord) -> Result<(), WorldError> {
         let path = self.dead_letter_path(&record.world_id, &record.node_id)?;
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent)?;
         }
 
         let line = serde_json::to_string(record)?;
@@ -429,10 +432,10 @@ impl MembershipRevocationAlertDeadLetterStore for FileMembershipRevocationAlertD
             return Ok(());
         }
 
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent)?;
         }
 
         let mut payload = Vec::new();
@@ -459,10 +462,10 @@ impl MembershipRevocationAlertDeadLetterStore for FileMembershipRevocationAlertD
         metrics: &MembershipRevocationAlertDeliveryMetrics,
     ) -> Result<(), WorldError> {
         let path = self.delivery_metrics_path(world_id, node_id)?;
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent)?;
         }
 
         let line = serde_json::to_string(&FileMembershipRevocationAlertDeliveryMetricsLine {

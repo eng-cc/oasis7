@@ -59,14 +59,14 @@ impl LeaseManager {
             };
         }
 
-        if let Some(lease) = &self.lease {
-            if lease.expires_at_ms > now_ms {
-                return LeaseDecision {
-                    granted: false,
-                    lease: self.lease.clone(),
-                    reason: Some("lease already held".to_string()),
-                };
-            }
+        if let Some(lease) = &self.lease
+            && lease.expires_at_ms > now_ms
+        {
+            return LeaseDecision {
+                granted: false,
+                lease: self.lease.clone(),
+                reason: Some("lease already held".to_string()),
+            };
         }
 
         let term = self.next_term;
@@ -157,20 +157,20 @@ impl LeaseManager {
     }
 
     pub fn release(&mut self, lease_id: &str) -> bool {
-        if let Some(lease) = &self.lease {
-            if lease.lease_id == lease_id {
-                self.lease = None;
-                return true;
-            }
+        if let Some(lease) = &self.lease
+            && lease.lease_id == lease_id
+        {
+            self.lease = None;
+            return true;
         }
         false
     }
 
     pub fn expire_if_needed(&mut self, now_ms: i64) -> Option<LeaseState> {
-        if let Some(lease) = &self.lease {
-            if lease.expires_at_ms <= now_ms {
-                return self.lease.take();
-            }
+        if let Some(lease) = &self.lease
+            && lease.expires_at_ms <= now_ms
+        {
+            return self.lease.take();
         }
         None
     }

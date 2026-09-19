@@ -188,21 +188,19 @@ pub(super) fn validate_key_revocation(
         });
     }
 
-    if !policy.revoked_signature_key_ids.is_empty() {
-        if let Some(signature_key_id) = announce.signature_key_id.as_deref() {
-            if policy
-                .revoked_signature_key_ids
-                .iter()
-                .any(|key_id| key_id == signature_key_id)
-            {
-                return Err(WorldError::DistributedValidationFailed {
-                    reason: format!(
-                        "membership revocation signature_key_id {} is revoked",
-                        signature_key_id
-                    ),
-                });
-            }
-        }
+    if !policy.revoked_signature_key_ids.is_empty()
+        && let Some(signature_key_id) = announce.signature_key_id.as_deref()
+        && policy
+            .revoked_signature_key_ids
+            .iter()
+            .any(|key_id| key_id == signature_key_id)
+    {
+        return Err(WorldError::DistributedValidationFailed {
+            reason: format!(
+                "membership revocation signature_key_id {} is revoked",
+                signature_key_id
+            ),
+        });
     }
 
     if !policy.accepted_signature_key_ids.is_empty() {
@@ -346,21 +344,19 @@ pub(super) fn validate_membership_snapshot(
         });
     }
 
-    if !policy.revoked_signature_key_ids.is_empty() {
-        if let Some(signature_key_id) = snapshot.signature_key_id.as_deref() {
-            if policy
-                .revoked_signature_key_ids
-                .iter()
-                .any(|key_id| key_id == signature_key_id)
-            {
-                return Err(WorldError::DistributedValidationFailed {
-                    reason: format!(
-                        "membership snapshot signature_key_id {} is revoked",
-                        signature_key_id
-                    ),
-                });
-            }
-        }
+    if !policy.revoked_signature_key_ids.is_empty()
+        && let Some(signature_key_id) = snapshot.signature_key_id.as_deref()
+        && policy
+            .revoked_signature_key_ids
+            .iter()
+            .any(|key_id| key_id == signature_key_id)
+    {
+        return Err(WorldError::DistributedValidationFailed {
+            reason: format!(
+                "membership snapshot signature_key_id {} is revoked",
+                signature_key_id
+            ),
+        });
     }
 
     if !policy.accepted_signature_key_ids.is_empty() {

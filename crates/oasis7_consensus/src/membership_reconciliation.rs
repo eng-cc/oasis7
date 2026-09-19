@@ -347,10 +347,10 @@ impl MembershipRevocationScheduleStateStore for FileMembershipRevocationSchedule
         state: &MembershipRevocationReconcileScheduleState,
     ) -> Result<(), WorldError> {
         let path = self.state_path(world_id, node_id)?;
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent)?;
         }
 
         let bytes = serde_json::to_vec(state)?;
@@ -637,6 +637,10 @@ impl MembershipSyncClient {
         Ok(alerts.len())
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "State-machine entrypoint keeps explicit schedule, keyring, policy, and persistence seams"
+    )]
     pub fn run_revocation_reconcile_schedule(
         &self,
         world_id: &str,

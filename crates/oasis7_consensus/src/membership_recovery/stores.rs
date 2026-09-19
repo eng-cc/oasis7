@@ -116,10 +116,10 @@ impl MembershipRevocationCoordinatorStateStore for FileMembershipRevocationCoord
         state: &MembershipRevocationCoordinatorLeaseState,
     ) -> Result<(), WorldError> {
         let path = self.lease_path(world_id)?;
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent)?;
         }
         let bytes = serde_json::to_vec(state)?;
         fs::write(path, bytes)?;
@@ -150,9 +150,12 @@ pub trait MembershipRevocationAlertRecoveryStore {
     ) -> Result<(), WorldError>;
 }
 
+type PendingAlertRecords =
+    Arc<Mutex<BTreeMap<(String, String), Vec<MembershipRevocationPendingAlert>>>>;
+
 #[derive(Debug, Clone, Default)]
 pub struct InMemoryMembershipRevocationAlertRecoveryStore {
-    pending: Arc<Mutex<BTreeMap<(String, String), Vec<MembershipRevocationPendingAlert>>>>,
+    pending: PendingAlertRecords,
 }
 
 impl InMemoryMembershipRevocationAlertRecoveryStore {
@@ -245,10 +248,10 @@ impl MembershipRevocationAlertRecoveryStore for FileMembershipRevocationAlertRec
             return Ok(());
         }
 
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent)?;
         }
 
         let bytes = serde_json::to_vec(alerts)?;
