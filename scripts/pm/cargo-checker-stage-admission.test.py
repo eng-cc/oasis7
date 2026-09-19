@@ -61,7 +61,7 @@ def _comment(stage, commit, tree, blob, data, task_uid, pr, comment, fragment):
             "Post-merge approved_normative_source readback "
             "(stage=normative_source; immutable, not candidate authority): "
             f"repository={REPOSITORY}; default_branch=main; task_uid={task_uid}; "
-            f"PR={pr}; trusted_predecessor/source_scope_base={CHECKER_SCOPE}; "
+            f"PR={pr}; trusted_predecessor/source_scope_base={CHECKER_BASE}; "
             f"source_head={'7' * 40}; "
             "predecessor authority path=doc/engineering/workflow/source-of-truth.md; "
             f"predecessor file sha256={'9' * 64}. GitHub live PR readback reports "
@@ -131,10 +131,38 @@ def _authority_api():
                "repo": {"full_name": REPOSITORY}},},
     }
     def api(path):
+        if path.endswith(f"issues/{MODULE.CHECKER_ISSUE}"):
+            return {
+                "number": MODULE.CHECKER_ISSUE,
+                "state": "open",
+                "repository_url": f"https://api.github.com/repos/{REPOSITORY}",
+                "body": (
+                    "<!-- oasis7-pm-task -->\n"
+                    f"task_uid: {TASK_UID}\n"
+                    "- pr_url: `https://github.com/eng-cc/oasis7/pull/3827`\n"
+                    "- pr_number: `3827`\n"
+                ),
+            }
         if path.endswith(f"issues/comments/{MODULE.NORMATIVE_COMMENT}"):
             return {"body": bodies[MODULE.NORMATIVE_COMMENT]}
         if path.endswith(f"issues/comments/{MODULE.PLANNER_COMMENT}"):
             return {"body": bodies[MODULE.PLANNER_COMMENT]}
+        if "/compare/" in path:
+            return {"merge_base_commit": {"sha": CHECKER_SCOPE}}
+        if "/actions/runs/" in path:
+            return {
+                "id": 35463292968,
+                "status": "completed",
+                "conclusion": "success",
+                "event": "workflow_dispatch",
+                "head_branch": "main",
+                "head_sha": CHECKER_BASE,
+                "display_title": (
+                    "oasis7-ci|workflow_dispatch|integration_revalidation|"
+                    "task_e21604f5cdb3476c8e146332a68a05b4|3821|"
+                    + CHECKER_BASE + "|" + "8" * 40
+                ),
+            }
         if "/commits/" in path:
             return commits[path.rsplit("/", 1)[1]]
         if "/contents/" in path:
@@ -218,11 +246,52 @@ class CheckerStageAdmissionTest(unittest.TestCase):
                     CHECKER_SCOPE, TESTED_TREE, Path("."),
                 )
 
+    def test_stage_classifier_keeps_ordinary_prs_conservative_and_blocks_suspicious_checker(self):
+        self.assertFalse(MODULE.classify_checker_stage(9999, None))
+        self.assertTrue(MODULE.classify_checker_stage(3827, TASK_UID))
+        with self.assertRaisesRegex(MODULE.AdmissionError, "trusted task"):
+            MODULE.classify_checker_stage(3827, "task_00000000000000000000000000000000")
+
+    def test_checker_task_binding_rejects_issue_uid_or_reciprocal_pr_drift(self):
+        api = _authority_api()
+        original = api
+
+        def wrong_issue(path):
+            response = original(path)
+            if path.endswith(f"issues/{MODULE.CHECKER_ISSUE}"):
+                response = dict(response)
+                response["body"] = response["body"].replace(TASK_UID, "task_00000000000000000000000000000000")
+            return response
+
+        with patch.object(MODULE, "gh_api", side_effect=wrong_issue):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "Issue UID"):
+                MODULE.verify_checker_pr(
+                    REPOSITORY, 3827, TASK_UID, CHECKER_BASE, CHECKER_HEAD,
+                    CHECKER_SCOPE, TESTED_TREE, Path("."),
+                )
+
+        api = _authority_api()
+        original = api
+
+        def missing_reciprocal(path):
+            response = original(path)
+            if path.endswith(f"issues/{MODULE.CHECKER_ISSUE}"):
+                response = dict(response)
+                response["body"] = f"task_uid: {TASK_UID}\n"
+            return response
+
+        with patch.object(MODULE, "gh_api", side_effect=missing_reciprocal):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "reciprocal PR"):
+                MODULE.verify_checker_pr(
+                    REPOSITORY, 3827, TASK_UID, CHECKER_BASE, CHECKER_HEAD,
+                    CHECKER_SCOPE, TESTED_TREE, Path("."),
+                )
+
     def test_checker_identity_rejects_wrong_current_task_uid_even_when_body_is_live(self):
         api = _authority_api()
         with patch.object(MODULE, "gh_api", side_effect=api), \
              patch.object(MODULE, "_git", side_effect=[CHECKER_SCOPE, TESTED_TREE]):
-            with self.assertRaisesRegex(MODULE.AdmissionError, "task identity"):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "task.*(?:identity|UID)"):
                 MODULE.verify_checker_pr(
                     REPOSITORY, 3827, "task_00000000000000000000000000000000",
                     CHECKER_BASE, CHECKER_HEAD,
@@ -260,6 +329,58 @@ class CheckerStageAdmissionTest(unittest.TestCase):
             return response
         with patch.object(MODULE, "gh_api", side_effect=wrong_head):
             with self.assertRaisesRegex(MODULE.AdmissionError, "source head"):
+                MODULE.verify_authority_chain(REPOSITORY)
+
+        for field, replacement in (
+            ("trusted_integration_base", "6" * 40),
+            ("source_scope_base", "7" * 40),
+        ):
+            api = _authority_api()
+            original = api
+
+            def wrong_base(path, field=field, replacement=replacement):
+                response = original(path)
+                if path.endswith(f"issues/comments/{MODULE.PLANNER_COMMENT}"):
+                    response = dict(response)
+                    response["body"] = response["body"].replace(
+                        f"{field}={CHECKER_BASE if field == 'trusted_integration_base' else CHECKER_SCOPE}",
+                        f"{field}={replacement}",
+                    )
+                return response
+
+            with self.subTest(field=field), patch.object(MODULE, "gh_api", side_effect=wrong_base):
+                with self.assertRaisesRegex(MODULE.AdmissionError, "base|merge-base"):
+                    MODULE.verify_authority_chain(REPOSITORY)
+
+        api = _authority_api()
+        original = api
+
+        def wrong_normative_base(path):
+            response = original(path)
+            if path.endswith(f"issues/comments/{MODULE.NORMATIVE_COMMENT}"):
+                response = dict(response)
+                response["body"] = response["body"].replace(
+                    f"trusted_predecessor/source_scope_base={CHECKER_BASE}",
+                    "trusted_predecessor/source_scope_base=" + "6" * 40,
+                )
+            return response
+
+        with patch.object(MODULE, "gh_api", side_effect=wrong_normative_base):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "base"):
+                MODULE.verify_authority_chain(REPOSITORY)
+
+        api = _authority_api()
+        original = api
+
+        def wrong_integration_run(path):
+            response = original(path)
+            if "/actions/runs/" in path:
+                response = dict(response)
+                response["head_sha"] = "8" * 40
+            return response
+
+        with patch.object(MODULE, "gh_api", side_effect=wrong_integration_run):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "integration run base"):
                 MODULE.verify_authority_chain(REPOSITORY)
 
     def test_authority_chain_rejects_missing_planner_verification_evidence(self):
@@ -314,7 +435,8 @@ class CheckerStageAdmissionTest(unittest.TestCase):
             "schema": MODULE.SCHEMA, "phase": "preflight", "repository": REPOSITORY,
             "task_uid": TASK_UID, "pr_number": 3827, "base_oid": CHECKER_BASE,
             "head_oid": CHECKER_HEAD, "scope_base_oid": CHECKER_SCOPE,
-            "tested_tree": TESTED_TREE, "checker_command_digest": "sha256:" + "a" * 64,
+            "tested_tree": TESTED_TREE, "checker_command": ["python3", "checker"],
+            "checker_command_digest": MODULE.command_digest(["python3", "checker"]),
             "run_id": "99", "run_attempt": "1", "runner": {"run_id": "99", "run_attempt": "1"},
         }
         digest = MODULE.preflight_digest(preflight)
@@ -366,7 +488,8 @@ class CheckerStageAdmissionTest(unittest.TestCase):
             "schema": MODULE.SCHEMA, "phase": "preflight", "repository": REPOSITORY,
             "task_uid": TASK_UID, "pr_number": 3827, "base_oid": CHECKER_BASE,
             "head_oid": CHECKER_HEAD, "scope_base_oid": CHECKER_SCOPE,
-            "tested_tree": TESTED_TREE, "checker_command_digest": "sha256:" + "a" * 64,
+            "tested_tree": TESTED_TREE, "checker_command": ["python3", "checker"],
+            "checker_command_digest": MODULE.command_digest(["python3", "checker"]),
             "runner": {"run_id": "99", "run_attempt": "1"},
         }
         receipt = MODULE.build_postrun_receipt(
@@ -375,9 +498,11 @@ class CheckerStageAdmissionTest(unittest.TestCase):
              "planner": {"merged_commit": PLANNER_COMMIT}},
             {"path": MODULE.PLANNER_PATH, "source_head": "8" * 40,
              "merged_commit": PLANNER_COMMIT, "bytes_sha256": "sha256:" + "b" * 64},
-            {"check_name": "required-gate", "check_app_id": 15368, "check_run_id": 123},
+            {"check_name": "required-gate", "check_app_id": 15368, "check_run_id": 123,
+             "check_head": CHECKER_HEAD, "workflow_run_id": "99"},
             status="passed", exit_code=0,
         )
+        self.assertEqual("provisional", receipt["activation"])
         for field in ("normative_authority", "planner_authority", "executing_planner", "check", "result"):
             self.assertIn(field, receipt)
         self.assertEqual("passed", receipt["result"]["status"])

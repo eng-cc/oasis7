@@ -32,6 +32,9 @@ PLANNER_COMMENT = 5744986195
 PLANNER_PR = 3821
 PLANNER_ISSUE = 3818
 PLANNER_TASK_UID = "task_e21604f5cdb3476c8e146332a68a05b4"
+CHECKER_PR = 3827
+CHECKER_ISSUE = 3827
+CHECKER_TASK_UID = "task_be264ac2833044969d3c2c50b2b83cea"
 NORMATIVE_PATH = "doc/engineering/workflow/source-of-truth.md"
 PLANNER_PATH = "scripts/pm/cargo_package_profile_planner.py"
 CHECKER_SCOPE = (
@@ -197,6 +200,37 @@ def _validate_planner_verification(parsed: dict[str, Any]) -> None:
         raise AdmissionError("planner integration verification base mismatch")
     if match.group(2) != parsed.get("merged_tree"):
         raise AdmissionError("planner integration verification tested-tree mismatch")
+    run_match = re.search(
+        r"trusted exact integration run (\d+) at base [0-9a-f]{8,40} PASS",
+        evidence,
+    )
+    if run_match is None:
+        raise AdmissionError("planner integration verification run identity is missing")
+    parsed["trusted_integration_run_id"] = int(run_match.group(1))
+
+
+def _verify_live_integration_run(repository: str, parsed: dict[str, Any]) -> None:
+    run_id = parsed.get("trusted_integration_run_id")
+    if not isinstance(run_id, int) or run_id <= 0:
+        raise AdmissionError("planner integration run identity is invalid")
+    run = gh_api(f"repos/{repository}/actions/runs/{run_id}")
+    if not isinstance(run, dict) or run.get("id") != run_id:
+        raise AdmissionError("planner integration run readback is unavailable")
+    if run.get("status") != "completed" or run.get("conclusion") != "success":
+        raise AdmissionError("planner integration run is not a successful completed run")
+    if run.get("event") != "workflow_dispatch" or run.get("head_branch") != DEFAULT_BRANCH:
+        raise AdmissionError("planner integration run provenance is not trusted")
+    if run.get("head_sha") != parsed.get("trusted_integration_base"):
+        raise AdmissionError("planner integration run base identity mismatch")
+    title = str(run.get("display_title") or "")
+    for token in (
+        parsed.get("task_uid"),
+        str(parsed.get("pr_number")),
+        str(parsed.get("trusted_integration_base")),
+        str(parsed.get("source_head")),
+    ):
+        if not token or token not in title:
+            raise AdmissionError("planner integration run task/PR/head binding is incomplete")
 
 
 def _decode_contents(response: dict[str, Any], field: str) -> bytes:
@@ -247,6 +281,7 @@ def _verify_server_readback(
         if parsed.get("task_uid") != PLANNER_TASK_UID or parsed.get("issue_number") != PLANNER_ISSUE:
             raise AdmissionError("planner authority task/issue identity mismatch")
         _validate_planner_verification(parsed)
+        _verify_live_integration_run(repository, parsed)
     if parsed["repository"] != repository or parsed["default_branch"] != DEFAULT_BRANCH:
         raise AdmissionError("authority repository/default branch mismatch")
     expected_stage = "normative_source" if stage == "normative_source" else "approved_planner_authority"
@@ -267,6 +302,23 @@ def _verify_server_readback(
         raise AdmissionError("authority PR head repository mismatch")
     if head.get("sha") != parsed.get("source_head"):
         raise AdmissionError("authority PR head/source head identity mismatch")
+    live_base = base.get("sha")
+    if not isinstance(live_base, str) or OID_RE.fullmatch(live_base) is None:
+        raise AdmissionError("authority PR base SHA is unavailable")
+    expected_base = (
+        parsed.get("source_scope_base")
+        if stage == "normative_source"
+        else parsed.get("trusted_integration_base")
+    )
+    if expected_base != live_base:
+        raise AdmissionError("authority receipt base identity mismatch")
+    if stage == "planner_authority":
+        comparison = gh_api(
+            f"repos/{repository}/compare/{live_base}...{parsed['source_head']}"
+        )
+        merge_base = ((comparison.get("merge_base_commit") or {}).get("sha")) if isinstance(comparison, dict) else None
+        if merge_base != parsed.get("source_scope_base"):
+            raise AdmissionError("planner source scope is not the live PR merge-base")
     commit = gh_api(f"repos/{repository}/commits/{parsed['merged_commit']}")
     if not isinstance(commit, dict):
         raise AdmissionError("authority commit readback is malformed")
@@ -398,6 +450,8 @@ def verify_checker_pr(
 ) -> dict[str, Any]:
     if repository != REPOSITORY:
         raise AdmissionError("checker PR repository is not canonical")
+    if pr_number != CHECKER_PR:
+        raise AdmissionError("checker stage PR identity is not the trusted checker PR")
     _require_oid(base_oid, "checker PR base")
     _require_oid(head_oid, "checker PR head")
     _require_oid(scope_base_oid, "checker scope base")
@@ -415,6 +469,7 @@ def verify_checker_pr(
         raise AdmissionError("checker PR base repository mismatch")
     if (head.get("repo") or {}).get("full_name") != repository:
         raise AdmissionError("checker PR head repository mismatch")
+    verify_checker_task_binding(repository, pr_number, task_uid, head_oid, pull)
     body = pull.get("body") or ""
     matches = re.findall(r"^Task: (task_[0-9a-f]{32})$", body, re.MULTILINE)
     if not isinstance(task_uid, str) or not task_uid.startswith("task_") or len(matches) != 1 or matches[0] != task_uid:
@@ -438,6 +493,59 @@ def verify_checker_pr(
         "tested_tree": tested_tree,
         "changed_paths": changed,
     }
+
+
+def classify_checker_stage(pr_number: int, task_uid: str | None) -> bool:
+    """Return whether the exact trusted checker-stage route is selected.
+
+    Ordinary PRs must retain the conservative path.  Once the reserved checker
+    PR number is selected, any missing or foreign task identity is suspicious
+    and blocks rather than silently downgrading to an unbound stage run.
+    """
+    if pr_number != CHECKER_PR:
+        return False
+    if task_uid != CHECKER_TASK_UID:
+        raise AdmissionError("checker stage task identity is not the trusted task")
+    return True
+
+
+def verify_checker_task_binding(
+    repository: str,
+    pr_number: int,
+    task_uid: str | None,
+    head_oid: str,
+    pull: dict[str, Any],
+) -> None:
+    """Bind the candidate to canonical Issue #3827 and its reciprocal PR."""
+    if repository != REPOSITORY or pr_number != CHECKER_PR:
+        raise AdmissionError("checker task repository/PR identity mismatch")
+    if task_uid != CHECKER_TASK_UID:
+        raise AdmissionError("checker task UID is not the trusted Issue UID")
+    issue = gh_api(f"repos/{repository}/issues/{CHECKER_ISSUE}")
+    if (
+        not isinstance(issue, dict)
+        or issue.get("number") != CHECKER_ISSUE
+        or issue.get("state") != "open"
+        or issue.get("repository_url") != f"https://api.github.com/repos/{repository}"
+    ):
+        raise AdmissionError("checker task Issue readback is unavailable")
+    body = issue.get("body")
+    if not isinstance(body, str):
+        raise AdmissionError("checker task Issue body is unavailable")
+    uids = re.findall(r"(?m)^task_uid:\s*(task_[0-9a-f]{32})\s*$", body)
+    if uids != [CHECKER_TASK_UID]:
+        raise AdmissionError("checker task Issue UID binding mismatch")
+    reciprocal = re.findall(
+        rf"https://github\.com/{re.escape(repository)}/pull/{CHECKER_PR}\b", body
+    )
+    reciprocal += re.findall(rf"(?m)^-?\s*pr_number:\s*`?{CHECKER_PR}`?\s*$", body)
+    if not reciprocal:
+        raise AdmissionError("checker task reciprocal PR binding is unavailable")
+    if pull.get("number") != CHECKER_PR:
+        raise AdmissionError("checker PR number readback mismatch")
+    live_head = ((pull.get("head") or {}).get("sha"))
+    if live_head != head_oid:
+        raise AdmissionError("checker task reciprocal PR head mismatch")
 
 
 def _serializable_authority(authority: dict[str, Any]) -> dict[str, Any]:
@@ -464,6 +572,8 @@ def build_preflight(
 ) -> dict[str, Any]:
     if not isinstance(task_uid, str) or not task_uid.startswith("task_"):
         raise AdmissionError("current checker task UID is required")
+    if not classify_checker_stage(pr_number, task_uid):
+        raise AdmissionError("checker stage route is not the trusted exact-stage PR")
     authorities = verify_authority_chain(repository)
     planner = verify_executing_planner(planner_path, authorities["planner"], repo_root)
     tested_tree = _git(repo_root, "merge-tree", "--write-tree", base_oid, head_oid)
@@ -578,6 +688,7 @@ def build_postrun_receipt(
     )
     receipt.update(
         {
+            "activation": "provisional",
             "normative_authority": _serializable_authority(authorities["normative"]),
             "planner_authority": _serializable_authority(authorities["planner"]),
             "executing_planner": executing_planner,
@@ -603,6 +714,8 @@ def verify_durable_postrun_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
     """Validate the durable artifact before a workflow uploads it."""
     if receipt.get("schema") != SCHEMA or receipt.get("phase") != "post_run":
         raise AdmissionError("durable post-run receipt schema/phase is invalid")
+    if receipt.get("activation") != "provisional":
+        raise AdmissionError("durable post-run receipt is not marked provisional")
     if receipt.get("receipt_digest") != durable_receipt_digest(receipt):
         raise AdmissionError("durable post-run receipt digest mismatch")
     for field in ("normative_authority", "planner_authority", "executing_planner", "check", "result"):
@@ -614,6 +727,16 @@ def verify_durable_postrun_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
     check = receipt["check"]
     if not isinstance(check.get("check_app_id"), int) or not isinstance(check.get("check_run_id"), int):
         raise AdmissionError("durable post-run check identity is incomplete")
+    _require_oid(check.get("check_head"), "durable check head")
+    if str(check.get("workflow_run_id")) != str((receipt.get("runner") or {}).get("run_id")):
+        raise AdmissionError("durable post-run workflow run identity mismatch")
+    if not isinstance(result.get("command"), list) or command_digest(result["command"]) != result.get("command_digest"):
+        raise AdmissionError("durable post-run command argv/digest is invalid")
+    if result.get("command_digest") != receipt.get("checker_command_digest"):
+        raise AdmissionError("durable post-run command identity mismatch")
+    for field in ("base_oid", "head_oid", "scope_base_oid", "tested_tree"):
+        if result.get(field) != receipt.get(field):
+            raise AdmissionError(f"durable post-run result {field} mismatch")
     planner = receipt["executing_planner"]
     _require_oid(planner.get("merged_commit"), "durable planner merged commit")
     _require_oid(planner.get("source_head"), "durable planner source head")

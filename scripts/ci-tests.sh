@@ -490,6 +490,14 @@ run_cargo_package_scope_check() {
     echo "skip: Cargo package scope audit reason=trusted_base_policy_unavailable claim_boundary=contract_suite_only"
     return 0
   fi
+  if [[ -n "$stage_pr_number" && -z "$stage_adapter" ]]; then
+    echo "error: checker-stage PR requested without trusted stage adapter" >&2
+    return 1
+  fi
+  if [[ -n "${OASIS7_CARGO_STAGE_TASK_UID:-}" && -z "$stage_pr_number" ]]; then
+    echo "error: checker-stage task identity provided without checker-stage PR" >&2
+    return 1
+  fi
   if [[ -n "$stage_adapter" && -n "$stage_pr_number" ]]; then
     [[ -f "$stage_adapter" && -f "$stage_planner" && -n "$stage_pr_number" && \
       -n "${OASIS7_CARGO_STAGE_TASK_UID:-}" && -n "$integration_base" && -n "$stage_receipt" ]] || {
