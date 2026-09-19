@@ -47,19 +47,19 @@
 
 ### 2.3 有界认可、独立基线与区域互赖
 
-- 世界内成长、独立基线、区域互赖和通用机会的规范性主责已经迁入[`成熟世界成长与区域参与`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-001)；其 [`REQ-WR-MW-004`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004) / [`AC-WR-MW-004`](../world-rules-core-gameplay/mature-world-progression.prd.md#ac-wr-mw-004) 承接来源/范围/期限/复核、待决/hold/receipt、并发单次效果和失效恢复边界。
+- 首次持续能力之后的世界内成长、独立基线、区域互赖和通用机会的规范性主责已经迁入[`成熟世界成长与区域参与`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-001)；其 [`REQ-WR-MW-004`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004) / [`AC-WR-MW-004`](../world-rules-core-gameplay/mature-world-progression.prd.md#ac-wr-mw-004) 承接成熟世界中的来源/范围/期限/复核、待决/hold/receipt、并发单次效果和失效恢复边界。
 - 情境声誉的主体、地点/服务/合同/时间范围、更新、到期和申诉由[`沟通、合同、声誉与 R&D 连续性`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)的 [`REQ-WR-CR-003`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003) / [`AC-WR-CR-003`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#ac-wr-cr-003) 主责；本专题只保留免费/付费服务、访问和外部参与不能自动兑换世界内认可或资格的入口边界。
-- `FE-3` 与 `FE-4` 是跨模块组合验收：玩家可读的世界机会、独立基线和区域专业化优势必须分别满足成熟世界及情境声誉的主责条款，不在玩家接入模块重述成长或资格规则。pioneer priority 与区域设施容量继续使用其既有窄范围专业专题。
+- `FE-3` 与 `FE-4` 是跨模块组合验收：其中世界机会仅指首次持续能力之后的成熟世界样例，玩家可读的机会、独立基线和区域专业化优势必须分别满足成熟世界及情境声誉的主责条款，不在玩家接入模块重述成长或资格规则。pioneer priority 与区域设施容量继续使用其既有窄范围专业专题。
 
 ### 2.4 认可的生命周期、失效与反滥用
 
-- 认可的来源、范围、用途、期限、复核/申诉、失效、反滥用和恢复规则由[`成熟世界成长与区域参与`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004)主责；情境声誉记录与更新由[`沟通、合同、声誉与 R&D 连续性`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)主责。本专题保留 `REQ-ENTRY-FREE-002` / `AC-ENTRY-FREE-002` 作为入口的负边界与组合验收，不再另立一套认可生命周期。
-- 入口必须继续说明：付费便利、访问、在线时长、泛化互动或自我声明不会自动兑换世界内认可、资格、区域优先级或权力；世界内事实、专业审核和治理决定的具体资格、评分、分配与执行仍由 gameplay/runtime/blockchain/QA authority 决定。
+- 首次持续能力之后的成熟世界认可，其来源、范围、用途、期限、复核/申诉、失效、反滥用和恢复规则由[`成熟世界成长与区域参与`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004)主责；情境声誉记录与更新由[`沟通、合同、声誉与 R&D 连续性`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)主责。本专题保留 `REQ-ENTRY-FREE-002` / `AC-ENTRY-FREE-002` 作为入口的负边界与组合验收，不再另立一套认可生命周期。
+- 入口必须继续说明：付费便利、访问、在线时长、泛化互动或自我声明不会自动兑换世界内认可、资格、区域优先级或权力；世界内事实、专业审核和治理决定的具体资格、评分、分配与执行仍由 gameplay/runtime/blockchain/QA authority 决定。首次持续能力之前，首局/入口仅可表达无世界效果的 preview、推荐、当前 blocker 或下一步，不承诺早期认可、奖励、资格、优先级、容量或可使用机会。
 
 #### 容量竞争下的机会申领生命周期
 
-- 容量竞争的预览、待决、hold/排队、receipt、并发去重和失败恢复统一消费[`成熟世界成长与区域参与`](../world-rules-core-gameplay/mature-world-progression.prd.md#ac-wr-mw-004)；pioneer priority 和区域设施提交分别回链[`Frontier 扩展与世界信息边界`](../world-rules-core-gameplay/frontier-expansion-and-world-information-boundaries.prd.md#req-wr-fi-002)与[`受治理的区域能力与扩展`](../world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-001)，不能在入口专题泛化。
-- `FE-6` / `FE-7` 保留为跨模块组合验收：失效/拒绝/撤销不删除历史、不封锁独立基线；资格/预览不产生容量效果，至多一个当前有效 receipt 产生世界效果，其余请求明确拒绝、释放或待决并提供下一步。上述规则的唯一规范性主责是目标 gameplay 专题。
+- 首次持续能力之后的成熟世界容量竞争，其预览、待决、hold/排队、receipt、并发去重和失败恢复统一消费[`成熟世界成长与区域参与`](../world-rules-core-gameplay/mature-world-progression.prd.md#ac-wr-mw-004)；pioneer priority 和区域设施提交分别回链[`Frontier 扩展与世界信息边界`](../world-rules-core-gameplay/frontier-expansion-and-world-information-boundaries.prd.md#req-wr-fi-002)与[`受治理的区域能力与扩展`](../world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-001)，不能在入口专题泛化。
+- `FE-6` / `FE-7` 保留为跨模块组合验收，且其认可/容量申领仅适用于首次持续能力之后的成熟世界：失效/拒绝/撤销不删除历史、不封锁独立基线；资格/预览不产生容量效果，至多一个当前有效 receipt 产生世界效果，其余请求明确拒绝、释放或待决并提供下一步。上述规则的唯一规范性主责是目标 gameplay 专题。
 
 ## 3. 权威与冲突处理
 
@@ -94,25 +94,28 @@
 <a id="req-entry-free-002"></a>
 ### REQ-ENTRY-FREE-002：认可与机会必须有界且可失效
 
-- 要求：入口必须消费并显式链接[`成熟世界成长与区域参与`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004)和[`沟通、合同、声誉与 R&D 连续性`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)的世界内认可/机会主责；免费基础进入、付费便利、访问或外部参与不得自动变成世界资产、资格、区域优先级、OC、治理权、区域控制或永久全局权力。目标专题定义的失效仍不得抹除历史或封锁独立基线。
+- 适用阶段：首次持续能力之后的成熟世界认可/机会组合；首次持续能力之前不承诺世界内认可、资格、奖励、优先级、容量或可使用机会。
+- 要求：在该适用阶段，入口必须消费并显式链接[`成熟世界成长与区域参与`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004)和[`沟通、合同、声誉与 R&D 连续性`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)的世界内认可/机会主责；免费基础进入、付费便利、访问或外部参与不得自动变成世界资产、资格、区域优先级、OC、治理权、区域控制或永久全局权力。目标专题定义的失效仍不得抹除历史或封锁独立基线。
+- 早期负边界：首次持续能力之前，入口仅可证明 preview、推荐、当前 blocker 或下一步不产生世界效果；付费便利、在线时长、泛化互动或自我声明不构成早期认可、奖励、资格、优先级、容量或可使用机会。
 - 验收：AC-ENTRY-FREE-002
 
 <a id="ac-entry-free-002"></a>
 ### AC-ENTRY-FREE-002：认可到期不会重放为新资格
 
 - 覆盖要求：REQ-ENTRY-FREE-002
-- 场景与结果：入口组合样例能回链成熟世界 [`REQ-WR-MW-004`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004) / [`AC-WR-MW-004`](../world-rules-core-gameplay/mature-world-progression.prd.md#ac-wr-mw-004) 与情境声誉 [`REQ-WR-CR-003`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003) / [`AC-WR-CR-003`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#ac-wr-cr-003)；代表性授予、使用、到期、拒绝、暂停或撤销仍能读到来源/范围/时间边界，历史认可、旧 receipt、重复申领或重连重试不会产生第二次分配、隐性优先权或永久权力，失败方仍可走独立路径、补证、替代路线、恢复或复核。
+- 场景与结果：首次持续能力之后的成熟世界入口组合样例能回链成熟世界 [`REQ-WR-MW-004`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004) / [`AC-WR-MW-004`](../world-rules-core-gameplay/mature-world-progression.prd.md#ac-wr-mw-004) 与情境声誉 [`REQ-WR-CR-003`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003) / [`AC-WR-CR-003`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#ac-wr-cr-003)；代表性授予、使用、到期、拒绝、暂停或撤销仍能读到来源/范围/时间边界，历史认可、旧 receipt、重复申领或重连重试不会产生第二次分配、隐性优先权或永久权力，失败方仍可走独立路径、补证、替代路线、恢复或复核。
+- 早期边界：首次持续能力之前的入口样例只证明 preview、推荐、当前 blocker 或下一步不产生世界效果，不证明早期认可、奖励、资格、优先级、容量或可使用机会。
 - 证据边界：资格、评分、分配、OC、治理和反滥用实现由 gameplay/runtime/blockchain/QA authority 定义；产品层不冻结数值或算法。
 
 ## 5. Done：成功标准与验收
 
 - FE-1：产品说明能区分免费客户端/账户/基础进入、世界内需要取得和维护的实质能力，以及不授予世界权力的可选付费便利服务；不会把其中任何一项误写成当前 preview 已广泛可用。
 - FE-2：组合[`首局与持续游玩`](../world-rules-core-gameplay/first-session-and-continuation.prd.md#1-产品目标)与[`成熟世界成长与区域参与`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-001)的证据，证明玩家可逐步展开真实深度并读懂实质后果；持续 power 不来自永久账号树或全局强度分，而来自可审计的世界内资产、训练、模块、合同、credentials 和关系。
-- FE-3：组合成熟世界 [`REQ-WR-MW-004`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004) / [`AC-WR-MW-004`](../world-rules-core-gameplay/mature-world-progression.prd.md#ac-wr-mw-004) 与情境声誉 [`REQ-WR-CR-003`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003) / [`AC-WR-CR-003`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#ac-wr-cr-003) 的认可样例，只授予有界未来机会或资格，并说明范围、期限、用途、事实/审核来源与复核条件；它不自动授予 power、OC、治理或区域控制。
+- FE-3：首次持续能力之后的成熟世界组合 [`REQ-WR-MW-004`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004) / [`AC-WR-MW-004`](../world-rules-core-gameplay/mature-world-progression.prd.md#ac-wr-mw-004) 与情境声誉 [`REQ-WR-CR-003`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003) / [`AC-WR-CR-003`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#ac-wr-cr-003) 的认可样例，只授予有界未来机会或资格，并说明范围、期限、用途、事实/审核来源与复核条件；它不自动授予 power、OC、治理或区域控制；本 FE 不承诺首次持续能力之前的早期认可或奖励。
 - FE-4：[`成熟世界成长与区域参与`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-001)样例证明玩家具备不立即依附强组织的可行独立基线，同时区域专业化与互赖在不强制依附的前提下带来可读优势。
 - FE-5：任何公开或入口 surface 将长期方向、当前候选证据、实际受支持入口与未承诺内容分开；历史或局部 evidence 不得代签免费可用性、支付服务、成长完整性或发行就绪。
-- FE-6：组合成熟世界 [`REQ-WR-MW-004`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004) / [`AC-WR-MW-004`](../world-rules-core-gameplay/mature-world-progression.prd.md#ac-wr-mw-004) 与情境声誉 [`REQ-WR-CR-003`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003) / [`AC-WR-CR-003`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#ac-wr-cr-003) 的证据，证明认可的授予、使用、到期、拒绝、暂停或撤销都能说明来源、范围、用途和时间边界；无效或被滥用的认可不会被交易、重放或洗成永久权力，且其处置不静默删除历史、改写已确认因果或封锁独立基线。
-- FE-7：组合成熟世界 [`REQ-WR-MW-004`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004) / [`AC-WR-MW-004`](../world-rules-core-gameplay/mature-world-progression.prd.md#ac-wr-mw-004) 与适用的 frontier/区域设施窄范围合同，证明两名合格玩家竞争同一有限机会时，资格/邀请和申领预览不产生容量效果；最多一项符合当前条件的申领以 receipt 结算；其余请求明确拒绝/释放或保持待决，不产生分配、欠费或隐性优先权；重连重试不产生第二次效果，且失败方仍有可读恢复或独立路径。
+- FE-6：首次持续能力之后的成熟世界组合 [`REQ-WR-MW-004`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004) / [`AC-WR-MW-004`](../world-rules-core-gameplay/mature-world-progression.prd.md#ac-wr-mw-004) 与情境声誉 [`REQ-WR-CR-003`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003) / [`AC-WR-CR-003`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#ac-wr-cr-003) 的证据，证明认可的授予、使用、到期、拒绝、暂停或撤销都能说明来源、范围、用途和时间边界；无效或被滥用的认可不会被交易、重放或洗成永久权力，且其处置不静默删除历史、改写已确认因果或封锁独立基线；本 FE 不承诺首次持续能力之前的早期认可或奖励。
+- FE-7：首次持续能力之后的成熟世界组合 [`REQ-WR-MW-004`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004) / [`AC-WR-MW-004`](../world-rules-core-gameplay/mature-world-progression.prd.md#ac-wr-mw-004) 与适用的 frontier/区域设施窄范围合同，证明两名合格玩家竞争同一有限机会时，资格/邀请和申领预览不产生容量效果；最多一项符合当前条件的申领以 receipt 结算；其余请求明确拒绝/释放或保持待决，不产生分配、欠费或隐性优先权；重连重试不产生第二次效果，且失败方仍有可读恢复或独立路径。
 - FE-8：可选服务不可用、降级、到期、取消或续费失败的样例证明：便利服务状态与世界权威/结算状态保持分离；玩家身份、Agent 控制权、已确认历史和仍有效义务连续可追溯；未结算动作按专业合同真实处置；玩家具有不依赖付费服务的恢复或安全停止路径；重购、续费或换商不自动续期资格、恢复机会或扩大世界权力。
 
 ### 5.1 验收追踪
