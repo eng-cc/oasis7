@@ -171,6 +171,26 @@ class MoveTaskLifecycleContract(unittest.TestCase):
             merge_mapping.assert_not_called()
             update_project.assert_not_called()
 
+    def test_record_pr_rejects_second_pr_without_mutating_task_truth(self) -> None:
+        for existing_field in ("pr_url", "pull_request_url", "pr_number"):
+          with self.subTest(existing_field=existing_field), tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            record = mapping_record(status="ready", phase="pre_pr_ready")
+            record[existing_field] = 1999 if existing_field == "pr_number" else "https://github.com/eng-cc/oasis7/pull/1999"
+            mapping_path = self.write_mapping(root, record)
+            before = self.digest(mapping_path)
+            with (
+                mock.patch.object(MODULE, "update_issue_body") as update_issue,
+                mock.patch.object(MODULE, "issue_comment") as comment,
+                mock.patch.object(MODULE, "update_project_fields") as update_project,
+            ):
+                with self.assertRaisesRegex(MODULE._CommandExit, "different PR .*already bound"):
+                    MODULE.command_record_pr(record_pr_args(root))
+            self.assertEqual(before, self.digest(mapping_path))
+            update_issue.assert_not_called()
+            comment.assert_not_called()
+            update_project.assert_not_called()
+
     def test_record_pr_cannot_rewrite_terminal_task(self) -> None:
         for phase in ("post_merge_done", "closed_without_merge"):
             with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
@@ -225,6 +245,7 @@ class MoveTaskLifecycleContract(unittest.TestCase):
                 mock.patch.object(MODULE, "issue_comment", return_value="comment-url"),
                 mock.patch.object(MODULE, "merge_task_mapping") as merge_mapping,
                 mock.patch.object(MODULE, "update_project_fields", return_value=0),
+                mock.patch.object(MODULE, "synchronize_live_issue_traceability", return_value=[]),
             ):
                 result = MODULE.command_record_pr(record_pr_args(root))
             self.assertEqual(0, result)

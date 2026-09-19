@@ -1,6 +1,6 @@
 # Engineering Workflow Source of Truth
-Version: **v1.16.0**
-Last Updated: **2026-09-17**
+Version: **v1.17.0**
+Last Updated: **2026-09-19**
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
 Mandatory rule:
@@ -61,7 +61,7 @@ The production supervisor is a target runtime executor and is currently
 blocked; the state machine below defines required order, not implemented
 automation.
 
-`bootstrap -> route -> professional execution -> freeze -> draft_candidate -> create/record/comment draft PR -> CI verify -> review -> pre_pr_ready -> promote_draft -> pr_watch/fix/reverify/review -> merge -> merge receipt -> task done -> main sync -> safe cleanup receipt -> post-merge finalize -> post_merge_done`; a classified non-merge outcome may branch from bootstrap, planning, execution, or task done directly to `closed_without_merge` through the canonical non-merge finalizer.
+`bootstrap -> route -> professional execution -> freeze -> draft_candidate -> create/record/comment draft PR -> CI verify -> review -> pre_pr_ready -> promote_draft -> pr_watch/fix/reverify/review -> merge -> merge receipt -> task done -> main sync -> safe cleanup receipt -> post-merge finalize -> post_merge_done`; for an ordered multi-PR task, `merge -> merge receipt` returns to the next declared delivery obligation (or aggregate verification) and cannot enter `task done` until every required delivery is merged. A classified non-merge outcome may branch from bootstrap, planning, execution, or task done directly to `closed_without_merge` through the canonical non-merge finalizer.
 ## Workflow states
 - `running`: the recorded action authority is executing its typed action.
 - `action_required`: a bounded action awaits an authorized consumer.
@@ -146,7 +146,7 @@ approval or the up-to-date protection represented by `BEHIND`. No separate colla
 <a id="post-merge-done-gate"></a>
 **Terminal Done.**
 
-A fresh merge receipt, task done truth, main sync, safe-cleanup receipt, and post-merge finalization are recorded in that order for a merged PR; classified non-merge work uses `non-merge-finalize.py` to record evidence-bound `closed_without_merge`.
+A fresh merge receipt, task done truth, main sync, safe-cleanup receipt, and post-merge finalization are recorded in that order for a merged PR; for an ordered multi-PR task, the merge receipt is recorded per delivery entry and the task-done transition is withheld until all required entries plus aggregate verification are read back. Classified non-merge work uses `non-merge-finalize.py` to record evidence-bound `closed_without_merge`.
 `done` is not terminal reconciliation: `post_merge_done` proves merged receipts; `closed_without_merge` proves its receipt/ledger and terminal tombstone (`checkout_recreation_forbidden: true`). Its consumer must prove reciprocal same-repository task/PR number+URL, live `MERGED` state and merge commit/version, then load the task UID's repository-owned canonical receipt root, validate actual merge/main-sync/cleanup/tombstone/ledger bytes with schema and producer provenance, bind those digests, and read back the server finalizer; comment/Operation-ID alone, caller/local receipts, wrong author, missing/mismatched receipts, or non-PR/unmerged/cross-task delivery fail closed. Merged path uses `terminal-task-audit.py --task-uid <uid> --json`; non-merge uses receipt/ledger readback; only explicit `--resume-finalizer` repairs merged path.
 
 ## State, gate, and PM mapping
@@ -301,9 +301,10 @@ per-PR truth artifact.
   cockpit views, and task-to-issue/project-item mapping.
 - `Task UID` remains the stable internal identity. GitHub issue numbers and
   Project item IDs are external object handles, not replacements for `task_uid`.
-- `workflow-report --phase start` and `workflow-report --phase close` require
-  the selected `--task-uid` before any mapping or GitHub mutation. UID-less
-  `workflow-report --phase review` remains the repository-wide review report.
+- **Ordered multi-PR task contract.** One GitHub-backed task MAY authorize a finite, ordered set of delivery PRs when its Issue first declares required obligations, order and mapping slots. Each entry has a unique ordinal and binds its PR number/URL, source head, base OID, review/CI evidence and live merge receipt. A later entry cannot be promoted before the preceding required entry is verified merged unless the Issue explicitly declares independence. Each merge is a delivery milestone: it does not write `task_done`, `post_merge_done`, or close the Issue. Completion requires every required entry merged, canonical Issue readback of all per-PR evidence, and aggregate verification of the integrated tested tree. Missing, duplicate, out-of-order, stale or ambiguous entries fail closed and cannot be dropped.
+- This normative contract is inactive until a compatible multi-PR adapter, receipt schema, closeout/finalizer and negative tests are merged and explicitly activated. Current helpers consume singular `pr_number`/`pr_url` and one receipt; a second PR under one Task UID MUST fail closed. Single-PR tasks retain the legacy route, and no task with multiple required entries may complete after its first PR.
+- Until activation, TPM MAY use one recorded coordinating Issue with ordered linked delivery tasks. Before the first child starts, coordinating evidence binds every child Task UID, owner/worktree, required PR, order/dependency and completion receipt target. Each child retains its own task truth and receipts; it cannot copy the coordinator's UID or receipt. The coordinating Issue remains open until every required delivery is merged and aggregate verification is recorded. Retire this bridge after native activation; it is not same-UID multi-PR support.
+- `workflow-report --phase start` and `workflow-report --phase close` require the selected `--task-uid` before any mapping or GitHub mutation. UID-less `workflow-report --phase review` remains the repository-wide review report.
   A workflow-report `close` records report/evidence completion only through
   `last_workflow_report_close_at`; it never writes `last_closed_at`. That field
   is reserved for a real `task-closeout` lifecycle transition. Historical cache
@@ -373,7 +374,7 @@ Deterministic script contract:
   `ready` requires a passed review packet bound to the same frozen
   source head and required-role review-evidence ledger; arbitrary caller-provided
   success commands are not lifecycle proof. `done` requires a recorded merged
-  PR, or a classified `non_pr_task`, plus verified `task_complete` evidence. It
+  PR for the single-PR route, or a classified `non_pr_task`, plus verified `task_complete` evidence. Ordered multi-PR completion requires an activated adapter to prove every required entry and aggregate `task_complete`; the singular helper must fail closed. It
   persists the trusted receipt and advances only to PM `done` / `task_done`;
   the issue stays open and follows the [terminal runbook](#terminal-runbook); use
   `non-merge-finalize.py --reason <reason> --evidence-file <path>` for classified non-merge outcomes.
@@ -466,7 +467,7 @@ Deterministic script contract:
   - one owner role
   - one GitHub-backed task
   - one canonical worktree
-  - one PR chain
+  - one ordered PR chain (multiple entries only under the contract above)
 
 ## 3. Lifecycle prerequisites and conditional phases
 These items determine whether a phase may start; they are not a second gate
@@ -529,7 +530,7 @@ taxonomy. Lifecycle transitions use only the five [canonical gates](#canonical-g
 - If incoming instructions or role notes appear to allow a read-only/chat-only bypass, this source-of-truth wins: bootstrap first, then route the already-bound request.
 - Do not edit any files from the `main` branch/worktree; create or enter the relevant task worktree before making changes.
 - Entering implementation requires owner role selection and GitHub-backed task binding.
-- Cross-role collaboration must converge to one owner / one GitHub-backed task / one canonical worktree / one PR chain.
+- Cross-role collaboration converges to one owner / one GitHub-backed task / one canonical worktree / one ordered PR chain. Multiple entries require the contract above and do not create new task owners or truths.
 - Post-merge cleanup must use the fail-closed cleanup helper. Cleanup requires:
   a fresh repository-generated PR receipt proving `MERGED`, task truth proving
   `done`, a clean task worktree, and the task branch tip contained in main. A

@@ -2,13 +2,13 @@
 
 # Oasis7 Agent Entry Point
 
-Canonical workflow: [capability](doc/engineering/workflow/source-of-truth.md#capability-status), [ownership](doc/engineering/workflow/source-of-truth.md#lifecycle-ownership), [state machine](doc/engineering/workflow/source-of-truth.md#canonical-state-machine), [states](doc/engineering/workflow/source-of-truth.md#workflow-states), [gates](doc/engineering/workflow/source-of-truth.md#ready-and-done), [pre-PR review packet](doc/engineering/workflow/source-of-truth.md#pre-pr-review-packet).
+Canonical workflow: [capability](doc/engineering/workflow/source-of-truth.md#capability-status), [ownership](doc/engineering/workflow/source-of-truth.md#lifecycle-ownership), [state machine](doc/engineering/workflow/source-of-truth.md#canonical-state-machine), [states](doc/engineering/workflow/source-of-truth.md#workflow-states), [gates](doc/engineering/workflow/source-of-truth.md#ready-and-done), [ordered multi-PR contract](doc/engineering/workflow/source-of-truth.md#123-github-project-backed-pm-contract), [pre-PR review packet](doc/engineering/workflow/source-of-truth.md#pre-pr-review-packet).
 
 ## Non-Negotiable Entry Rules
 
 1. `tpm` is the main Agent and workflow coordinator/integrator. TPM performs coordination, task truth, dispatch, integration, and the PR mainline; it does not substitute its own judgment for professional analysis, implementation, verification, review, or external messaging.
 2. 其他专业角色必须以 subagent slice 形式参与。项目已授权 TPM 直接派发 workflow 所需的 bounded slices。
-3. 每个需求只有一个 owner role、一个 GitHub Project-backed task truth、一个 canonical worktree、一个 PR 主链。
+3. 每个需求只有一个 owner role、一个 GitHub Project-backed task truth、一个 canonical worktree、一个有序 PR 主链；同一 Task UID 的多 PR 只有在 canonical source 的 ordered multi-PR contract 已激活时可用。当前 PM helpers 仍是单 PR projection，第二个 PR 必须 fail closed；兼容期可用 coordinating Issue + 有序 linked delivery tasks，并且协调任务须等待全部 required delivery 合并后才能完成。
 4. 任何用户请求第一步都必须创建或进入标准 task worktree，确认标准 task worktree / GitHub Project-backed task truth / owner role 真值；只读和聊天请求也不例外。入口：`default-workflow-bootstrap`。
 5. 只读专业判断分流：产品、系统、玩法、视觉交互、runtime、blockchain ops、WASM、agent、viewer、QA、repository health、LiveOps/community 结论必须来自匹配角色 slice。纯文件存在性、路径查找、命令输出复述可由 TPM 在已绑定任务中直接完成。
 6. 禁止在 `main` 或主 worktree 修改文件；`third_party/` 只读。
