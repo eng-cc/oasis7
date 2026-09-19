@@ -21,7 +21,7 @@
 - [`间接控制下的玩家能动性与续接`](indirect-control-agency-and-continuation.prd.md)：玩家通过 Agent 推动世界时的意图可读、因果可解释、干预重排、记忆纠正与回流续接。
 - [`Agent 所有权与持续经营`](agent-ownership-and-stewardship.prd.md)：玩家以明确承诺取得、维持或结束自己的 Agent 控制权，并读懂成本、风险和恢复选择。
 - [`成熟世界成长与区域参与`](mature-world-progression.prd.md)：首次持续能力之后的独立成长、区域专业化、有限影响、anti-grind / 恢复，以及有界认可与通用机会申领边界。
-- [`受治理的区域能力与扩展`](governed-regional-capabilities-and-extensions.prd.md)：区域设施从条件报价到有限服务、维护/耗尽/退役的生命周期，以及创作者扩展从治理提案到权威生效、审计与恢复的产品边界。
+- [`受治理的区域能力与扩展`](governed-regional-capabilities-and-extensions.prd.md)：区域 charter 成立/退化、地点 tenure、公共融资和通行保护；区域设施从条件报价到有限服务、维护/耗尽/退役，以及创作者扩展从治理提案到权威生效、审计与恢复的产品边界。
 - [`区域冲突、软赛季与可恢复损失`](chartered-conflict-soft-seasons-and-recovery.prd.md)：宣战、有限参战范围、实体战利品/占领、可恢复重建和不重置世界的软赛季边界。
 - [`沟通、合同、声誉与 R&D 连续性`](communication-contracts-reputation-and-rd-continuity.prd.md)：人类沟通与 Agent 合同的边界、持续服务争端、情境声誉及研究归因/份额的长期产品语义。
 - [`组织连续性、解散与长期不活跃保护`](organization-continuity-dissolution-and-dormancy-protection.prd.md)：组织 charter 的个人保护底线、可审计解散顺序，以及长期不活跃时的保护、恢复主张与有限处置边界。
