@@ -34,7 +34,10 @@ Governed transaction contract (current path):
     --host-adapter <governed-host-adapter> \
     --human-direct-ssh-request <fresh-live-human-stop-request.json> \
     --known-hosts <pinned-known-hosts> \
-    [--credential-env <temporary-env-name> | --credential-fd <temporary-fd>]
+    [--credential-env <temporary-env-name> | --credential-fd <temporary-fd>] \
+    [--adapter-credential-fd <temporary-fd> | \
+      --adapter-storage-credential-fd <temporary-fd> \
+      --adapter-sequencer-credential-fd <temporary-fd>]
   quiesce --host-adapter is retired and fails closed; use the direct mode:
   ./scripts/p2p-public-testnet-rebuild-validators.sh human_direct_ssh \
     --request <human-stop-request.json> \
@@ -52,7 +55,8 @@ digest. It does not call systemd or modify validator state. Apply/rollback
 require the governed host adapter and emit transaction-bound phase receipts.
 Resume is a governed recovery operation: it requires an explicit transaction,
 host adapter, fresh live human-direct-SSH request, canonical pinned known-hosts,
-one temporary credential seam, and an already provisioned absolute
+a temporary credential seam (direct observation environment/FD or triad adapter
+FD), and an already provisioned absolute
 `OASIS7_VALIDATOR_PAIR_NONCE_LEDGER` environment binding. The nonce environment
 path must match the request's exact `nonce_ledger_path`; the wrapper never
 infers, creates, or falls back to a transaction/output ledger. Persisted proofs
@@ -129,6 +133,9 @@ require_resume_inputs() {
   local known_hosts=""
   local credential_env=""
   local credential_fd=""
+  local adapter_credential_fd=""
+  local adapter_storage_credential_fd=""
+  local adapter_sequencer_credential_fd=""
   while (($#)); do
     case "$1" in
       --execution-mode)
@@ -175,6 +182,27 @@ require_resume_inputs() {
         credential_fd=$2
         shift 2
         ;;
+      --adapter-credential-fd)
+        [[ $# -ge 2 && -n "$2" ]] || die "resume requires a value for --adapter-credential-fd"
+        [[ "$2" =~ ^[0-9]+$ ]] || die "resume --adapter-credential-fd must be numeric"
+        [[ -z "$adapter_credential_fd" && -z "$adapter_storage_credential_fd" && -z "$adapter_sequencer_credential_fd" ]] || die "resume accepts one shared adapter descriptor or both role-specific descriptors"
+        adapter_credential_fd=$2
+        shift 2
+        ;;
+      --adapter-storage-credential-fd)
+        [[ $# -ge 2 && -n "$2" ]] || die "resume requires a value for --adapter-storage-credential-fd"
+        [[ "$2" =~ ^[0-9]+$ ]] || die "resume --adapter-storage-credential-fd must be numeric"
+        [[ -z "$adapter_credential_fd" && -z "$adapter_storage_credential_fd" ]] || die "resume received duplicate or mixed adapter credential descriptors"
+        adapter_storage_credential_fd=$2
+        shift 2
+        ;;
+      --adapter-sequencer-credential-fd)
+        [[ $# -ge 2 && -n "$2" ]] || die "resume requires a value for --adapter-sequencer-credential-fd"
+        [[ "$2" =~ ^[0-9]+$ ]] || die "resume --adapter-sequencer-credential-fd must be numeric"
+        [[ -z "$adapter_credential_fd" && -z "$adapter_sequencer_credential_fd" ]] || die "resume received duplicate or mixed adapter credential descriptors"
+        adapter_sequencer_credential_fd=$2
+        shift 2
+        ;;
       *)
         die "resume rejects unsupported or positional input: $1"
         ;;
@@ -184,7 +212,19 @@ require_resume_inputs() {
   [[ -n "$host_adapter" ]] || die "resume requires --host-adapter"
   [[ -n "$direct_request" ]] || die "resume requires --request for fresh live GitHub authority"
   [[ -n "$known_hosts" ]] || die "resume requires --known-hosts for the canonical SSH pin"
-  [[ -n "$credential_env" || -n "$credential_fd" ]] || die "resume requires exactly one temporary credential seam"
+  if [[ -n "$adapter_storage_credential_fd" || -n "$adapter_sequencer_credential_fd" ]]; then
+    [[ -n "$adapter_storage_credential_fd" && -n "$adapter_sequencer_credential_fd" ]] || die "resume requires both role-specific adapter descriptors"
+    [[ -z "$adapter_credential_fd" ]] || die "resume accepts one shared adapter descriptor or both role-specific descriptors"
+    [[ -z "$credential_fd" ]] || die "resume cannot mix role-specific adapter descriptors with --credential-fd"
+  fi
+  if [[ -n "$adapter_credential_fd" && ( -n "$adapter_storage_credential_fd" || -n "$adapter_sequencer_credential_fd" ) ]]; then
+    die "resume accepts one shared adapter descriptor or both role-specific descriptors"
+  fi
+  if [[ "$execution_mode" = "triad_staggered" ]]; then
+    [[ -n "$credential_fd" || -n "$adapter_credential_fd" || -n "$adapter_storage_credential_fd" ]] || die "triad resume requires a shared or role-specific adapter descriptor"
+  else
+    [[ -n "$credential_env" || -n "$credential_fd" ]] || die "resume requires a direct-observation credential seam"
+  fi
   local nonce_ledger=${OASIS7_VALIDATOR_PAIR_NONCE_LEDGER:-}
   [[ -n "$nonce_ledger" ]] || die "resume requires OASIS7_VALIDATOR_PAIR_NONCE_LEDGER"
   [[ "$nonce_ledger" = /* ]] || die "resume requires an absolute OASIS7_VALIDATOR_PAIR_NONCE_LEDGER path"

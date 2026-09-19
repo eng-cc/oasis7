@@ -76,8 +76,21 @@ def digest(value: object) -> str:
     ).hexdigest()
 
 
-def run(command: list[str], env: dict[str, str], label: str) -> dict[str, object]:
-    result = subprocess.run(command, text=True, capture_output=True, env=env, check=False)
+def run(
+    command: list[str],
+    env: dict[str, str],
+    label: str,
+    *,
+    pass_fds: tuple[int, ...] = (),
+) -> dict[str, object]:
+    result = subprocess.run(
+        command,
+        text=True,
+        capture_output=True,
+        env=env,
+        pass_fds=pass_fds,
+        check=False,
+    )
     if result.returncode != 0:
         raise SystemExit(f"{label} failed ({result.returncode}): {result.stderr}")
     try:
@@ -269,6 +282,10 @@ print(json.dumps(value, separators=(',', ':')))
     env["PATH"] = f"{fake_bin}:{env['PATH']}"
     env["OASIS7_VALIDATOR_PAIR_NONCE_LEDGER"] = str(temp / "nonce-ledger.jsonl")
     env["O7_TRIAD_FORBIDDEN_LOG"] = str(forbidden_log)
+    credential_secret = "triad-adapter-fixture-secret\n"
+    credential_path = temp / "adapter-credential"
+    credential_path.write_text(credential_secret, encoding="utf-8")
+    credential_fd = os.open(credential_path, os.O_RDONLY)
 
     common = [
         "--execution-mode",
@@ -281,24 +298,37 @@ print(json.dumps(value, separators=(',', ':')))
         str(temp / "live-request.json"),
         "--known-hosts",
         str(temp / "known-hosts"),
-        "--credential-env",
-        "O7_TRIAD_TEST_SECRET",
+        "--credential-fd",
+        str(credential_fd),
+        "--adapter-credential-fd",
+        str(credential_fd),
     ]
-    plan = run(
-        [str(wrapper), "plan", "--execution-mode", "triad_staggered", "--out-dir", str(temp / "plan")],
-        env,
-        "triad plan",
-    )
-    assert_triad_receipt(plan, "plan")
-    transaction.write_text(json.dumps(plan) + "\n", encoding="utf-8")
+    try:
+        plan = run(
+            [str(wrapper), "plan", "--execution-mode", "triad_staggered", "--out-dir", str(temp / "plan")],
+            env,
+            "triad plan",
+        )
+        assert_triad_receipt(plan, "plan")
+        transaction.write_text(json.dumps(plan) + "\n", encoding="utf-8")
 
-    for route in ("apply", "resume", "rollback"):
-        receipt = run([str(wrapper), route, *common], env, f"triad {route}")
-        assert_triad_receipt(receipt, route)
+        for route in ("apply", "resume", "rollback"):
+            receipt = run(
+                [str(wrapper), route, *common],
+                env,
+                f"triad {route}",
+                pass_fds=(credential_fd,),
+            )
+            assert_triad_receipt(receipt, route)
+    finally:
+        os.close(credential_fd)
 
     invocations = [json.loads(line) for line in args_log.read_text(encoding="utf-8").splitlines()]
     if len(invocations) != 4:
         raise SystemExit(f"expected four governed executor invocations, got {len(invocations)}")
+    args_log_text = args_log.read_text(encoding="utf-8")
+    if credential_secret.strip() in args_log_text:
+        raise SystemExit("triad route leaked the adapter credential value into executor argv/log")
     for invocation in invocations:
         if "--execution-mode" not in invocation or invocation[invocation.index("--execution-mode") + 1] != "triad_staggered":
             raise SystemExit(f"triad mode was not forwarded verbatim: {invocation!r}")
@@ -354,56 +384,72 @@ def assert_mode_mismatch_fails_before_callback() -> None:
         known_hosts.write_text("fixture\n", encoding="utf-8")
         env = dict(os.environ)
         env["OASIS7_VALIDATOR_PAIR_NONCE_LEDGER"] = str(temp / "nonce-ledger.jsonl")
-        env["O7_MODE_TEST_SECRET"] = "fixture-secret"
-        for requested_mode, persisted_mode in (
-            ("pair", "triad_staggered"),
-            ("triad_staggered", "pair"),
-        ):
-            transaction = temp / f"transaction-{requested_mode}-{persisted_mode}.json"
-            write_transaction(transaction, phase="planned", execution_mode=persisted_mode)
-            callback_log = temp / f"callback-{requested_mode}-{persisted_mode}.log"
-            adapter = temp / f"host-adapter-{requested_mode}-{persisted_mode}.py"
-            adapter.write_text(
-                "#!/usr/bin/env python3\n"
-                f"from pathlib import Path\nPath({str(callback_log)!r}).open('a', encoding='utf-8').write('callback\\n')\n"
-                "print('{}')\n",
-                encoding="utf-8",
-            )
-            adapter.chmod(0o755)
-            for route in ("apply", "resume", "rollback"):
-                command = [
-                    str(wrapper),
-                    route,
-                    "--execution-mode",
-                    requested_mode,
-                    "--transaction",
-                    str(transaction),
-                    "--host-adapter",
-                    str(adapter),
-                ]
-                if route == "resume":
-                    command.extend(
-                        [
-                            "--request",
-                            str(request),
-                            "--known-hosts",
-                            str(known_hosts),
-                            "--credential-env",
-                            "O7_MODE_TEST_SECRET",
-                        ]
-                    )
-                result = subprocess.run(command, text=True, capture_output=True, env=env, check=False)
-                combined = result.stderr + result.stdout
-                if result.returncode == 0 or "mode" not in combined.lower():
-                    raise SystemExit(
-                        f"{route} accepted or misreported explicit mode mismatch "
-                        f"requested={requested_mode} persisted={persisted_mode}: {combined}"
-                    )
-            if callback_log.exists() and callback_log.read_text(encoding="utf-8"):
-                raise SystemExit(
-                    f"mode mismatch invoked the host adapter before rejection "
-                    f"requested={requested_mode} persisted={persisted_mode}"
+        credential_path = temp / "mode-mismatch-credential"
+        credential_path.write_text("mode-mismatch-fixture-secret\n", encoding="utf-8")
+        credential_fd = os.open(credential_path, os.O_RDONLY)
+        try:
+            for requested_mode, persisted_mode in (
+                ("pair", "triad_staggered"),
+                ("triad_staggered", "pair"),
+            ):
+                transaction = temp / f"transaction-{requested_mode}-{persisted_mode}.json"
+                write_transaction(transaction, phase="planned", execution_mode=persisted_mode)
+                callback_log = temp / f"callback-{requested_mode}-{persisted_mode}.log"
+                adapter = temp / f"host-adapter-{requested_mode}-{persisted_mode}.py"
+                adapter.write_text(
+                    "#!/usr/bin/env python3\n"
+                    f"from pathlib import Path\nPath({str(callback_log)!r}).open('a', encoding='utf-8').write('callback\\n')\n"
+                    "print('{}')\n",
+                    encoding="utf-8",
                 )
+                adapter.chmod(0o755)
+                for route in ("apply", "resume", "rollback"):
+                    command = [
+                        str(wrapper),
+                        route,
+                        "--execution-mode",
+                        requested_mode,
+                        "--transaction",
+                        str(transaction),
+                        "--host-adapter",
+                        str(adapter),
+                    ]
+                    pass_fds: tuple[int, ...] = ()
+                    if route == "resume":
+                        command.extend(
+                            [
+                                "--request",
+                                str(request),
+                                "--known-hosts",
+                                str(known_hosts),
+                                "--credential-fd",
+                                str(credential_fd),
+                                "--adapter-credential-fd",
+                                str(credential_fd),
+                            ]
+                        )
+                        pass_fds = (credential_fd,)
+                    result = subprocess.run(
+                        command,
+                        text=True,
+                        capture_output=True,
+                        env=env,
+                        pass_fds=pass_fds,
+                        check=False,
+                    )
+                    combined = result.stderr + result.stdout
+                    if result.returncode == 0 or "mode" not in combined.lower():
+                        raise SystemExit(
+                            f"{route} accepted or misreported explicit mode mismatch "
+                            f"requested={requested_mode} persisted={persisted_mode}: {combined}"
+                        )
+                if callback_log.exists() and callback_log.read_text(encoding="utf-8"):
+                    raise SystemExit(
+                        f"mode mismatch invoked the host adapter before rejection "
+                        f"requested={requested_mode} persisted={persisted_mode}"
+                    )
+        finally:
+            os.close(credential_fd)
 
 
 def assert_executor_records_member_observations_around_callbacks() -> None:

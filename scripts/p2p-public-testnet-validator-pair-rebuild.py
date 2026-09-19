@@ -28,6 +28,7 @@ import datetime as dt
 import fcntl
 import hashlib
 import importlib.util
+import inspect
 import json
 import os
 import re
@@ -1657,6 +1658,74 @@ def _direct_ssh_call(
     return result.stdout.strip()
 
 
+ADAPTER_SHARED_CREDENTIAL_FD_ENV = "OASIS7_TRIAD_ADAPTER_SHARED_FD"
+ADAPTER_STORAGE_CREDENTIAL_FD_ENV = "OASIS7_TRIAD_ADAPTER_STORAGE_FD"
+ADAPTER_SEQUENCER_CREDENTIAL_FD_ENV = "OASIS7_TRIAD_ADAPTER_SEQUENCER_FD"
+
+
+def _adapter_credential_fds(args: argparse.Namespace | None) -> dict[str, int]:
+    """Resolve numeric, inherited credential descriptors for a host adapter.
+
+    The descriptor numbers are transport metadata only.  This helper never
+    reads them and never serializes them into a transaction or receipt.  A
+    shared descriptor may be supplied through the existing ``--credential-fd``
+    seam; role-specific descriptors use the explicit adapter options.  An
+    incomplete or ambiguous role mapping is rejected before a callback starts.
+    """
+    if args is None:
+        return {}
+    shared = getattr(args, "adapter_credential_fd", None)
+    if shared is None:
+        shared = getattr(args, "credential_fd", None)
+    storage = getattr(args, "adapter_storage_credential_fd", None)
+    sequencer = getattr(args, "adapter_sequencer_credential_fd", None)
+    role_values = [value for value in (storage, sequencer) if value is not None]
+    if shared is not None and role_values:
+        fail("host adapter accepts one shared descriptor or both role-specific descriptors, not a mixture")
+    if (storage is None) != (sequencer is None):
+        fail("host adapter role-specific credential descriptors must cover storage and sequencer")
+    if shared is not None:
+        values = {"shared": shared}
+    elif storage is not None and sequencer is not None:
+        values = {"storage-205": storage, "sequencer-204": sequencer}
+    else:
+        return {}
+    for label, value in values.items():
+        if not isinstance(value, int) or value <= 2:
+            fail(f"host adapter credential descriptor is invalid for {label}")
+        try:
+            os.fstat(value)
+        except OSError:
+            fail(f"host adapter credential descriptor is unavailable for {label}")
+    return values
+
+
+def _adapter_subprocess_environment(
+    args: argparse.Namespace | None, credential_fds: dict[str, int]
+) -> dict[str, str]:
+    """Create the adapter environment without forwarding any secret value."""
+    environment = os.environ.copy()
+    for key in list(environment):
+        if key == "SSHPASS" or key.endswith("_SSHPASS"):
+            environment.pop(key, None)
+    credential_env = getattr(args, "credential_env", None) if args is not None else None
+    if isinstance(credential_env, str):
+        environment.pop(credential_env, None)
+    for key in (
+        ADAPTER_SHARED_CREDENTIAL_FD_ENV,
+        ADAPTER_STORAGE_CREDENTIAL_FD_ENV,
+        ADAPTER_SEQUENCER_CREDENTIAL_FD_ENV,
+    ):
+        environment.pop(key, None)
+    if "shared" in credential_fds:
+        environment[ADAPTER_SHARED_CREDENTIAL_FD_ENV] = str(credential_fds["shared"])
+    elif credential_fds:
+        environment[ADAPTER_STORAGE_CREDENTIAL_FD_ENV] = str(credential_fds["storage-205"])
+        environment[ADAPTER_SEQUENCER_CREDENTIAL_FD_ENV] = str(credential_fds["sequencer-204"])
+    environment["OASIS7_TRIAD_ADAPTER_CREDENTIAL_TRANSPORT"] = "fd-only-v1"
+    return environment
+
+
 def _direct_service_readback(
     role: str,
     target: str,
@@ -3012,6 +3081,7 @@ def _build_plan_for_mode(
         ),
         "package": {
             "directory": str(package_dir),
+            "package_sha256": inventory_tree(package_dir)["sha256"],
             "provenance": str(provenance_path),
             "version": provenance_summary["package"]["package_version"],
             "run_id": provenance_summary["package"]["run_id"],
@@ -4052,7 +4122,13 @@ def _adopt_completed_adapter_callback(
     return transaction
 
 
-def run_host_adapter(adapter: Path, transaction_path: Path, plan: dict[str, Any], phase: str) -> dict[str, Any]:
+def run_host_adapter(
+    adapter: Path,
+    transaction_path: Path,
+    plan: dict[str, Any],
+    phase: str,
+    direct_args: argparse.Namespace | None = None,
+) -> dict[str, Any]:
     if adapter.is_symlink() or not adapter.is_file():
         fail(f"host adapter must be a regular file: {adapter}")
     existing_callback = plan.get("adapter_callback")
@@ -4083,16 +4159,26 @@ def run_host_adapter(adapter: Path, transaction_path: Path, plan: dict[str, Any]
     plan["canonical_digest"] = canonical_digest(plan)
     write_json(transaction_path, plan)
     try:
+        credential_fds = _adapter_credential_fds(direct_args)
+        adapter_environment = _adapter_subprocess_environment(direct_args, credential_fds)
         result = subprocess.run(
             [str(adapter), "--phase", phase, "--transaction", str(transaction_path)],
             check=False,
             text=True,
             capture_output=True,
             timeout=300,
+            env=adapter_environment,
+            pass_fds=tuple(sorted(set(credential_fds.values()))),
         )
     except (OSError, subprocess.TimeoutExpired) as error:
         _record_adapter_callback_failure(transaction_path, plan, phase, f"{error.__class__.__name__}")
         fail(f"host adapter execution failed: {error.__class__.__name__}")
+    except BaseException as error:
+        # This includes fail-closed credential transport validation.  The
+        # callback journal must never remain ambiguously in_flight after a
+        # pre-exec rejection such as an incomplete role mapping.
+        _record_adapter_callback_failure(transaction_path, plan, phase, str(error))
+        raise
     if result.returncode != 0:
         _record_adapter_callback_failure(transaction_path, plan, phase, f"exit {result.returncode}")
         fail(f"host adapter failed with exit {result.returncode}")
@@ -4143,6 +4229,43 @@ def run_host_adapter(adapter: Path, transaction_path: Path, plan: dict[str, Any]
         plan["canonical_digest"] = canonical_digest(plan)
         raise
     return validated_receipt
+
+
+def _invoke_host_adapter(
+    adapter: Path,
+    transaction_path: Path,
+    plan: dict[str, Any],
+    phase: str,
+    direct_args: argparse.Namespace | None = None,
+) -> dict[str, Any]:
+    """Invoke the adapter seam while preserving four-argument test doubles.
+
+    The production callback receives the direct-SSH namespace so the executor
+    can pass role-specific credential descriptors.  Existing read-only test
+    doubles intentionally implement the historical four-argument seam; they
+    must remain usable without weakening the production callback contract.
+    """
+    callback = run_host_adapter
+    try:
+        signature = inspect.signature(callback)
+    except (TypeError, ValueError):
+        return callback(adapter, transaction_path, plan, phase, direct_args)
+    positional = [
+        parameter
+        for parameter in signature.parameters.values()
+        if parameter.kind
+        in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+    ]
+    accepts_varargs = any(
+        parameter.kind == inspect.Parameter.VAR_POSITIONAL
+        for parameter in signature.parameters.values()
+    )
+    keyword_direct_args = signature.parameters.get("direct_args")
+    if keyword_direct_args is not None and keyword_direct_args.kind == inspect.Parameter.KEYWORD_ONLY:
+        return callback(adapter, transaction_path, plan, phase, direct_args=direct_args)
+    if not accepts_varargs and len(positional) < 5:
+        return callback(adapter, transaction_path, plan, phase)
+    return callback(adapter, transaction_path, plan, phase, direct_args)
 
 
 def _verified_backup_receipt(backup: dict[str, Any], transaction_id: str) -> dict[str, Any]:
@@ -4255,6 +4378,17 @@ def _resume_direct_args(
         known_hosts=known_hosts_value,
         credential_env=getattr(direct_args, "credential_env", None) if direct_args is not None else None,
         credential_fd=getattr(direct_args, "credential_fd", None) if direct_args is not None else None,
+        adapter_credential_fd=getattr(direct_args, "adapter_credential_fd", None) if direct_args is not None else None,
+        adapter_storage_credential_fd=(
+            getattr(direct_args, "adapter_storage_credential_fd", None)
+            if direct_args is not None
+            else None
+        ),
+        adapter_sequencer_credential_fd=(
+            getattr(direct_args, "adapter_sequencer_credential_fd", None)
+            if direct_args is not None
+            else None
+        ),
     )
     if direct_args is not None and hasattr(direct_args, "_credential_secret"):
         result._credential_secret = direct_args._credential_secret
@@ -4432,8 +4566,8 @@ def _continue_staggered_transaction(
         transaction["phase"] = "staggered_preflight"
         transaction["canonical_digest"] = canonical_digest(transaction)
         write_json(path, transaction)
-        transaction["staggered_preflight_receipt"] = run_host_adapter(
-            host_adapter, path, transaction, "staggered-preflight"
+        transaction["staggered_preflight_receipt"] = _invoke_host_adapter(
+            host_adapter, path, transaction, "staggered-preflight", direct_args
         )
         transaction.pop("adapter_callback", None)
         transaction["phase"] = "staggered_prepared"
@@ -4468,7 +4602,7 @@ def _continue_staggered_transaction(
         )
         transaction["canonical_digest"] = canonical_digest(transaction)
         write_json(path, transaction)
-        receipt = run_host_adapter(host_adapter, path, transaction, phase)
+        receipt = _invoke_host_adapter(host_adapter, path, transaction, phase, direct_args)
         transaction[f"{role}_staggered_receipt"] = receipt
         _record_staggered_stage_receipt(transaction, role, receipt)
         transaction["canonical_digest"] = canonical_digest(transaction)
@@ -4527,7 +4661,9 @@ def _continue_transaction(
         transaction["canonical_digest"] = canonical_digest(transaction)
         write_json(path, transaction)
         try:
-            transaction["preflight_receipt"] = run_host_adapter(host_adapter, path, transaction, "preflight")
+            transaction["preflight_receipt"] = _invoke_host_adapter(
+                host_adapter, path, transaction, "preflight", direct_args
+            )
             transaction.pop("adapter_callback", None)
         except BaseException as preflight_error:
             transaction["phase"] = "preflight_failed"
@@ -4554,7 +4690,9 @@ def _continue_transaction(
         write_json(path, transaction)
     transaction["backup"] = backups
     if not isinstance(transaction.get("backup_receipt"), dict):
-        transaction["backup_receipt"] = run_host_adapter(host_adapter, path, transaction, "backup")
+        transaction["backup_receipt"] = _invoke_host_adapter(
+            host_adapter, path, transaction, "backup", direct_args
+        )
         transaction.pop("adapter_callback", None)
     transaction["phase"] = "backed_up"
     transaction["canonical_digest"] = canonical_digest(transaction)
@@ -4576,7 +4714,9 @@ def _continue_transaction(
     transaction["canonical_digest"] = canonical_digest(transaction)
     write_json(path, transaction)
     if not isinstance(transaction.get("host_receipt"), dict):
-        transaction["host_receipt"] = run_host_adapter(host_adapter, path, transaction, "apply")
+        transaction["host_receipt"] = _invoke_host_adapter(
+            host_adapter, path, transaction, "apply", direct_args
+        )
         transaction.pop("adapter_callback", None)
         transaction["phase"] = "applied"
         transaction["applied_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
@@ -4861,6 +5001,25 @@ def _expected_adapter_evidence(plan: dict[str, Any]) -> dict[str, Any]:
     return {"identity_receipts": identities, "sequencer_rebuild_proof": proof_binding}
 
 
+def _expected_adapter_package_binding(plan: dict[str, Any]) -> dict[str, Any]:
+    package = plan.get("package")
+    if not isinstance(package, dict):
+        fail("adapter package binding is missing")
+    fields = (
+        "package_sha256",
+        "runtime_sha256",
+        "runtime_size_bytes",
+        "version",
+        "commit",
+        "run_id",
+    )
+    binding = {key: package[key] for key in fields if key in package}
+    for key in ("runtime_sha256", "commit", "run_id"):
+        if key not in binding:
+            fail(f"adapter package binding is missing {key}")
+    return binding
+
+
 def _build_adapter_binding(plan: dict[str, Any], phase: str, phase_window_started_at: str) -> dict[str, Any]:
     plan_digest = plan.get("plan_digest")
     transaction_id = plan.get("transaction_id")
@@ -4869,15 +5028,23 @@ def _build_adapter_binding(plan: dict[str, Any], phase: str, phase_window_starte
     if not isinstance(transaction_id, str) or not transaction_id.strip():
         fail("adapter binding requires the transaction id")
     _parse_timestamp(phase_window_started_at, "adapter phase window")
-    return {
+    binding = {
         "schema_version": "oasis7.validator_pair_rebuild_adapter_binding.v1",
         "plan_digest": plan_digest,
         "transaction_id": transaction_id,
         "phase": phase,
         "phase_window_started_at": phase_window_started_at,
+        "credential_transport": (
+            "fd-only-v1"
+            if plan.get("execution_mode") == TRIAD_STAGGERED_EXECUTION_MODE
+            else "caller-bound"
+        ),
         "repository_executable": repository_executable_identity(),
         "evidence_bindings": _expected_adapter_evidence(plan),
     }
+    if plan.get("execution_mode") == TRIAD_STAGGERED_EXECUTION_MODE:
+        binding["package"] = _expected_adapter_package_binding(plan)
+    return binding
 
 
 def _validate_adapter_binding(receipt: dict[str, Any], plan: dict[str, Any], phase: str) -> None:
@@ -4888,6 +5055,13 @@ def _validate_adapter_binding(receipt: dict[str, Any], plan: dict[str, Any], pha
         fail("host adapter binding identity mismatch")
     if binding.get("repository_executable") != repository_executable_identity():
         fail("host adapter binding producer is not the repository-owned executor")
+    if plan.get("execution_mode") == TRIAD_STAGGERED_EXECUTION_MODE:
+        if binding.get("credential_transport") != "fd-only-v1":
+            fail("host adapter credential transport binding mismatch")
+        if receipt.get("package") != binding.get("package"):
+            fail("host adapter package provenance binding mismatch")
+    elif "credential_transport" in binding and binding.get("credential_transport") != "caller-bound":
+        fail("host adapter credential transport binding mismatch")
     expected_evidence = _expected_adapter_evidence(plan)
     if binding.get("evidence_bindings") != expected_evidence:
         fail("persisted host adapter binding no longer matches plan evidence")
@@ -4993,8 +5167,8 @@ def rollback_staggered_transaction(
         elif isinstance(transaction.get("staggered_rollback_receipt"), dict):
             validate_host_receipt(transaction["staggered_rollback_receipt"], transaction, "staggered-rollback")
         else:
-            transaction["staggered_rollback_receipt"] = run_host_adapter(
-                host_adapter, path, transaction, "staggered-rollback"
+            transaction["staggered_rollback_receipt"] = _invoke_host_adapter(
+                host_adapter, path, transaction, "staggered-rollback", direct_args
             )
         if failed_role not in backups:
             fail(f"staggered rollback backup missing for {failed_role}")
@@ -5315,7 +5489,9 @@ def apply_transaction(
             rollback_errors.append(f"rollback direct re-observation: {rollback_direct_error}")
         try:
             if not rollback_errors:
-                transaction["rollback_receipt"] = run_host_adapter(host_adapter, path, transaction, "rollback")
+                transaction["rollback_receipt"] = _invoke_host_adapter(
+                    host_adapter, path, transaction, "rollback", direct_args
+                )
                 transaction.pop("adapter_callback", None)
         except BaseException as rollback_callback_error:
             rollback_errors.append(f"host-adapter: {rollback_callback_error}")
@@ -5398,7 +5574,9 @@ def rollback_transaction(
             )
             transaction["canonical_digest"] = canonical_digest(transaction)
             write_json(path, transaction)
-            transaction["rollback_receipt"] = run_host_adapter(host_adapter, path, transaction, "rollback")
+            transaction["rollback_receipt"] = _invoke_host_adapter(
+                host_adapter, path, transaction, "rollback", direct_args
+            )
             transaction.pop("adapter_callback", None)
         rollback_post_callback_receipt = _rollback_direct_reobserve(transaction, direct_args)
         transaction["rollback_post_callback_direct_quiescence_observation"] = _direct_observation_record(
@@ -5451,6 +5629,24 @@ def _validated_dispatch_execution_mode(
 def parser() -> argparse.ArgumentParser:
     root = argparse.ArgumentParser(description=__doc__)
     sub = root.add_subparsers(dest="mode", required=True)
+
+    def add_adapter_credential_options(command: argparse.ArgumentParser) -> None:
+        command.add_argument(
+            "--adapter-credential-fd",
+            type=int,
+            help="temporary shared descriptor for the governed host adapter",
+        )
+        command.add_argument(
+            "--adapter-storage-credential-fd",
+            type=int,
+            help="temporary storage-205 descriptor for the governed host adapter",
+        )
+        command.add_argument(
+            "--adapter-sequencer-credential-fd",
+            type=int,
+            help="temporary sequencer-204 descriptor for the governed host adapter",
+        )
+
     plan = sub.add_parser("plan")
     plan.add_argument(
         "--execution-mode",
@@ -5477,6 +5673,7 @@ def parser() -> argparse.ArgumentParser:
     plan.add_argument("--known-hosts")
     plan.add_argument("--credential-env")
     plan.add_argument("--credential-fd", type=int)
+    add_adapter_credential_options(plan)
     plan.add_argument("--out-dir")
     quiesce = sub.add_parser("quiesce")
     quiesce.add_argument("--consumer-impact-record", required=True)
@@ -5491,6 +5688,7 @@ def parser() -> argparse.ArgumentParser:
     direct.add_argument("--host-adapter")
     direct.add_argument("--credential-env")
     direct.add_argument("--credential-fd", type=int)
+    add_adapter_credential_options(direct)
     apply = sub.add_parser("apply")
     apply.add_argument(
         "--execution-mode",
@@ -5503,6 +5701,7 @@ def parser() -> argparse.ArgumentParser:
     apply.add_argument("--known-hosts")
     apply.add_argument("--credential-env")
     apply.add_argument("--credential-fd", type=int)
+    add_adapter_credential_options(apply)
     rollback = sub.add_parser("rollback")
     rollback.add_argument(
         "--execution-mode",
@@ -5515,6 +5714,7 @@ def parser() -> argparse.ArgumentParser:
     rollback.add_argument("--known-hosts")
     rollback.add_argument("--credential-env")
     rollback.add_argument("--credential-fd", type=int)
+    add_adapter_credential_options(rollback)
     resume = sub.add_parser("resume")
     resume.add_argument(
         "--execution-mode",
@@ -5527,6 +5727,7 @@ def parser() -> argparse.ArgumentParser:
     resume.add_argument("--known-hosts")
     resume.add_argument("--credential-env")
     resume.add_argument("--credential-fd", type=int)
+    add_adapter_credential_options(resume)
     return root
 
 
