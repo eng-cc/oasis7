@@ -54,7 +54,7 @@
 ### 2.4 认可的生命周期、失效与反滥用
 
 - 首次持续能力之后的成熟世界认可，其来源、范围、用途、期限、复核/申诉、失效、反滥用和恢复规则由[`成熟世界成长与区域参与`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004)主责；情境声誉记录与更新由[`沟通、合同、声誉与 R&D 连续性`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)主责。本专题保留 `REQ-ENTRY-FREE-002` / `AC-ENTRY-FREE-002` 作为入口的负边界与组合验收，不再另立一套认可生命周期。
-- 入口必须继续说明：付费便利、访问、在线时长、泛化互动或自我声明不会自动兑换世界内认可、资格、区域优先级或权力；世界内事实、专业审核和治理决定的具体资格、评分、分配与执行仍由 gameplay/runtime/blockchain/QA authority 决定。首次持续能力之前，首局/入口仅可表达无世界效果的 preview、推荐、当前 blocker 或下一步，不承诺早期认可、奖励、资格、优先级、容量或可使用机会。
+- 入口必须继续说明：付费便利、访问、在线时长、泛化互动或自我声明不会自动兑换世界内认可、资格、区域优先级或权力；世界内事实、专业审核和治理决定的具体资格、评分、分配与执行仍由 gameplay/runtime/blockchain/QA authority 决定。首次持续能力之前，**从这些入口或泛化互动信号推导的认可/机会**仅可表达无世界效果的 preview、推荐、当前 blocker 或下一步，不承诺由这些信号产生早期认可、奖励、资格、优先级、容量或可使用机会；首局取得持续能力所需的世界行动及其结果仍由首局玩法合同主责。
 
 #### 容量竞争下的机会申领生命周期
 
@@ -96,7 +96,7 @@
 
 - 适用阶段：首次持续能力之后的成熟世界认可/机会组合；首次持续能力之前不承诺世界内认可、资格、奖励、优先级、容量或可使用机会。
 - 要求：在该适用阶段，入口必须消费并显式链接[`成熟世界成长与区域参与`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004)和[`沟通、合同、声誉与 R&D 连续性`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)的世界内认可/机会主责；免费基础进入、付费便利、访问或外部参与不得自动变成世界资产、资格、区域优先级、OC、治理权、区域控制或永久全局权力。目标专题定义的失效仍不得抹除历史或封锁独立基线。
-- 早期负边界：首次持续能力之前，入口仅可证明 preview、推荐、当前 blocker 或下一步不产生世界效果；付费便利、在线时长、泛化互动或自我声明不构成早期认可、奖励、资格、优先级、容量或可使用机会。
+- 早期负边界：首次持续能力之前，从接入、付费便利、在线时长、泛化互动或自我声明推导的认可/机会仅可证明 preview、推荐、当前 blocker 或下一步不产生世界效果，不构成由这些信号授予的早期认可、奖励、资格、优先级、容量或可使用机会；不限制首局玩法合同下取得持续能力所需的世界行动、资源和交付结果。
 - 验收：AC-ENTRY-FREE-002
 
 <a id="ac-entry-free-002"></a>
@@ -104,7 +104,7 @@
 
 - 覆盖要求：REQ-ENTRY-FREE-002
 - 场景与结果：首次持续能力之后的成熟世界入口组合样例能回链成熟世界 [`REQ-WR-MW-004`](../world-rules-core-gameplay/mature-world-progression.prd.md#req-wr-mw-004) / [`AC-WR-MW-004`](../world-rules-core-gameplay/mature-world-progression.prd.md#ac-wr-mw-004) 与情境声誉 [`REQ-WR-CR-003`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003) / [`AC-WR-CR-003`](../world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md#ac-wr-cr-003)；代表性授予、使用、到期、拒绝、暂停或撤销仍能读到来源/范围/时间边界，历史认可、旧 receipt、重复申领或重连重试不会产生第二次分配、隐性优先权或永久权力，失败方仍可走独立路径、补证、替代路线、恢复或复核。
-- 早期边界：首次持续能力之前的入口样例只证明 preview、推荐、当前 blocker 或下一步不产生世界效果，不证明早期认可、奖励、资格、优先级、容量或可使用机会。
+- 早期边界：首次持续能力之前，从接入、付费或泛化互动信号推导的认可/机会样例只证明 preview、推荐、当前 blocker 或下一步不产生世界效果，不证明由这些信号授予的早期认可、奖励、资格、优先级、容量或可使用机会；首局正常世界行动及其结果不在这项负边界内。
 - 证据边界：资格、评分、分配、OC、治理和反滥用实现由 gameplay/runtime/blockchain/QA authority 定义；产品层不冻结数值或算法。
 
 ## 5. Done：成功标准与验收
