@@ -21,7 +21,7 @@
 - [玩家可读的世界舞台](player-readable-world-stage.prd.md)：约束正式世界表面的首读层级、空间关系来源、可归因玩家因果与按需诊断边界。
 - [玩家可读表面的连续性](player-readable-surface-continuity.prd.md)：约束 viewport、信息密度、语言与连接状态变化时，主要决策面仍可读、可操作且可恢复。
 - [Agent 对话与 Prompt 控制](agent-conversation-and-prompt-control.prd.md)：区分一次对话、预设/草稿与持续 Prompt/目标调整，并配对承载跨 surface 产品交互设计。
-- [Agent 权限、资产与责任连续性](agent-authority-ownership-and-accountability.prd.md)：承载自治模式、预授权、团队扩张、转让后的身份连续性、异议/override 与因果责任边界。
+- [Agent 自治、委托与责任连续性](agent-authority-ownership-and-accountability.prd.md)：承载自治模式、预授权、转让后的有效委托与身份连续性、异议/override 与因果责任边界；团队资产扩张与经济义务由玩法模块主责。
 - [Provider、学习认证与情报连续性](provider-learning-intelligence-and-cadence.prd.md)：可选择的认证 provider、固定权威节奏、可审计训练/重训与有期限情报的长期产品边界。
 
 ## 1. 产品承诺
@@ -57,6 +57,8 @@ Agent 不得绕过世界规则与基础设施约束；当工业、市场或治�
 产品 PRD 不改写具体模式、API、UI 或 provider 选择；冲突时由对应 `agent_engineer`、`viewer_engineer` 或 runtime owner 与产品 owner 共同裁决。
 
 相邻产品组合依赖：工业、市场、物流和治理的产品语义由 [`世界规则与玩法系统`](../world-rules-core-gameplay/prd.md) 拥有；[`权威世界基础设施`](../world-infrastructure/prd.md) 提供最终性、确定性执行与状态连续性保证；本模块消费两者形成可解释的 Agent 决策与反馈闭环，但不能以相邻产品 PRD 代替 `game` / `runtime` / `world-simulator` 的专业规则与验证证据。
+
+Agent 团队资产扩张、容量与转让后的经济义务由玩法模块的[Agent 所有权与持续经营](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md)主责；本模块只消费其结果，并独立定义有效委托与责任连续性。
 
 ## 4. 路线图
 
