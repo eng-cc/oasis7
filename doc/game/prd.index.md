@@ -1,6 +1,6 @@
 # game PRD 文件级索引
 
-区域设施阅读顺序：先从 `doc/product/README.md` 选择“世界规则与玩法系统”，再读其 [`受治理的区域能力与扩展`](../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md) 产品专题，最后下钻到本索引中的 `micro_depot` 专业合同。`PRD-GAME-016` 继续是该设施玩法与经济边界的专业域权威。
+区域玩法阅读顺序：先从 `doc/product/README.md` 选择“世界规则与玩法系统”，再读其 [`受治理的区域能力与扩展`](../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md) 产品专题；区域 charter、tenure 与公共融资下钻到 `PRD-GAME-017`，可编程区域设施再下钻到 `PRD-GAME-016` 的 `micro_depot` 专业合同。两份 game 专题分别拥有各自声明范围，不形成第五产品模块或并列产品入口。
 审计轮次: 12
 
 更新时间：2026-07-06
@@ -21,6 +21,7 @@
 - 想先看“成熟世界里小玩家为什么不必立刻依附 major power，仍能继续形成 leverage”：先读 `doc/product/world-rules-core-gameplay/mature-world-progression.prd.md`，再读 `doc/game/gameplay/gameplay-mature-world-progression-contract.prd.md`
 - 想先回答“1cm 物理世界”和“当前为什么不是 Minecraft 式逐块玩法”之间的边界：先读 `doc/product/world-rules-core-gameplay/prd.md` 的产品承诺，再读 `doc/game/gameplay/gameplay-top-level-design.prd.md` 的玩法合同
 - 想先回答“可编程区域设施如何作为中后期区域专业化能力落地，而不变成自由建造或任意 WASM 上传”：先读 `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md`
+- 想先回答“区域 charter、tenure 与公共融资如何成为有边界、可恢复且不封锁独立路线的玩家循环”：先读 `doc/product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md`，再读 `doc/game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md`
 - 想先看访问模式、受控试玩与 release readiness：读 `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`；当前执行状态由 GitHub task truth 与对应 evidence 确认。
 - 想继续按文件名、专题或补充材料下钻：使用下方热点子域导航与补充入口；当前文件库存统一以 `./scripts/doc-inventory-report.sh` 为准，本页不维护容易漂移的数量快照
 
@@ -47,6 +48,7 @@
 - `doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md`：访问模式、统一候选门禁与公开 claim 升阶入口。
 - `doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md`：近期高频经济规则与 token 成本边界主入口。
 - `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md`：WASM-backed 可编程区域设施、micro_depot quote/receipt、upkeep 与区域专业化边界主入口。
+- `doc/game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md`：`PRD-GAME-017` 区域 charter 提案/审查、双资格、退化恢复、tenure 长期规划、服务费/公共 levy 玩家合同主入口；产品承诺仍由 `governed-regional-capabilities-and-extensions.prd.md` 拥有。
 - `doc/game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md`：restricted grant 发放、撤销、过期与 incident 处理 runbook。
 
 ## 默认阅读面边界
@@ -79,6 +81,7 @@
 | `doc/game/gameplay/gameplay-mature-world-progression-contract.prd.md` | PRD-only；本专题不新增接口、状态机、回滚或实现算法，后续引入实现结构时再补同名 design |
 | `doc/game/gameplay/gameplay-top-level-design.prd.md` | `doc/game/gameplay/gameplay-top-level-design.design.md` |
 | `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md` | `doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.design.md` |
+| `doc/game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md` | PRD-only；本专题只承载区域制度的玩家动作、机会成本、失败恢复、申诉与验收，不新增实现结构 |
 
 ## 历史 closure / provenance 入口
 | 历史 closure 专题 | 当前追溯入口 |
