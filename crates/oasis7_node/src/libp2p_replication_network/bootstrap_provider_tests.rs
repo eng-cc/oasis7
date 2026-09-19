@@ -45,7 +45,7 @@ fn listening_addr_with_peer_id(network: &Libp2pReplicationNetwork) -> Multiaddr 
         .into_iter()
         .find(|addr| addr.to_string().contains("127.0.0.1"))
         .expect("listener visible addr")
-        .with(libp2p::multiaddr::Protocol::P2p(network.peer_id().into()))
+        .with(libp2p::multiaddr::Protocol::P2p(network.peer_id()))
 }
 
 #[test]

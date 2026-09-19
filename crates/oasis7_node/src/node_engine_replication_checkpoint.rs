@@ -287,6 +287,10 @@ impl PosNodeEngine {
         })
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable fresh-observer recovery seam preserves execution mismatch context and progress channels"
+    )]
     pub(super) fn try_fresh_observer_checkpoint_fallback_after_execution_mismatch(
         &mut self,
         endpoint: &ReplicationNetworkEndpoint,

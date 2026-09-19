@@ -38,8 +38,10 @@ fn failed_runtime_worker_spawn_restores_observer_for_retry() {
                 .start()
                 .expect("observer must survive the failed start");
 
-            let mut snapshot = NodeConsensusSnapshot::default();
-            snapshot.committed_height = 1;
+            let snapshot = NodeConsensusSnapshot {
+                committed_height: 1,
+                ..Default::default()
+            };
             runtime
                 .submit_consensus_progress_for_test(snapshot, 1)
                 .expect("submit progress after retried start");

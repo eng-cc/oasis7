@@ -253,9 +253,8 @@ impl ReplicationRuntime {
             retained_sources,
             retained_envelopes,
         )
-        .map_err(|err| {
+        .inspect_err(|err| {
             self.mark_checkpoint_lineage_recovery_required(&root, err.to_string());
-            err
         })?;
         Ok(())
     }
@@ -483,9 +482,8 @@ impl ReplicationRuntime {
         })?;
         sync_dir(root)?;
         self.write_checkpoint_lineage_health(root, journal.generation, &BTreeMap::new(), 0, 0)
-            .map_err(|err| {
+            .inspect_err(|err| {
                 self.mark_checkpoint_lineage_recovery_required(root, err.to_string());
-                err
             })?;
         let _ = restored;
         Ok(())

@@ -657,14 +657,14 @@ impl ReplicationNetworkEndpoint {
                 REPLICATION_FETCH_COMMIT_PROTOCOL,
             )?;
         }
-        if let Some(response) = self.cached_fetch_commit_success_response(request) {
-            if !require_lineage_sidecar || response.lineage_envelope.is_some() {
-                return Ok(GapSyncFetchCommitResponse {
-                    response,
-                    repair_summary: "cache=hit".to_string(),
-                    route_snapshot: NodeReplicationGapSyncRouteSnapshot::default(),
-                });
-            }
+        if let Some(response) = self.cached_fetch_commit_success_response(request)
+            && (!require_lineage_sidecar || response.lineage_envelope.is_some())
+        {
+            return Ok(GapSyncFetchCommitResponse {
+                response,
+                repair_summary: "cache=hit".to_string(),
+                route_snapshot: NodeReplicationGapSyncRouteSnapshot::default(),
+            });
         }
         let mut last_err = None;
         let mut route_events = Vec::new();
@@ -901,14 +901,13 @@ impl ReplicationNetworkEndpoint {
             .lock()
             .expect("lock fetch-commit success cache");
         cache.retain(|_, entry| entry.valid_until > now);
-        if cache.len() >= FETCH_COMMIT_SUCCESS_CACHE_MAX_ENTRIES {
-            if let Some(oldest_key) = cache
+        if cache.len() >= FETCH_COMMIT_SUCCESS_CACHE_MAX_ENTRIES
+            && let Some(oldest_key) = cache
                 .iter()
                 .min_by_key(|(_, entry)| entry.cached_at)
                 .map(|(key, _)| key.clone())
-            {
-                cache.remove(&oldest_key);
-            }
+        {
+            cache.remove(&oldest_key);
         }
         cache.insert(
             fetch_commit_success_cache_key(request),
