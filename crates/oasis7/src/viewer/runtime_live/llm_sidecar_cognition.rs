@@ -81,6 +81,24 @@ impl RuntimeLlmSidecar {
         }
         let provider_settings = provider_settings_from_env()?;
         let runtime_binding = world.current_runtime_binding(world_id)?;
+        #[cfg(any(test, feature = "test_tier_required"))]
+        if hosted_local_mock_test_lane_enabled(true) {
+            install_hosted_local_mock_test_capability_fixtures(world, true)?;
+        }
+        if self
+            .provider_lineage_binding
+            .as_ref()
+            .is_some_and(|previous| previous != &runtime_binding)
+        {
+            // A reconnect/reorg may advance the authoritative Runtime head
+            // while an older provider context is still cached. Do not let
+            // that context remain eligible for prompt-control admission or
+            // for the next provider turn under the new head.
+            self.provider_contexts
+                .retain(|_, context| context.request_context.runtime_binding == runtime_binding);
+            self.provider_retry_contexts
+                .retain(|_, context| context.request_context.runtime_binding == runtime_binding);
+        }
         self.provider_lineage_binding = Some(runtime_binding.clone());
         let recent_event_summary = recent_runtime_event_summaries(world);
         self.release_due_provider_waits(world)?;

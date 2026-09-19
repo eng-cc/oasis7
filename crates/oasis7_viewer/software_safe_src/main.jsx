@@ -3537,7 +3537,7 @@ function InteractionPanel() {
         </div>
         </PanelSection>
       <Show when={promptOverridesVisible()}>
-        <PanelSection title={tr(locale(), "提示词覆盖", "Prompt Overrides")}>
+        <PanelSection class="command-surface__prompt-panel" title={tr(locale(), "提示词覆盖", "Prompt Overrides")}>
           <div class="feedback-detail">{promptVersionState().summary}</div>
           <div class="feedback-detail">{promptVersionState().detail}</div>
           <Show when={!promptControlsEnabled()}>
@@ -3617,7 +3617,7 @@ function InteractionPanel() {
               {tr(locale(), "应用提示词", "Apply Prompt")}
             </button>
           </div>
-          <div class="toolbar">
+          <div class="toolbar command-surface__rollback-actions">
             <div class="field field--inline-flex">
               <label for="prompt-rollback-version">{tr(locale(), "下一次回滚目标版本", "Next Rollback Target Version")}</label>
               <input

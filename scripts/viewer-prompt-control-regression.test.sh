@@ -51,9 +51,9 @@ restricted
 --local-test-provider-authority
 local-test-provider-authority.json
 --local-test-provider-wasm
-.tmp/wasm-build-suite/module.runtime.local-test-provider.wasm
+.tmp/wasm-build-suite/local-test-provider/module.runtime.local-test-provider.wasm
 --local-test-provider-metadata
-.tmp/wasm-build-suite/module.runtime.local-test-provider.metadata.json
+.tmp/wasm-build-suite/local-test-provider/module.runtime.local-test-provider.metadata.json
 --local-test-provider-agent-id
 starter-agent-0
 --local-test-provider-owner-binding
@@ -85,6 +85,59 @@ EOF
     return 1
   fi
   echo "viewer-prompt-control full-gameplay contract: passed"
+}
+
+run_hosted_local_mock_contract_checks() {
+  local failures=""
+  local required_text
+  while IFS= read -r required_text; do
+    if ! grep -Fq -- "$required_text" "$runner"; then
+      failures="${failures}\n- missing ${required_text}"
+    fi
+  done <<'EOF'
+--hosted-local-mock
+--test-tier-required
+test_tier_required
+hosted_local_mock_seeded_agent
+--chain-enable
+--chain-local-standalone-test
+--local-test-provider-authority
+local-test-provider-authority.json
+--local-test-provider-wasm
+.tmp/wasm-build-suite/local-test-provider/module.runtime.local-test-provider.wasm
+--local-test-provider-metadata
+.tmp/wasm-build-suite/local-test-provider/module.runtime.local-test-provider.metadata.json
+--local-test-provider-agent-id
+AGENT_ID
+--local-test-provider-owner-binding
+local-test-owner-0
+--local-test-provider-finality-block-hash
+blake3:0000000000000000000000000000000000000000000000000000000000000000
+--local-test-provider-session-mode
+hosted_public_join
+provider_backed
+provider_local_mock
+worldsim_provider_v1
+loopback_http
+player_parity
+--skip-llm-provider-preflight
+--no-auto-play
+OASIS7_RUN_LAUNCHER_STACK_SKIP_SOURCE_BUILD=1
+seed-42
+EOF
+
+  if grep -Fq -- '--hosted-local-mock)' "$runner" && ! grep -Fq -- 'requires explicit --test-tier-required' "$runner"; then
+    failures="${failures}\n- Hosted local-mock route must require explicit test_tier_required"
+  fi
+  if ! grep -Fq -- '--chain-enable' "$runner" || ! grep -Fq -- '--chain-local-standalone-test' "$runner"; then
+    failures="${failures}\n- Hosted local-mock route must use the explicit DevLocal standalone chain"
+  fi
+  if [[ -n "$failures" ]]; then
+    echo "viewer-prompt-control Hosted local-mock contract: RED" >&2
+    printf '%b\n' "$failures" >&2
+    return 1
+  fi
+  echo "viewer-prompt-control Hosted local-mock contract: passed"
 }
 
 run_strong_auth_contract_checks() {
@@ -222,6 +275,170 @@ fi
 run_full_gameplay_contract_checks
 
 # Contract-only verification must never touch a browser or launcher/provider.
+run_hosted_local_mock_contract_checks
+if "$runner" --contract-only --headed --hosted-local-mock --out-dir "$tmp_root/hosted-mock-without-tier" >"$tmp_root/hosted-mock-without-tier.log" 2>&1; then
+  echo "Hosted local-mock route unexpectedly accepted without --test-tier-required" >&2
+  exit 1
+fi
+grep -Fq -- "requires explicit --test-tier-required" "$tmp_root/hosted-mock-without-tier.log"
+if "$runner" --contract-only --headed --hosted-local-mock --test-tier-required --full-gameplay --out-dir "$tmp_root/hosted-mock-full-gameplay" >"$tmp_root/hosted-mock-full-gameplay.log" 2>&1; then
+  echo "Hosted local-mock route unexpectedly accepted with --full-gameplay" >&2
+  exit 1
+fi
+grep -Fq -- "cannot be combined with --full-gameplay" "$tmp_root/hosted-mock-full-gameplay.log"
+
+# The explicit seed-42 fixture must encode a complete Ed25519 key and the
+# checked-in public half.  Keep this assertion secret-free: only lengths and
+# the known public fixture are compared, never emitted.
+python3 - "$runner" <<'PY'
+import pathlib
+import re
+import sys
+
+source = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+private = re.search(r'local seed42_private="([0-9a-f]+)"', source).group(1)
+public = re.search(r'local seed42_public="([0-9a-f]+)"', source).group(1)
+assert len(private) == 64, "seed-42 private fixture must contain 32 bytes"
+assert len(bytes.fromhex(private)) == 32
+assert len(public) == 64, "seed-42 public fixture must contain 32 bytes"
+assert public == "197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61"
+PY
+
+# An explicit seed-42 Hosted route must not silently inherit a malformed
+# signer from the caller environment.  The failure is intentionally generic:
+# this test must never echo private key material into logs or artifacts.
+bad_signer_out="$tmp_root/hosted-mock-bad-signer"
+bad_signer_private="$(printf 'aa%.0s' {1..30})"
+set +e
+env \
+  OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=fixture-public \
+  OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY="$bad_signer_private" \
+  OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=fixture-approval \
+  "$runner" \
+  --contract-only \
+  --headed \
+  --hosted-local-mock \
+  --test-tier-required \
+  --test-signer-seed 42 \
+  --out-dir "$bad_signer_out" >"$tmp_root/hosted-mock-bad-signer.log" 2>&1
+bad_signer_rc=$?
+set -e
+test "$bad_signer_rc" -ne 0
+grep -Fq -- "requires the deterministic seed-42 signer fixture" "$tmp_root/hosted-mock-bad-signer.log"
+if grep -Fq -- "$bad_signer_private" "$tmp_root/hosted-mock-bad-signer.log"; then
+  echo "bad signer fixture value leaked into runner diagnostics" >&2
+  exit 1
+fi
+
+# A test signer is never an implicit production/default launcher input.  The
+# no-seed contract remains caller/default mode and records no test signer.
+production_contract_dir="$tmp_root/production-contract"
+env \
+  OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=production-public \
+  OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY=production-private \
+  OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=production-approval \
+  "$runner" \
+  --contract-only \
+  --headed \
+  --test-tier-required \
+  --out-dir "$production_contract_dir" >/dev/null
+python3 - "$production_contract_dir/runner-config.json" <<'PY'
+import json
+import pathlib
+import sys
+
+config = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert config["deploymentMode"] == "caller_or_default"
+assert config["launchRoute"] == "legacy_prompt_control"
+assert config["testSigner"] == {"privateKeyRecorded": False, "seed": None}
+PY
+
+if "$runner" --contract-only --headed --test-tier-required --test-signer-seed 42 --out-dir "$tmp_root/seed-without-hosted" >"$tmp_root/seed-without-hosted.log" 2>&1; then
+  echo "explicit test signer unexpectedly accepted outside Hosted local-mock route" >&2
+  exit 1
+fi
+grep -Fq -- "requires --hosted-local-mock" "$tmp_root/seed-without-hosted.log"
+
+hosted_contract_dir="$tmp_root/hosted-local-mock-contract"
+"$runner" \
+  --contract-only \
+  --headed \
+  --hosted-local-mock \
+  --test-tier-required \
+  --test-signer-seed 42 \
+  --out-dir "$hosted_contract_dir" >/dev/null
+python3 - "$hosted_contract_dir/runner-config.json" "$hosted_contract_dir/artifact-manifest.json" <<'PY'
+import json
+import pathlib
+import sys
+
+config = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+manifest = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+assert config["browserMode"] == "headed"
+assert config["launchRoute"] == "hosted_local_mock_seeded_agent"
+assert config["deploymentMode"] == "hosted_public_join"
+assert config["chain"] == {
+    "autoPlay": False,
+    "enabled": True,
+    "standaloneTest": True,
+    "storageProfile": "dev_local",
+}
+assert config["localAuthority"] == {
+    "authorityArtifact": "runtime/local-test-provider-authority.json",
+    "finalityBlockHash": "blake3:" + "0" * 64,
+    "ownerBinding": "local-test-owner-0",
+    "sessionMode": "hosted_public_join",
+    "wasmArtifact": ".tmp/wasm-build-suite/local-test-provider/module.runtime.local-test-provider.wasm",
+    "metadataArtifact": ".tmp/wasm-build-suite/local-test-provider/module.runtime.local-test-provider.metadata.json",
+}
+assert config["provider"] == {
+    "backend": "provider_local_mock",
+    "contract": "worldsim_provider_v1",
+    "executionLane": "player_parity",
+    "transport": "loopback_http",
+    "url": "http://127.0.0.1:5841",
+}
+assert config["seededAgent"] is True
+assert config["testSigner"] == {"privateKeyRecorded": False, "seed": 42}
+assert config["testTierRequired"] is True
+assert config["evidenceBoundary"] == {
+    "providerCallsDuringVerification": False,
+    "realInference": False,
+    "worldConsequenceClaim": False,
+}
+assert manifest["launchRoute"] == config["launchRoute"]
+assert manifest["testSignerSeed"] == 42
+assert manifest["testTierRequired"] is True
+assert manifest["providerCallsDuringVerification"] is False
+assert manifest["externalProviderCallsDuringVerification"] is False
+assert manifest["localMockCallsDuringVerification"] is True
+assert "runner-config.json" in {item["path"] for item in manifest["artifacts"]}
+PY
+viewport_contract_dir="$tmp_root/viewport-contract"
+"$runner" \
+  --contract-only \
+  --headed \
+  --hosted-local-mock \
+  --test-tier-required \
+  --test-signer-seed 42 \
+  --viewport-width 390 \
+  --viewport-height 844 \
+  --out-dir "$viewport_contract_dir" >/dev/null
+python3 - "$viewport_contract_dir/runner-config.json" <<'PY'
+import json
+import pathlib
+import sys
+
+config = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+assert config["viewport"] == {"requestedHeight": 844, "requestedWidth": 390}
+PY
+set +e
+"$runner" --contract-only --headed --viewport-width 390 --out-dir "$tmp_root/viewport-without-height" >"$tmp_root/viewport-without-height.log" 2>&1
+viewport_missing_height_rc=$?
+set -e
+test "$viewport_missing_height_rc" -ne 0
+grep -Fq -- "must be provided together" "$tmp_root/viewport-without-height.log"
+
 fake_bin="$tmp_root/bin"
 mkdir -p "$fake_bin"
 cat >"$fake_bin/agent-browser" <<'EOF'
@@ -339,6 +556,10 @@ if [[ "${1:-}" == "eval" ]]; then
       : >"$VIEWER_PROMPT_FIXTURE_FALLBACK_MARKER"
     fi
     printf '%s\n' 'true'
+  elif [[ "$script" == *'window.innerWidth'* && "$script" == *'visualViewportWidth'* && "$script" != *'horizontalOverflowPx'* ]]; then
+    printf '%s\n' '{"innerWidth":1280,"innerHeight":720,"outerWidth":1280,"outerHeight":720,"devicePixelRatio":1,"visualViewportWidth":1280,"visualViewportHeight":720}'
+  elif [[ "$script" == *'horizontalOverflowPx'* ]]; then
+    printf '%s\n' '{"activeElementIsRollback":true,"horizontalOverflowPx":0,"rollback":{"activeElement":"rollback","focusVisible":true,"height":44,"minHitTarget":true,"outlineStyle":"solid","outlineWidth":"2px","text":"Rollback Prompt","uncovered":true,"visible":true,"width":120},"targetRow":{"position":"sticky","visible":true},"viewport":{"height":720,"width":1280}}'
   elif [[ "$script" == *'prompt_surface_missing:'* && "$script" == *'details.command-surface__advanced-details > summary'* ]]; then
     if [[ "${VIEWER_PROMPT_FIXTURE_PRE_PROMPT_TAB_LOST:-0}" == "1" ]]; then
       printf '%s\n' '"tab_lost"'
@@ -482,6 +703,26 @@ test -f "$fallback_marker"
 grep -Fq 'domcontentloaded fallback' "$fallback_out/agent-browser.log"
 test -f "$fallback_out/failure-domcontentloaded-session-info.json"
 test -f "$fallback_out/failure-domcontentloaded-tabs.json"
+python3 - "$fallback_out/browser-viewport.json" "$fallback_out/artifact-manifest.json" <<'PY'
+import json
+import pathlib
+import sys
+
+viewport = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+manifest = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+assert viewport["width"] == 1280
+assert viewport["height"] == 720
+assert viewport["innerWidth"] == 1280
+assert viewport["innerHeight"] == 720
+assert manifest["viewport"]["width"] == 1280
+assert manifest["viewport"]["height"] == 720
+layout = manifest["promptLayout"]
+assert layout["horizontalOverflowPx"] == 0
+assert layout["rollback"]["minHitTarget"] is True
+assert layout["rollback"]["uncovered"] is True
+assert layout["rollback"]["visible"] is True
+assert layout["targetRow"]["position"] == "sticky"
+PY
 
 action_failure_out="$tmp_root/action-failure"
 action_count_file="$tmp_root/test-login-action-count"
@@ -701,7 +942,7 @@ assert manifest["visibleActionContract"] == {
 }
 paths = [entry["path"] for entry in manifest["artifacts"]]
 assert paths == sorted(paths)
-assert paths == ["contract.json", "manifest-input.json"]
+assert paths == ["contract.json", "manifest-input.json", "runner-config.json"]
 for entry in manifest["artifacts"]:
     assert set(entry) == {"bytes", "path", "sha256"}
     assert len(entry["sha256"]) == 64
@@ -737,28 +978,78 @@ else
 cat >"$sandbox/scripts/run-launcher-stack.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
-[[ "${OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY:-}" == "fixture" ]]
-[[ "${OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY:-}" == "fixture" ]]
-[[ "${OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE:-}" == "fixture" ]]
+[[ -n "${OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY:-}" ]]
+[[ -n "${OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY:-}" ]]
+[[ -n "${OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE:-}" ]]
 [[ "${OASIS7_HOSTED_TEST_LOGIN_ENABLED:-}" == "1" ]]
 output_dir=""
 chain_disable_seen=0
+chain_enable_seen=0
+args_file="${VIEWER_PROMPT_FIXTURE_ARGS_FILE:-}"
+if [[ -n "$args_file" ]]; then
+  : >"$args_file"
+fi
 while (($# > 0)); do
+  if [[ -n "$args_file" ]]; then
+    printf '%s\n' "$1" >>"$args_file"
+  fi
   if [[ "${1:-}" == "--output-dir" ]]; then
     output_dir="${2:?missing output dir}"
     shift 2
   elif [[ "${1:-}" == "--chain-disable" ]]; then
     chain_disable_seen=1
     shift
+  elif [[ "${1:-}" == "--chain-enable" ]]; then
+    chain_enable_seen=1
+    shift
   else
     shift
   fi
 done
-[[ "$chain_disable_seen" == "1" ]]
+case "${VIEWER_PROMPT_FIXTURE_EXPECT_ROUTE:-default}" in
+  default) [[ "$chain_disable_seen" == "1" ]] ;;
+  hosted) [[ "$chain_enable_seen" == "1" ]] ;;
+  full) [[ "$chain_enable_seen" == "1" ]] ;;
+  *) exit 1 ;;
+esac
 mkdir -p "$output_dir"
+if [[ "${VIEWER_PROMPT_FIXTURE_EXPECT_ROUTE:-default}" == "full" ]]; then
+  cat >"$output_dir/session.meta" <<'META'
+STACK_READY=1
+LOCAL_TEST_PROVIDER_SETUP_ENABLED=1
+CHAIN_ENABLED=1
+DEPLOYMENT_MODE=trusted_local_only
+META
+  cat >"$output_dir/local-test-provider-authority.json" <<'JSON'
+{"agent_id":"starter-agent-0","grant":{"grant_id":"fixture-grant"},"invocation_context":{"grant_id":"fixture-grant","subject":{"agent_id":"starter-agent-0"}}}
+JSON
+fi
 printf '%s\n' '- URL: http://127.0.0.1:9'
 printf '%s\n' '- URL: http://127.0.0.1:9/?render_mode=viewer&ws=ws%3A%2F%2F127.0.0.1%3A11&hosted_access=fixture-authority' \
   >"$output_dir/oasis7_viewer_live.log"
+sleep 5
+EOF
+  mkdir -p "$sandbox/.tmp/wasm-build-suite/local-test-provider" "$sandbox/fake-target"
+  : >"$sandbox/.tmp/wasm-build-suite/local-test-provider/module.runtime.local-test-provider.wasm"
+  : >"$sandbox/.tmp/wasm-build-suite/local-test-provider/module.runtime.local-test-provider.metadata.json"
+  cat >"$sandbox/scripts/cargo-dev-lib.sh" <<'EOF'
+#!/usr/bin/env bash
+oasis7_cargo_dev() {
+  local expect_bin=""
+  while (($# > 0)); do
+    if [[ "${1:-}" == "--bin" ]]; then
+      expect_bin="${2:?missing binary}"
+      : >"${OASIS7_TEST_TIER_FAKE_TARGET:?missing fake target}/$expect_bin"
+      chmod +x "${OASIS7_TEST_TIER_FAKE_TARGET}/$expect_bin"
+      shift 2
+    else
+      shift
+    fi
+  done
+}
+oasis7_cargo_dev_debug_bin_dir() {
+  printf '%s\n' "${OASIS7_TEST_TIER_FAKE_TARGET:?missing fake target}"
+}
 EOF
   cat >"$sandbox/bin/agent-browser" <<'EOF'
 #!/usr/bin/env bash
@@ -788,6 +1079,10 @@ elif [[ "${1:-}" == "eval" && "${2:-}" == "--stdin" ]]; then
   script=$(cat)
   if [[ "$script" == 'window.__AW_TEST__.getState()' ]]; then
     printf '%s\n' '{"authReady":true,"authRegistrationStatus":"registered","authRuntimeStatus":"registered","authBoundAgentId":"agent-1","authSessionEpoch":1,"authBindingEpoch":1,"viewerProtocol":{"negotiated":true,"capabilities":["prompt_control_result_v1"],"authorityEpoch":"fixture-authority"},"selectedId":"agent-1","selectedPromptVersion":0,"lastPromptFeedback":null,"strongAuthLastGrantActionId":null,"strongAuthLastGrantError":null}'
+  elif [[ "$script" == *'window.innerWidth'* && "$script" == *'visualViewportWidth'* && "$script" != *'horizontalOverflowPx'* ]]; then
+    printf '%s\n' '{"innerWidth":1280,"innerHeight":720,"outerWidth":1280,"outerHeight":720,"devicePixelRatio":1,"visualViewportWidth":1280,"visualViewportHeight":720}'
+  elif [[ "$script" == *'horizontalOverflowPx'* ]]; then
+    printf '%s\n' '{"activeElementIsRollback":true,"horizontalOverflowPx":0,"rollback":{"activeElement":"rollback","focusVisible":true,"height":44,"minHitTarget":true,"outlineStyle":"solid","outlineWidth":"2px","text":"Rollback Prompt","uncovered":true,"visible":true,"width":120},"targetRow":{"position":"sticky","visible":true},"viewport":{"height":720,"width":1280}}'
   elif [[ "$script" == *'prompt_surface_missing:'* && "$script" == *'details.command-surface__advanced-details > summary'* ]]; then
     printf '%s\n' '"ready"'
   else
@@ -814,7 +1109,34 @@ EOF
     echo "Bash 3 empty-array compatibility flow failed: $result_code" >&2
     exit 1
   fi
+
+  hosted_args_file="$tmp_root/hosted-stack-args"
+  env "$fallback_backend_requirement" \
+    VIEWER_PROMPT_FIXTURE_EXPECT_ROUTE=hosted \
+    VIEWER_PROMPT_FIXTURE_ARGS_FILE="$hosted_args_file" \
+    OASIS7_TEST_TIER_FAKE_TARGET="$sandbox/fake-target" \
+    PATH="$sandbox/bin:$PATH" /bin/bash "$sandbox/scripts/viewer-prompt-control-regression.sh" \
+    --headed --hosted-local-mock --test-tier-required --test-login \
+    --out-dir "$tmp_root/hosted-stack-args-run" \
+    --caller-sentinel hosted-value
+grep -Fqx -- '--caller-sentinel' "$hosted_args_file"
+grep -Fqx -- 'hosted-value' "$hosted_args_file"
+
+  full_args_file="$tmp_root/full-gameplay-stack-args"
+  env "$fallback_backend_requirement" \
+    VIEWER_PROMPT_FIXTURE_EXPECT_ROUTE=full \
+    VIEWER_PROMPT_FIXTURE_ARGS_FILE="$full_args_file" \
+    OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=fixture \
+    OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY=fixture \
+    OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=fixture \
+    PATH="$sandbox/bin:$PATH" /bin/bash "$sandbox/scripts/viewer-prompt-control-regression.sh" \
+    --headed --full-gameplay --test-login \
+    --out-dir "$tmp_root/full-gameplay-stack-args-run" \
+    --caller-sentinel full-value
+grep -Fqx -- '--caller-sentinel' "$full_args_file"
+grep -Fqx -- 'full-value' "$full_args_file"
 fi
+
 grep -Fq 'if ((${#STACK_ARGS[@]} > 0)); then' "$runner"
 
 echo "viewer-prompt-control runner contract: passed"

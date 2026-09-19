@@ -453,6 +453,28 @@ describe("fullscreen map shell contract", () => {
     );
   });
 
+  it("keeps Hosted prompt rollback reachable in the true phone-width Command drawer", async () => {
+    const [{ terminalShellCss }, mainSource] = await Promise.all([
+      readViewerHtml(),
+      readFile("software_safe_src/main.jsx", "utf8"),
+    ]);
+    expect(mainSource).toMatch(/class="command-surface__prompt-panel"/);
+    expect(mainSource).toMatch(/class="toolbar command-surface__rollback-actions"/);
+    const mobileBlock = terminalShellCss.match(/@media\s*\(max-width:\s*640px\)[\s\S]*$/i)?.[0] || "";
+    expect(mobileBlock).toMatch(
+      /#viewer-details-panel\s+\.command-surface__prompt-panel\s+textarea\s*\{[^}]*min-height:\s*56px/i,
+    );
+    expect(mobileBlock).toMatch(
+      /#viewer-details-panel\s+\.command-surface__rollback-actions\s*\{[^}]*display:\s*grid[^}]*grid-template-columns:\s*minmax\(0,\s*1fr\)\s+auto/i,
+    );
+    expect(mobileBlock).toMatch(
+      /#viewer-details-panel\s+\.command-surface__rollback-actions\s+\.field--inline-flex\s*\{[^}]*min-width:\s*0/i,
+    );
+    expect(mobileBlock).toMatch(
+      /#viewer-details-panel\s+\.command-surface__rollback-actions\s+\[data-prompt-action="rollback"\]:focus\s*\{[^}]*outline:\s*3px\s+solid\s+var\(--color-focus-ring\)/i,
+    );
+  });
+
   it("places unavailable fallback copy below navigation and keeps diagnostics folded", async () => {
     const { terminalShellCss } = await readViewerHtml();
     const fallbackRule = findRule(terminalShellCss, /\[data-viewer-overlay=["']renderer-unavailable["']\]/);

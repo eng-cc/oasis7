@@ -535,6 +535,97 @@ fn runtime_live_hello_omits_governed_rollback_when_no_durable_sink_exists() {
 }
 
 #[test]
+fn hosted_local_mock_seeded_agent_negotiates_prompt_control_result_capability() {
+    let _guard = runtime_provider_env_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    clear_runtime_provider_env();
+    // SAFETY: This test/setup code mutates process environment while holding
+    // the canonical provider environment lock.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_DECISION_SOURCE_ENV, "provider_backed");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_backed");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_BACKEND_ENV, "provider_local_mock");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_CONTRACT_ENV, "worldsim_provider_v1");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_TRANSPORT_ENV, "loopback_http");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, "http://127.0.0.1:9");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+        oasis7::env_mut::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
+    }
+
+    let test_world_id = "live-runtime-minimal".to_string();
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm)
+            .with_hosted_public_join_mode(true)
+            .with_test_cognition_runtime_binding(
+                "hosted-local-mock-branch",
+                0,
+                Some(
+                    crate::simulator::h_v1("oasis7.viewer.test.finality-block.v1", &test_world_id)
+                        .to_string(),
+                ),
+                "verified",
+                0,
+            ),
+    )
+    .expect("create Hosted local-mock runtime server");
+    assert!(
+        server.world.state().agents.contains_key("agent-0"),
+        "Hosted local-mock negotiation must start with the seeded Agent"
+    );
+    server
+        .world
+        .install_test_provider_capability_fixture("agent-0")
+        .expect("install proof-bearing Hosted local-mock capability context");
+
+    let mut session = RuntimeLiveSession::new();
+    let (mut writer, peer) = test_writer_pair();
+    server
+        .handle_request(
+            ViewerRequest::HelloV2 {
+                client: "hosted-local-mock-capability-probe".to_string(),
+                version: VIEWER_PROTOCOL_VERSION,
+                capabilities: vec![
+                    crate::viewer::protocol::PROMPT_CONTROL_RESULT_CAPABILITY.to_string(),
+                ],
+            },
+            &mut session,
+            &mut writer,
+        )
+        .expect("handle Hosted local-mock v2 hello");
+    let responses = read_available_runtime_live_responses(&peer, Duration::from_millis(25));
+    let (capabilities, authority_epoch) = match responses.first() {
+        Some(ViewerResponse::HelloAck {
+            capabilities,
+            authority_epoch,
+            ..
+        }) => (capabilities, authority_epoch),
+        other => panic!("expected Hosted local-mock hello ack, got {other:?}"),
+    };
+    let negotiated = crate::viewer::protocol::viewer_protocol_supports_prompt_control_result(
+        &session.negotiated_protocol,
+    );
+    clear_runtime_provider_env();
+
+    assert!(
+        capabilities
+            .iter()
+            .any(|capability| capability
+                == crate::viewer::protocol::PROMPT_CONTROL_RESULT_CAPABILITY),
+        "Hosted local-mock seeded Agent must negotiate prompt_control_result_v1: {capabilities:?}"
+    );
+    assert!(
+        authority_epoch.is_some(),
+        "Hosted local-mock prompt-control negotiation must carry the authority epoch"
+    );
+    assert!(
+        negotiated,
+        "session must record prompt_control_result_v1 after Hosted local-mock negotiation"
+    );
+}
+
+#[test]
 fn runtime_live_status_unknown_fence_rejects_mutating_requests() {
     let recovery_dir = std::env::temp_dir().join(format!(
         "oasis7-status-unknown-fence-{}-{}",

@@ -490,6 +490,109 @@ fn parse_options_rejects_unknown_option() {
     assert!(err.contains("unknown option"));
 }
 
+fn hosted_local_mock_chain_args() -> Vec<String> {
+    vec![
+        "--chain-local-standalone-test".to_string(),
+        "--local-test-provider-authority".to_string(),
+        "authority.json".to_string(),
+        "--local-test-provider-wasm".to_string(),
+        "provider.wasm".to_string(),
+        "--local-test-provider-metadata".to_string(),
+        "provider.metadata.json".to_string(),
+        "--local-test-provider-finality-block-hash".to_string(),
+        format!("blake3:{}", "0".repeat(64)),
+        "--local-test-provider-session-mode".to_string(),
+        "hosted_public_join".to_string(),
+        "--agent-decision-source".to_string(),
+        "provider_backed".to_string(),
+        "--agent-provider-backend".to_string(),
+        "provider_local_mock".to_string(),
+        "--agent-provider-contract".to_string(),
+        "worldsim_provider_v1".to_string(),
+        "--agent-provider-transport".to_string(),
+        "loopback_http".to_string(),
+        "--agent-execution-lane".to_string(),
+        "player_parity".to_string(),
+    ]
+}
+
+#[cfg(feature = "test_tier_required")]
+#[test]
+fn parse_options_accepts_hosted_local_mock_funding_tuple() {
+    let args = hosted_local_mock_chain_args();
+    let options = parse_options(args.iter().map(String::as_str))
+        .expect("chain runtime should admit the explicit test-tier tuple");
+    assert!(options.chain_local_standalone_test);
+    assert_eq!(
+        options.agent_decision_source.as_deref(),
+        Some("provider_backed")
+    );
+    assert_eq!(
+        options.agent_provider_backend.as_deref(),
+        Some("provider_local_mock")
+    );
+    assert_eq!(
+        options.agent_provider_contract.as_deref(),
+        Some("worldsim_provider_v1")
+    );
+    assert_eq!(
+        options.agent_provider_transport.as_deref(),
+        Some("loopback_http")
+    );
+    assert_eq!(
+        options.agent_execution_lane.as_deref(),
+        Some("player_parity")
+    );
+}
+
+#[cfg(not(feature = "test_tier_required"))]
+#[test]
+fn parse_options_rejects_hosted_local_mock_funding_without_test_tier() {
+    let args = hosted_local_mock_chain_args();
+    let error = parse_options(args.iter().map(String::as_str))
+        .expect_err("production chain runtime must reject Hosted local-mock funding");
+    assert!(error.contains("test_tier_required"), "{error}");
+}
+
+#[cfg(feature = "test_tier_required")]
+#[test]
+fn parse_options_rejects_hosted_local_mock_funding_with_wrong_tuple() {
+    let mut args = hosted_local_mock_chain_args();
+    let index = args
+        .iter()
+        .position(|arg| arg == "player_parity")
+        .expect("execution lane argument");
+    args[index] = "headless_agent".to_string();
+    let error = parse_options(args.iter().map(String::as_str))
+        .expect_err("Hosted local-mock funding must require player_parity");
+    assert!(error.contains("player_parity"), "{error}");
+}
+
+#[cfg(feature = "test_tier_required")]
+#[test]
+fn parse_options_rejects_hosted_local_mock_funding_without_authority_setup() {
+    let mut args = hosted_local_mock_chain_args();
+    for flag in [
+        "--local-test-provider-authority",
+        "--local-test-provider-wasm",
+        "--local-test-provider-metadata",
+        "--local-test-provider-finality-block-hash",
+        "--local-test-provider-session-mode",
+    ] {
+        let index = args
+            .iter()
+            .position(|arg| arg == flag)
+            .expect("local provider argument");
+        args.drain(index..=index + 1);
+    }
+    let error = parse_options(args.iter().map(String::as_str))
+        .expect_err("provider tuple must not grant synthetic local authority");
+    assert!(
+        error.contains("local test provider authority setup"),
+        "{error}"
+    );
+}
+
 #[test]
 fn default_runtime_paths_depend_on_node_id() {
     let options = CliOptions {

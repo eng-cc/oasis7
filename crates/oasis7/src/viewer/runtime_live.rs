@@ -9,7 +9,8 @@ use super::protocol::{
     AuthoritativeRollbackRequest, AuthoritativeRollbackV2Request,
     AuthoritativeSessionRegisterRequest, AuthoritativeSessionRevokeRequest,
     AuthoritativeSessionRotateRequest, ControlCompletionAck, ControlCompletionStatus,
-    GameplayActionError, PROMPT_CONTROL_RESULT_CAPABILITY, REVOKE_SOCIAL_FACT_QUOTE_CAPABILITY,
+    GameplayActionError, PROMPT_CONTROL_RESULT_CAPABILITY, PromptControlError,
+    PromptControlResultStatus, PromptControlValueVisibility, REVOKE_SOCIAL_FACT_QUOTE_CAPABILITY,
     RollbackAuthorizationEnvelope, RollbackIntent, VIEWER_PROTOCOL_VERSION, ViewerControl,
     ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerResponse, ViewerStream,
     viewer_event_kind_matches, viewer_protocol_supports_prompt_control_result,
@@ -149,6 +150,10 @@ pub struct ViewerRuntimeLiveServer {
     auto_play_paused: bool,
     next_auto_play_step_at: Option<Instant>,
     last_chain_committed_height: u64,
+    // Set only after a chain snapshot has passed authority validation and was
+    // adopted into the viewer projection. RequestSnapshot may reuse that
+    // current projection instead of issuing a second readiness race.
+    chain_runtime_authoritatively_primed: bool,
     confirmed_player_gameplay_progress_time: Option<u64>,
     snapshot_config: WorldConfig,
     seed_model: Option<WorldModel>,
@@ -172,6 +177,7 @@ pub struct ViewerRuntimeLiveServer {
     runtime_action_players: BTreeMap<u64, String>,
     consumed_rollback_operator_nonces: BTreeSet<String>,
     prompt_control_authority: PromptControlRuntimeAuthority,
+    hosted_local_mock_test_lane_active: bool,
     authoritative_recovery_write_fence: Option<String>,
     smelter_affordability_debug_agent_id: Option<String>,
     governance_vote_quote_debug_agent_id: Option<String>,
@@ -275,6 +281,20 @@ impl ViewerRuntimeLiveServer {
             )
             .map_err(ViewerRuntimeLiveServerError::Init)?;
         }
+        let hosted_local_mock_test_lane_enabled =
+            control_plane::hosted_local_mock_test_lane_enabled(config.hosted_public_join_mode);
+        let hosted_local_mock_test_lane_active = if hosted_local_mock_test_lane_enabled
+            && chain_linked
+            && world.state().agents.is_empty()
+        {
+            true
+        } else {
+            control_plane::install_hosted_local_mock_test_capability_fixtures(
+                &mut world,
+                config.hosted_public_join_mode,
+            )
+            .map_err(ViewerRuntimeLiveServerError::Init)?
+        };
         let initial_world_time = world.state().time;
         let mut llm_sidecar = match seed_model.as_ref() {
             Some(model) => {
@@ -282,6 +302,9 @@ impl ViewerRuntimeLiveServer {
             }
             None => RuntimeLlmSidecar::new(config.decision_mode),
         };
+        if hosted_local_mock_test_lane_active {
+            llm_sidecar.enable_hosted_local_mock_test_lane();
+        }
         if let Some(provider_lineage_store) = config.provider_lineage_store_path() {
             llm_sidecar.configure_provider_lineage_store(provider_lineage_store);
             llm_sidecar
@@ -303,6 +326,7 @@ impl ViewerRuntimeLiveServer {
             initial_world_time,
             next_auto_play_step_at: None,
             last_chain_committed_height: 0,
+            chain_runtime_authoritatively_primed: false,
             confirmed_player_gameplay_progress_time: None,
             snapshot_config,
             seed_model,
@@ -384,6 +408,7 @@ impl ViewerRuntimeLiveServer {
                 .map(|generation| generation.consumed_rollback_operator_nonces.clone())
                 .unwrap_or_default(),
             prompt_control_authority,
+            hosted_local_mock_test_lane_active,
             authoritative_recovery_write_fence: None,
             smelter_affordability_debug_agent_id: None,
             governance_vote_quote_debug_agent_id: None,
@@ -473,8 +498,15 @@ impl ViewerRuntimeLiveServer {
                     let trimmed = line.trim();
                     if !trimmed.is_empty() {
                         if let Ok(request) = serde_json::from_str::<ViewerRequest>(trimmed) {
+                            let chain_prime =
+                                Self::prime_shared_request_if_needed(&shared, &request, &session)?;
                             let mut server = lock_shared_server(&shared)?;
-                            server.handle_request(request, &mut session, &mut writer)?;
+                            server.handle_request_with_chain_prime(
+                                request,
+                                &mut session,
+                                &mut writer,
+                                chain_prime,
+                            )?;
                         }
                     }
                 }
@@ -568,6 +600,16 @@ impl ViewerRuntimeLiveServer {
         session: &mut RuntimeLiveSession,
         writer: &mut BufWriter<TcpStream>,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
+        self.handle_request_with_chain_prime(request, session, writer, None)
+    }
+
+    fn handle_request_with_chain_prime(
+        &mut self,
+        request: ViewerRequest,
+        session: &mut RuntimeLiveSession,
+        writer: &mut BufWriter<TcpStream>,
+        mut chain_prime: Option<Result<(), ViewerRuntimeLiveServerError>>,
+    ) -> Result<(), ViewerRuntimeLiveServerError> {
         self.resolve_authoritative_recovery_write_fence()?;
         if matches!(&request, ViewerRequest::QuoteRevokeSocialFact { .. })
             && !viewer_protocol_supports_revoke_social_fact_quote(&session.negotiated_protocol)
@@ -628,6 +670,30 @@ impl ViewerRuntimeLiveServer {
                 ..
             } => {
                 let mut selected = Vec::new();
+                let hosted_local_mock_capability_ready = if version >= 2
+                    && self.hosted_local_mock_test_lane_active
+                    && self.chain_link_enabled()
+                    && self.world.state().agents.is_empty()
+                {
+                    if let Err(error) = chain_prime.take().unwrap_or_else(|| {
+                        self.prime_chain_linked_runtime_for_snapshot().map(|_| ())
+                    }) {
+                        emit_stderr_or_event(
+                            Level::WARN,
+                            format!(
+                                "viewer runtime live: Hosted local-mock HelloV2 prime skipped: {error:?}"
+                            )
+                            .as_str(),
+                            "viewer runtime live Hosted local-mock HelloV2 prime skipped",
+                        );
+                    }
+                    !self.world.state().agents.is_empty()
+                        && !self.world.capability_invocation_contexts().is_empty()
+                } else {
+                    !self.hosted_local_mock_test_lane_active
+                        || (!self.world.state().agents.is_empty()
+                            && !self.world.capability_invocation_contexts().is_empty())
+                };
                 if version >= 2 {
                     if self.authoritative_recovery_dir().is_some()
                         && offered.iter().any(|capability| {
@@ -646,7 +712,8 @@ impl ViewerRuntimeLiveServer {
                     {
                         selected.push(REVOKE_SOCIAL_FACT_QUOTE_CAPABILITY.to_string());
                     }
-                    if self.llm_sidecar.supports_prompt_control_result()
+                    if hosted_local_mock_capability_ready
+                        && self.llm_sidecar.supports_prompt_control_result()
                         && offered
                             .iter()
                             .any(|capability| capability == PROMPT_CONTROL_RESULT_CAPABILITY)
@@ -690,8 +757,16 @@ impl ViewerRuntimeLiveServer {
                 };
             }
             ViewerRequest::RequestSnapshot => {
-                if self.chain_link_enabled() && !session.initial_snapshot_sent {
-                    if let Err(err) = self.prime_chain_linked_runtime_for_snapshot() {
+                // HelloV2 may already have authoritatively primed this
+                // chain-linked server. Reusing that validated projection
+                // avoids a second status read racing the first snapshot.
+                if self.chain_link_enabled()
+                    && !session.initial_snapshot_sent
+                    && !self.chain_runtime_authoritatively_primed
+                {
+                    if let Err(err) = chain_prime.take().unwrap_or_else(|| {
+                        self.prime_chain_linked_runtime_for_snapshot().map(|_| ())
+                    }) {
                         if self.config.chain_link_policy == ChainLinkPolicy::Enforcing {
                             return Err(err);
                         }
@@ -775,6 +850,36 @@ impl ViewerRuntimeLiveServer {
                 self.apply_control_mode(mode, request_id, session, writer)?;
             }
             ViewerRequest::PromptControl { command } => {
+                // A headed Hosted local-mock client may issue prompt control
+                // before auto-play enters the decision loop. Prepare the
+                // provider context from the current authoritative projection
+                // so Apply cannot acknowledge without a real runner/context.
+                if self.hosted_local_mock_test_lane_active && self.llm_sidecar.is_llm_mode() {
+                    if let Err(error) = self.llm_sidecar.prepare_hosted_local_mock_prompt_context(
+                        &mut self.world,
+                        &self.snapshot_config,
+                        self.config.world_id.as_str(),
+                    ) {
+                        tracing::warn!(
+                            error,
+                            "Hosted local-mock prompt context preparation blocked prompt control"
+                        );
+                        let mut blocked = PromptControlError::default_legacy();
+                        blocked.code = "prompt_control_runtime_context_unavailable".to_string();
+                        blocked.message =
+                            format!("Hosted local-mock prompt context preparation failed: {error}");
+                        blocked.status = Some(PromptControlResultStatus::Blocked);
+                        blocked.value_visibility = Some(PromptControlValueVisibility::Hidden);
+                        blocked.reason_code =
+                            Some("prompt_control_runtime_context_unavailable".to_string());
+                        blocked.next_step = Some("retry_after_runtime_resync".to_string());
+                        send_response(
+                            writer,
+                            &ViewerResponse::PromptControlError { error: blocked },
+                        )?;
+                        return Ok(());
+                    }
+                }
                 match self
                     .handle_prompt_control_for_protocol(*command, &session.negotiated_protocol)
                 {
@@ -918,6 +1023,37 @@ impl ViewerRuntimeLiveServer {
             }
         }
         Ok(())
+    }
+
+    fn prime_shared_request_if_needed(
+        shared: &Arc<Mutex<Self>>,
+        request: &ViewerRequest,
+        session: &RuntimeLiveSession,
+    ) -> Result<Option<Result<(), ViewerRuntimeLiveServerError>>, ViewerRuntimeLiveServerError>
+    {
+        let should_prime = {
+            let server = lock_shared_server(shared)?;
+            match request {
+                ViewerRequest::HelloV2 { version, .. } => {
+                    *version >= 2
+                        && server.hosted_local_mock_test_lane_active
+                        && server.chain_link_enabled()
+                        && server.world.state().agents.is_empty()
+                }
+                ViewerRequest::RequestSnapshot => {
+                    server.chain_link_enabled()
+                        && !session.initial_snapshot_sent
+                        && !server.chain_runtime_authoritatively_primed
+                }
+                _ => false,
+            }
+        };
+        if !should_prime {
+            return Ok(None);
+        }
+        Ok(Some(
+            Self::prime_chain_linked_runtime_for_snapshot_minimized_lock(shared).map(|_| ()),
+        ))
     }
 
     fn advance_runtime(

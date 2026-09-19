@@ -122,6 +122,8 @@ use self::agent_chat_support::{
 };
 pub(in crate::viewer::runtime_live) use self::async_support::runtime_provider_context_digest;
 use self::async_support::{RuntimeLlmDecision, provider_trace_retryable};
+pub(in crate::viewer::runtime_live) use self::provider_support::hosted_local_mock_test_lane_enabled;
+pub(in crate::viewer::runtime_live) use self::provider_support::install_hosted_local_mock_test_capability_fixtures;
 pub(in crate::viewer::runtime_live) use self::provider_support::provider_settings_from_env;
 use self::provider_support::{
     env_requests_provider_backend, provider_phase1_action_catalog, provider_phase1_memory_summary,
@@ -256,6 +258,7 @@ pub(in crate::viewer::runtime_live) struct RuntimeLlmSidecar {
     pub(in crate::viewer::runtime_live) chunk_runtime: ChunkRuntimeConfig,
     provider_session_ids: BTreeMap<String, String>,
     provider_agent_ids: BTreeSet<String>,
+    hosted_local_mock_test_lane: bool,
     provider_context_seq: BTreeMap<String, u64>,
     provider_contexts: BTreeMap<String, cognition_context::ProviderContextState>,
     provider_retry_contexts: BTreeMap<String, cognition_context::ProviderContextState>,
@@ -396,6 +399,7 @@ impl RuntimeLlmSidecar {
             chunk_runtime: ChunkRuntimeConfig::default(),
             provider_session_ids: BTreeMap::new(),
             provider_agent_ids: BTreeSet::new(),
+            hosted_local_mock_test_lane: false,
             provider_context_seq: BTreeMap::new(),
             provider_contexts: BTreeMap::new(),
             provider_retry_contexts: BTreeMap::new(),
@@ -446,11 +450,16 @@ impl RuntimeLlmSidecar {
     pub(in crate::viewer::runtime_live) fn is_llm_mode(&self) -> bool {
         matches!(self.decision_mode, ViewerLiveDecisionMode::Llm)
     }
+
+    pub(in crate::viewer::runtime_live) fn enable_hosted_local_mock_test_lane(&mut self) {
+        self.hosted_local_mock_test_lane = true;
+    }
+
     pub(in crate::viewer::runtime_live) fn supports_prompt_control(&self) -> bool {
         !env_requests_provider_backend()
     }
     pub(in crate::viewer::runtime_live) fn supports_prompt_control_result(&self) -> bool {
-        self.is_llm_mode() && self.supports_prompt_control()
+        self.is_llm_mode() && (self.supports_prompt_control() || self.hosted_local_mock_test_lane)
     }
     pub(in crate::viewer::runtime_live) fn supports_agent_chat(&self) -> bool {
         true

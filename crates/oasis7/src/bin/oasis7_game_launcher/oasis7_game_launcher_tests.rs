@@ -679,6 +679,187 @@ fn provider_backed_viewer_live_env_preserves_local_mock_backend() {
     );
 }
 
+fn hosted_local_mock_provider_args() -> Vec<String> {
+    vec![
+        "--deployment-mode".to_string(),
+        "hosted_public_join".to_string(),
+        "--chain-enable".to_string(),
+        "--chain-local-standalone-test".to_string(),
+        "--local-test-provider-authority".to_string(),
+        "authority.json".to_string(),
+        "--local-test-provider-wasm".to_string(),
+        "provider.wasm".to_string(),
+        "--local-test-provider-metadata".to_string(),
+        "provider.metadata.json".to_string(),
+        "--local-test-provider-finality-block-hash".to_string(),
+        format!("blake3:{}", "0".repeat(64)),
+        "--local-test-provider-session-mode".to_string(),
+        "hosted_public_join".to_string(),
+        "--agent-decision-source".to_string(),
+        "provider_backed".to_string(),
+        "--agent-provider-backend".to_string(),
+        "provider_local_mock".to_string(),
+        "--agent-provider-contract".to_string(),
+        "worldsim_provider_v1".to_string(),
+        "--agent-provider-transport".to_string(),
+        "loopback_http".to_string(),
+        "--agent-provider-url".to_string(),
+        "http://127.0.0.1:5841".to_string(),
+        "--agent-execution-lane".to_string(),
+        "player_parity".to_string(),
+        "--with-llm".to_string(),
+        "--no-open-browser".to_string(),
+    ]
+}
+
+#[cfg(feature = "test_tier_required")]
+#[test]
+fn parse_options_accepts_hosted_local_mock_funding_admission() {
+    let args = hosted_local_mock_provider_args();
+    let options = parse_options(args.iter().map(String::as_str))
+        .expect("test-tier Hosted local-mock fixture should be admitted");
+    assert!(options.chain_enabled);
+    assert!(options.chain_local_standalone_test);
+    assert_eq!(options.deployment_mode, "hosted_public_join");
+    assert_eq!(
+        options.agent_decision_source,
+        PROVIDER_BACKED_DECISION_SOURCE
+    );
+    assert_eq!(options.agent_provider_backend, LOCAL_MOCK_PROVIDER_BACKEND);
+    assert_eq!(options.agent_provider_contract, WORLDSIM_PROVIDER_CONTRACT);
+    assert_eq!(
+        options.agent_provider_transport,
+        LOOPBACK_HTTP_PROVIDER_TRANSPORT
+    );
+    assert_eq!(
+        options.agent_execution_lane,
+        ProviderExecutionMode::PlayerParity
+    );
+}
+
+#[cfg(not(feature = "test_tier_required"))]
+#[test]
+fn parse_options_rejects_hosted_local_mock_funding_without_test_tier() {
+    let args = hosted_local_mock_provider_args();
+    let error = parse_options(args.iter().map(String::as_str))
+        .expect_err("production binary must reject Hosted local-mock funding");
+    assert!(error.contains("test_tier_required"), "{error}");
+}
+
+#[cfg(feature = "test_tier_required")]
+#[test]
+fn parse_options_rejects_hosted_local_mock_funding_with_non_loopback_transport() {
+    let mut args = hosted_local_mock_provider_args();
+    let index = args
+        .iter()
+        .position(|arg| arg == "loopback_http")
+        .expect("loopback transport argument");
+    args[index] = "remote_https".to_string();
+    let error = parse_options(args.iter().map(String::as_str))
+        .expect_err("Hosted local-mock funding must remain loopback-only");
+    assert!(error.contains("loopback_http"), "{error}");
+}
+
+#[cfg(feature = "test_tier_required")]
+#[test]
+fn parse_options_rejects_hosted_local_mock_url_userinfo_host_spoof() {
+    let mut args = hosted_local_mock_provider_args();
+    let index = args
+        .iter()
+        .position(|arg| arg == "http://127.0.0.1:5841")
+        .expect("provider URL argument");
+    args[index] = "http://127.0.0.1:5841@evil.example/".to_string();
+    let error = parse_options(args.iter().map(String::as_str))
+        .expect_err("userinfo must not hide a non-loopback provider host");
+    assert!(error.contains("loopback_http"), "{error}");
+}
+
+#[cfg(feature = "test_tier_required")]
+#[test]
+fn parse_options_rejects_hosted_local_mock_url_malformed_port() {
+    let mut args = hosted_local_mock_provider_args();
+    let index = args
+        .iter()
+        .position(|arg| arg == "http://127.0.0.1:5841")
+        .expect("provider URL argument");
+    args[index] = "http://127.0.0.1:not-a-port/".to_string();
+    let error = parse_options(args.iter().map(String::as_str))
+        .expect_err("provider URL must contain a numeric port");
+    assert!(error.contains("loopback_http"), "{error}");
+}
+
+#[cfg(feature = "test_tier_required")]
+#[test]
+fn parse_options_rejects_hosted_local_mock_url_malformed_authority_path() {
+    let mut args = hosted_local_mock_provider_args();
+    let index = args
+        .iter()
+        .position(|arg| arg == "http://127.0.0.1:5841")
+        .expect("provider URL argument");
+    args[index] = "http://127.0.0.1:5841:9999/provider".to_string();
+    let error = parse_options(args.iter().map(String::as_str))
+        .expect_err("provider URL must not contain a second authority port");
+    assert!(error.contains("loopback_http"), "{error}");
+}
+
+#[cfg(feature = "test_tier_required")]
+#[test]
+fn parse_options_accepts_hosted_local_mock_url_with_valid_loopback_path() {
+    let mut args = hosted_local_mock_provider_args();
+    let index = args
+        .iter()
+        .position(|arg| arg == "http://127.0.0.1:5841")
+        .expect("provider URL argument");
+    args[index] = "http://127.0.0.1:5841/provider".to_string();
+    parse_options(args.iter().map(String::as_str))
+        .expect("a valid loopback host, port, and path should be admitted");
+}
+
+#[cfg(feature = "test_tier_required")]
+#[test]
+fn parse_options_rejects_hosted_local_mock_funding_without_standalone_chain() {
+    let mut args = hosted_local_mock_provider_args();
+    args.retain(|arg| arg != "--chain-local-standalone-test");
+    let error = parse_options(args.iter().map(String::as_str))
+        .expect_err("Hosted local-mock funding must require standalone chain");
+    assert!(error.contains("--chain-local-standalone-test"), "{error}");
+}
+
+#[test]
+fn parse_options_preserves_builtin_llm_local_funding_admission() {
+    let mut args = hosted_local_mock_provider_args();
+    let replacements = [
+        ("hosted_public_join", "trusted_local_only"),
+        ("provider_backed", "builtin_llm"),
+        ("provider_local_mock", "provider_local_bridge"),
+    ];
+    for (from, to) in replacements {
+        let index = args
+            .iter()
+            .position(|arg| arg == from)
+            .expect("legacy fixture argument");
+        args[index] = to.to_string();
+    }
+    args.insert(2, "--allow-trusted-local-playtest".to_string());
+    let options = parse_options(args.iter().map(String::as_str))
+        .expect("legacy builtin_llm local funding must remain admitted");
+    assert!(options.chain_enabled);
+    assert_eq!(options.agent_decision_source, BUILTIN_LLM_DECISION_SOURCE);
+}
+
+#[test]
+fn parse_options_rejects_hosted_builtin_llm_local_funding() {
+    let mut args = hosted_local_mock_provider_args();
+    let index = args
+        .iter()
+        .position(|arg| arg == "provider_backed")
+        .expect("provider decision source argument");
+    args[index] = BUILTIN_LLM_DECISION_SOURCE.to_string();
+    let error = parse_options(args.iter().map(String::as_str))
+        .expect_err("Hosted local funding must not widen the builtin_llm lane");
+    assert!(error.contains("trusted_local_only"), "{error}");
+}
+
 #[test]
 fn build_viewer_live_command_wires_agent_chat_echo_flag_from_env() {
     // SAFETY: This test/setup code mutates process environment in a controlled scope.

@@ -7,11 +7,16 @@ OUT_DIR="output/playwright/prompt-control/${CASE_ID}"
 HEADED=0
 CONTRACT_ONLY=0
 FULL_GAMEPLAY=0
+HOSTED_LOCAL_MOCK=0
+TEST_TIER_REQUIRED=0
+TEST_SIGNER_SEED=""
 GAME_URL=""
 AGENT_ID="starter-agent-0"
 PROMPT_GOAL="Inspect the selected agent's prompt control state."
 STARTUP_TIMEOUT=180
 ACTION_TIMEOUT_MS=10000
+VIEWPORT_WIDTH=""
+VIEWPORT_HEIGHT=""
 TEST_LOGIN=0
 STACK_ARGS=()
 STACK_BOOTSTRAPPED=0
@@ -30,6 +35,9 @@ Options:
   --headed | --headless
   --contract-only
   --full-gameplay         launch the trusted-local chain-backed gameplay lane
+  --hosted-local-mock     launch the Hosted local-mock seeded-Agent lane
+  --test-tier-required    build/launch oasis7 binaries with test_tier_required
+  --test-signer-seed N    deterministic Hosted test signer fixture (currently 42)
   --case-id ID
   --out-dir DIR
   --url URL
@@ -38,6 +46,8 @@ Options:
   --prompt-goal TEXT
   --startup-timeout SECONDS
   --action-timeout-ms MILLISECONDS
+  --viewport-width PIXELS
+  --viewport-height PIXELS
 EOF
 }
 
@@ -47,6 +57,9 @@ while (($# > 0)); do
     --headless) HEADED=0 ;;
     --contract-only) CONTRACT_ONLY=1 ;;
     --full-gameplay) FULL_GAMEPLAY=1 ;;
+    --hosted-local-mock) HOSTED_LOCAL_MOCK=1 ;;
+    --test-tier-required) TEST_TIER_REQUIRED=1 ;;
+    --test-signer-seed) shift; TEST_SIGNER_SEED="${1:?missing value for --test-signer-seed}" ;;
     --case-id) shift; CASE_ID="${1:?missing value for --case-id}" ;;
     --out-dir) shift; OUT_DIR="${1:?missing value for --out-dir}" ;;
     --url) shift; GAME_URL="${1:?missing value for --url}" ;;
@@ -55,11 +68,36 @@ while (($# > 0)); do
     --prompt-goal) shift; PROMPT_GOAL="${1:?missing value for --prompt-goal}" ;;
     --startup-timeout) shift; STARTUP_TIMEOUT="${1:?missing value for --startup-timeout}" ;;
     --action-timeout-ms) shift; ACTION_TIMEOUT_MS="${1:?missing value for --action-timeout-ms}" ;;
+    --viewport-width) shift; VIEWPORT_WIDTH="${1:?missing value for --viewport-width}" ;;
+    --viewport-height) shift; VIEWPORT_HEIGHT="${1:?missing value for --viewport-height}" ;;
     -h|--help) usage; exit 0 ;;
     *) STACK_ARGS+=("$1") ;;
   esac
   shift
 done
+
+if (( HOSTED_LOCAL_MOCK == 1 )); then
+  if (( TEST_TIER_REQUIRED == 0 )); then
+    echo "error: --hosted-local-mock requires explicit --test-tier-required" >&2
+    exit 2
+  fi
+  if (( FULL_GAMEPLAY == 1 )); then
+    echo "error: --hosted-local-mock cannot be combined with --full-gameplay" >&2
+    exit 2
+  fi
+  if [[ -z "$TEST_SIGNER_SEED" ]]; then
+    TEST_SIGNER_SEED="42"
+  fi
+fi
+
+if [[ -n "$TEST_SIGNER_SEED" && "$TEST_SIGNER_SEED" != "42" ]]; then
+  echo "error: --test-signer-seed currently supports only the deterministic seed-42 fixture" >&2
+  exit 2
+fi
+if [[ -n "$TEST_SIGNER_SEED" && "$HOSTED_LOCAL_MOCK" != "1" ]]; then
+  echo "error: --test-signer-seed requires --hosted-local-mock" >&2
+  exit 2
+fi
 
 if ((${#STACK_ARGS[@]} > 0)); then
   for stack_arg in "${STACK_ARGS[@]}"; do
@@ -87,12 +125,19 @@ if ! [[ "$STARTUP_TIMEOUT" =~ ^[1-9][0-9]*$ && "$ACTION_TIMEOUT_MS" =~ ^[1-9][0-
   echo "error: timeouts must be positive integers" >&2
   exit 2
 fi
+if [[ -n "$VIEWPORT_WIDTH" || -n "$VIEWPORT_HEIGHT" ]]; then
+  if ! [[ "$VIEWPORT_WIDTH" =~ ^[1-9][0-9]*$ && "$VIEWPORT_HEIGHT" =~ ^[1-9][0-9]*$ ]]; then
+    echo "error: --viewport-width and --viewport-height must be provided together as positive integers" >&2
+    exit 2
+  fi
+fi
 
 LOCAL_PROVIDER_AUTHORITY="$OUT_DIR/runtime/local-test-provider-authority.json"
-LOCAL_PROVIDER_WASM="$ROOT_DIR/.tmp/wasm-build-suite/module.runtime.local-test-provider.wasm"
-LOCAL_PROVIDER_METADATA="$ROOT_DIR/.tmp/wasm-build-suite/module.runtime.local-test-provider.metadata.json"
+LOCAL_PROVIDER_DIR="$ROOT_DIR/.tmp/wasm-build-suite/local-test-provider"
+LOCAL_PROVIDER_WASM="$LOCAL_PROVIDER_DIR/module.runtime.local-test-provider.wasm"
+LOCAL_PROVIDER_METADATA="$LOCAL_PROVIDER_DIR/module.runtime.local-test-provider.metadata.json"
 
-if (( FULL_GAMEPLAY == 1 )); then
+if (( CONTRACT_ONLY == 0 && (FULL_GAMEPLAY == 1 || HOSTED_LOCAL_MOCK == 1) )); then
   if [[ ! -f "$LOCAL_PROVIDER_WASM" ]]; then
     echo "error: local test provider artifact WASM is missing: $LOCAL_PROVIDER_WASM" >&2
     exit 2
@@ -105,11 +150,146 @@ fi
 
 AGENT_SELECTOR="[data-pixel-world-agent-marker=\"true\"][data-agent-id=\"${AGENT_ID}\"]"
 
+write_runner_config() {
+  mkdir -p "$OUT_DIR"
+  python3 - "$OUT_DIR/runner-config.json" "$TEST_TIER_REQUIRED" "$HOSTED_LOCAL_MOCK" "$TEST_SIGNER_SEED" "$AGENT_ID" "$VIEWPORT_WIDTH" "$VIEWPORT_HEIGHT" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+test_tier_required = sys.argv[2] == "1"
+hosted_local_mock = sys.argv[3] == "1"
+viewport_width = int(sys.argv[6]) if sys.argv[6] else None
+viewport_height = int(sys.argv[7]) if sys.argv[7] else None
+path.write_text(
+    json.dumps(
+        {
+            "agentId": sys.argv[5],
+            "browserMode": "headed",
+            "deploymentMode": "hosted_public_join" if hosted_local_mock else "caller_or_default",
+            "evidenceBoundary": {
+                "providerCallsDuringVerification": False,
+                "realInference": False,
+                "worldConsequenceClaim": False,
+            },
+            "launchRoute": "hosted_local_mock_seeded_agent" if hosted_local_mock else "legacy_prompt_control",
+            "chain": {
+                "autoPlay": False,
+                "enabled": hosted_local_mock,
+                "standaloneTest": hosted_local_mock,
+                "storageProfile": "dev_local" if hosted_local_mock else None,
+            },
+            "localAuthority": {
+                "authorityArtifact": "runtime/local-test-provider-authority.json" if hosted_local_mock else None,
+                "finalityBlockHash": "blake3:" + "0" * 64 if hosted_local_mock else None,
+                "ownerBinding": "local-test-owner-0" if hosted_local_mock else None,
+                "sessionMode": "hosted_public_join" if hosted_local_mock else None,
+                "wasmArtifact": ".tmp/wasm-build-suite/local-test-provider/module.runtime.local-test-provider.wasm" if hosted_local_mock else None,
+                "metadataArtifact": ".tmp/wasm-build-suite/local-test-provider/module.runtime.local-test-provider.metadata.json" if hosted_local_mock else None,
+            },
+            "provider": {
+                "backend": "provider_local_mock" if hosted_local_mock else None,
+                "contract": "worldsim_provider_v1" if hosted_local_mock else None,
+                "executionLane": "player_parity" if hosted_local_mock else None,
+                "transport": "loopback_http" if hosted_local_mock else None,
+                "url": "http://127.0.0.1:5841" if hosted_local_mock else None,
+            },
+            "seededAgent": hosted_local_mock,
+            "testSigner": {
+                "seed": int(sys.argv[4]) if sys.argv[4] else None,
+                "privateKeyRecorded": False,
+            },
+            "testTierRequired": test_tier_required,
+            "viewport": {
+                "requestedHeight": viewport_height,
+                "requestedWidth": viewport_width,
+            },
+        },
+        indent=2,
+        sort_keys=True,
+    )
+    + "\n",
+    encoding="utf-8",
+)
+PY
+}
+
+build_test_tier_binaries() {
+  source "$ROOT_DIR/scripts/cargo-dev-lib.sh"
+  local build_log="$OUT_DIR/test-tier-required-build.log"
+  local build_command="$OUT_DIR/test-tier-required-build.command"
+  local target_dir
+  local -a build_args=(
+    build
+    -p oasis7
+    --features test_tier_required
+    --bin oasis7_llm_provider_probe
+    --bin oasis7_game_launcher
+    --bin oasis7_viewer_live
+  )
+  if (( FULL_GAMEPLAY == 1 || HOSTED_LOCAL_MOCK == 1 )); then
+    build_args+=(--bin oasis7_chain_runtime)
+  fi
+
+  printf 'oasis7_cargo_dev' >"$build_command"
+  printf ' %q' "${build_args[@]}" >>"$build_command"
+  printf '\n' >>"$build_command"
+  if ! oasis7_cargo_dev "${build_args[@]}" >"$build_log" 2>&1; then
+    echo "error: test_tier_required launcher/viewer build failed (log: $build_log)" >&2
+    return 1
+  fi
+
+  target_dir="$(oasis7_cargo_dev_debug_bin_dir "$ROOT_DIR")"
+  local -a required_binaries=(
+    oasis7_llm_provider_probe
+    oasis7_game_launcher
+    oasis7_viewer_live
+  )
+  if (( FULL_GAMEPLAY == 1 || HOSTED_LOCAL_MOCK == 1 )); then
+    required_binaries+=(oasis7_chain_runtime)
+  fi
+  for binary in "${required_binaries[@]}"; do
+    if [[ ! -x "$target_dir/$binary" ]]; then
+      echo "error: test_tier_required binary missing after build: $target_dir/$binary" >&2
+      return 1
+    fi
+  done
+  printf 'target_dir=%s\nfeatures=test_tier_required\n' "$target_dir" >"$OUT_DIR/test-tier-required-binaries.meta"
+  export OASIS7_RUN_LAUNCHER_STACK_SKIP_SOURCE_BUILD=1
+}
+
 require_nonempty_env() {
   local name="$1"
   if [[ -z "${!name:-}" ]]; then
     echo "error: required strong-auth environment variable ${name} is missing" >&2
     exit 2
+  fi
+}
+
+configure_test_signer() {
+  [[ "$TEST_SIGNER_SEED" == "42" ]] || return 0
+
+  # This is the same deterministic seed-42 fixture used by the Hosted
+  # strong-auth unit lane.  It is only installed for the explicit local
+  # browser route and never used by production launcher defaults.
+  local seed42_private="2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a2a"
+  local seed42_public="197f6b23e16c8532c6abc838facd5ea789be0c76b2920334039bfa8b3d368d61"
+  local seed42_approval="correct-code"
+  if [[ -n "${OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY:-}" && "${OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY}" != "$seed42_public" ]] \
+    || [[ -n "${OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY:-}" && "${OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY}" != "$seed42_private" ]] \
+    || [[ -n "${OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE:-}" && "${OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE}" != "$seed42_approval" ]]; then
+    echo "error: --test-signer-seed 42 requires the deterministic seed-42 signer fixture; refusing mismatched strong-auth signer environment" >&2
+    return 2
+  fi
+  if [[ -z "${OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY:-}" ]]; then
+    export OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY="$seed42_public"
+  fi
+  if [[ -z "${OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY:-}" ]]; then
+    export OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY="$seed42_private"
+  fi
+  if [[ -z "${OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE:-}" ]]; then
+    export OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE="$seed42_approval"
   fi
 }
 
@@ -267,7 +447,7 @@ write_manifest() {
   local eligible="$3"
   local provider_calls="$4"
   local agent_id="${5:-\${AGENT_ID}}"
-  python3 - "$root" "$CASE_ID" "$tier" "$eligible" "$provider_calls" "$agent_id" <<'PY'
+  python3 - "$root" "$CASE_ID" "$tier" "$eligible" "$provider_calls" "$agent_id" "$TEST_TIER_REQUIRED" "$HOSTED_LOCAL_MOCK" "$TEST_SIGNER_SEED" <<'PY'
 import hashlib
 import json
 import pathlib
@@ -278,6 +458,23 @@ case_id, tier = sys.argv[2], sys.argv[3]
 eligible = sys.argv[4].lower() == "true"
 provider_calls = sys.argv[5].lower() == "true"
 agent_id = sys.argv[6]
+test_tier_required = sys.argv[7] == "1"
+hosted_local_mock = sys.argv[8] == "1"
+test_signer_seed = int(sys.argv[9]) if sys.argv[9] else None
+viewport_path = root / "browser-viewport.json"
+viewport = None
+if viewport_path.is_file():
+    try:
+        viewport = json.loads(viewport_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        viewport = None
+layout_path = root / "browser-layout.json"
+prompt_layout = None
+if layout_path.is_file():
+    try:
+        prompt_layout = json.loads(layout_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        prompt_layout = None
 visible = {
     "selection": rf'[data-pixel-world-agent-marker=\"true\"][data-agent-id=\"{agent_id}\"]',
     "promptDisclosure": "Advanced Prompt Settings",
@@ -305,9 +502,16 @@ manifest = {
     "browserMode": "headed",
     "caseId": case_id,
     "evidenceTier": tier,
+    "externalProviderCallsDuringVerification": provider_calls,
+    "launchRoute": "hosted_local_mock_seeded_agent" if hosted_local_mock else "legacy_prompt_control",
+    "localMockCallsDuringVerification": hosted_local_mock,
     "providerCallsDuringVerification": provider_calls,
     "schema": "oasis7.viewer.prompt-control-artifact-manifest/v1",
+    "testSignerSeed": test_signer_seed,
+    "testTierRequired": test_tier_required,
     "visibleActionContract": visible,
+    "viewport": viewport,
+    "promptLayout": prompt_layout,
 }
 (root / "artifact-manifest.json").write_text(
     json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8"
@@ -355,7 +559,9 @@ PY
 
 # This branch is deliberately before ab_require and the launcher. It is the
 # deterministic, no-provider verification surface used by automated tests.
+configure_test_signer
 if (( CONTRACT_ONLY == 1 )); then
+  write_runner_config
   write_contract_artifacts
   exit 0
 fi
@@ -374,6 +580,10 @@ fi
 
 source "$ROOT_DIR/scripts/agent-browser-lib.sh"
 mkdir -p "$OUT_DIR"
+write_runner_config
+if (( TEST_TIER_REQUIRED == 1 )); then
+  build_test_tier_binaries
+fi
 RUN_ID="viewer-prompt-control-${CASE_ID}-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 LAUNCH_LOG="$OUT_DIR/launcher.log"
 AB_LOG="$OUT_DIR/agent-browser.log"
@@ -477,6 +687,104 @@ run_visible_action() {
   capture_failure_diagnostics "$phase"
   echo "error: visible action ${phase} failed (phase: ${phase}; diagnostics: ${OUT_DIR}/failure-$(diagnostic_slug "$phase")-*)" >&2
   return "$result"
+}
+
+capture_browser_viewport() {
+  local raw
+  local result
+  if raw="$(ab_read_eval "$SESSION" 'JSON.stringify({innerWidth:window.innerWidth,innerHeight:window.innerHeight,outerWidth:window.outerWidth,outerHeight:window.outerHeight,devicePixelRatio:window.devicePixelRatio,visualViewportWidth:window.visualViewport?.width ?? null,visualViewportHeight:window.visualViewport?.height ?? null})' 2>&1)"; then
+    :
+  else
+    result=$?
+    printf '[viewport] measurement failed (exit=%s):\n%s\n' "$result" "$raw" >>"$AB_LOG"
+    echo "error: browser viewport measurement failed (phase: browser viewport measurement; diagnostics: ${OUT_DIR}/agent-browser.log)" >&2
+    return "$result"
+  fi
+  if ! python3 - "$OUT_DIR/browser-viewport.json" "$raw" "$VIEWPORT_WIDTH" "$VIEWPORT_HEIGHT" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+raw = sys.argv[2]
+requested_width = int(sys.argv[3]) if sys.argv[3] else None
+requested_height = int(sys.argv[4]) if sys.argv[4] else None
+try:
+    measured = json.loads(raw)
+    if isinstance(measured, str):
+        measured = json.loads(measured)
+except (TypeError, ValueError) as exc:
+    raise SystemExit(f"invalid browser viewport measurement: {exc}")
+if not isinstance(measured, dict):
+    raise SystemExit("invalid browser viewport measurement: expected object")
+required = ("innerWidth", "innerHeight", "outerWidth", "outerHeight", "devicePixelRatio")
+if any(key not in measured for key in required):
+    raise SystemExit("invalid browser viewport measurement: missing required field")
+width = int(measured["innerWidth"])
+height = int(measured["innerHeight"])
+if requested_width is not None and (width != requested_width or height != requested_height):
+    raise SystemExit(
+        f"requested viewport {requested_width}x{requested_height} measured as {width}x{height}"
+    )
+payload = {
+    "height": height,
+    "innerHeight": height,
+    "innerWidth": width,
+    "outerHeight": int(measured["outerHeight"]),
+    "outerWidth": int(measured["outerWidth"]),
+    "requestedHeight": requested_height,
+    "requestedWidth": requested_width,
+    "devicePixelRatio": float(measured["devicePixelRatio"]),
+    "visualViewportHeight": measured.get("visualViewportHeight"),
+    "visualViewportWidth": measured.get("visualViewportWidth"),
+    "width": width,
+}
+path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+  then
+    result=$?
+    printf '[viewport] measurement rejected (exit=%s): %s\n' "$result" "$raw" >>"$AB_LOG"
+    echo "error: browser viewport measurement did not satisfy the requested dimensions (phase: browser viewport measurement; diagnostics: ${OUT_DIR}/agent-browser.log)" >&2
+    return "$result"
+  fi
+  printf '[viewport] %s\n' "$(tr '\n' ' ' <"$OUT_DIR/browser-viewport.json")" >>"$AB_LOG"
+}
+
+capture_prompt_layout() {
+  local raw
+  local result
+  if raw="$(ab_read_eval "$SESSION" 'JSON.stringify((() => { const button = document.querySelector(`button[data-prompt-action="rollback"]`); button?.focus({preventScroll:true}); const rect = button?.getBoundingClientRect(); const center = rect ? { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 } : null; const hit = center ? document.elementFromPoint(center.x, center.y) : null; const target = document.querySelector(`#viewer-details-panel .command-surface__target-row`); const targetRect = target?.getBoundingClientRect(); const buttonStyle = button ? getComputedStyle(button) : null; return { activeElementIsRollback: document.activeElement === button, horizontalOverflowPx: Math.max(0, document.documentElement.scrollWidth - window.innerWidth), rollback: { activeElement: document.activeElement?.getAttribute?.(`data-prompt-action`) || document.activeElement?.tagName || null, center, centerHit: hit ? { dataAction: hit.getAttribute(`data-prompt-action`), className: String(hit.className || ``), tagName: hit.tagName } : null, focusVisible: button?.matches(`:focus-visible`) === true, height: rect?.height || 0, minHitTarget: Boolean(rect && rect.width >= 44 && rect.height >= 44), outlineStyle: buttonStyle?.outlineStyle || null, outlineWidth: buttonStyle?.outlineWidth || null, text: button?.textContent?.trim() || null, uncovered: Boolean(button && hit && (hit === button || button.contains(hit))), visible: Boolean(rect && rect.top >= 0 && rect.left >= 0 && rect.bottom <= window.innerHeight && rect.right <= window.innerWidth), width: rect?.width || 0 }, targetRow: { height: targetRect?.height || 0, position: target ? getComputedStyle(target).position : null, top: targetRect?.top || 0, visible: Boolean(targetRect && targetRect.top >= 0 && targetRect.bottom <= window.innerHeight) }, viewport: { height: window.innerHeight, width: window.innerWidth } }; })())' 2>&1)"; then
+    :
+  else
+    result=$?
+    printf '[layout] measurement failed (exit=%s):\n%s\n' "$result" "$raw" >>"$AB_LOG"
+    echo "error: prompt layout measurement failed (phase: prompt layout measurement; diagnostics: ${OUT_DIR}/agent-browser.log)" >&2
+    return "$result"
+  fi
+  if ! python3 - "$OUT_DIR/browser-layout.json" "$raw" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+raw = sys.argv[2]
+try:
+    measured = json.loads(raw)
+    if isinstance(measured, str):
+        measured = json.loads(measured)
+except (TypeError, ValueError) as exc:
+    raise SystemExit(f"invalid prompt layout measurement: {exc}")
+if not isinstance(measured, dict):
+    raise SystemExit("invalid prompt layout measurement: expected object")
+path.write_text(json.dumps(measured, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+  then
+    result=$?
+    printf '[layout] measurement rejected (exit=%s): %s\n' "$result" "$raw" >>"$AB_LOG"
+    echo "error: prompt layout measurement did not return an object (phase: prompt layout measurement; diagnostics: ${OUT_DIR}/agent-browser.log)" >&2
+    return "$result"
+  fi
+  printf '[layout] %s\n' "$(tr '\n' ' ' <"$OUT_DIR/browser-layout.json")" >>"$AB_LOG"
 }
 
 register_hosted_player_session() {
@@ -759,23 +1067,91 @@ wait_for_rollback_version_convergence() {
 
 if [[ -z "$GAME_URL" ]]; then
   STACK_BOOTSTRAPPED=1
-  if (( FULL_GAMEPLAY == 1 )); then
-    STACK_ARGS=(
-      --allow-trusted-local-playtest
-      --chain-enable
-      --chain-local-standalone-test
-      --chain-node-auto-attest-all
-      --chain-link-policy shadow
-      --major-world-event-visibility restricted
-      --local-test-provider-authority "$LOCAL_PROVIDER_AUTHORITY"
-      --local-test-provider-wasm "$LOCAL_PROVIDER_WASM"
-      --local-test-provider-metadata "$LOCAL_PROVIDER_METADATA"
-      --local-test-provider-agent-id starter-agent-0
-      --local-test-provider-owner-binding local-test-owner-0
-      --local-test-provider-finality-block-hash blake3:0000000000000000000000000000000000000000000000000000000000000000
-      --local-test-provider-session-mode hosted_public_join
-      "${STACK_ARGS[@]}"
-    )
+  if (( HOSTED_LOCAL_MOCK == 1 )); then
+    # This is the only headed Hosted local-mock route.  It uses the existing
+    # run-scoped W3 DevLocal authority/funding fixture so starter-agent-0 has
+    # canonical starter ownership/funding while HostedPublicJoin + strong-auth
+    # remain the browser-facing authority surfaces.  No external bridge or
+    # inference provider is started.
+    if ((${#STACK_ARGS[@]} > 0)); then
+      STACK_ARGS=(
+        --chain-enable
+        --chain-local-standalone-test
+        --chain-node-auto-attest-all
+        --major-world-event-visibility restricted
+        --local-test-provider-authority "$LOCAL_PROVIDER_AUTHORITY"
+        --local-test-provider-wasm "$LOCAL_PROVIDER_WASM"
+        --local-test-provider-metadata "$LOCAL_PROVIDER_METADATA"
+        --local-test-provider-agent-id "$AGENT_ID"
+        --local-test-provider-owner-binding local-test-owner-0
+        --local-test-provider-finality-block-hash blake3:0000000000000000000000000000000000000000000000000000000000000000
+        --local-test-provider-session-mode hosted_public_join
+        --skip-llm-provider-preflight
+        --agent-decision-source provider_backed
+        --agent-provider-lane local-mock
+        --agent-provider-transport loopback_http
+        --agent-provider-url http://127.0.0.1:5841
+        --agent-execution-lane player_parity
+        --no-auto-play
+        "${STACK_ARGS[@]}"
+      )
+    else
+      STACK_ARGS=(
+        --chain-enable
+        --chain-local-standalone-test
+        --chain-node-auto-attest-all
+        --major-world-event-visibility restricted
+        --local-test-provider-authority "$LOCAL_PROVIDER_AUTHORITY"
+        --local-test-provider-wasm "$LOCAL_PROVIDER_WASM"
+        --local-test-provider-metadata "$LOCAL_PROVIDER_METADATA"
+        --local-test-provider-agent-id "$AGENT_ID"
+        --local-test-provider-owner-binding local-test-owner-0
+        --local-test-provider-finality-block-hash blake3:0000000000000000000000000000000000000000000000000000000000000000
+        --local-test-provider-session-mode hosted_public_join
+        --skip-llm-provider-preflight
+        --agent-decision-source provider_backed
+        --agent-provider-lane local-mock
+        --agent-provider-transport loopback_http
+        --agent-provider-url http://127.0.0.1:5841
+        --agent-execution-lane player_parity
+        --no-auto-play
+      )
+    fi
+  elif (( FULL_GAMEPLAY == 1 )); then
+    if ((${#STACK_ARGS[@]} > 0)); then
+      STACK_ARGS=(
+        --allow-trusted-local-playtest
+        --chain-enable
+        --chain-local-standalone-test
+        --chain-node-auto-attest-all
+        --chain-link-policy shadow
+        --major-world-event-visibility restricted
+        --local-test-provider-authority "$LOCAL_PROVIDER_AUTHORITY"
+        --local-test-provider-wasm "$LOCAL_PROVIDER_WASM"
+        --local-test-provider-metadata "$LOCAL_PROVIDER_METADATA"
+        --local-test-provider-agent-id starter-agent-0
+        --local-test-provider-owner-binding local-test-owner-0
+        --local-test-provider-finality-block-hash blake3:0000000000000000000000000000000000000000000000000000000000000000
+        --local-test-provider-session-mode hosted_public_join
+        "${STACK_ARGS[@]}"
+      )
+    else
+      STACK_ARGS=(
+        --allow-trusted-local-playtest
+        --chain-enable
+        --chain-local-standalone-test
+        --chain-node-auto-attest-all
+        --chain-link-policy shadow
+        --major-world-event-visibility restricted
+        --local-test-provider-authority "$LOCAL_PROVIDER_AUTHORITY"
+        --local-test-provider-wasm "$LOCAL_PROVIDER_WASM"
+        --local-test-provider-metadata "$LOCAL_PROVIDER_METADATA"
+        --local-test-provider-agent-id starter-agent-0
+        --local-test-provider-owner-binding local-test-owner-0
+        --local-test-provider-finality-block-hash blake3:0000000000000000000000000000000000000000000000000000000000000000
+        --local-test-provider-session-mode hosted_public_join
+      )
+    fi
   elif (( STACK_CHAIN_ARG_EXPLICIT == 0 )); then
     # Hosted bootstrap defaults to a chain-disabled page-play lane.  Any
     # explicit --chain-* caller argument remains authoritative.
@@ -784,7 +1160,7 @@ if [[ -z "$GAME_URL" ]]; then
   if ((${#STACK_ARGS[@]} > 0)); then
     "$ROOT_DIR/scripts/run-launcher-stack.sh" \
       --with-llm \
-      --agent-decision-source builtin_llm \
+      --agent-decision-source "$([[ "$HOSTED_LOCAL_MOCK" == "1" ]] && printf provider_backed || printf builtin_llm)" \
       --deployment-mode "$([[ "$FULL_GAMEPLAY" == "1" ]] && printf trusted_local_only || printf hosted_public_join)" \
       --json-ready \
       --run-id "$RUN_ID" \
@@ -793,7 +1169,7 @@ if [[ -z "$GAME_URL" ]]; then
   else
     "$ROOT_DIR/scripts/run-launcher-stack.sh" \
       --with-llm \
-      --agent-decision-source builtin_llm \
+      --agent-decision-source "$([[ "$HOSTED_LOCAL_MOCK" == "1" ]] && printf provider_backed || printf builtin_llm)" \
       --deployment-mode "$([[ "$FULL_GAMEPLAY" == "1" ]] && printf trusted_local_only || printf hosted_public_join)" \
       --json-ready \
       --run-id "$RUN_ID" \
@@ -851,6 +1227,13 @@ if (( HEADED == 1 )); then
 fi
 
 ab_open "$SESSION" 1 "$GAME_URL"
+if [[ -n "$VIEWPORT_WIDTH" ]]; then
+  if ! ab_cmd "$SESSION" set viewport "$VIEWPORT_WIDTH" "$VIEWPORT_HEIGHT" >>"$AB_LOG" 2>&1; then
+    echo "error: failed to set requested browser viewport ${VIEWPORT_WIDTH}x${VIEWPORT_HEIGHT} (phase: browser viewport setup; diagnostics: ${OUT_DIR}/agent-browser.log)" >&2
+    exit 1
+  fi
+fi
+capture_browser_viewport
 wait_for_domcontentloaded
 wait_for_webgl2
 wait_for_cli_stage "test-api" wait --fn 'typeof window.__AW_TEST__ === "object"'
@@ -920,6 +1303,7 @@ wait_for_prompt_feedback rollback "$before_version"
 wait_for_rollback_version_convergence "$before_version"
 rollback_state="$(state_raw)"
 write_safe_state "$rollback_state" "$OUT_DIR/state-after-rollback.json"
+capture_prompt_layout
 ab_screenshot "$SESSION" "$OUT_DIR/prompt-control.png" >/dev/null
 ab_cmd "$SESSION" snapshot >/dev/null 2>&1 || true
 
@@ -943,6 +1327,13 @@ summary = {
 }
 (root / "run-summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
-write_manifest "$OUT_DIR" "real_browser_single_actor_strong_auth" true true "$AGENT_ID"
+provider_calls_during_verification=true
+if (( HOSTED_LOCAL_MOCK == 1 )); then
+  # The local Runtime fixture is an in-process bounded provider lane.  It is
+  # recorded separately from external provider calls and never counts as real
+  # inference or external provider spend.
+  provider_calls_during_verification=false
+fi
+write_manifest "$OUT_DIR" "real_browser_single_actor_strong_auth" true "$provider_calls_during_verification" "$AGENT_ID"
 echo "headed single-actor strong-auth prompt flow complete (manifest: $OUT_DIR/artifact-manifest.json)"
 exit 0

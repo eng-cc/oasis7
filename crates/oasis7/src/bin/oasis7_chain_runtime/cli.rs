@@ -121,6 +121,12 @@ pub(super) struct CliOptions {
     pub local_test_provider_owner_binding: String,
     pub local_test_provider_finality_block_hash: Option<String>,
     pub local_test_provider_session_mode: String,
+    pub chain_local_standalone_test: bool,
+    pub agent_decision_source: Option<String>,
+    pub agent_provider_backend: Option<String>,
+    pub agent_provider_contract: Option<String>,
+    pub agent_provider_transport: Option<String>,
+    pub agent_execution_lane: Option<String>,
     pub storage_root: Option<PathBuf>,
     pub replication_root: Option<PathBuf>,
     pub reward_runtime_enabled: bool,
@@ -193,6 +199,12 @@ impl Default for CliOptions {
                 .to_string(),
             local_test_provider_finality_block_hash: None,
             local_test_provider_session_mode: DEFAULT_LOCAL_TEST_PROVIDER_SESSION_MODE.to_string(),
+            chain_local_standalone_test: false,
+            agent_decision_source: None,
+            agent_provider_backend: None,
+            agent_provider_contract: None,
+            agent_provider_transport: None,
+            agent_execution_lane: None,
             storage_root: None,
             replication_root: None,
             reward_runtime_enabled: true,
@@ -480,6 +492,31 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                 options.local_test_provider_session_mode =
                     parse_required_value(&mut iter, "--local-test-provider-session-mode")?;
             }
+            "--chain-local-standalone-test" => options.chain_local_standalone_test = true,
+            "--agent-decision-source" => {
+                options.agent_decision_source =
+                    Some(parse_required_value(&mut iter, "--agent-decision-source")?);
+            }
+            "--agent-provider-backend" => {
+                options.agent_provider_backend =
+                    Some(parse_required_value(&mut iter, "--agent-provider-backend")?);
+            }
+            "--agent-provider-contract" => {
+                options.agent_provider_contract = Some(parse_required_value(
+                    &mut iter,
+                    "--agent-provider-contract",
+                )?);
+            }
+            "--agent-provider-transport" => {
+                options.agent_provider_transport = Some(parse_required_value(
+                    &mut iter,
+                    "--agent-provider-transport",
+                )?);
+            }
+            "--agent-execution-lane" => {
+                options.agent_execution_lane =
+                    Some(parse_required_value(&mut iter, "--agent-execution-lane")?);
+            }
             "--storage-root" => {
                 let raw = parse_required_value(&mut iter, "--storage-root")?;
                 options.storage_root = Some(PathBuf::from(raw));
@@ -583,6 +620,11 @@ fn validate_local_test_provider_options(options: &CliOptions) -> Result<(), Stri
         || options.local_test_provider_owner_binding != DEFAULT_LOCAL_TEST_PROVIDER_OWNER_BINDING
         || options.local_test_provider_session_mode != DEFAULT_LOCAL_TEST_PROVIDER_SESSION_MODE;
     if !any_setup_option {
+        if provider_tuple_requested(options) {
+            return Err(
+                "provider tuple admission requires local test provider authority setup".to_string(),
+            );
+        }
         return Ok(());
     }
     if options.storage_profile != StorageProfile::DevLocal {
@@ -640,7 +682,43 @@ fn validate_local_test_provider_options(options: &CliOptions) -> Result<(), Stri
                 .to_string(),
         );
     }
+    if provider_tuple_requested(options) {
+        if !hosted_local_mock_provider_tuple(options) {
+            return Err(
+                "Hosted local-mock funding requires the exact provider_backed/provider_local_mock/worldsim_provider_v1/loopback_http/player_parity tuple"
+                    .to_string(),
+            );
+        }
+        if !cfg!(feature = "test_tier_required") {
+            return Err(
+                "Hosted local-mock funding requires a binary built with feature test_tier_required"
+                    .to_string(),
+            );
+        }
+        if !options.chain_local_standalone_test {
+            return Err(
+                "Hosted local-mock funding requires --chain-local-standalone-test".to_string(),
+            );
+        }
+    }
     Ok(())
+}
+
+fn provider_tuple_requested(options: &CliOptions) -> bool {
+    options.agent_decision_source.is_some()
+        || options.agent_provider_backend.is_some()
+        || options.agent_provider_contract.is_some()
+        || options.agent_provider_transport.is_some()
+        || options.agent_execution_lane.is_some()
+}
+
+fn hosted_local_mock_provider_tuple(options: &CliOptions) -> bool {
+    options.agent_decision_source.as_deref() == Some("provider_backed")
+        && options.agent_provider_backend.as_deref() == Some("provider_local_mock")
+        && options.agent_provider_contract.as_deref() == Some("worldsim_provider_v1")
+        && options.agent_provider_transport.as_deref() == Some("loopback_http")
+        && options.agent_execution_lane.as_deref() == Some("player_parity")
+        && options.local_test_provider_session_mode == "hosted_public_join"
 }
 
 fn valid_blake3_digest(value: &str) -> bool {
