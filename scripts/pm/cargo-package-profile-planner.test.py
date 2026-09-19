@@ -398,6 +398,83 @@ resolver = "2"
         )
         self.assertEqual(authority["merged_commit"], bound_only["trusted_authority"]["approved_normative_source"]["merged_commit"])
 
+    def _advance_default_branch(self, root: Path, relative: str, content: str) -> str:
+        git(root, "switch", "main")
+        self._write(root, relative, content)
+        tip = self._commit(root, "advance default branch")
+        git(root, "update-ref", "refs/remotes/origin/main", tip)
+        git(root, "switch", "source")
+        return tip
+
+    def test_advanced_default_branch_with_unchanged_authority_is_allowed(self) -> None:
+        temp, root, predecessor_scope, predecessor_head, merged_commit, source_head = self._authority_fixture()
+        self.addCleanup(temp.cleanup)
+        receipt = self._authority_receipt(root, predecessor_scope, predecessor_head, merged_commit, source_head)
+        binding = self._authority_binding(merged_commit, source_head, receipt)
+        live_task = self._current_task_identity(root, merged_commit, source_head, binding)
+        live_tip = self._advance_default_branch(root, "README.md", "unrelated default-branch change\n")
+        plan = self._plan_with_live_authority(
+            root,
+            merged_commit,
+            source_head,
+            receipt,
+            live_task,
+            profiles=("native",),
+            authority_binding=binding,
+            expected_task_uid=binding["task_uid"],
+            expected_pr_number=binding["pr_number"],
+        )
+        self.assertNotEqual(merged_commit, live_tip)
+        self.assertEqual(merged_commit, plan["trusted_authority"]["approved_normative_source"]["merged_commit"])
+
+    def test_default_branch_authority_tamper_is_rejected(self) -> None:
+        temp, root, predecessor_scope, predecessor_head, merged_commit, source_head = self._authority_fixture()
+        self.addCleanup(temp.cleanup)
+        receipt = self._authority_receipt(root, predecessor_scope, predecessor_head, merged_commit, source_head)
+        binding = self._authority_binding(merged_commit, source_head, receipt)
+        live_task = self._current_task_identity(root, merged_commit, source_head, binding)
+        self._advance_default_branch(
+            root,
+            self.api.AUTHORITY_PATH,
+            '<a id="cargo-checker-authority-upgrade"></a>tampered authority\n',
+        )
+        with self.assertRaisesRegex(Exception, "authority path|fragment"):
+            self._plan_with_live_authority(
+                root,
+                merged_commit,
+                source_head,
+                receipt,
+                live_task,
+                profiles=("native",),
+                authority_binding=binding,
+                expected_task_uid=binding["task_uid"],
+                expected_pr_number=binding["pr_number"],
+            )
+
+    def test_default_branch_divergence_is_rejected(self) -> None:
+        temp, root, predecessor_scope, predecessor_head, merged_commit, source_head = self._authority_fixture()
+        self.addCleanup(temp.cleanup)
+        receipt = self._authority_receipt(root, predecessor_scope, predecessor_head, merged_commit, source_head)
+        binding = self._authority_binding(merged_commit, source_head, receipt)
+        live_task = self._current_task_identity(root, merged_commit, source_head, binding)
+        git(root, "switch", "-c", "diverged", predecessor_scope)
+        self._write(root, "README.md", "diverged default branch\n")
+        divergent_tip = self._commit(root, "diverge default branch")
+        git(root, "update-ref", "refs/remotes/origin/main", divergent_tip)
+        git(root, "switch", "source")
+        with self.assertRaisesRegex(Exception, "ancestor|authority"):
+            self._plan_with_live_authority(
+                root,
+                merged_commit,
+                source_head,
+                receipt,
+                live_task,
+                profiles=("native",),
+                authority_binding=binding,
+                expected_task_uid=binding["task_uid"],
+                expected_pr_number=binding["pr_number"],
+            )
+
     def test_planner_authority_requires_live_readback(self) -> None:
         temp, root, _predecessor_scope, _predecessor_head, merged_commit, source_head = self._authority_fixture()
         self.addCleanup(temp.cleanup)

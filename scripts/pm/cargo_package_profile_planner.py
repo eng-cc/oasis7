@@ -52,6 +52,15 @@ def _git(repo: Path, *args: str, text: bool = True) -> Any:
     return result.stdout
 
 
+def _is_ancestor(repo: Path, ancestor: str, descendant: str) -> bool:
+    result = subprocess.run(
+        ["git", "-C", str(repo), "merge-base", "--is-ancestor", ancestor, descendant],
+        capture_output=True,
+        check=False,
+    )
+    return result.returncode == 0
+
+
 def _blob(repo: Path, oid: str, path: str) -> bytes:
     result = subprocess.run(
         ["git", "-C", str(repo), "show", f"{oid}:{path}"], capture_output=True, check=False
@@ -552,8 +561,12 @@ def _validate_approved_normative_source(
 
     if merged_commit != source_scope_base:
         raise PlanError("trusted authority merged commit is stale for current source scope")
-    if _git(repo, "rev-parse", f"refs/remotes/origin/{canonical_branch}").strip() != merged_commit:
-        raise PlanError("trusted authority merged commit is not the live default-branch tip")
+    live_default_tip = _require_oid(
+        _git(repo, "rev-parse", f"refs/remotes/origin/{canonical_branch}").strip(),
+        "live default branch tip",
+    )
+    if not _is_ancestor(repo, merged_commit, live_default_tip):
+        raise PlanError("trusted authority merged commit is not an ancestor of the live default branch")
     if _git(repo, "show", "-s", "--format=%T", merged_commit).strip() != merged_tree:
         raise PlanError("trusted authority merged tree mismatch")
     if _git(repo, "rev-parse", f"{merged_commit}:{AUTHORITY_PATH}").strip() != authority_blob:
@@ -568,6 +581,12 @@ def _validate_approved_normative_source(
     fragment = _fragment_bytes(merged_bytes, AUTHORITY_FRAGMENT)
     if _require_digest(receipt.get("stable_fragment_sha256"), "stable fragment") != _digest_bytes(fragment):
         raise PlanError("trusted authority fragment digest mismatch")
+    live_authority_bytes = _blob(repo, live_default_tip, AUTHORITY_PATH)
+    if _digest_bytes(live_authority_bytes) != merged_digest:
+        raise PlanError("live default branch authority path changed after approval")
+    live_fragment = _fragment_bytes(live_authority_bytes, AUTHORITY_FRAGMENT)
+    if _digest_bytes(live_fragment) != _digest_bytes(fragment):
+        raise PlanError("live default branch authority fragment changed after approval")
 
     predecessor_bytes = _blob(repo, predecessor_scope, AUTHORITY_PATH)
     predecessor_digest = _require_digest(receipt.get("predecessor_file_sha256"), "predecessor file")
