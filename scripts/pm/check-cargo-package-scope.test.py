@@ -337,6 +337,67 @@ path = "src/lib.rs"
 
         self._assert_allowed(repo, base, "gamma", mutate)
 
+    def test_new_package_with_multiline_member_and_lock_dependencies_is_allowed(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            self._write(
+                root,
+                "Cargo.toml",
+                """[workspace]
+members = [
+    "crates/alpha",
+    "crates/beta",
+    "crates/gamma",
+]
+resolver = "2"
+""",
+            )
+            self._write(
+                root,
+                "crates/gamma/Cargo.toml",
+                """[package]
+name = "gamma"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+""",
+            )
+            self._write(root, "crates/gamma/src/lib.rs", "pub fn gamma() {}\n")
+            with (root / "Cargo.lock").open("a", encoding="utf-8") as handle:
+                handle.write(
+                    """
+[[package]]
+name = "gamma"
+version = "0.1.0"
+dependencies = [
+    "alpha",
+]
+"""
+                )
+
+        self._assert_allowed(repo, base, "gamma", mutate)
+
+    def test_dependency_lines_for_another_package_remain_unattributable(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            (root / "crates/alpha/src/lib.rs").write_text(
+                "pub fn alpha() { println!(\"changed\"); }\n", encoding="utf-8"
+            )
+            lock = root / "Cargo.lock"
+            lock.write_text(
+                lock.read_text(encoding="utf-8").replace(
+                    'name = "beta"\nversion = "0.1.0"',
+                    'name = "beta"\nversion = "0.1.0"\ndependencies = [\n    "alpha",\n]',
+                ),
+                encoding="utf-8",
+            )
+
+        self._assert_rejected(repo, base, "alpha", mutate, "unattributable_lock_change")
+
     def test_package_local_manifest_and_matching_lock_update_are_allowed(self) -> None:
         repo, base = self._fixture()
 

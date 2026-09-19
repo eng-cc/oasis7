@@ -250,29 +250,38 @@ def workspace_members(text: str) -> set[str]:
     return {str(item).replace("\\", "/") for item in value if isinstance(item, str)}
 
 
-def lock_records(text: str) -> dict[str, list[dict[str, str]]]:
-    records: dict[str, list[dict[str, str]]] = {}
-    current: dict[str, str] | None = None
-    in_package = False
-    for line in text.splitlines():
-        if line.strip() == "[[package]]":
-            if current and current.get("name"):
-                records.setdefault(current["name"], []).append(current)
-            current = {}
-            in_package = True
-            continue
-        if line.startswith("[[") or (line.startswith("[") and not line.startswith("[[")):
-            if current and current.get("name"):
-                records.setdefault(current["name"], []).append(current)
-            current = None
-            in_package = False
-            continue
-        if in_package and current is not None:
-            match = re.match(r'^\s*(name|version|source|checksum)\s*=\s*"([^"]*)"', line)
-            if match:
-                current[match.group(1)] = match.group(2)
-    if current and current.get("name"):
-        records.setdefault(current["name"], []).append(current)
+def lock_package_sections(text: str) -> list[tuple[int, int, str]]:
+    lines = text.splitlines()
+    starts = [index for index, line in enumerate(lines) if line.strip() == "[[package]]"]
+    sections: list[tuple[int, int, str]] = []
+    for start in starts:
+        end = len(lines)
+        for index in range(start + 1, len(lines)):
+            if lines[index].startswith("[") and not lines[index].startswith("[["):
+                end = index
+                break
+            if lines[index].strip() == "[[package]]":
+                end = index
+                break
+        name = next(
+            (
+                match.group(1)
+                for line in lines[start + 1 : end]
+                if (match := re.match(r'^\s*name\s*=\s*"([^"]*)"', line))
+            ),
+            None,
+        )
+        if name:
+            sections.append((start + 1, end, name))
+    return sections
+
+
+def lock_records(text: str) -> dict[str, list[tuple[str, ...]]]:
+    lines = text.splitlines()
+    records: dict[str, list[tuple[str, ...]]] = {}
+    for start, end, name in lock_package_sections(text):
+        record = tuple(line.strip() for line in lines[start - 1 : end] if line.strip())
+        records.setdefault(name, []).append(record)
     return records
 
 
@@ -284,19 +293,57 @@ def lock_change_names(repo: Path, base: str, head: str) -> set[str]:
     return {name for name in set(before) | set(after) if before.get(name) != after.get(name)}
 
 
-def lock_diff_has_unattributable_lines(repo: Path, base: str, head: str) -> bool:
+def lock_diff_has_unattributable_lines(
+    repo: Path, base: str, head: str, allowed_package_names: set[str]
+) -> bool:
     diff = git(repo, "diff", "--unified=0", base, head, "--", "Cargo.lock").stdout
+    old_text = (git_blob(repo, base, "Cargo.lock") or b"").decode("utf-8", errors="replace")
+    new_text = (git_blob(repo, head, "Cargo.lock") or b"").decode("utf-8", errors="replace")
+    old_sections = lock_package_sections(old_text)
+    new_sections = lock_package_sections(new_text)
+
+    def package_at(sections: list[tuple[int, int, str]], line_number: int) -> str | None:
+        for start, end, name in sections:
+            if start <= line_number <= end:
+                return name
+        return None
+
+    hunk_pattern = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+    old_line = new_line = 0
     for line in diff.splitlines():
-        if not line or line.startswith(("+++", "---", "@@")):
+        if line.startswith(("+++", "---")):
             continue
-        if line[0] not in "+-":
+        hunk = hunk_pattern.match(line)
+        if hunk:
+            old_line = int(hunk.group(1))
+            new_line = int(hunk.group(3))
+            continue
+        if not line:
+            continue
+        if line[0] == "+":
+            line_number = new_line
+            new_line += 1
+            section = package_at(new_sections, line_number)
+        elif line[0] == "-":
+            line_number = old_line
+            old_line += 1
+            section = package_at(old_sections, line_number)
+        else:
+            old_line += 1
+            new_line += 1
             continue
         content = line[1:].strip()
         if not content:
             continue
-        if content == "[[package]]" or re.match(r"^(name|version|source|checksum)\s*=", content):
+        if section not in allowed_package_names:
+            return True
+        if content == "[[package]]":
             continue
-        if content.startswith("dependencies ="):
+        if re.match(r"^(name|version|source|checksum)\s*=", content):
+            continue
+        if content.startswith("dependencies =") or content == "]":
+            continue
+        if re.match(r'^"[^"\n]*",?$', content):
             continue
         return True
     return False
@@ -314,13 +361,19 @@ def root_manifest_is_mechanical(repo: Path, base: str, head: str, new_manifest_p
     added = new_members - old_members
     if added != new_manifest_paths:
         return False
-    diff = git(repo, "diff", "--unified=0", base, head, "--", "Cargo.toml").stdout
-    for line in diff.splitlines():
-        if not line or line.startswith(("+++", "---", "@@")) or line[0] not in "+-":
-            continue
-        if "members" not in line[1:]:
-            return False
-    return True
+
+    def normalize_members(text: str, members: set[str]) -> str | None:
+        match = re.search(r"(?ms)^\s*members\s*=\s*\[.*?\]", text)
+        if not match:
+            return None
+        canonical = "members = [\n" + "".join(
+            f'    "{member}",\n' for member in sorted(members)
+        ) + "]"
+        return text[: match.start()] + canonical + text[match.end() :]
+
+    old_normalized = normalize_members(old_blob.decode("utf-8", errors="replace"), old_members)
+    new_normalized = normalize_members(new_blob.decode("utf-8", errors="replace"), old_members)
+    return old_normalized is not None and old_normalized == new_normalized
 
 
 def source_text(repo: Path, head: str, path: str) -> str:
@@ -441,11 +494,11 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         if new_manifest_paths != {str(Path(package_manifest_paths(head_packages)[primary_package]).parent).replace("\\", "/")}:
             raise ScopeError("root_manifest_scope", "root manifest registers more than primary package")
     if root_lock_changed:
-        if lock_diff_has_unattributable_lines(repo, args.base, args.head):
-            raise ScopeError("unattributable_lock_change", "Cargo.lock contains non-package or non-mechanical changes")
         lock_names = lock_change_names(repo, args.base, args.head)
         if not lock_names or primary_package is None or not lock_names.issubset({primary_package}):
             raise ScopeError("unattributable_lock_change", ", ".join(sorted(lock_names)) or "unknown lock change")
+        if lock_diff_has_unattributable_lines(repo, args.base, args.head, {primary_package}):
+            raise ScopeError("unattributable_lock_change", "Cargo.lock contains non-package or non-mechanical changes")
 
     check_cross_package_edges(repo, args.head, normalized_paths, head_packages)
     return {
