@@ -1,13 +1,15 @@
 #!/usr/bin/env python3
 import base64
 import hashlib
-import importlib.util
 import json
+import importlib.util
+import io
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+import zipfile
 
 
 MODULE_PATH = Path(__file__).with_name("cargo_checker_stage_admission.py")
@@ -29,6 +31,9 @@ CHECKER_HEAD = "2" * 40
 CHECKER_SCOPE = "3" * 40
 TESTED_TREE = "4" * 40
 TASK_UID = "task_be264ac2833044969d3c2c50b2b83cea"
+CHECKER_PR = 4927
+INTEGRATION_RUN = 35463292968
+CHECK_RUN_ID = 123
 
 
 def _normative_bytes():
@@ -51,6 +56,43 @@ def _content(data, oid):
         "sha": oid,
         "size": len(data),
     }
+
+
+def _profile_artifacts():
+    plan = {
+        "schema": "oasis7-cargo-package-profile-plan/v1",
+        "plan_id": "sha256:" + "1" * 64,
+        "integration_base": CHECKER_BASE,
+        "source_head": "8" * 40,
+        "tested_tree": PLANNER_TREE,
+    }
+    results = [{
+        "status": "passed", "exit_code": 0,
+        "integration_base": CHECKER_BASE, "source_head": "8" * 40,
+        "tested_tree": PLANNER_TREE,
+    }]
+    receipt = {
+        "status": "passed", "plan_id": plan["plan_id"],
+        "integration_base": CHECKER_BASE, "source_head": "8" * 40,
+        "tested_tree": PLANNER_TREE,
+    }
+    payloads = {}
+    for key, value in (("plan", plan), ("results", results), ("receipt", receipt)):
+        payload = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+        payloads[key] = {"value": value, "bytes": payload}
+    envelope = {
+        "schema": "oasis7-cargo-package-profile-envelope/v1",
+        "repository": REPOSITORY, "task_uid": "task_e21604f5cdb3476c8e146332a68a05b4",
+        "pr_number": 3821, "run_id": INTEGRATION_RUN, "run_attempt": 1,
+        "check_name": "required-gate", "check_app_id": 15368,
+        "check_run_id": CHECK_RUN_ID, "integration_base": CHECKER_BASE,
+        "source_head": "8" * 40, "tested_tree": PLANNER_TREE,
+        "plan_digest": "sha256:" + hashlib.sha256(payloads["plan"]["bytes"]).hexdigest(),
+        "results_digest": "sha256:" + hashlib.sha256(payloads["results"]["bytes"]).hexdigest(),
+        "receipt_digest": "sha256:" + hashlib.sha256(payloads["receipt"]["bytes"]).hexdigest(),
+    }
+    payloads["envelope"] = {"value": envelope, "bytes": json.dumps(envelope, sort_keys=True, separators=(",", ":")).encode()}
+    return payloads
 
 
 def _comment(stage, commit, tree, blob, data, task_uid, pr, comment, fragment):
@@ -125,7 +167,7 @@ def _authority_api():
                "merge_commit_sha": PLANNER_COMMIT,
                "base": {"ref": "main", "sha": CHECKER_BASE, "repo": {"full_name": REPOSITORY}},
                "head": {"sha": "8" * 40, "repo": {"full_name": REPOSITORY}}},
-        3827: {"number": 3827, "state": "open", "merged": False, "draft": True,
+        CHECKER_PR: {"number": CHECKER_PR, "state": "open", "merged": False, "draft": True,
                "body": f"Task: {TASK_UID}\n", "base": {"ref": "main", "sha": CHECKER_BASE,
                "repo": {"full_name": REPOSITORY}}, "head": {"sha": CHECKER_HEAD,
                "repo": {"full_name": REPOSITORY}},},
@@ -139,8 +181,8 @@ def _authority_api():
                 "body": (
                     "<!-- oasis7-pm-task -->\n"
                     f"task_uid: {TASK_UID}\n"
-                    "- pr_url: `https://github.com/eng-cc/oasis7/pull/3827`\n"
-                    "- pr_number: `3827`\n"
+                    f"- pr_url: `https://github.com/eng-cc/oasis7/pull/{CHECKER_PR}`\n"
+                    f"- pr_number: `{CHECKER_PR}`\n"
                 ),
             }
         if path.endswith(f"issues/comments/{MODULE.NORMATIVE_COMMENT}"):
@@ -152,6 +194,7 @@ def _authority_api():
         if "/actions/runs/" in path:
             return {
                 "id": 35463292968,
+                "run_attempt": 1,
                 "status": "completed",
                 "conclusion": "success",
                 "event": "workflow_dispatch",
@@ -163,12 +206,18 @@ def _authority_api():
                     + CHECKER_BASE + "|" + "8" * 40
                 ),
             }
+        if "/check-runs?" in path:
+            return {"check_runs": [{
+                "id": CHECK_RUN_ID, "name": "required-gate", "head_sha": CHECKER_BASE,
+                "details_url": f"https://github.com/{REPOSITORY}/actions/runs/{INTEGRATION_RUN}/job/1",
+                "app": {"id": 15368, "slug": "github-actions"},
+            }]}
         if "/commits/" in path:
             return commits[path.rsplit("/", 1)[1]]
         if "/contents/" in path:
             commit = path.split("?ref=", 1)[1]
             return contents[commit]
-        if path.endswith("/pulls/3827/files?per_page=100&page=1"):
+        if path.endswith(f"/pulls/{CHECKER_PR}/files?per_page=100&page=1"):
             return [{"filename": value} for value in MODULE.CHECKER_SCOPE]
         if "/pulls/" in path:
             return prs[int(path.rsplit("/", 1)[1])]
@@ -179,6 +228,11 @@ def _authority_api():
 
 
 class CheckerStageAdmissionTest(unittest.TestCase):
+    def setUp(self):
+        self.profile_patch = patch.object(MODULE, "_read_profile_artifacts", return_value=_profile_artifacts())
+        self.profile_patch.start()
+        self.addCleanup(self.profile_patch.stop)
+
     def test_authority_chain_reads_both_fixed_live_server_readbacks(self):
         with patch.object(MODULE, "gh_api", side_effect=_authority_api()):
             chain = MODULE.verify_authority_chain(REPOSITORY)
@@ -242,15 +296,16 @@ class CheckerStageAdmissionTest(unittest.TestCase):
         with patch.object(MODULE, "gh_api", side_effect=api):
             with self.assertRaisesRegex(MODULE.AdmissionError, "head"):
                 MODULE.verify_checker_pr(
-                    REPOSITORY, 3827, TASK_UID, CHECKER_BASE, "9" * 40,
+                    REPOSITORY, CHECKER_PR, TASK_UID, CHECKER_BASE, "9" * 40,
                     CHECKER_SCOPE, TESTED_TREE, Path("."),
                 )
 
     def test_stage_classifier_keeps_ordinary_prs_conservative_and_blocks_suspicious_checker(self):
-        self.assertFalse(MODULE.classify_checker_stage(9999, None))
-        self.assertTrue(MODULE.classify_checker_stage(3827, TASK_UID))
-        with self.assertRaisesRegex(MODULE.AdmissionError, "trusted task"):
-            MODULE.classify_checker_stage(3827, "task_00000000000000000000000000000000")
+        with patch.object(MODULE, "gh_api", side_effect=_authority_api()):
+            self.assertFalse(MODULE.classify_checker_stage(REPOSITORY, 9999, None))
+            self.assertTrue(MODULE.classify_checker_stage(REPOSITORY, CHECKER_PR, TASK_UID))
+            with self.assertRaisesRegex(MODULE.AdmissionError, "trusted task"):
+                MODULE.classify_checker_stage(REPOSITORY, CHECKER_PR, "task_00000000000000000000000000000000")
 
     def test_checker_task_binding_rejects_issue_uid_or_reciprocal_pr_drift(self):
         api = _authority_api()
@@ -266,7 +321,7 @@ class CheckerStageAdmissionTest(unittest.TestCase):
         with patch.object(MODULE, "gh_api", side_effect=wrong_issue):
             with self.assertRaisesRegex(MODULE.AdmissionError, "Issue UID"):
                 MODULE.verify_checker_pr(
-                    REPOSITORY, 3827, TASK_UID, CHECKER_BASE, CHECKER_HEAD,
+                    REPOSITORY, CHECKER_PR, TASK_UID, CHECKER_BASE, CHECKER_HEAD,
                     CHECKER_SCOPE, TESTED_TREE, Path("."),
                 )
 
@@ -283,7 +338,26 @@ class CheckerStageAdmissionTest(unittest.TestCase):
         with patch.object(MODULE, "gh_api", side_effect=missing_reciprocal):
             with self.assertRaisesRegex(MODULE.AdmissionError, "reciprocal PR"):
                 MODULE.verify_checker_pr(
-                    REPOSITORY, 3827, TASK_UID, CHECKER_BASE, CHECKER_HEAD,
+                    REPOSITORY, CHECKER_PR, TASK_UID, CHECKER_BASE, CHECKER_HEAD,
+                    CHECKER_SCOPE, TESTED_TREE, Path("."),
+                )
+
+        api = _authority_api()
+        original = api
+
+        def ambiguous_reciprocal(path):
+            response = original(path)
+            if path.endswith(f"issues/{MODULE.CHECKER_ISSUE}"):
+                response = dict(response)
+                response["body"] = response["body"].replace(
+                    f"- pr_number: `{CHECKER_PR}`", f"- pr_number: `{CHECKER_PR + 1}`"
+                )
+            return response
+
+        with patch.object(MODULE, "gh_api", side_effect=ambiguous_reciprocal):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "ambiguous"):
+                MODULE.verify_checker_pr(
+                    REPOSITORY, CHECKER_PR, TASK_UID, CHECKER_BASE, CHECKER_HEAD,
                     CHECKER_SCOPE, TESTED_TREE, Path("."),
                 )
 
@@ -293,7 +367,7 @@ class CheckerStageAdmissionTest(unittest.TestCase):
              patch.object(MODULE, "_git", side_effect=[CHECKER_SCOPE, TESTED_TREE]):
             with self.assertRaisesRegex(MODULE.AdmissionError, "task.*(?:identity|UID)"):
                 MODULE.verify_checker_pr(
-                    REPOSITORY, 3827, "task_00000000000000000000000000000000",
+                    REPOSITORY, CHECKER_PR, "task_00000000000000000000000000000000",
                     CHECKER_BASE, CHECKER_HEAD,
                     CHECKER_SCOPE, TESTED_TREE, Path("."),
                 )
@@ -383,6 +457,44 @@ class CheckerStageAdmissionTest(unittest.TestCase):
             with self.assertRaisesRegex(MODULE.AdmissionError, "integration run base"):
                 MODULE.verify_authority_chain(REPOSITORY)
 
+    def test_integration_artifact_tested_tree_divergence_is_rejected(self):
+        artifacts = _profile_artifacts()
+        artifacts["envelope"]["value"] = dict(artifacts["envelope"]["value"], tested_tree="0" * 40)
+        with patch.object(MODULE, "gh_api", side_effect=_authority_api()), \
+             patch.object(MODULE, "_read_profile_artifacts", return_value=artifacts):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "envelope identity"):
+                MODULE.verify_authority_chain(REPOSITORY)
+
+    def test_profile_artifact_reader_binds_exact_run_artifacts(self):
+        payloads = _profile_artifacts()
+        members = {
+            "envelope": ("cargo-package-profile-envelope", "cargo-package-profile-envelope.json"),
+            "plan": ("cargo-package-profile-plan", "cargo-package-profile-plan.json"),
+            "results": ("cargo-package-profile-results", "cargo-package-profile-results.json"),
+            "receipt": ("cargo-package-profile-receipt", "cargo-package-profile-receipt.json"),
+        }
+        artifacts = []
+        archives = {}
+        for index, (key, (name, member)) in enumerate(members.items(), start=1):
+            artifacts.append({"id": index, "name": name, "expired": False,
+                              "workflow_run": {"id": INTEGRATION_RUN}})
+            stream = io.BytesIO()
+            with zipfile.ZipFile(stream, "w", zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr(member, payloads[key]["bytes"])
+            archives[index] = stream.getvalue()
+
+        def api(path):
+            if "/actions/runs/" in path and path.endswith("artifacts?per_page=100"):
+                return {"artifacts": artifacts}
+            raise AssertionError(path)
+
+        def download(path):
+            return archives[int(path.rsplit("/", 2)[1])]
+
+        with patch.object(MODULE, "gh_api", side_effect=api), patch.object(MODULE, "_gh_download", side_effect=download):
+            loaded = MODULE._read_profile_artifacts(REPOSITORY, INTEGRATION_RUN)
+        self.assertEqual(PLANNER_TREE, loaded["envelope"]["value"]["tested_tree"])
+
     def test_authority_chain_rejects_missing_planner_verification_evidence(self):
         api = _authority_api()
         original = api
@@ -415,11 +527,12 @@ class CheckerStageAdmissionTest(unittest.TestCase):
             "task_uid": TASK_UID, "changed_paths": sorted(MODULE.CHECKER_SCOPE),
         }
         with patch.object(MODULE, "verify_authority_chain", return_value=chain), \
+             patch.object(MODULE, "classify_checker_stage", return_value=True), \
              patch.object(MODULE, "verify_executing_planner", return_value={"bytes_sha256": planner_authority["authority_bytes_sha256"]}), \
              patch.object(MODULE, "verify_checker_pr", return_value=checker), \
              patch.object(MODULE, "_git", return_value=TESTED_TREE):
             receipt = MODULE.build_preflight(
-                repository=REPOSITORY, pr_number=3827, task_uid=TASK_UID,
+                repository=REPOSITORY, pr_number=CHECKER_PR, task_uid=TASK_UID,
                 base_oid=CHECKER_BASE, head_oid=CHECKER_HEAD, scope_base_oid=CHECKER_SCOPE,
                 repo_root=Path("."), planner_path=Path("planner.py"),
                 checker_path=Path("checker"), policy_path=Path("policy"), primary_package="auto",
@@ -433,7 +546,7 @@ class CheckerStageAdmissionTest(unittest.TestCase):
     def test_postrun_rejects_missing_failed_wrong_head_and_dirty_receipt(self):
         preflight = {
             "schema": MODULE.SCHEMA, "phase": "preflight", "repository": REPOSITORY,
-            "task_uid": TASK_UID, "pr_number": 3827, "base_oid": CHECKER_BASE,
+            "task_uid": TASK_UID, "pr_number": CHECKER_PR, "base_oid": CHECKER_BASE,
             "head_oid": CHECKER_HEAD, "scope_base_oid": CHECKER_SCOPE,
             "tested_tree": TESTED_TREE, "checker_command": ["python3", "checker"],
             "checker_command_digest": MODULE.command_digest(["python3", "checker"]),
@@ -486,7 +599,7 @@ class CheckerStageAdmissionTest(unittest.TestCase):
     def test_postrun_receipt_is_durable_and_complete(self):
         preflight = {
             "schema": MODULE.SCHEMA, "phase": "preflight", "repository": REPOSITORY,
-            "task_uid": TASK_UID, "pr_number": 3827, "base_oid": CHECKER_BASE,
+            "task_uid": TASK_UID, "pr_number": CHECKER_PR, "base_oid": CHECKER_BASE,
             "head_oid": CHECKER_HEAD, "scope_base_oid": CHECKER_SCOPE,
             "tested_tree": TESTED_TREE, "checker_command": ["python3", "checker"],
             "checker_command_digest": MODULE.command_digest(["python3", "checker"]),

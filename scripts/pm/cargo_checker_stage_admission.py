@@ -13,6 +13,7 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
+import io
 import json
 import os
 from pathlib import Path
@@ -20,6 +21,7 @@ import re
 import subprocess
 import sys
 from typing import Any
+import zipfile
 
 
 SCHEMA = "oasis7-cargo-checker-stage-admission/v1"
@@ -32,7 +34,6 @@ PLANNER_COMMENT = 5744986195
 PLANNER_PR = 3821
 PLANNER_ISSUE = 3818
 PLANNER_TASK_UID = "task_e21604f5cdb3476c8e146332a68a05b4"
-CHECKER_PR = 3827
 CHECKER_ISSUE = 3827
 CHECKER_TASK_UID = "task_be264ac2833044969d3c2c50b2b83cea"
 NORMATIVE_PATH = "doc/engineering/workflow/source-of-truth.md"
@@ -222,15 +223,114 @@ def _verify_live_integration_run(repository: str, parsed: dict[str, Any]) -> Non
         raise AdmissionError("planner integration run provenance is not trusted")
     if run.get("head_sha") != parsed.get("trusted_integration_base"):
         raise AdmissionError("planner integration run base identity mismatch")
-    title = str(run.get("display_title") or "")
-    for token in (
-        parsed.get("task_uid"),
-        str(parsed.get("pr_number")),
-        str(parsed.get("trusted_integration_base")),
-        str(parsed.get("source_head")),
+    checks = gh_api(
+        f"repos/{repository}/commits/{run['head_sha']}/check-runs?per_page=100"
+    )
+    marker = f"/actions/runs/{run_id}"
+    matches = [
+        item
+        for item in (checks.get("check_runs", []) if isinstance(checks, dict) else [])
+        if item.get("name") == "required-gate" and marker in str(item.get("details_url") or "")
+    ]
+    if len(matches) != 1:
+        raise AdmissionError("planner integration required-gate identity is missing or ambiguous")
+    check = matches[0]
+    app_id = ((check.get("app") or {}).get("id"))
+    if not isinstance(app_id, int) or app_id <= 0 or check.get("head_sha") != run.get("head_sha"):
+        raise AdmissionError("planner integration required-gate identity is invalid")
+    artifacts = _read_profile_artifacts(repository, run_id)
+    envelope = artifacts["envelope"]["value"]
+    expected = {
+        "schema": "oasis7-cargo-package-profile-envelope/v1",
+        "repository": repository,
+        "task_uid": parsed.get("task_uid"),
+        "pr_number": parsed.get("pr_number"),
+        "run_id": run_id,
+        "run_attempt": run.get("run_attempt"),
+        "check_name": "required-gate",
+        "check_app_id": app_id,
+        "check_run_id": check.get("id"),
+        "integration_base": parsed.get("trusted_integration_base"),
+        "source_head": parsed.get("source_head"),
+        "tested_tree": parsed.get("merged_tree"),
+    }
+    if any(envelope.get(field) != value for field, value in expected.items()):
+        raise AdmissionError("planner integration envelope identity mismatch")
+    for field in ("plan", "results", "receipt"):
+        expected_digest = _require_digest(envelope.get(f"{field}_digest"), f"{field} artifact")
+        if expected_digest != _digest(artifacts[field]["bytes"]):
+            raise AdmissionError(f"planner integration {field} artifact digest mismatch")
+    plan = artifacts["plan"]["value"]
+    if any(plan.get(field) != expected[field] for field in ("integration_base", "source_head", "tested_tree")):
+        raise AdmissionError("planner integration plan identity mismatch")
+    results = artifacts["results"]["value"]
+    if not isinstance(results, list) or any(
+        not isinstance(item, dict)
+        or item.get("status") != "passed"
+        or item.get("exit_code") != 0
+        or any(item.get(field) != expected[field] for field in ("integration_base", "source_head", "tested_tree"))
+        for item in results
     ):
-        if not token or token not in title:
-            raise AdmissionError("planner integration run task/PR/head binding is incomplete")
+        raise AdmissionError("planner integration results identity or status mismatch")
+    receipt = artifacts["receipt"]["value"]
+    if (
+        not isinstance(receipt, dict)
+        or receipt.get("status") != "passed"
+        or receipt.get("plan_id") != plan.get("plan_id")
+        or any(receipt.get(field) != expected[field] for field in ("integration_base", "source_head", "tested_tree"))
+    ):
+        raise AdmissionError("planner integration receipt identity or status mismatch")
+    parsed["trusted_integration_envelope"] = envelope
+
+
+def _gh_download(path: str) -> bytes:
+    try:
+        return subprocess.check_output(["gh", "api", path], stderr=subprocess.PIPE)
+    except Exception as exc:  # pragma: no cover - exact gh failures vary by runner
+        raise AdmissionError(f"live GitHub artifact download failed for {path}: {exc}") from exc
+
+
+def _read_profile_artifact(
+    repository: str, artifact: dict[str, Any], member: str
+) -> dict[str, Any]:
+    artifact_id = artifact.get("id")
+    if not isinstance(artifact_id, int) or artifact.get("expired"):
+        raise AdmissionError("planner integration artifact is missing or expired")
+    try:
+        with zipfile.ZipFile(
+            io.BytesIO(_gh_download(f"repos/{repository}/actions/artifacts/{artifact_id}/zip"))
+        ) as archive:
+            if archive.namelist() != [member]:
+                raise ValueError(f"expected only {member}")
+            payload = archive.read(member)
+        value = json.loads(payload)
+    except (OSError, ValueError, json.JSONDecodeError, zipfile.BadZipFile) as exc:
+        raise AdmissionError(f"planner integration artifact {member} is malformed") from exc
+    if not isinstance(value, (dict, list)):
+        raise AdmissionError(f"planner integration artifact {member} has invalid JSON")
+    return {"value": value, "bytes": payload}
+
+
+def _read_profile_artifacts(repository: str, run_id: int) -> dict[str, dict[str, Any]]:
+    names = {
+        "envelope": ("cargo-package-profile-envelope", "cargo-package-profile-envelope.json"),
+        "plan": ("cargo-package-profile-plan", "cargo-package-profile-plan.json"),
+        "results": ("cargo-package-profile-results", "cargo-package-profile-results.json"),
+        "receipt": ("cargo-package-profile-receipt", "cargo-package-profile-receipt.json"),
+    }
+    response = gh_api(f"repos/{repository}/actions/runs/{run_id}/artifacts?per_page=100")
+    artifacts = response.get("artifacts") if isinstance(response, dict) else None
+    if not isinstance(artifacts, list):
+        raise AdmissionError("planner integration artifact listing is unavailable")
+    result: dict[str, dict[str, Any]] = {}
+    for key, (name, member) in names.items():
+        matches = [item for item in artifacts if isinstance(item, dict) and item.get("name") == name]
+        if len(matches) != 1:
+            raise AdmissionError(f"planner integration artifact {name} is missing or ambiguous")
+        if int((matches[0].get("workflow_run") or {}).get("id") or 0) != run_id:
+            raise AdmissionError(f"planner integration artifact {name} belongs to another run")
+        result[key] = _read_profile_artifact(repository, matches[0], member)
+    return result
 
 
 def _decode_contents(response: dict[str, Any], field: str) -> bytes:
@@ -450,8 +550,6 @@ def verify_checker_pr(
 ) -> dict[str, Any]:
     if repository != REPOSITORY:
         raise AdmissionError("checker PR repository is not canonical")
-    if pr_number != CHECKER_PR:
-        raise AdmissionError("checker stage PR identity is not the trusted checker PR")
     _require_oid(base_oid, "checker PR base")
     _require_oid(head_oid, "checker PR head")
     _require_oid(scope_base_oid, "checker scope base")
@@ -495,32 +593,9 @@ def verify_checker_pr(
     }
 
 
-def classify_checker_stage(pr_number: int, task_uid: str | None) -> bool:
-    """Return whether the exact trusted checker-stage route is selected.
-
-    Ordinary PRs must retain the conservative path.  Once the reserved checker
-    PR number is selected, any missing or foreign task identity is suspicious
-    and blocks rather than silently downgrading to an unbound stage run.
-    """
-    if pr_number != CHECKER_PR:
-        return False
-    if task_uid != CHECKER_TASK_UID:
-        raise AdmissionError("checker stage task identity is not the trusted task")
-    return True
-
-
-def verify_checker_task_binding(
-    repository: str,
-    pr_number: int,
-    task_uid: str | None,
-    head_oid: str,
-    pull: dict[str, Any],
-) -> None:
-    """Bind the candidate to canonical Issue #3827 and its reciprocal PR."""
-    if repository != REPOSITORY or pr_number != CHECKER_PR:
-        raise AdmissionError("checker task repository/PR identity mismatch")
-    if task_uid != CHECKER_TASK_UID:
-        raise AdmissionError("checker task UID is not the trusted Issue UID")
+def _read_checker_task_binding(repository: str) -> dict[str, Any]:
+    if repository != REPOSITORY:
+        raise AdmissionError("checker task repository is not canonical")
     issue = gh_api(f"repos/{repository}/issues/{CHECKER_ISSUE}")
     if (
         not isinstance(issue, dict)
@@ -535,13 +610,47 @@ def verify_checker_task_binding(
     uids = re.findall(r"(?m)^task_uid:\s*(task_[0-9a-f]{32})\s*$", body)
     if uids != [CHECKER_TASK_UID]:
         raise AdmissionError("checker task Issue UID binding mismatch")
-    reciprocal = re.findall(
-        rf"https://github\.com/{re.escape(repository)}/pull/{CHECKER_PR}\b", body
+    references = re.findall(
+        rf"https://github\.com/{re.escape(repository)}/pull/(\d+)\b", body
     )
-    reciprocal += re.findall(rf"(?m)^-?\s*pr_number:\s*`?{CHECKER_PR}`?\s*$", body)
-    if not reciprocal:
+    references.extend(re.findall(r"(?m)^-?\s*pr_number:\s*`?(\d+)`?\s*$", body))
+    unique = sorted(set(int(value) for value in references))
+    if not unique:
         raise AdmissionError("checker task reciprocal PR binding is unavailable")
-    if pull.get("number") != CHECKER_PR:
+    if len(unique) != 1:
+        raise AdmissionError("checker task reciprocal PR binding is ambiguous")
+    return {"issue_number": CHECKER_ISSUE, "task_uid": CHECKER_TASK_UID, "pr_number": unique[0]}
+
+
+def classify_checker_stage(repository: str, pr_number: int, task_uid: str | None) -> bool:
+    """Return whether the exact trusted checker-stage route is selected.
+
+    Ordinary PRs must retain the conservative path.  The checker PR number is
+    discovered from the live task Issue; any missing or foreign identity on that
+    exact PR is suspicious and blocks rather than downgrading silently.
+    """
+    binding = _read_checker_task_binding(repository)
+    if pr_number != binding["pr_number"]:
+        return False
+    if task_uid != CHECKER_TASK_UID:
+        raise AdmissionError("checker stage task identity is not the trusted task")
+    return True
+
+
+def verify_checker_task_binding(
+    repository: str,
+    pr_number: int,
+    task_uid: str | None,
+    head_oid: str,
+    pull: dict[str, Any],
+) -> None:
+    """Bind the candidate to canonical Issue #3827 and its reciprocal PR."""
+    binding = _read_checker_task_binding(repository)
+    if pr_number != binding["pr_number"]:
+        raise AdmissionError("checker task reciprocal PR identity mismatch")
+    if task_uid != binding["task_uid"]:
+        raise AdmissionError("checker task UID is not the trusted Issue UID")
+    if pull.get("number") != binding["pr_number"]:
         raise AdmissionError("checker PR number readback mismatch")
     live_head = ((pull.get("head") or {}).get("sha"))
     if live_head != head_oid:
@@ -572,7 +681,7 @@ def build_preflight(
 ) -> dict[str, Any]:
     if not isinstance(task_uid, str) or not task_uid.startswith("task_"):
         raise AdmissionError("current checker task UID is required")
-    if not classify_checker_stage(pr_number, task_uid):
+    if not classify_checker_stage(repository, pr_number, task_uid):
         raise AdmissionError("checker stage route is not the trusted exact-stage PR")
     authorities = verify_authority_chain(repository)
     planner = verify_executing_planner(planner_path, authorities["planner"], repo_root)
