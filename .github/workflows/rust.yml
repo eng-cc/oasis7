@@ -237,6 +237,7 @@ jobs:
             impact_args=(--impact-projection "${RUNNER_TEMP}/impact-projection.json" --task-uid "${task_uid}" --scope-base-oid "${scope_base_oid}")
           elif [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]; then
             planner=(python3 -I "${RUNNER_TEMP}/integration-planner/plan-rust-required-scope.py")
+            task_uid="${{ inputs.task_uid }}"
             run_mode_args=(--run-mode "${{ inputs.run_mode }}")
             impact_args=(
               --impact-projection "${RUNNER_TEMP}/impact-projection.json"
@@ -258,6 +259,7 @@ jobs:
           echo "source_scope_base=${source_scope_base}" >>"${GITHUB_OUTPUT}"
           echo "integration_base=${base_ref}" >>"${GITHUB_OUTPUT}"
           echo "source_head=${head_ref}" >>"${GITHUB_OUTPUT}"
+          echo "task_uid=${task_uid}" >>"${GITHUB_OUTPUT}"
       - name: Report planned scope
         run: |
           echo "scope=${{ steps.scope.outputs.scope }}"
@@ -444,6 +446,8 @@ jobs:
           OASIS7_CARGO_SCOPE_HEAD: ${{ steps.scope.outputs.head_oid }}
           OASIS7_CARGO_SCOPE_INTEGRATION_BASE: ${{ steps.scope.outputs.integration_base_oid }}
           OASIS7_CARGO_STAGE_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          OASIS7_CARGO_STAGE_TASK_UID: ${{ steps.scope.outputs.task_uid || inputs.task_uid }}
+          OASIS7_CARGO_STAGE_RECEIPT: ${{ github.workspace }}/output/cargo-checker-stage-admission/post-run-receipt.json
         run: |
           trusted_checker="${RUNNER_TEMP}/trusted-check-cargo-package-scope"
           trusted_profile_authority="${RUNNER_TEMP}/trusted-cargo-profile-authority"
@@ -559,6 +563,14 @@ jobs:
           else
             CI_VERBOSE=1 ./scripts/ci-tests.sh required
           fi
+      - name: Upload Cargo checker-stage admission receipt
+        if: ${{ always() && hashFiles('output/cargo-checker-stage-admission/post-run-receipt.json') != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: cargo-checker-stage-admission-receipt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/cargo-checker-stage-admission/post-run-receipt.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Upload Cargo package profile plan
         if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
         uses: actions/upload-artifact@v7

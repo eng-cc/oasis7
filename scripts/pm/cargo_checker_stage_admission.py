@@ -27,8 +27,11 @@ REPOSITORY = "eng-cc/oasis7"
 DEFAULT_BRANCH = "main"
 NORMATIVE_COMMENT = 5743059557
 NORMATIVE_PR = 3815
+NORMATIVE_TASK_UID = "task_7bbce5924333467f9edfae48e1c73889"
 PLANNER_COMMENT = 5744986195
 PLANNER_PR = 3821
+PLANNER_ISSUE = 3818
+PLANNER_TASK_UID = "task_e21604f5cdb3476c8e146332a68a05b4"
 NORMATIVE_PATH = "doc/engineering/workflow/source-of-truth.md"
 PLANNER_PATH = "scripts/pm/cargo_package_profile_planner.py"
 CHECKER_SCOPE = (
@@ -74,6 +77,12 @@ def command_digest(argv: list[str]) -> str:
 def preflight_digest(receipt: dict[str, Any]) -> str:
     unsigned = dict(receipt)
     unsigned.pop("preflight_digest", None)
+    return _json_digest(unsigned)
+
+
+def durable_receipt_digest(receipt: dict[str, Any]) -> str:
+    unsigned = dict(receipt)
+    unsigned.pop("receipt_digest", None)
     return _json_digest(unsigned)
 
 
@@ -129,6 +138,11 @@ def _parse_planner_receipt(body: str) -> dict[str, Any]:
     pr = int(_field(body, r"\bpr=(\d+)\b", "PR identity"))
     if pr != PLANNER_PR:
         raise AdmissionError("planner receipt PR identity mismatch")
+    verification = _field(
+        body,
+        r"Verification commands/results bound to this exact source head: (.*?)(?: Consumption restriction:|$)",
+        "verification commands/results",
+    )
     return {
         "repository": _field(body, r"\brepository=([^;]+)", "repository"),
         "default_branch": _field(body, r"\bdefault_branch=([^;]+)", "default branch"),
@@ -154,7 +168,35 @@ def _parse_planner_receipt(body: str) -> dict[str, Any]:
         "stable_fragment": _field(body, r"\bstable_fragment=(.*?); stable_fragment_sha256=", "fragment"),
         "stable_fragment_sha256": "sha256:"
         + _field(body, r"\bstable_fragment_sha256=([0-9a-f]{64})\b", "fragment digest"),
+        "verification_evidence": verification,
     }
+
+
+def _validate_planner_verification(parsed: dict[str, Any]) -> None:
+    evidence = str(parsed.get("verification_evidence") or "")
+    required = (
+        "python3 scripts/pm/cargo-package-profile-planner.test.py 23/23 PASS",
+        "python3 scripts/pm/check-cargo-package-scope.test.py 13/13 PASS",
+        "./scripts/pm/lint.sh PASS",
+        "./scripts/doc-governance-check.sh PASS",
+        f"./scripts/pm/workflow-lint.sh --task-uid {PLANNER_TASK_UID} --phase current PASS",
+        "git diff --check PASS",
+        "terminal finalizer PASS",
+    )
+    missing = [item for item in required if item not in evidence]
+    if missing:
+        raise AdmissionError("planner verification commands/results are incomplete")
+    match = re.search(
+        r"trusted exact integration run \d+ at base ([0-9a-f]{8,40}) PASS, tested_tree=([0-9a-f]{40})",
+        evidence,
+    )
+    if match is None:
+        raise AdmissionError("planner exact integration verification is missing")
+    trusted_base = str(parsed.get("trusted_integration_base") or "")
+    if not trusted_base.startswith(match.group(1)):
+        raise AdmissionError("planner integration verification base mismatch")
+    if match.group(2) != parsed.get("merged_tree"):
+        raise AdmissionError("planner integration verification tested-tree mismatch")
 
 
 def _decode_contents(response: dict[str, Any], field: str) -> bytes:
@@ -198,6 +240,13 @@ def _verify_server_readback(
     if not isinstance(body, str):
         raise AdmissionError("authority readback comment body is missing")
     parsed = _parse_normative_receipt(body) if stage == "normative_source" else _parse_planner_receipt(body)
+    if stage == "normative_source":
+        if parsed.get("task_uid") != NORMATIVE_TASK_UID:
+            raise AdmissionError("normative authority task identity mismatch")
+    else:
+        if parsed.get("task_uid") != PLANNER_TASK_UID or parsed.get("issue_number") != PLANNER_ISSUE:
+            raise AdmissionError("planner authority task/issue identity mismatch")
+        _validate_planner_verification(parsed)
     if parsed["repository"] != repository or parsed["default_branch"] != DEFAULT_BRANCH:
         raise AdmissionError("authority repository/default branch mismatch")
     expected_stage = "normative_source" if stage == "normative_source" else "approved_planner_authority"
@@ -216,6 +265,8 @@ def _verify_server_readback(
         raise AdmissionError("authority PR base repository/branch mismatch")
     if (head.get("repo") or {}).get("full_name") != repository:
         raise AdmissionError("authority PR head repository mismatch")
+    if head.get("sha") != parsed.get("source_head"):
+        raise AdmissionError("authority PR head/source head identity mismatch")
     commit = gh_api(f"repos/{repository}/commits/{parsed['merged_commit']}")
     if not isinstance(commit, dict):
         raise AdmissionError("authority commit readback is malformed")
@@ -366,7 +417,7 @@ def verify_checker_pr(
         raise AdmissionError("checker PR head repository mismatch")
     body = pull.get("body") or ""
     matches = re.findall(r"^Task: (task_[0-9a-f]{32})$", body, re.MULTILINE)
-    if len(matches) != 1 or (task_uid is not None and matches[0] != task_uid):
+    if not isinstance(task_uid, str) or not task_uid.startswith("task_") or len(matches) != 1 or matches[0] != task_uid:
         raise AdmissionError("checker PR task identity mismatch")
     changed = sorted(_pr_files(repository, pr_number))
     if changed != sorted(CHECKER_SCOPE):
@@ -411,6 +462,8 @@ def build_preflight(
     workflow_ref: str = "",
     workflow_sha: str = "",
 ) -> dict[str, Any]:
+    if not isinstance(task_uid, str) or not task_uid.startswith("task_"):
+        raise AdmissionError("current checker task UID is required")
     authorities = verify_authority_chain(repository)
     planner = verify_executing_planner(planner_path, authorities["planner"], repo_root)
     tested_tree = _git(repo_root, "merge-tree", "--write-tree", base_oid, head_oid)
@@ -502,6 +555,72 @@ def verify_postrun(
         "exit_code": exit_code,
         "runner": runner,
     }
+
+
+def build_postrun_receipt(
+    preflight: dict[str, Any],
+    authorities: dict[str, dict[str, Any]],
+    executing_planner: dict[str, Any],
+    check: dict[str, Any],
+    *,
+    status: str,
+    exit_code: int,
+) -> dict[str, Any]:
+    """Create the durable, complete post-run evidence artifact."""
+    runner = preflight.get("runner") or {}
+    receipt = verify_postrun(
+        preflight,
+        preflight_digest(preflight),
+        status=status,
+        exit_code=exit_code,
+        run_id=str(runner.get("run_id") or ""),
+        run_attempt=str(runner.get("run_attempt") or ""),
+    )
+    receipt.update(
+        {
+            "normative_authority": _serializable_authority(authorities["normative"]),
+            "planner_authority": _serializable_authority(authorities["planner"]),
+            "executing_planner": executing_planner,
+            "check": check,
+            "result": {
+                "status": status,
+                "exit_code": exit_code,
+                "command": preflight.get("checker_command"),
+                "command_digest": preflight.get("checker_command_digest"),
+                "base_oid": preflight.get("base_oid"),
+                "head_oid": preflight.get("head_oid"),
+                "scope_base_oid": preflight.get("scope_base_oid"),
+                "tested_tree": preflight.get("tested_tree"),
+            },
+        }
+    )
+    receipt["receipt_digest"] = durable_receipt_digest(receipt)
+    verify_durable_postrun_receipt(receipt)
+    return receipt
+
+
+def verify_durable_postrun_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
+    """Validate the durable artifact before a workflow uploads it."""
+    if receipt.get("schema") != SCHEMA or receipt.get("phase") != "post_run":
+        raise AdmissionError("durable post-run receipt schema/phase is invalid")
+    if receipt.get("receipt_digest") != durable_receipt_digest(receipt):
+        raise AdmissionError("durable post-run receipt digest mismatch")
+    for field in ("normative_authority", "planner_authority", "executing_planner", "check", "result"):
+        if not isinstance(receipt.get(field), dict):
+            raise AdmissionError(f"durable post-run receipt is missing {field}")
+    result = receipt["result"]
+    if result.get("status") != "passed" or result.get("exit_code") != 0:
+        raise AdmissionError("durable post-run result is not successful")
+    check = receipt["check"]
+    if not isinstance(check.get("check_app_id"), int) or not isinstance(check.get("check_run_id"), int):
+        raise AdmissionError("durable post-run check identity is incomplete")
+    planner = receipt["executing_planner"]
+    _require_oid(planner.get("merged_commit"), "durable planner merged commit")
+    _require_oid(planner.get("source_head"), "durable planner source head")
+    _require_digest(planner.get("bytes_sha256"), "durable planner bytes")
+    for field in ("base_oid", "head_oid", "scope_base_oid", "tested_tree"):
+        _require_oid(receipt.get(field), f"durable {field}")
+    return receipt
 
 
 def verify_live_check_identity(
@@ -602,18 +721,18 @@ def main(argv: list[str] | None = None) -> int:
         else:
             if not args.preflight or args.preflight_digest is None:
                 raise AdmissionError("post-run requires preflight and preflight-digest")
-            receipt = json.loads(Path(args.preflight).read_text(encoding="utf-8"))
-            if receipt.get("repository") != args.repository or receipt.get("pr_number") != args.pr_number:
+            preflight = json.loads(Path(args.preflight).read_text(encoding="utf-8"))
+            if preflight.get("repository") != args.repository or preflight.get("pr_number") != args.pr_number:
                 raise AdmissionError("post-run repository/PR identity mismatch")
             for argument, field in (
                 (args.base_oid, "base_oid"),
                 (args.head_oid, "head_oid"),
                 (args.scope_base_oid, "scope_base_oid"),
             ):
-                if receipt.get(field) != argument:
+                if preflight.get(field) != argument:
                     raise AdmissionError(f"post-run {field} identity mismatch")
-            receipt = verify_postrun(
-                receipt,
+            verify_postrun(
+                preflight,
                 args.preflight_digest,
                 status=args.result_status,
                 exit_code=args.exit_code,
@@ -627,9 +746,11 @@ def main(argv: list[str] | None = None) -> int:
             policy_path = args.policy_path
             if planner_path is None or checker_path is None or policy_path is None:
                 raise AdmissionError("post-run requires planner, checker, and policy paths")
-            verify_executing_planner(planner_path, authorities["planner"], args.repo_root)
+            executing_planner = verify_executing_planner(
+                planner_path, authorities["planner"], args.repo_root
+            )
             tested_tree = _git(args.repo_root, "merge-tree", "--write-tree", args.base_oid, args.head_oid)
-            if tested_tree != receipt["tested_tree"]:
+            if tested_tree != preflight["tested_tree"]:
                 raise AdmissionError("post-run tested-tree identity changed")
             expected_command = [
                 sys.executable,
@@ -646,20 +767,28 @@ def main(argv: list[str] | None = None) -> int:
                 str(policy_path),
                 "--json",
             ]
-            if command_digest(expected_command) != receipt.get("checker_command_digest"):
+            if command_digest(expected_command) != preflight.get("checker_command_digest"):
                 raise AdmissionError("post-run checker command identity mismatch")
             verify_checker_pr(
                 args.repository,
                 args.pr_number,
-                receipt.get("task_uid"),
+                preflight.get("task_uid"),
                 args.base_oid,
                 args.head_oid,
                 args.scope_base_oid,
                 tested_tree,
                 args.repo_root,
             )
-            receipt["check"] = verify_live_check_identity(
+            check = verify_live_check_identity(
                 args.repository, args.check_head or args.head_oid, args.run_id, args.check_name
+            )
+            receipt = build_postrun_receipt(
+                preflight,
+                authorities,
+                executing_planner,
+                check,
+                status=args.result_status,
+                exit_code=args.exit_code,
             )
         rendered = json.dumps(receipt, sort_keys=True, separators=(",", ":")) + "\n"
         if args.output:

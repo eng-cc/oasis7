@@ -475,6 +475,7 @@ run_cargo_package_scope_check() {
   local stage_planner="${OASIS7_CARGO_STAGE_PLANNER:-${OASIS7_CARGO_PROFILE_PLANNER:-}}"
   local integration_base="${OASIS7_CARGO_SCOPE_INTEGRATION_BASE:-$base_oid}"
   local stage_pr_number="${OASIS7_CARGO_STAGE_PR_NUMBER:-}"
+  local stage_receipt="${OASIS7_CARGO_STAGE_RECEIPT:-}"
   local stage_preflight=""
   local stage_digest=""
   if [[ -z "$base_oid" || -z "$head_oid" ]]; then
@@ -490,10 +491,12 @@ run_cargo_package_scope_check() {
     return 0
   fi
   if [[ -n "$stage_adapter" && -n "$stage_pr_number" ]]; then
-    [[ -f "$stage_adapter" && -f "$stage_planner" && -n "$stage_pr_number" && -n "$integration_base" ]] || {
+    [[ -f "$stage_adapter" && -f "$stage_planner" && -n "$stage_pr_number" && \
+      -n "${OASIS7_CARGO_STAGE_TASK_UID:-}" && -n "$integration_base" && -n "$stage_receipt" ]] || {
       echo "error: trusted checker-stage adapter inputs are incomplete" >&2
       return 1
     }
+    mkdir -p "$(dirname "$stage_receipt")"
     stage_preflight="$(mktemp)"
     if ! run python3 "$stage_adapter" preflight \
       --repository "${GITHUB_REPOSITORY:-}" \
@@ -502,6 +505,7 @@ run_cargo_package_scope_check() {
       --base "$integration_base" \
       --head "$head_oid" \
       --scope-base "$base_oid" \
+      --task-uid "${OASIS7_CARGO_STAGE_TASK_UID}" \
       --planner-path "$stage_planner" \
       --checker-path "$checker" \
       --policy-path "$repo_root/$policy" \
@@ -555,7 +559,8 @@ PY
       --run-id "${GITHUB_RUN_ID:-}" \
       --run-attempt "${GITHUB_RUN_ATTEMPT:-}" \
       --workflow-ref "${GITHUB_WORKFLOW_REF:-}" \
-      --workflow-sha "${GITHUB_WORKFLOW_SHA:-}"
+      --workflow-sha "${GITHUB_WORKFLOW_SHA:-}" \
+      --output "$stage_receipt"
     rm -f "$stage_preflight"
   elif [[ -n "$stage_adapter" ]]; then
     echo "skip: checker-stage admission reason=no_live_checker_pr claim_boundary=conservative_scope_only"

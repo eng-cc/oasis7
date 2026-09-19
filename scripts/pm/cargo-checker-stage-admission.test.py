@@ -28,7 +28,7 @@ CHECKER_BASE = "1" * 40
 CHECKER_HEAD = "2" * 40
 CHECKER_SCOPE = "3" * 40
 TESTED_TREE = "4" * 40
-TASK_UID = "task_631aac5cd5494a36a3a5115694d668a3"
+TASK_UID = "task_be264ac2833044969d3c2c50b2b83cea"
 
 
 def _normative_bytes():
@@ -84,8 +84,12 @@ def _comment(stage, commit, tree, blob, data, task_uid, pr, comment, fragment):
         f"through before next top-level def _extract( ; stable_fragment_sha256={fragment_digest}. "
         "Verification commands/results bound to this exact source head: "
         "python3 scripts/pm/cargo-package-profile-planner.test.py 23/23 PASS; "
+        "python3 scripts/pm/check-cargo-package-scope.test.py 13/13 PASS; "
+        "./scripts/pm/lint.sh PASS; ./scripts/doc-governance-check.sh PASS; "
+        "./scripts/pm/workflow-lint.sh --task-uid task_e21604f5cdb3476c8e146332a68a05b4 --phase current PASS; "
+        "git diff --check PASS; "
         "trusted exact integration run 35463292968 at base " + CHECKER_BASE +
-        " PASS, tested_tree=" + PLANNER_TREE + "."
+        " PASS, tested_tree=" + PLANNER_TREE + "; terminal finalizer PASS."
     )
 
 
@@ -116,7 +120,7 @@ def _authority_api():
         3815: {"number": 3815, "state": "closed", "merged": True,
                "merge_commit_sha": NORMATIVE_COMMIT,
                "base": {"ref": "main", "sha": CHECKER_BASE, "repo": {"full_name": REPOSITORY}},
-               "head": {"sha": "8" * 40, "repo": {"full_name": REPOSITORY}}},
+               "head": {"sha": "7" * 40, "repo": {"full_name": REPOSITORY}}},
         3821: {"number": 3821, "state": "closed", "merged": True,
                "merge_commit_sha": PLANNER_COMMIT,
                "base": {"ref": "main", "sha": CHECKER_BASE, "repo": {"full_name": REPOSITORY}},
@@ -214,6 +218,63 @@ class CheckerStageAdmissionTest(unittest.TestCase):
                     CHECKER_SCOPE, TESTED_TREE, Path("."),
                 )
 
+    def test_checker_identity_rejects_wrong_current_task_uid_even_when_body_is_live(self):
+        api = _authority_api()
+        with patch.object(MODULE, "gh_api", side_effect=api), \
+             patch.object(MODULE, "_git", side_effect=[CHECKER_SCOPE, TESTED_TREE]):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "task identity"):
+                MODULE.verify_checker_pr(
+                    REPOSITORY, 3827, "task_00000000000000000000000000000000",
+                    CHECKER_BASE, CHECKER_HEAD,
+                    CHECKER_SCOPE, TESTED_TREE, Path("."),
+                )
+
+    def test_authority_chain_rejects_wrong_predecessor_task_issue_or_pr_head(self):
+        for replacement, message in (
+            ("task_e21604f5cdb3476c8e146332a68a05b4", "task"),
+            ("issue=3818", "issue"),
+        ):
+            api = _authority_api()
+            original = api
+            def wrong_receipt(path, replacement=replacement):
+                response = original(path)
+                if path.endswith(f"issues/comments/{MODULE.PLANNER_COMMENT}"):
+                    response = dict(response)
+                    body = response["body"]
+                    if replacement.startswith("task_"):
+                        body = body.replace(replacement, "task_00000000000000000000000000000000")
+                    else:
+                        body = body.replace(replacement, "issue=9999")
+                    response["body"] = body
+                return response
+            with self.subTest(message=message), patch.object(MODULE, "gh_api", side_effect=wrong_receipt):
+                with self.assertRaisesRegex(MODULE.AdmissionError, message):
+                    MODULE.verify_authority_chain(REPOSITORY)
+        api = _authority_api()
+        original = api
+        def wrong_head(path):
+            response = original(path)
+            if "/pulls/3821" in path:
+                response = dict(response)
+                response["head"] = {"sha": "6" * 40, "repo": {"full_name": REPOSITORY}}
+            return response
+        with patch.object(MODULE, "gh_api", side_effect=wrong_head):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "source head"):
+                MODULE.verify_authority_chain(REPOSITORY)
+
+    def test_authority_chain_rejects_missing_planner_verification_evidence(self):
+        api = _authority_api()
+        original = api
+        def missing_verification(path):
+            response = original(path)
+            if path.endswith(f"issues/comments/{MODULE.PLANNER_COMMENT}"):
+                response = dict(response)
+                response["body"] = response["body"].split("Verification commands/results", 1)[0]
+            return response
+        with patch.object(MODULE, "gh_api", side_effect=missing_verification):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "verification"):
+                MODULE.verify_authority_chain(REPOSITORY)
+
     def test_preflight_binds_scope_and_command_digest(self):
         self.assertTrue(hasattr(MODULE, "build_preflight"))
         expected = ["python3", "scripts/pm/check-cargo-package-scope"]
@@ -299,6 +360,31 @@ class CheckerStageAdmissionTest(unittest.TestCase):
         with patch.object(MODULE, "gh_api", return_value={"check_runs": []}):
             with self.assertRaisesRegex(MODULE.AdmissionError, "missing or ambiguous"):
                 MODULE.verify_live_check_identity(REPOSITORY, check_head, "99")
+
+    def test_postrun_receipt_is_durable_and_complete(self):
+        preflight = {
+            "schema": MODULE.SCHEMA, "phase": "preflight", "repository": REPOSITORY,
+            "task_uid": TASK_UID, "pr_number": 3827, "base_oid": CHECKER_BASE,
+            "head_oid": CHECKER_HEAD, "scope_base_oid": CHECKER_SCOPE,
+            "tested_tree": TESTED_TREE, "checker_command_digest": "sha256:" + "a" * 64,
+            "runner": {"run_id": "99", "run_attempt": "1"},
+        }
+        receipt = MODULE.build_postrun_receipt(
+            preflight,
+            {"normative": {"merged_commit": NORMATIVE_COMMIT},
+             "planner": {"merged_commit": PLANNER_COMMIT}},
+            {"path": MODULE.PLANNER_PATH, "source_head": "8" * 40,
+             "merged_commit": PLANNER_COMMIT, "bytes_sha256": "sha256:" + "b" * 64},
+            {"check_name": "required-gate", "check_app_id": 15368, "check_run_id": 123},
+            status="passed", exit_code=0,
+        )
+        for field in ("normative_authority", "planner_authority", "executing_planner", "check", "result"):
+            self.assertIn(field, receipt)
+        self.assertEqual("passed", receipt["result"]["status"])
+        self.assertIs(MODULE.verify_durable_postrun_receipt(receipt), receipt)
+        tampered = dict(receipt, head_oid="9" * 40)
+        with self.assertRaisesRegex(MODULE.AdmissionError, "digest"):
+            MODULE.verify_durable_postrun_receipt(tampered)
 
 
 if __name__ == "__main__":
