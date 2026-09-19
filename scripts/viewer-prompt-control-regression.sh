@@ -10,6 +10,10 @@ FULL_GAMEPLAY=0
 HOSTED_LOCAL_MOCK=0
 TEST_TIER_REQUIRED=0
 TEST_SIGNER_SEED=""
+SOURCE_BASE_REF="${OASIS7_VIEWER_PROVENANCE_BASE:-}"
+SOURCE_HEAD=""
+SOURCE_BASE=""
+SOURCE_TREE_CLEAN=""
 GAME_URL=""
 AGENT_ID="starter-agent-0"
 PROMPT_GOAL="Inspect the selected agent's prompt control state."
@@ -38,6 +42,7 @@ Options:
   --hosted-local-mock     launch the Hosted local-mock seeded-Agent lane
   --test-tier-required    build/launch oasis7 binaries with test_tier_required
   --test-signer-seed N    deterministic Hosted test signer fixture (currently 42)
+  --source-base REF       immutable source comparison/base ref for binary provenance
   --case-id ID
   --out-dir DIR
   --url URL
@@ -60,6 +65,7 @@ while (($# > 0)); do
     --hosted-local-mock) HOSTED_LOCAL_MOCK=1 ;;
     --test-tier-required) TEST_TIER_REQUIRED=1 ;;
     --test-signer-seed) shift; TEST_SIGNER_SEED="${1:?missing value for --test-signer-seed}" ;;
+    --source-base) shift; SOURCE_BASE_REF="${1:?missing value for --source-base}" ;;
     --case-id) shift; CASE_ID="${1:?missing value for --case-id}" ;;
     --out-dir) shift; OUT_DIR="${1:?missing value for --out-dir}" ;;
     --url) shift; GAME_URL="${1:?missing value for --url}" ;;
@@ -137,6 +143,15 @@ LOCAL_PROVIDER_DIR="$ROOT_DIR/.tmp/wasm-build-suite/local-test-provider"
 LOCAL_PROVIDER_WASM="$LOCAL_PROVIDER_DIR/module.runtime.local-test-provider.wasm"
 LOCAL_PROVIDER_METADATA="$LOCAL_PROVIDER_DIR/module.runtime.local-test-provider.metadata.json"
 
+if (( CONTRACT_ONLY == 0 )); then
+  for stale_artifact in binary-provenance.json artifact-manifest.json run-summary.json; do
+    if [[ -e "$OUT_DIR/$stale_artifact" ]]; then
+      echo "error: refusing to reuse existing provenance output: $OUT_DIR/$stale_artifact" >&2
+      exit 2
+    fi
+  done
+fi
+
 if (( CONTRACT_ONLY == 0 && (FULL_GAMEPLAY == 1 || HOSTED_LOCAL_MOCK == 1) )); then
   if [[ ! -f "$LOCAL_PROVIDER_WASM" ]]; then
     echo "error: local test provider artifact WASM is missing: $LOCAL_PROVIDER_WASM" >&2
@@ -150,9 +165,148 @@ fi
 
 AGENT_SELECTOR="[data-pixel-world-agent-marker=\"true\"][data-agent-id=\"${AGENT_ID}\"]"
 
+capture_source_provenance() {
+  local default_base_ref
+  local dirty_tree
+  SOURCE_HEAD="$(git -C "$ROOT_DIR" rev-parse --verify 'HEAD^{commit}' 2>/dev/null || true)"
+  if [[ -z "$SOURCE_HEAD" ]]; then
+    echo "error: cannot resolve exact source HEAD for binary provenance" >&2
+    return 1
+  fi
+  if [[ -z "$SOURCE_BASE_REF" ]]; then
+    default_base_ref="${OASIS7_VIEWER_PROVENANCE_BASE_REF:-main}"
+    SOURCE_BASE_REF="$default_base_ref"
+  fi
+  SOURCE_BASE="$(git -C "$ROOT_DIR" rev-parse --verify "${SOURCE_BASE_REF}^{commit}" 2>/dev/null || true)"
+  if [[ -z "$SOURCE_BASE" ]]; then
+    echo "error: cannot resolve exact source base for binary provenance: $SOURCE_BASE_REF" >&2
+    return 1
+  fi
+  if ! git -C "$ROOT_DIR" merge-base --is-ancestor "$SOURCE_BASE" "$SOURCE_HEAD" >/dev/null 2>&1; then
+    echo "error: source base is not an ancestor of source HEAD; refusing binary provenance" >&2
+    return 1
+  fi
+  dirty_tree="$(git -C "$ROOT_DIR" status --porcelain --untracked-files=all 2>/dev/null || true)"
+  if [[ -n "$dirty_tree" ]]; then
+    echo "error: source tree is dirty; refusing exact-head binary provenance" >&2
+    return 1
+  fi
+  SOURCE_TREE_CLEAN="1"
+}
+
+write_source_build_command() {
+  local command_path="$1"
+  shift
+  python3 - "$command_path" "$@" <<'PY'
+import json
+import pathlib
+import sys
+
+path = pathlib.Path(sys.argv[1])
+path.write_text(json.dumps({"argv": sys.argv[2:]}, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+PY
+}
+
+write_binary_provenance() {
+  local target_dir="$1"
+  local build_log="$2"
+  local build_command_path="$3"
+  local build_started="$4"
+  local build_finished="$5"
+  local rustc_release="$6"
+  local cargo_version="$7"
+  local rustup_toolchain="$8"
+  local host_triple="$9"
+  shift 9
+  python3 - "$OUT_DIR/binary-provenance.json" "$target_dir" "$build_log" "$build_command_path" "$build_started" "$build_finished" "$SOURCE_HEAD" "$SOURCE_BASE" "$SOURCE_BASE_REF" "$SOURCE_TREE_CLEAN" "$rustc_release" "$cargo_version" "$rustup_toolchain" "$host_triple" "$@" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+
+output = pathlib.Path(sys.argv[1])
+target_dir = pathlib.Path(sys.argv[2]).resolve()
+build_log = pathlib.Path(sys.argv[3]).resolve()
+build_command_path = pathlib.Path(sys.argv[4]).resolve()
+build_started, build_finished = sys.argv[5], sys.argv[6]
+source_head, source_base, source_base_ref = sys.argv[7], sys.argv[8], sys.argv[9]
+source_tree_clean = sys.argv[10] == "1"
+rustc_release, cargo_version, rustup_toolchain, host_triple = sys.argv[11:15]
+binary_names = sys.argv[15:]
+
+if not source_tree_clean or not source_head or not source_base:
+    raise SystemExit("binary provenance requires a clean exact source identity")
+if not build_log.is_file() or not build_command_path.is_file():
+    raise SystemExit("binary provenance is missing the build log or command record")
+command_record = json.loads(build_command_path.read_text(encoding="utf-8"))
+build_log_bytes = build_log.read_bytes()
+build_command = command_record.get("argv")
+if not isinstance(build_command, list) or not build_command:
+    raise SystemExit("binary provenance build command is invalid")
+
+binaries = {}
+for name in binary_names:
+    path = target_dir / name
+    if not path.is_file() or not path.stat().st_mode & 0o111:
+        raise SystemExit(f"binary provenance missing executable: {path}")
+    data = path.read_bytes()
+    binaries[name] = {
+        "path": str(path),
+        "sha256": hashlib.sha256(data).hexdigest(),
+        "sizeBytes": len(data),
+        "usedBySourceMode": True,
+        "launched": name != "oasis7_llm_provider_probe",
+    }
+
+output.write_text(
+    json.dumps(
+        {
+            "schema": "oasis7.viewer.binary-provenance/v1",
+            "status": "verified",
+            "source": {
+                "head": source_head,
+                "base": source_base,
+                "baseRef": source_base_ref,
+                "treeClean": source_tree_clean,
+            },
+            "build": {
+                "command": build_command,
+                "commandRecord": str(build_command_path),
+                "features": ["test_tier_required"],
+                "profile": "debug",
+                "targetDir": str(target_dir),
+                "startedAt": build_started,
+                "finishedAt": build_finished,
+                "log": str(build_log),
+                "logSha256": hashlib.sha256(build_log_bytes).hexdigest(),
+                "toolchain": {
+                    "rustcVersion": rustc_release,
+                    "cargoVersion": cargo_version,
+                    "activeToolchain": rustup_toolchain,
+                    "hostTriple": host_triple,
+                },
+            },
+            "freshness": {
+                "outputRootWasFresh": True,
+                "targetDirMatchesLauncher": True,
+                "reusePolicy": "cargo build validated the clean source identity; pre-existing evidence output is rejected",
+            },
+            "binaries": binaries,
+            "launchedBinaries": [name for name, item in binaries.items() if item["launched"]],
+            "notLaunchedBinaries": [name for name, item in binaries.items() if not item["launched"]],
+        },
+        indent=2,
+        sort_keys=True,
+    )
+    + "\n",
+    encoding="utf-8",
+)
+PY
+}
+
 write_runner_config() {
   mkdir -p "$OUT_DIR"
-  python3 - "$OUT_DIR/runner-config.json" "$TEST_TIER_REQUIRED" "$HOSTED_LOCAL_MOCK" "$TEST_SIGNER_SEED" "$AGENT_ID" "$VIEWPORT_WIDTH" "$VIEWPORT_HEIGHT" <<'PY'
+  python3 - "$OUT_DIR/runner-config.json" "$TEST_TIER_REQUIRED" "$HOSTED_LOCAL_MOCK" "$TEST_SIGNER_SEED" "$AGENT_ID" "$VIEWPORT_WIDTH" "$VIEWPORT_HEIGHT" "$SOURCE_HEAD" "$SOURCE_BASE" "$SOURCE_BASE_REF" "$SOURCE_TREE_CLEAN" <<'PY'
 import json
 import pathlib
 import sys
@@ -162,11 +316,25 @@ test_tier_required = sys.argv[2] == "1"
 hosted_local_mock = sys.argv[3] == "1"
 viewport_width = int(sys.argv[6]) if sys.argv[6] else None
 viewport_height = int(sys.argv[7]) if sys.argv[7] else None
+source_head = sys.argv[8] or None
+source_base = sys.argv[9] or None
+source_base_ref = sys.argv[10] or None
+source_tree_clean = sys.argv[11] == "1" if sys.argv[11] else None
 path.write_text(
     json.dumps(
         {
             "agentId": sys.argv[5],
             "browserMode": "headed",
+            "source": {
+                "head": source_head,
+                "base": source_base,
+                "baseRef": source_base_ref,
+                "treeClean": source_tree_clean,
+            },
+            "provenance": {
+                "path": "binary-provenance.json" if source_head else None,
+                "status": "verified" if source_head else None,
+            },
             "deploymentMode": "hosted_public_join" if hosted_local_mock else "caller_or_default",
             "evidenceBoundary": {
                 "providerCallsDuringVerification": False,
@@ -219,11 +387,19 @@ build_test_tier_binaries() {
   source "$ROOT_DIR/scripts/cargo-dev-lib.sh"
   local build_log="$OUT_DIR/test-tier-required-build.log"
   local build_command="$OUT_DIR/test-tier-required-build.command"
+  local build_started
+  local build_finished
   local target_dir
+  local rustc_verbose
+  local rustc_release
+  local cargo_version
+  local rustup_toolchain
+  local host_triple
   local -a build_args=(
     build
     -p oasis7
     --features test_tier_required
+    --locked
     --bin oasis7_llm_provider_probe
     --bin oasis7_game_launcher
     --bin oasis7_viewer_live
@@ -232,13 +408,16 @@ build_test_tier_binaries() {
     build_args+=(--bin oasis7_chain_runtime)
   fi
 
+  build_started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   printf 'oasis7_cargo_dev' >"$build_command"
   printf ' %q' "${build_args[@]}" >>"$build_command"
   printf '\n' >>"$build_command"
+  write_source_build_command "$OUT_DIR/test-tier-required-build.json" oasis7_cargo_dev "${build_args[@]}"
   if ! oasis7_cargo_dev "${build_args[@]}" >"$build_log" 2>&1; then
     echo "error: test_tier_required launcher/viewer build failed (log: $build_log)" >&2
     return 1
   fi
+  build_finished="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 
   target_dir="$(oasis7_cargo_dev_debug_bin_dir "$ROOT_DIR")"
   local -a required_binaries=(
@@ -255,7 +434,29 @@ build_test_tier_binaries() {
       return 1
     fi
   done
-  printf 'target_dir=%s\nfeatures=test_tier_required\n' "$target_dir" >"$OUT_DIR/test-tier-required-binaries.meta"
+  rustc_verbose="$(rustc -vV 2>/dev/null || true)"
+  rustc_release="$(printf '%s\n' "$rustc_verbose" | sed -n 's/^release: //p')"
+  host_triple="$(printf '%s\n' "$rustc_verbose" | sed -n 's/^host: //p')"
+  cargo_version="$(cargo --version 2>/dev/null | sed 's/^cargo //' || true)"
+  rustup_toolchain="$(rustup show active-toolchain 2>/dev/null || true)"
+  if [[ -z "$rustc_release" || -z "$host_triple" || -z "$cargo_version" ]]; then
+    echo "error: cannot resolve Rust toolchain identity for binary provenance" >&2
+    return 1
+  fi
+  printf 'target_dir=%s\nfeatures=test_tier_required\nprofile=debug\nsource_head=%s\nsource_base=%s\nsource_base_ref=%s\nrustc_release=%s\ncargo_version=%s\nactive_toolchain=%s\nhost_triple=%s\n' \
+    "$target_dir" "$SOURCE_HEAD" "$SOURCE_BASE" "$SOURCE_BASE_REF" "$rustc_release" "$cargo_version" "$rustup_toolchain" "$host_triple" \
+    >"$OUT_DIR/test-tier-required-binaries.meta"
+  write_binary_provenance \
+    "$target_dir" \
+    "$build_log" \
+    "$OUT_DIR/test-tier-required-build.json" \
+    "$build_started" \
+    "$build_finished" \
+    "$rustc_release" \
+    "$cargo_version" \
+    "$rustup_toolchain" \
+    "$host_triple" \
+    "${required_binaries[@]}"
   export OASIS7_RUN_LAUNCHER_STACK_SKIP_SOURCE_BUILD=1
 }
 
@@ -461,6 +662,17 @@ agent_id = sys.argv[6]
 test_tier_required = sys.argv[7] == "1"
 hosted_local_mock = sys.argv[8] == "1"
 test_signer_seed = int(sys.argv[9]) if sys.argv[9] else None
+provenance_path = root / "binary-provenance.json"
+binary_provenance = None
+if test_tier_required and tier != "contract_only":
+    if not provenance_path.is_file():
+        raise SystemExit("refusing a test-tier manifest without binary provenance")
+    try:
+        binary_provenance = json.loads(provenance_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise SystemExit(f"invalid binary provenance: {exc}")
+    if binary_provenance.get("status") != "verified":
+        raise SystemExit("refusing a test-tier manifest with unverified binary provenance")
 viewport_path = root / "browser-viewport.json"
 viewport = None
 if viewport_path.is_file():
@@ -501,11 +713,13 @@ manifest = {
     "artifacts": artifacts,
     "browserMode": "headed",
     "caseId": case_id,
+    "binaryProvenance": binary_provenance,
     "evidenceTier": tier,
     "externalProviderCallsDuringVerification": provider_calls,
     "launchRoute": "hosted_local_mock_seeded_agent" if hosted_local_mock else "legacy_prompt_control",
     "localMockCallsDuringVerification": hosted_local_mock,
     "providerCallsDuringVerification": provider_calls,
+    "source": (binary_provenance or {}).get("source"),
     "schema": "oasis7.viewer.prompt-control-artifact-manifest/v1",
     "testSignerSeed": test_signer_seed,
     "testTierRequired": test_tier_required,
@@ -579,11 +793,14 @@ if [[ -n "$GAME_URL" ]]; then
 fi
 
 source "$ROOT_DIR/scripts/agent-browser-lib.sh"
+if (( TEST_TIER_REQUIRED == 1 )); then
+  capture_source_provenance
+fi
 mkdir -p "$OUT_DIR"
-write_runner_config
 if (( TEST_TIER_REQUIRED == 1 )); then
   build_test_tier_binaries
 fi
+write_runner_config
 RUN_ID="viewer-prompt-control-${CASE_ID}-$(date -u +%Y%m%dT%H%M%SZ)-$$"
 LAUNCH_LOG="$OUT_DIR/launcher.log"
 AB_LOG="$OUT_DIR/agent-browser.log"

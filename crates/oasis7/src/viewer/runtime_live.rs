@@ -152,10 +152,6 @@ pub struct ViewerRuntimeLiveServer {
     auto_play_paused: bool,
     next_auto_play_step_at: Option<Instant>,
     last_chain_committed_height: u64,
-    // Set only after a chain snapshot has passed authority validation and was
-    // adopted into the viewer projection. RequestSnapshot may reuse that
-    // current projection instead of issuing a second readiness race.
-    chain_runtime_authoritatively_primed: bool,
     confirmed_player_gameplay_progress_time: Option<u64>,
     snapshot_config: WorldConfig,
     seed_model: Option<WorldModel>,
@@ -328,7 +324,6 @@ impl ViewerRuntimeLiveServer {
             initial_world_time,
             next_auto_play_step_at: None,
             last_chain_committed_height: 0,
-            chain_runtime_authoritatively_primed: false,
             confirmed_player_gameplay_progress_time: None,
             snapshot_config,
             seed_model,
@@ -676,18 +671,23 @@ impl ViewerRuntimeLiveServer {
                     && self.hosted_local_mock_test_lane_active
                     && self.chain_link_enabled()
                     && self.world.state().agents.is_empty()
+                    && !session.chain_runtime_authoritatively_primed
                 {
-                    if let Err(error) = chain_prime.take().unwrap_or_else(|| {
+                    let prime_result = chain_prime.take().unwrap_or_else(|| {
                         self.prime_chain_linked_runtime_for_snapshot().map(|_| ())
-                    }) {
-                        emit_stderr_or_event(
+                    });
+                    match prime_result {
+                        Ok(()) => {
+                            session.chain_runtime_authoritatively_primed = true;
+                        }
+                        Err(error) => emit_stderr_or_event(
                             Level::WARN,
                             format!(
                                 "viewer runtime live: Hosted local-mock HelloV2 prime skipped: {error:?}"
                             )
                             .as_str(),
                             "viewer runtime live Hosted local-mock HelloV2 prime skipped",
-                        );
+                        ),
                     }
                     !self.world.state().agents.is_empty()
                         && !self.world.capability_invocation_contexts().is_empty()
@@ -764,22 +764,28 @@ impl ViewerRuntimeLiveServer {
                 // avoids a second status read racing the first snapshot.
                 if self.chain_link_enabled()
                     && !session.initial_snapshot_sent
-                    && !self.chain_runtime_authoritatively_primed
+                    && !session.chain_runtime_authoritatively_primed
                 {
-                    if let Err(err) = chain_prime.take().unwrap_or_else(|| {
+                    let prime_result = chain_prime.take().unwrap_or_else(|| {
                         self.prime_chain_linked_runtime_for_snapshot().map(|_| ())
-                    }) {
-                        if self.config.chain_link_policy == ChainLinkPolicy::Enforcing {
-                            return Err(err);
+                    });
+                    match prime_result {
+                        Ok(()) => {
+                            session.chain_runtime_authoritatively_primed = true;
                         }
-                        emit_stderr_or_event(
-                            Level::WARN,
-                            format!(
-                                "viewer runtime live: initial chain sync skipped before snapshot: {err:?}"
-                            )
-                            .as_str(),
-                            "viewer runtime live initial chain sync skipped",
-                        );
+                        Err(err) => {
+                            if self.config.chain_link_policy == ChainLinkPolicy::Enforcing {
+                                return Err(err);
+                            }
+                            emit_stderr_or_event(
+                                Level::WARN,
+                                format!(
+                                    "viewer runtime live: initial chain sync skipped before snapshot: {err:?}"
+                                )
+                                .as_str(),
+                                "viewer runtime live initial chain sync skipped",
+                            );
+                        }
                     }
                 }
                 if session.wants_initial_snapshot() {
@@ -1041,11 +1047,12 @@ impl ViewerRuntimeLiveServer {
                         && server.hosted_local_mock_test_lane_active
                         && server.chain_link_enabled()
                         && server.world.state().agents.is_empty()
+                        && !session.chain_runtime_authoritatively_primed
                 }
                 ViewerRequest::RequestSnapshot => {
                     server.chain_link_enabled()
                         && !session.initial_snapshot_sent
-                        && !server.chain_runtime_authoritatively_primed
+                        && !session.chain_runtime_authoritatively_primed
                 }
                 _ => false,
             }

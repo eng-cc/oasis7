@@ -269,3 +269,112 @@ fn chain_linked_runtime_event_suffix_delivers_new_era_recipe_completion() {
     assert_eq!(compacted_selected.len(), 1);
     assert_eq!(compacted_selected[0].id, 1);
 }
+
+#[test]
+fn chain_linked_runtime_revalidates_initial_snapshot_after_previous_session() {
+    let execution_world_dir = runtime_live_temp_dir("chain_sync_second_session_revalidation");
+    let mut execution_world = crate::runtime::World::new_production_hardened();
+    execution_world.submit_action(RuntimeAction::RegisterAgent {
+        agent_id: "chain-agent".to_string(),
+        pos: crate::geometry::GeoPos::new(1, 2, 0),
+    });
+    execution_world
+        .step()
+        .expect("advance initial execution world");
+    execution_world
+        .save_to_dir_with_chain_resource_context(
+            execution_world_dir.as_path(),
+            crate::runtime::ChainResourceDerivationContext {
+                world_id: "testnet-world",
+                chain_id: "testnet-chain",
+                genesis_ref: Some("testnet-genesis"),
+                created_at_height: 1,
+                manifest_height: 1,
+                commit_block_hash: Some("testnet-block-1"),
+                tick: execution_world.state().time,
+            },
+            "testnet-world-config",
+            "testnet-generation-algorithm",
+        )
+        .expect("persist initial execution world");
+
+    let chain_status = TestChainStatusServer::start(execution_world_dir.clone());
+    chain_status.committed_height.store(1, Ordering::SeqCst);
+
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_poll_interval(Duration::from_millis(50)),
+    )
+    .expect("runtime server");
+    let mut first_session = RuntimeLiveSession::new();
+    let (mut first_writer, first_peer) = test_writer_pair();
+
+    server
+        .handle_request(
+            ViewerRequest::RequestSnapshot,
+            &mut first_session,
+            &mut first_writer,
+        )
+        .expect("first session snapshot");
+    first_writer.flush().expect("flush first session snapshot");
+    let _ = read_available_runtime_live_responses(&first_peer, Duration::from_millis(200));
+    assert_eq!(chain_status.status_requests(), 1);
+    let first_snapshot_time = server.world.state().time;
+
+    let mut updated_execution_world =
+        crate::runtime::World::load_from_dir(execution_world_dir.as_path())
+            .expect("reload initial execution world");
+    updated_execution_world
+        .step()
+        .expect("advance execution world after first session");
+    updated_execution_world
+        .save_to_dir_with_chain_resource_context(
+            execution_world_dir.as_path(),
+            crate::runtime::ChainResourceDerivationContext {
+                world_id: "testnet-world",
+                chain_id: "testnet-chain",
+                genesis_ref: Some("testnet-genesis"),
+                created_at_height: 1,
+                manifest_height: 2,
+                commit_block_hash: Some("testnet-block-2"),
+                tick: updated_execution_world.state().time,
+            },
+            "testnet-world-config",
+            "testnet-generation-algorithm",
+        )
+        .expect("persist updated execution world");
+    chain_status.committed_height.store(2, Ordering::SeqCst);
+
+    let mut second_session = RuntimeLiveSession::new();
+    let (mut second_writer, second_peer) = test_writer_pair();
+    server
+        .handle_request(
+            ViewerRequest::RequestSnapshot,
+            &mut second_session,
+            &mut second_writer,
+        )
+        .expect("second session snapshot");
+    second_writer
+        .flush()
+        .expect("flush second session snapshot");
+
+    assert_eq!(
+        chain_status.status_requests(),
+        2,
+        "a later session must revalidate the chain before its first snapshot"
+    );
+    assert!(
+        server.world.state().time > first_snapshot_time,
+        "second session must not receive the prior session's stale projection"
+    );
+    let responses = read_available_runtime_live_responses(&second_peer, Duration::from_millis(200));
+    let snapshot = responses
+        .iter()
+        .find_map(|response| match response {
+            ViewerResponse::Snapshot { snapshot } => Some(snapshot),
+            _ => None,
+        })
+        .expect("second session snapshot response");
+    assert_eq!(snapshot.time, server.world.state().time);
+}

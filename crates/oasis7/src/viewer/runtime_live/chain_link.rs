@@ -523,9 +523,6 @@ impl ViewerRuntimeLiveServer {
         );
         self.world = prepared.world;
         self.last_chain_committed_height = prepared.committed_height;
-        // The projection reached this point only after chain authority and
-        // Hosted local-mock admission checks succeeded.
-        self.chain_runtime_authoritatively_primed = true;
         self.confirm_player_gameplay_progress();
 
         let mapped_events: Vec<_> = runtime_events

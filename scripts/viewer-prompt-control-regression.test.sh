@@ -99,6 +99,20 @@ run_hosted_local_mock_contract_checks() {
 --test-tier-required
 test_tier_required
 hosted_local_mock_seeded_agent
+--source-base
+binary-provenance.json
+oasis7.viewer.binary-provenance/v1
+source tree is dirty; refusing exact-head binary provenance
+refusing to reuse existing provenance output
+test-tier-required-build.json
+test-tier-required-build.log
+sha256
+rustcVersion
+cargoVersion
+activeToolchain
+profile
+source_head
+source_base
 --chain-enable
 --chain-local-standalone-test
 --local-test-provider-authority
@@ -1032,6 +1046,39 @@ EOF
   mkdir -p "$sandbox/.tmp/wasm-build-suite/local-test-provider" "$sandbox/fake-target"
   : >"$sandbox/.tmp/wasm-build-suite/local-test-provider/module.runtime.local-test-provider.wasm"
   : >"$sandbox/.tmp/wasm-build-suite/local-test-provider/module.runtime.local-test-provider.metadata.json"
+  cat >"$sandbox/bin/git" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+args=("$@")
+if [[ "${args[0]:-}" == "-C" ]]; then
+  args=("${args[@]:2}")
+fi
+case "${args[*]}" in
+  "rev-parse --verify HEAD^{commit}") printf '%s\n' 'fixture-head-7181473f' ;;
+  "rev-parse --verify fixture-base^{commit}") printf '%s\n' 'fixture-base-65e2cc9' ;;
+  "merge-base --is-ancestor fixture-base-65e2cc9 fixture-head-7181473f") exit 0 ;;
+  "status --porcelain --untracked-files=all")
+    if [[ "${VIEWER_PROMPT_FIXTURE_GIT_DIRTY:-0}" == "1" ]]; then
+      printf '%s\n' ' M source.rs'
+    fi
+    ;;
+  *) echo "unsupported fixture git call: ${args[*]}" >&2; exit 97 ;;
+esac
+EOF
+  cat >"$sandbox/bin/rustc" <<'EOF'
+#!/usr/bin/env bash
+if [[ "${1:-}" == "-vV" ]]; then
+  printf '%s\n' 'release: fixture-rustc' 'host: fixture-host'
+fi
+EOF
+  cat >"$sandbox/bin/cargo" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' 'cargo fixture-cargo'
+EOF
+  cat >"$sandbox/bin/rustup" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' 'fixture-toolchain'
+EOF
   cat >"$sandbox/scripts/cargo-dev-lib.sh" <<'EOF'
 #!/usr/bin/env bash
 oasis7_cargo_dev() {
@@ -1091,7 +1138,7 @@ elif [[ "${1:-}" == "eval" && "${2:-}" == "--stdin" ]]; then
 fi
 exit 0
 EOF
-  chmod +x "$sandbox/scripts/run-launcher-stack.sh" "$sandbox/bin/agent-browser"
+  chmod +x "$sandbox/scripts/run-launcher-stack.sh" "$sandbox/bin/agent-browser" "$sandbox/bin/git" "$sandbox/bin/rustc" "$sandbox/bin/cargo" "$sandbox/bin/rustup"
   set +e
   env "$fallback_backend_requirement" \
     VIEWER_PROMPT_FIXTURE_REQUIRE_HOSTED_ACCESS=1 \
@@ -1118,9 +1165,72 @@ EOF
     PATH="$sandbox/bin:$PATH" /bin/bash "$sandbox/scripts/viewer-prompt-control-regression.sh" \
     --headed --hosted-local-mock --test-tier-required --test-login \
     --out-dir "$tmp_root/hosted-stack-args-run" \
+    --source-base fixture-base \
     --caller-sentinel hosted-value
 grep -Fqx -- '--caller-sentinel' "$hosted_args_file"
 grep -Fqx -- 'hosted-value' "$hosted_args_file"
+python3 - "$tmp_root/hosted-stack-args-run/binary-provenance.json" "$tmp_root/hosted-stack-args-run/runner-config.json" "$tmp_root/hosted-stack-args-run/artifact-manifest.json" <<'PY'
+import json
+import pathlib
+import sys
+
+provenance = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+config = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
+manifest = json.loads(pathlib.Path(sys.argv[3]).read_text(encoding="utf-8"))
+assert provenance["schema"] == "oasis7.viewer.binary-provenance/v1"
+assert provenance["source"]["head"] == "fixture-head-7181473f"
+assert provenance["source"]["base"] == "fixture-base-65e2cc9"
+assert provenance["source"]["baseRef"] == "fixture-base"
+assert provenance["source"]["treeClean"] is True
+assert provenance["build"]["profile"] == "debug"
+assert provenance["build"]["features"] == ["test_tier_required"]
+assert provenance["build"]["command"][:4] == ["oasis7_cargo_dev", "build", "-p", "oasis7"]
+assert provenance["build"]["toolchain"]["rustcVersion"] == "fixture-rustc"
+assert provenance["build"]["toolchain"]["cargoVersion"] == "fixture-cargo"
+assert provenance["status"] == "verified"
+assert set(provenance["binaries"]) == {
+    "oasis7_chain_runtime",
+    "oasis7_game_launcher",
+    "oasis7_llm_provider_probe",
+    "oasis7_viewer_live",
+}
+for entry in provenance["binaries"].values():
+    assert len(entry["sha256"]) == 64
+    assert entry["path"]
+assert config["provenance"]["path"] == "binary-provenance.json"
+assert config["source"]["head"] == "fixture-head-7181473f"
+assert manifest["binaryProvenance"]["status"] == "verified"
+assert "binary-provenance.json" in {item["path"] for item in manifest["artifacts"]}
+PY
+
+stale_out="$tmp_root/stale-provenance-output"
+mkdir -p "$stale_out"
+printf '%s\n' '{"schema":"oasis7.viewer.binary-provenance/v1","status":"verified"}' >"$stale_out/binary-provenance.json"
+set +e
+env "$fallback_backend_requirement" \
+  VIEWER_PROMPT_FIXTURE_EXPECT_ROUTE=hosted \
+  OASIS7_TEST_TIER_FAKE_TARGET="$sandbox/fake-target" \
+  PATH="$sandbox/bin:$PATH" /bin/bash "$sandbox/scripts/viewer-prompt-control-regression.sh" \
+  --headed --hosted-local-mock --test-tier-required --test-login \
+  --source-base fixture-base --out-dir "$stale_out" >"$tmp_root/stale-provenance.log" 2>&1
+stale_rc=$?
+set -e
+test "$stale_rc" -ne 0
+grep -Fq -- "refusing to reuse existing provenance output" "$tmp_root/stale-provenance.log"
+
+dirty_out="$tmp_root/dirty-source-output"
+set +e
+env "$fallback_backend_requirement" \
+  VIEWER_PROMPT_FIXTURE_EXPECT_ROUTE=hosted \
+  VIEWER_PROMPT_FIXTURE_GIT_DIRTY=1 \
+  OASIS7_TEST_TIER_FAKE_TARGET="$sandbox/fake-target" \
+  PATH="$sandbox/bin:$PATH" /bin/bash "$sandbox/scripts/viewer-prompt-control-regression.sh" \
+  --headed --hosted-local-mock --test-tier-required --test-login \
+  --source-base fixture-base --out-dir "$dirty_out" >"$tmp_root/dirty-source.log" 2>&1
+dirty_rc=$?
+set -e
+test "$dirty_rc" -ne 0
+grep -Fq -- "source tree is dirty; refusing exact-head binary provenance" "$tmp_root/dirty-source.log"
 
   full_args_file="$tmp_root/full-gameplay-stack-args"
   env "$fallback_backend_requirement" \
