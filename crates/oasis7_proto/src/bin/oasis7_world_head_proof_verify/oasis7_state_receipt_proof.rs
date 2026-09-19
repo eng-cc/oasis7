@@ -48,28 +48,28 @@ pub(crate) fn verify_state_receipt_proof_path(
     let proof = decode_state_receipt_proof_from_path(path, format)?;
     proof.validate_contract()?;
     let proof_hash = proof.proof_hash()?;
-    if let Some(expected) = expect_hash {
-        if proof_hash != expected {
-            return Err(format!(
-                "state receipt proof hash mismatch: expected={expected} actual={proof_hash}"
-            ));
-        }
+    if let Some(expected) = expect_hash
+        && proof_hash != expected
+    {
+        return Err(format!(
+            "state receipt proof hash mismatch: expected={expected} actual={proof_hash}"
+        ));
     }
-    if let Some(expected) = expect_world_id {
-        if proof.world_id != expected {
-            return Err(format!(
-                "world_id mismatch: expected={expected} actual={}",
-                proof.world_id
-            ));
-        }
+    if let Some(expected) = expect_world_id
+        && proof.world_id != expected
+    {
+        return Err(format!(
+            "world_id mismatch: expected={expected} actual={}",
+            proof.world_id
+        ));
     }
-    if let Some(expected) = expect_height {
-        if proof.height != expected {
-            return Err(format!(
-                "height mismatch: expected={expected} actual={}",
-                proof.height
-            ));
-        }
+    if let Some(expected) = expect_height
+        && proof.height != expected
+    {
+        return Err(format!(
+            "height mismatch: expected={expected} actual={}",
+            proof.height
+        ));
     }
     Ok(json!({
         "schema_version": "oasis7.world_state_receipt_proof_verifier.v1",

@@ -7,6 +7,7 @@
 - 想确认首局、前 10/30 分钟吸引力和持续游玩合同：先读 `../../product/world-rules-core-gameplay/first-session-and-continuation.prd.md` 的产品承诺，再读 `gameplay-top-level-design.prd.md` 的 early-retention 专业合同；当前 verdict 由同候选 GitHub task evidence 与 `../../testing/evidence/` 确认。
 - 想确认间接控制为什么仍然应该让玩家感觉自己在控制：先读 `gameplay-indirect-control-agency-contract.prd.md`
 - 想确认成熟世界里小玩家/新玩家靠什么继续形成独立价值：先读 `../../product/world-rules-core-gameplay/mature-world-progression.prd.md`，再读 `gameplay-mature-world-progression-contract.prd.md` 的专业合同
+- 想确认区域 charter、tenure 与公共融资如何形成玩家可读、可恢复且不封锁独立路线的制度循环：先读 `../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md`，再读 `gameplay-regional-charter-tenure-funding-contract.prd.md`
 - 想确认下游容量不足时如何暂停/降载上游、持有输出并恢复未决流水线：读 `gameplay-industrial-backpressure-recovery-contract.prd.md`
 - 想确认需求满足、取消、到期、未知或缩减后如何处置既有工业工作：读 `gameplay-industrial-demand-change-disposition-contract.prd.md`
 - 想确认工厂维护真值、计划停机、带风险运行与既有工作的恢复边界：读 `gameplay-industrial-maintenance-planned-downtime-contract.prd.md`
@@ -23,7 +24,8 @@
 - `../README.md` 是 game 模块级 landing page，负责在模块 PRD、执行台账、文件级索引和少量高频 gameplay 专题之间分流。
 - `../prd.md` 是 game 模块目标态与阶段口径真值。
 - `gameplay-top-level-design.prd.md` 只拥有核心玩法骨架与 `PRD-GAME-012` early-retention 的详细合同；它不替代 `../prd.md` 的活跃路由/状态职责，也不覆盖其他 topic 或 `doc/product/` 的声明范围。
-- `gameplay-mature-world-progression-contract.prd.md` 拥有 `PRD-GAME-015` 的 lane、恢复、专业化、checkpoint 与 anti-grind 详细合同；产品承诺仍由 mature-world 产品分册拥有。
+- `gameplay-mature-world-progression-contract.prd.md` 拥有 `PRD-GAME-015` 的 lane、恢复、专业化、checkpoint 与 anti-grind 详细合同，并在 [generic mature-world recognition/opportunity leaf](./gameplay-mature-world-progression-contract.prd.md#prd-game-015-recognition-opportunity) 中承接 `REQ-WR-MW-004` / `MW-11` 的专业玩法语义；不新增 PRD-ID 或 authority，产品承诺仍由 mature-world 产品分册拥有。
+- `gameplay-regional-charter-tenure-funding-contract.prd.md` 拥有 `PRD-GAME-017` 的区域 charter 提案/审查、双资格、退化恢复、tenure 长期规划、服务费/公共 levy 玩家动作与验收；产品 `GR-004` 至 `GR-008` 仍由 `governed-regional-capabilities-and-extensions.prd.md` 拥有，runtime/P2P/QA 保留各自执行与验证 authority。
 - GitHub Project task status 与 issue evidence comments 是 retention、preview、经济规则和放行门禁的执行状态入口。
 - `../prd.index.md` 是完整文件级索引，适合已知主题后按文件名查找。
 
@@ -55,6 +57,7 @@
   - `gameplay-indirect-control-agency-contract.prd.md`
   - `../../product/world-rules-core-gameplay/prd.md`（产品承诺）与 `gameplay-top-level-design.prd.md`（玩法合同）
   - `../../product/world-rules-core-gameplay/mature-world-progression.prd.md`（产品承诺）与 `gameplay-mature-world-progression-contract.prd.md`（玩法合同）
+  - `../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md`（产品承诺）与 `gameplay-regional-charter-tenure-funding-contract.prd.md`（区域制度玩法合同）
   - `gameplay-regional-infrastructure-micro-depot-contract.prd.md`
 - 适合问题:
   - 间接控制如何保留玩家主因果感
