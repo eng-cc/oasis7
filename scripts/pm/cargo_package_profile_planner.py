@@ -340,8 +340,11 @@ def _read_current_planner_task_from_github(repo: Path) -> dict[str, Any]:
         raise PlanError("live current planner PR base repository mismatch")
     if base.get("ref") != _canonical_default_branch(repo):
         raise PlanError("live current planner PR base branch mismatch")
-    if base.get("sha") != base_match.group(1):
-        raise PlanError("live current planner PR base SHA mismatch")
+    live_base_sha = base.get("sha")
+    if not isinstance(live_base_sha, str) or OID_PATTERN.fullmatch(live_base_sha) is None:
+        raise PlanError("live current planner PR base SHA is missing")
+    if not _is_ancestor(repo, base_match.group(1), live_base_sha):
+        raise PlanError("live current planner PR base is not descended from trusted task base")
     if head.get("ref") != branch_match.group(1):
         raise PlanError("live current planner PR head branch mismatch")
     head_sha = head.get("sha")
@@ -353,13 +356,14 @@ def _read_current_planner_task_from_github(repo: Path) -> dict[str, Any]:
         "repository": CURRENT_PLANNER_REPOSITORY,
         "issue_number": CURRENT_PLANNER_ISSUE,
         "task_uid": task_match.group(1),
-        "integration_base": base_match.group(1),
+        "initial_base": base_match.group(1),
+        "integration_base": live_base_sha,
         "branch": branch_match.group(1),
         "pr_number": current_pr_number,
         "head_sha": head_sha,
         "head_repository": head_repo["full_name"],
         "head_ref": head["ref"],
-        "base_sha": base["sha"],
+        "base_sha": live_base_sha,
         "base_repository": base_repo["full_name"],
         "base_ref": base["ref"],
     }
@@ -443,6 +447,7 @@ def _validate_approved_normative_source(
     current_task_uid = current_task.get("task_uid")
     current_task_issue_number = current_task.get("issue_number")
     current_task_pr_number = current_task.get("pr_number")
+    current_task_initial_base = current_task.get("initial_base")
     current_task_base = current_task.get("integration_base")
     current_task_branch = current_task.get("branch")
     current_task_head_sha = current_task.get("head_sha")
@@ -457,6 +462,8 @@ def _validate_approved_normative_source(
         raise PlanError("live current planner task issue identity is invalid")
     if not isinstance(current_task_pr_number, int) or current_task_pr_number <= 0:
         raise PlanError("live current planner PR number is invalid")
+    if not isinstance(current_task_initial_base, str) or OID_PATTERN.fullmatch(current_task_initial_base) is None:
+        raise PlanError("live current planner initial base is invalid")
     if not isinstance(current_task_base, str) or OID_PATTERN.fullmatch(current_task_base) is None:
         raise PlanError("live current planner task base is invalid")
     if not isinstance(current_task_branch, str) or not current_task_branch:
@@ -532,6 +539,8 @@ def _validate_approved_normative_source(
         or current_task_base_sha != current_task_base
     ):
         raise PlanError("planner authority base is not live task truth")
+    if not _is_ancestor(repo, current_task_initial_base, current_task_base):
+        raise PlanError("planner authority live PR base is not descended from trusted task base")
     if _git(repo, "branch", "--show-current").strip() != current_task_branch:
         raise PlanError("planner authority branch is not live task truth")
     if _git(repo, "rev-parse", "HEAD").strip() != source_head:
@@ -559,14 +568,14 @@ def _validate_approved_normative_source(
     if receipt.get("stable_fragment") != AUTHORITY_FRAGMENT:
         raise PlanError("trusted authority stable fragment mismatch")
 
-    if merged_commit != source_scope_base:
-        raise PlanError("trusted authority merged commit is stale for current source scope")
+    if not _is_ancestor(repo, merged_commit, source_scope_base):
+        raise PlanError("trusted authority merged commit is not an ancestor of current source scope")
     live_default_tip = _require_oid(
         _git(repo, "rev-parse", f"refs/remotes/origin/{canonical_branch}").strip(),
         "live default branch tip",
     )
-    if not _is_ancestor(repo, merged_commit, live_default_tip):
-        raise PlanError("trusted authority merged commit is not an ancestor of the live default branch")
+    if not _is_ancestor(repo, source_scope_base, live_default_tip):
+        raise PlanError("current source scope is not an ancestor of the live default branch")
     if _git(repo, "show", "-s", "--format=%T", merged_commit).strip() != merged_tree:
         raise PlanError("trusted authority merged tree mismatch")
     if _git(repo, "rev-parse", f"{merged_commit}:{AUTHORITY_PATH}").strip() != authority_blob:
@@ -582,10 +591,16 @@ def _validate_approved_normative_source(
     if _require_digest(receipt.get("stable_fragment_sha256"), "stable fragment") != _digest_bytes(fragment):
         raise PlanError("trusted authority fragment digest mismatch")
     live_authority_bytes = _blob(repo, live_default_tip, AUTHORITY_PATH)
-    if _digest_bytes(live_authority_bytes) != merged_digest:
+    scope_authority_bytes = _blob(repo, source_scope_base, AUTHORITY_PATH)
+    if _digest_bytes(scope_authority_bytes) != merged_digest:
+        raise PlanError("current source scope authority path changed after approval")
+    if _digest_bytes(live_authority_bytes) != _digest_bytes(scope_authority_bytes):
         raise PlanError("live default branch authority path changed after approval")
+    scope_fragment = _fragment_bytes(scope_authority_bytes, AUTHORITY_FRAGMENT)
+    if _digest_bytes(scope_fragment) != _digest_bytes(fragment):
+        raise PlanError("current source scope authority fragment changed after approval")
     live_fragment = _fragment_bytes(live_authority_bytes, AUTHORITY_FRAGMENT)
-    if _digest_bytes(live_fragment) != _digest_bytes(fragment):
+    if _digest_bytes(live_fragment) != _digest_bytes(scope_fragment):
         raise PlanError("live default branch authority fragment changed after approval")
 
     predecessor_bytes = _blob(repo, predecessor_scope, AUTHORITY_PATH)

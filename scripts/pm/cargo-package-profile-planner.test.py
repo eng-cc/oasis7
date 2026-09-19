@@ -343,19 +343,29 @@ resolver = "2"
         }
 
     def _current_task_identity(
-        self, root: Path, merged_commit: str, source_head: str, binding: dict[str, object]
+        self,
+        root: Path,
+        merged_commit: str,
+        source_head: str,
+        binding: dict[str, object],
+        *,
+        integration_base: str | None = None,
+        initial_base: str | None = None,
     ) -> dict[str, object]:
+        integration_base = integration_base or merged_commit
+        initial_base = initial_base or merged_commit
         return {
             "repository": "eng-cc/oasis7",
             "issue_number": 3818,
             "task_uid": binding["task_uid"],
-            "integration_base": merged_commit,
+            "initial_base": initial_base,
+            "integration_base": integration_base,
             "branch": git(root, "branch", "--show-current"),
             "pr_number": binding["pr_number"],
             "head_sha": source_head,
             "head_repository": "eng-cc/oasis7",
             "head_ref": git(root, "branch", "--show-current"),
-            "base_sha": merged_commit,
+            "base_sha": integration_base,
             "base_repository": "eng-cc/oasis7",
             "base_ref": "main",
         }
@@ -406,6 +416,11 @@ resolver = "2"
         git(root, "switch", "source")
         return tip
 
+    def _rebase_source_onto_default(self, root: Path) -> str:
+        git(root, "switch", "source")
+        git(root, "rebase", "main")
+        return git(root, "rev-parse", "HEAD")
+
     def test_advanced_default_branch_with_unchanged_authority_is_allowed(self) -> None:
         temp, root, predecessor_scope, predecessor_head, merged_commit, source_head = self._authority_fixture()
         self.addCleanup(temp.cleanup)
@@ -426,6 +441,69 @@ resolver = "2"
         )
         self.assertNotEqual(merged_commit, live_tip)
         self.assertEqual(merged_commit, plan["trusted_authority"]["approved_normative_source"]["merged_commit"])
+
+    def test_rebased_source_scope_uses_live_base_not_approved_commit(self) -> None:
+        temp, root, predecessor_scope, predecessor_head, merged_commit, source_head = self._authority_fixture()
+        self.addCleanup(temp.cleanup)
+        live_base = self._advance_default_branch(root, "README.md", "unrelated rebased base change\n")
+        rebased_source_head = self._rebase_source_onto_default(root)
+        receipt = self._authority_receipt(
+            root, predecessor_scope, predecessor_head, merged_commit, rebased_source_head
+        )
+        binding = self._authority_binding(live_base, rebased_source_head, receipt)
+        live_task = self._current_task_identity(
+            root,
+            merged_commit,
+            rebased_source_head,
+            binding,
+            integration_base=live_base,
+        )
+        plan = self._plan_with_live_authority(
+            root,
+            live_base,
+            rebased_source_head,
+            receipt,
+            live_task,
+            profiles=("native",),
+            authority_binding=binding,
+            expected_task_uid=binding["task_uid"],
+            expected_pr_number=binding["pr_number"],
+        )
+        self.assertEqual(live_base, plan["source_scope_base"])
+        self.assertEqual(merged_commit, plan["trusted_authority"]["approved_normative_source"]["merged_commit"])
+
+    def test_rebased_source_scope_authority_tamper_is_rejected(self) -> None:
+        temp, root, predecessor_scope, predecessor_head, merged_commit, source_head = self._authority_fixture()
+        self.addCleanup(temp.cleanup)
+        live_base = self._advance_default_branch(
+            root,
+            self.api.AUTHORITY_PATH,
+            '<a id="cargo-checker-authority-upgrade"></a>tampered rebased authority\n',
+        )
+        rebased_source_head = self._rebase_source_onto_default(root)
+        receipt = self._authority_receipt(
+            root, predecessor_scope, predecessor_head, merged_commit, rebased_source_head
+        )
+        binding = self._authority_binding(live_base, rebased_source_head, receipt)
+        live_task = self._current_task_identity(
+            root,
+            merged_commit,
+            rebased_source_head,
+            binding,
+            integration_base=live_base,
+        )
+        with self.assertRaisesRegex(Exception, "source scope authority path|fragment"):
+            self._plan_with_live_authority(
+                root,
+                live_base,
+                rebased_source_head,
+                receipt,
+                live_task,
+                profiles=("native",),
+                authority_binding=binding,
+                expected_task_uid=binding["task_uid"],
+                expected_pr_number=binding["pr_number"],
+            )
 
     def test_default_branch_authority_tamper_is_rejected(self) -> None:
         temp, root, predecessor_scope, predecessor_head, merged_commit, source_head = self._authority_fixture()
