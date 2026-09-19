@@ -756,17 +756,21 @@ impl Libp2pNetwork {
                                         }
                                     }
                                 }
-                                SwarmEvent::Behaviour(BehaviourEvent::RendezvousServer(event)) => {
-                                    if let rendezvous::server::Event::PeerNotRegistered { peer, namespace, error } = event {
-                                        push_bounded_clone(
-                                            &event_errors,
-                                            format!(
-                                                "libp2p rendezvous server rejected peer={peer} namespace={namespace}: {error:?}"
-                                            ),
-                                            max_error_messages,
-                                            "lock errors",
-                                        );
-                                    }
+                                SwarmEvent::Behaviour(BehaviourEvent::RendezvousServer(
+                                    rendezvous::server::Event::PeerNotRegistered {
+                                        peer,
+                                        namespace,
+                                        error,
+                                    },
+                                )) => {
+                                    push_bounded_clone(
+                                        &event_errors,
+                                        format!(
+                                            "libp2p rendezvous server rejected peer={peer} namespace={namespace}: {error:?}"
+                                        ),
+                                        max_error_messages,
+                                        "lock errors",
+                                    );
                                 }
                                 SwarmEvent::NewExternalAddrCandidate { address } => {
                                     push_bounded_clone(

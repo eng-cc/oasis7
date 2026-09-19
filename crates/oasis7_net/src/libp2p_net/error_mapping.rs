@@ -166,6 +166,10 @@ mod tests {
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
     #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+    #[expect(
+        clippy::enum_variant_names,
+        reason = "Legacy v1 error-code names are part of the persisted wire contract"
+    )]
     enum LegacyV1DistributedErrorCode {
         ErrNotFound,
         ErrBadRequest,

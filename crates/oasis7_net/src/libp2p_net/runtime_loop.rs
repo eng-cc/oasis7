@@ -93,32 +93,6 @@ pub(super) fn request_failure_world_error(
     }
 }
 
-#[cfg(test)]
-mod request_failure_tests {
-    use super::*;
-
-    #[test]
-    fn cancelled_response_and_unexpected_eof_are_retryable_transport_failures() {
-        for failure in [
-            request_response::OutboundFailure::ConnectionClosed,
-            request_response::OutboundFailure::Io(std::io::Error::from(
-                std::io::ErrorKind::UnexpectedEof,
-            )),
-        ] {
-            let error = request_failure_world_error(failure, "request failed".to_string());
-            assert!(super::super::error_mapping::world_error_is_retryable_connection_gap(&error));
-            assert!(matches!(
-                error,
-                WorldError::NetworkRequestFailed {
-                    code: DistributedErrorCode::ErrNotAvailable,
-                    retryable: true,
-                    ..
-                }
-            ));
-        }
-    }
-}
-
 pub(super) struct CommandContext<'a> {
     pub event_published: &'a Arc<Mutex<Vec<NetworkMessage>>>,
     pub event_errors: &'a Arc<Mutex<Vec<String>>>,
@@ -421,6 +395,10 @@ fn active_transport_paths_for_peers(
         .collect()
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Peer-manager refresh keeps mutable state references explicit to preserve quarantine ordering"
+)]
 pub(super) fn refresh_peer_manager_healths(
     discovered_peer_records: &HashMap<PeerId, SignedPeerRecord>,
     active_transport_paths: &HashMap<PeerId, TransportPath>,
@@ -742,10 +720,10 @@ pub(super) fn handle_command(
             CommandOutcome::Continue
         }
         Some(Command::Dial(addr)) => {
-            if let (Some(peer_id), _) = super::swarm_behaviour::split_peer_id(addr.clone()) {
-                if peers.contains(&peer_id) || swarm.is_connected(&peer_id) {
-                    return CommandOutcome::Continue;
-                }
+            if let (Some(peer_id), _) = super::swarm_behaviour::split_peer_id(addr.clone())
+                && (peers.contains(&peer_id) || swarm.is_connected(&peer_id))
+            {
+                return CommandOutcome::Continue;
             }
             if let Err(err) = super::dial_addr_with_optional_peer_id(swarm, addr) {
                 push_bounded_clone(
@@ -796,10 +774,10 @@ pub(super) fn handle_command(
             let mut candidate_peers: Vec<PeerId> = Vec::new();
             if using_provider_subset {
                 for provider in providers {
-                    if let Ok(peer_id) = provider.parse::<PeerId>() {
-                        if connected_request_peers.contains(&peer_id) {
-                            candidate_peers.push(peer_id);
-                        }
+                    if let Ok(peer_id) = provider.parse::<PeerId>()
+                        && connected_request_peers.contains(&peer_id)
+                    {
+                        candidate_peers.push(peer_id);
                     }
                 }
                 if candidate_peers.is_empty() {
@@ -1166,33 +1144,54 @@ pub(super) fn handle_command(
                         provider_keys.insert(key, now);
                     }
                 }
-                if let Some(template) = ctx.peer_record_template {
-                    if peer_record_last_published_at_ms
+                if let Some(template) = ctx.peer_record_template
+                    && peer_record_last_published_at_ms
                         .map(|last_ms| should_republish(last_ms, now, ctx.republish_interval_ms))
                         .unwrap_or(true)
-                        && publish_configured_peer_record(
-                            swarm,
-                            pending_dht,
-                            ctx.keypair,
-                            template,
-                            ctx.event_listening_addrs,
-                            ctx.event_reachability,
-                            ctx.allow_loopback_external_addrs_for_testing,
-                            None,
-                        )
-                        .is_ok()
-                    {
-                        publish_discovery_provider(
-                            swarm,
-                            provider_keys,
-                            template.world_id.as_str(),
-                        );
-                        *peer_record_last_published_at_ms = Some(now);
-                    }
+                    && publish_configured_peer_record(
+                        swarm,
+                        pending_dht,
+                        ctx.keypair,
+                        template,
+                        ctx.event_listening_addrs,
+                        ctx.event_reachability,
+                        ctx.allow_loopback_external_addrs_for_testing,
+                        None,
+                    )
+                    .is_ok()
+                {
+                    publish_discovery_provider(swarm, provider_keys, template.world_id.as_str());
+                    *peer_record_last_published_at_ms = Some(now);
                 }
             }
             CommandOutcome::Continue
         }
         Some(Command::Shutdown) | None => CommandOutcome::Break,
+    }
+}
+
+#[cfg(test)]
+mod request_failure_tests {
+    use super::*;
+
+    #[test]
+    fn cancelled_response_and_unexpected_eof_are_retryable_transport_failures() {
+        for failure in [
+            request_response::OutboundFailure::ConnectionClosed,
+            request_response::OutboundFailure::Io(std::io::Error::from(
+                std::io::ErrorKind::UnexpectedEof,
+            )),
+        ] {
+            let error = request_failure_world_error(failure, "request failed".to_string());
+            assert!(super::super::error_mapping::world_error_is_retryable_connection_gap(&error));
+            assert!(matches!(
+                error,
+                WorldError::NetworkRequestFailed {
+                    code: DistributedErrorCode::ErrNotAvailable,
+                    retryable: true,
+                    ..
+                }
+            ));
+        }
     }
 }
