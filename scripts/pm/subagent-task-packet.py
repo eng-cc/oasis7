@@ -15,6 +15,7 @@ from pathlib import Path
 
 
 SCHEMA = "oasis7-subagent-task-packet/v1"
+PRIMARY_PACKAGE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*\Z")
 TASK_UID_RE = re.compile(r"task_[0-9a-f]{32}\Z")
 SLICE_ID_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 MAX_SUMMARY_BYTES = 4096
@@ -116,6 +117,13 @@ def current_facts(root: Path, task: dict[str, object], base: str,
         "base_binding": "immutable_oid" if frozen_base_oid else "live_ref",
         "head": head,
     }
+
+
+def validate_primary_package(value: object, name: str = "primary_package") -> str:
+    package = str(value or "").strip()
+    if not PRIMARY_PACKAGE_RE.fullmatch(package):
+        fail(f"{name} must be one valid declared Cargo package name")
+    return package
 
 
 def bounded(value: str, name: str) -> str:
@@ -515,6 +523,14 @@ def validate_packet(root: Path, packet: dict[str, object],
         fail(f"stale or mismatched packet base_binding: expected {facts['base_binding']}, got {base_binding}")
     if identity.get("issue_url") != task.get("issue_url"):
         fail("packet issue URL does not match task mapping")
+    task_package = task.get("primary_package")
+    packet_package = identity.get("primary_package")
+    if task_package not in (None, ""):
+        validate_primary_package(task_package, "task primary_package")
+        if packet_package != task_package:
+            fail("packet primary_package does not match task mapping")
+    elif packet_package not in (None, ""):
+        fail("legacy task cannot carry packet primary_package")
     for field in ("repository", "project_item_id", "task_status"):
         mapping_field = "status" if field == "task_status" else field
         if identity.get(field) != task.get(mapping_field):
@@ -766,6 +782,7 @@ def parser() -> argparse.ArgumentParser:
     create.add_argument("--integration-owner", required=True)
     create.add_argument("--integration-order", required=True)
     create.add_argument("--packet-producer", required=True)
+    create.add_argument("--primary-package", type=validate_primary_package)
     create.add_argument("--context-delivery-mode", choices=sorted(DELIVERY_MODES), required=True)
     create.add_argument("--full-history-escalation-reason", default="")
     create.add_argument("--intended-model-configuration", required=True)
@@ -869,6 +886,8 @@ def main() -> int:
             "collaboration_boundary": bounded(args.collaboration_boundary, "context.collaboration_boundary"),
         },
     }
+    if args.primary_package is not None:
+        packet["identity"]["primary_package"] = validate_primary_package(args.primary_package)
     if review_context is not None:
         packet["review_context"] = review_context
     packet["slice"]["full_history_escalation_reason"] = bounded(

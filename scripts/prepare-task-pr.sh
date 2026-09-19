@@ -1356,6 +1356,21 @@ try:
     import base64
     live_issue = json.loads(subprocess.check_output(['gh', 'api', f'repos/{repo_name}/issues/{issue_number}'], text=True))
     live_body = live_issue.get('body', '')
+    if not isinstance(live_body, str):
+        fail('live Issue body is not text')
+    package_lines = re.findall(r'^- primary_package:.*$', live_body, re.MULTILINE)
+    package_matches = re.findall(r'^- primary_package: `([^`]+)`$', live_body, re.MULTILINE)
+    if 'primary_package:' in live_body and (len(package_lines) != 1 or len(package_matches) != 1):
+        fail('malformed live primary_package')
+    live_primary_package = package_matches[0].strip() if package_matches else ''
+    if live_primary_package and re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_-]*', live_primary_package) is None:
+        fail(f'live primary_package is invalid: {live_primary_package}')
+    mapped_primary_package = str(record.get('primary_package') or '').strip()
+    if mapped_primary_package != live_primary_package:
+        fail(
+            'primary_package cache differs from live Issue: '
+            f"{mapped_primary_package or '<missing>'} != {live_primary_package or '<missing>'}"
+        )
     matches = re.findall(r'^- loop_binding_b64: `([^`]+)`$', live_body, re.MULTILINE)
     if 'loop_binding_b64:' in live_body:
         if len(matches) != 1: fail('malformed live loop binding')
@@ -1382,6 +1397,10 @@ except (OSError, ValueError, KeyError, subprocess.CalledProcessError) as exc:
 print(task_uid)
 print(issue_url)
 print(issue_number)
+primary_package = str(record.get("primary_package") or "").strip()
+if primary_package and re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]*", primary_package) is None:
+    fail(f"mapped primary_package is invalid: {primary_package}")
+print(primary_package)
 PY
 }
 
@@ -1447,6 +1466,7 @@ BOUND_TASK_FIELDS=""
 BOUND_TASK_UID=""
 BOUND_TASK_ISSUE_URL=""
 BOUND_TASK_ISSUE_NUMBER=""
+BOUND_TASK_PRIMARY_PACKAGE=""
 if [[ "$DRAFT_CANDIDATE" == "1" ]]; then
   DRAFT_FREEZE_EVIDENCE_HELPER="${PREPARE_TASK_PR_DRAFT_FREEZE_EVIDENCE_PATH:-$SOURCE_WORKTREE/scripts/pm/record-draft-freeze-evidence.py}"
   python3 "$DRAFT_FREEZE_EVIDENCE_HELPER" --worktree "$SOURCE_WORKTREE" \
@@ -1459,6 +1479,7 @@ if [[ "$DRAFT_CANDIDATE" == "1" ]]; then
   BOUND_TASK_UID="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '1p')"
   BOUND_TASK_ISSUE_URL="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '2p')"
   BOUND_TASK_ISSUE_NUMBER="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '3p')"
+  BOUND_TASK_PRIMARY_PACKAGE="$(printf '%s\n' "$BOUND_TASK_FIELDS" | sed -n '4p')"
   if [[ -n "$BOUND_TASK_UID" && -z "$IMPACT_PROJECTION" && "$LEGACY_REVIEW_V1" != "1" ]]; then
     die "task-bound draft candidate requires --impact-projection; pass --legacy-review-v1 only for an explicit compatibility migration"
   fi
@@ -1481,6 +1502,7 @@ LOCAL_REQUIRED_COMMAND=""
 CARGO_PACKAGE_SCOPE_STATUS="not_run"
 CARGO_PACKAGE_SCOPE_COMMAND=""
 CARGO_PACKAGE_SCOPE_REASON=""
+CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE=""
 CLAIM_READY_COMMAND=""
 LOCAL_REQUIRED_EXTRA_COMMANDS=()
 
@@ -1670,6 +1692,18 @@ else
     --primary-package auto --policy "$CARGO_PACKAGE_SCOPE_POLICY" --json 2>&1)"; then
     printf '%s\n' "$CARGO_PACKAGE_SCOPE_OUTPUT" >&2
     die "Cargo package scope check failed for $SOURCE_SCOPE_BASE..$SOURCE_HEAD"
+  fi
+  CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE="$(python3 -c 'import json,sys; print(json.load(sys.stdin).get("primary_package") or "")' <<<"$CARGO_PACKAGE_SCOPE_OUTPUT")" \
+    || die "Cargo package scope output is malformed"
+  # A canonical task binding is available only for the draft-candidate path.
+  # Ordinary local required-validation reads may inspect a Cargo diff without
+  # selecting a task; keep those reads usable while making task-bound PR
+  # preparation fail closed on missing or mismatched package intent.
+  if [[ -n "$CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE" && -n "$BOUND_TASK_UID" ]]; then
+    [[ -n "$BOUND_TASK_PRIMARY_PACKAGE" ]] \
+      || die "Cargo diff changes one business package ($CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE) but canonical task primary_package is missing"
+    [[ "$BOUND_TASK_PRIMARY_PACKAGE" == "$CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE" ]] \
+      || die "canonical task primary_package ($BOUND_TASK_PRIMARY_PACKAGE) differs from actual Cargo package ($CARGO_PACKAGE_SCOPE_PRIMARY_PACKAGE)"
   fi
   CARGO_PACKAGE_SCOPE_STATUS="validated"
   LOCAL_REQUIRED_EXTRA_COMMANDS+=("$CARGO_PACKAGE_SCOPE_COMMAND")

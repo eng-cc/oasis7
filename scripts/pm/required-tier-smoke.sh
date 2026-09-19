@@ -727,6 +727,7 @@ ROLE_REPORT_TASK_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/role-report
 EMPTY_LOG_TASK_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/new-task.sh" \
   --owner-role qa_engineer \
   --title "empty execution log current lint fixture" \
+  --primary-package oasis7 \
   --priority P2 \
   --source-ref .pm/evidence/bootstrap.md \
   --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md \
@@ -762,6 +763,7 @@ STAGE_REPORT_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/stage-report.sh
 CLOSEOUT_TASK_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/new-task.sh" \
   --owner-role qa_engineer \
   --title "closeout helper smoke task" \
+  --primary-package oasis7 \
   --priority P2 \
   --source-ref .pm/evidence/bootstrap.md \
   --related-prd doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md \
@@ -908,6 +910,7 @@ CLOSED_TASK_READY_CLAIM_STDERR="$(cat "$TMPDIR/closed-task-ready-claim.err")"
 MISSING_ACTUAL_JSON="$(PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/new-task.sh" \
   --owner-role qa_engineer \
   --title "missing actual result lint fixture" \
+  --primary-package oasis7 \
   --priority P2 \
   --source-ref .pm/evidence/bootstrap.md \
   --json)"

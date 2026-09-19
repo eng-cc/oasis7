@@ -470,6 +470,7 @@ run_cargo_package_scope_check() {
   local head_oid="${OASIS7_CARGO_SCOPE_HEAD:-}"
   local checker="${OASIS7_CARGO_SCOPE_CHECKER:-./scripts/pm/check-cargo-package-scope}"
   local policy="./.pm/cargo-package-scope-policy.json"
+  local primary_package="${OASIS7_CARGO_PRIMARY_PACKAGE:-auto}"
   if [[ -z "$base_oid" || -z "$head_oid" ]]; then
     echo "skip: Cargo package scope audit reason=trusted_base_head_not_provided claim_boundary=contract_suite_only"
     return 0
@@ -486,7 +487,7 @@ run_cargo_package_scope_check() {
     --repo-root "$repo_root" \
     --base "$base_oid" \
     --head "$head_oid" \
-    --primary-package auto \
+    --primary-package "$primary_package" \
     --policy "$repo_root/$policy" \
     --json
 }

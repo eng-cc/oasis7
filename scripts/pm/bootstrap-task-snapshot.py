@@ -17,6 +17,7 @@ from typing import Any
 
 
 SCHEMA = "oasis7.bootstrap-task-snapshot/v1"
+PRIMARY_PACKAGE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*\Z")
 
 
 class SnapshotError(Exception):
@@ -103,6 +104,11 @@ def live_payload(
         raise SnapshotError(f"tasks mapping is missing required bootstrap truth: {details}")
     if not isinstance(task["acceptance"], list) or not task["acceptance"]:
         raise SnapshotError("tasks mapping acceptance must be a non-empty list")
+    if task.get("primary_package") not in (None, ""):
+        package = str(task["primary_package"]).strip()
+        if PRIMARY_PACKAGE_RE.fullmatch(package) is None:
+            raise SnapshotError("tasks mapping primary_package is invalid")
+        task["primary_package"] = package
     bootstrap_epoch = task.get("bootstrap_epoch", 1)
     if type(bootstrap_epoch) is not int or bootstrap_epoch < 1:
         raise SnapshotError("tasks mapping bootstrap_epoch must be a positive integer")
@@ -136,6 +142,8 @@ def live_payload(
             "owner_role": task["owner_role"],
             "acceptance": task["acceptance"],
             "bootstrap_epoch": bootstrap_epoch,
+            **({"primary_package": task["primary_package"]}
+               if task.get("primary_package") not in (None, "") else {}),
             **({"loop_binding": task["loop_binding"]} if task.get("loop_binding") is not None else {}),
         },
         "repository": task["repository"],
@@ -254,6 +262,7 @@ def validate_epoch_identity(args: argparse.Namespace) -> pathlib.Path:
                 "item_id": project.get("item_id") if isinstance(project, dict) else None,
             },
             "owner_role": task.get("owner_role") if isinstance(task, dict) else None,
+            "primary_package": task.get("primary_package") if isinstance(task, dict) else None,
             "acceptance": task.get("acceptance") if isinstance(task, dict) else None,
             "bootstrap_epoch": task.get("bootstrap_epoch") if isinstance(task, dict) else None,
             "loop_binding": task.get("loop_binding") if isinstance(task, dict) else None,

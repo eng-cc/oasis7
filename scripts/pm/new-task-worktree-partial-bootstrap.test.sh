@@ -59,6 +59,7 @@ set +e
   ./scripts/new-task-worktree.sh engineering partial-bootstrap \
     --branch "$BRANCH" --path "$TARGET" \
     --pm-owner-role tpm --pm-title "partial bootstrap fixture" \
+    --pm-primary-package oasis7 \
     --pm-source-ref doc/engineering/project.md \
     --pm-acceptance "partial remote bootstrap remains resumable") \
   >"$TMPDIR/bootstrap.out" 2>"$TMPDIR/bootstrap.err"

@@ -213,11 +213,13 @@ EOF
 chmod +x "$TMPDIR/bin/gh"
 
 write_task_binding() {
+  local primary_package="${1:-}"
   mkdir -p "$SMOKE_WORKTREE/.pm/tasks"
   cat > "$SMOKE_WORKTREE/.pm/tasks/$TASK_UID.yaml" <<EOF
 task_uid: $TASK_UID
 title: "prepare task pr role review fixture"
 owner_role: tpm
+$(if [[ -n "$primary_package" ]]; then printf 'primary_package: %s\n' "$primary_package"; fi)
 worktree_hint: $SMOKE_WORKTREE_CANONICAL
 execution_log_path: .pm/tasks/$TASK_UID.execution.md
 status: committed
@@ -481,6 +483,7 @@ reset_project_mapping_after_record_pr() {
 
 write_changed_path_fixture() {
   local changed_path="$1"
+  local primary_package="${2:-}"
   mkdir -p "$SMOKE_WORKTREE/$(dirname "$changed_path")"
   printf '\n// prepare-task-pr local required command fixture\n' >> "$SMOKE_WORKTREE/$changed_path"
   "$REAL_GIT" -C "$SMOKE_WORKTREE" add "$changed_path"
@@ -490,7 +493,7 @@ write_changed_path_fixture() {
     -c commit.gpgsign=false \
     commit --no-verify -m "test: local required command fixture" >/dev/null
   SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
-  write_task_binding
+  write_task_binding "$primary_package"
   write_project_trace
   write_role_review_packet "$SOURCE_HEAD" "no_findings"
   commit_fixture_evidence
@@ -837,6 +840,45 @@ if any("push" in line for line in git_lines):
 if "cannot record and read back canonical draft_candidate frozen identity" not in stderr:
     raise SystemExit(f"unexpected producer failure: {stderr}")
 PY
+
+# A stale package projection must not override the live Issue authority.
+stale_package_base="$SOURCE_HEAD"
+python3 - "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" "$TASK_UID" <<'PY'
+import json
+import sys
+
+path, task_uid = sys.argv[1:]
+data = json.loads(open(path, encoding="utf-8").read())
+data["tasks"][task_uid]["primary_package"] = "cached-package"
+open(path, "w", encoding="utf-8").write(json.dumps(data) + "\n")
+PY
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add -f .pm/github-project-sync/tasks.json
+"$REAL_GIT" -C "$SMOKE_WORKTREE" \
+  -c user.name="oasis7 smoke" \
+  -c user.email="smoke@example.invalid" \
+  -c commit.gpgsign=false \
+  commit --no-verify -m "test: stale primary package cache" >/dev/null
+SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+stale_package_body="$TMPDIR/stale-package-body.json"
+stale_package_comments="$TMPDIR/stale-package-comments.json"
+printf '{"body":"<!-- oasis7-pm-task -->\\ntask_uid: %s\\n\\nTask metadata:\\n- primary_package: `live-package`\\n","number":123,"title":"fixture","url":"https://github.com/example/oasis7/issues/123"}\n' "$TASK_UID" >"$stale_package_body"
+cat >"$stale_package_comments" <<EOF
+{"comments":[{"body":"<!-- oasis7-pm-evidence -->\\nTask UID: $TASK_UID\\nSource Worktree: $SMOKE_WORKTREE_CANONICAL\\nSource Branch: $SMOKE_BRANCH\\nSource Head: $SOURCE_HEAD\\nComparison Ref: refs/remotes/origin/main\\nComparison OID: $COMPARISON_OID\\n"}]}
+EOF
+stale_package_log="$TMPDIR/gh-stale-package.log"
+stale_package_git_log="$TMPDIR/git-stale-package.log"
+if TEST_GH_PERSIST_COMMENT=0 TEST_GH_ISSUE_BODY_JSON="$stale_package_body" TEST_GH_ISSUE_VIEW_JSON="$stale_package_comments" \
+  run_prepare "$stale_package_log" "$stale_package_git_log" --draft-candidate \
+  >"$TMPDIR/stale-package.out" 2>"$TMPDIR/stale-package.err"; then
+  echo "expected stale primary_package cache to fail closed" >&2
+  exit 1
+fi
+if ! grep -q "primary_package cache differs from live Issue" "$TMPDIR/stale-package.err"; then
+  cat "$TMPDIR/stale-package.err" >&2
+  exit 1
+fi
+"$REAL_GIT" -C "$SMOKE_WORKTREE" reset --hard "$stale_package_base" >/dev/null
+SOURCE_HEAD="$stale_package_base"
 
 draft_log="$TMPDIR/gh-draft-candidate.log"
 draft_git_log="$TMPDIR/git-draft-candidate.log"
@@ -2095,7 +2137,7 @@ if review["status"] != "passed":
 PY
 
 reset_smoke_branch_to_base
-write_changed_path_fixture "crates/oasis7_node/src/network_bridge.rs"
+write_changed_path_fixture "crates/oasis7_node/src/network_bridge.rs" "oasis7_node"
 node_required_json="$TMPDIR/node-required.json"
 run_prepare "$TMPDIR/gh-node-required.log" "$TMPDIR/git-node-required.log" --json >"$node_required_json"
 
@@ -2126,7 +2168,7 @@ if "node:crates/oasis7_node/src/network_bridge.rs" not in reason:
 PY
 
 reset_smoke_branch_to_base
-write_changed_path_fixture "crates/oasis7_net/src/lib.rs"
+write_changed_path_fixture "crates/oasis7_net/src/lib.rs" "oasis7_net"
 net_required_json="$TMPDIR/net-required.json"
 run_prepare "$TMPDIR/gh-net-required.log" "$TMPDIR/git-net-required.log" --json >"$net_required_json"
 
@@ -2156,7 +2198,7 @@ if "net:crates/oasis7_net/src/lib.rs" not in reason:
 PY
 
 reset_smoke_branch_to_base
-write_changed_path_fixture "crates/oasis7_viewer/src/lib.rs"
+write_changed_path_fixture "crates/oasis7_viewer/src/lib.rs" "oasis7_viewer"
 viewer_required_json="$TMPDIR/viewer-required.json"
 run_prepare "$TMPDIR/gh-viewer-required.log" "$TMPDIR/git-viewer-required.log" --json >"$viewer_required_json"
 

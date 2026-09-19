@@ -29,6 +29,7 @@ issue_authoritative_keys = frozenset(
         "task_uid", "title", "issue_number", "issue_url", "owner_role", "module",
         "status", "workflow_phase", "priority", "worktree_hint", "source_signal",
         "source_type", "severity", "pr_url", "pr_number", "merge_hold",
+        "primary_package",
         "loop_binding", "bootstrap_base_oid", "completion_mode",
         "traceability_mode", "coordination_ref", "traceability_record",
         "coordination_record", "traceability_candidate", "aggregate_candidate",
@@ -62,6 +63,7 @@ PR_HEAD_REQUIRED_FIELDS = ("headRefOid", "headRefName")
 PR_HEAD_OPTIONAL_FIELDS = ("headRepositoryOwner", "headRepositoryName")
 PR_HEAD_FIELDS = PR_HEAD_REQUIRED_FIELDS + PR_HEAD_OPTIONAL_FIELDS
 NON_MERGE_RECEIPT_SCHEMA_VERSION = 1
+PRIMARY_PACKAGE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*\Z")
 
 _store_path = pathlib.Path(__file__).with_name("workflow-durable-store.py")
 if not _store_path.exists(): _store_path = pathlib.Path.cwd()/"scripts/pm/workflow-durable-store.py"
@@ -84,6 +86,13 @@ class _CommandExit(SystemExit):
 def die(message: str) -> None:
     print(f"github-project-task: {message}", file=sys.stderr)
     raise _CommandExit(message)
+
+
+def validate_primary_package(value: str) -> str:
+    value = str(value or "").strip()
+    if not PRIMARY_PACKAGE_RE.fullmatch(value):
+        raise ValueError("primary_package must be one valid declared Cargo package name")
+    return value
 
 
 def now() -> str:
@@ -475,6 +484,15 @@ def issue_task_fields(body: str) -> dict[str, Any]:
         except (ValueError, UnicodeError) as exc:
             die(f"invalid loop binding: {exc}")
         fields["loop_binding"] = binding
+    package_lines = re.findall(r"^- primary_package:.*$", body, re.MULTILINE)
+    package_matches = re.findall(r"^- primary_package: `([^`]+)`$", body, re.MULTILINE)
+    if "primary_package:" in body:
+        if len(package_lines) != 1 or len(package_matches) != 1:
+            die("primary package is malformed or duplicated")
+        try:
+            fields["primary_package"] = validate_primary_package(package_matches[0])
+        except ValueError as exc:
+            die(str(exc))
     context_matches = re.findall(r"^- traceability_context_b64: `([^`]+)`$", body, re.MULTILINE)
     if "traceability_context_b64:" in body:
         if len(context_matches) != 1:
@@ -639,7 +657,7 @@ def github_issue_record(repo: str, task_uid: str) -> dict[str, Any] | None:
 
 
 def task_from_record(uid: str, record: dict[str, Any]) -> OrderedDict[str, Any]:
-    return OrderedDict(
+    task = OrderedDict(
         [
             ("task_uid", uid),
             ("title", record.get("title") or ""),
@@ -676,6 +694,12 @@ def task_from_record(uid: str, record: dict[str, Any]) -> OrderedDict[str, Any]:
             ("updated_at", record.get("updated_at") or now()),
         ]
     )
+    if record.get("primary_package") not in (None, ""):
+        try:
+            task["primary_package"] = validate_primary_package(str(record["primary_package"]))
+        except ValueError as exc:
+            die(str(exc))
+    return task
 
 
 def issue_body(task: OrderedDict[str, Any]) -> str:
@@ -693,6 +717,8 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
         f"- priority: `{task.get('priority')}`",
         f"- worktree_hint: `{task.get('worktree_hint') or ''}`",
     ]
+    if task.get("primary_package") not in (None, ""):
+        lines.append(f"- primary_package: `{validate_primary_package(str(task['primary_package']))}`")
     if task.get("source_signal") or task.get("source_type") or task.get("severity"):
         lines.extend(
             [
@@ -1198,6 +1224,12 @@ def _command_new_task(args: argparse.Namespace) -> int:
     root = args.root.resolve()
     mapping_path = mapping_path_for(root, args.mapping)
     repository_identity = authoritative_repository_identity(root, args.repo, args.worktree_hint or str(root))
+    primary_package = getattr(args, "primary_package", None)
+    if primary_package not in (None, ""):
+        try:
+            primary_package = validate_primary_package(primary_package)
+        except ValueError as exc:
+            die(str(exc))
     immutable_request = OrderedDict(
         [
             ("repo", args.repo),
@@ -1216,6 +1248,8 @@ def _command_new_task(args: argparse.Namespace) -> int:
             ("handoff_to", sorted(args.handoff_to or [])),
         ]
     )
+    if primary_package:
+        immutable_request["primary_package"] = primary_package
     binding_path = getattr(args, "loop_binding", None)
     binding = json.loads(pathlib.Path(binding_path).read_text()) if binding_path else None
     if binding_path and (not isinstance(binding, dict) or not binding):
@@ -1310,6 +1344,8 @@ def _command_new_task(args: argparse.Namespace) -> int:
             ("updated_at", now()),
         ]
     )
+    if primary_package:
+        task["primary_package"] = primary_package
     if binding:
         task["loop_binding"] = binding
         task["bootstrap_base_oid"] = base_oid
@@ -1367,6 +1403,7 @@ def _command_new_task(args: argparse.Namespace) -> int:
         "source_signal": args.source_signal or "",
         "source_type": args.source_type or "",
         "severity": args.severity or "",
+        **({"primary_package": primary_package} if primary_package else {}),
         "source_refs": args.source_ref or [],
         "doc_refs": args.doc_ref or [],
         "related_prd": args.related_prd or [],
@@ -2626,6 +2663,7 @@ def build_parser() -> argparse.ArgumentParser:
     new_task.add_argument("--acceptance", action="append", default=[])
     new_task.add_argument("--handoff-to", action="append", default=[])
     new_task.add_argument("--worktree-hint")
+    new_task.add_argument("--primary-package", type=validate_primary_package)
     new_task.add_argument("--loop-binding", help="Full frozen oasis7.loop-task/v1 JSON file")
     new_task.add_argument("--request-key", help="Persisted logical manual request identity")
     new_task.add_argument("--bootstrap-base-oid", help="Fetched immutable bootstrap base for manual tasks")

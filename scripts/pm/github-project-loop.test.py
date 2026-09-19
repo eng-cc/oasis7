@@ -81,6 +81,7 @@ class LoopTransport(unittest.TestCase):
                 binding.write_text(json.dumps(BINDING))
                 args = TASK.build_parser().parse_args(['new-task', str(root), '--title', 'fixture',
                     '--owner-role', BINDING['owner_role'], '--source-ref', 'test', '--acceptance', 'M17',
+                    '--primary-package', 'oasis7',
                     '--loop-binding', str(binding), '--request-key', 'request:1', '--bootstrap-base-oid', 'd' * 40, '--json'])
                 live = {}
                 preflight_failed = False

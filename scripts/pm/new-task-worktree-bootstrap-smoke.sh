@@ -166,6 +166,7 @@ BOOTSTRAP_JSON="$(
     --path "$WORKTREE_PATH" \
     --pm-owner-role producer_system_designer \
     --pm-title "smoke bootstrap task" \
+    --pm-primary-package oasis7 \
     --pm-source-ref doc/engineering/project.md \
     --pm-doc-ref doc/engineering/prd.md \
     --pm-related-prd PRD-ENGINEERING-021 \

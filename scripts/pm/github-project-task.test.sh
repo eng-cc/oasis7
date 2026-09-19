@@ -274,6 +274,7 @@ python3 "$TMPDIR/github-project-task.py" new-task "$TMPDIR" \
   --title "GitHub-backed lifecycle smoke" \
   --module engineering \
   --priority P2 \
+  --primary-package oasis7 \
   --source-ref doc/engineering/workflow/source-of-truth.md \
   --worktree-hint "$TMPDIR/worktree" \
   --json > "$NEW_JSON"
