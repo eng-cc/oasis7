@@ -673,6 +673,15 @@ if test_tier_required and tier != "contract_only":
         raise SystemExit(f"invalid binary provenance: {exc}")
     if binary_provenance.get("status") != "verified":
         raise SystemExit("refusing a test-tier manifest with unverified binary provenance")
+browser_diagnostics = None
+if tier != "contract_only":
+    browser_diagnostics = {
+        "console": "browser-console.log",
+        "errors": "browser-errors.log",
+    }
+    for relative in browser_diagnostics.values():
+        if not (root / relative).is_file():
+            raise SystemExit(f"refusing a headed manifest without browser diagnostics: {relative}")
 viewport_path = root / "browser-viewport.json"
 viewport = None
 if viewport_path.is_file():
@@ -712,6 +721,7 @@ manifest = {
     "acceptanceEligible": eligible,
     "artifacts": artifacts,
     "browserMode": "headed",
+    "browserDiagnostics": browser_diagnostics,
     "caseId": case_id,
     "binaryProvenance": binary_provenance,
     "evidenceTier": tier,
@@ -1244,6 +1254,49 @@ out_path.write_text(json.dumps(redact(data), ensure_ascii=False, indent=2) + "\n
 PY
 }
 
+capture_success_browser_diagnostics() {
+  local status=0
+  if ! AB_READ_RETRY_ATTEMPTS=1 ab_read_retry "$SESSION" console \
+    >"$OUT_DIR/browser-console.log" 2>&1; then
+    status=1
+  fi
+  if ! AB_READ_RETRY_ATTEMPTS=1 ab_read_retry "$SESSION" errors \
+    >"$OUT_DIR/browser-errors.log" 2>&1; then
+    status=1
+  fi
+  if (( status != 0 )); then
+    echo "error: successful headed evidence requires browser console/errors capture (phase: browser diagnostics; diagnostics: $OUT_DIR)" >&2
+    return "$status"
+  fi
+}
+
+quiesce_for_manifest() {
+  local status=0
+  local launch_pid
+  if [[ -n "$LAUNCH_PID" ]]; then
+    launch_pid="$LAUNCH_PID"
+    kill "$LAUNCH_PID" 2>/dev/null || true
+    wait "$LAUNCH_PID" >/dev/null 2>&1 || true
+    if kill -0 "$launch_pid" 2>/dev/null; then
+      status=1
+    fi
+    if [[ -f "$LAUNCH_LOG" ]] && grep -Fq -- "unable to prove launcher process-group quiescence" "$LAUNCH_LOG"; then
+      status=1
+    fi
+    LAUNCH_PID=""
+  fi
+  if [[ -n "$SESSION" ]]; then
+    if ! ab_session_cleanup "$SESSION" "$OUT_DIR"; then
+      status=1
+    fi
+    SESSION=""
+  fi
+  if (( status != 0 )); then
+    echo "error: headed evidence processes did not reach quiescence before manifest finalization" >&2
+    return "$status"
+  fi
+}
+
 wait_for_prompt_feedback() {
   local mode="$1"
   local rollback_version="${2:-}"
@@ -1523,6 +1576,8 @@ write_safe_state "$rollback_state" "$OUT_DIR/state-after-rollback.json"
 capture_prompt_layout
 ab_screenshot "$SESSION" "$OUT_DIR/prompt-control.png" >/dev/null
 ab_cmd "$SESSION" snapshot >/dev/null 2>&1 || true
+capture_success_browser_diagnostics
+quiesce_for_manifest
 
 python3 - "$OUT_DIR" "$CASE_ID" "$AGENT_ID" <<'PY'
 import json

@@ -106,6 +106,12 @@ source tree is dirty; refusing exact-head binary provenance
 refusing to reuse existing provenance output
 test-tier-required-build.json
 test-tier-required-build.log
+capture_success_browser_diagnostics
+browser-console.log
+browser-errors.log
+browserDiagnostics
+quiesce_for_manifest
+quiescence
 sha256
 rustcVersion
 cargoVersion
@@ -1027,6 +1033,7 @@ case "${VIEWER_PROMPT_FIXTURE_EXPECT_ROUTE:-default}" in
   *) exit 1 ;;
 esac
 mkdir -p "$output_dir"
+printf '%s\n' '{"state":"before-close"}' >"$output_dir/hosted-player-sessions.json"
 if [[ "${VIEWER_PROMPT_FIXTURE_EXPECT_ROUTE:-default}" == "full" ]]; then
   cat >"$output_dir/session.meta" <<'META'
 STACK_READY=1
@@ -1135,6 +1142,18 @@ elif [[ "${1:-}" == "eval" && "${2:-}" == "--stdin" ]]; then
   else
     printf '%s\n' 'true'
   fi
+elif [[ " $* " == *" console "* ]]; then
+  if [[ "${VIEWER_PROMPT_FIXTURE_CONSOLE_FAILURE:-0}" == "1" ]]; then
+    echo "fixture console capture failed" >&2
+    exit 17
+  fi
+  printf '%s\n' '[]'
+elif [[ " $* " == *" errors "* ]]; then
+  printf '%s\n' '[]'
+elif [[ " $* " == *" close "* ]]; then
+  if [[ "${VIEWER_PROMPT_FIXTURE_MUTATE_ON_CLOSE:-0}" == "1" && -n "${AB_SESSION_ARTIFACT_DIR:-}" ]]; then
+    printf '%s\n' '{"state":"after-close"}' >"$AB_SESSION_ARTIFACT_DIR/runtime/hosted-player-sessions.json"
+  fi
 fi
 exit 0
 EOF
@@ -1160,6 +1179,7 @@ EOF
   hosted_args_file="$tmp_root/hosted-stack-args"
   env "$fallback_backend_requirement" \
     VIEWER_PROMPT_FIXTURE_EXPECT_ROUTE=hosted \
+    VIEWER_PROMPT_FIXTURE_MUTATE_ON_CLOSE=1 \
     VIEWER_PROMPT_FIXTURE_ARGS_FILE="$hosted_args_file" \
     OASIS7_TEST_TIER_FAKE_TARGET="$sandbox/fake-target" \
     PATH="$sandbox/bin:$PATH" /bin/bash "$sandbox/scripts/viewer-prompt-control-regression.sh" \
@@ -1170,6 +1190,7 @@ EOF
 grep -Fqx -- '--caller-sentinel' "$hosted_args_file"
 grep -Fqx -- 'hosted-value' "$hosted_args_file"
 python3 - "$tmp_root/hosted-stack-args-run/binary-provenance.json" "$tmp_root/hosted-stack-args-run/runner-config.json" "$tmp_root/hosted-stack-args-run/artifact-manifest.json" <<'PY'
+import hashlib
 import json
 import pathlib
 import sys
@@ -1201,7 +1222,32 @@ assert config["provenance"]["path"] == "binary-provenance.json"
 assert config["source"]["head"] == "fixture-head-7181473f"
 assert manifest["binaryProvenance"]["status"] == "verified"
 assert "binary-provenance.json" in {item["path"] for item in manifest["artifacts"]}
+assert manifest["browserDiagnostics"] == {
+    "console": "browser-console.log",
+    "errors": "browser-errors.log",
+}
+assert pathlib.Path(sys.argv[3]).parent.joinpath("browser-console.log").read_text(encoding="utf-8").strip() == "[]"
+assert pathlib.Path(sys.argv[3]).parent.joinpath("browser-errors.log").read_text(encoding="utf-8").strip() == "[]"
+for item in manifest["artifacts"]:
+    path = pathlib.Path(sys.argv[3]).parent / item["path"]
+    assert path.is_file(), item["path"]
+    assert hashlib.sha256(path.read_bytes()).hexdigest() == item["sha256"], item["path"]
 PY
+
+diagnostic_failure_out="$tmp_root/browser-diagnostics-failure"
+set +e
+env "$fallback_backend_requirement" \
+  VIEWER_PROMPT_FIXTURE_EXPECT_ROUTE=hosted \
+  VIEWER_PROMPT_FIXTURE_CONSOLE_FAILURE=1 \
+  OASIS7_TEST_TIER_FAKE_TARGET="$sandbox/fake-target" \
+  PATH="$sandbox/bin:$PATH" /bin/bash "$sandbox/scripts/viewer-prompt-control-regression.sh" \
+  --headed --hosted-local-mock --test-tier-required --test-login \
+  --source-base fixture-base --out-dir "$diagnostic_failure_out" >"$tmp_root/browser-diagnostics-failure.log" 2>&1
+diagnostic_rc=$?
+set -e
+test "$diagnostic_rc" -ne 0
+grep -Fq -- "requires browser console/errors capture" "$tmp_root/browser-diagnostics-failure.log"
+test ! -e "$diagnostic_failure_out/artifact-manifest.json"
 
 stale_out="$tmp_root/stale-provenance-output"
 mkdir -p "$stale_out"
