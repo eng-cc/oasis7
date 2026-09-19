@@ -1196,6 +1196,5 @@ fn now_unix_time_ms() -> i64 {
         .map(|duration| i64::try_from(duration.as_millis()).unwrap_or(i64::MAX))
         .unwrap_or(0)
 }
-
 #[cfg(test)]
 mod tests;
