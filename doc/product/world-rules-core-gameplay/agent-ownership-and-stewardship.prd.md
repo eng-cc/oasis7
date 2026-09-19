@@ -107,6 +107,51 @@ Agent 的取得、维护、容量、转让条件与关联经济权利属于世�
 - 当：玩家查看结果并尝试恢复或重新认领。
 - 则：结果显示原因、范围、历史 receipt、未决义务和真实可用路径；新的控制权必须重新通过当前资格、资源、容量和反滥用校验，重复请求不能重放支持、权限、财富或世界效果。
 
+<a id="req-wr-aos-003"></a>
+### REQ-WR-AOS-003：团队扩张必须保留取得、维护与授权边界
+
+- 要求：从一个主 Agent 扩张到团队时，每个额外 Agent 都必须经过当时有效的取得资格，并承担可读的取得、维护、授权和协调约束；团队成员数量不得自动放大自治范围、产能或世界权力，小规模独立路线必须继续可用。
+- 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)
+- 验收：[AC-WR-AOS-003](#ac-wr-aos-003)
+
+<a id="ac-wr-aos-003"></a>
+### AC-WR-AOS-003：团队扩张不静默复制权力或自动产能
+
+- 覆盖要求：REQ-WR-AOS-003
+- 给定：玩家或组织从一个可操作的主 Agent 比较并申请一个或多个额外 Agent。
+- 当：扩张前后分别检查取得、维护、授权、协调和独立经营路径。
+- 则：每个额外 Agent 的取得与持续经营约束均可被追踪；团队扩张不静默扩大自治/责任范围、世界权力或自动产能，且玩家仍能选择小规模独立路线。Agent 专题的自治、委托与责任结果由其自身 authority 消费并验证，不由本条重复立法。
+
+<a id="req-wr-aos-004"></a>
+### REQ-WR-AOS-004：工业制造供给必须承担资源、产能与交付约束
+
+- 要求：额外 Agent 的常态取得路径应通过世界内工业订单表达，并让玩家或组织理解资源投入、适用产能占用和可读交付时间；普通治理 quota 不得直接发放 Agent 或替代工业供给约束，取得后的维护、授权与协调义务仍持续。
+- 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)
+- 验收：[AC-WR-AOS-004](#ac-wr-aos-004)
+
+<a id="ac-wr-aos-004"></a>
+### AC-WR-AOS-004：工业供给不以治理 quota 或无成本路径替代
+
+- 覆盖要求：REQ-WR-AOS-004
+- 给定：玩家或组织为额外 Agent 提交一个世界内工业订单。
+- 当：订单进入确认、生产、交付或失败/等待处置之一。
+- 则：组合证据能读出资源、产能和交付约束，并证明交付后的维护、授权和协调义务仍在；普通治理 quota 不直接产生 Agent、不绕过工业供给，早期一个主 Agent 的经营锚点与小规模独立路线保持有效。Agent 专题的授权与责任结果只作为消费条件，不把工业订单变成新的委托权威。
+
+<a id="req-wr-aos-005"></a>
+### REQ-WR-AOS-005：经济转让必须重评资格并保留连续性
+
+- 要求：Agent 的经济转让只能在当时有效的资格、容量、资源、治理和反滥用条件下生效，并保留既有身份、来源、审计历史、已生效结果和未决义务；经济转让本身不得推导额外自治、委托或世界权力。
+- 专业权威：[`Agent claim 经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)
+- 验收：[AC-WR-AOS-005](#ac-wr-aos-005)
+
+<a id="ac-wr-aos-005"></a>
+### AC-WR-AOS-005：转让生效点区分经济权利与 Agent 委托权威
+
+- 覆盖要求：REQ-WR-AOS-005
+- 给定：一个 Agent 的经济转让请求带有转让人、目标持有人、适用范围和待决义务。
+- 当：提交、重连重试、资格变化或转让生效点发生变化。
+- 则：权威结果只在当前资格和反滥用条件通过后生效，失败或待决原因与下一步可读；转让前后的身份、来源、审计历史、已生效结果和未决义务连续可追溯。自治范围、旧授权失效、新目标和责任归因由 Agent 专题消费/验证，不能由经济转让条款重复授予或删除。
+
 ## 3. 权威边界
 
 | 层级 | 本产品分册拥有 | 下层专业域拥有 |
@@ -128,8 +173,9 @@ Agent 的取得、维护、容量、转让条件与关联经济权利属于世�
 - AS-6：首个认领样例在确认前证明候选用途/差异、upfront 成本、确认后 upkeep runway、回收或失去触发、恢复/重新选择以及等待或替代动作；受限认领资助与 liquid starter OC 首聊解锁在同一因果链中仍可明确区分，且不产生免费认领或持续补贴含义。
 - AS-7：主动结束、到期/回收和受争议限制的样例可区分原因与生效范围；每条路径保留历史 receipt 与未决义务的可审计连续性，并明确控制权停止后的恢复、重新选择、申诉或安全停止。重新取得控制权按当时资格重新评估，不能重置首个支持、逃避既有义务、取得额外容量或把历史记录转换为权限/财富。
 - AS-8：代表性多路径恢复状态发布稳定、可区分的 `repair`、`rebuild`、`pivot` 比较项，每项含时间、资源、风险、保留收益和推荐原因；未知值可读降级，缺失/旧式资料不臆造选项，且查看或推荐不执行权威动作。
-- 组合验证（团队资产）：从一个主 Agent 扩张到团队的样例消费[智能体专题](../agents-world-simulation/agent-authority-ownership-and-accountability.prd.md#agent-delegation-boundary)的自治与责任边界，并证明额外 Agent 带来取得、维护、授权和协调约束，而非无成本的自动产能或世界权力；小规模独立路线仍可继续。
-- 组合验证（工业供给）：额外 Agent 的样例消费[智能体专题](../agents-world-simulation/agent-authority-ownership-and-accountability.prd.md#agent-delegation-boundary)的授权/责任结果，并证明玩家或组织通过世界内工业订单承担资源、产能和交付时间，取得后继续承担维护、授权与协调成本；普通治理 quota 既不直接发放 Agent，也不替代工业供给约束，且早期一个主 Agent 的经营锚点保持不变。
+- AS-9：从一个主 Agent 扩张到团队的样例满足 [AC-WR-AOS-003](#ac-wr-aos-003)，额外 Agent 的取得、维护、授权和协调约束可追踪，自治/责任不会被静默放大，且小规模独立路线仍可继续；[智能体专题](../agents-world-simulation/agent-authority-ownership-and-accountability.prd.md#agent-delegation-boundary)只消费其自治与责任结果。
+- AS-10：额外 Agent 的世界内工业订单样例满足 [AC-WR-AOS-004](#ac-wr-aos-004)，资源、适用产能、交付时间、取得后的维护/授权/协调约束可追踪；普通治理 quota 不直接发放 Agent，且早期一个主 Agent 的经营锚点保持不变。
+- AS-11：经济转让样例满足 [AC-WR-AOS-005](#ac-wr-aos-005)，资格重评、转让生效点、身份/来源/历史/未决义务连续性可追踪；[智能体专题](../agents-world-simulation/agent-authority-ownership-and-accountability.prd.md#agent-delegation-boundary)只消费自治、旧授权失效、新目标和责任归因结果。
 
 ### 4.1 验收追踪
 
@@ -142,6 +188,9 @@ Agent 的取得、维护、容量、转让条件与关联经济权利属于世�
 | AS-6 | gameplay_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-011 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | 首个认领承诺包、持续成本、失去/恢复、替代决策与两类启动支持边界的组合证据 | test_tier_required |
 | AS-7 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-GAME-011 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | 结束/回收/争议限制的原因和范围、历史与义务连续性、可读恢复/停止、以及重新认领资格重评和反 churn 套利的组合证据 | test_tier_full |
 | AS-8 | producer_system_designer / runtime_engineer / viewer_engineer / qa_engineer | PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | 权威恢复选项的完整发布、定性比较、未知/缺失降级与非执行边界 | test_tier_required |
+| AS-9 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / qa_engineer | PRD-GAME-011 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-016 / PRD-TESTING-003 | 主 Agent 到团队的取得、维护、授权、协调约束；自治/责任不因团队扩张静默放大；小规模独立路线与 Agent 专题消费边界 | test_tier_required |
+| AS-10 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / qa_engineer | PRD-GAME-011 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-016 / PRD-TESTING-003 | 工业订单的资源/产能/交付约束、治理 quota 非直接供给、取得后维护/授权/协调持续义务与早期单 Agent 锚点 | test_tier_full |
+| AS-11 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-011 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-016 / PRD-TESTING-003 | 转让资格重评、生效点、经济连续性与身份/来源/历史/未决义务保留；自治、授权和责任由 Agent 专题消费 | test_tier_full |
 
 ## 5. Non-Goals
 
@@ -158,3 +207,6 @@ Agent 的取得、维护、容量、转让条件与关联经济权利属于世�
 | --- | --- | --- | --- | --- |
 | [REQ-WR-AOS-001](#req-wr-aos-001) / [AC-WR-AOS-001](#ac-wr-aos-001) | `producer_system_designer` | [`Agent claim 经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md#public-claim-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-WR-AOS-002](#req-wr-aos-002) / [AC-WR-AOS-002](#ac-wr-aos-002) | `producer_system_designer` | [`Agent claim 经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md#public-claim-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-AOS-003](#req-wr-aos-003) / [AC-WR-AOS-003](#ac-wr-aos-003) | `producer_system_designer` / `gameplay_designer` / `agent_engineer` / `runtime_engineer` / `qa_engineer` | [`game PRD`](../../game/prd.md#3-player-facing-authority-boundary); [`world-runtime PRD`](../../world-runtime/prd.md); [`world-simulator PRD`](../../world-simulator/prd.md); [`testing PRD`](../../testing/prd.md) | 主 Agent 到团队的扩张样例；额外 Agent 的取得/维护/授权/协调约束、非静默权力与小规模独立路线；Agent 专题只消费自治/责任结果 | `test_tier_required` |
+| [REQ-WR-AOS-004](#req-wr-aos-004) / [AC-WR-AOS-004](#ac-wr-aos-004) | `producer_system_designer` / `gameplay_designer` / `agent_engineer` / `runtime_engineer` / `qa_engineer` | [`game PRD`](../../game/prd.md#3-player-facing-authority-boundary); [`world-runtime PRD`](../../world-runtime/prd.md); [`world-simulator PRD`](../../world-simulator/prd.md); [`testing PRD`](../../testing/prd.md) | 世界内工业订单的资源/产能/交付、治理 quota 非直接供给、交付后的维护/授权/协调与早期单 Agent 锚点 | `test_tier_full` |
+| [REQ-WR-AOS-005](#req-wr-aos-005) / [AC-WR-AOS-005](#ac-wr-aos-005) | `producer_system_designer` / `gameplay_designer` / `agent_engineer` / `runtime_engineer` / `viewer_engineer` / `qa_engineer` | [`Agent claim 经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md#public-claim-boundary); [`world-runtime PRD`](../../world-runtime/prd.md); [`world-simulator PRD`](../../world-simulator/prd.md); [`testing PRD`](../../testing/prd.md) | 经济转让资格重评、生效点与不可套利边界；身份、来源、审计历史、已生效结果和未决义务连续性；Agent 专题消费自治/授权/责任结果而不重复立法 | `test_tier_full` |
