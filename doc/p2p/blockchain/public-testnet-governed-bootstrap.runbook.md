@@ -569,18 +569,20 @@ consumer-impact record 通过后，selected staggered executor 必须先进入 `
 
 The canonical pair transaction remains the authority-bound evidence and recovery surface for a full-pair operation, but must not be mixed with this live staggered cutover. The selected path is `scripts/p2p-public-testnet-rebuild-validators.sh`; its receipt contract below is the required one-member-at-a-time evidence. Do not invoke full-pair `apply` for this triad cutover: its stopped-pair admission contract is a different operation and violates the live-peer invariant below.
 
-For this cutover, every governed `plan`, `apply`, `resume`, and `rollback` invocation must pass `--execution-mode triad_staggered`. The wrapper dispatches that mode to the repository-owned staggered executor; the legacy positional SSH form remains audit-only and is never a fallback for a governed transaction. The host adapter owns the target-specific stop/reset/stage/start/readback callback after the executor has captured a read-only backup, so no local pair reset may run while the target is live.
+For this cutover, every governed `plan`, `apply`, `resume`, and `rollback` invocation must pass `--execution-mode triad_staggered`. The wrapper dispatches that mode to the repository-owned staggered executor; the former positional SSH rebuild form is retired and fail-closed, while historical receipts remain forensic-only and never authorize a governed transaction. The host adapter owns the target-specific stop/reset/stage/start/readback callback after the executor has captured a read-only backup, so no local pair reset may run while the target is live. Each member receipt must include an independently observed `target_stopped_before_reset` readback and `reset_started_after_target_stop=true`; the executor also records fresh direct live observations immediately before and after every member callback.
+Resume phase names are exact and role-bound: `staggered_storage-205_in_progress` and `staggered_sequencer-204_in_progress`; aliases without the member id are rejected before any callback or re-observation.
 
 ### C2. Reset one validator at a time
 以下 stop 是 live authority 下由人类按成员分别执行的动作；一次只处理当前成员，另一成员必须保持 running。`human_direct_ssh` executor 只在当前成员 stop 后 read-only 复观测，再允许受治理 destructive reset：
 
 ```bash
+# Step 1 only. Do not paste a second stop until the executor has completed
+# storage reset/stage/start/readback and the live-peer gate.
 systemctl stop oasis7-triad-storage.service
-# 重新 read back storage-205 后，才处理 sequencer-204：
-systemctl stop oasis7-triad-sequencer.service
 ```
 
 同一 executor 必须在每次 reset 前对另一成员完成 direct read-only re-observation：先证明 sequencer-204 live，才可 reset/stage/start/readback storage-205；再证明 storage-205 live，才可 reset/stage/start/readback sequencer-204。不得先停两台，也不得在一台 reset 后把两台都留在 stopped 状态；旧 storage runtime 与新 sequencer staging 不得在没有 live peer 的情况下交错共存。
+第二台的 `systemctl stop oasis7-triad-sequencer.service` 只能作为下一次、独立的受治理动作，在上述 gate 成功后由 executor/adapter 生成；不得把两条 stop 命令放进同一个可复制代码块。
 
 从第一台 validator 停止到 Phase G full-fleet health criteria 全部通过，按 testnet outage 窗口处理；缓存可读、单个 endpoint 恢复或 sequencer 单机存活都不是网络恢复。
 

@@ -69,24 +69,12 @@ JSON cannot establish host-state authority. Use `human_direct_ssh` for the
 bounded, read-only stop evidence path. It never preflights, resets, stages,
 starts, or mutates observer state.
 
-Historical SSH audit path (not the current governed transaction contract):
-  ./scripts/p2p-public-testnet-rebuild-validators.sh \
-    --config-dir <path> \
-    --world-dir <path> \
-    --consumer-impact-record <path> \
-    --sequencer-ssh-host <user@host> \
-    --sequencer-sshpass-env <env-name> \
-    --sequencer-service <name> \
-    --sequencer-status-url <url> \
-    --storage-ssh-host <user@host> \
-    --storage-sshpass-env <env-name> \
-    --storage-service <name> \
-    --storage-status-url <url> \
-    [--stack-root <path>] \
-    [--out-dir <path>] \
-    [--poll-attempts <n>] \
-    [--poll-sleep-seconds <n>] \
-    [--disable-ssh-multiplex]
+The historical positional SSH rebuild path is retired and fail-closed. Its
+former `--config-dir`, `--world-dir`, `--sequencer-ssh-host`,
+`--sequencer-sshpass-env`, `--storage-ssh-host`, and
+`--storage-sshpass-env` arguments remain source-visible only so old receipts
+and audit tooling can identify the retired contract; this wrapper will never
+execute that destructive path. Historical receipts are forensic evidence only.
 
 Description:
   Safely rebuild the validator pair with a staggered cutover:
@@ -566,6 +554,8 @@ contract.update(
             "start": "sequencer-then-storage-host-receipt-required",
             "same_window_fleet_health": "same host-receipt captured_at window required",
         },
+        "executor_live_observations": value.get("staggered_live_observations", {}),
+        "executor_rollback_observations": value.get("staggered_rollback_observations", {}),
         "rollback_boundary": {
             "schema_version": "oasis7.validator_pair_rebuild_rollback_boundary.v1",
             "restore_deleted_chain_state": False,
@@ -682,9 +672,15 @@ print(output)
 PY
 }
 
-# New governed modes are explicit subcommands.  Legacy invocations retain the
-# historical SSH fixture contract and are intentionally not used for a current
-# destructive rebuild.
+# New governed modes are explicit subcommands.  The former positional SSH
+# rebuild path is retained below only as unreachable legacy source for audit
+# fixtures; fail closed before its parser so it cannot stop, reset, stage, or
+# start a live node.
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+  usage
+  exit 0
+fi
+
 case "${1:-}" in
   plan|apply|rollback|quiesce|human_direct_ssh)
     receipt_contract_envelope "$@"
@@ -716,6 +712,11 @@ case "${1:-}" in
     exit $?
     ;;
 esac
+
+if [[ $# -eq 0 ]]; then
+  die "a governed subcommand is required; the legacy destructive SSH rebuild path is retired"
+fi
+die "legacy destructive SSH rebuild invocation is retired and fail-closed; use the governed plan/apply/resume/rollback path"
 
 CONFIG_DIR=""
 WORLD_DIR=""
