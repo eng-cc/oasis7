@@ -320,13 +320,15 @@ impl FeedbackStore {
 
         let content_hash = feedback_create_content_hash(&request)?;
         verify_signed_request(
-            FeedbackActionKind::Create,
-            request.feedback_id.as_str(),
-            request.author_public_key_hex.as_str(),
-            content_hash.as_str(),
-            request.nonce.as_str(),
-            request.timestamp_ms,
-            request.expires_at_ms,
+            FeedbackSignedPayload::new(
+                FeedbackActionKind::Create,
+                request.feedback_id.as_str(),
+                request.author_public_key_hex.as_str(),
+                content_hash.as_str(),
+                request.nonce.as_str(),
+                request.timestamp_ms,
+                request.expires_at_ms,
+            ),
             request.signature_hex.as_str(),
         )?;
         self.claim_nonce(
@@ -401,13 +403,15 @@ impl FeedbackStore {
         )?;
         let content_hash = blake3_hex(request.content.as_bytes());
         verify_signed_request(
-            FeedbackActionKind::Append,
-            request.feedback_id.as_str(),
-            request.actor_public_key_hex.as_str(),
-            content_hash.as_str(),
-            request.nonce.as_str(),
-            request.timestamp_ms,
-            request.expires_at_ms,
+            FeedbackSignedPayload::new(
+                FeedbackActionKind::Append,
+                request.feedback_id.as_str(),
+                request.actor_public_key_hex.as_str(),
+                content_hash.as_str(),
+                request.nonce.as_str(),
+                request.timestamp_ms,
+                request.expires_at_ms,
+            ),
             request.signature_hex.as_str(),
         )?;
         self.claim_nonce(
@@ -469,13 +473,15 @@ impl FeedbackStore {
         )?;
         let reason_hash = blake3_hex(request.reason.as_bytes());
         verify_signed_request(
-            FeedbackActionKind::Tombstone,
-            request.feedback_id.as_str(),
-            request.actor_public_key_hex.as_str(),
-            reason_hash.as_str(),
-            request.nonce.as_str(),
-            request.timestamp_ms,
-            request.expires_at_ms,
+            FeedbackSignedPayload::new(
+                FeedbackActionKind::Tombstone,
+                request.feedback_id.as_str(),
+                request.actor_public_key_hex.as_str(),
+                reason_hash.as_str(),
+                request.nonce.as_str(),
+                request.timestamp_ms,
+                request.expires_at_ms,
+            ),
             request.signature_hex.as_str(),
         )?;
         self.claim_nonce(
@@ -729,6 +735,29 @@ struct FeedbackSignedPayload<'a> {
     expires_at_ms: i64,
 }
 
+impl<'a> FeedbackSignedPayload<'a> {
+    fn new(
+        action: FeedbackActionKind,
+        feedback_id: &'a str,
+        actor_public_key_hex: &'a str,
+        content_hash: &'a str,
+        nonce: &'a str,
+        timestamp_ms: i64,
+        expires_at_ms: i64,
+    ) -> Self {
+        Self {
+            version: FEEDBACK_SIGNATURE_PAYLOAD_VERSION,
+            action: action.as_str(),
+            feedback_id,
+            actor_public_key_hex,
+            content_hash,
+            nonce,
+            timestamp_ms,
+            expires_at_ms,
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 struct FeedbackEventHashPayload<'a> {
     version: u8,
@@ -888,30 +917,16 @@ fn validate_signed_request_timestamps(
 }
 
 fn verify_signed_request(
-    action: FeedbackActionKind,
-    feedback_id: &str,
-    actor_public_key_hex: &str,
-    content_hash: &str,
-    nonce: &str,
-    timestamp_ms: i64,
-    expires_at_ms: i64,
+    payload: FeedbackSignedPayload<'_>,
     signature_hex: &str,
 ) -> Result<(), WorldError> {
-    validate_public_key_hex(actor_public_key_hex)?;
+    validate_public_key_hex(payload.actor_public_key_hex)?;
     validate_signature_hex(signature_hex)?;
-    let payload = FeedbackSignedPayload {
-        version: FEEDBACK_SIGNATURE_PAYLOAD_VERSION,
-        action: action.as_str(),
-        feedback_id,
-        actor_public_key_hex,
-        content_hash,
-        nonce,
-        timestamp_ms,
-        expires_at_ms,
-    };
     let payload_bytes = to_canonical_cbor(&payload)?;
-    let public_key_bytes =
-        decode_hex_array::<32>(actor_public_key_hex, "feedback actor_public_key_hex")?;
+    let public_key_bytes = decode_hex_array::<32>(
+        payload.actor_public_key_hex,
+        "feedback actor_public_key_hex",
+    )?;
     let signature_bytes = decode_hex_array::<64>(signature_hex, "feedback signature_hex")?;
     let verifying_key = VerifyingKey::from_bytes(&public_key_bytes).map_err(|err| {
         WorldError::DistributedValidationFailed {
@@ -1146,7 +1161,7 @@ fn feedback_audit_path_timestamp_ms(path: &str) -> Option<i64> {
     if !timestamp.bytes().all(|byte| byte.is_ascii_digit()) {
         return None;
     }
-    if !rest.as_bytes().get(20).is_some_and(|byte| *byte == b'-') {
+    if rest.as_bytes().get(20).is_none_or(|byte| *byte != b'-') {
         return None;
     }
     timestamp.parse().ok()
