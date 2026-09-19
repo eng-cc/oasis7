@@ -9,7 +9,7 @@
 - Last reviewed：2026-09-13
 - 专业域权威：[`Agent claim 经济合同`](../../game/gameplay/gameplay-agent-claim-economy-contract.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
-本文承载玩家取得、维持和结束 Agent 控制权的长期产品承诺。它补充首局与持续游玩、间接控制和成熟世界成长分册，但不冻结经济数值、状态字段、身份实现、界面结构、运营操作、测试步骤或当前放行结论。
+本文承载玩家取得、维持和结束 Agent 控制权，以及 Agent 资产、团队扩张和经济连续性的长期产品承诺。它补充首局与持续游玩、间接控制和成熟世界成长分册，但不冻结经济数值、状态字段、身份实现、界面结构、运营操作、测试步骤或当前放行结论。
 
 ## 设计适用性与生命周期闭合
 
@@ -65,7 +65,17 @@
 
 这一边界保持 world-first：控制权变化以权威世界事实而非客户端叙述为准；保持 emergence-first：玩家可在同一规则下重建关系和策略，而不能复制补贴或权限；保持 persistent / auditable：结束、未决义务和新选择连续可追溯；保持 extensible：未来的恢复或争议机制可以增加受限路径，但必须满足同样的资格重评、非重置和可读结果包。
 
-### 2.4 可验证的控制权与恢复要求
+<a id="agent-asset-economy"></a>
+### 2.4 Agent 资产、团队与经济连续性
+
+Agent 的取得、维护、容量、转让条件与关联经济权利属于世界规则与玩法系统的产品主责。Agent 可以成为长期持有、扩张和转让的经营资产，但取得与维持团队必须承担显著的时间、资源、维护、授权和协调复杂度；它不是无成本的线性囤积权。自治、委托、授权重评与责任归因的消费边界见[Agent 自治、委托与责任连续性](../agents-world-simulation/agent-authority-ownership-and-accountability.prd.md#agent-delegation-boundary)。
+
+- 早期体验以一个可理解的主 Agent 为经营锚点；后续可以形成团队、设施角色和授权层级，但组织层级不能取消小规模玩家的独立路线、绕过区域/治理资格，或把成员数量自动转为额外世界权力。
+- 额外 Agent 是可持有、可调度且可转让的长期经营资产；玩家或组织取得额外 Agent 的常态路径是向世界内工业能力下单制造，订单消耗显著资源、占用适用产能并经历可读交付时间。
+- Agent 的供给主要受工业、物流、设施与交付约束，而不是由普通治理 quota 直接发放或扩张；适用资格与安全边界仍可限制订单，但不能把治理影响力伪装成无成本 Agent 供给。
+- 受规则约束的控制、经济、经营角色和关联资产权益可以随转让条件发生变化；转让生效后的自治范围、旧授权失效和新目标取得由[智能体专题](../agents-world-simulation/agent-authority-ownership-and-accountability.prd.md#agent-delegation-boundary)消费并继续定义，不能由经济转让本身推导出额外世界权力。
+
+### 2.5 可验证的控制权与恢复要求
 
 <a id="req-wr-aos-001"></a>
 ### REQ-WR-AOS-001：首个控制权确认必须是可比较的非零承诺
@@ -118,6 +128,8 @@
 - AS-6：首个认领样例在确认前证明候选用途/差异、upfront 成本、确认后 upkeep runway、回收或失去触发、恢复/重新选择以及等待或替代动作；受限认领资助与 liquid starter OC 首聊解锁在同一因果链中仍可明确区分，且不产生免费认领或持续补贴含义。
 - AS-7：主动结束、到期/回收和受争议限制的样例可区分原因与生效范围；每条路径保留历史 receipt 与未决义务的可审计连续性，并明确控制权停止后的恢复、重新选择、申诉或安全停止。重新取得控制权按当时资格重新评估，不能重置首个支持、逃避既有义务、取得额外容量或把历史记录转换为权限/财富。
 - AS-8：代表性多路径恢复状态发布稳定、可区分的 `repair`、`rebuild`、`pivot` 比较项，每项含时间、资源、风险、保留收益和推荐原因；未知值可读降级，缺失/旧式资料不臆造选项，且查看或推荐不执行权威动作。
+- 组合验证（团队资产）：从一个主 Agent 扩张到团队的样例消费[智能体专题](../agents-world-simulation/agent-authority-ownership-and-accountability.prd.md#agent-delegation-boundary)的自治与责任边界，并证明额外 Agent 带来取得、维护、授权和协调约束，而非无成本的自动产能或世界权力；小规模独立路线仍可继续。
+- 组合验证（工业供给）：额外 Agent 的样例消费[智能体专题](../agents-world-simulation/agent-authority-ownership-and-accountability.prd.md#agent-delegation-boundary)的授权/责任结果，并证明玩家或组织通过世界内工业订单承担资源、产能和交付时间，取得后继续承担维护、授权与协调成本；普通治理 quota 既不直接发放 Agent，也不替代工业供给约束，且早期一个主 Agent 的经营锚点保持不变。
 
 ### 4.1 验收追踪
 
