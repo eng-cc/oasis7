@@ -23,7 +23,7 @@
 - `../README.md` 是 game 模块级 landing page，负责在模块 PRD、执行台账、文件级索引和少量高频 gameplay 专题之间分流。
 - `../prd.md` 是 game 模块目标态与阶段口径真值。
 - `gameplay-top-level-design.prd.md` 只拥有核心玩法骨架与 `PRD-GAME-012` early-retention 的详细合同；它不替代 `../prd.md` 的活跃路由/状态职责，也不覆盖其他 topic 或 `doc/product/` 的声明范围。
-- `gameplay-mature-world-progression-contract.prd.md` 拥有 `PRD-GAME-015` 的 lane、恢复、专业化、checkpoint 与 anti-grind 详细合同；产品承诺仍由 mature-world 产品分册拥有。
+- `gameplay-mature-world-progression-contract.prd.md` 拥有 `PRD-GAME-015` 的 lane、恢复、专业化、checkpoint 与 anti-grind 详细合同，并在 [generic mature-world recognition/opportunity leaf](./gameplay-mature-world-progression-contract.prd.md#prd-game-015-recognition-opportunity) 中承接 `REQ-WR-MW-004` / `MW-11` 的专业玩法语义；不新增 PRD-ID 或 authority，产品承诺仍由 mature-world 产品分册拥有。
 - GitHub Project task status 与 issue evidence comments 是 retention、preview、经济规则和放行门禁的执行状态入口。
 - `../prd.index.md` 是完整文件级索引，适合已知主题后按文件名查找。
 
