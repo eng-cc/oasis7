@@ -25,9 +25,9 @@ mod render;
 #[path = "lib_test_hit_targets.rs"]
 mod test_hit_targets;
 
-use test_hit_targets::{
-    hotspot_test_hit_targets, publish_hotspot_test_hit_targets, publish_location_test_hit_targets,
-};
+#[cfg(test)]
+use test_hit_targets::hotspot_test_hit_targets;
+use test_hit_targets::{publish_hotspot_test_hit_targets, publish_location_test_hit_targets};
 
 thread_local! {
     static BRIDGE_SHARED: RefCell<BridgeSharedState> = RefCell::new(BridgeSharedState::default());
@@ -428,11 +428,13 @@ impl HitRegionCacheKey {
     }
 }
 
+#[derive(Default)]
 enum RenderSnapshot {
+    #[default]
     Unchanged,
     Changed {
         version: u64,
-        state: Option<RenderState>,
+        state: Option<Box<RenderState>>,
     },
 }
 
@@ -441,12 +443,6 @@ struct SharedSnapshot {
     mounted: bool,
     render: RenderSnapshot,
     input_events: Vec<InputEvent>,
-}
-
-impl Default for RenderSnapshot {
-    fn default() -> Self {
-        Self::Unchanged
-    }
 }
 
 #[wasm_bindgen]
@@ -677,7 +673,7 @@ fn shared_snapshot(current_render_version: u64) -> SharedSnapshot {
         } else {
             RenderSnapshot::Changed {
                 version: shared.render_version,
-                state: shared.render_state.clone(),
+                state: shared.render_state.clone().map(Box::new),
             }
         };
         SharedSnapshot {
@@ -901,10 +897,10 @@ fn apply_external_render_snapshot(
     };
 
     let previous_focus_target = focus_target_from_render_state(runtime.render_state.as_ref());
-    let next_focus_target = focus_target_from_render_state(render_state.as_ref());
-    let next_signature = render_content_signature(render_state.as_ref());
+    let next_focus_target = focus_target_from_render_state(render_state.as_deref());
+    let next_signature = render_content_signature(render_state.as_deref());
     let content_changed = next_signature != runtime.render_content_signature;
-    let camera_content_changed = camera_content_signature(render_state.as_ref())
+    let camera_content_changed = camera_content_signature(render_state.as_deref())
         != camera_content_signature(runtime.render_state.as_ref());
     if camera_content_changed {
         runtime.camera_fit_version = 0;
@@ -925,7 +921,7 @@ fn apply_external_render_snapshot(
         runtime.pending_focus_target = Some(follow_target);
     }
     runtime.render_version = render_version;
-    runtime.render_state = render_state;
+    runtime.render_state = render_state.map(|state| *state);
     runtime.needs_reconcile = content_changed || next_focus_target != previous_focus_target;
     runtime.hit_regions_dirty |=
         camera_content_changed || next_focus_target != previous_focus_target;

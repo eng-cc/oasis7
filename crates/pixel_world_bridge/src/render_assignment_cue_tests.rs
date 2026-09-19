@@ -6,9 +6,7 @@ fn assignment_cue_entities(
     let world = app.world_mut();
     let mut cues = world.query::<(Entity, &PixelWorldAssignmentCueVisual, &Transform)>();
     cues.iter(world)
-        .map(|(entity, cue, transform)| {
-            ((cue.link_id.clone(), cue.part), (entity, transform.clone()))
-        })
+        .map(|(entity, cue, transform)| ((cue.link_id.clone(), cue.part), (entity, *transform)))
         .collect()
 }
 

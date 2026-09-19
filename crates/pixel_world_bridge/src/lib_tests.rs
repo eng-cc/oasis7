@@ -74,7 +74,7 @@ fn changed_snapshot(
         mounted,
         render: RenderSnapshot::Changed {
             version: render_version,
-            state: render_state,
+            state: render_state.map(Box::new),
         },
         input_events: Vec::new(),
     }
@@ -379,7 +379,7 @@ fn assert_presentation_metadata_update_reconciles(
         true,
         RenderSnapshot::Changed {
             version: 2,
-            state: Some(changed),
+            state: Some(Box::new(changed)),
         },
     );
 
@@ -481,7 +481,7 @@ fn location_label_changes_trigger_reactive_reconcile_without_camera_reset() {
         true,
         RenderSnapshot::Changed {
             version: 2,
-            state: Some(renamed),
+            state: Some(Box::new(renamed)),
         },
     );
 
@@ -532,7 +532,7 @@ fn agent_position_source_changes_trigger_reactive_reconcile_without_camera_reset
         true,
         RenderSnapshot::Changed {
             version: 2,
-            state: Some(snapshot),
+            state: Some(Box::new(snapshot)),
         },
     );
     assert!(runtime.needs_reconcile);
@@ -639,7 +639,7 @@ fn social_link_only_render_updates_trigger_reconcile_without_camera_reset() {
             true,
             RenderSnapshot::Changed {
                 version: 2,
-                state: Some(next),
+                state: Some(Box::new(next)),
             },
         );
 
@@ -684,7 +684,7 @@ fn assert_label_only_render_update_reconciles_without_resetting_camera_or_follow
         true,
         RenderSnapshot::Changed {
             version: 2,
-            state: Some(renamed),
+            state: Some(Box::new(renamed)),
         },
     );
 
@@ -736,7 +736,7 @@ fn assert_active_intent_only_update_preserves_manual_camera_and_focus() {
         true,
         RenderSnapshot::Changed {
             version: 2,
-            state: Some(next),
+            state: Some(Box::new(next)),
         },
     );
 
