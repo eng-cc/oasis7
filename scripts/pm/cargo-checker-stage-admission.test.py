@@ -239,7 +239,10 @@ class CheckerStageAdmissionTest(unittest.TestCase):
             encoding="utf-8"
         )
         self.assertIn("id: checker-stage", workflow)
-        self.assertIn('git diff --name-only "${CHECKER_BASE_SHA}" "${CHECKER_HEAD_SHA}"', workflow)
+        self.assertIn(
+            'git diff --name-status --find-renames --find-copies --find-copies-harder "${CHECKER_BASE_SHA}" "${CHECKER_HEAD_SHA}"',
+            workflow,
+        )
         self.assertIn("issues/3827", workflow)
         self.assertIn(
             "OASIS7_CARGO_STAGE_PR_NUMBER: ${{ steps.checker-stage.outputs.pr_number }}",

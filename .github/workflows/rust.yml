@@ -206,11 +206,40 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mapfile -t changed_paths < <(git diff --name-only "${CHECKER_BASE_SHA}" "${CHECKER_HEAD_SHA}")
           checker_paths=(
             "scripts/pm/check-cargo-package-scope"
             "scripts/pm/check-cargo-package-scope.test.py"
           )
+          if [[ -z "${CHECKER_BASE_SHA}" || -z "${CHECKER_HEAD_SHA}" ]]; then
+            echo "checker-stage changed-path range is incomplete" >&2
+            exit 1
+          fi
+          changed_status_file="$(mktemp)"
+          trap 'rm -f "${changed_status_file}"' EXIT
+          if ! git diff --name-status --find-renames --find-copies --find-copies-harder "${CHECKER_BASE_SHA}" "${CHECKER_HEAD_SHA}" >"${changed_status_file}"; then
+            echo "checker-stage changed-path readback failed for the supplied range" >&2
+            exit 1
+          fi
+          changed_paths=()
+          while IFS=$'\t' read -r status first_path second_path; do
+            [[ -n "${status}" ]] || continue
+            case "${status}" in
+              R*|C*)
+                [[ -n "${first_path}" && -n "${second_path}" ]] || {
+                  echo "checker-stage rename/copy record is malformed" >&2
+                  exit 1
+                }
+                changed_paths+=("${first_path}" "${second_path}")
+                ;;
+              *)
+                [[ -n "${first_path}" && -z "${second_path}" ]] || {
+                  echo "checker-stage changed-path record is malformed" >&2
+                  exit 1
+                }
+                changed_paths+=("${first_path}")
+                ;;
+            esac
+          done <"${changed_status_file}"
           checker_path_touched=false
           for path in "${changed_paths[@]}"; do
             if [[ "${path}" == "${checker_paths[0]}" || "${path}" == "${checker_paths[1]}" ]]; then
