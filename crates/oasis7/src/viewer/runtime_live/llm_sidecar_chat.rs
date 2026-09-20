@@ -68,7 +68,7 @@ impl RuntimeLlmSidecar {
                         request_digest: intent_identity
                             .map(|(_, request_digest)| request_digest.to_string()),
                     });
-                return Ok(());
+                Ok(())
             }
             #[cfg(target_arch = "wasm32")]
             {
@@ -135,7 +135,7 @@ impl RuntimeLlmSidecar {
                         message: error.to_string(),
                         agent_id: Some(agent_id.to_string()),
                     })?;
-                return Ok(());
+                Ok(())
             }
             #[cfg(target_arch = "wasm32")]
             {

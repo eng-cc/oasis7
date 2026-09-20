@@ -41,10 +41,12 @@ fn node_runtime_multi_node_points_closure_settles_rewards() {
     storage.start().expect("storage start");
     observer.start().expect("observer start");
 
-    let mut config = NodePointsConfig::default();
-    config.epoch_duration_seconds = 60;
-    config.epoch_pool_points = 300;
-    config.min_self_sim_compute_units = 1;
+    let config = NodePointsConfig {
+        epoch_duration_seconds: 60,
+        epoch_pool_points: 300,
+        min_self_sim_compute_units: 1,
+        ..NodePointsConfig::default()
+    };
     let mut collector =
         NodePointsRuntimeCollector::new(config, NodePointsRuntimeHeuristics::default());
 
