@@ -18,6 +18,10 @@ use super::reachability::{
 };
 use super::{Behaviour, CommandResponseSender};
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Peer-record publication keeps signing and response state explicit to preserve wire ordering"
+)]
 pub(super) fn publish_configured_peer_record(
     swarm: &mut Swarm<Behaviour>,
     pending_dht: &mut HashMap<kad::QueryId, PendingDhtQuery>,

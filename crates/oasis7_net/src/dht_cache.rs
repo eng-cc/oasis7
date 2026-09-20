@@ -85,10 +85,10 @@ impl CachedDht {
             return Ok(None);
         }
         let record = self.store.get_head(world_id)?;
-        if let Some(record) = record {
-            if now_ms.saturating_sub(record.updated_at_ms) <= self.config.head_ttl_ms {
-                return Ok(Some(record.head));
-            }
+        if let Some(record) = record
+            && now_ms.saturating_sub(record.updated_at_ms) <= self.config.head_ttl_ms
+        {
+            return Ok(Some(record.head));
         }
         Ok(None)
     }
