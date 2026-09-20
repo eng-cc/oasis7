@@ -5,12 +5,14 @@ from __future__ import annotations
 
 import argparse
 from dataclasses import dataclass
+import html
 from pathlib import Path
 import re
 import sys
+from urllib.parse import unquote
 
 try:
-    from product_doc_markdown import parse_markdown_links
+    from product_doc_markdown import parse_markdown_blocks, parse_markdown_html, parse_markdown_links
 except RuntimeError as exc:
     print(f"product-doc-governance: error: {exc}", file=sys.stderr)
     raise SystemExit(2) from exc
@@ -29,29 +31,32 @@ class ProductModule:
 
 
 MODULES = (
+    # C1: active landing/root identities use only the final display label.
+    # Historical aliases remain valid as ordinary prose/provenance because the
+    # checker only inspects canonical identity declarations and entry rows.
     ProductModule(
         "world-rules-core-gameplay",
         "PRD-PRODUCT-001",
         ("doc/game/prd.md", "doc/world-runtime/prd.md", "doc/world-simulator/prd.md", "doc/p2p/prd.md"),
-        ("世界规则与核心玩法", "世界规则与玩法系统"),
+        ("世界规则与玩法系统",),
     ),
     ProductModule(
         "world-infrastructure",
         "PRD-PRODUCT-002",
         ("doc/game/prd.md", "doc/world-runtime/prd.md", "doc/p2p/prd.md"),
-        ("大世界基础设施", "权威世界基础设施"),
+        ("权威世界基础设施",),
     ),
     ProductModule(
         "agents-world-simulation",
         "PRD-PRODUCT-003",
         ("doc/world-simulator/prd.md",),
-        ("智能体与世界模拟", "智能体、世界模拟与交互"),
+        ("智能体、世界模拟与交互",),
     ),
     ProductModule(
         "player-entry-distribution",
         "PRD-PRODUCT-004",
         ("README.md", "doc/world-simulator/prd.md"),
-        ("玩家入口与发行", "玩家接入与发行"),
+        ("玩家接入与发行",),
     ),
 )
 LIFECYCLES = {"proposed", "draft", "active", "superseded", "retired"}
@@ -81,6 +86,117 @@ REQUIRED_HEADINGS = (
     "### 5.1 验收追踪",
     "## 6. Non-Goals",
 )
+HTML_COMMENT_RE = re.compile(r"<!--[\s\S]*?-->")
+ANCHOR_RE = re.compile(r"<a\s+[^>]*\bid\s*=\s*[\"']([^\"']+)[\"'][^>]*>", re.IGNORECASE)
+HTML_TAG_RE = re.compile(r"<[^>]+>")
+
+
+def without_html_comments(text: str) -> str:
+    """Match product-content's fragment parser while preserving line numbers."""
+    def preserve_newlines(match: re.Match[str]) -> str:
+        return "".join(character for character in match.group(0) if character in "\r\n")
+
+    return HTML_COMMENT_RE.sub(preserve_newlines, text)
+
+
+def visible_lines(text: str) -> list[tuple[int, str]]:
+    """Return line-numbered prose, excluding comments and Markdown code blocks."""
+    text = without_html_comments(text)
+    excluded_lines = {
+        number
+        for block in parse_markdown_blocks(text)
+        for number in range(block.start_line, block.end_line + 1)
+    }
+    return [
+        (number, line)
+        for number, line in enumerate(text.splitlines(), start=1)
+        if number not in excluded_lines
+    ]
+
+
+def actual_anchor_occurrences(text: str) -> list[tuple[str, int]]:
+    """Return parser-recognized HTML anchors, excluding comments."""
+    occurrences: list[tuple[str, int]] = []
+    for node in parse_markdown_html(without_html_comments(text)):
+        for match in ANCHOR_RE.finditer(node.content):
+            line = node.line + node.content[: match.start()].count("\n")
+            occurrences.append((match.group(1), line))
+    return occurrences
+
+
+def split_link_target(raw: str) -> tuple[str, str | None]:
+    """Split a CommonMark target using the product-content checker contract."""
+    target = raw.strip().split(None, 1)[0].strip("<>")
+    if "#" not in target:
+        return target, None
+    path, fragment = target.split("#", 1)
+    return path, unquote(fragment)
+
+
+def is_external_link_target(target: str) -> bool:
+    return "://" in target or target.startswith(("mailto:", "//"))
+
+
+def github_heading_slug(value: str) -> str:
+    value = HTML_TAG_RE.sub("", html.unescape(value)).strip().lower()
+    value = re.sub(r"[`*_~]", "", value)
+    value = re.sub(r"[^\w\-\u0080-\uffff ]", "", value, flags=re.UNICODE)
+    return re.sub(r"\s+", "-", value)
+
+
+def fragment_exists(text: str, fragment: str) -> bool:
+    """Apply the same explicit-anchor and GitHub-heading semantics as content checks."""
+    return fragment.strip().lower() in fragment_ids(text)
+
+
+def fragment_ids(text: str) -> set[str]:
+    """Build the target's navigable fragment set once per product document."""
+    fragments = {
+        anchor.strip().lower()
+        for anchor, _number in actual_anchor_occurrences(text)
+    }
+    visible = "\n".join(line for _, line in visible_lines(text))
+    for line in visible.splitlines():
+        match = re.match(r"^ {0,3}#{1,6}\s+(.+?)\s*#*\s*$", line)
+        if match:
+            fragments.add(github_heading_slug(match.group(1)))
+    return fragments
+
+
+def validate_product_fragments(root: Path, errors: list[str]) -> None:
+    """Validate local fragments across product docs, without scanning other doc trees."""
+    product_root = root / "doc/product"
+    fragments_by_path: dict[Path, set[str]] = {}
+    for source in sorted(product_root.glob("**/*.md")):
+        if not source.is_file():
+            continue
+        source_relative = source.relative_to(root).as_posix()
+        source_text = source.read_text(encoding="utf-8")
+        for link in parse_markdown_links(source_text):
+            target, fragment = split_link_target(link.target)
+            if not fragment or is_external_link_target(target):
+                continue
+            target_path = source if not target else (source.parent / target).resolve()
+            try:
+                target_relative = target_path.relative_to(root)
+            except ValueError:
+                continue
+            # Structural inventory checks report missing paths; this pass only
+            # adds the fragment contract when the local target is readable.
+            if not target_path.is_file():
+                continue
+            if target_path not in fragments_by_path:
+                fragments_by_path[target_path] = fragment_ids(
+                    target_path.read_text(encoding="utf-8")
+                )
+            if fragment.strip().lower() not in fragments_by_path[target_path]:
+                fail(
+                    errors,
+                    "invalid-fragment",
+                    f"{source_relative}:{link.line}: {target_relative.as_posix()}#{fragment}",
+                )
+
+
 def metadata(text: str, label: str) -> str | None:
     match = re.search(rf"^- {re.escape(label)}：(?:`([^`]+)`|(.+))$", text, re.MULTILINE)
     if not match:
@@ -375,6 +491,7 @@ def check(root: Path) -> list[str]:
             fail(errors, "topic-pair-orphan", f"{paired_path.relative_to(root)} has no declared {topic}")
     if any((root / "doc/product").glob("**/archive")):
         fail(errors, "lifecycle-archive", "doc/product/**/archive is forbidden")
+    validate_product_fragments(root, errors)
     return errors
 
 
