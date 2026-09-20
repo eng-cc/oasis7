@@ -242,7 +242,12 @@ def live(repository, task_uid, task_issue_number, pr_number, check_name, check_a
         if run.get("name")==check_name and (check_app_id is None or str(app_id)==str(check_app_id)):
             matches.append(run)
     if not matches: raise SystemExit("ci-ready-receipt: wrong_app or uncertain: required check identity missing")
-    matches.sort(key=lambda x:(x.get("completed_at") or "",int(x.get("id") or 0)),reverse=True)
+    # Check-run completion time is absent while a run is pending.  Sorting by
+    # it first lets an older green run outrank a newer pending run, which would
+    # turn an in-flight check into ordinary readiness evidence.  GitHub check
+    # run IDs are immutable creation-order locators, so use that ordering
+    # before validating status and conclusion.
+    matches.sort(key=lambda x: int(x.get("id") or 0), reverse=True)
     run=matches[0]
     base_oid,head_oid=check_run_pull_request_identity(run,pr_number,head_oid,expected_base_ref)
     if not ordinary_pr and str((pr.get("base") or {}).get("sha") or "") != base_oid:

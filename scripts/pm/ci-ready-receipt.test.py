@@ -88,6 +88,13 @@ class ReceiptTest(unittest.TestCase):
     with self.api(runs=[wrong]):
       with self.assertRaisesRegex(SystemExit, "wrong_head"):
         M.live("eng-cc/oasis7", UID, 1, 7, "required-gate", "42", ordinary_pr=True)
+  def test_ordinary_pr_receipt_rejects_newer_pending_run_instead_of_old_green(self):
+    older_green=run()
+    newer_pending=run()
+    newer_pending.update(id=10, status="in_progress", conclusion=None, completed_at=None)
+    with self.api(runs=[older_green, newer_pending]):
+      with self.assertRaisesRegex(SystemExit, "check incomplete"):
+        M.live("eng-cc/oasis7", UID, 1, 7, "required-gate", "42", ordinary_pr=True)
   def test_expected_base_ref_rejects_same_oid_pr_retarget(self):
     moved=pr(); moved["base"]["ref"]="release"
     moved_run=run(); moved_run["pull_requests"][0]["base"]["ref"]="release"

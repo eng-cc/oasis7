@@ -43,6 +43,7 @@ Options:
   --comparison-ref <ref>     Base ref for immutable range hygiene; derived from origin/main or main when omitted
   --pr-gate-json <path>      Fresh pr-lifecycle-gate JSON (required for ready_for_merge)
   --ci-ready-receipt <path>  Trusted live CI receipt (required for ready_for_pr)
+  --review-plan <path>       Canonical v2 review plan (defaults to the task scratch plan)
   --json                     Print machine-readable JSON summary
   -h, --help                 Show help
 
@@ -64,6 +65,7 @@ TASK_UID=""
 COMPARISON_REF=""
 PR_GATE_JSON=""
 CI_READY_RECEIPT=""
+REVIEW_PLAN=""
 VERIFICATION_PROFILE=""
 
 while [[ $# -gt 0 ]]; do
@@ -91,6 +93,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     --pr-gate-json) PR_GATE_JSON="${2:-}"; shift 2 ;;
     --ci-ready-receipt) CI_READY_RECEIPT="${2:-}"; shift 2 ;;
+    --review-plan) REVIEW_PLAN="${2:-}"; shift 2 ;;
     -h|--help)
       usage
       exit 0
@@ -140,6 +143,90 @@ PY
     --task-uid "$RECEIPT_TASK_UID" --task-issue-number "$RECEIPT_ISSUE" --pr-number "$RECEIPT_PR" --check-name "$RECEIPT_CHECK" \
     --check-app-id "$RECEIPT_APP" --planner-digest "$RECEIPT_PLANNER" --receipt "$CI_READY_RECEIPT" --allow-ready-pr >/dev/null \
     || die "ci_ready_receipt live validation failed: stale wrong_head wrong_app superseded cancelled uncertain"
+
+  # A direct ready_for_pr claim must consume the same v2 source-review and
+  # trusted projection decision used by promotion/closeout.  The live receipt
+  # proves the source-bound CI check; it cannot by itself prove that ordinary
+  # CI is sufficient for a high-risk projection.
+  REVIEW_PLAN_PATH="$REVIEW_PLAN"
+  if [[ -z "$REVIEW_PLAN_PATH" ]]; then
+    REVIEW_PLAN_PATH="$ROOT_DIR/.pm/scratch/$RECEIPT_TASK_UID/review-plan.json"
+    if [[ ! -f "$REVIEW_PLAN_PATH" ]]; then
+      REVIEW_PLAN_PATH="$(python3 - "$ROOT_DIR" "$RECEIPT_TASK_UID" "$CI_READY_RECEIPT" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1]).resolve()
+task_uid = sys.argv[2]
+receipt = json.loads(Path(sys.argv[3]).read_text(encoding="utf-8"))
+receipt_head = receipt.get("head_oid")
+candidates = []
+for path in sorted((root / ".pm" / "scratch" / task_uid / "review-plans").glob("*.json")):
+    try:
+        plan = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        continue
+    source = plan.get("source_review_identity")
+    if (plan.get("schema") == "oasis7-review-plan/v2"
+            and isinstance(source, dict)
+            and source.get("task_uid") == task_uid
+            and source.get("source_head_oid") == receipt_head):
+        candidates.append(path)
+if len(candidates) != 1:
+    raise SystemExit(
+        "canonical v2 review plan is missing or ambiguous for the receipt source head"
+    )
+print(candidates[0])
+PY
+      )" || die "ready_for_pr requires one canonical v2 review plan for the receipt source head"
+    fi
+  fi
+  python3 - "$ROOT_DIR" "$REVIEW_PLAN_PATH" "$CI_READY_RECEIPT" "$RECEIPT_TASK_UID" "$SCRIPT_DIR" <<'PY' \
+    || die "ready_for_pr requires a trusted v2 review plan and applicable CI authority"
+import importlib.util
+import json
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1]).resolve()
+plan_path = Path(sys.argv[2])
+if not plan_path.is_absolute():
+    plan_path = root / plan_path
+if plan_path.is_symlink():
+    raise SystemExit("claim-ready: review plan must not be a symlink")
+try:
+    plan_path = plan_path.resolve(strict=True)
+except OSError as exc:
+    raise SystemExit(f"claim-ready: canonical v2 review plan cannot be read: {exc}") from exc
+if root not in plan_path.parents:
+    raise SystemExit("claim-ready: review plan must be inside the canonical worktree")
+
+try:
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    receipt = json.loads(Path(sys.argv[3]).read_text(encoding="utf-8"))
+except (OSError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"claim-ready: canonical v2 review plan or CI receipt is invalid: {exc}") from exc
+
+identity_path = Path(sys.argv[5]) / "ci_ready_receipt_identity.py"
+spec = importlib.util.spec_from_file_location("claim_ready_ci_receipt_identity", identity_path)
+if spec is None or spec.loader is None:
+    raise SystemExit("claim-ready: trusted CI receipt identity helper is unavailable")
+identity = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(identity)
+
+task_uid = sys.argv[4]
+identity.validate_source_review_epoch(plan, root=root, task_uid=task_uid)
+requires_strict = identity.projection_requires_strict_integration(plan)
+ordinary = identity.is_ordinary_pr_ci_receipt(receipt)
+trusted_integration = identity.has_live_integration_attestation(receipt)
+if not ordinary and not trusted_integration:
+    raise SystemExit("claim-ready: CI receipt is neither ordinary live PR CI nor trusted integration evidence")
+if requires_strict and ordinary:
+    raise SystemExit("claim-ready: high-risk projection requires trusted integration CI; ordinary PR CI is insufficient")
+if not identity.can_reuse_source_review(plan, receipt):
+    raise SystemExit("claim-ready: v2 source-review reuse is not proven by the trusted CI receipt")
+PY
 fi
 
 CLAIM_LABEL=""

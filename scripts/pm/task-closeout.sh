@@ -733,7 +733,15 @@ fi
 
 if [[ "$TARGET_STATUS" == "ready" && -n "$CI_READY_RECEIPT" && "$VERIFICATION_PROFILE" != "fixture_repository_state" ]]; then
   if [[ "$REVIEW_PLAN_SCHEMA" == "oasis7-review-plan/v2" ]]; then
-    python3 - "$ROOT_DIR" "$REVIEW_PLAN" "$CI_READY_RECEIPT" <<'PY' \
+    CI_CURRENT_TARGET_OID="$(gh pr view "$CI_PR_NUMBER" -R "$CI_REPOSITORY" --json baseRefOid --jq '.baseRefOid')" \
+      || die "could not read the live PR target OID for source review reuse"
+    [[ "$CI_CURRENT_TARGET_OID" =~ ^[0-9a-f]{40,64}$ ]] \
+      || die "live PR target OID is missing or invalid for source review reuse"
+    if [[ "$CI_VALIDATION_MODE" == "ordinary_pr" ]] && ! git -C "$ROOT_DIR" cat-file -e "$CI_CURRENT_TARGET_OID^{commit}" >/dev/null 2>&1; then
+      git -C "$ROOT_DIR" fetch --no-tags --no-write-fetch-head origin "$CI_CURRENT_TARGET_OID" >/dev/null 2>&1 \
+        || die "could not fetch the live PR target OID for source review reuse"
+    fi
+    python3 - "$ROOT_DIR" "$REVIEW_PLAN" "$CI_READY_RECEIPT" "$CI_CURRENT_TARGET_OID" <<'PY' \
       || die "v2 source review cannot be reused: latest trusted integration tree or authority changed"
 import importlib.util
 import json
@@ -742,10 +750,13 @@ from pathlib import Path
 root=Path(sys.argv[1]).resolve()
 plan=json.loads(Path(sys.argv[2]).read_text(encoding='utf-8'))
 receipt=json.loads(Path(sys.argv[3]).read_text(encoding='utf-8'))
+current_target_oid=sys.argv[4]
 spec=importlib.util.spec_from_file_location('ci_ready_receipt_identity_v2', root/'scripts/pm/ci_ready_receipt_identity.py')
 if spec is None or spec.loader is None: raise SystemExit('v2 identity helper unavailable')
 helper=importlib.util.module_from_spec(spec); spec.loader.exec_module(helper)
-if not helper.can_reuse_source_review(plan, receipt): raise SystemExit('changed tested tree or integration authority requires full review')
+if not helper.can_reuse_source_review(
+        plan, receipt, current_target_oid=current_target_oid, current_target_root=root):
+    raise SystemExit('changed tested tree or integration authority requires full review')
 PY
   else
     CI_REVIEW_EVIDENCE_DIGEST="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8")).get("review_evidence_digest", ""))' "$CI_READY_RECEIPT")" \

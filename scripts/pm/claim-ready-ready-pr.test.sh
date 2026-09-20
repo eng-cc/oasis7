@@ -68,4 +68,147 @@ assert 'old.get(key)!=val' in ci_source
 assert 'not 0 <= (dt.datetime.now(dt.timezone.utc)-seen).total_seconds() <= 600' in ci_source
 PY
 
+# A high-risk v2 projection must reject an ordinary source-bound receipt at the
+# direct claim-ready entrypoint. This uses a small isolated worktree and stubs
+# only the live receipt/bootstrap readers so the claim path reaches the real
+# v2 identity and projection classifier.
+TEST_ROOT="$(mktemp -d)"
+trap 'rm -rf -- "$TEST_ROOT"' EXIT
+FIXTURE="$TEST_ROOT/fixture"
+UID_VALUE="task_11111111111111111111111111111111"
+mkdir -p "$FIXTURE/scripts/pm" "$FIXTURE/.pm/scratch/$UID_VALUE/review-plans" "$FIXTURE/.pm/github-project-sync"
+cp "$SCRIPT_DIR/claim-ready.sh" "$SCRIPT_DIR/ci_ready_receipt_identity.py" "$SCRIPT_DIR/repo-state-fingerprint.py" "$FIXTURE/scripts/pm/"
+python3 - "$FIXTURE/scripts/pm/ci-ready-receipt.py" "$FIXTURE/scripts/pm/bootstrap-task-snapshot.py" <<'PY'
+from pathlib import Path
+import sys
+
+for raw in sys.argv[1:]:
+    Path(raw).write_text("#!/usr/bin/env python3\nraise SystemExit(0)\n", encoding="utf-8")
+PY
+chmod +x "$FIXTURE/scripts/pm/claim-ready.sh"
+git -C "$FIXTURE" init -q
+git -C "$FIXTURE" config user.email test@example.com
+git -C "$FIXTURE" config user.name Test
+printf 'fixture\n' >"$FIXTURE/tracked.txt"
+git -C "$FIXTURE" add tracked.txt
+git -C "$FIXTURE" commit -qm fixture
+FIXTURE_HEAD="$(git -C "$FIXTURE" rev-parse HEAD)"
+python3 - "$FIXTURE" "$FIXTURE_HEAD" "$UID_VALUE" <<'PY'
+import hashlib
+import importlib.util
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+head = sys.argv[2]
+task_uid = sys.argv[3]
+spec = importlib.util.spec_from_file_location(
+    "claim_ready_identity_fixture", root / "scripts/pm/ci_ready_receipt_identity.py"
+)
+identity = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(identity)
+source = identity.source_review_identity(
+    task_uid=task_uid,
+    bootstrap_epoch=1,
+    repository="eng-cc/oasis7",
+    pr_number=7,
+    source_head_oid=head,
+    source_scope_oid=head,
+    changed_paths_digest="a" * 64,
+    ordered_role_ids=["repository_health_engineer"],
+    role_contract_digest="b" * 64,
+    review_policy_digest="c" * 64,
+    input_contract_digest="d" * 64,
+)
+changed_paths = ["scripts/pm/claim-ready.sh"]
+changed_paths_digest = "sha256:" + hashlib.sha256(
+    json.dumps(changed_paths, sort_keys=True, separators=(",", ":")).encode()
+).hexdigest()
+projection = {
+    "schema": "oasis7-workflow-impact-projection/v2",
+    "task_uid": task_uid,
+    "source_head_oid": head,
+    "scope_base_oid": head,
+    "changed_paths": changed_paths,
+    "changed_paths_digest": changed_paths_digest,
+    "closure_status": {"status": "complete"},
+    "review_escalated": False,
+    "verification_affected": False,
+    "change_class": "mixed",
+    "review_reasons": [],
+    "public_semantics": [],
+}
+projection["projection_digest"] = "sha256:" + hashlib.sha256(
+    json.dumps(
+        {key: value for key, value in projection.items() if key != "projection_digest"},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+).hexdigest()
+applicability = identity.review_applicability_identity(source)
+plan = {
+    "schema": "oasis7-review-plan/v2",
+    "task_uid": task_uid,
+    "source_review_identity": source,
+    "source_review_digest": identity.source_review_digest(source),
+    "impact_projection": projection,
+    "impact_projection_schema": "oasis7-workflow-impact-projection/v2",
+    "impact_projection_digest": projection["projection_digest"],
+    "impact_projection_planner_digest": "sha256:" + "e" * 64,
+    "effective_mode": {"effective_policy": "manual"},
+    "professional_review_applicability": {
+        "identity": applicability,
+        "identity_digest": identity.review_applicability_digest(applicability),
+        "verified": True,
+    },
+}
+task_root = root / ".pm" / "scratch" / task_uid
+(task_root / "review-plans" / "1.json").write_text(json.dumps(plan), encoding="utf-8")
+(task_root / "bootstrap-task-snapshot.json").write_text(
+    json.dumps({"request": {"identity": "fixture"}, "task": {"bootstrap_epoch": 1}}),
+    encoding="utf-8",
+)
+(root / ".pm/github-project-sync/tasks.json").write_text(
+    json.dumps({"project": {"repo": "eng-cc/oasis7"}, "tasks": {task_uid: {"status": "ready", "issue_number": 99}}}),
+    encoding="utf-8",
+)
+receipt = {
+    "receipt_type": "oasis7_ci_ready_receipt",
+    "issuer": "github_live_query",
+    "repository": "eng-cc/oasis7",
+    "task_uid": task_uid,
+    "task_issue_number": 99,
+    "pr_number": 7,
+    "base_oid": head,
+    "head_oid": head,
+    "check_name": "required-gate",
+    "check_app_id": "15368",
+    "check_run_id": 1,
+    "planner_digest": "f" * 64,
+    "conclusion": "success",
+    "ci_validation_mode": "ordinary_pr",
+    "base_ref": "main",
+    "live_validation": "ci-ready-receipt-live",
+    "impact_projection_schema": "oasis7-workflow-impact-projection/v2",
+    "impact_projection_digest": projection["projection_digest"],
+    "impact_projection_planner_digest": "sha256:" + "e" * 64,
+}
+(root / "receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
+PY
+set +e
+PM_ROOT_DIR="$FIXTURE" "$FIXTURE/scripts/pm/claim-ready.sh" \
+  --claim-type ready_for_pr \
+  --verification-profile repository_required \
+  --task-uid "$UID_VALUE" \
+  --ci-ready-receipt "$FIXTURE/receipt.json" \
+  --json >"$TEST_ROOT/claim.json" 2>"$TEST_ROOT/claim.err"
+CLAIM_STATUS=$?
+set -e
+if [[ "$CLAIM_STATUS" == "0" ]]; then
+  echo "claim-ready accepted ordinary CI for a high-risk v2 projection" >&2
+  exit 1
+fi
+grep -F "high-risk projection requires trusted integration CI" "$TEST_ROOT/claim.err" >/dev/null
+
 echo "claim-ready-ready-pr.test: OK"

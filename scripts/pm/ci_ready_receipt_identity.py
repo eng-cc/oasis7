@@ -403,6 +403,145 @@ def projection_requires_strict_integration(plan: dict[str, Any]) -> bool:
     )
 
 
+def _related_path(path: str, other: str) -> bool:
+    left, right = path.strip("/"), other.strip("/")
+    return left == right or left.startswith(right + "/") or right.startswith(left + "/")
+
+
+def _relation_path(value: Any) -> str | None:
+    """Return a repository-relative path from a trusted relation locator."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    path = value.strip().split("#", 1)[0].strip("/")
+    if (not path or path.startswith(".") or "\x00" in path
+            or "\\" in path or any(part in {"", ".", ".."} for part in path.split("/"))):
+        return None
+    return path
+
+
+def _source_path_exists(root: pathlib.Path, source_head: str, path: str) -> bool:
+    try:
+        return subprocess.run(
+            ["git", "-C", str(root), "cat-file", "-e", f"{source_head}:{path}"],
+            check=False, capture_output=True,
+        ).returncode == 0
+    except OSError:
+        return False
+
+
+def _target_relation_paths(
+    projection: dict[str, Any], *, root: pathlib.Path, source_head: str,
+) -> tuple[list[str], bool]:
+    """Collect verified contract/consumer paths for target-only drift checks."""
+    relations = [
+        path for path in (projection.get("changed_paths") or [])
+        if isinstance(path, str)
+    ]
+    unmapped = False
+
+    def mapped_candidates(candidates: list[Any]) -> list[str]:
+        mapped: list[str] = []
+        for value in candidates:
+            path = _relation_path(value)
+            if path and _source_path_exists(root, source_head, path):
+                mapped.append(path)
+        return mapped
+
+    for item in projection.get("affected_consumers") or []:
+        candidates: list[Any] = []
+        if isinstance(item, str):
+            candidates.append(item)
+        elif isinstance(item, dict):
+            candidates.extend(item.get(key) for key in ("path", "consumer_path", "contract_path"))
+            refs = item.get("references")
+            if isinstance(refs, list):
+                candidates.extend(ref.get("path") for ref in refs if isinstance(ref, dict))
+        mapped = mapped_candidates(candidates)
+        if mapped:
+            relations.extend(mapped)
+        else:
+            unmapped = True
+
+    for item in projection.get("consumed_contracts") or []:
+        candidates: list[Any] = []
+        if isinstance(item, str):
+            candidates.append(item)
+        elif isinstance(item, dict):
+            candidates.extend(item.get(key) for key in ("path", "contract_path"))
+            for container_key in ("consumed_clause_refs", "content_refs", "clauses"):
+                refs = item.get(container_key)
+                if isinstance(refs, list):
+                    candidates.extend(ref.get("path") for ref in refs if isinstance(ref, dict))
+            nested = item.get("contract")
+            if isinstance(nested, dict):
+                candidates.append(nested.get("path"))
+                refs = nested.get("content_refs")
+                if isinstance(refs, list):
+                    candidates.extend(ref.get("path") for ref in refs if isinstance(ref, dict))
+        mapped = mapped_candidates(candidates)
+        if mapped:
+            relations.extend(mapped)
+        else:
+            unmapped = True
+
+    closure = projection.get("closure_status") or {}
+    evidence = closure.get("evidence") if isinstance(closure, dict) else None
+    if evidence is not None and not isinstance(evidence, list):
+        unmapped = True
+    if isinstance(evidence, list):
+        for item in evidence:
+            path = _relation_path(item.get("path")) if isinstance(item, dict) else None
+            if path and _source_path_exists(root, source_head, path):
+                relations.append(path)
+            else:
+                unmapped = True
+    return relations, unmapped
+
+
+def _target_advance_requires_strict(
+    plan: dict[str, Any], *, root: pathlib.Path | str | None, current_target_oid: str,
+) -> bool:
+    """Return whether a live target advance is related or unverifiable.
+
+    Ordinary CI is allowed to reuse source review only when the current target
+    advance can be proven unrelated from the verified projection.  A missing
+    target object, non-ancestor scope, or unmapped contract/consumer therefore
+    fails closed.
+    """
+    if root is None:
+        return True
+    try:
+        source = _validate_source_identity(plan.get("source_review_identity"))
+        target = _require_oid(current_target_oid, "current_target_oid")
+        scope = _require_oid(source["source_scope_oid"], "source_scope_oid")
+        source_head = _require_oid(source["source_head_oid"], "source_head_oid")
+    except (TypeError, ValueError, KeyError):
+        return True
+    if target == scope:
+        return False
+    root_path = pathlib.Path(root).resolve()
+    try:
+        subprocess.run(
+            ["git", "-C", str(root_path), "merge-base", "--is-ancestor", scope, target],
+            check=True, capture_output=True,
+        )
+        changed = subprocess.check_output(
+            ["git", "-C", str(root_path), "diff", "--name-only", f"{scope}..{target}"],
+            text=True,
+        ).splitlines()
+    except (OSError, subprocess.CalledProcessError):
+        return True
+    projection = plan.get("impact_projection")
+    if not isinstance(projection, dict):
+        return True
+    relations, unmapped = _target_relation_paths(
+        projection, root=root_path, source_head=source_head,
+    )
+    if unmapped or not relations:
+        return True
+    return any(_related_path(path, relation) for path in changed for relation in relations)
+
+
 def _require_projection_digest(value: Any, field: str) -> str:
     if not isinstance(value, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", value):
         raise ValueError(f"{field} must be a prefixed SHA-256 digest")
@@ -627,6 +766,8 @@ def can_reuse_source_review(
     plan: dict[str, Any], latest_receipt: dict[str, Any],
     current_source_identity: dict[str, Any] | None = None,
     current_applicability: dict[str, Any] | None = None,
+    current_target_oid: str | None = None,
+    current_target_root: pathlib.Path | str | None = None,
     *, require_fresh_integration: bool = True,
 ) -> bool:
     """Return whether trusted integration proves safe source-review reuse.
@@ -637,6 +778,9 @@ def can_reuse_source_review(
     complete plan still requires a fresh integration identity on the
     promotion/closeout path; ``require_fresh_integration=False`` is reserved
     for idempotent plan lookup while creating or refreshing an immutable plan.
+    Promotion and closeout may pass ``current_target_oid`` and
+    ``current_target_root`` to prove that an ordinary target advance is
+    unrelated to the verified projection.
     """
     try:
         if plan.get("schema") != SOURCE_REVIEW_SCHEMA:
@@ -667,9 +811,9 @@ def can_reuse_source_review(
             if current_applicability is not None:
                 if _verified_review_applicability(current_applicability) != applicability:
                     return False
-            # Ordinary PR CI proves the frozen source/check identity.  Its
-            # recorded base is retained for audit, but current-target
-            # equality belongs only to the strict integration route.
+            if current_target_oid is not None and _target_advance_requires_strict(
+                    plan, root=current_target_root, current_target_oid=current_target_oid):
+                return False
             return True
         if not has_live_integration_attestation(latest_receipt):
             return False
