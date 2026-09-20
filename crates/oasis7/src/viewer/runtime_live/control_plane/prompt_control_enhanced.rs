@@ -152,6 +152,44 @@ impl ViewerRuntimeLiveServer {
         )
     }
 
+    fn prepare_hosted_local_mock_prompt_context_after_authorization(
+        &mut self,
+        request_id: &str,
+        operation: PromptControlOperation,
+        preview: bool,
+    ) -> Result<(), PromptControlError> {
+        if !(self.hosted_local_mock_test_lane_active && self.llm_sidecar.is_llm_mode()) {
+            return Ok(());
+        }
+        self.llm_sidecar
+            .prepare_hosted_local_mock_prompt_context(
+                &mut self.world,
+                &self.snapshot_config,
+                self.config.world_id.as_str(),
+            )
+            .map_err(|error| {
+                tracing::warn!(
+                    error = %error,
+                    "Hosted local-mock prompt context preparation blocked authorized prompt control"
+                );
+                let mut blocked = prompt_control_enhanced_error(
+                    "prompt_control_runtime_context_unavailable",
+                    &format!("Hosted local-mock prompt context preparation failed: {error}"),
+                    Some(request_id.to_string()),
+                    operation,
+                    preview,
+                    None,
+                    None,
+                    PromptControlResultStatus::Blocked,
+                );
+                blocked.value_visibility = Some(PromptControlValueVisibility::Hidden);
+                blocked.reason_code =
+                    Some("prompt_control_runtime_context_unavailable".to_string());
+                blocked.next_step = Some("retry_after_runtime_resync".to_string());
+                blocked
+            })
+    }
+
     #[expect(
         clippy::result_large_err,
         reason = "Prompt-control protocol errors preserve the stable typed error envelope"
@@ -477,6 +515,11 @@ impl ViewerRuntimeLiveServer {
                 )
             })?;
         }
+        self.prepare_hosted_local_mock_prompt_context_after_authorization(
+            request_id.as_str(),
+            operation,
+            preview,
+        )?;
         let current = self
             .current_prompt_profile(agent_id.as_str())
             .map_err(|_| {

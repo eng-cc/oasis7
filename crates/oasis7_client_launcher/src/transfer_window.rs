@@ -69,16 +69,11 @@ pub(super) enum TransferQueryResponse {
     Status(WebTransferStatusResponse),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(super) enum TransferNonceMode {
+    #[default]
     Auto,
     Manual,
-}
-
-impl Default for TransferNonceMode {
-    fn default() -> Self {
-        Self::Auto
-    }
 }
 
 #[derive(Debug, Clone, Default)]
@@ -327,18 +322,16 @@ impl ClientLauncherApp {
                     self.transfer_timeline_marker(*state),
                     self.transfer_timeline_stage_label(index)
                 );
-                if index == 2 {
-                    if let Some(status) = final_status {
-                        if matches!(
-                            status,
-                            WebTransferLifecycleStatus::Confirmed
-                                | WebTransferLifecycleStatus::Failed
-                                | WebTransferLifecycleStatus::Timeout
-                        ) {
-                            stage_text =
-                                format!("{stage_text} ({})", self.transfer_status_text(status));
-                        }
-                    }
+                if index == 2
+                    && let Some(status) = final_status
+                    && matches!(
+                        status,
+                        WebTransferLifecycleStatus::Confirmed
+                            | WebTransferLifecycleStatus::Failed
+                            | WebTransferLifecycleStatus::Timeout
+                    )
+                {
+                    stage_text = format!("{stage_text} ({})", self.transfer_status_text(status));
                 }
                 ui.small(
                     egui::RichText::new(stage_text).color(self.transfer_timeline_color(*state)),
@@ -362,10 +355,10 @@ impl ClientLauncherApp {
             .transfer_account(self.transfer_draft.from_account_id.trim())
             .map(|item| item.next_nonce_hint)
             .filter(|value| *value > 0);
-        if self.transfer_panel_state.nonce_mode == TransferNonceMode::Auto {
-            if let Some(nonce) = self.transfer_panel_state.auto_nonce_hint {
-                self.transfer_draft.nonce = nonce.to_string();
-            }
+        if self.transfer_panel_state.nonce_mode == TransferNonceMode::Auto
+            && let Some(nonce) = self.transfer_panel_state.auto_nonce_hint
+        {
+            self.transfer_draft.nonce = nonce.to_string();
         }
     }
 

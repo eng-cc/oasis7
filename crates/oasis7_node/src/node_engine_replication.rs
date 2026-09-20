@@ -13,6 +13,10 @@ use crate::replication_state_reconcile::ReplicationCommitPayload;
 use oasis7_proto::distributed::WorldHeadAnnounce;
 
 impl PosNodeEngine {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable replication publication seam keeps transport, commit, and execution channels explicit"
+    )]
     pub(super) fn broadcast_local_replication(
         &mut self,
         gossip_endpoint: Option<&GossipEndpoint>,
@@ -69,15 +73,14 @@ impl PosNodeEngine {
                 .persist_local_checkpoint_message_for_lineage(node_id, world_id, &message)?;
             if let Some(endpoint) = network_endpoint {
                 if let Some(payload) = parse_replication_commit_payload(message.payload.as_slice())
+                    && let Some(descriptor) = payload.execution_checkpoint.as_ref()
                 {
-                    if let Some(descriptor) = payload.execution_checkpoint.as_ref() {
-                        Self::publish_execution_checkpoint_descriptor_providers(
-                            endpoint,
-                            world_id,
-                            replication,
-                            descriptor,
-                        )?;
-                    }
+                    Self::publish_execution_checkpoint_descriptor_providers(
+                        endpoint,
+                        world_id,
+                        replication,
+                        descriptor,
+                    )?;
                 }
                 endpoint.publish_local_content_provider_best_effort(
                     world_id,
@@ -272,7 +275,7 @@ impl PosNodeEngine {
             &mut dyn FnMut(NodeConsensusSnapshot) -> Result<(), NodeError>,
         >,
     ) -> Result<(), NodeError> {
-        let Some(replication_runtime) = replication.as_deref_mut() else {
+        let Some(replication_runtime) = replication.as_mut() else {
             return Ok(());
         };
         self.refresh_replication_persisted_height(replication_runtime, world_id)?;
@@ -386,20 +389,20 @@ impl PosNodeEngine {
                 continue;
             }
             let mut executed_commit = None;
-            if let Some(payload) = payload_view.as_ref() {
-                if payload.height == committed_successor {
-                    let full_payload = parse_replication_commit_payload(message.payload.as_slice())
-                        .ok_or_else(|| NodeError::Replication {
-                            reason: format!(
-                                "replication message payload decode failed at height {}",
-                                payload.height
-                            ),
-                        })?;
-                    let executed = with_execution_hook(&mut execution_hook, |hook| {
-                        self.execute_synced_replication_commit(world_id, &full_payload, hook)
+            if let Some(payload) = payload_view.as_ref()
+                && payload.height == committed_successor
+            {
+                let full_payload = parse_replication_commit_payload(message.payload.as_slice())
+                    .ok_or_else(|| NodeError::Replication {
+                        reason: format!(
+                            "replication message payload decode failed at height {}",
+                            payload.height
+                        ),
                     })?;
-                    executed_commit = Some((full_payload.height, executed.0, executed.1));
-                }
+                let executed = with_execution_hook(&mut execution_hook, |hook| {
+                    self.execute_synced_replication_commit(world_id, &full_payload, hook)
+                })?;
+                executed_commit = Some((full_payload.height, executed.0, executed.1));
             }
             let mut persisted_commit = false;
             match replication_runtime.apply_remote_message(node_id, world_id, &message) {
@@ -411,15 +414,14 @@ impl PosNodeEngine {
                     );
                     if let Some(full_payload) =
                         parse_replication_commit_payload(message.payload.as_slice())
+                        && let Some(descriptor) = full_payload.execution_checkpoint.as_ref()
                     {
-                        if let Some(descriptor) = full_payload.execution_checkpoint.as_ref() {
-                            Self::publish_execution_checkpoint_descriptor_providers(
-                                endpoint,
-                                world_id,
-                                replication_runtime,
-                                descriptor,
-                            )?;
-                        }
+                        Self::publish_execution_checkpoint_descriptor_providers(
+                            endpoint,
+                            world_id,
+                            replication_runtime,
+                            descriptor,
+                        )?;
                     }
                     if let Some(payload) = payload_view {
                         self.advance_contiguous_replication_persisted_height(
@@ -434,13 +436,12 @@ impl PosNodeEngine {
                     message.node_id, message.world_id, err
                 )),
             }
-            if persisted_commit {
-                if let Some((height, block_hash, committed_at_ms)) = executed_commit {
-                    self.record_synced_replication_height(height, block_hash, committed_at_ms)?;
-                    if let Some(callback) = progress_callback.as_deref_mut() {
-                        let decision = self.idle_pending_decision()?;
-                        callback(self.snapshot_from_decision(&decision))?;
-                    }
+            if persisted_commit && let Some((height, block_hash, committed_at_ms)) = executed_commit
+            {
+                self.record_synced_replication_height(height, block_hash, committed_at_ms)?;
+                if let Some(callback) = progress_callback.as_deref_mut() {
+                    let decision = self.idle_pending_decision()?;
+                    callback(self.snapshot_from_decision(&decision))?;
                 }
             }
         }
@@ -455,6 +456,10 @@ impl PosNodeEngine {
         }
         Ok(())
     }
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "High-checkpoint recovery seam preserves explicit network, execution, and progress channels"
+    )]
     pub(super) fn try_sync_high_replication_checkpoint_boundary(
         &mut self,
         endpoint: &ReplicationNetworkEndpoint,
@@ -557,12 +562,12 @@ impl PosNodeEngine {
                 return Ok(false);
             };
             let probe_nonce = std::env::var("OASIS7_CHECKPOINT_PROBE_NONCE").ok();
-            if let Some(probe_nonce) = probe_nonce.as_deref() {
-                if !ReplicationRuntime::checkpoint_probe_nonce_is_valid(probe_nonce) {
-                    return Err(NodeError::Replication {
-                        reason: "checkpoint verification receipt probe nonce must be at least 32 URL-safe characters".to_string(),
-                    });
-                }
+            if let Some(probe_nonce) = probe_nonce.as_deref()
+                && !ReplicationRuntime::checkpoint_probe_nonce_is_valid(probe_nonce)
+            {
+                return Err(NodeError::Replication {
+                    reason: "checkpoint verification receipt probe nonce must be at least 32 URL-safe characters".to_string(),
+                });
             }
             let (checkpoint_bundle, checkpoint_fetch_observations) = self
                 .fetch_execution_checkpoint_bundle(
@@ -680,6 +685,10 @@ impl PosNodeEngine {
         Ok(true)
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Gap-sync recovery seam keeps replication, execution, progress, and peer-head tracking channels explicit"
+    )]
     pub(super) fn sync_missing_replication_commits_with_progress(
         &mut self,
         endpoint: &ReplicationNetworkEndpoint,
@@ -692,7 +701,7 @@ impl PosNodeEngine {
         >,
         record_peer_heads_from_gap_sync: bool,
     ) -> Result<(), NodeError> {
-        let Some(replication_runtime) = replication.as_deref_mut() else {
+        let Some(replication_runtime) = replication.as_mut() else {
             return Ok(());
         };
         self.refresh_replication_persisted_height(replication_runtime, world_id)?;

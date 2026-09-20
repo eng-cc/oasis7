@@ -386,10 +386,10 @@ impl ClientLauncherApp {
                     if Self::command_tile(ui, "⚙", self.tr("配置", "Config"), true).clicked() {
                         self.config_window_open = true;
                     }
-                    if !self.is_expert_mode() {
-                        if Self::command_tile(ui, "?", self.tr("引导", "Guide"), true).clicked() {
-                            self.open_onboarding_manual();
-                        }
+                    if !self.is_expert_mode()
+                        && Self::command_tile(ui, "?", self.tr("引导", "Guide"), true).clicked()
+                    {
+                        self.open_onboarding_manual();
                     }
                     if Self::command_tile(ui, "◇", self.tr("洞察", "Insights"), true).clicked()
                     {
@@ -673,12 +673,12 @@ impl ClientLauncherApp {
     }
 
     fn log_source_and_message(line: &str) -> (&str, &str) {
-        if let Some(rest) = line.strip_prefix('[') {
-            if let Some(end) = rest.find(']') {
-                let source = &rest[..end];
-                let message = rest[end + 1..].trim();
-                return (source, message);
-            }
+        if let Some(rest) = line.strip_prefix('[')
+            && let Some(end) = rest.find(']')
+        {
+            let source = &rest[..end];
+            let message = rest[end + 1..].trim();
+            return (source, message);
         }
         if line.contains("control plane") {
             ("control", line)

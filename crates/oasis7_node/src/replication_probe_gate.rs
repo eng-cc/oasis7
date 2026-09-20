@@ -83,7 +83,7 @@ impl PosNodeEngine {
         mut replication: Option<&mut ReplicationRuntime>,
         mut execution_hook: Option<&mut dyn NodeExecutionHook>,
     ) -> Result<bool, NodeError> {
-        let Some(replication_runtime) = replication.as_deref_mut() else {
+        let Some(replication_runtime) = replication.as_mut() else {
             return Ok(false);
         };
         if !self.peer_heads.is_empty() {
@@ -259,130 +259,6 @@ fn replication_successor_probe_fetch_commit_unavailable(err: &NodeError) -> bool
         )
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    const LIBP2P_CBOR_DEFAULT_MAX_RESPONSE_BYTES: usize = 10 * 1024 * 1024;
-
-    #[test]
-    fn requested_fetch_blob_chunk_fits_libp2p_outer_cbor_response_limit() {
-        let inner_json = serde_json::to_vec(&FetchBlobResponse {
-            found: true,
-            range_offset_bytes: Some(0),
-            range_complete: Some(false),
-            blob: Some(vec![u8::MAX; REPLICATION_FETCH_BLOB_CHUNK_BYTES]),
-        })
-        .expect("encode worst-case legacy fetch-blob response");
-        let outer_cbor = serde_cbor::to_vec(&oasis7_proto::distributed_net::NetworkResponse {
-            payload: inner_json,
-        })
-        .expect("encode libp2p response envelope");
-
-        assert!(
-            outer_cbor.len() <= LIBP2P_CBOR_DEFAULT_MAX_RESPONSE_BYTES,
-            "requester chunk must fit the libp2p CBOR response cap after legacy JSON and outer envelope encoding: chunk_bytes={} encoded_bytes={} cap_bytes={}",
-            REPLICATION_FETCH_BLOB_CHUNK_BYTES,
-            outer_cbor.len(),
-            LIBP2P_CBOR_DEFAULT_MAX_RESPONSE_BYTES,
-        );
-    }
-
-    #[test]
-    fn provider_aware_fallback_treats_no_admissible_peers_as_retryable() {
-        let err = NodeError::Replication {
-            reason: format!(
-                "{}libp2p-replication no admissible connected peers for protocol /aw/node/replication/fetch-blob/1.0.0",
-                crate::network_bridge::REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX
-            ),
-        };
-        assert!(should_fallback_provider_aware_replication_request(&err));
-        assert!(replication_request_waitable_connection_gap(&err));
-    }
-
-    #[test]
-    fn provider_aware_fallback_treats_route_unavailable_as_retryable() {
-        let err = NodeError::Replication {
-            reason: format!(
-                "{}simulated provider route unavailable",
-                crate::network_bridge::REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX
-            ),
-        };
-        assert!(should_fallback_provider_aware_replication_request(&err));
-        assert!(!replication_request_waitable_connection_gap(&err));
-    }
-
-    #[test]
-    fn provider_aware_fallback_treats_provider_route_exhaustion_as_retryable() {
-        let err = NodeError::Replication {
-            reason: "blob fetch provider routes exhausted without response for world_id=w hash=abc"
-                .to_string(),
-        };
-
-        assert!(should_fallback_provider_aware_replication_request(&err));
-        assert!(!replication_request_waitable_connection_gap(&err));
-    }
-
-    #[test]
-    fn provider_aware_fallback_treats_fetch_blob_unsupported_as_retryable() {
-        let err = NodeError::Replication {
-            reason: "replication network error: NetworkRequestFailed { code: ErrUnsupported, message: \"/aw/node/replication/fetch-blob/1.0.0\", retryable: false }"
-                .to_string(),
-        };
-        assert!(should_fallback_provider_aware_replication_request(&err));
-        assert!(!replication_request_waitable_connection_gap(&err));
-    }
-
-    #[test]
-    fn provider_aware_fallback_treats_fetch_blob_unsupported_as_retryable_without_debug_text() {
-        let err = NodeError::Replication {
-            reason: "replication network request failed: kind=unsupported protocol=/aw/node/replication/fetch-blob/1.0.0 detail=/aw/node/replication/fetch-blob/1.0.0 unsupported by remote"
-                .to_string(),
-        };
-
-        assert!(
-            should_fallback_provider_aware_replication_request(&err),
-            "classification should use structured kind/protocol data, not the WorldError Debug text spelling"
-        );
-        assert!(!replication_request_waitable_connection_gap(&err));
-    }
-
-    #[test]
-    fn provider_aware_fallback_does_not_hide_business_unsupported() {
-        let err = NodeError::Replication {
-            reason: "replication network request failed: kind=unsupported protocol=/aw/node/replication/fetch-blob/1.0.0 detail=remote peer declined request"
-                .to_string(),
-        };
-
-        assert!(!should_fallback_provider_aware_replication_request(&err));
-        assert!(!replication_request_waitable_connection_gap(&err));
-    }
-
-    #[test]
-    fn successor_probe_treats_fetch_commit_unsupported_as_unavailable() {
-        let err = NodeError::Replication {
-            reason: "replication network error: NetworkRequestFailed { code: ErrUnsupported, message: \"/aw/node/replication/fetch-commit/1.0.0\", retryable: false }"
-                .to_string(),
-        };
-        assert!(replication_successor_probe_fetch_commit_unavailable(&err));
-        assert!(!replication_request_waitable_connection_gap(&err));
-    }
-
-    #[test]
-    fn successor_probe_treats_fetch_commit_unsupported_as_unavailable_without_debug_text() {
-        let err = NodeError::Replication {
-            reason: "replication network request failed: kind=unsupported protocol=/aw/node/replication/fetch-commit/1.0.0 detail=/aw/node/replication/fetch-commit/1.0.0 unsupported by remote"
-                .to_string(),
-        };
-
-        assert!(
-            replication_successor_probe_fetch_commit_unavailable(&err),
-            "classification should survive display wording changes as long as kind/protocol are preserved"
-        );
-        assert!(!replication_request_waitable_connection_gap(&err));
-    }
-}
-
 pub(super) fn request_fetch_blob_with_route_fallback(
     endpoint: &ReplicationNetworkEndpoint,
     world_id: &str,
@@ -407,6 +283,7 @@ pub(super) fn request_fetch_blob_with_route_fallback(
     )
 }
 
+#[cfg(test)]
 pub(super) fn request_fetch_blob_with_route_fallback_resuming(
     endpoint: &ReplicationNetworkEndpoint,
     world_id: &str,
@@ -487,6 +364,10 @@ pub(super) fn request_fetch_blob_with_storage_challenge_routes(
     )
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Stable blob route fallback seam preserves provider policy, progress, size, and provenance controls"
+)]
 fn request_fetch_blob_with_route_fallback_policy(
     endpoint: &ReplicationNetworkEndpoint,
     world_id: &str,
@@ -520,21 +401,20 @@ fn request_fetch_blob_with_route_fallback_policy(
                 if !crate::network_bridge::replication_network_error_is_rate_limited_protocol(
                     &err,
                     REPLICATION_FETCH_BLOB_PROTOCOL,
-                ) {
-                    if let Some(progress) = progress.as_deref_mut() {
-                        progress.clear();
-                    }
+                ) && let Some(progress) = progress.as_deref_mut()
+                {
+                    progress.clear();
                 }
                 return Err(err);
             }
         };
-        if response.found {
-            if let (Some(provider_id), Some(successful_provider_ids)) = (
+        if response.found
+            && let (Some(provider_id), Some(successful_provider_ids)) = (
                 successful_provider_id,
                 successful_provider_ids.as_deref_mut(),
-            ) {
-                successful_provider_ids.insert(provider_id);
-            }
+            )
+        {
+            successful_provider_ids.insert(provider_id);
         }
         if !response.found {
             if let Some(progress) = progress.as_deref_mut() {
@@ -613,18 +493,18 @@ fn request_fetch_blob_with_route_fallback_policy(
         }
         offset = next_offset;
         if is_final_chunk {
-            if let Some(expected_size_bytes) = expected_size_bytes {
-                if offset != expected_size_bytes {
-                    if let Some(progress) = progress.as_deref_mut() {
-                        progress.clear();
-                    }
-                    return Err(NodeError::Replication {
-                        reason: format!(
-                            "blob fetch final range size mismatch expected={} actual={}",
-                            expected_size_bytes, offset
-                        ),
-                    });
+            if let Some(expected_size_bytes) = expected_size_bytes
+                && offset != expected_size_bytes
+            {
+                if let Some(progress) = progress.as_deref_mut() {
+                    progress.clear();
                 }
+                return Err(NodeError::Replication {
+                    reason: format!(
+                        "blob fetch final range size mismatch expected={} actual={}",
+                        expected_size_bytes, offset
+                    ),
+                });
             }
             let blob = if let Some(progress) = progress.as_deref_mut() {
                 progress.take_complete()
@@ -685,10 +565,11 @@ fn request_fetch_blob_chunk_with_route_fallback(
         }
     }
 
-    if provider_lookup_supplied && !policy.allow_connected_peer_fallback {
-        if let Some(response) = last_not_found {
-            return Ok((response, None));
-        }
+    if provider_lookup_supplied
+        && !policy.allow_connected_peer_fallback
+        && let Some(response) = last_not_found
+    {
+        return Ok((response, None));
     }
 
     if policy.require_retryable_provider_route_before_fallback
@@ -846,4 +727,128 @@ fn request_fetch_blob_chunk_with_route_fallback(
             ),
         }),
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const LIBP2P_CBOR_DEFAULT_MAX_RESPONSE_BYTES: usize = 10 * 1024 * 1024;
+
+    #[test]
+    fn requested_fetch_blob_chunk_fits_libp2p_outer_cbor_response_limit() {
+        let inner_json = serde_json::to_vec(&FetchBlobResponse {
+            found: true,
+            range_offset_bytes: Some(0),
+            range_complete: Some(false),
+            blob: Some(vec![u8::MAX; REPLICATION_FETCH_BLOB_CHUNK_BYTES]),
+        })
+        .expect("encode worst-case legacy fetch-blob response");
+        let outer_cbor = serde_cbor::to_vec(&oasis7_proto::distributed_net::NetworkResponse {
+            payload: inner_json,
+        })
+        .expect("encode libp2p response envelope");
+
+        assert!(
+            outer_cbor.len() <= LIBP2P_CBOR_DEFAULT_MAX_RESPONSE_BYTES,
+            "requester chunk must fit the libp2p CBOR response cap after legacy JSON and outer envelope encoding: chunk_bytes={} encoded_bytes={} cap_bytes={}",
+            REPLICATION_FETCH_BLOB_CHUNK_BYTES,
+            outer_cbor.len(),
+            LIBP2P_CBOR_DEFAULT_MAX_RESPONSE_BYTES,
+        );
+    }
+
+    #[test]
+    fn provider_aware_fallback_treats_no_admissible_peers_as_retryable() {
+        let err = NodeError::Replication {
+            reason: format!(
+                "{}libp2p-replication no admissible connected peers for protocol /aw/node/replication/fetch-blob/1.0.0",
+                crate::network_bridge::REPLICATION_NETWORK_AVAILABILITY_GAP_PREFIX
+            ),
+        };
+        assert!(should_fallback_provider_aware_replication_request(&err));
+        assert!(replication_request_waitable_connection_gap(&err));
+    }
+
+    #[test]
+    fn provider_aware_fallback_treats_route_unavailable_as_retryable() {
+        let err = NodeError::Replication {
+            reason: format!(
+                "{}simulated provider route unavailable",
+                crate::network_bridge::REPLICATION_NETWORK_ROUTE_UNAVAILABLE_PREFIX
+            ),
+        };
+        assert!(should_fallback_provider_aware_replication_request(&err));
+        assert!(!replication_request_waitable_connection_gap(&err));
+    }
+
+    #[test]
+    fn provider_aware_fallback_treats_provider_route_exhaustion_as_retryable() {
+        let err = NodeError::Replication {
+            reason: "blob fetch provider routes exhausted without response for world_id=w hash=abc"
+                .to_string(),
+        };
+
+        assert!(should_fallback_provider_aware_replication_request(&err));
+        assert!(!replication_request_waitable_connection_gap(&err));
+    }
+
+    #[test]
+    fn provider_aware_fallback_treats_fetch_blob_unsupported_as_retryable() {
+        let err = NodeError::Replication {
+            reason: "replication network error: NetworkRequestFailed { code: ErrUnsupported, message: \"/aw/node/replication/fetch-blob/1.0.0\", retryable: false }"
+                .to_string(),
+        };
+        assert!(should_fallback_provider_aware_replication_request(&err));
+        assert!(!replication_request_waitable_connection_gap(&err));
+    }
+
+    #[test]
+    fn provider_aware_fallback_treats_fetch_blob_unsupported_as_retryable_without_debug_text() {
+        let err = NodeError::Replication {
+            reason: "replication network request failed: kind=unsupported protocol=/aw/node/replication/fetch-blob/1.0.0 detail=/aw/node/replication/fetch-blob/1.0.0 unsupported by remote"
+                .to_string(),
+        };
+
+        assert!(
+            should_fallback_provider_aware_replication_request(&err),
+            "classification should use structured kind/protocol data, not the WorldError Debug text spelling"
+        );
+        assert!(!replication_request_waitable_connection_gap(&err));
+    }
+
+    #[test]
+    fn provider_aware_fallback_does_not_hide_business_unsupported() {
+        let err = NodeError::Replication {
+            reason: "replication network request failed: kind=unsupported protocol=/aw/node/replication/fetch-blob/1.0.0 detail=remote peer declined request"
+                .to_string(),
+        };
+
+        assert!(!should_fallback_provider_aware_replication_request(&err));
+        assert!(!replication_request_waitable_connection_gap(&err));
+    }
+
+    #[test]
+    fn successor_probe_treats_fetch_commit_unsupported_as_unavailable() {
+        let err = NodeError::Replication {
+            reason: "replication network error: NetworkRequestFailed { code: ErrUnsupported, message: \"/aw/node/replication/fetch-commit/1.0.0\", retryable: false }"
+                .to_string(),
+        };
+        assert!(replication_successor_probe_fetch_commit_unavailable(&err));
+        assert!(!replication_request_waitable_connection_gap(&err));
+    }
+
+    #[test]
+    fn successor_probe_treats_fetch_commit_unsupported_as_unavailable_without_debug_text() {
+        let err = NodeError::Replication {
+            reason: "replication network request failed: kind=unsupported protocol=/aw/node/replication/fetch-commit/1.0.0 detail=/aw/node/replication/fetch-commit/1.0.0 unsupported by remote"
+                .to_string(),
+        };
+
+        assert!(
+            replication_successor_probe_fetch_commit_unavailable(&err),
+            "classification should survive display wording changes as long as kind/protocol are preserved"
+        );
+        assert!(!replication_request_waitable_connection_gap(&err));
+    }
 }

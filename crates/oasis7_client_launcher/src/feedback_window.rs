@@ -7,12 +7,11 @@ use crate::feedback_entry::{
 fn sanitized_launch_config_snapshot(config: &LaunchConfig) -> Result<serde_json::Value, String> {
     let mut value =
         serde_json::to_value(config).map_err(|err| format!("config serialization error: {err}"))?;
-    if let Some(object) = value.as_object_mut() {
-        if let Some(token) = object.get_mut("agent_provider_auth_token") {
-            if !token.as_str().unwrap_or_default().is_empty() {
-                *token = serde_json::Value::String("<redacted>".to_string());
-            }
-        }
+    if let Some(object) = value.as_object_mut()
+        && let Some(token) = object.get_mut("agent_provider_auth_token")
+        && !token.as_str().unwrap_or_default().is_empty()
+    {
+        *token = serde_json::Value::String("<redacted>".to_string());
     }
     Ok(value)
 }

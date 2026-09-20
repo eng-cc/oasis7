@@ -159,14 +159,14 @@ impl ClientLauncherApp {
                 }
             }
             LauncherUiFieldKind::Checkbox => {
-                if let Some(value) = launcher_checkbox_field_mut(&mut self.config, field.id) {
-                    if ui.checkbox(value, label).changed() {
-                        self.config.normalize();
-                        if !chain_runtime_effectively_enabled(&self.config) {
-                            self.chain_runtime_status = ChainRuntimeStatus::Disabled;
-                        }
-                        self.config_dirty = true;
+                if let Some(value) = launcher_checkbox_field_mut(&mut self.config, field.id)
+                    && ui.checkbox(value, label).changed()
+                {
+                    self.config.normalize();
+                    if !chain_runtime_effectively_enabled(&self.config) {
+                        self.chain_runtime_status = ChainRuntimeStatus::Disabled;
                     }
+                    self.config_dirty = true;
                 }
             }
         }
@@ -932,23 +932,23 @@ impl ClientLauncherApp {
                 snapshot.health_latency_ms,
                 snapshot.total_latency_ms,
             ));
-            if let Some(fallback_reason) = snapshot.fallback_reason.as_deref() {
-                if !fallback_reason.trim().is_empty() {
-                    ui.small(format!(
-                        "{}: {}",
-                        self.tr("降级原因", "Fallback Reason"),
-                        fallback_reason
-                    ));
-                }
+            if let Some(fallback_reason) = snapshot.fallback_reason.as_deref()
+                && !fallback_reason.trim().is_empty()
+            {
+                ui.small(format!(
+                    "{}: {}",
+                    self.tr("降级原因", "Fallback Reason"),
+                    fallback_reason
+                ));
             }
-            if let Some(last_error) = snapshot.last_error.as_deref() {
-                if !last_error.trim().is_empty() {
-                    ui.small(format!(
-                        "{}: {}",
-                        self.tr("最近错误", "Last Error"),
-                        last_error
-                    ));
-                }
+            if let Some(last_error) = snapshot.last_error.as_deref()
+                && !last_error.trim().is_empty()
+            {
+                ui.small(format!(
+                    "{}: {}",
+                    self.tr("最近错误", "Last Error"),
+                    last_error
+                ));
             }
         }
     }

@@ -460,7 +460,7 @@ impl ClientLauncherApp {
             }
 
             ui.label(self.tr("已连接 Peer 明细", "Connected Peer Details"));
-            let rows = self.connected_peer_detail_rows(&replication);
+            let rows = self.connected_peer_detail_rows(replication);
             self.render_connected_peer_detail_rows(ui, rows.as_slice());
         } else {
             ui.small(self.tr(

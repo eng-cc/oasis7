@@ -825,7 +825,7 @@ fn high_checkpoint_all_sidecarless_providers_are_attempted_but_authoritative_val
         &mut progress_callback,
     );
 
-    assert_eq!(result.expect("sidecar-less candidate should be rejected"), false);
+    assert!(!result.expect("sidecar-less candidate should be rejected"));
     assert_eq!(
         fixture.network.commit_attempts(),
         vec![fixture.checkpoint_height, fixture.checkpoint_height],

@@ -9,8 +9,7 @@ use super::protocol::{
     AuthoritativeRollbackRequest, AuthoritativeRollbackV2Request,
     AuthoritativeSessionRegisterRequest, AuthoritativeSessionRevokeRequest,
     AuthoritativeSessionRotateRequest, ControlCompletionAck, ControlCompletionStatus,
-    GameplayActionError, PROMPT_CONTROL_RESULT_CAPABILITY, PromptControlError,
-    PromptControlResultStatus, PromptControlValueVisibility, REVOKE_SOCIAL_FACT_QUOTE_CAPABILITY,
+    GameplayActionError, PROMPT_CONTROL_RESULT_CAPABILITY, REVOKE_SOCIAL_FACT_QUOTE_CAPABILITY,
     RollbackAuthorizationEnvelope, RollbackIntent, VIEWER_PROTOCOL_VERSION, ViewerControl,
     ViewerControlProfile, ViewerEventKind, ViewerRequest, ViewerResponse, ViewerStream,
     viewer_event_kind_matches, viewer_protocol_supports_prompt_control_result,
@@ -856,36 +855,6 @@ impl ViewerRuntimeLiveServer {
                 self.apply_control_mode(mode, request_id, session, writer)?;
             }
             ViewerRequest::PromptControl { command } => {
-                // A headed Hosted local-mock client may issue prompt control
-                // before auto-play enters the decision loop. Prepare the
-                // provider context from the current authoritative projection
-                // so Apply cannot acknowledge without a real runner/context.
-                if self.hosted_local_mock_test_lane_active && self.llm_sidecar.is_llm_mode() {
-                    if let Err(error) = self.llm_sidecar.prepare_hosted_local_mock_prompt_context(
-                        &mut self.world,
-                        &self.snapshot_config,
-                        self.config.world_id.as_str(),
-                    ) {
-                        tracing::warn!(
-                            error,
-                            "Hosted local-mock prompt context preparation blocked prompt control"
-                        );
-                        let mut blocked = PromptControlError::default_legacy();
-                        blocked.code = "prompt_control_runtime_context_unavailable".to_string();
-                        blocked.message =
-                            format!("Hosted local-mock prompt context preparation failed: {error}");
-                        blocked.status = Some(PromptControlResultStatus::Blocked);
-                        blocked.value_visibility = Some(PromptControlValueVisibility::Hidden);
-                        blocked.reason_code =
-                            Some("prompt_control_runtime_context_unavailable".to_string());
-                        blocked.next_step = Some("retry_after_runtime_resync".to_string());
-                        send_response(
-                            writer,
-                            &ViewerResponse::PromptControlError { error: blocked },
-                        )?;
-                        return Ok(());
-                    }
-                }
                 match self
                     .handle_prompt_control_for_protocol(*command, &session.negotiated_protocol)
                 {

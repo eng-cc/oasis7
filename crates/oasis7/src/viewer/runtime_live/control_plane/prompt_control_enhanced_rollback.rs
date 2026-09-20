@@ -282,6 +282,11 @@ impl ViewerRuntimeLiveServer {
                     )
                 })?;
         }
+        self.prepare_hosted_local_mock_prompt_context_after_authorization(
+            request_id.as_str(),
+            operation,
+            false,
+        )?;
         let current = self
             .current_prompt_profile(agent_id.as_str())
             .map_err(|_| {

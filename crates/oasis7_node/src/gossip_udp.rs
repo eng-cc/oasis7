@@ -377,7 +377,10 @@ fn bump_gossip_outbound_attempts(
     lane.failure_ratio_ppm = if lane.attempted_datagrams == 0 {
         0
     } else {
-        lane.failed_datagrams.saturating_mul(1_000_000) / lane.attempted_datagrams
+        lane.failed_datagrams
+            .saturating_mul(1_000_000)
+            .checked_div(lane.attempted_datagrams)
+            .unwrap_or(0)
     };
 }
 

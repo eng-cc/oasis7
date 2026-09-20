@@ -24,25 +24,13 @@ const MAX_COMMIT_MESSAGE_PACK_ENTRY_BYTES: u64 = 256 * 1024;
 const LATEST_COMMIT_HEAD_INDEX_SCHEMA: u8 = 1;
 const LATEST_COMMIT_HEAD_INDEX_DIR: &str = "replication_commit_heads";
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub(super) struct LatestCommitHeadIndex {
     pub(super) schema: u8,
     pub(super) world_id: String,
     pub(super) height: u64,
     pub(super) record_content_hash: String,
     pub(super) message_hash: String,
-}
-
-impl Default for LatestCommitHeadIndex {
-    fn default() -> Self {
-        Self {
-            schema: 0,
-            world_id: String::new(),
-            height: 0,
-            record_content_hash: String::new(),
-            message_hash: String::new(),
-        }
-    }
 }
 
 pub(super) fn latest_commit_head_index_path_from_root(root_dir: &Path, world_id: &str) -> PathBuf {

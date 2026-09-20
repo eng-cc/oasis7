@@ -4,6 +4,14 @@ use oasis7_proto::distributed_pos::required_supermajority_stake;
 
 use crate::{NodeError, NodePosConfig};
 
+type ValidatedPosState = (
+    BTreeMap<String, u64>,
+    BTreeMap<String, String>,
+    BTreeMap<String, String>,
+    u64,
+    u64,
+);
+
 pub(crate) fn validate_pos_config(pos_config: &NodePosConfig) -> Result<(), NodeError> {
     let _ = validated_pos_state(pos_config)?;
     Ok(())
@@ -11,16 +19,7 @@ pub(crate) fn validate_pos_config(pos_config: &NodePosConfig) -> Result<(), Node
 
 pub(crate) fn validated_pos_state(
     pos_config: &NodePosConfig,
-) -> Result<
-    (
-        BTreeMap<String, u64>,
-        BTreeMap<String, String>,
-        BTreeMap<String, String>,
-        u64,
-        u64,
-    ),
-    NodeError,
-> {
+) -> Result<ValidatedPosState, NodeError> {
     if pos_config.validators.is_empty() {
         return Err(NodeError::InvalidConfig {
             reason: "pos validators cannot be empty".to_string(),

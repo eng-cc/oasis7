@@ -72,6 +72,10 @@ pub(super) fn peer_record_world_id(template: Option<&PeerRecord>) -> &str {
         .unwrap_or_default()
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Discovery state is kept explicit to preserve peer-record and routing event ordering"
+)]
 pub(super) fn log_routing_updated(
     event_errors: &Arc<Mutex<Vec<String>>>,
     lifecycle_event_errors_at_ms: &mut HashMap<String, i64>,
@@ -327,6 +331,10 @@ pub(super) fn maybe_queue_discovery_peer_record(
     );
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Discovery state is kept explicit to preserve peer-record and routing event ordering"
+)]
 pub(super) fn maybe_request_connected_peer_record(
     swarm: &mut Swarm<Behaviour>,
     pending_peer_record_requests: &mut HashMap<
@@ -367,6 +375,10 @@ pub(super) fn maybe_request_connected_peer_record(
     true
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Discovery state is kept explicit to preserve peer-record and routing event ordering"
+)]
 fn request_cached_peer_record_via(
     swarm: &mut Swarm<Behaviour>,
     pending_peer_record_requests: &mut HashMap<
@@ -426,6 +438,10 @@ fn select_cached_peer_record_proxy(
     })
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Discovery state is kept explicit to preserve peer-record and routing event ordering"
+)]
 pub(super) fn maybe_request_cached_peer_record(
     swarm: &mut Swarm<Behaviour>,
     pending_peer_record_requests: &mut HashMap<
@@ -500,6 +516,10 @@ pub(super) fn maybe_request_cached_discovery_peers(
     true
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Discovery state is kept explicit to preserve peer-record and routing event ordering"
+)]
 pub(super) fn handle_rendezvous_discovered(
     swarm: &mut Swarm<Behaviour>,
     rendezvous_node: PeerId,
@@ -562,6 +582,10 @@ pub(super) fn handle_rendezvous_discovered(
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Discovery state is kept explicit to preserve peer-record and routing event ordering"
+)]
 pub(super) fn process_discovered_peer_record(
     swarm: &mut Swarm<Behaviour>,
     discovered_peer_records: &mut HashMap<PeerId, SignedPeerRecord>,
@@ -645,6 +669,10 @@ pub(super) fn peer_record_matches_target(
         .unwrap_or(false)
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Discovery state is kept explicit to preserve peer-record and routing event ordering"
+)]
 pub(super) fn handle_request_response_request(
     request: &NetworkRequest,
     handlers: &HashMap<String, HandlerRegistration>,
@@ -723,6 +751,10 @@ pub(super) fn handle_request_response_request(
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Discovery state is kept explicit to preserve peer-record and routing event ordering"
+)]
 pub(super) fn handle_peer_record_response(
     swarm: &mut Swarm<Behaviour>,
     kind: PendingPeerRecordRequest,
@@ -893,6 +925,10 @@ pub(super) fn handle_peer_record_response(
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Discovery state is kept explicit to preserve peer-record and routing event ordering"
+)]
 pub(super) fn handle_peer_record_outbound_failure(
     swarm: &mut Swarm<Behaviour>,
     kind: PendingPeerRecordRequest,

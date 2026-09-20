@@ -19,6 +19,10 @@ use super::{
     Libp2pReachabilitySnapshot, PeerManagerBlockArtifact, PeerManagerPeerHealth, PeerManagerPolicy,
 };
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Connection lifecycle state is passed explicitly to preserve transport ordering and lifetimes"
+)]
 pub(super) fn record_established_connection(
     known_transport_paths: &HashMap<PeerId, Vec<TransportPath>>,
     active_transport_paths: &mut HashMap<PeerId, TransportPath>,
@@ -105,6 +109,10 @@ pub(super) fn redundant_connection_ids_for_peer(
     redundant
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Connection lifecycle state is passed explicitly to preserve transport ordering and lifetimes"
+)]
 pub(super) fn prune_redundant_peer_connections(
     swarm: &mut libp2p::Swarm<Behaviour>,
     established_transport_paths_by_connection: &HashMap<ConnectionId, TransportPath>,
@@ -147,6 +155,10 @@ pub(super) fn prune_redundant_peer_connections(
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Connection lifecycle state is passed explicitly to preserve transport ordering and lifetimes"
+)]
 pub(super) fn log_active_transport_path(
     event_errors: &Arc<Mutex<Vec<String>>>,
     lifecycle_event_errors_at_ms: &mut HashMap<String, i64>,
@@ -204,6 +216,10 @@ pub(super) fn refresh_active_path_after_connection_close(
     )
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Connection lifecycle state is passed explicitly to preserve transport ordering and lifetimes"
+)]
 pub(super) fn clear_disconnected_peer_state(
     peers: &mut Vec<PeerId>,
     admitted_active_peers: &mut HashSet<PeerId>,
@@ -244,6 +260,10 @@ pub(super) fn clear_disconnected_peer_state(
     quarantined
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Connection lifecycle state is passed explicitly to preserve transport ordering and lifetimes"
+)]
 pub(super) fn refresh_peer_manager_views(
     swarm: &mut libp2p::Swarm<Behaviour>,
     discovered_peer_records: &HashMap<PeerId, SignedPeerRecord>,
@@ -287,6 +307,10 @@ pub(super) fn refresh_peer_manager_views(
     )
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Connection lifecycle state is passed explicitly to preserve transport ordering and lifetimes"
+)]
 pub(super) fn failover_after_disconnect(
     swarm: &mut libp2p::Swarm<Behaviour>,
     known_transport_paths: &HashMap<PeerId, Vec<TransportPath>>,

@@ -6,7 +6,7 @@ use oasis7_proto::distributed_net::{
 };
 use oasis7_proto::world_error::WorldError;
 
-use super::{Admission, Handler, Libp2pReplicationNetwork};
+use super::{Admission, ContextHandler, Handler, HandlerInput, Libp2pReplicationNetwork};
 
 impl Libp2pReplicationNetwork {
     pub fn request(&self, protocol: &str, payload: &[u8]) -> Result<Vec<u8>, WorldError> {
@@ -29,7 +29,7 @@ impl Libp2pReplicationNetwork {
     pub fn register_handler(
         &self,
         protocol: &str,
-        handler: Box<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>,
+        handler: HandlerInput,
     ) -> Result<(), WorldError> {
         ProtoDistributedNetwork::register_handler(self, protocol, handler)
     }
@@ -247,14 +247,7 @@ impl ProtoDistributedNetwork<WorldError> for Libp2pReplicationNetwork {
         handler: oasis7_proto::distributed_net::ContextNetworkHandler<WorldError>,
     ) -> Result<(), WorldError> {
         let admission: Admission = Arc::from(admission);
-        let handler: Arc<
-            dyn Fn(
-                    &oasis7_proto::distributed_net::NetworkRequestContext,
-                    &[u8],
-                ) -> Result<Vec<u8>, WorldError>
-                + Send
-                + Sync,
-        > = Arc::from(handler);
+        let handler: ContextHandler = Arc::from(handler);
         self.inner.register_context_handler_with_admission(
             protocol,
             Box::new({

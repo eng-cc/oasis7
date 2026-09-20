@@ -31,6 +31,11 @@ mod response_worker_tests;
 mod subscribe_ack_tests;
 mod transport_path_refresh_tests;
 
+mod transport_retry_tests {
+    use super::*;
+    include!("transport_retry_tests.rs");
+}
+
 pub(super) fn signed_discovery_peer_record(
     keypair: &Keypair,
     discovery_sources: Vec<crate::dht::PeerDiscoverySource>,
@@ -551,7 +556,7 @@ fn request_uses_swarm_connected_peers_when_snapshot_is_empty() {
         .into_iter()
         .find(|addr| addr.to_string().contains("127.0.0.1"))
         .expect("listener addr")
-        .with(libp2p::multiaddr::Protocol::P2p(listener.peer_id().into()));
+        .with(libp2p::multiaddr::Protocol::P2p(listener.peer_id()));
     let dialer = Libp2pNetwork::new(Libp2pNetworkConfig {
         listen_addrs: vec!["/ip4/127.0.0.1/tcp/0".parse().expect("listen")],
         bootstrap_peers: vec![dial_addr],

@@ -315,6 +315,10 @@ fn restore_last_successful_config_profile_normalizes_hosted_public_join() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Launch configuration fixture intentionally overrides only legacy-mode fields under test."
+)]
 fn normalize_launch_config_maps_legacy_trusted_local_preview_to_hosted_join() {
     let mut config = LaunchConfig::default();
     config.deployment_mode = "trusted_local_only".to_string();

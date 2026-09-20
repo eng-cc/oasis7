@@ -12,6 +12,7 @@ pub(super) use self::storage::load_launcher_ux_state;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
+#[derive(Default)]
 pub(super) struct LauncherUxState {
     pub(super) onboarding_completed: bool,
     pub(super) onboarding_dismissed: bool,
@@ -23,23 +24,6 @@ pub(super) struct LauncherUxState {
     pub(super) onboarding_completed_count: u64,
     pub(super) demo_mode_runs_count: u64,
     pub(super) quick_action_click_count: u64,
-}
-
-impl Default for LauncherUxState {
-    fn default() -> Self {
-        Self {
-            onboarding_completed: false,
-            onboarding_dismissed: false,
-            expert_mode: false,
-            last_successful_config: None,
-            last_successful_saved_at_unix_ms: None,
-            onboarding_opened_count: 0,
-            onboarding_skipped_count: 0,
-            onboarding_completed_count: 0,
-            demo_mode_runs_count: 0,
-            quick_action_click_count: 0,
-        }
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -607,6 +591,10 @@ impl ClientLauncherApp {
         egui::Color32::from_rgb(252, 253, 250)
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "UI card helper keeps layout, status, content, and action closure inputs explicit."
+    )]
     fn render_task_card_frame(
         ui: &mut egui::Ui,
         step: &str,
@@ -1129,11 +1117,10 @@ impl ClientLauncherApp {
 
                 ui.add_space(8.0);
                 ui.horizontal_wrapped(|ui| {
-                    if let Some(previous) = step.previous() {
-                        if Self::modal_secondary_button(ui, self.tr("上一步", "Back")).clicked()
-                        {
-                            self.onboarding_state.step = previous;
-                        }
+                    if let Some(previous) = step.previous()
+                        && Self::modal_secondary_button(ui, self.tr("上一步", "Back")).clicked()
+                    {
+                        self.onboarding_state.step = previous;
                     }
 
                     if let Some(next) = step.next() {

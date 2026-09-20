@@ -51,6 +51,7 @@ impl PosNodeEngine {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn sync_missing_replication_commits(
         &mut self,
         endpoint: &ReplicationNetworkEndpoint,
@@ -355,27 +356,25 @@ impl PosNodeEngine {
             .map_err(|reason| NodeError::Replication { reason })?;
         let key = checkpoint_lineage_cache_key(&envelope)
             .map_err(|reason| NodeError::Replication { reason })?;
-        if let Some(replication_runtime) = replication.as_deref_mut() {
-            if let Some(stored) = replication_runtime.load_checkpoint_lineage_envelope(&key)? {
-                if stored
-                    .verify_against_authority(
-                        world_id,
-                        &stored.head,
-                        authority.as_slice(),
-                        self.validator_set_hash.as_str(),
-                        self.total_stake,
-                        self.required_stake,
-                    )
-                    .is_ok()
-                {
-                    self.lineage_state
-                        .envelopes
-                        .insert(key.clone(), stored.clone());
-                    let _ = replication_runtime
-                        .attach_checkpoint_lineage_envelope(node_id, world_id, &stored)?;
-                    return Ok(());
-                }
-            }
+        if let Some(replication_runtime) = replication.as_deref_mut()
+            && let Some(stored) = replication_runtime.load_checkpoint_lineage_envelope(&key)?
+            && stored
+                .verify_against_authority(
+                    world_id,
+                    &stored.head,
+                    authority.as_slice(),
+                    self.validator_set_hash.as_str(),
+                    self.total_stake,
+                    self.required_stake,
+                )
+                .is_ok()
+        {
+            self.lineage_state
+                .envelopes
+                .insert(key.clone(), stored.clone());
+            let _ = replication_runtime
+                .attach_checkpoint_lineage_envelope(node_id, world_id, &stored)?;
+            return Ok(());
         }
         let votes = self.lineage_state.votes.entry(key.clone()).or_default();
         if let Some(previous) = votes.get(message.vote.validator_id.as_str()) {
@@ -406,7 +405,7 @@ impl PosNodeEngine {
         self.lineage_state
             .envelopes
             .insert(key, quorum_envelope.clone());
-        if let Some(replication_runtime) = replication.as_deref_mut() {
+        if let Some(replication_runtime) = replication {
             replication_runtime.persist_checkpoint_lineage_envelope(&quorum_envelope)?;
             let _ = replication_runtime.attach_checkpoint_lineage_envelope(
                 node_id,
