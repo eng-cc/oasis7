@@ -5,7 +5,7 @@ Lifecycle: current controlled recovery procedure; the date is establishment prov
 审计轮次: 7
 
 - 当前产品边界：[`区域冲突、软赛季与可恢复损失`](../../product/world-rules-core-gameplay/chartered-conflict-soft-seasons-and-recovery.prd.md#req-wr-cc-003) 的 `REQ-WR-CC-003` / [`AC-6`](../../product/world-rules-core-gameplay/chartered-conflict-soft-seasons-and-recovery.prd.md#ac-6) / [`AC-7`](../../product/world-rules-core-gameplay/chartered-conflict-soft-seasons-and-recovery.prd.md#ac-7) 承接系统性危机、同一世界连续性与恢复项目的一次性结果边界；高影响保护动作的授权、证据、范围、期限、恢复/复核/申诉边界见 [`普通共同决策与宪制边界`](../../product/world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md#req-wr-gcb-006) 的 `REQ-WR-GCB-006` / [`AC-WR-GCB-006`](../../product/world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md#ac-wr-gcb-006)。
-- 历史 provenance（本 runbook 于 2026-03-06 建档）：旧 [`世界连续性、治理与恢复`](../../product/world-infrastructure/world-continuity-governance-and-recovery.prd.md#cr-6) 已退休；此处仅保留 `CR-6` 的日期绑定历史映射，不作为 active authority、路线图或当前 readiness 证据。
+- 历史 provenance（本 runbook 于 2026-03-06 建档）：旧 [`世界连续性、治理与恢复`](../../product/world-infrastructure/world-continuity-governance-and-recovery.prd.md#7-组合验收) 已退休；此处仅保留 `CR-6` 的日期绑定历史映射，不作为 active authority、路线图或当前 readiness 证据。
 - 语义缺口与跟进：上述产品锚点只界定玩家结果与治理边界，不代替 replay/rollback 的 runtime、P2P 或 QA 专业实现/证据；`runtime_engineer`、`blockchain_ops_engineer` 与 `qa_engineer` 需在本 runbook 支持当前实现或任何公开 claim 前补齐同一候选的恢复对账证据。
 - 专业权威：`doc/world-runtime/prd.md`、`doc/p2p/prd.md`
 - 覆盖任务：`TASK-GAME-014`（`PRD-GAME-006-02`）
