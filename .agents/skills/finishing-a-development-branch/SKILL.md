@@ -117,7 +117,7 @@ python3 ./scripts/pm/non-merge-finalize.py \
 
 - frozen comparison range and fresh verification
 - canonical review and gate evidence links
-- PR URL and merged receipt, or canonical blocker with resume instruction
+- PR URL and merged receipt; for ordered deliveries, report the milestone without terminal closeout until the canonical multi-PR adapter is active, using linked delivery tasks under the source-of-truth compatibility bridge meanwhile; or report a blocker with resume instruction
 - main-sync and cleanup result
 
 Missing trusted runtime attestation is `capability_blocked` for unattended automation, not human-operated PRs. Never manufacture passed evidence or downgrade a blocker.

@@ -620,7 +620,7 @@ python3 "$TMPDIR/github-project-task.py" record-pr "$TMPDIR" \
   --project-owner eng-cc \
   --project-number 1 \
   --task-uid "$TASK_UID" \
-  --pr-url "https://github.com/eng-cc/oasis7/pull/2002" \
+  --pr-url "https://github.com/eng-cc/oasis7/pull/2001" \
   --json > "$TMPDIR/record-pr.json"
 
 python3 - "$TMPDIR/.pm/github-project-sync/tasks.json" "$TASK_UID" "$GH_CALL_LOG" <<'PY'
@@ -664,8 +664,8 @@ record = mapping["tasks"][uid]
 assert record["issue_url"] == "https://github.com/eng-cc/oasis7/issues/2001", record
 assert record["project_item_id"] == "ITEM_ID", record
 assert record["status"] == "done", record
-assert record["pr_url"] == "https://github.com/eng-cc/oasis7/pull/2002", record
-assert record["pr_number"] == 2002, record
+assert record["pr_url"] == "https://github.com/eng-cc/oasis7/pull/2001", record
+assert record["pr_number"] == 2001, record
 assert record["worktree_hint"] == str(pathlib.Path(sys.argv[1]).parents[2].resolve()), record
 assert len(comments) >= 7, comments
 assert record["claim_verifications"][-1]["claim_type"] == "task_complete", record

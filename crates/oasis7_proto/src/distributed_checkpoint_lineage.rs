@@ -121,6 +121,10 @@ pub fn checkpoint_lineage_vote_signing_payload(
 /// Compute the descriptor digest bound into the envelope.  The ordered blob
 /// list is part of the v1 contract; callers must not replace it with a route,
 /// provider, or message-content hash.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The eight-argument helper is a public v1 protocol API; changing it would break existing node callers and their signed-input contract."
+)]
 pub fn checkpoint_lineage_descriptor_digest(
     world_id: &str,
     checkpoint_height: u64,
