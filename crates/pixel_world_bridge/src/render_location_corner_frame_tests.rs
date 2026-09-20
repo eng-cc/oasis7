@@ -47,7 +47,7 @@ fn location_corner_frame_segments(app: &mut App) -> Vec<CornerFrameSegment> {
                 })
         })
         .collect::<Vec<_>>();
-    segments.sort_by(|left, right| left.entity.to_bits().cmp(&right.entity.to_bits()));
+    segments.sort_by_key(|segment| segment.entity.to_bits());
     segments
 }
 
