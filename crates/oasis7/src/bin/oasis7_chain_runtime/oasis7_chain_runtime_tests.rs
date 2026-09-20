@@ -7,28 +7,20 @@ use super::{
     build_chain_balances_payload_from_world, build_default_peer_record,
     build_default_replication_network_config, build_live_node_network_policy_recommendation,
     build_node_replication_config, build_replication_fetch_requester_allowlist,
-    build_replication_remote_writer_allowlist, build_validator_signer_public_keys,
-    derive_node_consensus_signer_keypair, derive_node_libp2p_identity_keypair_config,
-    network_tier_allows_open_observer_fetch, node_keypair_config, parse_options,
+    build_replication_remote_writer_allowlist, node_keypair_config, parse_options,
     parse_validator_spec, reserve_startup_reconcile_bind_guard,
 };
 use ed25519_dalek::SigningKey;
-use oasis7::network_tier_manifest::{
-    LoadedNetworkTierManifest, NETWORK_TIER_MANIFEST_SCHEMA_V1, NetworkTierClaimsPolicy,
-    NetworkTierEndpointPolicy, NetworkTierManifest, NetworkTierPromotionPolicy,
-    NetworkTierRuntimeRefs, NetworkTierTokenPolicy, NetworkTierValidatorPolicy,
-};
 use oasis7::runtime::World as RuntimeWorld;
 use oasis7_node::{
     Libp2pReachabilitySnapshot, LiveAutoNatStatus, LiveHolePunchState, LivePublicPortReachability,
     LiveTransportKind, NodeAutoNatStatus, NodeConfig, NodeHolePunchViability, NodeNetworkPolicy,
-    NodePublicPortReachability, NodeRole, NodeUserMode, PosValidator,
+    NodePublicPortReachability, NodeRole, NodeUserMode,
 };
 use oasis7_proto::distributed_dht::{
     PeerDeploymentMode, PeerDiscoverySource, PeerNodeRole, PeerReachabilityClass,
 };
 use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
-use std::collections::BTreeMap;
 use std::net::{TcpListener, UdpSocket};
 use std::path::Path;
 
@@ -488,6 +480,109 @@ fn balances_payload_reports_empty_world_without_error() {
 fn parse_options_rejects_unknown_option() {
     let err = parse_options(["--unknown"].into_iter()).expect_err("should fail");
     assert!(err.contains("unknown option"));
+}
+
+fn hosted_local_mock_chain_args() -> Vec<String> {
+    vec![
+        "--chain-local-standalone-test".to_string(),
+        "--local-test-provider-authority".to_string(),
+        "authority.json".to_string(),
+        "--local-test-provider-wasm".to_string(),
+        "provider.wasm".to_string(),
+        "--local-test-provider-metadata".to_string(),
+        "provider.metadata.json".to_string(),
+        "--local-test-provider-finality-block-hash".to_string(),
+        format!("blake3:{}", "0".repeat(64)),
+        "--local-test-provider-session-mode".to_string(),
+        "hosted_public_join".to_string(),
+        "--agent-decision-source".to_string(),
+        "provider_backed".to_string(),
+        "--agent-provider-backend".to_string(),
+        "provider_local_mock".to_string(),
+        "--agent-provider-contract".to_string(),
+        "worldsim_provider_v1".to_string(),
+        "--agent-provider-transport".to_string(),
+        "loopback_http".to_string(),
+        "--agent-execution-lane".to_string(),
+        "player_parity".to_string(),
+    ]
+}
+
+#[cfg(feature = "test_tier_required")]
+#[test]
+fn parse_options_accepts_hosted_local_mock_funding_tuple() {
+    let args = hosted_local_mock_chain_args();
+    let options = parse_options(args.iter().map(String::as_str))
+        .expect("chain runtime should admit the explicit test-tier tuple");
+    assert!(options.chain_local_standalone_test);
+    assert_eq!(
+        options.agent_decision_source.as_deref(),
+        Some("provider_backed")
+    );
+    assert_eq!(
+        options.agent_provider_backend.as_deref(),
+        Some("provider_local_mock")
+    );
+    assert_eq!(
+        options.agent_provider_contract.as_deref(),
+        Some("worldsim_provider_v1")
+    );
+    assert_eq!(
+        options.agent_provider_transport.as_deref(),
+        Some("loopback_http")
+    );
+    assert_eq!(
+        options.agent_execution_lane.as_deref(),
+        Some("player_parity")
+    );
+}
+
+#[cfg(not(feature = "test_tier_required"))]
+#[test]
+fn parse_options_rejects_hosted_local_mock_funding_without_test_tier() {
+    let args = hosted_local_mock_chain_args();
+    let error = parse_options(args.iter().map(String::as_str))
+        .expect_err("production chain runtime must reject Hosted local-mock funding");
+    assert!(error.contains("test_tier_required"), "{error}");
+}
+
+#[cfg(feature = "test_tier_required")]
+#[test]
+fn parse_options_rejects_hosted_local_mock_funding_with_wrong_tuple() {
+    let mut args = hosted_local_mock_chain_args();
+    let index = args
+        .iter()
+        .position(|arg| arg == "player_parity")
+        .expect("execution lane argument");
+    args[index] = "headless_agent".to_string();
+    let error = parse_options(args.iter().map(String::as_str))
+        .expect_err("Hosted local-mock funding must require player_parity");
+    assert!(error.contains("player_parity"), "{error}");
+}
+
+#[cfg(feature = "test_tier_required")]
+#[test]
+fn parse_options_rejects_hosted_local_mock_funding_without_authority_setup() {
+    let mut args = hosted_local_mock_chain_args();
+    for flag in [
+        "--local-test-provider-authority",
+        "--local-test-provider-wasm",
+        "--local-test-provider-metadata",
+        "--local-test-provider-finality-block-hash",
+        "--local-test-provider-session-mode",
+    ] {
+        let index = args
+            .iter()
+            .position(|arg| arg == flag)
+            .expect("local provider argument");
+        args.drain(index..=index + 1);
+    }
+    let error = parse_options(args.iter().map(String::as_str))
+        .expect_err("provider tuple must not grant synthetic local authority");
+    assert!(
+        error.contains("local test provider authority setup"),
+        "{error}"
+    );
 }
 
 #[test]
@@ -1038,147 +1133,5 @@ fn build_replication_fetch_requester_allowlist_combines_validator_and_explicit_k
     );
 }
 
-#[test]
-fn public_testnet_manifest_allows_open_observer_fetch_without_validator_admission() {
-    let loaded = test_network_tier_manifest("public_testnet", true);
-
-    assert!(network_tier_allows_open_observer_fetch(Some(&loaded)));
-}
-
-#[test]
-fn public_testnet_manifest_without_observer_policy_does_not_allow_open_observer_fetch() {
-    let loaded = test_network_tier_manifest("public_testnet", false);
-
-    assert!(!network_tier_allows_open_observer_fetch(Some(&loaded)));
-}
-
-#[test]
-fn mainnet_manifest_does_not_allow_open_observer_fetch() {
-    let loaded = test_network_tier_manifest("mainnet", true);
-
-    assert!(!network_tier_allows_open_observer_fetch(Some(&loaded)));
-}
-
-fn test_network_tier_manifest(tier: &str, allow_observer_nodes: bool) -> LoadedNetworkTierManifest {
-    LoadedNetworkTierManifest {
-        source_path: "test-manifest.json".to_string(),
-        manifest: NetworkTierManifest {
-            schema_version: NETWORK_TIER_MANIFEST_SCHEMA_V1.to_string(),
-            tier: tier.to_string(),
-            status: "rehearsal".to_string(),
-            network_id: format!("oasis7-{tier}"),
-            chain_id: format!("oasis7-{tier}"),
-            runtime_refs: NetworkTierRuntimeRefs {
-                release_candidate_bundle_ref: "bundle.json".to_string(),
-                genesis_ref: "genesis.json".to_string(),
-                bootstrap_peer_ref: "peers.txt".to_string(),
-            },
-            endpoint_policy: NetworkTierEndpointPolicy {
-                rpc_ref: "http://127.0.0.1:6631".to_string(),
-                explorer_ref: "http://127.0.0.1:6632/explorer".to_string(),
-                faucet_ref: Some("none".to_string()),
-            },
-            validator_policy: NetworkTierValidatorPolicy {
-                governance_mode: "governance_registry".to_string(),
-                validator_admission: "allowlist_or_governed_candidate".to_string(),
-                target_validator_count: 2,
-                allow_observer_nodes,
-            },
-            token_policy: NetworkTierTokenPolicy {
-                symbol: "OC".to_string(),
-                faucet_mode: "guarded_testnet_faucet".to_string(),
-                reset_policy: "resettable".to_string(),
-                value_semantics: "testnet".to_string(),
-            },
-            claims_policy: NetworkTierClaimsPolicy {
-                allowed_claims: vec!["public_testnet".to_string()],
-                denied_claims: vec!["mainnet_live".to_string()],
-            },
-            promotion_policy: NetworkTierPromotionPolicy {
-                promote_from: vec!["local_devnet".to_string()],
-                required_gates: vec!["public_testnet_rehearsal_pass".to_string()],
-            },
-            evidence_refs: vec![],
-        },
-        bootstrap_peers: vec![],
-    }
-}
-
-#[test]
-fn derive_node_consensus_signer_keypair_is_deterministic_for_oasis7_namespace() {
-    let signing_key = SigningKey::from_bytes(&[7_u8; 32]);
-    let keypair = node_keypair_config::NodeKeypairConfig {
-        private_key_hex: hex::encode(signing_key.to_bytes()),
-        public_key_hex: hex::encode(signing_key.verifying_key().to_bytes()),
-    };
-
-    let signer_a =
-        derive_node_consensus_signer_keypair("node-a", &keypair).expect("derive signer a");
-    let signer_a_repeat =
-        derive_node_consensus_signer_keypair("node-a", &keypair).expect("derive signer a repeat");
-    let signer_b =
-        derive_node_consensus_signer_keypair("node-b", &keypair).expect("derive signer b");
-
-    assert_eq!(signer_a.private_key_hex, signer_a_repeat.private_key_hex);
-    assert_eq!(signer_a.public_key_hex, signer_a_repeat.public_key_hex);
-    assert_ne!(signer_a.public_key_hex, signer_b.public_key_hex);
-}
-
-#[test]
-fn build_validator_signer_public_keys_prefers_explicit_overrides() {
-    let signing_key = SigningKey::from_bytes(&[7_u8; 32]);
-    let keypair = node_keypair_config::NodeKeypairConfig {
-        private_key_hex: hex::encode(signing_key.to_bytes()),
-        public_key_hex: hex::encode(signing_key.verifying_key().to_bytes()),
-    };
-    let validators = vec![
-        PosValidator {
-            validator_id: "node-a".to_string(),
-            stake: 60,
-        },
-        PosValidator {
-            validator_id: "node-b".to_string(),
-            stake: 40,
-        },
-    ];
-    let mut overrides = BTreeMap::new();
-    overrides.insert("node-b".to_string(), "deadbeef".to_string());
-
-    let bindings = build_validator_signer_public_keys(validators.as_slice(), &keypair, &overrides)
-        .expect("bindings should build");
-
-    assert_eq!(bindings.get("node-b").map(String::as_str), Some("deadbeef"));
-    assert_ne!(bindings.get("node-a"), bindings.get("node-b"));
-}
-
-#[test]
-fn derive_node_libp2p_identity_keypair_is_deterministic_and_node_scoped() {
-    let signing_key = SigningKey::from_bytes(&[11_u8; 32]);
-    let keypair = node_keypair_config::NodeKeypairConfig {
-        private_key_hex: hex::encode(signing_key.to_bytes()),
-        public_key_hex: hex::encode(signing_key.verifying_key().to_bytes()),
-    };
-
-    let identity_a = derive_node_libp2p_identity_keypair_config("node-a", &keypair)
-        .expect("derive libp2p identity a");
-    let identity_a_repeat = derive_node_libp2p_identity_keypair_config("node-a", &keypair)
-        .expect("derive libp2p identity a repeat");
-    let identity_b = derive_node_libp2p_identity_keypair_config("node-b", &keypair)
-        .expect("derive libp2p identity b");
-
-    assert_eq!(
-        identity_a.private_key_hex,
-        identity_a_repeat.private_key_hex
-    );
-    assert_eq!(identity_a.public_key_hex, identity_a_repeat.public_key_hex);
-    assert_ne!(identity_a.public_key_hex, identity_b.public_key_hex);
-
-    let libp2p_a = oasis7_node::derive_libp2p_identity_keypair(identity_a.private_key_hex.as_str())
-        .expect("libp2p keypair a");
-    let libp2p_b = oasis7_node::derive_libp2p_identity_keypair(identity_b.private_key_hex.as_str())
-        .expect("libp2p keypair b");
-    assert_ne!(
-        libp2p_a.public().to_peer_id(),
-        libp2p_b.public().to_peer_id()
-    );
-}
+#[path = "oasis7_chain_runtime_tests_network.rs"]
+mod network_tests;

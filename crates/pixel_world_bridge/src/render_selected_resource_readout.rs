@@ -16,7 +16,9 @@ const RESOURCE_READOUT_PRIORITY_CUE_LEFT_BAND_WIDTH: f64 = 0.44;
 /// interaction entities so player-facing state cannot alter world input.
 #[derive(Component)]
 pub(crate) struct PixelWorldSelectedResourceReadout {
+    #[cfg(test)]
     pub(crate) target_kind: String,
+    #[cfg(test)]
     pub(crate) target_id: String,
     pub(crate) display: String,
 }
@@ -94,7 +96,7 @@ pub(super) fn reconcile_selected_resource_readout(
         }
     });
 
-    let Some((target_kind, target_id, resource_summary, canvas_x, canvas_y)) = selected else {
+    let Some((_target_kind, _target_id, resource_summary, canvas_x, canvas_y)) = selected else {
         for (entity, _) in existing_readouts.iter() {
             commands.entity(entity).despawn();
         }
@@ -102,8 +104,10 @@ pub(super) fn reconcile_selected_resource_readout(
     };
     let display = player_facing_resource_summary(resource_summary);
     let readout = PixelWorldSelectedResourceReadout {
-        target_kind: target_kind.to_string(),
-        target_id: target_id.to_string(),
+        #[cfg(test)]
+        target_kind: _target_kind.to_string(),
+        #[cfg(test)]
+        target_id: _target_id.to_string(),
         display,
     };
     let visuals = resource_readout_visuals(

@@ -53,6 +53,7 @@
 - 声誉分别属于玩家、Agent、组织和角色/岗位，并限定在相关地点、服务、合同、时间和受影响群体的情境中。它不能被压缩为全球万能分数，也不能从一次成功、付费、名望或组织规模自动推出所有场景的信任与权力。
 - 声誉记录具有新近性、到期、可补充更新与申诉路径；严重或重复事实可以在适用情境内持续可见，但不存在不可纠正的永久 blacklist。任何限制都应说明来源、范围、期限、更新/恢复条件和可用复核。
 - Agent、设施、合同或组织控制权转让时，相关世界历史、风险和已确认 receipt 仍需披露；但玩家的个人、政治或社会 credential 不随资产/控制权自动转移、出售或继承。新的 owner 只能在自己的授权、关系和情境记录下重新建立资格。
+- 当情境声誉被成熟世界用于未来机会或候选资格时，本分册只主责主体/情境归属、来源、期限、更新与申诉的可追溯记录；成长、独立基线、容量竞争、待决/hold/receipt 和单次机会效果由[`成熟世界成长与区域参与`](mature-world-progression.prd.md#req-wr-mw-004)主责。它不把声誉记录扩成区域分配、pioneer priority、治理权或 Agent delegation authority。
 
 ### 2.4 预声明 R&D charter、归因与份额
 
@@ -95,7 +96,7 @@
 <a id="req-wr-cr-003"></a>
 ### REQ-WR-CR-003：声誉与 R&D 归因必须局部可更新且可追溯
 
-- 要求：声誉按主体与情境记录并支持到期、更新和申诉；R&D 在工作前以 charter 声明贡献与份额，Agent provenance 持续可追溯，份额转移不得自动转移个人 credential 或一般声誉。
+- 要求：声誉按主体与情境记录并支持到期、更新和申诉；R&D 在工作前以 charter 声明贡献与份额，Agent provenance 持续可追溯，份额转移不得自动转移个人 credential 或一般声誉。当该记录被世界内机会消费时，仍由[`成熟世界成长与区域参与`](mature-world-progression.prd.md#req-wr-mw-004)约束机会的作用域、容量、待决、结算和恢复边界；入口组合边界见[`免费进入、世界内成长与有界认可`](../player-entry-distribution/free-entry-world-progression-and-recognition.prd.md#req-entry-free-002)；本要求不授予区域分配或优先级。
 - 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 - 验收：[AC-WR-CR-003](#ac-wr-cr-003)
 

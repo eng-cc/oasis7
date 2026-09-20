@@ -6132,6 +6132,11 @@ dependencies = [
 ]
 
 [[package]]
+name = "oasis7_client_api"
+version = "0.1.0"
+dependencies = ["ed25519-dalek 3.0.0", "hex", "serde", "serde_json"]
+
+[[package]]
 name = "oasis7_client_launcher"
 version = "0.1.0"
 dependencies = [

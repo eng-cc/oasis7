@@ -95,3 +95,4 @@ This design delegates product requirements and acceptance semantics to its paire
 | [REQ-SC31-006](industrial-demand-goals-and-settlement.prd.md#req-sc31-006) | [AC-SC31-007](industrial-demand-goals-and-settlement.prd.md#ac-sc31-007) |
 | [REQ-SC31-007](industrial-demand-goals-and-settlement.prd.md#req-sc31-007) | [AC-SC31-008](industrial-demand-goals-and-settlement.prd.md#ac-sc31-008) |
 | [REQ-SC31-008](industrial-demand-goals-and-settlement.prd.md#req-sc31-008) | [AC-SC31-009](industrial-demand-goals-and-settlement.prd.md#ac-sc31-009) |
+| [REQ-SC31-009](industrial-demand-goals-and-settlement.prd.md#req-sc31-009) | [AC-SC31-010](industrial-demand-goals-and-settlement.prd.md#ac-sc31-010) / [AC-SC31-011](industrial-demand-goals-and-settlement.prd.md#ac-sc31-011) |

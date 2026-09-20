@@ -123,6 +123,21 @@
 - 当：授权到期、撤销或被不同范围的续期替代。
 - 则：请求保持原授权结果、明确拒绝或由玩家显式新提；不能继承旧优先级、资格、补偿承诺或世界效果，市场回归常态，已确认历史仍可追溯。
 
+<a id="req-wr-es-004"></a>
+### REQ-WR-ES-004：紧急保供必须是有证据、有界且可退出的市场例外
+
+- 要求：正常价格、供需、竞争和局部故障继续由市场、合约与物流形成；只有预声明的系统性必需品危机并具备事实证据、品类、受影响范围、授权来源、开始/到期时间、介入方式、补偿/公开分配、复核和申诉入口的最小授权包，才可产生紧急世界效果。介入不得变成常态限价、永久配给、任意没收、可转让/可叠加资格或绕过路线、到达、存储、合同结算、世界资格与 receipt 的旁路。
+- 专业权威：[`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md#ac-game-018-05)、[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
+- 验收：[AC-WR-ES-004](#ac-wr-es-004)
+
+<a id="ac-wr-es-004"></a>
+### AC-WR-ES-004：正常市场与紧急保供区分且退出后恢复常态
+
+- 覆盖要求：REQ-WR-ES-004
+- 给定：普通价格波动、局部故障、暂时短缺，以及一项具备完整授权包的系统性必需品危机和一项缺少证据、范围、期限、授权、复核或申诉任一项的对照样例。
+- 当：市场评估是否启动、执行、续期、撤销或退出采购、补偿、分配或 rationing。
+- 则：普通样例维持常态且不产生紧急效果；完整危机只在声明品类/地点/主体/期限内以最小介入生效，玩家能读到授权理由、补偿/公开分配、复核/申诉、自己的 `allocated`/`partial`/`denied`/`expired` 结果及下一步。缺项原子拒绝；到期、拒绝续期、撤销或复核后回归常态，未使用临时资格失效但已确认 receipt/历史保留，待决请求不跨授权，重复/重连/replay 不复制效果。
+
 ## 6. 范围与权威边界
 
 产品层定义 `常态市场 -> 危机证据 -> 最小授权包 -> 有界介入 -> 到期/撤销/复核 -> 常态恢复` 的玩家与制度语义。
@@ -138,6 +153,7 @@
 - ES-5：代表性受影响玩家样例能区分常态/待审、已授权但尚未完成、receipt 支持的已确认结果，以及拒绝、撤销、到期或复核后变更；每种非完成状态均不伪造交付、补偿或资格，并在适用时给出常态替代、补证、申诉或重新规划的下一步。
 - ES-6：原授权到期、撤销或被不同范围的续期替代时，代表性待决采购、补偿、分配与 rationing 请求不会跨授权自动执行、结算、继承优先级或产生第二次效果；玩家只能查看原请求结果，并在新授权确实覆盖时以新的显式请求重新规划。
 - ES-7：同一冻结资格、需求、作用范围、资源与政策快照下，代表性稀缺分配在等价重排序、重复投递和回放中保持同一结果；只有已声明的优先依据和 tie resolution authority 能影响结果，未声明的到达/提交/管理员顺序不能改变结果。采用 lottery 时，权威 seed 与 receipt 支持确定性回放。快照漂移原子拒绝或重新报价，政策变化不追溯重排已冻结批次；玩家能区分 `allocated`、`partial`、`denied`、`expired`，读到依据/原因与下一步，且 retry、reconnect、renewal 不产生第二次 world effect。
+- ES-8：代表性正常市场/危机样例证明最小授权包、范围/期限、补偿/公开分配、复核/申诉和物理/结算边界同时成立；缺项维持常态或原子拒绝，退出自动恢复常态且不迁移待决请求、不残留临时资格或复制历史效果。
 
 ## 8. 验收追踪
 
@@ -149,6 +165,7 @@
 | ES-5 | producer_system_designer / runtime_engineer / viewer_engineer / gameplay_designer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 从常态/待审、授权未完成到 receipt 确认及拒绝/退出的状态区分；每个状态的无伪造结果、可用下一步和正式玩家 surface 可读性组合证据 | test_tier_full |
 | ES-6 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / viewer_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 授权到期、撤销及范围变化续期下的待决请求、旧/新请求关联、单次 world effect、receipt 不追溯改写与玩家可读恢复路径组合证据 | test_tier_full |
 | ES-7 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / viewer_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 冻结快照、声明优先依据、确定性 tie resolution、权威 lottery seed/receipt（如适用）、快照漂移拒绝/重新报价、批次不可追溯重排、四类分配结果可读性及 retry/reconnect/renewal 单次 world effect 的组合证据 | test_tier_full |
+| ES-8 / [AC-WR-ES-004](#ac-wr-es-004) | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / viewer_engineer / qa_engineer | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 正常市场与系统性危机的证据包、范围/期限/补偿/公开分配/复核/申诉、物理交付/存储/结算不可旁路、退出恢复常态与待决/重复负例 | test_tier_full |
 
 ## 9. Non-Goals
 
@@ -165,3 +182,4 @@
 | [REQ-WR-ES-001](#req-wr-es-001) / [AC-WR-ES-001](#ac-wr-es-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-WR-ES-002](#req-wr-es-002) / [AC-WR-ES-002](#ac-wr-es-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-WR-ES-003](#req-wr-es-003) / [AC-WR-ES-003](#ac-wr-es-003) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-ES-004](#req-wr-es-004) / [AC-WR-ES-004](#ac-wr-es-004) | `producer_system_designer` | [`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md#ac-game-018-05)、[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_full` |
