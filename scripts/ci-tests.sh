@@ -76,6 +76,7 @@ run_cargo() {
 
 run_cargo_clippy() {
   local lint_flags=(
+    -D warnings
     -D clippy::correctness
     -D clippy::suspicious
   )
