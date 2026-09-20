@@ -641,7 +641,7 @@ fn checkpoint_receipt_recovers_finalization_failure_without_reinstalling_generic
         "the failed finalization must retain the installed checkpoint identity for retry"
     );
     fs::remove_dir(&receipt_path).expect("unblock receipt publication for retry");
-    let second_sync = engine_b
+    engine_b
         .sync_missing_replication_commits(
             &endpoint_b,
             "node-b",
@@ -650,8 +650,6 @@ fn checkpoint_receipt_recovers_finalization_failure_without_reinstalling_generic
             Some(&mut execution_hook),
         )
         .expect("retry must finalize the receipt without reinstalling the closure");
-
-    let _ = second_sync;
 
     assert_eq!(
         execution_hook.installed,

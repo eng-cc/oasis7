@@ -275,12 +275,12 @@ impl ClientLauncherApp {
                 "反馈/转账/浏览器依赖链就绪。",
                 "Feedback/transfer/explorer depend on chain readiness.",
             ));
-            if state == PreflightCheckState::Blocked {
-                if Self::preflight_action_button(ui, self.tr("重试探测", "Retry")).clicked() {
-                    self.record_guided_quick_action_click();
-                    self.trigger_state_refresh();
-                    self.update_chain_runtime_status();
-                }
+            if state == PreflightCheckState::Blocked
+                && Self::preflight_action_button(ui, self.tr("重试探测", "Retry")).clicked()
+            {
+                self.record_guided_quick_action_click();
+                self.trigger_state_refresh();
+                self.update_chain_runtime_status();
             }
         });
     }

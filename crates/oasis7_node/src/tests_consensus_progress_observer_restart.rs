@@ -19,9 +19,11 @@ fn blocked_dispatcher_delivers_equal_head_between_lagging_snapshots_in_order() {
             .expect("spawn ordered observer dispatcher");
             let submitter = dispatcher.submitter();
 
-            let mut lag = NodeConsensusSnapshot::default();
-            lag.committed_height = 10;
-            lag.network_committed_height = 9;
+            let lag = NodeConsensusSnapshot {
+                committed_height: 10,
+                network_committed_height: 9,
+                ..Default::default()
+            };
             let mut equal_head = lag.clone();
             equal_head.network_committed_height = 10;
             let mut fresh_lag = equal_head.clone();
@@ -203,8 +205,10 @@ fn failed_observer_worker_spawn_restores_observer_for_retry() {
                 .start()
                 .expect("observer must survive its own worker spawn failure");
 
-            let mut snapshot = NodeConsensusSnapshot::default();
-            snapshot.committed_height = 1;
+            let snapshot = NodeConsensusSnapshot {
+                committed_height: 1,
+                ..Default::default()
+            };
             runtime
                 .submit_consensus_progress_for_test(snapshot, 1)
                 .expect("submit progress after retried observer spawn");
@@ -256,9 +260,11 @@ fn bounded_stop_hands_pending_lag_equal_and_fresh_lag_to_recreated_observer_in_o
             .expect("spawn blocked restart dispatcher");
             let submitter = dispatcher.submitter();
 
-            let mut lag = NodeConsensusSnapshot::default();
-            lag.committed_height = 10;
-            lag.network_committed_height = 9;
+            let lag = NodeConsensusSnapshot {
+                committed_height: 10,
+                network_committed_height: 9,
+                ..Default::default()
+            };
             let mut equal_head = lag.clone();
             equal_head.network_committed_height = 10;
             let mut fresh_lag = equal_head.clone();
@@ -344,9 +350,11 @@ fn restart_handoff_keeps_sequences_monotonic_and_backpressure_until_newest_deliv
             .expect("spawn first restart sequence dispatcher");
             let first_submitter = dispatcher.submitter();
 
-            let mut lag = NodeConsensusSnapshot::default();
-            lag.committed_height = 10;
-            lag.network_committed_height = 9;
+            let lag = NodeConsensusSnapshot {
+                committed_height: 10,
+                network_committed_height: 9,
+                ..Default::default()
+            };
             let mut equal_head = lag.clone();
             equal_head.network_committed_height = 10;
             let mut inherited_lag = equal_head.clone();

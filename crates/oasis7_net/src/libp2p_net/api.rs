@@ -139,7 +139,7 @@ fn peer_health_is_hard_request_blocked(health: &PeerManagerPeerHealth) -> bool {
         && !health
             .issues
             .iter()
-            .all(|issue| peer_health_issue_is_record_exchange_pending(issue))
+            .all(peer_health_issue_is_record_exchange_pending)
 }
 
 fn peer_health_is_soft_deprioritized(health: &PeerManagerPeerHealth) -> bool {
@@ -148,7 +148,7 @@ fn peer_health_is_soft_deprioritized(health: &PeerManagerPeerHealth) -> bool {
         && health
             .issues
             .iter()
-            .all(|issue| peer_health_issue_is_record_exchange_pending(issue))
+            .all(peer_health_issue_is_record_exchange_pending)
         && health
             .issues
             .iter()

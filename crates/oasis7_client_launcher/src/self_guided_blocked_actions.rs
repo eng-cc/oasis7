@@ -178,26 +178,19 @@ impl ClientLauncherApp {
         );
 
         ui.horizontal_wrapped(|ui| {
-            if let Some(cta) = primary {
-                if ui.button(self.disabled_cta_text(cta)).clicked() {
-                    self.record_guided_quick_action_click();
-                    self.handle_disabled_action_cta(
-                        cta,
-                        game_required_issues,
-                        chain_required_issues,
-                    );
-                }
+            if let Some(cta) = primary
+                && ui.button(self.disabled_cta_text(cta)).clicked()
+            {
+                self.record_guided_quick_action_click();
+                self.handle_disabled_action_cta(cta, game_required_issues, chain_required_issues);
             }
 
-            if let Some(cta) = secondary {
-                if Some(cta) != primary && ui.button(self.disabled_cta_text(cta)).clicked() {
-                    self.record_guided_quick_action_click();
-                    self.handle_disabled_action_cta(
-                        cta,
-                        game_required_issues,
-                        chain_required_issues,
-                    );
-                }
+            if let Some(cta) = secondary
+                && Some(cta) != primary
+                && ui.button(self.disabled_cta_text(cta)).clicked()
+            {
+                self.record_guided_quick_action_click();
+                self.handle_disabled_action_cta(cta, game_required_issues, chain_required_issues);
             }
         });
     }

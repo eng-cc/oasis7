@@ -54,6 +54,10 @@ pub(super) fn push_bounded_clone<T: Clone>(
 }
 
 #[cfg(test)]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Test helper mirrors the keyed production helper while preserving bounded-log semantics"
+)]
 pub(super) fn push_bounded_string_with_cooldown(
     values: &Arc<Mutex<Vec<String>>>,
     recent_values_at_ms: &mut HashMap<String, i64>,
@@ -77,6 +81,10 @@ pub(super) fn push_bounded_string_with_cooldown(
     )
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Bounded-log helper keeps mutable cooldown state and lock labels explicit"
+)]
 pub(super) fn push_bounded_string_with_keyed_cooldown(
     values: &Arc<Mutex<Vec<String>>>,
     recent_values_at_ms: &mut HashMap<String, i64>,
