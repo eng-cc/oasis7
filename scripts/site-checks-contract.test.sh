@@ -13,6 +13,15 @@ site_checks=(
   scripts/site-download-check.sh
 )
 
+if grep -Fq '  push:' "$pages_workflow"; then
+  echo "Pages workflow must not deploy automatically from a push" >&2
+  exit 1
+fi
+if ! grep -Fq '  workflow_dispatch:' "$pages_workflow"; then
+  echo "Pages workflow must remain manually dispatchable" >&2
+  exit 1
+fi
+
 for check in "${site_checks[@]}"; do
   if [[ ! -x "$repo_root/$check" ]]; then
     echo "site quality check is missing or not executable: $check" >&2
@@ -24,19 +33,6 @@ for check in "${site_checks[@]}"; do
   fi
   if ! grep -Fq "  run ./$check" "$ci_tests"; then
     echo "ci-tests site selector does not run site quality check: $check" >&2
-    exit 1
-  fi
-done
-
-for path in \
-  'site/**' \
-  'scripts/site-link-check.sh' \
-  'scripts/site-homepage-claim-check.sh' \
-  'scripts/site-manual-sync-check.sh' \
-  'scripts/site-download-check.sh' \
-  '.github/workflows/pages.yml'; do
-  if ! grep -Fq "      - \"$path\"" "$pages_workflow"; then
-    echo "Pages workflow is missing its site quality path trigger: $path" >&2
     exit 1
   fi
 done

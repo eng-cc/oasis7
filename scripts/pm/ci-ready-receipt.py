@@ -216,7 +216,8 @@ def check_run_pull_request_identity(check_run, pr_number, expected_head, expecte
         raise SystemExit("ci-ready-receipt: wrong_head check run PR identity mismatch")
     return base_oid,head_oid
 
-def live(repository, task_uid, task_issue_number, pr_number, check_name, check_app_id, allow_ready_pr=False, expected_base_ref=None):
+def live(repository, task_uid, task_issue_number, pr_number, check_name, check_app_id,
+         allow_ready_pr=False, expected_base_ref=None, ordinary_pr=False):
     if check_app_id is None or not re.fullmatch(r"[0-9]+",str(check_app_id)):
         raise SystemExit("ci-ready-receipt: check app id is required")
     pr=gh("api",f"repos/{repository}/pulls/{pr_number}")
@@ -244,12 +245,22 @@ def live(repository, task_uid, task_issue_number, pr_number, check_name, check_a
     matches.sort(key=lambda x:(x.get("completed_at") or "",int(x.get("id") or 0)),reverse=True)
     run=matches[0]
     base_oid,head_oid=check_run_pull_request_identity(run,pr_number,head_oid,expected_base_ref)
-    if str((pr.get("base") or {}).get("sha") or "") != base_oid:
+    if not ordinary_pr and str((pr.get("base") or {}).get("sha") or "") != base_oid:
         raise SystemExit("ci-ready-receipt: stale integration base; rerun required CI against current target without rebasing source")
     if run.get("status")!="completed": raise SystemExit("ci-ready-receipt: uncertain: check incomplete")
     conclusion=str(run.get("conclusion") or "").lower()
     if conclusion=="cancelled": raise SystemExit("ci-ready-receipt: cancelled")
     if conclusion!="success": raise SystemExit(f"ci-ready-receipt: required check conclusion={conclusion or 'uncertain'}")
+    if ordinary_pr:
+        fresh=gh("api",f"repos/{repository}/pulls/{pr_number}")
+        if (fresh.get("state")!="open" or fresh.get("merged")
+                or (not allow_ready_pr and not fresh.get("draft"))
+                or f"Refs #{task_issue_number}" not in (fresh.get("body") or "")
+                or f"Task: {task_uid}" not in (fresh.get("body") or "")
+                or fresh.get("base",{}).get("ref")!=pr.get("base",{}).get("ref")
+                or fresh.get("head",{}).get("sha")!=head_oid):
+            raise SystemExit("ci-ready-receipt: PR source/ref identity changed during ordinary CI verification")
+        pr=fresh
     return pr,run,base_oid,head_oid
 
 def main():
@@ -265,13 +276,16 @@ def main():
     p.add_argument('--integration-run-id',type=int,help='new trusted manual integration workflow run')
     a=p.parse_args()
     existing=json.loads(Path(a.receipt).read_text()) if a.receipt else {}
-    pr,run,base_oid,head_oid=selected_live(a.repository,a.task_uid,a.task_issue_number,a.pr_number,a.check_name,a.check_app_id,a.allow_ready_pr,a.base_ref,a.integration_run_id or existing.get('integration_run_id'))
+    bound_base_ref = a.base_ref or existing.get("base_ref")
+    pr,run,base_oid,head_oid=selected_live(a.repository,a.task_uid,a.task_issue_number,a.pr_number,a.check_name,a.check_app_id,a.allow_ready_pr,bound_base_ref,a.integration_run_id or existing.get('integration_run_id'))
     old=None
     if a.receipt:
         old=json.loads(Path(a.receipt).read_text(encoding="utf-8"))
         live_identity={"repository":a.repository,"task_uid":a.task_uid,"task_issue_number":a.task_issue_number,
           "pr_number":a.pr_number,"base_oid":base_oid,"head_oid":head_oid,"check_name":a.check_name,
           "check_app_id":(run.get("app") or {}).get("id"),"check_run_id":run.get("id"),"conclusion":"success"}
+        if "base_ref" in old:
+            live_identity["base_ref"] = pr.get("base", {}).get("ref")
         for key,val in live_identity.items():
             if old.get(key)!=val: raise SystemExit(f"ci-ready-receipt: wrong_head/wrong_app/superseded receipt mismatch: {key}")
         seen=dt.datetime.fromisoformat(str(old["observed_at"]).replace("Z","+00:00"))
@@ -290,6 +304,12 @@ def main():
       "task_uid":a.task_uid,"task_issue_number":a.task_issue_number,"pr_number":a.pr_number,"base_oid":base_oid,"head_oid":head_oid,
       "check_name":a.check_name,"check_app_id":(run.get("app") or {}).get("id"),"check_run_id":run.get("id"),
       "planner_digest":trusted_planner_digest,"planner":planner,"planner_config_sha256":planner["planner_config_sha256"],"run_rust_baseline":planner["run_rust_baseline"],"conclusion":"success","observed_at":now()}
+    if old is None or "base_ref" in old:
+        payload["base_ref"] = pr.get("base", {}).get("ref")
+    if old is None or "ci_validation_mode" in old:
+        payload["ci_validation_mode"] = "trusted_integration" if run.get("_integration") else "ordinary_pr"
+    if old is None or "live_validation" in old:
+        payload["live_validation"] = "ci-ready-receipt-live"
     if planner.get("impact_projection_status") == "verified":
         payload.update(impact_projection_schema=planner["impact_projection_schema"],impact_projection_digest=planner["impact_projection_digest"],impact_projection_planner_digest=planner["impact_projection_planner_digest"])
     if old is None or 'scope_base_oid' in old:
@@ -317,7 +337,8 @@ def main():
             refreshed = {**refreshed, "review_evidence_digest": payload["review_evidence_digest"]}
         payload = refreshed
     print(json.dumps(payload,sort_keys=True,indent=2 if a.json else None))
-def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=False,base_ref=None,integration_run_id=None):
+def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=False,base_ref=None,
+                  integration_run_id=None, require_integration=False, require_dispatch=False):
     from integration_ci import current_request, verified_run
     pr=gh('api',f'repos/{repository}/pulls/{number}')
     if (not allow_ready_pr and not pr.get('draft')) or f'Refs #{issue}' not in (pr.get('body') or '') or f'Task: {uid}' not in (pr.get('body') or ''):
@@ -356,9 +377,17 @@ def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=Fals
             raise ValueError('explicit integration locator absent from verified current request range')
     except (ValueError,KeyError,OSError,subprocess.SubprocessError) as exc:
         raise SystemExit('ci-ready-receipt: current request blocked: '+str(exc)) from exc
+    if require_integration:
+        if require_dispatch:
+            raise SystemExit('ci-ready-receipt: strict integration request is absent')
+        # Compatibility callers may request the strict base/check contract
+        # before manual dispatch is available.  This path never relaxes to
+        # ordinary PR evidence; the normal high-risk path supplies a matching
+        # workflow_dispatch request and uses the branch above.
+        return live(repository,uid,issue,number,check_name,app,allow_ready_pr,base_ref,ordinary_pr=False)
     # Only proven absence permits ordinary PR evidence. Never consult old green
     # after a matching request has failed, remains pending or is unreadable.
-    ordinary=live(repository,uid,issue,number,check_name,app,allow_ready_pr,base_ref)
+    ordinary=live(repository,uid,issue,number,check_name,app,allow_ready_pr,base_ref,ordinary_pr=True)
     if current_request(repository,uid,number,base,head,pr["base"]["ref"]) is not None:
         raise SystemExit("ci-ready-receipt: current request changed during ordinary CI verification")
     return ordinary

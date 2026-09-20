@@ -303,6 +303,106 @@ def has_live_integration_attestation(receipt: dict[str, Any]) -> bool:
     )
 
 
+def is_ordinary_pr_ci_receipt(receipt: dict[str, Any]) -> bool:
+    """Recognize source-bound PR CI without treating it as target integration.
+
+    The mode is emitted by the live receipt helper.  Missing mode remains a
+    read-only compatibility shape for older ordinary receipts; live
+    validation still re-reads the check run before this helper is consulted.
+    """
+    if not isinstance(receipt, dict) or receipt.get("receipt_type") != "oasis7_ci_ready_receipt":
+        return False
+    if receipt.get("issuer") != "github_live_query" or receipt.get("trusted_integration_artifact") is True:
+        return False
+    if receipt.get("ci_validation_mode") not in (None, "ordinary_pr"):
+        return False
+    if receipt.get("conclusion") != "success":
+        return False
+    required = ("repository", "task_uid", "task_issue_number", "pr_number", "base_oid",
+                "head_oid", "check_name", "check_app_id", "check_run_id", "planner_digest")
+    if not all(receipt.get(field) not in (None, "") for field in required):
+        return False
+    # New ordinary receipts bind the target ref in addition to its recorded
+    # base OID. Older receipts without a validation mode remain compatibility
+    # inputs and are still revalidated by the live helper before reuse.
+    return receipt.get("ci_validation_mode") != "ordinary_pr" or bool(receipt.get("base_ref"))
+
+
+def has_live_pr_ci_attestation(receipt: dict[str, Any]) -> bool:
+    """Return whether a receipt is a live, source-bound ordinary PR check."""
+    return is_ordinary_pr_ci_receipt(receipt) and (
+        receipt.get("live_validation") in (None, "ci-ready-receipt-live")
+    )
+
+
+def projection_requires_strict_integration(plan: dict[str, Any]) -> bool:
+    """Fail closed for ordinary receipts when the bound projection is risky.
+
+    Promotion and closeout receive an immutable v2 plan plus a refreshed CI
+    receipt, but do not have the live PR payload used by the merge gate.  The
+    plan's already verified impact projection therefore remains the authority
+    for rejecting an ordinary receipt on high-risk or unknown source scope.
+    """
+    projection = plan.get("impact_projection") if isinstance(plan, dict) else None
+    if not isinstance(projection, dict):
+        return True
+    source = plan.get("source_review_identity")
+    if not isinstance(source, dict):
+        return True
+    projection_digest = projection.get("projection_digest")
+    if (not isinstance(projection_digest, str)
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", projection_digest)):
+        return True
+    projection_body = {key: value for key, value in projection.items() if key != "projection_digest"}
+    expected_projection_digest = "sha256:" + hashlib.sha256(
+        json.dumps(projection_body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    if (projection_digest != expected_projection_digest
+            or plan.get("impact_projection_digest") != projection_digest):
+        return True
+    if (projection.get("source_head_oid") != source.get("source_head_oid")
+            or projection.get("scope_base_oid") != source.get("source_scope_oid")):
+        return True
+    changed_paths = projection.get("changed_paths")
+    changed_paths_digest = projection.get("changed_paths_digest")
+    if (not isinstance(changed_paths, list)
+            or changed_paths != sorted(set(changed_paths))
+            or any(not isinstance(path, str) or not path for path in changed_paths)
+            or not isinstance(changed_paths_digest, str)
+            or changed_paths_digest != "sha256:" + hashlib.sha256(
+                json.dumps(changed_paths, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            ).hexdigest()
+            or source.get("changed_paths_digest") != changed_paths_digest.removeprefix("sha256:")):
+        return True
+    # Explicit public behavior changes are strict by structure; consuming a
+    # stable contract alone does not imply that the target changed it.
+    if projection.get("public_semantics"):
+        return True
+    if projection.get("review_escalated") is True or projection.get("verification_affected") is True:
+        return True
+    if projection.get("change_class") in {"workflow-doc", "unknown", "mixed"}:
+        return True
+    closure = projection.get("closure_status")
+    if not isinstance(closure, dict) or closure.get("status") != "complete":
+        return True
+    risk_text = json.dumps(
+        [reason for reason in projection.get("review_reasons", [])
+         if isinstance(reason, str) and not reason.startswith("input:")],
+        sort_keys=True,
+    ).lower()
+    risk_terms = ("api", "abi", "persistence", "serialization", "state-root", "consensus",
+                  "security", "dependency", "permission", "workflow", "validation", "contract",
+                  "schema", "migration", "wasm", "replay", "recovery", "critical")
+    if any(term in risk_text for term in risk_terms):
+        return True
+    high_risk_paths = (".github/workflows/", ".codex/", "scripts/pm/", "cargo.toml", "cargo.lock")
+    return any(
+        any(path.lower().startswith(prefix) or path.lower() == prefix.rstrip("/")
+            for prefix in high_risk_paths)
+        for path in projection.get("changed_paths", [])
+    )
+
+
 def _require_projection_digest(value: Any, field: str) -> str:
     if not isinstance(value, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", value):
         raise ValueError(f"{field} must be a prefixed SHA-256 digest")
@@ -541,8 +641,6 @@ def can_reuse_source_review(
     try:
         if plan.get("schema") != SOURCE_REVIEW_SCHEMA:
             return False
-        if not has_live_integration_attestation(latest_receipt):
-            return False
         source = _validate_source_identity(plan.get("source_review_identity"))
         if plan.get("source_review_digest") != source_review_digest(source):
             return False
@@ -551,6 +649,30 @@ def can_reuse_source_review(
         if current_source_identity is not None and _validate_source_identity(current_source_identity) != source:
             return False
         _validate_projection_binding(plan, latest_receipt)
+        applicability = _verified_review_applicability(
+            plan.get("professional_review_applicability")
+        )
+        if applicability != review_applicability_identity(source):
+            return False
+        if has_live_pr_ci_attestation(latest_receipt):
+            mode = plan.get("effective_mode")
+            if not isinstance(mode, dict) or mode.get("effective_policy") == "legacy":
+                return False
+            if projection_requires_strict_integration(plan):
+                return False
+            if latest_receipt.get("task_uid") != source["task_uid"]:
+                return False
+            if latest_receipt.get("head_oid") != source["source_head_oid"]:
+                return False
+            if current_applicability is not None:
+                if _verified_review_applicability(current_applicability) != applicability:
+                    return False
+            # Ordinary PR CI proves the frozen source/check identity.  Its
+            # recorded base is retained for audit, but current-target
+            # equality belongs only to the strict integration route.
+            return True
+        if not has_live_integration_attestation(latest_receipt):
+            return False
         accepted_raw = plan.get("integration_ci_identity")
         accepted: dict[str, Any] | None = None
         if accepted_raw is not None:
@@ -559,11 +681,6 @@ def can_reuse_source_review(
                 return False
             if accepted.get("conclusion") != "success":
                 return False
-        applicability = _verified_review_applicability(
-            plan.get("professional_review_applicability")
-        )
-        if applicability != review_applicability_identity(source):
-            return False
         if current_applicability is not None:
             if _verified_review_applicability(current_applicability) != applicability:
                 return False
@@ -614,6 +731,14 @@ def review_evidence_identity(receipt: dict[str, Any]) -> dict[str, Any]:
     if missing:
         raise ValueError("CI receipt is missing review authority fields: " + ",".join(missing))
     result = {field: receipt[field] for field in AUTHORITY_FIELDS}
+    if receipt.get("ci_validation_mode") is not None:
+        if receipt.get("ci_validation_mode") not in {"ordinary_pr", "trusted_integration"}:
+            raise ValueError("CI receipt validation mode is invalid")
+        result["ci_validation_mode"] = receipt["ci_validation_mode"]
+    if receipt.get("base_ref") is not None:
+        if not isinstance(receipt.get("base_ref"), str) or not receipt["base_ref"].strip():
+            raise ValueError("CI receipt target ref is invalid")
+        result["base_ref"] = receipt["base_ref"]
     if 'scope_base_oid' in receipt or 'integration_base_oid' in receipt:
         if not re.fullmatch(r'[0-9a-f]{40,64}', str(receipt.get('scope_base_oid', ''))) or receipt.get('integration_base_oid') != receipt['base_oid']:
             raise ValueError('CI receipt scope/integration authority is incomplete')

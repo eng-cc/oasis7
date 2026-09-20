@@ -59,6 +59,8 @@ class ReceiptTest(unittest.TestCase):
     issued=json.loads(output.getvalue())
     self.assertEqual(issued["scope_base_oid"],"b"*40)
     self.assertEqual(issued["integration_base_oid"],issued["base_oid"])
+    self.assertEqual("main", issued["base_ref"])
+    self.assertEqual("ordinary_pr", issued["ci_validation_mode"])
 
   def test_success(self):
     with self.api(): self.assertEqual("a"*40,M.live("eng-cc/oasis7",UID,1,7,"required-gate","42")[3])
@@ -67,12 +69,34 @@ class ReceiptTest(unittest.TestCase):
     with self.api(r=moved):
       with self.assertRaisesRegex(SystemExit,"integration.*rerun"):
         M.live("eng-cc/oasis7",UID,1,7,"required-gate","42")
+  def test_ordinary_pr_receipt_allows_unrelated_target_advance(self):
+    moved=pr(); moved["base"]["sha"]="c"*40
+    moved_run=run(); moved_run["pull_requests"][0]["base"]["sha"]="c"*40
+    with self.api(r=moved,runs=[moved_run]):
+      _, observed, base, head = M.live(
+        "eng-cc/oasis7", UID, 1, 7, "required-gate", "42", ordinary_pr=True
+      )
+    self.assertEqual("c"*40, base)
+    self.assertEqual("a"*40, head)
+    self.assertEqual("success", observed["conclusion"])
+  def test_ordinary_pr_receipt_still_rejects_invalid_check(self):
+    for conclusion in ("failure", "cancelled"):
+      with self.subTest(conclusion=conclusion), self.api(runs=[run(conclusion)]):
+        with self.assertRaisesRegex(SystemExit, conclusion):
+          M.live("eng-cc/oasis7", UID, 1, 7, "required-gate", "42", ordinary_pr=True)
+    wrong=run(); wrong["head_sha"]="c"*40; wrong["pull_requests"][0]["head"]["sha"]="c"*40
+    with self.api(runs=[wrong]):
+      with self.assertRaisesRegex(SystemExit, "wrong_head"):
+        M.live("eng-cc/oasis7", UID, 1, 7, "required-gate", "42", ordinary_pr=True)
   def test_expected_base_ref_rejects_same_oid_pr_retarget(self):
     moved=pr(); moved["base"]["ref"]="release"
     moved_run=run(); moved_run["pull_requests"][0]["base"]["ref"]="release"
     with self.api(r=moved,runs=[moved_run]):
       with self.assertRaisesRegex(SystemExit,"wrong_base_ref|base identity"):
         M.live("eng-cc/oasis7",UID,1,7,"required-gate","42",expected_base_ref="main")
+  def test_receipt_bound_target_ref_is_rechecked_on_refresh(self):
+    with self.assertRaisesRegex(SystemExit, "base ref mismatch"):
+      self.invoke_verify(lambda receipt: receipt.update(base_ref="release"))
   def test_planner_config_digest_is_bound_into_the_issued_receipt(self):
     receipt=self.invoke_verify()
     self.assertIn("planner_config_sha256",receipt["planner"],

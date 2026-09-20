@@ -672,9 +672,10 @@ PY
   trap - EXIT
 fi
 
-# A caller-owned CI receipt is immutable. Every v2 closeout performs one
-# complete live same-identity integration validation, even inside its observation
-# window; the legacy v1 path refreshes only when its observation window expires.
+# A caller-owned CI receipt is immutable. Every closeout performs one complete
+# live same-identity source/check validation. Only strict high-risk receipts
+# require a manual integration request locator; ordinary PR receipts retain
+# their recorded check base and do not chase unrelated target advancement.
 REFRESHED_CI_READY_RECEIPT=""
 if [[ "$TARGET_STATUS" == "ready" && -n "$CI_READY_RECEIPT" && "$VERIFICATION_PROFILE" != "fixture_repository_state" ]]; then
   CI_RECEIPT_STALE="$(python3 - "$CI_READY_RECEIPT" <<'PY'
@@ -690,7 +691,7 @@ PY
     CI_IDENTITY_JSON="$(python3 - "$CI_READY_RECEIPT" <<'PY'
 import json,sys
 r=json.load(open(sys.argv[1],encoding='utf-8'))
-print(json.dumps([r.get(k,'') for k in ('repository','task_issue_number','pr_number','check_name','check_app_id','planner_digest','integration_run_id')]))
+print(json.dumps([r.get(k,'') for k in ('repository','task_issue_number','pr_number','check_name','check_app_id','planner_digest','integration_run_id','ci_validation_mode','base_ref')]))
 PY
 )"
     CI_REPOSITORY="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])[0])' "$CI_IDENTITY_JSON")"
@@ -700,14 +701,21 @@ PY
     CI_CHECK_APP="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])[4])' "$CI_IDENTITY_JSON")"
     CI_PLANNER_DIGEST="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])[5])' "$CI_IDENTITY_JSON")"
     CI_INTEGRATION_RUN_ID="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])[6])' "$CI_IDENTITY_JSON")"
+    CI_VALIDATION_MODE="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])[7])' "$CI_IDENTITY_JSON")"
+    CI_BASE_REF="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])[8])' "$CI_IDENTITY_JSON")"
     if [[ "$REVIEW_PLAN_SCHEMA" == "oasis7-review-plan/v2" ]]; then
-      [[ "$CI_INTEGRATION_RUN_ID" =~ ^[0-9]+$ ]] || die "v2 ci-ready receipt lacks the current integration request/run identity"
+      CI_REFRESH_ARGS=()
+      [[ -n "$CI_BASE_REF" ]] && CI_REFRESH_ARGS+=(--base-ref "$CI_BASE_REF")
+      if [[ "$CI_VALIDATION_MODE" == "trusted_integration" || -n "$CI_INTEGRATION_RUN_ID" ]]; then
+        [[ "$CI_INTEGRATION_RUN_ID" =~ ^[0-9]+$ ]] || die "strict v2 ci-ready receipt lacks the current integration request/run identity"
+        CI_REFRESH_ARGS+=(--integration-run-id "$CI_INTEGRATION_RUN_ID")
+      fi
       python3 "$SCRIPT_DIR/ci-ready-receipt.py" \
         --repository "$CI_REPOSITORY" --task-uid "$TASK_UID" \
         --task-issue-number "$CI_TASK_ISSUE" --pr-number "$CI_PR_NUMBER" \
         --check-name "$CI_CHECK_NAME" --check-app-id "$CI_CHECK_APP" \
         --planner-digest "$CI_PLANNER_DIGEST" --receipt "$CI_READY_RECEIPT" \
-        --refresh-same-identity --integration-run-id "$CI_INTEGRATION_RUN_ID" \
+        --refresh-same-identity "${CI_REFRESH_ARGS[@]}" \
         --json >"$REFRESHED_CI_READY_RECEIPT" \
         || die "stale ci-ready receipt failed same-identity refresh"
     else

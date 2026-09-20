@@ -25,7 +25,7 @@ class SelectionTests(unittest.TestCase):
    return {'workflow_runs':self.runs[(page-1)*size:page*size]}
   if '/contents/' in path:return {'type':'file','path':integration.WORKFLOW,'encoding':'base64','content':base64.b64encode(getattr(self,'workflow','no integration mode').encode()).decode()}
   raise AssertionError(path)
- def check(self,locator=None,allow_ready_pr=False):
+ def check(self,locator=None,allow_ready_pr=False,require_integration=False,require_dispatch=False):
   def verify(repo,uid,number,base,head,n,app):
    r=next(r for r in self.runs if r['id']==n)
    if getattr(self,'verification_error',False):raise OSError('artifact read uncertain')
@@ -34,7 +34,7 @@ class SelectionTests(unittest.TestCase):
    if r['conclusion']!='success' or r['status']!='completed':raise ValueError('current request not successful')
    return {'id':n},{'workflow_run_id':n}
   with patch.object(receipt,'gh',side_effect=self.api),patch.object(integration,'gh',side_effect=self.api),patch.object(receipt,'live',return_value=(self.pr,{'id':1},BASE,HEAD)),patch.object(integration,'verified_run',side_effect=verify):
-   return receipt.selected_live('owner/repo',UID,1,12,'required-gate',42,allow_ready_pr=allow_ready_pr,integration_run_id=locator)
+   return receipt.selected_live('owner/repo',UID,1,12,'required-gate',42,allow_ready_pr=allow_ready_pr,integration_run_id=locator,require_integration=require_integration,require_dispatch=require_dispatch)
  def test_new_failure_blocks_even_normal_green(self):
   with self.assertRaisesRegex((SystemExit,ValueError),'current request'):self.check()
  def test_explicit_old_green_does_not_bypass_new_failure(self):
@@ -85,8 +85,13 @@ class SelectionTests(unittest.TestCase):
   self.pr_race={**self.pr,'draft':False}
   self.assertFalse(self.check(allow_ready_pr=True)[0]['draft'])
  def test_pre_activation_old_workflow_proves_unrelated(self):
-  old=run(20);old['display_title']='Rust';self.runs=[old]
-  self.assertEqual(self.check()[1]['id'],1)
+   old=run(20);old['display_title']='Rust';self.runs=[old]
+   self.assertEqual(self.check()[1]['id'],1)
+
+ def test_strict_selection_rejects_missing_manual_dispatch(self):
+   old=run(20);old['display_title']='Rust';self.runs=[old]
+   with self.assertRaisesRegex(SystemExit,'strict integration request is absent'):
+    self.check(require_integration=True,require_dispatch=True)
 
  def test_unknown_request_on_capable_workflow_never_skips(self):
   self.workflow='integration_revalidation';self.runs[0]['display_title']='unknown'

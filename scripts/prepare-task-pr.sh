@@ -1870,12 +1870,16 @@ PY
   [[ "$PR_STATE" == OPEN && -z "$PR_MERGED_AT" ]] || die "promote_draft requires an open, unmerged PR"
   case "$PR_IS_DRAFT" in true|false) ;; *) die "promote_draft received uncertain PR draft state: $PR_IS_DRAFT" ;; esac
   CI_READY_RECEIPT_HELPER="${PREPARE_TASK_PR_CI_READY_RECEIPT_PATH:-$ROOT_DIR/scripts/pm/ci-ready-receipt.py}"
-  RECEIPT_VERIFY_CMD=(python3 "$CI_READY_RECEIPT_HELPER" --repository "$RR" --task-uid "$RT" --task-issue-number "$RI" --pr-number "$RP" --check-name "$RC" --check-app-id "$RA" --planner-digest "$RD" --receipt "$PROMOTE_DRAFT_RECEIPT" --refresh-same-identity --base-ref "$CANONICAL_DEFAULT_BRANCH")
+  PROMOTE_CI_VALIDATION_MODE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8")).get("ci_validation_mode", ""))' "$PROMOTE_DRAFT_RECEIPT")"
+  PROMOTE_INTEGRATION_RUN_ID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8")).get("integration_run_id", ""))' "$PROMOTE_DRAFT_RECEIPT")"
+  RECEIPT_VERIFY_CMD=(python3 "$CI_READY_RECEIPT_HELPER" --repository "$RR" --task-uid "$RT" --task-issue-number "$RI" --pr-number "$RP" --check-name "$RC" --check-app-id "$RA" --planner-digest "$RD" --receipt "$PROMOTE_DRAFT_RECEIPT" --refresh-same-identity)
+  RECEIPT_VERIFY_CMD+=(--base-ref "$CANONICAL_DEFAULT_BRANCH")
   if [[ "$LOCAL_ROLE_REVIEW_PLAN_SCHEMA" == "oasis7-review-plan/v2" ]]; then
-    PROMOTE_INTEGRATION_RUN_ID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1],encoding="utf-8")).get("integration_run_id", ""))' "$PROMOTE_DRAFT_RECEIPT")"
-    [[ "$PROMOTE_INTEGRATION_RUN_ID" =~ ^[0-9]+$ ]] \
-      || die "promote_draft v2 ci_ready_receipt lacks the current integration request/run identity"
-    RECEIPT_VERIFY_CMD+=(--integration-run-id "$PROMOTE_INTEGRATION_RUN_ID")
+    if [[ "$PROMOTE_CI_VALIDATION_MODE" == "trusted_integration" || -n "$PROMOTE_INTEGRATION_RUN_ID" ]]; then
+      [[ "$PROMOTE_INTEGRATION_RUN_ID" =~ ^[0-9]+$ ]] \
+        || die "promote_draft strict v2 ci_ready_receipt lacks the current integration request/run identity"
+      RECEIPT_VERIFY_CMD+=(--integration-run-id "$PROMOTE_INTEGRATION_RUN_ID")
+    fi
   fi
   [[ "$PR_IS_DRAFT" == false ]] && RECEIPT_VERIFY_CMD+=(--allow-ready-pr)
   "${RECEIPT_VERIFY_CMD[@]}" >/dev/null \
