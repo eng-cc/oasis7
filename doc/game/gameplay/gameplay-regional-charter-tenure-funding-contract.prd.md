@@ -1,12 +1,12 @@
 # Gameplay 区域 charter、tenure 与公共融资合同
 
 - `PRD-ID`：`PRD-GAME-017`
-- 上层产品映射：本合同承接 [`受治理的区域能力与扩展`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md) 的 `GR-004` 至 `GR-008` 产品结果；产品专题拥有区域 charter、tenure 与 levy 的产品承诺，本文件拥有玩家动作、取舍、失败恢复、申诉和可玩性验收。
+- 上层产品映射：本合同承接产品 [`REQ-WR-GR-004`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-004) / [`AC-WR-GR-004`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#ac-wr-gr-004)、[`REQ-WR-GR-005`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-005) / [`AC-WR-GR-005`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#ac-wr-gr-005)、[`REQ-WR-GR-006`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-006) / [`AC-WR-GR-006`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#ac-wr-gr-006)、[`REQ-WR-GR-007`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-007) / [`AC-WR-GR-007`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#ac-wr-gr-007)、[`REQ-WR-GR-008`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-008) / [`AC-WR-GR-008`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#ac-wr-gr-008) 的产品结果；产品专题拥有区域 charter、tenure 与 levy 的产品承诺，本文件拥有玩家动作、取舍、失败恢复、申诉和可玩性验收。
 - 主题 authority：本文件是 `game` 专业域中区域成立/调整、双资格约束、退化/恢复、tenure 长期规划与服务费/公共 levy 玩家语义的详细 authority；不把 `PRD-GAME-015` 的成熟世界成长路线扩展为 charter、tenure 或 levy 的完整合同。
 - 专业边界：`world-runtime` 拥有空间、资格、bond、tenure、费用、receipt、状态与确定性恢复；`p2p` 拥有身份、治理授权/签名和分布式状态；`doc/testing/prd.md` 与 QA 拥有组合验证证据。产品专题仍拥有 `GR-004` 至 `GR-008` 的稳定产品要求。
 - 设计适用性：`simple-topic-exemption`（`PRD-only-sufficient`）。本文件只承载 Why / What / Done、玩家循环、机会成本、失败恢复和验收，不新增 API、schema、状态机、回滚算法、数值或 UI 布局；配对例外在 [`doc/game/prd.index.md`](../prd.index.md) 登记。
 - 当前执行：可变 task 状态与当前实现证据由 GitHub Project task truth 和 issue evidence comments 拥有；本文件不宣称当前已实现、已平衡、已发布或已获得 release readiness。
-- 依赖锚点状态：本合同的 `GR-004` 至 `GR-008` 语义依赖产品迁移 #3816。当前工作树尚未合入该依赖，因此下方映射链接有意只指向产品专题根文件，不伪造当前可解析的 fragment；精确锚点在依赖 #3816 合并后才生效：`#req-wr-gr-004` / `#ac-wr-gr-004`、`#req-wr-gr-005` / `#ac-wr-gr-005`、`#req-wr-gr-006` / `#ac-wr-gr-006`、`#req-wr-gr-007` / `#ac-wr-gr-007`、`#req-wr-gr-008` / `#ac-wr-gr-008`。
+- 产品锚点状态：本合同的 `GR-004` 至 `GR-008` 语义均直达 active 产品专题的 `REQ/AC` 精确锚点；本文件只消费这些产品边界，不把链接存在写成当前实现、可玩性或 release 证据。
 
 ## 1. 目标与范围
 
@@ -40,31 +40,31 @@
 
 ### <a id="ac-game-017-01"></a>AC-GAME-017-01：charter 提案与分层审查形成可读选择
 
-承接产品 [`GR-004 产品专题`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md)（精确 `REQ-WR-GR-004` / `AC-WR-GR-004` 锚点待依赖 #3816 合并后生效）。
+承接产品 [`REQ-WR-GR-004`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-004) / [`AC-WR-GR-004`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#ac-wr-gr-004)。
 
 给定成立、合并或调整区域的提案，玩家能查看空间锚定边界、持续设施/物流/服务能力、需求/交付、Agent/资源、边界理由和 bond 证据，并区分本地审查、邻区异议与全局宪制/反圈地复核的作用范围。提交前预览只说明当前取舍，不预留地点、资源、资格或权力；执行前条件漂移、缺项或越界时，玩家收到原子拒绝/待补证据及下一步。有效结果至多形成一次有作用域的 charter receipt，不把批准写成永久控制或全局权力。
 
 ### <a id="ac-game-017-02"></a>AC-GAME-017-02：双资格约束本地治理且保留通行与独立路线
 
-承接产品 [`GR-005 产品专题`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md)（精确 `REQ-WR-GR-005` / `AC-WR-GR-005` 锚点待依赖 #3816 合并后生效）。
+承接产品 [`REQ-WR-GR-005`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-005) / [`AC-WR-GR-005`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#ac-wr-gr-005)。
 
 玩家能比较受限 OC/可撤回委托/实际控制人封顶形成的治理资格与持续运营、维护或交付形成的本地贡献资格；任何一侧单独不足以把资本、短时到访或历史头衔变成无限控制。区域事项只影响声明的公共项目、服务、许可和受限竞争；触及受保护权利的事项拒绝或转入独立宪制轨道。容量稀缺时玩家看到透明结算、替代路线或重建路径，不能被区域任意驱逐、封路或阻断独立成长。
 
 ### <a id="ac-game-017-03"></a>AC-GAME-017-03：退化、恢复和解散保持可归因且可恢复
 
-承接产品 [`GR-006 产品专题`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md)（精确 `REQ-WR-GR-006` / `AC-WR-GR-006` 锚点待依赖 #3816 合并后生效）。
+承接产品 [`REQ-WR-GR-006`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-006) / [`AC-WR-GR-006`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#ac-wr-gr-006)。
 
 玩家能区分短时服务失败、持续退化、观察/恢复、暂停高影响权限、恢复成功和解散/回归未成熟区域。每种状态说明触发事实、当前限制、恢复条件、异议/申诉和下一决策点；`repair_region`、`rebuild_service`、`pivot_local_use` 的时间/阶段成本、资源成本、保留/失去价值和主要风险可比较。短时失败、技术停机或未审计处罚不能静默删除 charter、bond、设施、Agent、tenure、身份、合同或历史 receipt；规则化迁移、回收、重建和申诉只产生一次可追溯结果。
 
 ### <a id="ac-game-017-04"></a>AC-GAME-017-04：tenure 支持可读长期规划但不产生永久主权
 
-承接产品 [`GR-007 产品专题`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md)（精确 `REQ-WR-GR-007` / `AC-WR-GR-007` 锚点待依赖 #3816 合并后生效）。
+承接产品 [`REQ-WR-GR-007`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-007) / [`AC-WR-GR-007`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#ac-wr-gr-007)。
 
 玩家在取得、续期或转让 tenure 前能读到建设/服务用途、维护与实际使用条件、可规划的时间 horizon、公共通行影响、续期/转让限制以及不能保证的未来价值。玩家可以选择继续维护、转让、延期、改走其他地点或请求申诉；预览不锁定地点或容量，也不保证未来资源、收益或排他权。到期、长期闲置、明确违约或预定义公共必要性触发收回时，玩家能看到通知、理由、申诉以及适用的迁移、可回收拆除或规则化补偿路径；区域竞争、退化或公共必要性不能自动静默没收资产、身份、合同或封锁公共通行。
 
 ### <a id="ac-game-017-05"></a>AC-GAME-017-05：服务费与公共 levy 分离且失效时 fail closed
 
-承接产品 [`GR-008 产品专题`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md)（精确 `REQ-WR-GR-008` / `AC-WR-GR-008` 锚点待依赖 #3816 合并后生效）。
+承接产品 [`REQ-WR-GR-008`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-008) / [`AC-WR-GR-008`](../../product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#ac-wr-gr-008)。
 
 玩家能比较可排他服务的收益对象、用途、成本、范围、退出/替代路径与自愿费用，以及不可排他公共品 levy 的 charter 授权、目的、受益范围、预算/费率上限、期限、公开账目和定期复核。有效项目在当前授权下最多结算一次；未授权、过期、超范围、无账目或未审计 levy 原子拒绝，不扣费、不产生欠费、资格变化、通行限制或独立成长门槛。玩家得到补证、申诉、常态服务、独立恢复或重新规划的下一步；无效提案、重连和重复执行不产生第二次世界效果。
 
