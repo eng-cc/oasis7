@@ -253,6 +253,17 @@ class CheckerStageAdmissionTest(unittest.TestCase):
             workflow,
         )
 
+    def test_workflow_bypasses_generic_profile_planner_only_for_exact_stage_route(self):
+        workflow = (Path(__file__).parents[2] / ".github/workflows/rust.yml").read_text(
+            encoding="utf-8"
+        )
+        stage_branch = workflow.index('if [[ -n "${OASIS7_CARGO_STAGE_PR_NUMBER:-}" ]]')
+        planner_call = workflow.index('python3 "${OASIS7_CARGO_PROFILE_PLANNER}"')
+        self.assertLess(stage_branch, planner_call)
+        self.assertIn("OASIS7_CARGO_STAGE_TASK_UID", workflow)
+        self.assertIn("cargo-checker-stage-admission-receipt-", workflow)
+        self.assertIn("steps.checker-stage.outputs.pr_number == ''", workflow)
+
     def test_authority_chain_reads_both_fixed_live_server_readbacks(self):
         with patch.object(MODULE, "gh_api", side_effect=_authority_api()):
             chain = MODULE.verify_authority_chain(REPOSITORY)

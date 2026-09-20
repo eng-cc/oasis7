@@ -14,6 +14,8 @@ PROFILE_ARTIFACTS={
     "results": ("cargo-package-profile-results", "cargo-package-profile-results.json"),
     "receipt": ("cargo-package-profile-receipt", "cargo-package-profile-receipt.json"),
 }
+STAGE_ARTIFACT_PREFIX="cargo-checker-stage-admission-receipt-"
+STAGE_ARTIFACT_MEMBER="post-run-receipt.json"
 # Keep every planner gate selector in the receipt authority digest, including
 # non-Rust governance gates that do not appear in the Rust test matrix.
 RUN_FIELDS=(
@@ -121,6 +123,115 @@ def _trusted_workflow_source(repository, workflow_sha):
     try: return base64.b64decode(normalized,validate=True)
     except Exception as exc: raise SystemExit(f"ci-ready-receipt: trusted workflow source is malformed: {exc}")
 
+def _verify_live_checker_stage_scope(repository, task_uid, task_issue_number, pr_number, proof):
+    try:
+        from cargo_checker_stage_admission import CHECKER_ISSUE, CHECKER_SCOPE, CHECKER_TASK_UID
+    except Exception as exc:
+        raise SystemExit(f"ci-ready-receipt: checker-stage authority module is unavailable: {exc}")
+    if repository != "eng-cc/oasis7" or task_issue_number != CHECKER_ISSUE or task_uid != CHECKER_TASK_UID:
+        raise SystemExit("ci-ready-receipt: checker-stage task identity is not the trusted Issue binding")
+    issue=gh("api",f"repos/{repository}/issues/{CHECKER_ISSUE}")
+    if not isinstance(issue,dict) or issue.get("number")!=CHECKER_ISSUE or issue.get("state")!="open" or issue.get("repository_url")!=f"https://api.github.com/repos/{repository}":
+        raise SystemExit("ci-ready-receipt: checker-stage task Issue readback is unavailable")
+    body=str(issue.get("body") or "").replace("\r\n","\n")
+    uids=re.findall(r"(?m)^task_uid:\s*(task_[0-9a-f]{32})\s*$",body)
+    if uids != [CHECKER_TASK_UID]:
+        raise SystemExit("ci-ready-receipt: checker-stage task Issue UID binding is ambiguous")
+    references=set(re.findall(rf"https://github\.com/{re.escape(repository)}/pull/(\d+)\b",body))
+    references.update(re.findall(r"(?m)^-?\s*pr_number:\s*`?(\d+)`?\s*$",body))
+    if references != {str(pr_number)}:
+        raise SystemExit("ci-ready-receipt: checker-stage reciprocal PR binding is missing or mismatched")
+    pull=gh("api",f"repos/{repository}/pulls/{pr_number}")
+    if not isinstance(pull,dict) or pull.get("number")!=pr_number or pull.get("state")!="open" or pull.get("merged"):
+        raise SystemExit("ci-ready-receipt: checker-stage PR is unavailable or not open")
+    base=pull.get("base") or {}
+    head=pull.get("head") or {}
+    if base.get("ref")!="main":
+        raise SystemExit("ci-ready-receipt: checker-stage PR base branch is not canonical main")
+    if ((base.get("repo") or {}).get("full_name")!=repository or
+        (head.get("repo") or {}).get("full_name")!=repository):
+        raise SystemExit("ci-ready-receipt: checker-stage PR base/head repository is not canonical")
+    if str(head.get("sha") or "") != str(proof.get("head_oid") or ""):
+        raise SystemExit("ci-ready-receipt: checker-stage PR head does not match integration source head")
+    if str(base.get("sha") or "") != str(proof.get("base_oid") or ""):
+        raise SystemExit("ci-ready-receipt: checker-stage PR base does not match integration base")
+    files=[]
+    for page in range(1,101):
+        batch=gh("api",f"repos/{repository}/pulls/{pr_number}/files?per_page=100&page={page}")
+        if not isinstance(batch,list):
+            raise SystemExit("ci-ready-receipt: checker-stage changed-path readback is unavailable")
+        files.extend(batch)
+        if len(batch)<100: break
+    else: raise SystemExit("ci-ready-receipt: checker-stage changed-path pagination overflow")
+    if len(files)!=len(CHECKER_SCOPE):
+        raise SystemExit("ci-ready-receipt: checker-stage PR scope is not exactly the trusted two-file set")
+    if sorted(item.get("filename") for item in files if isinstance(item,dict)) != sorted(CHECKER_SCOPE):
+        raise SystemExit("ci-ready-receipt: checker-stage PR changed paths are outside the trusted two-file set")
+    if any(not isinstance(item,dict) or item.get("status")!="modified" or item.get("previous_filename") for item in files):
+        raise SystemExit("ci-ready-receipt: checker-stage PR contains rename/copy or non-modification scope")
+
+def _checker_stage_disposition(repository, check_run, proof, artifacts, workflow_source, *, task_uid, task_issue_number, pr_number):
+    try:
+        from cargo_checker_stage_admission import verify_durable_postrun_receipt, AdmissionError
+    except Exception as exc:
+        raise SystemExit(f"ci-ready-receipt: checker-stage receipt verifier is unavailable: {exc}")
+    required_markers=(b"id: checker-stage",b"git diff --name-status --find-renames",b"cargo-checker-stage-admission-receipt-")
+    if any(marker not in workflow_source for marker in required_markers):
+        raise SystemExit("ci-ready-receipt: trusted workflow lacks the checker-stage integration route")
+    workflow_run_id=int(proof.get("workflow_run_id") or 0)
+    run_attempt=int(proof.get("run_attempt") or 0)
+    if workflow_run_id<1 or run_attempt<1:
+        raise SystemExit("ci-ready-receipt: checker-stage workflow run identity is incomplete")
+    expected_name=f"{STAGE_ARTIFACT_PREFIX}{workflow_run_id}-{run_attempt}"
+    prefixed=[item for item in artifacts if isinstance(item,dict) and str(item.get("name") or "").startswith(STAGE_ARTIFACT_PREFIX)]
+    if len(prefixed)!=1 or prefixed[0].get("name")!=expected_name:
+        raise SystemExit("ci-ready-receipt: checker-stage receipt artifacts are missing, duplicate, or unexpected")
+    matches=[item for item in artifacts if isinstance(item,dict) and item.get("name")==expected_name]
+    if len(matches)!=1 or matches[0].get("expired") is not False:
+        raise SystemExit("ci-ready-receipt: checker-stage receipt artifact is missing, ambiguous, or expired")
+    artifact=matches[0]
+    if int((artifact.get("workflow_run") or {}).get("id") or 0)!=workflow_run_id:
+        raise SystemExit("ci-ready-receipt: checker-stage receipt artifact belongs to the wrong workflow run")
+    try:
+        with zipfile.ZipFile(io.BytesIO(artifact_bytes(repository,artifact["id"]))) as archive:
+            if archive.namelist()!=[STAGE_ARTIFACT_MEMBER]: raise ValueError("unexpected archive members")
+            receipt_bytes=archive.read(STAGE_ARTIFACT_MEMBER)
+            receipt=json.loads(receipt_bytes)
+    except Exception as exc:
+        raise SystemExit(f"ci-ready-receipt: malformed checker-stage receipt artifact: {exc}")
+    try:
+        verify_durable_postrun_receipt(receipt)
+    except AdmissionError as exc:
+        raise SystemExit(f"ci-ready-receipt: invalid checker-stage durable receipt: {exc}")
+    if not isinstance(receipt,dict) or receipt.get("repository")!=repository or receipt.get("task_uid")!=task_uid or receipt.get("pr_number")!=pr_number:
+        raise SystemExit("ci-ready-receipt: checker-stage receipt task/PR identity mismatch")
+    runner=receipt.get("runner") or {}
+    expected_runner={"run_id":str(workflow_run_id),"run_attempt":str(run_attempt),"workflow_ref":proof.get("workflow_ref"),"workflow_sha":proof.get("workflow_sha")}
+    if any(runner.get(field)!=value for field,value in expected_runner.items()):
+        raise SystemExit("ci-ready-receipt: checker-stage receipt workflow identity mismatch")
+    if check_run.get("status")!="completed" or str(check_run.get("conclusion") or "").lower()!="success":
+        raise SystemExit("ci-ready-receipt: checker-stage required-gate check is not completed successfully")
+    live_check=receipt.get("check") or {}
+    # The required-gate check in integration_revalidation executes on the
+    # trusted target checkout B; the receipt still binds the source PR head H
+    # independently below.  Do not confuse the check execution identity with
+    # the source head identity.
+    expected_check={"check_name":check_run.get("name"),"check_app_id":(check_run.get("app") or {}).get("id"),"check_run_id":check_run.get("id"),"check_head":proof.get("base_oid"),"workflow_run_id":str(workflow_run_id)}
+    if any(live_check.get(field)!=value for field,value in expected_check.items()):
+        raise SystemExit("ci-ready-receipt: checker-stage receipt check identity mismatch")
+    expected_scope_base=scope_base_for_run(repository,proof.get("base_oid"),proof.get("head_oid"))
+    expected_tree=proof.get("tested_tree_oid")
+    if any(receipt.get(field)!=value for field,value in (("base_oid",proof.get("base_oid")),("head_oid",proof.get("head_oid")),("scope_base_oid",expected_scope_base),("tested_tree",expected_tree))):
+        raise SystemExit("ci-ready-receipt: checker-stage receipt B/H/T or scope-base mismatch")
+    _verify_live_checker_stage_scope(repository,task_uid,task_issue_number,pr_number,proof)
+    return {"schema":"oasis7-cargo-checker-stage-coverage/v1","execution_disposition":"trusted_checker_stage_receipt","disposition_validated":True,
+      "repository":repository,"task_uid":task_uid,"task_issue_number":task_issue_number,"pr_number":pr_number,
+      "workflow_ref":proof.get("workflow_ref"),"workflow_sha":proof.get("workflow_sha"),"run_id":workflow_run_id,"run_attempt":run_attempt,
+      "check_name":check_run.get("name"),"check_app_id":(check_run.get("app") or {}).get("id"),"check_run_id":check_run.get("id"),
+      "integration_base":proof.get("base_oid"),"source_head":proof.get("head_oid"),"tested_tree":proof.get("tested_tree_oid"),
+      "scope_base":expected_scope_base,"stage_receipt_artifact":expected_name,
+      "stage_receipt_digest":"sha256:"+hashlib.sha256(receipt_bytes).hexdigest()}
+
 def cargo_package_profile_for_run(repository, check_run, proof, planner, *, task_uid, task_issue_number, pr_number):
     workflow_run_id=int(proof.get("workflow_run_id") or 0)
     if workflow_run_id < 1:
@@ -133,8 +244,13 @@ def cargo_package_profile_for_run(repository, check_run, proof, planner, *, task
     else: raise SystemExit("ci-ready-receipt: package profile artifact pagination overflow")
     profile_names={value[0] for value in PROFILE_ARTIFACTS.values()}
     present={item.get("name") for item in artifacts} & profile_names
+    stage_artifacts=[item for item in artifacts if isinstance(item,dict) and str(item.get("name") or "").startswith(STAGE_ARTIFACT_PREFIX)]
+    if stage_artifacts and present:
+        raise SystemExit("ci-ready-receipt: checker-stage and package-profile artifacts cannot be mixed")
     if not present:
         workflow_source=_trusted_workflow_source(repository,proof.get("workflow_sha"))
+        if stage_artifacts:
+            return _checker_stage_disposition(repository,check_run,proof,artifacts,workflow_source,task_uid=task_uid,task_issue_number=task_issue_number,pr_number=pr_number)
         if b"cargo-package-profile-envelope" in workflow_source:
             raise SystemExit("ci-ready-receipt: package profile artifact missing from envelope-capable trusted workflow")
         if planner.get("scope")!="full" or not all(planner.get(field) is True for field in RUN_FIELDS):
