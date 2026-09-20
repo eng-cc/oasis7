@@ -5,21 +5,21 @@ use super::super::{
 use super::World;
 use crate::simulator::canonical_agent_intent_summary;
 
-#[cfg(any(test, feature = "test_tier_required"))]
+#[cfg(test)]
 const STATUS_PROPOSED: &str = "proposed";
-#[cfg(any(test, feature = "test_tier_required"))]
+#[cfg(test)]
 const STATUS_SUBMITTED: &str = "submitted";
 const STATUS_ACCEPTED: &str = "accepted";
-#[cfg(any(test, feature = "test_tier_required"))]
+#[cfg(test)]
 const STATUS_BLOCKED: &str = "blocked";
 const STATUS_COMPLETED: &str = "completed";
-#[cfg(any(test, feature = "test_tier_required"))]
+#[cfg(test)]
 const STATUS_REJECTED: &str = "rejected";
-#[cfg(any(test, feature = "test_tier_required"))]
+#[cfg(test)]
 const STATUS_EXPIRED: &str = "expired";
-#[cfg(any(test, feature = "test_tier_required"))]
+#[cfg(test)]
 const STATUS_CANCELLED: &str = "cancelled";
-#[cfg(any(test, feature = "test_tier_required"))]
+#[cfg(test)]
 const SOURCE_PROVIDER_ADVISORY: &str = "provider_advisory";
 
 fn invalid_intent(reason: impl Into<String>) -> WorldError {
@@ -88,7 +88,7 @@ impl World {
     ///
     /// This path deliberately creates only `AgentIntentProposed`; provider
     /// output cannot submit, accept, or complete an intent on its own.
-    #[cfg(any(test, feature = "test_tier_required"))]
+    #[cfg(test)]
     pub(crate) fn record_provider_advisory_proposed(
         &mut self,
         agent_id: &str,
@@ -165,7 +165,7 @@ impl World {
             .ok_or_else(|| invalid_intent("provider advisory was not persisted"))
     }
 
-    #[cfg(any(test, feature = "test_tier_required"))]
+    #[cfg(test)]
     fn transition_agent_intent_terminal_exact(
         &mut self,
         agent_id: &str,
@@ -228,7 +228,7 @@ impl World {
     }
 
     /// Persist expiry for an exact intent before execution or completion.
-    #[cfg(any(test, feature = "test_tier_required"))]
+    #[cfg(test)]
     pub(crate) fn expire_agent_intent_exact(
         &mut self,
         agent_id: &str,
@@ -244,7 +244,7 @@ impl World {
     }
 
     /// Persist cancellation for an exact submitted/accepted/blocked intent.
-    #[cfg(any(test, feature = "test_tier_required"))]
+    #[cfg(test)]
     pub(crate) fn cancel_agent_intent_exact(
         &mut self,
         agent_id: &str,
