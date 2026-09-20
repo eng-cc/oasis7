@@ -411,18 +411,18 @@ impl ViewerRuntimeLiveServer {
                     .to_string(),
             ));
         }
-        if self.hosted_local_mock_test_lane_active && !prepared.world.state().agents.is_empty() {
-            if !control_plane::install_hosted_local_mock_test_capability_fixtures(
+        if self.hosted_local_mock_test_lane_active
+            && !prepared.world.state().agents.is_empty()
+            && !control_plane::install_hosted_local_mock_test_capability_fixtures(
                 &mut prepared.world,
                 self.config.hosted_public_join_mode,
             )
             .map_err(ViewerRuntimeLiveServerError::Init)?
-            {
-                return Err(ViewerRuntimeLiveServerError::Init(
+        {
+            return Err(ViewerRuntimeLiveServerError::Init(
                     "Hosted local-mock test lane was disabled before authoritative fixture installation"
                         .to_string(),
                 ));
-            }
         }
         let prepared_snapshot = prepared.world.snapshot();
         let baseline_snapshot_hash = compute_runtime_snapshot_hash(&baseline_snapshot)?;

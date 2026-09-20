@@ -157,7 +157,7 @@ impl ViewerRuntimeLiveServer {
         request_id: &str,
         operation: PromptControlOperation,
         preview: bool,
-    ) -> Result<(), PromptControlError> {
+    ) -> Result<(), Box<PromptControlError>> {
         if !(self.hosted_local_mock_test_lane_active && self.llm_sidecar.is_llm_mode()) {
             return Ok(());
         }
@@ -186,7 +186,7 @@ impl ViewerRuntimeLiveServer {
                 blocked.reason_code =
                     Some("prompt_control_runtime_context_unavailable".to_string());
                 blocked.next_step = Some("retry_after_runtime_resync".to_string());
-                blocked
+                Box::new(blocked)
             })
     }
 
@@ -519,7 +519,8 @@ impl ViewerRuntimeLiveServer {
             request_id.as_str(),
             operation,
             preview,
-        )?;
+        )
+        .map_err(|error| *error)?;
         let current = self
             .current_prompt_profile(agent_id.as_str())
             .map_err(|_| {

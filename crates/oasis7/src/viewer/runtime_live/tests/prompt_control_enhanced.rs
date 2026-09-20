@@ -207,7 +207,7 @@ fn runtime_prompt_control_hosted_local_mock_provider_refreshes_after_runtime_reb
         Some(current_binding.clone()),
         "refresh must rebuild context instead of retaining the prior Runtime head"
     );
-    let applied = server
+    server
         .llm_sidecar
         .apply_prompt_profile_to_driver(&crate::simulator::AgentPromptProfile {
             agent_id,
@@ -215,7 +215,6 @@ fn runtime_prompt_control_hosted_local_mock_provider_refreshes_after_runtime_reb
             ..Default::default()
         })
         .expect("refreshed current-head context must admit prompt control");
-    assert_eq!(applied, ());
     assert_eq!(
         server.llm_sidecar.provider_test_binding(),
         Some(current_binding.clone())
