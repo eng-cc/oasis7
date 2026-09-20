@@ -1,5 +1,6 @@
 use super::*;
 use oasis7::launcher_bootstrap_peers::parse_chain_replication_bootstrap_peer;
+use std::net::IpAddr;
 
 pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, String> {
     let mut options = CliOptions::default();
@@ -311,7 +312,9 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
     } else {
         DeploymentMode::parse_user_facing(options.deployment_mode.as_str(), "--deployment-mode")?
     };
-    if !deployment_mode.allows_local_chain_runtime() {
+    if !deployment_mode.allows_local_chain_runtime()
+        && !local_test_provider_setup_requested(&options)
+    {
         options.chain_enabled = false;
     }
     validate_agent_decision_source(options.agent_decision_source.as_str())?;
@@ -473,13 +476,89 @@ fn validate_local_test_provider_options(options: &CliOptions) -> Result<(), Stri
                 .to_string(),
         );
     }
-    if options.agent_decision_source != BUILTIN_LLM_DECISION_SOURCE {
+    if options.agent_decision_source == BUILTIN_LLM_DECISION_SOURCE {
+        if options.deployment_mode != "trusted_local_only" {
+            return Err(
+                "local test provider authority setup requires trusted_local_only builtin_llm lane"
+                    .to_string(),
+            );
+        }
+        return Ok(());
+    }
+    if !hosted_local_mock_provider_tuple(options) {
+        if options.deployment_mode != "hosted_public_join"
+            || options.agent_decision_source != PROVIDER_BACKED_DECISION_SOURCE
+        {
+            return Err(
+                "local test provider authority setup requires --agent-decision-source builtin_llm"
+                    .to_string(),
+            );
+        }
         return Err(
-            "local test provider authority setup requires --agent-decision-source builtin_llm"
+            "Hosted local-mock funding requires the exact HostedPublicJoin provider_backed/provider_local_mock/worldsim_provider_v1/loopback_http/player_parity tuple"
+                .to_string(),
+        );
+    }
+    if !cfg!(feature = "test_tier_required") {
+        return Err(
+            "Hosted local-mock funding requires a binary built with feature test_tier_required"
                 .to_string(),
         );
     }
     Ok(())
+}
+
+fn local_test_provider_setup_requested(options: &CliOptions) -> bool {
+    options.local_test_provider_authority_path.is_some()
+        || options.local_test_provider_wasm_path.is_some()
+        || options.local_test_provider_metadata_path.is_some()
+        || options.local_test_provider_finality_block_hash.is_some()
+        || options.local_test_provider_agent_id != "starter-agent-0"
+        || options.local_test_provider_owner_binding != "local-test-owner-0"
+        || options.local_test_provider_session_mode != "hosted_public_join"
+}
+
+fn hosted_local_mock_provider_tuple(options: &CliOptions) -> bool {
+    options.deployment_mode == "hosted_public_join"
+        && options.agent_decision_source == PROVIDER_BACKED_DECISION_SOURCE
+        && options.agent_provider_backend == LOCAL_MOCK_PROVIDER_BACKEND
+        && options.agent_provider_contract == WORLDSIM_PROVIDER_CONTRACT
+        && options.agent_provider_transport == LOOPBACK_HTTP_PROVIDER_TRANSPORT
+        && options.agent_execution_lane == ProviderExecutionMode::PlayerParity
+        && options.local_test_provider_session_mode == "hosted_public_join"
+        && is_loopback_http_provider_url(options.agent_provider_url.as_str())
+}
+
+fn is_loopback_http_provider_url(raw: &str) -> bool {
+    let value = raw.trim();
+    let Some(scheme) = value.get(.."http://".len()) else {
+        return false;
+    };
+    if !scheme.eq_ignore_ascii_case("http://")
+        || value
+            .bytes()
+            .any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control())
+    {
+        return false;
+    }
+
+    let authority_and_path = &value["http://".len()..];
+    let authority_end = authority_and_path
+        .find(['/', '?', '#'])
+        .unwrap_or(authority_and_path.len());
+    let authority = &authority_and_path[..authority_end];
+    if authority.is_empty() || authority.contains('@') {
+        return false;
+    }
+    let Ok((host, _port)) = parse_host_port(authority, "provider URL") else {
+        return false;
+    };
+    if host.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    host.parse::<IpAddr>()
+        .map(|address| address.is_loopback())
+        .unwrap_or(false)
 }
 
 fn validate_generated_world_options(options: &CliOptions) -> Result<(), String> {

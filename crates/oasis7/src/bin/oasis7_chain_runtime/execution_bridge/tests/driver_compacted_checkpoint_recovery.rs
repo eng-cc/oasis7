@@ -12,6 +12,17 @@ use oasis7_node::{NodeExecutionCommitContext, NodeExecutionHook, compute_consens
 
 fn install_module_fixture(world: &mut RuntimeWorld, module_id: &str, wasm_bytes: &[u8]) -> String {
     world.set_policy(PolicySet::allow_all());
+    let signer_public_key_hex = hex::encode(
+        test_module_artifact_signing_key()
+            .verifying_key()
+            .to_bytes(),
+    );
+    world
+        .bind_node_identity(
+            TEST_MODULE_ARTIFACT_SIGNER_NODE_ID,
+            signer_public_key_hex.as_str(),
+        )
+        .expect("bind test module signer identity");
     let wasm_hash = sha256_hex(wasm_bytes);
     world
         .register_module_artifact(wasm_hash.clone(), wasm_bytes)

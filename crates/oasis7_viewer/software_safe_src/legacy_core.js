@@ -3214,9 +3214,7 @@ function handleAgentChatError(error) {
 }
 
 function adoptHostedRecoveryAck(ack) {
-  if (!ack || !state.auth.available) {
-    return;
-  }
+  if (!ack || !state.auth.available || (ack.status === "catch_up_ready" && ack.message === "snapshot_sync_metadata" && [ack.player_id, ack.session_pubkey, ack.session_epoch, ack.binding_epoch, ack.agent_id].every((value) => value == null))) return;
   clearHostedRuntimeSyncTimer();
   const usesLegacyPreviewBootstrap = state.auth.source === LEGACY_VIEWER_AUTH_BOOTSTRAP_SOURCE;
   const hadPendingForceRebind = state.auth.pendingForceRebind === true;
