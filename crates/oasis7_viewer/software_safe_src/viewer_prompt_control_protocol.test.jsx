@@ -311,6 +311,75 @@ describe("viewer prompt control protocol", () => {
     expect(core.state.auth.bindingEpoch).toBeNull();
   }, HEAVY_UI_TEST_TIMEOUT_MS);
 
+  it("does not resolve registration from identity-less snapshot metadata", async () => {
+    const { core, sockets, sentMessages } = await setupConnectedSemanticCore();
+    core.state.auth = {
+      ...core.state.auth,
+      available: true,
+      playerId: "local-test-player-bound",
+      publicKey: "abcdef0123456789abcdef0123456789",
+      privateKey: "07".repeat(32),
+      registrationGrant: "grant-before-metadata",
+      registrationStatus: "issued",
+      runtimeStatus: "issued",
+      sessionEpoch: null,
+      bindingEpoch: null,
+      boundAgentId: null,
+      syncInFlight: false,
+    };
+
+    const registerPromise = core.registerPlayerSessionForTest("agent-0");
+    await waitFor(() => {
+      expect(sentMessages).toEqual(expect.arrayContaining([
+        expect.objectContaining({
+          type: "authoritative_recovery",
+          command: expect.objectContaining({
+            mode: "register_session",
+            request: expect.objectContaining({
+              player_id: "local-test-player-bound",
+              requested_agent_id: "agent-0",
+              registration_grant: "grant-before-metadata",
+            }),
+          }),
+        }),
+      ]));
+    });
+    sockets[0].receive({
+      type: "authoritative_recovery_ack",
+      ack: {
+        status: "catch_up_ready",
+        message: "snapshot_sync_metadata",
+        player_id: null,
+        session_pubkey: null,
+        session_epoch: null,
+        binding_epoch: null,
+        agent_id: null,
+      },
+    });
+    expect(core.state.auth.registrationGrant).toBe("grant-before-metadata");
+    expect(core.state.auth.registrationStatus).toBe("registering");
+    expect(core.state.auth.runtimeStatus).toBe("registering");
+    expect(core.state.auth.sessionEpoch).toBeNull();
+
+    sockets[0].receive({
+      type: "authoritative_recovery_ack",
+      ack: {
+        status: "catch_up_ready",
+        player_id: "local-test-player-bound",
+        session_pubkey: "abcdef0123456789abcdef0123456789",
+        session_epoch: 1,
+        binding_epoch: null,
+        agent_id: "agent-0",
+      },
+    });
+    await expect(registerPromise).resolves.toEqual(expect.objectContaining({
+      status: "catch_up_ready",
+      player_id: "local-test-player-bound",
+      session_epoch: 1,
+    }));
+    expect(core.state.auth.registrationGrant).toBeNull();
+  }, HEAVY_UI_TEST_TIMEOUT_MS);
+
   it("waits for the authoritative snapshot after an enhanced applied receipt", async () => {
     const { core, sockets, sentMessages } = await setupConnectedSemanticCore({
       snapshot: sampleSnapshot({ model: { agent_player_bindings: {} } }),
