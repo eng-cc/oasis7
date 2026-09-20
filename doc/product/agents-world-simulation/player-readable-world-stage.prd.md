@@ -81,7 +81,7 @@ projection 与 ambient feed，但没有空间 anchor，因此没有 stage marker
 首个 P1 切片只处理一个当前选中的 Agent。玩家从世界或目标上下文选中 Agent 后，应能
 在不离开世界决策语境的情况下读到该 Agent 的最小可用上下文。选中或可见只建立解释
 上下文，不等于账号绑定、认领或当前可控制；控制/授权语义沿用[`Agent 对话与 Prompt 控制`](agent-conversation-and-prompt-control.prd.md)
-和[`Agent 权限、资产与责任连续性`](agent-authority-ownership-and-accountability.prd.md)，
+和[`Agent 自治、委托与责任连续性`](agent-authority-ownership-and-accountability.prd.md)，
 不由本分册重新定义。Facility、Territory、Organization、Depot、Module 和 Location 不得
 继承 Agent 的语义，等待各自的权威合同。
 

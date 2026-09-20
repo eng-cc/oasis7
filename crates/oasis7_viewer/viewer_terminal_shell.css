@@ -1629,6 +1629,42 @@ body {
     overflow-wrap: anywhere;
   }
 
+  /* Prompt Overrides is intentionally a dense, scrollable operator surface on
+   * phone widths. Keep its three editable fields compact and keep the rollback
+   * target/action on one row so the action cannot land beneath the world HUD
+   * when the route panel is opened at 390x844. Desktop keeps the original
+   * field heights and wrapping. */
+  #viewer-details-panel .command-surface__prompt-panel textarea {
+    min-height: 56px;
+    max-height: 80px;
+  }
+
+  #viewer-details-panel .command-surface__prompt-panel .panel__body {
+    gap: 10px;
+    padding: 10px;
+  }
+
+  #viewer-details-panel .command-surface__rollback-actions {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: end;
+    gap: 8px;
+  }
+
+  #viewer-details-panel .command-surface__rollback-actions .field--inline-flex {
+    min-width: 0;
+  }
+
+  #viewer-details-panel .command-surface__rollback-actions [data-prompt-action="rollback"] {
+    min-height: 44px;
+    white-space: nowrap;
+  }
+
+  #viewer-details-panel .command-surface__rollback-actions [data-prompt-action="rollback"]:focus {
+    outline: 3px solid var(--color-focus-ring);
+    outline-offset: 2px;
+  }
+
   .pixel-world-decision-area .pixel-world-command-cell__action,
   [data-viewer-overlay="cinematic-entry"] .pixel-world-focus-entry__button {
     min-width: 44px;

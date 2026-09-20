@@ -1,4 +1,4 @@
-# 受治理工业、市场结算与危机保供（待迁移）
+# 受治理工业、市场结算与危机保供（迁移 provenance）
 
 ## 文档身份
 
@@ -11,17 +11,28 @@
 
 ## 迁移状态
 
-本页保留尚未完全吸收的工业扩展、结算资产、市场地理产品语义和验收，避免在迁移前丢失规则。它已不再是权威世界基础设施的 active authority、路线图或验收入口：基础设施只提供最终性、权威状态、复制、存储、恢复和确定性执行边界。常态市场与紧急保供语义已迁入 [`常态市场与有界紧急保供`](../world-rules-core-gameplay/market-normal-state-and-emergency-supply.prd.md)；其余接收 authority 是 [`世界规则与玩法系统`](../world-rules-core-gameplay/prd.md)。owner 必须完成剩余语义回填和活跃引用修复后，才能删除本页。专业实现、数值、runtime/P2P 合同和当前公开 claim 仍由各自专业 authority 拥有。
+本页保留工业扩展、结算资产、市场地理和危机保供语义的历史 provenance，避免迁移时丢失规则。它已不再是权威世界基础设施的 active authority、路线图或验收入口：基础设施只提供最终性、权威状态、复制、存储、恢复和确定性执行边界。旧 AC-1 至 AC-5 的产品语义已由 [`世界规则与玩法系统`](../world-rules-core-gameplay/prd.md) 下的稳定专题锚点接收；本页暂不删除，因为 PRD-GAME-018 等专业文档仍有旧源活跃 backlink，且后续 S1 尚需修复专业引用。专业实现、数值、runtime/P2P 合同和当前公开 claim 仍由各自专业 authority 拥有。
 
 
 本文定义基础工业规则与玩家/Agent 创造的受治理能力如何共同扩展世界，市场如何在全球发现和物理结算之间保持一致，以及常态价格和紧急保供的制度边界。它不定义配方、价格、税费、版税、汇率、订单簿、物流、escrow、危机阈值或任何 runtime/UI 实现。
 
 ## 生命周期闭合
 
-- 接收 authority：[常态市场与有界紧急保供](../world-rules-core-gameplay/market-normal-state-and-emergency-supply.prd.md#1-产品目标) 与 [世界规则与玩法系统](../world-rules-core-gameplay/prd.md#活跃产品专题)。
-- 剩余语义：受治理工业提案、创作者许可/收益、市场发现与物理结算的产品边界及其验收仍需由接收专题或专业 authority 明确承接；常态/紧急保供已由接收专题拥有。
-- 稳定引用：本页保留原产品目标、验收和专业 authority 的历史定位，并以 [常态市场与有界紧急保供](../world-rules-core-gameplay/market-normal-state-and-emergency-supply.prd.md#1-产品目标) 作为当前下钻入口。
-- 删除条件：全部产品语义完成接收、专业实现/经济 authority 仍可达、活跃引用修复且无未决阻塞后，才可删除本页。
+- 接收 authority：[`受治理的区域能力与扩展`](../world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-009)、[`工业需求目标与生产交付结算`](../world-rules-core-gameplay/industrial-demand-goals-and-settlement.prd.md#req-sc31-009)与 [`常态市场与有界紧急保供`](../world-rules-core-gameplay/market-normal-state-and-emergency-supply.prd.md#req-wr-es-004)。
+- 剩余语义：旧 AC-1 至 AC-5 的提案/模拟/试点/准入、许可/开放、OC/世界资格分离、发现/物理物流/escrow，以及常态/紧急保供语义均已有唯一 active REQ/AC 锚点；专业 PRD、runtime、P2P、testing 仍拥有各自合同和证据。本页仅保留历史 provenance。
+- 未闭合条件：[`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md#ac-game-018-03) 及其他专业引用仍使用本页旧 `AC-1` 至 `AC-4` provenance；另有 AC-3 pending wording 需要专业 owner 按新产品锚点修复。产品任务不修改 `doc/game/**`，因此本页在 S1 引用修复完成前保留且不能作为 active authority。
+- 稳定引用：本页的历史 AC 保持可读；当前产品入口经 [`世界规则与玩法系统`](../world-rules-core-gameplay/prd.md#活跃产品专题) 下的工业、市场和保供专题接收，专业执行与验证仍由各自 authority 拥有。
+- 删除条件：专业引用全部切换到新产品锚点、旧源路径不再被 active 文档使用、专业实现/经济 authority 仍可达且治理/链接检查通过；满足前不得删除本页。
+
+### 迁移映射（本页只作历史 provenance）
+
+| 旧源条款 | 当前 active 产品接收锚点 | 接收语义与保留边界 | 当前状态 |
+| --- | --- | --- | --- |
+| [AC-1](#ac-1) | [REQ-WR-GR-009](../world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-009) / [AC-WR-GR-009](../world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#ac-wr-gr-009) | 提案→确定性模拟→受限试点→治理准入；保留 scope、资源/机会成本、权限、失败原因、恢复/复查和不得旁路的 Non-Goals | 产品已接收；PRD-GAME-018 旧 provenance 待 S1 替换 |
+| [AC-2](#ac-2) | [REQ-WR-GR-010](../world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-010) / [AC-WR-GR-010](../world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#ac-wr-gr-010) | 许可/版税/收益权的用途、区域、期限、维护、撤销/争议、开放条件；到期/开放不形成永久垄断或追溯改写 | 产品已接收；PRD-GAME-018 旧 provenance 待 S1 替换 |
+| [AC-3](#ac-3) | [REQ-WR-GR-011](../world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-011) / [AC-WR-GR-011](../world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#ac-wr-gr-011) | OC 链上转让与世界资源/信用/合同/工业准入/区域资格双向隔离；锁定/委托/控制人只是治理输入，仍需本地贡献；不承诺 fee-free transfer 或 OC↔世界配额/兑换 | 产品已接收；PRD-GAME-018 旧 provenance 与 pending wording 待 S1 替换 |
+| [AC-4](#ac-4) | [REQ-SC31-009](../world-rules-core-gameplay/industrial-demand-goals-and-settlement.prd.md#req-sc31-009) / [AC-SC31-010](../world-rules-core-gameplay/industrial-demand-goals-and-settlement.prd.md#ac-sc31-010) / [AC-SC31-011](../world-rules-core-gameplay/industrial-demand-goals-and-settlement.prd.md#ac-sc31-011) | 新鲜度/来源的发现、报价/合同、路线、出发/在途/到达、目的地存储、ownership/escrow 里程碑、争议与 exactly-once 恢复分层 | 产品已接收；PRD-GAME-018 旧 provenance 待 S1 替换 |
+| [AC-5](#ac-5) | [REQ-WR-ES-001](../world-rules-core-gameplay/market-normal-state-and-emergency-supply.prd.md#req-wr-es-001) / [AC-WR-ES-001](../world-rules-core-gameplay/market-normal-state-and-emergency-supply.prd.md#ac-wr-es-001)；[REQ-WR-ES-002](../world-rules-core-gameplay/market-normal-state-and-emergency-supply.prd.md#req-wr-es-002) / [AC-WR-ES-002](../world-rules-core-gameplay/market-normal-state-and-emergency-supply.prd.md#ac-wr-es-002)；[REQ-WR-ES-003](../world-rules-core-gameplay/market-normal-state-and-emergency-supply.prd.md#req-wr-es-003) / [AC-WR-ES-003](../world-rules-core-gameplay/market-normal-state-and-emergency-supply.prd.md#ac-wr-es-003)；[REQ-WR-ES-004](../world-rules-core-gameplay/market-normal-state-and-emergency-supply.prd.md#req-wr-es-004) / [AC-WR-ES-004](../world-rules-core-gameplay/market-normal-state-and-emergency-supply.prd.md#ac-wr-es-004) | 正常市场与有证据、有范围/期限、补偿/公开分配、复核/申诉、可退出的系统性危机区分；退出恢复常态且不迁移待决请求 | 产品已接收；旧源保留至 active 引用闭合 |
 ## 1. 产品目标
 
 世界提供可预测的基础物理、资源、工业与结算规则；玩家和 Agent 可以在这些规则上提出新的配方、材料、设施或模块能力，但不能用未审计上传、一次投票或模型生成文本直接改写权威世界。新能力必须先证明它能在同一确定性世界中运行，再经治理获得有限、可追溯的可用范围。
@@ -71,7 +82,7 @@
 ## 5.1 关键决策与未决迁移边界
 
 - 关键决策：工业、市场和紧急保供的玩家语义由世界规则与玩法系统模块接收；本页只保留迁移期间的产品语义记录，基础设施产品层继续负责最终性、权威状态、确定性执行和恢复边界。专业 runtime/P2P 合同仍由对应 authority 拥有，不在本页复制。
-- 未决问题：接收 owner 仍需核对工业扩展、结算资产/OC 分离、跨区市场地理和危机保供的剩余条款、验收以及活跃引用是否全部回填；这些条款在接收完成前不得被表达为当前能力。
+- 未决问题：AC-1～5 的产品语义已由上列 active 条款接收，但 `PRD-GAME-018` 的历史来源链接及“AC-3 产品接收待定”专业导航尚未更新，故本页不能删除。后续须先完成专业引用修复、核对退役引用与必要的 inventory 记录，再删除本页；产品条款接收本身不证明工业、市场、结算或危机能力当前已实现、可用或发行。
 - 决策 role 与触发条件：`producer_system_designer` 负责接收与删除决定，`gameplay_designer` 负责工业/市场规则，`runtime_engineer` 与 `blockchain_ops_engineer` 负责执行、分布式状态和证据边界；只有接收文档完成回填并修复引用后才可删除本页。
 - 临时排除范围：本页保持 `superseded` 和非权威状态，不新增配方、价格、支付、外部兑换、危机机制或发行 claim。
 

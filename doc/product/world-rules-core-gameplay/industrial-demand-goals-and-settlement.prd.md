@@ -85,6 +85,7 @@
 | 目标、库存、批量、产率或 terminal capacity 漂移触发重报价、无副作用原子拒绝或 profile 明示有界 pending | REQ-SC31-006 | AC-SC31-007 |
 | 重复 submit/delivery、重连、乱序、恢复和 replay 不复制生产、交付、需求减少、盈余处置、奖励或容量释放 | REQ-SC31-007 | AC-SC31-008 |
 | Viewer、pure API 与 Agent 对 demand 状态、数量分层、blocker、动作和复查点保持同义 | REQ-SC31-008 | AC-SC31-009 |
+| 跨区交易把新鲜度/来源的市场发现、报价/合同、物理路线/到达/目的地存储与 ownership/escrow 里程碑分开，并为延误、损耗、拒收、争议、重连和 replay 保留恢复边界 | REQ-SC31-009 | AC-SC31-010、AC-SC31-011 |
 
 ### 4.2 叶子要求
 
@@ -176,6 +177,17 @@
 - 专业权威：[PRD-GAME-014](../../game/prd.md)、[PRD-WORLD_RUNTIME-019](../../world-runtime/prd.md)、[PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md)、[PRD-TESTING-003](../../testing/prd.md)。
 - 验收：AC-SC31-009。
 
+<a id="req-sc31-009"></a>
+#### REQ-SC31-009：跨区发现、物流与里程碑结算分层
+
+- 性质：已采纳目标
+- 适用条件：玩家查看跨区供给/需求并从报价或合同进入物理交付、目的地存储和 ownership/escrow 结算。
+- 要求：产品读面必须（MUST）标明情报来源、时间戳/新鲜度、可见范围、不确定性、报价/合同状态、路线/时间/损耗、目的地准入与容量，并分别表达发现、承诺、出发、在途、到达、storage acceptance、ownership settlement 和 escrow 里程碑。发现或报价不等于出发/到达/需求满足；到达不等于目的地接收或所有权结算；只有合同声明的物理/接收事实与里程碑条件均验证后才可产生一次对应 settlement。
+- 失败与恢复：延误、损耗、拒收、路线失效、条件漂移、争议、重连、重复投递和 replay 必须保留已占用/已损失价值、证据、primary blocker、下一复查与合法的等待、补救、退回、改道、重谈、争议或安全停止路径，不得静默换货、换路、提前结算或复制资金/库存/奖励/需求减少。
+- 上位承诺：SC-31。
+- 专业权威：[`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md#ac-game-018-04)、[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)。
+- 验收：AC-SC31-010、AC-SC31-011。
+
 ## 5. 验收与证据
 
 <a id="ac-sc31-001"></a>
@@ -259,6 +271,24 @@
 
 覆盖：REQ-SC31-008。
 
+<a id="ac-sc31-010"></a>
+### AC-SC31-010：跨区市场不把发现或前序状态伪装成结算
+
+给定：一项带来源/新鲜度边界的跨区市场发现结果、报价/合同、物理路线、目的地存储和 escrow 里程碑，并包含延误、损耗、拒收、争议、条件漂移、重复投递或 replay 的对照样例。
+当：玩家查看、确认、观察或恢复该交易。
+则：玩家能区分情报发现、范围明确的承诺、出发/在途、到达、目的地 storage acceptance 和 ownership settlement；陈旧、私有或不完整情报不会表现为实时库存，任何前序状态都不能表示到货、需求满足或最终结算。
+
+覆盖：REQ-SC31-009。
+
+<a id="ac-sc31-011"></a>
+### AC-SC31-011：Escrow 里程碑与争议恢复保持 exactly-once
+
+给定：一项绑定物理/接收事实的跨区 escrow 合同，包含延误、损耗、目的地拒收、条件漂移、争议、重连、重复投递、并发到达或 replay 的对照样例。
+当：玩家观察里程碑、等待、补救、退回、改道、重谈、争议或安全停止。
+则：玩家能看到每个里程碑的释放/保留条件、双方责任、证据窗口、已占用/已损失货物与资金和下一复查；只有绑定事实满足后才产生一次对应 settlement，失败时保留合法 escrow/物理状态和可读恢复路径，重连、重试、乱序、并发到达和 replay 不重复释放、扣款、发奖、减少需求或改写已结算历史。
+
+覆盖：REQ-SC31-009。
+
 ### 5.1 追踪
 
 | 叶子要求 | 上位承诺 | 专业权威 / PRD-ID | 验收场景 | 验证入口 |
@@ -271,6 +301,7 @@
 | REQ-SC31-006 | SC-31 | [`doc/world-runtime/prd.md`](../../world-runtime/prd.md) / [PRD-WORLD_RUNTIME-001](../../world-runtime/prd.md)、[PRD-WORLD_RUNTIME-019](../../world-runtime/prd.md)；[`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md) / [PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md) | AC-SC31-007 | `test_tier_required`：drift 重报价/拒绝/pending |
 | REQ-SC31-007 | SC-31 | [`doc/world-runtime/prd.md`](../../world-runtime/prd.md) / [PRD-WORLD_RUNTIME-043](../../world-runtime/prd.md)；[`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md) / [PRD-WORLD_SIMULATOR-047](../../world-simulator/prd.md)；[`doc/testing/prd.md`](../../testing/prd.md) / [PRD-TESTING-003](../../testing/prd.md) | AC-SC31-008 | `test_tier_required`；`test_tier_full` 覆盖并发、跨窗口、恢复/replay/补偿 |
 | REQ-SC31-008 | SC-31 | [`doc/game/prd.md`](../../game/prd.md) / [PRD-GAME-014](../../game/prd.md)；[`world-runtime` 专业 PRD](../../world-runtime/prd.md) 与 [`M4 工业资源流转合同`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md)；[`doc/testing/prd.md`](../../testing/prd.md) / [PRD-TESTING-003](../../testing/prd.md) | AC-SC31-009 | `test_tier_required`：Viewer/pure API/Agent parity |
+| REQ-SC31-009 | SC-31 | [`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md)；[`doc/game/prd.md`](../../game/prd.md)；[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)；[`doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md)；[`doc/p2p/prd.md`](../../p2p/prd.md)；[`doc/testing/prd.md`](../../testing/prd.md) | AC-SC31-010、AC-SC31-011 | `test_tier_full`：新鲜度/来源、发现→报价→路线→到达→存储→ownership/escrow 里程碑、失败恢复、争议与 exactly-once |
 
 ### 5.2 产品效果与证据范围
 
@@ -317,3 +348,4 @@
 | [REQ-SC31-006](#req-sc31-006) / [AC-SC31-007](#ac-sc31-007) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/game/gameplay/gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-SC31-007](#req-sc31-007) / [AC-SC31-008](#ac-sc31-008) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/game/gameplay/gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-SC31-008](#req-sc31-008) / [AC-SC31-009](#ac-sc31-009) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/game/gameplay/gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-SC31-009](#req-sc31-009) / [AC-SC31-010](#ac-sc31-010)、[AC-SC31-011](#ac-sc31-011) | `producer_system_designer` | [`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md#ac-game-018-04)、[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`](../../world-simulator/m4/industrial-resource-flow-contract.prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_full` |
