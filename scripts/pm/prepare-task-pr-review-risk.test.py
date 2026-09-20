@@ -72,10 +72,17 @@ class PrepareTaskPrReviewRiskTests(unittest.TestCase):
 
     def test_v2_promotion_rechecks_canonical_bootstrap_generation_before_reuse(self):
         source = PREPARE.read_text(encoding="utf-8")
-        promotion = source[source.index('promote_draft v2 source review reuse'):]
+        promotion = source[source.index('helper.validate_source_review_epoch'):]
         guard = "helper.validate_source_review_epoch(plan, root=root, task_uid=task_uid)"
         self.assertIn(guard, promotion)
         self.assertLess(promotion.index(guard), promotion.index("helper.can_reuse_source_review"))
+
+    def test_v2_promotion_passes_live_target_oid_to_reuse_classifier(self):
+        source = PREPARE.read_text(encoding="utf-8")
+        self.assertIn("--json isDraft,state,mergedAt,baseRefOid", source)
+        self.assertIn('(.mergedAt // "__none__")', source)
+        self.assertIn('PR_BASE_OID', source)
+        self.assertIn('current_target_oid=current_target_oid, current_target_root=root', source)
 
     def test_prepare_task_pr_quotes_the_terminal_finalizer_command(self):
         source = PREPARE.read_text(encoding="utf-8")

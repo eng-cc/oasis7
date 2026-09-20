@@ -56,6 +56,11 @@ class ProductionLoopTests(unittest.TestCase):
         self.assertEqual(result['readiness_receipt']['head_oid'],'b'*40)
         checked.assert_called_once()
 
+    def test_legacy_admission_keeps_strict_integration_contract(self):
+        with patch.object(gate, 'live_integration_admission', return_value=None) as checked:
+            self.run_gate()
+        self.assertTrue(checked.call_args.kwargs['require_strict'])
+
     def run_gate(self, admission=None, fresh=None, ready=True):
         data = {'number': 12, 'repository': 'owner/repo', 'baseRefOid': 'a' * 40, 'headRefOid': 'b' * 40,
                 'state': 'OPEN', 'isDraft': False, 'body': 'Task: task_uid\nRefs #1',
