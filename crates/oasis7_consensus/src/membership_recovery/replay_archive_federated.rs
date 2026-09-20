@@ -563,10 +563,7 @@ impl MembershipSyncClient {
         )
     }
 
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "Public aggregate query preserves explicit filter and event-bus seams"
-    )]
+    #[expect(clippy::too_many_arguments)]
     pub fn query_revocation_dead_letter_replay_rollback_governance_recovery_drill_alert_events_aggregated(
         &self,
         world_id: &str,
@@ -672,10 +669,7 @@ impl MembershipSyncClient {
         Ok((events, next_since_event_at_ms))
     }
 
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "Public cursor query preserves explicit cursor, filter, and event-bus seams"
-    )]
+    #[expect(clippy::too_many_arguments)]
     pub fn query_revocation_dead_letter_replay_rollback_governance_recovery_drill_alert_events_incremental_since_cursor(
         &self,
         world_id: &str,
@@ -734,10 +728,7 @@ impl MembershipSyncClient {
         Ok((events, next_event_at_ms, next_node_id))
     }
 
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "Public composite cursor query preserves explicit cursor and event-bus seams"
-    )]
+    #[expect(clippy::too_many_arguments)]
     pub fn query_revocation_dead_letter_replay_rollback_governance_recovery_drill_alert_events_incremental_since_composite_sequence_cursor(
         &self,
         world_id: &str,
@@ -836,10 +827,7 @@ impl MembershipSyncClient {
         ))
     }
 
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "Public stateful cursor query preserves explicit consumer, cursor, and event-bus seams"
-    )]
+    #[expect(clippy::too_many_arguments)]
     pub fn query_revocation_dead_letter_replay_rollback_governance_recovery_drill_alert_events_incremental_with_composite_sequence_cursor_state(
         &self,
         world_id: &str,
