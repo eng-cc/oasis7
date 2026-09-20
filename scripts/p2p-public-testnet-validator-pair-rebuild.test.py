@@ -538,8 +538,96 @@ print(json.dumps({{
             f"storage-205=local:{self.nodes['storage-205']}",
             "--node",
             f"sequencer-204=local:{self.nodes['sequencer-204']}",
+            "--credential-env",
+            "HUMAN_DIRECT_SSH_SECRET",
             "--out-dir",
             str(self.out),
+        ]
+
+    def _write_identity_v2_executor_inputs(self, *, capture_window_id: str = "capture-window-pair-red-001") -> dict[str, Path]:
+        """Build the non-live, exact-five executor input-boundary fixture."""
+        task_uid = "task_cf4163ccd876402d8317b569019e12a6"
+        network_id = "oasis7-public-testnet-governed-20260606"
+        node_specs = (
+            ("storage-205", "triad-testnet-storage", "12D3KooWtriadtestnetstorage"),
+            ("sequencer-204", "triad-testnet-sequencer", "12D3KooWtriadtestnetsequencer"),
+            ("linux-lan-observer", "triad-testnet-local", "12D3KooWtriadtestnetlocal"),
+            ("windows-observer", "triad-testnet-windows-observer", "12D3KooWtriadtestnetwindowsobserver"),
+            ("macos-observer", "triad-testnet-fourth-local", "12D3KooWtriadtestnetfourthlocal"),
+        )
+        evidence_map = self.root / "identity-v2-evidence-map.json"
+        evidence_map.write_text(
+            json.dumps(
+                {
+                    "schema_version": "oasis7.identity_v2_evidence_map.v2",
+                    "network_id": network_id,
+                    "task_uid": task_uid,
+                    "head_oid": FROZEN_HEAD_OID,
+                    "entries": [
+                        {"node_name": name, "node_id": node_id, "peer_id": peer_id}
+                        for name, node_id, peer_id in node_specs
+                    ],
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        evidence_map.chmod(0o600)
+        authority = self.root / "identity-v2-authority.json"
+        authority.write_text(
+            json.dumps(
+                {
+                    "schema_version": "oasis7.identity_v2_executor_authority.v1",
+                    "mode": "plan_only",
+                    "authorized": False,
+                    "apply_authorized": False,
+                    "task_uid": task_uid,
+                    "head_oid": FROZEN_HEAD_OID,
+                    "capture_window_id": capture_window_id,
+                    "evidence_map_sha256": sha256(evidence_map),
+                    "issued_at": "2026-09-20T00:00:00Z",
+                    "expires_at": "2099-01-01T00:00:00Z",
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        authority.chmod(0o600)
+        capture_window = self.root / "identity-v2-capture-window.json"
+        capture_window.write_text(
+            json.dumps(
+                {
+                    "schema_version": "oasis7.identity_v2_capture_window.v1",
+                    "id": capture_window_id,
+                    "starts_at": "2026-09-20T00:00:00Z",
+                    "ends_at": "2099-01-01T00:00:00Z",
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        capture_window.chmod(0o600)
+        return {
+            "evidence_map": evidence_map,
+            "authority": authority,
+            "capture_window": capture_window,
+        }
+
+    @staticmethod
+    def _identity_v2_executor_args(inputs: dict[str, Path]) -> list[str]:
+        return [
+            "--identity-v2-evidence-map",
+            str(inputs["evidence_map"]),
+            "--identity-v2-authority",
+            str(inputs["authority"]),
+            "--identity-v2-capture-window",
+            str(inputs["capture_window"]),
         ]
 
     def _apply_args(
@@ -613,7 +701,9 @@ os.execv({sys.executable!r}, [{sys.executable!r}, *args])
             encoding="utf-8",
         )
         fake_python.chmod(0o755)
-        nonce_ledger = self.root.parent / f"oasis7-human-direct-nonce-{len(self.external_fixture_paths)}.jsonl"
+        nonce_ledger = self.root.parent / (
+            f"oasis7-human-direct-nonce-{self.root.name}-{len(self.external_fixture_paths)}.jsonl"
+        )
         nonce_ledger.write_text("", encoding="utf-8")
         nonce_ledger.chmod(0o600)
         self.external_fixture_paths.append(nonce_ledger)
@@ -1725,6 +1815,80 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
         self.assertEqual(receipt["mutation_order"], ["storage-205", "sequencer-204"])
         self.assertEqual(receipt["startup_order"], ["sequencer-204", "storage-205"])
         self.assertEqual(receipt["phase"], "planned")
+
+    def test_plan_requires_identity_v2_map_authority_and_capture_window(self) -> None:
+        inputs = self._write_identity_v2_executor_inputs()
+        result = subprocess.run(
+            self._base_args() + self._identity_v2_executor_args(inputs),
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        plan = json.loads(result.stdout)
+        self.assertFalse(plan["execution"]["provider_mutation_performed"])
+        self.assertEqual(plan["identity_v2"]["evidence_map_sha256"], sha256(inputs["evidence_map"]))
+        self.assertEqual(plan["identity_v2"]["authority_sha256"], sha256(inputs["authority"]))
+        self.assertEqual(plan["identity_v2"]["capture_window_id"], "capture-window-pair-red-001")
+
+    def test_plan_rejects_missing_or_mismatched_identity_v2_inputs(self) -> None:
+        inputs = self._write_identity_v2_executor_inputs()
+        missing_map = subprocess.run(
+            self._base_args()
+            + [
+                "--identity-v2-authority",
+                str(inputs["authority"]),
+                "--identity-v2-capture-window",
+                str(inputs["capture_window"]),
+            ],
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(missing_map.returncode, 0)
+        self.assertRegex(missing_map.stderr, r"(?i)identity.?v2.*evidence.?map.*(required|missing)")
+
+        mismatched = self._write_identity_v2_executor_inputs(capture_window_id="capture-window-other")
+        mismatched["capture_window"].write_text(
+            json.dumps(
+                {
+                    "schema_version": "oasis7.identity_v2_capture_window.v1",
+                    "id": "capture-window-mismatch",
+                    "starts_at": "2026-09-20T00:00:00Z",
+                    "ends_at": "2026-09-20T23:59:59Z",
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        mismatched_result = subprocess.run(
+            self._base_args() + self._identity_v2_executor_args(mismatched),
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(mismatched_result.returncode, 0)
+        self.assertRegex(mismatched_result.stderr, r"(?i)capture.?window.*(mismatch|binding|match)")
+
+    def test_plan_rejects_identity_v2_inputs_under_writable_non_sticky_ancestor(self) -> None:
+        inputs = self._write_identity_v2_executor_inputs()
+        unsafe_parent = self.root / "writable-parent"
+        unsafe_parent.mkdir()
+        unsafe_parent.chmod(0o777)
+        unsafe_inputs: dict[str, Path] = {}
+        for name, source in inputs.items():
+            destination = unsafe_parent / source.name
+            shutil.copyfile(source, destination)
+            destination.chmod(0o600)
+            unsafe_inputs[name] = destination
+
+        result = subprocess.run(
+            self._base_args() + self._identity_v2_executor_args(unsafe_inputs),
+            text=True,
+            capture_output=True,
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertRegex(result.stderr, r"(?i)(identity.?v2|ancestor|writable|permission|unsafe)")
+        self.assertFalse(result.stdout.strip())
 
     def test_plan_receipt_truthfully_reports_direct_remote_observation(self) -> None:
         result = subprocess.run(self._base_args(), text=True, capture_output=True)

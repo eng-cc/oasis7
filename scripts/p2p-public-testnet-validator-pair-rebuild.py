@@ -47,6 +47,23 @@ from urllib.parse import urlsplit
 
 PLAN_SCHEMA = "oasis7.validator_pair_rebuild_plan.v1"
 SCHEMA = "oasis7.validator_pair_rebuild_transaction.v1"
+IDENTITY_V2_EVIDENCE_MAP_SCHEMA = "oasis7.identity_v2_evidence_map.v2"
+IDENTITY_V2_AUTHORITY_SCHEMA = "oasis7.identity_v2_executor_authority.v1"
+IDENTITY_V2_CAPTURE_WINDOW_SCHEMA = "oasis7.identity_v2_capture_window.v1"
+IDENTITY_V2_NODE_ORDER = (
+    "storage-205",
+    "sequencer-204",
+    "linux-lan-observer",
+    "windows-observer",
+    "macos-observer",
+)
+IDENTITY_V2_NODE_IDS = {
+    "storage-205": "triad-testnet-storage",
+    "sequencer-204": "triad-testnet-sequencer",
+    "linux-lan-observer": "triad-testnet-local",
+    "windows-observer": "triad-testnet-windows-observer",
+    "macos-observer": "triad-testnet-fourth-local",
+}
 QUIESCENCE_REQUEST_SCHEMA = "oasis7.validator_pair_rebuild_quiescence_request.v1"
 QUIESCENCE_PROOF_SCHEMA = "oasis7.validator_pair_rebuild_quiescence_proof.v1"
 QUIESCENCE_MAX_AGE_SECONDS = 300
@@ -391,6 +408,163 @@ def load_json(path: Path, label: str) -> dict[str, Any]:
     if not isinstance(value, dict):
         fail(f"{label} must be a JSON object")
     return value
+
+
+def _identity_v2_input_file(value: Any, label: str) -> tuple[Path, dict[str, Any], str]:
+    """Load one executor-owned identity-v2 input without following symlinks."""
+    if not isinstance(value, str) or not value.strip():
+        fail(f"identity-v2 {label} path is required")
+    path = Path(value).expanduser()
+    if not path.is_absolute():
+        fail(f"identity-v2 {label} path must be absolute")
+    for ancestor in (path, *path.parents):
+        if ancestor.is_symlink() and ancestor not in {Path("/var"), Path("/tmp")}:
+            fail(f"identity-v2 {label} path must not contain symlinks")
+    for ancestor in path.parents:
+        try:
+            directory = ancestor.stat()
+        except OSError as error:
+            fail(f"cannot stat identity-v2 {label} ancestor: {error.__class__.__name__}")
+        if not stat.S_ISDIR(directory.st_mode) or directory.st_uid not in {0, os.getuid()}:
+            fail(f"identity-v2 {label} has an unsafe ancestor")
+        mode = stat.S_IMODE(directory.st_mode)
+        sticky_root_temp = directory.st_uid == 0 and bool(mode & stat.S_ISVTX)
+        if mode & (stat.S_IWGRP | stat.S_IWOTH) and not sticky_root_temp:
+            fail(f"identity-v2 {label} has an unauthorized-writable ancestor")
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    if not nofollow:
+        fail(f"identity-v2 {label} requires no-follow file reads")
+    descriptor = None
+    try:
+        descriptor = os.open(path, os.O_RDONLY | nofollow)
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode):
+            fail(f"identity-v2 {label} path must be a regular file")
+        if before.st_uid != os.getuid() or stat.S_IMODE(before.st_mode) != 0o600:
+            fail(f"identity-v2 {label} path must be owner-only mode 0600")
+        with os.fdopen(descriptor, "rb", closefd=False) as handle:
+            raw = handle.read()
+        after = os.fstat(descriptor)
+        if (
+            (before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_uid, before.st_mode)
+            != (after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_uid, after.st_mode)
+        ):
+            fail(f"identity-v2 {label} changed while reading")
+    except OSError as error:
+        fail(f"cannot read identity-v2 {label}: {error.__class__.__name__}")
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+    try:
+        loaded = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        fail(f"identity-v2 {label} is malformed JSON: {error.__class__.__name__}")
+    if not isinstance(loaded, dict):
+        fail(f"identity-v2 {label} must be a JSON object")
+    return path, loaded, hashlib.sha256(raw).hexdigest()
+
+
+def _validate_identity_v2_executor_inputs(args: argparse.Namespace) -> dict[str, Any] | None:
+    """Validate optional plan-only identity-v2 inputs as one bound tuple.
+
+    The legacy pair plan remains available when none of the new inputs are
+    supplied.  Once identity-v2 admission inputs are selected, all three
+    artifacts are mandatory and are retained as audit bindings only.  The
+    ``authorized`` field is intentionally not an executor grant: provider
+    admission remains an independent adapter responsibility.
+    """
+    values = {
+        "evidence_map": getattr(args, "identity_v2_evidence_map", None),
+        "authority": getattr(args, "identity_v2_authority", None),
+        "capture_window": getattr(args, "identity_v2_capture_window", None),
+    }
+    supplied = {name for name, value in values.items() if value is not None}
+    if not supplied:
+        return None
+    if supplied != set(values):
+        missing = sorted(set(values) - supplied)
+        fail(
+            "identity-v2 evidence-map, authority, and capture-window inputs are "
+            f"required together; missing {', '.join(missing)}"
+        )
+
+    evidence_path, evidence, evidence_sha256 = _identity_v2_input_file(
+        values["evidence_map"], "evidence map"
+    )
+    authority_path, authority, authority_sha256 = _identity_v2_input_file(
+        values["authority"], "authority"
+    )
+    capture_path, capture_window, capture_sha256 = _identity_v2_input_file(
+        values["capture_window"], "capture window"
+    )
+    if evidence.get("schema_version") != IDENTITY_V2_EVIDENCE_MAP_SCHEMA:
+        fail("identity-v2 evidence map schema is unsupported")
+    if authority.get("schema_version") != IDENTITY_V2_AUTHORITY_SCHEMA:
+        fail("identity-v2 authority schema is unsupported")
+    if capture_window.get("schema_version") != IDENTITY_V2_CAPTURE_WINDOW_SCHEMA:
+        fail("identity-v2 capture window schema is unsupported")
+
+    evidence_task_uid = evidence.get("task_uid")
+    authority_task_uid = authority.get("task_uid")
+    if not isinstance(evidence_task_uid, str) or not evidence_task_uid.strip():
+        fail("identity-v2 evidence map task_uid is required")
+    if authority_task_uid != evidence_task_uid:
+        fail("identity-v2 authority task_uid binding mismatch")
+    expected_head = repository_head_oid()
+    if evidence.get("head_oid") != expected_head:
+        fail("identity-v2 evidence map HEAD binding mismatch")
+    if authority.get("head_oid") != expected_head:
+        fail("identity-v2 authority HEAD binding mismatch")
+
+    entries = evidence.get("entries")
+    if not isinstance(entries, list) or len(entries) != len(IDENTITY_V2_NODE_ORDER):
+        fail("identity-v2 evidence map must contain the exact five managed nodes")
+    by_name: dict[str, dict[str, Any]] = {}
+    for entry in entries:
+        if not isinstance(entry, dict):
+            fail("identity-v2 evidence map entry must be an object")
+        name = entry.get("node_name")
+        if name in by_name or name not in IDENTITY_V2_NODE_IDS:
+            fail("identity-v2 evidence map node set is not canonical")
+        if entry.get("node_id") != IDENTITY_V2_NODE_IDS[name]:
+            fail(f"identity-v2 evidence map node_id binding mismatch for {name}")
+        peer_id = entry.get("peer_id")
+        if not isinstance(peer_id, str) or not peer_id.strip():
+            fail(f"identity-v2 evidence map peer_id is required for {name}")
+        by_name[name] = entry
+    if tuple(by_name) != IDENTITY_V2_NODE_ORDER:
+        fail("identity-v2 evidence map node order is not canonical")
+    if authority.get("evidence_map_sha256") != evidence_sha256:
+        fail("identity-v2 authority evidence-map digest mismatch")
+
+    capture_id = capture_window.get("id")
+    if not isinstance(capture_id, str) or not capture_id.strip():
+        fail("identity-v2 capture window id is required")
+    if authority.get("capture_window_id") != capture_id:
+        fail("identity-v2 capture-window binding mismatch")
+    starts_at = capture_window.get("starts_at")
+    ends_at = capture_window.get("ends_at")
+    if not isinstance(starts_at, str) or not isinstance(ends_at, str):
+        fail("identity-v2 capture window bounds are required")
+    start = _parse_timestamp(starts_at, "identity-v2 capture window starts_at")
+    end = _parse_timestamp(ends_at, "identity-v2 capture window ends_at")
+    if end <= start:
+        fail("identity-v2 capture window bounds are inverted")
+
+    return {
+        "evidence_map_path": str(evidence_path),
+        "evidence_map_sha256": evidence_sha256,
+        "authority_path": str(authority_path),
+        "authority_sha256": authority_sha256,
+        "capture_window_path": str(capture_path),
+        "capture_window_sha256": capture_sha256,
+        "capture_window_id": capture_id,
+        "task_uid": evidence_task_uid,
+        "head_oid": expected_head,
+        "entry_node_names": list(IDENTITY_V2_NODE_ORDER),
+        "validation": "plan-only",
+        "apply_authorized": False,
+    }
 
 
 def path_kind(path: Path) -> str:
@@ -3045,6 +3219,7 @@ def _build_plan_for_mode(
 ) -> dict[str, Any]:
     if execution_mode not in {PAIR_EXECUTION_MODE, TRIAD_STAGGERED_EXECUTION_MODE}:
         fail(f"unsupported validator rebuild execution mode: {execution_mode}")
+    identity_v2 = _validate_identity_v2_executor_inputs(args)
     package_dir = Path(args.package_dir).resolve()
     provenance_path = Path(args.provenance).resolve()
     helper = load_provenance_helper()
@@ -3131,6 +3306,12 @@ def _build_plan_for_mode(
         "startup_order": (
             MUTATION_ORDER if execution_mode == TRIAD_STAGGERED_EXECUTION_MODE else STARTUP_ORDER
         ),
+        "execution": {
+            "mode": "plan-only",
+            "provider_mutation_performed": False,
+            "plan_is_apply_proof": False,
+            "apply_requires_fresh_adapter_receipt": True,
+        },
         "package": {
             "directory": str(package_dir),
             "package_sha256": inventory_tree(package_dir)["sha256"],
@@ -3215,6 +3396,11 @@ def _build_plan_for_mode(
             else {"strategy": "same-filesystem-full-snapshot", "required_on_gate_failure": True}
         ),
     }
+    if identity_v2 is not None:
+        # These are retained evidence bindings only.  The pair executor does
+        # not promote caller authority into apply permission; the governed
+        # adapter must independently verify current admission before mutation.
+        plan["identity_v2"] = identity_v2
     if execution_mode == TRIAD_STAGGERED_EXECUTION_MODE:
         plan["pair_preservation"] = {
             "max_simultaneously_stopped_validators": 1,
@@ -5902,6 +6088,9 @@ def parser() -> argparse.ArgumentParser:
     plan.add_argument("--sequencer-proof-url", required=True)
     plan.add_argument("--observer-receipt")
     plan.add_argument("--identity-receipts", required=True)
+    plan.add_argument("--identity-v2-evidence-map")
+    plan.add_argument("--identity-v2-authority")
+    plan.add_argument("--identity-v2-capture-window")
     plan.add_argument("--sequencer-rebuild-proof", required=True)
     plan.add_argument("--sequencer-rebuild-proof-verification")
     plan.add_argument("--sequencer-proof-verifier")
