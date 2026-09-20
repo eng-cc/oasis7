@@ -16,9 +16,9 @@ Create a temporary task worktree, bootstrap a GitHub-backed task inside it throu
 `new-task-worktree.sh --pm-*`, and assert that the source worktree stays
 unchanged while the target worktree receives the mapping record, start metadata,
 a copied canonical main-worktree `config.toml`, and an ignored `target` symlink
-to the repo-family shared cargo cache. When the canonical source checkout has no
-local `config.toml`, this smoke seeds a temporary fixture so the copy path is
-still covered.
+to the current-worktree cargo cache namespace. When the canonical source checkout
+has no local `config.toml`, this smoke seeds a temporary fixture so the copy
+path is still covered.
 
 Options:
   --json       Print machine-readable JSON summary

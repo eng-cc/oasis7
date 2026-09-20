@@ -29,8 +29,8 @@
 - 不做覆盖率百分比硬门槛治理（如行覆盖率 >= N%）。
 
 ## 开发态缓存约定
-- 若当前是在同一 repo family 的多个 git worktree 之间做本地迭代，开发态 `cargo check/test/run/build` 默认优先使用 `./scripts/cargo-dev.sh <cargo-args...>`，让多个 task worktree 复用 shared target 目录，减少重复编译。通过 `./scripts/new-task-worktree.sh` 创建的新 task worktree 还会默认把 git-ignored `target` 链接到同一个 shared target 目录，使直接 cargo 与 wrapper 混用时也优先落到同一开发态缓存。
-- 本地 smoke / playtest / prewarm / regression / drill / longrun 脚本若只是为了开发反馈，应优先 source `scripts/cargo-dev-lib.sh` 并调用 `oasis7_cargo_dev ...` / `oasis7_cargo_dev_debug_bin_dir`，从而与手工 `cargo-dev.sh` 使用同一个 shared target；`CI=1`、`OASIS7_CARGO_DEV_SHARED=0` 或 `OASIS7_FORCE_RAW_CARGO=1` 会回退到原始 cargo target 解析。
+- 若当前是在同一 repo family 的多个 git worktree 之间做本地迭代，开发态 `cargo check/test/run/build` 默认优先使用 `./scripts/cargo-dev.sh <cargo-args...>`。每个 worktree 按自身 source identity 使用稳定、隔离的 target namespace；同一 worktree 内可复用缓存，divergent worktree 不得互选 artifacts。通过 `./scripts/new-task-worktree.sh` 创建的新 task worktree 会把 git-ignored `target` 链接到该 worktree 的 namespace，使直接 cargo 与 wrapper 在同一 worktree 内复用同一开发态缓存。
+- 本地 smoke / playtest / prewarm / regression / drill / longrun 脚本若只是为了开发反馈，应优先 source `scripts/cargo-dev-lib.sh` 并调用 `oasis7_cargo_dev ...` / `oasis7_cargo_dev_debug_bin_dir`，从而与手工 `cargo-dev.sh` 使用同一个当前-worktree target；`CI=1`、`OASIS7_CARGO_DEV_SHARED=0` 或 `OASIS7_FORCE_RAW_CARGO=1` 会回退到原始 cargo target 解析。
 - 该入口只服务开发态缓存复用，不替代本手册中的正式验收命令；手册里的 canonical 验收命令仍显式写原始 `env -u RUSTC_WRAPPER cargo ...`。
 - deterministic wasm / release 链路继续保持 `CARGO_TARGET_DIR` 为空；涉及 `scripts/build-wasm-module.sh`、release evidence 或 hash/receipt 对账时，不要改用 `scripts/cargo-dev.sh`。
 
