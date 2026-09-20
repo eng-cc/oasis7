@@ -76,7 +76,7 @@ TEST_ROOT="$(mktemp -d)"
 trap 'rm -rf -- "$TEST_ROOT"' EXIT
 FIXTURE="$TEST_ROOT/fixture"
 UID_VALUE="task_11111111111111111111111111111111"
-mkdir -p "$FIXTURE/scripts/pm" "$FIXTURE/.pm/scratch/$UID_VALUE/review-plans" "$FIXTURE/.pm/github-project-sync"
+mkdir -p "$FIXTURE/scripts/pm" "$FIXTURE/.pm/scratch/$UID_VALUE/review-plans" "$FIXTURE/.pm/github-project-sync" "$TEST_ROOT/bin"
 cp "$SCRIPT_DIR/claim-ready.sh" "$SCRIPT_DIR/ci_ready_receipt_identity.py" "$SCRIPT_DIR/repo-state-fingerprint.py" "$FIXTURE/scripts/pm/"
 python3 - "$FIXTURE/scripts/pm/ci-ready-receipt.py" "$FIXTURE/scripts/pm/bootstrap-task-snapshot.py" <<'PY'
 from pathlib import Path
@@ -86,14 +86,49 @@ for raw in sys.argv[1:]:
     Path(raw).write_text("#!/usr/bin/env python3\nraise SystemExit(0)\n", encoding="utf-8")
 PY
 chmod +x "$FIXTURE/scripts/pm/claim-ready.sh"
-git -C "$FIXTURE" init -q
+python3 - "$TEST_ROOT/bin/gh" <<'PY'
+from pathlib import Path
+import sys
+
+Path(sys.argv[1]).write_text(
+    "#!/usr/bin/env bash\n"
+    "if [[ \"$1 $2\" == \"pr view\" ]]; then\n"
+    "  printf '%s\\n' \"${TARGET_OID:?}\"\n"
+    "  exit 0\n"
+    "fi\n"
+    "echo \"unexpected gh invocation: $*\" >&2\n"
+    "exit 9\n",
+    encoding="utf-8",
+)
+PY
+chmod +x "$TEST_ROOT/bin/gh"
+git -C "$FIXTURE" init -q -b main
 git -C "$FIXTURE" config user.email test@example.com
 git -C "$FIXTURE" config user.name Test
-printf 'fixture\n' >"$FIXTURE/tracked.txt"
-git -C "$FIXTURE" add tracked.txt
-git -C "$FIXTURE" commit -qm fixture
+printf '/scripts/pm/\n/.pm/\n/receipt.json\n' >"$FIXTURE/.gitignore"
+printf 'contract\n' >"$FIXTURE/contract.txt"
+git -C "$FIXTURE" add .gitignore contract.txt
+git -C "$FIXTURE" commit -qm scope
+FIXTURE_SCOPE="$(git -C "$FIXTURE" rev-parse HEAD)"
+printf 'feature\n' >"$FIXTURE/feature.txt"
+git -C "$FIXTURE" add feature.txt
+git -C "$FIXTURE" commit -qm source
 FIXTURE_HEAD="$(git -C "$FIXTURE" rev-parse HEAD)"
-python3 - "$FIXTURE" "$FIXTURE_HEAD" "$UID_VALUE" <<'PY'
+git -C "$FIXTURE" branch target-related "$FIXTURE_SCOPE"
+git -C "$FIXTURE" checkout -q target-related
+printf 'related target change\n' >>"$FIXTURE/contract.txt"
+git -C "$FIXTURE" add contract.txt
+git -C "$FIXTURE" commit -qm related-target
+RELATED_TARGET="$(git -C "$FIXTURE" rev-parse HEAD)"
+git -C "$FIXTURE" checkout -q main
+git -C "$FIXTURE" branch target-unrelated "$FIXTURE_SCOPE"
+git -C "$FIXTURE" checkout -q target-unrelated
+printf 'unrelated target change\n' >"$FIXTURE/unrelated.txt"
+git -C "$FIXTURE" add unrelated.txt
+git -C "$FIXTURE" commit -qm unrelated-target
+UNRELATED_TARGET="$(git -C "$FIXTURE" rev-parse HEAD)"
+git -C "$FIXTURE" checkout -q main
+python3 - "$FIXTURE" "$FIXTURE_HEAD" "$UID_VALUE" "$FIXTURE_SCOPE" <<'PY'
 import hashlib
 import importlib.util
 import json
@@ -103,6 +138,11 @@ import sys
 root = pathlib.Path(sys.argv[1])
 head = sys.argv[2]
 task_uid = sys.argv[3]
+scope = sys.argv[4]
+changed_paths = ["feature.txt"]
+changed_paths_digest = "sha256:" + hashlib.sha256(
+    json.dumps(changed_paths, sort_keys=True, separators=(",", ":")).encode()
+).hexdigest()
 spec = importlib.util.spec_from_file_location(
     "claim_ready_identity_fixture", root / "scripts/pm/ci_ready_receipt_identity.py"
 )
@@ -114,22 +154,18 @@ source = identity.source_review_identity(
     repository="eng-cc/oasis7",
     pr_number=7,
     source_head_oid=head,
-    source_scope_oid=head,
-    changed_paths_digest="a" * 64,
+    source_scope_oid=scope,
+    changed_paths_digest=changed_paths_digest.removeprefix("sha256:"),
     ordered_role_ids=["repository_health_engineer"],
     role_contract_digest="b" * 64,
     review_policy_digest="c" * 64,
     input_contract_digest="d" * 64,
 )
-changed_paths = ["scripts/pm/claim-ready.sh"]
-changed_paths_digest = "sha256:" + hashlib.sha256(
-    json.dumps(changed_paths, sort_keys=True, separators=(",", ":")).encode()
-).hexdigest()
 projection = {
     "schema": "oasis7-workflow-impact-projection/v2",
     "task_uid": task_uid,
     "source_head_oid": head,
-    "scope_base_oid": head,
+    "scope_base_oid": scope,
     "changed_paths": changed_paths,
     "changed_paths_digest": changed_paths_digest,
     "closure_status": {"status": "complete"},
@@ -170,7 +206,7 @@ task_root = root / ".pm" / "scratch" / task_uid
     encoding="utf-8",
 )
 (root / ".pm/github-project-sync/tasks.json").write_text(
-    json.dumps({"project": {"repo": "eng-cc/oasis7"}, "tasks": {task_uid: {"status": "ready", "issue_number": 99}}}),
+    json.dumps({"project": {"repo": "eng-cc/oasis7"}, "tasks": {task_uid: {"status": "ready", "issue_number": 0}}}),
     encoding="utf-8",
 )
 receipt = {
@@ -178,9 +214,9 @@ receipt = {
     "issuer": "github_live_query",
     "repository": "eng-cc/oasis7",
     "task_uid": task_uid,
-    "task_issue_number": 99,
+    "task_issue_number": 0,
     "pr_number": 7,
-    "base_oid": head,
+    "base_oid": scope,
     "head_oid": head,
     "check_name": "required-gate",
     "check_app_id": "15368",
@@ -197,7 +233,8 @@ receipt = {
 (root / "receipt.json").write_text(json.dumps(receipt), encoding="utf-8")
 PY
 set +e
-PM_ROOT_DIR="$FIXTURE" "$FIXTURE/scripts/pm/claim-ready.sh" \
+TARGET_OID="$FIXTURE_HEAD" PATH="$TEST_ROOT/bin:$PATH" PM_ROOT_DIR="$FIXTURE" \
+  "$FIXTURE/scripts/pm/claim-ready.sh" \
   --claim-type ready_for_pr \
   --verification-profile repository_required \
   --task-uid "$UID_VALUE" \
@@ -210,5 +247,75 @@ if [[ "$CLAIM_STATUS" == "0" ]]; then
   exit 1
 fi
 grep -F "high-risk projection requires trusted integration CI" "$TEST_ROOT/claim.err" >/dev/null
+
+# The same direct path must reject a mapped related target-only change while
+# allowing an unrelated target advance once the live target object is bound.
+python3 - "$FIXTURE" "$UID_VALUE" <<'PY'
+import hashlib
+import json
+import pathlib
+import sys
+
+root = pathlib.Path(sys.argv[1])
+task_uid = sys.argv[2]
+task_root = root / ".pm" / "scratch" / task_uid
+plan_path = task_root / "review-plans" / "1.json"
+plan = json.loads(plan_path.read_text(encoding="utf-8"))
+projection = plan["impact_projection"]
+projection.update(
+    {
+        "change_class": "code",
+        "affected_consumers": [{"path": "contract.txt"}],
+        "review_escalated": False,
+        "verification_affected": False,
+        "review_reasons": [],
+        "public_semantics": [],
+    }
+)
+projection["projection_digest"] = "sha256:" + hashlib.sha256(
+    json.dumps(
+        {key: value for key, value in projection.items() if key != "projection_digest"},
+        sort_keys=True,
+        separators=(",", ":"),
+    ).encode()
+).hexdigest()
+plan["impact_projection_digest"] = projection["projection_digest"]
+plan_path.write_text(json.dumps(plan), encoding="utf-8")
+receipt_path = root / "receipt.json"
+receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+receipt["impact_projection_digest"] = projection["projection_digest"]
+receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+PY
+set +e
+TARGET_OID="$RELATED_TARGET" PATH="$TEST_ROOT/bin:$PATH" PM_ROOT_DIR="$FIXTURE" \
+  "$FIXTURE/scripts/pm/claim-ready.sh" \
+  --claim-type ready_for_pr \
+  --verification-profile repository_required \
+  --task-uid "$UID_VALUE" \
+  --ci-ready-receipt "$FIXTURE/receipt.json" \
+  --json >"$TEST_ROOT/related.json" 2>"$TEST_ROOT/related.err"
+RELATED_STATUS=$?
+set -e
+if [[ "$RELATED_STATUS" == "0" ]]; then
+  echo "claim-ready accepted a related target-only change" >&2
+  exit 1
+fi
+grep -F "v2 source-review reuse is not proven" "$TEST_ROOT/related.err" >/dev/null
+
+TARGET_OID="$UNRELATED_TARGET" PATH="$TEST_ROOT/bin:$PATH" PM_ROOT_DIR="$FIXTURE" \
+  "$FIXTURE/scripts/pm/claim-ready.sh" \
+  --claim-type ready_for_pr \
+  --verification-profile repository_required \
+  --task-uid "$UID_VALUE" \
+  --ci-ready-receipt "$FIXTURE/receipt.json" \
+  --json >"$TEST_ROOT/unrelated.json"
+python3 - "$TEST_ROOT/unrelated.json" <<'PY'
+import json
+import sys
+
+payload = json.loads(open(sys.argv[1], encoding="utf-8").read())
+if payload.get("status") != "verified" or payload.get("allowed_to_claim") is not True:
+    raise SystemExit(f"unrelated target advance should remain reusable: {payload}")
+PY
 
 echo "claim-ready-ready-pr.test: OK"

@@ -144,6 +144,18 @@ PY
     --check-app-id "$RECEIPT_APP" --planner-digest "$RECEIPT_PLANNER" --receipt "$CI_READY_RECEIPT" --allow-ready-pr >/dev/null \
     || die "ci_ready_receipt live validation failed: stale wrong_head wrong_app superseded cancelled uncertain"
 
+  command -v gh >/dev/null 2>&1 || die "ready_for_pr requires live GitHub target read access"
+  CI_CURRENT_TARGET_OID="$(gh pr view "$RECEIPT_PR" -R "$RECEIPT_REPOSITORY" --json baseRefOid --jq '.baseRefOid')" \
+    || die "could not read the live PR target OID for source review reuse"
+  [[ "$CI_CURRENT_TARGET_OID" =~ ^[0-9a-f]{40,64}$ ]] \
+    || die "live PR target OID is missing or invalid for source review reuse"
+  if ! git -C "$ROOT_DIR" cat-file -e "$CI_CURRENT_TARGET_OID^{commit}" >/dev/null 2>&1; then
+    git -C "$ROOT_DIR" fetch --no-tags --no-write-fetch-head origin "$CI_CURRENT_TARGET_OID" >/dev/null 2>&1 \
+      || die "could not fetch the live PR target OID for source review reuse"
+  fi
+  git -C "$ROOT_DIR" cat-file -e "$CI_CURRENT_TARGET_OID^{commit}" >/dev/null 2>&1 \
+    || die "live PR target OID is unavailable locally for source review reuse"
+
   # A direct ready_for_pr claim must consume the same v2 source-review and
   # trusted projection decision used by promotion/closeout.  The live receipt
   # proves the source-bound CI check; it cannot by itself prove that ordinary
@@ -182,7 +194,7 @@ PY
       )" || die "ready_for_pr requires one canonical v2 review plan for the receipt source head"
     fi
   fi
-  python3 - "$ROOT_DIR" "$REVIEW_PLAN_PATH" "$CI_READY_RECEIPT" "$RECEIPT_TASK_UID" "$SCRIPT_DIR" <<'PY' \
+  python3 - "$ROOT_DIR" "$REVIEW_PLAN_PATH" "$CI_READY_RECEIPT" "$RECEIPT_TASK_UID" "$CI_CURRENT_TARGET_OID" "$SCRIPT_DIR" <<'PY' \
     || die "ready_for_pr requires a trusted v2 review plan and applicable CI authority"
 import importlib.util
 import json
@@ -208,7 +220,8 @@ try:
 except (OSError, json.JSONDecodeError) as exc:
     raise SystemExit(f"claim-ready: canonical v2 review plan or CI receipt is invalid: {exc}") from exc
 
-identity_path = Path(sys.argv[5]) / "ci_ready_receipt_identity.py"
+current_target_oid = sys.argv[5]
+identity_path = Path(sys.argv[6]) / "ci_ready_receipt_identity.py"
 spec = importlib.util.spec_from_file_location("claim_ready_ci_receipt_identity", identity_path)
 if spec is None or spec.loader is None:
     raise SystemExit("claim-ready: trusted CI receipt identity helper is unavailable")
@@ -224,7 +237,8 @@ if not ordinary and not trusted_integration:
     raise SystemExit("claim-ready: CI receipt is neither ordinary live PR CI nor trusted integration evidence")
 if requires_strict and ordinary:
     raise SystemExit("claim-ready: high-risk projection requires trusted integration CI; ordinary PR CI is insufficient")
-if not identity.can_reuse_source_review(plan, receipt):
+if not identity.can_reuse_source_review(
+        plan, receipt, current_target_oid=current_target_oid, current_target_root=root):
     raise SystemExit("claim-ready: v2 source-review reuse is not proven by the trusted CI receipt")
 PY
 fi
