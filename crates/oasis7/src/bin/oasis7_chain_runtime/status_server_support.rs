@@ -428,10 +428,29 @@ fn handle_chain_status_connection(
                 .map_err(|err| format!("failed to write rebuild proof response: {err}"))?;
         }
         "/v1/chain/status" => {
-            let (mut snapshot, udp_gossip_traffic) = runtime
-                .lock()
-                .map_err(|_| "failed to read node runtime snapshot: lock poisoned".to_string())
-                .map(|locked| (locked.snapshot(), locked.gossip_traffic_snapshot()))?;
+            let (mut snapshot, udp_gossip_traffic) = match runtime.try_lock() {
+                Ok(locked) => (locked.snapshot(), locked.gossip_traffic_snapshot()),
+                Err(std::sync::TryLockError::WouldBlock) => {
+                    // A consensus execution commit may legitimately hold the
+                    // runtime mutex while publishing its durable world. Do
+                    // not wait past the viewer's bounded chain-link read and
+                    // then write into a closed socket; fail closed so the
+                    // viewer retries without accepting a stale projection.
+                    write_json_response(
+                        &mut stream,
+                        503,
+                        br#"{"error":"runtime_busy"}"#,
+                        head_only,
+                    )
+                    .map_err(|err| {
+                        format!("failed to write busy /v1/chain/status response: {err}")
+                    })?;
+                    return Ok(());
+                }
+                Err(std::sync::TryLockError::Poisoned(_)) => {
+                    return Err("failed to read node runtime snapshot: lock poisoned".to_string());
+                }
+            };
             attach_governance_slashing_receipts(&mut snapshot, execution_world_dir);
             let live_snapshot = replication_network.reachability_snapshot();
             let (p2p_recommendation, p2p_detection) =
@@ -440,7 +459,23 @@ fn handle_chain_status_connection(
                 applied_runtime_user_mode_label(options).map(str::to_string);
             let replication_debug_status =
                 build_chain_replication_debug_status(replication_network.as_ref());
-            let transactions = transfer_submit_api::build_chain_transfer_metrics_status(&runtime)?;
+            let transactions =
+                match transfer_submit_api::try_build_chain_transfer_metrics_status(&runtime) {
+                    Ok(Some(transactions)) => transactions,
+                    Ok(None) => {
+                        write_json_response(
+                            &mut stream,
+                            503,
+                            br#"{"error":"runtime_busy"}"#,
+                            head_only,
+                        )
+                        .map_err(|err| {
+                            format!("failed to write busy /v1/chain/status response: {err}")
+                        })?;
+                        return Ok(());
+                    }
+                    Err(err) => return Err(err),
+                };
             let payload =
                 super::status_payload::build_chain_status_payload_with_storage_root_and_authority(
                     snapshot,

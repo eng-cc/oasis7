@@ -910,6 +910,28 @@ fn sync_tracker_from_runtime(
         .lock()
         .map_err(|_| "failed to lock node runtime for transfer tracker sync".to_string())?
         .drain_committed_action_batches();
+    sync_tracker_from_batches(batches, tracker)
+}
+
+fn try_sync_tracker_from_runtime(
+    runtime: &Arc<Mutex<NodeRuntime>>,
+    tracker: &mut TransferTracker,
+) -> Result<bool, String> {
+    let batches = match runtime.try_lock() {
+        Ok(locked) => locked.drain_committed_action_batches(),
+        Err(std::sync::TryLockError::WouldBlock) => return Ok(false),
+        Err(std::sync::TryLockError::Poisoned(_)) => {
+            return Err("failed to lock node runtime for transfer tracker sync".to_string());
+        }
+    };
+    sync_tracker_from_batches(batches, tracker)?;
+    Ok(true)
+}
+
+fn sync_tracker_from_batches(
+    batches: Vec<oasis7_node::NodeCommittedActionBatch>,
+    tracker: &mut TransferTracker,
+) -> Result<(), String> {
     super::explorer_p0_api::ingest_committed_batches(batches.as_slice());
 
     for batch in batches {
@@ -969,14 +991,16 @@ fn sync_tracker_from_runtime(
     Ok(())
 }
 
-pub(super) fn build_chain_transfer_metrics_status(
+pub(super) fn try_build_chain_transfer_metrics_status(
     runtime: &Arc<Mutex<NodeRuntime>>,
-) -> Result<ChainTransferMetricsStatus, String> {
+) -> Result<Option<ChainTransferMetricsStatus>, String> {
     let mut tracker = lock_transfer_tracker();
-    sync_tracker_from_runtime(runtime, &mut tracker)?;
+    if !try_sync_tracker_from_runtime(runtime, &mut tracker)? {
+        return Ok(None);
+    }
     let now_ms = super::now_unix_ms();
     tracker.refresh_lifecycle_by_time(now_ms);
-    Ok(tracker.metrics_status(now_ms))
+    Ok(Some(tracker.metrics_status(now_ms)))
 }
 
 fn summarize_transfer_latency_samples(mut samples: Vec<i64>) -> ChainTransferLatencySummaryStatus {

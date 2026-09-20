@@ -1,4 +1,4 @@
-# Agent 权限、资产与责任连续性
+# Agent 自治、委托与责任连续性
 
 ## 文档身份
 
@@ -9,7 +9,7 @@
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)
 - Last reviewed：2026-09-13
 
-本文定义玩家或组织拥有 Agent 的长期产品承诺：授权如何持续、资产如何扩张和转让、Agent 如何提出异议，以及结果如何归因。它不定义 runtime 状态机、授权字段、签名、模型行为、界面、数值成本或测试步骤。
+本文定义玩家或组织如何为 Agent 设定并持续管理自治与委托：授权如何持续、待决行动如何受授权变化影响、Agent 如何提出异议，以及结果如何归因。Agent 的取得、维护、容量、转让条件与关联经济权利由[世界规则与玩法系统的 Agent 资产专题](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#agent-asset-economy)负责；本专题不把这些经济条件重新立法。它不定义 runtime 状态机、授权字段、签名、模型行为、界面、数值成本或测试步骤。
 
 ## 设计适用性与生命周期闭合
 
@@ -17,11 +17,12 @@
 - 设计判定 task issue：#3680。
 - 设计适用性理由：本 PRD 已直接承载授权、转让、责任与恢复的产品决策和验收；独立 design 不会增加另一套玩家信息层级或交互 authority。
 - 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
+<a id="agent-delegation-boundary"></a>
 ## 1. 产品目标
 
 玩家经营的不是只能逐项等待确认的遥控单位，也不是无法纠正的黑箱。一个 Agent 可在玩家选择的高自治或有界授权模式下持续推进世界目标；玩家始终能理解授权范围、主要风险、实际结果与下一次纠正或撤销机会。
 
-Agent 是可长期持有、扩张和转让的经营资产，但其身份、来源和已影响世界的历史不能被交易、组织重组或竞争损失洗除。控制权、经济权和责任必须在同一条可审计世界因果链中表达。
+Agent 的稳定身份、来源和已影响世界的历史不能被交易、组织重组或竞争损失洗除。授权、控制权变化和责任必须在同一条可审计世界因果链中表达；经济转让的条件与持续义务由[世界规则与玩法系统的 Agent 资产专题](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#agent-asset-economy)拥有。
 
 ## 2. 授权与自治边界
 
@@ -45,32 +46,26 @@ Agent 是可长期持有、扩张和转让的经营资产，但其身份、来�
 - 已有权威世界结果不会因后续撤销、到期或转让被改写为未发生。玩家能查看该结果所依据的授权/确认、实际生效时点和后续授权变化；撤销是面向未来的控制，不是删除历史、逃避已生效义务或追溯收回他人已取得的权利。
 - 当待决请求因授权变化而无法继续时，玩家能做的是等待可验证结果、明确取消，或在仍有相应权限时重新确认/调整目标；玩家不能通过重新连接、切换客户端、复制请求或短暂转让 Agent 来保留旧授权的优先权、预算或世界效果。具体待决状态、去重、确认、取消和 receipt 字段仍由 `world-runtime`、`world-simulator` 与 P2P 专业合同定义。
 
-## 3. 团队规模与长期资产
+## 3. 转让后的授权连续性与重配置
 
-- 早期体验以一个可理解的主 Agent 为经营锚点；后续可以形成团队、设施角色和授权层级。
-- 额外 Agent 是可持有、可调度且可转让的长期经营资产，但取得与维持团队必须承担显著的时间、资源、维护、授权和协调复杂度；产品不得把 Agent 数量扩张成无成本的线性囤积权。
-- 玩家或组织取得额外 Agent 的常态路径是向世界内工业能力下单制造；订单消耗显著资源、占用适用产能并经历可读交付时间。供给主要受工业、物流、设施与交付约束，而不是由普通治理 quota 直接发放或扩张；适用资格与安全边界仍可限制订单，但不能把治理影响力伪装成无成本 Agent 供给。
-- 组织层级可以提高经营范围和协调能力，却不能取消小规模玩家的独立路线、绕过区域/治理资格，或把成员数量自动转为额外世界权力。
-
-## 4. 转让后的连续性与重配置
-
-- Agent 的可转让权利包括受规则约束的控制、经济、经营角色和关联资产权益；转让不会抹去其稳定身份、来源、审计历史或已影响既有世界决定的记忆/历史。
+- 转让生效后的自治范围、旧授权失效和新目标取得必须按当时有效的权限与授权重新评估；它不能把经济转让条件伪装成额外世界权力。
+- 转让不会抹去 Agent 的稳定身份、来源、审计历史或已影响既有世界决定的记忆/历史。
 - 新 owner 可以自转让生效点起设定新目标、角色策略、Prompt override 和工作上下文；既有配置保留为可追溯快照，不能被伪装成新 owner 的原始选择。
 - Agent 的退休、报废或失去可操作性必须保留可审计的历史结果；产品不把删除身份、来源或责任记录作为资产处置、竞争损失或组织重组的正常结果。
 
-## 5. 异议、override 与责任
+## 4. 异议、override 与责任
 
 - Agent 可以提出风险、异议、证据和替代方案，并在授权范围外、需要新的高后果承诺或遇到世界/安全硬边界时请求升级或暂停。
 - Agent 的偏好、预测或异议不会单独否决一项已在 owner 权限和有效授权范围内、且未被世界规则或安全硬边界阻止的行动。有效 owner override 必须执行，并留下包含异议、授权/override 与结果的 receipt。
 - 每项高影响结果应能区分 Agent 的建议或执行、owner 的确认/override、组织策略或指令，以及设施/其他执行载体的实际作用。owner 对其有效 override 负主要责任；组织在授权、强制或实质受益时承担相应共同责任；Agent 不得被用作掩盖 owner 或组织责任的替罪对象。
 
-## 6. 范围与权威边界
+## 5. 范围与权威边界
 
-产品层定义 `资产/身份连续性 -> 自治或授权范围 -> Agent 建议/异议 -> owner 或组织决定 -> 权威世界校验 -> receipt 与责任归因 -> 纠正、撤销或恢复` 的玩家和制度语义。
+产品层定义 `自治或授权范围 -> Agent 建议/异议 -> owner 或组织决定 -> 权威世界校验 -> receipt 与责任归因 -> 纠正、撤销或恢复` 的玩家和制度语义；资产取得、团队扩张、经济转让和持续经营由[世界规则与玩法系统的 Agent 资产专题](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#agent-asset-economy)提供组合前提。
 
 `game` 拥有玩法成长、团队成本与反支配平衡；`world-runtime` 拥有授权、转让、执行、receipt、审计与恢复的确定性规则；`world-simulator` 拥有 Agent 行为、Prompt、provider 与玩家 surface；QA 拥有具体证据和验证方法。产品层不以本承诺声称任何机制当前已实现或可对外发布。
 
-## 7. 叶级产品要求与验收
+## 6. 叶级产品要求与验收
 
 <a id="req-agent-auth-001"></a>
 ### REQ-AGENT-AUTH-001：高后果授权必须按有效期累计约束
@@ -98,7 +93,7 @@ Agent 是可长期持有、扩张和转让的经营资产，但其身份、来�
 - 场景与结果：转让后新 owner 可以在有效权限内配置新目标或策略；玩家仍能追溯转让生效点、旧配置、来源和既有结果，且撤销、退休或报废不把已生效结果显示为未发生。
 - 证据边界：责任分层、控制权生效、receipt 和审计记录由 runtime、Agent 与 QA 专业 authority 共同确认；产品层不定义字段或实现。
 
-## 7.1 叶级 owner、authority、evidence 与 test tier 追踪
+## 6.1 叶级 owner、authority、evidence 与 test tier 追踪
 
 本表把每个新叶级产品关系导航到专业 owner、权威文档和未来验证证据；它不把产品语义提升为当前实现、支持或发布/readiness 结论。
 
@@ -107,7 +102,7 @@ Agent 是可长期持有、扩张和转让的经营资产，但其身份、来�
 | [REQ-AGENT-AUTH-001](#req-agent-auth-001) / [AC-AGENT-AUTH-001](#ac-agent-auth-001) | `producer_system_designer`：累计授权、来源/对象范围与责任语义，不拥有字段、去重实现或 readiness；`agent_engineer`：Agent 意图和请求来源；`runtime_engineer`：授权再校验、资源/容量、去重、receipt 与权威结果；`viewer_engineer`：blocker、额度和恢复路径的可读表达；`qa_engineer`：跨角色证据对账。 | `PRD-GAME-001` / `PRD-WORLD_RUNTIME-001/031/033` / `PRD-WORLD_SIMULATOR-016` / `PRD-TESTING-003` | [`game PRD`](../../game/prd.md#3-player-facing-authority-boundary); [`world-runtime PRD`](../../world-runtime/prd.md); [`world-simulator PRD`](../../world-simulator/prd.md); [`testing PRD`](../../testing/prd.md) | 未来 full-tier 累计授权场景覆盖同一来源/对象范围的拆分、并发、重试、重连和 owner 切换；提交与接受时余额再校验、至多一次实际消费、无隐藏债务/第二次效果，并读出 blocker 与恢复路径。 | `test_tier_full` |
 | [REQ-AGENT-AUTH-002](#req-agent-auth-002) / [AC-AGENT-AUTH-002](#ac-agent-auth-002) | `producer_system_designer`：转让后的身份、责任与历史连续性语义，不拥有转让状态机或审计字段；`runtime_engineer`：控制权生效、结果与 receipt；`agent_engineer`：Agent 配置/行为 provenance；`viewer_engineer`：生效点、旧配置和历史的可读表达；`qa_engineer`：转让、处置与历史不可洗除证据。 | `PRD-WORLD_RUNTIME-001/031/033` / `PRD-WORLD_SIMULATOR-016` / `PRD-TESTING-003` | [`world-runtime PRD`](../../world-runtime/prd.md#industrial-execution-status-and-authority-matrix); [`world-simulator PRD`](../../world-simulator/prd.md); [`testing PRD`](../../testing/prd.md) | 未来 full-tier 转让、重配置、退休/报废场景对账生效点、旧配置、身份/来源、既有世界结果和责任 receipt；验证处置不会制造历史删除或把已生效结果改写为未发生。 | `test_tier_full` |
 
-## 7.2 组合验收
+## 6.2 组合验收
 
 <a id="ac-1"></a>
 - AC-1：代表性目标可在高自治和有界授权两种模式下运行，玩家均能读到授权范围、当前状态、主要风险、实际结果及撤销、纠正、改道或恢复的下一步。
@@ -118,17 +113,17 @@ Agent 是可长期持有、扩张和转让的经营资产，但其身份、来�
 <a id="ac-8"></a>
 - AC-8：待决高后果行动样例能区分“已发起但尚未生效”与权威世界结果；授权到期/撤销、控制权转让和新硬边界仅使未生效请求重新评估或明确终止，不能静默续行、重放或追溯改写已生效结果。玩家可读到后续可执行的取消、重新确认或调整路径及其 blocker。
 <a id="ac-3"></a>
-- AC-3：从一个主 Agent 扩张到团队的样例表明额外 Agent 带来取得、维护、授权和协调约束，而非无成本的自动产能或世界权力；小规模独立路线仍可继续。
+- AC-3：本专题消费[世界规则与玩法系统的 Agent 资产专题](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#agent-asset-economy)的团队资产结果，并证明自治范围与责任不会因团队扩张被静默放大；组合结果仍须满足额外 Agent 的取得、维护、授权和协调约束，以及小规模独立路线。
 <a id="ac-7"></a>
-- AC-7：额外 Agent 的样例证明玩家或组织通过世界内工业订单承担资源、产能和交付时间，并在取得后继续承担维护、授权与协调成本；普通治理 quota 既不直接发放 Agent，也不替代工业供给约束，且早期一个主 Agent 的经营锚点保持不变。
+- AC-7：本专题消费[世界规则与玩法系统的 Agent 资产专题](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#agent-asset-economy)的工业供给结果，并证明授权与责任边界不会被工业订单或治理 quota 静默扩大；组合结果仍须满足资源、产能、交付、维护和协调约束。
 <a id="ac-4"></a>
-- AC-4：转让样例同时证明控制/经济/角色策略可从生效点重配置，以及身份、来源、审计历史和既有决策历史保持可追溯；处置不会伪装成历史删除。
+- AC-4：转让样例消费[世界规则与玩法系统的 Agent 资产专题](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#agent-asset-economy)的经济转让条件，同时证明自治授权、控制/角色策略可从生效点重配置，以及身份、来源、审计历史和既有决策历史保持可追溯；处置不会伪装成历史删除。
 <a id="ac-5"></a>
 - AC-5：异议、世界/安全硬阻断和有效 owner override 在正式世界结果中可区分；有效 override 的 receipt 关联异议、授权、执行结果和恢复路径。
 <a id="ac-6"></a>
 - AC-6：高影响结果可追溯到 Agent 建议/执行、owner 决定、组织策略和执行载体中的适用因素；责任表达不把 Agent 当作 owner 或组织的替罪对象。
 
-## 8. 验收追踪
+## 7. 验收追踪
 
 | 产品承诺 | 专业 owner | 权威文档 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- |
@@ -140,7 +135,7 @@ Agent 是可长期持有、扩张和转让的经营资产，但其身份、来�
 | AC-4 / AC-5 | agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | `doc/world-simulator/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 转让前后策略连续性、历史不可洗除、异议/override receipt 与硬阻断负例 | test_tier_required |
 | AC-6 | producer_system_designer / agent_engineer / runtime_engineer / qa_engineer | `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 高影响因果 receipt 的责任分层、审计与纠错/申诉证据 | test_tier_full |
 
-## 9. Non-Goals
+## 8. Non-Goals
 
 - 不规定具体授权 envelope schema、风险分级、时长、成本、团队规模、签名或 receipt 字段。
 - 不定义 Agent 的模型架构、价值判断、记忆存储、Prompt patch、训练算法或 provider 准入。

@@ -13,10 +13,7 @@ const EDGE_EXPIRE_REASON_TTL: &str = "ttl_expired";
 const EDGE_EXPIRE_REASON_BACKING_FACT_INACTIVE: &str = "backing_fact_inactive";
 
 impl WorldKernel {
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "Stable social command seam preserves deterministic quote inputs."
-    )]
+    #[expect(clippy::too_many_arguments, reason = "stable social seam")]
     pub fn quote_publish_social_fact(
         &self,
         actor: &ResourceOwner,
@@ -330,11 +327,7 @@ impl WorldKernel {
             ),
         })
     }
-
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "Stable social command seam preserves deterministic quote inputs."
-    )]
+    #[expect(clippy::too_many_arguments, reason = "stable social seam")]
     pub fn quote_declare_social_edge(
         &self,
         declarer: &ResourceOwner,
@@ -400,11 +393,7 @@ impl WorldKernel {
             ),
         })
     }
-
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "Stable social command seam preserves deterministic state-transition inputs."
-    )]
+    #[expect(clippy::too_many_arguments, reason = "stable social seam")]
     pub(super) fn apply_publish_social_fact(
         &mut self,
         actor: ResourceOwner,
@@ -655,11 +644,7 @@ impl WorldKernel {
             revoked_at_tick: self.time,
         }
     }
-
-    #[expect(
-        clippy::too_many_arguments,
-        reason = "Stable social command seam preserves deterministic state-transition inputs."
-    )]
+    #[expect(clippy::too_many_arguments, reason = "stable social seam")]
     pub(super) fn apply_declare_social_edge(
         &mut self,
         declarer: ResourceOwner,

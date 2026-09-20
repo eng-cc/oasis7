@@ -315,10 +315,7 @@ fn latest_fresh_requester_failure_disposition<'a>(
             .then_some(disposition)
         })
 }
-#[expect(
-    clippy::too_many_arguments,
-    reason = "Player gameplay snapshot construction maps the stable observable DTO fields"
-)]
+#[expect(clippy::too_many_arguments, reason = "DTO mapping")]
 pub(super) fn build_player_gameplay_snapshot(
     state: &WorldState,
     controlled_agent_id: Option<&str>,

@@ -684,10 +684,6 @@ impl World {
         self
     }
 
-    // ---------------------------------------------------------------------
-    // Accessors
-    // ---------------------------------------------------------------------
-
     pub fn state(&self) -> &WorldState {
         &self.state
     }
@@ -1077,10 +1073,8 @@ impl World {
                     .contains_key(&pending.intent_id)
             })
         {
-            // An authorization-linked intent already represents a durable
-            // budget debit.  Refusing the new queue event keeps the staged
-            // command atomic; silently evicting the existing linked intent
-            // would strand that debit and its recovery receipt.
+            // An authorization-linked intent represents a durable budget debit;
+            // refuse the new queue event rather than stranding its recovery receipt.
             return Err(WorldError::CapabilityAuthorizationDenied {
                 reason: "effect queue is full of authorization-linked intents".to_string(),
             });
@@ -1128,9 +1122,8 @@ impl World {
                     .capability_effect_receipt_links
                     .contains_key(&intent.intent_id)
             }) else {
-                // Keep linked effects durable even if an operator lowers the
-                // limit below their count.  They remain dispatchable and can
-                // be closed by a real provider receipt after restart.
+                // Keep linked effects durable below a lowered limit; a real
+                // provider receipt can still close them after restart.
                 break;
             };
             let _ = self.pending_effects.remove(eviction_index);

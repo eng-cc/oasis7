@@ -52,7 +52,7 @@ impl ViewerRuntimeLiveServer {
                 PromptControlResultStatus::Blocked,
             ));
         }
-        if !self.llm_sidecar.supports_prompt_control() {
+        if !self.llm_sidecar.supports_prompt_control_result() {
             return Err(prompt_control_enhanced_error(
                 "agent_provider_prompt_control_unsupported",
                 "prompt_control is not supported when runtime live uses ProviderBacked(Local HTTP)",

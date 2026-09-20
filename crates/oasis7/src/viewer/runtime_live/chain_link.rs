@@ -304,6 +304,38 @@ impl ViewerRuntimeLiveServer {
         Ok(dispatch.advanced)
     }
 
+    /// Prime the first chain-linked projection without holding the shared
+    /// Viewer mutex across the status/world read. HelloV2 and the initial
+    /// snapshot request are served by separate client threads; keeping the
+    /// network read outside the mutex prevents a slow chain-status response
+    /// from starving the launcher presence probe's HelloAck. The prepared
+    /// world is still applied under the mutex and passes the same authority
+    /// checks before it can become visible.
+    pub(super) fn prime_chain_linked_runtime_for_snapshot_minimized_lock(
+        shared: &Arc<Mutex<Self>>,
+    ) -> Result<bool, ViewerRuntimeLiveServerError> {
+        let chain_status_bind = {
+            let server = lock_shared_server(shared)?;
+            server
+                .config
+                .chain_status_bind
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+                .map(str::to_string)
+        };
+        let Some(chain_status_bind) = chain_status_bind else {
+            return Ok(false);
+        };
+
+        let prepared = prepare_chain_linked_runtime_update(chain_status_bind.as_str())?;
+        let mut server = lock_shared_server(shared)?;
+        server.clear_chain_sync_failure_feedback();
+        let mut silent_session = RuntimeLiveSession::new_with_playing(false);
+        let dispatch = server.apply_chain_linked_runtime_update(prepared, &mut silent_session)?;
+        Ok(dispatch.advanced)
+    }
+
     pub(super) fn sync_chain_linked_runtime_minimized_lock(
         shared: &Arc<Mutex<Self>>,
         session: &mut RuntimeLiveSession,
@@ -356,7 +388,7 @@ impl ViewerRuntimeLiveServer {
 
     fn apply_chain_linked_runtime_update(
         &mut self,
-        prepared: PreparedChainLinkedRuntimeUpdate,
+        mut prepared: PreparedChainLinkedRuntimeUpdate,
         session: &mut RuntimeLiveSession,
     ) -> Result<ChainLinkedRuntimeDispatch, ViewerRuntimeLiveServerError> {
         self.llm_sidecar
@@ -364,9 +396,6 @@ impl ViewerRuntimeLiveServer {
         let baseline_logical_time = self.world.state().time;
         let baseline_event_seq = latest_runtime_event_seq(&self.world);
         let baseline_snapshot = self.world.snapshot();
-        let prepared_snapshot = prepared.world.snapshot();
-        let baseline_snapshot_hash = compute_runtime_snapshot_hash(&baseline_snapshot)?;
-        let prepared_snapshot_hash = compute_runtime_snapshot_hash(&prepared_snapshot)?;
         // Chain-linked viewers are observers. The chain writer must publish
         // authority and provisioning records in its committed world before
         // the viewer accepts that world; the viewer never mutates the loaded
@@ -376,6 +405,28 @@ impl ViewerRuntimeLiveServer {
             &self.config.provider_backed_bootstrap_authorities,
         )
         .map_err(ViewerRuntimeLiveServerError::Init)?;
+        if self.hosted_local_mock_test_lane_active && prepared.world.state().agents.is_empty() {
+            return Err(ViewerRuntimeLiveServerError::Init(
+                "Hosted local-mock authoritative chain world requires a Runtime-seeded Agent"
+                    .to_string(),
+            ));
+        }
+        if self.hosted_local_mock_test_lane_active && !prepared.world.state().agents.is_empty() {
+            if !control_plane::install_hosted_local_mock_test_capability_fixtures(
+                &mut prepared.world,
+                self.config.hosted_public_join_mode,
+            )
+            .map_err(ViewerRuntimeLiveServerError::Init)?
+            {
+                return Err(ViewerRuntimeLiveServerError::Init(
+                    "Hosted local-mock test lane was disabled before authoritative fixture installation"
+                        .to_string(),
+                ));
+            }
+        }
+        let prepared_snapshot = prepared.world.snapshot();
+        let baseline_snapshot_hash = compute_runtime_snapshot_hash(&baseline_snapshot)?;
+        let prepared_snapshot_hash = compute_runtime_snapshot_hash(&prepared_snapshot)?;
         let materially_different_world = prepared_snapshot_hash != baseline_snapshot_hash
             && chain_linked_runtime_has_playable_state(&prepared.world);
         if prepared.committed_height < self.last_chain_committed_height {
@@ -726,13 +777,14 @@ fn fetch_chain_status_snapshot(
     stream.flush()?;
 
     let response = read_chain_link_http_response(&mut stream)?;
-    let (status_code, payload): (u16, ChainStatusSyncSnapshot) =
-        parse_http_json_response(response.as_slice(), "chain status")?;
+    let (status_code, body) = parse_http_response(response.as_slice(), "chain status")?;
     if status_code != 200 {
         return Err(ViewerRuntimeLiveServerError::Serde(format!(
             "chain status request returned non-200 response: HTTP {status_code}"
         )));
     }
+    let payload = serde_json::from_slice::<ChainStatusSyncSnapshot>(body)
+        .map_err(|err| ViewerRuntimeLiveServerError::Serde(err.to_string()))?;
     Ok(payload)
 }
 
@@ -762,8 +814,9 @@ fn post_chain_linked_submit_payload(
     stream.flush()?;
 
     let response = read_chain_link_http_response(&mut stream)?;
-    let (status_code, payload): (u16, ChainGameplaySubmitResponse) =
-        parse_http_json_response(response.as_slice(), "chain gameplay submit")?;
+    let (status_code, body) = parse_http_response(response.as_slice(), "chain gameplay submit")?;
+    let payload = serde_json::from_slice::<ChainGameplaySubmitResponse>(body)
+        .map_err(|err| ViewerRuntimeLiveServerError::Serde(err.to_string()))?;
     if !(200..=299).contains(&status_code) && payload.ok {
         return Err(ViewerRuntimeLiveServerError::Serde(format!(
             "chain gameplay submit returned HTTP {status_code} with invalid success payload"
@@ -806,10 +859,10 @@ fn connect_chain_status_stream(
     Ok(stream)
 }
 
-fn parse_http_json_response<T: serde::de::DeserializeOwned>(
-    response: &[u8],
+fn parse_http_response<'a>(
+    response: &'a [u8],
     label: &str,
-) -> Result<(u16, T), ViewerRuntimeLiveServerError> {
+) -> Result<(u16, &'a [u8]), ViewerRuntimeLiveServerError> {
     let Some(body_start) = response.windows(4).position(|window| window == b"\r\n\r\n") else {
         return Err(ViewerRuntimeLiveServerError::Serde(format!(
             "{label} response missing HTTP body"
@@ -827,9 +880,7 @@ fn parse_http_json_response<T: serde::de::DeserializeOwned>(
                 "{label} response missing HTTP status code"
             ))
         })?;
-    let payload = serde_json::from_slice::<T>(&response[(body_start + 4)..])
-        .map_err(|err| ViewerRuntimeLiveServerError::Serde(err.to_string()))?;
-    Ok((status_code, payload))
+    Ok((status_code, &response[(body_start + 4)..]))
 }
 
 fn read_chain_link_http_response(

@@ -105,6 +105,9 @@ pub(super) fn build_oasis7_chain_runtime_args(options: &CliOptions) -> Vec<Strin
         args.push(registry_path);
     }
     if options.chain_enabled {
+        if options.chain_local_standalone_test {
+            args.push("--chain-local-standalone-test".to_string());
+        }
         for path in &options.provider_bootstrap_authority_paths {
             args.push("--provider-bootstrap-authority".to_string());
             args.push(path.clone());
@@ -142,6 +145,18 @@ pub(super) fn build_oasis7_chain_runtime_args(options: &CliOptions) -> Vec<Strin
             );
             args.push("--local-test-provider-session-mode".to_string());
             args.push(options.local_test_provider_session_mode.clone());
+            if options.agent_decision_source == "provider_backed" {
+                args.push("--agent-decision-source".to_string());
+                args.push(options.agent_decision_source.clone());
+                args.push("--agent-provider-backend".to_string());
+                args.push(options.agent_provider_backend.clone());
+                args.push("--agent-provider-contract".to_string());
+                args.push(options.agent_provider_contract.clone());
+                args.push("--agent-provider-transport".to_string());
+                args.push(options.agent_provider_transport.clone());
+                args.push("--agent-execution-lane".to_string());
+                args.push(options.agent_execution_lane.as_str().to_string());
+            }
         }
     }
     args

@@ -7,7 +7,6 @@ use super::module_release_transition::ReleaseMapProjection;
 use super::*;
 use serde::Serialize;
 use serde::ser::SerializeStruct;
-
 /// Borrowed typed overlays preserving canonical serialization.
 #[derive(Debug)]
 pub struct WorldStateProjection<'a> {
@@ -363,10 +362,7 @@ impl Serialize for WorldStateProjection<'_> {
     }
 }
 
-#[expect(
-    clippy::too_many_arguments,
-    reason = "The serializer receives each independent overlay explicitly to preserve deterministic field ordering and snapshot compatibility."
-)]
+#[expect(clippy::too_many_arguments)]
 fn serialize_world_state<S>(
     state: &WorldState,
     body_overlay: Option<&BodyOverlay>,

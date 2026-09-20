@@ -241,6 +241,10 @@ pub(super) struct RuntimeLiveSession {
     pub(super) metrics: RunnerMetrics,
     pub(super) transient_play_failures: u8,
     pub(super) initial_snapshot_sent: bool,
+    // A chain prime may be reused only by the same session that requested it.
+    // The server projection is shared, but the proof that its first snapshot
+    // was freshly authorized is not.
+    pub(super) chain_runtime_authoritatively_primed: bool,
     pub(super) negotiated_protocol: crate::viewer::protocol::NegotiatedViewerProtocol,
 }
 
@@ -262,6 +266,7 @@ impl RuntimeLiveSession {
             metrics: RunnerMetrics::default(),
             transient_play_failures: 0,
             initial_snapshot_sent: false,
+            chain_runtime_authoritatively_primed: false,
             negotiated_protocol:
                 crate::viewer::protocol::NegotiatedViewerProtocol::v1_without_capabilities(),
         }

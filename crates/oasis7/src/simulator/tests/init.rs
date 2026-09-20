@@ -59,10 +59,7 @@ fn init_default_fragment_radiation_distribution_is_conservative() {
 }
 
 #[test]
-#[expect(
-    clippy::field_reassign_with_default,
-    reason = "Scenario fixture mutates only the fields under test."
-)]
+#[expect(clippy::field_reassign_with_default, reason = "fixture defaults")]
 fn init_is_deterministic_with_seed() {
     let mut config = WorldConfig::default();
     config.asteroid_fragment.base_density_per_km3 = 0.5;
@@ -90,10 +87,7 @@ fn init_requires_spawn_location() {
 }
 
 #[test]
-#[expect(
-    clippy::field_reassign_with_default,
-    reason = "Scenario fixture mutates only the fields under test."
-)]
+#[expect(clippy::field_reassign_with_default, reason = "fixture defaults")]
 fn init_seeds_locations_and_resources() {
     let config = WorldConfig::default();
     let mut init = WorldInitConfig::default();
@@ -219,10 +213,7 @@ fn scenario_templates_build_models() {
 }
 
 #[test]
-#[expect(
-    clippy::field_reassign_with_default,
-    reason = "Scenario fixture mutates only the fields under test."
-)]
+#[expect(clippy::field_reassign_with_default, reason = "fixture defaults")]
 fn scenario_asteroid_fragment_min_spacing_overrides_world_config() {
     let spec_json = r#"{
         "id": "spacing_override",
@@ -276,10 +267,7 @@ fn scenario_asteroid_fragment_min_spacing_overrides_world_config() {
 }
 
 #[test]
-#[expect(
-    clippy::field_reassign_with_default,
-    reason = "Scenario fixture mutates only the fields under test."
-)]
+#[expect(clippy::field_reassign_with_default, reason = "fixture defaults")]
 fn chunk_generated_fragments_include_fragment_profile() {
     let mut config = WorldConfig::default();
     config.space = SpaceConfig {
@@ -732,10 +720,7 @@ fn world_model_chunk_states_roundtrip_json_keys() {
 }
 
 #[test]
-#[expect(
-    clippy::field_reassign_with_default,
-    reason = "Scenario fixture mutates only the fields under test."
-)]
+#[expect(clippy::field_reassign_with_default, reason = "fixture defaults")]
 fn boundary_reservations_are_created_for_unexplored_neighbor_chunks() {
     let mut config = WorldConfig::default();
     config.space = SpaceConfig {
@@ -774,10 +759,7 @@ fn boundary_reservations_are_created_for_unexplored_neighbor_chunks() {
 }
 
 #[test]
-#[expect(
-    clippy::field_reassign_with_default,
-    reason = "Scenario fixture mutates only the fields under test."
-)]
+#[expect(clippy::field_reassign_with_default, reason = "fixture defaults")]
 fn cross_chunk_generation_respects_spacing_with_neighbor_checks() {
     let mut config = WorldConfig::default();
     config.space = SpaceConfig {
@@ -841,10 +823,7 @@ fn cross_chunk_generation_respects_spacing_with_neighbor_checks() {
 }
 
 #[test]
-#[expect(
-    clippy::field_reassign_with_default,
-    reason = "Scenario fixture mutates only the fields under test."
-)]
+#[expect(clippy::field_reassign_with_default, reason = "fixture defaults")]
 fn world_model_roundtrip_preserves_fragment_profile() {
     let mut config = WorldConfig::default();
     config.space = SpaceConfig {
@@ -902,10 +881,7 @@ fn world_model_roundtrip_preserves_fragment_profile() {
 }
 
 #[test]
-#[expect(
-    clippy::field_reassign_with_default,
-    reason = "Scenario fixture mutates only the fields under test."
-)]
+#[expect(clippy::field_reassign_with_default, reason = "fixture defaults")]
 fn consume_fragment_resource_keeps_fragment_and_chunk_conservation() {
     let mut config = WorldConfig::default();
     config.space = SpaceConfig {
@@ -1030,10 +1006,7 @@ fn scenario_asteroid_fragment_bootstrap_chunks_generate_without_seed_locations()
 }
 
 #[test]
-#[expect(
-    clippy::field_reassign_with_default,
-    reason = "Scenario fixture mutates only the fields under test."
-)]
+#[expect(clippy::field_reassign_with_default, reason = "fixture defaults")]
 fn chunk_generation_respects_max_fragments_per_chunk() {
     let mut config = WorldConfig::default();
     config.space = SpaceConfig {
@@ -1081,10 +1054,7 @@ fn chunk_generation_respects_max_fragments_per_chunk() {
 }
 
 #[test]
-#[expect(
-    clippy::field_reassign_with_default,
-    reason = "Scenario fixture mutates only the fields under test."
-)]
+#[expect(clippy::field_reassign_with_default, reason = "fixture defaults")]
 fn chunk_generation_respects_block_budgets() {
     let mut config = WorldConfig::default();
     config.space = SpaceConfig {

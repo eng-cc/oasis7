@@ -47,8 +47,9 @@ pub(in crate::viewer::runtime_live) use agent_chat_intent::RuntimePrimaryIntent;
 use agent_chat_intent::{apply_accepted_primary_intent, resolve_agent_chat_intent};
 pub(super) use auth_helpers::map_auth_verify_error_code;
 use auth_helpers::{hosted_strong_auth_grant_public_key_from_env, hosted_strong_auth_now_unix_ms};
-pub(super) use llm_sidecar::{
+pub(in crate::viewer::runtime_live) use llm_sidecar::{
     RuntimeChatIntentAckRecord, RuntimeLlmSidecar, RuntimePlayerBindingPlan,
+    hosted_local_mock_test_lane_enabled, install_hosted_local_mock_test_capability_fixtures,
     simulator_action_label, simulator_action_to_runtime,
 };
 const RUNTIME_AGENT_CHAT_ECHO_ENV: &str = "OASIS7_RUNTIME_AGENT_CHAT_ECHO";
