@@ -212,7 +212,11 @@ def _checker_stage_disposition(repository, check_run, proof, artifacts, workflow
     if check_run.get("status")!="completed" or str(check_run.get("conclusion") or "").lower()!="success":
         raise SystemExit("ci-ready-receipt: checker-stage required-gate check is not completed successfully")
     live_check=receipt.get("check") or {}
-    expected_check={"check_name":check_run.get("name"),"check_app_id":(check_run.get("app") or {}).get("id"),"check_run_id":check_run.get("id"),"check_head":proof.get("head_oid"),"workflow_run_id":str(workflow_run_id)}
+    # The required-gate check in integration_revalidation executes on the
+    # trusted target checkout B; the receipt still binds the source PR head H
+    # independently below.  Do not confuse the check execution identity with
+    # the source head identity.
+    expected_check={"check_name":check_run.get("name"),"check_app_id":(check_run.get("app") or {}).get("id"),"check_run_id":check_run.get("id"),"check_head":proof.get("base_oid"),"workflow_run_id":str(workflow_run_id)}
     if any(live_check.get(field)!=value for field,value in expected_check.items()):
         raise SystemExit("ci-ready-receipt: checker-stage receipt check identity mismatch")
     expected_scope_base=scope_base_for_run(repository,proof.get("base_oid"),proof.get("head_oid"))

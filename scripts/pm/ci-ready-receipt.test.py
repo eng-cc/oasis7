@@ -26,14 +26,14 @@ def artifact_zip(payload=None,filename="oasis7-required-plan-v1.json"):
   out=io.BytesIO()
   with zipfile.ZipFile(out,"w") as z: z.writestr(filename,json.dumps(payload if payload is not None else envelope()))
   return out.getvalue()
-def stage_receipt(task_uid=UID,pr_number=7,base_oid="b"*40,head_oid="a"*40,scope_base_oid="b"*40,tested_tree="c"*40,run_id="12345",run_attempt="1",status="passed"):
+def stage_receipt(task_uid=UID,pr_number=7,base_oid="b"*40,head_oid="a"*40,scope_base_oid="b"*40,tested_tree="c"*40,run_id="12345",run_attempt="1",status="passed",check_head=None):
   command=["python3","scripts/pm/check-cargo-package-scope","--base",scope_base_oid,"--head",head_oid,"--json"]
   receipt={"schema":A.SCHEMA,"phase":"post_run","activation":"provisional","repository":"eng-cc/oasis7","default_branch":"main","task_uid":task_uid,"pr_number":pr_number,
     "base_oid":base_oid,"head_oid":head_oid,"scope_base_oid":scope_base_oid,"tested_tree":tested_tree,
     "runner":{"run_id":run_id,"run_attempt":run_attempt,"workflow_ref":"eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main","workflow_sha":"w"*40},
     "normative_authority":{"merged_commit":"d"*40},"planner_authority":{"merged_commit":"e"*40},
     "executing_planner":{"merged_commit":"e"*40,"source_head":"f"*40,"bytes_sha256":"sha256:"+"d"*64},
-    "check":{"check_name":"required-gate","check_app_id":42,"check_run_id":9,"check_head":head_oid,"workflow_run_id":run_id},
+    "check":{"check_name":"required-gate","check_app_id":42,"check_run_id":9,"check_head":head_oid if check_head is None else check_head,"workflow_run_id":run_id},
     "checker_command_digest":A.command_digest(command),
     "result":{"status":status,"exit_code":0 if status=="passed" else 1,"command":command,"command_digest":A.command_digest(command),"base_oid":base_oid,"head_oid":head_oid,"scope_base_oid":scope_base_oid,"tested_tree":tested_tree}}
   receipt["receipt_digest"]=A.durable_receipt_digest(receipt)
@@ -312,12 +312,37 @@ class ReceiptTest(unittest.TestCase):
         return {"number":7,"state":"open","merged":False,"body":f"Task: {A.CHECKER_TASK_UID}\n\nRefs #3827",
           "head":{"sha":"a"*40,"repo":{"full_name":"eng-cc/oasis7"}},"base":{"sha":"b"*40,"ref":"main","repo":{"full_name":"eng-cc/oasis7"}}}
       raise AssertionError(path)
-    with patch.object(M,"gh",side_effect=read),patch.object(M,"artifact_bytes",return_value=stage_artifact_zip(stage_receipt(task_uid=A.CHECKER_TASK_UID))):
+    with patch.object(M,"gh",side_effect=read),patch.object(M,"artifact_bytes",return_value=stage_artifact_zip(stage_receipt(task_uid=A.CHECKER_TASK_UID,check_head="b"*40))):
       disposition=M.cargo_package_profile_for_run("eng-cc/oasis7",check,proof,full,task_uid=A.CHECKER_TASK_UID,task_issue_number=3827,pr_number=7)
     self.assertEqual("trusted_checker_stage_receipt",disposition["execution_disposition"])
     self.assertTrue(disposition["disposition_validated"])
     self.assertEqual(12345,disposition["run_id"])
     self.assertEqual("a"*40,disposition["source_head"])
+
+  def test_checker_stage_receipt_rejects_source_head_as_check_identity(self):
+    proof={"workflow_run_id":12345,"workflow_sha":"w"*40,
+      "workflow_ref":"eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main",
+      "run_attempt":1,"base_oid":"b"*40,"head_oid":"a"*40,"tested_tree_oid":"c"*40}
+    check=run()
+    full=M.canonical_planner({**plan(),"scope":"full",**{field:"true" for field in M.RUN_FIELDS}})
+    workflow=base64.b64encode(b"id: checker-stage\ngit diff --name-status --find-renames\ncargo-package-profile-envelope\ncargo-checker-stage-admission-receipt-\n").decode()
+    def read(*args):
+      path=args[-1]
+      if "artifacts?" in path:return {"artifacts":[stage_artifact()]}
+      if "/contents/.github/workflows/rust.yml?ref=" in path:return {"encoding":"base64","content":workflow}
+      if "/compare/" in path:return {"merge_base_commit":{"sha":"b"*40}}
+      if path.endswith("/issues/3827"):
+        return {"number":3827,"state":"open","repository_url":"https://api.github.com/repos/eng-cc/oasis7",
+          "body":f"task_uid: {A.CHECKER_TASK_UID}\n- pr_url: https://github.com/eng-cc/oasis7/pull/7\n"}
+      if path.endswith("/pulls/7/files?per_page=100&page=1"):
+        return [{"filename":value,"status":"modified"} for value in A.CHECKER_SCOPE]
+      if "/pulls/7" in path:
+        return {"number":7,"state":"open","merged":False,"body":f"Task: {A.CHECKER_TASK_UID}\n\nRefs #3827",
+          "head":{"sha":"a"*40,"repo":{"full_name":"eng-cc/oasis7"}},"base":{"sha":"b"*40,"ref":"main","repo":{"full_name":"eng-cc/oasis7"}}}
+      raise AssertionError(path)
+    with patch.object(M,"gh",side_effect=read),patch.object(M,"artifact_bytes",return_value=stage_artifact_zip(stage_receipt(task_uid=A.CHECKER_TASK_UID,check_head="a"*40))):
+      with self.assertRaisesRegex(SystemExit,"receipt check identity mismatch"):
+        M.cargo_package_profile_for_run("eng-cc/oasis7",check,proof,full,task_uid=A.CHECKER_TASK_UID,task_issue_number=3827,pr_number=7)
 
   def test_checker_stage_receipt_tamper_and_expiry_fail_closed(self):
     proof={"workflow_run_id":12345,"workflow_sha":"w"*40,
