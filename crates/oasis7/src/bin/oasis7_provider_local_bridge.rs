@@ -599,10 +599,7 @@ impl ProviderState {
         let payload = self.load_newapi_bridge_state()?;
         let bindings = payload.get("bindings").and_then(Value::as_array)?;
         let project_bindings = payload.get("project_bindings").and_then(Value::as_array)?;
-        let (by_ref, by_bridge_user_id) = match parse_newapi_bridge_bearer_selector(normalized) {
-            Some(selector) => selector,
-            None => return None,
-        };
+        let (by_ref, by_bridge_user_id) = parse_newapi_bridge_bearer_selector(normalized)?;
         bindings.iter().find_map(|entry| {
             let object = entry.as_object()?;
             if object.get("status").and_then(Value::as_str) != Some("active") {
@@ -1083,12 +1080,12 @@ fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<CliOptions, 
     if options.bind_addr.trim().is_empty() {
         return Err("--bind requires a non-empty value".to_string());
     }
-    if let Some(token) = options.auth_token.as_deref() {
-        if token.trim().len() < MIN_BRIDGE_AUTH_TOKEN_LEN {
-            return Err(format!(
-                "--auth-token must be at least {MIN_BRIDGE_AUTH_TOKEN_LEN} characters"
-            ));
-        }
+    if let Some(token) = options.auth_token.as_deref()
+        && token.trim().len() < MIN_BRIDGE_AUTH_TOKEN_LEN
+    {
+        return Err(format!(
+            "--auth-token must be at least {MIN_BRIDGE_AUTH_TOKEN_LEN} characters"
+        ));
     }
     Ok(options)
 }
@@ -1152,12 +1149,9 @@ fn load_auth_route_map(path: &str) -> Result<BTreeMap<String, String>, String> {
 }
 
 fn validate_profile(agent_profile: Option<&str>) -> Option<String> {
-    let Some(agent_profile) = agent_profile
+    let agent_profile = agent_profile
         .map(str::trim)
-        .filter(|value| !value.is_empty())
-    else {
-        return None;
-    };
+        .filter(|value| !value.is_empty())?;
     if matches!(agent_profile, DEFAULT_PROVIDER_AGENT_PROFILE) {
         None
     } else {

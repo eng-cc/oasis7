@@ -1,6 +1,14 @@
 use super::*;
 
 impl ViewerRuntimeLiveServer {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Prompt-control terminal error recording preserves the signed protocol context"
+    )]
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     pub(super) fn record_enhanced_prompt_control_error(
         &mut self,
         verified_player_id: &str,

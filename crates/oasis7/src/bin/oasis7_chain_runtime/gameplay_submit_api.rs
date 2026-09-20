@@ -160,17 +160,15 @@ fn handle_gameplay_submit(
             return Ok(());
         }
     };
-    if let Some(auth) = authorized.legacy_auth.as_ref() {
-        if let Err(error) = record_legacy_gameplay_nonce(execution_world_dir, auth) {
-            let (status, code, message) = match error {
-                LegacyNonceError::Replay(message) => (409, "auth_nonce_replay", message),
-                LegacyNonceError::Internal(message) => {
-                    (503, GAMEPLAY_SUBMIT_ERROR_INTERNAL, message)
-                }
-            };
-            write_gameplay_submit_error(stream, status, code, message.as_str())?;
-            return Ok(());
-        }
+    if let Some(auth) = authorized.legacy_auth.as_ref()
+        && let Err(error) = record_legacy_gameplay_nonce(execution_world_dir, auth)
+    {
+        let (status, code, message) = match error {
+            LegacyNonceError::Replay(message) => (409, "auth_nonce_replay", message),
+            LegacyNonceError::Internal(message) => (503, GAMEPLAY_SUBMIT_ERROR_INTERNAL, message),
+        };
+        write_gameplay_submit_error(stream, status, code, message.as_str())?;
+        return Ok(());
     }
     let runtime_action = authorized.action;
 
@@ -208,6 +206,7 @@ fn handle_gameplay_submit(
     write_gameplay_submit_json_response(stream, 200, &response)
 }
 
+#[cfg(test)]
 pub(super) fn parse_gameplay_submit_request(body: &[u8]) -> Result<GameplayActionRequest, String> {
     serde_json::from_slice(body).map_err(|err| format!("invalid gameplay submit request: {err}"))
 }

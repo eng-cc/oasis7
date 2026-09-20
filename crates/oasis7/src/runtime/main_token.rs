@@ -315,13 +315,13 @@ pub fn validate_main_token_config_bounds(config: &MainTokenConfig) -> Result<(),
             config.decimals
         ));
     }
-    if let Some(max_supply) = config.max_supply {
-        if max_supply < config.initial_supply {
-            return Err(format!(
-                "main token max_supply must be >= initial_supply: max={} initial={}",
-                max_supply, config.initial_supply
-            ));
-        }
+    if let Some(max_supply) = config.max_supply
+        && max_supply < config.initial_supply
+    {
+        return Err(format!(
+            "main token max_supply must be >= initial_supply: max={} initial={}",
+            max_supply, config.initial_supply
+        ));
     }
 
     let inflation = &config.inflation_policy;

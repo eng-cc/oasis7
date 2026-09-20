@@ -342,11 +342,9 @@ impl RuntimeGameplayBridge {
                 action_id: rejected_action_id,
                 reason,
             }) = &event.body
-            {
-                if *rejected_action_id == action_id {
+                && *rejected_action_id == action_id {
                     return Some(reason.clone());
                 }
-            }
         }
         None
     }
@@ -480,7 +478,7 @@ impl RuntimeGameplayBridge {
         })
     }
 
-    #[cfg(test)]
+    #[cfg(all(test, feature = "test_tier_full"))]
     pub(crate) fn seed_agent_resource_balance(
         &mut self,
         agent_id: &str,

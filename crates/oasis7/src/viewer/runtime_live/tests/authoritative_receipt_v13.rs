@@ -135,7 +135,7 @@ fn governed_player_attribution_preserves_non_rejected_census_semantics_across_re
             .iter()
             .any(|blocker| blocker == "player_attribution_incomplete")
     );
-    for (_, (batch_id, event_id, _, status)) in sources.iter().enumerate() {
+    for (batch_id, event_id, _, status) in sources.iter() {
         let resolved = persisted_outcome
             .dispositions
             .iter()

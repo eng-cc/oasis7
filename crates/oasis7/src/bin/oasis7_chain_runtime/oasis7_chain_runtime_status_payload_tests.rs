@@ -518,6 +518,10 @@ fn sha256_hex(bytes: &[u8]) -> String {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn build_chain_status_payload_warns_when_finality_p95_exceeds_budget() {
     let mut consensus = NodeConsensusSnapshot::default();
     consensus.recent_finality_latency = NodeFinalityLatencySnapshot {

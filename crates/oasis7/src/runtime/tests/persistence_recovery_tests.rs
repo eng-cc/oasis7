@@ -56,6 +56,10 @@ fn snapshot_deserialization_rejects_rollback_registry_map_key_mismatch() {
         .expect_err("registry map keys must exactly match normalized authority ids");
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Rollback authorization fixture keeps every signed identity field explicit."
+)]
 fn signed_rollback_authorization(
     snapshot: &Snapshot,
     target_journal_len: usize,

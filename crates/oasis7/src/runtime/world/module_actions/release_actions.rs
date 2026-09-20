@@ -322,9 +322,9 @@ impl World {
                         | Action::ModuleReleaseApplyWithFinality { .. }
                 ) =>
             {
-                return Ok(self
+                Ok(self
                     .try_apply_module_release_action(action_id, action)?
-                    .expect("release action must be handled"));
+                    .expect("release action must be handled"))
             }
             Action::ListModuleArtifactForSale {
                 seller_agent_id,

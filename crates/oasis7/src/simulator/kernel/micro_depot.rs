@@ -478,6 +478,10 @@ impl WorldKernel {
         Ok(())
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable install command seam preserves deterministic action argument order."
+    )]
     pub(super) fn apply_install_micro_depot(
         &mut self,
         installer_agent_id: AgentId,
@@ -604,6 +608,10 @@ impl WorldKernel {
         }
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable repair command seam preserves deterministic action argument order."
+    )]
     pub(super) fn apply_service_micro_depot_repair(
         &mut self,
         action_id: ActionId,
@@ -626,6 +634,10 @@ impl WorldKernel {
         )
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable logistics command seam preserves deterministic action argument order."
+    )]
     pub(super) fn apply_service_micro_depot_logistics(
         &mut self,
         action_id: ActionId,
@@ -648,6 +660,10 @@ impl WorldKernel {
         )
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable micro-depot command seam keeps validated transition inputs explicit."
+    )]
     fn apply_service_micro_depot(
         &mut self,
         action_id: ActionId,

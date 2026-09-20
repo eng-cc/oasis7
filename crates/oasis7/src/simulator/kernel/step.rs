@@ -231,8 +231,7 @@ impl WorldKernel {
         for hook in &self.rule_hooks.pre_action {
             decisions.push(hook(action_id, &action, self));
         }
-        let merged_decision =
-            self.merge_pre_action_rule_decisions(action_id, decisions.into_iter());
+        let merged_decision = self.merge_pre_action_rule_decisions(action_id, decisions);
         self.time = event_time;
         let kind = match merged_decision.verdict {
             KernelRuleVerdict::Deny => WorldEventKind::ActionRejected {

@@ -84,6 +84,10 @@ impl ChainAgentClaimActionResponse {
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Stable protocol and runtime seam keeps independently validated inputs explicit."
+)]
 pub(super) fn maybe_handle_agent_claim_request(
     stream: &mut TcpStream,
     request_bytes: &[u8],

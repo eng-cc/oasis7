@@ -9,11 +9,13 @@ use crate::runtime::{
     SchedulerWakeV1, World as RuntimeWorld, WorldEvent as RuntimeWorldEvent,
     WorldEventBody as RuntimeWorldEventBody,
 };
+#[cfg(target_arch = "wasm32")]
+use crate::simulator::AgentRunner;
 #[cfg(not(target_arch = "wasm32"))]
 use crate::simulator::AsyncAgentRunner;
 use crate::simulator::{
     Action as SimulatorAction, ActionCatalogEntry, AgentDecision, AgentDecisionTrace,
-    AgentPromptProfile, AgentRunner, ChunkRuntimeConfig,
+    AgentPromptProfile, ChunkRuntimeConfig,
     ContinuationProposalV1 as SimulatorContinuationProposalV1, ContinuousAgentResponseContextV1,
     LlmAgentBehavior, LlmAgentConfig, Location, MemoryWriteStore, OpenAiChatCompletionClient,
     ProviderAgentChatRequest, ProviderBackedAgentBehavior, ProviderExecutionMode,
@@ -335,14 +337,17 @@ impl RuntimePlayerBindingPlan {
     }
 }
 impl RuntimeLlmSidecar {
+    #[cfg(test)]
     pub(in crate::viewer::runtime_live) fn pending_actions_empty(&self) -> bool {
         self.pending_actions.is_empty()
     }
 
+    #[cfg(test)]
     pub(in crate::viewer::runtime_live) fn provider_contexts_empty(&self) -> bool {
         self.provider_contexts.is_empty()
     }
 
+    #[cfg(test)]
     pub(in crate::viewer::runtime_live) fn provider_has_terminal_status(
         &self,
         status: &str,
@@ -352,6 +357,7 @@ impl RuntimeLlmSidecar {
             .any(|terminal| terminal.status == status)
     }
 
+    #[cfg(test)]
     pub(in crate::viewer::runtime_live) fn provider_memory_store(&self) -> &MemoryWriteStore {
         &self.provider_memory_store
     }
@@ -575,13 +581,13 @@ impl RuntimeLlmSidecar {
         if nonce == 0 {
             return Err("auth nonce must be greater than zero".to_string());
         }
-        if let Some(last_nonce) = self.player_auth_last_nonce.get(player_id) {
-            if nonce <= *last_nonce {
-                return Err(format!(
-                    "auth nonce replay for {}: expected nonce > {}, received {}",
-                    player_id, last_nonce, nonce
-                ));
-            }
+        if let Some(last_nonce) = self.player_auth_last_nonce.get(player_id)
+            && nonce <= *last_nonce
+        {
+            return Err(format!(
+                "auth nonce replay for {}: expected nonce > {}, received {}",
+                player_id, last_nonce, nonce
+            ));
         }
         Ok(())
     }
@@ -625,6 +631,10 @@ impl RuntimeLlmSidecar {
         ack.idempotent_replay = true;
         Ok(Some(ack))
     }
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable chat acknowledgement persistence seam keeps signed intent identity fields explicit."
+    )]
     pub(in crate::viewer::runtime_live) fn record_chat_intent_ack(
         &mut self,
         player_id: &str,
@@ -897,17 +907,6 @@ impl RuntimeLlmSidecar {
             .any(|wake| wake.agent_id == agent_id)
     }
 
-    pub(in crate::viewer::runtime_live) fn pending_runtime_wake_id_for_agent(
-        &self,
-        agent_id: &str,
-    ) -> Option<&str> {
-        self.pending_runtime_wakes
-            .values()
-            .filter(|wake| wake.agent_id == agent_id)
-            .min_by_key(|wake| (wake.wake_seq, wake.wake_id.as_str()))
-            .map(|wake| wake.wake_id.as_str())
-    }
-
     pub(in crate::viewer::runtime_live) fn pending_runtime_wake_id_for_context(
         &self,
         agent_id: &str,
@@ -946,17 +945,6 @@ impl RuntimeLlmSidecar {
         self.pending_runtime_wakes.remove(wake_id);
     }
 
-    pub(super) fn push_chat_message(
-        &mut self,
-        world: &RuntimeWorld,
-        config: &WorldConfig,
-        agent_id: &str,
-        player_id: &str,
-        message: &str,
-    ) -> Result<(), AgentChatError> {
-        self.push_chat_message_with_intent(world, config, agent_id, player_id, message, None)
-    }
-
     /// Queue a provider-backed chat request with the exact durable Intent
     /// identity that authorized it.  The caller must use this after the
     /// accepted Intent has been committed; the sidecar never invents or
@@ -977,19 +965,6 @@ impl RuntimeLlmSidecar {
             message,
             Some((intent.intent_id.as_str(), intent.request_digest.as_str())),
         )
-    }
-
-    pub(super) fn drain_provider_agent_chat_replies(
-        &mut self,
-        world: &RuntimeWorld,
-    ) -> (Vec<(String, String)>, Vec<AgentChatError>) {
-        let (replies, failures) = self.drain_provider_agent_chat_replies_with_identity(world);
-        let replies = replies
-            .into_iter()
-            .map(|(pending, reply)| (pending.agent_id, reply))
-            .collect();
-        let errors = failures.into_iter().map(|failure| failure.error).collect();
-        (replies, errors)
     }
 
     /// Drain provider replies while retaining the exact Intent identity for

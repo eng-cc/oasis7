@@ -644,10 +644,10 @@ fn compat_snapshot_exposes_player_agent_claim_overview() {
     assert!(anonymous_gameplay.available_actions.iter().all(|action| {
         action.action_id != crate::viewer::ACTION_CLAIM_STARTER_OC
             && action.action_id != "chat_first_agent"
-            && !action
+            && action
                 .target_agent_id
                 .as_deref()
-                .is_some_and(|target| target == primary_agent_id.as_str())
+                .is_none_or(|target| target != primary_agent_id.as_str())
     }));
 
     let snapshot = server.compat_snapshot(Some(SNAPSHOT_PLAYER_ID));

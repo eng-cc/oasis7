@@ -272,56 +272,55 @@ impl World {
             } else {
                 self.cognition.clone()
             })
-        {
-            if let Some(existing) = parsed.commit_records.iter().find(|record| {
+            && let Some(existing) = parsed.commit_records.iter().find(|record| {
                 record.agent_id == request.agent_id
                     && record.agent_session_id == request.agent_session_id
                     && record.agent_turn_id == request.agent_turn_id
                     && record.decision_request_id == request.decision_request_id
                     && record.request_digest == request.request_digest
-            }) {
-                let stored_action_digest = self
-                    .cognition
-                    .get("action_digests")
-                    .and_then(JsonValue::as_object)
-                    .and_then(|digests| digests.get(&existing.commit_id))
-                    .and_then(JsonValue::as_str)
-                    .map(str::to_string)
-                    .or_else(|| {
-                        parsed
-                            .staged_actions
-                            .get(&existing.commit_id)
-                            .map(|staged| cognition_digest_v1("oasis7.cognition.action.v1", staged))
-                    });
-                if existing.status == "prepared" && stored_action_digest.is_none() {
-                    return Err(cognition_validation("cognition_staged_action_missing"));
-                }
-                if stored_action_digest
-                    .as_deref()
-                    .is_some_and(|stored| stored != action_digest)
-                {
-                    return Err(cognition_validation("envelope_idempotency_conflict"));
-                }
-                if existing.status == "aborted" {
-                    return Err(cognition_validation(
-                        existing
-                            .abort_reason
-                            .as_deref()
-                            .unwrap_or("cognition_commit_aborted"),
-                    ));
-                }
-                let response_matches = parsed.responses.iter().any(|response| {
-                    response.envelope_digest == existing.envelope_digest
-                        && response.response_artifact.as_ref() == Some(&response_artifact_value)
+            })
+        {
+            let stored_action_digest = self
+                .cognition
+                .get("action_digests")
+                .and_then(JsonValue::as_object)
+                .and_then(|digests| digests.get(&existing.commit_id))
+                .and_then(JsonValue::as_str)
+                .map(str::to_string)
+                .or_else(|| {
+                    parsed
+                        .staged_actions
+                        .get(&existing.commit_id)
+                        .map(|staged| cognition_digest_v1("oasis7.cognition.action.v1", staged))
                 });
-                if !response_matches {
-                    return Err(cognition_validation("response_artifact_lineage_mismatch"));
-                }
-                if existing.status == "committed" {
-                    let lineage = self.read_runtime_receipt_lineage(&existing.receipt_id)?;
-                    self.verify_runtime_receipt_lineage(&lineage)?;
-                    return Ok((existing.clone(), lineage));
-                }
+            if existing.status == "prepared" && stored_action_digest.is_none() {
+                return Err(cognition_validation("cognition_staged_action_missing"));
+            }
+            if stored_action_digest
+                .as_deref()
+                .is_some_and(|stored| stored != action_digest)
+            {
+                return Err(cognition_validation("envelope_idempotency_conflict"));
+            }
+            if existing.status == "aborted" {
+                return Err(cognition_validation(
+                    existing
+                        .abort_reason
+                        .as_deref()
+                        .unwrap_or("cognition_commit_aborted"),
+                ));
+            }
+            let response_matches = parsed.responses.iter().any(|response| {
+                response.envelope_digest == existing.envelope_digest
+                    && response.response_artifact.as_ref() == Some(&response_artifact_value)
+            });
+            if !response_matches {
+                return Err(cognition_validation("response_artifact_lineage_mismatch"));
+            }
+            if existing.status == "committed" {
+                let lineage = self.read_runtime_receipt_lineage(&existing.receipt_id)?;
+                self.verify_runtime_receipt_lineage(&lineage)?;
+                return Ok((existing.clone(), lineage));
             }
         }
 
@@ -451,6 +450,10 @@ impl World {
         Ok(())
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stale rejection persists the complete request identity and envelope binding explicitly."
+    )]
     pub(in crate::runtime::world) fn record_stale_cognition_rejection(
         &mut self,
         agent_id: &str,

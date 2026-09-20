@@ -101,8 +101,8 @@ pub(crate) fn build_readiness_status(
     observability: &ChainNodeObservabilityStatus,
     policy: ChainReadinessPolicyStatus,
 ) -> ChainReadinessStatus {
-    let failed_gates = (!observability.ready)
-        .then(|| {
+    let failed_gates = if !observability.ready {
+        {
             observability
                 .alerts
                 .iter()
@@ -122,8 +122,10 @@ pub(crate) fn build_readiness_status(
                 })
                 .map(|alert| alert.code.clone())
                 .collect()
-        })
-        .unwrap_or_default();
+        }
+    } else {
+        Default::default()
+    };
     ChainReadinessStatus {
         status: if observability.ready {
             "ready"

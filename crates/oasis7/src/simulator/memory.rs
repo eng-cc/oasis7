@@ -25,6 +25,10 @@ pub struct MemoryEntry {
 }
 
 /// Types of memory entries.
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Stable memory wire enum preserves direct gameplay decision and action payloads."
+)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", content = "data")]
 pub enum MemoryEntryKind {

@@ -3,7 +3,9 @@ use crate::runtime::{
     CausedBy as RuntimeCausedBy, DomainEvent as RuntimeDomainEvent,
     WorldEvent as RuntimeWorldEvent, WorldEventBody as RuntimeWorldEventBody,
 };
-use crate::simulator::{Action as SimulatorAction, ActionResult, FeedbackEnvelopeV1};
+#[cfg(target_arch = "wasm32")]
+use crate::simulator::ActionResult;
+use crate::simulator::{Action as SimulatorAction, FeedbackEnvelopeV1};
 use serde_json::Value as JsonValue;
 
 impl RuntimeLlmSidecar {
@@ -102,7 +104,7 @@ impl RuntimeLlmSidecar {
     pub(in crate::viewer::runtime_live) fn notify_action_result(
         &mut self,
         action_id: u64,
-        event: WorldEvent,
+        _event: WorldEvent,
         rejected: bool,
     ) {
         let Some(mut pending) = self.pending_actions.remove(&action_id) else {
@@ -125,12 +127,12 @@ impl RuntimeLlmSidecar {
             self.persist_provider_lineage_best_effort();
             return;
         }
-        let success = !rejected;
+        #[cfg(target_arch = "wasm32")]
         let action_result = ActionResult {
             action: pending.action.clone(),
             action_id,
-            success,
-            event: event.clone(),
+            success: !rejected,
+            event: _event,
         };
         #[cfg(target_arch = "wasm32")]
         if let Some(RuntimeDecisionRunner::Builtin(runner)) = self.runner.as_mut() {
@@ -150,59 +152,6 @@ impl RuntimeLlmSidecar {
             self.pending_actions.insert(action_id, pending);
         }
         self.persist_provider_lineage_best_effort();
-    }
-
-    /// Runtime integration seam for the typed feedback path. A viewer event
-    /// can establish `pending`, but only a Runtime receipt may close a
-    /// successful provider turn as `committed`.
-    pub(in crate::viewer::runtime_live) fn finalize_provider_action(
-        &mut self,
-        action_id: u64,
-        status: &str,
-        runtime_receipt_id: Option<String>,
-        feedback_id: Option<String>,
-    ) -> Option<FeedbackEnvelopeV1> {
-        if status == "committed"
-            && runtime_receipt_id
-                .as_deref()
-                .is_none_or(|receipt| receipt.trim().is_empty())
-        {
-            return None;
-        }
-        if !matches!(status, "committed" | "rejected" | "failed") {
-            return None;
-        }
-        let Some(pending) = self.pending_actions.get(&action_id).cloned() else {
-            return None;
-        };
-        let Some(cognition) = pending.cognition.clone() else {
-            // Builtin/legacy actions have no provider envelope to finalize.
-            self.pending_actions.remove(&action_id);
-            self.release_provider_turn(pending.agent_id.as_str());
-            return None;
-        };
-        let feedback = self.provider_feedback(
-            &cognition,
-            Some(action_id),
-            status,
-            runtime_receipt_id,
-            feedback_id,
-            None,
-        );
-        self.finalize_provider_action_with_feedback(action_id, feedback)
-    }
-
-    /// Finalize with a prebuilt Runtime feedback envelope.  This lets the
-    /// production control plane consume provider memory intents against the
-    /// exact Runtime receipt before the sidecar releases the awaiting actor
-    /// outcome, without minting a second feedback sequence/id.
-    pub(in crate::viewer::runtime_live) fn finalize_provider_action_with_feedback(
-        &mut self,
-        action_id: u64,
-        feedback: FeedbackEnvelopeV1,
-    ) -> Option<FeedbackEnvelopeV1> {
-        self.finalize_provider_action_with_feedback_checked(action_id, feedback)
-            .ok()
     }
 
     /// Finalize a Runtime-committed provider action only after the sidecar
@@ -305,6 +254,7 @@ impl RuntimeLlmSidecar {
     ) -> Result<(), String> {
         #[cfg(not(target_arch = "wasm32"))]
         {
+            let _ = memory_write_intents;
             let Some(runner) = self
                 .runner
                 .as_mut()
@@ -462,25 +412,23 @@ impl RuntimeLlmSidecar {
                 },
             );
         }
-        if let Some(context) = context.as_ref() {
-            if let Some(runner) = self
+        if let Some(context) = context.as_ref()
+            && let Some(runner) = self
                 .runner
                 .as_mut()
                 .and_then(RuntimeDecisionRunner::async_runner_mut)
-            {
-                if let Err(error) = runner.expire_runtime_turn(
-                    context.request_context.agent_subject.as_str(),
-                    context.request_context.agent_session_id.as_str(),
-                    context.request_context.agent_turn_id.as_str(),
-                    context.request_context.decision_request_id.as_str(),
-                    context.request_context.request_digest.to_string().as_str(),
-                ) {
-                    let message = error.to_string();
-                    if !message.contains("unknown pending Runtime turn") {
-                        self.persist_provider_lineage_best_effort();
-                        return Err(format!("provider actor release failed: {error}"));
-                    }
-                }
+            && let Err(error) = runner.expire_runtime_turn(
+                context.request_context.agent_subject.as_str(),
+                context.request_context.agent_session_id.as_str(),
+                context.request_context.agent_turn_id.as_str(),
+                context.request_context.decision_request_id.as_str(),
+                context.request_context.request_digest.to_string().as_str(),
+            )
+        {
+            let message = error.to_string();
+            if !message.contains("unknown pending Runtime turn") {
+                self.persist_provider_lineage_best_effort();
+                return Err(format!("provider actor release failed: {error}"));
             }
         }
 

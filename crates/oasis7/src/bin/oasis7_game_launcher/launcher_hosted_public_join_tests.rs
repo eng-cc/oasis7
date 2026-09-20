@@ -90,6 +90,10 @@ fn build_viewer_live_command_derives_trusted_registration_issuer_key() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn build_viewer_live_command_wires_llm_timeout_default_into_spawn_path() {
     let mut options = CliOptions::default();
     options.agent_decision_source = BUILTIN_LLM_DECISION_SOURCE.to_string();

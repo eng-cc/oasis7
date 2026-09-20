@@ -1,5 +1,9 @@
 use super::*;
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Durable chat ack construction preserves the stable viewer protocol fields"
+)]
 fn durable_agent_chat_ack(
     agent_id: &str,
     player_id: &str,
@@ -140,12 +144,8 @@ impl ViewerRuntimeLiveServer {
         // Provider capability is an admission precondition. Do this before
         // nonce consumption, binding, durable acceptance, behavior feedback,
         // or provider queueing so an unsupported provider has no side effect.
-        if let Err(provider_error) = self
-            .llm_sidecar
-            .ensure_provider_agent_chat_capability(agent_id.as_str())
-        {
-            return Err(provider_error);
-        }
+        self.llm_sidecar
+            .ensure_provider_agent_chat_capability(agent_id.as_str())?;
         if self.world.main_token_liquid_balance(agent_id.as_str()) == 0
             && !self
                 .world

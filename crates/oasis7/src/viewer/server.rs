@@ -14,10 +14,12 @@ use super::protocol::{
     viewer_event_kind_matches,
 };
 use crate::observability::emit_stderr_or_event;
+#[cfg(test)]
+use crate::simulator::RuntimePerfHealth;
 use crate::simulator::runtime_perf::unsupported_runtime_perf_snapshot;
 use crate::simulator::{
-    PersistError, RunnerMetrics, RuntimePerfHealth, RuntimePerfSnapshot, WorldEvent, WorldJournal,
-    WorldSnapshot, WorldTime,
+    PersistError, RunnerMetrics, RuntimePerfSnapshot, WorldEvent, WorldJournal, WorldSnapshot,
+    WorldTime,
 };
 
 #[derive(Debug, Clone)]
@@ -132,19 +134,14 @@ impl ViewerServer {
 
         let mut session = ViewerSession::new(&self.journal.events);
 
-        loop {
-            match rx.recv() {
-                Ok(command) => {
-                    if !session.handle_request(
-                        command,
-                        &mut writer,
-                        &self.snapshot,
-                        &self.config.world_id,
-                    )? {
-                        break;
-                    }
-                }
-                Err(_) => break,
+        while let Ok(command) = rx.recv() {
+            if !session.handle_request(
+                command,
+                &mut writer,
+                &self.snapshot,
+                &self.config.world_id,
+            )? {
+                break;
             }
         }
         Ok(())
@@ -655,10 +652,10 @@ impl<'a> ViewerSession<'a> {
         while self.cursor < self.events.len() {
             let event = self.events.get(self.cursor).cloned();
             self.cursor = self.cursor.saturating_add(1);
-            if let Some(event) = event {
-                if self.event_allowed(&event) {
-                    return Some(event);
-                }
+            if let Some(event) = event
+                && self.event_allowed(&event)
+            {
+                return Some(event);
             }
         }
         None

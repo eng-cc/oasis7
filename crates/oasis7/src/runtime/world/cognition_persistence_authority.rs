@@ -136,7 +136,7 @@ impl World {
                         | ContinuationStatusV1::Rejected
                 )
             })
-            .map(|continuation| normalize_cognition_continuation(continuation))
+            .map(normalize_cognition_continuation)
             .collect()
     }
 

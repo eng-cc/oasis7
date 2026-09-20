@@ -376,10 +376,10 @@ fn required_fresh_peer_heads(
     match (loaded.manifest.tier.as_str(), snapshot.role.as_str()) {
         ("local_devnet", _) => 0,
         ("public_testnet", "observer") => 1,
-        ("public_testnet", _) => max_peer_validators.min(2).max(1),
-        ("mainnet", "observer") => max_peer_validators.min(2).max(1),
+        ("public_testnet", _) => max_peer_validators.clamp(1, 2),
+        ("mainnet", "observer") => max_peer_validators.clamp(1, 2),
         ("mainnet", _) => {
-            let two_thirds = ((target_validators * 2) + 2) / 3;
+            let two_thirds = (target_validators * 2).div_ceil(3);
             two_thirds.min(max_peer_validators).max(1)
         }
         (_, _) => DEFAULT_REQUIRED_FRESH_PEER_HEADS,

@@ -77,33 +77,23 @@ pub struct WarState {
 }
 
 /// Lifecycle state for one governance proposal.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum GovernanceProposalStatus {
+    #[default]
     Open,
     Passed,
     Rejected,
 }
 
-impl Default for GovernanceProposalStatus {
-    fn default() -> Self {
-        Self::Open
-    }
-}
-
 /// Governance identity status used for anti-sybil controls.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum GovernanceIdentityStatus {
+    #[default]
     Active,
     Frozen,
     Expelled,
-}
-
-impl Default for GovernanceIdentityStatus {
-    fn default() -> Self {
-        Self::Active
-    }
 }
 
 /// Persisted governance identity profile (stake + status + warmup).
@@ -193,18 +183,13 @@ pub struct GovernanceVoteState {
 }
 
 /// Lifecycle state for one crisis.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum CrisisStatus {
     Active,
+    #[default]
     Resolved,
     TimedOut,
-}
-
-impl Default for CrisisStatus {
-    fn default() -> Self {
-        Self::Resolved
-    }
 }
 
 /// Persisted crisis lifecycle state.
@@ -248,33 +233,23 @@ pub struct MetaProgressState {
 }
 
 /// Lifecycle state for one economic contract.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum EconomicContractStatus {
+    #[default]
     Open,
     Accepted,
     Settled,
     Expired,
 }
 
-impl Default for EconomicContractStatus {
-    fn default() -> Self {
-        Self::Open
-    }
-}
-
 /// Settlement semantics for a persisted economic contract.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum EconomicContractFulfillmentKind {
+    #[default]
     AtomicExchange,
     Service,
-}
-
-impl Default for EconomicContractFulfillmentKind {
-    fn default() -> Self {
-        Self::AtomicExchange
-    }
 }
 
 /// Persisted economic contract state.

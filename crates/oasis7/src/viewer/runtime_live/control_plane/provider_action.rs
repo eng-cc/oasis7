@@ -6,6 +6,10 @@ use crate::runtime::{
 use crate::simulator::AgentDecision;
 
 impl ViewerRuntimeLiveServer {
+    #[expect(
+        clippy::result_large_err,
+        reason = "Provider decision traces retain the stable typed transport error envelope"
+    )]
     pub(in crate::viewer::runtime_live) fn enqueue_llm_action_from_sidecar(
         &mut self,
     ) -> Result<Option<AgentDecisionTrace>, AgentDecisionTrace> {
@@ -16,11 +20,7 @@ impl ViewerRuntimeLiveServer {
         let wake_recovery_error = self
             .llm_sidecar
             .provider_wake_recovery_pending_agent()
-            .and_then(|agent_id| {
-                self.retry_provider_wake_recovery()
-                    .err()
-                    .map(|error| (agent_id, error))
-            });
+            .zip(self.retry_provider_wake_recovery().err());
         let unresolved_wake_agent = wake_recovery_error
             .as_ref()
             .map(|(agent_id, _)| agent_id.as_str());
@@ -59,14 +59,14 @@ impl ViewerRuntimeLiveServer {
             let lease = self.llm_sidecar.provider_cognition_lease(agent_id.as_str());
             return Err(self.finish_provider_transport_exhaustion(agent_id, None, lease));
         }
-        if let Some((_, agent_id, _)) = self.llm_sidecar.pending_provider_action_for_recovery() {
-            if let Err(error) = self.retry_committed_provider_action() {
-                return Err(wake_handoff_error_trace(
-                    agent_id.as_str(),
-                    self.world.state().time,
-                    format!("Runtime receipt finalization recovery remains pending: {error}"),
-                ));
-            }
+        if let Some((_, agent_id, _)) = self.llm_sidecar.pending_provider_action_for_recovery()
+            && let Err(error) = self.retry_committed_provider_action()
+        {
+            return Err(wake_handoff_error_trace(
+                agent_id.as_str(),
+                self.world.state().time,
+                format!("Runtime receipt finalization recovery remains pending: {error}"),
+            ));
         }
         let decision = self.llm_sidecar.next_llm_decision(
             &mut self.world,
@@ -110,16 +110,15 @@ impl ViewerRuntimeLiveServer {
             return Err(self.finish_provider_transport_exhaustion(agent_id, decision_trace, lease));
         }
         #[cfg(not(target_arch = "wasm32"))]
-        if let Some(trace) = decision_trace.as_ref() {
-            if self
+        if let Some(trace) = decision_trace.as_ref()
+            && self
                 .llm_sidecar
                 .has_provider_wait_recovery(decision.agent_id.as_str())
-            {
-                // A failed continuation compensation owns the exact request
-                // identity until its durable recovery pass succeeds. Do not
-                // let the generic provider-error path release that identity.
-                return Err(trace.clone());
-            }
+        {
+            // A failed continuation compensation owns the exact request
+            // identity until its durable recovery pass succeeds. Do not
+            // let the generic provider-error path release that identity.
+            return Err(trace.clone());
         }
         if let Some(trace) = decision_trace.as_ref() {
             if trace.llm_error.is_some()

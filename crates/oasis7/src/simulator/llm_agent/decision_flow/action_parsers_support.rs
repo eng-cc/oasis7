@@ -176,7 +176,7 @@ fn parse_positive_u64_list(
     if value.is_empty() {
         return Err(format!("{decision} `{field_name}` cannot be empty"));
     }
-    if value.iter().any(|candidate| *candidate == 0) {
+    if value.contains(&0) {
         return Err(format!("{decision} `{field_name}` must be positive"));
     }
     Ok(value.to_vec())

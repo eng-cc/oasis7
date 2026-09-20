@@ -25,7 +25,40 @@ pub struct CognitionProvisioningRequestV1 {
     pub provisioning_digest: String,
 }
 
+type CognitionAuthorityDigestPayload<'a> = (
+    &'a str,
+    &'a str,
+    &'a str,
+    u64,
+    &'a str,
+    &'a str,
+    u64,
+    &'a str,
+    &'a str,
+    &'a str,
+    &'a str,
+);
+
+type CognitionProvisioningDigestPayload<'a> = (
+    &'a str,
+    &'a str,
+    &'a str,
+    u64,
+    &'a str,
+    &'a str,
+    u64,
+    &'a str,
+    &'a str,
+    u64,
+    &'a str,
+    &'a str,
+);
+
 impl CognitionProvisioningRequestV1 {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Provisioning identity fields define the stable digest input and are kept explicit for compatibility."
+    )]
     pub fn new(
         provision_id: impl Into<String>,
         account_id: impl Into<String>,
@@ -58,21 +91,7 @@ impl CognitionProvisioningRequestV1 {
         request
     }
 
-    fn authority_digest_payload(
-        &self,
-    ) -> (
-        &str,
-        &str,
-        &str,
-        u64,
-        &str,
-        &str,
-        u64,
-        &str,
-        &str,
-        &str,
-        &str,
-    ) {
+    fn authority_digest_payload(&self) -> CognitionAuthorityDigestPayload<'_> {
         (
             &self.account_id,
             &self.owner_binding,
@@ -88,22 +107,7 @@ impl CognitionProvisioningRequestV1 {
         )
     }
 
-    fn provisioning_digest_payload(
-        &self,
-    ) -> (
-        &str,
-        &str,
-        &str,
-        u64,
-        &str,
-        &str,
-        u64,
-        &str,
-        &str,
-        u64,
-        &str,
-        &str,
-    ) {
+    fn provisioning_digest_payload(&self) -> CognitionProvisioningDigestPayload<'_> {
         (
             &self.provision_id,
             &self.account_id,

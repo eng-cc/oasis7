@@ -243,11 +243,11 @@ impl PerfSeriesState {
         } else {
             0.0
         };
-        let over_budget_ratio_ppm = if self.samples_total > 0 {
-            self.over_budget_total.saturating_mul(1_000_000) / self.samples_total
-        } else {
-            0
-        };
+        let over_budget_ratio_ppm = self
+            .over_budget_total
+            .saturating_mul(1_000_000)
+            .checked_div(self.samples_total)
+            .unwrap_or_default();
 
         RuntimePerfSeriesSnapshot {
             samples_total: self.samples_total,

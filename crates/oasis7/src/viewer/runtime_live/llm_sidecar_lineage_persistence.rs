@@ -791,11 +791,11 @@ impl RuntimeLlmSidecar {
             }
             self.provider_completed_decisions.retain(|decision| {
                 !decision_matches_commit_record(decision, &marker)
-                    && !(decision.cognition.is_none() && decision.agent_id == marker.agent_id)
+                    && (decision.cognition.is_some() || decision.agent_id != marker.agent_id)
             });
             self.provider_held_decisions.retain(|_, decision| {
                 !decision_matches_commit_record(decision, &marker)
-                    && !(decision.cognition.is_none() && decision.agent_id == marker.agent_id)
+                    && (decision.cognition.is_some() || decision.agent_id != marker.agent_id)
             });
             if !committed_recovery_pending {
                 self.provider_active_turns.remove(agent_id.as_str());
@@ -981,8 +981,8 @@ impl RuntimeLlmSidecar {
         // terminal turn.
         let terminal_agents = self
             .provider_terminal_states
-            .iter()
-            .filter_map(|(agent_id, _terminal)| {
+            .keys()
+            .filter_map(|agent_id| {
                 if self.provider_wake_recovery_pending.contains_key(agent_id) {
                     return None;
                 }

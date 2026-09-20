@@ -882,7 +882,7 @@ fn runtime_provider_feedback_delivery_failure_survives_reload_without_readmissio
         Duration::from_secs(5),
         || match restarted.enqueue_llm_action_from_sidecar() {
             Err(trace) => Err(format!("fresh provider admission trace: {trace:?}")),
-            Ok(_) => Ok(decision_requests() >= exhausted_requests + 1),
+            Ok(_) => Ok(decision_requests() > exhausted_requests),
         },
     )
     .expect("feedback recovery must allow a later fresh provider request");

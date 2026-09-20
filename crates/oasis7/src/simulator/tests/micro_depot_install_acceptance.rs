@@ -590,7 +590,7 @@ fn micro_depot_install_quote_is_non_mutating_and_makes_the_finite_commission_vis
     assert!(
         quote
             .get("expected_future_blockers_covered")
-            .map_or(true, serde_json::Value::is_null),
+            .is_none_or(serde_json::Value::is_null),
         "missing forecast evidence must not invent future-blocker coverage"
     );
     assert_eq!(

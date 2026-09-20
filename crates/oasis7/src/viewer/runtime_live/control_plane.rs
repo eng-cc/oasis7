@@ -122,6 +122,10 @@ impl ViewerRuntimeLiveServer {
         Ok(verified)
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     fn bind_agent_player_access(
         &mut self,
         agent_id: &str,
@@ -374,6 +378,10 @@ impl ViewerRuntimeLiveServer {
     }
 }
 
+#[expect(
+    clippy::result_large_err,
+    reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+)]
 pub(super) fn normalize_required_player_id(
     player_id: &str,
     agent_id: &str,
@@ -394,6 +402,10 @@ pub(super) fn normalize_required_player_id(
     Ok(normalized.to_string())
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Prompt-control error construction preserves the stable protocol context"
+)]
 fn prompt_control_enhanced_error(
     code: &str,
     message: &str,
@@ -535,6 +547,10 @@ pub(super) fn normalize_optional_public_key(public_key: Option<&str>) -> Option<
         .map(ToOwned::to_owned)
 }
 
+#[expect(
+    clippy::result_large_err,
+    reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+)]
 pub(super) fn ensure_updated_by_matches_player_runtime(
     updated_by: Option<&str>,
     player_id: &str,
@@ -558,6 +574,10 @@ pub(super) fn ensure_updated_by_matches_player_runtime(
     })
 }
 
+#[expect(
+    clippy::result_large_err,
+    reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+)]
 pub(super) fn ensure_agent_player_access_runtime(
     world: &RuntimeWorld,
     sidecar: &RuntimeLlmSidecar,
@@ -568,6 +588,10 @@ pub(super) fn ensure_agent_player_access_runtime(
     ensure_agent_player_access_runtime_inner(world, sidecar, agent_id, player_id, public_key, false)
 }
 
+#[expect(
+    clippy::result_large_err,
+    reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+)]
 pub(super) fn ensure_agent_player_binding_target_runtime(
     world: &RuntimeWorld,
     sidecar: &RuntimeLlmSidecar,
@@ -578,6 +602,10 @@ pub(super) fn ensure_agent_player_binding_target_runtime(
     ensure_agent_player_access_runtime_inner(world, sidecar, agent_id, player_id, public_key, true)
 }
 
+#[expect(
+    clippy::result_large_err,
+    reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+)]
 fn ensure_agent_player_access_runtime_inner(
     world: &RuntimeWorld,
     sidecar: &RuntimeLlmSidecar,
@@ -706,24 +734,28 @@ pub(super) fn prompt_profile_digest_runtime(profile: &AgentPromptProfile) -> Str
     hex::encode(hasher.finalize())
 }
 
+#[expect(
+    clippy::result_large_err,
+    reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+)]
 pub(super) fn ensure_expected_prompt_version_runtime(
     agent_id: &str,
     current_version: u64,
     expected_version: Option<u64>,
 ) -> Result<(), PromptControlError> {
-    if let Some(expected) = expected_version {
-        if expected != current_version {
-            return Err(PromptControlError {
-                code: "version_conflict".to_string(),
-                message: format!(
-                    "prompt profile version conflict for {}: expected {}, current {}",
-                    agent_id, expected, current_version
-                ),
-                agent_id: Some(agent_id.to_string()),
-                current_version: Some(current_version),
-                ..PromptControlError::default_legacy()
-            });
-        }
+    if let Some(expected) = expected_version
+        && expected != current_version
+    {
+        return Err(PromptControlError {
+            code: "version_conflict".to_string(),
+            message: format!(
+                "prompt profile version conflict for {}: expected {}, current {}",
+                agent_id, expected, current_version
+            ),
+            agent_id: Some(agent_id.to_string()),
+            current_version: Some(current_version),
+            ..PromptControlError::default_legacy()
+        });
     }
     Ok(())
 }

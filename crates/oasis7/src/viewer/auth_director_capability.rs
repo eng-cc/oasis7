@@ -33,6 +33,10 @@ struct DirectorCapabilitySigningEnvelope<'a> {
 /// The caller must obtain `session_epoch` and the server identity from an
 /// authoritative runtime/session policy. This helper deliberately performs no local
 /// permission decision and never signs a gameplay or command capability.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Director capability signing preserves the stable protocol payload shape"
+)]
 pub fn sign_director_capability_grant(
     player_id: &str,
     player_public_key: &str,

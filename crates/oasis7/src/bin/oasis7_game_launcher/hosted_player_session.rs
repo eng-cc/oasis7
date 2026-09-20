@@ -214,6 +214,7 @@ impl HostedPlayerSessionIssuer {
         atomic_write_json(path, &ledger)
     }
 
+    #[cfg(test)]
     pub(super) fn observe_runtime_active_players<'a, I>(&mut self, active_players: I)
     where
         I: IntoIterator<Item = &'a str>,
@@ -475,6 +476,7 @@ impl HostedPlayerSessionIssuer {
         }
     }
 
+    #[cfg(test)]
     pub(super) fn issue(
         &mut self,
         deployment_mode: DeploymentMode,

@@ -658,19 +658,10 @@ impl CognitionReceiptV1 {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 pub struct CognitionResourceBalanceV1 {
     pub available: u64,
     pub reserved: u64,
-}
-
-impl Default for CognitionResourceBalanceV1 {
-    fn default() -> Self {
-        Self {
-            available: 0,
-            reserved: 0,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -1015,9 +1006,9 @@ impl CognitionEconomyStateV1 {
                     "cognition_provisioning_binding_conflict",
                 ));
             }
-            return self.leases.get(&existing.lease_id).cloned().ok_or_else(|| {
-                CognitionEconomyError::InvalidState("cognition_idempotency_lease_missing")
-            });
+            return self.leases.get(&existing.lease_id).cloned().ok_or(
+                CognitionEconomyError::InvalidState("cognition_idempotency_lease_missing"),
+            );
         }
         if request
             .quote

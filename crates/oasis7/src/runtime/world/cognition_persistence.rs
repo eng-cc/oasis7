@@ -414,7 +414,7 @@ impl World {
             if let Some(artifact) = response_artifact.as_ref() {
                 let response_matches = existing_parsed.responses.iter().any(|response| {
                     response.envelope_digest == existing.envelope_digest
-                        && response.response_artifact.as_ref() == Some(&artifact)
+                        && response.response_artifact.as_ref() == Some(artifact)
                 });
                 if !response_matches {
                     return Err(cognition_validation("response_artifact_lineage_mismatch"));

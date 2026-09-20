@@ -1,6 +1,10 @@
 use super::*;
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Scenario fixture mutates only the fields under test."
+)]
 fn init_keeps_integer_location_seed_positions() {
     let config = WorldConfig::default();
     let mut init = WorldInitConfig::default();
@@ -23,6 +27,10 @@ fn init_keeps_integer_location_seed_positions() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Scenario fixture mutates only the fields under test."
+)]
 fn init_generated_fragments_use_integer_centimeter_positions() {
     let mut config = WorldConfig::default();
     config.space = SpaceConfig {

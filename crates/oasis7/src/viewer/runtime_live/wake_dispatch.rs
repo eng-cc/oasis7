@@ -17,24 +17,24 @@ pub(super) fn ensure_viewer_runtime_binding(
             )
         },
     );
+    #[cfg(test)]
+    let (branch_id, finality_epoch, finality_block_hash, finality_status, reorg_epoch) =
+        binding_override.unwrap_or(("main", 0, None, "pending", 0));
     #[cfg(not(test))]
-    let binding_override = None;
+    let (branch_id, finality_epoch, finality_block_hash, finality_status, reorg_epoch) =
+        ("main", 0, None, "pending", 0);
     let world_id = config.world_id.as_str();
     match world.cognition().get("runtime_binding") {
-        None | Some(serde_json::Value::Null) => {
-            let (branch_id, finality_epoch, finality_block_hash, finality_status, reorg_epoch) =
-                binding_override.unwrap_or(("main", 0, None, "pending", 0));
-            world
-                .bind_cognition_runtime(
-                    world_id,
-                    branch_id,
-                    finality_epoch,
-                    finality_block_hash,
-                    finality_status,
-                    reorg_epoch,
-                )
-                .map_err(ViewerRuntimeLiveServerError::Runtime)
-        }
+        None | Some(serde_json::Value::Null) => world
+            .bind_cognition_runtime(
+                world_id,
+                branch_id,
+                finality_epoch,
+                finality_block_hash,
+                finality_status,
+                reorg_epoch,
+            )
+            .map_err(ViewerRuntimeLiveServerError::Runtime),
         Some(_) => {
             let binding = world
                 .current_cognition_runtime_binding()

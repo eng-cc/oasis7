@@ -1,5 +1,9 @@
 use super::*;
 
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Scenario fixture mutates only the fields under test."
+)]
 fn kernel_for_fragment_refill_preview(
     interval_ticks: i64,
     current_tick: u64,

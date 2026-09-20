@@ -552,6 +552,10 @@ impl BridgeService {
         })
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable bridge persistence seam keeps receipt identity and accounting fields explicit."
+    )]
     fn persist_topup_receipt(
         &self,
         bridge_deposit_id: &str,
@@ -588,6 +592,10 @@ impl BridgeService {
         })
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable bridge reconciliation seam keeps receipt identity and accounting fields explicit."
+    )]
     fn persist_reconciled(
         &self,
         bridge_deposit_id: &str,
@@ -689,6 +697,10 @@ impl BridgeService {
         })
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable bridge failure persistence seam keeps verification evidence fields explicit."
+    )]
     fn persist_verification_failure(
         &self,
         bridge_deposit_id: &str,

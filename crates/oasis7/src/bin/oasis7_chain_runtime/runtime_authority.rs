@@ -39,6 +39,7 @@ pub(super) struct RuntimeAuthorityBinding {
 /// runtime.  A partial binding is rejected, as is a deployment inventory that
 /// is not bound by the loaded network-tier manifest.  No repository-local
 /// path, digest, or signer is synthesized here.
+#[cfg(test)]
 pub(super) fn load_runtime_authority_binding(
     execution_world_dir: &Path,
     registry_path: Option<&Path>,
@@ -63,6 +64,7 @@ pub(super) fn load_runtime_authority_binding(
 /// managed inventory is intentionally specific to the three-equal-validator
 /// topology and is not a valid authority for the two-validator observer sync
 /// adapter.
+#[cfg(test)]
 pub(super) fn load_runtime_authority_binding_for_node(
     execution_world_dir: &Path,
     node_id: &str,
@@ -110,13 +112,13 @@ pub(super) fn load_runtime_authority_binding_for_node_with_world_id(
     validate_managed_node_role(node_id, node_role)?;
     if node_role == NodeRole::Observer
         && !is_managed_triad_node_id(node_id)
-        && registry_path.is_some()
         && inventory_path.is_none()
+        && let Some(registry_path) = registry_path
     {
         return observer::load_observer_registry_authority(
             execution_world_dir,
             effective_world_id,
-            registry_path.expect("registry path checked above"),
+            registry_path,
             loaded_network_tier_manifest,
         );
     }
@@ -130,17 +132,13 @@ pub(super) fn load_runtime_authority_binding_for_node_with_world_id(
                         .to_string(),
                 );
             }
-            return Ok(None);
+            Ok(None)
         }
         (None, Some(_)) => {
-            return Err(
-                "deployment inventory authority requires --genesis-validator-registry".to_string(),
-            );
+            Err("deployment inventory authority requires --genesis-validator-registry".to_string())
         }
         (Some(_), None) => {
-            return Err(
-                "genesis validator registry authority requires --deployment-inventory".to_string(),
-            );
+            Err("genesis validator registry authority requires --deployment-inventory".to_string())
         }
         (Some(registry_path), Some(inventory_path)) => {
             if !node_id.is_empty() && !is_managed_triad_node_id(node_id) {

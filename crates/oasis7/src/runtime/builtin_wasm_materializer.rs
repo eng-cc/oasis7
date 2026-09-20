@@ -71,10 +71,9 @@ pub(crate) fn load_builtin_wasm_with_fetch_fallback(
 
     if let Some(cached_hash) =
         cached_expected_module_hash_for(module_id, expected_hashes, distfs_root)
+        && let Ok(bytes) = store.get_verified(&cached_hash)
     {
-        if let Ok(bytes) = store.get_verified(&cached_hash) {
-            return Ok(bytes);
-        }
+        return Ok(bytes);
     }
 
     if let Some((actual_hash, fetched)) = try_fetch_builtin_wasm(module_id, expected_hashes)? {
@@ -86,10 +85,10 @@ pub(crate) fn load_builtin_wasm_with_fetch_fallback(
     let compiled = match compile_builtin_wasm(module_id, expected_hashes) {
         Ok(compiled) => compiled,
         Err(compile_error) => {
-            if let Some(cached_hash) = cached_module_hash_for(module_id, distfs_root) {
-                if let Ok(bytes) = store.get_verified(&cached_hash) {
-                    return Ok(bytes);
-                }
+            if let Some(cached_hash) = cached_module_hash_for(module_id, distfs_root)
+                && let Ok(bytes) = store.get_verified(&cached_hash)
+            {
+                return Ok(bytes);
             }
             return Err(compile_error);
         }
@@ -534,9 +533,7 @@ fn write_module_hash_index(
 }
 
 fn is_expected_hash(expected_hashes: &[&str], actual_hash: &str) -> bool {
-    expected_hashes
-        .iter()
-        .any(|expected| *expected == actual_hash)
+    expected_hashes.contains(&actual_hash)
 }
 
 fn is_sha256_hex(value: &str) -> bool {

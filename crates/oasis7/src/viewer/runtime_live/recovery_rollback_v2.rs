@@ -4,6 +4,10 @@ use super::*;
 use sha2::{Digest, Sha256};
 
 impl ViewerRuntimeLiveServer {
+    #[expect(
+        clippy::result_large_err,
+        reason = "Recovery protocol errors preserve the stable typed error envelope"
+    )]
     pub(super) fn rollback_to_stable_checkpoint_v2(
         &mut self,
         request: AuthoritativeRollbackRequest,
@@ -12,6 +16,10 @@ impl ViewerRuntimeLiveServer {
         self.rollback_to_stable_checkpoint_payload(request, Some(canonical_v2_payload))
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Recovery protocol errors preserve the stable typed error envelope"
+    )]
     pub(super) fn rollback_v2_to_replay_target(
         &mut self,
         request: AuthoritativeRollbackV2Request,

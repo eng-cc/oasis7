@@ -407,6 +407,7 @@ fn handle_connection(mut stream: TcpStream, service: &BridgeService) -> Result<(
     )
 }
 
+#[cfg(test)]
 fn dispatch_request(
     service: &BridgeService,
     request: HttpRequest,

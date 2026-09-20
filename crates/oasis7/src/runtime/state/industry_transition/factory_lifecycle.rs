@@ -133,12 +133,12 @@ impl PreparedFactoryLifecycle {
                     recovered: recovered.clone(),
                     durability_ppm: *durability_ppm,
                 };
-                if let Some(existing) = state.factory_recycle_receipts.get(factory_id) {
-                    if existing != &receipt {
-                        return Err(invalid(format!(
-                            "factory recycle conflicts with persisted receipt: factory_id={factory_id}"
-                        )));
-                    }
+                if let Some(existing) = state.factory_recycle_receipts.get(factory_id)
+                    && existing != &receipt
+                {
+                    return Err(invalid(format!(
+                        "factory recycle conflicts with persisted receipt: factory_id={factory_id}"
+                    )));
                 }
                 Self::prepare_recycled(
                     state,

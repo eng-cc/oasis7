@@ -52,17 +52,15 @@ pub(super) fn build_oasis7_viewer_live_command(
         command.env_remove(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV);
         if let Ok(issuer_private_key) =
             std::env::var(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV)
-        {
-            if let Ok(issuer_public_key) =
+            && let Ok(issuer_public_key) =
                 oasis7::viewer::derive_hosted_registration_issuer_public_key(
                     issuer_private_key.as_str(),
                 )
-            {
-                command.env(
-                    oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV,
-                    issuer_public_key,
-                );
-            }
+        {
+            command.env(
+                oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PUBLIC_KEY_ENV,
+                issuer_public_key,
+            );
         }
     }
     if options.auto_play {

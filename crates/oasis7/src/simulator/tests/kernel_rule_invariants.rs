@@ -6,6 +6,10 @@ fn event_kind_json(event: &WorldEvent) -> serde_json::Value {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Scenario fixture mutates only the fields under test."
+)]
 fn kernel_action_behavior_snapshot_stays_stable() {
     let mut config = WorldConfig::default();
     config.move_cost_per_km_electricity = 0;

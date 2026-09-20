@@ -49,6 +49,10 @@ pub(super) fn publication_test_manifest(
         bootstrap_peers: vec!["/ip4/127.0.0.1/tcp/4100".to_string()],
     }
 }
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 pub(super) fn publication_test_snapshot(role: NodeRole, commit_age_ms: i64) -> NodeSnapshot {
     let mut consensus = NodeConsensusSnapshot::default();
     consensus.latest_height = PUBLICATION_TEST_HEIGHT;

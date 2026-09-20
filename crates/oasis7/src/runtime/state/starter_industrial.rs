@@ -98,45 +98,6 @@ impl StarterIndustrialFeasibilityResult {
 }
 
 impl WorldState {
-    pub(super) fn record_starter_industrial_milestone_if_match(
-        &mut self,
-        job_id: ActionId,
-        factory_id: &str,
-        recipe_id: &str,
-        accepted_batches: u32,
-        produce: &[MaterialStack],
-        output_ledger: &MaterialLedgerId,
-        settled_at: WorldTime,
-    ) {
-        let matches_profile = accepted_batches > 0
-            && factory_id == STARTER_SMELTER_FACTORY_ID
-            && recipe_id == STARTER_SMELTER_RECIPE_ID
-            && self
-                .factories
-                .get(factory_id)
-                .is_some_and(|factory| factory.output_ledger == *output_ledger)
-            && produce
-                .iter()
-                .any(|stack| stack.kind == "iron_ingot" && stack.amount > 0);
-        if matches_profile
-            && self
-                .industry_progress
-                .starter_industrial_milestone
-                .is_none()
-        {
-            self.industry_progress.starter_industrial_milestone =
-                Some(StarterIndustrialMilestoneV1 {
-                    profile_id: STARTER_INDUSTRIAL_PROFILE_ID.to_string(),
-                    profile_revision: STARTER_INDUSTRIAL_PROFILE_REVISION,
-                    factory_id: factory_id.to_string(),
-                    recipe_id: recipe_id.to_string(),
-                    output_ledger: output_ledger.clone(),
-                    settlement_job_id: job_id,
-                    settled_at,
-                });
-        }
-    }
-
     /// Evaluate the canonical starter industrial profile from one fresh set
     /// of world-owned authority facts. This is intentionally a pure read: the
     /// result does not reserve resources, enqueue work, or mutate the durable

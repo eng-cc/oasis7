@@ -109,6 +109,10 @@ pub trait AgentBehavior {
 }
 
 /// The result of an agent's decision process.
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Stable agent decision wire enum preserves direct gameplay action payloads."
+)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum AgentDecision {
     /// The agent decides to perform an action.

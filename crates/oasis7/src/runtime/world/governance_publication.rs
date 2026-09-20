@@ -81,15 +81,15 @@ impl World {
                 ),
             });
         }
-        if let Some(not_before_tick) = proposal.not_before_tick {
-            if self.state.time < not_before_tick {
-                return Err(WorldError::GovernancePolicyInvalid {
-                    reason: format!(
-                        "proposal_id={} timelock pending current_tick={} not_before_tick={}",
-                        proposal_id, self.state.time, not_before_tick
-                    ),
-                });
-            }
+        if let Some(not_before_tick) = proposal.not_before_tick
+            && self.state.time < not_before_tick
+        {
+            return Err(WorldError::GovernancePolicyInvalid {
+                reason: format!(
+                    "proposal_id={} timelock pending current_tick={} not_before_tick={}",
+                    proposal_id, self.state.time, not_before_tick
+                ),
+            });
         }
         if let Some(activate_epoch) = proposal.activate_epoch {
             let current_epoch = self.current_governance_epoch();
@@ -409,6 +409,10 @@ impl PreparedGovernanceProposalApply {
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Module projection receives independent mutable stores to preserve deterministic update ordering."
+)]
 pub(super) fn project_module_changes(
     time: u64,
     proposal_id: ProposalId,

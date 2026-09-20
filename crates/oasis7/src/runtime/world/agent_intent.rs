@@ -354,6 +354,7 @@ impl World {
     /// Authentication, authorization, nonce consumption, and provider enqueueing remain
     /// outside this kernel method.  The caller supplies the already verified player identity
     /// and intent sequence; the runtime owns logical time and journal event sequencing.
+    #[cfg(test)]
     pub(crate) fn record_agent_chat_intent(
         &mut self,
         player_id: &str,
@@ -374,6 +375,10 @@ impl World {
 
     /// Append a player-authenticated agent-chat intent with the authority
     /// identity that must survive durable retry/replay.
+    #[expect(
+        clippy::collapsible_if,
+        reason = "Retry idempotency first matches the intent key, then validates the complete durable payload."
+    )]
     pub(crate) fn record_agent_chat_intent_with_authority(
         &mut self,
         player_id: &str,

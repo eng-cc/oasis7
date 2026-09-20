@@ -50,30 +50,30 @@ pub struct AuditFilter {
 
 impl AuditFilter {
     pub fn matches(&self, event: &WorldEvent) -> bool {
-        if let Some(kinds) = &self.kinds {
-            if !kinds.contains(&event.audit_kind()) {
-                return false;
-            }
+        if let Some(kinds) = &self.kinds
+            && !kinds.contains(&event.audit_kind())
+        {
+            return false;
         }
-        if let Some(from_time) = self.from_time {
-            if event.time < from_time {
-                return false;
-            }
+        if let Some(from_time) = self.from_time
+            && event.time < from_time
+        {
+            return false;
         }
-        if let Some(to_time) = self.to_time {
-            if event.time > to_time {
-                return false;
-            }
+        if let Some(to_time) = self.to_time
+            && event.time > to_time
+        {
+            return false;
         }
-        if let Some(from_event_id) = self.from_event_id {
-            if event.id < from_event_id {
-                return false;
-            }
+        if let Some(from_event_id) = self.from_event_id
+            && event.id < from_event_id
+        {
+            return false;
         }
-        if let Some(to_event_id) = self.to_event_id {
-            if event.id > to_event_id {
-                return false;
-            }
+        if let Some(to_event_id) = self.to_event_id
+            && event.id > to_event_id
+        {
+            return false;
         }
         if let Some(cause) = &self.caused_by {
             match cause {

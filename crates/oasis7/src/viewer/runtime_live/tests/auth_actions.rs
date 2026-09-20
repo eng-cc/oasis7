@@ -752,8 +752,8 @@ fn runtime_session_register_rejects_same_player_binding_to_second_agent() {
         .state()
         .agents
         .keys()
-        .cloned()
         .take(2)
+        .cloned()
         .collect();
     assert!(
         agent_ids.len() >= 2,
@@ -810,8 +810,8 @@ fn runtime_session_register_allows_same_player_rebind_with_force_rebind() {
         .state()
         .agents
         .keys()
-        .cloned()
         .take(2)
+        .cloned()
         .collect();
     assert!(
         agent_ids.len() >= 2,

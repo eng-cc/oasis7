@@ -327,10 +327,10 @@ impl PreparedEconomicContractEvent {
         out: &mut S,
     ) -> Result<(), S::Error> {
         let mut updates = self.agents.clone();
-        if let Some(actor) = self.event.agent_id() {
-            if let Some(agent) = updates.get_mut(actor) {
-                agent.mailbox.push_back(self.event.clone());
-            }
+        if let Some(actor) = self.event.agent_id()
+            && let Some(agent) = updates.get_mut(actor)
+        {
+            agent.mailbox.push_back(self.event.clone());
         }
         out.serialize_field(
             "agents",

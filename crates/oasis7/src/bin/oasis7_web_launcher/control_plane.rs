@@ -6,7 +6,7 @@ use std::io::{BufRead, BufReader, Read};
 use std::net::{TcpListener, TcpStream, ToSocketAddrs};
 use std::path::Path;
 use std::process::{Child, Command, Stdio};
-use std::sync::mpsc::{self, Sender, TryRecvError};
+use std::sync::mpsc::{self, Sender};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -192,11 +192,8 @@ pub(super) fn poll_process_state(state: &mut ServiceState) {
         return;
     };
 
-    loop {
-        match running.log_rx.try_recv() {
-            Ok(line) => state.append_log(line),
-            Err(TryRecvError::Empty) | Err(TryRecvError::Disconnected) => break,
-        }
+    while let Ok(line) = running.log_rx.try_recv() {
+        state.append_log(line);
     }
 
     match running.child.try_wait() {
@@ -223,14 +220,9 @@ pub(super) fn poll_chain_process_state(state: &mut ServiceState) {
     };
 
     let mut recent_chain_logs = Vec::new();
-    loop {
-        match running.log_rx.try_recv() {
-            Ok(line) => {
-                recent_chain_logs.push(line.clone());
-                state.append_log(line);
-            }
-            Err(TryRecvError::Empty) | Err(TryRecvError::Disconnected) => break,
-        }
+    while let Ok(line) = running.log_rx.try_recv() {
+        recent_chain_logs.push(line.clone());
+        state.append_log(line);
     }
 
     match running.child.try_wait() {
@@ -891,13 +883,12 @@ pub(super) fn validate_chain_config(config: &LauncherConfig) -> Vec<String> {
     if proposal_tick_phase.is_err() {
         issues.push("chain pos proposal tick phase must be a non-negative integer".to_string());
     }
-    if let (Ok(ticks_per_slot), Ok(proposal_tick_phase)) = (ticks_per_slot, proposal_tick_phase) {
-        if proposal_tick_phase >= ticks_per_slot {
-            issues.push(
-                "chain pos proposal tick phase must be less than chain pos ticks per slot"
-                    .to_string(),
-            );
-        }
+    if let (Ok(ticks_per_slot), Ok(proposal_tick_phase)) = (ticks_per_slot, proposal_tick_phase)
+        && proposal_tick_phase >= ticks_per_slot
+    {
+        issues.push(
+            "chain pos proposal tick phase must be less than chain pos ticks per slot".to_string(),
+        );
     }
     if parse_optional_i64(
         config.chain_pos_slot_clock_genesis_unix_ms.as_str(),
