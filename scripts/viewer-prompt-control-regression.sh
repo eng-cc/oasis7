@@ -988,8 +988,9 @@ capture_prompt_layout() {
     echo "error: prompt layout measurement failed (phase: prompt layout measurement; diagnostics: ${OUT_DIR}/agent-browser.log)" >&2
     return "$result"
   fi
-  if ! python3 - "$OUT_DIR/browser-layout.json" "$raw" <<'PY'
+  if python3 - "$OUT_DIR/browser-layout.json" "$raw" <<'PY'
 import json
+import math
 import pathlib
 import sys
 
@@ -1003,12 +1004,38 @@ except (TypeError, ValueError) as exc:
     raise SystemExit(f"invalid prompt layout measurement: {exc}")
 if not isinstance(measured, dict):
     raise SystemExit("invalid prompt layout measurement: expected object")
+
+def finite_number(value, label):
+    if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value):
+        raise SystemExit(f"invalid prompt layout measurement: {label} must be a finite number")
+    return float(value)
+
+overflow = finite_number(measured.get("horizontalOverflowPx"), "horizontalOverflowPx")
+if overflow > 0:
+    raise SystemExit(
+        f"invalid prompt layout measurement: horizontal overflow is {overflow:g}px"
+    )
+
+rollback = measured.get("rollback")
+if not isinstance(rollback, dict):
+    raise SystemExit("invalid prompt layout measurement: rollback must be an object")
+for field in ("visible", "uncovered", "minHitTarget"):
+    if rollback.get(field) is not True:
+        raise SystemExit(f"invalid prompt layout measurement: rollback.{field} must be true")
+for field in ("width", "height"):
+    size = finite_number(rollback.get(field), f"rollback.{field}")
+    if size < 44:
+        raise SystemExit(
+            f"invalid prompt layout measurement: rollback.{field} is {size:g}px; minimum is 44px"
+        )
 path.write_text(json.dumps(measured, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 PY
   then
+    :
+  else
     result=$?
     printf '[layout] measurement rejected (exit=%s): %s\n' "$result" "$raw" >>"$AB_LOG"
-    echo "error: prompt layout measurement did not return an object (phase: prompt layout measurement; diagnostics: ${OUT_DIR}/agent-browser.log)" >&2
+    echo "error: prompt layout measurement rejected (phase: prompt layout measurement; diagnostics: ${OUT_DIR}/agent-browser.log)" >&2
     return "$result"
   fi
   printf '[layout] %s\n' "$(tr '\n' ' ' <"$OUT_DIR/browser-layout.json")" >>"$AB_LOG"
