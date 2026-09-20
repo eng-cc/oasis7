@@ -581,12 +581,11 @@ impl MembershipDirectorySignerKeyring {
         }
 
         let mut try_order: Vec<&MembershipDirectorySigner> = Vec::new();
-        if let Some(active_key_id) = self.active_key_id.as_deref() {
-            if let Some(active_signer) = self.signers.get(active_key_id) {
-                if !self.revoked_key_ids.contains(active_key_id) {
-                    try_order.push(active_signer);
-                }
-            }
+        if let Some(active_key_id) = self.active_key_id.as_deref()
+            && let Some(active_signer) = self.signers.get(active_key_id)
+            && !self.revoked_key_ids.contains(active_key_id)
+        {
+            try_order.push(active_signer);
         }
         for (key_id, signer) in &self.signers {
             if self.active_key_id.as_deref() != Some(key_id.as_str())
@@ -645,12 +644,11 @@ impl MembershipDirectorySignerKeyring {
         }
 
         let mut try_order: Vec<&MembershipDirectorySigner> = Vec::new();
-        if let Some(active_key_id) = self.active_key_id.as_deref() {
-            if let Some(active_signer) = self.signers.get(active_key_id) {
-                if !self.revoked_key_ids.contains(active_key_id) {
-                    try_order.push(active_signer);
-                }
-            }
+        if let Some(active_key_id) = self.active_key_id.as_deref()
+            && let Some(active_signer) = self.signers.get(active_key_id)
+            && !self.revoked_key_ids.contains(active_key_id)
+        {
+            try_order.push(active_signer);
         }
         for (key_id, signer) in &self.signers {
             if self.active_key_id.as_deref() != Some(key_id.as_str())

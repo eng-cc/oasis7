@@ -151,10 +151,10 @@ pub(crate) fn write_jsonl_lines(path: &Path, lines: &[String]) -> Result<(), Wor
         }
         return Ok(());
     }
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent)?;
-        }
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent)?;
     }
     let mut file = OpenOptions::new()
         .create(true)
@@ -169,10 +169,10 @@ pub(crate) fn write_jsonl_lines(path: &Path, lines: &[String]) -> Result<(), Wor
 }
 
 fn append_jsonl_line(path: &Path, line: &str) -> Result<(), WorldError> {
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent)?;
-        }
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent)?;
     }
     let mut file = OpenOptions::new().create(true).append(true).open(path)?;
     file.write_all(line.as_bytes())?;

@@ -146,10 +146,10 @@ impl QuorumConsensus {
 
     pub fn save_snapshot_to_path(&self, path: impl AsRef<Path>) -> Result<(), WorldError> {
         let path = path.as_ref();
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent)?;
         }
 
         let snapshot = ConsensusSnapshotFile {
@@ -290,15 +290,15 @@ impl QuorumConsensus {
         let proposer_id = proposer_id.into();
         self.ensure_validator(&proposer_id)?;
 
-        if let Some(committed_height) = self.latest_committed_height(&head.world_id) {
-            if head.height <= committed_height {
-                return Err(WorldError::DistributedValidationFailed {
-                    reason: format!(
-                        "stale proposal for {} at height {} (committed={committed_height})",
-                        head.world_id, head.height
-                    ),
-                });
-            }
+        if let Some(committed_height) = self.latest_committed_height(&head.world_id)
+            && head.height <= committed_height
+        {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: format!(
+                    "stale proposal for {} at height {} (committed={committed_height})",
+                    head.world_id, head.height
+                ),
+            });
         }
 
         let key = (head.world_id.clone(), head.height);
@@ -338,6 +338,10 @@ impl QuorumConsensus {
         Ok(decision)
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Public vote state-machine API keeps explicit proposal and decision fields"
+    )]
     pub fn vote_head(
         &mut self,
         world_id: &str,
@@ -642,6 +646,10 @@ pub fn propose_world_head_with_quorum(
     Ok(decision)
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Public network vote adapter keeps explicit DHT and vote fields for compatibility"
+)]
 pub fn vote_world_head_with_quorum(
     dht: &impl DistributedDht,
     consensus: &mut QuorumConsensus,

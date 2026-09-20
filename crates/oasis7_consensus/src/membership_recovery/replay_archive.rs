@@ -16,6 +16,15 @@ use super::replay_audit::{
 };
 use super::{MembershipSyncClient, normalized_schedule_key};
 
+type GovernanceAuditRecords = Arc<
+    Mutex<
+        BTreeMap<
+            (String, String),
+            Vec<MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRecord>,
+        >,
+    >,
+>;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRetentionPolicy {
     pub max_records: usize,
@@ -66,14 +75,7 @@ pub trait MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRetentionSt
 
 #[derive(Debug, Clone, Default)]
 pub struct InMemoryMembershipRevocationDeadLetterReplayRollbackGovernanceAuditRetentionStore {
-    records: Arc<
-        Mutex<
-            BTreeMap<
-                (String, String),
-                Vec<MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRecord>,
-            >,
-        >,
-    >,
+    records: GovernanceAuditRecords,
 }
 
 impl InMemoryMembershipRevocationDeadLetterReplayRollbackGovernanceAuditRetentionStore {
@@ -188,10 +190,10 @@ impl FileMembershipRevocationDeadLetterReplayRollbackGovernanceAuditRetentionSto
         records: &[MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRecord],
     ) -> Result<(), WorldError> {
         let path = self.audit_path(world_id, node_id)?;
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent)?;
         }
         if records.is_empty() {
             if path.exists() {
@@ -224,10 +226,10 @@ impl MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRetentionStore
         record: &MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRecord,
     ) -> Result<(), WorldError> {
         let path = self.audit_path(world_id, node_id)?;
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent)?;
         }
         let line = serde_json::to_string(record)?;
         let mut file = OpenOptions::new().create(true).append(true).open(path)?;
@@ -439,10 +441,10 @@ impl MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillSchedule
         state: &MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillScheduleState,
     ) -> Result<(), WorldError> {
         let path = self.state_path(world_id, node_id)?;
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent)?;
         }
         let bytes = serde_json::to_vec_pretty(state)?;
         fs::write(path, bytes)?;
@@ -504,6 +506,10 @@ impl MembershipSyncClient {
         )
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Recovery drill entrypoint keeps explicit schedule, policy, state, and audit seams"
+    )]
     pub fn run_revocation_dead_letter_replay_rollback_governance_recovery_drill_schedule(
         &self,
         world_id: &str,

@@ -198,16 +198,26 @@ pub trait MembershipRevocationDeadLetterReplayPolicyAuditStore {
     ) -> Result<Vec<MembershipRevocationDeadLetterReplayPolicyAdoptionAuditRecord>, WorldError>;
 }
 
-#[derive(Debug, Clone, Default)]
-pub struct InMemoryMembershipRevocationDeadLetterReplayPolicyAuditStore {
-    records: Arc<
-        Mutex<
-            BTreeMap<
-                (String, String),
-                Vec<MembershipRevocationDeadLetterReplayPolicyAdoptionAuditRecord>,
-            >,
+type PolicyAuditRecords = Arc<
+    Mutex<
+        BTreeMap<
+            (String, String),
+            Vec<MembershipRevocationDeadLetterReplayPolicyAdoptionAuditRecord>,
         >,
     >,
+>;
+type GovernanceAuditRecords = Arc<
+    Mutex<
+        BTreeMap<
+            (String, String),
+            Vec<MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRecord>,
+        >,
+    >,
+>;
+
+#[derive(Debug, Clone, Default)]
+pub struct InMemoryMembershipRevocationDeadLetterReplayPolicyAuditStore {
+    records: PolicyAuditRecords,
 }
 
 impl InMemoryMembershipRevocationDeadLetterReplayPolicyAuditStore {
@@ -285,10 +295,10 @@ impl MembershipRevocationDeadLetterReplayPolicyAuditStore
         record: &MembershipRevocationDeadLetterReplayPolicyAdoptionAuditRecord,
     ) -> Result<(), WorldError> {
         let path = self.audit_path(world_id, node_id)?;
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent)?;
         }
         let line = serde_json::to_string(record)?;
         let mut file = OpenOptions::new().create(true).append(true).open(path)?;
@@ -417,10 +427,10 @@ impl MembershipRevocationDeadLetterReplayRollbackAlertStateStore
         state: &MembershipRevocationDeadLetterReplayRollbackAlertState,
     ) -> Result<(), WorldError> {
         let path = self.state_path(world_id, node_id)?;
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent)?;
         }
         fs::write(path, serde_json::to_vec(state)?)?;
         Ok(())
@@ -525,10 +535,10 @@ impl MembershipRevocationDeadLetterReplayRollbackGovernanceStateStore
         state: &MembershipRevocationDeadLetterReplayRollbackGovernanceState,
     ) -> Result<(), WorldError> {
         let path = self.state_path(world_id, node_id)?;
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent)?;
         }
         fs::write(path, serde_json::to_vec(state)?)?;
         Ok(())
@@ -537,14 +547,7 @@ impl MembershipRevocationDeadLetterReplayRollbackGovernanceStateStore
 
 #[derive(Debug, Clone, Default)]
 pub struct InMemoryMembershipRevocationDeadLetterReplayRollbackGovernanceAuditStore {
-    records: Arc<
-        Mutex<
-            BTreeMap<
-                (String, String),
-                Vec<MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRecord>,
-            >,
-        >,
-    >,
+    records: GovernanceAuditRecords,
 }
 
 impl InMemoryMembershipRevocationDeadLetterReplayRollbackGovernanceAuditStore {
@@ -620,10 +623,10 @@ impl MembershipRevocationDeadLetterReplayRollbackGovernanceAuditStore
         record: &MembershipRevocationDeadLetterReplayRollbackGovernanceAuditRecord,
     ) -> Result<(), WorldError> {
         let path = self.audit_path(world_id, node_id)?;
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent)?;
         }
         let line = serde_json::to_string(record)?;
         let mut file = OpenOptions::new().create(true).append(true).open(path)?;
