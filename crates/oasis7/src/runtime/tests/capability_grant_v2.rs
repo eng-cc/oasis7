@@ -382,6 +382,10 @@ fn install_test_capability_authority(world: &mut World, revoked_grant_ids: BTree
     )
     .expect("register governed capability issuer");
 }
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Capability authority test fixture keeps independently varied protocol fields explicit."
+)]
 pub(super) fn install_test_capability_authority_with_metadata(
     world: &mut World,
     revoked_grant_ids: BTreeSet<String>,

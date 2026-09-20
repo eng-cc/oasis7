@@ -180,7 +180,7 @@ impl fmt::Display for ScenarioSpecError {
 
 impl std::error::Error for ScenarioSpecError {}
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 #[serde(default, deny_unknown_fields)]
 pub struct WorldScenarioSpec {
     pub id: String,
@@ -192,22 +192,6 @@ pub struct WorldScenarioSpec {
     pub agents: AgentSpawnConfig,
     pub power_plants: Vec<PowerPlantSeedConfig>,
     pub module_visual_entities: Vec<ModuleVisualEntity>,
-}
-
-impl Default for WorldScenarioSpec {
-    fn default() -> Self {
-        Self {
-            id: String::new(),
-            name: String::new(),
-            seed: 0,
-            origin: ScenarioOriginConfig::default(),
-            location_generator: ScenarioLocationGeneratorConfig::default(),
-            asteroid_fragment: AsteroidFragmentInitConfig::default(),
-            agents: AgentSpawnConfig::default(),
-            power_plants: Vec::new(),
-            module_visual_entities: Vec::new(),
-        }
-    }
 }
 
 impl WorldScenarioSpec {

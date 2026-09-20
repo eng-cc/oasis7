@@ -48,6 +48,10 @@ fn assert_budget_bounds(model: &WorldModel) {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Scenario fixture mutates only the fields under test."
+)]
 fn fragment_and_chunk_budgets_stay_within_total_bounds_after_consumption() {
     let mut config = WorldConfig::default();
     config.space = SpaceConfig {
@@ -87,7 +91,7 @@ fn fragment_and_chunk_budgets_stay_within_total_bounds_after_consumption() {
         .as_ref()
         .expect("fragment budget")
         .get_remaining(element);
-    let consume_amount = remaining_before.min(40).max(1);
+    let consume_amount = remaining_before.clamp(1, 40);
 
     kernel
         .consume_fragment_resource(&fragment.id, element, consume_amount)
@@ -105,6 +109,10 @@ fn fragment_and_chunk_budgets_stay_within_total_bounds_after_consumption() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Scenario fixture mutates only the fields under test."
+)]
 fn harvest_and_refine_follow_resource_ledger_without_free_gain() {
     let mut config = WorldConfig::default();
     config.economy.refine_electricity_cost_per_kg = 3;

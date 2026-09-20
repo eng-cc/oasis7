@@ -688,7 +688,7 @@ fn stale_replan_context_releases_old_continuation_without_budget_spend() {
         .expect("scheduler");
     bind_test_turn(&mut world);
     let admitted_proposal = proposal(&world);
-    let admitted = world
+    world
         .admit_cognition_continuation(admitted_proposal.clone())
         .expect("admit continuation");
     world.step().expect("advance to wake tick");
@@ -1123,13 +1123,6 @@ fn wake_handoff_revalidates_current_state_head_before_budget_debit() {
         .admit_cognition_continuation(proposal(&world))
         .expect("admit continuation");
     world.step().expect("advance to wake tick");
-    let wake_id = world
-        .cognition_in_flight_wakes()
-        .expect("in-flight wake")
-        .first()
-        .expect("leased wake")
-        .wake_id
-        .clone();
     world.submit_action(Action::RegisterAgent {
         agent_id: "agent-evidence-mutation".to_string(),
         pos: super::pos(0, 0),

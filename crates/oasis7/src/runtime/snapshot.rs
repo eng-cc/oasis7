@@ -52,19 +52,10 @@ pub struct SnapshotRecord {
 }
 
 /// Catalog of all recorded snapshots with retention policy.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct SnapshotCatalog {
     pub records: Vec<SnapshotRecord>,
     pub retention: SnapshotRetentionPolicy,
-}
-
-impl Default for SnapshotCatalog {
-    fn default() -> Self {
-        Self {
-            records: Vec::new(),
-            retention: SnapshotRetentionPolicy::default(),
-        }
-    }
 }
 
 /// A complete snapshot of the world state at a point in time.

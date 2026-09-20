@@ -116,6 +116,10 @@ pub(super) fn build_signed_gameplay_action_request(
     })
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Stable protocol and runtime seam keeps independently validated inputs explicit."
+)]
 pub(super) fn build_signed_prompt_apply_request(
     agent_id: &str,
     player_id: &str,
@@ -255,7 +259,7 @@ pub(super) fn command_output(hello_ack: &Value, responses: &[CollectedResponse])
     })
 }
 
-pub(super) fn latest_snapshot<'a>(responses: &'a [CollectedResponse]) -> Option<&'a WorldSnapshot> {
+pub(super) fn latest_snapshot(responses: &[CollectedResponse]) -> Option<&WorldSnapshot> {
     responses
         .iter()
         .rev()

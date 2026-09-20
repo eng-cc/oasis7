@@ -132,6 +132,10 @@ pub fn reward_mint_signature_v1(
     )
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Signature construction preserves the established deterministic preimage argument order."
+)]
 pub fn reward_mint_signature_v2(
     epoch_index: u64,
     node_id: &str,
@@ -164,6 +168,10 @@ pub fn reward_mint_signature_v2(
     ))
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Signature verification preserves the established deterministic preimage argument order."
+)]
 pub fn verify_reward_mint_signature_v2(
     signature: &str,
     epoch_index: u64,

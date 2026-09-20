@@ -348,7 +348,7 @@ fn bounded_mailbox_enqueue_is_nonblocking_and_enforces_per_agent_single_flight()
 
 #[test]
 fn provider_delay_cannot_block_world_step_or_create_an_effect_before_validation() {
-    let mut world = World::new();
+    let world = World::new();
     let before = fingerprint(&world);
     let mut mailbox = AgentCognitionMailbox::with_capacity(1, 1);
     let pending = mailbox

@@ -103,6 +103,10 @@ impl World {
         Ok(())
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Validation resume inputs mirror the persisted product validation transaction identity."
+    )]
     pub(super) fn resume_product_validation_receipt(
         &mut self,
         job_id: ActionId,
@@ -387,21 +391,24 @@ impl World {
                     .find(|attempt| attempt.validation_index == validation_index)
             })
             .cloned();
-        if let Some(attempt) = &attempt {
-            if attempt.requester_agent_id != requester_agent_id
+        if let Some(attempt) = &attempt
+            && (attempt.requester_agent_id != requester_agent_id
                 || receipt_module_id.is_some_and(|module_id| attempt.module_id != module_id)
-                || attempt.stack != *stack
-            {
-                return Err(WorldError::ResourceBalanceInvalid {
-                    reason: format!(
-                        "product validation attempt conflicts with job or receipt: job_id={job_id} index={validation_index:?}"
-                    ),
-                });
-            }
+                || attempt.stack != *stack)
+        {
+            return Err(WorldError::ResourceBalanceInvalid {
+                reason: format!(
+                    "product validation attempt conflicts with job or receipt: job_id={job_id} index={validation_index:?}"
+                ),
+            });
         }
         Ok(attempt)
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Validation attempt inputs mirror the persisted product validation event schema."
+    )]
     pub(super) fn record_product_validation_attempt(
         &mut self,
         job_id: ActionId,

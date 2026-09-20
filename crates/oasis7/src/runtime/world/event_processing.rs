@@ -202,10 +202,10 @@ impl World {
                     ),
                 });
             }
-            if let Some(tick) = replaying_tick {
-                if event.time != tick {
-                    self.record_tick_consensus_for_tick(tick)?;
-                }
+            if let Some(tick) = replaying_tick
+                && event.time != tick
+            {
+                self.record_tick_consensus_for_tick(tick)?;
             }
             match &event.body {
                 WorldEventBody::PolicyDecisionRecorded(record) => {
@@ -601,19 +601,19 @@ impl World {
                 "nonce must be > 0".to_string(),
             );
         }
-        if let Some(last_nonce) = self.state.node_redeem_nonces.get(node_id) {
-            if nonce <= *last_nonce {
-                return self.power_redeem_rejected(
-                    node_id,
-                    target_agent_id,
-                    redeem_credits,
-                    nonce,
-                    format!(
-                        "nonce replay detected: nonce={} last_nonce={}",
-                        nonce, last_nonce
-                    ),
-                );
-            }
+        if let Some(last_nonce) = self.state.node_redeem_nonces.get(node_id)
+            && nonce <= *last_nonce
+        {
+            return self.power_redeem_rejected(
+                node_id,
+                target_agent_id,
+                redeem_credits,
+                nonce,
+                format!(
+                    "nonce replay detected: nonce={} last_nonce={}",
+                    nonce, last_nonce
+                ),
+            );
         }
         let credits_per_power_unit = self.state.reward_asset_config.credits_per_power_unit;
         if credits_per_power_unit == 0 {

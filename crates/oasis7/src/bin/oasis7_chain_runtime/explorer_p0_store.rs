@@ -477,17 +477,16 @@ impl ExplorerStore {
                 if let Some(action_filter) = action_filter {
                     return item.action_id == action_filter;
                 }
-                if let Some(account_filter) = account_filter {
-                    if item.from_account_id != account_filter
-                        && item.to_account_id != account_filter
-                    {
-                        return false;
-                    }
+                if let Some(account_filter) = account_filter
+                    && item.from_account_id != account_filter
+                    && item.to_account_id != account_filter
+                {
+                    return false;
                 }
-                if let Some(status_filter) = status_filter {
-                    if item.status != status_filter {
-                        return false;
-                    }
+                if let Some(status_filter) = status_filter
+                    && item.status != status_filter
+                {
+                    return false;
                 }
                 true
             })
@@ -568,34 +567,33 @@ impl ExplorerStore {
         let mut dedup = BTreeSet::<String>::new();
         let mut items = Vec::<ExplorerSearchHit>::new();
 
-        if let Ok(height) = query.parse::<u64>() {
-            if let Some(block) = self.blocks_by_height.get(&height) {
-                let dedup_key = format!("block:{}", block.height);
-                if dedup.insert(dedup_key) {
-                    items.push(ExplorerSearchHit {
-                        item_type: "block".to_string(),
-                        key: block.height.to_string(),
-                        summary: format!("height={} hash={}", block.height, block.block_hash),
-                    });
-                }
+        if let Ok(height) = query.parse::<u64>()
+            && let Some(block) = self.blocks_by_height.get(&height)
+        {
+            let dedup_key = format!("block:{}", block.height);
+            if dedup.insert(dedup_key) {
+                items.push(ExplorerSearchHit {
+                    item_type: "block".to_string(),
+                    key: block.height.to_string(),
+                    summary: format!("height={} hash={}", block.height, block.block_hash),
+                });
             }
         }
 
-        if let Ok(action_id) = query.parse::<u64>() {
-            if let Some(tx_hash) = self.tx_hash_by_action_id.get(&action_id) {
-                if let Some(tx) = self.txs_by_hash.get(tx_hash.as_str()) {
-                    let dedup_key = format!("tx:{}", tx.tx_hash);
-                    if dedup.insert(dedup_key) {
-                        items.push(ExplorerSearchHit {
-                            item_type: "tx".to_string(),
-                            key: tx.tx_hash.clone(),
-                            summary: format!(
-                                "action_id={} status={:?} {}->{}",
-                                tx.action_id, tx.status, tx.from_account_id, tx.to_account_id
-                            ),
-                        });
-                    }
-                }
+        if let Ok(action_id) = query.parse::<u64>()
+            && let Some(tx_hash) = self.tx_hash_by_action_id.get(&action_id)
+            && let Some(tx) = self.txs_by_hash.get(tx_hash.as_str())
+        {
+            let dedup_key = format!("tx:{}", tx.tx_hash);
+            if dedup.insert(dedup_key) {
+                items.push(ExplorerSearchHit {
+                    item_type: "tx".to_string(),
+                    key: tx.tx_hash.clone(),
+                    summary: format!(
+                        "action_id={} status={:?} {}->{}",
+                        tx.action_id, tx.status, tx.from_account_id, tx.to_account_id
+                    ),
+                });
             }
         }
 

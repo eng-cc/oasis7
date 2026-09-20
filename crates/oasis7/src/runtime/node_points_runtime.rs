@@ -333,15 +333,14 @@ impl NodePointsRuntimeCollector {
         self.apply_observation(observation);
 
         let epoch_ms = self.epoch_duration_ms();
-        if let Some(start_ms) = self.epoch_started_at_unix_ms {
-            if epoch_ms > 0 {
-                let elapsed_ms =
-                    observation_time_delta(start_ms, self.latest_observed_at_unix_ms());
-                if elapsed_ms >= epoch_ms {
-                    let report = self.settle_epoch_internal()?;
-                    self.epoch_started_at_unix_ms = Some(self.latest_observed_at_unix_ms());
-                    return Ok(report);
-                }
+        if let Some(start_ms) = self.epoch_started_at_unix_ms
+            && epoch_ms > 0
+        {
+            let elapsed_ms = observation_time_delta(start_ms, self.latest_observed_at_unix_ms());
+            if elapsed_ms >= epoch_ms {
+                let report = self.settle_epoch_internal()?;
+                self.epoch_started_at_unix_ms = Some(self.latest_observed_at_unix_ms());
+                return Ok(report);
             }
         }
         Ok(None)
@@ -564,6 +563,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::field_reassign_with_default,
+        reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+    )]
     fn collector_observes_ticks_and_force_settles() {
         let mut config = NodePointsConfig::default();
         config.epoch_pool_points = 100;
@@ -607,6 +610,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::field_reassign_with_default,
+        reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+    )]
     fn collector_snapshot_roundtrip_restores_state() {
         let mut config = NodePointsConfig::default();
         config.epoch_pool_points = 100;
@@ -728,6 +735,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::field_reassign_with_default,
+        reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+    )]
     fn collector_auto_settles_when_epoch_elapsed() {
         let mut config = NodePointsConfig::default();
         config.epoch_pool_points = 50;
@@ -766,6 +777,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::field_reassign_with_default,
+        reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+    )]
     fn collector_propagates_uptime_challenge_counts_into_rewards() {
         let mut config = NodePointsConfig::default();
         config.epoch_pool_points = 100;
@@ -839,6 +854,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::field_reassign_with_default,
+        reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+    )]
     fn collector_propagates_storage_challenge_counts_into_storage_rewards() {
         let mut config = NodePointsConfig::default();
         config.epoch_pool_points = 0;

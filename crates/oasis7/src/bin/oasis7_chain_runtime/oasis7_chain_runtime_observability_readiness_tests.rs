@@ -1,3 +1,16 @@
+#![expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixtures intentionally override canonical defaults for scenario fields."
+)]
+#![expect(
+    clippy::enum_variant_names,
+    reason = "Readiness scenario variants intentionally share a descriptive state suffix."
+)]
+#![expect(
+    clippy::type_complexity,
+    reason = "Boundary mutation tables keep each named snapshot mutation next to its scenario label."
+)]
+
 use oasis7::network_tier_manifest::{
     LoadedNetworkTierManifest, NETWORK_TIER_MANIFEST_SCHEMA_V1, NetworkTierClaimsPolicy,
     NetworkTierEndpointPolicy, NetworkTierManifest, NetworkTierPromotionPolicy,

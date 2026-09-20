@@ -174,7 +174,7 @@ fn module_call_pure_policy_hook_can_deny_effect() {
             WorldEventBody::ModuleCallFailed(failure) => Some(failure),
             _ => None,
         })
-        .last()
+        .next_back()
         .expect("failure event");
     assert_eq!(failed.code, ModuleCallErrorCode::PolicyDenied);
     assert!(failed.detail.contains("blocked_by_pure_policy"));

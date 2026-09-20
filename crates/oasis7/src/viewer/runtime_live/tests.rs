@@ -237,16 +237,16 @@ fn read_test_http_request(stream: &mut TcpStream) -> Vec<u8> {
             break;
         }
         request.extend_from_slice(&buffer[..bytes]);
-        if expected_len.is_none() {
-            if let Some(boundary) = request.windows(4).position(|window| window == b"\r\n\r\n") {
-                let content_length = parse_test_http_content_length(&request[..boundary]);
-                expected_len = Some(boundary + 4 + content_length);
-            }
+        if expected_len.is_none()
+            && let Some(boundary) = request.windows(4).position(|window| window == b"\r\n\r\n")
+        {
+            let content_length = parse_test_http_content_length(&request[..boundary]);
+            expected_len = Some(boundary + 4 + content_length);
         }
-        if let Some(expected_len) = expected_len {
-            if request.len() >= expected_len {
-                break;
-            }
+        if let Some(expected_len) = expected_len
+            && request.len() >= expected_len
+        {
+            break;
         }
     }
     request

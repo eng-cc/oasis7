@@ -418,17 +418,12 @@ impl AsteroidFragmentConfig {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum MaterialDistributionStrategy {
+    #[default]
     Uniform,
     CoreMetalRimVolatile,
-}
-
-impl Default for MaterialDistributionStrategy {
-    fn default() -> Self {
-        Self::Uniform
-    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]

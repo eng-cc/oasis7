@@ -1,6 +1,10 @@
 use super::*;
 
 impl ViewerRuntimeLiveServer {
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     pub(in crate::viewer::runtime_live) fn handle_prompt_control(
         &mut self,
         command: PromptControlCommand,
@@ -75,6 +79,10 @@ impl ViewerRuntimeLiveServer {
         }
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     fn prompt_control_preview(
         &mut self,
         request: PromptControlApplyRequest,
@@ -122,6 +130,10 @@ impl ViewerRuntimeLiveServer {
         })
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     fn prompt_control_apply(
         &mut self,
         request: PromptControlApplyRequest,
@@ -240,6 +252,10 @@ impl ViewerRuntimeLiveServer {
         })
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     fn prompt_control_rollback(
         &mut self,
         request: PromptControlRollbackRequest,
@@ -366,6 +382,10 @@ impl ViewerRuntimeLiveServer {
         })
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     fn verify_and_consume_prompt_control_apply_auth(
         &mut self,
         intent: PromptControlAuthIntent,
@@ -411,6 +431,10 @@ impl ViewerRuntimeLiveServer {
         Ok(())
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     pub(super) fn verify_hosted_prompt_control_apply_strong_auth(
         &self,
         intent: PromptControlAuthIntent,
@@ -447,6 +471,10 @@ impl ViewerRuntimeLiveServer {
         })
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     fn verify_and_consume_prompt_control_rollback_auth(
         &mut self,
         request: &PromptControlRollbackRequest,
@@ -491,6 +519,10 @@ impl ViewerRuntimeLiveServer {
         Ok(())
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     pub(super) fn verify_hosted_prompt_control_rollback_strong_auth(
         &self,
         request: &PromptControlRollbackRequest,

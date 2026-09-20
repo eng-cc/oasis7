@@ -14,6 +14,10 @@ pub(super) fn resolve_viewer_live_llm_timeout_ms(configured_timeout_ms: u64) -> 
     configured_timeout_ms.min(live_timeout_ceiling_ms)
 }
 
+#[expect(
+    clippy::result_large_err,
+    reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+)]
 pub(super) fn normalize_required_player_id(
     player_id: &str,
     agent_id: &str,
@@ -41,6 +45,10 @@ pub(super) fn normalize_optional_public_key(public_key: Option<&str>) -> Option<
         .map(ToOwned::to_owned)
 }
 
+#[expect(
+    clippy::result_large_err,
+    reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+)]
 pub(super) fn ensure_updated_by_matches_player(
     updated_by: Option<&str>,
     player_id: &str,
@@ -64,6 +72,10 @@ pub(super) fn ensure_updated_by_matches_player(
     })
 }
 
+#[expect(
+    clippy::result_large_err,
+    reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+)]
 pub(super) fn ensure_agent_player_access(
     kernel: &WorldKernel,
     agent_id: &str,
@@ -180,24 +192,28 @@ pub(super) fn prompt_profile_digest(profile: &AgentPromptProfile) -> String {
     hex::encode(hasher.finalize())
 }
 
+#[expect(
+    clippy::result_large_err,
+    reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+)]
 pub(super) fn ensure_expected_prompt_version(
     agent_id: &str,
     current_version: u64,
     expected_version: Option<u64>,
 ) -> Result<(), PromptControlError> {
-    if let Some(expected) = expected_version {
-        if expected != current_version {
-            return Err(PromptControlError {
-                code: "version_conflict".to_string(),
-                message: format!(
-                    "prompt profile version conflict for {}: expected {}, current {}",
-                    agent_id, expected, current_version
-                ),
-                agent_id: Some(agent_id.to_string()),
-                current_version: Some(current_version),
-                ..PromptControlError::default_legacy()
-            });
-        }
+    if let Some(expected) = expected_version
+        && expected != current_version
+    {
+        return Err(PromptControlError {
+            code: "version_conflict".to_string(),
+            message: format!(
+                "prompt profile version conflict for {}: expected {}, current {}",
+                agent_id, expected, current_version
+            ),
+            agent_id: Some(agent_id.to_string()),
+            current_version: Some(current_version),
+            ..PromptControlError::default_legacy()
+        });
     }
     Ok(())
 }

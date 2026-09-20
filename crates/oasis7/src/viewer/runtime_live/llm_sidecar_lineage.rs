@@ -13,11 +13,12 @@ impl RuntimeLlmSidecar {
         if self.provider_lineage_hydrated {
             return;
         }
-        if self.provider_lineage_store.is_some() && !self.provider_lineage_restored {
-            if let Err(error) = self.restore_provider_lineage(world) {
-                self.provider_lineage_recovery_pending = Some(error.clone());
-                tracing::warn!(error, "provider lineage checkpoint restore failed");
-            }
+        if self.provider_lineage_store.is_some()
+            && !self.provider_lineage_restored
+            && let Err(error) = self.restore_provider_lineage(world)
+        {
+            self.provider_lineage_recovery_pending = Some(error.clone());
+            tracing::warn!(error, "provider lineage checkpoint restore failed");
         }
         if self.provider_lineage_recovery_pending.is_some() {
             // Do not rebuild fresh provider contexts from Runtime projections
@@ -232,18 +233,6 @@ impl RuntimeLlmSidecar {
         Ok(())
     }
 
-    pub(in crate::viewer::runtime_live) fn provider_transport_exhausted_agent(
-        &self,
-    ) -> Option<String> {
-        self.provider_transport_exhausted.iter().next().cloned()
-    }
-
-    pub(in crate::viewer::runtime_live) fn take_provider_transport_exhausted_agent(
-        &mut self,
-    ) -> Option<String> {
-        self.provider_transport_exhausted_agent()
-    }
-
     pub(in crate::viewer::runtime_live) fn provider_transport_exhausted_agent_excluding(
         &self,
         excluded_agent: Option<&str>,
@@ -389,6 +378,10 @@ impl RuntimeLlmSidecar {
         self.persist_provider_lineage()
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Wake failure recovery carries the stable Runtime/provider identity tuple"
+    )]
     pub(super) fn handle_provider_wake_resume_failure(
         &mut self,
         world: &mut RuntimeWorld,

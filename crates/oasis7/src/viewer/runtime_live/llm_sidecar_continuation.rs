@@ -119,18 +119,13 @@ impl RuntimeLlmSidecar {
                 #[cfg(target_arch = "wasm32")]
                 _ => None,
             })
-            .map(str::to_string);
+            .map(ToString::to_string);
         if let Some(active_proposal_id) = active_proposal_id {
             if active_proposal_id == proposal.continuation_proposal_id {
-                let Some(validation) = self.runner.as_ref().and_then(|runner| match runner {
+                let Some(validation) = self.runner.as_ref().map(|runner| match runner {
                     RuntimeDecisionRunner::ProviderBacked(runner)
-                    | RuntimeDecisionRunner::Builtin(runner) => {
-                        Some(runner.validate_active_continuation_with_authority(
-                            agent_id, &authority, runtime,
-                        ))
-                    }
-                    #[cfg(target_arch = "wasm32")]
-                    _ => None,
+                    | RuntimeDecisionRunner::Builtin(runner) => runner
+                        .validate_active_continuation_with_authority(agent_id, &authority, runtime),
                 }) else {
                     return Err(self.fence_runtime_continuation(
                         agent_id,
@@ -151,18 +146,15 @@ impl RuntimeLlmSidecar {
                 ),
             ));
         }
-        let Some(result) = self.runner.as_mut().and_then(|runner| match runner {
+        let Some(result) = self.runner.as_mut().map(|runner| match runner {
             RuntimeDecisionRunner::ProviderBacked(runner)
-            | RuntimeDecisionRunner::Builtin(runner) => {
-                Some(runner.hydrate_runtime_continuation_with_authority(
+            | RuntimeDecisionRunner::Builtin(runner) => runner
+                .hydrate_runtime_continuation_with_authority(
                     agent_id,
                     proposal,
                     &authority,
                     runtime.clone(),
-                ))
-            }
-            #[cfg(target_arch = "wasm32")]
-            _ => None,
+                ),
         }) else {
             return Err(self.fence_runtime_continuation(
                 agent_id,

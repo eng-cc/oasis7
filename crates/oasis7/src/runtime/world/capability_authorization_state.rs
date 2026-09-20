@@ -18,54 +18,6 @@ use super::World;
 use super::capability_authorization::deny;
 
 impl World {
-    pub(super) fn reserve_capability_budget(
-        &mut self,
-        key: &str,
-        reservation_units: i64,
-    ) -> Result<(), WorldError> {
-        let account = self
-            .capability_budget_accounts
-            .get_mut(key)
-            .ok_or_else(|| deny("capability budget account is not available"))?;
-        if reservation_units < 0 || account.remaining_units < reservation_units {
-            return Err(deny("capability budget is insufficient before sandbox"));
-        }
-        account.remaining_units -= reservation_units;
-        account.reserved_units = account
-            .reserved_units
-            .checked_add(reservation_units)
-            .ok_or_else(|| deny("capability budget reservation overflow"))?;
-        Ok(())
-    }
-
-    pub(super) fn settle_capability_budget(
-        &mut self,
-        key: &str,
-        reservation_units: i64,
-        actual_units: i64,
-    ) -> Result<i64, WorldError> {
-        if actual_units < 0 || actual_units > reservation_units {
-            return Err(deny("capability budget actual cost exceeds reservation"));
-        }
-        let account = self
-            .capability_budget_accounts
-            .get_mut(key)
-            .ok_or_else(|| deny("capability budget account is not available"))?;
-        account.reserved_units = account
-            .reserved_units
-            .checked_sub(reservation_units)
-            .ok_or_else(|| deny("capability budget reservation underflow"))?;
-        account.remaining_units = account
-            .remaining_units
-            .checked_add(reservation_units - actual_units)
-            .ok_or_else(|| deny("capability budget release overflow"))?;
-        account.spent_units = account
-            .spent_units
-            .checked_add(actual_units)
-            .ok_or_else(|| deny("capability budget spend overflow"))?;
-        Ok(account.remaining_units)
-    }
-
     pub(super) fn refresh_capability_authorization_root(&mut self) -> Result<(), WorldError> {
         self.capability_authorization_root = self.compute_capability_authorization_root()?;
         Ok(())
@@ -111,6 +63,10 @@ impl World {
         )
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Authorization root inputs are independent durable projection components and remain explicit for deterministic hashing."
+    )]
     pub(super) fn compute_capability_authorization_root_with_full_projection(
         &self,
         capability_grants_v2: &std::collections::BTreeMap<String, serde_json::Value>,

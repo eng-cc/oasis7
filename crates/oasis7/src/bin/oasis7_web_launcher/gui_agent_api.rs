@@ -576,13 +576,13 @@ fn build_query_runtime_target(
     spec: QueryActionSpec,
     payload: &GuiAgentQueryPayload,
 ) -> Result<String, String> {
-    if let Some(query_target) = payload.query_target.as_deref() {
-        if query_target != spec.query_target {
-            return Err(format!(
-                "payload.query_target `{query_target}` is invalid for action `{}`",
-                spec.action
-            ));
-        }
+    if let Some(query_target) = payload.query_target.as_deref()
+        && query_target != spec.query_target
+    {
+        return Err(format!(
+            "payload.query_target `{query_target}` is invalid for action `{}`",
+            spec.action
+        ));
     }
 
     let query = payload.query.as_deref().unwrap_or_default().trim();

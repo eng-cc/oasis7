@@ -527,7 +527,7 @@ fn llm_env_var(key: &str) -> Option<String> {
     std::env::var(key).ok()
 }
 
-fn llm_table<'a>(table: &'a toml::value::Table) -> Option<&'a toml::value::Table> {
+fn llm_table(table: &toml::value::Table) -> Option<&toml::value::Table> {
     table.get(TOML_LLM_TABLE).and_then(toml::Value::as_table)
 }
 
@@ -539,7 +539,7 @@ fn non_empty_toml_string(table: &toml::value::Table, key: &str) -> Option<String
         .filter(|value| !value.is_empty())
 }
 
-fn selected_profile_table<'a>(table: &'a toml::value::Table) -> Option<&'a toml::value::Table> {
+fn selected_profile_table(table: &toml::value::Table) -> Option<&toml::value::Table> {
     let profile_name = llm_table(table)
         .and_then(|llm| non_empty_toml_string(llm, TOML_LLM_PROFILE))
         .or_else(|| non_empty_toml_string(table, TOML_LLM_PROFILE))?;
@@ -573,9 +573,7 @@ fn selected_model_provider_name(table: &toml::value::Table) -> Option<String> {
     None
 }
 
-fn selected_model_provider_table<'a>(
-    table: &'a toml::value::Table,
-) -> Option<&'a toml::value::Table> {
+fn selected_model_provider_table(table: &toml::value::Table) -> Option<&toml::value::Table> {
     let provider_name = selected_model_provider_name(table)?;
     table
         .get(TOML_MODEL_PROVIDERS_TABLE)
@@ -933,9 +931,7 @@ const OPENAI_TOOL_AGENT_SUBMIT_DECISION: &str = "agent_submit_decision";
 const OPENAI_TOOL_AGENT_DEBUG_GRANT_RESOURCE: &str = "agent_debug_grant_resource";
 
 fn sanitize_prompt_override(value: Option<String>) -> Option<String> {
-    let Some(value) = value else {
-        return None;
-    };
+    let value = value?;
     let trimmed = value.trim();
     if trimmed.is_empty() {
         None

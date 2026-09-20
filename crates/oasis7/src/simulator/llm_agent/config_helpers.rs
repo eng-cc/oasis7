@@ -1,12 +1,12 @@
 use super::LlmConfigError;
 
-pub(super) fn goal_value<F>(getter: &mut F, key: &str, agent_id: &str) -> Option<String>
+pub(super) fn goal_value<F>(mut getter: &mut F, key: &str, agent_id: &str) -> Option<String>
 where
     F: FnMut(&str) -> Option<String>,
 {
     agent_scoped_goal_key(key, agent_id)
         .as_deref()
-        .and_then(|agent_key| getter(agent_key))
+        .and_then(&mut getter)
         .or_else(|| getter(key))
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())

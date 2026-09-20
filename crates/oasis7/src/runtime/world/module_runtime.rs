@@ -7,6 +7,7 @@ use oasis7_wasm_abi::{
     ModuleInvocationProvenance, ModuleOutput, ModuleSandbox, ModuleStateUpdate,
     validate_module_command_declarations, validate_module_command_envelope,
 };
+#[cfg(any(test, feature = "test_tier_required"))]
 use oasis7_wasm_router::{PreparedSubscription, prepare_subscriptions};
 
 use super::super::util::{hash_json, to_canonical_cbor};
@@ -16,6 +17,7 @@ use super::super::{
 };
 #[cfg(test)]
 use super::super::{ModuleRecord, ModuleRole};
+#[cfg(any(test, feature = "test_tier_required"))]
 use super::PreparedSubscriptionCacheEntry;
 use super::World;
 use super::capability_authorization_command_stage::{
@@ -32,6 +34,10 @@ fn count_exceeds_limit(count: usize, limit: u32) -> bool {
 }
 
 /// The small operation surface shared by the canonical world and a borrowed
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Module execution context is passed explicitly to keep capability and sandbox boundaries visible."
+)]
 pub(super) fn process_module_output_for_target<T: ModuleCallTarget + ?Sized>(
     target: &mut T,
     module_id: &str,
@@ -148,7 +154,7 @@ pub(super) fn process_module_output_for_target<T: ModuleCallTarget + ?Sized>(
     }
 
     let mut intents = Vec::new();
-    for (effect, resolved_cap_ref) in output.effects.iter().zip(resolved_caps.into_iter()) {
+    for (effect, resolved_cap_ref) in output.effects.iter().zip(resolved_caps) {
         let intent = match target.build_effect_intent_for_call(
             effect.kind.clone(),
             effect.params.clone(),
@@ -398,6 +404,7 @@ fn enforce_pure_policy_hooks_for_target<T: ModuleCallTarget + ?Sized>(
 #[path = "module_runtime_tests.rs"]
 mod tests;
 
+#[cfg(any(test, feature = "test_tier_required"))]
 fn prepared_subscription_cache_key(manifest: &ModuleManifest) -> Result<String, WorldError> {
     let record_key = ModuleRegistry::record_key(&manifest.module_id, &manifest.version);
     let subscription_hash = hash_json(&manifest.subscriptions)?;
@@ -407,6 +414,7 @@ fn prepared_subscription_cache_key(manifest: &ModuleManifest) -> Result<String, 
     ))
 }
 
+#[cfg(any(test, feature = "test_tier_required"))]
 fn prepared_subscription_lookup_key(manifest: &ModuleManifest) -> String {
     format!(
         "{}|wasm={}",
@@ -570,6 +578,7 @@ impl World {
         Ok(())
     }
 
+    #[cfg(any(test, feature = "test_tier_required"))]
     fn prepared_subscriptions_for_manifest(
         &mut self,
         manifest: &ModuleManifest,
@@ -821,6 +830,7 @@ impl World {
         })
     }
 
+    #[cfg(any(test, feature = "test_tier_required"))]
     pub(super) fn apply_module_changes(
         &mut self,
         proposal_id: super::super::ProposalId,

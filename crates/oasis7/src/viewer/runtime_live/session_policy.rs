@@ -46,6 +46,7 @@ pub(super) struct RuntimeSessionPolicy {
 }
 
 impl RuntimeSessionPolicy {
+    #[cfg(test)]
     pub(super) fn register_session(
         &mut self,
         player_id: &str,

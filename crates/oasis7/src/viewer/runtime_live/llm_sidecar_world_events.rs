@@ -46,6 +46,7 @@ impl RuntimeLlmSidecar {
     /// Deliver an authoritative production completion to its owning Agent.
     /// Runtime-live receives the full runtime receipt through `mapped_event`,
     /// while the simulator behavior owns coverage state and replay idempotence.
+    #[cfg(test)]
     pub(in crate::viewer::runtime_live) fn notify_recipe_completion_if_needed(
         &mut self,
         runtime_event: &RuntimeWorldEvent,

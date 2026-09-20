@@ -3,6 +3,10 @@ use super::super::{GovernanceEvent, GovernanceIdentityPenaltyStatus, WorldError,
 use super::World;
 
 impl World {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Identity penalty inputs are independently audited governance fields and retain their public API shape."
+    )]
     pub fn apply_identity_penalty(
         &mut self,
         target_agent_id: impl Into<String>,

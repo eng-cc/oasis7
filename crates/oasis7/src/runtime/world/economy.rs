@@ -85,6 +85,10 @@ struct ProductValidationModuleCallRequest {
     amount: i64,
 }
 
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Action resolution variants preserve the existing runtime error/API shape; boxing would change callers."
+)]
 pub(super) enum EconomyActionResolution {
     Resolved(Action),
     Rejected(RejectReason),
@@ -948,10 +952,10 @@ impl World {
     }
 
     fn resolve_product_module_for_stack(&self, product_kind: &str) -> Option<String> {
-        if let Some(module_id) = Self::builtin_product_module_for_kind(product_kind) {
-            if self.module_registry.active.contains_key(module_id) {
-                return Some(module_id.to_string());
-            }
+        if let Some(module_id) = Self::builtin_product_module_for_kind(product_kind)
+            && self.module_registry.active.contains_key(module_id)
+        {
+            return Some(module_id.to_string());
         }
         let suffix = format!(".{product_kind}");
         self.module_registry
@@ -1104,10 +1108,6 @@ impl World {
         })
     }
 
-    fn material_stacks(&self) -> Vec<MaterialStack> {
-        self.ledger_material_stacks(&MaterialLedgerId::world())
-    }
-
     fn material_stacks_by_ledger(&self) -> BTreeMap<String, Vec<MaterialStack>> {
         self.state
             .material_ledgers
@@ -1119,18 +1119,6 @@ impl World {
                 )
             })
             .collect()
-    }
-
-    fn select_material_consume_ledger_for_module_request(
-        &self,
-        preferred_ledger: MaterialLedgerId,
-        consume: &[MaterialStack],
-    ) -> MaterialLedgerId {
-        if self.has_materials_in_ledger(&preferred_ledger, consume) {
-            preferred_ledger
-        } else {
-            MaterialLedgerId::world()
-        }
     }
 }
 

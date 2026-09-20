@@ -7,7 +7,6 @@ use super::module_release_transition::ReleaseMapProjection;
 use super::*;
 use serde::Serialize;
 use serde::ser::SerializeStruct;
-
 /// Borrowed typed overlays preserving canonical serialization.
 #[derive(Debug)]
 pub struct WorldStateProjection<'a> {
@@ -321,14 +320,14 @@ impl Serialize for WorldStateProjection<'_> {
     where
         S: serde::Serializer,
     {
-        if let Some(overlay) = self.body_overlay.as_ref() {
-            if overlay.requires_body_target() && !self.state.agents.contains_key(&overlay.agent_id)
-            {
-                return Err(serde::ser::Error::custom(format!(
-                    "body overlay target agent not found: {}",
-                    overlay.agent_id
-                )));
-            }
+        if let Some(overlay) = self.body_overlay.as_ref()
+            && overlay.requires_body_target()
+            && !self.state.agents.contains_key(&overlay.agent_id)
+        {
+            return Err(serde::ser::Error::custom(format!(
+                "body overlay target agent not found: {}",
+                overlay.agent_id
+            )));
         }
         serialize_world_state(
             self.state,
@@ -363,6 +362,7 @@ impl Serialize for WorldStateProjection<'_> {
     }
 }
 
+#[expect(clippy::too_many_arguments)]
 fn serialize_world_state<S>(
     state: &WorldState,
     body_overlay: Option<&BodyOverlay>,

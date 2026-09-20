@@ -67,12 +67,11 @@ fn persist_state(path: &Path, state: &PersistedBridgeState) -> Result<(), String
 }
 
 fn write_bytes_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent).map_err(|err| {
-                format!("create bridge state dir {} failed: {err}", parent.display())
-            })?;
-        }
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent)
+            .map_err(|err| format!("create bridge state dir {} failed: {err}", parent.display()))?;
     }
     let temp_path = path.with_extension("json.tmp");
     fs::write(temp_path.as_path(), bytes).map_err(|err| {

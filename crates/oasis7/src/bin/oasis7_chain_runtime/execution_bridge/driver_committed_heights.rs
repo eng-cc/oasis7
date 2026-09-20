@@ -45,6 +45,10 @@ pub(crate) fn bridge_committed_heights(
     )
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Stable protocol and runtime seam keeps independently validated inputs explicit."
+)]
 fn bridge_committed_heights_with_policy(
     snapshot: &NodeSnapshot,
     observed_at_unix_ms: i64,

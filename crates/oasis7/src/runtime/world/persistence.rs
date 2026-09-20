@@ -252,17 +252,15 @@ fn verify_tick_consensus_record_slice(records: &[TickConsensusRecord]) -> Result
                 ),
             });
         }
-        if let Some(previous_block_hash) = previous_block_hash.as_ref() {
-            if record.block.header.parent_hash != *previous_block_hash {
-                return Err(WorldError::DistributedValidationFailed {
-                    reason: format!(
-                        "tick consensus archive parent hash mismatch tick={} expected={} actual={}",
-                        record.block.header.tick,
-                        previous_block_hash,
-                        record.block.header.parent_hash,
-                    ),
-                });
-            }
+        if let Some(previous_block_hash) = previous_block_hash.as_ref()
+            && record.block.header.parent_hash != *previous_block_hash
+        {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: format!(
+                    "tick consensus archive parent hash mismatch tick={} expected={} actual={}",
+                    record.block.header.tick, previous_block_hash, record.block.header.parent_hash,
+                ),
+            });
         }
         if let Some(previous_height) = previous_height {
             let expected_height = previous_height.saturating_add(1);
@@ -277,15 +275,15 @@ fn verify_tick_consensus_record_slice(records: &[TickConsensusRecord]) -> Result
                 });
             }
         }
-        if let Some(previous_tick) = previous_tick {
-            if record.block.header.tick <= previous_tick {
-                return Err(WorldError::DistributedValidationFailed {
-                    reason: format!(
-                        "tick consensus archive tick ordering mismatch previous={} current={}",
-                        previous_tick, record.block.header.tick,
-                    ),
-                });
-            }
+        if let Some(previous_tick) = previous_tick
+            && record.block.header.tick <= previous_tick
+        {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: format!(
+                    "tick consensus archive tick ordering mismatch previous={} current={}",
+                    previous_tick, record.block.header.tick,
+                ),
+            });
         }
         previous_block_hash = Some(record.certificate.block_hash.clone());
         previous_height = Some(record.certificate.consensus_height);

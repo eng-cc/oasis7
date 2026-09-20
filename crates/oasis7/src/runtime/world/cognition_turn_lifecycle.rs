@@ -181,6 +181,10 @@ impl World {
 
     /// Persist one provider delivery attempt. Transport retries reuse the
     /// request identity and retry sequence while increasing the attempt.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Provider dispatch preserves the stable request/retry identity tuple."
+    )]
     pub fn dispatch_cognition_request(
         &mut self,
         agent_id: &str,
@@ -291,6 +295,10 @@ impl World {
     /// Close a turn with a durable provider/persistence failure before any
     /// response or envelope exists. No receipt, commit marker, world effect,
     /// or implicit retry is created by this method.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Turn failure preserves the stable request/retry identity tuple."
+    )]
     pub fn fail_cognition_turn(
         &mut self,
         agent_id: &str,

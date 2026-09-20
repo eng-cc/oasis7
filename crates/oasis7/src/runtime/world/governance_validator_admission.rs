@@ -85,9 +85,9 @@ impl World {
         }
     }
 
-    pub(crate) fn governance_effective_validator_admission_records<'a>(
-        admissions: &'a BTreeMap<String, GovernanceValidatorAdmissionRecord>,
-    ) -> BTreeMap<String, &'a GovernanceValidatorAdmissionRecord> {
+    pub(crate) fn governance_effective_validator_admission_records(
+        admissions: &BTreeMap<String, GovernanceValidatorAdmissionRecord>,
+    ) -> BTreeMap<String, &GovernanceValidatorAdmissionRecord> {
         let mut effective = BTreeMap::new();
         for record in admissions.values() {
             let candidate = effective.entry(record.node_id.clone()).or_insert(record);
@@ -114,9 +114,8 @@ impl World {
     ) -> Vec<String> {
         admissions
             .iter()
-            .filter_map(|(candidate_id, record)| {
-                (record.node_id == node_id).then(|| candidate_id.clone())
-            })
+            .filter(|(_, record)| record.node_id == node_id)
+            .map(|(candidate_id, _)| candidate_id.clone())
             .collect()
     }
 
@@ -170,6 +169,10 @@ impl World {
             .map(Some)
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Validator admission submission fields are a stable governance state-machine input set."
+    )]
     pub(crate) fn apply_governance_validator_admission_submitted(
         &mut self,
         controller_account_id: &str,
@@ -238,15 +241,15 @@ impl World {
                 ),
             });
         }
-        if let Some(existing_public_key) = self.node_identity_public_key(record.node_id.as_str()) {
-            if existing_public_key != record.finality_signer_public_key {
-                return Err(WorldError::GovernancePolicyInvalid {
-                    reason: format!(
-                        "validator admission node identity binding mismatch node_id={} expected={} actual={}",
-                        record.node_id, existing_public_key, record.finality_signer_public_key
-                    ),
-                });
-            }
+        if let Some(existing_public_key) = self.node_identity_public_key(record.node_id.as_str())
+            && existing_public_key != record.finality_signer_public_key
+        {
+            return Err(WorldError::GovernancePolicyInvalid {
+                reason: format!(
+                    "validator admission node identity binding mismatch node_id={} expected={} actual={}",
+                    record.node_id, existing_public_key, record.finality_signer_public_key
+                ),
+            });
         }
         self.bind_node_identity(
             record.node_id.as_str(),

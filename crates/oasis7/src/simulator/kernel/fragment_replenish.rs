@@ -3,7 +3,7 @@ use crate::geometry::GeoPos;
 use super::super::asteroid_fragment::generate_fragments;
 use super::super::chunking::{ChunkBounds, ChunkCoord, chunk_bounds, chunk_coord_of, chunk_seed};
 use super::super::fragment_physics::{synthesize_fragment_budget, synthesize_fragment_profile};
-use super::super::types::{ChunkResourceBudget, PPM_BASE};
+use super::super::types::PPM_BASE;
 use super::super::world_model::{ChunkState, SpaceConfig, WorldModel};
 use super::{FragmentReplenishedEntry, WorldEventKind, WorldKernel};
 
@@ -17,7 +17,7 @@ impl WorldKernel {
 
         let config = self.config.asteroid_fragment.clone();
         let interval_ticks = config.replenish_interval_ticks.max(0) as u64;
-        if interval_ticks == 0 || self.time == 0 || self.time % interval_ticks != 0 {
+        if interval_ticks == 0 || self.time == 0 || !self.time.is_multiple_of(interval_ticks) {
             return;
         }
 
@@ -165,7 +165,7 @@ impl WorldKernel {
                 .model
                 .chunk_resource_budgets
                 .entry(entry.coord)
-                .or_insert_with(ChunkResourceBudget::default);
+                .or_default();
             if let Some(fragment_budget) = &entry.location.fragment_budget {
                 chunk_budget.accumulate_fragment(fragment_budget);
             }

@@ -306,37 +306,27 @@ pub(in crate::viewer::runtime_live) fn simulator_action_to_runtime(
             wasm_hash: wasm_hash.clone(),
         }),
         SimulatorAction::BuildFactory {
-            owner,
+            owner: ResourceOwner::Agent { agent_id },
             location_id,
             factory_id,
             factory_kind,
-        } => match owner {
-            ResourceOwner::Agent { agent_id } => {
-                crate::viewer::gameplay_actions::runtime_factory_build_action(
-                    agent_id,
-                    location_id,
-                    factory_id,
-                    factory_kind,
-                )
-            }
-            _ => None,
-        },
+        } => crate::viewer::gameplay_actions::runtime_factory_build_action(
+            agent_id,
+            location_id,
+            factory_id,
+            factory_kind,
+        ),
         SimulatorAction::ScheduleRecipe {
-            owner,
+            owner: ResourceOwner::Agent { agent_id },
             factory_id,
             recipe_id,
             batches,
-        } => match owner {
-            ResourceOwner::Agent { agent_id } => {
-                crate::viewer::gameplay_actions::runtime_schedule_recipe_action(
-                    agent_id,
-                    factory_id,
-                    recipe_id,
-                    (*batches).try_into().ok()?,
-                )
-            }
-            _ => None,
-        },
+        } => crate::viewer::gameplay_actions::runtime_schedule_recipe_action(
+            agent_id,
+            factory_id,
+            recipe_id,
+            (*batches).try_into().ok()?,
+        ),
         SimulatorAction::DelistModuleArtifact {
             seller_agent_id,
             wasm_hash,
@@ -413,6 +403,7 @@ pub(super) fn restore_behavior_long_term_memory_from_model(
     }
 }
 
+#[cfg(target_arch = "wasm32")]
 pub(super) fn sync_llm_runner_long_term_memory(
     kernel: &mut WorldKernel,
     runner: &AgentRunner<LlmAgentBehavior<OpenAiChatCompletionClient>>,

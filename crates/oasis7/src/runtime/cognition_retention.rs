@@ -373,10 +373,8 @@ impl CognitionRetentionStore {
         self.response_artifacts = self
             .records
             .values()
-            .filter_map(|record| {
-                (!record.response_artifact_id.is_empty())
-                    .then(|| record.response_artifact_id.clone())
-            })
+            .filter(|record| !record.response_artifact_id.is_empty())
+            .map(|record| record.response_artifact_id.clone())
             .collect();
     }
 }

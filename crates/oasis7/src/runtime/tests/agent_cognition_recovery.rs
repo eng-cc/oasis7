@@ -1,7 +1,6 @@
 //! P0.3 RED fixtures for response replay, duplicate commit projection, and
 //! additive legacy snapshot compatibility.
 
-use super::super::*;
 use crate::runtime::{
     CognitionRecovery, CognitionRecoveryFixture, CognitionRecoveryProbe, CognitionSnapshotV1,
     WorldCommitRecordV1, WorldRootViewV1,
@@ -77,6 +76,10 @@ fn report(fixture: &mut CognitionRecoveryFixture, probe: &mut CognitionRecoveryP
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn durable_response_replay_does_not_invoke_provider_again() {
     let mut probe = CognitionRecoveryProbe::default();
     probe.provider_invocation_count = 1;

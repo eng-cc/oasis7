@@ -10,9 +10,8 @@
 
 use super::super::*;
 use crate::runtime::{
-    AgentContinuation, CognitionContinuationProposalV1, CognitionScheduler, ContinuationStatusV1,
-    RetentionRecordV1, RetentionReplayRequestV1, SchedulerPolicyV1, SchedulerWakeV1,
-    WakeConditionV1,
+    AgentContinuation, CognitionContinuationProposalV1, CognitionScheduler, RetentionRecordV1,
+    RetentionReplayRequestV1, SchedulerPolicyV1, SchedulerWakeV1, WakeConditionV1,
 };
 use serde_json::{Value, json};
 use std::fs;
@@ -77,52 +76,6 @@ fn wake(
         "pending_reason": "capacity_available"
     }))
     .expect("decode live scheduler wake")
-}
-
-fn continuation(status: ContinuationStatusV1) -> AgentContinuation {
-    let mut continuation: AgentContinuation = serde_json::from_value(json!({
-        "schema_version": "agent-continuation.v1",
-        "continuation_id": "continuation-live-1",
-        "wake_id": "wake-live-1",
-        "world_id": WORLD_ID,
-        "branch_id": BRANCH_ID,
-        "finality_epoch": 7,
-        "finality_block_hash": "blake3:1111111111111111111111111111111111111111111111111111111111111111",
-        "finality_status": "verified",
-        "reorg_epoch": 3,
-        "runtime_manifest_hash": "blake3:runtime-manifest-live-7",
-        "agent_id": AGENT_A,
-        "agent_session_id": "session.agent-live-a",
-        "agent_turn_id": "turn.agent-live-a",
-        "decision_request_id": "request.agent-live-a",
-        "origin_turn_id": "turn.agent-live-a",
-        "origin_request_digest": "blake3:origin-request-live-1",
-        "continuation_proposal_id": "proposal-live-1",
-        "proposal_digest": "blake3:proposal-live-1",
-        "action_or_envelope_digest": null,
-        "wake_conditions": [{
-            "schema_version": "wake-condition.v1",
-            "kind": "receipt_linked",
-            "receipt_id": "blake3:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
-        }],
-        "next_wake_tick": null,
-        "remaining_budget": {"unit": "steps", "value": 2},
-        "valid_until_tick": 100,
-        "precondition_digest": "blake3:precondition-live-1",
-        "action_or_plan_kind": "wait",
-        "baseline_observation_digest": "blake3:baseline-live-1",
-        "goal_digest": "blake3:goal-live-1",
-        "policy_digest": "blake3:policy-live-1",
-        "policy_revision": 1,
-        "precondition_summary": "ready",
-        "source": "runtime-test",
-        "wake_seq": 1,
-        "status": status,
-        "terminal_disposition": null
-    }))
-    .expect("decode live continuation");
-    continuation.refresh_status_digest();
-    continuation
 }
 
 fn proposal(world: &World) -> CognitionContinuationProposalV1 {

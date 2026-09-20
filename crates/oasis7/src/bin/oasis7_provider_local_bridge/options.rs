@@ -10,18 +10,15 @@ pub(super) fn default_gateway_health_url() -> String {
         let file = ["open", "claw", ".json"].concat();
         home.join(dir).join(file)
     });
-    if let Some(config_path) = config_path {
-        if let Ok(raw) = fs::read_to_string(config_path) {
-            if let Ok(value) = serde_json::from_str::<Value>(raw.as_str()) {
-                if let Some(port) = value
-                    .get("gateway")
-                    .and_then(|gateway| gateway.get("port"))
-                    .and_then(Value::as_u64)
-                {
-                    return format!("http://127.0.0.1:{port}/health");
-                }
-            }
-        }
+    if let Some(config_path) = config_path
+        && let Ok(raw) = fs::read_to_string(config_path)
+        && let Ok(value) = serde_json::from_str::<Value>(raw.as_str())
+        && let Some(port) = value
+            .get("gateway")
+            .and_then(|gateway| gateway.get("port"))
+            .and_then(Value::as_u64)
+    {
+        return format!("http://127.0.0.1:{port}/health");
     }
     "http://127.0.0.1:18789/health".to_string()
 }

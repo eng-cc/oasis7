@@ -31,19 +31,14 @@ impl Default for GovernanceExecutionPolicy {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum GovernanceIdentityPenaltyStatus {
+    #[default]
     Applied,
     Appealed,
     AppealAccepted,
     AppealRejected,
-}
-
-impl Default for GovernanceIdentityPenaltyStatus {
-    fn default() -> Self {
-        Self::Applied
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -177,6 +172,10 @@ pub struct GovernanceFinalityCertificate {
 impl GovernanceFinalityCertificate {
     pub const SIGNATURE_PREFIX_ED25519_V1: &'static str = "govsig:ed25519:v1:";
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "The governance signature preimage is a stable wire contract; grouping arguments would alter callers and signing compatibility."
+    )]
     pub fn signing_payload_v1(
         proposal_id: ProposalId,
         manifest_hash: &str,

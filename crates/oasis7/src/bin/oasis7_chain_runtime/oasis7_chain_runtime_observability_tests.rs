@@ -165,6 +165,10 @@ fn sample_transfer_metrics() -> super::transfer_submit_api::ChainTransferMetrics
     }
 }
 
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn assert_chain_status_payload_consensus_health_metrics() {
     let mut consensus = NodeConsensusSnapshot::default();
     consensus.committed_height = 5;
@@ -660,6 +664,10 @@ fn assert_chain_status_payload_consensus_health_metrics() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn build_chain_status_payload_marks_local_chain_ahead_of_network_head() {
     let mut consensus = NodeConsensusSnapshot::default();
     consensus.committed_height = 1_233;
@@ -717,6 +725,10 @@ fn build_chain_status_payload_marks_local_chain_ahead_of_network_head() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn build_chain_status_payload_marks_peer_head_unavailable_not_ready() {
     let mut consensus = NodeConsensusSnapshot::default();
     consensus.committed_height = 10;
@@ -830,6 +842,10 @@ fn build_chain_status_payload_marks_peer_head_unavailable_not_ready() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn build_chain_status_payload_marks_stale_peer_heads_not_ready() {
     let mut consensus = NodeConsensusSnapshot::default();
     consensus.committed_height = 10;
@@ -867,6 +883,10 @@ fn build_chain_status_payload_marks_stale_peer_heads_not_ready() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn build_chain_status_payload_marks_peer_head_hash_conflict_critical() {
     let mut consensus = NodeConsensusSnapshot::default();
     consensus.committed_height = 10;
@@ -915,6 +935,10 @@ fn build_chain_status_payload_marks_peer_head_hash_conflict_critical() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn build_chain_status_payload_marks_validator_unknown_reachability_not_ready() {
     let mut consensus = NodeConsensusSnapshot::default();
     consensus.committed_height = 10;
@@ -1038,6 +1062,10 @@ fn build_chain_status_payload_surfaces_consensus_health_metrics() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn build_chain_status_payload_clamps_future_ages_to_zero() {
     let mut consensus = NodeConsensusSnapshot::default();
     consensus.last_committed_at_ms = Some(i64::MAX);

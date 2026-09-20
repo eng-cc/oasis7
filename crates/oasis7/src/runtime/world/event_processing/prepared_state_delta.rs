@@ -1,5 +1,9 @@
 use super::*;
 
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Prepared replay deltas retain their existing variant payloads for deterministic state installation."
+)]
 pub(in crate::runtime::world::event_processing) enum PreparedEventStateDelta {
     NoState(WorldEventBody),
     ProductValidationDeliveryCursorUpdated {

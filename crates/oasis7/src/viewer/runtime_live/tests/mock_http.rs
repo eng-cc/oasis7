@@ -142,10 +142,10 @@ fn read_runtime_live_http_request(stream: &mut std::net::TcpStream) -> Option<Re
                     .unwrap_or(0);
             }
         }
-        if let Some(boundary) = header_end {
-            if buffer.len() >= boundary + 4 + content_length {
-                break;
-            }
+        if let Some(boundary) = header_end
+            && buffer.len() >= boundary + 4 + content_length
+        {
+            break;
         }
     }
 

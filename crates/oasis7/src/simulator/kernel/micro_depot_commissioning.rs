@@ -37,6 +37,10 @@ impl MicroDepotCommissioning {
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Stable commissioning command seam keeps deterministic validation inputs explicit."
+)]
 pub(super) fn validate_install_commissioning(
     measured_supply_schema_version: u8,
     facility_id: &str,

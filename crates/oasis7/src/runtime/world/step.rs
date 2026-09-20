@@ -54,10 +54,10 @@ impl World {
             return Ok(None);
         }
         let mut original_route_ids = route_ids.clone();
-        if original_route_ids.is_empty() {
-            if let Some(route_id) = route_id {
-                original_route_ids.push(route_id.clone());
-            }
+        if original_route_ids.is_empty()
+            && let Some(route_id) = route_id
+        {
+            original_route_ids.push(route_id.clone());
         }
         let original_path_id = logistics_path_id(&original_route_ids);
         let mut payout_map = BTreeMap::<String, i64>::new();
@@ -615,21 +615,21 @@ impl World {
                 }
 
                 let decision = self.evaluate_rule_decisions(&action_envelope, sandbox)?;
-                if decision.verdict == RuleVerdict::Modify {
-                    if let Some(override_action) = decision.override_action.clone() {
-                        self.record_action_override(
-                            super::super::ActionOverrideRecord {
-                                action_id: envelope.id,
-                                original_action: envelope.action.clone(),
-                                override_action: override_action.clone(),
-                            },
-                            Some(CausedBy::Action(envelope.id)),
-                        )?;
-                        action_envelope = ActionEnvelope {
-                            id: envelope.id,
-                            action: override_action,
-                        };
-                    }
+                if decision.verdict == RuleVerdict::Modify
+                    && let Some(override_action) = decision.override_action.clone()
+                {
+                    self.record_action_override(
+                        super::super::ActionOverrideRecord {
+                            action_id: envelope.id,
+                            original_action: envelope.action.clone(),
+                            override_action: override_action.clone(),
+                        },
+                        Some(CausedBy::Action(envelope.id)),
+                    )?;
+                    action_envelope = ActionEnvelope {
+                        id: envelope.id,
+                        action: override_action,
+                    };
                 }
 
                 if decision.verdict == RuleVerdict::Deny {

@@ -201,10 +201,10 @@ fn normalize_trace_aggregate(trace: &mut AgentDecisionTrace, mut overflow: bool)
         if trace.parse_error.take().is_some() {
             continue;
         }
-        if let Some(diagnostics) = trace.llm_diagnostics.as_mut() {
-            if diagnostics.model.take().is_some() {
-                continue;
-            }
+        if let Some(diagnostics) = trace.llm_diagnostics.as_mut()
+            && diagnostics.model.take().is_some()
+        {
+            continue;
         }
         break;
     }
@@ -281,6 +281,10 @@ pub(super) fn provider_error_to_trace(error: &DecisionProviderError) -> AgentDec
     trace
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Stable provider trace seam keeps request and response identity inputs explicit."
+)]
 pub(super) fn response_to_trace(
     agent_id: &str,
     observation: &Observation,

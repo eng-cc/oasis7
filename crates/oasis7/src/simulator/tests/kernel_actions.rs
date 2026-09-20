@@ -164,6 +164,7 @@ fn register_location_rejects_out_of_bounds() {
 }
 
 #[test]
+#[expect(clippy::field_reassign_with_default, reason = "Scenario fixture mutates only the fields under test.")]
 fn harvest_radiation_adds_electricity() {
     let mut kernel = WorldKernel::new();
     let mut profile = LocationProfile::default();
@@ -200,6 +201,7 @@ fn harvest_radiation_adds_electricity() {
 }
 
 #[test]
+#[expect(clippy::field_reassign_with_default, reason = "Scenario fixture mutates only the fields under test.")]
 fn harvest_radiation_respects_max_per_tick() {
     let mut config = WorldConfig::default();
     config.physics.max_harvest_per_tick = 5;
@@ -233,6 +235,7 @@ fn harvest_radiation_respects_max_per_tick() {
 }
 
 #[test]
+#[expect(clippy::field_reassign_with_default, reason = "Scenario fixture mutates only the fields under test.")]
 fn harvest_radiation_applies_thermal_penalty() {
     let mut config = WorldConfig::default();
     config.physics.thermal_capacity = 5;
@@ -524,6 +527,7 @@ fn kernel_rejects_move_to_same_location() {
 }
 
 #[test]
+#[expect(clippy::field_reassign_with_default, reason = "Scenario fixture mutates only the fields under test.")]
 fn kernel_move_agent_progresses_over_multiple_ticks_when_speed_is_low() {
     let mut config = WorldConfig::default();
     config.move_cost_per_km_electricity = 0;
@@ -603,6 +607,7 @@ fn kernel_move_agent_progresses_over_multiple_ticks_when_speed_is_low() {
 }
 
 #[test]
+#[expect(clippy::field_reassign_with_default, reason = "Scenario fixture mutates only the fields under test.")]
 fn kernel_rejects_move_with_non_positive_agent_speed() {
     let mut config = WorldConfig::default();
     config.move_cost_per_km_electricity = 0;
@@ -652,6 +657,7 @@ fn kernel_rejects_move_with_non_positive_agent_speed() {
 }
 
 #[test]
+#[expect(clippy::field_reassign_with_default, reason = "Scenario fixture mutates only the fields under test.")]
 fn kernel_segmented_move_keeps_agent_on_centimeter_grid() {
     let mut config = WorldConfig::default();
     config.move_cost_per_km_electricity = 0;
@@ -712,7 +718,7 @@ fn kernel_observe_visibility_range() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-2".to_string(),
         name: "far".to_string(),
-        pos: pos(DEFAULT_VISIBILITY_RANGE_CM as i64 + 1, 0),
+        pos: pos(DEFAULT_VISIBILITY_RANGE_CM + 1, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {
@@ -1024,6 +1030,7 @@ fn kernel_config_overrides_defaults() {
 }
 
 #[test]
+#[expect(clippy::field_reassign_with_default, reason = "Scenario fixture mutates only the fields under test.")]
 fn movement_cost_scales_with_time_step_and_power_unit() {
     let mut config = WorldConfig::default();
     config.move_cost_per_km_electricity = 2;
@@ -1041,6 +1048,7 @@ fn movement_cost_scales_with_time_step_and_power_unit() {
 }
 
 #[test]
+#[expect(clippy::field_reassign_with_default, reason = "Scenario fixture mutates only the fields under test.")]
 fn movement_cost_uses_calibrated_per_km_in_move_action() {
     let mut config = WorldConfig::default();
     config.move_cost_per_km_electricity = 2;
@@ -1062,7 +1070,7 @@ fn movement_cost_uses_calibrated_per_km_in_move_action() {
     kernel.submit_action(Action::RegisterLocation {
         location_id: "loc-2".to_string(),
         name: "outpost".to_string(),
-        pos: pos(CM_PER_KM as i64, 0),
+        pos: pos(CM_PER_KM, 0),
         profile: LocationProfile::default(),
     });
     kernel.submit_action(Action::RegisterAgent {

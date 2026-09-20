@@ -492,18 +492,18 @@ impl ViewerRuntimeLiveServer {
                 Ok(0) => return Ok(()),
                 Ok(_) => {
                     let trimmed = line.trim();
-                    if !trimmed.is_empty() {
-                        if let Ok(request) = serde_json::from_str::<ViewerRequest>(trimmed) {
-                            let chain_prime =
-                                Self::prime_shared_request_if_needed(&shared, &request, &session)?;
-                            let mut server = lock_shared_server(&shared)?;
-                            server.handle_request_with_chain_prime(
-                                request,
-                                &mut session,
-                                &mut writer,
-                                chain_prime,
-                            )?;
-                        }
+                    if !trimmed.is_empty()
+                        && let Ok(request) = serde_json::from_str::<ViewerRequest>(trimmed)
+                    {
+                        let chain_prime =
+                            Self::prime_shared_request_if_needed(&shared, &request, &session)?;
+                        let mut server = lock_shared_server(&shared)?;
+                        server.handle_request_with_chain_prime(
+                            request,
+                            &mut session,
+                            &mut writer,
+                            chain_prime,
+                        )?;
                     }
                 }
                 Err(err) if is_timeout_error(&err) => {}
@@ -523,18 +523,17 @@ impl ViewerRuntimeLiveServer {
                 && chain_link_enabled
                 && session.initial_snapshot_sent
                 && session.should_poll_chain(chain_poll_interval)
-            {
-                if let Err(err) = Self::sync_chain_linked_runtime_minimized_lock(
+                && let Err(err) = Self::sync_chain_linked_runtime_minimized_lock(
                     &shared,
                     &mut session,
                     &mut writer,
-                ) {
-                    emit_stderr_or_event(
-                        Level::WARN,
-                        format!("viewer runtime live: chain sync skipped: {err:?}").as_str(),
-                        "viewer runtime live chain sync skipped",
-                    );
-                }
+                )
+            {
+                emit_stderr_or_event(
+                    Level::WARN,
+                    format!("viewer runtime live: chain sync skipped: {err:?}").as_str(),
+                    "viewer runtime live chain sync skipped",
+                );
             }
 
             let mut server = lock_shared_server(&shared)?;
@@ -559,10 +558,10 @@ impl ViewerRuntimeLiveServer {
                 Ok(0) => return Ok(()),
                 Ok(_) => {
                     let trimmed = line.trim();
-                    if !trimmed.is_empty() {
-                        if let Ok(request) = serde_json::from_str::<ViewerRequest>(trimmed) {
-                            self.handle_request(request, &mut session, &mut writer)?;
-                        }
+                    if !trimmed.is_empty()
+                        && let Ok(request) = serde_json::from_str::<ViewerRequest>(trimmed)
+                    {
+                        self.handle_request(request, &mut session, &mut writer)?;
                     }
                 }
                 Err(err) if is_timeout_error(&err) => {}
@@ -574,14 +573,13 @@ impl ViewerRuntimeLiveServer {
                 && self.chain_link_enabled()
                 && session.initial_snapshot_sent
                 && session.should_poll_chain(self.config.chain_poll_interval)
+                && let Err(err) = self.sync_chain_linked_runtime(&mut session, &mut writer)
             {
-                if let Err(err) = self.sync_chain_linked_runtime(&mut session, &mut writer) {
-                    emit_stderr_or_event(
-                        Level::WARN,
-                        format!("viewer runtime live: chain sync skipped: {err:?}").as_str(),
-                        "viewer runtime live chain sync skipped",
-                    );
-                }
+                emit_stderr_or_event(
+                    Level::WARN,
+                    format!("viewer runtime live: chain sync skipped: {err:?}").as_str(),
+                    "viewer runtime live chain sync skipped",
+                );
             }
 
             if self.authoritative_recovery_write_fence.is_none() {

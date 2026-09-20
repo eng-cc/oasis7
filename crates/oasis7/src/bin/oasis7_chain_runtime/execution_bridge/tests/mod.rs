@@ -16,7 +16,6 @@ use super::driver::{
 use super::external_effect::{
     build_execution_external_effect_materialization_with_pre_step_root,
     execution_committed_actions_hash, execution_module_anchor_hash, execution_world_snapshot_root,
-    load_execution_external_effect_materialization,
     persist_execution_external_effect_materialization,
     validate_execution_external_effect_for_context,
 };

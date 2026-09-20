@@ -5,6 +5,10 @@ use super::{
 };
 
 impl ExecutionCheckpointManifest {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable protocol and runtime seam keeps independently validated inputs explicit."
+    )]
     pub(super) fn new(
         world_id: String,
         height: u64,
@@ -45,6 +49,10 @@ impl ExecutionCheckpointManifest {
         Ok(manifest)
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable protocol and runtime seam keeps independently validated inputs explicit."
+    )]
     pub(super) fn new_with_predecessor_execution_block_hash(
         world_id: String,
         height: u64,

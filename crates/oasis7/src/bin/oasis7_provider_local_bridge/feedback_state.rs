@@ -226,6 +226,10 @@ fn state_temp_path(path: &Path) -> PathBuf {
     PathBuf::from(temporary_path)
 }
 
+#[expect(
+    clippy::type_complexity,
+    reason = "Stable callback and channel topology remains explicit at this integration seam."
+)]
 pub(super) fn load_feedback_state(
     path: Option<&Path>,
 ) -> Result<

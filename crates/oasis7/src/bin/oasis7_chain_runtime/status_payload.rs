@@ -1,3 +1,5 @@
+#![expect(clippy::too_many_arguments)]
+
 use super::execution_bridge::{
     ExecutionBridgeCommitTimingSnapshot, snapshot_execution_bridge_commit_timing,
 };
@@ -57,13 +59,15 @@ pub(super) use status_payload_validator_provider::{
 mod status_payload_observability;
 #[path = "status_payload_state_sync.rs"]
 mod status_payload_state_sync;
+#[cfg(test)]
+pub(super) use status_payload_observability::RuntimePerfGateTier;
 use status_payload_observability::{
     ChainFinalityLatencyStatus, ChainInboundTimingRejectionsStatus,
     ChainP2pPathObservabilityStatus, build_path_observability_status,
 };
 pub(crate) use status_payload_observability::{
-    ChainP2pTransportTransition, ChainP2pTransportTransitionCounters, RuntimePerfGateTier,
-    build_liveness_status, build_runtime_perf_observability_status,
+    ChainP2pTransportTransition, ChainP2pTransportTransitionCounters, build_liveness_status,
+    build_runtime_perf_observability_status,
     build_runtime_perf_snapshot_from_execution_bridge_timing, classify_transport_stability,
     observability_status_for_alerts, observability_summary_for_alerts,
     push_local_chain_ahead_alert, push_observability_alert, reachability_policy_ok,
@@ -155,6 +159,7 @@ pub(super) struct ChainNodeObservabilityAlert {
     pub(super) summary: String,
 }
 
+#[cfg(test)]
 pub(super) fn build_chain_node_observability_status(
     snapshot: &NodeSnapshot,
     storage_metrics: &storage_metrics::StorageMetricsSnapshot,
@@ -786,6 +791,7 @@ pub(super) fn build_chain_status_payload(
     )
 }
 
+#[cfg(test)]
 pub(super) fn build_chain_status_payload_with_storage_root(
     snapshot: NodeSnapshot,
     execution_world_dir: &Path,

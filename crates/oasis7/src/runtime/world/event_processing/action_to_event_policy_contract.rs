@@ -335,20 +335,19 @@ impl World {
                 }
                 if let Some(existing_public_key) =
                     self.node_identity_public_key(record.node_id.as_str())
+                    && existing_public_key != record.finality_signer_public_key
                 {
-                    if existing_public_key != record.finality_signer_public_key {
-                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                            action_id,
-                            reason: RejectReason::RuleDenied {
-                                notes: vec![format!(
-                                    "submit validator admission rejected: node identity binding mismatch node_id={} expected={} actual={}",
-                                    record.node_id,
-                                    existing_public_key,
-                                    record.finality_signer_public_key
-                                )],
-                            },
-                        }));
-                    }
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![format!(
+                                "submit validator admission rejected: node identity binding mismatch node_id={} expected={} actual={}",
+                                record.node_id,
+                                existing_public_key,
+                                record.finality_signer_public_key
+                            )],
+                        },
+                    }));
                 }
                 if self
                     .state
@@ -1088,18 +1087,17 @@ impl World {
                         contract.creator_agent_id.as_str(),
                         contract.counterparty_agent_id.as_str(),
                         ECONOMIC_CONTRACT_PAIR_COOLDOWN_TICKS,
-                    ) {
-                        if self.state.time < ready_at {
-                            return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                                action_id,
-                                reason: RejectReason::RuleDenied {
-                                    notes: vec![format!(
-                                        "economic contract settlement denied: pair cooldown active until tick {}",
-                                        ready_at
-                                    )],
-                                },
-                            }));
-                        }
+                    ) && self.state.time < ready_at
+                    {
+                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                            action_id,
+                            reason: RejectReason::RuleDenied {
+                                notes: vec![format!(
+                                    "economic contract settlement denied: pair cooldown active until tick {}",
+                                    ready_at
+                                )],
+                            },
+                        }));
                     }
                     if contract.settlement_kind == ResourceKind::Data
                         && !self.state.has_data_access_permission(

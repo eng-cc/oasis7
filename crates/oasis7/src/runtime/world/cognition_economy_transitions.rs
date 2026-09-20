@@ -468,6 +468,10 @@ impl CognitionEconomyStateV1 {
         Ok(receipt)
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Economy journal event fields map one-to-one to the persisted transition schema."
+    )]
     pub(super) fn append_event(
         &mut self,
         event_kind: &str,

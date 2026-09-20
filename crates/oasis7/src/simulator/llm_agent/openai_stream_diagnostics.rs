@@ -149,6 +149,10 @@ fn format_event_stream_error(error: &EventStreamError<std::io::Error>) -> String
 }
 
 impl OpenAiChatCompletionClient {
+    #[expect(
+        clippy::result_large_err,
+        reason = "Stable provider transport seam retains the structured request error contract."
+    )]
     pub(super) fn send_responses_request(
         &self,
         client: &async_openai::Client<async_openai::config::OpenAIConfig>,
@@ -179,6 +183,10 @@ impl OpenAiChatCompletionClient {
         })
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Stable provider transport seam retains the structured request error contract."
+    )]
     pub(super) fn send_responses_request_for_text(
         &self,
         client: &async_openai::Client<async_openai::config::OpenAIConfig>,
@@ -208,6 +216,10 @@ impl OpenAiChatCompletionClient {
         })
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Stable provider transport seam retains the structured request error contract."
+    )]
     fn send_instrumented_responses_request(
         &self,
         mut payload: CreateResponse,
@@ -225,6 +237,10 @@ impl OpenAiChatCompletionClient {
         })
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Stable provider transport seam retains the structured request error contract."
+    )]
     fn send_instrumented_responses_request_for_text(
         &self,
         mut payload: CreateResponse,
