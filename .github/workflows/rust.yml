@@ -577,7 +577,9 @@ jobs:
             fi
           fi
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${INTEGRATION_MODE}" == "integration_revalidation" ]]; then
-            if [[ -n "${OASIS7_CARGO_SCOPE_BASE:-}" ]]; then
+            if [[ -n "${OASIS7_CARGO_STAGE_PR_NUMBER:-}" ]]; then
+              echo "trusted checker-stage integration route: generic Cargo profile planner is bypassed"
+            elif [[ -n "${OASIS7_CARGO_SCOPE_BASE:-}" ]]; then
               [[ -n "${OASIS7_CARGO_PROFILE_PLANNER:-}" && -n "${OASIS7_CARGO_PROFILE_DRIVER:-}" ]] || {
                 echo "trusted Cargo package profile authority is unavailable" >&2
                 exit 1
@@ -675,28 +677,28 @@ jobs:
           if-no-files-found: error
           retention-days: 7
       - name: Upload Cargo package profile plan
-        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
+        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation' && steps.checker-stage.outputs.pr_number == ''
         uses: actions/upload-artifact@v7
         with:
           name: cargo-package-profile-plan
           path: output/cargo-package-profile/cargo-package-profile-plan.json
           if-no-files-found: error
       - name: Upload Cargo package profile results
-        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
+        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation' && steps.checker-stage.outputs.pr_number == ''
         uses: actions/upload-artifact@v7
         with:
           name: cargo-package-profile-results
           path: output/cargo-package-profile/cargo-package-profile-results.json
           if-no-files-found: error
       - name: Upload Cargo package profile receipt
-        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
+        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation' && steps.checker-stage.outputs.pr_number == ''
         uses: actions/upload-artifact@v7
         with:
           name: cargo-package-profile-receipt
           path: output/cargo-package-profile/cargo-package-profile-receipt.json
           if-no-files-found: error
       - name: Upload Cargo package profile envelope
-        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
+        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation' && steps.checker-stage.outputs.pr_number == ''
         uses: actions/upload-artifact@v7
         with:
           name: cargo-package-profile-envelope
