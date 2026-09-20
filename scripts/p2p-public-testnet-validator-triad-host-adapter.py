@@ -62,6 +62,8 @@ RESET_SURFACES = (
 )
 MUTATION_ORDER = ("storage-205", "sequencer-204")
 PHASES = {"staggered-preflight", "staggered-storage", "staggered-sequencer", "staggered-rollback"}
+BACKUP_PHASES = {"staggered-storage-backup", "staggered-sequencer-backup"}
+PHASES |= BACKUP_PHASES
 ROLE_ALIASES = {"storage-205": "storage", "sequencer-204": "sequencer"}
 SHARED_FD_ENV = "OASIS7_TRIAD_ADAPTER_SHARED_FD"
 STORAGE_FD_ENV = "OASIS7_TRIAD_ADAPTER_STORAGE_FD"
@@ -69,6 +71,7 @@ SEQUENCER_FD_ENV = "OASIS7_TRIAD_ADAPTER_SEQUENCER_FD"
 TRANSPORT_ENV = "OASIS7_TRIAD_ADAPTER_CREDENTIAL_TRANSPORT"
 HEX64 = re.compile(r"^[0-9a-fA-F]{64}$")
 SAFE_VERSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.+:~-]*$")
+MIN_REMOTE_BACKUP_INODES = 128
 
 
 class AdapterExit(SystemExit):
@@ -415,6 +418,218 @@ class FixedSSH:
             fail(f"capability_blocked: strict SSH command failed for {role}")
         return result.stdout.strip()
 
+    def remote_forensic_backup(
+        self, role: str, transaction_id: str, required_bytes: int, required_inodes: int
+    ) -> dict[str, Any]:
+        """Capture a durable, remote-only forensic backup before mutation.
+
+        The command is deliberately generated from the fixed inventory and the
+        canonical reset-surface set.  It never receives a credential value in
+        argv or the environment; ``command`` carries the inherited FD through
+        the pinned ``_argv`` path.  A partial backup is left as a hidden
+        ``.partial`` directory and is never promoted to the transaction-bound
+        final path.
+        """
+        if not isinstance(transaction_id, str) or not SAFE_VERSION.fullmatch(transaction_id) or ".." in transaction_id:
+            fail("capability_blocked: remote backup transaction id is unsafe")
+        if (
+            isinstance(required_bytes, bool)
+            or not isinstance(required_bytes, int)
+            or required_bytes <= 0
+            or isinstance(required_inodes, bool)
+            or not isinstance(required_inodes, int)
+            or required_inodes < MIN_REMOTE_BACKUP_INODES
+        ):
+            fail("capability_blocked: remote backup code-owned capacity threshold is malformed")
+        node = self.inventory["nodes"][role]
+        backup_root = f"{STACK_ROOT}/backups/{transaction_id}"
+        surfaces_json = json.dumps(list(RESET_SURFACES), ensure_ascii=True, separators=(",", ":"))
+        remote = (f'''set -euo pipefail
+python3 - {shlex.quote(STACK_ROOT)} {shlex.quote(backup_root)} {shlex.quote(role)} {shlex.quote(ROLE_ALIASES[role])} {shlex.quote(node["service"])} {shlex.quote(transaction_id)} {required_bytes} {required_inodes} <<'PY'
+'''
+        + r'''
+import hashlib
+import json
+import os
+import shutil
+import stat
+import subprocess
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+backup_root = Path(sys.argv[2])
+role = sys.argv[3]
+role_alias = sys.argv[4]
+service = sys.argv[5]
+transaction_id = sys.argv[6]
+required_bytes = int(sys.argv[7])
+required_inodes = int(sys.argv[8])
+reset_surfaces = json.loads(__SURFACES_JSON__)
+partial_root = backup_root.parent / ("." + backup_root.name + ".partial")
+
+def fail(message):
+    raise SystemExit(message)
+
+if root.is_symlink() or not root.is_dir():
+    fail("remote backup root is not a real directory")
+backup_parent = root / "backups"
+if backup_root.parent != backup_parent or backup_parent.is_symlink() or not backup_parent.is_dir():
+    fail("remote backup path escapes the fixed stack root")
+if backup_root.exists() or backup_root.is_symlink() or partial_root.exists() or partial_root.is_symlink():
+    fail("remote backup transaction path already exists")
+try:
+    readback = subprocess.run(
+        [
+            str(root / "current/bin/service-readback"),
+            "--read-only", "--role", role_alias, "--root", str(root), "--service", service,
+        ], check=False, capture_output=True, text=True, timeout=30,
+    )
+except (OSError, subprocess.TimeoutExpired) as error:
+    fail("remote backup service readback failed: " + error.__class__.__name__)
+if readback.returncode != 0:
+    fail("remote backup service readback returned a non-zero status")
+try:
+    service_value = json.loads(readback.stdout)
+except json.JSONDecodeError:
+    fail("remote backup service readback is not JSON")
+if not isinstance(service_value, dict) or service_value.get("independently_observed") is not True:
+    fail("remote backup service readback is not independently observed")
+if (
+    service_value.get("active") is not True
+    or service_value.get("running") is not True
+    or service_value.get("service_state") != "running"
+):
+    fail("remote backup target is not live before capture")
+try:
+    usage = shutil.disk_usage(root)
+    statvfs = os.statvfs(root)
+    free_bytes = int(usage.free)
+    free_inodes = int(statvfs.f_favail)
+except OSError as error:
+    fail("remote backup capacity read failed: " + error.__class__.__name__)
+if free_bytes < required_bytes or free_inodes < required_inodes:
+    fail("remote backup capacity is below the code-owned threshold")
+
+def metadata(path, relative):
+    value = {"path": relative}
+    info = path.lstat()
+    if stat.S_ISLNK(info.st_mode) or not (stat.S_ISREG(info.st_mode) or stat.S_ISDIR(info.st_mode)):
+        fail("remote reset surface contains a symlink or special entry: " + relative)
+    value.update({"kind": "file" if stat.S_ISREG(info.st_mode) else "directory", "mode": stat.S_IMODE(info.st_mode), "uid": info.st_uid, "gid": info.st_gid})
+    if stat.S_ISREG(info.st_mode):
+        digest = hashlib.sha256()
+        with path.open("rb") as handle:
+            for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                digest.update(chunk)
+        value.update({"size_bytes": info.st_size, "sha256": digest.hexdigest()})
+    return value
+
+def copy_tree(source, destination, relative):
+    value = metadata(source, relative)
+    if source.is_dir():
+        destination.mkdir(parents=True, exist_ok=False)
+        for child in sorted(source.iterdir(), key=lambda item: item.name):
+            child_relative = relative + "/" + child.name
+            value.setdefault("children", []).append(copy_tree(child, destination / child.name, child_relative))
+    else:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination, follow_symlinks=False)
+    return value
+
+partial_root.mkdir(parents=True)
+snapshot = partial_root / "snapshot"
+snapshot.mkdir()
+entries = []
+try:
+    for surface in reset_surfaces:
+        source = root / surface
+        destination = snapshot / surface
+        if not source.exists() and not source.is_symlink():
+            entries.append({"path": surface, "kind": "absent"})
+            continue
+        entries.append(copy_tree(source, destination, surface))
+    manifest = {
+        "schema_version": "oasis7.validator_pair_rebuild_remote_backup_manifest.v1",
+        "role": role,
+        "transaction_id": transaction_id,
+        "root": str(root),
+        "backup_root": str(backup_root),
+        "reset_surfaces": reset_surfaces,
+        "entries": entries,
+        "backup_non_seed": {
+            "forensic_only": True,
+            "seed_eligible": False,
+            "restore_deleted_chain_state": False,
+        },
+    }
+    manifest_path = partial_root / "manifest.json"
+    payload = json.dumps(manifest, ensure_ascii=True, sort_keys=True, separators=(",", ":")) + "\n"
+    with manifest_path.open("w", encoding="utf-8") as handle:
+        handle.write(payload)
+        handle.flush()
+        os.fsync(handle.fileno())
+    directory_fd = os.open(str(partial_root), os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(directory_fd)
+    finally:
+        os.close(directory_fd)
+    same_filesystem = os.stat(root).st_dev == os.stat(partial_root).st_dev
+    if not same_filesystem:
+        fail("remote backup is not on the fixed stack filesystem")
+    os.replace(partial_root, backup_root)
+    parent_fd = os.open(str(backup_root.parent), os.O_RDONLY | getattr(os, "O_DIRECTORY", 0))
+    try:
+        os.fsync(parent_fd)
+    finally:
+        os.close(parent_fd)
+    final_manifest = backup_root / "manifest.json"
+    digest = hashlib.sha256(final_manifest.read_bytes()).hexdigest()
+    print(json.dumps({
+        "schema_version": "oasis7.validator_pair_rebuild_remote_backup_receipt.v1",
+        "role": role,
+        "transaction_id": transaction_id,
+        "remote_target": True,
+        "credential_transport": "fd-only-v1",
+        "remote_root": str(root),
+        "backup_root": str(backup_root),
+        "manifest": str(final_manifest),
+        "manifest_sha256": digest,
+        "reset_surface_manifest_sha256": digest,
+        "reset_surfaces": reset_surfaces,
+        "capacity": {
+            "verified": True,
+            "same_filesystem": True,
+            "available_bytes": free_bytes,
+            "free_bytes": free_bytes,
+            "required_bytes": required_bytes,
+            "free_inodes": free_inodes,
+            "required_inodes": required_inodes,
+        },
+        "backup_non_seed": {
+            "forensic_only": True,
+            "seed_eligible": False,
+            "restore_deleted_chain_state": False,
+        },
+    }, ensure_ascii=True, sort_keys=True, separators=(",", ":")))
+except BaseException:
+    shutil.rmtree(partial_root, ignore_errors=True)
+    raise
+PY
+''').replace("__SURFACES_JSON__", repr(surfaces_json))
+        raw = self.command(role, remote, timeout=300)
+        try:
+            value = json.loads(raw)
+        except json.JSONDecodeError:
+            fail(f"capability_blocked: remote backup receipt is not JSON for {role}")
+        if not isinstance(value, dict):
+            fail(f"capability_blocked: remote backup receipt is not an object for {role}")
+        # The remote command proves the backup contents; the fixed local
+        # inventory binds that proof to the pinned host identity.  Keep this
+        # binding explicit so resume cannot adopt a receipt from another host.
+        value["remote_host"] = node["host"]
+        return value
+
     @staticmethod
     def _tar_filter(info: tarfile.TarInfo) -> tarfile.TarInfo:
         if info.issym() or info.islnk() or not (info.isfile() or info.isdir()):
@@ -486,18 +701,95 @@ def readback(transport: FixedSSH, inventory: dict[str, Any], role: str) -> dict[
     return value
 
 
-def observe_node(transport: FixedSSH, inventory: dict[str, Any], role: str, plan_root: str, *, running: bool) -> dict[str, Any]:
-    value = readback(transport, inventory, role)
-    required_health = ("healthz_ok", "ready", "last_error", "nrestarts", "oom_panic_segfault")
+def health_url_for_role(transaction: dict[str, Any], role: str) -> str:
+    proof = transaction.get("proof")
+    if not isinstance(proof, dict):
+        fail("transaction health proof is missing")
+    key = "storage_health_url" if role == "storage-205" else "sequencer_health_url"
+    value = proof.get(key)
+    if not isinstance(value, str) or not value:
+        fail(f"{key} must be a local /healthz endpoint")
+    try:
+        parsed_url = urlsplit(value)
+        hostname = parsed_url.hostname
+    except ValueError:
+        fail(f"{key} must be a local /healthz endpoint")
+    if (
+        parsed_url.scheme != "http"
+        or hostname not in {"127.0.0.1", "localhost"}
+        or parsed_url.path != "/healthz"
+        or parsed_url.query
+        or parsed_url.fragment
+        or parsed_url.username is not None
+        or parsed_url.password is not None
+    ):
+        fail(f"{key} must be a local /healthz endpoint")
+    return value
+
+
+def probe_healthz(transport: FixedSSH, role: str, health_url: str) -> dict[str, Any]:
+    """Read the role's transaction-bound health endpoint over the pinned host."""
+    command = f"curl --fail --silent --show-error --max-time 5 {shlex.quote(health_url)}"
+    raw = transport.command(role, command)
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        fail(f"remote /healthz is not JSON for {role}")
+    if not isinstance(value, dict):
+        fail(f"remote /healthz is not an object for {role}")
+    required_health = ("ok", "ready", "last_error", "nrestarts", "oom_panic_segfault")
     if any(key not in value for key in required_health):
-        fail(f"remote health evidence is incomplete for {role}")
-    if value.get("healthz_ok") is not True or value.get("ready") is not True or value.get("last_error") is not None:
+        fail(f"remote /healthz evidence is incomplete for {role}")
+    if not isinstance(value["ok"], bool) or not isinstance(value["ready"], bool):
+        fail(f"remote /healthz boolean fields are malformed for {role}")
+    if value["last_error"] is not None and not isinstance(value["last_error"], str):
+        fail(f"remote /healthz last_error field is malformed for {role}")
+    if isinstance(value["nrestarts"], bool) or not isinstance(value["nrestarts"], int):
+        fail(f"remote /healthz nrestarts field is malformed for {role}")
+    if not isinstance(value["oom_panic_segfault"], bool):
+        fail(f"remote /healthz crash field is malformed for {role}")
+    if value["ok"] is not True or value["ready"] is not True or value["last_error"] is not None:
         fail(f"remote health readiness gate failed for {role}")
-    if value.get("nrestarts") != 0 or value.get("oom_panic_segfault") is not False:
+    if value["nrestarts"] != 0 or value["oom_panic_segfault"] is not False:
         fail(f"remote health restart/crash gate failed for {role}")
+    return value
+
+
+def observe_node(
+    transport: FixedSSH,
+    inventory: dict[str, Any],
+    role: str,
+    plan_root: str,
+    *,
+    running: bool,
+    health_url: str | None = None,
+) -> dict[str, Any]:
+    # Validate the transaction-bound endpoint before any remote observation so
+    # an operator cannot redirect a probe to an untrusted host or path.
+    if not isinstance(health_url, str) or not health_url:
+        fail(f"remote health URL is missing for {role}")
+    try:
+        parsed_health_url = urlsplit(health_url)
+        hostname = parsed_health_url.hostname
+    except ValueError:
+        fail(f"remote health URL is not a local /healthz endpoint for {role}")
+    if (
+        parsed_health_url.scheme != "http"
+        or hostname not in {"127.0.0.1", "localhost"}
+        or parsed_health_url.path != "/healthz"
+        or parsed_health_url.query
+        or parsed_health_url.fragment
+        or parsed_health_url.username is not None
+        or parsed_health_url.password is not None
+    ):
+        fail(f"remote health URL is not a local /healthz endpoint for {role}")
+    value = readback(transport, inventory, role)
     expected_state = (value.get("active") is True and value.get("running") is True and value.get("service_state") == "running")
     if expected_state != running:
         fail(f"remote service state gate failed for {role}")
+    health = probe_healthz(transport, role, health_url)
+    if health["ok"] is not running:
+        fail(f"remote health/service state mismatch for {role}")
     runtime = transport.command(role, f"sha256sum {shlex.quote(STACK_ROOT + '/current/bin/oasis7_chain_runtime')} | awk '{{print $1}}'")
     return {
         "role": role,
@@ -510,11 +802,11 @@ def observe_node(transport: FixedSSH, inventory: dict[str, Any], role: str, plan
         "listeners": [str(item) for item in value.get("listeners", [])],
         "runtime_sha256": runtime,
         "runtime_size_bytes": None,
-        "healthz_ok": value["healthz_ok"],
-        "ready": value["ready"],
-        "last_error": value["last_error"],
-        "nrestarts": value["nrestarts"],
-        "oom_panic_segfault": value["oom_panic_segfault"],
+        "healthz_ok": health["ok"],
+        "ready": health["ready"],
+        "last_error": health["last_error"],
+        "nrestarts": health["nrestarts"],
+        "oom_panic_segfault": health["oom_panic_segfault"],
         "full_chain_status_called": False,
     }
 
@@ -588,13 +880,7 @@ def control_script(transaction: dict[str, Any], phase: str, package: dict[str, A
     network = transaction.get("network", {})
     network_id = str(network.get("network_id") or "")
     chain_id = str(network.get("chain_id") or network_id)
-    proof = transaction.get("proof", {})
-    health_key = "storage_health_url" if role == "storage-205" else "sequencer_health_url"
-    health_url = str(proof.get(health_key) or "")
-    if phase != "staggered-rollback":
-        parsed_url = urlsplit(health_url)
-        if parsed_url.scheme != "http" or parsed_url.hostname not in {"127.0.0.1", "localhost"} or parsed_url.path != "/healthz" or parsed_url.query or parsed_url.fragment:
-            fail(f"{health_key} must be a local /healthz endpoint")
+    health_url = "" if phase == "staggered-rollback" else health_url_for_role(transaction, role)
     reset = " ".join(shlex.quote(item) for item in RESET_SURFACES)
     phase_literal = shlex.quote(phase)
     role_literal = shlex.quote(ROLE_ALIASES[role])
@@ -623,9 +909,19 @@ emit_final() {{
   health=$(HEALTH_JSON="$health" python3 - <<'PY'
 import json, os
 value = json.loads(os.environ['HEALTH_JSON'])
+if not isinstance(value, dict):
+    raise SystemExit('health evidence is not an object')
 required = ('ok', 'ready', 'last_error', 'nrestarts', 'oom_panic_segfault')
 if any(key not in value for key in required):
     raise SystemExit('health evidence is incomplete')
+if not isinstance(value['ok'], bool) or not isinstance(value['ready'], bool):
+    raise SystemExit('health boolean evidence is malformed')
+if value['last_error'] is not None and not isinstance(value['last_error'], str):
+    raise SystemExit('health last_error evidence is malformed')
+if isinstance(value['nrestarts'], bool) or not isinstance(value['nrestarts'], int):
+    raise SystemExit('health restart evidence is malformed')
+if not isinstance(value['oom_panic_segfault'], bool):
+    raise SystemExit('health crash evidence is malformed')
 if value['ok'] is not True or value['ready'] is not True or value['last_error'] is not None:
     raise SystemExit('health readiness gate failed')
 if value['nrestarts'] != 0 or value['oom_panic_segfault'] is not False:
@@ -757,21 +1053,105 @@ def require_remote_backup(transaction: dict[str, Any], role: str) -> None:
     entry = backup.get(role) if isinstance(backup, dict) else None
     if not isinstance(entry, dict) or entry.get("remote_target") is not True:
         fail(f"capability_blocked: remote backup evidence is required before {role} mutation")
+    if entry.get("schema_version") != "oasis7.validator_pair_rebuild_remote_backup_receipt.v1":
+        fail(f"capability_blocked: remote backup receipt schema is unsupported for {role}")
+    transaction_id = transaction.get("transaction_id")
+    if (
+        not isinstance(transaction_id, str)
+        or not transaction_id.strip()
+        or not SAFE_VERSION.fullmatch(transaction_id)
+        or ".." in transaction_id
+    ):
+        fail("capability_blocked: remote backup transaction binding is missing or unsafe")
+    if entry.get("transaction_id") != transaction_id:
+        fail(f"capability_blocked: remote backup transaction binding is stale for {role}")
+    if entry.get("role") != role:
+        fail(f"capability_blocked: remote backup role binding is mismatched for {role}")
+    if entry.get("credential_transport") != "fd-only-v1":
+        fail(f"capability_blocked: remote backup credential transport is not FD-only for {role}")
     expected = EXECUTOR.HUMAN_DIRECT_SSH_CANONICAL[role]
     if entry.get("remote_host") != expected["host"] or entry.get("remote_root") != STACK_ROOT:
         fail(f"capability_blocked: remote backup host/root binding is not fixed for {role}")
+    expected_manifest = f"{STACK_ROOT}/backups/{transaction_id}/manifest.json"
+    if entry.get("manifest") != expected_manifest:
+        fail(f"capability_blocked: remote backup manifest path is not transaction-bound for {role}")
     manifest_sha256 = entry.get("manifest_sha256")
     if not isinstance(manifest_sha256, str) or not HEX64.fullmatch(manifest_sha256):
         fail(f"capability_blocked: remote backup manifest digest is missing for {role}")
+    reset_surface_manifest_sha256 = entry.get("reset_surface_manifest_sha256")
+    if not isinstance(reset_surface_manifest_sha256, str) or not HEX64.fullmatch(reset_surface_manifest_sha256):
+        fail(f"capability_blocked: remote reset-surface manifest digest is missing for {role}")
+    if entry.get("reset_surfaces") != list(RESET_SURFACES):
+        fail(f"capability_blocked: remote reset-surface binding is not canonical for {role}")
+    non_seed = entry.get("backup_non_seed")
+    if (
+        not isinstance(non_seed, dict)
+        or non_seed.get("forensic_only") is not True
+        or non_seed.get("seed_eligible") is not False
+        or non_seed.get("restore_deleted_chain_state") is not False
+    ):
+        fail(f"capability_blocked: remote backup is not forensic-only non-seed evidence for {role}")
     capacity = entry.get("capacity")
     if (
         not isinstance(capacity, dict)
         or capacity.get("verified") is not True
-        or not isinstance(capacity.get("available_bytes"), int)
-        or not isinstance(capacity.get("required_bytes"), int)
-        or capacity["available_bytes"] < capacity["required_bytes"]
+        or capacity.get("same_filesystem") is not True
     ):
         fail(f"capability_blocked: remote backup capacity evidence is missing for {role}")
+    numeric_fields = ("available_bytes", "free_bytes", "required_bytes", "free_inodes", "required_inodes")
+    if any(
+        isinstance(capacity.get(field), bool)
+        or not isinstance(capacity.get(field), int)
+        or capacity[field] < 0
+        for field in numeric_fields
+    ):
+        fail(f"capability_blocked: remote backup capacity evidence is malformed for {role}")
+    if (
+        capacity["available_bytes"] < capacity["required_bytes"]
+        or capacity["free_bytes"] < capacity["required_bytes"]
+        or capacity["free_inodes"] < capacity["required_inodes"]
+    ):
+        fail(f"capability_blocked: remote backup capacity is insufficient for {role}")
+    if entry.get("reset_surface_manifest_sha256") != manifest_sha256:
+        fail(f"capability_blocked: remote reset-surface manifest is not bound for {role}")
+    expected_backup_root = f"{STACK_ROOT}/backups/{transaction_id}"
+    if entry.get("backup_root") != expected_backup_root:
+        fail(f"capability_blocked: remote backup root is not transaction-bound for {role}")
+    planned = transaction.get("capacity", {}).get(role) if isinstance(transaction.get("capacity"), dict) else None
+    if isinstance(planned, dict):
+        if (
+            capacity.get("required_bytes") != planned.get("required_bytes")
+            or capacity.get("required_inodes") != planned.get("required_inodes")
+            or planned.get("required_inodes", 0) < MIN_REMOTE_BACKUP_INODES
+        ):
+            fail(f"capability_blocked: remote backup capacity threshold is not code-bound for {role}")
+
+
+def remote_backup_thresholds(transaction: dict[str, Any], role: str) -> tuple[int, int]:
+    capacity = transaction.get("capacity")
+    planned = capacity.get(role) if isinstance(capacity, dict) else None
+    if not isinstance(planned, dict):
+        fail(f"capability_blocked: code-owned remote backup capacity threshold is missing for {role}")
+    required_bytes = planned.get("required_bytes")
+    required_inodes = planned.get("required_inodes")
+    if (
+        isinstance(required_bytes, bool)
+        or not isinstance(required_bytes, int)
+        or required_bytes <= 0
+        or isinstance(required_inodes, bool)
+        or not isinstance(required_inodes, int)
+        or required_inodes < MIN_REMOTE_BACKUP_INODES
+    ):
+        fail(f"capability_blocked: code-owned remote backup capacity threshold is malformed for {role}")
+    return required_bytes, required_inodes
+
+
+def backup_phase_role(phase: str) -> str:
+    if phase == "staggered-storage-backup":
+        return "storage-205"
+    if phase == "staggered-sequencer-backup":
+        return "sequencer-204"
+    fail(f"unsupported remote backup phase: {phase}")
 
 
 def run_phase(transaction: dict[str, Any], phase: str) -> dict[str, Any]:
@@ -783,7 +1163,14 @@ def run_phase(transaction: dict[str, Any], phase: str) -> dict[str, Any]:
         fail("transaction node bindings are missing")
     if phase == "staggered-preflight":
         nodes = {
-            role: observe_node(transport, inventory, role, str(plan_nodes[role]["root"]), running=True)
+            role: observe_node(
+                transport,
+                inventory,
+                role,
+                str(plan_nodes[role]["root"]),
+                running=True,
+                health_url=health_url_for_role(transaction, role),
+            )
             for role in MUTATION_ORDER
         }
         for role, node in nodes.items():
@@ -794,6 +1181,58 @@ def run_phase(transaction: dict[str, Any], phase: str) -> dict[str, Any]:
         for node in nodes.values():
             node["preflight_observer_mutation"] = False
         return receipt
+    if phase in BACKUP_PHASES:
+        target = backup_phase_role(phase)
+        peer = "sequencer-204" if target == "storage-205" else "storage-205"
+        plan_nodes = transaction.get("nodes")
+        if not isinstance(plan_nodes, dict) or any(role not in plan_nodes for role in MUTATION_ORDER):
+            fail("transaction node bindings are missing")
+        existing = transaction.get("backup")
+        if isinstance(existing, dict) and target in existing:
+            fail(f"remote backup is already bound for {target}")
+        peer_before = observe_node(
+            transport,
+            inventory,
+            peer,
+            str(plan_nodes[peer]["root"]),
+            running=True,
+            health_url=health_url_for_role(transaction, peer),
+        )
+        target_before = observe_node(
+            transport,
+            inventory,
+            target,
+            str(plan_nodes[target]["root"]),
+            running=True,
+            health_url=health_url_for_role(transaction, target),
+        )
+        required_bytes, required_inodes = remote_backup_thresholds(transaction, target)
+        entry = transport.remote_forensic_backup(
+            target,
+            str(transaction["transaction_id"]),
+            required_bytes,
+            required_inodes,
+        )
+        bound = dict(transaction)
+        bound["backup"] = {target: entry}
+        require_remote_backup(bound, target)
+        target_receipt = dict(target_before)
+        target_receipt.update(entry)
+        target_receipt["backup_verified"] = True
+        receipt = base_receipt(transaction, phase)
+        receipt.update(
+            {
+                "staggered_phase": "remote_backup",
+                "backup_role": target,
+                "live_peer_role": peer,
+                "backup_before_stop": True,
+                "target_stopped_before_reset": False,
+                "reset_started_after_target_stop": False,
+                "backup_receipt": entry,
+                "nodes": {target: target_receipt, peer: peer_before},
+            }
+        )
+        return receipt
     if phase == "staggered-rollback":
         failed = transaction.get("staggered_failed_role") or transaction.get("staggered_active_role")
         completed = transaction.get("staggered_completed_roles")
@@ -803,13 +1242,27 @@ def run_phase(transaction: dict[str, Any], phase: str) -> dict[str, Any]:
             fail("rollback target role is not transaction-bound")
         require_remote_backup(transaction, failed)
         peer = "sequencer-204" if failed == "storage-205" else "storage-205"
-        peer_before = observe_node(transport, inventory, peer, str(plan_nodes[peer]["root"]), running=True)
+        peer_before = observe_node(
+            transport,
+            inventory,
+            peer,
+            str(plan_nodes[peer]["root"]),
+            running=True,
+            health_url=health_url_for_role(transaction, peer),
+        )
         script, entries = control_script(transaction, phase, package, governed, failed)
         markers = parse_markers(transport.archive(failed, script, entries))
         stopped = markers.get("stopped")
         if not isinstance(stopped, dict) or stopped.get("active") is not False or stopped.get("running") is not False or stopped.get("service_state") != "stopped":
             fail("rollback target was not left stopped")
-        peer_after = observe_node(transport, inventory, peer, str(plan_nodes[peer]["root"]), running=True)
+        peer_after = observe_node(
+            transport,
+            inventory,
+            peer,
+            str(plan_nodes[peer]["root"]),
+            running=True,
+            health_url=health_url_for_role(transaction, peer),
+        )
         target = {
             "role": failed, "root": str(plan_nodes[failed]["root"]), "active": False,
             "running": False, "service_state": "stopped", "independently_observed": True,
@@ -823,7 +1276,14 @@ def run_phase(transaction: dict[str, Any], phase: str) -> dict[str, Any]:
     target = "storage-205" if phase == "staggered-storage" else "sequencer-204"
     peer = "sequencer-204" if target == "storage-205" else "storage-205"
     require_remote_backup(transaction, target)
-    peer_before = observe_node(transport, inventory, peer, str(plan_nodes[peer]["root"]), running=True)
+    peer_before = observe_node(
+        transport,
+        inventory,
+        peer,
+        str(plan_nodes[peer]["root"]),
+        running=True,
+        health_url=health_url_for_role(transaction, peer),
+    )
     script, entries = control_script(transaction, phase, package, governed, target)
     markers = parse_markers(transport.archive(target, script, entries))
     stopped = markers.get("stopped")
@@ -837,6 +1297,15 @@ def run_phase(transaction: dict[str, Any], phase: str) -> dict[str, Any]:
     health = markers.get("health", {}).get(alias)
     if not isinstance(payload, dict) or not isinstance(runtime, str) or not isinstance(health, dict):
         fail("target post-start readback is incomplete")
+    if (
+        not isinstance(health.get("ok"), bool)
+        or not isinstance(health.get("ready"), bool)
+        or (health.get("last_error") is not None and not isinstance(health.get("last_error"), str))
+        or isinstance(health.get("nrestarts"), bool)
+        or not isinstance(health.get("nrestarts"), int)
+        or not isinstance(health.get("oom_panic_segfault"), bool)
+    ):
+        fail("target health evidence is malformed")
     if health.get("ok") is not True or health.get("ready") is not True or health.get("last_error") is not None:
         fail("target health readiness gate failed")
     if health.get("nrestarts") != 0 or health.get("oom_panic_segfault") is not False:
@@ -857,7 +1326,14 @@ def run_phase(transaction: dict[str, Any], phase: str) -> dict[str, Any]:
     }
     if runtime != transaction["package"].get("runtime_sha256"):
         fail(f"target runtime identity mismatch for {target}")
-    peer_after = observe_node(transport, inventory, peer, str(plan_nodes[peer]["root"]), running=True)
+    peer_after = observe_node(
+        transport,
+        inventory,
+        peer,
+        str(plan_nodes[peer]["root"]),
+        running=True,
+        health_url=health_url_for_role(transaction, peer),
+    )
     if peer_before["running"] is not True or peer_after["running"] is not True:
         fail("live peer preservation readback failed")
     receipt = base_receipt(transaction, phase)

@@ -59,6 +59,10 @@ TRIAD_STAGGERED_PHASES = {
     "staggered-sequencer": "staggered_sequencer_receipt",
     "staggered-rollback": "staggered_rollback_receipt",
 }
+TRIAD_STAGGERED_BACKUP_PHASES = {
+    "staggered-storage-backup": "staggered_storage_backup_receipt",
+    "staggered-sequencer-backup": "staggered_sequencer_backup_receipt",
+}
 IDENTITY_METADATA_FIELDS = (
     "key_path",
     "key_sha256",
@@ -147,6 +151,7 @@ ADAPTER_CALLBACK_TARGETS = {
     "apply": "host_receipt",
     "rollback": "rollback_receipt",
     **TRIAD_STAGGERED_PHASES,
+    **TRIAD_STAGGERED_BACKUP_PHASES,
 }
 
 
@@ -3597,6 +3602,35 @@ def _validate_staggered_host_receipt(
                 fail(f"staggered preflight listener binding is incomplete for {role}")
         return receipt
 
+    if phase in TRIAD_STAGGERED_BACKUP_PHASES:
+        target = "storage-205" if phase == "staggered-storage-backup" else "sequencer-204"
+        peer = "sequencer-204" if target == "storage-205" else "storage-205"
+        _require_staggered_live_observation(plan, f"before-{phase}")
+        if receipt.get("staggered_phase") != "remote_backup" or receipt.get("backup_role") != target:
+            fail("staggered remote backup receipt phase/role is missing")
+        if receipt.get("live_peer_role") != peer or receipt.get("backup_before_stop") is not True:
+            fail("staggered remote backup receipt ordering is missing")
+        nodes = receipt.get("nodes")
+        target_value = nodes.get(target) if isinstance(nodes, dict) else None
+        peer_value = nodes.get(peer) if isinstance(nodes, dict) else None
+        if not isinstance(target_value, dict) or not isinstance(peer_value, dict):
+            fail("staggered remote backup receipt must cover target and live peer")
+        _validate_remote_backup_binding(plan, target, target_value)
+        if target_value.get("backup_verified") is not True:
+            fail(f"staggered remote backup verification is missing for {target}")
+        for role, value in ((target, target_value), (peer, peer_value)):
+            if (
+                value.get("active") is not True
+                or value.get("running") is not True
+                or value.get("service_state") != "running"
+                or value.get("independently_observed") is not True
+                or value.get("healthz_ok") is not True
+                or value.get("nrestarts") != 0
+                or value.get("oom_panic_segfault") is not False
+            ):
+                fail(f"staggered remote backup live gate failed for {role}")
+        return receipt
+
     if phase in {"staggered-storage", "staggered-sequencer"}:
         target = "storage-205" if phase == "staggered-storage" else "sequencer-204"
         peer = "sequencer-204" if target == "storage-205" else "storage-205"
@@ -3666,7 +3700,7 @@ def _validate_staggered_host_receipt(
 
 
 def validate_host_receipt(receipt: dict[str, Any], plan: dict[str, Any], phase: str) -> dict[str, Any]:
-    if phase in TRIAD_STAGGERED_PHASES:
+    if phase in TRIAD_STAGGERED_PHASES or phase in TRIAD_STAGGERED_BACKUP_PHASES:
         return _validate_staggered_host_receipt(receipt, plan, phase)
     if plan.get("execution_mode", PAIR_EXECUTION_MODE) != PAIR_EXECUTION_MODE:
         fail("pair host receipt validation refuses a non-pair transaction")
@@ -3991,6 +4025,81 @@ def _record_adapter_callback_failure(
         pass
 
 
+def _validate_remote_backup_binding(
+    transaction: dict[str, Any], role: str, entry: dict[str, Any]
+) -> dict[str, Any]:
+    """Validate a FixedSSH-produced remote backup without trusting local roots."""
+    if transaction.get("execution_mode") != TRIAD_STAGGERED_EXECUTION_MODE:
+        fail("remote backup binding is only valid for triad_staggered transactions")
+    transaction_id = _direct_safe_identifier(transaction.get("transaction_id"), "remote backup transaction id")
+    if role not in MUTATION_ORDER or not isinstance(entry, dict):
+        fail(f"remote backup binding is malformed for {role}")
+    if entry.get("schema_version") != "oasis7.validator_pair_rebuild_remote_backup_receipt.v1":
+        fail(f"remote backup receipt schema is unsupported for {role}")
+    expected = HUMAN_DIRECT_SSH_CANONICAL[role]
+    if entry.get("remote_target") is not True:
+        fail(f"remote backup must be a remote target receipt for {role}")
+    if entry.get("role") != role or entry.get("transaction_id") != transaction_id:
+        fail(f"remote backup role/transaction binding mismatch for {role}")
+    if entry.get("credential_transport") != "fd-only-v1":
+        fail(f"remote backup credential transport is not FD-only for {role}")
+    if entry.get("remote_host") != expected["host"] or entry.get("remote_root") != PRODUCTION_STACK_ROOT:
+        fail(f"remote backup host/root binding mismatch for {role}")
+    expected_backup_root = f"{PRODUCTION_STACK_ROOT}/backups/{transaction_id}"
+    expected_manifest = f"{expected_backup_root}/manifest.json"
+    if entry.get("backup_root") != expected_backup_root or entry.get("manifest") != expected_manifest:
+        fail(f"remote backup path binding mismatch for {role}")
+    manifest_sha256 = entry.get("manifest_sha256")
+    reset_manifest_sha256 = entry.get("reset_surface_manifest_sha256")
+    if (
+        not isinstance(manifest_sha256, str)
+        or not re.fullmatch(r"[0-9a-fA-F]{64}", manifest_sha256)
+        or reset_manifest_sha256 != manifest_sha256
+    ):
+        fail(f"remote backup manifest digest binding mismatch for {role}")
+    if entry.get("reset_surfaces") != list(RESET_SURFACES):
+        fail(f"remote backup reset-surface binding mismatch for {role}")
+    non_seed = entry.get("backup_non_seed")
+    if (
+        not isinstance(non_seed, dict)
+        or non_seed.get("forensic_only") is not True
+        or non_seed.get("seed_eligible") is not False
+        or non_seed.get("restore_deleted_chain_state") is not False
+    ):
+        fail(f"remote backup non-seed binding mismatch for {role}")
+    capacity = entry.get("capacity")
+    if not isinstance(capacity, dict) or capacity.get("verified") is not True or capacity.get("same_filesystem") is not True:
+        fail(f"remote backup capacity binding is not verified for {role}")
+    numeric = ("available_bytes", "free_bytes", "required_bytes", "free_inodes", "required_inodes")
+    if any(
+        isinstance(capacity.get(field), bool)
+        or not isinstance(capacity.get(field), int)
+        or capacity[field] < 0
+        for field in numeric
+    ):
+        fail(f"remote backup capacity binding is malformed for {role}")
+    planned = transaction.get("capacity", {}).get(role) if isinstance(transaction.get("capacity"), dict) else None
+    if not isinstance(planned, dict):
+        fail(f"remote backup code-owned capacity plan is missing for {role}")
+    required_bytes = planned.get("required_bytes")
+    required_inodes = planned.get("required_inodes")
+    if (
+        isinstance(required_bytes, bool)
+        or not isinstance(required_bytes, int)
+        or required_bytes <= 0
+        or isinstance(required_inodes, bool)
+        or not isinstance(required_inodes, int)
+        or required_inodes < 128
+        or capacity["required_bytes"] != required_bytes
+        or capacity["required_inodes"] != required_inodes
+        or capacity["available_bytes"] < required_bytes
+        or capacity["free_bytes"] < required_bytes
+        or capacity["free_inodes"] < required_inodes
+    ):
+        fail(f"remote backup capacity does not satisfy the code-owned threshold for {role}")
+    return entry
+
+
 def _validate_persisted_backup_refs(transaction: dict[str, Any]) -> None:
     """Verify every persisted backup reference before resume mutates state."""
     raw_backups = transaction.get("backup")
@@ -4000,6 +4109,12 @@ def _validate_persisted_backup_refs(transaction: dict[str, Any]) -> None:
         return
     if not isinstance(raw_backups, dict):
         fail("transaction persisted backup refs are malformed")
+    if transaction.get("execution_mode") == TRIAD_STAGGERED_EXECUTION_MODE:
+        if set(raw_backups) - set(MUTATION_ORDER):
+            fail("transaction persisted remote backup refs contain an unknown role")
+        for role, backup in raw_backups.items():
+            _validate_remote_backup_binding(transaction, role, backup)
+        return
     transaction_id = _direct_safe_identifier(transaction.get("transaction_id"), "transaction recovery id")
     if any(role not in MUTATION_ORDER for role in raw_backups):
         fail("transaction persisted backup refs contain an unknown role")
@@ -4081,7 +4196,24 @@ def _adopt_completed_adapter_callback(
         fail(f"completed host adapter callback conflicts with persisted {target}")
     transaction[target] = receipt
     transaction.pop("adapter_callback", None)
-    if phase in TRIAD_STAGGERED_PHASES:
+    if phase in TRIAD_STAGGERED_BACKUP_PHASES:
+        role = "storage-205" if phase == "staggered-storage-backup" else "sequencer-204"
+        nodes = receipt.get("nodes")
+        backup = nodes.get(role) if isinstance(nodes, dict) else None
+        if not isinstance(backup, dict):
+            fail(f"completed remote backup callback has no target receipt for {role}")
+        _validate_remote_backup_binding(transaction, role, backup)
+        persisted = transaction.get("backup")
+        if not isinstance(persisted, dict):
+            persisted = {}
+        existing = persisted.get(role)
+        if existing is not None and existing != backup:
+            fail(f"completed remote backup callback conflicts with persisted backup for {role}")
+        persisted[role] = backup
+        transaction["backup"] = persisted
+        transaction[f"{role}_staggered_backup_receipt"] = receipt
+        transaction["phase"] = f"staggered_{role}_backuped"
+    elif phase in TRIAD_STAGGERED_PHASES:
         if phase in {"staggered-storage", "staggered-sequencer"}:
             _record_staggered_stage_receipt(
                 transaction,
@@ -4566,6 +4698,9 @@ def _continue_staggered_transaction(
             role: refresh_capacity(Path(transaction["nodes"][role]["root"]), transaction["capacity"][role], role)
             for role in MUTATION_ORDER
         }
+        for value in transaction["capacity_apply"].values():
+            value["authority"] = "audit_only"
+        transaction["capacity_apply_authority"] = "audit_only"
         transaction["canonical_digest"] = canonical_digest(transaction)
         write_json(path, transaction)
 
@@ -4597,12 +4732,45 @@ def _continue_staggered_transaction(
         transaction["canonical_digest"] = canonical_digest(transaction)
         write_json(path, transaction)
         if role not in backups:
-            # A live target may be snapshotted read-only, but its reset/stage
-            # surfaces must remain untouched until the target-specific
-            # governed adapter callback has taken ownership of the stop.
-            backups[role] = snapshot_node(transaction["nodes"][role], transaction["transaction_id"])
+            # Local roots are planning/audit inputs only for triad_staggered.
+            # The mutation authority is a FixedSSH-produced remote receipt;
+            # never turn a local snapshot into permission to stop/reset.
+            local_audit = transaction.get("local_backup_audit")
+            if not isinstance(local_audit, dict):
+                local_audit = {}
+            local_root = Path(transaction["nodes"][role]["root"])
+            local_audit[role] = {
+                "authority": "audit_only",
+                "inventory": inventory_tree(local_root),
+                "remote_authority_required": True,
+            }
+            transaction["local_backup_audit"] = local_audit
+            transaction["phase"] = f"staggered_{role}_backup_in_progress"
+            transaction["canonical_digest"] = canonical_digest(transaction)
+            write_json(path, transaction)
+            backup_phase = (
+                "staggered-storage-backup" if role == "storage-205" else "staggered-sequencer-backup"
+            )
+            _record_staggered_live_reobserve(
+                transaction, direct_args, observation_key=f"before-{backup_phase}"
+            )
+            transaction["phase"] = backup_phase
+            transaction["canonical_digest"] = canonical_digest(transaction)
+            write_json(path, transaction)
+            backup_receipt = _invoke_host_adapter(
+                host_adapter, path, transaction, backup_phase, direct_args
+            )
+            backup_nodes = backup_receipt.get("nodes")
+            remote_backup = backup_nodes.get(role) if isinstance(backup_nodes, dict) else None
+            if not isinstance(remote_backup, dict):
+                fail(f"remote backup callback returned no target receipt for {role}")
+            _validate_remote_backup_binding(transaction, role, remote_backup)
+            transaction[f"{role}_staggered_backup_receipt"] = backup_receipt
+            backups[role] = remote_backup
             transaction["backup"] = backups
             transaction["nodes"][role]["backup"] = backups[role]
+            transaction.pop("adapter_callback", None)
+            transaction["phase"] = f"staggered_{role}_backuped"
             transaction["canonical_digest"] = canonical_digest(transaction)
             write_json(path, transaction)
         phase = "staggered-storage" if role == "storage-205" else "staggered-sequencer"
@@ -5323,9 +5491,15 @@ def resume_staggered_transaction(
         "staggered_preflight",
         "staggered_prepared",
         "staggered_storage-205_in_progress",
+        "staggered_storage_backup_in_progress",
+        "staggered-storage-backup",
+        "staggered_storage_backuped",
         "staggered-storage",
         "staggered_storage_applied",
         "staggered_sequencer-204_in_progress",
+        "staggered_sequencer_backup_in_progress",
+        "staggered-sequencer-backup",
+        "staggered_sequencer_backuped",
         "staggered-sequencer",
         "applied",
         "rollback_required",
@@ -5345,12 +5519,27 @@ def resume_staggered_transaction(
         if callback_state["status"] == "completed" and callback_phase != "staggered-rollback":
             allowed_callback_phases = {
                 "staggered-preflight": {"staggered_preflight", "staggered-preflight"},
+                "staggered-storage-backup": {
+                    "staggered_storage_backup_in_progress",
+                    "staggered-storage-backup",
+                    "staggered_storage_backuped",
+                },
                 "staggered-storage": {"staggered-storage", "staggered_storage-205_in_progress"},
+                "staggered-sequencer-backup": {
+                    "staggered_sequencer_backup_in_progress",
+                    "staggered-sequencer-backup",
+                    "staggered_sequencer_backuped",
+                },
                 "staggered-sequencer": {"staggered-sequencer", "staggered_sequencer-204_in_progress"},
             }
             if phase not in allowed_callback_phases.get(callback_phase, set()):
                 fail("completed staggered host adapter callback phase does not match transaction phase")
-            if callback_phase in {"staggered-storage", "staggered-sequencer"}:
+            if callback_phase in {
+                "staggered-storage",
+                "staggered-sequencer",
+                "staggered-storage-backup",
+                "staggered-sequencer-backup",
+            }:
                 _record_staggered_live_reobserve(
                     transaction,
                     direct_args,

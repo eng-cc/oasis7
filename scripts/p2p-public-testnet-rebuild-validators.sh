@@ -262,6 +262,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import stat
 import sys
 import tempfile
@@ -406,6 +407,27 @@ RESET_TARGETS = [
     "output/node-distfs",
 ]
 
+TRIAD_REMOTE_ROOT = "/opt/oasis7/p2p-testnet"
+TRIAD_REMOTE_HOSTS = {
+    "storage-205": "root@39.104.205.67",
+    "sequencer-204": "root@39.104.204.172",
+}
+TRIAD_REMOTE_BACKUP_SCHEMA = "oasis7.validator_pair_rebuild_remote_backup_receipt.v1"
+TRIAD_REMOTE_BACKUP_PHASES = (
+    "staggered-preflight",
+    "staggered-storage-backup",
+    "staggered-storage",
+    "staggered-sequencer-backup",
+    "staggered-sequencer",
+)
+TRIAD_REMOTE_BACKUP_NUMERIC_FIELDS = (
+    "available_bytes",
+    "free_bytes",
+    "required_bytes",
+    "free_inodes",
+    "required_inodes",
+)
+
 
 def reset_target_digest() -> str:
     return digest_json(RESET_TARGETS)
@@ -416,6 +438,137 @@ def cli_value(flag: str) -> str | None:
         return args[args.index(flag) + 1]
     except (ValueError, IndexError):
         return None
+
+
+def triad_remote_backup_entry(role: str, observed: object, transaction_id: object) -> dict[str, object]:
+    """Validate a remote FixedSSH receipt without reading its remote path locally."""
+    if not isinstance(observed, dict):
+        raise SystemExit(f"missing remote forensic backup receipt for {role}")
+    if observed.get("schema_version") != TRIAD_REMOTE_BACKUP_SCHEMA:
+        raise SystemExit(f"unsupported remote forensic backup receipt schema for {role}")
+    if (
+        observed.get("remote_target") is not True
+        or observed.get("role") != role
+        or observed.get("transaction_id") != transaction_id
+        or observed.get("credential_transport") != "fd-only-v1"
+        or observed.get("remote_host") != TRIAD_REMOTE_HOSTS[role]
+        or observed.get("remote_root") != TRIAD_REMOTE_ROOT
+    ):
+        raise SystemExit(f"remote forensic backup host/transaction binding mismatch for {role}")
+    if not isinstance(transaction_id, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.+:~-]*", transaction_id) or ".." in transaction_id:
+        raise SystemExit("remote forensic backup transaction id is unsafe")
+    backup_root = f"{TRIAD_REMOTE_ROOT}/backups/{transaction_id}"
+    manifest = f"{backup_root}/manifest.json"
+    if observed.get("backup_root") != backup_root or observed.get("manifest") != manifest:
+        raise SystemExit(f"remote forensic backup path binding mismatch for {role}")
+    manifest_sha256 = observed.get("manifest_sha256")
+    if not isinstance(manifest_sha256, str) or not re.fullmatch(r"[0-9a-fA-F]{64}", manifest_sha256):
+        raise SystemExit(f"remote forensic backup manifest digest is malformed for {role}")
+    if observed.get("reset_surface_manifest_sha256") != manifest_sha256:
+        raise SystemExit(f"remote reset-surface manifest digest mismatch for {role}")
+    if observed.get("reset_surfaces") != list(RESET_TARGETS):
+        raise SystemExit(f"remote forensic backup reset-surface binding mismatch for {role}")
+    non_seed = observed.get("backup_non_seed")
+    if (
+        not isinstance(non_seed, dict)
+        or non_seed.get("forensic_only") is not True
+        or non_seed.get("seed_eligible") is not False
+        or non_seed.get("restore_deleted_chain_state") is not False
+    ):
+        raise SystemExit(f"remote forensic backup non-seed binding mismatch for {role}")
+    capacity = observed.get("capacity")
+    if (
+        not isinstance(capacity, dict)
+        or capacity.get("verified") is not True
+        or capacity.get("same_filesystem") is not True
+    ):
+        raise SystemExit(f"remote forensic backup capacity is not verified for {role}")
+    for field in TRIAD_REMOTE_BACKUP_NUMERIC_FIELDS:
+        field_value = capacity.get(field)
+        if isinstance(field_value, bool) or not isinstance(field_value, int) or field_value < 0:
+            raise SystemExit(f"remote forensic backup capacity field is malformed for {role}: {field}")
+    planned = value.get("capacity", {}).get(role) if isinstance(value.get("capacity"), dict) else None
+    if not isinstance(planned, dict):
+        raise SystemExit(f"code-owned remote backup capacity plan is missing for {role}")
+    required_bytes = planned.get("required_bytes")
+    required_inodes = planned.get("required_inodes")
+    if (
+        isinstance(required_bytes, bool)
+        or not isinstance(required_bytes, int)
+        or required_bytes <= 0
+        or isinstance(required_inodes, bool)
+        or not isinstance(required_inodes, int)
+        or required_inodes < 128
+        or capacity.get("required_bytes") != required_bytes
+        or capacity.get("required_inodes") != required_inodes
+        or capacity.get("available_bytes", 0) < required_bytes
+        or capacity.get("free_bytes", 0) < required_bytes
+        or capacity.get("free_inodes", 0) < required_inodes
+    ):
+        raise SystemExit(f"remote forensic backup capacity threshold mismatch for {role}")
+    return observed
+
+
+def triad_backup_phase_envelope() -> None:
+    """Bind backup phases and peer-live proof without local backup authority."""
+    if value.get("execution_mode", "pair") != "triad_staggered":
+        return
+    expected = list(TRIAD_REMOTE_BACKUP_PHASES)
+    if mode == "rollback":
+        expected.append("staggered-rollback")
+    supplied = value.get("backup_phase_order")
+    if supplied is not None and supplied != expected:
+        raise SystemExit("triad remote backup phase order is not deterministic")
+    value["backup_phase_order"] = expected
+    transaction_id = value.get("transaction_id")
+    backups = value.get("backup") if isinstance(value.get("backup"), dict) else {}
+    if mode == "plan" and not backups:
+        return
+    if set(backups) != {"storage-205", "sequencer-204"}:
+        raise SystemExit("triad receipt must contain both remote forensic backup entries")
+    for role in ("storage-205", "sequencer-204"):
+        observed = triad_remote_backup_entry(role, backups.get(role), transaction_id)
+        phase_name = "staggered-storage-backup" if role == "storage-205" else "staggered-sequencer-backup"
+        phase_receipt = value.get(f"{role}_staggered_backup_receipt")
+        if not isinstance(phase_receipt, dict):
+            # Plan-only envelopes may carry the durable remote entries without
+            # having executed a callback. Apply/resume/rollback must carry the
+            # executor-owned phase envelope as well. A supplied explicit
+            # backup_phase_order is that durable envelope for adapters that
+            # publish phase receipts separately from the transaction body.
+            if mode != "plan" and supplied is None:
+                raise SystemExit(f"missing {phase_name} receipt for {role}")
+            continue
+        if (
+            phase_receipt.get("phase") != phase_name
+            or phase_receipt.get("staggered_phase") != "remote_backup"
+            or phase_receipt.get("backup_role") != role
+            or phase_receipt.get("backup_before_stop") is not True
+            or phase_receipt.get("target_stopped_before_reset") is not False
+            or phase_receipt.get("reset_started_after_target_stop") is not False
+        ):
+            raise SystemExit(f"{phase_name} receipt ordering/role binding failed for {role}")
+        nodes = phase_receipt.get("nodes")
+        target = nodes.get(role) if isinstance(nodes, dict) else None
+        peer_role = "sequencer-204" if role == "storage-205" else "storage-205"
+        peer = nodes.get(peer_role) if isinstance(nodes, dict) else None
+        if not isinstance(target, dict) or not isinstance(peer, dict):
+            raise SystemExit(f"{phase_name} receipt must cover target and live peer")
+        triad_remote_backup_entry(role, target, transaction_id)
+        if any(target.get(key) != observed.get(key) for key in ("manifest", "manifest_sha256", "backup_root", "transaction_id", "role")):
+            raise SystemExit(f"{phase_name} target receipt differs from durable backup entry for {role}")
+        if target.get("backup_verified") is not True:
+            raise SystemExit(f"{phase_name} target backup verification is missing for {role}")
+        if (
+            peer.get("active") is not True
+            or peer.get("running") is not True
+            or peer.get("service_state") != "running"
+            or peer.get("independently_observed") is not True
+            or peer.get("healthz_ok") is not True
+            or peer.get("nrestarts") != 0
+            or peer.get("oom_panic_segfault") is not False
+        ):
+            raise SystemExit(f"{phase_name} live peer proof failed for {peer_role}")
 
 
 def node_contracts() -> dict[str, object]:
@@ -469,6 +622,8 @@ def node_contracts() -> dict[str, object]:
             "status": "required_at_apply" if mode == "plan" else "receipt_bound",
         }
         triad_mode = value.get("execution_mode", "pair") == "triad_staggered"
+        if triad_mode:
+            triad_backup_phase_envelope()
         completed_roles = value.get("staggered_completed_roles", [])
         if not isinstance(completed_roles, list):
             completed_roles = []
@@ -491,30 +646,48 @@ def node_contracts() -> dict[str, object]:
                 if not triad_mode or role in completed_roles or role in staged:
                     raise SystemExit(f"missing forensic backup receipt for {role}")
             else:
-                manifest_path = observed_backup.get("manifest")
-                backup_root = observed_backup.get("backup_root")
-                manifest_sha256 = observed_backup.get("manifest_sha256")
-                if not isinstance(manifest_path, str) or not isinstance(backup_root, str) or not isinstance(manifest_sha256, str):
-                    raise SystemExit(f"incomplete forensic backup receipt for {role}")
-                manifest_file = Path(manifest_path)
-                backup_root_path = Path(backup_root).resolve()
-                if manifest_file.is_symlink() or not manifest_file.is_file() or manifest_file.resolve().parent != backup_root_path:
-                    raise SystemExit(f"forensic backup manifest path binding mismatch for {role}")
-                if sha256_file(manifest_file) != manifest_sha256.lower():
-                    raise SystemExit(f"forensic backup manifest digest mismatch for {role}")
-                if backup_root_path.parent != root / "backups":
-                    raise SystemExit(f"forensic backup root binding mismatch for {role}")
-                backup_receipt = {
-                    "backup_root": str(backup_root_path),
-                    "backup_manifest_sha256": manifest_sha256,
-                    "backup_inventory": value.get("capacity", {}).get(role, {}).get("inventory", {}),
-                    "backup_capacity": value.get("capacity", {}).get(role, {}),
-                    "backup_non_seed": {
-                        "forensic_only": True,
-                        "seed_eligible": False,
-                        "restore_deleted_chain_state": False,
-                    },
-                }
+                if triad_mode:
+                    # The FixedSSH receipt is remote authority.  The wrapper
+                    # must not stat/hash a path on the local transaction host
+                    # or turn local inventory into permission to mutate.
+                    remote = triad_remote_backup_entry(role, observed_backup, value.get("transaction_id"))
+                    backup_receipt = {
+                        "authority": "fixedssh_remote_target",
+                        "remote_target": True,
+                        "schema_version": remote["schema_version"],
+                        "backup_root": remote["backup_root"],
+                        "manifest": remote["manifest"],
+                        "backup_manifest_sha256": remote["manifest_sha256"],
+                        "reset_surface_manifest_sha256": remote["reset_surface_manifest_sha256"],
+                        "backup_capacity": remote["capacity"],
+                        "backup_non_seed": remote["backup_non_seed"],
+                        "local_audit_only": True,
+                    }
+                else:
+                    manifest_path = observed_backup.get("manifest")
+                    backup_root = observed_backup.get("backup_root")
+                    manifest_sha256 = observed_backup.get("manifest_sha256")
+                    if not isinstance(manifest_path, str) or not isinstance(backup_root, str) or not isinstance(manifest_sha256, str):
+                        raise SystemExit(f"incomplete forensic backup receipt for {role}")
+                    manifest_file = Path(manifest_path)
+                    backup_root_path = Path(backup_root).resolve()
+                    if manifest_file.is_symlink() or not manifest_file.is_file() or manifest_file.resolve().parent != backup_root_path:
+                        raise SystemExit(f"forensic backup manifest path binding mismatch for {role}")
+                    if sha256_file(manifest_file) != manifest_sha256.lower():
+                        raise SystemExit(f"forensic backup manifest digest mismatch for {role}")
+                    if backup_root_path.parent != root / "backups":
+                        raise SystemExit(f"forensic backup root binding mismatch for {role}")
+                    backup_receipt = {
+                        "backup_root": str(backup_root_path),
+                        "backup_manifest_sha256": manifest_sha256,
+                        "backup_inventory": value.get("capacity", {}).get(role, {}).get("inventory", {}),
+                        "backup_capacity": value.get("capacity", {}).get(role, {}),
+                        "backup_non_seed": {
+                            "forensic_only": True,
+                            "seed_eligible": False,
+                            "restore_deleted_chain_state": False,
+                        },
+                    }
         result[role] = {
             "role": role,
             "platform": node.get("transport", "unknown"),
@@ -533,6 +706,9 @@ def node_contracts() -> dict[str, object]:
             },
             "post_delete_absence_proof": post_delete_proof,
             "forensic_backup": {
+                "authority": "local_audit_only" if triad_mode else "local_transaction_backup",
+                "local_audit_only": triad_mode,
+                "remote_authority_required": triad_mode,
                 "manifest": backup_manifest,
                 "manifest_sha256": digest_json(backup_manifest),
                 "capacity": value.get("capacity", {}).get(role, {}),
@@ -635,6 +811,7 @@ if contract["execution_mode"] == "triad_staggered":
         {
             "max_simultaneously_stopped_validators": 1,
             "phase_order": phase_order,
+            "backup_phase_order": value.get("backup_phase_order", []),
             "historical_ssh_fallback": False,
         }
     )

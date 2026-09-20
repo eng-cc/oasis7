@@ -478,6 +478,21 @@ scripts/p2p-public-testnet-rebuild-validators.sh apply \
   --known-hosts <same-pinned-known-hosts> \
   --host-adapter <governed-host-adapter>
 ```
+
+对于 `execution_mode=triad_staggered`，本地 state inventory 和
+`capacity_apply` 只作 `audit_only` 证据，不能授权停机、删除或 reset。executor
+必须在每个 `staggered-storage`/`staggered-sequencer` mutation callback 前，先持久化
+`staggered-*-backup` phase，并通过固定 inventory、pinned host-key 与 FD-only
+`FixedSSH` 在目标主机完成 remote forensic backup/capacity capture。receipt 必须绑定
+transaction、role/host/root、完整 reset-surface manifest digest、code-owned
+bytes/inodes threshold，并固定 `seed_eligible=false`；只有该 receipt 已通过校验并
+写入 transaction journal，才允许进入对应 stop/reset callback。partial、缺失、过期或
+binding/digest/capacity 不一致均 fail closed，不能回退到 local snapshot；resume 和
+target-only rollback 也必须重新校验同一 remote receipt，且另一台 validator 保持 live。
+receipt envelope 对 triad receipt 只校验该远端路径的固定字符串绑定、manifest
+digest、容量与 phase envelope，不在 transaction 所在机器上 `stat` 或读取 remote
+manifest；pair legacy 路径仍保留本地 manifest 的 fail-closed 校验。
+
 #### External nonce-ledger deployment prerequisite
 
 Before any `human_direct_ssh`, `plan`, `apply`, `resume`, or `rollback`, provision this executor-owned external replay barrier: `/var/lib/oasis7/p2p-public-testnet/validator-pair-nonces.jsonl`.

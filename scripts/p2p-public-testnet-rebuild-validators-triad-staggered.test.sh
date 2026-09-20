@@ -152,15 +152,42 @@ def assert_triad_receipt(value: dict[str, object], route: str) -> None:
     if contract.get("historical_ssh_fallback") is not False:
         raise SystemExit(f"{route} receipt does not prove no historical SSH fallback")
     phases = contract.get("phase_order")
-    expected_phases = [
-        "staggered-preflight",
-        "staggered-storage",
-        "staggered-sequencer",
-    ]
+    expected_phases = ["staggered-preflight", "staggered-storage", "staggered-sequencer"]
     if route == "rollback":
         expected_phases.append("staggered-rollback")
     if phases != expected_phases:
         raise SystemExit(f"{route} phase ordering is not deterministic: {phases!r}")
+    backup_phases = value.get("backup_phase_order")
+    expected_backup_phases = [
+        "staggered-preflight",
+        "staggered-storage-backup",
+        "staggered-storage",
+        "staggered-sequencer-backup",
+        "staggered-sequencer",
+    ]
+    if route == "rollback":
+        expected_backup_phases.append("staggered-rollback")
+    if backup_phases != expected_backup_phases:
+        raise SystemExit(f"{route} backup phase ordering is not deterministic: {backup_phases!r}")
+    backups = value.get("backup")
+    if not isinstance(backups, dict) or set(backups) != {"storage-205", "sequencer-204"}:
+        raise SystemExit(f"{route} receipt is missing both remote backup entries")
+    transaction_id = value.get("transaction_id")
+    for role in ("storage-205", "sequencer-204"):
+        entry = backups[role]
+        expected = executor_module.HUMAN_DIRECT_SSH_CANONICAL[role]
+        if (
+            not isinstance(entry, dict)
+            or entry.get("schema_version") != "oasis7.validator_pair_rebuild_remote_backup_receipt.v1"
+            or entry.get("remote_target") is not True
+            or entry.get("role") != role
+            or entry.get("transaction_id") != transaction_id
+            or entry.get("credential_transport") != "fd-only-v1"
+            or entry.get("remote_host") != expected["host"]
+            or entry.get("remote_root") != executor_module.PRODUCTION_STACK_ROOT
+            or entry.get("backup_non_seed", {}).get("seed_eligible") is not False
+        ):
+            raise SystemExit(f"{route} receipt has an invalid remote backup binding for {role}")
 
 
 with tempfile.TemporaryDirectory(prefix="oasis7-triad-staggered-contract-") as temp_dir:
@@ -178,6 +205,11 @@ with tempfile.TemporaryDirectory(prefix="oasis7-triad-staggered-contract-") as t
     roots_literal = repr({role: str(path) for role, path in roots.items()})
     reset_targets_literal = repr(reset_targets)
     temp_literal = repr(str(temp))
+    canonical_hosts_literal = repr(
+        {role: executor_module.HUMAN_DIRECT_SSH_CANONICAL[role]["host"] for role in executor_module.MUTATION_ORDER}
+    )
+    production_root_literal = repr(executor_module.PRODUCTION_STACK_ROOT)
+    transaction_id_literal = repr("triad-staggered-fixture")
     fake_python.write_text(
         f"""#!{sys.executable}
 import hashlib
@@ -211,18 +243,30 @@ phase_order = [
     'staggered-storage',
     'staggered-sequencer',
 ]
+backup_phase_order = [
+    'staggered-preflight',
+    'staggered-storage-backup',
+    'staggered-storage',
+    'staggered-sequencer-backup',
+    'staggered-sequencer',
+]
 if route == 'rollback':
     phase_order.append('staggered-rollback')
+    backup_phase_order.append('staggered-rollback')
 if bad_phase_order:
     phase_order.reverse()
 
 reset_targets = {reset_targets_literal}
 target_digest = hashlib.sha256(json.dumps(reset_targets, separators=(',', ':')).encode()).hexdigest()
+canonical_hosts = {canonical_hosts_literal}
+production_root = {production_root_literal}
+transaction_id = {transaction_id_literal}
 nodes = {{}}
 for role, root in {roots_literal}.items():
     nodes[role] = {{'root': root, 'transport': 'local'}}
 staged = {{}}
 backup = {{}}
+capacity = {{}}
 for role, node in nodes.items():
     root_path = Path(node['root'])
     manifest_root = root_path / 'backups' / 'fixture'
@@ -235,23 +279,58 @@ for role, node in nodes.items():
         'target_set': reset_targets,
         'target_set_sha256': target_digest,
     }}}}
+    required_bytes = 1024
+    required_inodes = 128
+    backup_root = f"{{production_root}}/backups/{{transaction_id}}"
     backup[role] = {{
-        'manifest': str(manifest),
-        'backup_root': str(manifest_root),
+        'schema_version': 'oasis7.validator_pair_rebuild_remote_backup_receipt.v1',
+        'role': role,
+        'transaction_id': transaction_id,
+        'remote_target': True,
+        'credential_transport': 'fd-only-v1',
+        'remote_host': canonical_hosts[role],
+        'remote_root': production_root,
+        'backup_root': backup_root,
+        'manifest': f"{{backup_root}}/manifest.json",
         'manifest_sha256': manifest_sha,
+        'reset_surface_manifest_sha256': manifest_sha,
+        'reset_surfaces': reset_targets,
+        'capacity': {{
+            'verified': True,
+            'same_filesystem': True,
+            'available_bytes': 4096,
+            'free_bytes': 4096,
+            'required_bytes': required_bytes,
+            'free_inodes': 256,
+            'required_inodes': required_inodes,
+        }},
+        'backup_non_seed': {{
+            'forensic_only': True,
+            'seed_eligible': False,
+            'restore_deleted_chain_state': False,
+        }},
+    }}
+    capacity[role] = {{
+        'required_bytes': required_bytes,
+        'required_inodes': required_inodes,
+        'free_bytes': 4096,
+        'free_inodes': 256,
+        'same_filesystem': True,
+        'verified': True,
     }}
 
 value = {{
     'schema_version': 'oasis7.validator_pair_rebuild_transaction.v1',
     'execution_mode': reported_mode,
     'phase': 'rolled_back' if route in ('resume', 'rollback') else 'prepared',
+    'transaction_id': transaction_id,
     'mutation_order': ['storage-205', 'sequencer-204'],
     'startup_order': ['storage-205', 'sequencer-204'],
     'max_simultaneously_stopped_validators': max_stopped,
     'nodes': nodes,
     'staged': staged,
     'backup': backup,
-    'capacity': {{'storage-205': {{}}, 'sequencer-204': {{}}}},
+    'capacity': capacity,
     'package': {{'directory': str(Path({temp_literal}) / 'package')}},
     'network': {{'governed': {{}}}},
     'provenance': {{'epoch': 'fixture'}},
@@ -264,6 +343,7 @@ value = {{
         'observer_mutation': False,
         'historical_ssh_fallback': False,
     }},
+    'backup_phase_order': backup_phase_order,
 }}
 print(json.dumps(value, separators=(',', ':')))
 """,
@@ -463,7 +543,13 @@ def assert_executor_records_member_observations_around_callbacks() -> None:
             "execution_mode": "triad_staggered",
             "transaction_id": "triad-observation-fixture",
             "nodes": {role: {"root": str(root_path)} for role, root_path in roots.items()},
-            "capacity": {role: {} for role in roots},
+            "capacity": {
+                role: {
+                    "required_bytes": 1024,
+                    "required_inodes": 128,
+                }
+                for role in roots
+            },
             "capacity_apply": None,
             "backup": {},
             "staged": {},
@@ -483,6 +569,77 @@ def assert_executor_records_member_observations_around_callbacks() -> None:
 
         def fake_adapter(adapter, path, value, phase):
             events.append(("adapter", phase))
+            if phase in {"staggered-storage-backup", "staggered-sequencer-backup"}:
+                role = "storage-205" if phase == "staggered-storage-backup" else "sequencer-204"
+                peer_role = "sequencer-204" if role == "storage-205" else "storage-205"
+                transaction_id = value["transaction_id"]
+                expected_host = executor_module.HUMAN_DIRECT_SSH_CANONICAL[role]["host"]
+                backup_root = f"{executor_module.PRODUCTION_STACK_ROOT}/backups/{transaction_id}"
+                manifest_sha = "b" * 64
+                remote_backup = {
+                    "schema_version": "oasis7.validator_pair_rebuild_remote_backup_receipt.v1",
+                    "role": role,
+                    "transaction_id": transaction_id,
+                    "remote_target": True,
+                    "credential_transport": "fd-only-v1",
+                    "remote_host": expected_host,
+                    "remote_root": executor_module.PRODUCTION_STACK_ROOT,
+                    "backup_root": backup_root,
+                    "manifest": f"{backup_root}/manifest.json",
+                    "manifest_sha256": manifest_sha,
+                    "reset_surface_manifest_sha256": manifest_sha,
+                    "reset_surfaces": list(executor_module.RESET_SURFACES),
+                    "capacity": {
+                        "verified": True,
+                        "same_filesystem": True,
+                        "available_bytes": 4096,
+                        "free_bytes": 4096,
+                        "required_bytes": 1024,
+                        "free_inodes": 256,
+                        "required_inodes": 128,
+                    },
+                    "backup_non_seed": {
+                        "forensic_only": True,
+                        "seed_eligible": False,
+                        "restore_deleted_chain_state": False,
+                    },
+                }
+                live = {
+                    "role": peer_role,
+                    "root": value["nodes"][peer_role]["root"],
+                    "active": True,
+                    "running": True,
+                    "service_state": "running",
+                    "independently_observed": True,
+                    "healthz_ok": True,
+                    "nrestarts": 0,
+                    "oom_panic_segfault": False,
+                }
+                target = {
+                    **remote_backup,
+                    "root": value["nodes"][role]["root"],
+                    "active": True,
+                    "running": True,
+                    "service_state": "running",
+                    "independently_observed": True,
+                    "healthz_ok": True,
+                    "nrestarts": 0,
+                    "oom_panic_segfault": False,
+                    "backup_verified": True,
+                }
+                return {
+                    "schema_version": "oasis7.validator_pair_rebuild_host_receipt.v2",
+                    "phase": phase,
+                    "execution_mode": "triad_staggered",
+                    "transaction_id": transaction_id,
+                    "staggered_phase": "remote_backup",
+                    "backup_role": role,
+                    "live_peer_role": peer_role,
+                    "backup_before_stop": True,
+                    "target_stopped_before_reset": False,
+                    "reset_started_after_target_stop": False,
+                    "nodes": {role: target, peer_role: live},
+                }
             return {"phase": phase}
 
         def fake_observe(value, direct_args, *, observation_key="initial"):
@@ -509,9 +666,13 @@ def assert_executor_records_member_observations_around_callbacks() -> None:
         expected = [
             ("observe", "before-staggered-preflight"),
             ("adapter", "staggered-preflight"),
+            ("observe", "before-staggered-storage-backup"),
+            ("adapter", "staggered-storage-backup"),
             ("observe", "before-staggered-storage"),
             ("adapter", "staggered-storage"),
             ("observe", "after-staggered-storage"),
+            ("observe", "before-staggered-sequencer-backup"),
+            ("adapter", "staggered-sequencer-backup"),
             ("observe", "before-staggered-sequencer"),
             ("adapter", "staggered-sequencer"),
             ("observe", "after-staggered-sequencer"),
@@ -520,8 +681,10 @@ def assert_executor_records_member_observations_around_callbacks() -> None:
             raise SystemExit(f"executor member observation/callback ordering drifted: {events!r}")
         if set(transaction.get("staggered_live_observations", {})) != {
             "before-staggered-preflight",
+            "before-staggered-storage-backup",
             "before-staggered-storage",
             "after-staggered-storage",
+            "before-staggered-sequencer-backup",
             "before-staggered-sequencer",
             "after-staggered-sequencer",
         }:

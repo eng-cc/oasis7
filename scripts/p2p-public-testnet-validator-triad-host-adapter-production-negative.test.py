@@ -43,6 +43,90 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+VALID_HEALTH_URL = "http://127.0.0.1/healthz"
+_MISSING = object()
+
+
+class HealthProbeTransport:
+    """Fake SSH transport separating service-readback from an actual /healthz probe."""
+
+    def __init__(
+        self,
+        *,
+        service_payload: dict[str, object] | None = None,
+        health_payload: dict[str, object] | object = _MISSING,
+        health_raw: str | object = _MISSING,
+    ) -> None:
+        self.calls: list[tuple[str, str]] = []
+        self.service_payload = service_payload or {
+            "independently_observed": True,
+            "active": True,
+            "running": True,
+            "service_state": "running",
+            "listeners": [],
+        }
+        self.health_payload = health_payload
+        self.health_raw = health_raw
+
+    def command(self, role: str, remote: str, timeout: int = 60) -> str:
+        del timeout
+        self.calls.append((role, remote))
+        if "service-readback" in remote:
+            return json.dumps(self.service_payload)
+        if "/healthz" in remote:
+            if self.health_raw is not _MISSING:
+                return str(self.health_raw)
+            if self.health_payload is _MISSING:
+                raise SystemExit("health probe unavailable")
+            return json.dumps(self.health_payload)
+        if "sha256sum" in remote:
+            return "a" * 64
+        raise AssertionError(f"unexpected remote command: {remote}")
+
+
+def healthy_health_payload() -> dict[str, object]:
+    return {
+        "ok": True,
+        "ready": True,
+        "last_error": None,
+        "nrestarts": 0,
+        "oom_panic_segfault": False,
+    }
+
+
+def valid_remote_backup_entry(
+    *,
+    role: str = "storage-205",
+    transaction_id: str = "fixture-transaction",
+) -> dict[str, object]:
+    expected = ADAPTER.EXECUTOR.HUMAN_DIRECT_SSH_CANONICAL[role]
+    capacity = {
+        "verified": True,
+        "available_bytes": 4096,
+        "required_bytes": 1024,
+        "free_bytes": 4096,
+        "required_inodes": 16,
+        "free_inodes": 16,
+    }
+    return {
+        "role": role,
+        "transaction_id": transaction_id,
+        "remote_target": True,
+        "remote_host": expected["host"],
+        "remote_root": ADAPTER.STACK_ROOT,
+        "manifest": f"{ADAPTER.STACK_ROOT}/backups/{transaction_id}/manifest.json",
+        "manifest_sha256": "a" * 64,
+        "reset_surface_manifest_sha256": "b" * 64,
+        "reset_surfaces": list(ADAPTER.RESET_SURFACES),
+        "capacity": capacity,
+        "backup_non_seed": {
+            "forensic_only": True,
+            "seed_eligible": False,
+            "restore_deleted_chain_state": False,
+        },
+    }
+
+
 class GovernedTriadProductionNegativeTests(unittest.TestCase):
     def test_resume_adapter_fd_only_fails_before_direct_observation(self) -> None:
         """Adapter-only resume must not enter direct SSH without a credential seam."""
@@ -117,6 +201,145 @@ class GovernedTriadProductionNegativeTests(unittest.TestCase):
                 "/fixture/storage-205",
                 running=True,
             )
+
+    def test_preflight_uses_separate_fixed_healthz_probe(self) -> None:
+        transport = HealthProbeTransport(health_payload=healthy_health_payload())
+        inventory = {
+            "nodes": {
+                "storage-205": {"service": "oasis7-triad-storage.service"},
+            }
+        }
+        observed = ADAPTER.observe_node(
+            transport,
+            inventory,
+            "storage-205",
+            "/fixture/storage-205",
+            running=True,
+            health_url=VALID_HEALTH_URL,
+        )
+        self.assertTrue(observed["healthz_ok"])
+        self.assertTrue(observed["ready"])
+        self.assertEqual(observed["last_error"], None)
+        self.assertEqual(observed["nrestarts"], 0)
+        self.assertFalse(observed["oom_panic_segfault"])
+        service_calls = [remote for _, remote in transport.calls if "service-readback" in remote]
+        health_calls = [remote for _, remote in transport.calls if "/healthz" in remote]
+        self.assertEqual(len(service_calls), 1)
+        self.assertEqual(len(health_calls), 1)
+        self.assertNotEqual(service_calls[0], health_calls[0])
+        self.assertIn(VALID_HEALTH_URL, health_calls[0])
+
+    def test_absent_healthz_fails_closed(self) -> None:
+        transport = HealthProbeTransport()
+        inventory = {"nodes": {"storage-205": {"service": "oasis7-triad-storage.service"}}}
+        with self.assertRaisesRegex(SystemExit, r"(?i)health"):
+            ADAPTER.observe_node(
+                transport,
+                inventory,
+                "storage-205",
+                "/fixture/storage-205",
+                running=True,
+                health_url=VALID_HEALTH_URL,
+            )
+
+    def test_malformed_healthz_fails_closed(self) -> None:
+        transport = HealthProbeTransport(health_raw="not-json\n")
+        inventory = {"nodes": {"storage-205": {"service": "oasis7-triad-storage.service"}}}
+        with self.assertRaisesRegex(SystemExit, r"(?i)health|json"):
+            ADAPTER.observe_node(
+                transport,
+                inventory,
+                "storage-205",
+                "/fixture/storage-205",
+                running=True,
+                health_url=VALID_HEALTH_URL,
+            )
+
+    def test_false_healthz_fails_closed(self) -> None:
+        inventory = {"nodes": {"storage-205": {"service": "oasis7-triad-storage.service"}}}
+        for key, value in (
+            ("ok", False),
+            ("ready", False),
+            ("last_error", "fixture failure"),
+            ("nrestarts", 1),
+            ("oom_panic_segfault", True),
+        ):
+            with self.subTest(key=key):
+                payload = healthy_health_payload()
+                payload[key] = value
+                transport = HealthProbeTransport(health_payload=payload)
+                with self.assertRaisesRegex(SystemExit, r"(?i)health|ready|error|restart|crash"):
+                    ADAPTER.observe_node(
+                        transport,
+                        inventory,
+                        "storage-205",
+                        "/fixture/storage-205",
+                        running=True,
+                        health_url=VALID_HEALTH_URL,
+                    )
+
+    def test_wrong_healthz_url_is_rejected_before_remote_probe(self) -> None:
+        transport = HealthProbeTransport(health_payload=healthy_health_payload())
+        inventory = {"nodes": {"storage-205": {"service": "oasis7-triad-storage.service"}}}
+        with self.assertRaisesRegex(SystemExit, r"(?i)health|url|local"):
+            ADAPTER.observe_node(
+                transport,
+                inventory,
+                "storage-205",
+                "/fixture/storage-205",
+                running=True,
+                health_url="https://untrusted.example/healthz",
+            )
+        self.assertEqual(transport.calls, [])
+
+    def test_health_state_mismatch_is_rejected(self) -> None:
+        transport = HealthProbeTransport(
+            service_payload={
+                "independently_observed": True,
+                "active": False,
+                "running": False,
+                "service_state": "stopped",
+                "listeners": [],
+            },
+            health_payload=healthy_health_payload(),
+        )
+        inventory = {"nodes": {"storage-205": {"service": "oasis7-triad-storage.service"}}}
+        with self.assertRaisesRegex(SystemExit, r"(?i)state|running|active"):
+            ADAPTER.observe_node(
+                transport,
+                inventory,
+                "storage-205",
+                "/fixture/storage-205",
+                running=True,
+                health_url=VALID_HEALTH_URL,
+            )
+
+    def test_service_readback_health_defaults_are_not_authority(self) -> None:
+        transport = HealthProbeTransport(
+            service_payload={
+                "independently_observed": True,
+                "active": True,
+                "running": True,
+                "service_state": "running",
+                "listeners": [],
+                "healthz_ok": True,
+                "ready": True,
+                "last_error": None,
+                "nrestarts": 0,
+                "oom_panic_segfault": False,
+            }
+        )
+        inventory = {"nodes": {"storage-205": {"service": "oasis7-triad-storage.service"}}}
+        with self.assertRaisesRegex(SystemExit, r"(?i)health"):
+            ADAPTER.observe_node(
+                transport,
+                inventory,
+                "storage-205",
+                "/fixture/storage-205",
+                running=True,
+                health_url=VALID_HEALTH_URL,
+            )
+        self.assertTrue(any("/healthz" in remote for _, remote in transport.calls))
 
     def test_stale_registry_digest_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory(prefix="oasis7-triad-stale-registry-") as temp_dir:
@@ -249,6 +472,43 @@ class GovernedTriadProductionNegativeTests(unittest.TestCase):
                     {},
                     "storage-205",
                 )
+
+    def test_remote_backup_receipt_rejects_unbound_or_short_evidence(self) -> None:
+        cases = [
+            (
+                "seed eligible",
+                lambda entry: entry["backup_non_seed"].update(seed_eligible=True),
+            ),
+            (
+                "missing reset-surface manifest",
+                lambda entry: entry.pop("reset_surface_manifest_sha256"),
+            ),
+            (
+                "short free inodes",
+                lambda entry: entry["capacity"].update(free_inodes=15),
+            ),
+            (
+                "role mismatch",
+                lambda entry: entry.update(role="sequencer-204"),
+            ),
+            (
+                "stale transaction binding",
+                lambda entry: entry.update(transaction_id="stale-transaction"),
+            ),
+        ]
+        for label, mutate in cases:
+            with self.subTest(label=label):
+                entry = valid_remote_backup_entry()
+                mutate(entry)
+                transaction = {
+                    "transaction_id": "fixture-transaction",
+                    "backup": {"storage-205": entry},
+                }
+                with self.assertRaisesRegex(
+                    SystemExit,
+                    r"(?i)(remote|backup|capacity|seed|surface|transaction|role|inode)",
+                ):
+                    ADAPTER.require_remote_backup(transaction, "storage-205")
 
 
 if __name__ == "__main__":

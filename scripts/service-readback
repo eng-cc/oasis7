@@ -415,7 +415,7 @@ def service_state(service: str, *, require_disabled: bool = False) -> tuple[bool
             continue
         key, value = line.split("=", 1)
         values[key] = value.strip()
-    if not {"LoadState", "ActiveState", "SubState", "NRestarts", "UnitFileState"}.issubset(values):
+    if not {"LoadState", "ActiveState", "SubState", "NRestarts", "UnitFileState", "MainPID"}.issubset(values):
         fail("service read-only probe returned incomplete state")
     if values["LoadState"] != "loaded":
         fail("service unit is not loaded")
@@ -425,13 +425,31 @@ def service_state(service: str, *, require_disabled: bool = False) -> tuple[bool
         fail("service read-only probe returned malformed restart count")
     if restarts != 0:
         fail("service read-only probe reports a nonzero restart count")
-    if values["ActiveState"] != "inactive" or values["SubState"] != "dead":
-        fail("service unit is not in the expected inactive/dead state")
+    active_state = values["ActiveState"]
+    sub_state = values["SubState"]
+    main_pid = values["MainPID"]
+    if not re.fullmatch(r"[0-9]+", main_pid):
+        fail("service read-only probe returned malformed MainPID")
+    if require_disabled:
+        # validator-47 is staged but must never be started.  Keep this strict
+        # no-start gate independent from the active service contract below.
+        if active_state != "inactive" or sub_state != "dead":
+            fail("validator-47 service unit is not in the expected inactive/dead state")
+    elif (active_state, sub_state) not in {
+        ("inactive", "dead"),
+        ("active", "running"),
+    }:
+        # These Type=simple chain services are either live/running or
+        # stopped/dead. Unknown, socket-like, and oneshot-like combinations
+        # remain fail-closed instead of being flattened into a guessed state.
+        fail("service unit has an unsupported active/substate combination")
+    if active_state == "active" and int(main_pid) <= 0:
+        fail("active service unit has no valid MainPID")
     if require_disabled and values["UnitFileState"] != "disabled":
         fail("validator-47 service unit is not disabled")
-    active = values["ActiveState"] == "active"
-    running = active and values["SubState"] in {"running", "listening", "exited"}
-    return active, running, values["UnitFileState"], values.get("MainPID", "0")
+    active = active_state == "active"
+    running = active and sub_state == "running"
+    return active, running, values["UnitFileState"], main_pid
 
 
 def process_running(main_pid: str, root: str) -> bool:

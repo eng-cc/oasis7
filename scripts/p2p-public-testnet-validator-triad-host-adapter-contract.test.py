@@ -24,6 +24,7 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
 EXECUTOR = ROOT / "scripts" / "p2p-public-testnet-validator-pair-rebuild.py"
+ADAPTER_PATH = ROOT / "scripts" / "p2p-public-testnet-validator-triad-host-adapter.py"
 
 
 def load_executor():
@@ -36,6 +37,18 @@ def load_executor():
 
 
 MODULE = load_executor()
+
+
+def load_adapter():
+    spec = importlib.util.spec_from_file_location("triad_host_adapter_contract_adapter", ADAPTER_PATH)
+    if spec is None or spec.loader is None:
+        raise RuntimeError("unable to load governed triad host adapter")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+ADAPTER = load_adapter()
 
 
 def sha256(path: Path) -> str:
@@ -90,6 +103,8 @@ class GovernedTriadHostAdapterContractTests(unittest.TestCase):
             nodes[role] = {"role": role, "root": str(node_root)}
         proof = {
             "identity_receipts": self.identity_receipts,
+            "storage_health_url": "http://127.0.0.1/healthz",
+            "sequencer_health_url": "http://127.0.0.1/healthz",
             "sequencer_rebuild_proof": {
                 "sha256": sha256(self.sequencer_proof),
                 "role": "sequencer-204",
@@ -319,6 +334,136 @@ print(json.dumps(receipt, ensure_ascii=True, sort_keys=True))
         )
         self.assertRegex(str(error), r"(?i)(live peer|running|health)")
         self.assertEqual(persisted["adapter_callback"]["status"], "failed")
+
+    def test_peer_health_failure_precedes_destructive_script_generation(self) -> None:
+        class SyntheticHealthTransport:
+            def command(self, role: str, remote: str, timeout: int = 60) -> str:
+                del role, timeout
+                if "service-readback" in remote:
+                    # These values are deliberately synthetic.  A production
+                    # adapter must not treat them as /healthz authority.
+                    return json.dumps(
+                        {
+                            "independently_observed": True,
+                            "active": True,
+                            "running": True,
+                            "service_state": "running",
+                            "listeners": [],
+                            "healthz_ok": True,
+                            "ready": True,
+                            "last_error": None,
+                            "nrestarts": 0,
+                            "oom_panic_segfault": False,
+                        }
+                    )
+                if "/healthz" in remote:
+                    raise SystemExit("health probe unavailable")
+                if "sha256sum" in remote:
+                    return "a" * 64
+                raise AssertionError(f"unexpected remote command: {remote}")
+
+        transaction = {
+            "nodes": {
+                "storage-205": {"root": "/fixture/storage"},
+                "sequencer-204": {"root": "/fixture/sequencer"},
+            },
+            "proof": {
+                "storage_health_url": "http://127.0.0.1/healthz",
+                "sequencer_health_url": "http://127.0.0.1/healthz",
+            },
+        }
+        inventory = {
+            "nodes": {
+                "storage-205": {"service": "oasis7-triad-storage.service"},
+                "sequencer-204": {"service": "oasis7-triad-sequencer.service"},
+            }
+        }
+        control_calls: list[object] = []
+
+        def unexpected_control_script(*_args: object, **_kwargs: object) -> tuple[str, list[object]]:
+            control_calls.append(True)
+            raise AssertionError("destructive control script was generated before health proof")
+
+        with (
+            patch.object(ADAPTER, "validate_transaction", return_value=(inventory, {}, {}, {})),
+            patch.object(ADAPTER, "credential_fds", return_value={}),
+            patch.object(ADAPTER, "FixedSSH", return_value=SyntheticHealthTransport()),
+            patch.object(ADAPTER, "require_remote_backup"),
+            patch.object(ADAPTER, "control_script", unexpected_control_script),
+        ):
+            with self.assertRaisesRegex(SystemExit, r"(?i)health"):
+                ADAPTER.run_phase(transaction, "staggered-storage")
+        self.assertEqual(control_calls, [])
+
+    def test_preflight_proves_each_member_through_transaction_bound_healthz(self) -> None:
+        class HealthyTransport:
+            def __init__(self, runtime_sha256: str) -> None:
+                self.calls: list[tuple[str, str]] = []
+                self.runtime_sha256 = runtime_sha256
+
+            def command(self, role: str, remote: str, timeout: int = 60) -> str:
+                del timeout
+                self.calls.append((role, remote))
+                if "service-readback" in remote:
+                    return json.dumps(
+                        {
+                            "independently_observed": True,
+                            "active": True,
+                            "running": True,
+                            "service_state": "running",
+                            "listeners": [],
+                        }
+                    )
+                if "/healthz" in remote:
+                    return json.dumps(
+                        {
+                            "ok": True,
+                            "ready": True,
+                            "last_error": None,
+                            "nrestarts": 0,
+                            "oom_panic_segfault": False,
+                        }
+                    )
+                if "sha256sum" in remote:
+                    return self.runtime_sha256
+                raise AssertionError(f"unexpected remote command: {remote}")
+
+        transaction = self._base_plan()
+        inventory = {
+            "nodes": {
+                "storage-205": {"service": "oasis7-triad-storage.service"},
+                "sequencer-204": {"service": "oasis7-triad-sequencer.service"},
+            }
+        }
+        transport = HealthyTransport(self.runtime_sha256)
+
+        with (
+            patch.object(ADAPTER, "validate_transaction", return_value=(inventory, self.root / "known-hosts", {}, {})),
+            patch.object(ADAPTER, "credential_fds", return_value={}),
+            patch.object(ADAPTER, "FixedSSH", return_value=transport),
+            patch.object(ADAPTER, "base_receipt", return_value={}),
+        ):
+            receipt = ADAPTER.run_phase(transaction, "staggered-preflight")
+
+        self.assertEqual(receipt["staggered_phase"], "preflight")
+        self.assertTrue(receipt["live_baseline"])
+        self.assertEqual(set(receipt["nodes"]), set(MODULE.MUTATION_ORDER))
+        for node in receipt["nodes"].values():
+            self.assertTrue(node["healthz_ok"])
+            self.assertTrue(node["ready"])
+            self.assertIsNone(node["last_error"])
+            self.assertEqual(node["nrestarts"], 0)
+            self.assertFalse(node["oom_panic_segfault"])
+            self.assertFalse(node["preflight_observer_mutation"])
+        for role, expected_url in (
+            ("storage-205", transaction["proof"]["storage_health_url"]),
+            ("sequencer-204", transaction["proof"]["sequencer_health_url"]),
+        ):
+            role_calls = [remote for called_role, remote in transport.calls if called_role == role]
+            self.assertEqual(sum("service-readback" in remote for remote in role_calls), 1)
+            health_calls = [remote for remote in role_calls if "/healthz" in remote]
+            self.assertEqual(len(health_calls), 1)
+            self.assertIn(expected_url, health_calls[0])
 
     def test_package_hash_and_commit_are_bound_and_fail_closed(self) -> None:
         for variable, pattern in (
