@@ -30,7 +30,16 @@ mod admission_tests;
 use oasis7_net::{PeerManagerHealthIssue, PeerManagerHealthStatus, PeerManagerPeerHealth};
 
 type Handler = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>;
+type HandlerInput = Box<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>;
 type Admission = Arc<dyn Fn(&[u8]) -> Result<(), WorldError> + Send + Sync>;
+type ContextHandler = Arc<
+    dyn Fn(
+            &oasis7_proto::distributed_net::NetworkRequestContext,
+            &[u8],
+        ) -> Result<Vec<u8>, WorldError>
+        + Send
+        + Sync,
+>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReplicationPeerHealthDebug {
@@ -576,6 +585,10 @@ impl Libp2pReplicationNetwork {
         )
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable replication request seam keeps protocol, peer refresh, timeout, and retry budget controls explicit"
+    )]
     fn request_over_refreshed_peers_with_budget<F, G>(
         &self,
         protocol: &str,
@@ -989,20 +1002,14 @@ fn soft_deprioritized_peers_from_healths(healths: &[PeerManagerPeerHealth]) -> H
 fn peer_is_request_blocked(health: &PeerManagerPeerHealth) -> bool {
     matches!(health.status, PeerManagerHealthStatus::Blocked)
         && !health.issues.is_empty()
-        && !health
-            .issues
-            .iter()
-            .all(|issue| issue_is_soft_bootstrap_constraint(issue))
+        && !health.issues.iter().all(issue_is_soft_bootstrap_constraint)
 }
 
 #[cfg(test)]
 fn peer_is_soft_deprioritized_for_requests(health: &PeerManagerPeerHealth) -> bool {
     matches!(health.status, PeerManagerHealthStatus::Blocked)
         && !health.issues.is_empty()
-        && health
-            .issues
-            .iter()
-            .all(|issue| issue_is_soft_bootstrap_constraint(issue))
+        && health.issues.iter().all(issue_is_soft_bootstrap_constraint)
         && health
             .issues
             .iter()

@@ -10,10 +10,10 @@ pub(crate) fn resolve_launcher_binary_path() -> PathBuf {
         return PathBuf::from(path);
     }
 
-    if let Ok(current_exe) = env::current_exe() {
-        if let Some(bin_dir) = current_exe.parent() {
-            return bin_dir.join(binary_name("oasis7_game_launcher"));
-        }
+    if let Ok(current_exe) = env::current_exe()
+        && let Some(bin_dir) = current_exe.parent()
+    {
+        return bin_dir.join(binary_name("oasis7_game_launcher"));
     }
 
     PathBuf::from(binary_name("oasis7_game_launcher"))
@@ -30,10 +30,10 @@ pub(crate) fn resolve_chain_runtime_binary_path() -> PathBuf {
         return PathBuf::from(path);
     }
 
-    if let Ok(current_exe) = env::current_exe() {
-        if let Some(bin_dir) = current_exe.parent() {
-            return bin_dir.join(binary_name("oasis7_chain_runtime"));
-        }
+    if let Ok(current_exe) = env::current_exe()
+        && let Some(bin_dir) = current_exe.parent()
+    {
+        return bin_dir.join(binary_name("oasis7_chain_runtime"));
     }
 
     PathBuf::from(binary_name("oasis7_chain_runtime"))
@@ -50,10 +50,10 @@ pub(crate) fn resolve_web_launcher_binary_path() -> PathBuf {
         return PathBuf::from(path);
     }
 
-    if let Ok(current_exe) = env::current_exe() {
-        if let Some(bin_dir) = current_exe.parent() {
-            return bin_dir.join(binary_name("oasis7_web_launcher"));
-        }
+    if let Ok(current_exe) = env::current_exe()
+        && let Some(bin_dir) = current_exe.parent()
+    {
+        return bin_dir.join(binary_name("oasis7_web_launcher"));
     }
 
     PathBuf::from(binary_name("oasis7_web_launcher"))
@@ -71,11 +71,11 @@ pub(crate) fn resolve_static_dir_path() -> PathBuf {
     }
 
     let mut candidates = Vec::new();
-    if let Ok(current_exe) = env::current_exe() {
-        if let Some(bin_dir) = current_exe.parent() {
-            candidates.push(bin_dir.join("..").join("web"));
-            candidates.push(bin_dir.join("..").join("..").join("web"));
-        }
+    if let Ok(current_exe) = env::current_exe()
+        && let Some(bin_dir) = current_exe.parent()
+    {
+        candidates.push(bin_dir.join("..").join("web"));
+        candidates.push(bin_dir.join("..").join("..").join("web"));
     }
     candidates.extend(viewer_dev_dist_candidates());
     candidates.push(PathBuf::from("web"));
@@ -107,7 +107,7 @@ pub(crate) fn open_browser(url: &str) -> Result<(), String> {
         if status.success() {
             return Ok(());
         }
-        return Err(format!("open exited with {status}"));
+        Err(format!("open exited with {status}"))
     }
 
     #[cfg(target_os = "windows")]

@@ -22,7 +22,7 @@ use crate::{
     REPLICATED_EXECUTION_INPUT_ACTION_ID, REPLICATED_EXECUTION_INPUT_SUBMITTER,
 };
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(super) struct RuntimeState {
     pub(super) generation: u64,
     pub(super) tick_count: u64,
@@ -31,20 +31,6 @@ pub(super) struct RuntimeState {
     pub(super) consensus: NodeConsensusSnapshot,
     pub(super) consensus_progress_observer_error: Option<NodeConsensusProgressObserverError>,
     pub(super) last_error: Option<String>,
-}
-
-impl Default for RuntimeState {
-    fn default() -> Self {
-        Self {
-            generation: 0,
-            tick_count: 0,
-            last_tick_unix_ms: None,
-            replica_maintenance_last_polled_at_ms: None,
-            consensus: NodeConsensusSnapshot::default(),
-            consensus_progress_observer_error: None,
-            last_error: None,
-        }
-    }
 }
 
 const CONSENSUS_ACTION_PAYLOAD_ENVELOPE_VERSION: u8 = 1;

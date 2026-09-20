@@ -60,7 +60,7 @@ fn libp2p_discovery_acquires_peer_from_dht_peer_record() {
         .into_iter()
         .find(|addr| addr.to_string().contains("127.0.0.1"))
         .expect("bootstrap addr")
-        .with(libp2p::multiaddr::Protocol::P2p(bootstrap.peer_id().into()));
+        .with(libp2p::multiaddr::Protocol::P2p(bootstrap.peer_id()));
 
     let publisher = loopback_test_peer(
         vec![bootstrap_addr.clone()],
@@ -164,7 +164,7 @@ fn libp2p_rendezvous_discovery_acquires_peer_from_bootstrap_registration() {
         .into_iter()
         .find(|addr| addr.to_string().contains("127.0.0.1"))
         .expect("bootstrap addr")
-        .with(libp2p::multiaddr::Protocol::P2p(bootstrap.peer_id().into()));
+        .with(libp2p::multiaddr::Protocol::P2p(bootstrap.peer_id()));
 
     let seeker = loopback_test_peer(
         vec![bootstrap_addr.clone()],

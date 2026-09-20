@@ -70,7 +70,7 @@ fn libp2p_traffic_metrics_track_requests_and_gossip_payloads() {
         .into_iter()
         .find(|addr| addr.to_string().contains("127.0.0.1"))
         .expect("net1 addr")
-        .with(libp2p::multiaddr::Protocol::P2p(net1.peer_id().into()));
+        .with(libp2p::multiaddr::Protocol::P2p(net1.peer_id()));
 
     net1.register_handler(
         "/aw/rr/1.0.0/ping",

@@ -33,9 +33,10 @@ COPY_PATHS = (
     "doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md",
 )
 
-# The slug and Product PRD-ID are the stable identity.  During C0 each identity
-# deliberately accepts only these two display-name spellings; the following
-# tests are the executable compatibility contract for that window.
+# The slug and Product PRD-ID are the stable identity.  The tuple keeps both
+# the retired and final display labels so C1 can prove that only the final
+# label is accepted in active identity declarations while retired prose stays
+# recognizable.
 MODULE_NAME_COMPATIBILITY = (
     (
         "world-rules-core-gameplay",
@@ -130,10 +131,22 @@ def replace_manifest_module_name(
 
 def set_module_display_name(root: Path, module: tuple[str, str, str, str], name: str) -> None:
     """Set one module's manifest and canonical-root display name from either P1/C0 source spelling."""
+    set_landing_display_name(root, module, name)
+    set_root_display_name(root, module, name)
+
+
+def set_landing_display_name(root: Path, module: tuple[str, str, str, str], name: str) -> None:
+    """Change only one active landing-row display name."""
     slug, _prd_id, legacy_name, final_name = module
     current_names = (legacy_name, final_name)
     manifest = root / "doc/product/README.md"
     replace_manifest_module_name(manifest, slug, current_names, name)
+
+
+def set_root_display_name(root: Path, module: tuple[str, str, str, str], name: str) -> None:
+    """Change the canonical root heading and active product-module metadata."""
+    slug, _prd_id, legacy_name, final_name = module
+    current_names = (legacy_name, final_name)
     replace_from_current_name(
         root / f"doc/product/{slug}/prd.md",
         current_names,
@@ -154,10 +167,44 @@ def set_all_module_display_names(root: Path) -> None:
         set_module_display_name(root, module, module[3])
 
 
-def set_all_module_legacy_names(root: Path) -> None:
-    """Switch every landing row, root heading, and metadata label to C0 names."""
-    for module in MODULE_NAME_COMPATIBILITY:
-        set_module_display_name(root, module, module[2])
+def add_historical_legacy_prose(root: Path) -> None:
+    """Historical migration prose may retain old labels without active identity."""
+    path = root / "doc/product/world-infrastructure/world-continuity-governance-and-recovery.prd.md"
+    path.write_text(
+        path.read_text(encoding="utf-8")
+        + (
+            "\n历史迁移 provenance 仍可提及旧标签：世界规则与核心玩法、大世界基础设施、"
+            "智能体与世界模拟、玩家入口与发行；这些文字不是当前产品入口或 canonical root identity。\n"
+        ),
+        encoding="utf-8",
+    )
+
+
+def add_invalid_active_topic_fragment(root: Path) -> None:
+    """An active module inventory link must resolve its real target fragment."""
+    replace(
+        root / "doc/product/world-rules-core-gameplay/prd.md",
+        "(first-session-and-continuation.prd.md)",
+        "(first-session-and-continuation.prd.md#missing-active-topic-fragment)",
+    )
+
+
+def add_invalid_paired_design_fragment(root: Path) -> None:
+    """A paired design mapping must resolve the referenced product anchor."""
+    replace(
+        root / "doc/product/world-rules-core-gameplay/industrial-demand-goals-and-settlement.design.md",
+        "industrial-demand-goals-and-settlement.prd.md#req-sc31-001",
+        "industrial-demand-goals-and-settlement.prd.md#missing-paired-design-fragment",
+    )
+
+
+def add_invalid_retired_migration_fragment(root: Path) -> None:
+    """A retired migration mapping must preserve navigable fragment targets."""
+    replace(
+        root / "doc/product/world-infrastructure/prd.md",
+        "(world-continuity-governance-and-recovery.prd.md)",
+        "(world-continuity-governance-and-recovery.prd.md#missing-retired-migration-fragment)",
+    )
 
 
 def add_fenced_identity_pseudo_content(root: Path, module: tuple[str, str, str, str]) -> None:
@@ -250,12 +297,31 @@ def main() -> None:
     finally:
         shutil.rmtree(root)
 
-    # The unchanged P1 fixture proves all four final labels.  This scenario
-    # switches every landing row, root heading, and 产品模块 metadata label to
-    # its explicit C0 legacy name and must remain accepted for compatibility.
-    scenario(None, set_all_module_legacy_names)
+    # C1 keeps old labels recognizable in historical prose but no longer accepts
+    # them as active landing/root identities. These two scenarios are RED until
+    # the production checker stops treating C0 names as active aliases.
+    module = MODULE_NAME_COMPATIBILITY[0]
+    scenario(
+        "entry-contract",
+        lambda root: set_landing_display_name(root, module, module[2]),
+    )
+    scenario(
+        "metadata-contract",
+        lambda root: set_root_display_name(root, module, module[2]),
+    )
+    scenario(None, add_historical_legacy_prose)
 
-    # The same helper must also preserve an explicit all-final positive case.
+    # C1-02 must reject broken anchors in active inventories, paired designs,
+    # and retired migration mappings while leaving existing path checks intact.
+    # These are RED until the checker validates fragments in product scope.
+    for invalid_fragment_fixture in (
+        add_invalid_active_topic_fragment,
+        add_invalid_paired_design_fragment,
+        add_invalid_retired_migration_fragment,
+    ):
+        scenario("invalid-fragment", invalid_fragment_fixture)
+
+    # The explicit all-final identity case remains a positive control.
     scenario(None, set_all_module_display_names)
 
     # Arbitrary names and another module's name are not compatibility aliases.

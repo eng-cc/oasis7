@@ -509,6 +509,10 @@ impl ReplicationRuntime {
         )
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable replication commit envelope seam mirrors the persisted commit and execution binding fields"
+    )]
     pub(crate) fn build_local_commit_message_with_checkpoint(
         &mut self,
         node_id: &str,
@@ -1085,13 +1089,12 @@ impl ReplicationRuntime {
             || message.public_key_hex.is_some()
         {
             verify_replication_message_signature(message)?;
-            if let Some(public_key_hex) = message.public_key_hex.as_deref() {
-                if message.record.writer_id != public_key_hex {
-                    return Err(NodeError::Replication {
-                        reason: "replication writer_id does not match signature public key"
-                            .to_string(),
-                    });
-                }
+            if let Some(public_key_hex) = message.public_key_hex.as_deref()
+                && message.record.writer_id != public_key_hex
+            {
+                return Err(NodeError::Replication {
+                    reason: "replication writer_id does not match signature public key".to_string(),
+                });
             }
         }
         self.validate_remote_writer_authorization(message.record.writer_id.as_str())?;

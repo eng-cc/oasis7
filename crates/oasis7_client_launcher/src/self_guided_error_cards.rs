@@ -167,21 +167,20 @@ impl ClientLauncherApp {
                     self.chain_runtime_status,
                     ChainRuntimeStatus::StaleExecutionWorld(_)
                 )
+                && let Some(recovery) = self.chain_recovery.clone()
             {
-                if let Some(recovery) = self.chain_recovery.clone() {
-                    ui.separator();
-                    ui.small(format!(
-                        "{}: {} · {}: {}",
-                        self.tr("建议 fresh node", "Suggested fresh node"),
-                        recovery.fresh_node_id,
-                        self.tr("建议状态端口", "Suggested status bind"),
-                        recovery.fresh_chain_status_bind,
-                    ));
-                    if ui.button(self.stale_chain_recovery_action_text()).clicked() {
-                        self.record_guided_quick_action_click();
-                        if self.apply_chain_recovery_config().is_some() {
-                            self.handle_start_chain_click(issues);
-                        }
+                ui.separator();
+                ui.small(format!(
+                    "{}: {} · {}: {}",
+                    self.tr("建议 fresh node", "Suggested fresh node"),
+                    recovery.fresh_node_id,
+                    self.tr("建议状态端口", "Suggested status bind"),
+                    recovery.fresh_chain_status_bind,
+                ));
+                if ui.button(self.stale_chain_recovery_action_text()).clicked() {
+                    self.record_guided_quick_action_click();
+                    if self.apply_chain_recovery_config().is_some() {
+                        self.handle_start_chain_click(issues);
                     }
                 }
             }

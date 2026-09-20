@@ -177,6 +177,10 @@ pub(crate) fn lineage_head_from_commit(
 /// authority and the exact checkpoint descriptor carried by a replication
 /// payload.  This helper intentionally does not read manifests or create
 /// votes: the envelope must already be present in the signed payload.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Stable checkpoint authority seam mirrors the signed lineage descriptor and validator context"
+)]
 pub(crate) fn verify_checkpoint_lineage_for_descriptor(
     envelope: &CheckpointLineageEnvelopeV1,
     world_id: &str,

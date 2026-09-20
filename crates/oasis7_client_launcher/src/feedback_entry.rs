@@ -54,6 +54,10 @@ impl Default for FeedbackDraft {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[expect(
+    clippy::enum_variant_names,
+    reason = "Feedback validation issues intentionally use a shared Required suffix in player-facing error mapping."
+)]
 pub(crate) enum FeedbackDraftIssue {
     TitleRequired,
     DescriptionRequired,

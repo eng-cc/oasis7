@@ -210,7 +210,7 @@ fn merkle_proof_for_index(
 ) -> Result<Vec<NodeValidatorStakeProofStepSnapshot>, NodeError> {
     let mut proof = Vec::new();
     while level.len() > 1 {
-        let sibling_index = if index % 2 == 0 {
+        let sibling_index = if index.is_multiple_of(2) {
             if index + 1 < level.len() {
                 index + 1
             } else {
@@ -220,7 +220,7 @@ fn merkle_proof_for_index(
             index - 1
         };
         proof.push(NodeValidatorStakeProofStepSnapshot {
-            side: if index % 2 == 0 {
+            side: if index.is_multiple_of(2) {
                 "right".to_string()
             } else {
                 "left".to_string()

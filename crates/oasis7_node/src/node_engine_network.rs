@@ -554,7 +554,7 @@ impl PosNodeEngine {
                 previous_execution_height,
                 previous_execution_block_hash.as_deref(),
                 previous_execution_state_root.as_deref(),
-                execution_hook.as_deref_mut(),
+                execution_hook,
                 peer_mismatch,
                 &err,
             )?;
@@ -585,7 +585,7 @@ impl PosNodeEngine {
                 previous_execution_height,
                 previous_execution_block_hash.as_deref(),
                 previous_execution_state_root.as_deref(),
-                execution_hook.as_deref_mut(),
+                execution_hook,
                 true,
                 &err,
             )?;
@@ -593,21 +593,24 @@ impl PosNodeEngine {
         }
         if self.last_execution_height == payload.height
             && self.execution_binding_for_height(payload.height).is_none()
-        {
-            if let (Some(execution_block_hash), Some(execution_state_root)) = (
+            && let (Some(execution_block_hash), Some(execution_state_root)) = (
                 payload.execution_block_hash.clone(),
                 payload.execution_state_root.clone(),
-            ) {
-                self.remember_execution_binding(
-                    payload.height,
-                    execution_block_hash,
-                    execution_state_root,
-                );
-            }
+            )
+        {
+            self.remember_execution_binding(
+                payload.height,
+                execution_block_hash,
+                execution_state_root,
+            );
         }
         Ok((payload.block_hash.clone(), payload.committed_at_ms))
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable replication recovery seam keeps prior execution bindings and mismatch context explicit"
+    )]
     fn rollback_synced_execution_after_failure(
         &mut self,
         world_id: &str,
@@ -1177,13 +1180,12 @@ impl PosNodeEngine {
                     {
                         continue;
                     }
-                    if let Some(replication_runtime) = replication.as_deref_mut() {
-                        if replication_runtime
+                    if let Some(replication_runtime) = replication.as_deref_mut()
+                        && replication_runtime
                             .apply_remote_message(node_id, world_id, &replication_msg)
                             .is_ok()
-                        {
-                            endpoint.remember_peer(from)?;
-                        }
+                    {
+                        endpoint.remember_peer(from)?;
                     }
                 }
             }

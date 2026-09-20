@@ -169,7 +169,7 @@ fn default_chain_node_id() -> String {
         .as_millis();
     #[cfg(not(target_arch = "wasm32"))]
     {
-        return format!("{DEFAULT_CHAIN_NODE_ID}-fresh-{}-{now}", std::process::id());
+        format!("{DEFAULT_CHAIN_NODE_ID}-fresh-{}-{now}", std::process::id())
     }
 
     #[cfg(target_arch = "wasm32")]

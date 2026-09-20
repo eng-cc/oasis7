@@ -24,26 +24,7 @@ fn public_key_hex(signing_key: &SigningKey) -> String {
     hex::encode(signing_key.verifying_key().to_bytes())
 }
 
-fn sign_signature_hex(
-    action: FeedbackActionKind,
-    feedback_id: &str,
-    actor_public_key_hex: &str,
-    content_hash: &str,
-    nonce: &str,
-    timestamp_ms: i64,
-    expires_at_ms: i64,
-    signing_key: &SigningKey,
-) -> String {
-    let payload = FeedbackSignedPayload {
-        version: FEEDBACK_SIGNATURE_PAYLOAD_VERSION,
-        action: action.as_str(),
-        feedback_id,
-        actor_public_key_hex,
-        content_hash,
-        nonce,
-        timestamp_ms,
-        expires_at_ms,
-    };
+fn sign_signature_hex(payload: FeedbackSignedPayload<'_>, signing_key: &SigningKey) -> String {
     let bytes = to_canonical_cbor(&payload).expect("cbor");
     let signature = signing_key.sign(bytes.as_slice());
     hex::encode(signature.to_bytes())
@@ -79,13 +60,15 @@ fn feedback_create_append_tombstone_public_read_roundtrip() {
     };
     let create_content_hash = feedback_create_content_hash(&create_stub).expect("content hash");
     let create_signature = sign_signature_hex(
-        FeedbackActionKind::Create,
-        create_stub.feedback_id.as_str(),
-        create_stub.author_public_key_hex.as_str(),
-        create_content_hash.as_str(),
-        create_stub.nonce.as_str(),
-        create_stub.timestamp_ms,
-        create_stub.expires_at_ms,
+        FeedbackSignedPayload::new(
+            FeedbackActionKind::Create,
+            create_stub.feedback_id.as_str(),
+            create_stub.author_public_key_hex.as_str(),
+            create_content_hash.as_str(),
+            create_stub.nonce.as_str(),
+            create_stub.timestamp_ms,
+            create_stub.expires_at_ms,
+        ),
         &signing_key,
     );
     let mut create_request = create_stub;
@@ -101,13 +84,15 @@ fn feedback_create_append_tombstone_public_read_roundtrip() {
     let append_expire = now_plus(60_000);
     let append_hash = blake3_hex(append_content.as_bytes());
     let append_signature = sign_signature_hex(
-        FeedbackActionKind::Append,
-        "fb-001",
-        actor_public_key_hex.as_str(),
-        append_hash.as_str(),
-        append_nonce.as_str(),
-        append_timestamp,
-        append_expire,
+        FeedbackSignedPayload::new(
+            FeedbackActionKind::Append,
+            "fb-001",
+            actor_public_key_hex.as_str(),
+            append_hash.as_str(),
+            append_nonce.as_str(),
+            append_timestamp,
+            append_expire,
+        ),
         &signing_key,
     );
     let append_receipt = feedback_store
@@ -130,13 +115,15 @@ fn feedback_create_append_tombstone_public_read_roundtrip() {
     let tombstone_expire = now_plus(60_000);
     let tombstone_hash = blake3_hex(tombstone_reason.as_bytes());
     let tombstone_signature = sign_signature_hex(
-        FeedbackActionKind::Tombstone,
-        "fb-001",
-        actor_public_key_hex.as_str(),
-        tombstone_hash.as_str(),
-        tombstone_nonce.as_str(),
-        tombstone_timestamp,
-        tombstone_expire,
+        FeedbackSignedPayload::new(
+            FeedbackActionKind::Tombstone,
+            "fb-001",
+            actor_public_key_hex.as_str(),
+            tombstone_hash.as_str(),
+            tombstone_nonce.as_str(),
+            tombstone_timestamp,
+            tombstone_expire,
+        ),
         &signing_key,
     );
     let tombstone_receipt = feedback_store
@@ -193,13 +180,15 @@ fn feedback_author_control_rejects_non_author_append() {
     };
     let create_hash = feedback_create_content_hash(&create_stub).expect("hash");
     let create_signature = sign_signature_hex(
-        FeedbackActionKind::Create,
-        create_stub.feedback_id.as_str(),
-        create_stub.author_public_key_hex.as_str(),
-        create_hash.as_str(),
-        create_stub.nonce.as_str(),
-        create_stub.timestamp_ms,
-        create_stub.expires_at_ms,
+        FeedbackSignedPayload::new(
+            FeedbackActionKind::Create,
+            create_stub.feedback_id.as_str(),
+            create_stub.author_public_key_hex.as_str(),
+            create_hash.as_str(),
+            create_stub.nonce.as_str(),
+            create_stub.timestamp_ms,
+            create_stub.expires_at_ms,
+        ),
         &author,
     );
     let mut create_request = create_stub;
@@ -211,13 +200,15 @@ fn feedback_author_control_rejects_non_author_append() {
     let append_content = "attacker append";
     let append_hash = blake3_hex(append_content.as_bytes());
     let append_signature = sign_signature_hex(
-        FeedbackActionKind::Append,
-        "fb-author",
-        attacker_pubkey.as_str(),
-        append_hash.as_str(),
-        "n-attacker-1",
-        now_plus(10),
-        now_plus(60_000),
+        FeedbackSignedPayload::new(
+            FeedbackActionKind::Append,
+            "fb-author",
+            attacker_pubkey.as_str(),
+            append_hash.as_str(),
+            "n-attacker-1",
+            now_plus(10),
+            now_plus(60_000),
+        ),
         &attacker,
     );
     let append_result = feedback_store.append_feedback(FeedbackAppendRequest {
@@ -265,13 +256,15 @@ fn feedback_replay_nonce_is_rejected() {
     };
     let create_hash = feedback_create_content_hash(&create_stub).expect("hash");
     let create_signature = sign_signature_hex(
-        FeedbackActionKind::Create,
-        create_stub.feedback_id.as_str(),
-        create_stub.author_public_key_hex.as_str(),
-        create_hash.as_str(),
-        create_stub.nonce.as_str(),
-        create_stub.timestamp_ms,
-        create_stub.expires_at_ms,
+        FeedbackSignedPayload::new(
+            FeedbackActionKind::Create,
+            create_stub.feedback_id.as_str(),
+            create_stub.author_public_key_hex.as_str(),
+            create_hash.as_str(),
+            create_stub.nonce.as_str(),
+            create_stub.timestamp_ms,
+            create_stub.expires_at_ms,
+        ),
         &author,
     );
     let mut first_request = create_stub.clone();
@@ -324,13 +317,15 @@ fn feedback_rate_limit_blocks_excessive_submissions() {
         };
         let content_hash = feedback_create_content_hash(&stub).expect("hash");
         let signature = sign_signature_hex(
-            FeedbackActionKind::Create,
-            stub.feedback_id.as_str(),
-            stub.author_public_key_hex.as_str(),
-            content_hash.as_str(),
-            stub.nonce.as_str(),
-            stub.timestamp_ms,
-            stub.expires_at_ms,
+            FeedbackSignedPayload::new(
+                FeedbackActionKind::Create,
+                stub.feedback_id.as_str(),
+                stub.author_public_key_hex.as_str(),
+                content_hash.as_str(),
+                stub.nonce.as_str(),
+                stub.timestamp_ms,
+                stub.expires_at_ms,
+            ),
             &author,
         );
         FeedbackCreateRequest {
@@ -388,13 +383,15 @@ fn feedback_rate_limit_skips_stale_audit_paths_before_reading() {
     };
     let content_hash = feedback_create_content_hash(&stub).expect("hash");
     let signature = sign_signature_hex(
-        FeedbackActionKind::Create,
-        stub.feedback_id.as_str(),
-        stub.author_public_key_hex.as_str(),
-        content_hash.as_str(),
-        stub.nonce.as_str(),
-        stub.timestamp_ms,
-        stub.expires_at_ms,
+        FeedbackSignedPayload::new(
+            FeedbackActionKind::Create,
+            stub.feedback_id.as_str(),
+            stub.author_public_key_hex.as_str(),
+            content_hash.as_str(),
+            stub.nonce.as_str(),
+            stub.timestamp_ms,
+            stub.expires_at_ms,
+        ),
         &author,
     );
     let receipt = feedback_store

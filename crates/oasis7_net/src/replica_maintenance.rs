@@ -120,6 +120,10 @@ pub fn execute_replica_maintenance_plan(
     report
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Public polling API keeps its established parameter list for caller compatibility"
+)]
 pub fn run_replica_maintenance_poll(
     dht: &impl DistributedDht,
     executor: &impl ReplicaTransferExecutor,
