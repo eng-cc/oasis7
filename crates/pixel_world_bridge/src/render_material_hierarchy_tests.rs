@@ -257,7 +257,7 @@ fn same_color_compound_update_reconciles_inset_without_resetting_camera() {
             true,
             RenderSnapshot::Changed {
                 version,
-                state: Some(state.clone()),
+                state: Some(Box::new(state.clone())),
             },
         );
         assert!(
