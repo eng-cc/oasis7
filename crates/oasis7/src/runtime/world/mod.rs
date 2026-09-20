@@ -183,7 +183,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
 
-#[cfg(any(test, feature = "test_tier_required"))]
+#[cfg(test)]
 use oasis7_wasm_router::PreparedSubscription;
 
 use super::CrisisStatus;
@@ -204,7 +204,7 @@ use super::governance::{
 };
 use super::main_token::main_token_account_id_from_node_public_key;
 use super::manifest::Manifest;
-#[cfg(any(test, feature = "test_tier_required"))]
+#[cfg(test)]
 use super::modules::ModuleSubscription;
 use super::modules::{ModuleCache, ModuleLimits, ModuleRegistry};
 use super::policy::PolicySet;
@@ -217,10 +217,10 @@ use crate::simulator::ModuleVisualEntity;
 
 #[derive(Debug, Clone)]
 pub(super) struct PreparedSubscriptionCacheEntry {
-    #[cfg(any(test, feature = "test_tier_required"))]
+    #[cfg(test)]
     pub(super) subscriptions: Vec<ModuleSubscription>,
     pub(super) _subscription_fingerprint: String,
-    #[cfg(any(test, feature = "test_tier_required"))]
+    #[cfg(test)]
     pub(super) prepared: Arc<[PreparedSubscription]>,
 }
 

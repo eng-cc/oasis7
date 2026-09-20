@@ -477,11 +477,11 @@ impl World {
             (authority, proof)
         };
 
-        if !self
+        if self
             .module_registry
             .active
             .get(LOCAL_TEST_PROVIDER_MODULE_ID)
-            .is_some_and(|version| version == LOCAL_TEST_PROVIDER_MODULE_VERSION)
+            .is_none_or(|version| version != LOCAL_TEST_PROVIDER_MODULE_VERSION)
         {
             return Err(local_test_error("local provider module is not active"));
         }

@@ -1,4 +1,5 @@
 use super::*;
+#[cfg(any(test, feature = "test_tier_required"))]
 use std::net::IpAddr;
 
 pub(super) fn env_requests_provider_backend() -> bool {
@@ -33,7 +34,7 @@ pub(in crate::viewer::runtime_live) fn hosted_local_mock_test_lane_enabled(
         let execution_lane = named_env_var_any(&[VIEWER_AGENT_EXECUTION_LANE_ENV]);
         let provider_url = named_env_var_any(&[VIEWER_AGENT_PROVIDER_URL_ENV]);
 
-        return decision_source
+        decision_source
             .as_deref()
             .and_then(canonical_agent_decision_source)
             == Some(PROVIDER_BACKED_DECISION_SOURCE)
@@ -53,7 +54,7 @@ pub(in crate::viewer::runtime_live) fn hosted_local_mock_test_lane_enabled(
             && execution_lane.as_deref() == Some("player_parity")
             && provider_url
                 .as_deref()
-                .is_some_and(is_loopback_http_provider_url);
+                .is_some_and(is_loopback_http_provider_url)
     }
 
     #[cfg(not(any(test, feature = "test_tier_required")))]
@@ -88,7 +89,7 @@ pub(in crate::viewer::runtime_live) fn install_hosted_local_mock_test_capability
                     )
                 })?;
         }
-        return Ok(true);
+        Ok(true)
     }
 
     #[cfg(not(any(test, feature = "test_tier_required")))]
@@ -98,6 +99,7 @@ pub(in crate::viewer::runtime_live) fn install_hosted_local_mock_test_capability
     }
 }
 
+#[cfg(any(test, feature = "test_tier_required"))]
 fn is_loopback_http_provider_url(raw: &str) -> bool {
     let value = raw.trim();
     let Some(scheme) = value.get(.."http://".len()) else {
@@ -136,6 +138,7 @@ fn is_loopback_http_provider_url(raw: &str) -> bool {
         .unwrap_or(false)
 }
 
+#[cfg(any(test, feature = "test_tier_required"))]
 fn parse_provider_host_port(authority: &str) -> Option<(&str, &str)> {
     if let Some(rest) = authority.strip_prefix('[') {
         let (host, remainder) = rest.split_once(']')?;

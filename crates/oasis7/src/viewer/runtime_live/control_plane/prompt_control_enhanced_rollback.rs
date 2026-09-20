@@ -286,7 +286,8 @@ impl ViewerRuntimeLiveServer {
             request_id.as_str(),
             operation,
             false,
-        )?;
+        )
+        .map_err(|error| *error)?;
         let current = self
             .current_prompt_profile(agent_id.as_str())
             .map_err(|_| {

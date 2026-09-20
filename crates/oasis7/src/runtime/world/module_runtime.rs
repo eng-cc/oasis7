@@ -7,7 +7,7 @@ use oasis7_wasm_abi::{
     ModuleInvocationProvenance, ModuleOutput, ModuleSandbox, ModuleStateUpdate,
     validate_module_command_declarations, validate_module_command_envelope,
 };
-#[cfg(any(test, feature = "test_tier_required"))]
+#[cfg(test)]
 use oasis7_wasm_router::{PreparedSubscription, prepare_subscriptions};
 
 use super::super::util::{hash_json, to_canonical_cbor};
@@ -17,7 +17,7 @@ use super::super::{
 };
 #[cfg(test)]
 use super::super::{ModuleRecord, ModuleRole};
-#[cfg(any(test, feature = "test_tier_required"))]
+#[cfg(test)]
 use super::PreparedSubscriptionCacheEntry;
 use super::World;
 use super::capability_authorization_command_stage::{
@@ -404,7 +404,7 @@ fn enforce_pure_policy_hooks_for_target<T: ModuleCallTarget + ?Sized>(
 #[path = "module_runtime_tests.rs"]
 mod tests;
 
-#[cfg(any(test, feature = "test_tier_required"))]
+#[cfg(test)]
 fn prepared_subscription_cache_key(manifest: &ModuleManifest) -> Result<String, WorldError> {
     let record_key = ModuleRegistry::record_key(&manifest.module_id, &manifest.version);
     let subscription_hash = hash_json(&manifest.subscriptions)?;
@@ -414,7 +414,7 @@ fn prepared_subscription_cache_key(manifest: &ModuleManifest) -> Result<String, 
     ))
 }
 
-#[cfg(any(test, feature = "test_tier_required"))]
+#[cfg(test)]
 fn prepared_subscription_lookup_key(manifest: &ModuleManifest) -> String {
     format!(
         "{}|wasm={}",
@@ -578,7 +578,7 @@ impl World {
         Ok(())
     }
 
-    #[cfg(any(test, feature = "test_tier_required"))]
+    #[cfg(test)]
     fn prepared_subscriptions_for_manifest(
         &mut self,
         manifest: &ModuleManifest,

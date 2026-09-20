@@ -313,20 +313,21 @@ impl RuntimeLlmSidecar {
                         (Some(simulator), Some(runtime))
                     });
                 let observation_for_context = observation.clone();
-                let (turn_context, request_context) = build_provider_context(
-                    session_id.as_str(),
-                    current_sequence,
-                    agent_id.as_str(),
-                    observation.clone(),
-                    &settings,
-                    runtime_binding.clone(),
-                    recent_event_summary.as_slice(),
-                    capability_context,
-                    replan_cause.as_ref(),
-                    runtime_continuation.as_ref(),
-                    &self.provider_memory_store,
-                    goal_snapshot,
-                )?;
+                let (turn_context, request_context) =
+                    build_provider_context(ProviderContextInput {
+                        session_id: session_id.as_str(),
+                        sequence: current_sequence,
+                        agent_id: agent_id.as_str(),
+                        observation: observation.clone(),
+                        settings: &settings,
+                        runtime_binding: runtime_binding.clone(),
+                        recent_event_summary: recent_event_summary.as_slice(),
+                        capability_context,
+                        replan_cause: replan_cause.as_ref(),
+                        continuation: runtime_continuation.as_ref(),
+                        memory_store: &self.provider_memory_store,
+                        goal_snapshot,
+                    })?;
                 if let Some(identity) =
                     lineage_generation_recovery::provider_request_capability_identity(
                         &request_context,
@@ -423,8 +424,7 @@ impl RuntimeLlmSidecar {
                                 resumed
                                     .replanned_continuation
                                     .as_ref()
-                                    .map(|_| runtime_continuation.clone())
-                                    .flatten(),
+                                    .and_then(|_| runtime_continuation.clone()),
                             )
                             .map_err(|error| {
                                 format!(
@@ -535,19 +535,23 @@ impl RuntimeLlmSidecar {
     }
 }
 
-fn build_provider_context(
-    session_id: &str,
+struct ProviderContextInput<'a> {
+    session_id: &'a str,
     sequence: u64,
-    agent_id: &str,
+    agent_id: &'a str,
     observation: Observation,
-    settings: &ProviderDecisionSettings,
+    settings: &'a ProviderDecisionSettings,
     runtime_binding: RuntimeBindingV1,
-    recent_event_summary: &[String],
+    recent_event_summary: &'a [String],
     capability_context: ProviderCapabilityContext,
-    replan_cause: Option<&ProviderStaleReplanCause>,
-    continuation: Option<&SimulatorContinuationProposalV1>,
-    memory_store: &MemoryWriteStore,
+    replan_cause: Option<&'a ProviderStaleReplanCause>,
+    continuation: Option<&'a SimulatorContinuationProposalV1>,
+    memory_store: &'a MemoryWriteStore,
     goal_snapshot: crate::simulator::GoalSnapshotV1,
+}
+
+fn build_provider_context(
+    input: ProviderContextInput<'_>,
 ) -> Result<
     (
         ContinuousAgentTurnContextV1,
@@ -555,6 +559,20 @@ fn build_provider_context(
     ),
     String,
 > {
+    let ProviderContextInput {
+        session_id,
+        sequence,
+        agent_id,
+        observation,
+        settings,
+        runtime_binding,
+        recent_event_summary,
+        capability_context,
+        replan_cause,
+        continuation,
+        memory_store,
+        goal_snapshot,
+    } = input;
     let action_catalog = provider_phase1_action_catalog();
     let memory_snapshot = memory_store.context_snapshot(agent_id, session_id, "session_private", 8);
     let memory_summary =
@@ -636,11 +654,9 @@ fn build_provider_context(
         capability_invocation_context_digest,
         memory_snapshot_digest: Digest32::from(memory_snapshot.digest.clone()),
         goal_snapshot_digest: Digest32::from(goal_snapshot.digest.clone()),
-        continuation_digest: Digest32::from(
-            continuation
-                .map(|value| h_v1("oasis7.cognition.continuation.v1", value))
-                .unwrap_or_else(|| h_v1("oasis7.cognition.continuation.v1", &Value::Null)),
-        ),
+        continuation_digest: continuation
+            .map(|value| h_v1("oasis7.cognition.continuation.v1", value))
+            .unwrap_or_else(|| h_v1("oasis7.cognition.continuation.v1", &Value::Null)),
         adapter_protocol_version: PROVIDER_ADAPTER_PROTOCOL_VERSION.to_string(),
         budget_contract: BudgetContractV1 {
             max_latency_ms: settings.decision_timeout_ms,
