@@ -477,7 +477,7 @@ impl World {
             (authority, proof)
         };
 
-        if self
+        if !self
             .module_registry
             .active
             .get(LOCAL_TEST_PROVIDER_MODULE_ID)
