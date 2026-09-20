@@ -14,6 +14,9 @@ import hashlib
 import importlib.util
 import json
 import os
+import shutil
+import stat
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -314,6 +317,172 @@ print(json.dumps(receipt, sort_keys=True, separators=(',', ':')))
         encoding="utf-8",
     )
     path.chmod(0o700)
+
+
+def make_remote_stack(root: Path, *, symlink_surface: bool = False) -> Path:
+    """Create a secret-free local stand-in for the fixed remote stack root."""
+    (root / "backups").mkdir(parents=True)
+    service_readback = root / "current" / "bin" / "service-readback"
+    service_readback.parent.mkdir(parents=True)
+    service_readback.write_text(
+        "#!/usr/bin/env python3\n"
+        "import json\n"
+        "print(json.dumps({'independently_observed': True, 'active': True, "
+        "'running': True, 'service_state': 'running'}))\n",
+        encoding="utf-8",
+    )
+    service_readback.chmod(service_readback.stat().st_mode | stat.S_IXUSR)
+    for relative in ADAPTER.RESET_SURFACES:
+        surface = root / relative
+        surface.mkdir(parents=True)
+        (surface / "fixture.txt").write_text("fixture\n", encoding="utf-8")
+    if symlink_surface:
+        target = root / "outside-reset-surface"
+        target.write_text("must not be followed\n", encoding="utf-8")
+        shutil.rmtree(root / ADAPTER.RESET_SURFACES[0])
+        (root / ADAPTER.RESET_SURFACES[0]).symlink_to(target)
+    return root
+
+
+def make_local_producer_transport(
+    root: Path, role: str, captured: dict[str, object]
+) -> tuple[object, int]:
+    """Build FixedSSH with a local command seam that executes its real script."""
+    expected = EXECUTOR.HUMAN_DIRECT_SSH_CANONICAL[role]
+    known_hosts = root / "known-hosts"
+    known_hosts.write_text("fixture known host\n", encoding="utf-8")
+    credential_fd = os.open(os.devnull, os.O_RDONLY)
+    transport = ADAPTER.FixedSSH.__new__(ADAPTER.FixedSSH)
+    transport.inventory = {
+        "nodes": {
+            role: {
+                "host": expected["host"],
+                "service": "oasis7-triad-storage.service",
+            }
+        }
+    }
+    transport.known_hosts = known_hosts
+    transport.fds = {"shared": credential_fd}
+    transport.sshpass = "/usr/bin/sshpass"
+    transport.ssh = "/usr/bin/ssh"
+
+    def run_local(remote_role: str, remote: str, timeout: int = 60) -> str:
+        del timeout
+        argv = transport._argv(remote_role, remote)
+        captured["argv"] = argv
+        captured["remote"] = remote
+        result = subprocess.run(
+            ["bash", "-c", remote],
+            check=False,
+            text=True,
+            capture_output=True,
+            env=ADAPTER.clean_environment(),
+            pass_fds=(credential_fd,),
+        )
+        captured["returncode"] = result.returncode
+        captured["stderr"] = result.stderr
+        return result.stdout.strip()
+
+    transport.command = run_local
+    return transport, credential_fd
+
+
+class FixedSSHRemoteProducerTests(unittest.TestCase):
+    def test_remote_forensic_backup_executes_generated_script_with_pinned_fd(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="oasis7-remote-producer-valid-") as temp_dir:
+            root = make_remote_stack(Path(temp_dir) / "stack")
+            captured: dict[str, object] = {}
+            transport, credential_fd = make_local_producer_transport(root, "storage-205", captured)
+            transaction_id = "producer-fixture-valid"
+            try:
+                with patch.object(ADAPTER, "STACK_ROOT", str(root)):
+                    receipt = transport.remote_forensic_backup(
+                        "storage-205",
+                        transaction_id,
+                        required_bytes=1,
+                        required_inodes=ADAPTER.MIN_REMOTE_BACKUP_INODES,
+                    )
+            finally:
+                os.close(credential_fd)
+
+            expected = EXECUTOR.HUMAN_DIRECT_SSH_CANONICAL["storage-205"]
+            argv = captured["argv"]
+            self.assertEqual(argv[:3], ["/usr/bin/sshpass", "-d", str(credential_fd)])
+            self.assertIn("StrictHostKeyChecking=yes", argv)
+            self.assertIn(f"UserKnownHostsFile={root / 'known-hosts'}", argv)
+            self.assertEqual(argv[-2], expected["host"])
+            self.assertEqual(captured["returncode"], 0)
+            remote = captured["remote"]
+            self.assertIsInstance(remote, str)
+            self.assertIn("os.replace(partial_root, backup_root)", remote)
+            self.assertIn("os.fsync(parent_fd)", remote)
+            self.assertNotIn("SSHPASS", remote)
+
+            backup_root = root / "backups" / transaction_id
+            manifest = backup_root / "manifest.json"
+            self.assertTrue(manifest.is_file())
+            self.assertFalse((root / "backups" / f".{transaction_id}.partial").exists())
+            self.assertEqual(receipt["schema_version"], "oasis7.validator_pair_rebuild_remote_backup_receipt.v1")
+            self.assertIs(receipt["remote_target"], True)
+            self.assertEqual(receipt["remote_host"], expected["host"])
+            self.assertEqual(receipt["remote_root"], str(root))
+            self.assertEqual(receipt["backup_root"], str(backup_root))
+            self.assertEqual(receipt["manifest"], str(manifest))
+            self.assertEqual(receipt["manifest_sha256"], digest_file(manifest))
+            self.assertEqual(receipt["reset_surface_manifest_sha256"], receipt["manifest_sha256"])
+            self.assertTrue(receipt["capacity"]["verified"])
+            self.assertIs(receipt["backup_non_seed"]["seed_eligible"], False)
+
+    def test_remote_forensic_backup_rejects_service_failure_before_partial(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="oasis7-remote-producer-service-") as temp_dir:
+            root = make_remote_stack(Path(temp_dir) / "stack")
+            service_readback = root / "current" / "bin" / "service-readback"
+            service_readback.write_text("#!/bin/sh\nexit 23\n", encoding="utf-8")
+            service_readback.chmod(service_readback.stat().st_mode | stat.S_IXUSR)
+            captured: dict[str, object] = {}
+            transport, credential_fd = make_local_producer_transport(root, "storage-205", captured)
+            transaction_id = "producer-fixture-service-failure"
+            try:
+                with patch.object(ADAPTER, "STACK_ROOT", str(root)):
+                    with self.assertRaises(SystemExit):
+                        transport.remote_forensic_backup(
+                            "storage-205",
+                            transaction_id,
+                            required_bytes=1,
+                            required_inodes=ADAPTER.MIN_REMOTE_BACKUP_INODES,
+                        )
+            finally:
+                os.close(credential_fd)
+            self.assertFalse((root / "backups" / transaction_id).exists())
+            self.assertFalse((root / "backups" / f".{transaction_id}.partial").exists())
+            self.assertIn("service readback", captured["stderr"])
+
+    def test_remote_forensic_backup_cleans_partial_on_capacity_and_surface_failure(self) -> None:
+        cases = (
+            ("capacity", False, 10**30, "capacity is below"),
+            ("unsupported-surface", True, 1, "symlink or special entry"),
+        )
+        for label, symlink_surface, required_bytes, expected_error in cases:
+            with self.subTest(label=label):
+                with tempfile.TemporaryDirectory(prefix=f"oasis7-remote-producer-{label}-") as temp_dir:
+                    root = make_remote_stack(Path(temp_dir) / "stack", symlink_surface=symlink_surface)
+                    captured: dict[str, object] = {}
+                    transport, credential_fd = make_local_producer_transport(root, "storage-205", captured)
+                    transaction_id = f"producer-fixture-{label}"
+                    try:
+                        with patch.object(ADAPTER, "STACK_ROOT", str(root)):
+                            with self.assertRaises(SystemExit):
+                                transport.remote_forensic_backup(
+                                    "storage-205",
+                                    transaction_id,
+                                    required_bytes=required_bytes,
+                                    required_inodes=ADAPTER.MIN_REMOTE_BACKUP_INODES,
+                                )
+                    finally:
+                        os.close(credential_fd)
+                    self.assertFalse((root / "backups" / transaction_id).exists())
+                    self.assertFalse((root / "backups" / f".{transaction_id}.partial").exists())
+                    self.assertIn(expected_error, captured["stderr"])
 
 
 class GovernedRemoteBackupPhaseTests(unittest.TestCase):

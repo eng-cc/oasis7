@@ -42,6 +42,7 @@ import time
 import uuid
 from pathlib import Path
 from typing import Any, NoReturn
+from urllib.parse import urlsplit
 
 
 PLAN_SCHEMA = "oasis7.validator_pair_rebuild_plan.v1"
@@ -2401,6 +2402,40 @@ def reject_full_status(url: str | None, label: str) -> None:
         fail(f"204 {label} must use a bounded proof endpoint; full /v1/chain/status is forbidden")
 
 
+HEALTH_URL_BINDINGS = {
+    "storage-205": ("storage_health_url", 6632),
+    "sequencer-204": ("sequencer_health_url", 6631),
+}
+
+
+def validate_role_health_url(value: Any, role: str) -> str:
+    """Require each validator health probe to use its fixed local listener."""
+    binding = HEALTH_URL_BINDINGS.get(role)
+    if binding is None:
+        fail(f"unsupported validator health role: {role}")
+    label, expected_port = binding
+    if not isinstance(value, str) or not value.strip():
+        fail(f"{label} is required for {role}")
+    try:
+        parsed = urlsplit(value)
+        hostname = parsed.hostname
+        port = parsed.port
+    except ValueError:
+        fail(f"{label} must be a local /healthz endpoint on port {expected_port}")
+    if (
+        parsed.scheme != "http"
+        or hostname not in {"127.0.0.1", "localhost"}
+        or port != expected_port
+        or parsed.path != "/healthz"
+        or parsed.query
+        or parsed.fragment
+        or parsed.username is not None
+        or parsed.password is not None
+    ):
+        fail(f"{label} must be a local /healthz endpoint on port {expected_port}")
+    return value
+
+
 def attestation_body(value: dict[str, Any]) -> bytes:
     body = {key: item for key, item in value.items() if key not in {"signature_ref", "public_key_ref"}}
     return json.dumps(body, ensure_ascii=True, sort_keys=True, separators=(",", ":")).encode()
@@ -3021,6 +3056,8 @@ def _build_plan_for_mode(
     impact_path = Path(args.consumer_impact_record).resolve()
     impact = validate_impact(impact_path)
     nodes = parse_nodes(args.node)
+    storage_health_url = validate_role_health_url(args.storage_health_url, "storage-205")
+    sequencer_health_url = validate_role_health_url(args.sequencer_health_url, "sequencer-204")
     direct_request = getattr(args, "human_direct_ssh_request", None)
     stopped_proof_path_value = getattr(args, "stopped_quiescence_proof", None)
     if isinstance(direct_request, str) and direct_request.strip():
@@ -3085,7 +3122,7 @@ def _build_plan_for_mode(
         required_inodes = max(128, int((full_backup_entries + package_entries + governed_entries) * 1.20) + 16)
         capacities[role] = capacity_for(capacity, role, required, required_inodes, node_inventory)
     reject_full_status(args.sequencer_proof_url, "proof URL")
-    reject_full_status(args.sequencer_health_url, "health URL")
+    reject_full_status(sequencer_health_url, "health URL")
     plan: dict[str, Any] = {
         "schema_version": PLAN_SCHEMA,
         "execution_mode": execution_mode,
@@ -3151,8 +3188,8 @@ def _build_plan_for_mode(
             "known_hosts_path": stopped_proof["known_hosts_path"],
             "github_live": stopped_proof["github_live"],
             "deployment_inventory_sha256": stopped_proof["inventory_sha256"],
-            "storage_health_url": args.storage_health_url,
-            "sequencer_health_url": args.sequencer_health_url,
+            "storage_health_url": storage_health_url,
+            "sequencer_health_url": sequencer_health_url,
             "sequencer_proof_url": args.sequencer_proof_url,
             "full_204_status_forbidden": True,
             "identity_receipts_path": str(Path(args.identity_receipts).resolve()) if args.identity_receipts else None,

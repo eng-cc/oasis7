@@ -522,6 +522,10 @@ print(json.dumps({{
             str(self.rebuild_proof),
             "--sequencer-proof-url",
             "http://127.0.0.1:6631/v1/chain/rebuild-proof",
+            "--storage-health-url",
+            "http://127.0.0.1:6632/healthz",
+            "--sequencer-health-url",
+            "http://127.0.0.1:6631/healthz",
             "--consumer-impact-record",
             str(self.impact),
             "--stopped-quiescence-proof",
@@ -2344,6 +2348,27 @@ print(Path(os.environ["HUMAN_DIRECT_SSH_GITHUB_RESPONSE"]).read_text(encoding="u
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("204", result.stderr)
+
+    def test_plan_requires_role_bound_health_ports_before_live_observation(self) -> None:
+        cases = (
+            ("storage missing", "--storage-health-url", None),
+            ("storage default", "--storage-health-url", "http://127.0.0.1/healthz"),
+            ("storage wrong", "--storage-health-url", "http://127.0.0.1:6631/healthz"),
+            ("sequencer missing", "--sequencer-health-url", None),
+            ("sequencer default", "--sequencer-health-url", "http://127.0.0.1/healthz"),
+            ("sequencer wrong", "--sequencer-health-url", "http://127.0.0.1:6632/healthz"),
+        )
+        for label, option, replacement in cases:
+            with self.subTest(label=label):
+                args = self._base_args()
+                index = args.index(option)
+                if replacement is None:
+                    del args[index : index + 2]
+                else:
+                    args[index + 1] = replacement
+                result = subprocess.run(args, text=True, capture_output=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertRegex(result.stderr, r"(?i)(health|port|required)")
 
     def test_active_runbook_has_no_sequencer_full_status_command(self) -> None:
         runbook = (ROOT / "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md").read_text(encoding="utf-8")

@@ -50,6 +50,59 @@ TRIAD_SOURCE_REGISTRY_SHA256 = "1296accdac21371a017797b29503aa6658ed600f71049db0
 TRIAD_BOOTSTRAP_PEERS_SHA256 = "5e62e5b132fe083c18c637213baefebad161c675e2243b2e02dc8bcd5f70401c"
 TRIAD_GENERATED_REGISTRY_SHA256 = "1290818e16b4d5f6fa1929a18e0d6c73295d0ff86e8c7ee8ee58e670874199fd"
 TRIAD_GENERATED_REGISTRY_SEMANTIC_SHA256 = "82b3b705cc72173b34fc738f9cff00cba2f4cab0f05ca32ca58bf4dfd5ea7228"
+FULL_NETWORK_PLANNER_PATH = ROOT / "scripts" / "p2p-public-testnet-full-network-clean-room.py"
+IDENTITY_V2_NETWORK_ID = "oasis7-public-testnet-governed-20260606"
+IDENTITY_V2_EVIDENCE_SCHEMA = "oasis7.identity_v2_evidence_map.v2"
+IDENTITY_V2_NODE_ORDER = (
+    "storage-205",
+    "sequencer-204",
+    "linux-lan-observer",
+    "windows-observer",
+    "macos-observer",
+)
+IDENTITY_V2_EVIDENCE_ARTIFACT_FIELDS = frozenset(
+    {
+        "raw_v1",
+        "prepare_manifest",
+        "payload",
+        "provider_attestation",
+        "unsigned_envelope",
+        "signed_envelope",
+        "verification",
+    }
+)
+IDENTITY_V2_SUMMARY_RECEIPT_FIELDS = frozenset(
+    {
+        "schema_version",
+        "mode",
+        "evaluation_time",
+        "raw_v1_sha256",
+        "canonical_payload_sha256",
+        "envelope_sha256",
+        "signer_id",
+        "public_key_sha256",
+        "trust_config_sha256",
+        "provider_registry_sha256",
+        "verifier_executable_sha256",
+        "network_id",
+        "proof_ref",
+        "proof_claims_sha256",
+        "task_uid",
+        "head_oid",
+        "node_id",
+        "peer_id",
+        "capture_window_id",
+        "rotation_epoch",
+        "historical_only",
+        "apply_authorized",
+        "authority_scope",
+        "verified",
+    }
+)
+IDENTITY_V2_VERIFIER_PIN_FIELDS = frozenset(
+    {"trust_config_sha256", "provider_registry_sha256", "verifier_executable_sha256"}
+)
+_FULL_NETWORK_PLANNER: Any | None = None
 RESET_SURFACES = (
     "data/execution-records",
     "data/execution-world",
@@ -72,6 +125,13 @@ TRANSPORT_ENV = "OASIS7_TRIAD_ADAPTER_CREDENTIAL_TRANSPORT"
 HEX64 = re.compile(r"^[0-9a-fA-F]{64}$")
 SAFE_VERSION = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.+:~-]*$")
 MIN_REMOTE_BACKUP_INODES = 128
+HEALTH_PORTS = {"storage-205": 6632, "sequencer-204": 6631}
+OPS_HELPERS = (
+    "oasis7_world_repair_rebuild",
+    "oasis7_governance_registry_import",
+    "oasis7_governance_registry_audit",
+    "service-readback",
+)
 
 
 class AdapterExit(SystemExit):
@@ -168,34 +228,353 @@ def credential_fds() -> dict[str, int]:
     return values
 
 
-def validate_identity_v2(transaction: dict[str, Any]) -> None:
+def load_full_network_planner() -> Any:
+    """Load the code-owned five-node planner without importing provider state."""
+    global _FULL_NETWORK_PLANNER
+    if _FULL_NETWORK_PLANNER is not None:
+        return _FULL_NETWORK_PLANNER
+    spec = importlib.util.spec_from_file_location(
+        "oasis7_public_testnet_full_network_clean_room", FULL_NETWORK_PLANNER_PATH
+    )
+    if spec is None or spec.loader is None:
+        fail("capability_blocked: canonical full-network planner is unavailable")
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+    except (OSError, ImportError, SyntaxError) as error:
+        fail(f"capability_blocked: canonical full-network planner cannot load: {error.__class__.__name__}")
+    _FULL_NETWORK_PLANNER = module
+    return module
+
+
+def _identity_v2_descriptor(value: Any, label: str) -> tuple[Path, dict[str, Any]]:
+    if not isinstance(value, dict) or set(value) != {"path", "sha256", "size_bytes"}:
+        fail(f"capability_blocked: {label} descriptor fields are not exact")
+    digest = value.get("sha256")
+    size = value.get("size_bytes")
+    if not isinstance(value.get("path"), str) or not value["path"].strip():
+        fail(f"capability_blocked: {label} path is missing")
+    if not isinstance(digest, str) or HEX64.fullmatch(digest) is None:
+        fail(f"capability_blocked: {label} digest is malformed")
+    if isinstance(size, bool) or not isinstance(size, int) or size <= 0:
+        fail(f"capability_blocked: {label} size is malformed")
+    path = regular_file(Path(value["path"]), label)
+    try:
+        actual_size = path.stat().st_size
+    except OSError as error:
+        fail(f"capability_blocked: {label} cannot be read: {error.__class__.__name__}")
+    if actual_size != size or sha256_file(path) != digest.lower():
+        fail(f"capability_blocked: {label} digest or size mismatch")
+    return path, value
+
+
+def _identity_v2_planner_map(admission: dict[str, Any]) -> dict[str, Any] | None:
+    """Return an embedded canonical map only when its full shape is present."""
+    candidate = admission.get("evidence_map")
+    if candidate is None:
+        candidate = admission
+    if not isinstance(candidate, dict):
+        return None
+    context = candidate.get("context")
+    plan_intent = candidate.get("plan_intent")
+    entries = candidate.get("entries")
+    if not (
+        isinstance(context, dict)
+        and set(context) == {"path", "sha256", "size_bytes"}
+        and isinstance(plan_intent, dict)
+        and set(plan_intent) == {"path", "sha256", "size_bytes"}
+        and isinstance(entries, list)
+        and len(entries) == len(IDENTITY_V2_NODE_ORDER)
+    ):
+        return None
+    expected_fields = {"node_name", "node_id", "peer_id", *IDENTITY_V2_EVIDENCE_ARTIFACT_FIELDS}
+    if any(not isinstance(entry, dict) or set(entry) != expected_fields for entry in entries):
+        return None
+    return candidate
+
+
+def _validate_identity_v2_summary(admission: dict[str, Any]) -> None:
+    """Validate the secret-free exact-five contract used by admission fixtures.
+
+    Production transaction admission additionally requires the canonical map
+    path below.  Keeping this summary validator strict is useful for callers
+    that inspect the identity gate directly and prevents the former
+    receipt-list shortcut from being treated as evidence.
+    """
+    planner = load_full_network_planner()
+    if admission.get("schema_version") != IDENTITY_V2_EVIDENCE_SCHEMA:
+        fail("capability_blocked: identity-v2 evidence map schema is unsupported")
+    if admission.get("verified") is not True or admission.get("status") != "verified":
+        fail("capability_blocked: identity-v2 admission is not verified")
+    if admission.get("network_id") != IDENTITY_V2_NETWORK_ID:
+        fail("capability_blocked: identity-v2 network binding mismatch")
+    for field in ("task_uid", "head_oid", "capture_window_id", "rotation_epoch", "peer_registry_sha256", "peer_registry_epoch", "context_digest"):
+        value = admission.get(field)
+        if not isinstance(value, str) or not value.strip():
+            fail(f"capability_blocked: identity-v2 {field} binding is missing")
+    context = admission.get("context")
+    expected_context = {
+        "network_id": admission["network_id"],
+        "task_uid": admission["task_uid"],
+        "head_oid": admission["head_oid"],
+        "capture_window_id": admission["capture_window_id"],
+        "context_digest": admission["context_digest"],
+        "peer_registry_sha256": admission["peer_registry_sha256"],
+        "peer_registry_epoch": admission["peer_registry_epoch"],
+        "rotation_epoch": admission["rotation_epoch"],
+    }
+    if not isinstance(context, dict) or context != expected_context:
+        fail("capability_blocked: identity-v2 context binding mismatch")
+
+    entries = admission.get("entries")
+    receipts = admission.get("receipts")
+    if not isinstance(entries, list) or len(entries) != len(IDENTITY_V2_NODE_ORDER):
+        fail("capability_blocked: identity-v2 evidence map must contain exactly five entries")
+    if not isinstance(receipts, list) or len(receipts) != len(IDENTITY_V2_NODE_ORDER):
+        fail("capability_blocked: identity-v2 evidence map must contain exactly five receipts")
+    expected_entry_fields = {"node_name", "node_id", "peer_id", "role", "host", "verification"}
+    expected_receipt_fields = {"node_name", "node_id", "peer_id", "role", "host", "path", "sha256", "size_bytes"}
+    seen_peers: set[str] = set()
+    provider = admission.get("provider")
+    verifier = admission.get("verifier")
+    if not isinstance(provider, dict) or set(provider) != {"request_ids", "proof_refs"}:
+        fail("capability_blocked: identity-v2 provider context is missing")
+    request_ids = provider.get("request_ids")
+    proof_refs = provider.get("proof_refs")
+    if (
+        not isinstance(request_ids, list)
+        or not isinstance(proof_refs, list)
+        or len(request_ids) != len(IDENTITY_V2_NODE_ORDER)
+        or len(proof_refs) != len(IDENTITY_V2_NODE_ORDER)
+    ):
+        fail("capability_blocked: identity-v2 provider request/proof references are not unique")
+    if any(not isinstance(value, str) for value in request_ids + proof_refs):
+        fail("capability_blocked: identity-v2 provider request/proof references are malformed")
+    if len(set(request_ids)) != len(request_ids) or len(set(proof_refs)) != len(proof_refs):
+        fail("capability_blocked: identity-v2 provider request/proof references are not unique")
+    for request_id in request_ids:
+        if not isinstance(request_id, str) or re.fullmatch(r"req-v2:[0-9a-fA-F]{64}", request_id) is None:
+            fail("capability_blocked: identity-v2 provider request reference is malformed")
+    for proof_ref in proof_refs:
+        if not isinstance(proof_ref, str) or re.fullmatch(r"proof-v1:[0-9a-fA-F]{64}", proof_ref) is None:
+            fail("capability_blocked: identity-v2 provider proof reference is malformed")
+    if not isinstance(verifier, dict) or set(verifier) != IDENTITY_V2_VERIFIER_PIN_FIELDS:
+        fail("capability_blocked: identity-v2 verifier pins are incomplete")
+    for field in IDENTITY_V2_VERIFIER_PIN_FIELDS:
+        if not isinstance(verifier.get(field), str) or HEX64.fullmatch(verifier[field]) is None:
+            fail(f"capability_blocked: identity-v2 {field} pin is malformed")
+
+    for index, (entry, receipt_meta) in enumerate(zip(entries, receipts)):
+        if not isinstance(entry, dict) or set(entry) != expected_entry_fields:
+            fail(f"capability_blocked: identity-v2 entry {index} fields are not exact")
+        if not isinstance(receipt_meta, dict) or set(receipt_meta) != expected_receipt_fields:
+            fail(f"capability_blocked: identity-v2 receipt binding {index} fields are not exact")
+        name = entry.get("node_name")
+        if name != IDENTITY_V2_NODE_ORDER[index] or receipt_meta.get("node_name") != name:
+            fail("capability_blocked: identity-v2 node order or binding is not canonical")
+        expected = planner.EXPECTED_NODES.get(name)
+        expected_host = planner.CANONICAL_HOST_INVENTORY.get(name, {}).get("target")
+        if not isinstance(expected, dict) or entry.get("node_id") != expected.get("node_id") or entry.get("role") != expected.get("role") or entry.get("host") != expected_host:
+            fail(f"capability_blocked: identity-v2 {name} role/node/host binding mismatch")
+        if any(receipt_meta.get(field) != entry.get(field) for field in ("node_id", "peer_id", "role", "host")):
+            fail(f"capability_blocked: identity-v2 {name} receipt binding mismatch")
+        peer_id = entry.get("peer_id")
+        if not isinstance(peer_id, str) or not peer_id.strip() or peer_id in seen_peers:
+            fail(f"capability_blocked: identity-v2 {name} peer binding is missing or duplicated")
+        seen_peers.add(peer_id)
+        descriptor_path, descriptor = _identity_v2_descriptor(entry.get("verification"), f"identity-v2 {name} verification")
+        receipt_path, receipt_descriptor = _identity_v2_descriptor(
+            {key: receipt_meta[key] for key in ("path", "sha256", "size_bytes")},
+            f"identity-v2 {name} receipt",
+        )
+        if descriptor != receipt_descriptor or descriptor_path != receipt_path:
+            fail(f"capability_blocked: identity-v2 {name} receipt pairing mismatch")
+        receipt = load_json(receipt_path, f"identity-v2 {name} receipt")
+        if set(receipt) != IDENTITY_V2_SUMMARY_RECEIPT_FIELDS:
+            fail(f"capability_blocked: identity-v2 {name} receipt fields are not exact")
+        if (
+            receipt.get("schema_version") != "oasis7.identity_v2_verification_receipt.v1"
+            or receipt.get("mode") != "current_admission"
+            or receipt.get("verified") is not True
+            or receipt.get("apply_authorized") is not True
+            or receipt.get("historical_only") is not False
+            or receipt.get("authority_scope") != "deployed-governance-root"
+        ):
+            fail(f"capability_blocked: identity-v2 {name} receipt is not current admission")
+        for digest_field in (
+            "raw_v1_sha256",
+            "canonical_payload_sha256",
+            "envelope_sha256",
+            "public_key_sha256",
+            "proof_claims_sha256",
+            "trust_config_sha256",
+            "provider_registry_sha256",
+            "verifier_executable_sha256",
+        ):
+            if not isinstance(receipt.get(digest_field), str) or HEX64.fullmatch(receipt[digest_field]) is None:
+                fail(f"capability_blocked: identity-v2 {name} {digest_field} is malformed")
+        for field, expected_value in (
+            ("network_id", admission["network_id"]),
+            ("task_uid", admission["task_uid"]),
+            ("head_oid", admission["head_oid"]),
+            ("node_id", entry["node_id"]),
+            ("peer_id", entry["peer_id"]),
+            ("capture_window_id", admission["capture_window_id"]),
+            ("rotation_epoch", admission["rotation_epoch"]),
+            ("trust_config_sha256", verifier["trust_config_sha256"]),
+            ("provider_registry_sha256", verifier["provider_registry_sha256"]),
+            ("verifier_executable_sha256", verifier["verifier_executable_sha256"]),
+            ("proof_ref", proof_refs[index]),
+        ):
+            if receipt.get(field) != expected_value:
+                fail(f"capability_blocked: identity-v2 {name} {field} binding mismatch")
+
+
+def _validate_full_network_identity_v2(transaction: dict[str, Any], admission: dict[str, Any]) -> None:
+    """Delegate production admission to the canonical planner and fresh verifier."""
+    planner = load_full_network_planner()
+    evidence = _identity_v2_planner_map(admission)
+    if evidence is None:
+        fail("capability_blocked: canonical full-network identity-v2 evidence map is required")
+    authority = transaction.get("identity_v2_authority")
+    if authority is None:
+        authority = transaction.get("authority")
+    if not isinstance(authority, dict):
+        fail("capability_blocked: identity-v2 planner authority binding is missing")
+    capture_window_id = transaction.get("capture_window_id")
+    if capture_window_id is None:
+        capture_window_id = authority.get("capture_window_id")
+    if not isinstance(capture_window_id, str) or not capture_window_id.strip():
+        fail("capability_blocked: identity-v2 capture window binding is missing")
+    for field in ("network_id", "task_uid", "head_oid"):
+        if field in admission and admission[field] != evidence.get(field):
+            fail(f"capability_blocked: identity-v2 {field} envelope binding mismatch")
+    try:
+        validated, _raw_by_node, envelopes = planner._identity_v2_evidence_map(
+            evidence,
+            {"authority": authority, "capture_window_id": capture_window_id},
+        )
+        context_path, _ = planner._evidence_descriptor(validated.get("context"), "identity-v2 context")
+        intent_path, _ = planner._evidence_descriptor(validated.get("plan_intent"), "identity-v2 plan intent")
+        fresh = planner._independently_verify_identity_v2_entries(validated, context_path, intent_path)
+    except (SystemExit, KeyError, TypeError, OSError) as error:
+        fail(f"capability_blocked: canonical identity-v2 admission failed: {error}")
+    if set(envelopes) != set(IDENTITY_V2_NODE_ORDER) or set(fresh) != set(IDENTITY_V2_NODE_ORDER):
+        fail("capability_blocked: canonical identity-v2 verifier did not cover exact five nodes")
+
+
+def validate_identity_v2(transaction: dict[str, Any], *, require_full_network: bool = False) -> None:
     proof = transaction.get("proof")
     admission = proof.get("identity_v2") if isinstance(proof, dict) else None
-    if not isinstance(admission, dict) or admission.get("verified") is not True:
+    if not isinstance(admission, dict):
         fail("capability_blocked: identity-v2 admission is unavailable or unverified")
-    if admission.get("status") != "verified":
+    if "verified" in admission and admission.get("verified") is not True:
+        fail("capability_blocked: identity-v2 admission is unverified")
+    if "status" in admission and admission.get("status") != "verified":
         fail("capability_blocked: identity-v2 admission status is not verified")
-    receipts = admission.get("receipts")
-    if not isinstance(receipts, list) or not receipts:
-        fail("capability_blocked: authenticated identity-v2 receipts are required")
-    for item in receipts:
-        if not isinstance(item, dict) or not isinstance(item.get("path"), str):
-            fail("capability_blocked: identity-v2 receipt path is missing")
-        if not isinstance(item.get("sha256"), str) or not HEX64.fullmatch(item["sha256"]):
-            fail("capability_blocked: identity-v2 receipt digest is missing")
-        path = regular_file(Path(item["path"]), "identity-v2 receipt")
-        if item["sha256"].lower() != sha256_file(path):
-            fail("capability_blocked: identity-v2 receipt digest mismatch")
-        value = load_json(path, "identity-v2 receipt")
-        if value.get("schema_version") != "oasis7.identity_v2_verification_receipt.v1":
-            fail("capability_blocked: identity-v2 receipt schema is not the governed verification receipt")
-        if (
-            value.get("mode") != "current_admission"
-            or value.get("verified") is not True
-            or value.get("apply_authorized") is not True
-            or value.get("historical_only") is not False
-        ):
-            fail("capability_blocked: identity-v2 receipt is not current-admission evidence")
+    if _identity_v2_planner_map(admission) is not None:
+        _validate_full_network_identity_v2(transaction, admission)
+        return
+    if require_full_network:
+        fail("capability_blocked: canonical full-network identity-v2 evidence map is required")
+    _validate_identity_v2_summary(admission)
+
+
+def _ops_archive_relative(name: str) -> str:
+    """Normalize a member from the packaged operator-tools archive."""
+    path = Path(name)
+    if path.is_absolute() or ".." in path.parts:
+        fail("ops-tools archive contains an unsafe member path")
+    parts = list(path.parts)
+    while parts and parts[0] == ".":
+        parts.pop(0)
+    if len(parts) > 1 and parts[0] not in {"bin", ".oasis7-ops-tools-manifest.json", "SHA256SUMS"}:
+        # The release archive carries one fixed top-level directory.  Keep the
+        # suffix so the digest binding is independent of tar's root spelling.
+        parts = parts[1:]
+    return "/".join(parts)
+
+
+def ops_helper_digests(archive_path: Path) -> dict[str, str]:
+    """Extract the exact helper digests from the checked operator bundle.
+
+    The outer package checksum binds the archive; this second binding proves
+    which helper bytes the remote preflight must find under ``current/bin``.
+    No member is extracted to the local filesystem.
+    """
+    try:
+        archive = tarfile.open(archive_path, mode="r:*")
+    except (OSError, tarfile.TarError) as error:
+        fail(f"ops-tools archive is unreadable: {error.__class__.__name__}")
+    with archive:
+        members = archive.getmembers()
+        regular_members: dict[str, tarfile.TarInfo] = {}
+        manifest: dict[str, Any] | None = None
+        sums: dict[str, str] = {}
+        for member in members:
+            if member.issym() or member.islnk() or not (member.isfile() or member.isdir()):
+                fail("ops-tools archive contains a symlink or special entry")
+            relative = _ops_archive_relative(member.name)
+            if not relative:
+                continue
+            if member.isfile():
+                if relative in regular_members:
+                    fail(f"ops-tools archive contains duplicate member: {relative}")
+                regular_members[relative] = member
+            if relative == ".oasis7-ops-tools-manifest.json":
+                handle = archive.extractfile(member)
+                if handle is None:
+                    fail("ops-tools archive manifest is unreadable")
+                try:
+                    value = json.loads(handle.read().decode("utf-8"))
+                except (UnicodeError, json.JSONDecodeError):
+                    fail("ops-tools archive manifest is malformed")
+                if not isinstance(value, dict):
+                    fail("ops-tools archive manifest is not an object")
+                manifest = value
+            elif relative == "SHA256SUMS":
+                handle = archive.extractfile(member)
+                if handle is None:
+                    fail("ops-tools archive checksums are unreadable")
+                try:
+                    lines = handle.read().decode("utf-8").splitlines()
+                except UnicodeError:
+                    fail("ops-tools archive checksums are malformed")
+                for line in lines:
+                    fields = line.split()
+                    if len(fields) != 2 or not HEX64.fullmatch(fields[0]):
+                        fail("ops-tools archive checksums contain a malformed entry")
+                    sums[_ops_archive_relative(fields[1].lstrip("*"))] = fields[0].lower()
+        if manifest is None or manifest.get("opsToolsSchemaVersion") != 1:
+            fail("ops-tools archive manifest is missing or unsupported")
+        tools = manifest.get("tools")
+        if not isinstance(tools, list):
+            fail("ops-tools archive manifest tools are missing")
+        manifest_digests: dict[str, str] = {}
+        for item in tools:
+            if not isinstance(item, dict) or not isinstance(item.get("path"), str) or not isinstance(item.get("sha256"), str):
+                fail("ops-tools archive manifest tool binding is malformed")
+            path = _ops_archive_relative(item["path"])
+            if not HEX64.fullmatch(item["sha256"]):
+                fail("ops-tools archive manifest tool digest is malformed")
+            manifest_digests[path] = item["sha256"].lower()
+        expected_paths = {f"bin/{name}" for name in OPS_HELPERS}
+        if set(manifest_digests) != expected_paths:
+            fail("ops-tools archive helper set is not the governed set")
+        result: dict[str, str] = {}
+        for name in OPS_HELPERS:
+            relative = f"bin/{name}"
+            member = regular_members.get(relative)
+            if member is None:
+                fail(f"ops-tools archive helper is missing: {name}")
+            handle = archive.extractfile(member)
+            if handle is None:
+                fail(f"ops-tools archive helper is unreadable: {name}")
+            actual = hashlib.sha256(handle.read()).hexdigest()
+            if actual != manifest_digests[relative] or sums.get(relative) != actual:
+                fail(f"ops-tools archive helper digest mismatch: {name}")
+            result[name] = actual
+        return result
 
 
 def load_inventory() -> tuple[dict[str, Any], Path]:
@@ -263,6 +642,7 @@ def validate_package(transaction: dict[str, Any]) -> dict[str, Any]:
                 matches.append(fields[0])
         if matches != [sha256_file(files[target_name])]:
             fail(f"package checksum binding mismatch for {target_name}")
+    helper_sha256 = ops_helper_digests(files[OPS_TOOLS_NAME])
     runtime_relpath = package.get("runtime_relpath")
     runtime_sha256 = package.get("runtime_sha256")
     runtime_size_bytes = package.get("runtime_size_bytes")
@@ -273,7 +653,14 @@ def validate_package(transaction: dict[str, Any]) -> dict[str, Any]:
         fail("package runtime digest binding mismatch")
     if not isinstance(runtime_size_bytes, int) or runtime.stat().st_size != runtime_size_bytes:
         fail("package runtime size binding mismatch")
-    return {"directory": directory, "version": version, "commit": commit, "run_id": run_id, "files": files}
+    return {
+        "directory": directory,
+        "version": version,
+        "commit": commit,
+        "run_id": run_id,
+        "files": files,
+        "helper_sha256": helper_sha256,
+    }
 
 
 def validate_governed(transaction: dict[str, Any]) -> dict[str, Path]:
@@ -359,7 +746,10 @@ def validate_transaction(transaction: dict[str, Any], phase: str) -> tuple[dict[
         fail("adapter executor provenance mismatch")
     if not isinstance(transaction.get("transaction_id"), str) or not transaction["transaction_id"].strip():
         fail("transaction id is missing")
-    validate_identity_v2(transaction)
+    # A direct validator call may inspect the secret-free exact-five summary
+    # contract, but every real triad transaction must carry the canonical
+    # full-network map and pass the planner's independent verifier.
+    validate_identity_v2(transaction, require_full_network=True)
     package = validate_package(transaction)
     governed = validate_governed(transaction)
     inventory, known_hosts = load_inventory()
@@ -681,6 +1071,224 @@ PY
         return stdout
 
 
+def validate_plan_node_bindings(transaction: dict[str, Any], inventory: dict[str, Any]) -> None:
+    """Bind every remote operation to the canonical role/root/service tuple."""
+    nodes = transaction.get("nodes")
+    if not isinstance(nodes, dict) or set(nodes) != set(MUTATION_ORDER):
+        fail("transaction node bindings must cover exactly the governed roles")
+    for role in MUTATION_ORDER:
+        node = nodes.get(role)
+        expected = inventory.get("nodes", {}).get(role)
+        if not isinstance(node, dict) or not isinstance(expected, dict):
+            fail(f"transaction node binding is missing for {role}")
+        if node.get("role") not in {None, role}:
+            fail(f"transaction node role binding is not fixed for {role}")
+        if node.get("root") != expected.get("root") or expected.get("root") != STACK_ROOT:
+            fail(f"transaction node root binding is not fixed for {role}")
+        if node.get("service") not in {None, expected.get("service")}:
+            fail(f"transaction node service binding is not fixed for {role}")
+
+
+def preflight_helper_capabilities(
+    transport: FixedSSH,
+    inventory: dict[str, Any],
+    role: str,
+    package: dict[str, Any],
+) -> dict[str, Any]:
+    """Prove the read-only remote prerequisites before any stop/reset action."""
+    helper_hashes = package.get("helper_sha256")
+    if not isinstance(helper_hashes, dict) or set(helper_hashes) != set(OPS_HELPERS):
+        fail("capability_blocked: exact packaged operator-helper identity is missing")
+    if any(not isinstance(value, str) or not HEX64.fullmatch(value) for value in helper_hashes.values()):
+        fail("capability_blocked: packaged operator-helper identity is malformed")
+    required = {
+        "version": package.get("version"),
+        "commit": package.get("commit"),
+        "run_id": package.get("run_id"),
+        "runtime_sha256": package.get("runtime_sha256"),
+        "runtime_size_bytes": package.get("runtime_size_bytes"),
+    }
+    if (
+        not isinstance(required["version"], str)
+        or not isinstance(required["commit"], str)
+        or not isinstance(required["run_id"], str)
+        or not isinstance(required["runtime_sha256"], str)
+        or not HEX64.fullmatch(required["runtime_sha256"])
+        or isinstance(required["runtime_size_bytes"], bool)
+        or not isinstance(required["runtime_size_bytes"], int)
+        or required["runtime_size_bytes"] <= 0
+    ):
+        fail("capability_blocked: exact package/runtime identity is missing")
+    expected = inventory["nodes"][role]
+    payload = json.dumps(helper_hashes, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    args = " ".join(
+        shlex.quote(str(value))
+        for value in (
+            STACK_ROOT,
+            role,
+            expected["service"],
+            required["version"],
+            required["commit"],
+            required["run_id"],
+            required["runtime_sha256"],
+            str(required["runtime_size_bytes"]),
+            payload,
+        )
+    )
+    remote = (
+        "set -euo pipefail; "
+        "command -v python3 >/dev/null 2>&1; "
+        "command -v tar >/dev/null 2>&1; "
+        "command -v systemctl >/dev/null 2>&1; "
+        "command -v ps >/dev/null 2>&1; "
+        f"python3 - {args} <<'PY'\n"
+        + r'''
+import hashlib
+import json
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+root = Path(sys.argv[1])
+role, service, version, commit, run_id, runtime_sha, runtime_size, helper_json = sys.argv[2:]
+helpers = json.loads(helper_json)
+
+def fail(message):
+    raise SystemExit(message)
+
+if role not in {"storage-205", "sequencer-204"}:
+    fail("remote preflight role is not governed")
+if not root.is_dir() or root.is_symlink():
+    fail("remote preflight stack root is not a real directory")
+current = root / "current"
+if current.is_symlink():
+    resolved_current = current.resolve()
+    try:
+        resolved_current.relative_to(root / "releases")
+    except ValueError:
+        fail("remote preflight current release escapes the fixed stack root")
+elif not current.is_dir():
+    fail("remote preflight current release is unavailable")
+
+buildinfo_path = root / "DEPLOYED_BUILDINFO"
+if not buildinfo_path.is_file() or buildinfo_path.is_symlink():
+    fail("remote preflight deployed package identity is unavailable")
+buildinfo = {}
+for line in buildinfo_path.read_text(encoding="utf-8").splitlines():
+    key, separator, value = line.partition("=")
+    if separator:
+        if key in buildinfo:
+            fail("remote preflight deployed package identity is duplicated")
+        buildinfo[key] = value
+if any(
+    buildinfo.get(key) != value
+    for key, value in (
+        ("package_version", version),
+        ("commit", commit),
+        ("run_id", run_id),
+        ("runtime_sha256", runtime_sha),
+        ("runtime_size", runtime_size),
+    )
+):
+    fail("remote preflight deployed package identity mismatch")
+
+def digest(path):
+    value = hashlib.sha256(path.read_bytes()).hexdigest()
+    return value
+
+runtime = current / "bin/oasis7_chain_runtime"
+if not runtime.is_file() or runtime.is_symlink() or digest(runtime) != runtime_sha or runtime.stat().st_size != int(runtime_size):
+    fail("remote preflight runtime identity mismatch")
+
+def helper_ready(name, required_help=()):
+    path = current / "bin" / name
+    if not path.is_file() or path.is_symlink() or not (path.stat().st_mode & 0o111):
+        fail("remote preflight helper is missing or not executable: " + name)
+    observed = digest(path)
+    if observed != helpers.get(name):
+        fail("remote preflight helper identity mismatch: " + name)
+    try:
+        result = subprocess.run([str(path), "--help"], check=False, capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        fail("remote preflight helper readiness failed: " + name + ": " + error.__class__.__name__)
+    if result.returncode != 0:
+        fail("remote preflight helper readiness returned non-zero: " + name)
+    help_text = result.stdout + result.stderr
+    if any(item not in help_text for item in required_help):
+        fail("remote preflight helper contract is incomplete: " + name)
+
+helper_ready("oasis7_world_repair_rebuild", ("--generated-world-dir", "--output-world-dir"))
+helper_ready("oasis7_governance_registry_import", ("--world-dir", "--public-manifest"))
+helper_ready("oasis7_governance_registry_audit")
+helper_ready("service-readback")
+
+for command, arguments in (
+    ("python3", ("-c", "import json,sys; json.dumps({'ready': True}); sys.exit(0)")),
+    ("tar", ("--version",)),
+    ("systemctl", ("--version",)),
+    ("ps", ("-eo", "pid=,args=")),
+):
+    if shutil.which(command) is None:
+        fail("remote preflight tool is unavailable: " + command)
+    try:
+        result = subprocess.run([command, *arguments], check=False, capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        fail("remote preflight tool readiness failed: " + command + ": " + error.__class__.__name__)
+    if result.returncode != 0:
+        fail("remote preflight tool readiness returned non-zero: " + command)
+
+print(json.dumps({
+    "preflight_verified": True,
+    "package_identity_verified": True,
+    "runtime_identity_verified": True,
+    "runtime_executable": True,
+    "repair_rebuild_helper_executable": True,
+    "generated_world_dir_contract": True,
+    "governance_registry_importer_executable": True,
+    "helper_identity_verified": True,
+    "python_available": True,
+    "tar_available": True,
+    "systemd_available": True,
+    "process_inspection_available": True,
+    "role": role,
+    "service": service,
+    "runtime_sha256": digest(runtime),
+    "helper_sha256": {name: digest(current / "bin" / name) for name in helpers},
+}, ensure_ascii=True, sort_keys=True, separators=(",", ":")))
+PY
+'''
+    )
+    raw = transport.command(role, remote, timeout=90)
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        fail(f"remote preflight helper receipt is not JSON for {role}")
+    if not isinstance(value, dict):
+        fail(f"remote preflight helper receipt is not an object for {role}")
+    required_fields = (
+        "preflight_verified",
+        "package_identity_verified",
+        "runtime_identity_verified",
+        "runtime_executable",
+        "repair_rebuild_helper_executable",
+        "generated_world_dir_contract",
+        "governance_registry_importer_executable",
+        "helper_identity_verified",
+        "python_available",
+        "tar_available",
+        "systemd_available",
+        "process_inspection_available",
+    )
+    if any(value.get(field) is not True for field in required_fields):
+        fail(f"remote preflight helper readiness is incomplete for {role}")
+    if value.get("role") != role or value.get("service") != expected["service"]:
+        fail(f"remote preflight helper role/service binding mismatch for {role}")
+    if value.get("runtime_sha256") != required["runtime_sha256"] or value.get("helper_sha256") != helper_hashes:
+        fail(f"remote preflight helper identity receipt mismatch for {role}")
+    return value
+
+
 def readback(transport: FixedSSH, inventory: dict[str, Any], role: str) -> dict[str, Any]:
     node = inventory["nodes"][role]
     command = " ".join(
@@ -701,34 +1309,45 @@ def readback(transport: FixedSSH, inventory: dict[str, Any], role: str) -> dict[
     return value
 
 
-def health_url_for_role(transaction: dict[str, Any], role: str) -> str:
-    proof = transaction.get("proof")
-    if not isinstance(proof, dict):
-        fail("transaction health proof is missing")
-    key = "storage_health_url" if role == "storage-205" else "sequencer_health_url"
-    value = proof.get(key)
+def validate_health_url(value: Any, role: str) -> str:
+    expected_port = HEALTH_PORTS.get(role)
+    if expected_port is None:
+        fail(f"unsupported validator health role: {role}")
+    label = "storage_health_url" if role == "storage-205" else "sequencer_health_url"
     if not isinstance(value, str) or not value:
-        fail(f"{key} must be a local /healthz endpoint")
+        fail(f"{label} is required for {role}")
     try:
         parsed_url = urlsplit(value)
         hostname = parsed_url.hostname
+        port = parsed_url.port
     except ValueError:
-        fail(f"{key} must be a local /healthz endpoint")
+        fail(f"{label} must be a local /healthz endpoint on port {expected_port}")
     if (
         parsed_url.scheme != "http"
         or hostname not in {"127.0.0.1", "localhost"}
+        or port != expected_port
         or parsed_url.path != "/healthz"
         or parsed_url.query
         or parsed_url.fragment
         or parsed_url.username is not None
         or parsed_url.password is not None
     ):
-        fail(f"{key} must be a local /healthz endpoint")
+        fail(f"{label} must be a local /healthz endpoint on port {expected_port}")
     return value
+
+
+def health_url_for_role(transaction: dict[str, Any], role: str) -> str:
+    proof = transaction.get("proof")
+    if not isinstance(proof, dict):
+        fail("transaction health proof is missing")
+    key = "storage_health_url" if role == "storage-205" else "sequencer_health_url"
+    value = proof.get(key)
+    return validate_health_url(value, role)
 
 
 def probe_healthz(transport: FixedSSH, role: str, health_url: str) -> dict[str, Any]:
     """Read the role's transaction-bound health endpoint over the pinned host."""
+    validate_health_url(health_url, role)
     command = f"curl --fail --silent --show-error --max-time 5 {shlex.quote(health_url)}"
     raw = transport.command(role, command)
     try:
@@ -766,23 +1385,7 @@ def observe_node(
 ) -> dict[str, Any]:
     # Validate the transaction-bound endpoint before any remote observation so
     # an operator cannot redirect a probe to an untrusted host or path.
-    if not isinstance(health_url, str) or not health_url:
-        fail(f"remote health URL is missing for {role}")
-    try:
-        parsed_health_url = urlsplit(health_url)
-        hostname = parsed_health_url.hostname
-    except ValueError:
-        fail(f"remote health URL is not a local /healthz endpoint for {role}")
-    if (
-        parsed_health_url.scheme != "http"
-        or hostname not in {"127.0.0.1", "localhost"}
-        or parsed_health_url.path != "/healthz"
-        or parsed_health_url.query
-        or parsed_health_url.fragment
-        or parsed_health_url.username is not None
-        or parsed_health_url.password is not None
-    ):
-        fail(f"remote health URL is not a local /healthz endpoint for {role}")
+    validate_health_url(health_url, role)
     value = readback(transport, inventory, role)
     expected_state = (value.get("active") is True and value.get("running") is True and value.get("service_state") == "running")
     if expected_state != running:
@@ -1156,6 +1759,7 @@ def backup_phase_role(phase: str) -> str:
 
 def run_phase(transaction: dict[str, Any], phase: str) -> dict[str, Any]:
     inventory, known_hosts, package, governed = validate_transaction(transaction, phase)
+    validate_plan_node_bindings(transaction, inventory)
     fds = credential_fds()
     transport = FixedSSH(inventory, known_hosts, fds)
     plan_nodes = transaction.get("nodes")
@@ -1176,6 +1780,7 @@ def run_phase(transaction: dict[str, Any], phase: str) -> dict[str, Any]:
         for role, node in nodes.items():
             if node["runtime_sha256"] != transaction["package"].get("runtime_sha256"):
                 fail(f"preflight runtime identity mismatch for {role}")
+            node.update(preflight_helper_capabilities(transport, inventory, role, package))
         receipt = base_receipt(transaction, phase)
         receipt.update({"staggered_phase": "preflight", "live_baseline": True, "nodes": nodes})
         for node in nodes.values():

@@ -15,6 +15,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import tarfile
 import tempfile
 import unittest
 from pathlib import Path
@@ -43,7 +44,7 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-VALID_HEALTH_URL = "http://127.0.0.1/healthz"
+VALID_HEALTH_URL = "http://127.0.0.1:6632/healthz"
 _MISSING = object()
 
 
@@ -127,7 +128,73 @@ def valid_remote_backup_entry(
     }
 
 
+def helper_package() -> dict[str, object]:
+    return {
+        "version": "fixture-version",
+        "commit": "a" * 40,
+        "run_id": "123",
+        "runtime_sha256": "b" * 64,
+        "runtime_size_bytes": 123,
+        "helper_sha256": {
+            name: f"{index:064x}"
+            for index, name in enumerate(ADAPTER.OPS_HELPERS, 1)
+        },
+    }
+
+
+def helper_receipt(role: str, package: dict[str, object]) -> dict[str, object]:
+    return {
+        "preflight_verified": True,
+        "package_identity_verified": True,
+        "runtime_identity_verified": True,
+        "runtime_executable": True,
+        "repair_rebuild_helper_executable": True,
+        "generated_world_dir_contract": True,
+        "governance_registry_importer_executable": True,
+        "helper_identity_verified": True,
+        "python_available": True,
+        "tar_available": True,
+        "systemd_available": True,
+        "process_inspection_available": True,
+        "role": role,
+        "service": f"oasis7-triad-{role.split('-')[0]}.service",
+        "runtime_sha256": package["runtime_sha256"],
+        "helper_sha256": package["helper_sha256"],
+    }
+
+
 class GovernedTriadProductionNegativeTests(unittest.TestCase):
+    def test_ops_helper_archive_digest_binding_is_exact(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="oasis7-triad-ops-helper-archive-") as temp_dir:
+            root = Path(temp_dir)
+            bundle = root / "oasis7-linux-x64-ops-tools"
+            (bundle / "bin").mkdir(parents=True)
+            tools = []
+            for name in ADAPTER.OPS_HELPERS:
+                path = bundle / "bin" / name
+                path.write_bytes((name + " fixture").encode())
+                tools.append(
+                    {
+                        "path": f"bin/{name}",
+                        "sha256": sha256(path),
+                        "sizeBytes": path.stat().st_size,
+                    }
+                )
+            (bundle / ".oasis7-ops-tools-manifest.json").write_text(
+                json.dumps({"opsToolsSchemaVersion": 1, "tools": tools}) + "\n",
+                encoding="utf-8",
+            )
+            (bundle / "SHA256SUMS").write_text(
+                "".join(f"{item['sha256']}  ./{item['path']}\n" for item in tools),
+                encoding="utf-8",
+            )
+            archive_path = root / ADAPTER.OPS_TOOLS_NAME
+            with tarfile.open(archive_path, "w:gz") as archive:
+                archive.add(bundle, arcname=bundle.name)
+            observed = ADAPTER.ops_helper_digests(archive_path)
+            self.assertEqual(set(observed), set(ADAPTER.OPS_HELPERS))
+            self.assertEqual(observed["oasis7_world_repair_rebuild"], tools[0]["sha256"])
+
     def test_resume_adapter_fd_only_fails_before_direct_observation(self) -> None:
         """Adapter-only resume must not enter direct SSH without a credential seam."""
         with tempfile.TemporaryDirectory(prefix="oasis7-triad-resume-credential-") as temp_dir:
@@ -229,6 +296,70 @@ class GovernedTriadProductionNegativeTests(unittest.TestCase):
         self.assertNotEqual(service_calls[0], health_calls[0])
         self.assertIn(VALID_HEALTH_URL, health_calls[0])
 
+    def test_preflight_requires_exact_packaged_helper_identity_before_remote_probe(self) -> None:
+        class NoRemoteTransport:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, str]] = []
+
+            def command(self, role: str, remote: str, timeout: int = 60) -> str:
+                self.calls.append((role, remote))
+                raise AssertionError("remote preflight must not run without helper identity")
+
+        transport = NoRemoteTransport()
+        inventory = {
+            "nodes": {
+                "storage-205": {
+                    "service": "oasis7-triad-storage.service",
+                }
+            }
+        }
+        package = helper_package()
+        package.pop("helper_sha256")
+        with self.assertRaisesRegex(SystemExit, r"(?i)(helper|identity|package)"):
+            ADAPTER.preflight_helper_capabilities(transport, inventory, "storage-205", package)
+        self.assertEqual(transport.calls, [])
+
+    def test_preflight_rejects_helper_mismatch_or_tool_unreadiness_before_mutation(self) -> None:
+        package = helper_package()
+        inventory = {
+            "nodes": {
+                "storage-205": {
+                    "service": "oasis7-triad-storage.service",
+                }
+            }
+        }
+
+        class PreflightTransport:
+            def __init__(self, receipt: dict[str, object]) -> None:
+                self.receipt = receipt
+                self.calls: list[tuple[str, str]] = []
+
+            def command(self, role: str, remote: str, timeout: int = 60) -> str:
+                del timeout
+                self.calls.append((role, remote))
+                self.assert_read_only(remote)
+                return json.dumps(self.receipt)
+
+            @staticmethod
+            def assert_read_only(remote: str) -> None:
+                if any(token in remote for token in ("systemctl stop", "systemctl start", "rm -rf", "reset")):
+                    raise AssertionError("preflight helper probe contains mutation")
+
+        bad_hash = helper_receipt("storage-205", package)
+        bad_hash["helper_sha256"] = dict(package["helper_sha256"])
+        bad_hash["helper_sha256"]["oasis7_world_repair_rebuild"] = "f" * 64
+        with self.assertRaisesRegex(SystemExit, r"(?i)(helper|identity)"):
+            ADAPTER.preflight_helper_capabilities(
+                PreflightTransport(bad_hash), inventory, "storage-205", package
+            )
+
+        unavailable = helper_receipt("storage-205", package)
+        unavailable["python_available"] = False
+        with self.assertRaisesRegex(SystemExit, r"(?i)(readiness|python|preflight)"):
+            ADAPTER.preflight_helper_capabilities(
+                PreflightTransport(unavailable), inventory, "storage-205", package
+            )
+
     def test_absent_healthz_fails_closed(self) -> None:
         transport = HealthProbeTransport()
         inventory = {"nodes": {"storage-205": {"service": "oasis7-triad-storage.service"}}}
@@ -291,6 +422,29 @@ class GovernedTriadProductionNegativeTests(unittest.TestCase):
                 health_url="https://untrusted.example/healthz",
             )
         self.assertEqual(transport.calls, [])
+
+    def test_healthz_port_is_role_bound_before_remote_probe(self) -> None:
+        cases = (
+            ("storage-205", None),
+            ("storage-205", "http://127.0.0.1/healthz"),
+            ("storage-205", "http://127.0.0.1:6631/healthz"),
+            ("sequencer-204", "http://127.0.0.1/healthz"),
+            ("sequencer-204", "http://127.0.0.1:6632/healthz"),
+        )
+        for role, value in cases:
+            with self.subTest(role=role, value=value):
+                transport = HealthProbeTransport(health_payload=healthy_health_payload())
+                inventory = {"nodes": {role: {"service": f"oasis7-triad-{role.split('-')[0]}.service"}}}
+                with self.assertRaisesRegex(SystemExit, r"(?i)(health|port|required)"):
+                    ADAPTER.observe_node(
+                        transport,
+                        inventory,
+                        role,
+                        f"/fixture/{role}",
+                        running=True,
+                        health_url=value,
+                    )
+                self.assertEqual(transport.calls, [])
 
     def test_health_state_mismatch_is_rejected(self) -> None:
         transport = HealthProbeTransport(
@@ -422,7 +576,7 @@ class GovernedTriadProductionNegativeTests(unittest.TestCase):
                     "storage-205": {"service": "oasis7-triad-storage.service"},
                 },
                 "network": {"network_id": "fixture-network", "chain_id": "fixture-chain"},
-                "proof": {"storage_health_url": "http://127.0.0.1/healthz"},
+                "proof": {"storage_health_url": "http://127.0.0.1:6632/healthz"},
             }
             script, _ = ADAPTER.control_script(
                 transaction,
@@ -456,7 +610,7 @@ class GovernedTriadProductionNegativeTests(unittest.TestCase):
                     "storage-205": {"service": "oasis7-triad-storage.service"},
                 },
                 "network": {"network_id": "fixture-network", "chain_id": "fixture-chain"},
-                "proof": {"storage_health_url": "http://127.0.0.1/healthz"},
+                "proof": {"storage_health_url": "http://127.0.0.1:6632/healthz"},
                 "backup": {
                     "storage-205": {
                         "manifest": str(local_backup),

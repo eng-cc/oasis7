@@ -53,27 +53,13 @@
 | `triad-testnet-windows-observer` | observer | Windows observer | `C:\oasis7-deploy` | scheduled task `Oasis7Observer` | `http://127.0.0.1:5121/v1/chain/status` |
 | `triad-testnet-fourth-local` | observer | macOS local observer | `$OASIS7_TESTNET_FOURTH_ROOT` | launchd `oasis7.testnet.fourth` | `http://127.0.0.1:19083/v1/chain/status` |
 
-The 204/sequencer row is intentionally not a full-status contract. Governed
-rebuild, rollout, and fleet evidence must use the signed
-`oasis7.rebuild_status.v1` response from `/v1/chain/rebuild-proof` and, once
-the identity-v2 capability is provisioned, a separately verified
-`oasis7.identity_receipt.v2` envelope. Legacy `oasis7.identity_receipt.v1` is
-raw runtime metadata only, retired for direct admission, and may be retained
-solely as the exact byte payload bound by the v2 digest; there is no v1
-compatibility fallback. The identity-v2 path is currently **NOT PROVISIONED /
-CAPABILITY BLOCKED**: a copied signature, callback, or `verified: true` field
-is not evidence. A 204 `/v1/chain/status` request is forbidden in this
-runbook; it may only be used under a separately recorded local diagnostic
-exception that is not deployment or readiness evidence.
+The 204/sequencer row is intentionally not a full-status contract. Governed rebuild, rollout, and fleet evidence must use the signed `oasis7.rebuild_status.v1` response from `/v1/chain/rebuild-proof` and, once the identity-v2 capability is provisioned, a separately verified `oasis7.identity_receipt.v2` envelope. Legacy `oasis7.identity_receipt.v1` is raw runtime metadata only, retired for direct admission, and may be retained solely as the exact byte payload bound by the v2 digest; there is no v1 compatibility fallback.
+The identity-v2 path is currently **NOT PROVISIONED / CAPABILITY BLOCKED**: a copied signature, callback, or `verified: true` field is not evidence. A 204 `/v1/chain/status` request is forbidden in this runbook; it may only be used under a separately recorded local diagnostic exception that is not deployment or readiness evidence.
 
 Credential files may be used by an operator as local access aids, but this runbook only records target identities and never records secret values.
 
 ### 2.2.1 Bounded 204 proof and identity-v2 contract
-The 204 proof remains a bounded, same-window artifact. Identity-v2 evidence is
-separate and is not created by the proof verifier. The current required set is
-exactly `sequencer-204`, `storage-205`, `linux-lan-observer`,
-`windows-observer`, and `macos-observer`, once each; a plan may not shrink it to
-nodes with convenient receipts.
+The 204 proof remains a bounded, same-window artifact. Identity-v2 evidence is separate and is not created by the proof verifier. The current required set is exactly `sequencer-204`, `storage-205`, `linux-lan-observer`, `windows-observer`, and `macos-observer`, once each; a plan may not shrink it to nodes with convenient receipts.
 
 1. `/v1/chain/rebuild-proof` returns `oasis7.rebuild_status.v1` with the
    bounded top-level fields `schema_version`, `observed_at_unix_ms`, `ok`,

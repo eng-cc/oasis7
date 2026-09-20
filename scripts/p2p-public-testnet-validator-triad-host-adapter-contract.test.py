@@ -103,8 +103,8 @@ class GovernedTriadHostAdapterContractTests(unittest.TestCase):
             nodes[role] = {"role": role, "root": str(node_root)}
         proof = {
             "identity_receipts": self.identity_receipts,
-            "storage_health_url": "http://127.0.0.1/healthz",
-            "sequencer_health_url": "http://127.0.0.1/healthz",
+            "storage_health_url": "http://127.0.0.1:6632/healthz",
+            "sequencer_health_url": "http://127.0.0.1:6631/healthz",
             "sequencer_rebuild_proof": {
                 "sha256": sha256(self.sequencer_proof),
                 "role": "sequencer-204",
@@ -364,18 +364,18 @@ print(json.dumps(receipt, ensure_ascii=True, sort_keys=True))
 
         transaction = {
             "nodes": {
-                "storage-205": {"root": "/fixture/storage"},
-                "sequencer-204": {"root": "/fixture/sequencer"},
+                "storage-205": {"root": ADAPTER.STACK_ROOT},
+                "sequencer-204": {"root": ADAPTER.STACK_ROOT},
             },
             "proof": {
-                "storage_health_url": "http://127.0.0.1/healthz",
-                "sequencer_health_url": "http://127.0.0.1/healthz",
+                "storage_health_url": "http://127.0.0.1:6632/healthz",
+                "sequencer_health_url": "http://127.0.0.1:6631/healthz",
             },
         }
         inventory = {
             "nodes": {
-                "storage-205": {"service": "oasis7-triad-storage.service"},
-                "sequencer-204": {"service": "oasis7-triad-sequencer.service"},
+                "storage-205": {"root": ADAPTER.STACK_ROOT, "service": "oasis7-triad-storage.service"},
+                "sequencer-204": {"root": ADAPTER.STACK_ROOT, "service": "oasis7-triad-sequencer.service"},
             }
         }
         control_calls: list[object] = []
@@ -400,10 +400,35 @@ print(json.dumps(receipt, ensure_ascii=True, sort_keys=True))
             def __init__(self, runtime_sha256: str) -> None:
                 self.calls: list[tuple[str, str]] = []
                 self.runtime_sha256 = runtime_sha256
+                self.helper_sha256 = {
+                    name: f"{index:064x}"
+                    for index, name in enumerate(ADAPTER.OPS_HELPERS, 1)
+                }
 
             def command(self, role: str, remote: str, timeout: int = 60) -> str:
                 del timeout
                 self.calls.append((role, remote))
+                if "command -v python3" in remote and "oasis7_world_repair_rebuild" in remote:
+                    return json.dumps(
+                        {
+                            "preflight_verified": True,
+                            "package_identity_verified": True,
+                            "runtime_identity_verified": True,
+                            "runtime_executable": True,
+                            "repair_rebuild_helper_executable": True,
+                            "generated_world_dir_contract": True,
+                            "governance_registry_importer_executable": True,
+                            "helper_identity_verified": True,
+                            "python_available": True,
+                            "tar_available": True,
+                            "systemd_available": True,
+                            "process_inspection_available": True,
+                            "role": role,
+                            "service": f"oasis7-triad-{role.split('-')[0]}.service",
+                            "runtime_sha256": self.runtime_sha256,
+                            "helper_sha256": self.helper_sha256,
+                        }
+                    )
                 if "service-readback" in remote:
                     return json.dumps(
                         {
@@ -429,16 +454,26 @@ print(json.dumps(receipt, ensure_ascii=True, sort_keys=True))
                 raise AssertionError(f"unexpected remote command: {remote}")
 
         transaction = self._base_plan()
+        for role in MODULE.MUTATION_ORDER:
+            transaction["nodes"][role]["root"] = ADAPTER.STACK_ROOT
         inventory = {
             "nodes": {
-                "storage-205": {"service": "oasis7-triad-storage.service"},
-                "sequencer-204": {"service": "oasis7-triad-sequencer.service"},
+                "storage-205": {"root": ADAPTER.STACK_ROOT, "service": "oasis7-triad-storage.service"},
+                "sequencer-204": {"root": ADAPTER.STACK_ROOT, "service": "oasis7-triad-sequencer.service"},
             }
         }
         transport = HealthyTransport(self.runtime_sha256)
+        package = {
+            "version": self.package_run_id,
+            "commit": self.package_commit,
+            "run_id": self.package_run_id,
+            "runtime_sha256": self.runtime_sha256,
+            "runtime_size_bytes": self.runtime.stat().st_size,
+            "helper_sha256": transport.helper_sha256,
+        }
 
         with (
-            patch.object(ADAPTER, "validate_transaction", return_value=(inventory, self.root / "known-hosts", {}, {})),
+            patch.object(ADAPTER, "validate_transaction", return_value=(inventory, self.root / "known-hosts", package, {})),
             patch.object(ADAPTER, "credential_fds", return_value={}),
             patch.object(ADAPTER, "FixedSSH", return_value=transport),
             patch.object(ADAPTER, "base_receipt", return_value={}),
@@ -455,15 +490,29 @@ print(json.dumps(receipt, ensure_ascii=True, sort_keys=True))
             self.assertEqual(node["nrestarts"], 0)
             self.assertFalse(node["oom_panic_segfault"])
             self.assertFalse(node["preflight_observer_mutation"])
+            self.assertTrue(node["preflight_verified"])
+            self.assertTrue(node["package_identity_verified"])
+            self.assertTrue(node["helper_identity_verified"])
         for role, expected_url in (
             ("storage-205", transaction["proof"]["storage_health_url"]),
             ("sequencer-204", transaction["proof"]["sequencer_health_url"]),
         ):
             role_calls = [remote for called_role, remote in transport.calls if called_role == role]
-            self.assertEqual(sum("service-readback" in remote for remote in role_calls), 1)
+            self.assertEqual(sum("service-readback --read-only" in remote for remote in role_calls), 1)
             health_calls = [remote for remote in role_calls if "/healthz" in remote]
             self.assertEqual(len(health_calls), 1)
             self.assertIn(expected_url, health_calls[0])
+        preflight_calls = [remote for _, remote in transport.calls if "command -v python3" in remote]
+        self.assertEqual(len(preflight_calls), 2)
+        for remote in preflight_calls:
+            self.assertIn("oasis7_world_repair_rebuild", remote)
+            self.assertIn("oasis7_governance_registry_import", remote)
+            self.assertIn("command -v tar", remote)
+            self.assertIn("command -v systemctl", remote)
+            self.assertIn("command -v ps", remote)
+            self.assertNotIn("systemctl stop", remote)
+            self.assertNotIn("systemctl start", remote)
+            self.assertNotIn("rm -rf", remote)
 
     def test_package_hash_and_commit_are_bound_and_fail_closed(self) -> None:
         for variable, pattern in (
