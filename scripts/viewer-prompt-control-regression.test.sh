@@ -579,7 +579,22 @@ if [[ "${1:-}" == "eval" ]]; then
   elif [[ "$script" == *'window.innerWidth'* && "$script" == *'visualViewportWidth'* && "$script" != *'horizontalOverflowPx'* ]]; then
     printf '%s\n' '{"innerWidth":1280,"innerHeight":720,"outerWidth":1280,"outerHeight":720,"devicePixelRatio":1,"visualViewportWidth":1280,"visualViewportHeight":720}'
   elif [[ "$script" == *'horizontalOverflowPx'* ]]; then
-    printf '%s\n' '{"activeElementIsRollback":true,"horizontalOverflowPx":0,"rollback":{"activeElement":"rollback","focusVisible":true,"height":44,"minHitTarget":true,"outlineStyle":"solid","outlineWidth":"2px","text":"Rollback Prompt","uncovered":true,"visible":true,"width":120},"targetRow":{"position":"sticky","visible":true},"viewport":{"height":720,"width":1280}}'
+    layout_json='{"activeElementIsRollback":true,"horizontalOverflowPx":0,"rollback":{"activeElement":"rollback","focusVisible":true,"height":44,"minHitTarget":true,"outlineStyle":"solid","outlineWidth":"2px","text":"Rollback Prompt","uncovered":true,"visible":true,"width":120},"targetRow":{"position":"sticky","visible":true},"viewport":{"height":720,"width":1280}}'
+    case "${VIEWER_PROMPT_FIXTURE_LAYOUT_NEGATIVE:-}" in
+      overflow)
+        layout_json='{"activeElementIsRollback":true,"horizontalOverflowPx":1,"rollback":{"activeElement":"rollback","focusVisible":true,"height":44,"minHitTarget":true,"outlineStyle":"solid","outlineWidth":"2px","text":"Rollback Prompt","uncovered":true,"visible":true,"width":120},"targetRow":{"position":"sticky","visible":true},"viewport":{"height":720,"width":1280}}'
+        ;;
+      hidden)
+        layout_json='{"activeElementIsRollback":true,"horizontalOverflowPx":0,"rollback":{"activeElement":"rollback","focusVisible":true,"height":44,"minHitTarget":true,"outlineStyle":"solid","outlineWidth":"2px","text":"Rollback Prompt","uncovered":true,"visible":false,"width":120},"targetRow":{"position":"sticky","visible":true},"viewport":{"height":720,"width":1280}}'
+        ;;
+      covered)
+        layout_json='{"activeElementIsRollback":true,"horizontalOverflowPx":0,"rollback":{"activeElement":"rollback","center":{"x":60,"y":60},"centerHit":{"dataAction":"apply","className":"covered-overlay","tagName":"BUTTON"},"focusVisible":true,"height":44,"minHitTarget":true,"outlineStyle":"solid","outlineWidth":"2px","text":"Rollback Prompt","uncovered":false,"visible":true,"width":120},"targetRow":{"position":"sticky","visible":true},"viewport":{"height":720,"width":1280}}'
+        ;;
+      undersized)
+        layout_json='{"activeElementIsRollback":true,"horizontalOverflowPx":0,"rollback":{"activeElement":"rollback","focusVisible":true,"height":43,"minHitTarget":false,"outlineStyle":"solid","outlineWidth":"2px","text":"Rollback Prompt","uncovered":true,"visible":true,"width":40},"targetRow":{"position":"sticky","visible":true},"viewport":{"height":720,"width":1280}}'
+        ;;
+    esac
+    printf '%s\n' "$layout_json"
   elif [[ "$script" == *'prompt_surface_missing:'* && "$script" == *'details.command-surface__advanced-details > summary'* ]]; then
     if [[ "${VIEWER_PROMPT_FIXTURE_PRE_PROMPT_TAB_LOST:-0}" == "1" ]]; then
       printf '%s\n' '"tab_lost"'
@@ -703,6 +718,37 @@ first_out="$tmp_root/first"
 second_out="$tmp_root/second"
 run_contract "$first_out"
 run_contract "$second_out"
+
+# RED-phase negative acceptance fixtures.  Each fixture is a valid layout
+# object with exactly one invalid player-facing property.  The runner must
+# reject it before writing an acceptance-eligible manifest; the current
+# implementation only parses object shape, so these assertions fail until
+# semantic layout validation is implemented.
+run_layout_negative_fixture() {
+  local kind="$1"
+  local out_dir="$tmp_root/layout-negative-$kind"
+  local log_file="$tmp_root/layout-negative-$kind.log"
+  local rc
+  set +e
+  VIEWER_PROMPT_FIXTURE_LAYOUT_NEGATIVE="$kind" \
+    OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY=fixture \
+    OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY=fixture \
+    OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE=fixture \
+    PATH="$fake_bin:$PATH" "$runner" \
+    --headed --test-login --url http://127.0.0.1:9 --out-dir "$out_dir" >"$log_file" 2>&1
+  rc=$?
+  set -e
+  if [[ "$rc" -eq 0 ]]; then
+    echo "layout negative fixture '$kind' unexpectedly accepted" >&2
+    return 1
+  fi
+  grep -Fq -- 'prompt layout measurement' "$log_file"
+}
+
+run_layout_negative_fixture overflow
+run_layout_negative_fixture hidden
+run_layout_negative_fixture covered
+run_layout_negative_fixture undersized
 
 fallback_out="$tmp_root/domcontentloaded-fallback"
 fallback_marker="$tmp_root/domcontentloaded-fallback-seen"
