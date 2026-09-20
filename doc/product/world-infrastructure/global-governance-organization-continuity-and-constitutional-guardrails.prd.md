@@ -6,12 +6,12 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`superseded`
 - Owner role：`producer_system_designer`
-- Last reviewed：2026-09-13
+- Last reviewed：2026-09-20
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
 ## 迁移状态
 
-本页保留尚未完全吸收的稳定产品语义和验收，避免迁移期间丢失规则。它已不再是权威世界基础设施的 active authority、路线图或验收入口：基础设施只提供最终性、权威状态、复制、存储、恢复和确定性执行边界。GG-1 普通事项白名单与 GG-5 宪制护栏已由 [`普通共同决策与宪制边界`](../world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md) 接收，GG-4 的组织连续性由 [`组织连续性、解散与长期不活跃保护`](../world-rules-core-gameplay/organization-continuity-dissolution-and-dormancy-protection.prd.md) 接收；本页继续保留尚待迁移的 GG-2 资格/控制权公平与 GG-3 外部 OC/游戏内权利分离语义，直至接收 authority 完成回填和活跃引用修复后再删除。专业实现、数值、runtime/P2P 合同和当前公开 claim 仍由各自专业 authority 拥有。
+本页保留已完成接收的稳定产品语义和验收 provenance，避免迁移期间丢失规则。它已不再是权威世界基础设施的 active authority、路线图或验收入口：基础设施只提供最终性、权威状态、复制、存储、恢复和确定性执行边界。GG-1 普通事项白名单与 GG-5 宪制护栏已由 [`普通共同决策与宪制边界`](../world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md) 接收，GG-4 的组织连续性由 [`组织连续性、解散与长期不活跃保护`](../world-rules-core-gameplay/organization-continuity-dissolution-and-dormancy-protection.prd.md) 接收；本页的 GG-2 与 GG-3 已分别由 active [GCB-004](../world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md#req-wr-gcb-004) 与 [GCB-005](../world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md#req-wr-gcb-005) 接收。旧源继续保留为只读迁移 provenance，直至 S1 修复全部活跃引用并通过治理/链接检查。专业实现、数值、runtime/P2P 合同和当前公开 claim 仍由各自专业 authority 拥有。
 
 
 本文是长期产品分册，定义普通全局治理的有限产品范围、组织连续性和不可由普通治理改写的宪制保护。它不定义阈值、锁定/解锁时长、身份技术、控制人计算、链上或智能合约结构、runtime 状态机、签名/custody 实现、当前候选 verdict 或发行就绪。
@@ -19,9 +19,9 @@
 ## 生命周期闭合
 
 - 接收 authority：[普通共同决策与宪制边界](../world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md#1-产品目标) 与 [组织连续性、解散与长期不活跃保护](../world-rules-core-gameplay/organization-continuity-dissolution-and-dormancy-protection.prd.md#1-产品承诺)。
-- 剩余语义：GG-2 资格/控制权公平与 GG-3 外部 OC、游戏内权利分离仍需在接收专题中保留稳定 REQ/AC 与活跃引用。
-- 稳定引用：本页的 GG-1 至 GG-5 验收及其专业 authority 仍可由本页和 [普通共同决策与宪制边界](../world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md#1-产品目标) 定位；本页保持只读迁移引用。
-- 删除条件：接收专题完成剩余语义、建立 REQ/AC 与专业 authority 追踪、修复全部活跃引用且无未决阻塞后，才可删除本页。
+- 剩余语义：GG-2 与 GG-3 已在接收专题建立稳定 REQ/AC；剩余工作仅为 S1 修复专业与历史 active backlinks，并确认专业 authority 仍可达。
+- 稳定引用：本页的 GG-1 至 GG-5 验收及其专业 authority 仍可由本页和 [普通共同决策与宪制边界](../world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md#1-产品目标) 定位；GCB-004/005 是当前 active 产品入口，本页保持只读迁移引用。
+- 删除条件：接收专题的 REQ/AC 与专业 authority 追踪稳定、所有活跃来源引用切换到 active 锚点、旧源路径不再被 active 文档使用且治理/链接检查通过后，才可删除本页。
 ## 1. 产品目标
 
 玩家和组织可以在一个持续、可审计的世界中处理有限的共同运行事项，而不能把持有、付费、匿名账户、组织章程或普通投票扩展为无界的世界主权。普通治理服务于政策、财库和 charter 的运行；它与宪制保护、玩家基本权利、安全、validator/finality、signer 和 custody 分层。组织可以按自身目的协作、重组或退出，但个人资产、合同、退出、历史和 Agent 身份保有不可穿透的最低保护。
@@ -73,11 +73,11 @@
 3. 宪制护栏：将普通运行决策与不可穿透保护和双轨宪制修订分离。
 4. 诚实证据：仅在同一候选的专业实现和 QA 证据成立时，声明其中任一能力的当前可用性。
 
-## 4.1 未决问题与迁移边界
+## 4.1 迁移闭合与边界
 
-- 未决产品问题：GG-2 的资格/控制权公平与 GG-3 的外部 OC、游戏内权利分离，仍需由接收模块确认完整语义、局部验收和活跃引用是否已覆盖；本页不把现有专业实现或历史材料视为已完成接收。
+- 接收结论：GG-2 的资格/控制权公平由 [REQ-WR-GCB-004](../world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md#req-wr-gcb-004) / [AC-WR-GCB-004](../world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md#ac-wr-gcb-004) 接收；GG-3 的外部 OC、游戏内权利分离由 [REQ-WR-GCB-005](../world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md#req-wr-gcb-005) / [AC-WR-GCB-005](../world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md#ac-wr-gcb-005) 接收。两者只建立产品边界与目标验收，不把专业实现或历史材料视为当前可用性。
 - 决策 role：`producer_system_designer` 负责产品接收决定，`gameplay_designer` 负责规则与经济边界，`blockchain_ops_engineer` 与 `runtime_engineer` 负责相应专业合同和证据边界。
-- 解决触发条件：接收 authority 回填剩余语义、建立稳定追踪和验收引用，并修复所有活跃来源引用后，才可复核删除本页；在此之前，本页保持 `superseded`、只读和非权威状态。
+- 解决触发条件：S1 完成专业 authority 与历史 active backlinks 修复，验证新旧映射和链接治理通过后，才可复核删除本页；在此之前，本页保持 `superseded`、只读和非权威状态。
 - 临时排除范围：本页不新增普通治理能力、不修改 OC/身份/资格规则、不宣称当前实现或发行 readiness；专业权威继续承担技术真值和当前证据。
 
 ## 5. Done：成功标准与验收
@@ -93,8 +93,8 @@
 | 成功标准 | 专业 owner | 专业域 PRD-ID | 权威文档 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- | --- |
 | GG-1 | producer_system_designer / gameplay_designer / blockchain_ops_engineer / runtime_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 普通事项白名单、排除事项拒绝与非普通轨道路由的组合证据 | test_tier_full |
-| GG-2 | producer_system_designer / blockchain_ops_engineer / runtime_engineer / qa_engineer | PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 验证账户主体聚合、锁定/委托/实际控制人封顶、公开委托/最终计票审计、最小数据披露、重复主体 review/merge/revocation/correction/appeal 与历史 receipt 证据 | test_tier_full |
-| GG-3 | producer_system_designer / blockchain_ops_engineer / runtime_engineer / qa_engineer | PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 外部 OC 转让、游戏权利快照/解除、非追溯投票与单向 quota bridge 负例 | test_tier_full |
+| GG-2 | producer_system_designer / blockchain_ops_engineer / runtime_engineer / qa_engineer | PRD-PRODUCT-001 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | [`普通共同决策与宪制边界`](../world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md#req-wr-gcb-004); `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 验证账户主体聚合、锁定/委托/实际控制人封顶、公开委托/最终计票审计、最小数据披露、重复主体 review/merge/revocation/correction/appeal 与历史 receipt 证据 | test_tier_full |
+| GG-3 | producer_system_designer / blockchain_ops_engineer / runtime_engineer / qa_engineer | PRD-PRODUCT-001 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | [`普通共同决策与宪制边界`](../world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md#req-wr-gcb-005); `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 外部 OC 转让、游戏权利快照/解除、非追溯投票与单向 quota bridge 负例 | test_tier_full |
 | GG-4 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-002 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | charter floors、解散 waterfall、estate/delegation/reclaim、Agent/设施处置与历史连续性证据 | test_tier_full |
 | GG-5 | producer_system_designer / blockchain_ops_engineer / runtime_engineer / qa_engineer | PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/product/world-infrastructure/world-continuity-governance-and-recovery.prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 普通/宪制双轨、保护底线、跨区域/受影响主体确认、延迟、审计与程序申诉证据 | test_tier_full |
 

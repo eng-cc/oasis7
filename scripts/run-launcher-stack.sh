@@ -69,6 +69,7 @@ LOCAL_TEST_PROVIDER_AGENT_ID="${OASIS7_LOCAL_TEST_PROVIDER_AGENT_ID:-starter-age
 LOCAL_TEST_PROVIDER_OWNER_BINDING="${OASIS7_LOCAL_TEST_PROVIDER_OWNER_BINDING:-local-test-owner-0}"
 LOCAL_TEST_PROVIDER_FINALITY_BLOCK_HASH="${OASIS7_LOCAL_TEST_PROVIDER_FINALITY_BLOCK_HASH:-}"
 LOCAL_TEST_PROVIDER_SESSION_MODE="${OASIS7_LOCAL_TEST_PROVIDER_SESSION_MODE:-hosted_public_join}"
+LOCAL_TEST_PROVIDER_ADMISSION="none"
 AGENT_PROVIDER_PROD_URL="${OASIS7_AGENT_PROVIDER_PROD_URL:-https://t2t.oasis7.tech}"
 AGENT_PROVIDER_TEST_URL="${OASIS7_AGENT_PROVIDER_TEST_URL:-}"
 PRINT_AGENT_PROVIDER_CONFIG="0"
@@ -158,7 +159,7 @@ Options:
   --provider-bootstrap-authority <path>
                            Explicit JSON Runtime authority bundle; repeat per ProviderBacked agent
   --local-test-provider-authority <path>
-                           Explicit DevLocal authority output bundle (requires local standalone + builtin_llm mode)
+                           Explicit DevLocal authority output bundle (requires local standalone + builtin_llm, or the explicit test-tier Hosted local-mock tuple)
   --local-test-provider-wasm <path>
                            Real WASM artifact for the explicit DevLocal provider setup
   --local-test-provider-metadata <path>
@@ -500,6 +501,27 @@ resolve_agent_provider_lane_defaults() {
 
 resolve_agent_provider_lane_defaults
 
+provider_url_is_loopback() {
+  local provider_url="$1"
+  python3 - "$provider_url" <<'PY'
+import ipaddress
+import sys
+from urllib.parse import urlsplit
+
+parts = urlsplit(sys.argv[1])
+if parts.scheme != "http" or not parts.hostname:
+    raise SystemExit(1)
+host = parts.hostname.strip().lower()
+if host == "localhost":
+    raise SystemExit(0)
+try:
+    is_loopback = ipaddress.ip_address(host).is_loopback
+except ValueError:
+    is_loopback = False
+raise SystemExit(0 if is_loopback else 1)
+PY
+}
+
 AGENT_CHAT_ECHO="${OASIS7_RUNTIME_AGENT_CHAT_ECHO:-}"
 if [[ -z "$AGENT_CHAT_ECHO" ]]; then
   AGENT_CHAT_ECHO="0"
@@ -562,8 +584,24 @@ if [[ -n "$LOCAL_TEST_PROVIDER_AUTHORITY_PATH" || -n "$LOCAL_TEST_PROVIDER_WASM_
     echo "error: local test authority setup requires --chain-local-standalone-test" >&2
     exit 1
   fi
-  if [[ "$AGENT_DECISION_SOURCE" != "builtin_llm" ]]; then
-    echo "error: local test provider authority setup requires --agent-decision-source builtin_llm" >&2
+  if [[ "$AGENT_DECISION_SOURCE" == "builtin_llm" \
+    && "$DEPLOYMENT_MODE" == "trusted_local_only" \
+    && "$ALLOW_TRUSTED_LOCAL_PLAYTEST" == "1" ]]; then
+    LOCAL_TEST_PROVIDER_ADMISSION="builtin_llm_dev_local"
+  elif [[ "$DEPLOYMENT_MODE" == "hosted_public_join" \
+    && "$AGENT_PROVIDER_LANE" == "local-mock" \
+    && "$AGENT_DECISION_SOURCE" == "provider_backed" \
+    && "$AGENT_PROVIDER_BACKEND" == "provider_local_mock" \
+    && "$AGENT_PROVIDER_CONTRACT" == "worldsim_provider_v1" \
+    && "$AGENT_PROVIDER_TRANSPORT" == "loopback_http" \
+    && "$AGENT_EXECUTION_LANE" == "player_parity" \
+    && "$LOCAL_TEST_PROVIDER_SESSION_MODE" == "hosted_public_join" \
+    && "$CHAIN_ENABLED" == "1" \
+    && "$CHAIN_LOCAL_STANDALONE_TEST" == "1" ]] \
+    && provider_url_is_loopback "$AGENT_PROVIDER_URL"; then
+    LOCAL_TEST_PROVIDER_ADMISSION="hosted_local_mock_test_tier"
+  else
+    echo "error: local test provider authority setup requires either builtin_llm DevLocal or the exact test-tier HostedPublicJoin provider_local_mock/worldsim_provider_v1/loopback_http/player_parity tuple" >&2
     exit 1
   fi
   if [[ -z "$LOCAL_TEST_PROVIDER_AUTHORITY_PATH" || -z "$LOCAL_TEST_PROVIDER_WASM_PATH" || -z "$LOCAL_TEST_PROVIDER_METADATA_PATH" || -z "$LOCAL_TEST_PROVIDER_FINALITY_BLOCK_HASH" ]]; then
@@ -615,6 +653,7 @@ payload = {
     "agent_execution_lane": "$AGENT_EXECUTION_LANE",
     "provider_bootstrap_authority_count": "${#PROVIDER_BOOTSTRAP_AUTHORITY_PATHS[@]}",
     "local_test_provider_setup_enabled": "$LOCAL_TEST_PROVIDER_SETUP_ENABLED",
+    "local_test_provider_admission": "$LOCAL_TEST_PROVIDER_ADMISSION",
     "local_test_provider_session_mode": "$LOCAL_TEST_PROVIDER_SESSION_MODE",
     "major_world_event_visibility": "$MAJOR_WORLD_EVENT_VISIBILITY",
     "chain_link_policy": "$CHAIN_LINK_POLICY",
@@ -953,6 +992,7 @@ write_session_meta() {
     printf 'PROVIDER_LINEAGE_STORE_PATH=%s\n' "$OUTPUT_DIR/viewer-provider-lineage.json"
     printf 'PROVIDER_BOOTSTRAP_AUTHORITY_COUNT=%s\n' "${#PROVIDER_BOOTSTRAP_AUTHORITY_PATHS[@]}"
     printf 'LOCAL_TEST_PROVIDER_SETUP_ENABLED=%s\n' "$LOCAL_TEST_PROVIDER_SETUP_ENABLED"
+    printf 'LOCAL_TEST_PROVIDER_ADMISSION=%s\n' "$LOCAL_TEST_PROVIDER_ADMISSION"
     printf 'LOCAL_TEST_PROVIDER_AUTHORITY_PATH=%s\n' "$LOCAL_TEST_PROVIDER_AUTHORITY_PATH"
     printf 'LOCAL_TEST_PROVIDER_SESSION_MODE=%s\n' "$LOCAL_TEST_PROVIDER_SESSION_MODE"
     printf 'HOSTED_ACCOUNT_STORE_PATH=%s\n' "$HOSTED_ACCOUNT_STORE_PATH"
@@ -1107,6 +1147,9 @@ else
   )
   if [[ "$CHAIN_ENABLED" == "1" ]]; then
     SOURCE_BUILD_ARGS+=(--bin oasis7_chain_runtime)
+  fi
+  if [[ "$LOCAL_TEST_PROVIDER_ADMISSION" == "hosted_local_mock_test_tier" ]]; then
+    SOURCE_BUILD_ARGS+=(--features test_tier_required)
   fi
   if [[ "${OASIS7_RUN_LAUNCHER_STACK_SKIP_SOURCE_BUILD:-0}" == "1" ]]; then
     echo "warning: skipping source-mode cargo build; using existing binaries from $SOURCE_MODE_TARGET_DIR" >&2

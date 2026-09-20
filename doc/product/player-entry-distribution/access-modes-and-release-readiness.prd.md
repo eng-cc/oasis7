@@ -6,7 +6,7 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：2026-09-13
+- Last reviewed：2026-09-20
 - 公开状态权威：[`README.md`](../../../README.md)
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
@@ -68,6 +68,21 @@ UI 私有聚合或 API 客户端自行推导不能成为第二事实源。协议
 
 ## 5.1 叶级产品要求与验收
 
+<a id="req-entry-candidate-001"></a>
+### REQ-ENTRY-CANDIDATE-001：候选门禁必须绑定同一版本的跨域证据
+
+- 要求：阶段或公开 claim 的候选门禁必须把 primary mode、适用入口、权威 runtime/P2P 执行、恢复路径、长期经济审计、发行资产、QA 汇总与公开 claim 输入绑定到同一候选版本和证据窗口。任一输入缺失、来自不同候选、只具备局部/历史 green 或无法证明跨域对应关系时，产品结果只能保持 blocked、observer 或更窄的目标性结论；本要求不生成当前 release verdict。
+- 专业权威：[`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[`README.md`](../../../README.md)
+- 验收：[AC-ENTRY-CANDIDATE-001](#ac-entry-candidate-001)
+
+<a id="ac-entry-candidate-001"></a>
+### AC-ENTRY-CANDIDATE-001：局部或跨候选证据不能代签整体验收
+
+- 覆盖要求：REQ-ENTRY-CANDIDATE-001
+- 给定：一个候选版本及其入口、runtime/P2P、恢复、经济审计、发行资产、QA 和公开 claim 证据，另有局部 green、历史证据或跨候选混合的对照样例。
+- 当：产品评估阶段/公开 claim 是否满足候选门禁。
+- 则：只有同一候选且证据窗口、primary mode、适用入口和跨域对应关系完整的样例，才可形成候选门禁输入；任何缺证、候选漂移、局部/历史 green 或对应关系不明的样例保持 blocked、observer 或较窄的目标性结论，不能代签当前 release readiness、公开可用性或阶段自动升级。专业 runtime/P2P/恢复、经济、QA、LiveOps 与根 README 仍各自拥有实现、证据和公开状态 authority。
+
 <a id="req-entry-mode-001"></a>
 ### REQ-ENTRY-MODE-001：每个入口必须绑定唯一 primary mode
 
@@ -109,7 +124,7 @@ UI 私有聚合或 API 客户端自行推导不能成为第二事实源。协议
 - AR-1：所有入口和证据都能归一到 `viewer` 或 `pure_api`，不存在由 alias、provider、deployment 或 session context 派生的第三种模式。
 - AR-2：同一候选版本分别证明 `viewer` 与 `pure_api` 的阶段、目标、阻塞、下一步、核心动作、主要因果与重连恢复；两种模式证据不互相代签。
 - AR-3：blocked/observer 样例能说明真实原因和恢复路径，且不会继续保留错误的 playable/parity 结论。
-- AR-4：统一候选门禁把入口、权威运行与恢复、发行资产、QA 和公开 claim 绑定到同一版本；局部或历史 green 无法代签。
+- AR-4：统一候选门禁把入口、权威运行与恢复、发行资产、QA 和公开 claim 绑定到同一版本；局部或历史 green 无法代签。叶级边界由 [REQ-ENTRY-CANDIDATE-001](#req-entry-candidate-001) / [AC-ENTRY-CANDIDATE-001](#ac-entry-candidate-001) 冻结。
 - AR-5：公开口径变更可追踪到产品决策、专业验证、QA 结论、LiveOps 同步和根 README；gate pass 不自动等于阶段升级。
 - AR-6：适用的 Launcher 受控动作如实区分可执行、阻断与结果，并给出对应恢复下一步；平台字段或适配差异、submit acceptance、近期历史与控制面可达均不被外推为跨端完全一致、结算、持久性、可玩性或发行结论。
 - LP-1：每轮 preview 都能追踪同一候选、primary mode、受支持入口、claim envelope 与反馈入口，且不会被表述为公开发布或自动升阶。
@@ -149,5 +164,6 @@ UI 私有聚合或 API 客户端自行推导不能成为第二事实源。协议
 
 | REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- |
+| [REQ-ENTRY-CANDIDATE-001](#req-entry-candidate-001) / [AC-ENTRY-CANDIDATE-001](#ac-entry-candidate-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[`README.md`](../../../README.md) | 同候选 primary mode/入口、runtime/P2P、恢复、长期经济审计、发行资产、QA 与公开 claim 的完整证据窗口；缺证、候选漂移或局部/历史 green 只能保持 blocked/observer/较窄目标性结论，不生成当前 release verdict | `test_tier_full` |
 | [REQ-ENTRY-MODE-001](#req-entry-mode-001) / [AC-ENTRY-MODE-001](#ac-entry-mode-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-ENTRY-MODE-002](#req-entry-mode-002) / [AC-ENTRY-MODE-002](#ac-entry-mode-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
