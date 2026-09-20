@@ -784,6 +784,8 @@ run_required_gate_checks() {
   run ./scripts/check-windows-paths.sh
   run bash ./scripts/check-script-executable-bits.sh
   run bash ./scripts/cargo-dev-windows-toolchain.test.sh
+  run bash ./scripts/cargo-dev-worktree-isolation.test.sh
+  run bash ./scripts/pm/new-task-worktree-cargo-cache-migration.test.sh
   run bash ./scripts/doc-governance-check.test.sh
   run bash ./scripts/testing-manual-active-contract.test.sh
   run bash ./scripts/ci-tests-argument-contract.test.sh
