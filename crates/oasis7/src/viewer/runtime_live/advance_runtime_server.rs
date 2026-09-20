@@ -80,8 +80,8 @@ impl ViewerRuntimeLiveServer {
                                     .to_string()
                             });
                             let reason = append_decision_upstream_trace(reason, &trace);
-                            if decision_trace_provider_error_retryable(&trace).unwrap_or(true) {
-                                if self.tolerate_background_play_gameplay_block(
+                            if decision_trace_provider_error_retryable(&trace).unwrap_or(true)
+                                && self.tolerate_background_play_gameplay_block(
                                     session,
                                     writer,
                                     action,
@@ -90,9 +90,9 @@ impl ViewerRuntimeLiveServer {
                                     reason.clone(),
                                     delta_logical_time,
                                     delta_event_seq,
-                                )? {
-                                    return Ok(());
-                                }
+                                )?
+                            {
+                                return Ok(());
                             }
                             return self.block_gameplay_control(
                                 session,
@@ -109,22 +109,22 @@ impl ViewerRuntimeLiveServer {
                     }
                 }
             }
-            if self.should_advance_compatibility_tick(iteration_logical_time) {
-                if let Err(error) = self.world.step() {
-                    let (delta_logical_time, delta_event_seq) =
-                        self.control_completion_delta(baseline_logical_time, baseline_event_seq);
-                    return self.block_runtime_control(
-                        session,
-                        writer,
-                        action,
-                        "runtime step aborted because world advance failed",
-                        ViewerRuntimeLiveServerError::Runtime(error),
-                        request_id,
-                        delta_logical_time,
-                        delta_event_seq,
-                        true,
-                    );
-                }
+            if self.should_advance_compatibility_tick(iteration_logical_time)
+                && let Err(error) = self.world.step()
+            {
+                let (delta_logical_time, delta_event_seq) =
+                    self.control_completion_delta(baseline_logical_time, baseline_event_seq);
+                return self.block_runtime_control(
+                    session,
+                    writer,
+                    action,
+                    "runtime step aborted because world advance failed",
+                    ViewerRuntimeLiveServerError::Runtime(error),
+                    request_id,
+                    delta_logical_time,
+                    delta_event_seq,
+                    true,
+                );
             }
             self.sync_runtime_wake_projection()?;
             session.transient_play_failures = 0;
@@ -191,10 +191,10 @@ impl ViewerRuntimeLiveServer {
                         );
                     }
                 };
-            if let Some(trace) = decision_trace {
-                if session.explicitly_subscribed_to(ViewerStream::Events) {
-                    send_response(writer, &ViewerResponse::DecisionTrace { trace })?;
-                }
+            if let Some(trace) = decision_trace
+                && session.explicitly_subscribed_to(ViewerStream::Events)
+            {
+                send_response(writer, &ViewerResponse::DecisionTrace { trace })?;
             }
 
             if session.explicitly_subscribed_to(ViewerStream::Events)

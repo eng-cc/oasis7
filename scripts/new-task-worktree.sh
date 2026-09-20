@@ -22,7 +22,7 @@ Default conventions:
 - branch: task/<module>-<task>
 - worktrees root: <repo-parent>/worktrees
 - worktree path: <worktrees root>/<repo-name>-<module>-<task>
-- cargo target: ignored `target` symlink to the repo-family shared dev cache
+- cargo target: ignored `target` symlink to the worktree-scoped shared dev cache
 - base ref: HEAD
 
 Options:
@@ -467,6 +467,25 @@ CANONICAL_CONFIG_COPIED=0
 CARGO_SHARED_TARGET_DIR=""
 TARGET_CARGO_TARGET_PATH="$TARGET_PATH/target"
 CARGO_TARGET_LINKED=0
+CARGO_TARGET_MIGRATED=0
+
+replace_target_symlink() {
+  local migration_dir
+  migration_dir="$(mktemp -d "$TARGET_CARGO_TARGET_PATH.migration.XXXXXX")" || return 1
+  if ! ln -s "$CARGO_SHARED_TARGET_DIR" "$migration_dir/target" || \
+    ! "$PYTHON_BIN" - "$migration_dir/target" "$TARGET_CARGO_TARGET_PATH" <<'PY'
+import os
+import sys
+
+os.replace(sys.argv[1], sys.argv[2])
+PY
+  then
+    unlink "$migration_dir/target" >/dev/null 2>&1 || true
+    rmdir "$migration_dir" >/dev/null 2>&1 || true
+    return 1
+  fi
+  rmdir "$migration_dir" >/dev/null 2>&1 || true
+}
 
 cleanup_bootstrap_failure() {
   # A resumed worktree may contain user work; never remove it on setup failure.
@@ -501,17 +520,45 @@ if ! CARGO_SHARED_TARGET_DIR="$(cd "$TARGET_PATH" && "$ROOT_DIR/scripts/cargo-de
 fi
 
 if [[ -e "$TARGET_CARGO_TARGET_PATH" || -L "$TARGET_CARGO_TARGET_PATH" ]]; then
-  if [[ "$LOOP_RESUME" != "1" || ! -L "$TARGET_CARGO_TARGET_PATH" ]] || \
-    ! "$PYTHON_BIN" - "$TARGET_CARGO_TARGET_PATH" "$CARGO_SHARED_TARGET_DIR" <<'PY'
-import os,sys
-raise SystemExit(0 if os.path.realpath(sys.argv[1]) == os.path.realpath(sys.argv[2]) else 1)
-PY
-  then
+  if [[ "$LOOP_RESUME" != "1" || ! -L "$TARGET_CARGO_TARGET_PATH" ]]; then
     cleanup_bootstrap_failure
     echo "error: invalid existing target path before shared cargo cache bootstrap: $TARGET_CARGO_TARGET_PATH" >&2
     exit 1
   fi
-  CARGO_TARGET_LINKED=1
+  if "$PYTHON_BIN" - "$TARGET_CARGO_TARGET_PATH" "$CARGO_SHARED_TARGET_DIR" <<'PY'
+import os,sys
+raise SystemExit(0 if os.path.realpath(sys.argv[1]) == os.path.realpath(sys.argv[2]) else 1)
+PY
+  then
+    CARGO_TARGET_LINKED=1
+  elif "$PYTHON_BIN" - "$TARGET_CARGO_TARGET_PATH" "$CANONICAL_REPO_ROOT" <<'PY'
+import os
+import pathlib
+import sys
+
+old_target = pathlib.Path(os.path.realpath(sys.argv[1]))
+cache_root = pathlib.Path(sys.argv[2]).resolve().parent / ".oasis7-cache" / "cargo-target"
+try:
+    old_target.relative_to(cache_root)
+except ValueError:
+    raise SystemExit(1)
+raise SystemExit(0)
+PY
+  then
+    # Replace only the current worktree's symlink. Never remove the old cache
+    # directory, which may still be referenced by another live worktree.
+    if ! mkdir -p "$CARGO_SHARED_TARGET_DIR" || ! replace_target_symlink; then
+      cleanup_bootstrap_failure
+      echo "error: failed to migrate existing target symlink to isolated cargo cache; preserved old cache" >&2
+      exit 1
+    fi
+    CARGO_TARGET_LINKED=1
+    CARGO_TARGET_MIGRATED=1
+  else
+    cleanup_bootstrap_failure
+    echo "error: invalid existing target path before shared cargo cache bootstrap: $TARGET_CARGO_TARGET_PATH" >&2
+    exit 1
+  fi
 fi
 if ! mkdir -p "$CARGO_SHARED_TARGET_DIR"; then
   cleanup_bootstrap_failure
@@ -649,7 +696,7 @@ PY
 )"
 fi
 
-SUMMARY_JSON="$("$PYTHON_BIN" - "$MODULE_INPUT" "$TASK_INPUT" "$MODULE_SLUG" "$TASK_SLUG" "$BRANCH_NAME" "$TARGET_PATH" "$BASE_REF" "$MODE" "$REPO_ROOT" "$FAMILY_REPO_NAME" "$WORKTREES_ROOT" "$CANONICAL_CONFIG_SOURCE" "$CANONICAL_CONFIG_EXISTS" "$TARGET_CONFIG_PATH" "$CANONICAL_CONFIG_COPIED" "$CARGO_SHARED_TARGET_DIR" "$TARGET_CARGO_TARGET_PATH" "$CARGO_TARGET_LINKED" "$INIT_DOCS" "$DOC_PRD_PATH" "$DOC_PRD_EXISTS" "$DOC_PROJECT_PATH" "$DOC_PROJECT_EXISTS" "$WITH_HARNESS" "$HARNESS_BOOTSTRAP_LOG" "$HARNESS_STATE_FILE" "$HARNESS_STATUS" "$HARNESS_VIEWER_URL" "$PM_BOOTSTRAP" "$PM_OWNER_ROLE" "$PM_TITLE" "$PM_PRIORITY" "$PM_TASK_UID" "$PM_TASK_PATH" "$PM_EXECUTION_LOG_PATH" "$PM_BOOTSTRAP_SNAPSHOT_PATH" "$PM_BOOTSTRAP_SNAPSHOT_DIGEST" <<'PY'
+SUMMARY_JSON="$("$PYTHON_BIN" - "$MODULE_INPUT" "$TASK_INPUT" "$MODULE_SLUG" "$TASK_SLUG" "$BRANCH_NAME" "$TARGET_PATH" "$BASE_REF" "$MODE" "$REPO_ROOT" "$FAMILY_REPO_NAME" "$WORKTREES_ROOT" "$CANONICAL_CONFIG_SOURCE" "$CANONICAL_CONFIG_EXISTS" "$TARGET_CONFIG_PATH" "$CANONICAL_CONFIG_COPIED" "$CARGO_SHARED_TARGET_DIR" "$TARGET_CARGO_TARGET_PATH" "$CARGO_TARGET_LINKED" "$INIT_DOCS" "$DOC_PRD_PATH" "$DOC_PRD_EXISTS" "$DOC_PROJECT_PATH" "$DOC_PROJECT_EXISTS" "$WITH_HARNESS" "$HARNESS_BOOTSTRAP_LOG" "$HARNESS_STATE_FILE" "$HARNESS_STATUS" "$HARNESS_VIEWER_URL" "$PM_BOOTSTRAP" "$PM_OWNER_ROLE" "$PM_TITLE" "$PM_PRIORITY" "$PM_TASK_UID" "$PM_TASK_PATH" "$PM_EXECUTION_LOG_PATH" "$PM_BOOTSTRAP_SNAPSHOT_PATH" "$PM_BOOTSTRAP_SNAPSHOT_DIGEST" "$CARGO_TARGET_MIGRATED" <<'PY'
 from __future__ import annotations
 
 import json
@@ -677,6 +724,7 @@ payload = {
         "shared_target_dir": sys.argv[16],
         "target_path": sys.argv[17],
         "linked": sys.argv[18] == "1",
+        "migrated": sys.argv[38] == "1",
     },
 }
 if sys.argv[19] == "1":
@@ -742,6 +790,7 @@ Cargo dev cache:
 - shared target dir: $CARGO_SHARED_TARGET_DIR
 - target path: $TARGET_CARGO_TARGET_PATH
 - linked: $([[ "$CARGO_TARGET_LINKED" == "1" ]] && printf 'yes' || printf 'no')
+- migrated existing link: $([[ "$CARGO_TARGET_MIGRATED" == "1" ]] && printf 'yes' || printf 'no')
 INFO
 
 if [[ "$INIT_DOCS" == "1" ]]; then
