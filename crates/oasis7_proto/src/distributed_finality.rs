@@ -266,18 +266,18 @@ impl WorldFinalityProofV1 {
                         self.trusted_anchor_block_hash, proof.block.prev_block_hash
                     ));
                 }
-            } else if let Some(previous_hash) = previous_block_hash.as_deref() {
-                if proof.block.prev_block_hash != previous_hash {
-                    return Err(format!(
-                        "prev_block_hash mismatch at height {}: expected={} actual={}",
-                        proof.height, previous_hash, proof.block.prev_block_hash
-                    ));
-                }
+            } else if let Some(previous_hash) = previous_block_hash.as_deref()
+                && proof.block.prev_block_hash != previous_hash
+            {
+                return Err(format!(
+                    "prev_block_hash mismatch at height {}: expected={} actual={}",
+                    proof.height, previous_hash, proof.block.prev_block_hash
+                ));
             }
-            if let Some(previous_timestamp) = previous_timestamp_ms {
-                if proof.timestamp_ms < previous_timestamp {
-                    return Err(format!("timestamp regressed at height {}", proof.height));
-                }
+            if let Some(previous_timestamp) = previous_timestamp_ms
+                && proof.timestamp_ms < previous_timestamp
+            {
+                return Err(format!("timestamp regressed at height {}", proof.height));
             }
             previous_block_hash = Some(proof.head.block_hash.clone());
             previous_timestamp_ms = Some(proof.timestamp_ms);
@@ -374,6 +374,10 @@ pub fn world_finality_validator_set_transition_signing_payload(
     ))
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "This public v1 signing helper preserves the established argument order and canonical payload tuple used by existing finality callers."
+)]
 pub fn world_finality_validator_set_transition_governance_signing_payload(
     signer_id: &str,
     world_id: &str,
@@ -468,12 +472,12 @@ fn validate_validator_set(validators: &[WorldFinalityValidatorV1]) -> Result<(),
         if validator.stake_weight == 0 {
             return Err(format!("validators[{index}].stake_weight must be positive"));
         }
-        if let Some(exit_height) = validator.exit_height {
-            if exit_height <= validator.activation_height {
-                return Err(format!(
-                    "validators[{index}].exit_height must be greater than activation_height"
-                ));
-            }
+        if let Some(exit_height) = validator.exit_height
+            && exit_height <= validator.activation_height
+        {
+            return Err(format!(
+                "validators[{index}].exit_height must be greater than activation_height"
+            ));
         }
     }
     Ok(())
@@ -511,12 +515,12 @@ fn validate_governance_signer_set(
                 "governance_signers[{index}].stake_weight must be positive"
             ));
         }
-        if let Some(exit_height) = signer.exit_height {
-            if exit_height <= signer.activation_height {
-                return Err(format!(
-                    "governance_signers[{index}].exit_height must be greater than activation_height"
-                ));
-            }
+        if let Some(exit_height) = signer.exit_height
+            && exit_height <= signer.activation_height
+        {
+            return Err(format!(
+                "governance_signers[{index}].exit_height must be greater than activation_height"
+            ));
         }
     }
     Ok(())

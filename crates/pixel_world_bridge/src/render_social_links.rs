@@ -89,13 +89,15 @@ pub(super) fn reconcile_social_links(
             commands,
             &mut by_key,
             &mut active,
-            &link.id,
-            SocialLinkPart::FromGlyph,
-            from_x,
-            from_y,
-            SOCIAL_ENDPOINT_COLOR,
-            width,
-            height,
+            SocialLinkGlyph {
+                link_id: &link.id,
+                part: SocialLinkPart::FromGlyph,
+                x: from_x,
+                y: from_y,
+                color: SOCIAL_ENDPOINT_COLOR,
+                width,
+                height,
+            },
         );
         if is_directional_relation(&link.relation_kind) {
             let marker_segments = directional_marker_segments(from_x, from_y, to_x, to_y);
@@ -134,13 +136,15 @@ pub(super) fn reconcile_social_links(
             commands,
             &mut by_key,
             &mut active,
-            &link.id,
-            SocialLinkPart::ToGlyph,
-            to_x,
-            to_y,
-            SOCIAL_ENDPOINT_COLOR,
-            width,
-            height,
+            SocialLinkGlyph {
+                link_id: &link.id,
+                part: SocialLinkPart::ToGlyph,
+                x: to_x,
+                y: to_y,
+                color: SOCIAL_ENDPOINT_COLOR,
+                width,
+                height,
+            },
         );
     }
     for (key, entity) in by_key {
@@ -161,6 +165,16 @@ struct DirectionalMarkerSegments {
     upper_to: ScreenPoint,
     lower_from: ScreenPoint,
     lower_to: ScreenPoint,
+}
+
+struct SocialLinkGlyph<'a> {
+    link_id: &'a str,
+    part: SocialLinkPart,
+    x: f64,
+    y: f64,
+    color: Color,
+    width: f64,
+    height: f64,
 }
 
 /// A pair of short chevrons at the destination makes the existing `from -> to`
@@ -271,25 +285,19 @@ fn upsert_glyph(
     commands: &mut Commands,
     by_key: &mut HashMap<(String, SocialLinkPart), Entity>,
     active: &mut HashSet<(String, SocialLinkPart)>,
-    link_id: &str,
-    part: SocialLinkPart,
-    x: f64,
-    y: f64,
-    color: Color,
-    width: f64,
-    height: f64,
+    glyph: SocialLinkGlyph<'_>,
 ) {
-    let key = (link_id.to_string(), part);
+    let key = (glyph.link_id.to_string(), glyph.part);
     active.insert(key.clone());
     let mut transform = Transform::from_translation(to_bevy_translation(
-        x,
-        y,
-        width,
-        height,
+        glyph.x,
+        glyph.y,
+        glyph.width,
+        glyph.height,
         SOCIAL_LINK_LAYER_Z + 0.01,
     ));
     transform.rotation = Quat::from_rotation_z(std::f32::consts::FRAC_PI_4);
-    let sprite = sprite_for_square(color, 5.0);
+    let sprite = sprite_for_square(glyph.color, 5.0);
     if let Some(entity) = by_key.remove(&key) {
         commands.entity(entity).insert((sprite, transform));
         by_key.insert(key, entity);
@@ -299,8 +307,8 @@ fn upsert_glyph(
                 sprite,
                 transform,
                 PixelWorldSocialLinkVisual {
-                    link_id: link_id.to_string(),
-                    part,
+                    link_id: glyph.link_id.to_string(),
+                    part: glyph.part,
                 },
             ))
             .id();

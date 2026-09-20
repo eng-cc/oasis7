@@ -195,6 +195,109 @@ jobs:
               ;;
           esac
 
+      - id: checker-stage
+        name: Classify trusted checker-stage route
+        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CHECKER_BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.integration_base }}
+          CHECKER_HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.expected_head }}
+          CHECKER_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          checker_paths=(
+            "scripts/pm/check-cargo-package-scope"
+            "scripts/pm/check-cargo-package-scope.test.py"
+          )
+          if [[ -z "${CHECKER_BASE_SHA}" || -z "${CHECKER_HEAD_SHA}" ]]; then
+            echo "checker-stage changed-path range is incomplete" >&2
+            exit 1
+          fi
+          changed_status_file="$(mktemp)"
+          trap 'rm -f "${changed_status_file}"' EXIT
+          if ! git diff --name-status --find-renames --find-copies --find-copies-harder "${CHECKER_BASE_SHA}" "${CHECKER_HEAD_SHA}" >"${changed_status_file}"; then
+            echo "checker-stage changed-path readback failed for the supplied range" >&2
+            exit 1
+          fi
+          changed_paths=()
+          while IFS=$'\t' read -r status first_path second_path; do
+            [[ -n "${status}" ]] || continue
+            case "${status}" in
+              R*|C*)
+                [[ -n "${first_path}" && -n "${second_path}" ]] || {
+                  echo "checker-stage rename/copy record is malformed" >&2
+                  exit 1
+                }
+                changed_paths+=("${first_path}" "${second_path}")
+                ;;
+              *)
+                [[ -n "${first_path}" && -z "${second_path}" ]] || {
+                  echo "checker-stage changed-path record is malformed" >&2
+                  exit 1
+                }
+                changed_paths+=("${first_path}")
+                ;;
+            esac
+          done <"${changed_status_file}"
+          checker_path_touched=false
+          for path in "${changed_paths[@]}"; do
+            if [[ "${path}" == "${checker_paths[0]}" || "${path}" == "${checker_paths[1]}" ]]; then
+              checker_path_touched=true
+            fi
+          done
+          if [[ "${checker_path_touched}" != true ]]; then
+            {
+              echo "pr_number="
+              echo "task_uid="
+              echo "receipt="
+            } >>"${GITHUB_OUTPUT}"
+            echo "ordinary changed-path route: checker stage is not selected"
+            exit 0
+          fi
+          if (( ${#changed_paths[@]} != 2 )); then
+            echo "checker-stage path touched without the exact two-file checker scope" >&2
+            exit 1
+          fi
+          if [[ ( "${changed_paths[0]}" != "${checker_paths[0]}" && "${changed_paths[0]}" != "${checker_paths[1]}" ) ||
+                ( "${changed_paths[1]}" != "${checker_paths[0]}" && "${changed_paths[1]}" != "${checker_paths[1]}" ) ]]; then
+            echo "checker-stage path touched without the exact two-file checker scope" >&2
+            exit 1
+          fi
+          if [[ "${GITHUB_REPOSITORY}" != "eng-cc/oasis7" ]]; then
+            echo "checker-stage authority is unavailable outside the canonical repository" >&2
+            exit 1
+          fi
+          issue_body="$(gh api "repos/${GITHUB_REPOSITORY}/issues/3827" --jq .body)"
+          resolved_pr="$(ISSUE_BODY="${issue_body}" python3 -I - <<'PY'
+          import os
+          import re
+
+          task_uid = "task_be264ac2833044969d3c2c50b2b83cea"
+          body = os.environ.get("ISSUE_BODY", "").replace("\r\n", "\n")
+          if re.findall(r"^task_uid:[^\n]*$", body, re.M) != [f"task_uid: {task_uid}"]:
+              raise SystemExit("trusted checker Issue UID is missing or ambiguous")
+          issue_uids = re.findall(r"^task_uid: (task_[0-9a-f]{32})$", body, re.M)
+          if issue_uids != [task_uid]:
+              raise SystemExit("trusted checker Issue UID mismatch")
+          references = set(re.findall(r"/pull/(\d+)\b", body))
+          references.update(re.findall(r"^- pr_number: `?(\d+)`?$", body, re.M))
+          if len(references) != 1:
+              raise SystemExit("trusted checker Issue reciprocal PR is missing or ambiguous")
+          print(next(iter(references)))
+          PY
+          )"
+          if [[ "${resolved_pr}" != "${CHECKER_PR_NUMBER}" ]]; then
+            echo "trusted checker Issue reciprocal PR does not match the current PR" >&2
+            exit 1
+          fi
+          {
+            echo "pr_number=${CHECKER_PR_NUMBER}"
+            echo "task_uid=task_be264ac2833044969d3c2c50b2b83cea"
+            echo "receipt=${GITHUB_WORKSPACE}/output/cargo-checker-stage-admission/post-run-receipt.json"
+          } >>"${GITHUB_OUTPUT}"
+          echo "trusted checker-stage route selected for PR ${CHECKER_PR_NUMBER}"
+
       - id: scope
         name: Plan required gate scope
         env:
@@ -237,6 +340,7 @@ jobs:
             impact_args=(--impact-projection "${RUNNER_TEMP}/impact-projection.json" --task-uid "${task_uid}" --scope-base-oid "${scope_base_oid}")
           elif [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]; then
             planner=(python3 -I "${RUNNER_TEMP}/integration-planner/plan-rust-required-scope.py")
+            task_uid="${{ inputs.task_uid }}"
             run_mode_args=(--run-mode "${{ inputs.run_mode }}")
             impact_args=(
               --impact-projection "${RUNNER_TEMP}/impact-projection.json"
@@ -258,6 +362,7 @@ jobs:
           echo "source_scope_base=${source_scope_base}" >>"${GITHUB_OUTPUT}"
           echo "integration_base=${base_ref}" >>"${GITHUB_OUTPUT}"
           echo "source_head=${head_ref}" >>"${GITHUB_OUTPUT}"
+          echo "task_uid=${task_uid}" >>"${GITHUB_OUTPUT}"
       - name: Report planned scope
         run: |
           echo "scope=${{ steps.scope.outputs.scope }}"
@@ -417,6 +522,7 @@ jobs:
         run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
       - name: Run required test tier
         env:
+          GH_TOKEN: ${{ github.token }}
           INTEGRATION_MODE: ${{ inputs.run_mode }}
           OASIS7_PRODUCT_DOC_BASE: ${{ steps.scope.outputs.source_scope_base }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ steps.scope.outputs.head_oid }}
@@ -441,11 +547,16 @@ jobs:
           OASIS7_CI_RUN_RUST_BASELINE: ${{ steps.scope.outputs.run_rust_baseline }}
           OASIS7_CARGO_SCOPE_BASE: ${{ steps.scope.outputs.source_scope_base }}
           OASIS7_CARGO_SCOPE_HEAD: ${{ steps.scope.outputs.head_oid }}
+          OASIS7_CARGO_SCOPE_INTEGRATION_BASE: ${{ steps.scope.outputs.integration_base_oid }}
+          OASIS7_CARGO_STAGE_PR_NUMBER: ${{ steps.checker-stage.outputs.pr_number }}
+          OASIS7_CARGO_STAGE_TASK_UID: ${{ steps.checker-stage.outputs.task_uid }}
+          OASIS7_CARGO_STAGE_RECEIPT: ${{ steps.checker-stage.outputs.receipt }}
         run: |
           trusted_checker="${RUNNER_TEMP}/trusted-check-cargo-package-scope"
           trusted_profile_authority="${RUNNER_TEMP}/trusted-cargo-profile-authority"
           trusted_profile_planner="${trusted_profile_authority}/cargo_package_profile_planner.py"
           trusted_profile_driver="${trusted_profile_authority}/cargo_package_profile_driver.py"
+          trusted_stage_adapter="${trusted_profile_authority}/cargo_checker_stage_admission.py"
           if [[ -n "${OASIS7_CARGO_SCOPE_BASE:-}" ]] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
             git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/check-cargo-package-scope" >"${trusted_checker}"
             chmod +x "${trusted_checker}"
@@ -456,8 +567,13 @@ jobs:
                git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/cargo_package_profile_driver.py" >"${trusted_profile_driver}" 2>/dev/null; then
               export OASIS7_CARGO_PROFILE_PLANNER="${trusted_profile_planner}"
               export OASIS7_CARGO_PROFILE_DRIVER="${trusted_profile_driver}"
+              export OASIS7_CARGO_STAGE_PLANNER="${trusted_profile_planner}"
               export OASIS7_CARGO_PROFILE_INTEGRATION_BASE="${{ steps.scope.outputs.integration_base_oid }}"
               export OASIS7_CARGO_PROFILE_SOURCE_HEAD="${OASIS7_CARGO_SCOPE_HEAD}"
+            fi
+            if git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/cargo_checker_stage_admission.py" >"${trusted_stage_adapter}" 2>/dev/null; then
+              chmod +x "${trusted_stage_adapter}"
+              export OASIS7_CARGO_STAGE_ADAPTER="${trusted_stage_adapter}"
             fi
           fi
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${INTEGRATION_MODE}" == "integration_revalidation" ]]; then
@@ -550,6 +666,14 @@ jobs:
           else
             CI_VERBOSE=1 ./scripts/ci-tests.sh required
           fi
+      - name: Upload Cargo checker-stage admission receipt
+        if: ${{ always() && hashFiles('output/cargo-checker-stage-admission/post-run-receipt.json') != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: cargo-checker-stage-admission-receipt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: output/cargo-checker-stage-admission/post-run-receipt.json
+          if-no-files-found: error
+          retention-days: 7
       - name: Upload Cargo package profile plan
         if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
         uses: actions/upload-artifact@v7

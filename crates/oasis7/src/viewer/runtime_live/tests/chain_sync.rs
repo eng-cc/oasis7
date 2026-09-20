@@ -1,10 +1,66 @@
 use super::*;
 use crate::simulator::WorldEventKind;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+#[path = "chain_sync_recovery.rs"]
+mod chain_sync_recovery;
+
+struct HostedLocalMockProviderEnvSnapshot {
+    previous: Vec<(&'static str, Option<std::ffi::OsString>)>,
+}
+
+impl HostedLocalMockProviderEnvSnapshot {
+    fn capture() -> Self {
+        let keys = [
+            VIEWER_AGENT_DECISION_SOURCE_ENV,
+            VIEWER_AGENT_PROVIDER_BACKEND_ENV,
+            VIEWER_AGENT_PROVIDER_CONTRACT_ENV,
+            VIEWER_AGENT_PROVIDER_TRANSPORT_ENV,
+            VIEWER_AGENT_PROVIDER_URL_ENV,
+            VIEWER_AGENT_PROVIDER_PROFILE_ENV,
+            VIEWER_AGENT_EXECUTION_LANE_ENV,
+            VIEWER_AGENT_PROVIDER_MODE_ENV,
+        ];
+        let previous = keys
+            .into_iter()
+            .map(|key| (key, std::env::var_os(key)))
+            .collect();
+        clear_runtime_provider_env();
+        Self { previous }
+    }
+}
+
+impl Drop for HostedLocalMockProviderEnvSnapshot {
+    fn drop(&mut self) {
+        for (key, value) in self.previous.drain(..) {
+            // SAFETY: The test holds the canonical provider environment lock.
+            unsafe {
+                match value {
+                    Some(value) => oasis7::env_mut::set_var(key, value),
+                    None => oasis7::env_mut::remove_var(key),
+                }
+            }
+        }
+    }
+}
+
+fn configure_hosted_local_mock_provider_env() {
+    // SAFETY: The caller holds the canonical provider environment lock.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_DECISION_SOURCE_ENV, "provider_backed");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_backed");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_BACKEND_ENV, "provider_local_mock");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_CONTRACT_ENV, "worldsim_provider_v1");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_TRANSPORT_ENV, "loopback_http");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, "http://127.0.0.1:9");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+        oasis7::env_mut::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
+    }
+}
 
 pub(crate) struct TestChainStatusServer {
     pub(crate) addr: String,
     pub(crate) committed_height: Arc<AtomicU64>,
+    status_requests: Arc<AtomicU64>,
     submitted_gameplay_requests: Arc<Mutex<Vec<crate::viewer::GameplayActionRequest>>>,
     stop: Arc<AtomicBool>,
     join_handle: Option<thread::JoinHandle<()>>,
@@ -22,20 +78,46 @@ impl TestChainStatusServer {
         execution_world_dir: std::path::PathBuf,
         release_security_policy: ReleaseSecurityPolicy,
     ) -> Self {
+        Self::start_with_release_security_policy_and_delay(
+            execution_world_dir,
+            release_security_policy,
+            Duration::ZERO,
+        )
+    }
+
+    pub(crate) fn start_with_status_delay(
+        execution_world_dir: std::path::PathBuf,
+        status_delay: Duration,
+    ) -> Self {
+        Self::start_with_release_security_policy_and_delay(
+            execution_world_dir,
+            ReleaseSecurityPolicy::production_hardened(),
+            status_delay,
+        )
+    }
+
+    fn start_with_release_security_policy_and_delay(
+        execution_world_dir: std::path::PathBuf,
+        release_security_policy: ReleaseSecurityPolicy,
+        status_delay: Duration,
+    ) -> Self {
         let listener = TcpListener::bind("127.0.0.1:0").expect("bind chain status server");
         listener
             .set_nonblocking(true)
             .expect("set chain status listener nonblocking");
         let addr = listener.local_addr().expect("chain status local addr");
         let committed_height = Arc::new(AtomicU64::new(0));
+        let status_requests = Arc::new(AtomicU64::new(0));
         let submitted_gameplay_requests = Arc::new(Mutex::new(Vec::new()));
         let stop = Arc::new(AtomicBool::new(false));
         let committed_height_for_thread = Arc::clone(&committed_height);
+        let status_requests_for_thread = Arc::clone(&status_requests);
         let submitted_requests_for_thread = Arc::clone(&submitted_gameplay_requests);
         let next_gameplay_action_id_for_thread = Arc::new(AtomicU64::new(1));
         let stop_for_thread = Arc::clone(&stop);
         let execution_world_dir_for_thread = execution_world_dir.clone();
         let release_security_policy_for_thread = release_security_policy.clone();
+        let status_delay_for_thread = status_delay;
         let join_handle = thread::spawn(move || {
             loop {
                 if stop_for_thread.load(Ordering::SeqCst) {
@@ -64,6 +146,10 @@ impl TestChainStatusServer {
 
                         match (method, path) {
                             ("GET", "/v1/chain/status") => {
+                                status_requests_for_thread.fetch_add(1, Ordering::SeqCst);
+                                if !status_delay_for_thread.is_zero() {
+                                    thread::sleep(status_delay_for_thread);
+                                }
                                 let body = serde_json::json!({
                                     "consensus": {
                                         "committed_height": committed_height_for_thread.load(Ordering::SeqCst),
@@ -143,6 +229,7 @@ impl TestChainStatusServer {
         Self {
             addr: addr.to_string(),
             committed_height,
+            status_requests,
             submitted_gameplay_requests,
             stop,
             join_handle: Some(join_handle),
@@ -154,6 +241,10 @@ impl TestChainStatusServer {
             .lock()
             .expect("lock submitted requests")
             .clone()
+    }
+
+    pub(crate) fn status_requests(&self) -> u64 {
+        self.status_requests.load(Ordering::SeqCst)
     }
 }
 
@@ -179,6 +270,335 @@ fn chain_linked_formal_default_starts_without_local_fallback_agent() {
     assert!(
         server.world.state().agents.is_empty(),
         "chain-linked default entry should wait for committed runtime or player claim"
+    );
+}
+
+#[test]
+fn hosted_local_mock_chain_viewer_defers_fixture_install_until_authoritative_sync() {
+    let _env_guard = runtime_provider_env_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _provider_env_snapshot = HostedLocalMockProviderEnvSnapshot::capture();
+    configure_hosted_local_mock_provider_env();
+
+    let execution_world_dir = runtime_live_temp_dir("chain_sync_hosted_local_mock_init");
+    let mut execution_world = crate::runtime::World::new_production_hardened();
+    execution_world
+        .bind_cognition_runtime(
+            VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID,
+            "hosted-local-mock-branch",
+            0,
+            Some(
+                "blake3:1111111111111111111111111111111111111111111111111111111111111111"
+                    .to_string(),
+            ),
+            "verified",
+            0,
+        )
+        .expect("bind authoritative chain cognition runtime");
+    execution_world.submit_action(RuntimeAction::RegisterAgent {
+        agent_id: "hosted-chain-agent".to_string(),
+        pos: crate::geometry::GeoPos::new(1, 2, 0),
+    });
+    execution_world
+        .step()
+        .expect("register authoritative chain Agent");
+    execution_world
+        .save_to_dir_with_chain_resource_context(
+            execution_world_dir.as_path(),
+            crate::runtime::ChainResourceDerivationContext {
+                world_id: VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID,
+                chain_id: "hosted-local-mock-chain",
+                genesis_ref: Some("hosted-local-mock-genesis"),
+                created_at_height: 1,
+                manifest_height: 1,
+                commit_block_hash: Some("hosted-local-mock-block-1"),
+                tick: execution_world.state().time,
+            },
+            "hosted-local-mock-world-config",
+            "hosted-local-mock-generation",
+        )
+        .expect("persist authoritative chain world");
+
+    let chain_status = TestChainStatusServer::start(execution_world_dir.clone());
+    chain_status.committed_height.store(1, Ordering::SeqCst);
+
+    let mut viewer = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::formal_release_default()
+            .with_hosted_public_join_mode(true)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm)
+            .with_chain_status_bind(chain_status.addr.clone()),
+    )
+    .expect("empty pre-sync formal world must not abort Hosted local-mock startup");
+    assert!(
+        viewer.world.state().agents.is_empty(),
+        "the viewer must remain empty until authoritative chain sync"
+    );
+    assert!(
+        viewer.llm_sidecar.supports_prompt_control_result(),
+        "Hosted local-mock lane must be active while fixture installation is pending"
+    );
+
+    let mut session = RuntimeLiveSession::new();
+    let (mut writer, peer) = test_writer_pair();
+    viewer
+        .handle_request(
+            ViewerRequest::HelloV2 {
+                client: "hosted-local-mock-chain-client".to_string(),
+                version: VIEWER_PROTOCOL_VERSION,
+                capabilities: vec![PROMPT_CONTROL_RESULT_CAPABILITY.to_string()],
+            },
+            &mut session,
+            &mut writer,
+        )
+        .expect("HelloV2 must be accepted before the first chain snapshot");
+    let hello_responses = read_available_runtime_live_responses(&peer, Duration::from_millis(200));
+    assert!(
+        hello_responses.iter().any(|response| matches!(
+            response,
+            ViewerResponse::HelloAck { capabilities, .. }
+                if capabilities
+                    .iter()
+                    .any(|capability| capability == PROMPT_CONTROL_RESULT_CAPABILITY)
+        )),
+        "Hosted local-mock chain startup must negotiate prompt_control_result before sync: {hello_responses:?}"
+    );
+    viewer
+        .handle_request(ViewerRequest::RequestSnapshot, &mut session, &mut writer)
+        .expect("RequestSnapshot must reuse the authoritative HelloV2 prime");
+    let snapshot_line = read_response_line(&peer, Duration::from_millis(200))
+        .expect("RequestSnapshot must serialize a response");
+    assert!(
+        snapshot_line.contains("\"snapshot\"") || snapshot_line.contains("\"Snapshot\""),
+        "RequestSnapshot must serialize the already-authoritative world: {snapshot_line}"
+    );
+    assert_eq!(
+        chain_status.status_requests(),
+        1,
+        "HelloV2 and RequestSnapshot must not double-prime the same chain world"
+    );
+    viewer
+        .sync_chain_linked_runtime(&mut session, &mut writer)
+        .expect("authoritative chain sync should install the pending fixture");
+
+    assert!(
+        viewer
+            .world
+            .state()
+            .agents
+            .contains_key("hosted-chain-agent"),
+        "authoritative Agent must be adopted before local fixture installation"
+    );
+    assert!(
+        !viewer.world.capability_invocation_contexts().is_empty(),
+        "fixture installation must produce a proof-bearing invocation context"
+    );
+    let _ = read_response_line(&peer, Duration::from_millis(200));
+
+    let mut canonical_tick = crate::runtime::World::load_from_dir(execution_world_dir.as_path())
+        .expect("reload authoritative chain world");
+    canonical_tick
+        .step()
+        .expect("advance authoritative chain world");
+    canonical_tick
+        .save_to_dir_with_chain_resource_context(
+            execution_world_dir.as_path(),
+            crate::runtime::ChainResourceDerivationContext {
+                world_id: VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID,
+                chain_id: "hosted-local-mock-chain",
+                genesis_ref: Some("hosted-local-mock-genesis"),
+                created_at_height: 1,
+                manifest_height: 2,
+                commit_block_hash: Some("hosted-local-mock-block-2"),
+                tick: canonical_tick.state().time,
+            },
+            "hosted-local-mock-world-config",
+            "hosted-local-mock-generation",
+        )
+        .expect("persist next authoritative chain world");
+    chain_status.committed_height.store(2, Ordering::SeqCst);
+    viewer
+        .sync_chain_linked_runtime(&mut session, &mut writer)
+        .expect("subsequent authoritative sync should retain local fixture");
+    assert!(
+        !viewer.world.capability_invocation_contexts().is_empty(),
+        "each authoritative projection must retain a proof-bearing local fixture"
+    );
+}
+
+#[test]
+fn shared_hosted_prime_does_not_starve_v1_presence_hello() {
+    let _env_guard = runtime_provider_env_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _provider_env_snapshot = HostedLocalMockProviderEnvSnapshot::capture();
+    configure_hosted_local_mock_provider_env();
+
+    let execution_world_dir = runtime_live_temp_dir("chain_sync_shared_prime_probe");
+    let mut execution_world = crate::runtime::World::new_production_hardened();
+    execution_world
+        .bind_cognition_runtime(
+            VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID,
+            "hosted-local-mock-probe-branch",
+            0,
+            Some(
+                "blake3:1111111111111111111111111111111111111111111111111111111111111111"
+                    .to_string(),
+            ),
+            "verified",
+            0,
+        )
+        .expect("bind probe chain cognition runtime");
+    execution_world.submit_action(RuntimeAction::RegisterAgent {
+        agent_id: "hosted-probe-agent".to_string(),
+        pos: crate::geometry::GeoPos::new(1, 2, 0),
+    });
+    execution_world.step().expect("register probe chain Agent");
+    execution_world
+        .save_to_dir_with_chain_resource_context(
+            execution_world_dir.as_path(),
+            crate::runtime::ChainResourceDerivationContext {
+                world_id: VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID,
+                chain_id: "hosted-local-mock-probe-chain",
+                genesis_ref: Some("hosted-local-mock-probe-genesis"),
+                created_at_height: 1,
+                manifest_height: 1,
+                commit_block_hash: Some("hosted-local-mock-probe-block-1"),
+                tick: execution_world.state().time,
+            },
+            "hosted-local-mock-probe-config",
+            "hosted-local-mock-probe-generation",
+        )
+        .expect("persist probe chain world");
+
+    let chain_status = TestChainStatusServer::start_with_status_delay(
+        execution_world_dir,
+        Duration::from_millis(250),
+    );
+    chain_status.committed_height.store(1, Ordering::SeqCst);
+    let viewer = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::formal_release_default()
+            .with_hosted_public_join_mode(true)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm)
+            .with_chain_status_bind(chain_status.addr.clone()),
+    )
+    .expect("empty Hosted local-mock viewer should start before sync");
+    let shared = Arc::new(Mutex::new(viewer));
+    let prime_shared = Arc::clone(&shared);
+    let prime_thread = thread::spawn(move || {
+        let request = ViewerRequest::HelloV2 {
+            client: "hosted-prime".to_string(),
+            version: VIEWER_PROTOCOL_VERSION,
+            capabilities: vec![PROMPT_CONTROL_RESULT_CAPABILITY.to_string()],
+        };
+        let session = RuntimeLiveSession::new();
+        ViewerRuntimeLiveServer::prime_shared_request_if_needed(&prime_shared, &request, &session)
+    });
+
+    let deadline = Instant::now() + Duration::from_secs(1);
+    while chain_status.status_requests() == 0 && Instant::now() < deadline {
+        thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(
+        chain_status.status_requests(),
+        1,
+        "shared prime should be in its network read before the probe runs"
+    );
+
+    let started_at = Instant::now();
+    let mut probe_session = RuntimeLiveSession::new();
+    let (mut writer, peer) = test_writer_pair();
+    shared
+        .lock()
+        .expect("lock shared viewer while prime reads chain")
+        .handle_request(
+            ViewerRequest::Hello {
+                client: "launcher-presence-probe".to_string(),
+                version: VIEWER_PROTOCOL_VERSION,
+            },
+            &mut probe_session,
+            &mut writer,
+        )
+        .expect("presence Hello must not wait for shared chain prime");
+    assert!(
+        started_at.elapsed() < Duration::from_millis(150),
+        "presence Hello was blocked by the in-flight chain prime: {:?}",
+        started_at.elapsed()
+    );
+    assert!(
+        read_available_runtime_live_responses(&peer, Duration::from_millis(100))
+            .iter()
+            .any(|response| matches!(response, ViewerResponse::HelloAck { .. })),
+        "presence probe must receive HelloAck while chain prime is in flight"
+    );
+
+    let _ = prime_thread
+        .join()
+        .expect("shared prime thread should join")
+        .expect("authoritative shared prime should succeed")
+        .expect("chain status prime should advance the viewer");
+}
+
+#[test]
+fn hosted_local_mock_chain_sync_rejects_empty_authoritative_world() {
+    let _env_guard = runtime_provider_env_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _provider_env_snapshot = HostedLocalMockProviderEnvSnapshot::capture();
+    configure_hosted_local_mock_provider_env();
+
+    let execution_world_dir = runtime_live_temp_dir("chain_sync_hosted_local_mock_empty");
+    let mut execution_world = crate::runtime::World::new_production_hardened();
+    execution_world
+        .bind_cognition_runtime(
+            VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID,
+            "hosted-local-mock-empty-branch",
+            0,
+            Some(
+                "blake3:1111111111111111111111111111111111111111111111111111111111111111"
+                    .to_string(),
+            ),
+            "verified",
+            0,
+        )
+        .expect("bind empty authoritative chain cognition runtime");
+    execution_world
+        .save_to_dir_with_chain_resource_context(
+            execution_world_dir.as_path(),
+            crate::runtime::ChainResourceDerivationContext {
+                world_id: VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID,
+                chain_id: "hosted-local-mock-empty-chain",
+                genesis_ref: Some("hosted-local-mock-empty-genesis"),
+                created_at_height: 1,
+                manifest_height: 1,
+                commit_block_hash: Some("hosted-local-mock-empty-block-1"),
+                tick: execution_world.state().time,
+            },
+            "hosted-local-mock-empty-world-config",
+            "hosted-local-mock-empty-generation",
+        )
+        .expect("persist empty authoritative chain world");
+
+    let chain_status = TestChainStatusServer::start(execution_world_dir);
+    chain_status.committed_height.store(1, Ordering::SeqCst);
+    let mut viewer = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::formal_release_default()
+            .with_hosted_public_join_mode(true)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm)
+            .with_chain_status_bind(chain_status.addr.clone()),
+    )
+    .expect("empty pre-sync formal world must be allowed to await chain sync");
+    let mut session = RuntimeLiveSession::new();
+    let (mut writer, _peer) = test_writer_pair();
+
+    let error = viewer
+        .sync_chain_linked_runtime(&mut session, &mut writer)
+        .expect_err("empty authoritative Hosted local-mock world must fail closed");
+    assert!(
+        format!("{error:?}").contains(
+            "Hosted local-mock authoritative chain world requires a Runtime-seeded Agent"
+        ),
+        "unexpected empty authoritative world error: {error:?}"
     );
 }
 
@@ -744,274 +1164,4 @@ fn chain_linked_runtime_sync_clears_stale_local_test_sidecar_binding() {
             .map(String::as_str),
         Some("player-real")
     );
-}
-
-#[test]
-fn chain_linked_runtime_empty_poll_does_not_advance_world() {
-    let execution_world_dir = runtime_live_temp_dir("chain_sync_idle");
-    let execution_world = crate::runtime::World::new_production_hardened();
-    execution_world
-        .save_to_dir(execution_world_dir.as_path())
-        .expect("persist empty execution world");
-
-    let chain_status = TestChainStatusServer::start(execution_world_dir);
-    chain_status.committed_height.store(0, Ordering::SeqCst);
-
-    let mut server = ViewerRuntimeLiveServer::new(
-        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
-            .with_chain_status_bind(chain_status.addr.clone())
-            .with_chain_poll_interval(Duration::from_millis(50)),
-    )
-    .expect("runtime server");
-    server.latest_player_gameplay_feedback = Some(crate::simulator::PlayerGameplayRecentFeedback {
-        action: "chain_sync".to_string(),
-        stage: "blocked".to_string(),
-        effect: "committed runtime sync failed before the viewer could observe new world state"
-            .to_string(),
-        intent_summary: None,
-        target_agent_id: None,
-        reason: Some("simulated missing persistence".to_string()),
-        hint: Some("wait for execution world persistence".to_string()),
-        delta_logical_time: 0,
-        delta_event_seq: 0,
-    });
-    let mut session = RuntimeLiveSession::new();
-    session.playing = false;
-    session.subscribed.insert(ViewerStream::Events);
-    session.subscribed.insert(ViewerStream::Snapshot);
-    let initial_time = server.world.state().time;
-    let (mut writer, peer) = test_writer_pair();
-
-    let progressed = server
-        .sync_chain_linked_runtime(&mut session, &mut writer)
-        .expect("chain sync should succeed");
-
-    assert!(!progressed, "idle chain poll should not report progress");
-    assert_eq!(server.world.state().time, initial_time);
-    assert!(read_response_line(&peer, Duration::from_millis(100)).is_none());
-    assert_eq!(server.last_chain_committed_height, 0);
-    assert!(
-        server.latest_player_gameplay_feedback.is_none(),
-        "successful zero-delta chain sync should clear stale chain_sync feedback"
-    );
-}
-
-#[test]
-fn chain_linked_runtime_zero_delta_does_not_accept_committed_height() {
-    let execution_world_dir = runtime_live_temp_dir("chain_sync_zero_delta_height");
-    let execution_world = crate::runtime::World::new_production_hardened();
-    execution_world
-        .save_to_dir(execution_world_dir.as_path())
-        .expect("persist empty execution world");
-
-    let chain_status = TestChainStatusServer::start(execution_world_dir);
-    chain_status.committed_height.store(1, Ordering::SeqCst);
-
-    let mut server = ViewerRuntimeLiveServer::new(
-        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
-            .with_chain_status_bind(chain_status.addr.clone())
-            .with_chain_poll_interval(Duration::from_millis(50)),
-    )
-    .expect("runtime server");
-    let mut session = RuntimeLiveSession::new();
-    session.playing = false;
-    session.subscribed.insert(ViewerStream::Events);
-    session.subscribed.insert(ViewerStream::Snapshot);
-    let initial_time = server.world.state().time;
-    let (mut writer, peer) = test_writer_pair();
-
-    let progressed = server
-        .sync_chain_linked_runtime(&mut session, &mut writer)
-        .expect("chain sync should succeed");
-
-    assert!(
-        !progressed,
-        "zero-delta chain poll should not report progress"
-    );
-    assert_eq!(server.world.state().time, initial_time);
-    assert_eq!(server.last_chain_committed_height, 0);
-    assert!(read_response_line(&peer, Duration::from_millis(100)).is_none());
-}
-
-#[test]
-fn chain_linked_runtime_committed_height_zero_consumes_persisted_execution_world() {
-    let execution_world_dir = runtime_live_temp_dir("chain_sync_zero_committed_height");
-    let mut execution_world = crate::runtime::World::new_production_hardened();
-    execution_world.submit_action(RuntimeAction::RegisterAgent {
-        agent_id: "chain-agent".to_string(),
-        pos: crate::geometry::GeoPos::new(1, 2, 0),
-    });
-    execution_world.step().expect("advance execution world");
-    execution_world
-        .save_to_dir(execution_world_dir.as_path())
-        .expect("persist execution world");
-
-    let chain_status = TestChainStatusServer::start_with_release_security_policy(
-        execution_world_dir,
-        ReleaseSecurityPolicy::default(),
-    );
-    chain_status.committed_height.store(0, Ordering::SeqCst);
-
-    let mut server = ViewerRuntimeLiveServer::new(
-        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
-            .with_chain_status_bind(chain_status.addr.clone())
-            .with_chain_poll_interval(Duration::from_millis(50)),
-    )
-    .expect("runtime server");
-    server.latest_player_gameplay_feedback = Some(crate::simulator::PlayerGameplayRecentFeedback {
-        action: "chain_sync".to_string(),
-        stage: "blocked".to_string(),
-        effect: "stale bootstrap execution world should be ignored before the first commit"
-            .to_string(),
-        intent_summary: None,
-        target_agent_id: None,
-        reason: Some("bootstrap-only".to_string()),
-        hint: Some("wait for first committed height".to_string()),
-        delta_logical_time: 0,
-        delta_event_seq: 0,
-    });
-    let mut session = RuntimeLiveSession::new();
-    session.playing = false;
-    session.subscribed.insert(ViewerStream::Events);
-    session.subscribed.insert(ViewerStream::Snapshot);
-    let initial_time = server.world.state().time;
-    let (mut writer, peer) = test_writer_pair();
-
-    let progressed = server
-        .sync_chain_linked_runtime(&mut session, &mut writer)
-        .expect("chain sync should consume persisted zero-height execution world");
-
-    assert!(progressed);
-    assert_eq!(server.world.state().time, execution_world.state().time);
-    assert_ne!(server.world.state().time, initial_time);
-    assert_eq!(
-        server.last_chain_committed_height,
-        execution_world.state().time.max(1)
-    );
-    assert!(server.latest_player_gameplay_feedback.is_none());
-    let line = read_response_line(&peer, Duration::from_millis(200))
-        .expect("expected zero-height execution-world sync response");
-    assert!(!line.trim().is_empty());
-}
-
-#[test]
-fn chain_linked_runtime_recipe_completion_is_delivered_once_across_replay() {
-    let _guard = lock_test_llm_env();
-    let mut source = super::setup_industrial_gameplay_with_completed_jobs(82, 1);
-    let execution_world_dir = runtime_live_temp_dir("chain_sync_recipe_completion");
-    source
-        .world
-        .save_to_dir(execution_world_dir.as_path())
-        .expect("persist completed recipe execution world");
-
-    let chain_status = TestChainStatusServer::start(execution_world_dir.clone());
-    chain_status.committed_height.store(1, Ordering::SeqCst);
-    let mut server = ViewerRuntimeLiveServer::new(
-        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
-            .with_chain_status_bind(chain_status.addr.clone()),
-    )
-    .expect("runtime server");
-    let mut session = RuntimeLiveSession::new();
-    session.playing = false;
-    session.subscribed.insert(ViewerStream::Events);
-    let (mut writer, peer) = test_writer_pair();
-
-    assert!(
-        server
-            .sync_chain_linked_runtime(&mut session, &mut writer)
-            .expect("initial recipe completion chain sync")
-    );
-    let first_responses = read_available_runtime_live_responses(&peer, Duration::from_millis(200));
-    assert!(first_responses.iter().any(|response| matches!(
-        response,
-        ViewerResponse::Event { event }
-            if matches!(
-                &event.kind,
-                WorldEventKind::RuntimeEvent { kind, .. }
-                    if kind == "runtime.economy.recipe_completed"
-            )
-    )));
-
-    source.world.submit_action(RuntimeAction::MoveAgent {
-        agent_id: "starter-agent-0".to_string(),
-        to: crate::geometry::GeoPos::new(2, 1, 0),
-    });
-    source
-        .world
-        .step()
-        .expect("append replay-following runtime event");
-    source
-        .world
-        .save_to_dir(execution_world_dir.as_path())
-        .expect("persist replay-following execution world");
-    chain_status.committed_height.store(2, Ordering::SeqCst);
-
-    let (mut replay_writer, replay_peer) = test_writer_pair();
-    assert!(
-        server
-            .sync_chain_linked_runtime(&mut session, &mut replay_writer)
-            .expect("replay-following recipe completion chain sync")
-    );
-    let replay_responses =
-        read_available_runtime_live_responses(&replay_peer, Duration::from_millis(200));
-    assert!(!replay_responses.iter().any(|response| matches!(
-        response,
-        ViewerResponse::Event { event }
-            if matches!(
-                &event.kind,
-                WorldEventKind::RuntimeEvent { kind, .. }
-                    if kind == "runtime.economy.recipe_completed"
-            )
-    )));
-}
-
-#[test]
-fn chain_linked_runtime_event_suffix_delivers_new_era_recipe_completion() {
-    let recipe_completion = crate::runtime::WorldEvent {
-        id: u64::MAX,
-        time: 83,
-        caused_by: None,
-        body: crate::runtime::WorldEventBody::Domain(
-            crate::runtime::DomainEvent::RecipeCompleted {
-                job_id: 7,
-                requester_agent_id: "agent-0".to_string(),
-                factory_id: "factory-smelter".to_string(),
-                recipe_id: "recipe.iron-ingot".to_string(),
-                accepted_batches: 1,
-                produce: Vec::new(),
-                byproducts: Vec::new(),
-                output_ledger: crate::runtime::MaterialLedgerId::world(),
-                bottleneck_tags: Vec::new(),
-                logistics_route_ids: Vec::new(),
-                logistics_path_ids: Vec::new(),
-            },
-        ),
-    };
-    let mut rollover_recipe_completion = recipe_completion.clone();
-    rollover_recipe_completion.id = 1;
-    let baseline_events = vec![recipe_completion.clone()];
-    let prepared_events = vec![recipe_completion, rollover_recipe_completion];
-
-    let selected = super::super::chain_link::runtime_events_after_baseline(
-        baseline_events.as_slice(),
-        prepared_events.as_slice(),
-        0,
-        1,
-    );
-
-    assert_eq!(selected.len(), 1);
-    assert_eq!(selected[0].id, 1);
-    assert!(matches!(
-        &selected[0].body,
-        crate::runtime::WorldEventBody::Domain(crate::runtime::DomainEvent::RecipeCompleted { .. })
-    ));
-
-    let compacted_selected = super::super::chain_link::runtime_events_after_baseline(
-        baseline_events.as_slice(),
-        std::slice::from_ref(&selected[0]),
-        0,
-        1,
-    );
-    assert_eq!(compacted_selected.len(), 1);
-    assert_eq!(compacted_selected[0].id, 1);
 }

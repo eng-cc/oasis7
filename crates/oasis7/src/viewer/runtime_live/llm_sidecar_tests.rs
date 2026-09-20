@@ -466,3 +466,201 @@ fn stale_provider_replans_stop_at_the_bounded_budget() {
         Some("agent-0")
     );
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn hosted_local_mock_seeded_agent_builds_runtime_bound_capability_context() {
+    let _env_guard = crate::viewer::runtime_live::canonical_runtime_provider_env_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _provider_env_snapshot = ProviderEnvSnapshot::capture(&[
+        VIEWER_AGENT_DECISION_SOURCE_ENV,
+        VIEWER_AGENT_PROVIDER_BACKEND_ENV,
+        VIEWER_AGENT_PROVIDER_CONTRACT_ENV,
+        VIEWER_AGENT_PROVIDER_TRANSPORT_ENV,
+        VIEWER_AGENT_PROVIDER_URL_ENV,
+        VIEWER_AGENT_PROVIDER_PROFILE_ENV,
+        VIEWER_AGENT_EXECUTION_LANE_ENV,
+        VIEWER_AGENT_PROVIDER_MODE_ENV,
+    ]);
+    // SAFETY: This test/setup code mutates process environment while holding
+    // the canonical provider environment lock.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_DECISION_SOURCE_ENV, "provider_backed");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_backed");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_BACKEND_ENV, "provider_local_mock");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_CONTRACT_ENV, "worldsim_provider_v1");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_TRANSPORT_ENV, "loopback_http");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, "http://127.0.0.1:9");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_PROFILE_ENV, "oasis7_p0_low_freq_npc");
+        oasis7::env_mut::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
+    }
+
+    let agent_id = "hosted-local-mock-agent";
+    let mut world = RuntimeWorld::new();
+    world
+        .bind_cognition_runtime(
+            "hosted-local-mock-world",
+            "hosted-local-mock-branch",
+            0,
+            None,
+            "pending",
+            0,
+        )
+        .expect("bind Hosted local-mock Runtime cognition");
+    world.submit_action(RuntimeAction::RegisterAgent {
+        agent_id: agent_id.to_string(),
+        pos: GeoPos::new(0, 0, 0),
+    });
+    world
+        .step()
+        .expect("register seeded Hosted local-mock Agent");
+
+    let provider = crate::simulator::MockDecisionProvider::new("hosted-local-mock-provider");
+    let behavior = crate::simulator::ProviderBackedAgentBehavior::new_legacy_compatibility(
+        agent_id,
+        provider,
+        vec![crate::simulator::ActionCatalogEntry::new("wait", "wait")],
+    );
+    let mut runner = crate::simulator::AsyncAgentRunner::with_default_capacity();
+    runner
+        .register(behavior)
+        .expect("register seeded Hosted local-mock provider Agent");
+
+    let mut sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    sidecar.runner = Some(RuntimeDecisionRunner::ProviderBacked(runner));
+    sidecar.provider_agent_ids.insert(agent_id.to_string());
+    sidecar
+        .sync_shadow_kernel(&world, &WorldConfig::default())
+        .expect("sync Hosted local-mock shadow kernel");
+    let mut kernel = sidecar
+        .shadow_kernel
+        .take()
+        .expect("Hosted local-mock shadow kernel");
+    sidecar
+        .prepare_provider_request_contexts(&mut world, &mut kernel, "hosted-local-mock-world")
+        .expect("Hosted local-mock seeded Agent must have a Runtime-bound capability context");
+    let binding = world
+        .current_cognition_runtime_binding()
+        .expect("Runtime cognition binding");
+    let context = sidecar
+        .provider_contexts
+        .get(agent_id)
+        .expect("prepared provider context");
+    let request_context = &context.request_context;
+    let catalog = request_context
+        .base_decision_request
+        .capability_catalog
+        .as_ref()
+        .expect("provider capability catalog");
+    let invocation = request_context
+        .base_decision_request
+        .capability_invocation_context
+        .as_ref()
+        .expect("provider capability invocation context");
+
+    assert_eq!(catalog.world_id, binding.world_id);
+    assert_eq!(catalog.branch_id, binding.branch_id);
+    assert_eq!(catalog.finality_epoch, binding.finality_epoch);
+    assert_eq!(catalog.logical_tick, binding.base_tick);
+    assert_eq!(invocation.audience.world_id, binding.world_id);
+    assert_eq!(invocation.audience.branch_id, binding.branch_id);
+    assert_eq!(invocation.subject, catalog.subject);
+    assert_eq!(invocation.presenter.presenter_kind, "provider");
+    assert_eq!(
+        request_context.agent_session_id,
+        "runtime-test-session:hosted-local-mock-agent"
+    );
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn hosted_local_mock_lane_enabled_for_url(provider_url: &str) -> bool {
+    let _env_guard = crate::viewer::runtime_live::canonical_runtime_provider_env_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _provider_env_snapshot = ProviderEnvSnapshot::capture(&[
+        VIEWER_AGENT_DECISION_SOURCE_ENV,
+        VIEWER_AGENT_PROVIDER_BACKEND_ENV,
+        VIEWER_AGENT_PROVIDER_CONTRACT_ENV,
+        VIEWER_AGENT_PROVIDER_TRANSPORT_ENV,
+        VIEWER_AGENT_PROVIDER_URL_ENV,
+        VIEWER_AGENT_PROVIDER_PROFILE_ENV,
+        VIEWER_AGENT_EXECUTION_LANE_ENV,
+        VIEWER_AGENT_PROVIDER_MODE_ENV,
+    ]);
+    // SAFETY: This test/setup code mutates process environment while holding
+    // the canonical provider environment lock.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_DECISION_SOURCE_ENV, "provider_backed");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_backed");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_BACKEND_ENV, "provider_local_mock");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_CONTRACT_ENV, "worldsim_provider_v1");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_TRANSPORT_ENV, "loopback_http");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, provider_url);
+        oasis7::env_mut::set_var(
+            VIEWER_AGENT_PROVIDER_PROFILE_ENV,
+            DEFAULT_PROVIDER_AGENT_PROFILE,
+        );
+        oasis7::env_mut::set_var(VIEWER_AGENT_EXECUTION_LANE_ENV, "player_parity");
+    }
+    hosted_local_mock_test_lane_enabled(true)
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn hosted_local_mock_lane_rejects_provider_url_userinfo_host_spoof() {
+    assert!(!hosted_local_mock_lane_enabled_for_url(
+        "http://127.0.0.1:5841@evil.example/"
+    ));
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn hosted_local_mock_lane_rejects_provider_url_malformed_port() {
+    assert!(!hosted_local_mock_lane_enabled_for_url(
+        "http://127.0.0.1:not-a-port/"
+    ));
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn hosted_local_mock_lane_rejects_provider_url_malformed_authority_path() {
+    assert!(!hosted_local_mock_lane_enabled_for_url(
+        "http://127.0.0.1:5841:9999/provider"
+    ));
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn hosted_local_mock_lane_accepts_valid_loopback_provider_url_path() {
+    assert!(hosted_local_mock_lane_enabled_for_url(
+        "http://127.0.0.1:5841/provider"
+    ));
+}
+
+#[test]
+fn production_provider_backed_lane_keeps_prompt_control_disabled() {
+    let _env_guard = crate::viewer::runtime_live::canonical_runtime_provider_env_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _provider_env_snapshot = ProviderEnvSnapshot::capture(&[
+        VIEWER_AGENT_DECISION_SOURCE_ENV,
+        VIEWER_AGENT_PROVIDER_BACKEND_ENV,
+        VIEWER_AGENT_PROVIDER_URL_ENV,
+        VIEWER_AGENT_PROVIDER_MODE_ENV,
+    ]);
+    // SAFETY: This test/setup code mutates process environment while holding
+    // the canonical provider environment lock.
+    unsafe {
+        oasis7::env_mut::set_var(VIEWER_AGENT_DECISION_SOURCE_ENV, "provider_backed");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_MODE_ENV, "provider_backed");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_BACKEND_ENV, "provider_local_bridge");
+        oasis7::env_mut::set_var(VIEWER_AGENT_PROVIDER_URL_ENV, "http://127.0.0.1:9");
+    }
+
+    let sidecar = RuntimeLlmSidecar::new(ViewerLiveDecisionMode::Llm);
+    assert!(
+        !sidecar.supports_prompt_control_result(),
+        "production provider_backed must not inherit the test-only Hosted local-mock capability"
+    );
+}

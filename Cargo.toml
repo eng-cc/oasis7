@@ -1,5 +1,5 @@
 [workspace]
-members = [
+members = ["crates/oasis7_client_api",
     "crates/oasis7",
     "crates/oasis7_client_launcher",
     "crates/oasis7_launcher_ui",

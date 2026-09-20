@@ -1,4 +1,5 @@
 use super::*;
+use std::net::IpAddr;
 
 pub(super) fn env_requests_provider_backend() -> bool {
     named_env_var_any(&[
@@ -9,6 +10,146 @@ pub(super) fn env_requests_provider_backend() -> bool {
     .as_deref()
     .and_then(canonical_agent_decision_source)
     .is_some_and(|value| value == PROVIDER_BACKED_DECISION_SOURCE)
+}
+
+/// The in-crate local-mock capability path is deliberately narrower than the
+/// normal provider-backed lane.  It is available only to a test-tier build,
+/// an explicitly Hosted server, and a complete loopback provider configuration.
+/// A backend name by itself must never widen PromptControl authority.
+pub(in crate::viewer::runtime_live) fn hosted_local_mock_test_lane_enabled(
+    hosted_public_join_mode: bool,
+) -> bool {
+    if !hosted_public_join_mode {
+        return false;
+    }
+
+    #[cfg(any(test, feature = "test_tier_required"))]
+    {
+        let decision_source = named_env_var_any(&[VIEWER_AGENT_DECISION_SOURCE_ENV]);
+        let backend = named_env_var_any(&[VIEWER_AGENT_PROVIDER_BACKEND_ENV]);
+        let contract = named_env_var_any(&[VIEWER_AGENT_PROVIDER_CONTRACT_ENV]);
+        let transport = named_env_var_any(&[VIEWER_AGENT_PROVIDER_TRANSPORT_ENV]);
+        let profile = named_env_var_any(&[VIEWER_AGENT_PROVIDER_PROFILE_ENV]);
+        let execution_lane = named_env_var_any(&[VIEWER_AGENT_EXECUTION_LANE_ENV]);
+        let provider_url = named_env_var_any(&[VIEWER_AGENT_PROVIDER_URL_ENV]);
+
+        return decision_source
+            .as_deref()
+            .and_then(canonical_agent_decision_source)
+            == Some(PROVIDER_BACKED_DECISION_SOURCE)
+            && backend
+                .as_deref()
+                .and_then(canonical_agent_provider_backend)
+                == Some(LOCAL_MOCK_PROVIDER_BACKEND)
+            && contract
+                .as_deref()
+                .and_then(canonical_agent_provider_contract)
+                == Some(WORLDSIM_PROVIDER_CONTRACT)
+            && transport
+                .as_deref()
+                .and_then(canonical_agent_provider_transport)
+                == Some(LOOPBACK_HTTP_PROVIDER_TRANSPORT)
+            && profile.as_deref() == Some(DEFAULT_PROVIDER_AGENT_PROFILE)
+            && execution_lane.as_deref() == Some("player_parity")
+            && provider_url
+                .as_deref()
+                .is_some_and(is_loopback_http_provider_url);
+    }
+
+    #[cfg(not(any(test, feature = "test_tier_required")))]
+    {
+        false
+    }
+}
+
+pub(in crate::viewer::runtime_live) fn install_hosted_local_mock_test_capability_fixtures(
+    world: &mut RuntimeWorld,
+    hosted_public_join_mode: bool,
+) -> Result<bool, String> {
+    if !hosted_local_mock_test_lane_enabled(hosted_public_join_mode) {
+        return Ok(false);
+    }
+
+    #[cfg(any(test, feature = "test_tier_required"))]
+    {
+        let agent_ids = world.state().agents.keys().cloned().collect::<Vec<_>>();
+        if agent_ids.is_empty() {
+            return Err(
+                "Hosted local-mock test lane requires a Runtime-seeded Agent for capability installation"
+                    .to_string(),
+            );
+        }
+        for agent_id in agent_ids {
+            world
+                .install_test_provider_capability_fixture(agent_id.as_str())
+                .map_err(|error| {
+                    format!(
+                        "Hosted local-mock Runtime capability fixture installation failed for agent {agent_id}: {error:?}"
+                    )
+                })?;
+        }
+        return Ok(true);
+    }
+
+    #[cfg(not(any(test, feature = "test_tier_required")))]
+    {
+        let _ = world;
+        Ok(false)
+    }
+}
+
+fn is_loopback_http_provider_url(raw: &str) -> bool {
+    let value = raw.trim();
+    let Some(scheme) = value.get(.."http://".len()) else {
+        return false;
+    };
+    if !scheme.eq_ignore_ascii_case("http://")
+        || value
+            .bytes()
+            .any(|byte| byte.is_ascii_whitespace() || byte.is_ascii_control())
+    {
+        return false;
+    }
+
+    let authority_and_path = &value["http://".len()..];
+    let authority_end = authority_and_path
+        .find(['/', '?', '#'])
+        .unwrap_or(authority_and_path.len());
+    let authority = &authority_and_path[..authority_end];
+    if authority.is_empty() || authority.contains('@') {
+        return false;
+    }
+    let Some((host, port_text)) = parse_provider_host_port(authority) else {
+        return false;
+    };
+    let Ok(port) = port_text.parse::<u16>() else {
+        return false;
+    };
+    if port == 0 {
+        return false;
+    }
+    if host.eq_ignore_ascii_case("localhost") {
+        return true;
+    }
+    host.parse::<IpAddr>()
+        .map(|address| address.is_loopback())
+        .unwrap_or(false)
+}
+
+fn parse_provider_host_port(authority: &str) -> Option<(&str, &str)> {
+    if let Some(rest) = authority.strip_prefix('[') {
+        let (host, remainder) = rest.split_once(']')?;
+        let port = remainder.strip_prefix(':')?;
+        if host.is_empty() || port.is_empty() || port.contains(':') {
+            return None;
+        }
+        return Some((host, port));
+    }
+    let (host, port) = authority.rsplit_once(':')?;
+    if host.is_empty() || host.contains(':') || port.is_empty() {
+        return None;
+    }
+    Some((host, port))
 }
 
 pub(in crate::viewer::runtime_live) fn provider_settings_from_env()
