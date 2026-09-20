@@ -35,10 +35,10 @@ pub(super) fn read_cached_range(
         if let Some(entry) = cache.entries.get(&path) {
             Arc::clone(entry)
         } else {
-            if cache.entries.len() >= MAX_ENTRIES {
-                if let Some(evicted) = cache.fifo.pop_front() {
-                    cache.entries.remove(&evicted);
-                }
+            if cache.entries.len() >= MAX_ENTRIES
+                && let Some(evicted) = cache.fifo.pop_front()
+            {
+                cache.entries.remove(&evicted);
             }
             let entry = Arc::new(Mutex::new(None));
             cache.entries.insert(path.clone(), Arc::clone(&entry));
