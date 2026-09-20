@@ -222,20 +222,43 @@ def cross_package_dependency_edges(
     metadata: dict[str, Any],
     packages: dict[str, list[tuple[str, str]]],
 ) -> set[tuple[str, str, str]]:
+    """Return workspace-to-workspace dependency edges from Cargo metadata.
+
+    Path dependencies are resolved by their manifest location.  A dependency
+    whose package name matches another workspace package but has no path is
+    retained as a tagged edge as well: registry/git (or otherwise non-path)
+    sources must not disguise a cross-package edge.
+    """
     edges: set[tuple[str, str, str]] = set()
+    package_names = set(packages)
     for package in metadata["packages"]:
         source = package["name"]
         for dependency in package.get("dependencies", []):
-            if not isinstance(dependency, dict) or not dependency.get("path"):
+            if not isinstance(dependency, dict):
                 continue
-            dependency_path = Path(str(dependency["path"])).resolve()
-            try:
-                dependency_rel = dependency_path.relative_to(root.resolve()).as_posix()
-            except ValueError:
+            dependency_path = dependency.get("path")
+            if dependency_path:
+                resolved_path = Path(str(dependency_path)).resolve()
+                try:
+                    dependency_rel = resolved_path.relative_to(root.resolve()).as_posix()
+                except ValueError:
+                    continue
+                target = owner_for(dependency_rel, packages)
+                if target is not None and target != source:
+                    edges.add((source, target, str(dependency.get("kind") or "normal")))
                 continue
-            target = owner_for(dependency_rel, packages)
-            if target is not None and target != source:
-                edges.add((source, target, str(dependency.get("kind") or "normal")))
+
+            target = dependency.get("name")
+            if not isinstance(target, str) or target not in package_names or target == source:
+                continue
+            raw_source = str(dependency.get("source") or "")
+            if raw_source.startswith("registry+"):
+                edge_kind = "registry"
+            elif raw_source.startswith("git+"):
+                edge_kind = "git"
+            else:
+                edge_kind = "non_path"
+            edges.add((source, target, edge_kind))
     return edges
 
 
@@ -250,29 +273,53 @@ def workspace_members(text: str) -> set[str]:
     return {str(item).replace("\\", "/") for item in value if isinstance(item, str)}
 
 
-def lock_records(text: str) -> dict[str, list[dict[str, str]]]:
-    records: dict[str, list[dict[str, str]]] = {}
-    current: dict[str, str] | None = None
+def lock_records(text: str) -> dict[str, list[dict[str, Any]]]:
+    records: dict[str, list[dict[str, Any]]] = {}
+    current: dict[str, Any] | None = None
     in_package = False
+    in_dependencies = False
+
+    def append_current() -> None:
+        if current and current.get("name"):
+            records.setdefault(current["name"], []).append(current)
+
     for line in text.splitlines():
         if line.strip() == "[[package]]":
-            if current and current.get("name"):
-                records.setdefault(current["name"], []).append(current)
+            append_current()
             current = {}
             in_package = True
+            in_dependencies = False
             continue
         if line.startswith("[[") or (line.startswith("[") and not line.startswith("[[")):
-            if current and current.get("name"):
-                records.setdefault(current["name"], []).append(current)
+            append_current()
             current = None
             in_package = False
+            in_dependencies = False
             continue
         if in_package and current is not None:
+            stripped = line.strip()
+            if in_dependencies:
+                if stripped == "]":
+                    in_dependencies = False
+                else:
+                    match = re.fullmatch(r'"([^"]+)",?', stripped)
+                    if match:
+                        current.setdefault("dependencies", []).append(match.group(1))
+                continue
+            inline_dependencies = re.fullmatch(r"dependencies\s*=\s*\[(.*)\]", stripped)
+            if inline_dependencies:
+                current["dependencies"] = re.findall(
+                    r'"([^"]+)"', inline_dependencies.group(1)
+                )
+                continue
+            if re.match(r"^dependencies\s*=\s*\[$", stripped):
+                current["dependencies"] = []
+                in_dependencies = True
+                continue
             match = re.match(r'^\s*(name|version|source|checksum)\s*=\s*"([^"]*)"', line)
             if match:
                 current[match.group(1)] = match.group(2)
-    if current and current.get("name"):
-        records.setdefault(current["name"], []).append(current)
+    append_current()
     return records
 
 
@@ -284,21 +331,91 @@ def lock_change_names(repo: Path, base: str, head: str) -> set[str]:
     return {name for name in set(before) | set(after) if before.get(name) != after.get(name)}
 
 
+def lock_workspace_record(repo: Path, revision: str, package: str) -> dict[str, Any] | None:
+    blob = git_blob(repo, revision, "Cargo.lock")
+    if blob is None:
+        return None
+    records = lock_records(blob.decode("utf-8", errors="replace"))
+    workspace_records = [record for record in records.get(package, []) if "source" not in record]
+    if len(workspace_records) != 1:
+        return None
+    return workspace_records[0]
+
+
+def lock_dependency_names(repo: Path, revision: str, package: str) -> set[str] | None:
+    record = lock_workspace_record(repo, revision, package)
+    if record is None:
+        return None
+    return {
+        dependency.split(" ", 1)[0]
+        for dependency in record.get("dependencies", [])
+    }
+
+
+def metadata_package(metadata: dict[str, Any], package: str) -> dict[str, Any] | None:
+    matches = [
+        item
+        for item in metadata.get("packages", [])
+        if isinstance(item, dict) and item.get("name") == package
+    ]
+    if len(matches) != 1:
+        return None
+    return matches[0]
+
+
+def metadata_dependency_names(metadata: dict[str, Any], package: str) -> set[str] | None:
+    match = metadata_package(metadata, package)
+    if match is None:
+        return None
+    dependencies = match.get("dependencies", [])
+    if not isinstance(dependencies, list):
+        return None
+    names = {
+        dependency.get("name")
+        for dependency in dependencies
+        if isinstance(dependency, dict) and isinstance(dependency.get("name"), str)
+    }
+    return names
+
+
 def lock_diff_has_unattributable_lines(repo: Path, base: str, head: str) -> bool:
-    diff = git(repo, "diff", "--unified=0", base, head, "--", "Cargo.lock").stdout
-    for line in diff.splitlines():
-        if not line or line.startswith(("+++", "---", "@@")):
-            continue
-        if line[0] not in "+-":
-            continue
-        content = line[1:].strip()
-        if not content:
-            continue
-        if content == "[[package]]" or re.match(r"^(name|version|source|checksum)\s*=", content):
-            continue
-        if content.startswith("dependencies ="):
-            continue
-        return True
+    def is_mechanical_lock(text: str) -> bool:
+        in_dependencies = False
+        for line in text.splitlines():
+            content = line.strip()
+            if not content:
+                continue
+            if content in {
+                "# This file is automatically @generated by Cargo.",
+                "# It is not intended for manual editing.",
+            }:
+                continue
+            if content == "[[package]]":
+                in_dependencies = False
+                continue
+            if in_dependencies:
+                if content == "]":
+                    in_dependencies = False
+                    continue
+                if re.fullmatch(r'"[^"]+",?', content):
+                    continue
+                return False
+            if content in {"dependencies = [", "dependencies = []"}:
+                in_dependencies = content.endswith("[")
+                continue
+            if re.fullmatch(r'dependencies\s*=\s*\[(?:\s*"[^"]+",?\s*)*\]', content):
+                continue
+            if re.fullmatch(r"version\s*=\s*\d+", content):
+                continue
+            if re.fullmatch(r'(name|version|source|checksum)\s*=\s*"[^"]*"', content):
+                continue
+            return False
+        return not in_dependencies
+
+    for revision in (base, head):
+        lock_blob = git_blob(repo, revision, "Cargo.lock")
+        if lock_blob is None or not is_mechanical_lock(lock_blob.decode("utf-8", errors="replace")):
+            return True
     return False
 
 
@@ -379,15 +496,13 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         head_metadata = cargo_metadata(head_root)
         base_packages = package_roots(base_root, base_metadata)
         head_packages = package_roots(head_root, head_metadata)
-        added_dependency_edges = cross_package_dependency_edges(
-            head_root, head_metadata, head_packages
-        ) - cross_package_dependency_edges(base_root, base_metadata, base_packages)
-    if added_dependency_edges:
-        detail = ", ".join(
-            f"{source} -[{kind}]-> {target}"
-            for source, target, kind in sorted(added_dependency_edges)
+        base_dependency_edges = cross_package_dependency_edges(
+            base_root, base_metadata, base_packages
         )
-        raise ScopeError("cross_package_dependency", detail)
+        head_dependency_edges = cross_package_dependency_edges(
+            head_root, head_metadata, head_packages
+        )
+        added_dependency_edges = head_dependency_edges - base_dependency_edges
     requested_primary = None if args.primary_package == "auto" else args.primary_package
     if requested_primary is not None and requested_primary not in head_packages:
         raise ScopeError("unknown_primary_package", args.primary_package)
@@ -426,6 +541,34 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
     if package_owners and package_owners != {primary_package}:
         raise ScopeError("primary_package_mismatch", ", ".join(sorted(package_owners)))
 
+    if added_dependency_edges:
+        base_package_names = set(base_packages)
+        base_edge_pairs = {(source, target) for source, target, _ in base_dependency_edges}
+        invalid_edges: list[tuple[str, str, str]] = []
+        for source, target, kind in sorted(added_dependency_edges):
+            if kind != "normal":
+                invalid_edges.append((source, target, kind))
+                continue
+            if source not in base_package_names or target not in base_package_names:
+                invalid_edges.append((source, target, kind))
+                continue
+            if package_owners != {source} or target in package_owners:
+                invalid_edges.append((source, target, kind))
+                continue
+            if (source, target) in base_edge_pairs:
+                invalid_edges.append((source, target, kind))
+                continue
+            if any(
+                edge_source == target and edge_target == source
+                for edge_source, edge_target, _ in head_dependency_edges
+            ):
+                invalid_edges.append((source, target, kind))
+        if invalid_edges:
+            detail = ", ".join(
+                f"{source} -[{kind}]-> {target}" for source, target, kind in invalid_edges
+            )
+            raise ScopeError("cross_package_dependency", detail)
+
     root_manifest_changed = "Cargo.toml" in normalized_paths
     root_lock_changed = "Cargo.lock" in normalized_paths
     new_manifest_paths = {
@@ -446,6 +589,29 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         lock_names = lock_change_names(repo, args.base, args.head)
         if not lock_names or primary_package is None or not lock_names.issubset({primary_package}):
             raise ScopeError("unattributable_lock_change", ", ".join(sorted(lock_names)) or "unknown lock change")
+        expected_dependencies = metadata_dependency_names(head_metadata, primary_package)
+        actual_dependencies = lock_dependency_names(repo, args.head, primary_package)
+        if expected_dependencies is None or actual_dependencies is None:
+            raise ScopeError("unattributable_lock_change", "workspace package lock dependency record is unavailable")
+        if actual_dependencies != expected_dependencies:
+            raise ScopeError(
+                "unattributable_lock_change",
+                f"Cargo.lock dependencies for {primary_package} do not match Cargo metadata",
+            )
+        metadata_identity = metadata_package(head_metadata, primary_package)
+        lock_identity = lock_workspace_record(repo, args.head, primary_package)
+        if metadata_identity is None or lock_identity is None:
+            raise ScopeError("unattributable_lock_change", "workspace package lock identity is unavailable")
+        if lock_identity.get("version") != metadata_identity.get("version"):
+            raise ScopeError(
+                "unattributable_lock_change",
+                f"Cargo.lock version for {primary_package} does not match Cargo metadata",
+            )
+        if lock_identity.get("source") != metadata_identity.get("source"):
+            raise ScopeError(
+                "unattributable_lock_change",
+                f"Cargo.lock source for {primary_package} does not match Cargo metadata",
+            )
 
     check_cross_package_edges(repo, args.head, normalized_paths, head_packages)
     return {

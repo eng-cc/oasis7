@@ -183,6 +183,25 @@ path = "src/lib.rs"
         combined = (result.stdout + "\n" + result.stderr).lower()
         self.assertIn(reason.lower(), combined, combined)
 
+    def _assert_rejected_behavior(
+        self,
+        repo: Path,
+        base: str,
+        primary: str,
+        mutate: Callable[[Path], None],
+    ) -> None:
+        """Require a semantic rejection without prescribing its reason label."""
+        head = self._head(repo, mutate, "rejected dependency fixture")
+        result = self._run_checker(repo, base, head, primary)
+        combined = (result.stdout + "\n" + result.stderr).lower()
+        self.assertNotEqual(
+            0,
+            result.returncode,
+            f"expected semantic scope rejection; stdout={result.stdout!r} stderr={result.stderr!r}",
+        )
+        self.assertNotIn("cargo_metadata_unavailable", combined, combined)
+        self.assertNotIn("git_range_unavailable", combined, combined)
+
     def test_one_package_source_change_is_allowed(self) -> None:
         repo, base = self._fixture()
         self._assert_allowed(
@@ -193,6 +212,97 @@ path = "src/lib.rs"
                 "pub fn alpha() { println!(\"changed\"); }\n", encoding="utf-8"
             ),
         )
+
+    def test_existing_normal_path_dependency_to_unchanged_target_is_allowed(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            manifest = root / "crates/alpha/Cargo.toml"
+            manifest.write_text(
+                manifest.read_text(encoding="utf-8")
+                + '\n[dependencies]\nbeta = { path = "../beta" }\n',
+                encoding="utf-8",
+            )
+
+        self._assert_allowed(repo, base, "alpha", mutate)
+
+    def _add_normal_path_dependency_with_generated_lockfile(self, root: Path) -> None:
+        manifest = root / "crates/alpha/Cargo.toml"
+        manifest.write_text(
+            manifest.read_text(encoding="utf-8")
+            + '\n[dependencies]\nbeta = { path = "../beta" }\n',
+            encoding="utf-8",
+        )
+        generated = subprocess.run(
+            ["cargo", "generate-lockfile", "--manifest-path", str(root / "Cargo.toml")],
+            cwd=root,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(
+            0,
+            generated.returncode,
+            f"cargo generate-lockfile fixture failed: stdout={generated.stdout!r} stderr={generated.stderr!r}",
+        )
+
+    def test_existing_normal_path_dependency_with_generated_lockfile_is_allowed(self) -> None:
+        repo, base = self._fixture()
+        self._assert_allowed(repo, base, "alpha", self._add_normal_path_dependency_with_generated_lockfile)
+
+    def test_generated_lock_dependency_array_replacement_is_rejected(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            self._add_normal_path_dependency_with_generated_lockfile(root)
+            lock = root / "Cargo.lock"
+            content = lock.read_text(encoding="utf-8")
+            self.assertIn(' "beta",', content)
+            lock.write_text(content.replace(' "beta",', ' "forged",', 1), encoding="utf-8")
+
+        self._assert_rejected_behavior(repo, base, "alpha", mutate)
+
+    def test_generated_lock_dependency_array_append_is_rejected(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            self._add_normal_path_dependency_with_generated_lockfile(root)
+            lock = root / "Cargo.lock"
+            content = lock.read_text(encoding="utf-8")
+            self.assertIn(' "beta",\n]', content)
+            lock.write_text(
+                content.replace(' "beta",\n]', ' "beta",\n "forged",\n]', 1),
+                encoding="utf-8",
+            )
+
+        self._assert_rejected_behavior(repo, base, "alpha", mutate)
+
+    def test_source_only_change_with_forged_lock_version_is_rejected(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            (root / "crates/alpha/src/lib.rs").write_text(
+                "pub fn alpha() { println!(\"source changed\"); }\n", encoding="utf-8"
+            )
+            lock = root / "Cargo.lock"
+            content = lock.read_text(encoding="utf-8")
+            self.assertIn('name = "alpha"\nversion = "0.1.0"', content)
+            lock.write_text(
+                content.replace('name = "alpha"\nversion = "0.1.0"', 'name = "alpha"\nversion = "9.9.9"', 1),
+                encoding="utf-8",
+            )
+
+        self._assert_rejected_behavior(repo, base, "alpha", mutate)
+
+    def test_existing_normal_path_dependency_with_unrelated_lock_mutation_is_rejected(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            self._add_normal_path_dependency_with_generated_lockfile(root)
+            with (root / "Cargo.lock").open("a", encoding="utf-8") as handle:
+                handle.write("\n# unrelated lock mutation\n")
+
+        self._assert_rejected(repo, base, "alpha", mutate, "unattributable_lock_change")
 
     def test_two_business_packages_are_rejected(self) -> None:
         repo, base = self._fixture()
@@ -273,6 +383,114 @@ enabled = true
             )
 
         self._assert_rejected(repo, base, "alpha", mutate, "cross_package_dependency")
+
+    def test_cross_package_build_dependency_is_rejected(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            manifest = root / "crates/alpha/Cargo.toml"
+            manifest.write_text(
+                manifest.read_text(encoding="utf-8")
+                + '\n[build-dependencies]\nbeta = { path = "../beta" }\n',
+                encoding="utf-8",
+            )
+
+        self._assert_rejected_behavior(repo, base, "alpha", mutate)
+
+    def test_cross_package_registry_dependency_disguise_is_rejected(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            manifest = root / "crates/alpha/Cargo.toml"
+            manifest.write_text(
+                manifest.read_text(encoding="utf-8")
+                + '\n[dependencies]\nbeta = { version = "0.1.0" }\n',
+                encoding="utf-8",
+            )
+
+        self._assert_rejected_behavior(repo, base, "alpha", mutate)
+
+    def test_cross_package_git_dependency_disguise_is_rejected(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            manifest = root / "crates/alpha/Cargo.toml"
+            manifest.write_text(
+                manifest.read_text(encoding="utf-8")
+                + '\n[dependencies]\nbeta = { git = "https://example.invalid/beta.git", rev = "0" }\n',
+                encoding="utf-8",
+            )
+
+        self._assert_rejected_behavior(repo, base, "alpha", mutate)
+
+    def test_cross_package_reverse_dependency_is_rejected(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            alpha = root / "crates/alpha/Cargo.toml"
+            beta = root / "crates/beta/Cargo.toml"
+            alpha.write_text(
+                alpha.read_text(encoding="utf-8")
+                + '\n[dependencies]\nbeta = { path = "../beta" }\n',
+                encoding="utf-8",
+            )
+            beta.write_text(
+                beta.read_text(encoding="utf-8")
+                + '\n[dependencies]\nalpha = { path = "../alpha" }\n',
+                encoding="utf-8",
+            )
+
+        self._assert_rejected_behavior(repo, base, "alpha", mutate)
+
+    def test_normal_path_dependency_with_changed_target_is_rejected(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            alpha = root / "crates/alpha/Cargo.toml"
+            alpha.write_text(
+                alpha.read_text(encoding="utf-8")
+                + '\n[dependencies]\nbeta = { path = "../beta" }\n',
+                encoding="utf-8",
+            )
+            (root / "crates/beta/src/lib.rs").write_text(
+                "pub fn beta() { println!(\"changed target\"); }\n", encoding="utf-8"
+            )
+
+        self._assert_rejected_behavior(repo, base, "alpha", mutate)
+
+    def test_normal_path_dependency_with_new_target_is_rejected(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            workspace = root / "Cargo.toml"
+            workspace.write_text(
+                workspace.read_text(encoding="utf-8").replace(
+                    'members = ["crates/alpha", "crates/beta"]',
+                    'members = ["crates/alpha", "crates/beta", "crates/gamma"]',
+                ),
+                encoding="utf-8",
+            )
+            self._write(
+                root,
+                "crates/gamma/Cargo.toml",
+                """[package]
+name = "gamma"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+""",
+            )
+            self._write(root, "crates/gamma/src/lib.rs", "pub fn gamma() {}\n")
+            alpha = root / "crates/alpha/Cargo.toml"
+            alpha.write_text(
+                alpha.read_text(encoding="utf-8")
+                + '\n[dependencies]\ngamma = { path = "../gamma" }\n',
+                encoding="utf-8",
+            )
+
+        self._assert_rejected_behavior(repo, base, "alpha", mutate)
 
     def test_generated_output_into_another_package_is_rejected(self) -> None:
         repo, base = self._fixture()
