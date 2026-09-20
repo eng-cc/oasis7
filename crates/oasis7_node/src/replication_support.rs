@@ -1,5 +1,4 @@
 use super::*;
-use std::io::Write as _;
 #[cfg(windows)]
 use std::os::windows::ffi::OsStrExt as _;
 

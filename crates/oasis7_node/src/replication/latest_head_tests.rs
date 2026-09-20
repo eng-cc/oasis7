@@ -35,7 +35,7 @@ fn latest_commit_head_does_not_read_stale_hot_files() {
     let mut permissions = std::fs::metadata(&stale_path)
         .expect("stale metadata")
         .permissions();
-    permissions.set_mode(0);
+    permissions.set_mode(0o0);
     std::fs::set_permissions(&stale_path, permissions).expect("deny stale read");
 
     let lookups: Vec<_> = (0..4)

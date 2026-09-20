@@ -492,15 +492,14 @@ impl PosNodeEngine {
             .last_committed_block_hash
             .as_deref()
             .filter(|hash| !hash.starts_with("legacy-height-"))
+            && commit.block_hash != local_block_hash
         {
-            if commit.block_hash != local_block_hash {
-                return Err(NodeError::Replication {
-                    reason: format!(
-                        "replicated commit head conflicts with local committed head at height {}: local_block={} replicated_block={}",
-                        commit.height, local_block_hash, commit.block_hash
-                    ),
-                });
-            }
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "replicated commit head conflicts with local committed head at height {}: local_block={} replicated_block={}",
+                    commit.height, local_block_hash, commit.block_hash
+                ),
+            });
         }
         if let Some((local_execution_block_hash, local_execution_state_root)) =
             self.execution_binding_for_height(commit.height)

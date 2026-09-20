@@ -145,8 +145,8 @@ pub(super) fn attach_checkpoint_for_fetch_commit_if_boundary(
         // test-only root has no index, only aligned boundaries are eligible;
         // never scan unrelated hot/cold history to infer an exact latest head.
         message_height == request_height
-            && (request_height % REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL == 0
-                || request_height % (REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL / 2) == 0)
+            && (request_height.is_multiple_of(REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL)
+                || request_height.is_multiple_of(REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL / 2))
     };
     if !should_export {
         return Ok(Some(message));
@@ -173,8 +173,8 @@ pub(super) fn should_export_checkpoint_for_fetch_commit(
     latest_height: u64,
 ) -> bool {
     request_height == latest_height
-        || request_height % REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL == 0
-        || request_height % (REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL / 2) == 0
+        || request_height.is_multiple_of(REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL)
+        || request_height.is_multiple_of(REPLICATION_GAP_SYNC_MAX_HEIGHTS_PER_POLL / 2)
 }
 fn check_request_context(context: &NetworkRequestContext) -> Result<(), ProtoWorldError> {
     context.check_cancelled(|| ProtoWorldError::NetworkRequestFailed {

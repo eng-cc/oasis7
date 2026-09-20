@@ -1,6 +1,10 @@
 use super::*;
 
 #[cfg(not(target_arch = "wasm32"))]
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Stable operator maintenance poll seam keeps node, network, and sampling controls explicit"
+)]
 pub(super) fn maybe_run_runtime_replica_maintenance_poll(
     config: Option<NodeReplicaMaintenanceConfig>,
     node_id: &str,

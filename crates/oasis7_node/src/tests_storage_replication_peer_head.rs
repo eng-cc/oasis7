@@ -149,6 +149,12 @@ fn waitable_fetch_commit_error(protocol: &str) -> WorldError {
     }
 }
 
+type PeerDirectedHeadFixture = (
+    ReplicationNetworkEndpoint,
+    Arc<Mutex<Vec<Vec<String>>>>,
+    Arc<Mutex<Vec<(u64, u64)>>>,
+);
+
 fn peer_directed_head_endpoint(
     world_id: &str,
     connected_peer_ids: Vec<String>,
@@ -156,11 +162,7 @@ fn peer_directed_head_endpoint(
     configured_static_bootstrap_peer_ids: Vec<String>,
     peer_heads: Arc<Mutex<HashMap<String, super::replication::FetchHeadResponse>>>,
     head_request_errors: Arc<Mutex<HashMap<String, WorldError>>>,
-) -> (
-    ReplicationNetworkEndpoint,
-    Arc<Mutex<Vec<Vec<String>>>>,
-    Arc<Mutex<Vec<(u64, u64)>>>,
-) {
+) -> PeerDirectedHeadFixture {
     let provider_attempts = Arc::new(Mutex::new(Vec::<Vec<String>>::new()));
     let provider_budgets = Arc::new(Mutex::new(Vec::<(u64, u64)>::new()));
     let network: Arc<

@@ -1,16 +1,18 @@
 use super::*;
 
-fn build_storage_challenge_blob_cache_fixture(
-    seed: u8,
-    world_id: &str,
-    dir: &std::path::Path,
-) -> (
+type StorageChallengeBlobCacheFixture = (
     NodeConfig,
     Arc<dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync>,
     Arc<Mutex<usize>>,
     ReplicationRuntime,
     ReplicationNetworkEndpoint,
-) {
+);
+
+fn build_storage_challenge_blob_cache_fixture(
+    seed: u8,
+    world_id: &str,
+    dir: &std::path::Path,
+) -> StorageChallengeBlobCacheFixture {
     let pos_config = signed_pos_config_with_signer_seeds(
         vec![PosValidator {
             validator_id: "node-a".to_string(),
