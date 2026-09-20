@@ -12,8 +12,8 @@ pub(crate) fn load_launcher_ux_state() -> LauncherUxState {
         let Ok(content) = content else {
             return LauncherUxState::default();
         };
-        return serde_json::from_str::<LauncherUxState>(content.as_str())
-            .unwrap_or_else(|_| LauncherUxState::default());
+        serde_json::from_str::<LauncherUxState>(content.as_str())
+            .unwrap_or_else(|_| LauncherUxState::default())
     }
 
     #[cfg(target_arch = "wasm32")]

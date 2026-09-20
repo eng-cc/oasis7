@@ -228,12 +228,12 @@ fn resolve_viewer_static_dir_candidate_for_launcher(
 
     if user_path.is_relative() {
         let launcher_bin = launcher_bin.trim();
-        if !launcher_bin.is_empty() {
-            if let Some(bin_dir) = Path::new(launcher_bin).parent() {
-                let sibling_candidate = bin_dir.join("..").join(&user_path);
-                if sibling_candidate.is_dir() {
-                    return Some(sibling_candidate);
-                }
+        if !launcher_bin.is_empty()
+            && let Some(bin_dir) = Path::new(launcher_bin).parent()
+        {
+            let sibling_candidate = bin_dir.join("..").join(&user_path);
+            if sibling_candidate.is_dir() {
+                return Some(sibling_candidate);
             }
         }
     }
@@ -246,26 +246,25 @@ fn resolve_viewer_static_dir_for_launcher(
     raw: &str,
     launcher_bin: &str,
 ) -> Option<std::path::PathBuf> {
-    if raw == DEFAULT_VIEWER_STATIC_DIR {
-        if let Some((_, override_path)) = read_named_env_value(&[OASIS7_GAME_STATIC_DIR_ENV]) {
-            return resolve_viewer_static_dir_candidate_for_launcher(
-                override_path.as_str(),
-                launcher_bin,
-            );
-        }
+    if raw == DEFAULT_VIEWER_STATIC_DIR
+        && let Some((_, override_path)) = read_named_env_value(&[OASIS7_GAME_STATIC_DIR_ENV])
+    {
+        return resolve_viewer_static_dir_candidate_for_launcher(
+            override_path.as_str(),
+            launcher_bin,
+        );
     }
 
     if let Some(dir) = resolve_viewer_static_dir_candidate_for_launcher(raw, launcher_bin) {
         return Some(dir);
     }
 
-    if raw == DEFAULT_VIEWER_STATIC_DIR {
-        if let Some(dev_fallback) = platform_ops::viewer_dev_dist_candidates()
+    if raw == DEFAULT_VIEWER_STATIC_DIR
+        && let Some(dev_fallback) = platform_ops::viewer_dev_dist_candidates()
             .into_iter()
             .find(|candidate| candidate.is_dir())
-        {
-            return Some(dev_fallback);
-        }
+    {
+        return Some(dev_fallback);
     }
 
     None
@@ -352,13 +351,14 @@ pub(super) fn normalize_chain_network_tier_config(config: &mut LaunchConfig) {
     let tier =
         canonical_chain_network_tier(config.chain_network_tier.as_str()).unwrap_or("local_devnet");
     config.chain_network_tier = tier.to_string();
-    if config.chain_network_tier_manifest.trim().is_empty() {
-        if let Some(manifest) = known_network_tier_manifest(tier) {
-            config.chain_network_tier_manifest = manifest.to_string();
-        }
+    if config.chain_network_tier_manifest.trim().is_empty()
+        && let Some(manifest) = known_network_tier_manifest(tier)
+    {
+        config.chain_network_tier_manifest = manifest.to_string();
     }
 }
 
+#[cfg(test)]
 pub(super) fn effective_chain_network_tier_manifest(config: &LaunchConfig) -> String {
     let explicit = config.chain_network_tier_manifest.trim();
     if !explicit.is_empty() {
@@ -535,10 +535,10 @@ pub(super) fn collect_chain_required_config_issues(config: &LaunchConfig) -> Vec
     if proposal_tick_phase.is_err() {
         issues.push(ConfigIssue::ChainPosProposalTickPhaseInvalid);
     }
-    if let (Ok(ticks_per_slot), Ok(proposal_tick_phase)) = (ticks_per_slot, proposal_tick_phase) {
-        if proposal_tick_phase >= ticks_per_slot {
-            issues.push(ConfigIssue::ChainPosProposalTickPhaseOutOfRange);
-        }
+    if let (Ok(ticks_per_slot), Ok(proposal_tick_phase)) = (ticks_per_slot, proposal_tick_phase)
+        && proposal_tick_phase >= ticks_per_slot
+    {
+        issues.push(ConfigIssue::ChainPosProposalTickPhaseOutOfRange);
     }
     if parse_optional_i64(
         config.chain_pos_slot_clock_genesis_unix_ms.as_str(),
@@ -820,16 +820,12 @@ pub(super) fn build_game_url(config: &LaunchConfig) -> String {
     let hosted_access_verdict = if is_hosted_public_join && hosted_strong_auth_backend_grant_enabled
     {
         "hosted_public_join_strong_auth_preview"
-    } else if is_hosted_public_join {
-        "hosted_public_join_blocked_until_strong_auth"
     } else {
         "hosted_public_join_blocked_until_strong_auth"
     };
     let prompt_strong_auth_availability =
         if is_hosted_public_join && hosted_strong_auth_backend_grant_enabled {
             "public_player_plane_with_backend_reauth_preview"
-        } else if is_hosted_public_join {
-            "blocked_until_strong_auth"
         } else {
             "blocked_until_strong_auth"
         };
@@ -837,29 +833,15 @@ pub(super) fn build_game_url(config: &LaunchConfig) -> String {
         && hosted_strong_auth_backend_grant_enabled
     {
         "hosted public join allows prompt_control through browser-local player auth plus short-lived backend strong-auth grant; this remains preview-grade until stronger custody lands"
-    } else if is_hosted_public_join {
-        "hosted public join keeps this action behind strong_auth/private plane until the dedicated proof lane lands"
     } else {
         "hosted public join keeps this action behind strong_auth/private plane until the dedicated proof lane lands"
     };
     let hosted_access_hint = serde_json::json!({
         "deployment_mode": deployment_mode,
         "verdict": hosted_access_verdict,
-        "browser_signer_bootstrap": if is_hosted_public_join {
-            "disabled_for_public_player_plane"
-        } else {
-            "disabled_for_public_player_plane"
-        },
-        "local_chain_runtime": if is_hosted_public_join {
-            "blocked_for_public_player_plane"
-        } else {
-            "blocked_for_public_player_plane"
-        },
-        "node_admission": if is_hosted_public_join {
-            "operator_managed_node_onboarding_only"
-        } else {
-            "operator_managed_node_onboarding_only"
-        },
+        "browser_signer_bootstrap": "disabled_for_public_player_plane",
+        "local_chain_runtime": "blocked_for_public_player_plane",
+        "node_admission": "operator_managed_node_onboarding_only",
         "session_ladder": ["guest_session", "player_session", "strong_auth"],
         "action_matrix": [
             {
@@ -895,16 +877,8 @@ pub(super) fn build_game_url(config: &LaunchConfig) -> String {
             {
                 "action_id": "main_token_transfer",
                 "required_auth": "strong_auth",
-                "availability": if is_hosted_public_join {
-                    "blocked_until_strong_auth"
-                } else {
-                    "blocked_until_strong_auth"
-                },
-                "reason": if is_hosted_public_join {
-                    "hosted public join keeps this action behind strong_auth/private plane until the dedicated proof lane lands"
-                } else {
-                    "hosted public join keeps this action behind strong_auth/private plane until the dedicated proof lane lands"
-                },
+                "availability": "blocked_until_strong_auth",
+                "reason": "hosted public join keeps this action behind strong_auth/private plane until the dedicated proof lane lands",
             },
         ],
     })
@@ -1121,10 +1095,10 @@ pub(super) fn send_interrupt_signal(child: &Child) -> Result<(), String> {
         if rc == 0 {
             return Ok(());
         }
-        return Err(format!(
+        Err(format!(
             "send SIGINT failed: {}",
             std::io::Error::last_os_error()
-        ));
+        ))
     }
 
     #[cfg(not(unix))]

@@ -116,17 +116,12 @@ pub(crate) struct WebExplorerMempoolResponse {
     pub(super) error: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(super) enum ExplorerMempoolStatusFilter {
+    #[default]
     All,
     Accepted,
     Pending,
-}
-
-impl Default for ExplorerMempoolStatusFilter {
-    fn default() -> Self {
-        Self::All
-    }
 }
 
 impl ExplorerMempoolStatusFilter {
@@ -585,12 +580,10 @@ impl ClientLauncherApp {
                                         egui::Button::new(self.tr("下一页", "Next")),
                                     )
                                     .clicked()
-                                {
-                                    if let Some(next_cursor) = response.next_cursor {
+                                    && let Some(next_cursor) = response.next_cursor {
                                         self.explorer_panel_state.p1.address_cursor = next_cursor;
                                         self.explorer_panel_state.p1.pending_address_refresh = true;
                                     }
-                                }
                             });
 
                             let mut clicked_hash = None;
@@ -778,12 +771,10 @@ impl ClientLauncherApp {
                                         egui::Button::new(self.tr("下一页", "Next")),
                                     )
                                     .clicked()
-                                {
-                                    if let Some(next_cursor) = response.next_cursor {
+                                    && let Some(next_cursor) = response.next_cursor {
                                         self.explorer_panel_state.p1.contracts_cursor = next_cursor;
                                         self.explorer_panel_state.p1.pending_contracts_refresh = true;
                                     }
-                                }
                             });
 
                             let mut selected_contract_id = None;
@@ -880,15 +871,14 @@ impl ClientLauncherApp {
                                 &response.observed_at_unix_ms.to_string(),
                                 false,
                             );
-                            if let Some(contract) = response.contract.as_ref() {
-                                if let Ok(pretty) = serde_json::to_string_pretty(contract) {
+                            if let Some(contract) = response.contract.as_ref()
+                                && let Ok(pretty) = serde_json::to_string_pretty(contract) {
                                     egui::ScrollArea::vertical()
                                         .max_height(260.0)
                                         .show(ui, |ui| {
                                             ui.code(pretty);
                                         });
                                 }
-                            }
                             if !response.recent_txs.is_empty() {
                                 ui.add_space(6.0);
                                 ui.strong(self.tr("近期交易", "Recent Transactions"));
@@ -1045,11 +1035,10 @@ impl ClientLauncherApp {
                                     egui::Button::new(self.tr("下一页", "Next")),
                                 )
                                 .clicked()
+                                && let Some(next_cursor) = response.next_cursor
                             {
-                                if let Some(next_cursor) = response.next_cursor {
-                                    self.explorer_panel_state.p1.assets_cursor = next_cursor;
-                                    self.explorer_panel_state.p1.pending_assets_refresh = true;
-                                }
+                                self.explorer_panel_state.p1.assets_cursor = next_cursor;
+                                self.explorer_panel_state.p1.pending_assets_refresh = true;
                             }
                         });
 
