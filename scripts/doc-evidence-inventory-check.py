@@ -358,6 +358,11 @@ def check(root: Path, inventory_path: Path) -> list[str]:
         errors.append("schema-version: expected 1")
     if data.get("snapshot") != EXPECTED_SNAPSHOT:
         errors.append(f"snapshot: expected {EXPECTED_SNAPSHOT}")
+    generated = generated_inventory(root)
+    if data.get("scope") != generated["scope"]:
+        errors.append(f"scope: expected {generated['scope']}")
+    if data.get("freshness_boundary") != generated["freshness_boundary"]:
+        errors.append("freshness-boundary: committed boundary differs from reviewed generator")
     entries = data.get("entries")
     if not isinstance(entries, list):
         return errors + ["schema-entries: expected list"]
@@ -410,7 +415,7 @@ def check(root: Path, inventory_path: Path) -> list[str]:
     }
     if lifecycle_counts != EXPECTED_LIFECYCLE_COUNTS:
         errors.append(f"lifecycle-counts: {lifecycle_counts}")
-    generated_entries = generated_inventory(root)["entries"]
+    generated_entries = generated["entries"]
     if entries != generated_entries:
         errors.append("classification-drift: committed entries differ from reviewed generator")
     legacy_sources = [

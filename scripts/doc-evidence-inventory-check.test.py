@@ -120,6 +120,22 @@ def main() -> None:
     semantic_drift.expected = "lifecycle-counts"  # type: ignore[attr-defined]
     mutate(fixture(), semantic_drift)
 
+    def missing_freshness_boundary(root: Path) -> None:
+        path = root / "doc/testing/evidence/inventory.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        del data["freshness_boundary"]
+        path.write_text(json.dumps(data), encoding="utf-8")
+    missing_freshness_boundary.expected = "freshness-boundary"  # type: ignore[attr-defined]
+    mutate(fixture(), missing_freshness_boundary)
+
+    def mutated_freshness_boundary(root: Path) -> None:
+        path = root / "doc/testing/evidence/inventory.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["freshness_boundary"] = "operator inputs establish current readiness"
+        path.write_text(json.dumps(data), encoding="utf-8")
+    mutated_freshness_boundary.expected = "freshness-boundary"  # type: ignore[attr-defined]
+    mutate(fixture(), mutated_freshness_boundary)
+
     def swapped_triad_identity(root: Path) -> None:
         path = root / "doc/testing/evidence/inventory.json"
         data = json.loads(path.read_text(encoding="utf-8"))
