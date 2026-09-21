@@ -63,10 +63,22 @@ def main() -> None:
             if "validator-triad" in entry["path"] and "2026-09-15" in entry["path"]
         ]
         assert len(triad_entries) == 3, triad_entries
+        current_inputs = [entry for entry in triad_entries if entry["lifecycle"] == "CURRENT_OPERATOR_INPUT"]
+        historical_candidates = [entry for entry in triad_entries if entry["lifecycle"] == "HISTORICAL_PROVENANCE"]
+        assert len(current_inputs) == 2, current_inputs
+        assert {entry["semantic_role"] for entry in current_inputs} == {
+            "public_testnet_bootstrap_peer_input",
+            "public_testnet_bootstrap_registry_input",
+        }, current_inputs
+        assert all(entry["evidence_window"] == "current-committed-bootstrap-input" for entry in current_inputs)
         assert all(
-            entry["evidence_window"] == "2026-09-15-validator-triad-candidate-staging"
-            for entry in triad_entries
-        ), triad_entries
+            entry["claim_boundary"]
+            == "current_operator_input_only_not_current_health_readiness_deployment_completion_or_public_status"
+            for entry in current_inputs
+        )
+        assert len(historical_candidates) == 1, historical_candidates
+        assert historical_candidates[0]["evidence_window"] == "2026-09-15-validator-triad-candidate-staging"
+        assert historical_candidates[0]["claim_boundary"] == "historical_provenance_only_not_current_readiness_operator_sop_or_public_claim"
     finally:
         shutil.rmtree(root)
 

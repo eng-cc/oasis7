@@ -19,7 +19,7 @@
     },
     {
       "path": "doc/testing/evidence/inventory.json",
-      "content_sha256": "46e6e45ced482c6f685b03117eb5c93015e5afd409fb562018391250be656c5d"
+      "content_sha256": "4a0f70ac3c4970e3afebe8b9e5969d89243dc20bb880f75e2078c22335b28aee"
     }
   ],
   "delegates": [
@@ -28,7 +28,7 @@
       "exact_scope": "doc/testing/evidence/** excluding inventory.json",
       "checker_command": "python3 scripts/doc-evidence-inventory-check.py --repo-root <repo-root>",
       "expected_version": 1,
-      "sha256": "46e6e45ced482c6f685b03117eb5c93015e5afd409fb562018391250be656c5d",
+      "sha256": "4a0f70ac3c4970e3afebe8b9e5969d89243dc20bb880f75e2078c22335b28aee",
       "object_count": 128
     }
   ],

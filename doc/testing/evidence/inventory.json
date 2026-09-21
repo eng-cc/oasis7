@@ -2,7 +2,7 @@
   "version": 1,
   "scope": "doc/testing/evidence/** excluding inventory.json",
   "snapshot": "ddbc5a7d081cffd0c17697397ee89fbd69a98cd6",
-  "freshness_boundary": "2026-09-21 frozen-HEAD corpus inventory; classification and provenance only, not current runtime, recovery, fleet health, deployment readiness, operator authority, or public status.",
+  "freshness_boundary": "2026-09-21 frozen-HEAD corpus inventory; CURRENT_OPERATOR_INPUT identifies exact runbook/tool inputs only and does not establish current runtime, recovery, fleet health, deployment completion/readiness, or public status.",
   "entries": [
     {
       "path": "doc/testing/evidence/README.md",
@@ -1281,8 +1281,8 @@
     },
     {
       "path": "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-bootstrap-peers-2026-09-15.txt",
-      "lifecycle": "HISTORICAL_PROVENANCE",
-      "semantic_role": "public_testnet_governed_bootstrap",
+      "lifecycle": "CURRENT_OPERATOR_INPUT",
+      "semantic_role": "public_testnet_bootstrap_peer_input",
       "retention_owner": "qa_engineer",
       "domain_owner": "blockchain_ops_engineer",
       "required_followup_roles": [
@@ -1293,16 +1293,16 @@
       "authority": "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md",
       "backlink": "doc/testing/evidence/README.md",
       "disposition": "retain",
-      "rationale": "Batch-4 cross-role disposition: retained transition/bootstrap provenance; not current deployment, recovery, readiness, operator action, or public status.",
-      "residual_risk": "Historical endpoints, signer and peer identities, runtime hashes, faucet state, and live-candidate wording are stale-window facts; current action requires formal runbooks and fresh same-window evidence.",
-      "evidence_window": "2026-09-15-validator-triad-candidate-staging",
-      "claim_boundary": "historical_provenance_only_not_current_readiness_operator_sop_or_public_claim",
+      "rationale": "Current operator input consumed by the governed bootstrap runbook and deployment tooling; this classification does not establish live health, readiness, deployment completion, or public status.",
+      "residual_risk": "The committed peer and registry inputs may become stale; operator use still requires the governing runbook, exact consumer validation, and fresh same-window health/readiness evidence.",
+      "evidence_window": "current-committed-bootstrap-input",
+      "claim_boundary": "current_operator_input_only_not_current_health_readiness_deployment_completion_or_public_status",
       "content_sha256": "c7d0b977937adb5d27733ed0ad3e2212ccd0f3ac1b2273214e8cc57df110e5d6"
     },
     {
       "path": "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json",
-      "lifecycle": "HISTORICAL_PROVENANCE",
-      "semantic_role": "public_testnet_governed_bootstrap",
+      "lifecycle": "CURRENT_OPERATOR_INPUT",
+      "semantic_role": "public_testnet_bootstrap_registry_input",
       "retention_owner": "qa_engineer",
       "domain_owner": "blockchain_ops_engineer",
       "required_followup_roles": [
@@ -1313,10 +1313,10 @@
       "authority": "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md",
       "backlink": "doc/testing/evidence/README.md",
       "disposition": "retain",
-      "rationale": "Batch-4 cross-role disposition: retained transition/bootstrap provenance; not current deployment, recovery, readiness, operator action, or public status.",
-      "residual_risk": "Historical endpoints, signer and peer identities, runtime hashes, faucet state, and live-candidate wording are stale-window facts; current action requires formal runbooks and fresh same-window evidence.",
-      "evidence_window": "2026-09-15-validator-triad-candidate-staging",
-      "claim_boundary": "historical_provenance_only_not_current_readiness_operator_sop_or_public_claim",
+      "rationale": "Current operator input consumed by the governed bootstrap runbook and deployment tooling; this classification does not establish live health, readiness, deployment completion, or public status.",
+      "residual_risk": "The committed peer and registry inputs may become stale; operator use still requires the governing runbook, exact consumer validation, and fresh same-window health/readiness evidence.",
+      "evidence_window": "current-committed-bootstrap-input",
+      "claim_boundary": "current_operator_input_only_not_current_health_readiness_deployment_completion_or_public_status",
       "content_sha256": "a6bfa524e32f2f54c4665d58f18e87b5fa21845e17c14269be1cb1f978adb50f"
     },
     {
