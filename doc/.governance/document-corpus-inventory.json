@@ -15,11 +15,11 @@
     },
     {
       "path": "doc/.governance/document-semantic-review-overrides.json",
-      "content_sha256": "4ed3ac8586b4d0351d334281e5816a1ba3b57718d3b3744ade592de5398b98b2"
+      "content_sha256": "b4b52139eeb03ea34907f8cc1ff3b4e929be6501babf74bed95fea22c68ad208"
     },
     {
       "path": "doc/testing/evidence/inventory.json",
-      "content_sha256": "dfe85ef4478e8e42dfebe7a28d0a8690d60ec922acaf10f5b7068c3b7b12ee67"
+      "content_sha256": "46e6e45ced482c6f685b03117eb5c93015e5afd409fb562018391250be656c5d"
     }
   ],
   "delegates": [
@@ -28,8 +28,8 @@
       "exact_scope": "doc/testing/evidence/** excluding inventory.json",
       "checker_command": "python3 scripts/doc-evidence-inventory-check.py --repo-root <repo-root>",
       "expected_version": 1,
-      "sha256": "dfe85ef4478e8e42dfebe7a28d0a8690d60ec922acaf10f5b7068c3b7b12ee67",
-      "object_count": 125
+      "sha256": "46e6e45ced482c6f685b03117eb5c93015e5afd409fb562018391250be656c5d",
+      "object_count": 128
     }
   ],
   "objects": [
@@ -147,7 +147,7 @@
     },
     {
       "path": "doc/core/prd.md",
-      "content_sha256": "fc504833fe3ed568e7413e91f1a58d3ed9d8f02415fa7afe5a0ea2c5dc72d093",
+      "content_sha256": "348c7c6e734df32fe8d5ea26e78696b6a6dacbc888628bb4b7543f238aaa4e79",
       "registry_type": "professional_domain",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/core/README.md",
@@ -217,7 +217,7 @@
     },
     {
       "path": "doc/engineering/design.md",
-      "content_sha256": "5443a2a9303eaa979ce42d2bdb5d72b031cffc32bc2ea2790e90faffed795c0d",
+      "content_sha256": "f8835b5f6143f316e109510a5296cab0da3e917eb717e43b8cb57b994d90ca39",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -231,7 +231,7 @@
     },
     {
       "path": "doc/engineering/doc-governance/README.md",
-      "content_sha256": "da760ffe22973a56d32f9bbbd2791630f750f3cac1b1d94025e26404860fec7a",
+      "content_sha256": "d3b59bb903cd6c626427f7e86cbaf30bdfe48ff511c595e86e3d5e28d830b2bd",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -244,8 +244,22 @@
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
     },
     {
+      "path": "doc/engineering/doc-governance/cross-layer-requirements-traceability.design.md",
+      "content_sha256": "77f64710ca0700892edb6562266c786f3a06d7a6f01993b88bf70904dd9a76e2",
+      "registry_type": "professional_domain",
+      "structural_owner": "repository_health_engineer",
+      "authority_entry": "doc/engineering/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "repository_health_engineer",
+      "object_kind": "design",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "engineering-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
       "path": "doc/engineering/doc-governance/doc-structure-standard.design.md",
-      "content_sha256": "d8f04b841ff02787dc605d45ef7b31e538279107ea345592111057bd81af6016",
+      "content_sha256": "f106dea4f2e9aee3bf9a52f836078f65a00ef53b6610515bcd42ee87455c9592",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -273,13 +287,97 @@
     },
     {
       "path": "doc/engineering/doc-governance/documentation-governance.manual.md",
-      "content_sha256": "403f4e0eb4ae77e662da7ed6fdf61bddff34954fa1feb4034822607c6f243fc7",
+      "content_sha256": "16ce2fe369871cb7e55a99369e8f2d2b2eb70736b847a05e0386c65d03288229",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
       "authority_layer": "professional_domain",
       "semantic_decision_owner": "repository_health_engineer",
       "object_kind": "manual",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "engineering-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/engineering/doc-governance/product-documentation-full-corpus-governance.design.md",
+      "content_sha256": "d41ec17913943595a6f4d94f317594eaad916a012d56e8eeb053b527d9598d51",
+      "registry_type": "professional_domain",
+      "structural_owner": "repository_health_engineer",
+      "authority_entry": "doc/engineering/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "repository_health_engineer",
+      "object_kind": "design",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "engineering-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/engineering/doc-governance/product-documentation-standard.design.md",
+      "content_sha256": "ec6e7f1f11217da6e7cf879ff46f713c5a68edcb557ee70b0121734247261832",
+      "registry_type": "professional_domain",
+      "structural_owner": "repository_health_engineer",
+      "authority_entry": "doc/engineering/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "repository_health_engineer",
+      "object_kind": "design",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "engineering-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/engineering/doc-governance/product-documentation-standard.prd.md",
+      "content_sha256": "0572d24f581086b05aa97ec298f232a7e1126145d9bd440fad2dc40cb9a3991e",
+      "registry_type": "professional_domain",
+      "structural_owner": "repository_health_engineer",
+      "authority_entry": "doc/engineering/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "repository_health_engineer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "engineering-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/engineering/doc-governance/product-documentation-standard.templates.md",
+      "content_sha256": "a7a0682810aa72787e3471b706de2e9ac26e25dce0b7cf3ad3964da836f99e29",
+      "registry_type": "professional_domain",
+      "structural_owner": "repository_health_engineer",
+      "authority_entry": "doc/engineering/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "repository_health_engineer",
+      "object_kind": "markdown_record",
+      "lifecycle_candidate": "review_required",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "engineering-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/engineering/doc-governance/project-management-record-standard.design.md",
+      "content_sha256": "659fddda341209d144caa5a0a56a95a881e569ad2ee5f4ba0c2c00290f35c7d2",
+      "registry_type": "professional_domain",
+      "structural_owner": "repository_health_engineer",
+      "authority_entry": "doc/engineering/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "repository_health_engineer",
+      "object_kind": "design",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "engineering-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/engineering/doc-governance/system-design-writing-standard.design.md",
+      "content_sha256": "58414361957abcdc8fa617128224dcd50b845d6303c93868c3d13552b38fe23c",
+      "registry_type": "professional_domain",
+      "structural_owner": "repository_health_engineer",
+      "authority_entry": "doc/engineering/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "repository_health_engineer",
+      "object_kind": "design",
       "lifecycle_candidate": "active_candidate",
       "inventory_disposition": "retain_for_owner_review",
       "routing_batch": "engineering-corpus-review",
@@ -329,7 +427,7 @@
     },
     {
       "path": "doc/engineering/prd.index.md",
-      "content_sha256": "475c5cf789f0837731fd01667c8f07d8f248a7ad09ececaf2e9c9333fa97a9cd",
+      "content_sha256": "d902dec0cae4a0cce1ff0e9bf6549bf08e0399d22e60c593ac3b1fea7b0cf0ca",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -398,6 +496,34 @@
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
     },
     {
+      "path": "doc/engineering/workflow/ci-projection-publication.design.md",
+      "content_sha256": "789806a3ad373823dbbc2bc841748015fb35aba52d9131b0384a5d940550d255",
+      "registry_type": "professional_domain",
+      "structural_owner": "repository_health_engineer",
+      "authority_entry": "doc/engineering/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "repository_health_engineer",
+      "object_kind": "design",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "engineering-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/engineering/workflow/local-codex-three-loop.design.md",
+      "content_sha256": "02ef317e3428e9e3154f7031689cd6d1f0423627f39a4854f803bafa0c007911",
+      "registry_type": "professional_domain",
+      "structural_owner": "repository_health_engineer",
+      "authority_entry": "doc/engineering/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "repository_health_engineer",
+      "object_kind": "design",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "engineering-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
       "path": "doc/engineering/workflow/production-supervisor-runtime.design.md",
       "content_sha256": "b683cb0c35f7737d940cf14f993096697a388947f870604002f31f191d05009a",
       "registry_type": "professional_domain",
@@ -413,7 +539,7 @@
     },
     {
       "path": "doc/engineering/workflow/source-of-truth.md",
-      "content_sha256": "8ee059a40bada5040e2f3c9f2f5304245dd0d7bbf3943efe124557810d737154",
+      "content_sha256": "56f68a0529a0b03af8c62bfb2b2deda3f728ddf19bb1c52e9b312f0ed4602eea",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -426,8 +552,36 @@
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
     },
     {
+      "path": "doc/engineering/workflow/three-loop-completion-and-dependency.design.md",
+      "content_sha256": "fc7d968700c8694956cb852bb7734631ac0545a3242ccd694a11f8918c5d966b",
+      "registry_type": "professional_domain",
+      "structural_owner": "repository_health_engineer",
+      "authority_entry": "doc/engineering/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "repository_health_engineer",
+      "object_kind": "design",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "engineering-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/engineering/workflow/three-loop-role-adaptation.design.md",
+      "content_sha256": "af851112899b951bb239535f6788df407825211960ee521a0f3371a942d2483e",
+      "registry_type": "professional_domain",
+      "structural_owner": "repository_health_engineer",
+      "authority_entry": "doc/engineering/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "repository_health_engineer",
+      "object_kind": "design",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "engineering-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
       "path": "doc/game/README.md",
-      "content_sha256": "7e82329a9bf141c80055e717dd7894b0f3d4bfc597795ca12f0682095be7d052",
+      "content_sha256": "ffbfad9e17ccf84454af5a0ffe9d17adf974ad081f90542f077809e8ff77a49a",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -455,7 +609,7 @@
     },
     {
       "path": "doc/game/gameplay/README.md",
-      "content_sha256": "14e06d1eb83ceec593e7004d7a3c708af8f1913e213c50ed5da3b6db4831d37f",
+      "content_sha256": "88129715313b5039bdff6414dba87af135926cb6826925c8fa9d4250c814bbea",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -469,7 +623,7 @@
     },
     {
       "path": "doc/game/gameplay/gameplay-agent-claim-economy-contract.design.md",
-      "content_sha256": "4ee28caed024f2e5208d2d13be4a6bc1498c3382ea8fa2f30c3ac249f081aaf3",
+      "content_sha256": "d21793bfbd5923dee2d23d39d42c93a5be4c2f58fe516e6a67bba70f8067cfd4",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -483,7 +637,7 @@
     },
     {
       "path": "doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md",
-      "content_sha256": "e1aecbbab180f112ba9b2ad337aef726ac33177bb796a6abf2bb5bef77360df7",
+      "content_sha256": "b6ced7b4b802ba9f584990c58ccf52de989dd528a310f8080f70cde60c4cae80",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -497,7 +651,7 @@
     },
     {
       "path": "doc/game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md",
-      "content_sha256": "66d866c075a6fed1f27bb31209be19405c5303eb720469dc2e828f3abc687f95",
+      "content_sha256": "ce65e0008d7fcd46d5c3ee77bbe630101abf6b77e96ac93842b8eb37aa15183f",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -538,8 +692,176 @@
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
     },
     {
+      "path": "doc/game/gameplay/gameplay-industrial-backpressure-recovery-contract.prd.md",
+      "content_sha256": "435d1b0fb4ac835c1b002daf61349985d9eea3d38bc44aa93c9afe7ef3825a09",
+      "registry_type": "professional_domain",
+      "structural_owner": "gameplay_designer",
+      "authority_entry": "doc/game/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "gameplay_designer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "game-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md",
+      "content_sha256": "e4fea06340d248237aa60a735ac685974dd56c2586f623a3b426a1ae71dad265",
+      "registry_type": "professional_domain",
+      "structural_owner": "gameplay_designer",
+      "authority_entry": "doc/game/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "gameplay_designer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "game-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/game/gameplay/gameplay-industrial-demand-change-disposition-contract.prd.md",
+      "content_sha256": "1abf05116befe92c37417c88aa82b6ce558106b223dc3e71d49025f39a3954a7",
+      "registry_type": "professional_domain",
+      "structural_owner": "gameplay_designer",
+      "authority_entry": "doc/game/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "gameplay_designer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "game-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/game/gameplay/gameplay-industrial-externality-contract.prd.md",
+      "content_sha256": "31e0ff91f3a7b708a71e49cbddd73c4f1b08dc2560d6794ec73b30d88e96c4aa",
+      "registry_type": "professional_domain",
+      "structural_owner": "gameplay_designer",
+      "authority_entry": "doc/game/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "gameplay_designer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "game-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/game/gameplay/gameplay-industrial-factory-capability-lifecycle-contract.prd.md",
+      "content_sha256": "79a777cc81ba957a18bd7b8fe8c8c9a779d16ba6778da520b81c7b5d2684912c",
+      "registry_type": "professional_domain",
+      "structural_owner": "gameplay_designer",
+      "authority_entry": "doc/game/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "gameplay_designer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "game-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/game/gameplay/gameplay-industrial-factory-site-selection-contract.prd.md",
+      "content_sha256": "60face74f7715a2d73d730da28d3c4dc39488d8f9d32ba5172190e3b7ced6780",
+      "registry_type": "professional_domain",
+      "structural_owner": "gameplay_designer",
+      "authority_entry": "doc/game/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "gameplay_designer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "game-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/game/gameplay/gameplay-industrial-maintenance-planned-downtime-contract.prd.md",
+      "content_sha256": "3b3417beca23156ddee989221aba683911cbcda310b5efd4b5c202ba53017338",
+      "registry_type": "professional_domain",
+      "structural_owner": "gameplay_designer",
+      "authority_entry": "doc/game/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "gameplay_designer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "game-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/game/gameplay/gameplay-industrial-pipeline-service-window-contract.prd.md",
+      "content_sha256": "c9335c0eeddf0af2ffed48a713f3af29e2576f7a1423ed126b10cfe0c36a0b35",
+      "registry_type": "professional_domain",
+      "structural_owner": "gameplay_designer",
+      "authority_entry": "doc/game/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "gameplay_designer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "game-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/game/gameplay/gameplay-industrial-raw-material-qualification-substitution-contract.prd.md",
+      "content_sha256": "481795a79e23090e06b4f346a728f68529c3fc2e7538f07be718d4e08da74685",
+      "registry_type": "professional_domain",
+      "structural_owner": "gameplay_designer",
+      "authority_entry": "doc/game/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "gameplay_designer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "game-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/game/gameplay/gameplay-industrial-recipe-lifecycle-decision-contract.prd.md",
+      "content_sha256": "a066796e7664701c261bb5afe241b7dffa544c198b01aeed381d40ab0d30bbce",
+      "registry_type": "professional_domain",
+      "structural_owner": "gameplay_designer",
+      "authority_entry": "doc/game/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "gameplay_designer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "game-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/game/gameplay/gameplay-industrial-representative-execution-walkthrough.prd.md",
+      "content_sha256": "0edf70a01667dec420f65265ecdf6179a57d86dd5e7b5ee7118b345ccdb8652d",
+      "registry_type": "professional_domain",
+      "structural_owner": "gameplay_designer",
+      "authority_entry": "doc/game/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "gameplay_designer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "game-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/game/gameplay/gameplay-industrial-starter-completion-contract.prd.md",
+      "content_sha256": "75ffaf7346fd450d35949901c4887b7983399d1a06d87e6f940aff58c3942ded",
+      "registry_type": "professional_domain",
+      "structural_owner": "gameplay_designer",
+      "authority_entry": "doc/game/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "gameplay_designer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "game-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
       "path": "doc/game/gameplay/gameplay-longrun-p0-replay-rollback-runbook-2026-03-06.md",
-      "content_sha256": "36cbcfd12b939051af7e55f730a6dcf9211749170efd31215dbcc2dd6756bce9",
+      "content_sha256": "d0b6a3aaf5c43e44d174919a21ded63432ceb45422975dda79b106878e7df6da",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -552,8 +874,50 @@
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
     },
     {
+      "path": "doc/game/gameplay/gameplay-mature-world-progression-contract.prd.md",
+      "content_sha256": "5d251d58fb7e888e41975971b126857e9fd58498d4e7a3e0621da657e46bd1c6",
+      "registry_type": "professional_domain",
+      "structural_owner": "gameplay_designer",
+      "authority_entry": "doc/game/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "gameplay_designer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "game-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/game/gameplay/gameplay-ordinary-governance-subject-and-oc-rights-contract.prd.md",
+      "content_sha256": "222863fe5a5319a00caf65675377eac912c04d7cbad343ba8d8d8fd9b381f1f2",
+      "registry_type": "professional_domain",
+      "structural_owner": "gameplay_designer",
+      "authority_entry": "doc/game/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "gameplay_designer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "game-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/game/gameplay/gameplay-regional-charter-tenure-funding-contract.prd.md",
+      "content_sha256": "93846826c9a83a25280cf9cb763f17c05cf55a55ba042b2bad38c906df469dc7",
+      "registry_type": "professional_domain",
+      "structural_owner": "gameplay_designer",
+      "authority_entry": "doc/game/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "gameplay_designer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "game-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
       "path": "doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.design.md",
-      "content_sha256": "42a902afe996c57ab05c3c7032647501e57e593351f5afc3b3fc19e264b2ef4e",
+      "content_sha256": "7a56cbc6d221f620b6588ff345f84ced9ff65096d3230aba398a68a4d58e82ee",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -567,7 +931,7 @@
     },
     {
       "path": "doc/game/gameplay/gameplay-regional-infrastructure-micro-depot-contract.prd.md",
-      "content_sha256": "54b50ce06851135ec0bbb95dabfcb261f7509ecfafc47df9a0b90158a58cfe0a",
+      "content_sha256": "04491a6dbccd263e767e67b34a745c88533211cba0cdd77d81b3d95ab5d580b6",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -581,7 +945,7 @@
     },
     {
       "path": "doc/game/gameplay/gameplay-top-level-design.design.md",
-      "content_sha256": "a1d3ea8e785fbd7823dc866022f19ee830da772a8410b16fa04475ca91bfcb0b",
+      "content_sha256": "3530ae4bf23b1463887a49b73ed89cb6ad7953e4698c9c4d7e4b3ac73bde333a",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -595,7 +959,7 @@
     },
     {
       "path": "doc/game/gameplay/gameplay-top-level-design.prd.md",
-      "content_sha256": "91b0db456ac2d2b6e36a91d63c46dd5f303cd77aaf6a53bb794d9343c767299e",
+      "content_sha256": "909f3df5f05a46057b9a0ee227e29b4f6d53904a9fd430d00ebf07681aea25e3",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -609,7 +973,7 @@
     },
     {
       "path": "doc/game/gameplay/gameplay-war-politics-mvp-baseline.design.md",
-      "content_sha256": "cad063b5f32c2e04628fa6414750de8e1f3664abd9b0324b074ebd079ea5c71e",
+      "content_sha256": "12fb8ecb28971d64d6fa351b0d1ec44a752d0a9cc8b36752e3226db7d0ed6f86",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -623,7 +987,7 @@
     },
     {
       "path": "doc/game/prd.index.md",
-      "content_sha256": "1e651a70b6beae58941b78f0610b57cb939205a535f351aa7d04e9ed94f50bfc",
+      "content_sha256": "750312ede26852236e9f33aa4643d312c659cb849300d33367b28444f3df2e67",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -637,7 +1001,7 @@
     },
     {
       "path": "doc/game/prd.md",
-      "content_sha256": "763be9c3cbd8e0db9b1ee0d3cb2c74ad01ffca2edf87584fe2fe7a5499eb43ec",
+      "content_sha256": "ddfafe8500f30c668cb29c88f9629c561cc0e3a58fca6f7e14e9d266fdbb331e",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
@@ -763,7 +1127,7 @@
     },
     {
       "path": "doc/p2p/README.md",
-      "content_sha256": "5834adb8f5235fc50b2ad5a15c9bae53f473ad40c2ecdcf805dc7e4ad9d9b1df",
+      "content_sha256": "b89e7df4b64bdcffad28aae2e17f61bb54da22fb2b32790ee9302a5ca03f39e5",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -819,7 +1183,7 @@
     },
     {
       "path": "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md",
-      "content_sha256": "fb77f2e3971037b31a510f62a6bfc9c2d9dec953b7b3d77dee0297467e29cf12",
+      "content_sha256": "5b1a8158c5e23907a4968fc935ec564bdc0169cf0c7f53c54acb4afb3d76fc06",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -972,14 +1336,42 @@
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
     },
     {
+      "path": "doc/p2p/blockchain/public-testnet-governance-trust-root-provisioning.md",
+      "content_sha256": "4bd662dc224cd2a8bd3fa2723aacff7418f1a53e98e6304a1ae3a3b583ddcd9d",
+      "registry_type": "professional_domain",
+      "structural_owner": "blockchain_ops_engineer",
+      "authority_entry": "doc/p2p/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "blockchain_ops_engineer",
+      "object_kind": "markdown_record",
+      "lifecycle_candidate": "review_required",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "p2p-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
       "path": "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md",
-      "content_sha256": "41c6507bee667b76119cf76ad73561a7de80f57f011fd296d18560c9fb723ac3",
+      "content_sha256": "4898acc3a379ca8459251cb0b3373d30e372cd55ca5e00c676d877b055331b28",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
       "authority_layer": "professional_domain",
       "semantic_decision_owner": "blockchain_ops_engineer",
       "object_kind": "runbook",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "p2p-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/p2p/blockchain/public-testnet-identity-v2-signing.design.md",
+      "content_sha256": "ab13215f52cdeb41f482fed180a9c4358a0fa657242ef8dacc4e62ce0c9b93a4",
+      "registry_type": "professional_domain",
+      "structural_owner": "blockchain_ops_engineer",
+      "authority_entry": "doc/p2p/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "blockchain_ops_engineer",
+      "object_kind": "design",
       "lifecycle_candidate": "active_candidate",
       "inventory_disposition": "retain_for_owner_review",
       "routing_batch": "p2p-corpus-review",
@@ -1491,7 +1883,7 @@
     },
     {
       "path": "doc/p2p/prd.md",
-      "content_sha256": "832f56058db7b0f4966fe85f1fe1f56bd1cbe7c5653d34dc43700630d5e4214e",
+      "content_sha256": "2810f8ca028acfecf085c8fdc15654f1b2c809be115b729752d866db82e994e2",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1645,7 +2037,7 @@
     },
     {
       "path": "doc/p2p/token/mainchain-token-newapi-quota-bridge.runbook.md",
-      "content_sha256": "c4bd3716ac45699d2e96737dd73f99b3148eded06c53a700337a9c90cdc8cfbc",
+      "content_sha256": "e3ad5f8c024d382ccdfa986e1b3813dc01100118494a28103689cac78cf5359b",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1855,7 +2247,7 @@
     },
     {
       "path": "doc/playability_test_result/game-test.prd.md",
-      "content_sha256": "e2cb4cf4480728f21de0a3a06d056dc0162636f18dbec017c42d0d7858bba124",
+      "content_sha256": "fb01881761d39153c4f5716a86a3d93548e6e773b0860aaba9ed2910dc149be4",
       "registry_type": "evidence_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/playability_test_result/README.md",
@@ -1953,7 +2345,7 @@
     },
     {
       "path": "doc/product/README.md",
-      "content_sha256": "3a03d4c108286ce46e99d33c9e38a52eb07f4739a22e87b07e04f40aa40140ee",
+      "content_sha256": "a278747b410822dc5755f2ca269408c5de19ffd2950f4ec91e8fb65d33ff80d1",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -1967,7 +2359,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/agent-authority-ownership-and-accountability.prd.md",
-      "content_sha256": "7ee3d2173ba0cfc8fcbc7830d44eb061d6c29684a0f1f0174426abc5f472d1ac",
+      "content_sha256": "b24c179fa8e1f1fe14ddedb4c5831da5344b694161a34525fbfce5777a9f5088",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -1981,7 +2373,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/agent-conversation-and-prompt-control.design.md",
-      "content_sha256": "e62e60add1158a405c11988a29e0d1f513239a460cb6a48d652af54300770125",
+      "content_sha256": "8268a3c308c1aafb3beeb0b35348a0ee61ebdc889413bf76c52137166ef4001c",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -1995,7 +2387,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md",
-      "content_sha256": "5838af0a6a531fcc65c65e5a4eab977f040082b6a9d4c3216ef19356dc415d78",
+      "content_sha256": "d850a26543b028940ae5d7d43d8d5919077e591245a5b0d627f64a6bd6295a6b",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2009,7 +2401,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/player-readable-surface-continuity.design.md",
-      "content_sha256": "97e5da11e2a00313f78b0e0ac8c51e61a8666a6858e7ad57687265958ed9a19b",
+      "content_sha256": "1e0e869aa54a27c2856b7b60e710292a388b894476bb0813fb21f98783e24127",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2023,7 +2415,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/player-readable-surface-continuity.prd.md",
-      "content_sha256": "8778bd4061b14a7145ef1f9cb8cf9c397ba8332dcf9d53b6781d2fdbc45385e0",
+      "content_sha256": "3fdc5b98781d919b36bd5b44b3e9058ee8c5dd24a8d7e694a11955c01fe6c748",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2037,7 +2429,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/player-readable-world-stage.design.md",
-      "content_sha256": "6d09bbdd7170031ce645a164aebc18fa20b9551394ed9b584e7e00ed3a05c514",
+      "content_sha256": "b6b8e747dafcb6e2a5b06bd0d0e180fcff8ee3fec8c76b0360fbae86b2bf5fcb",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2051,7 +2443,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/player-readable-world-stage.prd.md",
-      "content_sha256": "3809bad116aa1bec80e9b1c21165fab33b80696f742417a6f3c7473aeb12d80a",
+      "content_sha256": "f7eb1238299df179b0ff33aa1dadff4b32e4335952671546fcf02a558a3078c6",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2065,7 +2457,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/prd.md",
-      "content_sha256": "cc92f249a757cd88a712c37be8f52780123f0b04f37571efe7d24c7cbcda832e",
+      "content_sha256": "a900192976e1ea45ffbef5cd1b9abcb25d20272d46ae8a036877396cd616f2b7",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2079,7 +2471,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/provider-agent-experience-continuity.prd.md",
-      "content_sha256": "e7d622715b7a1d8f29a0dbed45bdb539f58dfb6e82f11128843bdacb3f583b19",
+      "content_sha256": "9fc9a8fcc47debd6a89b9af77be2997605fb8c66383b366135d1174bc965264a",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2093,7 +2485,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/provider-learning-intelligence-and-cadence.prd.md",
-      "content_sha256": "8315d81b380b3296a0902e8d4370cef0ec54aaf2c539de9a8900784f86e3927b",
+      "content_sha256": "feda6b70b95c00ba4a5e11dff0c7e426fa963eb6bdab60f4b729d63da9d82de0",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2107,7 +2499,7 @@
     },
     {
       "path": "doc/product/player-entry-distribution/access-modes-and-release-readiness.prd.md",
-      "content_sha256": "284bd0bb06252507585d4ef7442883c004307e8a41020acafdce6250712e3f11",
+      "content_sha256": "54fc708c7655a1c88da6d290b5e2f008af91e298be5554864565723032498d32",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2121,7 +2513,7 @@
     },
     {
       "path": "doc/product/player-entry-distribution/free-entry-world-progression-and-recognition.prd.md",
-      "content_sha256": "0357b5457571a8f25f4128183a4bfdbb7ab83658592b1f1e5a2a79d72daf8c6f",
+      "content_sha256": "c993062dc14a5238ac761a5b2a1b858b7458b490dea718624f96b53e0b299412",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2135,7 +2527,7 @@
     },
     {
       "path": "doc/product/player-entry-distribution/local-launch-session-continuity-and-recovery.design.md",
-      "content_sha256": "6c31c3ac884d8bda1dae7da55ebd467bb84b5a2c41e2eaf8559e412c1c8eb950",
+      "content_sha256": "68650535a8525de0b82f8ae11771a46dc60e17c632e20f5f97ca77ed4807ddc5",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2149,7 +2541,7 @@
     },
     {
       "path": "doc/product/player-entry-distribution/local-launch-session-continuity-and-recovery.prd.md",
-      "content_sha256": "0f6d3e750cdc16930196a67d9926322028ea102597f09cf2e30d1548ee68f9ba",
+      "content_sha256": "3f7f734f644902e2bca7a2336728797492216dc02384899bc4be9f6d63b20638",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2163,7 +2555,7 @@
     },
     {
       "path": "doc/product/player-entry-distribution/participation-and-recognition-boundaries.prd.md",
-      "content_sha256": "0adb6836b37522fd6712b1706951750136dbe3e71a12c6a279106747074df3e4",
+      "content_sha256": "c76054c3c7fe0221bd88bfe5e48c4c23cbf9cedaab2bc71037ba33c76e13ccd3",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2177,7 +2569,7 @@
     },
     {
       "path": "doc/product/player-entry-distribution/prd.md",
-      "content_sha256": "0f474363edcf4e72d98a07bf13237215aceb0225a92a0adb64a972c73f65683d",
+      "content_sha256": "20d49f8229306949d7e7c374422c5318cd8730726c55f46e74c96d6fd50d7cb9",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2191,7 +2583,7 @@
     },
     {
       "path": "doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md",
-      "content_sha256": "8733419887d6a88cc9e65f1bb351daec1ccea83405e8d91bc830577285dafb26",
+      "content_sha256": "45c5ee9eb706260dc6a7fc78f8776b6d599a3f880f475a1b08fd9304ad8ecc84",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2205,7 +2597,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/deterministic-world-execution.prd.md",
-      "content_sha256": "d0dabcc8492cd65fac514c829c466b5af1b4adb7c7f166e7209ddc3c61f6c8ad",
+      "content_sha256": "a122af0077b252d67d32f2abeadf14c4a8a802412cc6f5a7bb13ba40be0e8037",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2219,7 +2611,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/distributed-consensus-and-state-availability.prd.md",
-      "content_sha256": "83214f8ee78e3b3d2522e978c14aca58b7b342959aa68ef8ee42a0b27e3c8f32",
+      "content_sha256": "dbed60e9a397e14fa0750390c32d90962c8fee3eae1a29d2d7705cc09a460d49",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2233,7 +2625,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/global-governance-organization-continuity-and-constitutional-guardrails.prd.md",
-      "content_sha256": "61b6b2c59960c7c312bec35192db93964bac1f1b01b08475e8b40035ae8adfad",
+      "content_sha256": "1ede776e334e6782d29662c7f287791411e682face26dc8c997a2b48fb62c469",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2247,7 +2639,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/governed-industry-market-and-emergency-supply.prd.md",
-      "content_sha256": "54ff813869e5b34bcada375e69c5786fd624ab5b0cd6ef6ca50e5a74ea396ae4",
+      "content_sha256": "214132cc8af8d56dff0a265f1582b4d2afa881751dc1c3365f8ed55334403eb9",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2261,7 +2653,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/prd.md",
-      "content_sha256": "8d72c6879a85908b9a798af33ef2539b3a355fd0264930c7f03c74622959ce7c",
+      "content_sha256": "d2aa0090e730c8ab37e957a232bea4d137b87a977f0e5eaf55727efce16c1d57",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2274,22 +2666,8 @@
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
     },
     {
-      "path": "doc/product/world-infrastructure/regional-charter-tenure-and-public-funding.prd.md",
-      "content_sha256": "c45a41a520826cf0eb27bfb53f87ef32c3abc92b93116dd13cf615babd329671",
-      "registry_type": "product_overlay",
-      "structural_owner": "producer_system_designer",
-      "authority_entry": "doc/product/README.md",
-      "authority_layer": "product_overlay",
-      "semantic_decision_owner": "producer_system_designer",
-      "object_kind": "prd",
-      "lifecycle_candidate": "active_candidate",
-      "inventory_disposition": "retain_for_owner_review",
-      "routing_batch": "product-corpus-review",
-      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
-    },
-    {
       "path": "doc/product/world-infrastructure/world-continuity-governance-and-recovery.prd.md",
-      "content_sha256": "b7b737536461e4c38cdd9aa44365399260b167db5bd5bd813d153a9dc61325b1",
+      "content_sha256": "ff7f1d1babdd1fe4e4a4e417e40c305c1255ce31591362f12bf069e726797e75",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2303,7 +2681,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md",
-      "content_sha256": "65326768927f4abb81c0a62f8d504bdc7af7bfa994846bd2e7198e1a13cb32e3",
+      "content_sha256": "6149d717405c3ef43ef09a61bc98a42092de678eec41a62e3e140000faa0c167",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2317,7 +2695,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/chartered-conflict-soft-seasons-and-recovery.prd.md",
-      "content_sha256": "da6d04a711e8f80315ae36be1f7d228d4d07ecbd40f3643aa1e53ad5f659359d",
+      "content_sha256": "94602368ee27199b8872c89484fb6e7ffc118fab18a84727ab7cc3ae54888ba3",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2331,7 +2709,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md",
-      "content_sha256": "03f1985a58e5be06832e1a12ebd01883c616ff86f31491e86b87e55c5926ec75",
+      "content_sha256": "9419edff0b46181c2445f52b6bfc50220c6827b01360829da7e5748866d5fa49",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2344,8 +2722,22 @@
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
     },
     {
+      "path": "doc/product/world-rules-core-gameplay/first-session-and-continuation.design.md",
+      "content_sha256": "16bf618facec9050f8d4f52538f45d9e66c3ace1615f696073f1f8746985e14b",
+      "registry_type": "product_overlay",
+      "structural_owner": "producer_system_designer",
+      "authority_entry": "doc/product/README.md",
+      "authority_layer": "product_overlay",
+      "semantic_decision_owner": "producer_system_designer",
+      "object_kind": "design",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "product-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
       "path": "doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md",
-      "content_sha256": "9d294bd92136c8d54780a40c5b9c79eeca0941c40d35db1367ed7c24e4571f69",
+      "content_sha256": "adf8e503d00f2fe8d90773bf91193b7a731c5bf4493093fd2b967ac524169859",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2359,7 +2751,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/frontier-expansion-and-world-information-boundaries.prd.md",
-      "content_sha256": "d97471af312855ff3f49c5dfffb3c8fff121affc72d9a4554639b4aad8b22c39",
+      "content_sha256": "384f3622f51e7ccabfb8e3a1ed28bb91480a294b35494e9ef195f207d37bec18",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2373,7 +2765,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md",
-      "content_sha256": "6da9f93c25f546bbd143400d97cbff12e48f1448447653fbd16bcd68bde8e645",
+      "content_sha256": "3228b8d734a416fb37a2055cd77c3bcab331aad0bb1a06a0e63bd76e22985d78",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2387,7 +2779,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md",
-      "content_sha256": "0c2737b469a07b5eb570dc59e125aaa4c7e9900a7faf6382190adee2d8080355",
+      "content_sha256": "a2e589e2eaaced89fac77401488d173364eaac4c273b9e90c1998c645c4653b2",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2401,7 +2793,35 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/indirect-control-agency-and-continuation.prd.md",
-      "content_sha256": "b0d5dbdbb66f3912bc8543dad03e60c506c186590189ccebb391df0e83cd3d7c",
+      "content_sha256": "21d46912fbcb8d04d70c558b8b2c3cda3fc7ca2c9d0dcfc0a2a2bb9f71ebc44b",
+      "registry_type": "product_overlay",
+      "structural_owner": "producer_system_designer",
+      "authority_entry": "doc/product/README.md",
+      "authority_layer": "product_overlay",
+      "semantic_decision_owner": "producer_system_designer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "product-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/product/world-rules-core-gameplay/industrial-demand-goals-and-settlement.design.md",
+      "content_sha256": "df82c50d07a324c506c92194f75f29b6aaf610fa4a0511ed6c80a92c04b8ca03",
+      "registry_type": "product_overlay",
+      "structural_owner": "producer_system_designer",
+      "authority_entry": "doc/product/README.md",
+      "authority_layer": "product_overlay",
+      "semantic_decision_owner": "producer_system_designer",
+      "object_kind": "design",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "product-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/product/world-rules-core-gameplay/industrial-demand-goals-and-settlement.prd.md",
+      "content_sha256": "9c760d73bb5fa0f236915a107ff2aaf6f24edf6a83159796b073f22d7ce5b65b",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2415,7 +2835,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/market-normal-state-and-emergency-supply.prd.md",
-      "content_sha256": "8544a4083e9089628d32df1ab7cc366907586553001e45231ecab34352d959f9",
+      "content_sha256": "aa0a5e1cb09b4427e93f2404ee66b4f08603ec9f60b1f6550da5980e602cb89e",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2429,7 +2849,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/mature-world-progression.prd.md",
-      "content_sha256": "0ed6f30b26cbeb8800200426879fde60c4ae937b5bfb1f1b60b7668e3a8ed01f",
+      "content_sha256": "3a69669f336828909c377e425b0e7f949cff43c11a5c7522f0be305e30a99ec4",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2443,7 +2863,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/organization-continuity-dissolution-and-dormancy-protection.prd.md",
-      "content_sha256": "294810d81c9b18f9b84dd7bacc69ea52dfc29f1cdc536cd274442d8f6f934a21",
+      "content_sha256": "cce369a7342b67c61f0d863f8c0d1b112bce2c16c6f5a7dc0d146497f80f5cd0",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2457,7 +2877,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md",
-      "content_sha256": "ce639720a5c12e98e658d05cc2b2f4f309c933db0b80f9ab4adbfffe5ececfb1",
+      "content_sha256": "e886654acfcdf07274322f2ee59cc895e48718a4d3922dea9b977fdd6ae47515",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2471,7 +2891,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/prd.md",
-      "content_sha256": "2c678a876b276bad6aed9faca854e7a5e265292f081c4826270bcd23ce3f601c",
+      "content_sha256": "a6f924b1a5d2ba3e83ff530019c02ce08a4907f73bab2fe9084b509b314fb50e",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2555,7 +2975,7 @@
     },
     {
       "path": "doc/readme/governance/README.md",
-      "content_sha256": "933f43bd6d5ad774f254e728e71018b10da75c11c1b6c5d72cef6bc71ad78c3a",
+      "content_sha256": "6480e6db2a1022e0fa8963a59f7ed9092276b816b5c5ad67d92df9039d9260a3",
       "registry_type": "professional_domain",
       "structural_owner": "liveops_community",
       "authority_entry": "doc/readme/README.md",
@@ -3045,7 +3465,7 @@
     },
     {
       "path": "doc/scripts/design.md",
-      "content_sha256": "37661c4964b3f16d423fd2df6e9a82a2e0a54bb91bbf3e0dd297b2c8407ff49f",
+      "content_sha256": "5a6098c212e51f9cf75e0006f06c9bac5be3cefc381bab933677c16b53fb1e50",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/scripts/README.md",
@@ -3101,7 +3521,7 @@
     },
     {
       "path": "doc/scripts/prd.md",
-      "content_sha256": "6d87c49ebcefd7172194635363b4569c9341da4d44806da3664bc81a69fa02b0",
+      "content_sha256": "16a9dcbe492f8b274d1cb355364c0e8d964b8c3740126c6c47c17a325d4f78a8",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/scripts/README.md",
@@ -3563,7 +3983,7 @@
     },
     {
       "path": "doc/testing/ci/ci-tiered-execution.design.md",
-      "content_sha256": "6b9033eda02d604b35d2d91179bec6c2289b596276c9670b84145129fcf62d3e",
+      "content_sha256": "7f79e99a26a5e8d1d07bbb92ba274e6b6cf90bd833afa07051fc4552fd7807da",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -3577,7 +3997,7 @@
     },
     {
       "path": "doc/testing/ci/ci-tiered-execution.prd.md",
-      "content_sha256": "882b4c8bdcdb14b9cc10ebd73e2f00aa8cdac9e399d6ff29608bc301c1981aea",
+      "content_sha256": "098e60195e7becc12540113af65c5b22905b448848076a39e03353fc3f584790",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -3829,7 +4249,7 @@
     },
     {
       "path": "doc/testing/manual/README.md",
-      "content_sha256": "51967b2c9df345b9d12541f1518ba7a9887353e642d08181bfaf5a3369db4d38",
+      "content_sha256": "9ca655783f4203a047b0b29df18c7e202c3a21d98ff6ff1e4d199cb4cd3d1f92",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -3843,7 +4263,7 @@
     },
     {
       "path": "doc/testing/manual/local-public-testnet-letai-test-environment-2026-06-23.manual.md",
-      "content_sha256": "3379093d315948f2b3d9f02528b0d46495457cf0e16008d9ac2a6315fb87f713",
+      "content_sha256": "448dc2beea93c373489a22d17ba0deac641cc612b92766fc534007214021e3af",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -3871,7 +4291,7 @@
     },
     {
       "path": "doc/testing/manual/public-testnet-fresh-validator-host-bootstrap-2026-07-28.manual.md",
-      "content_sha256": "4ba1b338aa015b34aca58d4f7c667a2acdfb9b4218349d611040043412b295be",
+      "content_sha256": "b0bed1f2df8fc0f45e328831738c2421ca8248b9d4ecd2f9d97a1ac1b2888844",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -3885,7 +4305,7 @@
     },
     {
       "path": "doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md",
-      "content_sha256": "9c391183c7081b1103761c4330ed944854797651f642cceb41061c43b9f0010e",
+      "content_sha256": "93abeda2c0e2610d9eebafc9d0843d21a21e0d58a025f57d2c32b30b418b66ec",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -3899,7 +4319,7 @@
     },
     {
       "path": "doc/testing/manual/web-ui-agent-browser-closure-manual.prd.md",
-      "content_sha256": "d1e7c62fe907c67f68620b54ad5a622aead9f336b1de2ffb7359809f10c9fda4",
+      "content_sha256": "79e76bb9efdbfefe2b445d31575dc7d60db9b28d26914b852ab713551ed43a1a",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -3927,7 +4347,7 @@
     },
     {
       "path": "doc/testing/manual/web-ui-playwright-closure-manual.manual.md",
-      "content_sha256": "1c1cd344abb4ca0865ee730566038aa1c2dd4408313c689f841db0efc7de2e5e",
+      "content_sha256": "e0c8f480e8cf9afcf1dd4cfd25efee7577070df092cc1b20b7688f25225bc3bf",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -3940,8 +4360,22 @@
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
     },
     {
+      "path": "doc/testing/performance/compile-metrics-v2-warm-check.design.md",
+      "content_sha256": "84f9bcdeef5c1dcd5161adc8af037ad3f9ceb7ba59f2a4042561923d4e57ed54",
+      "registry_type": "professional_domain",
+      "structural_owner": "qa_engineer",
+      "authority_entry": "doc/testing/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "qa_engineer",
+      "object_kind": "design",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "testing-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
       "path": "doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md",
-      "content_sha256": "b0d032a219c8d5a22f7b9c5d0a0d2470a07871df4339f9d8aa0f635338a6f2a6",
+      "content_sha256": "fd61b0ae091bf91aef5eb0b3464332e31880bc6eb5fbc3fc7a5596fd529d85c2",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -3969,7 +4403,7 @@
     },
     {
       "path": "doc/testing/prd.index.md",
-      "content_sha256": "9f200a5db3ec66a041027d22d8e4dfe53ace9da3566d1b2fcf3dbe0ee7e9f7ed",
+      "content_sha256": "516d70ce1ad63f2dfa3a953cc4bbc58e69e2b95b8acdb069354d6e889a2c8547",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -4165,7 +4599,7 @@
     },
     {
       "path": "doc/testing/templates/network-tier-public-testnet.example.json",
-      "content_sha256": "955f7b29a1ff96f08747aa3b10f7c8867167f77509fd11f656c657c4644f1a97",
+      "content_sha256": "96556dab1290a45851aeed27f6b677abd88c36747e87501924fb07ca91cc5764",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -4271,6 +4705,20 @@
       "semantic_decision_owner": "qa_engineer",
       "object_kind": "supporting_artifact",
       "lifecycle_candidate": "review_required",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "testing-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/testing/templates/public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json",
+      "content_sha256": "a6bfa524e32f2f54c4665d58f18e87b5fa21845e17c14269be1cb1f978adb50f",
+      "registry_type": "professional_domain",
+      "structural_owner": "qa_engineer",
+      "authority_entry": "doc/testing/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "qa_engineer",
+      "object_kind": "supporting_artifact",
+      "lifecycle_candidate": "historical_candidate",
       "inventory_disposition": "retain_for_owner_review",
       "routing_batch": "testing-corpus-review",
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
@@ -4585,7 +5033,7 @@
     },
     {
       "path": "doc/world-runtime/README.md",
-      "content_sha256": "cd07afd481e733ff36206b95f42c30f659432dda5aedbc0ad1d672e1ba702d2e",
+      "content_sha256": "61e3e61fd83a13d3959108b700b2ecb7cd2a259b11630a0131128fabe3bf8962",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -4613,7 +5061,7 @@
     },
     {
       "path": "doc/world-runtime/design.md",
-      "content_sha256": "0e843109374e184cb14083522f19ab6f16fbccdf461bd94c67f3b347c63e6c46",
+      "content_sha256": "b0da2507c63bfdec9c4c2272cf227d41aee333beae273ad2762dd783f2eddd97",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -4851,7 +5299,7 @@
     },
     {
       "path": "doc/world-runtime/module/module-lifecycle.md",
-      "content_sha256": "a92672752dc4df98dbf0a8b6aa0a87ec5563be322fe11af6df3f8091dcaf054b",
+      "content_sha256": "02811053b1414c8676772728535c5bd76820cd1f6fece63ea2593f09d177261c",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -4963,7 +5411,7 @@
     },
     {
       "path": "doc/world-runtime/prd.md",
-      "content_sha256": "67f75e854210fe54016b05c46f19c45e620e42763d94de76d8f7cea4459f48ae",
+      "content_sha256": "f6fde455ef85e9243d1b9abdf854e6215c588b213bb7ca0c5a89de0b52c750f4",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -4971,6 +5419,34 @@
       "semantic_decision_owner": "runtime_engineer",
       "object_kind": "markdown_record",
       "lifecycle_candidate": "review_required",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "world-runtime-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/world-runtime/runtime/agent-cognition-lifecycle.design.md",
+      "content_sha256": "8f6e837c2dc27e4d97162bc3c20774dbd290ff6a86d71a85b54e69b244932290",
+      "registry_type": "professional_domain",
+      "structural_owner": "runtime_engineer",
+      "authority_entry": "doc/world-runtime/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "runtime_engineer",
+      "object_kind": "design",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "world-runtime-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/world-runtime/runtime/agent-cognition-lifecycle.prd.md",
+      "content_sha256": "e0dfc208ffff2ccd5a816f896de44ac9d482eb5dc397fa50a94307abdb80bf5a",
+      "registry_type": "professional_domain",
+      "structural_owner": "runtime_engineer",
+      "authority_entry": "doc/world-runtime/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "runtime_engineer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
       "inventory_disposition": "retain_for_owner_review",
       "routing_batch": "world-runtime-corpus-review",
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
@@ -5033,7 +5509,7 @@
     },
     {
       "path": "doc/world-runtime/runtime/provider-remote-https-bridge-operator-runbook.md",
-      "content_sha256": "9842a2c28c46a05b51e260b14e1df8995d73080b99cc1a9c1fd1d8866d8f1b48",
+      "content_sha256": "b416d52ebade447a0e2ba34a0315cb02b326f6ad2a97f6527bbe0478d9c313d1",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5047,7 +5523,7 @@
     },
     {
       "path": "doc/world-runtime/runtime/runtime-integration.md",
-      "content_sha256": "cca2ce0d6b341e22f2d4173459c2901b2a2a60e852358868141a3f9120305144",
+      "content_sha256": "4f3bb4998fe6c7dab802343b2a58e7f2ebb8c6d81813426265c600984f3c8804",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5243,7 +5719,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-interface.md",
-      "content_sha256": "e8dcaecc6d5c56cd23189894747ba88a039f9722896badceceb3592726bc5a78",
+      "content_sha256": "66cb9c87a46ba6ba8faea69d4cb828ca0a4bc01a38a0b230b03b949ec3e4710d",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5313,7 +5789,7 @@
     },
     {
       "path": "doc/world-simulator/README.md",
-      "content_sha256": "2344e9e310c078a55e30d72598600d0f472906c44b77cb6f1743f52a9990b018",
+      "content_sha256": "5815b23a497f088798a2c0d05693d82b7526f785029868ebef21db62b5fb72d7",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -5565,7 +6041,7 @@
     },
     {
       "path": "doc/world-simulator/llm/README.md",
-      "content_sha256": "8caa83130801579edddba09fcb1d9bfd29f5e0827d9169bc7476b6b08447b4b9",
+      "content_sha256": "ded30e954142f443db5c5c0d0c93b2bba370ee10e36f8f9b8f29d174a7091405",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -5578,8 +6054,36 @@
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
     },
     {
+      "path": "doc/world-simulator/llm/continuous-agent-harness.design.md",
+      "content_sha256": "8d4732c61cd94e613435e8dd96b9481c4f2c73cf9faac536a4119436d800f71f",
+      "registry_type": "professional_domain",
+      "structural_owner": "runtime_engineer",
+      "authority_entry": "doc/world-simulator/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "runtime_engineer",
+      "object_kind": "design",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "world-simulator-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/world-simulator/llm/continuous-agent-harness.prd.md",
+      "content_sha256": "b00e29c3d9a97b908bf0dddde93bd400c6a2e5d703681122fd937acb6cf7963e",
+      "registry_type": "professional_domain",
+      "structural_owner": "runtime_engineer",
+      "authority_entry": "doc/world-simulator/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "runtime_engineer",
+      "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "world-simulator-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
       "path": "doc/world-simulator/llm/decision-provider-contract.design.md",
-      "content_sha256": "370efdae20fcd77183ce4744ebf5bf95bfb3ea27a9b90bd842457b0efb126cf4",
+      "content_sha256": "8f4a2902572bc091b90b38fb362ff086327b1f3bf80181eb2eae8ecc991f6da0",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -5593,7 +6097,7 @@
     },
     {
       "path": "doc/world-simulator/llm/decision-provider-contract.prd.md",
-      "content_sha256": "3c999ec96de83d205c57c17191614e29f119519639cd78d70d2dc2885d47dd6a",
+      "content_sha256": "47dcfb0d7dbcf6dd8a09d98d89479d2aa88f3cfb3b42399887aebf3799439233",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -5691,7 +6195,7 @@
     },
     {
       "path": "doc/world-simulator/llm/provider-agent-experience-parity.design.md",
-      "content_sha256": "eca635c0013d4479f06171348ac461be4c8947d0e30af8cf276257654c513197",
+      "content_sha256": "e263358d754e733ce19c6eafb92d1cf292aad5cb96cca63daa225302ad1dddac",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -5705,7 +6209,7 @@
     },
     {
       "path": "doc/world-simulator/llm/provider-agent-experience-parity.prd.md",
-      "content_sha256": "958c979f506adb63b879563deb5bae12ba4934643b93afc4cc1d89d7e7137e28",
+      "content_sha256": "67e1277be39e5ec9d8dfe5f05b70f012c6f42e34f46183158853ffc2526d8f90",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -5719,7 +6223,7 @@
     },
     {
       "path": "doc/world-simulator/llm/provider-agent-profile-oasis7_p0_low_freq_npc.md",
-      "content_sha256": "2b38fabe08160c13ce6d3aec82336078f6373ccc5df2e1a8f44046ec084de370",
+      "content_sha256": "805f4882fd65a3f76405c2e23b98981b770ba81e773220ecdc6beec4393bf6ae",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -5733,7 +6237,7 @@
     },
     {
       "path": "doc/world-simulator/llm/provider-loopback-http-contract.design.md",
-      "content_sha256": "6d81100ae90d8f1f69f4eaf9d70b8d7910869b89d4a1f55e9996c75c6cdc1a50",
+      "content_sha256": "3299ee63833cde5848eebe1f1d3a00c0cc3491023e01897e3a307d576bdb51aa",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -5747,7 +6251,7 @@
     },
     {
       "path": "doc/world-simulator/llm/provider-loopback-http-contract.prd.md",
-      "content_sha256": "b515cb4e8136be81a9f8ccbdbc946b5b81be97552d58356e4e490cf11097ae43",
+      "content_sha256": "3d554a8c59c938e449cae37df99ece50a529a0f055523c03ce73a60a56883a16",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -5761,7 +6265,7 @@
     },
     {
       "path": "doc/world-simulator/m4/industrial-resource-flow-contract.design.md",
-      "content_sha256": "77893e82341afcf87e0cb6a5fb7dbde2f87ba372870fc2eeae0ab63598b82164",
+      "content_sha256": "9e3ec404066f247a58059e3a3f05c29cb8e03981ace14a7ae9ef2eed8f5c10b1",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -5775,7 +6279,7 @@
     },
     {
       "path": "doc/world-simulator/m4/industrial-resource-flow-contract.prd.md",
-      "content_sha256": "4b6c57b358bbbfbb57b83229978327321c9ce5bb563dfdf9419421e7f3d51bd5",
+      "content_sha256": "b485005408f037b9235e9c0b65cee8f061fbfdd171faf9d70561744b11d1c21f",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -5789,7 +6293,7 @@
     },
     {
       "path": "doc/world-simulator/prd/acceptance/provider-agent-parity-aggregation-template.md",
-      "content_sha256": "0be33da0c3599ae5203f3cdeff2e8942213f0c3d5fb6636439f90680d92349b5",
+      "content_sha256": "7826108ea9a4dccff9363b330732a1fd40e8ed2f9e542a40c781a2564f5c1976",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -5831,7 +6335,7 @@
     },
     {
       "path": "doc/world-simulator/prd/acceptance/provider-agent-parity-score-card.md",
-      "content_sha256": "2f2cab0d8a9682e3e58e39fa01223c3bcb0cd5712ec0f3c764af0930135410ca",
+      "content_sha256": "67959b408dfb62bcafff8b9dde6d68cc0b0932e558da5f0419e467eeaaba1e51",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -5887,7 +6391,7 @@
     },
     {
       "path": "doc/world-simulator/prd.index.md",
-      "content_sha256": "eb46620e8b4b05632902b051ce5637454008a86d2035a36873bf90d2377d0066",
+      "content_sha256": "ede64ccefa4827b4d4972681a3b7113a392867e9da031d35981bf2d1dcca14ec",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6195,7 +6699,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-control-plane-split-live-playback.design.md",
-      "content_sha256": "e99edc1c47257058bd09464dca140ed721e79656f39d76ba0a265e8d0167c1cf",
+      "content_sha256": "f58b9de2569834b81fd7f8e53fa6930edcfbbc0cb8aef84bd16ede3c41cf9725",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6209,7 +6713,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md",
-      "content_sha256": "4f7ee6410ea1891b9c9a4796be87cce34dab9030a2fc812b6fa900308044166c",
+      "content_sha256": "918c60f5e7a7c05bf5b13c4525888db29e48559c3b3d37e7e154abab3ab7cbfe",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6279,7 +6783,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md",
-      "content_sha256": "46cb5ce5644706bcf9b352941c7c71292cefe5f93a7e968c015337f7d8744ac9",
+      "content_sha256": "2257e9a173b6e012e7e366f8f1aaf8315624e935d8bd3dee6932e74a91f78683",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6293,7 +6797,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md",
-      "content_sha256": "0c4b01ff775597bdcd2a9df698a2abbcab8cd34850941fb40e352e56f3814f95",
+      "content_sha256": "6737bf54f35684ab4bc16b64bba2792c3ea4c5e4022c0a315f5ce1a717f2f569",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6335,7 +6839,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-manual.manual.md",
-      "content_sha256": "03145dd56b858c44be7279fe051b2159e4d5deae51f46b7ffa7e9f310d42b31e",
+      "content_sha256": "4da321111f5a00e019d8180762efa3537e67c1543298f03328b3ee1c54e04838",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6489,7 +6993,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.design.md",
-      "content_sha256": "4db46b03c0b8c7ba49789d33df22581c0b0f1969f0a0bdfe138342866cf8f1c1",
+      "content_sha256": "8ee4861cc1e73c1c7c949dbf4242c0a52f684287f78a292bb5b92a13b516137a",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",

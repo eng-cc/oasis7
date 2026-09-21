@@ -30,13 +30,13 @@ REQUIRED_FIELDS = {
     "path", "lifecycle", "semantic_role", "retention_owner", "domain_owner",
     "required_followup_roles", "authority", "backlink", "disposition", "rationale", "residual_risk",
 }
-EXPECTED_SNAPSHOT = "144e9f4bf1f4d18c27e2fb17823cc89343d97206"
+EXPECTED_SNAPSHOT = "ddbc5a7d081cffd0c17697397ee89fbd69a98cd6"
 EXPECTED_LIFECYCLE_COUNTS = {
     "AMBIGUOUS_LIFECYCLE": 0,
     "ARCHIVED_PROVENANCE": 7,
     "CURRENT_NAVIGATION": 1,
     "WINDOW_OBSERVATION": 23,
-    "HISTORICAL_PROVENANCE": 87,
+    "HISTORICAL_PROVENANCE": 90,
     "SUPPORTING_ARTIFACT": 6,
     "TEMPLATE_NOT_EVIDENCE": 1,
 }
@@ -268,7 +268,10 @@ def generated_inventory(root: Path) -> dict[str, object]:
             ),
         }
         if batch4_source:
-            entry["evidence_window"] = "2026-06-governed-bootstrap" if "2026-06" in path else "2026-05-live-candidate-transition"
+            if "validator-triad" in path and "2026-09-15" in path:
+                entry["evidence_window"] = "2026-09-15-validator-triad-candidate-staging"
+            else:
+                entry["evidence_window"] = "2026-06-governed-bootstrap" if "2026-06" in path else "2026-05-live-candidate-transition"
             entry["claim_boundary"] = "historical_provenance_only_not_current_readiness_operator_sop_or_public_claim"
             entry["content_sha256"] = hashlib.sha256((root / path).read_bytes()).hexdigest()
         if batch5_source:
@@ -311,7 +314,7 @@ def generated_inventory(root: Path) -> dict[str, object]:
         "version": 1,
         "scope": "doc/testing/evidence/** excluding inventory.json",
         "snapshot": EXPECTED_SNAPSHOT,
-        "freshness_boundary": "2026-08-02 batch-1 inventory; it records classification, not a release-readiness verdict.",
+        "freshness_boundary": "2026-09-21 frozen-HEAD corpus inventory; classification and provenance only, not current runtime, recovery, fleet health, deployment readiness, operator authority, or public status.",
         "entries": entries,
     }
 
@@ -400,8 +403,8 @@ def check(root: Path, inventory_path: Path) -> list[str]:
             "public_testnet_faucet_transition",
         }
     ]
-    if len(batch4_entries) != 27:
-        errors.append(f"public-testnet-transition-count: expected 27, got {len(batch4_entries)}")
+    if len(batch4_entries) != 30:
+        errors.append(f"public-testnet-transition-count: expected 30, got {len(batch4_entries)}")
     for entry in batch4_entries:
         for field in ("evidence_window", "claim_boundary", "content_sha256"):
             if not isinstance(entry.get(field), str) or not entry[field].strip():

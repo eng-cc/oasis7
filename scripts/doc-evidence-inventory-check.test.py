@@ -57,6 +57,16 @@ def main() -> None:
     root = fixture()
     try:
         run(root)
+        inventory = json.loads((root / "doc/testing/evidence/inventory.json").read_text(encoding="utf-8"))
+        triad_entries = [
+            entry for entry in inventory["entries"]
+            if "validator-triad" in entry["path"] and "2026-09-15" in entry["path"]
+        ]
+        assert len(triad_entries) == 3, triad_entries
+        assert all(
+            entry["evidence_window"] == "2026-09-15-validator-triad-candidate-staging"
+            for entry in triad_entries
+        ), triad_entries
     finally:
         shutil.rmtree(root)
 
