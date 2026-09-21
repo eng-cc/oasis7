@@ -6,6 +6,7 @@ import subprocess
 import sys
 import os
 import json
+from types import SimpleNamespace
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('recovery', Path(__file__).with_name('loop_recovery.py'))
@@ -128,15 +129,20 @@ class RecoveryTests(unittest.TestCase):
                       'repository': 'eng-cc/oasis7', 'issue_number': 1, 'binding': {'task_uid': uid}}
             module.record_action(Path(tmp), uid, action)
             with patch.object(loop_contracts, 'GitHubAuthority') as authority, patch.object(loop_contracts, 'validate_contracts') as validate:
+                adapter = SimpleNamespace(
+                    contracts=loop_contracts, policy_commit='d' * 40,
+                    policy_digest='sha256:' + '1' * 64,
+                    bridge_commit='3' * 40, bridge_digest='sha256:' + '2' * 64,
+                )
                 authority.return_value.api.return_value = [[comment, comment]]
                 validate.return_value = {'status': 'passed'}
-                self.assertEqual(module.reconcile(Path(tmp), uid, Path(tmp))['status'], 'reconcile_required')
+                self.assertEqual(module.reconcile(Path(tmp), uid, Path(tmp), publication_adapter=adapter)['status'], 'reconcile_required')
                 validate.assert_not_called()
                 authority.return_value.api.return_value = [[comment]]
                 validate.return_value = {'status': 'blocked'}
-                self.assertEqual(module.reconcile(Path(tmp), uid, Path(tmp))['status'], 'reconcile_required')
+                self.assertEqual(module.reconcile(Path(tmp), uid, Path(tmp), publication_adapter=adapter)['status'], 'reconcile_required')
                 validate.return_value = {'status': 'passed'}
-                self.assertEqual(module.reconcile(Path(tmp), uid, Path(tmp))['status'], 'can_continue')
+                self.assertEqual(module.reconcile(Path(tmp), uid, Path(tmp), publication_adapter=adapter)['status'], 'can_continue')
                 self.assertTrue(all(call.kwargs == {'paginate': True} for call in authority.return_value.api.call_args_list))
 
     def test_invalid_publication_supersession_requires_exact_action_and_sole_stable_blocker(self):
@@ -154,13 +160,28 @@ class RecoveryTests(unittest.TestCase):
 
         def pending_result(tmp, comments, validation, **kwargs):
             module.record_action(Path(tmp), uid, action)
-            with patch.object(loop_contracts, 'GitHubAuthority') as authority, \
-                 patch.object(loop_contracts, 'validate_contracts', return_value=validation):
-                authority.return_value.api.return_value = [comments]
-                return module.reconcile(Path(tmp), uid, Path(tmp), **kwargs)
+            authority = unittest.mock.Mock()
+            authority.return_value.api.return_value = [comments]
+            contracts = SimpleNamespace(
+                GitHubAuthority=authority,
+                MARKER=loop_contracts.MARKER,
+                REPOSITORY=loop_contracts.REPOSITORY,
+                contract_digest=loop_contracts.contract_digest,
+                validate_contracts=unittest.mock.Mock(return_value=validation),
+            )
+            adapter = SimpleNamespace(
+                contracts=contracts,
+                policy_commit='d' * 40,
+                policy_digest='sha256:' + '1' * 64,
+                bridge_commit='3' * 40,
+                bridge_digest='sha256:' + '2' * 64,
+            )
+            with patch.dict(sys.modules, {'loop_contracts': SimpleNamespace()}):
+                return module.reconcile(
+                    Path(tmp), uid, Path(tmp), publication_adapter=adapter, **kwargs
+                )
 
-        blocker = {'status': 'blocked', 'blockers': ['contract does not cover target delivery'],
-                   'blocker_codes': ['target_delivery_not_covered']}
+        blocker = {'status': 'blocked', 'blockers': ['contract does not cover target delivery']}
         with tempfile.TemporaryDirectory() as tmp:
             self.assertEqual(pending_result(tmp, [comment], blocker)['status'], 'reconcile_required')
         with tempfile.TemporaryDirectory() as tmp:
@@ -178,6 +199,12 @@ class RecoveryTests(unittest.TestCase):
                              'target_delivery_not_covered')
             self.assertEqual(resolution['readback_evidence']['publication_ref'],
                              {'issue_number': 1, 'comment_id': 42})
+            self.assertEqual(resolution['readback_evidence']['supersession']['policy_commit'],
+                             'd' * 40)
+            self.assertEqual(resolution['readback_evidence']['supersession']['bridge_commit'],
+                             '3' * 40)
+            self.assertEqual(resolution['readback_evidence']['supersession']['bridge_digest'],
+                             'sha256:' + '2' * 64)
         for selected, comments, validation in (
             ('publication:wrong', [comment], blocker),
             (action_id, [comment, comment], blocker),
@@ -186,6 +213,9 @@ class RecoveryTests(unittest.TestCase):
                                     'blocker_codes': ['target_delivery_not_covered', 'other']}),
             (action_id, [comment], {'status': 'blocked', 'blockers': ['other'],
                                     'blocker_codes': ['other']}),
+            (action_id, [comment], {'status': 'blocked',
+                                    'blockers': ['contract does not cover target delivery'],
+                                    'blocker_codes': ['different_authority']}),
         ):
             with self.subTest(selected=selected, comments=len(comments), validation=validation):
                 with tempfile.TemporaryDirectory() as tmp:
