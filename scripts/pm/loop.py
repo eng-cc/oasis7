@@ -326,6 +326,7 @@ def main():
     parser.add_argument('--tool-root', type=Path)
     parser.add_argument('--task-uid', required=True)
     parser.add_argument('--manual-request-ref')
+    parser.add_argument('--supersede-invalid-publication')
     parser.add_argument('--loop-binding', type=Path)
     parser.add_argument('--contract', type=Path)
     parser.add_argument('--migrate-epoch', type=int)
@@ -340,6 +341,8 @@ def main():
             subprocess.run(['git', '-C', str(root), 'fetch', '--no-tags', 'origin', 'main:refs/remotes/origin/main'], check=True, capture_output=True)
         if args.command in ('bind', 'resume-check', 'recover', 'publish-contract') and not args.manual_request_ref:
             raise ValueError('explicit current manual request reference required')
+        if args.supersede_invalid_publication and args.command != 'recover':
+            raise ValueError('--supersede-invalid-publication is valid only with recover')
         if args.command == 'bind':
             if not args.loop_binding: raise ValueError('--loop-binding required')
             binding = json.loads(args.loop_binding.read_text())
@@ -397,7 +400,12 @@ def main():
             if args.command == 'recover':
                 task = recovery_task(root, task, args.tool_root)
                 with Reservation(common_dir(root), args.task_uid, (task.get('loop_binding') or {}).get('write_scope', []), recovery=True) as reservation:
-                    recovery = reconcile(common_dir(root), args.task_uid, root, args.tool_root, reservation_fd=reservation.handle.fileno())
+                    recovery = reconcile(
+                        common_dir(root), args.task_uid, root, args.tool_root,
+                        reservation_fd=reservation.handle.fileno(),
+                        supersede_invalid_publication=args.supersede_invalid_publication,
+                        manual_request_ref=args.manual_request_ref,
+                    )
                 if recovery['pending_actions']:
                     print(json.dumps(recovery, sort_keys=True))
                     return 2
@@ -449,7 +457,12 @@ def main():
                 )
                 if result['status'] in ('passed', 'legacy') and args.command == 'recover':
                     with Reservation(common_dir(root), args.task_uid, (task.get('loop_binding') or {}).get('write_scope', []), recovery=True) as reservation:
-                        result.update(reconcile(common_dir(root), args.task_uid, root, args.tool_root, reservation_fd=reservation.handle.fileno()))
+                        result.update(reconcile(
+                            common_dir(root), args.task_uid, root, args.tool_root,
+                            reservation_fd=reservation.handle.fileno(),
+                            supersede_invalid_publication=args.supersede_invalid_publication,
+                            manual_request_ref=args.manual_request_ref,
+                        ))
             if args.command == 'publish-contract' and result['status'] == 'passed':
                 if not args.contract: raise ValueError('--contract required')
                 validator = _trusted_module(args.tool_root, root, task['loop_binding'], 'loop_contracts')

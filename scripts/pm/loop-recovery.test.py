@@ -139,4 +139,61 @@ class RecoveryTests(unittest.TestCase):
                 self.assertEqual(module.reconcile(Path(tmp), uid, Path(tmp))['status'], 'can_continue')
                 self.assertTrue(all(call.kwargs == {'paginate': True} for call in authority.return_value.api.call_args_list))
 
+    def test_invalid_publication_supersession_requires_exact_action_and_sole_stable_blocker(self):
+        import loop_contracts
+        uid = 'task_' + 'a' * 32
+        contract = {'contract_id': 'c', 'revision': 1, 'content_refs': [{'clauses': ['one']}]}
+        expected = json.dumps(contract, sort_keys=True)
+        action_id = 'publication:' + __import__('hashlib').sha256(expected.encode()).hexdigest()
+        payload = {'marker': loop_contracts.MARKER, 'task_uid': uid, 'contract': contract,
+                   'contract_digest': loop_contracts.contract_digest(contract)}
+        comment = {'id': 42, 'body': json.dumps(payload)}
+        action = {'action_id': action_id, 'kind': 'publish_contract', 'expected': expected,
+                  'repository': 'eng-cc/oasis7', 'issue_number': 1,
+                  'binding': {'task_uid': uid, 'manual_request_ref': 'original-request'}}
+
+        def pending_result(tmp, comments, validation, **kwargs):
+            module.record_action(Path(tmp), uid, action)
+            with patch.object(loop_contracts, 'GitHubAuthority') as authority, \
+                 patch.object(loop_contracts, 'validate_contracts', return_value=validation):
+                authority.return_value.api.return_value = [comments]
+                return module.reconcile(Path(tmp), uid, Path(tmp), **kwargs)
+
+        blocker = {'status': 'blocked', 'blockers': ['contract does not cover target delivery'],
+                   'blocker_codes': ['target_delivery_not_covered']}
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(pending_result(tmp, [comment], blocker)['status'], 'reconcile_required')
+        with tempfile.TemporaryDirectory() as tmp:
+            result = pending_result(
+                tmp, [comment], blocker, supersede_invalid_publication=action_id,
+                manual_request_ref='current-user-authorization',
+            )
+            self.assertEqual(result['status'], 'can_continue')
+            journal = next(module._directory(Path(tmp)).glob('*.actions.jsonl'))
+            resolution = json.loads(journal.read_text().splitlines()[-1])
+            self.assertEqual(resolution['readback_evidence']['supersession']['action_id'], action_id)
+            self.assertEqual(resolution['readback_evidence']['supersession']['manual_request_ref'],
+                             'current-user-authorization')
+            self.assertEqual(resolution['readback_evidence']['supersession']['blocker_code'],
+                             'target_delivery_not_covered')
+            self.assertEqual(resolution['readback_evidence']['publication_ref'],
+                             {'issue_number': 1, 'comment_id': 42})
+        for selected, comments, validation in (
+            ('publication:wrong', [comment], blocker),
+            (action_id, [comment, comment], blocker),
+            (action_id, [comment], {'status': 'blocked',
+                                    'blockers': ['contract does not cover target delivery', 'other'],
+                                    'blocker_codes': ['target_delivery_not_covered', 'other']}),
+            (action_id, [comment], {'status': 'blocked', 'blockers': ['other'],
+                                    'blocker_codes': ['other']}),
+        ):
+            with self.subTest(selected=selected, comments=len(comments), validation=validation):
+                with tempfile.TemporaryDirectory() as tmp:
+                    result = pending_result(
+                        tmp, comments, validation,
+                        supersede_invalid_publication=selected,
+                        manual_request_ref='current-user-authorization',
+                    )
+                    self.assertEqual(result['status'], 'reconcile_required')
+
 if __name__ == '__main__': unittest.main()
