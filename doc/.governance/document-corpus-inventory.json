@@ -15,7 +15,7 @@
     },
     {
       "path": "doc/.governance/document-semantic-review-overrides.json",
-      "content_sha256": "b4b52139eeb03ea34907f8cc1ff3b4e929be6501babf74bed95fea22c68ad208"
+      "content_sha256": "83122735befdfc1c268fd3105c1bd86ec9a7a053d0da5024f6906fcea898bf17"
     },
     {
       "path": "doc/testing/evidence/inventory.json",
@@ -539,7 +539,7 @@
     },
     {
       "path": "doc/engineering/workflow/source-of-truth.md",
-      "content_sha256": "56f68a0529a0b03af8c62bfb2b2deda3f728ddf19bb1c52e9b312f0ed4602eea",
+      "content_sha256": "9f78bb9675c7c6e9b61534960d69c1d8d55f8125fcd607f13adaf75bf7896861",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -861,7 +861,7 @@
     },
     {
       "path": "doc/game/gameplay/gameplay-longrun-p0-replay-rollback-runbook-2026-03-06.md",
-      "content_sha256": "d0b6a3aaf5c43e44d174919a21ded63432ceb45422975dda79b106878e7df6da",
+      "content_sha256": "4f2e780167ec90732247694a55d7074dd4f582d8b8bc9920fcf79e603234192c",
       "registry_type": "professional_domain",
       "structural_owner": "gameplay_designer",
       "authority_entry": "doc/game/README.md",
