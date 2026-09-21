@@ -58,27 +58,32 @@ def main() -> None:
     try:
         run(root)
         inventory = json.loads((root / "doc/testing/evidence/inventory.json").read_text(encoding="utf-8"))
-        triad_entries = [
-            entry for entry in inventory["entries"]
+        fields = ("lifecycle", "semantic_role", "evidence_window", "claim_boundary")
+        triad_boundaries = {
+            entry["path"]: tuple(entry[field] for field in fields)
+            for entry in inventory["entries"]
             if "validator-triad" in entry["path"] and "2026-09-15" in entry["path"]
-        ]
-        assert len(triad_entries) == 3, triad_entries
-        current_inputs = [entry for entry in triad_entries if entry["lifecycle"] == "CURRENT_OPERATOR_INPUT"]
-        historical_candidates = [entry for entry in triad_entries if entry["lifecycle"] == "HISTORICAL_PROVENANCE"]
-        assert len(current_inputs) == 2, current_inputs
-        assert {entry["semantic_role"] for entry in current_inputs} == {
-            "public_testnet_bootstrap_peer_input",
-            "public_testnet_bootstrap_registry_input",
-        }, current_inputs
-        assert all(entry["evidence_window"] == "current-committed-bootstrap-input" for entry in current_inputs)
-        assert all(
-            entry["claim_boundary"]
-            == "current_operator_input_only_not_current_health_readiness_deployment_completion_or_public_status"
-            for entry in current_inputs
-        )
-        assert len(historical_candidates) == 1, historical_candidates
-        assert historical_candidates[0]["evidence_window"] == "2026-09-15-validator-triad-candidate-staging"
-        assert historical_candidates[0]["claim_boundary"] == "historical_provenance_only_not_current_readiness_operator_sop_or_public_claim"
+        }
+        assert triad_boundaries == {
+            "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-bootstrap-peers-2026-09-15.txt": (
+                "CURRENT_OPERATOR_INPUT",
+                "public_testnet_bootstrap_peer_input",
+                "current-committed-bootstrap-input",
+                "current_operator_input_only_not_current_health_readiness_deployment_completion_or_public_status",
+            ),
+            "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json": (
+                "CURRENT_OPERATOR_INPUT",
+                "public_testnet_bootstrap_registry_input",
+                "current-committed-bootstrap-input",
+                "current_operator_input_only_not_current_health_readiness_deployment_completion_or_public_status",
+            ),
+            "doc/testing/evidence/public-testnet-validator-triad-authority-2026-09-15.json": (
+                "HISTORICAL_PROVENANCE",
+                "public_testnet_transition",
+                "2026-09-15-validator-triad-candidate-staging",
+                "historical_provenance_only_not_current_readiness_operator_sop_or_public_claim",
+            ),
+        }
     finally:
         shutil.rmtree(root)
 
@@ -114,6 +119,20 @@ def main() -> None:
         path.write_text(json.dumps(data), encoding="utf-8")
     semantic_drift.expected = "lifecycle-counts"  # type: ignore[attr-defined]
     mutate(fixture(), semantic_drift)
+
+    def swapped_triad_identity(root: Path) -> None:
+        path = root / "doc/testing/evidence/inventory.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        peer = next(entry for entry in data["entries"] if entry["path"].endswith("validator-triad-bootstrap-peers-2026-09-15.txt"))
+        authority = next(entry for entry in data["entries"] if entry["path"].endswith("validator-triad-authority-2026-09-15.json"))
+        fields = ("lifecycle", "semantic_role", "evidence_window", "claim_boundary")
+        peer_values = {field: peer[field] for field in fields}
+        for field in fields:
+            peer[field] = authority[field]
+            authority[field] = peer_values[field]
+        path.write_text(json.dumps(data), encoding="utf-8")
+    swapped_triad_identity.expected = "classification-drift"  # type: ignore[attr-defined]
+    mutate(fixture(), swapped_triad_identity)
 
     def stale_navigation(root: Path) -> None:
         path = root / "doc/testing/evidence/README.md"

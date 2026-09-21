@@ -440,22 +440,34 @@ def check(root: Path, inventory_path: Path) -> list[str]:
         for field in ("evidence_window", "claim_boundary", "content_sha256"):
             if not isinstance(entry.get(field), str) or not entry[field].strip():
                 errors.append(f"public-testnet-transition-{field}: {entry.get('path')}")
-    operator_inputs = [entry for entry in entries if isinstance(entry, dict) and entry.get("lifecycle") == "CURRENT_OPERATOR_INPUT"]
-    expected_operator_roles = {
-        "public_testnet_bootstrap_peer_input",
-        "public_testnet_bootstrap_registry_input",
+    triad_boundary_fields = ("lifecycle", "semantic_role", "evidence_window", "claim_boundary")
+    expected_triad_boundaries = {
+        "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-bootstrap-peers-2026-09-15.txt": (
+            "CURRENT_OPERATOR_INPUT",
+            "public_testnet_bootstrap_peer_input",
+            "current-committed-bootstrap-input",
+            "current_operator_input_only_not_current_health_readiness_deployment_completion_or_public_status",
+        ),
+        "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json": (
+            "CURRENT_OPERATOR_INPUT",
+            "public_testnet_bootstrap_registry_input",
+            "current-committed-bootstrap-input",
+            "current_operator_input_only_not_current_health_readiness_deployment_completion_or_public_status",
+        ),
+        "doc/testing/evidence/public-testnet-validator-triad-authority-2026-09-15.json": (
+            "HISTORICAL_PROVENANCE",
+            "public_testnet_transition",
+            "2026-09-15-validator-triad-candidate-staging",
+            "historical_provenance_only_not_current_readiness_operator_sop_or_public_claim",
+        ),
     }
-    if (
-        len(operator_inputs) != 2
-        or {entry.get("semantic_role") for entry in operator_inputs} != expected_operator_roles
-        or any(entry.get("evidence_window") != "current-committed-bootstrap-input" for entry in operator_inputs)
-        or any(
-            entry.get("claim_boundary")
-            != "current_operator_input_only_not_current_health_readiness_deployment_completion_or_public_status"
-            for entry in operator_inputs
-        )
-    ):
-        errors.append("current-operator-input-boundary: expected exact peer and registry inputs")
+    actual_triad_boundaries = {
+        entry.get("path"): tuple(entry.get(field) for field in triad_boundary_fields)
+        for entry in entries
+        if isinstance(entry, dict) and entry.get("path") in expected_triad_boundaries
+    }
+    if actual_triad_boundaries != expected_triad_boundaries:
+        errors.append("current-operator-input-boundary: expected exact path-bound triad classifications")
     batch5_entries = [
         entry for entry in entries if isinstance(entry, dict) and entry.get("semantic_role") in {
             "historical_governance_registry_drill",
