@@ -622,6 +622,8 @@ def publish_contract(tool_root,target_repo_root,binding,contract,authority_reade
         upstream=validate_contracts(tool_root,target_repo_root,{**binding,"input_contracts":contract["upstream_contracts"]},reader,purpose="new_tasks")
         if upstream["blockers"]:
             return upstream
+        if binding.get("target_delivery") not in contract.get("scope",[]):
+            return result(["contract does not cover target delivery"])
         publication=(reader.publish(binding,contract,before_write=before_write) if before_write is not None else reader.publish(binding,contract))
         reference={"contract_id":contract["contract_id"],"revision":contract["revision"],"contract_digest":contract_digest(contract),"publication_ref":publication,"consumed_clauses":[c for item in contract["content_refs"] for c in item["clauses"]]}
         qualified = []
