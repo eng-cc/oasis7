@@ -105,6 +105,14 @@ class ContractTests(unittest.TestCase):
         self.assertNotEqual(self.source,self.merged)
         self.assertEqual(self.check()["status"],"passed")
 
+    def test_target_delivery_mismatch_has_stable_blocker_code(self):
+        self.contract["scope"] = ["different"]
+        self.record["contract"] = copy.deepcopy(self.contract)
+        self.ref["contract_digest"] = self.api.contract_digest(self.contract)
+        result = self.check()
+        self.assertEqual(result["blockers"], ["contract does not cover target delivery"])
+        self.assertEqual(result["blocker_codes"], ["target_delivery_not_covered"])
+
     def test_revoked_input_blocks_next_admission(self):
         self.record["contract"]["eligibility"]["in_flight"]=False
         self.assertEqual(self.check()["status"],"blocked")
