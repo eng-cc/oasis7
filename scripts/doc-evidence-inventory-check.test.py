@@ -131,7 +131,7 @@ def main() -> None:
             peer[field] = authority[field]
             authority[field] = peer_values[field]
         path.write_text(json.dumps(data), encoding="utf-8")
-    swapped_triad_identity.expected = "classification-drift"  # type: ignore[attr-defined]
+    swapped_triad_identity.expected = "current-operator-input-boundary"  # type: ignore[attr-defined]
     mutate(fixture(), swapped_triad_identity)
 
     def stale_navigation(root: Path) -> None:
