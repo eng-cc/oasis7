@@ -569,27 +569,23 @@ impl WorldKernel {
                         message: format!("empty public_key for agent unbinding: {}", agent_id),
                     });
                 }
-                if let Some(bound_player_id) = self.model.agent_player_bindings.get(agent_id) {
-                    if bound_player_id != player_id {
-                        return Err(PersistError::ReplayConflict {
-                            message: format!(
-                                "player unbinding mismatch for agent {}: expected={} actual={}",
-                                agent_id, bound_player_id, player_id
-                            ),
-                        });
-                    }
+                if let Some(bound_player_id) = self.model.agent_player_bindings.get(agent_id)
+                    && bound_player_id != player_id
+                {
+                    return Err(PersistError::ReplayConflict {
+                        message: format!(
+                            "player unbinding mismatch for agent {}: expected={} actual={}",
+                            agent_id, bound_player_id, player_id
+                        ),
+                    });
                 }
                 if let Some(existing_public_key) =
                     self.model.agent_player_public_key_bindings.get(agent_id)
+                    && normalized_public_key.as_deref() != Some(existing_public_key.as_str())
                 {
-                    if normalized_public_key.as_deref() != Some(existing_public_key.as_str()) {
-                        return Err(PersistError::ReplayConflict {
-                            message: format!(
-                                "public_key mismatch for agent unbinding: {}",
-                                agent_id
-                            ),
-                        });
-                    }
+                    return Err(PersistError::ReplayConflict {
+                        message: format!("public_key mismatch for agent unbinding: {}", agent_id),
+                    });
                 }
                 self.model.agent_player_bindings.remove(agent_id);
                 self.model.agent_player_public_key_bindings.remove(agent_id);

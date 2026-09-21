@@ -43,6 +43,8 @@ pub(super) fn canonical_runtime_provider_env_lock() -> &'static Mutex<()> {
     LOCK.get_or_init(|| Mutex::new(()))
 }
 
+#[path = "runtime_live/advance_runtime_server.rs"]
+mod advance_runtime_server;
 #[path = "runtime_live/advance_tick.rs"]
 mod advance_tick;
 mod authoritative;
@@ -172,6 +174,7 @@ pub struct ViewerRuntimeLiveServer {
     runtime_action_players: BTreeMap<u64, String>,
     consumed_rollback_operator_nonces: BTreeSet<String>,
     prompt_control_authority: PromptControlRuntimeAuthority,
+    hosted_local_mock_test_lane_active: bool,
     authoritative_recovery_write_fence: Option<String>,
     smelter_affordability_debug_agent_id: Option<String>,
     governance_vote_quote_debug_agent_id: Option<String>,
@@ -275,6 +278,20 @@ impl ViewerRuntimeLiveServer {
             )
             .map_err(ViewerRuntimeLiveServerError::Init)?;
         }
+        let hosted_local_mock_test_lane_enabled =
+            control_plane::hosted_local_mock_test_lane_enabled(config.hosted_public_join_mode);
+        let hosted_local_mock_test_lane_active = if hosted_local_mock_test_lane_enabled
+            && chain_linked
+            && world.state().agents.is_empty()
+        {
+            true
+        } else {
+            control_plane::install_hosted_local_mock_test_capability_fixtures(
+                &mut world,
+                config.hosted_public_join_mode,
+            )
+            .map_err(ViewerRuntimeLiveServerError::Init)?
+        };
         let initial_world_time = world.state().time;
         let mut llm_sidecar = match seed_model.as_ref() {
             Some(model) => {
@@ -282,6 +299,9 @@ impl ViewerRuntimeLiveServer {
             }
             None => RuntimeLlmSidecar::new(config.decision_mode),
         };
+        if hosted_local_mock_test_lane_active {
+            llm_sidecar.enable_hosted_local_mock_test_lane();
+        }
         if let Some(provider_lineage_store) = config.provider_lineage_store_path() {
             llm_sidecar.configure_provider_lineage_store(provider_lineage_store);
             llm_sidecar
@@ -384,6 +404,7 @@ impl ViewerRuntimeLiveServer {
                 .map(|generation| generation.consumed_rollback_operator_nonces.clone())
                 .unwrap_or_default(),
             prompt_control_authority,
+            hosted_local_mock_test_lane_active,
             authoritative_recovery_write_fence: None,
             smelter_affordability_debug_agent_id: None,
             governance_vote_quote_debug_agent_id: None,
@@ -471,11 +492,18 @@ impl ViewerRuntimeLiveServer {
                 Ok(0) => return Ok(()),
                 Ok(_) => {
                     let trimmed = line.trim();
-                    if !trimmed.is_empty() {
-                        if let Ok(request) = serde_json::from_str::<ViewerRequest>(trimmed) {
-                            let mut server = lock_shared_server(&shared)?;
-                            server.handle_request(request, &mut session, &mut writer)?;
-                        }
+                    if !trimmed.is_empty()
+                        && let Ok(request) = serde_json::from_str::<ViewerRequest>(trimmed)
+                    {
+                        let chain_prime =
+                            Self::prime_shared_request_if_needed(&shared, &request, &session)?;
+                        let mut server = lock_shared_server(&shared)?;
+                        server.handle_request_with_chain_prime(
+                            request,
+                            &mut session,
+                            &mut writer,
+                            chain_prime,
+                        )?;
                     }
                 }
                 Err(err) if is_timeout_error(&err) => {}
@@ -495,18 +523,17 @@ impl ViewerRuntimeLiveServer {
                 && chain_link_enabled
                 && session.initial_snapshot_sent
                 && session.should_poll_chain(chain_poll_interval)
-            {
-                if let Err(err) = Self::sync_chain_linked_runtime_minimized_lock(
+                && let Err(err) = Self::sync_chain_linked_runtime_minimized_lock(
                     &shared,
                     &mut session,
                     &mut writer,
-                ) {
-                    emit_stderr_or_event(
-                        Level::WARN,
-                        format!("viewer runtime live: chain sync skipped: {err:?}").as_str(),
-                        "viewer runtime live chain sync skipped",
-                    );
-                }
+                )
+            {
+                emit_stderr_or_event(
+                    Level::WARN,
+                    format!("viewer runtime live: chain sync skipped: {err:?}").as_str(),
+                    "viewer runtime live chain sync skipped",
+                );
             }
 
             let mut server = lock_shared_server(&shared)?;
@@ -531,10 +558,10 @@ impl ViewerRuntimeLiveServer {
                 Ok(0) => return Ok(()),
                 Ok(_) => {
                     let trimmed = line.trim();
-                    if !trimmed.is_empty() {
-                        if let Ok(request) = serde_json::from_str::<ViewerRequest>(trimmed) {
-                            self.handle_request(request, &mut session, &mut writer)?;
-                        }
+                    if !trimmed.is_empty()
+                        && let Ok(request) = serde_json::from_str::<ViewerRequest>(trimmed)
+                    {
+                        self.handle_request(request, &mut session, &mut writer)?;
                     }
                 }
                 Err(err) if is_timeout_error(&err) => {}
@@ -546,14 +573,13 @@ impl ViewerRuntimeLiveServer {
                 && self.chain_link_enabled()
                 && session.initial_snapshot_sent
                 && session.should_poll_chain(self.config.chain_poll_interval)
+                && let Err(err) = self.sync_chain_linked_runtime(&mut session, &mut writer)
             {
-                if let Err(err) = self.sync_chain_linked_runtime(&mut session, &mut writer) {
-                    emit_stderr_or_event(
-                        Level::WARN,
-                        format!("viewer runtime live: chain sync skipped: {err:?}").as_str(),
-                        "viewer runtime live chain sync skipped",
-                    );
-                }
+                emit_stderr_or_event(
+                    Level::WARN,
+                    format!("viewer runtime live: chain sync skipped: {err:?}").as_str(),
+                    "viewer runtime live chain sync skipped",
+                );
             }
 
             if self.authoritative_recovery_write_fence.is_none() {
@@ -567,6 +593,16 @@ impl ViewerRuntimeLiveServer {
         request: ViewerRequest,
         session: &mut RuntimeLiveSession,
         writer: &mut BufWriter<TcpStream>,
+    ) -> Result<(), ViewerRuntimeLiveServerError> {
+        self.handle_request_with_chain_prime(request, session, writer, None)
+    }
+
+    fn handle_request_with_chain_prime(
+        &mut self,
+        request: ViewerRequest,
+        session: &mut RuntimeLiveSession,
+        writer: &mut BufWriter<TcpStream>,
+        mut chain_prime: Option<Result<(), ViewerRuntimeLiveServerError>>,
     ) -> Result<(), ViewerRuntimeLiveServerError> {
         self.resolve_authoritative_recovery_write_fence()?;
         if matches!(&request, ViewerRequest::QuoteRevokeSocialFact { .. })
@@ -628,6 +664,35 @@ impl ViewerRuntimeLiveServer {
                 ..
             } => {
                 let mut selected = Vec::new();
+                let hosted_local_mock_capability_ready = if version >= 2
+                    && self.hosted_local_mock_test_lane_active
+                    && self.chain_link_enabled()
+                    && self.world.state().agents.is_empty()
+                    && !session.chain_runtime_authoritatively_primed
+                {
+                    let prime_result = chain_prime.take().unwrap_or_else(|| {
+                        self.prime_chain_linked_runtime_for_snapshot().map(|_| ())
+                    });
+                    match prime_result {
+                        Ok(()) => {
+                            session.chain_runtime_authoritatively_primed = true;
+                        }
+                        Err(error) => emit_stderr_or_event(
+                            Level::WARN,
+                            format!(
+                                "viewer runtime live: Hosted local-mock HelloV2 prime skipped: {error:?}"
+                            )
+                            .as_str(),
+                            "viewer runtime live Hosted local-mock HelloV2 prime skipped",
+                        ),
+                    }
+                    !self.world.state().agents.is_empty()
+                        && !self.world.capability_invocation_contexts().is_empty()
+                } else {
+                    !self.hosted_local_mock_test_lane_active
+                        || (!self.world.state().agents.is_empty()
+                            && !self.world.capability_invocation_contexts().is_empty())
+                };
                 if version >= 2 {
                     if self.authoritative_recovery_dir().is_some()
                         && offered.iter().any(|capability| {
@@ -646,7 +711,8 @@ impl ViewerRuntimeLiveServer {
                     {
                         selected.push(REVOKE_SOCIAL_FACT_QUOTE_CAPABILITY.to_string());
                     }
-                    if self.llm_sidecar.supports_prompt_control_result()
+                    if hosted_local_mock_capability_ready
+                        && self.llm_sidecar.supports_prompt_control_result()
                         && offered
                             .iter()
                             .any(|capability| capability == PROMPT_CONTROL_RESULT_CAPABILITY)
@@ -690,19 +756,33 @@ impl ViewerRuntimeLiveServer {
                 };
             }
             ViewerRequest::RequestSnapshot => {
-                if self.chain_link_enabled() && !session.initial_snapshot_sent {
-                    if let Err(err) = self.prime_chain_linked_runtime_for_snapshot() {
-                        if self.config.chain_link_policy == ChainLinkPolicy::Enforcing {
-                            return Err(err);
+                // HelloV2 may already have authoritatively primed this
+                // chain-linked server. Reusing that validated projection
+                // avoids a second status read racing the first snapshot.
+                if self.chain_link_enabled()
+                    && !session.initial_snapshot_sent
+                    && !session.chain_runtime_authoritatively_primed
+                {
+                    let prime_result = chain_prime.take().unwrap_or_else(|| {
+                        self.prime_chain_linked_runtime_for_snapshot().map(|_| ())
+                    });
+                    match prime_result {
+                        Ok(()) => {
+                            session.chain_runtime_authoritatively_primed = true;
                         }
-                        emit_stderr_or_event(
-                            Level::WARN,
-                            format!(
-                                "viewer runtime live: initial chain sync skipped before snapshot: {err:?}"
-                            )
-                            .as_str(),
-                            "viewer runtime live initial chain sync skipped",
-                        );
+                        Err(err) => {
+                            if self.config.chain_link_policy == ChainLinkPolicy::Enforcing {
+                                return Err(err);
+                            }
+                            emit_stderr_or_event(
+                                Level::WARN,
+                                format!(
+                                    "viewer runtime live: initial chain sync skipped before snapshot: {err:?}"
+                                )
+                                .as_str(),
+                                "viewer runtime live initial chain sync skipped",
+                            );
+                        }
                     }
                 }
                 if session.wants_initial_snapshot() {
@@ -920,280 +1000,35 @@ impl ViewerRuntimeLiveServer {
         Ok(())
     }
 
-    fn advance_runtime(
-        &mut self,
-        session: &mut RuntimeLiveSession,
-        writer: &mut BufWriter<TcpStream>,
-        action: &'static str,
-        step_count: usize,
-        request_id: Option<u64>,
-        emit_while_paused: bool,
-    ) -> Result<(), ViewerRuntimeLiveServerError> {
-        let baseline_logical_time = self.world.state().time;
-        let baseline_event_seq = latest_runtime_event_seq(&self.world);
-        let mut runtime_events_for_feedback = Vec::new();
-
-        for _ in 0..step_count.max(1) {
-            let iteration_logical_time = self.world.state().time;
-            self.sync_runtime_wake_projection()?;
-            if let Err(reason) = self
-                .llm_sidecar
-                .ensure_gameplay_ready(&self.world, &self.snapshot_config)
-            {
-                let (delta_logical_time, delta_event_seq) =
-                    self.control_completion_delta(baseline_logical_time, baseline_event_seq);
-                if self.tolerate_background_play_gameplay_block(
-                    session,
-                    writer,
-                    action,
-                    self.config.play_step_interval,
-                    "runtime play loop hit a transient LLM access failure; will retry on the next play tick",
-                    reason.clone(),
-                    delta_logical_time,
-                    delta_event_seq,
-                )? {
-                    return Ok(());
+    fn prime_shared_request_if_needed(
+        shared: &Arc<Mutex<Self>>,
+        request: &ViewerRequest,
+        session: &RuntimeLiveSession,
+    ) -> Result<Option<Result<(), ViewerRuntimeLiveServerError>>, ViewerRuntimeLiveServerError>
+    {
+        let should_prime = {
+            let server = lock_shared_server(shared)?;
+            match request {
+                ViewerRequest::HelloV2 { version, .. } => {
+                    *version >= 2
+                        && server.hosted_local_mock_test_lane_active
+                        && server.chain_link_enabled()
+                        && server.world.state().agents.is_empty()
+                        && !session.chain_runtime_authoritatively_primed
                 }
-                return self.block_gameplay_control(
-                    session,
-                    writer,
-                    action,
-                    "runtime play loop stopped because active LLM access is no longer available",
-                    reason,
-                    request_id,
-                    delta_logical_time,
-                    delta_event_seq,
-                    true,
-                );
-            }
-            let mut decision_trace: Option<AgentDecisionTrace> = None;
-            // Provider-backed cognition commits are Runtime-atomic and may
-            // append their terminal action event before the compatibility
-            // tick below runs. Capture the complete journal delta so the
-            // viewer still presents that authoritative event.
-            let journal_start = self.world.journal().events.len();
-            match self.config.decision_mode {
-                ViewerLiveDecisionMode::Script => self.script.enqueue(&mut self.world),
-                ViewerLiveDecisionMode::Llm => {
-                    self.llm_sidecar.request_decision();
-                    match self.enqueue_llm_action_from_sidecar() {
-                        Ok(trace) => {
-                            decision_trace = trace;
-                        }
-                        Err(trace) => {
-                            if session.explicitly_subscribed_to(ViewerStream::Events) {
-                                send_response(
-                                    writer,
-                                    &ViewerResponse::DecisionTrace {
-                                        trace: trace.clone(),
-                                    },
-                                )?;
-                            }
-                            let (delta_logical_time, delta_event_seq) = self
-                                .control_completion_delta(
-                                    baseline_logical_time,
-                                    baseline_event_seq,
-                                );
-                            let reason = trace.llm_error.clone().unwrap_or_else(|| {
-                                "gameplay requires a configured and reachable LLM provider"
-                                    .to_string()
-                            });
-                            let reason = append_decision_upstream_trace(reason, &trace);
-                            if decision_trace_provider_error_retryable(&trace).unwrap_or(true) {
-                                if self.tolerate_background_play_gameplay_block(
-                                    session,
-                                    writer,
-                                    action,
-                                    self.config.play_step_interval,
-                                    "runtime play loop hit a transient LLM decision failure; will retry on the next play tick",
-                                    reason.clone(),
-                                    delta_logical_time,
-                                    delta_event_seq,
-                                )? {
-                                    return Ok(());
-                                }
-                            }
-                            return self.block_gameplay_control(
-                                session,
-                                writer,
-                                action,
-                                "runtime play loop stopped because the LLM decision provider failed",
-                                reason,
-                                request_id,
-                                delta_logical_time,
-                                delta_event_seq,
-                                true,
-                            );
-                        }
-                    }
+                ViewerRequest::RequestSnapshot => {
+                    server.chain_link_enabled()
+                        && !session.initial_snapshot_sent
+                        && !session.chain_runtime_authoritatively_primed
                 }
+                _ => false,
             }
-            if self.should_advance_compatibility_tick(iteration_logical_time) {
-                if let Err(error) = self.world.step() {
-                    let (delta_logical_time, delta_event_seq) =
-                        self.control_completion_delta(baseline_logical_time, baseline_event_seq);
-                    return self.block_runtime_control(
-                        session,
-                        writer,
-                        action,
-                        "runtime step aborted because world advance failed",
-                        ViewerRuntimeLiveServerError::Runtime(error),
-                        request_id,
-                        delta_logical_time,
-                        delta_event_seq,
-                        true,
-                    );
-                }
-            }
-            self.sync_runtime_wake_projection()?;
-            session.transient_play_failures = 0;
-            if self.world.state().time > baseline_logical_time
-                || latest_runtime_event_seq(&self.world) > baseline_event_seq
-            {
-                self.confirm_player_gameplay_progress();
-            }
-            let new_events: Vec<_> = self.world.journal().events[journal_start..].to_vec();
-            runtime_events_for_feedback.extend(new_events.iter().cloned());
-            let mut mapped_events = Vec::new();
-            for runtime_event in &new_events {
-                let event = map_runtime_event(
-                    runtime_event,
-                    &self.snapshot_config,
-                    self.seed_model.as_ref(),
-                );
-                if matches!(runtime_event.body, RuntimeWorldEventBody::Domain(_)) {
-                    self.llm_sidecar
-                        .notify_action_result_if_needed(runtime_event, event.clone());
-                }
-                self.llm_sidecar.notify_recipe_completion_with_binding(
-                    runtime_event,
-                    event.clone(),
-                    self.world.current_cognition_runtime_binding().ok(),
-                );
-                mapped_events.push(event);
-            }
-            mapped_events.extend(self.pending_virtual_events.drain(..));
-            let pending_batch = match self.register_authoritative_batch(mapped_events.as_slice()) {
-                Ok(batch) => batch,
-                Err(error) => {
-                    let (delta_logical_time, delta_event_seq) =
-                        self.control_completion_delta(baseline_logical_time, baseline_event_seq);
-                    return self.block_runtime_control(
-                        session,
-                        writer,
-                        action,
-                        "runtime step aborted because authoritative batch registration failed",
-                        error,
-                        request_id,
-                        delta_logical_time,
-                        delta_event_seq,
-                        true,
-                    );
-                }
-            };
-            let batch_finality_updates =
-                match self.advance_authoritative_batch_finality(self.world.state().time) {
-                    Ok(updates) => updates,
-                    Err(error) => {
-                        let (delta_logical_time, delta_event_seq) = self
-                            .control_completion_delta(baseline_logical_time, baseline_event_seq);
-                        return self.block_runtime_control(
-                            session,
-                            writer,
-                            action,
-                            "runtime step aborted because authoritative finality update failed",
-                            error,
-                            request_id,
-                            delta_logical_time,
-                            delta_event_seq,
-                            true,
-                        );
-                    }
-                };
-            if let Some(trace) = decision_trace {
-                if session.explicitly_subscribed_to(ViewerStream::Events) {
-                    send_response(writer, &ViewerResponse::DecisionTrace { trace })?;
-                }
-            }
-
-            if session.explicitly_subscribed_to(ViewerStream::Events)
-                && (emit_while_paused || session.playing)
-            {
-                for event in &mapped_events {
-                    if session.event_allowed(event) {
-                        send_response(
-                            writer,
-                            &ViewerResponse::Event {
-                                event: event.clone(),
-                            },
-                        )?;
-                    }
-                }
-                send_response(
-                    writer,
-                    &ViewerResponse::AuthoritativeBatch {
-                        batch: pending_batch,
-                    },
-                )?;
-                for batch in batch_finality_updates {
-                    send_response(writer, &ViewerResponse::AuthoritativeBatch { batch })?;
-                }
-            }
-
-            if session.explicitly_subscribed_to(ViewerStream::Snapshot)
-                && should_emit_runtime_advance_snapshot(session, action, emit_while_paused)
-            {
-                let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
-                send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
-            }
-
-            session.metrics = runtime_metrics(&self.world);
-            if session.explicitly_subscribed_to(ViewerStream::Metrics) {
-                send_response(
-                    writer,
-                    &ViewerResponse::Metrics {
-                        time: Some(self.world.state().time),
-                        metrics: session.metrics.clone(),
-                    },
-                )?;
-            }
+        };
+        if !should_prime {
+            return Ok(None);
         }
-
-        if let Some(request_id) = request_id {
-            let delta_logical_time = self
-                .world
-                .state()
-                .time
-                .saturating_sub(baseline_logical_time);
-            let delta_event_seq =
-                latest_runtime_event_seq(&self.world).saturating_sub(baseline_event_seq);
-            let status = if delta_logical_time > 0 || delta_event_seq > 0 {
-                ControlCompletionStatus::Advanced
-            } else {
-                ControlCompletionStatus::TimeoutNoProgress
-            };
-            let ack = ControlCompletionAck {
-                request_id,
-                status,
-                delta_logical_time,
-                delta_event_seq,
-                error_code: None,
-                error_message: None,
-            };
-            let feedback = player_gameplay_feedback_from_control_ack(
-                &control_mode_for_action(action, step_count),
-                &ack,
-            );
-            let causality =
-                player_gameplay_causality_from_runtime_events(&runtime_events_for_feedback);
-            self.set_latest_player_gameplay_feedback_with_causality(feedback, causality);
-            if session.explicitly_subscribed_to(ViewerStream::Snapshot) {
-                let snapshot = self.compat_snapshot(session.current_player_id.as_deref());
-                send_response(writer, &ViewerResponse::Snapshot { snapshot })?;
-            }
-            send_response(writer, &ViewerResponse::ControlCompletionAck { ack })?;
-        }
-
-        Ok(())
+        Ok(Some(
+            Self::prime_chain_linked_runtime_for_snapshot_minimized_lock(shared).map(|_| ()),
+        ))
     }
 }

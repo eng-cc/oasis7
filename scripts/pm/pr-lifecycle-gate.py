@@ -7,11 +7,13 @@ import base64
 import os
 import datetime as dt
 import hashlib
+import importlib.util
 import json
 import subprocess
 import sys
 import re
 import fnmatch
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -464,8 +466,259 @@ def local_loop_admission(root, uid, base, head, tool_root):
             'policy_commit': (binding or {}).get('policy_commit'), 'task': task}
 
 
-def live_integration_admission(data, root, uid, tool_root, admission, integration_run_id=None):
-    """Read selected CI and its frozen planner artifact; never trust a local receipt."""
+def requires_strict_integration(data: dict[str, Any]) -> bool:
+    """Fail closed when no trusted projection context is available.
+
+    Production callers use ``trusted_requires_strict_integration`` after
+    byte-loading and validating the published projection.  This compatibility
+    wrapper deliberately never relaxes from ad-hoc PR data.
+    """
+    return True
+
+
+def _load_trusted_projection(data: dict[str, Any], root: Path, effective: Path, uid: str, policy_commit: str) -> dict[str, Any]:
+    body = str(data.get("body") or "")
+    marker = re.search(r"<!--\s*oasis7-impact-projection-b64:\s*([A-Za-z0-9+/=]+)\s*-->", body)
+    if not marker:
+        raise ValueError("trusted impact projection marker is missing")
+    try:
+        raw = base64.b64decode(marker.group(1), validate=True)
+        value = json.loads(raw.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ValueError("trusted impact projection marker is malformed") from exc
+    helper_path = effective / "scripts/pm/workflow-impact-projection.py"
+    if not helper_path.is_file() or helper_path.is_symlink():
+        raise ValueError("trusted impact projection helper is unavailable")
+    expected_helper = subprocess.check_output(
+        ["git", "-C", str(effective), "show", f"{policy_commit}:scripts/pm/workflow-impact-projection.py"]
+    )
+    if helper_path.read_bytes() != expected_helper:
+        raise ValueError("effective impact projection helper bytes differ from policy authority")
+    spec = importlib.util.spec_from_file_location("trusted_workflow_impact_projection", helper_path)
+    if spec is None or spec.loader is None:
+        raise ValueError("trusted impact projection helper cannot be loaded")
+    helper = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(helper)
+    scope_base = value.get("scope_base_oid")
+    source_head = data.get("headRefOid")
+    try:
+        subprocess.run(
+            ["git", "-C", str(root), "merge-base", "--is-ancestor", str(scope_base), str(source_head)],
+            check=True, capture_output=True,
+        )
+        changed_paths = subprocess.check_output(
+            ["git", "-C", str(root), "diff", "--name-only", f"{scope_base}..{source_head}"],
+            text=True,
+        ).splitlines()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ValueError("trusted impact projection source scope cannot be verified") from exc
+    with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", suffix=".json") as handle:
+        json.dump(value, handle)
+        handle.flush()
+        try:
+            return helper.load_verified_projection(
+                handle.name,
+                expected={"task_uid": uid, "source_head_oid": source_head,
+                          "scope_base_oid": scope_base, "changed_paths": changed_paths},
+                repo_root=root,
+            )
+        except (OSError, TypeError, ValueError) as exc:
+            raise ValueError(f"trusted impact projection is invalid: {exc}") from exc
+
+
+def _related_path(path: str, other: str) -> bool:
+    left, right = path.strip("/"), other.strip("/")
+    return left == right or left.startswith(right + "/") or right.startswith(left + "/")
+
+
+def _relation_path(value: Any) -> str | None:
+    """Return a safe repository path from a contract/consumer locator.
+
+    Contract references may carry a stable ``#fragment`` after the path.  The
+    fragment identifies the clause, while target-drift comparison is against
+    the repository path.  A missing or unsafe path is deliberately represented
+    as ``None`` so callers can fail closed when the target has advanced.
+    """
+    if not isinstance(value, str) or not value.strip():
+        return None
+    path = value.strip().split("#", 1)[0].strip("/")
+    if (not path or path.startswith(".") or "\x00" in path
+            or "\\" in path or any(part in {"", ".", ".."} for part in path.split("/"))):
+        return None
+    return path
+
+
+def _source_path_exists(root: Path, source_head: str, path: str) -> bool:
+    try:
+        return subprocess.run(
+            ["git", "-C", str(root), "cat-file", "-e", f"{source_head}:{path}"],
+            check=False, capture_output=True,
+        ).returncode == 0
+    except OSError:
+        return False
+
+
+def _mapped_relation_paths(
+    projection: dict[str, Any], *, root: Path, source_head: str,
+) -> tuple[list[str], bool]:
+    """Collect trusted target-drift paths and report unmapped declarations.
+
+    ``consumed_contracts`` describes stable inputs and therefore does not make
+    every ordinary PR strict.  Once the target advances, however, each
+    consumed contract must expose a repository-relative path (directly or via
+    its clause/content references).  Without that mapping the gate cannot
+    prove the target change is unrelated, so it escalates conservatively.
+    Closure evidence is included because it is the trusted projection's
+    explicit proof of the contract/consumer surface.
+    """
+    relations = [
+        path for path in (projection.get("changed_paths") or [])
+        if isinstance(path, str)
+    ]
+    unmapped = False
+
+    def mapped_candidates(candidates: list[Any]) -> list[str]:
+        return [
+            path for value in candidates
+            if (path := _relation_path(value)) and _source_path_exists(root, source_head, path)
+        ]
+
+    for item in projection.get("affected_consumers") or []:
+        candidates: list[Any] = []
+        if isinstance(item, str):
+            candidates.append(item)
+        elif isinstance(item, dict):
+            candidates.extend(item.get(key) for key in ("path", "consumer_path", "contract_path"))
+            refs = item.get("references")
+            if isinstance(refs, list):
+                candidates.extend(
+                    ref.get("path") for ref in refs if isinstance(ref, dict)
+                )
+        mapped = mapped_candidates(candidates)
+        if mapped:
+            relations.extend(mapped)
+        else:
+            unmapped = True
+
+    for item in projection.get("consumed_contracts") or []:
+        candidates = []
+        if isinstance(item, dict):
+            candidates.extend(item.get(key) for key in ("path", "contract_path"))
+            for container_key in ("consumed_clause_refs", "content_refs", "clauses"):
+                refs = item.get(container_key)
+                if isinstance(refs, list):
+                    candidates.extend(
+                        ref.get("path") for ref in refs if isinstance(ref, dict)
+                    )
+            nested = item.get("contract")
+            if isinstance(nested, dict):
+                candidates.append(nested.get("path"))
+                refs = nested.get("content_refs")
+                if isinstance(refs, list):
+                    candidates.extend(
+                        ref.get("path") for ref in refs if isinstance(ref, dict)
+                    )
+        # An identifier/revision pair is not a path mapping.  It remains valid
+        # source metadata, but cannot establish unrelated target drift.
+        mapped = mapped_candidates(candidates)
+        if mapped:
+            relations.extend(mapped)
+        else:
+            unmapped = True
+
+    closure = projection.get("closure_status") or {}
+    evidence = closure.get("evidence") if isinstance(closure, dict) else None
+    if isinstance(evidence, list):
+        for item in evidence:
+            path = _relation_path(item.get("path")) if isinstance(item, dict) else None
+            if path:
+                if _source_path_exists(root, source_head, path):
+                    relations.append(path)
+                else:
+                    unmapped = True
+            else:
+                unmapped = True
+
+    return relations, unmapped
+
+
+def trusted_requires_strict_integration(data: dict[str, Any], root: Path, effective: Path, uid: str, policy_commit: str) -> bool:
+    """Derive strict escalation only from the verified published projection."""
+    projection = _load_trusted_projection(data, root, effective, uid, policy_commit)
+    if projection.get("review_escalated") is True or projection.get("verification_affected") is True:
+        return True
+    if projection.get("change_class") in {"workflow-doc", "unknown", "mixed"}:
+        return True
+    closure = projection.get("closure_status") or {}
+    if not isinstance(closure, dict) or closure.get("status") != "complete":
+        return True
+    # Search only the projection values.  Including field names here would
+    # make every well-formed ``consumed_contracts`` field appear risky merely
+    # because the schema contains the word ``contract``.
+    risk_text = json.dumps(
+        [reason for reason in projection.get("review_reasons", [])
+         if isinstance(reason, str) and not reason.startswith("input:")],
+        sort_keys=True,
+    ).lower()
+    risk_terms = ("api", "abi", "persistence", "serialization", "state-root", "consensus",
+                  "security", "dependency", "permission", "workflow", "validation", "contract",
+                  "schema", "migration", "wasm", "replay", "recovery", "critical")
+    if any(term in risk_text for term in risk_terms):
+        return True
+    high_risk_paths = (".github/workflows/", ".codex/", "scripts/pm/", "cargo.toml", "cargo.lock")
+    if any(any(path.lower().startswith(prefix) or path.lower() == prefix.rstrip("/")
+               for prefix in high_risk_paths) for path in projection.get("changed_paths", [])):
+        return True
+    if projection.get("public_semantics"):
+        return True
+    scope_base = projection.get("scope_base_oid")
+    current_base = data.get("baseRefOid")
+    if scope_base != current_base:
+        try:
+            subprocess.run(
+                ["git", "-C", str(root), "merge-base", "--is-ancestor", str(scope_base), str(current_base)],
+                check=True, capture_output=True,
+            )
+            changed = subprocess.check_output(
+                ["git", "-C", str(root), "diff", "--name-only", f"{scope_base}..{current_base}"],
+                text=True,
+            ).splitlines()
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise ValueError("cannot verify target-only changes for ordinary integration policy") from exc
+        relations, unmapped = _mapped_relation_paths(
+            projection, root=root, source_head=str(data.get("headRefOid")),
+        )
+        if unmapped or not relations or any(
+            _related_path(path, related) for path in changed for related in relations
+        ):
+            return True
+    return False
+
+
+def _validate_live_integration_proof(
+    proof: dict[str, Any], data: dict[str, Any], *, strict: bool,
+    allow_legacy_strict_fallback: bool = False,
+) -> None:
+    """Enforce the selected evidence mode after isolated CI discovery.
+
+    ``selected_live`` retains a compatibility fallback for direct legacy
+    callers. The production gate must never accept that ordinary fallback when
+    the trusted classifier selected strict integration.
+    """
+    if not isinstance(proof, dict):
+        raise ValueError('live integration proof is not an object')
+    if strict and not allow_legacy_strict_fallback and proof.get('ci_validation_mode') != 'trusted_integration':
+        raise ValueError('strict integration requires a trusted integration receipt')
+    if proof.get('head_oid') != data['headRefOid']:
+        raise ValueError('source-bound PR CI head changed; rerun required CI for the current source')
+    if proof.get('base_ref') != data['baseRefName']:
+        raise ValueError('source-bound PR CI target ref changed; rerun required CI for the current target ref')
+    if strict and proof.get('integration_base_oid') != data['baseRefOid']:
+        raise ValueError('stale integration CI base/head; rerun required CI against current target without rebasing source')
+
+
+def live_integration_admission(data, root, uid, tool_root, admission, integration_run_id=None, *, require_strict=None):
+    """Read trusted source-bound PR CI or strict integration evidence."""
     policy = data.get('policy_discovery') or {}
     required = policy.get('required_status_checks')
     legacy = isinstance(admission, dict) and admission.get('status') == 'legacy'
@@ -490,12 +743,28 @@ def live_integration_admission(data, root, uid, tool_root, admission, integratio
         path = effective / relative
         if path.is_symlink() or path.read_bytes() != expected:
             raise ValueError('effective CI authority helper bytes differ: ' + name)
+    if require_strict == "auto":
+        projection_relative = 'scripts/pm/workflow-impact-projection.py'
+        projection_expected = subprocess.check_output(['git','-C',str(effective),'show',commit + ':' + projection_relative])
+        projection_path = effective / projection_relative
+        if projection_path.is_symlink() or projection_path.read_bytes() != projection_expected:
+            raise ValueError('effective CI authority helper bytes differ: workflow-impact-projection.py')
     task = admission['task']
     if task.get('repository') != data['repository']:
         raise ValueError('CI task repository identity mismatch')
+    strict = (trusted_requires_strict_integration(data, root, effective, uid, commit)
+              if require_strict == "auto" else True if require_strict is None else bool(require_strict))
+    if integration_run_id is not None:
+        strict = True
     request = {'root': str(effective), 'repository': data['repository'], 'uid': uid,
                'issue': task['issue_number'], 'pr': data['number'], 'app': next(iter(pins)),
-               'base_ref': data['baseRefName'], 'integration_run_id': integration_run_id}
+               'base_ref': data['baseRefName'], 'integration_run_id': integration_run_id,
+               'require_strict': strict,
+               # ``None`` is the direct compatibility API: it retains the
+               # legacy strict check fallback used by existing callers. Every
+               # production-selected strict mode carries an explicit policy
+               # selector and must have a matching manual dispatch.
+               'require_dispatch': bool(strict and require_strict is not None)}
     # Isolated stdlib loader installs only the two byte-verified modules. No
     # candidate directory/PYTHONPATH is added to the import search path.
     program = """import importlib.util,json,sys
@@ -503,9 +772,12 @@ from pathlib import Path
 request=json.loads(sys.argv[1]); directory=Path(request['root'])/'scripts/pm'
 for name,filename in [('integration_ci','integration_ci.py'),('ci_ready_receipt_identity','ci_ready_receipt_identity.py'),('ci_live','ci-ready-receipt.py')]:
  spec=importlib.util.spec_from_file_location(name,directory/filename); module=importlib.util.module_from_spec(spec); sys.modules[name]=module; spec.loader.exec_module(module)
-pr,run,base,head=module.selected_live(request['repository'],request['uid'],request['issue'],request['pr'],'required-gate',request['app'],allow_ready_pr=True,base_ref=request['base_ref'],integration_run_id=request.get('integration_run_id'))
+if request['require_strict']:
+ pr,run,base,head=module.selected_live(request['repository'],request['uid'],request['issue'],request['pr'],'required-gate',request['app'],allow_ready_pr=True,base_ref=request['base_ref'],integration_run_id=request.get('integration_run_id'),require_integration=True,require_dispatch=request.get('require_dispatch',False))
+else:
+ pr,run,base,head=module.selected_live(request['repository'],request['uid'],request['issue'],request['pr'],'required-gate',request['app'],allow_ready_pr=True,base_ref=request['base_ref'])
 planner=module.planner_for_run(request['repository'],run,base_oid=base,head_oid=head)
-proof={'integration_base_oid':base,'head_oid':head,'check_run_id':run['id'],'check_app_id':run['app']['id'],'planner_digest':module.hashlib.sha256(json.dumps(planner,sort_keys=True,separators=(',',':')).encode()).hexdigest()}
+proof={'integration_base_oid':base,'base_ref':pr.get('base',{}).get('ref'),'head_oid':head,'check_run_id':run['id'],'check_app_id':run['app']['id'],'planner_digest':module.hashlib.sha256(json.dumps(planner,sort_keys=True,separators=(',',':')).encode()).hexdigest(),'ci_validation_mode':'trusted_integration' if run.get('_integration') else 'ordinary_pr'}
 if run.get('_integration'):
  proof.update({key:run['_integration'][key] for key in ('workflow_run_id','workflow_sha','tested_tree_oid','tested_commit_oid')})
 print(json.dumps(proof))
@@ -514,8 +786,9 @@ print(json.dumps(proof))
     if completed.returncode:
         raise ValueError((completed.stderr or completed.stdout).strip() or 'fresh integration CI unavailable')
     proof = json.loads(completed.stdout)
-    if proof.get('integration_base_oid') != data['baseRefOid'] or proof.get('head_oid') != data['headRefOid']:
-        raise ValueError('stale integration CI base/head; rerun required CI against current target without rebasing source')
+    _validate_live_integration_proof(
+        proof, data, strict=strict, allow_legacy_strict_fallback=require_strict is None,
+    )
     return proof
 
 
@@ -528,7 +801,11 @@ def production_decision(data, admin_authorized, root, uid, tool_root, integratio
         if not all(re.fullmatch(r'[0-9a-f]{40}', value) for value in (base, head)):
             raise ValueError('current PR base/head OIDs unavailable')
         admission = local_loop_admission(root, uid, base, head, tool_root)
-        integration = live_integration_admission(data, root, uid, tool_root, admission, integration_run_id) if integration_run_id is not None else live_integration_admission(data, root, uid, tool_root, admission)
+        legacy_admission = isinstance(admission, dict) and admission.get('status') == 'legacy'
+        integration = live_integration_admission(
+            data, root, uid, tool_root, admission, integration_run_id,
+            require_strict=True if integration_run_id is not None or legacy_admission else "auto",
+        )
         fresh = read_pr_identity(data['repository'], data['number'])
         # Admission may involve slow remote reads. Even unchanged commit OIDs
         # cannot preserve authority after a draft, body or branch transition.

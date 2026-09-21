@@ -1,5 +1,9 @@
 use super::*;
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Rollback test signing helper mirrors the stable authorization payload"
+)]
 fn signed_v2_request(
     server: &ViewerRuntimeLiveServer,
     checkpoint_batch_id: &str,

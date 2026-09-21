@@ -322,6 +322,10 @@ impl MembershipSyncClient {
         ))
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Recovery drill state-machine seam keeps explicit stores for each durable phase"
+    )]
     pub fn run_revocation_dead_letter_replay_rollback_governance_recovery_drill(
         &self,
         world_id: &str,

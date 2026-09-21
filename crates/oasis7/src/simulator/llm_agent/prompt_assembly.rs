@@ -216,17 +216,17 @@ impl PromptAssembler {
             false,
         ));
 
-        if let Some(memory_digest) = input.memory_digest {
-            if !memory_digest.trim().is_empty() {
-                sections.push(SectionState::new(
-                    PromptSection {
-                        kind: PromptSectionKind::Memory,
-                        priority: PromptSectionPriority::Low,
-                        content: format!("[Memory Digest]\n{}", memory_digest),
-                    },
-                    false,
-                ));
-            }
+        if let Some(memory_digest) = input.memory_digest
+            && !memory_digest.trim().is_empty()
+        {
+            sections.push(SectionState::new(
+                PromptSection {
+                    kind: PromptSectionKind::Memory,
+                    priority: PromptSectionPriority::Low,
+                    content: format!("[Memory Digest]\n{}", memory_digest),
+                },
+                false,
+            ));
         }
 
         sections.push(SectionState::new(

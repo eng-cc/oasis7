@@ -222,12 +222,13 @@ fn provider_bootstrap_preflight_reconciles_record_ahead_of_world_cache() {
     let runtime = NodeRuntime::new(
         NodeConfig::new("node-a", "bootstrap-world", NodeRole::Sequencer).expect("node config"),
     );
-    let stale_error = super::super::publish_provider_backed_bootstrap_from_paths(
-        &runtime,
-        world_dir.as_path(),
-        std::slice::from_ref(&input_path),
-    )
-    .expect_err("preflight must reject the stale world cache");
+    let stale_error =
+        super::super::provider_bootstrap::publish_provider_backed_bootstrap_from_paths(
+            &runtime,
+            world_dir.as_path(),
+            std::slice::from_ref(&input_path),
+        )
+        .expect_err("preflight must reject the stale world cache");
     assert!(
         stale_error.contains("preflight rejected before consensus admission"),
         "stale cache should fail before queueing: {stale_error}"
@@ -246,7 +247,7 @@ fn provider_bootstrap_preflight_reconciles_record_ahead_of_world_cache() {
         "restart should restore the agent introduced before the authoritative head"
     );
 
-    super::super::publish_provider_backed_bootstrap_from_paths(
+    super::super::provider_bootstrap::publish_provider_backed_bootstrap_from_paths(
         &runtime,
         world_dir.as_path(),
         std::slice::from_ref(&input_path),
@@ -293,7 +294,7 @@ fn provider_bootstrap_preflight_rejects_stale_bundle_before_queueing() {
             NodeConfig::new("node-a", "bootstrap-world", NodeRole::Sequencer).expect("node config"),
         );
 
-        let error = super::super::publish_provider_backed_bootstrap_from_paths(
+        let error = super::super::provider_bootstrap::publish_provider_backed_bootstrap_from_paths(
             &runtime,
             world_dir.as_path(),
             std::slice::from_ref(&invalid_path),
@@ -308,18 +309,19 @@ fn provider_bootstrap_preflight_rejects_stale_bundle_before_queueing() {
         // rejected attempt, proving the failed preflight did not leave a
         // consensus action queued. The second valid submission then proves
         // that the successful path did queue exactly one action.
-        super::super::publish_provider_backed_bootstrap_from_paths(
+        super::super::provider_bootstrap::publish_provider_backed_bootstrap_from_paths(
             &runtime,
             world_dir.as_path(),
             std::slice::from_ref(&valid_path),
         )
         .expect("valid ProviderBacked authority should pass preflight");
-        let duplicate_error = super::super::publish_provider_backed_bootstrap_from_paths(
-            &runtime,
-            world_dir.as_path(),
-            std::slice::from_ref(&valid_path),
-        )
-        .expect_err("only one valid bootstrap action may be queued");
+        let duplicate_error =
+            super::super::provider_bootstrap::publish_provider_backed_bootstrap_from_paths(
+                &runtime,
+                world_dir.as_path(),
+                std::slice::from_ref(&valid_path),
+            )
+            .expect_err("only one valid bootstrap action may be queued");
         assert!(
             duplicate_error.contains("already queued"),
             "successful preflight should leave one queued action: {duplicate_error}"

@@ -184,7 +184,7 @@ impl WorldKernel {
             self.power_next_action_affordability(recovered_power, power_capacity);
         let recommended_power_action = self.power_survival_recommended_action(
             power_state_after_value,
-            &next_action_affordability_after_recovery,
+            next_action_affordability_after_recovery,
         );
         let shutdown_avoidance_reason = self.power_survival_recovery_summary(
             power_state_before_value,
@@ -278,7 +278,7 @@ impl WorldKernel {
             remaining_power,
             remaining_runway_ticks,
             production_interrupt_risk,
-            &recommended_sale_action,
+            recommended_sale_action,
         );
 
         Ok(PowerSaleQuote {
@@ -445,16 +445,6 @@ impl WorldKernel {
                 survival_runway_ticks,
                 power_state_before.label(),
                 power_state_after_recovery.label(),
-                recommended_power_action
-            )
-        } else if matches!(
-            power_state_after_recovery,
-            AgentPowerState::Critical | AgentPowerState::Shutdown
-        ) {
-            format!(
-                "recovery leaves agent in {} with {} runway ticks; recommended action: {}",
-                power_state_after_recovery.label(),
-                survival_runway_ticks,
                 recommended_power_action
             )
         } else {

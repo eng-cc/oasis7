@@ -132,106 +132,6 @@ impl WorldState {
             .authority_revision)
     }
 
-    pub(super) fn apply_location_anchor_updated(
-        &mut self,
-        anchor: &LocationAnchorV1,
-    ) -> Result<(), WorldError> {
-        require_nonempty(anchor.location_id.as_str(), "location_id")?;
-        let current = self
-            .location_anchors
-            .get(anchor.location_id.as_str())
-            .map(|record| record.authority_revision);
-        if let Some(existing) = self.location_anchors.get(anchor.location_id.as_str()) {
-            if existing == anchor {
-                return Ok(());
-            }
-        }
-        next_revision(current, anchor.authority_revision, "location anchor")?;
-        self.location_anchors
-            .insert(anchor.location_id.clone(), anchor.clone());
-        Ok(())
-    }
-
-    pub(super) fn apply_agent_location_authority_updated(
-        &mut self,
-        authority: &AgentLocationAuthorityV1,
-        now: WorldTime,
-    ) -> Result<(), WorldError> {
-        require_nonempty(authority.agent_id.as_str(), "agent_id")?;
-        require_nonempty(authority.location_id.as_str(), "location_id")?;
-        if !self.agents.contains_key(authority.agent_id.as_str()) {
-            return Err(WorldError::AgentNotFound {
-                agent_id: authority.agent_id.clone(),
-            });
-        }
-        if authority.effective_at > now {
-            return Err(WorldError::ResourceBalanceInvalid {
-                reason: format!(
-                    "agent location authority not yet effective: agent_id={} effective_at={} now={now}",
-                    authority.agent_id, authority.effective_at
-                ),
-            });
-        }
-        // Revocation is allowed to close an assignment while its anchor is
-        // inactive. Activation remains fail-closed against both anchor state
-        // and the assignment's effective anchor.
-        if authority.active {
-            require_active_location_anchor(
-                &self.location_anchors,
-                authority.location_id.as_str(),
-                now,
-            )?;
-        }
-        let current = self
-            .agent_location_authorities
-            .get(authority.agent_id.as_str())
-            .map(|record| record.authority_revision);
-        if let Some(existing) = self
-            .agent_location_authorities
-            .get(authority.agent_id.as_str())
-        {
-            if existing == authority {
-                return Ok(());
-            }
-        }
-        next_revision(current, authority.authority_revision, "agent location")?;
-        self.agent_location_authorities
-            .insert(authority.agent_id.clone(), authority.clone());
-        Ok(())
-    }
-
-    pub(super) fn apply_factory_site_authority_updated(
-        &mut self,
-        authority: &FactorySiteAuthorityV1,
-        now: WorldTime,
-    ) -> Result<(), WorldError> {
-        let mut normalized = authority.clone();
-        normalize_allowlist(&mut normalized)?;
-        if normalized.active {
-            require_active_location_anchor(
-                &self.location_anchors,
-                normalized.location_id.as_str(),
-                now,
-            )?;
-        }
-        let current = self
-            .factory_site_authorities
-            .get(normalized.site_id.as_str())
-            .map(|record| record.authority_revision);
-        if let Some(existing) = self
-            .factory_site_authorities
-            .get(normalized.site_id.as_str())
-        {
-            if existing == &normalized {
-                return Ok(());
-            }
-        }
-        next_revision(current, normalized.authority_revision, "factory site")?;
-        self.factory_site_authorities
-            .insert(normalized.site_id.clone(), normalized);
-        Ok(())
-    }
-
     pub(super) fn apply_factory_construction_power_profile_updated(
         &mut self,
         profile: &FactoryConstructionPowerProfileV1,
@@ -262,10 +162,9 @@ impl WorldState {
         if let Some(existing) = self
             .factory_construction_power_profiles
             .get(profile.factory_id.as_str())
+            && existing == profile
         {
-            if existing == profile {
-                return Ok(());
-            }
+            return Ok(());
         }
         next_revision(
             current,

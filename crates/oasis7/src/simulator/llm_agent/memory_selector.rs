@@ -157,7 +157,7 @@ fn top_k(mut items: Vec<ScoredMemory>, top_k: usize) -> Vec<ScoredMemory> {
         return Vec::new();
     }
     if !use_bounded_top_n(top_k, items.len()) {
-        items.sort_by(|left, right| compare_score_desc(left, right));
+        items.sort_by(compare_score_desc);
         items.truncate(top_k);
         return items;
     }

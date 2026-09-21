@@ -218,15 +218,15 @@ fn load_tick_consensus_archive_records_from_index(
     let mut archived_records = Vec::with_capacity(indexed_record_count);
     let mut previous_to_tick = None;
     for segment in archive_index.archived_segments {
-        if let Some(previous_to_tick) = previous_to_tick {
-            if segment.from_tick <= previous_to_tick {
-                return Err(WorldError::DistributedValidationFailed {
-                    reason: format!(
-                        "tick consensus archive segment ordering invalid: previous_to_tick={} current_from_tick={}",
-                        previous_to_tick, segment.from_tick,
-                    ),
-                });
-            }
+        if let Some(previous_to_tick) = previous_to_tick
+            && segment.from_tick <= previous_to_tick
+        {
+            return Err(WorldError::DistributedValidationFailed {
+                reason: format!(
+                    "tick consensus archive segment ordering invalid: previous_to_tick={} current_from_tick={}",
+                    previous_to_tick, segment.from_tick,
+                ),
+            });
         }
         let segment_path = dir.join(segment.relative_path.as_str());
         if !segment_path.exists() {
@@ -333,22 +333,20 @@ pub(super) fn hydrate_tick_consensus_snapshot_from_archive(
 ) -> Result<(), WorldError> {
     let (actual_hot_from_tick, actual_hot_to_tick) =
         tick_consensus_hot_tick_bounds(snapshot.tick_consensus_records.as_slice());
-    if snapshot.tick_consensus_hot_from_tick.is_some()
-        || snapshot.tick_consensus_hot_to_tick.is_some()
+    if (snapshot.tick_consensus_hot_from_tick.is_some()
+        || snapshot.tick_consensus_hot_to_tick.is_some())
+        && (snapshot.tick_consensus_hot_from_tick != actual_hot_from_tick
+            || snapshot.tick_consensus_hot_to_tick != actual_hot_to_tick)
     {
-        if snapshot.tick_consensus_hot_from_tick != actual_hot_from_tick
-            || snapshot.tick_consensus_hot_to_tick != actual_hot_to_tick
-        {
-            return Err(WorldError::DistributedValidationFailed {
-                reason: format!(
-                    "tick consensus hot summary mismatch: expected_from={:?} actual_from={:?} expected_to={:?} actual_to={:?}",
-                    snapshot.tick_consensus_hot_from_tick,
-                    actual_hot_from_tick,
-                    snapshot.tick_consensus_hot_to_tick,
-                    actual_hot_to_tick,
-                ),
-            });
-        }
+        return Err(WorldError::DistributedValidationFailed {
+            reason: format!(
+                "tick consensus hot summary mismatch: expected_from={:?} actual_from={:?} expected_to={:?} actual_to={:?}",
+                snapshot.tick_consensus_hot_from_tick,
+                actual_hot_from_tick,
+                snapshot.tick_consensus_hot_to_tick,
+                actual_hot_to_tick,
+            ),
+        });
     }
 
     if snapshot.tick_consensus_total_record_count == 0 {

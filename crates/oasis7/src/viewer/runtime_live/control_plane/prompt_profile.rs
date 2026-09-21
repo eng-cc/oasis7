@@ -23,6 +23,10 @@ impl ViewerRuntimeLiveServer {
             .insert(agent_id.to_string(), primary_intent);
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     pub(super) fn current_prompt_profile(
         &self,
         agent_id: &str,

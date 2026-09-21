@@ -943,8 +943,7 @@ fn load_newapi_bridge_state_route_token(route_label: &str) -> Option<String> {
         .iter()
         .filter(|entry| entry.get("bridge_user_id").and_then(Value::as_str) == Some(bridge_user_id))
         .filter_map(|entry| entry.get("token_key").and_then(Value::as_str))
-        .filter(|token| !token.trim().is_empty())
-        .last()
+        .rfind(|token| !token.trim().is_empty())
         .map(str::to_string)
 }
 

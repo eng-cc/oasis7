@@ -543,6 +543,10 @@ impl World {
         })
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Governance penalty fields are independently signed/state-machine inputs and remain explicit for compatibility."
+    )]
     pub(crate) fn prepare_governance_identity_penalty_application(
         &self,
         penalty_id: u64,

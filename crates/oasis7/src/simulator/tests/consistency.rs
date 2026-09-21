@@ -8,6 +8,10 @@ fn run_action_sequence(kernel: &mut WorldKernel, actions: &[Action]) {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Scenario fixture mutates only the fields under test."
+)]
 fn replay_from_snapshot_matches_same_seed_and_action_sequence() {
     let mut config = WorldConfig::default();
     config.economy.refine_electricity_cost_per_kg = 1;
@@ -20,7 +24,7 @@ fn replay_from_snapshot_matches_same_seed_and_action_sequence() {
 
     let (mut kernel, _) = initialize_kernel(config.clone(), init).expect("initialize kernel");
 
-    let actions = vec![
+    let actions = [
         Action::HarvestRadiation {
             agent_id: "agent-0".to_string(),
             max_amount: 10,

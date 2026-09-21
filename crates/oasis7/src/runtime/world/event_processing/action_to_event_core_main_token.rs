@@ -8,6 +8,10 @@ use crate::runtime::main_token::{
 use std::collections::BTreeSet;
 
 impl World {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Main-token transfer validation keeps the signed action fields explicit and ordered."
+    )]
     pub(super) fn evaluate_transfer_main_token_action(
         &self,
         action_id: ActionId,

@@ -526,37 +526,6 @@ fn inject_fault(fault: CheckpointInstallFault) -> Result<(), String> {
     Ok(())
 }
 
-#[cfg(not(test))]
-fn inject_fault(_: ()) -> Result<(), String> {
-    Ok(())
-}
-
-#[cfg(test)]
-mod transaction_tests {
-    use super::*;
-
-    #[test]
-    fn checkpoint_install_marker_rejects_corrupt_path_and_artifact_fields() {
-        let mut transaction = CheckpointInstallTransaction {
-            phase: CheckpointInstallTransactionPhase::Prepared,
-            transaction_id: "../outside".to_string(),
-            height: 2,
-            previous_state: super::super::ExecutionBridgeState::default(),
-            world_was_present: false,
-            backups: Vec::new(),
-        };
-        assert!(transaction.validate().is_err());
-        transaction.transaction_id = "123-0".to_string();
-        transaction.backups = (0..5)
-            .map(|_| FileBackup {
-                artifact: PublicationArtifact::State,
-                bytes: None,
-            })
-            .collect();
-        assert!(transaction.validate().is_err());
-    }
-}
-
 macro_rules! inject_checkpoint_fault {
     ($fault:ident) => {{
         #[cfg(test)]
@@ -880,4 +849,35 @@ pub(super) fn install_checkpoint_bundle(
         execution_block_hash: context.execution_block_hash,
         execution_state_root: context.execution_state_root,
     })
+}
+
+#[cfg(not(test))]
+fn inject_fault(_: ()) -> Result<(), String> {
+    Ok(())
+}
+
+#[cfg(test)]
+mod transaction_tests {
+    use super::*;
+
+    #[test]
+    fn checkpoint_install_marker_rejects_corrupt_path_and_artifact_fields() {
+        let mut transaction = CheckpointInstallTransaction {
+            phase: CheckpointInstallTransactionPhase::Prepared,
+            transaction_id: "../outside".to_string(),
+            height: 2,
+            previous_state: super::super::ExecutionBridgeState::default(),
+            world_was_present: false,
+            backups: Vec::new(),
+        };
+        assert!(transaction.validate().is_err());
+        transaction.transaction_id = "123-0".to_string();
+        transaction.backups = (0..5)
+            .map(|_| FileBackup {
+                artifact: PublicationArtifact::State,
+                bytes: None,
+            })
+            .collect();
+        assert!(transaction.validate().is_err());
+    }
 }

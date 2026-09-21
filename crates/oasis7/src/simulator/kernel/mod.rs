@@ -166,9 +166,10 @@ impl WorldKernel {
     }
 
     pub fn with_config(config: WorldConfig) -> Self {
-        let mut kernel = Self::default();
-        kernel.config = config.sanitized();
-        kernel
+        Self {
+            config: config.sanitized(),
+            ..Self::default()
+        }
     }
 
     pub fn with_model(config: WorldConfig, model: WorldModel) -> Self {
@@ -424,13 +425,13 @@ impl WorldKernel {
             return Err("auth nonce must be greater than zero".to_string());
         }
 
-        if let Some(last_nonce) = self.model.player_auth_last_nonce.get(player_id) {
-            if nonce <= *last_nonce {
-                return Err(format!(
-                    "auth nonce replay for {}: expected nonce > {}, received {}",
-                    player_id, last_nonce, nonce
-                ));
-            }
+        if let Some(last_nonce) = self.model.player_auth_last_nonce.get(player_id)
+            && nonce <= *last_nonce
+        {
+            return Err(format!(
+                "auth nonce replay for {}: expected nonce > {}, received {}",
+                player_id, last_nonce, nonce
+            ));
         }
 
         self.model

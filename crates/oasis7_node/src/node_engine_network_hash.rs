@@ -1,6 +1,10 @@
 use super::*;
 
 impl PosNodeEngine {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Consensus block hash payload mirrors the canonical wire field order"
+    )]
     pub(super) fn compute_block_hash(
         &self,
         world_id: &str,

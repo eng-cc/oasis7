@@ -1,5 +1,9 @@
 use super::*;
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Transfer quote test helper mirrors the stable signed request payload"
+)]
 fn signed_transfer_material_quote_request_json(
     requester_agent_id: &str,
     from_ledger: &str,

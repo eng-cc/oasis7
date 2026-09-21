@@ -155,10 +155,10 @@ impl LiveWorld {
 
         match &mut self.driver {
             LiveDriver::Script(script) => {
-                if let Some(action) = script.next_action(&self.kernel) {
-                    if let Some(bridge) = self.consensus_bridge.as_mut() {
-                        bridge.submit_action(action, ActionSubmitter::System)?;
-                    }
+                if let Some(action) = script.next_action(&self.kernel)
+                    && let Some(bridge) = self.consensus_bridge.as_mut()
+                {
+                    bridge.submit_action(action, ActionSubmitter::System)?;
                 }
                 Ok(LiveStepResult {
                     event: None,

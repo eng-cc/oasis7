@@ -6,7 +6,6 @@ use libp2p::identity::Keypair;
 use oasis7_proto::distributed_dht::{PeerDeploymentMode, PeerNodeRole, PeerRecord};
 
 use super::peer_record::sign_peer_record;
-use super::*;
 
 fn signed_discovery_peer_record(
     keypair: &Keypair,

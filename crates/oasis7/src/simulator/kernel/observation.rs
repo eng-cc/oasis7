@@ -12,12 +12,11 @@ use super::types::{
 
 impl WorldKernel {
     pub fn observe(&mut self, agent_id: &str) -> Result<Observation, RejectReason> {
-        if self.intel_ttl_ticks > 0 {
-            if let Some(cached) = self.intel_cache.get(agent_id) {
-                if cached.expires_at_tick > self.time {
-                    return Ok(cached.observation.clone());
-                }
-            }
+        if self.intel_ttl_ticks > 0
+            && let Some(cached) = self.intel_cache.get(agent_id)
+            && cached.expires_at_tick > self.time
+        {
+            return Ok(cached.observation.clone());
         }
 
         let Some(agent) = self.model.agents.get(agent_id) else {
@@ -90,7 +89,7 @@ impl WorldKernel {
             .values()
             .cloned()
             .collect::<Vec<_>>();
-        module_listings.sort_by(|left, right| left.order_id.cmp(&right.order_id));
+        module_listings.sort_by_key(|listing| listing.order_id);
 
         let mut module_bids = self
             .model
@@ -98,10 +97,10 @@ impl WorldKernel {
             .values()
             .flat_map(|bids| bids.iter().cloned())
             .collect::<Vec<_>>();
-        module_bids.sort_by(|left, right| left.order_id.cmp(&right.order_id));
+        module_bids.sort_by_key(|bid| bid.order_id);
 
         let mut power_open_orders = self.model.power_order_book.open_orders.clone();
-        power_open_orders.sort_by(|left, right| left.order_id.cmp(&right.order_id));
+        power_open_orders.sort_by_key(|order| order.order_id);
 
         let social_facts = self
             .model

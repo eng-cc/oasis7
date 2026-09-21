@@ -65,6 +65,10 @@ fn committed_receipt_tuple(
 }
 
 impl ViewerRuntimeLiveServer {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Player-facing blocked feedback keeps its stable protocol fields explicit"
+    )]
     pub(super) fn tolerate_background_play_gameplay_block(
         &mut self,
         session: &mut RuntimeLiveSession,
@@ -467,6 +471,10 @@ impl ViewerRuntimeLiveServer {
         }
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Player-facing gameplay completion ack preserves the stable control seam"
+    )]
     pub(super) fn block_gameplay_control(
         &mut self,
         session: &mut RuntimeLiveSession,
@@ -512,6 +520,10 @@ impl ViewerRuntimeLiveServer {
         Ok(())
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Player-facing runtime completion ack preserves the stable control seam"
+    )]
     pub(super) fn block_runtime_control(
         &mut self,
         session: &mut RuntimeLiveSession,

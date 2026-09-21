@@ -47,9 +47,8 @@ use super::external_effect::{
 };
 pub(crate) use super::local_bootstrap::derive_local_execution_bootstrap;
 use super::product_validation_intent::{
-    ProductValidationIntentMarkerV1, build_product_validation_intent_marker,
-    clear_product_validation_intent, load_product_validation_intent,
-    persist_product_validation_intent_for_staged_world,
+    ProductValidationIntentMarkerV1, clear_product_validation_intent,
+    load_product_validation_intent, persist_product_validation_intent_for_staged_world,
     world_is_staged_for_product_validation_intent,
 };
 pub(crate) use super::simulator_mirror::simulator_world_dir_from_execution_world_dir;
@@ -225,6 +224,10 @@ impl NodeRuntimeExecutionDriver {
         Ok(driver)
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable protocol and runtime seam keeps independently validated inputs explicit."
+    )]
     pub(crate) fn new_with_sandbox(
         state_path: std::path::PathBuf,
         world_dir: std::path::PathBuf,
@@ -756,22 +759,20 @@ impl NodeExecutionHook for NodeRuntimeExecutionDriver {
             blake3_hex(rollback_on_error!(super::to_cbor(hash_payload)).as_slice());
         if let (Some(expected_block_hash), Some(expected_state_root)) =
             (expected_execution_block_hash, expected_execution_state_root)
+            && (execution_block_hash != expected_block_hash
+                || execution_state_root != expected_state_root)
         {
-            if execution_block_hash != expected_block_hash
-                || execution_state_root != expected_state_root
-            {
-                self.execution_world = previous_execution_world;
-                self.simulator_mirror = previous_simulator_mirror;
-                self.state = previous_state;
-                return Err(format!(
-                    "execution driver peer mismatch at height {}: local_block={} peer_block={} local_state={} peer_state={}",
-                    context.height,
-                    execution_block_hash,
-                    expected_block_hash,
-                    execution_state_root,
-                    expected_state_root
-                ));
-            }
+            self.execution_world = previous_execution_world;
+            self.simulator_mirror = previous_simulator_mirror;
+            self.state = previous_state;
+            return Err(format!(
+                "execution driver peer mismatch at height {}: local_block={} peer_block={} local_state={} peer_state={}",
+                context.height,
+                execution_block_hash,
+                expected_block_hash,
+                execution_state_root,
+                expected_state_root
+            ));
         }
         let mut simulator_persist_ms = Duration::default();
         if simulator_mirror.is_some() {

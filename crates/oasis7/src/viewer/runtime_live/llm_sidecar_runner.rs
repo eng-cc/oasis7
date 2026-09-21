@@ -1,6 +1,28 @@
 use super::*;
 
 impl RuntimeLlmSidecar {
+    /// Lazily admit the Hosted local-mock provider context for prompt control
+    /// after the authoritative chain world has arrived. A headed client may
+    /// submit Apply before auto-play ever asks the decision loop to initialize
+    /// its runner; this uses the same Runtime-owned preparation as that path.
+    pub(in crate::viewer::runtime_live) fn prepare_hosted_local_mock_prompt_context(
+        &mut self,
+        world: &mut RuntimeWorld,
+        config: &WorldConfig,
+        world_id: &str,
+    ) -> Result<(), String> {
+        if !self.hosted_local_mock_test_lane {
+            return Ok(());
+        }
+        self.sync_shadow_kernel(world, config)?;
+        self.ensure_runner_initialized()?;
+        let mut kernel = self
+            .shadow_kernel
+            .take()
+            .ok_or_else(|| "Hosted local-mock provider shadow kernel missing".to_string())?;
+        self.prepare_provider_request_contexts(world, &mut kernel, world_id)
+    }
+
     #[cfg(all(test, not(target_arch = "wasm32")))]
     pub(in crate::viewer::runtime_live) fn replace_builtin_runner_for_test(
         &mut self,
@@ -9,10 +31,120 @@ impl RuntimeLlmSidecar {
         self.runner = Some(RuntimeDecisionRunner::Builtin(runner));
     }
 
+    #[cfg(all(test, not(target_arch = "wasm32")))]
+    pub(in crate::viewer::runtime_live) fn replace_provider_backed_runner_for_test(
+        &mut self,
+        agent_id: &str,
+    ) -> Result<(), String> {
+        let behavior = ProviderBackedAgentBehavior::new(
+            agent_id.to_string(),
+            crate::simulator::MockDecisionProvider::new("hosted-local-mock-runtime-test-provider"),
+            vec![ActionCatalogEntry::new("wait", "wait")],
+        );
+        let mut runner = AsyncAgentRunner::with_default_capacity();
+        runner
+            .register(behavior)
+            .map_err(|error| format!("register ProviderBacked test actor: {error:?}"))?;
+        self.runner = Some(RuntimeDecisionRunner::ProviderBacked(runner));
+        self.provider_agent_ids.insert(agent_id.to_string());
+        Ok(())
+    }
+
+    #[cfg(all(test, not(target_arch = "wasm32")))]
+    pub(in crate::viewer::runtime_live) fn prepare_provider_backed_test_context(
+        &mut self,
+        world: &mut RuntimeWorld,
+        config: &WorldConfig,
+        world_id: &str,
+        agent_id: &str,
+    ) -> Result<(), String> {
+        self.replace_provider_backed_runner_for_test(agent_id)?;
+        self.provider_contexts.clear();
+        self.sync_shadow_kernel(world, config)?;
+        let mut kernel = self
+            .shadow_kernel
+            .take()
+            .ok_or_else(|| "Hosted local-mock provider shadow kernel missing".to_string())?;
+        self.prepare_provider_request_contexts(world, &mut kernel, world_id)
+    }
+
+    #[cfg(all(test, not(target_arch = "wasm32")))]
+    pub(in crate::viewer::runtime_live) fn refresh_provider_backed_test_context(
+        &mut self,
+        world: &mut RuntimeWorld,
+        config: &WorldConfig,
+        world_id: &str,
+    ) -> Result<(), String> {
+        self.sync_shadow_kernel(world, config)?;
+        let mut kernel = self
+            .shadow_kernel
+            .take()
+            .ok_or_else(|| "Hosted local-mock provider shadow kernel missing".to_string())?;
+        self.prepare_provider_request_contexts(world, &mut kernel, world_id)
+    }
+
+    #[cfg(all(test, not(target_arch = "wasm32")))]
+    pub(in crate::viewer::runtime_live) fn provider_test_goal_summary(
+        &self,
+        agent_id: &str,
+    ) -> Option<String> {
+        self.provider_contexts.get(agent_id).map(|context| {
+            context
+                .turn_context
+                .goal_snapshot
+                .short_term_summary
+                .clone()
+        })
+    }
+
+    #[cfg(all(test, not(target_arch = "wasm32")))]
+    pub(in crate::viewer::runtime_live) fn provider_test_context_binding(
+        &self,
+        agent_id: &str,
+    ) -> Option<RuntimeBindingV1> {
+        self.provider_contexts
+            .get(agent_id)
+            .map(|context| context.request_context.runtime_binding.clone())
+    }
+
+    #[cfg(all(test, not(target_arch = "wasm32")))]
+    pub(in crate::viewer::runtime_live) fn set_provider_test_binding(
+        &mut self,
+        binding: RuntimeBindingV1,
+    ) {
+        self.provider_lineage_binding = Some(binding);
+    }
+
+    #[cfg(all(test, not(target_arch = "wasm32")))]
+    pub(in crate::viewer::runtime_live) fn provider_test_binding(
+        &self,
+    ) -> Option<RuntimeBindingV1> {
+        self.provider_lineage_binding.clone()
+    }
+
     pub(in crate::viewer::runtime_live) fn apply_prompt_profile_to_driver(
         &mut self,
         profile: &AgentPromptProfile,
     ) -> Result<(), String> {
+        #[cfg(not(target_arch = "wasm32"))]
+        let hosted_local_mock_provider_context_ready = self.hosted_local_mock_test_lane
+            && self
+                .provider_contexts
+                .get(profile.agent_id.as_str())
+                .is_some_and(|context| {
+                    context
+                        .turn_context
+                        .validate_for_agent(profile.agent_id.as_str())
+                        .is_ok()
+                        && context.request_context.validate_production_lane().is_ok()
+                        && context.request_context.agent_subject == profile.agent_id
+                        && self
+                            .provider_lineage_binding
+                            .as_ref()
+                            .is_some_and(|binding| {
+                                binding == &context.request_context.runtime_binding
+                            })
+                });
         #[cfg(not(target_arch = "wasm32"))]
         if let Some(RuntimeDecisionRunner::Builtin(runner)) = self.runner.as_mut() {
             runner
@@ -26,8 +158,35 @@ impl RuntimeLlmSidecar {
             return Ok(());
         }
         #[cfg(not(target_arch = "wasm32"))]
-        if let Some(RuntimeDecisionRunner::ProviderBacked(_)) = self.runner.as_mut() {
-            return Err("prompt control is unsupported for ProviderBacked runtime".to_string());
+        if let Some(RuntimeDecisionRunner::ProviderBacked(runner)) = self.runner.as_mut() {
+            // ProviderBacked remains denied in production.  The only native
+            // exception is the explicitly admitted Hosted local-mock test
+            // lane, and only while the sidecar still holds a validated
+            // Runtime-installed outer context for this exact Agent.  The
+            // context check prevents the lane marker (or backend name) from
+            // becoming a standalone prompt-control grant.
+            if !hosted_local_mock_provider_context_ready {
+                return Err(
+                    "prompt control is unsupported for ProviderBacked runtime without an admitted Hosted local-mock Runtime context"
+                        .to_string(),
+                );
+            }
+            runner
+                .set_prompt_overrides(
+                    profile.agent_id.as_str(),
+                    profile.system_prompt_override.clone(),
+                    profile.short_term_goal_override.clone(),
+                    profile.long_term_goal_override.clone(),
+                )
+                .map_err(|error| format!("prompt override enqueue failed: {error}"))?;
+            return Ok(());
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        if self.hosted_local_mock_test_lane
+            && env_requests_provider_backend()
+            && self.runner.is_none()
+        {
+            return Err("llm runner is not initialized".to_string());
         }
         #[cfg(target_arch = "wasm32")]
         let Some(RuntimeDecisionRunner::Builtin(runner)) = self.runner.as_mut() else {

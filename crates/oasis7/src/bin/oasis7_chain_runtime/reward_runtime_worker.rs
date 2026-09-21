@@ -159,22 +159,22 @@ pub(crate) fn poll_worker_error(
     match worker.error_rx.try_recv() {
         Ok(err) => Ok(Some(format!("reward runtime worker failed: {err}"))),
         Err(TryRecvError::Disconnected) => {
-            if let Some(handle) = worker.join_handle.as_ref() {
-                if handle.is_finished() {
-                    return Ok(Some(
-                        "reward runtime worker exited unexpectedly".to_string(),
-                    ));
-                }
+            if let Some(handle) = worker.join_handle.as_ref()
+                && handle.is_finished()
+            {
+                return Ok(Some(
+                    "reward runtime worker exited unexpectedly".to_string(),
+                ));
             }
             Ok(None)
         }
         Err(TryRecvError::Empty) => {
-            if let Some(handle) = worker.join_handle.as_ref() {
-                if handle.is_finished() {
-                    return Ok(Some(
-                        "reward runtime worker exited unexpectedly".to_string(),
-                    ));
-                }
+            if let Some(handle) = worker.join_handle.as_ref()
+                && handle.is_finished()
+            {
+                return Ok(Some(
+                    "reward runtime worker exited unexpectedly".to_string(),
+                ));
             }
             Ok(None)
         }

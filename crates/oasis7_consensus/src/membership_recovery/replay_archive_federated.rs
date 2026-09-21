@@ -32,6 +32,15 @@ use super::replay_audit::{
     MembershipRevocationDeadLetterReplayRollbackGovernanceStateStore,
 };
 use super::{MembershipSyncClient, normalized_schedule_key};
+
+type RecoveryDrillAlertEvents = Arc<
+    Mutex<
+        BTreeMap<
+            (String, String),
+            Vec<MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEvent>,
+        >,
+    >,
+>;
 use crate::tiered_file_log;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -268,10 +277,10 @@ impl MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEve
         let (normalized_world_id, normalized_consumer_id) =
             normalized_schedule_key(&state.world_id, &state.consumer_id)?;
         let path = self.state_path(&normalized_world_id, &normalized_consumer_id)?;
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent)?;
         }
         let normalized_since_node_id = match state.since_node_id.as_deref() {
             Some(node_id) => {
@@ -320,14 +329,7 @@ pub trait MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAle
 #[derive(Debug, Clone, Default)]
 pub struct InMemoryMembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEventBus
 {
-    events: Arc<
-        Mutex<
-            BTreeMap<
-                (String, String),
-                Vec<MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEvent>,
-            >,
-        >,
-    >,
+    events: RecoveryDrillAlertEvents,
 }
 
 impl InMemoryMembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertEventBus {
@@ -561,6 +563,7 @@ impl MembershipSyncClient {
         )
     }
 
+    #[expect(clippy::too_many_arguments)]
     pub fn query_revocation_dead_letter_replay_rollback_governance_recovery_drill_alert_events_aggregated(
         &self,
         world_id: &str,
@@ -666,6 +669,7 @@ impl MembershipSyncClient {
         Ok((events, next_since_event_at_ms))
     }
 
+    #[expect(clippy::too_many_arguments)]
     pub fn query_revocation_dead_letter_replay_rollback_governance_recovery_drill_alert_events_incremental_since_cursor(
         &self,
         world_id: &str,
@@ -724,6 +728,7 @@ impl MembershipSyncClient {
         Ok((events, next_event_at_ms, next_node_id))
     }
 
+    #[expect(clippy::too_many_arguments)]
     pub fn query_revocation_dead_letter_replay_rollback_governance_recovery_drill_alert_events_incremental_since_composite_sequence_cursor(
         &self,
         world_id: &str,
@@ -822,6 +827,7 @@ impl MembershipSyncClient {
         ))
     }
 
+    #[expect(clippy::too_many_arguments)]
     pub fn query_revocation_dead_letter_replay_rollback_governance_recovery_drill_alert_events_incremental_with_composite_sequence_cursor_state(
         &self,
         world_id: &str,
@@ -1095,10 +1101,10 @@ fn collect_governance_recovery_drill_alert_events_aggregated(
             if event.world_id != normalized_world_id || event.node_id != node_id {
                 continue;
             }
-            if let Some(min_event_at_ms) = min_event_at_ms {
-                if event.event_at_ms < min_event_at_ms {
-                    continue;
-                }
+            if let Some(min_event_at_ms) = min_event_at_ms
+                && event.event_at_ms < min_event_at_ms
+            {
+                continue;
             }
             if !outcomes.is_empty() && !outcomes.contains(&event.outcome) {
                 continue;
@@ -1131,10 +1137,10 @@ fn append_aggregate_records(
     policy: &MembershipRevocationDeadLetterReplayRollbackGovernanceAuditAggregateQueryPolicy,
 ) {
     for audit in source {
-        if let Some(min_audited_at_ms) = policy.min_audited_at_ms {
-            if audit.audited_at_ms < min_audited_at_ms {
-                continue;
-            }
+        if let Some(min_audited_at_ms) = policy.min_audited_at_ms
+            && audit.audited_at_ms < min_audited_at_ms
+        {
+            continue;
         }
         if !policy.levels.is_empty() && !policy.levels.contains(&audit.governance_level) {
             continue;

@@ -65,7 +65,7 @@ impl ViewerRuntimeLiveServer {
         player_id
             .trim()
             .starts_with("local-test-player-")
-            .then(|| self.governance_vote_quote_debug_agent_id.as_deref())
+            .then_some(self.governance_vote_quote_debug_agent_id.as_deref())
             .flatten()
     }
 }

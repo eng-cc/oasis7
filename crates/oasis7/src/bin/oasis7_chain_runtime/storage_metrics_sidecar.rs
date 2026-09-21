@@ -69,10 +69,10 @@ pub(super) fn read_sidecar_metrics(
     if !index.latest_generation.trim().is_empty() {
         active_generation_ids.insert(index.latest_generation.trim().to_string());
     }
-    if let Some(rollback_safe_generation) = index.rollback_safe_generation.as_ref() {
-        if !rollback_safe_generation.trim().is_empty() {
-            active_generation_ids.insert(rollback_safe_generation.trim().to_string());
-        }
+    if let Some(rollback_safe_generation) = index.rollback_safe_generation.as_ref()
+        && !rollback_safe_generation.trim().is_empty()
+    {
+        active_generation_ids.insert(rollback_safe_generation.trim().to_string());
     }
     let mut pinned_blob_hashes = BTreeSet::new();
     for generation_id in active_generation_ids {

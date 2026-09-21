@@ -6,6 +6,7 @@ pub(crate) mod agent_claim_light_lifecycle_publication;
 pub(crate) mod agent_claim_terminal_publication;
 mod agent_claims;
 mod agent_intent;
+#[cfg(test)]
 pub(crate) use agent_intent::derive_agent_chat_request_digest;
 pub(crate) mod agent_intent_publication;
 mod agent_intent_terminal;
@@ -107,6 +108,7 @@ mod local_test_provider_bootstrap;
 mod main_token_economy_audit;
 mod module_actions;
 mod module_artifact_retirement;
+#[cfg(any(test, feature = "test_tier_required"))]
 mod module_change_batch_publication;
 mod module_marketplace_publication;
 mod module_release_publication;
@@ -181,6 +183,7 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::Arc;
 
+#[cfg(test)]
 use oasis7_wasm_router::PreparedSubscription;
 
 use super::CrisisStatus;
@@ -201,7 +204,9 @@ use super::governance::{
 };
 use super::main_token::main_token_account_id_from_node_public_key;
 use super::manifest::Manifest;
-use super::modules::{ModuleCache, ModuleLimits, ModuleRegistry, ModuleSubscription};
+#[cfg(test)]
+use super::modules::ModuleSubscription;
+use super::modules::{ModuleCache, ModuleLimits, ModuleRegistry};
 use super::policy::PolicySet;
 use super::signer::ReceiptSigner;
 use super::snapshot::{Journal, SnapshotCatalog};
@@ -212,8 +217,10 @@ use crate::simulator::ModuleVisualEntity;
 
 #[derive(Debug, Clone)]
 pub(super) struct PreparedSubscriptionCacheEntry {
+    #[cfg(test)]
     pub(super) subscriptions: Vec<ModuleSubscription>,
     pub(super) _subscription_fingerprint: String,
+    #[cfg(test)]
     pub(super) prepared: Arc<[PreparedSubscription]>,
 }
 
@@ -677,10 +684,6 @@ impl World {
         self
     }
 
-    // ---------------------------------------------------------------------
-    // Accessors
-    // ---------------------------------------------------------------------
-
     pub fn state(&self) -> &WorldState {
         &self.state
     }
@@ -883,9 +886,12 @@ impl World {
             }
         }
         if stats.resolved_appeals > 0 {
-            stats.false_positive_rate_bps =
-                ((stats.appeal_accepted_penalties.saturating_mul(10_000)) / stats.resolved_appeals)
-                    .min(10_000) as u16;
+            stats.false_positive_rate_bps = (stats
+                .appeal_accepted_penalties
+                .saturating_mul(10_000)
+                .checked_div(stats.resolved_appeals)
+                .unwrap_or_default())
+            .min(10_000) as u16;
         }
         stats
     }
@@ -1067,10 +1073,8 @@ impl World {
                     .contains_key(&pending.intent_id)
             })
         {
-            // An authorization-linked intent already represents a durable
-            // budget debit.  Refusing the new queue event keeps the staged
-            // command atomic; silently evicting the existing linked intent
-            // would strand that debit and its recovery receipt.
+            // An authorization-linked intent represents a durable budget debit;
+            // refuse the new queue event rather than stranding its recovery receipt.
             return Err(WorldError::CapabilityAuthorizationDenied {
                 reason: "effect queue is full of authorization-linked intents".to_string(),
             });
@@ -1118,9 +1122,8 @@ impl World {
                     .capability_effect_receipt_links
                     .contains_key(&intent.intent_id)
             }) else {
-                // Keep linked effects durable even if an operator lowers the
-                // limit below their count.  They remain dispatchable and can
-                // be closed by a real provider receipt after restart.
+                // Keep linked effects durable below a lowered limit; a real
+                // provider receipt can still close them after restart.
                 break;
             };
             let _ = self.pending_effects.remove(eviction_index);

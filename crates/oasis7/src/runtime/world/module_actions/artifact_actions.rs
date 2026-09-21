@@ -221,6 +221,10 @@ impl World {
         )
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Install action fields include the stable module release/finality transaction context."
+    )]
     pub(super) fn apply_install_module_action_with_release(
         &mut self,
         action_id: u64,
@@ -243,22 +247,22 @@ impl World {
             )?;
             return Ok(true);
         }
-        if let Some(owner_agent_id) = self.state.module_artifact_owners.get(&manifest.wasm_hash) {
-            if owner_agent_id != installer_agent_id {
-                self.append_event(
-                    WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec![format!(
-                                "install module artifact rejected: installer {} does not own {} (owner {})",
-                                installer_agent_id, manifest.wasm_hash, owner_agent_id
-                            )],
-                        },
-                    }),
-                    Some(CausedBy::Action(action_id)),
-                )?;
-                return Ok(true);
-            }
+        if let Some(owner_agent_id) = self.state.module_artifact_owners.get(&manifest.wasm_hash)
+            && owner_agent_id != installer_agent_id
+        {
+            self.append_event(
+                WorldEventBody::Domain(DomainEvent::ActionRejected {
+                    action_id,
+                    reason: RejectReason::RuleDenied {
+                        notes: vec![format!(
+                            "install module artifact rejected: installer {} does not own {} (owner {})",
+                            installer_agent_id, manifest.wasm_hash, owner_agent_id
+                        )],
+                    },
+                }),
+                Some(CausedBy::Action(action_id)),
+            )?;
+            return Ok(true);
         }
         let fee_kind = ResourceKind::Electricity;
         let fee_amount = Self::module_install_fee_amount(manifest);
@@ -442,6 +446,10 @@ impl World {
         Ok(true)
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Upgrade action fields include the stable module release/finality transaction context."
+    )]
     pub(super) fn apply_upgrade_module_action(
         &mut self,
         action_id: u64,
@@ -540,22 +548,22 @@ impl World {
             )?;
             return Ok(true);
         }
-        if let Some(owner_agent_id) = self.state.module_artifact_owners.get(&manifest.wasm_hash) {
-            if owner_agent_id != upgrader_agent_id {
-                self.append_event(
-                    WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec![format!(
-                                "upgrade module artifact rejected: upgrader {} does not own {} (owner {})",
-                                upgrader_agent_id, manifest.wasm_hash, owner_agent_id
-                            )],
-                        },
-                    }),
-                    Some(CausedBy::Action(action_id)),
-                )?;
-                return Ok(true);
-            }
+        if let Some(owner_agent_id) = self.state.module_artifact_owners.get(&manifest.wasm_hash)
+            && owner_agent_id != upgrader_agent_id
+        {
+            self.append_event(
+                WorldEventBody::Domain(DomainEvent::ActionRejected {
+                    action_id,
+                    reason: RejectReason::RuleDenied {
+                        notes: vec![format!(
+                            "upgrade module artifact rejected: upgrader {} does not own {} (owner {})",
+                            upgrader_agent_id, manifest.wasm_hash, owner_agent_id
+                        )],
+                    },
+                }),
+                Some(CausedBy::Action(action_id)),
+            )?;
+            return Ok(true);
         }
 
         let current_key = oasis7_wasm_abi::ModuleRegistry::record_key(

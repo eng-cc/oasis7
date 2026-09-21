@@ -312,16 +312,16 @@ struct ConfigFileLock {
 impl ConfigFileLock {
     fn acquire(config_path: &Path) -> Result<Self, String> {
         let path = config_lock_path(config_path);
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent).map_err(|err| {
-                    format!(
-                        "create config lock parent dir {} failed: {}",
-                        parent.display(),
-                        err
-                    )
-                })?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent).map_err(|err| {
+                format!(
+                    "create config lock parent dir {} failed: {}",
+                    parent.display(),
+                    err
+                )
+            })?;
         }
 
         let deadline = Instant::now() + Duration::from_secs(30);
@@ -386,16 +386,16 @@ fn write_config_table(
 ) -> Result<(), String> {
     let content = toml::to_string_pretty(table)
         .map_err(|err| format!("serialize {} failed: {}", path.display(), err))?;
-    if let Some(parent) = path.parent() {
-        if !parent.as_os_str().is_empty() {
-            fs::create_dir_all(parent).map_err(|err| {
-                format!(
-                    "create config parent dir {} failed: {}",
-                    parent.display(),
-                    err
-                )
-            })?;
-        }
+    if let Some(parent) = path.parent()
+        && !parent.as_os_str().is_empty()
+    {
+        fs::create_dir_all(parent).map_err(|err| {
+            format!(
+                "create config parent dir {} failed: {}",
+                parent.display(),
+                err
+            )
+        })?;
     }
     fs::write(path, content).map_err(|err| format!("write {} failed: {}", path.display(), err))
 }

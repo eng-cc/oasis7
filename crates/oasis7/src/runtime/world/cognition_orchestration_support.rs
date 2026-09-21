@@ -508,10 +508,9 @@ impl World {
                             .get("envelope_idempotency_key")
                             .and_then(JsonValue::as_str)
                             == Some(marker.envelope_idempotency_key.as_str())
-                }) {
-                    if let Some(sequence) = event.get("journal_seq").and_then(JsonValue::as_u64) {
-                        record["cognition_journal_seq"] = json!(sequence);
-                    }
+                }) && let Some(sequence) = event.get("journal_seq").and_then(JsonValue::as_u64)
+                {
+                    record["cognition_journal_seq"] = json!(sequence);
                 }
             }
         }

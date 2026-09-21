@@ -5,14 +5,21 @@ use super::super::{
 use super::World;
 use crate::simulator::canonical_agent_intent_summary;
 
+#[cfg(test)]
 const STATUS_PROPOSED: &str = "proposed";
+#[cfg(test)]
 const STATUS_SUBMITTED: &str = "submitted";
 const STATUS_ACCEPTED: &str = "accepted";
+#[cfg(test)]
 const STATUS_BLOCKED: &str = "blocked";
 const STATUS_COMPLETED: &str = "completed";
+#[cfg(test)]
 const STATUS_REJECTED: &str = "rejected";
+#[cfg(test)]
 const STATUS_EXPIRED: &str = "expired";
+#[cfg(test)]
 const STATUS_CANCELLED: &str = "cancelled";
+#[cfg(test)]
 const SOURCE_PROVIDER_ADVISORY: &str = "provider_advisory";
 
 fn invalid_intent(reason: impl Into<String>) -> WorldError {
@@ -81,6 +88,7 @@ impl World {
     ///
     /// This path deliberately creates only `AgentIntentProposed`; provider
     /// output cannot submit, accept, or complete an intent on its own.
+    #[cfg(test)]
     pub(crate) fn record_provider_advisory_proposed(
         &mut self,
         agent_id: &str,
@@ -157,6 +165,7 @@ impl World {
             .ok_or_else(|| invalid_intent("provider advisory was not persisted"))
     }
 
+    #[cfg(test)]
     fn transition_agent_intent_terminal_exact(
         &mut self,
         agent_id: &str,
@@ -165,13 +174,22 @@ impl World {
         status: &str,
     ) -> Result<AgentIntentReplayDisposition, WorldError> {
         let current = validate_exact_identity(self, agent_id, intent_id, request_digest)?;
-        let allowed = match (current.status.as_str(), status) {
+        let allowed = matches!(
+            (current.status.as_str(), status),
             (STATUS_PROPOSED, STATUS_REJECTED | STATUS_EXPIRED)
-            | (STATUS_SUBMITTED, STATUS_REJECTED | STATUS_EXPIRED | STATUS_CANCELLED)
-            | (STATUS_ACCEPTED, STATUS_REJECTED | STATUS_EXPIRED | STATUS_CANCELLED)
-            | (STATUS_BLOCKED, STATUS_REJECTED | STATUS_EXPIRED | STATUS_CANCELLED) => true,
-            _ => false,
-        };
+                | (
+                    STATUS_SUBMITTED,
+                    STATUS_REJECTED | STATUS_EXPIRED | STATUS_CANCELLED
+                )
+                | (
+                    STATUS_ACCEPTED,
+                    STATUS_REJECTED | STATUS_EXPIRED | STATUS_CANCELLED
+                )
+                | (
+                    STATUS_BLOCKED,
+                    STATUS_REJECTED | STATUS_EXPIRED | STATUS_CANCELLED
+                )
+        );
         if !allowed {
             if current.status == status {
                 return Ok((&current).into());
@@ -209,22 +227,8 @@ impl World {
             .ok_or_else(|| invalid_intent("terminal disposition was not persisted"))
     }
 
-    /// Persist a deterministic rejection for an exact pending/accepted intent.
-    pub(crate) fn reject_agent_intent_exact(
-        &mut self,
-        agent_id: &str,
-        intent_id: &str,
-        request_digest: &str,
-    ) -> Result<AgentIntentReplayDisposition, WorldError> {
-        self.transition_agent_intent_terminal_exact(
-            agent_id,
-            intent_id,
-            request_digest,
-            STATUS_REJECTED,
-        )
-    }
-
     /// Persist expiry for an exact intent before execution or completion.
+    #[cfg(test)]
     pub(crate) fn expire_agent_intent_exact(
         &mut self,
         agent_id: &str,
@@ -240,6 +244,7 @@ impl World {
     }
 
     /// Persist cancellation for an exact submitted/accepted/blocked intent.
+    #[cfg(test)]
     pub(crate) fn cancel_agent_intent_exact(
         &mut self,
         agent_id: &str,

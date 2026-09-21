@@ -914,8 +914,10 @@ mod tests {
     #[test]
     fn archive_dead_letter_rejects_dead_lettered_overflow_without_mutation() {
         let store = InMemoryMembershipRevocationAlertDeadLetterStore::new();
-        let mut metrics = MembershipRevocationAlertDeliveryMetrics::default();
-        metrics.dead_lettered = usize::MAX;
+        let mut metrics = MembershipRevocationAlertDeliveryMetrics {
+            dead_lettered: usize::MAX,
+            ..Default::default()
+        };
 
         let err = archive_dead_letter(
             &store,

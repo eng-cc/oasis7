@@ -1,4 +1,8 @@
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn observe_triggers_chunk_generation_for_agent_chunk() {
     let mut config = WorldConfig::default();
     config.asteroid_fragment.base_density_per_km3 = 100.0;
@@ -132,6 +136,10 @@ fn detached_harvest_quote_generates_ungenerated_chunk_without_mutating_live_worl
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn action_chunk_generation_consumes_boundary_reservations() {
     let mut config = WorldConfig::default();
     config.move_cost_per_km_electricity = 0;
@@ -223,6 +231,10 @@ fn action_chunk_generation_consumes_boundary_reservations() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn step_replenishes_fragments_every_hundred_ticks_at_one_percent() {
     let mut config = WorldConfig::default();
     config.asteroid_fragment.base_density_per_km3 = 0.0;
@@ -330,6 +342,10 @@ fn kernel_closed_loop_example() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn kernel_consume_fragment_resource_keeps_chunk_budget_in_sync() {
     let mut config = WorldConfig::default();
     config.space = SpaceConfig {
@@ -374,7 +390,7 @@ fn kernel_consume_fragment_resource_keeps_chunk_budget_in_sync() {
         .get(&coord)
         .expect("chunk budget")
         .get_remaining(element);
-    let amount = before_fragment.min(30).max(1);
+    let amount = before_fragment.clamp(1, 30);
 
     kernel
         .consume_fragment_resource(&fragment.id, element, amount)
@@ -399,6 +415,10 @@ fn kernel_consume_fragment_resource_keeps_chunk_budget_in_sync() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn mine_compound_consumes_fragment_budget_and_awards_owner_compound() {
     let mut config = WorldConfig::default();
     config.economy.mine_electricity_cost_per_kg = 2;
@@ -509,6 +529,10 @@ fn mine_compound_consumes_fragment_budget_and_awards_owner_compound() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn mine_compound_enforces_location_cap() {
     let mut config = WorldConfig::default();
     config.economy.mine_electricity_cost_per_kg = 1;
@@ -637,6 +661,10 @@ fn debug_grant_resource_adds_requested_amount_to_owner_stock() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn refine_compound_consumes_electricity_and_outputs_hardware() {
     let mut config = WorldConfig::default();
     config.economy.refine_electricity_cost_per_kg = 3;
@@ -812,6 +840,10 @@ fn refine_compound_rejects_when_electricity_insufficient() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn build_factory_consumes_resources_and_persists_factory_state() {
     let mut config = WorldConfig::default();
     config.economy.factory_build_electricity_cost = 7;
@@ -901,6 +933,10 @@ fn build_factory_consumes_resources_and_persists_factory_state() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn schedule_recipe_consumes_inputs_and_outputs_data() {
     let mut config = WorldConfig::default();
     config.economy.factory_build_electricity_cost = 0;

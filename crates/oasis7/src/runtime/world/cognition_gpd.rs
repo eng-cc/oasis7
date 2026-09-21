@@ -32,6 +32,10 @@ fn terminal_status(status: ContinuationStatusV1) -> bool {
     )
 }
 
+#[expect(
+    clippy::collapsible_if,
+    reason = "The two-step Waking then Consumed transition is intentional state-machine sequencing."
+)]
 fn transition_terminal(
     continuation: &mut AgentContinuation,
     status: ContinuationStatusV1,
@@ -418,19 +422,18 @@ impl World {
                     .cognition_continuations_typed()?
                     .into_iter()
                     .find(|value| value.continuation_id == continuation_id);
-                if let Some(continuation) = continuation {
-                    if !terminal_status(continuation.status)
-                        && self
-                            .cognition_in_flight_wakes()?
-                            .iter()
-                            .any(|wake| wake.continuation_id == continuation_id)
-                    {
-                        self.terminalize_cognition_wake(
-                            &continuation.wake_id,
-                            ContinuationStatusV1::Rejected,
-                            "cognition_context_mismatch",
-                        )?;
-                    }
+                if let Some(continuation) = continuation
+                    && !terminal_status(continuation.status)
+                    && self
+                        .cognition_in_flight_wakes()?
+                        .iter()
+                        .any(|wake| wake.continuation_id == continuation_id)
+                {
+                    self.terminalize_cognition_wake(
+                        &continuation.wake_id,
+                        ContinuationStatusV1::Rejected,
+                        "cognition_context_mismatch",
+                    )?;
                 }
                 Err(error)
             }
@@ -687,24 +690,23 @@ impl World {
             .into_iter()
             .find(|value| value.continuation_id == continuation_id)
             .ok_or_else(|| handoff_error("continuation_missing"))?;
-        if let Some(current_context) = current_context.as_ref() {
-            if let Err(error) =
+        if let Some(current_context) = current_context.as_ref()
+            && let Err(error) =
                 self.validate_current_context_for_continuation(continuation_id, current_context)
+        {
+            if !terminal_status(live_continuation.status)
+                && self
+                    .cognition_in_flight_wakes()?
+                    .iter()
+                    .any(|wake| wake.continuation_id == continuation_id)
             {
-                if !terminal_status(live_continuation.status)
-                    && self
-                        .cognition_in_flight_wakes()?
-                        .iter()
-                        .any(|wake| wake.continuation_id == continuation_id)
-                {
-                    self.terminalize_cognition_wake(
-                        &live_continuation.wake_id,
-                        ContinuationStatusV1::Rejected,
-                        "cognition_context_mismatch",
-                    )?;
-                }
-                return Err(error);
+                self.terminalize_cognition_wake(
+                    &live_continuation.wake_id,
+                    ContinuationStatusV1::Rejected,
+                    "cognition_context_mismatch",
+                )?;
             }
+            return Err(error);
         }
         if let Some(reason) =
             self.live_cognition_wake_invalid_reason(continuation_id, &live_continuation)
@@ -859,18 +861,18 @@ impl World {
             .into_iter()
             .find(|value| value.continuation_id == live_wake.continuation_id)
             .ok_or_else(|| handoff_error("continuation_missing"))?;
-        if let Some(current_context) = current_context.as_ref() {
-            if let Err(error) = self.validate_current_context_for_continuation(
+        if let Some(current_context) = current_context.as_ref()
+            && let Err(error) = self.validate_current_context_for_continuation(
                 &live_continuation.continuation_id,
                 current_context,
-            ) {
-                self.terminalize_cognition_wake(
-                    &live_wake.wake_id,
-                    ContinuationStatusV1::Rejected,
-                    "cognition_context_mismatch",
-                )?;
-                return Err(error);
-            }
+            )
+        {
+            self.terminalize_cognition_wake(
+                &live_wake.wake_id,
+                ContinuationStatusV1::Rejected,
+                "cognition_context_mismatch",
+            )?;
+            return Err(error);
         }
         if let Some(reason) = self.live_cognition_wake_invalid_reason(
             &live_continuation.continuation_id,

@@ -4,6 +4,10 @@ use super::*;
 mod prompt_control_enhanced_rollback;
 
 impl ViewerRuntimeLiveServer {
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     pub(in crate::viewer::runtime_live) fn handle_prompt_control_for_protocol(
         &mut self,
         command: PromptControlCommand,
@@ -148,6 +152,48 @@ impl ViewerRuntimeLiveServer {
         )
     }
 
+    fn prepare_hosted_local_mock_prompt_context_after_authorization(
+        &mut self,
+        request_id: &str,
+        operation: PromptControlOperation,
+        preview: bool,
+    ) -> Result<(), Box<PromptControlError>> {
+        if !(self.hosted_local_mock_test_lane_active && self.llm_sidecar.is_llm_mode()) {
+            return Ok(());
+        }
+        self.llm_sidecar
+            .prepare_hosted_local_mock_prompt_context(
+                &mut self.world,
+                &self.snapshot_config,
+                self.config.world_id.as_str(),
+            )
+            .map_err(|error| {
+                tracing::warn!(
+                    error = %error,
+                    "Hosted local-mock prompt context preparation blocked authorized prompt control"
+                );
+                let mut blocked = prompt_control_enhanced_error(
+                    "prompt_control_runtime_context_unavailable",
+                    &format!("Hosted local-mock prompt context preparation failed: {error}"),
+                    Some(request_id.to_string()),
+                    operation,
+                    preview,
+                    None,
+                    None,
+                    PromptControlResultStatus::Blocked,
+                );
+                blocked.value_visibility = Some(PromptControlValueVisibility::Hidden);
+                blocked.reason_code =
+                    Some("prompt_control_runtime_context_unavailable".to_string());
+                blocked.next_step = Some("retry_after_runtime_resync".to_string());
+                Box::new(blocked)
+            })
+    }
+
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     fn handle_enhanced_prompt_apply(
         &mut self,
         request: PromptControlApplyRequest,
@@ -196,7 +242,7 @@ impl ViewerRuntimeLiveServer {
                 PromptControlResultStatus::Blocked,
             ));
         }
-        if !self.llm_sidecar.supports_prompt_control() {
+        if !self.llm_sidecar.supports_prompt_control_result() {
             return Err(prompt_control_enhanced_error(
                 "agent_provider_prompt_control_unsupported",
                 "prompt_control is not supported when runtime live uses ProviderBacked(Local HTTP)",
@@ -273,11 +319,11 @@ impl ViewerRuntimeLiveServer {
                     player_id.as_str(),
                     verified.public_key.as_str(),
                 ))
-            && !self
+            && self
                 .llm_sidecar
                 .agent_player_bindings
                 .get(agent_id.as_str())
-                .is_some_and(|bound_player| bound_player != player_id.as_str())
+                .is_none_or(|bound_player| bound_player == player_id.as_str())
         {
             return Err(prompt_control_result_unknown_error(&request_id));
         }
@@ -469,6 +515,12 @@ impl ViewerRuntimeLiveServer {
                 )
             })?;
         }
+        self.prepare_hosted_local_mock_prompt_context_after_authorization(
+            request_id.as_str(),
+            operation,
+            preview,
+        )
+        .map_err(|error| *error)?;
         let current = self
             .current_prompt_profile(agent_id.as_str())
             .map_err(|_| {

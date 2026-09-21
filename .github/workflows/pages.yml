@@ -1,17 +1,6 @@
 name: Pages
 
 on:
-  push:
-    branches: ["main"]
-    paths:
-      - "site/**"
-      - "scripts/site-link-check.sh"
-      - "scripts/site-homepage-claim-check.sh"
-      - "scripts/site-manual-sync-check.sh"
-      - "scripts/site-download-check.sh"
-      - "doc/world-simulator/viewer/viewer-manual.manual.md"
-      - ".github/workflows/pages.yml"
-      - "README.md"
   workflow_dispatch:
 
 permissions:

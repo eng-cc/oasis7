@@ -55,6 +55,10 @@ fn seed_settled_history(state: &mut WorldState, job_id: ActionId, order: u64) {
         .insert(job_id, failure_disposition(job_id));
 }
 
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn blocked_factory(action_id: ActionId) -> FactoryState {
     let mut production = FactoryProductionState::default();
     production.current_blocker_kind = Some("product_validation".to_string());

@@ -2,6 +2,10 @@ use super::*;
 use crate::status_payload;
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn mainnet_validator_relay_policy_requires_governed_redundancy_and_surfaces_slashing_boundary() {
     let runtime_sha256 = current_test_binary_sha256();
     let (dir, manifest_path) =

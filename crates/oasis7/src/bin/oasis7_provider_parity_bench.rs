@@ -243,6 +243,10 @@ struct SampleSummary {
     runtime_perf: RuntimePerfSnapshot,
 }
 
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Benchmark behavior variants preserve direct ownership to keep provider parity setup explicit."
+)]
 enum BenchBehavior {
     Builtin(BuiltinParityBehavior),
     ProviderBacked(ProviderBackedLoopbackBehavior),
@@ -333,17 +337,17 @@ impl AgentBehavior for BuiltinParityBehavior {
             observation,
             original_decision.clone(),
         );
-        if let Some(note) = guardrail_note {
-            if let Some(trace) = trace.as_mut() {
-                trace.decision = decision.clone();
-                trace.llm_step_trace.push(oasis7::simulator::LlmStepTrace {
-                    step_index: trace.llm_step_trace.len(),
-                    step_type: "builtin_parity_guardrail".to_string(),
-                    input_summary: decision_label(&original_decision),
-                    output_summary: decision_label(&decision),
-                    status: note,
-                });
-            }
+        if let Some(note) = guardrail_note
+            && let Some(trace) = trace.as_mut()
+        {
+            trace.decision = decision.clone();
+            trace.llm_step_trace.push(oasis7::simulator::LlmStepTrace {
+                step_index: trace.llm_step_trace.len(),
+                step_type: "builtin_parity_guardrail".to_string(),
+                input_summary: decision_label(&original_decision),
+                output_summary: decision_label(&decision),
+                status: note,
+            });
         }
         self.pending_trace = trace;
         decision
@@ -443,7 +447,8 @@ impl ProviderBackedLoopbackBehavior {
             .expect("request builder must record a provider request");
         let turn = self.next_turn;
         self.next_turn = self.next_turn.saturating_add(1);
-        let contexts = if let Some(origin) = self.recovery_origin.clone() {
+
+        if let Some(origin) = self.recovery_origin.clone() {
             self.retry_seq = self.retry_seq.saturating_add(1).max(2);
             target_context::build_target_context_for_retry(
                 request,
@@ -463,8 +468,7 @@ impl ProviderBackedLoopbackBehavior {
                 &self.session_id,
                 turn,
             )
-        };
-        contexts
+        }
     }
 }
 
@@ -664,13 +668,13 @@ fn main() {
             }
         }
 
-        if let Some(result_action) = result.action_result.as_ref() {
-            if let Some(reject_reason) = result_action.reject_reason() {
-                notes.push(format!(
-                    "step {step_index}: action rejected for agent {} with {:?}",
-                    result.agent_id, reject_reason
-                ));
-            }
+        if let Some(result_action) = result.action_result.as_ref()
+            && let Some(reject_reason) = result_action.reject_reason()
+        {
+            notes.push(format!(
+                "step {step_index}: action rejected for agent {} with {:?}",
+                result.agent_id, reject_reason
+            ));
         }
 
         step_records.push(StepTraceRecord {

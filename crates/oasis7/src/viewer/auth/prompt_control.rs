@@ -184,6 +184,10 @@ pub fn verify_prompt_control_rollback_auth_proof(
     })
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Hosted prompt-control grant signing preserves the stable protocol field order"
+)]
 pub fn sign_hosted_prompt_control_strong_auth_grant(
     action_id: &str,
     player_id: &str,

@@ -240,6 +240,10 @@ pub struct DecisionRequest {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "decision", rename_all = "snake_case")]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Stable provider decision wire enum preserves direct command payloads."
+)]
 pub enum ProviderDecision {
     Wait,
     WaitTicks {
@@ -872,6 +876,10 @@ impl<P: DecisionProvider> ProviderBackedAgentBehavior<P> {
         decision_provider_trace::provider_error_to_trace(error)
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable provider trace seam keeps request and response identity inputs explicit."
+    )]
     fn response_to_trace(
         &self,
         observation: &Observation,

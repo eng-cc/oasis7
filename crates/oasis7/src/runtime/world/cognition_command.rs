@@ -445,6 +445,10 @@ fn rejected_outcome(reason: &str) -> JsonValue {
         .unwrap_or_else(|| json!({"disposition": "rejected", "reject_reason": reason}))
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "The command outcome keeps its explicit stable telemetry fields for wire compatibility."
+)]
 fn command_outcome(
     disposition: &str,
     receipt_id: Option<&str>,

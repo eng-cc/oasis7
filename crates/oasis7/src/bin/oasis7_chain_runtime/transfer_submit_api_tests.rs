@@ -231,6 +231,10 @@ fn serialize_transfer_request(request: &ChainTransferSubmitRequest) -> Vec<u8> {
     serde_json::to_vec(request).expect("serialize transfer request")
 }
 
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn seed_world_for_explorer_p1(temp_dir: &Path) {
     let mut state = WorldState::default();
     state.main_token_config = MainTokenConfig {

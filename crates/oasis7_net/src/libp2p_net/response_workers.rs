@@ -137,6 +137,10 @@ impl ResponseWorkers {
         )
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "RejectedResponse carries the response channel and wire context together for immediate rejection"
+    )]
     pub(super) fn schedule(
         &self,
         channel: request_response::ResponseChannel<NetworkResponse>,
@@ -185,6 +189,10 @@ impl ResponseWorkers {
         })
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Completion keeps the response channel, budget, metrics, and swarm borrows explicit"
+    )]
     pub(super) fn complete(
         &self,
         completed: CompletedResponse,
@@ -223,6 +231,10 @@ impl ResponseWorkers {
         }
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Immediate responses keep the response channel, budget, metrics, and swarm borrows explicit"
+    )]
     pub(super) fn send_immediate(
         &self,
         channel: request_response::ResponseChannel<NetworkResponse>,
@@ -298,6 +310,10 @@ impl ResponseWorkers {
         })
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Returning the rejected Job preserves reservation ownership for the caller's recovery path"
+    )]
     fn submit(&self, job: Job) -> Result<(), Job> {
         let sender = match response_lane(job.protocol.as_str()) {
             ResponseLane::Control => &self.control,

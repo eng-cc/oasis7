@@ -9,8 +9,7 @@ use oasis7_wasm_router::{
 
 use super::super::util::{hash_json, to_canonical_cbor};
 use super::super::{
-    ActionEnvelope, ModuleKind, ModuleManifest, ModuleSubscriptionStage, WorldError, WorldEvent,
-    WorldEventBody,
+    ActionEnvelope, ModuleKind, ModuleSubscriptionStage, WorldError, WorldEvent, WorldEventBody,
 };
 use super::World;
 use super::capability_authorization_command_stage::{

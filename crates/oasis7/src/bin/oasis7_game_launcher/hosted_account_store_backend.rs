@@ -1,24 +1,28 @@
+use aliyun_tablestore_rs::error::OtsError;
+#[cfg(not(test))]
 use aliyun_tablestore_rs::{
     OtsClient,
     data::{GetRowRequest, PutRowRequest, UpdateRowRequest},
-    error::OtsError,
     model::{ColumnValue, Row},
     protos::{ReturnType, RowExistenceExpectation},
     table::CreateTableRequest,
 };
 use serde::{Deserialize, Serialize};
 use std::fs;
+#[cfg(not(test))]
 use std::future::Future;
 use std::io::Write;
 #[cfg(unix)]
 use std::os::unix::fs::{OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
+#[cfg(not(test))]
 use tokio::runtime::{Builder, Runtime};
 
 const HOSTED_ACCOUNT_STORE_BACKEND_ENV: &str = "OASIS7_HOSTED_ACCOUNT_STORE_BACKEND";
 const HOSTED_ACCOUNT_STORE_BACKEND_AUTO: &str = "auto";
 const HOSTED_ACCOUNT_STORE_BACKEND_FILE: &str = "file";
 const HOSTED_ACCOUNT_STORE_BACKEND_TABLESTORE: &str = "tablestore";
+#[cfg(not(test))]
 const HOSTED_ACCOUNT_STORE_PATH_ENV: &str = "OASIS7_HOSTED_ACCOUNT_STORE_PATH";
 const HOSTED_ACCOUNT_TABLESTORE_ENDPOINT_ENV: &str = "OASIS7_HOSTED_ACCOUNT_TABLESTORE_ENDPOINT";
 const HOSTED_ACCOUNT_TABLESTORE_AK_ID_ENV: &str = "OASIS7_HOSTED_ACCOUNT_TABLESTORE_AK_ID";
@@ -32,20 +36,35 @@ const ALIYUN_OTS_AK_ID_ENV: &str = "ALIYUN_OTS_AK_ID";
 const ALIYUN_OTS_AK_SECRET_ENV: &str = "ALIYUN_OTS_AK_SECRET";
 const ALIYUN_OTS_STS_TOKEN_ENV: &str = "ALIYUN_OTS_STS_TOKEN";
 const HOSTED_ACCOUNT_TABLESTORE_DEFAULT_TABLE: &str = "oasis7_hosted_account_identity";
+#[cfg(not(test))]
 const HOSTED_ACCOUNT_TABLESTORE_FACTOR_BUCKET: &str = "factor";
+#[cfg(not(test))]
 const HOSTED_ACCOUNT_TABLESTORE_META_BUCKET: &str = "meta";
+#[cfg(not(test))]
 const HOSTED_ACCOUNT_TABLESTORE_SEQUENCE_KEY: &str = "sequence";
+#[cfg(not(test))]
 const HOSTED_ACCOUNT_TABLESTORE_PK_BUCKET: &str = "bucket";
+#[cfg(not(test))]
 const HOSTED_ACCOUNT_TABLESTORE_PK_KEY: &str = "key";
+#[cfg(not(test))]
 const HOSTED_ACCOUNT_TABLESTORE_COL_ACCOUNT_ID: &str = "hosted_account_id";
+#[cfg(not(test))]
 const HOSTED_ACCOUNT_TABLESTORE_COL_PLAYER_ID: &str = "player_id";
+#[cfg(not(test))]
 const HOSTED_ACCOUNT_TABLESTORE_COL_LOGIN_CHANNEL: &str = "login_channel";
+#[cfg(not(test))]
 const HOSTED_ACCOUNT_TABLESTORE_COL_NORMALIZED_LOGIN_HINT: &str = "normalized_login_hint";
+#[cfg(not(test))]
 const HOSTED_ACCOUNT_TABLESTORE_COL_MASKED_LOGIN_HINT: &str = "masked_login_hint";
+#[cfg(not(test))]
 const HOSTED_ACCOUNT_TABLESTORE_COL_STATUS: &str = "status";
+#[cfg(not(test))]
 const HOSTED_ACCOUNT_TABLESTORE_COL_CREATED_AT_UNIX_MS: &str = "created_at_unix_ms";
+#[cfg(not(test))]
 const HOSTED_ACCOUNT_TABLESTORE_COL_LAST_VERIFIED_AT_UNIX_MS: &str = "last_verified_at_unix_ms";
+#[cfg(not(test))]
 const HOSTED_ACCOUNT_TABLESTORE_COL_NEXT_ACCOUNT_SEQUENCE: &str = "next_account_sequence";
+#[cfg(not(test))]
 const HOSTED_ACCOUNT_TABLESTORE_COL_NEXT_PLAYER_SEQUENCE: &str = "next_player_sequence";
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -71,6 +90,7 @@ pub(super) struct HostedAccountRecord {
 pub(super) enum HostedAccountStoreBackend {
     Disabled,
     File(FileHostedAccountStoreBackend),
+    #[cfg(not(test))]
     Tablestore(HostedAccountTablestoreBackend),
 }
 
@@ -80,6 +100,7 @@ pub(super) struct FileHostedAccountStoreBackend {
     store: HostedAccountStore,
 }
 
+#[cfg(not(test))]
 pub(super) struct HostedAccountTablestoreBackend {
     table_name: String,
     auto_create: bool,
@@ -111,6 +132,7 @@ impl std::fmt::Debug for HostedAccountStoreBackend {
                 .debug_tuple("HostedAccountStoreBackend::File")
                 .field(inner)
                 .finish(),
+            #[cfg(not(test))]
             Self::Tablestore(inner) => f
                 .debug_tuple("HostedAccountStoreBackend::Tablestore")
                 .field(inner)
@@ -119,6 +141,7 @@ impl std::fmt::Debug for HostedAccountStoreBackend {
     }
 }
 
+#[cfg(not(test))]
 impl std::fmt::Debug for HostedAccountTablestoreBackend {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("HostedAccountTablestoreBackend")
@@ -130,12 +153,14 @@ impl std::fmt::Debug for HostedAccountTablestoreBackend {
 }
 
 impl HostedAccountStoreBackend {
+    #[cfg(not(test))]
     pub(super) fn from_env() -> Result<Self, String> {
         let mode = HostedAccountStoreBackendMode::from_lookup(|key| std::env::var(key).ok())?;
         match mode {
             HostedAccountStoreBackendMode::File => {
                 FileHostedAccountStoreBackend::from_env().map(Self::File)
             }
+            #[cfg(not(test))]
             HostedAccountStoreBackendMode::Tablestore => {
                 HostedAccountTablestoreBackend::from_env().map(Self::Tablestore)
             }
@@ -170,6 +195,7 @@ impl HostedAccountStoreBackend {
                 masked_login_hint,
                 verified_at_unix_ms,
             ),
+            #[cfg(not(test))]
             Self::Tablestore(inner) => inner.record_verified_login(
                 factor_key,
                 login_channel,
@@ -185,12 +211,14 @@ impl HostedAccountStoreBackend {
         match self {
             Self::Disabled => 0,
             Self::File(inner) => inner.store.accounts_by_id.len(),
+            #[cfg(not(test))]
             Self::Tablestore(_) => 0,
         }
     }
 }
 
 impl FileHostedAccountStoreBackend {
+    #[cfg(not(test))]
     fn from_env() -> Result<Self, String> {
         let store_path = resolve_store_path();
         let store = load_store(store_path.as_path())?;
@@ -252,12 +280,15 @@ impl FileHostedAccountStoreBackend {
     }
 }
 
+#[cfg(not(test))]
 impl HostedAccountTablestoreBackend {
+    #[cfg(not(test))]
     fn from_env() -> Result<Self, String> {
         let config = HostedAccountTablestoreConfig::from_lookup(|key| std::env::var(key).ok())?;
         Self::from_config(config)
     }
 
+    #[cfg(not(test))]
     fn from_config(config: HostedAccountTablestoreConfig) -> Result<Self, String> {
         let (instance_name, region) =
             parse_tablestore_instance_and_region(config.endpoint.as_str())?;
@@ -285,6 +316,7 @@ impl HostedAccountTablestoreBackend {
         Ok(backend)
     }
 
+    #[cfg(not(test))]
     fn ensure_table_ready(&mut self) -> Result<(), String> {
         if self.table_exists()? {
             return Ok(());
@@ -312,6 +344,7 @@ impl HostedAccountTablestoreBackend {
         }
     }
 
+    #[cfg(not(test))]
     fn table_exists(&mut self) -> Result<bool, String> {
         let client = self.client.clone();
         let table_name = self.table_name.clone();
@@ -550,6 +583,7 @@ impl HostedAccountTablestoreConfig {
     }
 }
 
+#[cfg(not(test))]
 fn resolve_store_path() -> PathBuf {
     if let Ok(raw) = std::env::var(HOSTED_ACCOUNT_STORE_PATH_ENV) {
         let trimmed = raw.trim();
@@ -645,7 +679,7 @@ fn save_store(path: &Path, store: &HostedAccountStore) -> Result<(), String> {
                     )
                 })?;
         }
-        return Ok(());
+        Ok(())
     }
     #[cfg(not(unix))]
     {
@@ -710,6 +744,7 @@ fn build_hosted_player_id(sequence: u64) -> String {
     format!("hosted-player-account-{sequence:08x}")
 }
 
+#[cfg(not(test))]
 fn factor_row(factor_key: &str, record: &HostedAccountRecord) -> Row {
     Row::new()
         .primary_key_column_string(
@@ -748,6 +783,7 @@ fn factor_row(factor_key: &str, record: &HostedAccountRecord) -> Row {
         )
 }
 
+#[cfg(not(test))]
 fn hosted_account_record_from_row(row: Row) -> Result<HostedAccountRecord, String> {
     Ok(HostedAccountRecord {
         hosted_account_id: required_string_column(&row, HOSTED_ACCOUNT_TABLESTORE_COL_ACCOUNT_ID)?,
@@ -773,6 +809,7 @@ fn hosted_account_record_from_row(row: Row) -> Result<HostedAccountRecord, Strin
     })
 }
 
+#[cfg(not(test))]
 fn required_string_column(row: &Row, name: &str) -> Result<String, String> {
     match row.get_column_value(name) {
         Some(ColumnValue::String(value)) => Ok(value.clone()),
@@ -785,6 +822,7 @@ fn required_string_column(row: &Row, name: &str) -> Result<String, String> {
     }
 }
 
+#[cfg(not(test))]
 fn required_i64_column(row: &Row, name: &str) -> Result<i64, String> {
     match row.get_column_value(name) {
         Some(ColumnValue::Integer(value)) => Ok(*value),
@@ -797,12 +835,14 @@ fn required_i64_column(row: &Row, name: &str) -> Result<i64, String> {
     }
 }
 
+#[cfg(not(test))]
 fn required_u64_column(row: &Row, name: &str) -> Result<u64, String> {
     let value = required_i64_column(row, name)?;
     u64::try_from(value)
         .map_err(|err| format!("hosted account tablestore column `{name}` is negative: {err}"))
 }
 
+#[cfg(not(test))]
 fn unix_ms_to_i64(value: u64) -> i64 {
     i64::try_from(value).unwrap_or(i64::MAX)
 }
@@ -825,6 +865,7 @@ fn parse_tablestore_instance_and_region(endpoint: &str) -> Result<(String, Strin
     Ok((instance_name.to_string(), region.to_string()))
 }
 
+#[cfg(not(test))]
 fn format_ots_error(context: &str, err: OtsError) -> String {
     format!("{context} failed: {err}")
 }

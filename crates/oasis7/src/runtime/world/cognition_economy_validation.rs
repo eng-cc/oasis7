@@ -347,7 +347,8 @@ impl CognitionEconomyStateV1 {
                     }
                 };
             if event.operation_key != expected_operation
-                || expected_receipt != Some(event.receipt_id.as_str()) && event.receipt_id != ""
+                || (expected_receipt != Some(event.receipt_id.as_str())
+                    && !event.receipt_id.is_empty())
                 || event.status != expected_status
             {
                 return Err(CognitionEconomyError::InvalidState(

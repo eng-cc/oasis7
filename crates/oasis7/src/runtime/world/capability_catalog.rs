@@ -262,15 +262,14 @@ impl World {
         {
             return Err(deny("capability audience world does not match live world"));
         }
-        if let Some(binding) = self.cognition.get("runtime_binding") {
-            if binding.get("world_id").and_then(Value::as_str) != Some(audience.world_id.as_str())
+        if let Some(binding) = self.cognition.get("runtime_binding")
+            && (binding.get("world_id").and_then(Value::as_str) != Some(audience.world_id.as_str())
                 || binding.get("branch_id").and_then(Value::as_str)
                     != Some(audience.branch_id.as_str())
                 || binding.get("finality_epoch").and_then(Value::as_u64)
-                    != Some(audience.finality_epoch)
-            {
-                return Err(deny("capability audience conflicts with Runtime binding"));
-            }
+                    != Some(audience.finality_epoch))
+        {
+            return Err(deny("capability audience conflicts with Runtime binding"));
         }
         if let Some(record) = self.tick_consensus_records.last() {
             let block_hash = record.block.block_hash();

@@ -211,9 +211,7 @@ pub const EXECUTION_MISSING_PREDECESSOR_RECORD_SIGNATURE: &str =
     "execution driver missing predecessor record for non-contiguous committed height";
 
 fn required_network_blob_matches(sample_count: usize) -> usize {
-    sample_count
-        .min(STORAGE_GATE_NETWORK_MIN_MATCHES_CAP)
-        .max(1)
+    sample_count.clamp(1, STORAGE_GATE_NETWORK_MIN_MATCHES_CAP)
 }
 
 impl NodePosStatusAdapter for PosConsensusStatus {
@@ -417,11 +415,11 @@ impl NodeRuntime {
                 self.running.store(false, Ordering::SeqCst);
                 return Err(err);
             }
-            if let Some(store) = pos_state_store.as_ref() {
-                if let Err(err) = store.save_engine_state(&engine) {
-                    self.running.store(false, Ordering::SeqCst);
-                    return Err(err);
-                }
+            if let Some(store) = pos_state_store.as_ref()
+                && let Err(err) = store.save_engine_state(&engine)
+            {
+                self.running.store(false, Ordering::SeqCst);
+                return Err(err);
             }
         }
         if let Err(err) = bind_replicated_inputs(self, engine.next_height) {
@@ -443,18 +441,16 @@ impl NodeRuntime {
         if let (Some(network), Some(replication_config)) = (
             &self.replication_network,
             effective_replication_config.as_ref(),
+        ) && let Err(err) = register_replication_fetch_handlers_with_checkpoint_export(
+            network,
+            replication_config,
+            self.config.node_id.as_str(),
+            self.config.world_id.as_str(),
+            &self.config.network_policy,
+            self.execution_hook.clone(),
         ) {
-            if let Err(err) = register_replication_fetch_handlers_with_checkpoint_export(
-                network,
-                replication_config,
-                self.config.node_id.as_str(),
-                self.config.world_id.as_str(),
-                &self.config.network_policy,
-                self.execution_hook.clone(),
-            ) {
-                self.running.store(false, Ordering::SeqCst);
-                return Err(err);
-            }
+            self.running.store(false, Ordering::SeqCst);
+            return Err(err);
         }
         let mut replication_network = if let Some(network) = &self.replication_network {
             let subscribe = self.config.replication.is_some();
@@ -692,10 +688,10 @@ impl NodeRuntime {
                                     if let Err(err) = feedback_publish_result.as_ref() {
                                         current.last_error = Some(err.to_string());
                                     }
-                                    if let Err(err) = feedback_ingest_result.as_ref() {
-                                        if current.last_error.is_none() {
-                                            current.last_error = Some(err.to_string());
-                                        }
+                                    if let Err(err) = feedback_ingest_result.as_ref()
+                                        && current.last_error.is_none()
+                                    {
+                                        current.last_error = Some(err.to_string());
                                     }
                                     match maintenance_result {
                                         Ok(polled_at_ms) => {
@@ -716,12 +712,11 @@ impl NodeRuntime {
                                             max_committed_action_batch_bytes,
                                         );
                                     }
-                                    if let Some(store) = pos_state_store.as_ref() {
-                                        if let Err(err) = store.save_engine_state(&engine) {
-                                            if current.last_error.is_none() {
-                                                current.last_error = Some(err.to_string());
-                                            }
-                                        }
+                                    if let Some(store) = pos_state_store.as_ref()
+                                        && let Err(err) = store.save_engine_state(&engine)
+                                        && current.last_error.is_none()
+                                    {
+                                        current.last_error = Some(err.to_string());
                                     }
                                 }
                                 Err(err) => {

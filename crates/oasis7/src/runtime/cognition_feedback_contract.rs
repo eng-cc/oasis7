@@ -188,12 +188,12 @@ pub(crate) fn validate_runtime_feedback_disposition(
             }
         }
         "pending" if candidate_action_id.is_none() && no_receipt => {
-            if let Some(reason) = reason {
-                if !PENDING_REASONS.contains(&reason) {
-                    return Err(CognitionRecoveryError::new(
-                        "feedback_disposition_reason_invalid",
-                    ));
-                }
+            if let Some(reason) = reason
+                && !PENDING_REASONS.contains(&reason)
+            {
+                return Err(CognitionRecoveryError::new(
+                    "feedback_disposition_reason_invalid",
+                ));
             }
         }
         _ => {
@@ -310,12 +310,6 @@ impl RuntimeFeedbackOutboxRecordV1 {
             ));
         }
         Ok(())
-    }
-
-    pub(crate) fn from_feedback(
-        feedback: &crate::simulator::FeedbackEnvelopeV1,
-    ) -> Result<Self, CognitionRecoveryError> {
-        Self::from_feedback_with_projection(feedback, RuntimeFeedbackProjectionV1::default())
     }
 
     pub(crate) fn from_feedback_with_projection(

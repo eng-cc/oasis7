@@ -2,17 +2,12 @@ use serde::{Deserialize, Serialize};
 
 use super::main_token::{MainTokenEconomyAuditReport, MainTokenEconomyAuditThresholds};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum LongRunReleaseStage {
+    #[default]
     Canary,
     Full,
-}
-
-impl Default for LongRunReleaseStage {
-    fn default() -> Self {
-        Self::Canary
-    }
 }
 
 impl LongRunReleaseStage {

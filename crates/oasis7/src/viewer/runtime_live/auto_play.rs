@@ -35,10 +35,10 @@ impl ViewerRuntimeLiveServer {
             return false;
         }
         let now = Instant::now();
-        if let Some(next_step_at) = self.next_auto_play_step_at {
-            if now < next_step_at {
-                return false;
-            }
+        if let Some(next_step_at) = self.next_auto_play_step_at
+            && now < next_step_at
+        {
+            return false;
         }
         self.next_auto_play_step_at = Some(now + self.config.play_step_interval);
         true

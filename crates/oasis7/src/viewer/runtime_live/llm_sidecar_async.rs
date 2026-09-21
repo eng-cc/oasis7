@@ -241,17 +241,17 @@ impl RuntimeLlmSidecar {
             let Some(context) = self.provider_contexts.get(&agent_id).cloned() else {
                 continue;
             };
-            if let Some(existing_lease) = self.provider_cognition_lease(agent_id.as_str()) {
-                if let Err(error) = self.validate_provider_cognition_lease_for_request(
+            if let Some(existing_lease) = self.provider_cognition_lease(agent_id.as_str())
+                && let Err(error) = self.validate_provider_cognition_lease_for_request(
                     world,
                     agent_id.as_str(),
                     &context.request_context,
                     &existing_lease,
                     "dispatch",
-                ) {
-                    self.fence_provider_cognition_lease(agent_id.as_str(), &context, error.clone());
-                    return Some(RuntimeLlmDecision::from_agent_error(world, agent_id, error));
-                }
+                )
+            {
+                self.fence_provider_cognition_lease(agent_id.as_str(), &context, error.clone());
+                return Some(RuntimeLlmDecision::from_agent_error(world, agent_id, error));
             }
             let observation = match kernel.observe(agent_id.as_str()) {
                 Ok(observation) => observation,

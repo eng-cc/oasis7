@@ -89,23 +89,21 @@ impl World {
                         },
                     }));
                 }
-                if let Some(public_key) = public_key.as_deref() {
-                    if self
+                if let Some(public_key) = public_key.as_deref()
+                    && self
                         .state
                         .starter_oc_claims
                         .values()
                         .any(|claim| claim.public_key.as_deref() == Some(public_key))
-                    {
-                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                            action_id,
-                            reason: RejectReason::RuleDenied {
-                                notes: vec![
-                                    "claim starter OC rejected: public key already claimed"
-                                        .to_string(),
-                                ],
-                            },
-                        }));
-                    }
+                {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![
+                                "claim starter OC rejected: public key already claimed".to_string(),
+                            ],
+                        },
+                    }));
                 }
 
                 let source_treasury_bucket_id = if self

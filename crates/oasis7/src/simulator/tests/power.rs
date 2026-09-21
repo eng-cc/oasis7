@@ -51,6 +51,7 @@ fn power_tick_preserves_agent_event_order() {
 }
 
 #[test]
+#[expect(clippy::field_reassign_with_default, reason = "fixture defaults")]
 fn power_tick_dissipates_more_heat_when_hotter() {
     let mut config = WorldConfig::default();
     config.power.idle_cost_per_tick = 0;
@@ -139,6 +140,7 @@ fn power_tick_dissipates_more_heat_when_hotter() {
 }
 
 #[test]
+#[expect(clippy::field_reassign_with_default, reason = "fixture defaults")]
 fn power_tick_thermal_dissipation_never_makes_heat_negative() {
     let mut config = WorldConfig::default();
     config.power.idle_cost_per_tick = 0;
@@ -347,6 +349,7 @@ fn power_generation_creates_electricity() {
 }
 
 #[test]
+#[expect(clippy::field_reassign_with_default, reason = "fixture defaults")]
 fn build_radiation_power_factory_registers_plant_and_generates_to_owner() {
     let mut config = WorldConfig::default();
     config.economy.factory_build_electricity_cost = 0;

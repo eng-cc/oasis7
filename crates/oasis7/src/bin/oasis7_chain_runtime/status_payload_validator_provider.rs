@@ -465,6 +465,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::field_reassign_with_default,
+        reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+    )]
     fn provider_status_rejects_same_height_unrelated_checkpoint_identity() {
         let records_dir = temp_records_dir();
         let manifest_hash = write_checkpoint_fixture(records_dir.as_path());

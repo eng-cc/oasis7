@@ -162,6 +162,10 @@ pub(crate) fn finality_binding_digest_v1(
     )
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "This hash preimage is a stable replay/persistence contract; grouping fields would change call-site/API shape."
+)]
 pub(crate) fn world_state_binding_digest_v1(
     world_id: &str,
     branch_id: &str,
@@ -885,10 +889,10 @@ fn validate_origin_intent(
     {
         return Err(CognitionValidationError::new("intent_conflict"));
     }
-    if let Some(request_digest) = object.get("request_digest").and_then(JsonValue::as_str) {
-        if intent.request_digest.is_empty() || request_digest != intent.request_digest {
-            return Err(CognitionValidationError::new("intent_conflict"));
-        }
+    if let Some(request_digest) = object.get("request_digest").and_then(JsonValue::as_str)
+        && (intent.request_digest.is_empty() || request_digest != intent.request_digest)
+    {
+        return Err(CognitionValidationError::new("intent_conflict"));
     }
     if let Some(world_id) = object.get("world_id").and_then(JsonValue::as_str)
         && world_id != envelope.world_id

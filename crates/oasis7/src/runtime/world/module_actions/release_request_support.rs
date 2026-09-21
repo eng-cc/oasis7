@@ -1,6 +1,10 @@
 use super::*;
 
 impl World {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Release submission fields are the stable module governance transaction input set."
+    )]
     pub(super) fn handle_module_release_submit_action(
         &mut self,
         action_id: ActionId,
@@ -64,22 +68,22 @@ impl World {
             )?;
             return Ok(true);
         }
-        if let Some(owner_agent_id) = self.state.module_artifact_owners.get(&manifest.wasm_hash) {
-            if owner_agent_id != requester_agent_id {
-                self.append_event(
-                    WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec![format!(
-                                "module release submit rejected: requester {} does not own {} (owner {})",
-                                requester_agent_id, manifest.wasm_hash, owner_agent_id
-                            )],
-                        },
-                    }),
-                    Some(CausedBy::Action(action_id)),
-                )?;
-                return Ok(true);
-            }
+        if let Some(owner_agent_id) = self.state.module_artifact_owners.get(&manifest.wasm_hash)
+            && owner_agent_id != requester_agent_id
+        {
+            self.append_event(
+                WorldEventBody::Domain(DomainEvent::ActionRejected {
+                    action_id,
+                    reason: RejectReason::RuleDenied {
+                        notes: vec![format!(
+                            "module release submit rejected: requester {} does not own {} (owner {})",
+                            requester_agent_id, manifest.wasm_hash, owner_agent_id
+                        )],
+                    },
+                }),
+                Some(CausedBy::Action(action_id)),
+            )?;
+            return Ok(true);
         }
 
         let request_id = self.peek_next_module_release_request_id();
@@ -186,6 +190,10 @@ impl World {
         Ok(true)
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Attestation submission fields mirror the persisted build-proof schema."
+    )]
     pub(super) fn handle_module_release_submit_attestation_action(
         &mut self,
         action_id: ActionId,
@@ -587,22 +595,22 @@ impl World {
             )?;
             return Ok(true);
         }
-        if let Some(existing_approver) = request.role_approvals.get(&normalized_role) {
-            if existing_approver != approver_agent_id {
-                self.append_event(
-                    WorldEventBody::Domain(DomainEvent::ActionRejected {
-                        action_id,
-                        reason: RejectReason::RuleDenied {
-                            notes: vec![format!(
-                                "module release approve_role rejected: role {} already approved by {}",
-                                normalized_role, existing_approver
-                            )],
-                        },
-                    }),
-                    Some(CausedBy::Action(action_id)),
-                )?;
-                return Ok(true);
-            }
+        if let Some(existing_approver) = request.role_approvals.get(&normalized_role)
+            && existing_approver != approver_agent_id
+        {
+            self.append_event(
+                WorldEventBody::Domain(DomainEvent::ActionRejected {
+                    action_id,
+                    reason: RejectReason::RuleDenied {
+                        notes: vec![format!(
+                            "module release approve_role rejected: role {} already approved by {}",
+                            normalized_role, existing_approver
+                        )],
+                    },
+                }),
+                Some(CausedBy::Action(action_id)),
+            )?;
+            return Ok(true);
         }
         self.append_event(
             WorldEventBody::Domain(DomainEvent::ModuleReleaseRoleApproved {

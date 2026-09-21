@@ -222,10 +222,11 @@ fn concurrent_claim_conflict_charges_only_winner() {
             WorldEventBody::Domain(DomainEvent::AgentClaimed { .. }) => {
                 claim_events += 1;
             }
-            WorldEventBody::Domain(DomainEvent::ActionRejected { reason, .. }) => {
-                if let RejectReason::RuleDenied { notes } = reason {
-                    rejection_notes.extend(notes.iter().cloned());
-                }
+            WorldEventBody::Domain(DomainEvent::ActionRejected {
+                reason: RejectReason::RuleDenied { notes },
+                ..
+            }) => {
+                rejection_notes.extend(notes.iter().cloned());
             }
             _ => {}
         }

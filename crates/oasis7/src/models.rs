@@ -6,23 +6,12 @@ pub const DEFAULT_AGENT_HEIGHT_CM: i64 = 100;
 pub const DEFAULT_BODY_FRAME_KIND: &str = "standard_frame";
 pub const DEFAULT_BODY_SLOT_CAPACITY: u16 = 7;
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct BodyKernelView {
     pub mass_kg: u64,
     pub radius_cm: u64,
     pub thrust_limit: u64,
     pub cross_section_cm2: u64,
-}
-
-impl Default for BodyKernelView {
-    fn default() -> Self {
-        Self {
-            mass_kg: 0,
-            radius_cm: 0,
-            thrust_limit: 0,
-            cross_section_cm2: 0,
-        }
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

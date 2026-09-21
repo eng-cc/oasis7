@@ -208,10 +208,10 @@ impl MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertSta
         state: &MembershipRevocationDeadLetterReplayRollbackGovernanceRecoveryDrillAlertState,
     ) -> Result<(), WorldError> {
         let path = self.state_path(world_id, node_id)?;
-        if let Some(parent) = path.parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path.parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent)?;
         }
         fs::write(path, serde_json::to_vec_pretty(state)?)?;
         Ok(())
@@ -334,6 +334,10 @@ impl MembershipSyncClient {
         )
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Alert state-machine seam keeps explicit policy, state-store, and sink dependencies"
+    )]
     pub fn emit_revocation_dead_letter_replay_rollback_governance_recovery_drill_alert_if_needed(
         &self,
         world_id: &str,

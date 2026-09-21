@@ -861,47 +861,42 @@ impl<C: LlmCompletionClient> AgentBehavior for LlmAgentBehavior<C> {
         if self.config.execute_until_auto_reenter_ticks > 0
             && self.active_execute_until.is_none()
             && !resolved_via_execute_until
+            && let AgentDecision::Act(action) = &decision
+            && self.replan_guard_state.is_same_action_as_last(action)
         {
-            if let AgentDecision::Act(action) = &decision {
-                if self.replan_guard_state.is_same_action_as_last(action) {
-                    let projected_repeat = self
-                        .replan_guard_state
-                        .projected_consecutive_same_action(action);
-                    let will_force_replan_next =
-                        force_replan_threshold > 0 && projected_repeat >= force_replan_threshold;
-                    if !will_force_replan_next {
-                        let mut max_ticks = self.config.execute_until_auto_reenter_ticks as u64;
-                        if matches!(action, Action::HarvestRadiation { .. })
-                            && max_ticks > DEFAULT_LLM_HARVEST_EXECUTE_UNTIL_MAX_TICKS
-                        {
-                            max_ticks = DEFAULT_LLM_HARVEST_EXECUTE_UNTIL_MAX_TICKS;
-                        }
-                        let active_execute_until = ActiveExecuteUntil::from_auto_reentry(
-                            action.clone(),
-                            observation,
-                            max_ticks,
-                        );
-                        let until_summary = active_execute_until.until_events_summary();
-                        self.active_execute_until = Some(active_execute_until);
-                        let note = format!(
-                            "execute_until auto reentry armed: max_ticks={} until={}",
-                            max_ticks, until_summary
-                        );
-                        self.memory.record_note(observation.time, note.clone());
-                        let _ = self.append_conversation_message(
-                            observation.time,
-                            LlmChatRole::System,
-                            note.as_str(),
-                        );
-                        llm_step_trace.push(LlmStepTrace {
-                            step_index: max_turns,
-                            step_type: "execute_until_auto_reentry".to_string(),
-                            input_summary: "post_decision_same_action_detected".to_string(),
-                            output_summary: summarize_trace_text(note.as_str(), 220),
-                            status: "ok".to_string(),
-                        });
-                    }
+            let projected_repeat = self
+                .replan_guard_state
+                .projected_consecutive_same_action(action);
+            let will_force_replan_next =
+                force_replan_threshold > 0 && projected_repeat >= force_replan_threshold;
+            if !will_force_replan_next {
+                let mut max_ticks = self.config.execute_until_auto_reenter_ticks as u64;
+                if matches!(action, Action::HarvestRadiation { .. })
+                    && max_ticks > DEFAULT_LLM_HARVEST_EXECUTE_UNTIL_MAX_TICKS
+                {
+                    max_ticks = DEFAULT_LLM_HARVEST_EXECUTE_UNTIL_MAX_TICKS;
                 }
+                let active_execute_until =
+                    ActiveExecuteUntil::from_auto_reentry(action.clone(), observation, max_ticks);
+                let until_summary = active_execute_until.until_events_summary();
+                self.active_execute_until = Some(active_execute_until);
+                let note = format!(
+                    "execute_until auto reentry armed: max_ticks={} until={}",
+                    max_ticks, until_summary
+                );
+                self.memory.record_note(observation.time, note.clone());
+                let _ = self.append_conversation_message(
+                    observation.time,
+                    LlmChatRole::System,
+                    note.as_str(),
+                );
+                llm_step_trace.push(LlmStepTrace {
+                    step_index: max_turns,
+                    step_type: "execute_until_auto_reentry".to_string(),
+                    input_summary: "post_decision_same_action_detected".to_string(),
+                    output_summary: summarize_trace_text(note.as_str(), 220),
+                    status: "ok".to_string(),
+                });
             }
         }
 

@@ -195,6 +195,10 @@ impl fmt::Display for AsyncAgentRunnerError {
 
 impl std::error::Error for AsyncAgentRunnerError {}
 
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Stable actor command channel preserves direct observation and action payloads."
+)]
 enum ActorCommand {
     Decide {
         turn_id: AsyncTurnId,

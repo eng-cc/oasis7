@@ -38,10 +38,7 @@ fn manifest_with_commands(commands: Vec<ModuleCommandDeclaration>) -> ModuleMani
         subscriptions: Vec::new(),
         required_caps: Vec::new(),
         abi_contract: ModuleAbiContract {
-            declarations: ModuleSchemaDeclarations {
-                commands,
-                ..ModuleSchemaDeclarations::default()
-            },
+            declarations: ModuleSchemaDeclarations { commands },
             ..ModuleAbiContract::default()
         },
         artifact_identity: None,
@@ -70,7 +67,6 @@ fn legacy_manifest_deserializes_with_empty_command_declarations() {
 fn command_declaration_validation_accepts_versioned_schema_and_bound() {
     let declarations = ModuleSchemaDeclarations {
         commands: vec![declaration("bank.acme", "open_account")],
-        ..ModuleSchemaDeclarations::default()
     };
 
     assert!(validate_module_command_declarations(&declarations).is_ok());
@@ -79,14 +75,8 @@ fn command_declaration_validation_accepts_versioned_schema_and_bound() {
 #[test]
 fn command_declaration_validation_rejects_reserved_duplicate_zero_and_malformed_entries() {
     for invalid in [
-        {
-            let value = declaration("core", "open_account");
-            value
-        },
-        {
-            let value = declaration("kernel", "open_account");
-            value
-        },
+        declaration("core", "open_account"),
+        declaration("kernel", "open_account"),
         {
             let mut value = declaration("bank.acme", "open_account");
             value.schema_version = 0;
@@ -111,7 +101,6 @@ fn command_declaration_validation_rejects_reserved_duplicate_zero_and_malformed_
         assert!(
             validate_module_command_declarations(&ModuleSchemaDeclarations {
                 commands: vec![invalid],
-                ..ModuleSchemaDeclarations::default()
             })
             .is_err()
         );
@@ -122,7 +111,6 @@ fn command_declaration_validation_rejects_reserved_duplicate_zero_and_malformed_
             declaration("bank.acme", "open_account"),
             declaration("bank.acme", "open_account"),
         ],
-        ..ModuleSchemaDeclarations::default()
     };
     assert!(validate_module_command_declarations(&duplicate).is_err());
 }

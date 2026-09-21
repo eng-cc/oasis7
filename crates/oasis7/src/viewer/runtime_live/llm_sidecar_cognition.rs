@@ -81,6 +81,24 @@ impl RuntimeLlmSidecar {
         }
         let provider_settings = provider_settings_from_env()?;
         let runtime_binding = world.current_runtime_binding(world_id)?;
+        #[cfg(any(test, feature = "test_tier_required"))]
+        if hosted_local_mock_test_lane_enabled(true) {
+            install_hosted_local_mock_test_capability_fixtures(world, true)?;
+        }
+        if self
+            .provider_lineage_binding
+            .as_ref()
+            .is_some_and(|previous| previous != &runtime_binding)
+        {
+            // A reconnect/reorg may advance the authoritative Runtime head
+            // while an older provider context is still cached. Do not let
+            // that context remain eligible for prompt-control admission or
+            // for the next provider turn under the new head.
+            self.provider_contexts
+                .retain(|_, context| context.request_context.runtime_binding == runtime_binding);
+            self.provider_retry_contexts
+                .retain(|_, context| context.request_context.runtime_binding == runtime_binding);
+        }
         self.provider_lineage_binding = Some(runtime_binding.clone());
         let recent_event_summary = recent_runtime_event_summaries(world);
         self.release_due_provider_waits(world)?;
@@ -295,20 +313,21 @@ impl RuntimeLlmSidecar {
                         (Some(simulator), Some(runtime))
                     });
                 let observation_for_context = observation.clone();
-                let (turn_context, request_context) = build_provider_context(
-                    session_id.as_str(),
-                    current_sequence,
-                    agent_id.as_str(),
-                    observation.clone(),
-                    &settings,
-                    runtime_binding.clone(),
-                    recent_event_summary.as_slice(),
-                    capability_context,
-                    replan_cause.as_ref(),
-                    runtime_continuation.as_ref(),
-                    &self.provider_memory_store,
-                    goal_snapshot,
-                )?;
+                let (turn_context, request_context) =
+                    build_provider_context(ProviderContextInput {
+                        session_id: session_id.as_str(),
+                        sequence: current_sequence,
+                        agent_id: agent_id.as_str(),
+                        observation: observation.clone(),
+                        settings: &settings,
+                        runtime_binding: runtime_binding.clone(),
+                        recent_event_summary: recent_event_summary.as_slice(),
+                        capability_context,
+                        replan_cause: replan_cause.as_ref(),
+                        continuation: runtime_continuation.as_ref(),
+                        memory_store: &self.provider_memory_store,
+                        goal_snapshot,
+                    })?;
                 if let Some(identity) =
                     lineage_generation_recovery::provider_request_capability_identity(
                         &request_context,
@@ -405,8 +424,7 @@ impl RuntimeLlmSidecar {
                                 resumed
                                     .replanned_continuation
                                     .as_ref()
-                                    .map(|_| runtime_continuation.clone())
-                                    .flatten(),
+                                    .and_then(|_| runtime_continuation.clone()),
                             )
                             .map_err(|error| {
                                 format!(
@@ -517,19 +535,23 @@ impl RuntimeLlmSidecar {
     }
 }
 
-fn build_provider_context(
-    session_id: &str,
+struct ProviderContextInput<'a> {
+    session_id: &'a str,
     sequence: u64,
-    agent_id: &str,
+    agent_id: &'a str,
     observation: Observation,
-    settings: &ProviderDecisionSettings,
+    settings: &'a ProviderDecisionSettings,
     runtime_binding: RuntimeBindingV1,
-    recent_event_summary: &[String],
+    recent_event_summary: &'a [String],
     capability_context: ProviderCapabilityContext,
-    replan_cause: Option<&ProviderStaleReplanCause>,
-    continuation: Option<&SimulatorContinuationProposalV1>,
-    memory_store: &MemoryWriteStore,
+    replan_cause: Option<&'a ProviderStaleReplanCause>,
+    continuation: Option<&'a SimulatorContinuationProposalV1>,
+    memory_store: &'a MemoryWriteStore,
     goal_snapshot: crate::simulator::GoalSnapshotV1,
+}
+
+fn build_provider_context(
+    input: ProviderContextInput<'_>,
 ) -> Result<
     (
         ContinuousAgentTurnContextV1,
@@ -537,6 +559,20 @@ fn build_provider_context(
     ),
     String,
 > {
+    let ProviderContextInput {
+        session_id,
+        sequence,
+        agent_id,
+        observation,
+        settings,
+        runtime_binding,
+        recent_event_summary,
+        capability_context,
+        replan_cause,
+        continuation,
+        memory_store,
+        goal_snapshot,
+    } = input;
     let action_catalog = provider_phase1_action_catalog();
     let memory_snapshot = memory_store.context_snapshot(agent_id, session_id, "session_private", 8);
     let memory_summary =
@@ -618,11 +654,9 @@ fn build_provider_context(
         capability_invocation_context_digest,
         memory_snapshot_digest: Digest32::from(memory_snapshot.digest.clone()),
         goal_snapshot_digest: Digest32::from(goal_snapshot.digest.clone()),
-        continuation_digest: Digest32::from(
-            continuation
-                .map(|value| h_v1("oasis7.cognition.continuation.v1", value))
-                .unwrap_or_else(|| h_v1("oasis7.cognition.continuation.v1", &Value::Null)),
-        ),
+        continuation_digest: continuation
+            .map(|value| h_v1("oasis7.cognition.continuation.v1", value))
+            .unwrap_or_else(|| h_v1("oasis7.cognition.continuation.v1", &Value::Null)),
         adapter_protocol_version: PROVIDER_ADAPTER_PROTOCOL_VERSION.to_string(),
         budget_contract: BudgetContractV1 {
             max_latency_ms: settings.decision_timeout_ms,
@@ -918,89 +952,8 @@ fn provider_capability_context(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn runtime_continuation_hydration_reads_typed_active_projection() {
-        let mut world = RuntimeWorld::new();
-        let mut continuation: crate::runtime::AgentContinuation =
-            serde_json::from_value(serde_json::json!({
-                "schema_version": "agent-continuation.v1",
-                "continuation_id": "continuation-typed-readback",
-                "wake_id": "wake-typed-readback",
-                "world_id": "world-typed-readback",
-                "branch_id": "main",
-                "finality_epoch": 0,
-                "finality_block_hash": null,
-                "finality_status": "pending",
-                "reorg_epoch": 0,
-                "runtime_manifest_hash": "manifest-typed-readback",
-                "agent_id": "agent-typed-readback",
-                "agent_session_id": "session-typed-readback",
-                "agent_turn_id": "turn-typed-readback",
-                "decision_request_id": "request-typed-readback",
-                "origin_turn_id": "turn-typed-readback",
-                "origin_request_digest": "origin-typed-readback",
-                "continuation_proposal_id": "proposal-typed-readback",
-                "proposal_digest": "proposal-digest-typed-readback",
-                "action_or_envelope_digest": null,
-                "wake_conditions": [{
-                    "schema_version": "wake-condition.v1",
-                    "kind": "at_or_after_tick",
-                    "logical_tick": 0
-                }],
-                "next_wake_tick": 0,
-                "remaining_budget": {"unit": "steps", "value": 1},
-                "valid_until_tick": 10,
-                "precondition_digest": "precondition-typed-readback",
-                "wake_seq": 1,
-                "logical_tick": 0,
-                "status": "scheduled",
-                "terminal_disposition": null
-            }))
-            .expect("typed continuation fixture");
-        continuation.refresh_status_digest();
-        continuation
-            .validate_authoritative()
-            .expect("typed continuation fixture is authoritative");
-        world
-            .install_cognition_continuation_for_test(continuation.clone())
-            .expect("install typed continuation fixture");
-        let wake: crate::runtime::SchedulerWakeV1 = serde_json::from_value(serde_json::json!({
-            "schema_version": "scheduler-wake.v1",
-            "wake_id": "wake-typed-readback",
-            "continuation_id": "continuation-typed-readback",
-            "world_id": "world-typed-readback",
-            "branch_id": "main",
-            "finality_epoch": 0,
-            "finality_block_hash": "genesis",
-            "finality_status": "pending",
-            "reorg_epoch": 0,
-            "runtime_manifest_hash": "manifest-typed-readback",
-            "agent_id": "agent-typed-readback",
-            "agent_session_id": "session-typed-readback",
-            "agent_turn_id": "turn-typed-readback",
-            "decision_request_id": "request-typed-readback",
-            "next_wake_tick": 0,
-            "eligible_since_tick": 0,
-            "starvation_deadline_tick": 1,
-            "initial_priority": 0,
-            "wake_seq": 1,
-            "retry_seq": 0,
-            "status": "pending",
-            "pending_reason": "capacity_available"
-        }))
-        .expect("typed wake fixture");
-
-        assert_eq!(
-            active_runtime_continuation_for_wake(&world, &wake)
-                .expect("typed active continuation")
-                .continuation_id,
-            continuation.continuation_id
-        );
-    }
-}
+#[path = "llm_sidecar_cognition_tests.rs"]
+mod tests;
 
 fn provider_observation_from_runtime_observation(
     observation: &Observation,

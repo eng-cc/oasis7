@@ -181,6 +181,10 @@ impl TransferTracker {
         self.prune();
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable protocol and runtime seam keeps independently validated inputs explicit."
+    )]
     fn upsert_confirmed(
         &mut self,
         action_id: u64,
@@ -306,15 +310,16 @@ impl TransferTracker {
                     continue;
                 }
             } else {
-                if let Some(account) = account_filter {
-                    if item.from_account_id != account && item.to_account_id != account {
-                        continue;
-                    }
+                if let Some(account) = account_filter
+                    && item.from_account_id != account
+                    && item.to_account_id != account
+                {
+                    continue;
                 }
-                if let Some(status) = status_filter {
-                    if item.status != status {
-                        continue;
-                    }
+                if let Some(status) = status_filter
+                    && item.status != status
+                {
+                    continue;
                 }
             }
 
@@ -407,6 +412,10 @@ impl TransferTracker {
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Stable protocol and runtime seam keeps independently validated inputs explicit."
+)]
 pub(super) fn maybe_handle_transfer_submit_request(
     stream: &mut TcpStream,
     request_bytes: &[u8],
@@ -843,13 +852,13 @@ fn preflight_validate_transfer_request(
         }
     }
 
-    if let Some(asset_id) = request.asset_id.as_deref() {
-        if asset_id != "main_token" {
-            return Err((
-                TRANSFER_ERROR_UNSUPPORTED_ASSET.to_string(),
-                format!("transfer asset_id is not supported: {asset_id}"),
-            ));
-        }
+    if let Some(asset_id) = request.asset_id.as_deref()
+        && asset_id != "main_token"
+    {
+        return Err((
+            TRANSFER_ERROR_UNSUPPORTED_ASSET.to_string(),
+            format!("transfer asset_id is not supported: {asset_id}"),
+        ));
     }
 
     let world = match super::execution_bridge::load_execution_world(execution_world_dir) {
@@ -862,19 +871,19 @@ fn preflight_validate_transfer_request(
         }
     };
 
-    if let Some(from_account) = world.main_token_account_balance(request.from_account_id.as_str()) {
-        if from_account.liquid_balance < request.amount {
-            return Err((
-                "insufficient_balance".to_string(),
-                format!(
-                    "insufficient balance: account={} transferable_balance={} restricted_starter_claim_balance={} amount={}",
-                    request.from_account_id,
-                    from_account.liquid_balance,
-                    from_account.restricted_starter_claim_balance,
-                    request.amount
-                ),
-            ));
-        }
+    if let Some(from_account) = world.main_token_account_balance(request.from_account_id.as_str())
+        && from_account.liquid_balance < request.amount
+    {
+        return Err((
+            "insufficient_balance".to_string(),
+            format!(
+                "insufficient balance: account={} transferable_balance={} restricted_starter_claim_balance={} amount={}",
+                request.from_account_id,
+                from_account.liquid_balance,
+                from_account.restricted_starter_claim_balance,
+                request.amount
+            ),
+        ));
     }
 
     let last_nonce = world
@@ -901,6 +910,28 @@ fn sync_tracker_from_runtime(
         .lock()
         .map_err(|_| "failed to lock node runtime for transfer tracker sync".to_string())?
         .drain_committed_action_batches();
+    sync_tracker_from_batches(batches, tracker)
+}
+
+fn try_sync_tracker_from_runtime(
+    runtime: &Arc<Mutex<NodeRuntime>>,
+    tracker: &mut TransferTracker,
+) -> Result<bool, String> {
+    let batches = match runtime.try_lock() {
+        Ok(locked) => locked.drain_committed_action_batches(),
+        Err(std::sync::TryLockError::WouldBlock) => return Ok(false),
+        Err(std::sync::TryLockError::Poisoned(_)) => {
+            return Err("failed to lock node runtime for transfer tracker sync".to_string());
+        }
+    };
+    sync_tracker_from_batches(batches, tracker)?;
+    Ok(true)
+}
+
+fn sync_tracker_from_batches(
+    batches: Vec<oasis7_node::NodeCommittedActionBatch>,
+    tracker: &mut TransferTracker,
+) -> Result<(), String> {
     super::explorer_p0_api::ingest_committed_batches(batches.as_slice());
 
     for batch in batches {
@@ -960,14 +991,16 @@ fn sync_tracker_from_runtime(
     Ok(())
 }
 
-pub(super) fn build_chain_transfer_metrics_status(
+pub(super) fn try_build_chain_transfer_metrics_status(
     runtime: &Arc<Mutex<NodeRuntime>>,
-) -> Result<ChainTransferMetricsStatus, String> {
+) -> Result<Option<ChainTransferMetricsStatus>, String> {
     let mut tracker = lock_transfer_tracker();
-    sync_tracker_from_runtime(runtime, &mut tracker)?;
+    if !try_sync_tracker_from_runtime(runtime, &mut tracker)? {
+        return Ok(None);
+    }
     let now_ms = super::now_unix_ms();
     tracker.refresh_lifecycle_by_time(now_ms);
-    Ok(tracker.metrics_status(now_ms))
+    Ok(Some(tracker.metrics_status(now_ms)))
 }
 
 fn summarize_transfer_latency_samples(mut samples: Vec<i64>) -> ChainTransferLatencySummaryStatus {

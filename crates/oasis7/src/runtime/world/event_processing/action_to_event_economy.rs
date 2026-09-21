@@ -681,20 +681,20 @@ impl World {
                         .filter_map(|route_id| logistics_path_id(std::slice::from_ref(route_id)))
                         .collect();
                 }
-                if !resolved_logistics_path_ids.is_empty() {
-                    if let Err(reason) = self.state.allocate_recipe_path_amounts(
+                if !resolved_logistics_path_ids.is_empty()
+                    && let Err(reason) = self.state.allocate_recipe_path_amounts(
                         &consume_ledger,
                         &resolved_logistics_route_ids,
                         &resolved_logistics_path_ids,
                         &effective_consume,
-                    ) {
-                        return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
-                            action_id,
-                            reason: RejectReason::RuleDenied {
-                                notes: vec![reason],
-                            },
-                        }));
-                    }
+                    )
+                {
+                    return Ok(WorldEventBody::Domain(DomainEvent::ActionRejected {
+                        action_id,
+                        reason: RejectReason::RuleDenied {
+                            notes: vec![reason],
+                        },
+                    }));
                 }
                 let required_materials =
                     match action_to_event_economy_support::aggregate_material_stacks_for_admission(

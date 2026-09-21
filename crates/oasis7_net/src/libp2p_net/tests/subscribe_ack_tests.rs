@@ -125,7 +125,7 @@ async fn connect_loopback_swarms(
         }
     };
     let listener_peer = *listener.local_peer_id();
-    let dial_addr = listen_addr.with(libp2p::multiaddr::Protocol::P2p(listener_peer.into()));
+    let dial_addr = listen_addr.with(libp2p::multiaddr::Protocol::P2p(listener_peer));
     super::super::swarm_behaviour::dial_addr_with_optional_peer_id(dialer, dial_addr)
         .expect("dial listener");
 

@@ -1,3 +1,5 @@
+#![expect(clippy::field_reassign_with_default)]
+
 use super::build_chain_status_payload;
 use super::cli::parse_options;
 use oasis7::network_tier_manifest::{LoadedNetworkTierManifest, NETWORK_TIER_MANIFEST_SCHEMA_V1};

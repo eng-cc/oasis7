@@ -72,56 +72,53 @@ fn parse_options_defaults() {
 
 #[test]
 fn parse_options_accepts_overrides() {
-    let options = parse_options(
-        [
-            "--listen-bind",
-            "127.0.0.1:7510",
-            "--deployment-mode",
-            "hosted_public_join",
-            "--launcher-bin",
-            "/tmp/oasis7_game_launcher",
-            "--chain-runtime-bin",
-            "/tmp/oasis7_chain_runtime",
-            "--console-static-dir",
-            "/tmp/web-launcher-dist",
-            "--scenario",
-            "sandbox",
-            "--live-bind",
-            "127.0.0.1:6200",
-            "--web-bind",
-            "127.0.0.1:6201",
-            "--viewer-host",
-            "127.0.0.1",
-            "--viewer-port",
-            "4777",
-            "--viewer-static-dir",
-            "./web",
-            "--with-llm",
-            "--chain-disable",
-            "--open-browser",
-            "--chain-storage-profile",
-            "release_default",
-            "--chain-p2p-user-mode",
-            "public_entry",
-            "--chain-p2p-accept-public-entry",
-            "--chain-replication-network-peer",
-            "/ip4/127.0.0.1/tcp/4100",
-            "--chain-replication-network-peer",
-            "/dns4/bootstrap.example/tcp/4101",
-            "--chain-pos-slot-duration-ms",
-            "8000",
-            "--chain-pos-ticks-per-slot",
-            "10",
-            "--chain-pos-proposal-tick-phase",
-            "9",
-            "--chain-pos-adaptive-tick-scheduler",
-            "--chain-pos-slot-clock-genesis-unix-ms",
-            "1700000000000",
-            "--chain-pos-max-past-slot-lag",
-            "32",
-        ]
-        .into_iter(),
-    )
+    let options = parse_options([
+        "--listen-bind",
+        "127.0.0.1:7510",
+        "--deployment-mode",
+        "hosted_public_join",
+        "--launcher-bin",
+        "/tmp/oasis7_game_launcher",
+        "--chain-runtime-bin",
+        "/tmp/oasis7_chain_runtime",
+        "--console-static-dir",
+        "/tmp/web-launcher-dist",
+        "--scenario",
+        "sandbox",
+        "--live-bind",
+        "127.0.0.1:6200",
+        "--web-bind",
+        "127.0.0.1:6201",
+        "--viewer-host",
+        "127.0.0.1",
+        "--viewer-port",
+        "4777",
+        "--viewer-static-dir",
+        "./web",
+        "--with-llm",
+        "--chain-disable",
+        "--open-browser",
+        "--chain-storage-profile",
+        "release_default",
+        "--chain-p2p-user-mode",
+        "public_entry",
+        "--chain-p2p-accept-public-entry",
+        "--chain-replication-network-peer",
+        "/ip4/127.0.0.1/tcp/4100",
+        "--chain-replication-network-peer",
+        "/dns4/bootstrap.example/tcp/4101",
+        "--chain-pos-slot-duration-ms",
+        "8000",
+        "--chain-pos-ticks-per-slot",
+        "10",
+        "--chain-pos-proposal-tick-phase",
+        "9",
+        "--chain-pos-adaptive-tick-scheduler",
+        "--chain-pos-slot-clock-genesis-unix-ms",
+        "1700000000000",
+        "--chain-pos-max-past-slot-lag",
+        "32",
+    ])
     .expect("parse overrides");
 
     assert_eq!(options.listen_bind, "127.0.0.1:7510");
@@ -177,24 +174,20 @@ fn parse_options_accepts_overrides() {
 
 #[test]
 fn parse_options_forces_chain_disable_for_hosted_public_join() {
-    let options =
-        parse_options(["--deployment-mode", "hosted_public_join", "--chain-enable"].into_iter())
-            .expect("parse hosted mode");
+    let options = parse_options(["--deployment-mode", "hosted_public_join", "--chain-enable"])
+        .expect("parse hosted mode");
     assert_eq!(options.initial_config.deployment_mode, "hosted_public_join");
     assert!(!options.initial_config.chain_enabled);
 }
 
 #[test]
 fn parse_options_collects_repeat_validators() {
-    let options = parse_options(
-        [
-            "--chain-node-validator",
-            "node-a:40",
-            "--chain-node-validator",
-            "node-b:60",
-        ]
-        .into_iter(),
-    )
+    let options = parse_options([
+        "--chain-node-validator",
+        "node-a:40",
+        "--chain-node-validator",
+        "node-b:60",
+    ])
     .expect("parse validators");
 
     assert_eq!(
@@ -205,15 +198,12 @@ fn parse_options_collects_repeat_validators() {
 
 #[test]
 fn parse_options_collects_repeat_replication_bootstrap_peers() {
-    let options = parse_options(
-        [
-            "--chain-replication-network-peer",
-            "/ip4/127.0.0.1/tcp/4100",
-            "--chain-replication-network-peer",
-            "/dns4/bootstrap.example/tcp/4101",
-        ]
-        .into_iter(),
-    )
+    let options = parse_options([
+        "--chain-replication-network-peer",
+        "/ip4/127.0.0.1/tcp/4100",
+        "--chain-replication-network-peer",
+        "/dns4/bootstrap.example/tcp/4101",
+    ])
     .expect("parse bootstrap peers");
 
     assert_eq!(
@@ -224,28 +214,25 @@ fn parse_options_collects_repeat_replication_bootstrap_peers() {
 
 #[test]
 fn parse_options_rejects_unknown_option() {
-    let err = parse_options(["--unknown"].into_iter()).expect_err("unknown option should fail");
+    let err = parse_options(["--unknown"]).expect_err("unknown option should fail");
     assert!(err.contains("unknown option"));
 }
 
 #[test]
 fn parse_options_rejects_unknown_deployment_mode() {
-    let err = parse_options(["--deployment-mode", "invalid"].into_iter())
+    let err = parse_options(["--deployment-mode", "invalid"])
         .expect_err("invalid deployment mode should fail");
     assert!(err.contains("hosted_public_join"));
 }
 
 #[test]
 fn parse_options_ignores_chain_tuning_when_hosted_public_join_disables_chain() {
-    let options = parse_options(
-        [
-            "--chain-pos-ticks-per-slot",
-            "4",
-            "--chain-pos-proposal-tick-phase",
-            "4",
-        ]
-        .into_iter(),
-    )
+    let options = parse_options([
+        "--chain-pos-ticks-per-slot",
+        "4",
+        "--chain-pos-proposal-tick-phase",
+        "4",
+    ])
     .expect("hosted public join disables local chain validation");
     assert_eq!(options.initial_config.deployment_mode, "hosted_public_join");
     assert!(!options.initial_config.chain_enabled);

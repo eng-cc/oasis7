@@ -145,13 +145,13 @@ impl WorldKernel {
             ));
         }
 
-        if let Some(existing) = self.model.module_artifacts.get(wasm_hash) {
-            if existing.wasm_bytes != wasm_bytes {
-                return Err(format!(
-                    "module artifact hash {} already exists with different bytes",
-                    wasm_hash
-                ));
-            }
+        if let Some(existing) = self.model.module_artifacts.get(wasm_hash)
+            && existing.wasm_bytes != wasm_bytes
+        {
+            return Err(format!(
+                "module artifact hash {} already exists with different bytes",
+                wasm_hash
+            ));
         }
 
         self.model.module_artifacts.insert(
@@ -442,6 +442,10 @@ impl WorldKernel {
         Ok(())
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable replay seam preserves the serialized module-sale event fields."
+    )]
     pub(super) fn replay_module_artifact_sale_completed(
         &mut self,
         buyer_agent_id: &str,

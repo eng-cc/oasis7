@@ -637,9 +637,9 @@ fn genesis_validator_entry_node_id(
         .ok_or_else(|| "genesis validator registry entry requires node_id or signer_id".to_string())
 }
 
-fn genesis_validator_entry_public_key<'a>(
-    entry: &'a GenesisValidatorRegistryEntry,
-) -> Result<&'a str, String> {
+fn genesis_validator_entry_public_key(
+    entry: &GenesisValidatorRegistryEntry,
+) -> Result<&str, String> {
     entry
         .finality_signer_public_key
         .as_deref()

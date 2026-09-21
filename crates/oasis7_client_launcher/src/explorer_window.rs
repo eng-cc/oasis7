@@ -161,6 +161,10 @@ pub(super) struct WebExplorerSearchResponse {
 }
 
 #[derive(Debug, Clone)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Explorer response variants retain direct typed payload ownership across the UI query boundary."
+)]
 pub(super) enum ExplorerQueryResponse {
     Overview(WebExplorerOverviewResponse),
     Blocks(WebExplorerBlocksResponse),
@@ -197,20 +201,15 @@ pub(super) struct ExplorerQueryError {
     pub(super) message: String,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(super) enum ExplorerStatusFilter {
+    #[default]
     All,
     Accepted,
     Pending,
     Confirmed,
     Failed,
     Timeout,
-}
-
-impl Default for ExplorerStatusFilter {
-    fn default() -> Self {
-        Self::All
-    }
 }
 
 impl ExplorerStatusFilter {
@@ -226,8 +225,9 @@ impl ExplorerStatusFilter {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub(super) enum ExplorerTab {
+    #[default]
     Blocks,
     Txs,
     Search,
@@ -242,12 +242,6 @@ pub(super) enum ExplorerQuickShortcut {
     LatestBlock,
     RecentTxs,
     MyAccount,
-}
-
-impl Default for ExplorerTab {
-    fn default() -> Self {
-        Self::Blocks
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -589,9 +583,7 @@ impl ClientLauncherApp {
             return;
         }
 
-        if self.maybe_request_explorer_p1_data() {
-            return;
-        }
+        if self.maybe_request_explorer_p1_data() {}
     }
 
     pub(super) fn schedule_active_explorer_tab_refresh(&mut self, tab: ExplorerTab) {
@@ -614,6 +606,7 @@ impl ClientLauncherApp {
         self.schedule_active_explorer_tab_refresh(tab);
     }
 
+    #[cfg(test)]
     pub(super) fn active_explorer_tab(&self) -> ExplorerTab {
         self.explorer_panel_state.active_tab
     }

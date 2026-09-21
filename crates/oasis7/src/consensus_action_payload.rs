@@ -84,6 +84,10 @@ impl std::fmt::Display for MainTokenActionAuthError {
 impl std::error::Error for MainTokenActionAuthError {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "RuntimeAction has a stable serialized shape; boxing would change the public payload API."
+)]
 #[serde(tag = "type", content = "data", rename_all = "snake_case")]
 pub enum ConsensusActionPayloadBody {
     RuntimeAction {

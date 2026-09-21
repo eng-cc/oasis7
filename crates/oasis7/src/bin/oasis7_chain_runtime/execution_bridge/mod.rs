@@ -237,7 +237,7 @@ impl WorldHeadProofV1 {
     pub(super) fn proof_hash(&self) -> Result<String, String> {
         self.validate_contract()?;
         Ok(blake3_hex(
-            to_cbor(&(WORLD_HEAD_PROOF_HASH_DOMAIN_V1, self))?.as_slice(),
+            to_cbor((WORLD_HEAD_PROOF_HASH_DOMAIN_V1, self))?.as_slice(),
         ))
     }
 }
@@ -363,6 +363,10 @@ impl ExecutionBridgeRecord {
             })
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable protocol and runtime seam keeps independently validated inputs explicit."
+    )]
     pub(super) fn new_v2(
         world_id: String,
         height: u64,
@@ -400,6 +404,10 @@ impl ExecutionBridgeRecord {
         }
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable protocol and runtime seam keeps independently validated inputs explicit."
+    )]
     pub(super) fn new_v3(
         world_id: String,
         height: u64,
@@ -800,7 +808,7 @@ pub(crate) fn load_latest_execution_checkpoint_status_evidence(
 mod driver;
 mod driver_checkpoint_install;
 mod driver_committed_heights;
-mod driver_observability;
+pub(crate) mod driver_observability;
 mod driver_persistence;
 mod driver_replay_validation;
 mod driver_replicated_input;
@@ -813,6 +821,7 @@ mod tests;
 
 #[allow(unused_imports)]
 pub(super) use self::driver::NodeRuntimeExecutionDriver;
+#[cfg(not(test))]
 pub(super) use self::driver::derive_local_execution_bootstrap;
 #[allow(unused_imports)]
 pub(crate) use self::driver::{load_execution_world, load_execution_world_with_policy};
@@ -826,4 +835,5 @@ pub(crate) use self::driver_observability::{
     ExecutionBridgeCommitTimingSnapshot, record_execution_bridge_module_tick_routing_metrics,
     snapshot_execution_bridge_commit_timing, snapshot_execution_bridge_module_tick_routing_metrics,
 };
+#[cfg(not(test))]
 pub(super) use self::provider_bootstrap::publish_provider_backed_bootstrap_from_paths;

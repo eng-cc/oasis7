@@ -20,6 +20,10 @@ use sha2::{Digest, Sha256};
 
 use super::distfs_probe_runtime::{DistfsProbeRuntimeConfig, parse_distfs_probe_runtime_option};
 
+#[path = "cli_help.rs"]
+mod cli_help;
+pub(super) use cli_help::print_help;
+
 pub(super) const DEFAULT_NODE_ID: &str = "viewer-live-node";
 pub(super) const DEFAULT_WORLD_ID: &str = "oasis7-unified-world-v1";
 pub(super) const DEFAULT_STATUS_BIND: &str = "127.0.0.1:5121";
@@ -121,6 +125,12 @@ pub(super) struct CliOptions {
     pub local_test_provider_owner_binding: String,
     pub local_test_provider_finality_block_hash: Option<String>,
     pub local_test_provider_session_mode: String,
+    pub chain_local_standalone_test: bool,
+    pub agent_decision_source: Option<String>,
+    pub agent_provider_backend: Option<String>,
+    pub agent_provider_contract: Option<String>,
+    pub agent_provider_transport: Option<String>,
+    pub agent_execution_lane: Option<String>,
     pub storage_root: Option<PathBuf>,
     pub replication_root: Option<PathBuf>,
     pub reward_runtime_enabled: bool,
@@ -193,6 +203,12 @@ impl Default for CliOptions {
                 .to_string(),
             local_test_provider_finality_block_hash: None,
             local_test_provider_session_mode: DEFAULT_LOCAL_TEST_PROVIDER_SESSION_MODE.to_string(),
+            chain_local_standalone_test: false,
+            agent_decision_source: None,
+            agent_provider_backend: None,
+            agent_provider_contract: None,
+            agent_provider_transport: None,
+            agent_execution_lane: None,
             storage_root: None,
             replication_root: None,
             reward_runtime_enabled: true,
@@ -480,6 +496,31 @@ pub(super) fn parse_options<'a>(args: impl Iterator<Item = &'a str>) -> Result<C
                 options.local_test_provider_session_mode =
                     parse_required_value(&mut iter, "--local-test-provider-session-mode")?;
             }
+            "--chain-local-standalone-test" => options.chain_local_standalone_test = true,
+            "--agent-decision-source" => {
+                options.agent_decision_source =
+                    Some(parse_required_value(&mut iter, "--agent-decision-source")?);
+            }
+            "--agent-provider-backend" => {
+                options.agent_provider_backend =
+                    Some(parse_required_value(&mut iter, "--agent-provider-backend")?);
+            }
+            "--agent-provider-contract" => {
+                options.agent_provider_contract = Some(parse_required_value(
+                    &mut iter,
+                    "--agent-provider-contract",
+                )?);
+            }
+            "--agent-provider-transport" => {
+                options.agent_provider_transport = Some(parse_required_value(
+                    &mut iter,
+                    "--agent-provider-transport",
+                )?);
+            }
+            "--agent-execution-lane" => {
+                options.agent_execution_lane =
+                    Some(parse_required_value(&mut iter, "--agent-execution-lane")?);
+            }
             "--storage-root" => {
                 let raw = parse_required_value(&mut iter, "--storage-root")?;
                 options.storage_root = Some(PathBuf::from(raw));
@@ -583,6 +624,11 @@ fn validate_local_test_provider_options(options: &CliOptions) -> Result<(), Stri
         || options.local_test_provider_owner_binding != DEFAULT_LOCAL_TEST_PROVIDER_OWNER_BINDING
         || options.local_test_provider_session_mode != DEFAULT_LOCAL_TEST_PROVIDER_SESSION_MODE;
     if !any_setup_option {
+        if provider_tuple_requested(options) {
+            return Err(
+                "provider tuple admission requires local test provider authority setup".to_string(),
+            );
+        }
         return Ok(());
     }
     if options.storage_profile != StorageProfile::DevLocal {
@@ -640,7 +686,43 @@ fn validate_local_test_provider_options(options: &CliOptions) -> Result<(), Stri
                 .to_string(),
         );
     }
+    if provider_tuple_requested(options) {
+        if !hosted_local_mock_provider_tuple(options) {
+            return Err(
+                "Hosted local-mock funding requires the exact provider_backed/provider_local_mock/worldsim_provider_v1/loopback_http/player_parity tuple"
+                    .to_string(),
+            );
+        }
+        if !cfg!(feature = "test_tier_required") {
+            return Err(
+                "Hosted local-mock funding requires a binary built with feature test_tier_required"
+                    .to_string(),
+            );
+        }
+        if !options.chain_local_standalone_test {
+            return Err(
+                "Hosted local-mock funding requires --chain-local-standalone-test".to_string(),
+            );
+        }
+    }
     Ok(())
+}
+
+fn provider_tuple_requested(options: &CliOptions) -> bool {
+    options.agent_decision_source.is_some()
+        || options.agent_provider_backend.is_some()
+        || options.agent_provider_contract.is_some()
+        || options.agent_provider_transport.is_some()
+        || options.agent_execution_lane.is_some()
+}
+
+fn hosted_local_mock_provider_tuple(options: &CliOptions) -> bool {
+    options.agent_decision_source.as_deref() == Some("provider_backed")
+        && options.agent_provider_backend.as_deref() == Some("provider_local_mock")
+        && options.agent_provider_contract.as_deref() == Some("worldsim_provider_v1")
+        && options.agent_provider_transport.as_deref() == Some("loopback_http")
+        && options.agent_execution_lane.as_deref() == Some("player_parity")
+        && options.local_test_provider_session_mode == "hosted_public_join"
 }
 
 fn valid_blake3_digest(value: &str) -> bool {
@@ -860,25 +942,25 @@ fn validate_network_tier_bundle_artifact(
                     actual_tree.sha256_tree
                 ));
             }
-            if let Some(expected_file_count) = artifact.file_count {
-                if expected_file_count != actual_tree.file_count {
-                    return Err(format!(
-                        "network tier release_candidate_bundle_ref {} {label} file_count drift: bundle={} current={}",
-                        bundle_path.display(),
-                        expected_file_count,
-                        actual_tree.file_count
-                    ));
-                }
+            if let Some(expected_file_count) = artifact.file_count
+                && expected_file_count != actual_tree.file_count
+            {
+                return Err(format!(
+                    "network tier release_candidate_bundle_ref {} {label} file_count drift: bundle={} current={}",
+                    bundle_path.display(),
+                    expected_file_count,
+                    actual_tree.file_count
+                ));
             }
-            if let Some(expected_total_bytes) = artifact.total_bytes {
-                if expected_total_bytes != actual_tree.total_bytes {
-                    return Err(format!(
-                        "network tier release_candidate_bundle_ref {} {label} total_bytes drift: bundle={} current={}",
-                        bundle_path.display(),
-                        expected_total_bytes,
-                        actual_tree.total_bytes
-                    ));
-                }
+            if let Some(expected_total_bytes) = artifact.total_bytes
+                && expected_total_bytes != actual_tree.total_bytes
+            {
+                return Err(format!(
+                    "network tier release_candidate_bundle_ref {} {label} total_bytes drift: bundle={} current={}",
+                    bundle_path.display(),
+                    expected_total_bytes,
+                    actual_tree.total_bytes
+                ));
             }
         }
         _ => {}
@@ -1073,105 +1155,6 @@ pub(super) fn parse_validator_signer_public_key_spec(
         );
     }
     Ok((validator_id.to_string(), public_key_hex.to_string()))
-}
-
-pub(super) fn print_help() {
-    let pos_defaults = chain_pos_defaults::defaults();
-    println!(
-        "Usage: oasis7_chain_runtime [options]\n\n\
-Starts standalone chain/node runtime with status HTTP endpoints.\n\n\
-Options:\n\
-  --node-id <id>                    node identifier (default: {DEFAULT_NODE_ID})\n\
-  --world-id <id>                   technical runtime partition id for the unified persistent world (default: {DEFAULT_WORLD_ID})\n\
-  --storage-profile <name>          dev_local|release_default|soak_forensics (default: dev_local)\n\
-  --traffic-profile <name>          default|triad_low_traffic (default: default)\n\
-  --status-bind <host:port>         status HTTP bind (default: {DEFAULT_STATUS_BIND})\n\
-  --node-role <role>                sequencer|storage|observer (default: sequencer)\n\
-  --p2p-user-mode <mode>            auto_join|private_safe|public_entry (default: auto_join)\n\
-  --p2p-accept-public-entry         accept auto-detected public-entry recommendation\n\
-  --p2p-reject-public-entry         force conservative fallback when auto-detect suggests public entry (default)\n\
-  --p2p-detected-reachability <c>   public|hybrid|private|relay_only|validator_hidden\n\
-  --p2p-clear-detected-reachability clear detected reachability hint\n\
-  --p2p-detected-hole-punch <s>     unknown|viable|blocked (default: unknown)\n\
-  --p2p-detected-relay-available    mark relay fallback as available (default)\n\
-  --p2p-detected-relay-unavailable  mark relay fallback as unavailable\n\
-  --p2p-detected-probe-stable       mark auto-detection as stable (default)\n\
-  --p2p-detected-probe-unstable     mark auto-detection as unstable\n\
-  --p2p-deployment-mode <mode>      public|hybrid|private|relay_only|validator_hidden (default: private)\n\
-  --p2p-node-role <role>            validator_core|sentry|relay|full_storage|observer_light\n\
-  --p2p-source-operator <label>     canonical operator label for peer diversity policy\n\
-  --p2p-source-asn <label>          canonical ASN label for peer diversity policy\n\
-  --p2p-max-ipv4-subnet-active-peers <n>\n\
-                                    max active peers allowed in one IPv4 /24 before blocking\n\
-  --node-tick-ms <n>                worker poll/fallback interval ms (default: {DEFAULT_NODE_TICK_MS})\n\
-  --pos-slot-duration-ms <n>        PoS slot duration in milliseconds (default: {slot_duration_ms})\n\
-  --pos-ticks-per-slot <n>          logical ticks per PoS slot (default: {ticks_per_slot})\n\
-  --pos-proposal-tick-phase <n>     proposal trigger phase within slot tick window (default: {proposal_tick_phase})\n\
-  --pos-adaptive-tick-scheduler     enable adaptive wait to next logical tick boundary\n\
-  --pos-no-adaptive-tick-scheduler  disable adaptive scheduler (default)\n\
-  --pos-slot-clock-genesis-unix-ms <n>\n\
-                                    fixed slot clock genesis unix ms (default: auto)\n\
-  --pos-max-past-slot-lag <n>       max accepted inbound stale slot lag (default: {max_past_slot_lag})\n\
-  --node-validator <id:stake>       add validator stake (repeatable)\n\
-  --node-validator-signer-public-key <id:public_key_hex>\n\
-                                    override validator signer public key (repeatable)\n\
-  --node-auto-attest-all            enable auto attesting validators\n\
-  --node-no-auto-attest-all         disable auto attesting validators (default)\n\
-  --node-gossip-bind <addr:port>    UDP gossip bind\n\
-  --node-gossip-peer <addr:port>    UDP gossip peer (repeatable, requires --node-gossip-bind)\n\
-  --replication-network-listen <multiaddr>\n\
-                                    libp2p replication listen addr (repeatable, default: {DEFAULT_REPLICATION_NETWORK_LISTEN})\n\
-  --replication-network-peer <multiaddr>\n\
-                                    libp2p replication bootstrap peer (repeatable)\n\
-  --replication-remote-writer-public-key <public_key_hex>\n\
-                                    extra authorized replication fetch requester (repeatable)\n\
-  --network-tier-manifest <path>    load formal network tier manifest json and bootstrap peer ref\n\
-  --genesis-validator-registry <path>\n\
-                                    initialize empty execution world validator registry from genesis manifest\n\
-  --deployment-inventory <path>     bind immutable deployment inventory to node-emitted status\n\
-  --config <path>                   config file path for node keypair (default: {DEFAULT_CONFIG_FILE})\n\
-  --runtime-root <path>             override chain runtime state root directory\n\
-  --execution-bridge-state <path>   override execution bridge state file path\n\
-  --execution-world-dir <path>      override execution world directory\n\
-  --execution-records-dir <path>    override execution records directory\n\
-  --provider-bootstrap-authority <path>\n\
-                                    explicit JSON Runtime authority bundle; repeat per provider-backed agent\n\
-  --local-test-provider-authority <path>\n\
-                                    explicit DevLocal output JSON authority bundle (opt-in setup)\n\
-  --local-test-provider-wasm <path>\n\
-                                    real WASM artifact for the explicit DevLocal provider setup\n\
-  --local-test-provider-metadata <path>\n\
-                                    canonical build-suite metadata JSON for the WASM artifact\n\
-  --local-test-provider-agent-id <id>\n\
-                                    live starter agent to provision (default: {DEFAULT_LOCAL_TEST_PROVIDER_AGENT_ID})\n\
-  --local-test-provider-owner-binding <id>\n\
-                                    stable local session owner binding (default: {DEFAULT_LOCAL_TEST_PROVIDER_OWNER_BINDING})\n\
-  --local-test-provider-finality-block-hash <hash>\n\
-                                    explicit local finality marker, blake3:<64 lowercase hex>\n\
-  --local-test-provider-session-mode <mode>\n\
-                                    hosted_public_join|loopback (default: {DEFAULT_LOCAL_TEST_PROVIDER_SESSION_MODE})\n\
-  --storage-root <path>             override execution CAS/storage root\n\
-  --replication-root <path>         override replication root directory\n\
-  --reward-runtime-enable           enable reward runtime worker (default)\n\
-  --reward-runtime-disable          disable reward runtime worker\n\
-  --reward-runtime-signer-node-id <id>\n\
-                                    override reward runtime signer node id (default: --node-id)\n\
-  --reward-runtime-epoch-duration-secs <n>\n\
-                                    override reward settlement epoch duration seconds\n\
-  --reward-points-per-credit <n>    reward points per credit (default: {})\n\
-  --reward-runtime-auto-redeem      enable runtime auto redeem\n\
-  --reward-runtime-no-auto-redeem   disable runtime auto redeem (default)\n\
-  --reward-initial-reserve-power-units <n>\n\
-                                    reward reserve power units (default: {DEFAULT_REWARD_RUNTIME_RESERVE_UNITS})\n\
-  --reward-distfs-probe-per-tick <n>\n\
-                                    distfs challenge probes per tick (default: 1)\n\
-  -h, --help                        show help",
-        RewardAssetConfig::default().points_per_credit,
-        slot_duration_ms = pos_defaults.slot_duration_ms,
-        ticks_per_slot = pos_defaults.ticks_per_slot,
-        proposal_tick_phase = pos_defaults.proposal_tick_phase,
-        max_past_slot_lag = pos_defaults.max_past_slot_lag,
-    );
 }
 
 fn default_p2p_node_role(node_role: NodeRole) -> PeerNodeRole {

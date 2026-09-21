@@ -3,6 +3,10 @@ use oasis7_proto::storage_profile::{StorageProfile, StorageProfileConfig};
 use std::collections::BTreeMap;
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn build_chain_status_payload_zeroes_replication_gap_when_replication_disabled() {
     let mut consensus = NodeConsensusSnapshot::default();
     consensus.committed_height = 10;

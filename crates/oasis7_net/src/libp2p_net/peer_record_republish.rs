@@ -83,6 +83,10 @@ impl LocalPeerRecordRepublisher<'_> {
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Peer-record republish state remains explicit to preserve address and publication ordering"
+)]
 pub(super) fn log_external_addr_confirmed_and_republish(
     event_errors: &Arc<Mutex<Vec<String>>>,
     max_error_messages: usize,
@@ -108,6 +112,10 @@ pub(super) fn log_external_addr_confirmed_and_republish(
     );
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Peer-record republish state remains explicit to preserve address and publication ordering"
+)]
 pub(super) fn log_external_addr_expired_and_republish(
     event_errors: &Arc<Mutex<Vec<String>>>,
     max_error_messages: usize,

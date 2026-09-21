@@ -333,9 +333,7 @@ fn validate_audit_report(
             .iter()
             .any(|row| !row.threshold_matches_expectation)
     {
-        errors.push(format!(
-            "governance registry audit failed: at least one slot threshold does not match the expected threshold set"
-        ));
+        errors.push("governance registry audit failed: at least one slot threshold does not match the expected threshold set".to_string());
     }
     if options.require_single_failure_tolerance && !report.overall_single_failure_tolerance_pass {
         errors.push(

@@ -97,15 +97,15 @@ impl World {
                 });
             }
 
-            if let Some(active_version) = self.module_registry.active.get(&upgrade.module_id) {
-                if active_version != &upgrade.from_version {
-                    return Err(WorldError::ModuleChangeInvalid {
-                        reason: format!(
-                            "upgrade source version mismatch for {} (active {})",
-                            upgrade.module_id, active_version
-                        ),
-                    });
-                }
+            if let Some(active_version) = self.module_registry.active.get(&upgrade.module_id)
+                && active_version != &upgrade.from_version
+            {
+                return Err(WorldError::ModuleChangeInvalid {
+                    reason: format!(
+                        "upgrade source version mismatch for {} (active {})",
+                        upgrade.module_id, active_version
+                    ),
+                });
             }
         }
 
@@ -349,30 +349,30 @@ impl World {
 
     fn validate_module_abi_contract(&self, module: &ModuleManifest) -> Result<(), WorldError> {
         let contract = &module.abi_contract;
-        if let Some(version) = contract.abi_version {
-            if version != 1 {
-                return Err(WorldError::ModuleChangeInvalid {
-                    reason: format!(
-                        "module abi_version unsupported {} for {}",
-                        version, module.module_id
-                    ),
-                });
-            }
+        if let Some(version) = contract.abi_version
+            && version != 1
+        {
+            return Err(WorldError::ModuleChangeInvalid {
+                reason: format!(
+                    "module abi_version unsupported {} for {}",
+                    version, module.module_id
+                ),
+            });
         }
 
-        if let Some(schema) = &contract.input_schema {
-            if schema.trim().is_empty() {
-                return Err(WorldError::ModuleChangeInvalid {
-                    reason: format!("module input_schema is empty for {}", module.module_id),
-                });
-            }
+        if let Some(schema) = &contract.input_schema
+            && schema.trim().is_empty()
+        {
+            return Err(WorldError::ModuleChangeInvalid {
+                reason: format!("module input_schema is empty for {}", module.module_id),
+            });
         }
-        if let Some(schema) = &contract.output_schema {
-            if schema.trim().is_empty() {
-                return Err(WorldError::ModuleChangeInvalid {
-                    reason: format!("module output_schema is empty for {}", module.module_id),
-                });
-            }
+        if let Some(schema) = &contract.output_schema
+            && schema.trim().is_empty()
+        {
+            return Err(WorldError::ModuleChangeInvalid {
+                reason: format!("module output_schema is empty for {}", module.module_id),
+            });
         }
         if contract.input_schema.is_some() ^ contract.output_schema.is_some() {
             return Err(WorldError::ModuleChangeInvalid {
