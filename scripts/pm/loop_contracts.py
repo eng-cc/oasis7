@@ -31,8 +31,12 @@ def contract_digest(contract):
     return "sha256:" + hashlib.sha256(canonical({k:v for k,v in contract.items() if k != "eligibility"})).hexdigest()
 
 
-def result(errors, **fields):
-    return {"status":"blocked" if errors else "passed", "blockers":errors, **fields}
+TARGET_DELIVERY_NOT_COVERED = "target_delivery_not_covered"
+
+
+def result(errors, *, blocker_codes=None, **fields):
+    return {"status":"blocked" if errors else "passed", "blockers":errors,
+            "blocker_codes": blocker_codes or [], **fields}
 
 
 def git(root, *args):
@@ -604,7 +608,9 @@ def validate_contracts(tool_root,target_repo_root,binding,authority_reader=None,
                     errors.append("delivery obligation lacks terminal live readback: "+str(obligation.get("id")))
             except (ValueError,OSError,KeyError,TypeError) as exc:
                 errors.append(str(exc))
-    return result(errors, purpose=purpose, contracts_checked=len(visited), authority="injected_test_reader" if authority_reader is not None else "live_github")
+    codes = ([TARGET_DELIVERY_NOT_COVERED]
+             if "contract does not cover target delivery" in errors else [])
+    return result(errors, blocker_codes=codes, purpose=purpose, contracts_checked=len(visited), authority="injected_test_reader" if authority_reader is not None else "live_github")
 
 
 def publish_contract(tool_root,target_repo_root,binding,contract,authority_reader=None,before_write=None):
@@ -623,7 +629,8 @@ def publish_contract(tool_root,target_repo_root,binding,contract,authority_reade
         if upstream["blockers"]:
             return upstream
         if binding.get("target_delivery") not in contract.get("scope",[]):
-            return result(["contract does not cover target delivery"])
+            return result(["contract does not cover target delivery"],
+                          blocker_codes=[TARGET_DELIVERY_NOT_COVERED])
         publication=(reader.publish(binding,contract,before_write=before_write) if before_write is not None else reader.publish(binding,contract))
         reference={"contract_id":contract["contract_id"],"revision":contract["revision"],"contract_digest":contract_digest(contract),"publication_ref":publication,"consumed_clauses":[c for item in contract["content_refs"] for c in item["clauses"]]}
         qualified = []
