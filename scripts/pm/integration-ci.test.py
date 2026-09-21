@@ -38,8 +38,10 @@ class TargetedProjectionPromotionTests(unittest.TestCase):
   self.git('add',self.changed_path);self.git('commit','-qm','source')
   self.source_head=self.git('rev-parse','HEAD')
   self.git('switch','-q','--detach',self.scope_base)
-  (self.root/'target-only.txt').write_text('target advance\n',encoding='utf-8')
-  self.git('add','target-only.txt');self.git('commit','-qm','target advance')
+  target_only=self.root/'scripts/pm/workflow-next.py'
+  target_only.parent.mkdir(parents=True,exist_ok=True)
+  target_only.write_text('target advance\n',encoding='utf-8')
+  self.git('add','scripts/pm/workflow-next.py');self.git('commit','-qm','target advance')
   self.integration_base=self.git('rev-parse','HEAD')
   self.uid='task_'+'1'*32
   payload={
@@ -79,7 +81,8 @@ class TargetedProjectionPromotionTests(unittest.TestCase):
  def planner(self,event,base):
   result=subprocess.run([
    sys.executable,str(HERE.parents[1]/'scripts/plan-rust-required-scope.py'),
-   '--event-name',event,'--base-ref',base,'--head-ref',self.source_head,
+   '--event-name',event,'--run-mode','integration_revalidation' if event=='workflow_dispatch' else 'legacy',
+   '--base-ref',base,'--head-ref',self.source_head,
    '--task-uid',self.uid,'--scope-base-oid',self.scope_base,
    '--impact-projection',str(self.projection_path),
   ],cwd=self.root,text=True,capture_output=True)
@@ -93,17 +96,36 @@ class TargetedProjectionPromotionTests(unittest.TestCase):
   self.assertEqual(pr['impact_projection_digest'],self.projection['projection_digest'])
 
   # The integration target has advanced with a target-only commit.  The
-  # trusted workflow must execute the full gate while retaining the source
+  # trusted workflow must execute the targeted gate while retaining the source
   # projection digest; comparing the projection to this broader diff would be
   # both incorrect and unsafe.
   integration=self.planner('workflow_dispatch',self.integration_base)
-  self.assertEqual(integration['scope'],'full')
+  self.assertEqual(integration['scope'],'targeted',integration)
   self.assertEqual(integration['impact_projection_status'],'verified')
   self.assertEqual(integration['impact_projection_digest'],self.projection['projection_digest'])
   self.assertEqual(integration['test_profile'],'required')
-  self.assertEqual(integration['run_oasis7_required_tests'],'true')
-  self.assertEqual(integration['needs_rust_toolchain'],'true')
+  self.assertEqual(integration['selected_capabilities'],'workflow_governance')
+  self.assertEqual(integration['needs_rust_toolchain'],'false')
   self.assertEqual(integration['changed_path_count'],'2')
+
+ def test_recomputed_projection_cannot_claim_wrong_source_scope(self):
+  def digest(value):
+   canonical=json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode('utf-8')
+   return 'sha256:'+hashlib.sha256(canonical).hexdigest()
+  changed=dict(self.projection,ci_scope='targeted',ci_capabilities=['workflow_governance'])
+  changed['planner_identity']=dict(changed['planner_identity'],scope='targeted',selected_capabilities=['workflow_governance'])
+  changed['planner_digest']=digest(changed['planner_identity'])
+  changed['projection_digest']=digest({k:v for k,v in changed.items() if k!='projection_digest'})
+  self.projection_path.write_text(json.dumps(changed),encoding='utf-8')
+  result=subprocess.run([
+   sys.executable,str(HERE.parents[1]/'scripts/plan-rust-required-scope.py'),
+   '--event-name','workflow_dispatch','--run-mode','integration_revalidation',
+   '--base-ref',self.integration_base,'--head-ref',self.source_head,
+   '--task-uid',self.uid,'--scope-base-oid',self.scope_base,
+   '--impact-projection',str(self.projection_path),
+  ],cwd=self.root,text=True,capture_output=True)
+  self.assertNotEqual(result.returncode,0)
+  self.assertIn('source scope identity mismatch',result.stderr)
 
 
 class IntegrationTests(unittest.TestCase):
