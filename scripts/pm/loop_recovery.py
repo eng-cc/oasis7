@@ -164,7 +164,8 @@ def recovery_status(common, uid):
 
 
 def reconcile(common, uid, root, tool_root=None, *, reservation_fd=None,
-              supersede_invalid_publication=None, manual_request_ref=None):
+              supersede_invalid_publication=None, manual_request_ref=None,
+              publication_adapter=None):
     """Read back known push/child effects; unknown operations stay blocked."""
     for action in recovery_status(common, uid)['pending_actions']:
         evidence = None
@@ -213,9 +214,14 @@ def reconcile(common, uid, root, tool_root=None, *, reservation_fd=None,
                     if checked.returncode == 0:
                         evidence = {'issue_number': action['issue_number'], 'project_cache_refresh': json.loads(refreshed.stdout), 'snapshot_validation': checked.stdout.strip()}
         elif action['kind'] == 'publish_contract':
-            from loop_contracts import (GitHubAuthority, MARKER, REPOSITORY,
-                                        TARGET_DELIVERY_NOT_COVERED,
-                                        contract_digest, validate_contracts)
+            if publication_adapter is None:
+                continue
+            contracts = publication_adapter.contracts
+            GitHubAuthority = contracts.GitHubAuthority
+            MARKER = contracts.MARKER
+            REPOSITORY = contracts.REPOSITORY
+            contract_digest = contracts.contract_digest
+            validate_contracts = contracts.validate_contracts
             binding = action.get('binding')
             if not isinstance(binding, dict) or binding.get('task_uid') != uid or action.get('repository') != REPOSITORY:
                 continue
@@ -248,7 +254,7 @@ def reconcile(common, uid, root, tool_root=None, *, reservation_fd=None,
                     canonical_action = 'publication:' + hashlib.sha256(action['expected'].encode()).hexdigest()
                     exact_blocker = (
                         checked.get('blockers') == ['contract does not cover target delivery']
-                        and checked.get('blocker_codes') == [TARGET_DELIVERY_NOT_COVERED]
+                        and checked.get('blocker_codes') in (None, [])
                     )
                     if (action['action_id'] == canonical_action and exact_blocker
                             and isinstance(manual_request_ref, str) and manual_request_ref.strip()):
@@ -261,8 +267,12 @@ def reconcile(common, uid, root, tool_root=None, *, reservation_fd=None,
                             'supersession': {
                                 'action_id': action['action_id'],
                                 'manual_request_ref': manual_request_ref,
-                                'blocker_code': TARGET_DELIVERY_NOT_COVERED,
+                                'blocker_code': 'target_delivery_not_covered',
                                 'remote_preserved': True,
+                                'policy_commit': publication_adapter.policy_commit,
+                                'policy_digest': publication_adapter.policy_digest,
+                                'bridge_commit': publication_adapter.bridge_commit,
+                                'bridge_digest': publication_adapter.bridge_digest,
                             },
                         }
         if evidence:
