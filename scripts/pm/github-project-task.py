@@ -898,7 +898,7 @@ def update_project_fields(
     updated, skipped = sync.update_fields(project_id, project_item_id, task, fields)
     if task.get("loop_binding") and any(item.split(":", 1)[0] in {"Loop", "Change ID"} and not item.endswith(":unchanged") for item in skipped):
         die("loop Project projection incomplete; reconcile before retry")
-    if task.get("loop_binding"):
+    if task.get("loop_binding") and str(project_item_id).startswith("PVTI_"):
         expected = sync.project_field_values(task)
         try:
             live_values = sync.read_project_item_field_values(project_id, project_item_id)
