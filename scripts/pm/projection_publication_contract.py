@@ -12,6 +12,8 @@ import re
 from typing import Any
 
 SCHEMA = "oasis7-ci-impact-publication/v2"
+MAX_PROJECTION_BYTES = 32 * 1024
+MAX_BODY_BYTES = 60 * 1024
 UID_RE = re.compile(r"task_[0-9a-f]{32}$")
 OID_RE = re.compile(r"[0-9a-f]{40,64}$")
 
@@ -37,11 +39,16 @@ def build_contract(*, task_uid: str, source_head_oid: str, scope_base_oid: str,
         raise ContractError("projection_digest is invalid")
     if type(revision) is not int or revision < 1:
         raise ContractError("revision must be positive")
+    if clauses is not None and (not isinstance(clauses, list) or
+                                any(not isinstance(item, str) for item in clauses)):
+        raise ContractError("clauses must contain only strings")
     body = {"schema": SCHEMA, "revision": revision, "task_uid": task_uid,
             "source_head_oid": source_head_oid, "scope_base_oid": scope_base_oid,
             "projection_digest": projection_digest,
             "clauses": sorted(set(clauses or []))}
     body["contract_digest"] = digest(body)
+    if len(json.dumps(body, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()) > MAX_PROJECTION_BYTES:
+        raise ContractError("projection exceeds 32KiB limit")
     return body
 
 def validate_contract(value: Any) -> dict[str, Any]:
@@ -56,26 +63,47 @@ def validate_contract(value: Any) -> dict[str, Any]:
     _identity(value["scope_base_oid"], OID_RE, "scope_base_oid")
     if type(value["revision"]) is not int or value["revision"] < 1:
         raise ContractError("revision must be positive")
-    if not isinstance(value["clauses"], list) or value["clauses"] != sorted(set(value["clauses"])):
+    if (not isinstance(value["clauses"], list) or
+            any(not isinstance(item, str) for item in value["clauses"]) or
+            value["clauses"] != sorted(set(value["clauses"]))):
         raise ContractError("clauses must be sorted and unique")
     expected = digest({k: value[k] for k in required if k != "contract_digest"})
     if value["contract_digest"] != expected:
         raise ContractError("publication contract digest mismatch")
+    if len(json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()) > MAX_PROJECTION_BYTES:
+        raise ContractError("projection exceeds 32KiB limit")
     return value
 
 def encode_marker(contract: dict[str, Any]) -> str:
     value = validate_contract(contract)
-    return "<!-- oasis7-ci-impact-publication:v2 -->\n" + json.dumps(value, sort_keys=True, separators=(",", ":"))
+    marker = "<!-- oasis7-ci-impact-publication:v2 -->\n" + json.dumps(value, sort_keys=True, separators=(",", ":"))
+    if len(marker.encode()) > MAX_BODY_BYTES:
+        raise ContractError("publication body exceeds 60KiB limit")
+    return marker
 
 def decode_marker(body: str) -> dict[str, Any]:
     if not isinstance(body, str):
         raise ContractError("publication body must be text")
+    if len(body.encode()) > MAX_BODY_BYTES:
+        raise ContractError("publication body exceeds 60KiB limit")
     marker = "<!-- oasis7-ci-impact-publication:v2 -->"
     matches = body.count(marker)
     if matches != 1:
         raise ContractError("publication marker must occur exactly once")
-    raw = body.split(marker, 1)[1].strip().splitlines()[0]
+    payload = body.split(marker, 1)[1].lstrip()
+    decoder = json.JSONDecoder(object_pairs_hook=_reject_duplicate_keys)
     try:
-        return validate_contract(json.loads(raw))
+        parsed, end = decoder.raw_decode(payload)
+        if payload[end:].strip():
+            raise ContractError("trailing publication payload")
+        return validate_contract(parsed)
     except (json.JSONDecodeError, ContractError) as exc:
         raise ContractError("invalid publication marker") from exc
+
+def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ContractError("duplicate publication field")
+        result[key] = value
+    return result
