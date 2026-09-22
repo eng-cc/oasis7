@@ -903,7 +903,7 @@ def update_project_fields(
         try:
             live_values = sync.read_project_item_field_values(project_id, project_item_id)
         except Exception as exc:
-            die("loop Project projection readback unavailable; reconcile before retry: " + str(exc))
+            die("start outcome uncertain: loop Project projection readback unavailable; reconcile before retry: " + str(exc))
         mismatches = [
             f"{name}={live_values.get(name)!r}, expected={value!r}"
             for name, value in expected.items()
