@@ -898,6 +898,19 @@ def update_project_fields(
     updated, skipped = sync.update_fields(project_id, project_item_id, task, fields)
     if task.get("loop_binding") and any(item.split(":", 1)[0] in {"Loop", "Change ID"} and not item.endswith(":unchanged") for item in skipped):
         die("loop Project projection incomplete; reconcile before retry")
+    if task.get("loop_binding"):
+        expected = sync.project_field_values(task)
+        try:
+            live_values = sync.read_project_item_field_values(project_id, project_item_id)
+        except Exception as exc:
+            die("loop Project projection readback unavailable; reconcile before retry: " + str(exc))
+        mismatches = [
+            f"{name}={live_values.get(name)!r}, expected={value!r}"
+            for name, value in expected.items()
+            if name in {"Loop", "Change ID"} and live_values.get(name) != value
+        ]
+        if mismatches:
+            die("loop Project projection readback mismatch; reconcile before retry: " + "; ".join(mismatches))
     if skipped:
         print(f"github-project-task: skipped fields: {', '.join(skipped)}", file=sys.stderr)
     if require_lifecycle_projection:
