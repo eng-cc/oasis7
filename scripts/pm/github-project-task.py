@@ -366,10 +366,12 @@ def authoritative_repository_identity(root: pathlib.Path, repository: str, workt
     """Resolve the task/repository identity from the registered git worktree."""
     root = root.resolve(strict=True)
     requested = pathlib.Path(worktree_hint or root).expanduser()
-    # A stale/missing hint is not authority.  The active command root is the
-    # authoritative registered worktree fallback and is persisted separately
-    # as canonical_worktree.
-    canonical = (requested if requested.exists() else root).resolve(strict=True)
+    # A supplied hint is an identity claim, not a preference. Falling back to
+    # the command root when it is absent can silently bind a new task to an
+    # unrelated coordination worktree.
+    if worktree_hint and not requested.exists():
+        die(f"canonical worktree hint does not exist: {requested}")
+    canonical = requested.resolve(strict=True)
     def resolved_common_dir(worktree: pathlib.Path) -> pathlib.Path:
         value = pathlib.Path(run_text(["git", "-C", str(worktree), "rev-parse", "--git-common-dir"]))
         return value.resolve() if value.is_absolute() else (worktree / value).resolve()
