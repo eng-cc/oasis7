@@ -121,6 +121,7 @@ class BootstrapEndToEnd(unittest.TestCase):
             gh = binary / 'gh'; gh.write_text(FAKE); gh.chmod(0o755)
             state = temp / 'github.json'
             env = dict(os.environ, PATH=str(binary)+os.pathsep+os.environ['PATH'], FAKE_GH_STATE=str(state),
+                       OASIS7_PM_FAKE_GITHUB='1',
                        TEST_SHARED_TARGET=str(temp/'target'), PYTHONDONTWRITEBYTECODE='1')
             # Bootstrap mechanics are loop-agnostic.  Use a system-loop fixture
             # so this suite does not counterfeit the technical input that a
