@@ -6,7 +6,7 @@ from projection_publication_contract import build_contract, encode_marker, valid
 
 def prepare(*, task_uid: str, source_head_oid: str, scope_base_oid: str,
             projection_digest: str, clauses: list[str] | None = None,
-            revision: int = 2) -> tuple[dict[str, Any], str]:
+            revision: int = 3) -> tuple[dict[str, Any], str]:
     contract = build_contract(task_uid=task_uid, source_head_oid=source_head_oid,
                               scope_base_oid=scope_base_oid, projection_digest=projection_digest,
                               clauses=clauses, revision=revision)

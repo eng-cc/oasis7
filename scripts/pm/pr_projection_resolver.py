@@ -7,8 +7,16 @@ from projection_publication_contract import ContractError, decode_marker
 class ResolverError(ContractError):
     pass
 
-def resolve(body: str, *, task_uid: str, source_head_oid: str, scope_base_oid: str,
+def resolve(body: str, *, task_uid: str | None = None, source_head_oid: str | None = None,
+            scope_base_oid: str | None = None,
             live: dict[str, Any] | None = None) -> dict[str, Any]:
+    # v1 publications remain readable for existing PRs, but are never treated
+    # as a current contract or allowed to enter the v2 validation path.
+    legacy_marker = "<!-- oasis7-ci-impact-publication:v1 -->"
+    if legacy_marker in body:
+        return resolve_legacy(protocol="v1", body=body)
+    if not all((task_uid, source_head_oid, scope_base_oid)):
+        raise ResolverError("v2 resolution requires immutable identity")
     contract = decode_marker(body)
     for field, expected in (("task_uid", task_uid), ("source_head_oid", source_head_oid),
                             ("scope_base_oid", scope_base_oid)):
@@ -20,7 +28,15 @@ def resolve(body: str, *, task_uid: str, source_head_oid: str, scope_base_oid: s
                 raise ResolverError(f"live projection {field} identity mismatch")
     return contract
 
-def resolve_legacy(*, protocol: str, **kwargs: Any) -> dict[str, Any]:
-    if protocol != "v2":
+def resolve_legacy(*, protocol: str, body: str | None = None, **kwargs: Any) -> dict[str, Any]:
+    """Read the old v1 publication shape without upgrading or validating it."""
+    if protocol != "v1":
         raise ResolverError("UNSUPPORTED_RUN_PROTOCOL")
-    return resolve(**kwargs)
+    if body is not None and "<!-- oasis7-ci-impact-publication:v1 -->" not in body:
+        raise ResolverError("legacy publication marker missing")
+    return {
+        "protocol": "v1",
+        "legacy": True,
+        "status": "legacy-read",
+        "upgrade_required": True,
+    }
