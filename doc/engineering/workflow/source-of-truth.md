@@ -79,6 +79,7 @@ resume the typed action, not a role title.
 
 <a id="canonical-gates"></a>
 ## Ready and Done
+
 These are the only gate definitions in this specification.
 
 Ordinary local `git commit` is not a gate: repository pre-commit hooks run no formatting or validation, and `scripts/pre-commit.sh` is only a silent legacy
@@ -103,7 +104,7 @@ never satisfy a live task.
 **Draft candidate and promotion gate.**
 
 A draft candidate opens or resumes its frozen-head draft PR before exact-head CI. Before any push or PR write, the repo-owned helper derives the bound task identity from canonical mapping, writes a marked `<!-- oasis7-pm-evidence -->` comment binding task UID, canonical worktree/branch, source head, and comparison ref/OID, then reads that exact identity back from the task issue; write/readback failure or mismatch rejects the operation. Its receipt binds repository, task, PR, base/head OIDs, check/app/run, planner, conclusion, and observation time. Review identity uses the receipt's canonical CI-authority digest over every one of those authority fields except observation time; `observed_at` is liveness evidence, not review scope. A same-authority live refresh may renew only `observed_at` without creating another review epoch. Any authority change, including head/base, check app/run, conclusion, or planner identity, invalidates CI evidence and review. Promotion requires a fresh live receipt whose CI-authority digest equals the recorded review evidence digest.
-<a id="split-source-review-integration-contract"></a>**Source professional review and CI (v2).** `oasis7-review-plan/v2` records `source_review_identity={task_uid,bootstrap_epoch,repository,pr_number,source_head_oid,source_scope_oid,changed_paths_digest,ordered_role_ids,role_contract_digest,review_policy_digest,input_contract_digest}` and `source_review_digest` as the SHA-256 of its canonical JSON; `source_scope_oid` is the fixed immutable source-review range base and is never redefined by a later target advance. Every accepted CI receipt binds the repository, task, PR, source head, required check name/app/run, planner identity, completed successful conclusion, and the check's target ref. An ordinary PR receipt may retain the base OID used by its PR check when that base is older than the current target; that base is audit provenance and does not claim to validate the later target combination. An escalated integration snapshot additionally records `integration_ci_identity={repository,task_uid,pr_number,source_head_oid,integration_base_oid,workflow_ref,workflow_sha,request_id,request_created_at,run_id,run_attempt,check_app_id,check_run_id,planner_digest,tested_tree_oid,conclusion}` and `integration_ci_digest` over that canonical JSON. Source-review reuse requires the verified applicability identity—changed paths, ordered roles, role contract, review policy and input contract—to remain equal; `tested_tree_oid` is integration evidence, not review applicability. Ordinary promotion and merge use a fresh live read of the source-bound PR CI receipt and source review; they do not require a latest exact integration dispatch merely because the target branch advanced. A fresh exact integration dispatch/attempt and live current-PR readback remain mandatory for an explicit high-risk escalation or a verified related target change. Changed source/role/policy/input applicability, new findings, unknown dependency or authority closure, or legacy v1 requires a full new review epoch; verified target-only drift may reuse source review when the applicable ordinary policy permits it.
+<a id="split-source-review-integration-contract"></a>**Source professional review and CI (v2).** `oasis7-review-plan/v2` records `source_review_identity={task_uid,bootstrap_epoch,repository,pr_number,source_head_oid,source_scope_oid,changed_paths_digest,ordered_role_ids,role_contract_digest,review_policy_digest,input_contract_digest}` and `source_review_digest` as the SHA-256 of its canonical JSON; `source_scope_oid` is the fixed immutable source-review range base and is never redefined by a later target advance. Every accepted CI receipt binds the repository, task, PR, source head, required check name/app/run, planner identity, terminal successful conclusion, and the check's target ref. An ordinary PR receipt may retain the base OID used by its PR check when that base is older than the current target; that base is audit provenance and does not claim to validate the later target combination. An escalated integration snapshot additionally records `integration_ci_identity={repository,task_uid,pr_number,source_head_oid,integration_base_oid,workflow_ref,workflow_sha,request_id,request_created_at,run_id,run_attempt,check_app_id,check_run_id,planner_digest,tested_tree_oid,conclusion}` and `integration_ci_digest` over that canonical JSON. Source-review reuse requires the verified applicability identity—changed paths, ordered roles, role contract, review policy and input contract—to remain equal; `tested_tree_oid` is integration evidence, not review applicability. Ordinary promotion and merge use a fresh live read of the source-bound PR CI receipt and source review; they do not require a latest exact integration dispatch merely because the target branch advanced. A fresh exact integration dispatch/attempt and live current-PR readback remain mandatory for an explicit high-risk escalation or a verified related target change. Changed source/role/policy/input applicability, new findings, unknown dependency or authority closure, or legacy v1 requires a full new review epoch; verified target-only drift may reuse source review when the applicable ordinary policy permits it.
 Promotion-side review revalidation binds the packet's immutable `Comparison OID`
 to the fresh receipt/plan base OID; `Comparison Ref` is audit context and may
 move, but receipt base/head or PR base identity mismatch is rejected.
@@ -304,9 +305,11 @@ per-PR truth artifact.
   cockpit views, and task-to-issue/project-item mapping.
 - `Task UID` remains the stable internal identity. GitHub issue numbers and
   Project item IDs are external object handles, not replacements for `task_uid`.
+
 - **Ordered multi-PR task contract.** One GitHub-backed task MAY authorize a finite, ordered set of delivery PRs when its Issue first declares required obligations, order and mapping slots. Each entry has a unique ordinal and binds its PR number/URL, source head, base OID, review/CI evidence and live merge receipt. A later entry cannot be promoted before the preceding required entry is verified merged unless the Issue explicitly declares independence. Each merge is a delivery milestone: it does not write `task_done`, `post_merge_done`, or close the Issue. Completion requires every required entry merged, canonical Issue readback of all per-PR evidence, and aggregate verification of the integrated tested tree. Missing, duplicate, out-of-order, stale or ambiguous entries fail closed and cannot be dropped.
 - This normative contract is inactive until a compatible multi-PR adapter, receipt schema, closeout/finalizer and negative tests are merged and explicitly activated. Current helpers consume singular `pr_number`/`pr_url` and one receipt; a second PR under one Task UID MUST fail closed. Single-PR tasks retain the legacy route, and no task with multiple required entries may complete after its first PR.
 - Until activation, TPM MAY use one recorded coordinating Issue with ordered linked delivery tasks. Before the first child starts, coordinating evidence binds every child Task UID, owner/worktree, required PR, order/dependency and completion receipt target. Each child retains its own task truth and receipts; it cannot copy the coordinator's UID or receipt. The coordinating Issue remains open until every required delivery is merged and aggregate verification is recorded. Retire this bridge after native activation; it is not same-UID multi-PR support.
+
 - `workflow-report --phase start` and `workflow-report --phase close` require the selected `--task-uid` before any mapping or GitHub mutation. UID-less `workflow-report --phase review` remains the repository-wide review report.
   A workflow-report `close` records report/evidence completion only through
   `last_workflow_report_close_at`; it never writes `last_closed_at`. That field
@@ -647,41 +650,35 @@ helpers.
   its repository-owned completion profile.
 
 <a id="terminal-runbook"></a>
-### Terminal runbook
 
+### Terminal runbook
 <a id="terminal-readiness-preflight"></a>
 #### Terminal readiness preflight
-
 Before merge, the canonical default worktree must pass the mutation-free
 `finalize-task.sh --preflight --json` gate with `status: ready`, no blockers, and
 an exact executable `next_command`; identity drift fails closed. If the default
 worktree still has the pre-change helper, invoke the reviewed helper with
 `<canonical-task-worktree>/scripts/pm/finalize-task.sh --repo-root <canonical-default-worktree> --task-uid <task-uid> --pr <pr-number> --preflight --json`.
 Repair identity and rerun preflight; this gate creates no receipt or lifecycle state.
-
 After preflight and merge, use `<canonical-task-worktree>` for task evidence and
 `<canonical-default-worktree>` for sync, receipts, and finalization. Helpers
 fail closed on repository/task/PR/head/worktree/branch/default-branch drift.
 Receipt/common-dir relocation requires a trusted new epoch; never edit receipts.
-
 ```bash
 cd <canonical-default-worktree>
 RECEIPT_ROOT="$(python3 scripts/pm/canonical-receipt-root.py \
   --default-worktree <canonical-default-worktree> \
   --task-uid <TASK-UID> --create)"
 ```
-
 Normal operation is `./scripts/pm/finalize-task.sh --repo-root <canonical-default-worktree> --task-uid <TASK-UID> --pr <PR-NUMBER> --resume --json`. A classified non-merge outcome uses `python3 ./scripts/pm/non-merge-finalize.py --repo-root <canonical-default-worktree> --task-uid <TASK-UID> --reason <reason> --evidence-file <path> --json`; classify read-only work first with `python3 ./scripts/pm/github-project-task.py classify-non-pr-task <canonical-task-worktree> --task-uid <TASK-UID> --evidence "<evidence>" --json`, then use `non_pr_completed`. Resume state comes only from `python3 ./scripts/pm/workflow-next.py --repo-root <canonical-worktree> --task-uid <TASK-UID> --json`.
 It derives identity and squash proof while preserving the six fail-closed
 authorities below as the recovery/debug contract:
-
 1. Merge receipt — require live readback; retry this command with the same PR.
 ```bash
 cd <canonical-task-worktree>
 python3 scripts/pm/pr-merge-receipt.py <PR> --json \
   > "$RECEIPT_ROOT/merge-receipt.json"
 ```
-
 2. Task done — require task readback; retry this command with the same receipt.
 ```bash
 ./scripts/pm/task-closeout.sh --role <owner-role> --task-uid <TASK-UID> \
@@ -694,7 +691,6 @@ python3 scripts/pm/pr-merge-receipt.py <PR> --json \
 cd <canonical-default-worktree>
 ./scripts/pm/refresh-task-cache.sh --task-uid <TASK-UID> --json
 ```
-
 4. Main sync — require receipt readback; retry with the same bound inputs. A
 dirty default worktree is allowed only when it already equals fetched origin;
 any fast-forward still requires a clean worktree.
@@ -705,7 +701,6 @@ any fast-forward still requires a clean worktree.
   --receipt-output "$RECEIPT_ROOT/main-sync-receipt.json"
 ```
 Squash/rebase retry: run `./scripts/pm/patch-equivalence-receipt.sh --root <canonical-default-worktree> --branch-tip <task-branch-tip> --main-commit <integration-commit-in-main-history> --main-parent <integration-first-parent-base> > "$RECEIPT_ROOT/patch-equivalence-receipt.json"`, then retry steps 4 and 5 with `--patch-equivalence-receipt "$RECEIPT_ROOT/patch-equivalence-receipt.json"`. Both helpers require the recorded base on the integration commit's first-parent chain, recompute the bound branch patch identity, and require the conflict-free projected tree from merging the branch tip onto that base to equal the integration commit tree exactly; later main commits are allowed only while the integration commit remains an ancestor, and caller-authored JSON is not authority.
-
 5. Safe cleanup — require journal/receipt readback; resume by retrying this command.
 ```bash
 ./scripts/pm/post-merge-cleanup.sh --repo-root <canonical-default-worktree> \
@@ -715,7 +710,6 @@ Squash/rebase retry: run `./scripts/pm/patch-equivalence-receipt.sh --root <cano
   --main-sync-receipt "$RECEIPT_ROOT/main-sync-receipt.json" \
   --terminal-receipt-output "$RECEIPT_ROOT/terminal-cleanup-receipt.json"
 ```
-
 6. Finalize — require terminal issue/Project readback; retry to resume safely.
 ```bash
 python3 ./scripts/pm/post-merge-finalize.py \
@@ -731,7 +725,6 @@ python3 ./scripts/pm/post-merge-finalize.py \
 | 4 | main-sync receipt | local/default remote heads match and ancestry or exact patch equivalence is verified | repeat step 4 |
 | 5 | cleanup receipt | intent journal proves cleanup | repeat step 5 |
 | 6 | `post_merge_done` | phase persisted and issue closed | repeat step 6 |
-
 All six steps require readback; never reorder or substitute caller-authored
 receipts. The finalizer keeps one persistent ignored lock inode, and cleanup
 diagnostics distinguish absent, non-worktree, unregistered, and common-dir
@@ -739,21 +732,14 @@ mismatch states.
 
 ### 5.5 PR and review chain
 Select every involved reviewer through the [specialist review role selection](#specialist-review-role-selection), using changed paths, task slice history, user-visible claims, and verification claims. Each role returns `findings` or `no_findings` plus `residual_risk`; TPM records evidence-backed dispositions. `prepare-task-pr.sh --create` verifies the minimum path-inferred role set and the packet below. PR watch, holds, merge authority, invalidation, and terminal behavior come only from the [canonical gates](#ready-and-done) and [terminal order](#canonical-state-machine).
-
 #### Review feedback triage <a id="review-feedback-triage"></a>
-
 Review requires professional assessment, not automatic adoption of every suggestion. Verify each post-publication GitHub comment against the current diff, effective contract and actual consumers; judge impact, confidence, regression risk and scope. Do not wait for an absent GitHub Codex review. Only a credible P0 finding caused or exposed by the current PR diff requires repair in this PR, with focused evidence. Lower-severity findings and findings outside the current change receive an evidence-backed no-change disposition; they do not expand the task or authorize follow-up work. A Project priority label is scheduling metadata and is not review-finding severity. Investigate uncertainty proportionately before deciding; a hypothetical concern is not automatically a P0 blocker. Reject an incorrect or stale premise with concrete evidence. This post-PR policy does not weaken the pre-PR role-finding resolution contract, required checks, mergeability, holds, or live repository-policy clearance.
-
 Before a repair loop begins, every structured pre-PR role finding MUST carry a typed `triage` object with `classification=blocking|nonblocking` and a non-empty evidence basis. Missing, malformed, or unknown classification fails closed. A `blocking` pre-PR role finding requires a repair or an evidence-backed rejection; it may not be cleared with `non_actionable`. A `nonblocking` role finding may use the existing evidence-backed `non_actionable` disposition or be deferred with its rationale and residual-risk/revisit condition. Post-PR GitHub comments use the P0/current-change boundary above. Neither classification lowers required checks, role coverage, exact-head identity, or merge authority.
-
 A nonblocking improvement may remain unchanged in this PR when its benefit is low relative to cost, or it falls outside the authorized scope. Record a concise rationale and residual risk in the existing task/review evidence; for material follow-up, identify the responsible role and the condition that would justify revisiting it. Small preferences need no separate task or elaborate follow-up record. Deferral does not authorize another task, and cost or scope cannot excuse a real merge blocker.
-
 Use the existing evidence-backed no-change disposition path before resolving a GitHub thread. For formal role findings, preserve the immutable return and satisfy the role-finding resolution contract below: evidence-backed rejection uses `rejected_with_evidence`; a justified nonblocking no-change decision uses `non_actionable` only when evidence establishes why no change is required for this PR. It must never relabel a real blocker to bypass a gate. This guidance adds no disposition or lifecycle state and changes no resolver permissions. Required checks, requested changes, thread/disposition readback, frozen-head review, holds and merge authorization remain governed by the existing gates; triage alone does not make the PR merge-ready.
-
 Before pushing a repair, inventory all comments currently available and record an evidence-backed disposition for each. Batch only compatible accepted repairs that share the current source scope and can use one focused verification and push/CI cycle; a newly discovered blocker remains in scope and must be handled. Comments arriving after triage require a fresh inventory. There is no arbitrary cycle cap; batching never carries approval across a changed source head: after a push, prior review returns and any prior plan are context only, while the new epoch, current-head CI and all required roles remain mandatory.
 #### Pre-PR review packet
 A passed packet in GitHub task issue evidence comments contains:
-
 - `Pre-PR Local Role Review: passed`
 - `Task UID`, `Source Worktree`, `Source Branch`, `Source Head`, `Comparison Ref`, and its resolved `Comparison OID`
 - `Source Review Identity v2`: `source_head_oid`, `source_scope_oid`, changed-path/ordered-role digests, and role/policy/input digests
@@ -764,12 +750,9 @@ A passed packet in GitHub task issue evidence comments contains:
 - `Verification Matrix`, `Visual Evidence`, `WASM Evidence`, `Ops Evidence`,
   and `LiveOps Evidence`, each with evidence or a reasoned exemption
 - `Residual Risk` and `Slice Ledger`
-
 The immutable ledger matches `Review Roles` and `Source Head`, with one return per required role; each human-operated return binds slice ID, role, activation/context mode, actual runtime or unverifiable reason, artifact digest, both verdicts, disposition, and residual risk.
 The repository validates role coverage, head binding, and artifact integrity; the GitHub task issue remains the evidence sink. `n/a` ledgers and fixtures fail closed for live tasks.
-
 An optional `--prior-review-plan <completed-plan>` supplies incremental context only. The plan helper accepts it only when the prior plan, batch, completed collection and ledger are intact, and records the prior/current heads, exact changed paths and actual prior-head-to-current-head patch digest. Passing `--review-plan <current-plan>` to task-packet creation embeds that context with `authority=context_only`; it never supplies a current approval, role return, CI result or merge authority. Source changes still create a new review epoch and require current-head CI plus every expected role. `--impacted-role <canonical-role>` is repeatable only with a validated prior plan; a duplicate, unknown, non-required, or otherwise unbound role fails closed. An incremental context without explicit impacted roles has `review_scope=full` and `escalation_reasons=[unknown_impact]`. With explicit impacted roles it records `review_scope=scoped`, a deterministic `role_review_modes` map (`full_review` for impacted/new-required roles and `impact_confirmation` for other previously reviewed required roles), and digests binding every mode to the prior/current heads, exact delta-path digest, and scope digest. Affected roles perform full assessment; unaffected required roles must return bounded delta/impact confirmation. Unknown scope, new required roles, authority or policy drift, an uncovered finding, or invalid/incomplete prior evidence requires full assessment.
-
 ##### Role-finding resolution contract
 A role return is immutable: its `disposition=findings` and findings list are never rewritten to `no_findings`; one repository-owned role-resolution manifest, with one role record per finding-bearing return, is required before reconcile/collection, packet generation, or publication.
 The closeout facade and direct recorder consume that manifest through the same validator before either path emits output; invalid input must not rewrite the ledger. The schema is `oasis7-review-resolution/v1` at `.pm/scratch/<TASK-UID>/review-resolutions/<EPOCH>.json`, created once with no replacement; changes require a new epoch.
@@ -783,13 +766,17 @@ The validator loads the immutable manifest, recomputes all preimages, fixes the 
 Existing `record-pr-disposition.sh` is reusable only as a server-comment roundtrip pattern: its authority is PR-node/head-bound and `pr-lifecycle-gate.py` has no local role/slice/finding binding or resolver-permission check. It cannot authorize this manifest, and arbitrary prose, CLI overrides, caller issuer/runtime claims, or role self-resolution are forbidden.
 Only an account verified live by GitHub as having repository `admin` permission may authorize an exact-head, exact-finding `addressed`, `rejected_with_evidence`, or `non_actionable` resolution. The validator fetches the resolution comment's server author and that author's current permission for the canonical repository; absent lookup, non-`admin` permission, author mismatch, or stale/cached identity fails closed. Ambient `gh` identity, workflow role, task/issue authorship, local snapshots, and caller-supplied identity or permission claims never confer resolver authority and must not rewrite identity truth. Human-operated readback proves provenance/content integrity and admin authorization, not reviewer correctness or unattended runtime attestation.
 The packet aggregate is derived from structured returns, ignoring prose: `no_findings` only when every return is `no_findings`, and `addressed` only after exact all-findings coverage with every entry terminal and evidenced.
-
 Without `--review-plan`, a ledger `no_findings` return retains the legacy opaque-artifact path, including arbitrary bytes (plain text or JSON), with existing digest/path provenance checks. Only a parseable JSON object with `schema: "oasis7-review-return/v1"` invokes structured artifact checks in that mode; every other artifact remains opaque, while plan-backed/preflight returns are always structured.
 A no-plan `findings` return, or a reserved structured artifact without a valid epoch-bound manifest, remains blocked. Any invalid or missing manifest fails closed before facade reconcile/collection or either packet emission path and leaves the ledger unchanged. `review-closeout.sh --task-uid <uid> --review-plan <plan> --role-returns <ledger>` then reconciles/collects and delegates to `record-pre-pr-review.sh`; the recorder validates plan task/head/comparison ref+OID/roles and available comparison commit before publication.
-
 An unattended supervisor additionally requires runtime-issued dispatch and return attestation. Caller-authored receipts, issuer text, local fixtures, and self-signed evidence cannot satisfy that target mode; missing attestation is `capability_blocked` only for unattended automation. `review-package.sh` writes non-trivial packets under `.pm/scratch/<TASK-UID>/review-packages/`; `slice-ledger.sh` is a local index and task-issue comments remain the formal sink.
 
 <a id="appendix-a-target-supervisor-contract"></a>
 ### Appendix A: Unattended automation invariants
-
 Future unattended automation does not change the current human-operated path: it preserves canonical task/worktree/head/PR identity and lifecycle order; derives remote facts and mutation success from trusted readback; never manufactures professional judgment or accepts caller-authored, self-signed, or fixture evidence as runtime authority; and treats missing required machinery as `capability_blocked`.
+<a id="controlled-mixed-document-source-first-exception"></a>
+
+## Controlled mixed-document source-first exception
+The four restricted mixed documents named in the manual transition section remain denied at every ordinary endpoint. A separately bound `system` task may amend this authority before any policy, helper, skill, or restricted-source projection change. Its immutable admission object MUST bind `task_uid`, bootstrap epoch, frozen source-head OID, authority commit OID, exactly one source path, exact source fragment IDs, one destination path and fragment per clause or an explicitly reviewed retirement, semantic class (`product_promise`, `professional_rule`, `system_contract`, `history`, or `retire`), owner, reviewer set, write scope, out-of-scope set, dependencies, acceptance, rollback, and stop conditions. A clause may have exactly one authoritative destination; whole-section copying and dual authority are forbidden. Authorization is never inferred from a plan, label, filename, frontmatter, candidate policy, or user-controlled opt-out.
+The bounded routes are fixed: `doc/game/design.md` product goals/loops/feedback map to the world-rules root and playability evidence while technical integration/navigation remains; micro-depot product/staging/ROI maps to governed regional capabilities, mature-world progression, and paired PRD-GAME-016 while ABI/runtime/DTO/receipt remains technical; agent-claim player costs/runway/exclusivity/provenance map to agent ownership/stewardship and paired PRD-GAME-011 while ledger/state/events/DTO remains technical; top-level product clauses map to world-rules/playability, professional rules to its paired PRD, and technical navigation to `doc/game/design.md`. No new product module; delete only after backlink/provenance/test-fixture closure.
+Authorization MUST preserve source promises, technical constraints, defaults, thresholds, opaque blocker/receipt invariants, and distinct onboarding/capability gates; numeric/default/acceptance changes invalidate admission and require fresh product/gameplay approval. Review is producer/system mapping, applicable gameplay and runtime/WASM, repository health, and QA, plus viewer when receipt/ROI display changes. Acceptance requires clause-complete traceability, destination/source digest readback, repaired indexes/backlinks, no duplicate authority, exact classification, negative policy tests, role-complete review, and source-bound CI. Unknown path, stale identity, missing reviewer, clause drift, duplicate authority, failed readback, or new semantics stops the change and leaves the mixed source unchanged.
+Before projection, negative tests MUST reject direct edits, rename/copy, broad/wildcard or suffix/path bypasses, fake labels/frontmatter, unknown classification, mixed product/technical leaves, duplicate authority, missing clause/backlink/index mappings, stale task/PR/source/base/tree/OID/digest/stage identity, missing reviewers, changed invariants, incomplete/ambiguous readback, candidate-policy/checker self-modification or self-approval, projection without merged authority, and deletion before provenance/test-fixture closure. Ordinary deny remains authoritative until the amendment is merged and independently read back from default branch by exact repository, commit, tree, path, fragment, and recomputed digest. Only then may separately bound clause-scoped delivery tasks be admitted.
