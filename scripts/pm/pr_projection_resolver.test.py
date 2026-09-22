@@ -42,6 +42,34 @@ class ProjectionCompatibilityTests(unittest.TestCase):
         )
         self.assertEqual(3, resolved["revision"])
 
+    def test_non_text_body_fails_closed(self):
+        resolver = load("pr_projection_resolver")
+        with self.assertRaises(resolver.ResolverError):
+            resolver.resolve(None)
+
+    def test_oversized_body_fails_before_protocol_detection(self):
+        resolver = load("pr_projection_resolver")
+        with self.assertRaisesRegex(resolver.ResolverError, "60KiB"):
+            resolver.resolve("<!-- oasis7-ci-impact-publication:v1 -->\n" + "x" * (60 * 1024))
+
+    def test_v1_marker_must_be_unique_and_unmixed(self):
+        resolver = load("pr_projection_resolver")
+        marker = "<!-- oasis7-ci-impact-publication:v1 -->"
+        with self.assertRaises(resolver.ResolverError):
+            resolver.resolve(marker)
+        with self.assertRaises(resolver.ResolverError):
+            resolver.resolve("prefix\n" + marker + "\nlegacy")
+        with self.assertRaises(resolver.ResolverError):
+            resolver.resolve(marker + "\nlegacy\n" + marker)
+
+    def test_v1_and_v2_markers_cannot_be_mixed(self):
+        resolver = load("pr_projection_resolver")
+        with self.assertRaisesRegex(resolver.ResolverError, "mixed"):
+            resolver.resolve(
+                "<!-- oasis7-ci-impact-publication:v1 -->\nlegacy\n"
+                "<!-- oasis7-ci-impact-publication:v2 -->"
+            )
+
     def test_publication_default_is_revision_three(self):
         publication = load("pr_projection_publication")
         value, _ = publication.prepare(

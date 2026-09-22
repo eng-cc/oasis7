@@ -10,10 +10,24 @@ class ResolverError(ContractError):
 def resolve(body: str, *, task_uid: str | None = None, source_head_oid: str | None = None,
             scope_base_oid: str | None = None,
             live: dict[str, Any] | None = None) -> dict[str, Any]:
+    if not isinstance(body, str):
+        raise ResolverError("publication body must be text")
+    if len(body.encode()) > 60 * 1024:
+        raise ResolverError("publication body exceeds 60KiB limit")
     # v1 publications remain readable for existing PRs, but are never treated
     # as a current contract or allowed to enter the v2 validation path.
     legacy_marker = "<!-- oasis7-ci-impact-publication:v1 -->"
-    if legacy_marker in body:
+    v2_marker = "<!-- oasis7-ci-impact-publication:v2 -->"
+    v1_count = body.count(legacy_marker)
+    v2_count = body.count(v2_marker)
+    if v1_count and v2_count:
+        raise ResolverError("mixed publication protocols")
+    if v1_count:
+        if v1_count != 1 or not body.startswith(legacy_marker):
+            raise ResolverError("legacy publication marker must occur exactly once at the start")
+        legacy_payload = body[len(legacy_marker):]
+        if not legacy_payload.startswith("\n") or not legacy_payload[1:].strip():
+            raise ResolverError("legacy publication payload is ambiguous")
         return resolve_legacy(protocol="v1", body=body)
     if not all((task_uid, source_head_oid, scope_base_oid)):
         raise ResolverError("v2 resolution requires immutable identity")
@@ -32,8 +46,13 @@ def resolve_legacy(*, protocol: str, body: str | None = None, **kwargs: Any) -> 
     """Read the old v1 publication shape without upgrading or validating it."""
     if protocol != "v1":
         raise ResolverError("UNSUPPORTED_RUN_PROTOCOL")
-    if body is not None and "<!-- oasis7-ci-impact-publication:v1 -->" not in body:
-        raise ResolverError("legacy publication marker missing")
+    if body is not None:
+        marker = "<!-- oasis7-ci-impact-publication:v1 -->"
+        if (not isinstance(body, str) or body.count(marker) != 1 or
+                not body.startswith(marker) or
+                not body[len(marker):].startswith("\n") or
+                not body[len(marker) + 1:].strip()):
+            raise ResolverError("legacy publication marker missing or ambiguous")
     return {
         "protocol": "v1",
         "legacy": True,
