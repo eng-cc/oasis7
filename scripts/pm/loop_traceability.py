@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
-"""Fail-closed validation for the W2 coordinating traceability record.
+"""Fail-closed validation and explicitly gated publication for the W2 record.
 
-The public functions are deliberately side-effect free.  The default readers
-perform read-only ``gh``/``git`` queries; tests may inject deterministic
-readers, whose ``reader_kind`` is retained in the returned evidence and never
-treated as proof of live admission.
+Validators and preflight are read-only. Publication requires a separate
+explicit opt-in and a clean checkout at the live default-branch head; tests
+may inject deterministic readers, whose evidence is never live authority.
 """
 
 from __future__ import annotations
@@ -14,10 +13,13 @@ from copy import deepcopy
 from datetime import datetime
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
+import secrets
 import subprocess
 from typing import Any, Callable
+from urllib.parse import quote
 
 from loop_contracts import consumed_clause_ref_errors
 from loop_contracts import contract_digest as published_contract_digest
@@ -425,6 +427,599 @@ class GitHubAuthorityReader:
         elif isinstance(payload, dict) and isinstance(payload.get("contract"), dict) and "reverse_consumers" in payload["contract"]:
             result["reverse_consumers"] = payload["contract"]["reverse_consumers"]
         return result
+
+
+PUBLICATION_RESERVATION_MARKER = "oasis7-loop-change-reservation"
+PUBLICATION_RESERVATION_SCHEMA = "oasis7.loop-change-publication-reservation/v1"
+PUBLICATION_NONCE = re.compile(r"[A-Za-z0-9._-]{16,128}\Z")
+
+
+class GitHubTraceabilityPublisher:
+    """Authenticated GitHub adapter with a durable, task-scoped intent journal."""
+
+    def __init__(self, repo_root: Path | str | None = None):
+        self.repo_root = Path(repo_root or Path.cwd()).resolve()
+
+    def api(self, path: str, *, method: str | None = None, body: Any = None, paginate: bool = False) -> Any:
+        command = ["gh", "api", path]
+        if paginate:
+            command.extend(["--paginate", "--slurp"])
+        if method is not None:
+            command.extend(["--method", method])
+        if body is not None:
+            command.extend(["--input", "-"])
+        process = subprocess.run(
+            command,
+            cwd=self.repo_root,
+            input=canonical_bytes(body) if body is not None else None,
+            capture_output=True,
+        )
+        if process.returncode:
+            raise TraceabilityError(
+                "live GitHub publication API failed: "
+                + process.stderr.decode("utf-8", "replace").strip()
+            )
+        try:
+            return json.loads(process.stdout)
+        except json.JSONDecodeError as exc:
+            raise TraceabilityError("live GitHub publication API returned invalid JSON") from exc
+
+    def issue(self, issue_number: int) -> Any:
+        return self.api(f"repos/{REPOSITORY}/issues/{issue_number}")
+
+    def user(self) -> Any:
+        return self.api("user")
+
+    def permission(self, login: str) -> Any:
+        return self.api(f"repos/{REPOSITORY}/collaborators/{login}/permission")
+
+    def discover_comments(self, issue_number: int) -> dict[str, Any]:
+        pages = self.api(
+            f"repos/{REPOSITORY}/issues/{issue_number}/comments?per_page=100",
+            paginate=True,
+        )
+        if not isinstance(pages, list):
+            return {"complete": False, "comments": []}
+        if any(
+            not isinstance(page, (list, dict))
+            or (isinstance(page, list) and any(not isinstance(item, dict) for item in page))
+            for page in pages
+        ):
+            return {"complete": False, "comments": []}
+        return {"complete": True, "comments": _flatten_comments(pages)}
+
+    def post_reservation(self, issue_number: int, body: str) -> Any:
+        return self.api(
+            f"repos/{REPOSITORY}/issues/{issue_number}/comments",
+            method="POST",
+            body={"body": body},
+        )
+
+    def get_comment(self, issue_number: int, comment_id: int) -> Any:
+        del issue_number  # The server's issue_url is checked by the caller.
+        return self.api(f"repos/{REPOSITORY}/issues/comments/{comment_id}")
+
+    def patch_comment(self, issue_number: int, comment_id: int, body: str) -> Any:
+        del issue_number  # The server's issue_url is checked by the caller.
+        return self.api(
+            f"repos/{REPOSITORY}/issues/comments/{comment_id}",
+            method="PATCH",
+            body={"body": body},
+        )
+
+    def require_postmerge_enablement(self) -> None:
+        """Require live default HEAD with tracked files clean (untracked draft is allowed)."""
+        metadata = self.api(f"repos/{REPOSITORY}")
+        default_branch = metadata.get("default_branch") if isinstance(metadata, dict) else None
+        if not isinstance(default_branch, str) or not default_branch:
+            raise TraceabilityError("cannot verify repository default branch for publication enablement")
+        branch = subprocess.run(
+            ["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=self.repo_root, text=True, capture_output=True,
+        )
+        head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=self.repo_root, text=True, capture_output=True)
+        status = subprocess.run(
+            # The draft is a local untracked input; it cannot change tracked
+            # publisher code and therefore does not invalidate this check.
+            ["git", "status", "--porcelain", "--untracked-files=no"],
+            cwd=self.repo_root,
+            text=True,
+            capture_output=True,
+        )
+        if branch.returncode or head.returncode or status.returncode:
+            raise TraceabilityError("cannot verify clean post-merge publication checkout")
+        remote = self.api(f"repos/{REPOSITORY}/commits/{quote(default_branch, safe='')}")
+        remote_oid = remote.get("sha") if isinstance(remote, dict) else None
+        if (
+            branch.stdout.strip() != default_branch
+            or status.stdout.strip()
+            or not isinstance(remote_oid, str)
+            or not OID.fullmatch(remote_oid)
+            or head.stdout.strip() != remote_oid
+        ):
+            raise TraceabilityError(
+                "publication requires explicit enablement from a clean checkout at live default-branch HEAD"
+            )
+
+    def before_write(self, identity: dict[str, Any]) -> dict[str, Any]:
+        """Create or recover the durable intent without replacing prior state.
+
+        The journal is kept below Git's common directory, written with exclusive
+        creation and fsync. A malformed or conflicting existing file stays
+        pending; it is never overwritten to manufacture a fresh nonce.
+        """
+        common = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            cwd=self.repo_root,
+            text=True,
+            capture_output=True,
+        )
+        if common.returncode:
+            raise TraceabilityError("cannot locate Git common directory for publication intent")
+        common_dir = Path(common.stdout.strip())
+        if not common_dir.is_absolute():
+            common_dir = (self.repo_root / common_dir).resolve()
+        directory = common_dir / "oasis7-traceability-publications"
+        directory.mkdir(parents=True, exist_ok=True)
+        # Key by stable publication scope, then compare the entire immutable
+        # draft identity inside the journal. Including draft bytes in the
+        # filename would let changed bytes silently create a second nonce.
+        scope = {
+            field: identity.get(field)
+            for field in ("repository", "issue_number", "task_uid", "change_id")
+        }
+        if set(identity) != {
+            "repository", "issue_number", "task_uid", "change_id", "draft_body", "draft_digest"
+        }:
+            raise TraceabilityError("publication intent has unexpected identity fields")
+        key = hashlib.sha256(canonical_bytes(scope)).hexdigest()
+        journal = directory / f"{key}.json"
+        try:
+            descriptor = os.open(journal, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        except FileExistsError:
+            try:
+                saved = json.loads(journal.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                raise TraceabilityError("publication intent journal is unreadable; reconcile_required") from exc
+            if not isinstance(saved, dict) or any(saved.get(key) != value for key, value in identity.items()):
+                raise TraceabilityError("publication intent identity mismatch; reconcile_required")
+            nonce = saved.get("nonce")
+            if not isinstance(nonce, str) or not PUBLICATION_NONCE.fullmatch(nonce):
+                raise TraceabilityError("publication intent nonce is invalid; reconcile_required")
+            if set(saved) != set(identity) | {"nonce"}:
+                raise TraceabilityError("publication intent journal has unexpected fields; reconcile_required")
+            return {**saved, "newly_created": False}
+        except OSError as exc:
+            raise TraceabilityError("cannot create publication intent journal") from exc
+
+        nonce = secrets.token_urlsafe(24).rstrip("=")
+        saved = {**identity, "nonce": nonce}
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(canonical_bytes(saved))
+                handle.flush()
+                os.fsync(handle.fileno())
+            directory_fd = os.open(directory, os.O_RDONLY)
+            try:
+                os.fsync(directory_fd)
+            finally:
+                os.close(directory_fd)
+        except OSError as exc:
+            raise TraceabilityError("cannot durably persist publication intent") from exc
+        return {**saved, "newly_created": True}
+
+
+def _publication_issue(adapter: Any, issue_number: int, task_uid: str) -> dict[str, Any]:
+    issue = adapter.issue(issue_number)
+    if (
+        not isinstance(issue, dict)
+        or type(issue.get("number")) is not int
+        or issue.get("number") != issue_number
+        or issue.get("html_url") != _issue_url(issue_number)
+        or "pull_request" in issue
+    ):
+        raise TraceabilityError("publication Issue identity mismatch")
+    if _issue_task_uid(issue) != task_uid:
+        raise TraceabilityError("publication canonical task_uid mismatch")
+    return issue
+
+
+def _publication_login(adapter: Any) -> str:
+    user = adapter.user()
+    login = user.get("login") if isinstance(user, dict) else None
+    if not isinstance(login, str) or not login.strip():
+        raise TraceabilityError("authenticated publication user unavailable")
+    return login
+
+
+def _publication_admin(adapter: Any, login: str) -> None:
+    try:
+        permission = adapter.permission(login)
+    except Exception as exc:
+        raise TraceabilityError("live publication admin permission readback unavailable") from exc
+    if not isinstance(permission, dict) or permission.get("permission") != "admin":
+        raise TraceabilityError("publication requires live repository admin permission")
+
+
+def _publication_comments(adapter: Any, issue_number: int) -> list[dict[str, Any]]:
+    try:
+        readback = adapter.discover_comments(issue_number)
+    except Exception as exc:
+        raise TraceabilityError("complete publication comment pagination unavailable; reconcile_required") from exc
+    if (
+        not isinstance(readback, dict)
+        or readback.get("complete") is not True
+        or not isinstance(readback.get("comments"), list)
+    ):
+        raise TraceabilityError("publication comment pagination incomplete; reconcile_required")
+    comments = readback["comments"]
+    if any(not isinstance(comment, dict) for comment in comments):
+        raise TraceabilityError("malformed comment in complete publication readback")
+    ids = [comment.get("id") for comment in comments]
+    if any(type(comment_id) is not int or comment_id < 1 for comment_id in ids):
+        raise TraceabilityError("malformed server comment identity in publication readback")
+    if len(ids) != len(set(ids)):
+        raise TraceabilityError("duplicate server comment identity in publication readback")
+    return comments
+
+
+def _publication_payload(comment: dict[str, Any]) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(comment.get("body") or "")
+    except (TypeError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _active_record_comments(comments: list[dict[str, Any]], task_uid: str, change_id: str) -> list[dict[str, Any]]:
+    matches = []
+    for comment in comments:
+        payload = _publication_payload(comment)
+        if not isinstance(payload, dict) or payload.get("marker") != MARKER:
+            continue
+        record = payload.get("record")
+        task_ids = {payload.get("task_uid"), record.get("task_uid") if isinstance(record, dict) else None}
+        change_ids = {payload.get("change_id"), record.get("change_id") if isinstance(record, dict) else None}
+        if task_uid in task_ids and change_id in change_ids:
+            matches.append(comment)
+    return matches
+
+
+def _reservation_body(intent: dict[str, Any]) -> str:
+    return canonical_bytes({
+        "marker": PUBLICATION_RESERVATION_MARKER,
+        "schema": PUBLICATION_RESERVATION_SCHEMA,
+        "repository": REPOSITORY,
+        "issue_number": intent["issue_number"],
+        "task_uid": intent["task_uid"],
+        "change_id": intent["change_id"],
+        "nonce": intent["nonce"],
+        "draft_digest": intent["draft_digest"],
+    }).decode("utf-8")
+
+
+def _matching_reservations(
+    comments: list[dict[str, Any]], intent: dict[str, Any], expected_body: str, login: str,
+) -> list[dict[str, Any]]:
+    candidates = []
+    for comment in comments:
+        payload = _publication_payload(comment)
+        if (
+            not isinstance(payload, dict)
+            or payload.get("marker") != PUBLICATION_RESERVATION_MARKER
+            or payload.get("task_uid") != intent["task_uid"]
+            or payload.get("change_id") != intent["change_id"]
+        ):
+            continue
+        candidates.append(comment)
+    if len(candidates) > 1:
+        raise TraceabilityError("duplicate publication reservations; reconcile_required")
+    if not candidates:
+        return []
+    comment = candidates[0]
+    if comment.get("body") != expected_body:
+        raise TraceabilityError("publication reservation body/nonce/draft mismatch; reconcile_required")
+    if type(comment.get("id")) is not int or comment["id"] < 1:
+        raise TraceabilityError("publication reservation lacks server-assigned comment ID")
+    if comment.get("issue_url") != _api_issue_url(intent["issue_number"]):
+        raise TraceabilityError("publication reservation Issue identity mismatch")
+    author = (comment.get("user") or {}).get("login")
+    if author != login:
+        raise TraceabilityError("publication reservation server author mismatch")
+    return candidates
+
+
+def _final_record_for_comment(draft: dict[str, Any], comment_id: int) -> dict[str, Any]:
+    record = deepcopy(draft)
+    coordination = record.get("coordination_ref")
+    if not isinstance(coordination, dict):
+        raise TraceabilityError("publication draft coordination_ref is invalid")
+    coordination["comment_id"] = comment_id
+    coordination["record_digest"] = ""
+    coordination["record_digest"] = record_digest(record)
+    errors = _validate_record_shape(record)
+    if errors:
+        raise TraceabilityError("publication record invalid after server ID binding: " + "; ".join(errors))
+    return record
+
+
+def _final_body(record: dict[str, Any]) -> str:
+    return canonical_bytes(_comment_payload(record)).decode("utf-8")
+
+
+def _verify_comment(comment: Any, issue_number: int, comment_id: int, login: str, body: str) -> dict[str, Any]:
+    if (
+        not isinstance(comment, dict)
+        or type(comment.get("id")) is not int
+        or comment.get("id") != comment_id
+        or comment.get("issue_url") != _api_issue_url(issue_number)
+    ):
+        raise TraceabilityError("live publication comment identity mismatch")
+    author = (comment.get("user") or {}).get("login")
+    if author != login:
+        raise TraceabilityError("live publication server author mismatch")
+    if comment.get("body") != body:
+        raise TraceabilityError("live publication exact body readback mismatch")
+    return comment
+
+
+def _publication_result(record: dict[str, Any], body: str) -> dict[str, Any]:
+    coordination = record["coordination_ref"]
+    return {
+        "repository": coordination["repository"],
+        "issue_number": coordination["issue_number"],
+        "comment_id": coordination["comment_id"],
+        "task_uid": record["task_uid"],
+        "change_id": record["change_id"],
+        "record_digest": coordination["record_digest"],
+        "body_digest": "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest(),
+    }
+
+
+def _publication_draft_identity(record: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    if not isinstance(record, dict):
+        raise TraceabilityError("publication draft must be an object")
+    draft = deepcopy(record)
+    if draft.get("schema") != SCHEMA or draft.get("marker") != MARKER:
+        raise TraceabilityError("publication draft schema/marker mismatch")
+    if not isinstance(draft.get("task_uid"), str) or not UID.fullmatch(draft["task_uid"]):
+        raise TraceabilityError("publication draft task UID is invalid")
+    if not isinstance(draft.get("change_id"), str) or not draft["change_id"].strip():
+        raise TraceabilityError("publication draft change ID is invalid")
+    coordination = draft.get("coordination_ref")
+    if not isinstance(coordination, dict):
+        raise TraceabilityError("publication draft coordination_ref is required")
+    if coordination.get("repository") != REPOSITORY:
+        raise TraceabilityError("publication draft repository is not canonical")
+    issue_number = coordination.get("issue_number")
+    if type(issue_number) is not int or issue_number < 1:
+        raise TraceabilityError("publication draft Issue identity is invalid")
+    if "comment_id" in coordination:
+        raise TraceabilityError("publication draft cannot supply a guessed or stale comment ID")
+    if coordination.get("record_digest") != "":
+        raise TraceabilityError("publication draft record_digest must be blank before ID binding")
+    _oid(coordination.get("source_commit"), "publication draft source_commit")
+
+    draft_bytes = canonical_bytes(draft)
+    draft_body = draft_bytes.decode("utf-8")
+    draft_digest = "sha256:" + hashlib.sha256(draft_bytes).hexdigest()
+    identity = {
+        "repository": REPOSITORY,
+        "issue_number": issue_number,
+        "task_uid": draft["task_uid"],
+        "change_id": draft["change_id"],
+        "draft_body": draft_body,
+        "draft_digest": draft_digest,
+    }
+
+    # Validate the record shape before any live mutation. A fake positive ID is
+    # used only for side-effect-free structural validation.
+    structural = deepcopy(draft)
+    structural["coordination_ref"]["comment_id"] = 1
+    structural["coordination_ref"]["record_digest"] = ""
+    structural["coordination_ref"]["record_digest"] = record_digest(structural)
+    shape_errors = _validate_record_shape(structural)
+    if shape_errors:
+        raise TraceabilityError("publication draft record invalid: " + "; ".join(shape_errors))
+    return draft, identity
+
+
+def preflight_traceability_publication(record: dict[str, Any], adapter: Any) -> dict[str, Any]:
+    """Read-only publication preflight; never creates intent or writes comments."""
+    draft, identity = _publication_draft_identity(record)
+    issue_number = identity["issue_number"]
+    _publication_issue(adapter, issue_number, draft["task_uid"])
+    login = _publication_login(adapter)
+    _publication_admin(adapter, login)
+    comments = _publication_comments(adapter, issue_number)
+    active = _active_record_comments(comments, draft["task_uid"], draft["change_id"])
+    if len(active) > 1:
+        raise TraceabilityError("multiple active coordinating records for task/change")
+    if active:
+        comment_id = active[0].get("id")
+        if type(comment_id) is not int or comment_id < 1:
+            raise TraceabilityError("active record has no server comment ID")
+        final_record = _final_record_for_comment(draft, comment_id)
+        body = _final_body(final_record)
+        _verify_comment(active[0], issue_number, comment_id, login, body)
+        _verify_comment(adapter.get_comment(issue_number, comment_id), issue_number, comment_id, login, body)
+        _publication_issue(adapter, issue_number, draft["task_uid"])
+        if _publication_login(adapter) != login:
+            raise TraceabilityError("authenticated publisher changed during preflight")
+        _publication_admin(adapter, login)
+        final_comments = _publication_comments(adapter, issue_number)
+        final_active = _active_record_comments(final_comments, draft["task_uid"], draft["change_id"])
+        if len(final_active) != 1 or final_active[0].get("id") != comment_id:
+            raise TraceabilityError("active record uniqueness preflight mismatch")
+        return {"status": "already_published", "receipt": _publication_result(final_record, body)}
+
+    reservations = [
+        comment for comment in comments
+        if (payload := _publication_payload(comment)) is not None
+        and payload.get("marker") == PUBLICATION_RESERVATION_MARKER
+        and payload.get("task_uid") == draft["task_uid"]
+        and payload.get("change_id") == draft["change_id"]
+    ]
+    if reservations:
+        raise TraceabilityError("publication reservation requires journaled reconciliation; preflight is pending")
+    return {
+        "status": "preflight_passed",
+        "mutation_performed": False,
+        "repository": REPOSITORY,
+        "issue_number": issue_number,
+        "task_uid": draft["task_uid"],
+        "change_id": draft["change_id"],
+        "draft_digest": identity["draft_digest"],
+    }
+
+
+def publish_traceability_record(
+    record: dict[str, Any],
+    adapter: Any,
+    *,
+    before_write: Callable[[dict[str, Any]], dict[str, Any]] | None = None,
+    enable_publication: bool = False,
+) -> dict[str, Any]:
+    """Publish one comment-ID-bound record through an inert reservation.
+
+    ``before_write`` must durably create/reload the exact draft intent and return
+    its stable nonce plus ``newly_created``. The production GitHub adapter owns
+    this journal; injecting another callback for it is rejected. Test adapters
+    may inject a deterministic in-memory journal implementing the same seam.
+    """
+    draft, intent_identity = _publication_draft_identity(record)
+    issue_number = intent_identity["issue_number"]
+    if isinstance(adapter, GitHubTraceabilityPublisher):
+        if enable_publication is not True:
+            raise TraceabilityError("production publication requires explicit enable_publication opt-in")
+        adapter.require_postmerge_enablement()
+
+    _publication_issue(adapter, issue_number, draft["task_uid"])
+    login = _publication_login(adapter)
+    _publication_admin(adapter, login)
+    comments = _publication_comments(adapter, issue_number)
+
+    active = _active_record_comments(comments, draft["task_uid"], draft["change_id"])
+    if active:
+        if len(active) != 1:
+            raise TraceabilityError("multiple active coordinating records for task/change")
+        comment = active[0]
+        comment_id = comment.get("id")
+        if type(comment_id) is not int or comment_id < 1:
+            raise TraceabilityError("active record has no server comment ID")
+        expected_record = _final_record_for_comment(draft, comment_id)
+        expected_body = _final_body(expected_record)
+        _verify_comment(comment, issue_number, comment_id, login, expected_body)
+        observed = adapter.get_comment(issue_number, comment_id)
+        _verify_comment(observed, issue_number, comment_id, login, expected_body)
+        _publication_issue(adapter, issue_number, draft["task_uid"])
+        if _publication_login(adapter) != login:
+            raise TraceabilityError("authenticated publisher changed during readback")
+        _publication_admin(adapter, login)
+        final_comments = _publication_comments(adapter, issue_number)
+        final_active = _active_record_comments(final_comments, draft["task_uid"], draft["change_id"])
+        if len(final_active) != 1 or final_active[0].get("id") != comment_id:
+            raise TraceabilityError("active record uniqueness readback mismatch")
+        return _publication_result(expected_record, expected_body)
+
+    # A production adapter's own fsynced journal is mandatory. The injected
+    # callback is retained only for deterministic adapter tests.
+    if isinstance(adapter, GitHubTraceabilityPublisher):
+        journal_callback = adapter.before_write
+        if (
+            getattr(journal_callback, "__self__", None) is not adapter
+            or getattr(journal_callback, "__func__", None) is not GitHubTraceabilityPublisher.before_write
+            or (
+                before_write is not None
+                and (
+                    getattr(before_write, "__self__", None) is not adapter
+                    or getattr(before_write, "__func__", None) is not GitHubTraceabilityPublisher.before_write
+                )
+            )
+        ):
+            raise TraceabilityError("production publication requires its repository-owned intent journal")
+    else:
+        journal_callback = before_write
+    if not callable(journal_callback):
+        raise TraceabilityError("durable publication intent callback is required")
+    try:
+        intent = journal_callback(deepcopy(intent_identity))
+    except Exception as exc:
+        raise TraceabilityError("cannot persist or reload publication intent") from exc
+    if (
+        not isinstance(intent, dict)
+        or any(intent.get(key) != value for key, value in intent_identity.items())
+        or not isinstance(intent.get("nonce"), str)
+        or not PUBLICATION_NONCE.fullmatch(intent["nonce"])
+        or type(intent.get("newly_created")) is not bool
+    ):
+        raise TraceabilityError("publication intent readback mismatch; reconcile_required")
+
+    reservation_body = _reservation_body(intent)
+    reservations = _matching_reservations(comments, intent, reservation_body, login)
+    if reservations:
+        reservation = reservations[0]
+    elif intent["newly_created"] is True:
+        # The journal is durable before POST. Any uncertain response is
+        # reconciled by a fresh, complete Issue listing; it is never replayed.
+        try:
+            posted = adapter.post_reservation(issue_number, reservation_body)
+        except Exception:
+            posted = None
+        posted_id = posted.get("id") if isinstance(posted, dict) else None
+        if type(posted_id) is int and posted_id > 0:
+            # The exact server resource must be live-readable before PATCH.
+            # An uncertain GET is pending; a listing must not paper over it.
+            reservation = posted
+        else:
+            refreshed = _publication_comments(adapter, issue_number)
+            reservations = _matching_reservations(refreshed, intent, reservation_body, login)
+            if len(reservations) != 1:
+                raise TraceabilityError("uncertain reservation POST remains pending; reconcile_required")
+            reservation = reservations[0]
+    else:
+        raise TraceabilityError("existing publication intent has no exact reservation; reconcile_required")
+
+    reservation_id = reservation.get("id") if isinstance(reservation, dict) else None
+    if type(reservation_id) is not int or reservation_id < 1:
+        raise TraceabilityError("reservation has no server-assigned comment ID")
+    try:
+        reservation = adapter.get_comment(issue_number, reservation_id)
+    except Exception as exc:
+        raise TraceabilityError("exact reservation GET is uncertain; reconcile_required") from exc
+    _verify_comment(reservation, issue_number, reservation_id, login, reservation_body)
+
+    final_record = _final_record_for_comment(draft, reservation_id)
+    final_body = _final_body(final_record)
+    patch_error: BaseException | None = None
+    try:
+        adapter.patch_comment(issue_number, reservation_id, final_body)
+    except Exception as exc:
+        patch_error = exc
+    try:
+        final_readback = adapter.get_comment(issue_number, reservation_id)
+    except Exception as exc:
+        raise TraceabilityError("uncertain PATCH readback unavailable; reconcile_required") from exc
+    if isinstance(final_readback, dict) and final_readback.get("body") == reservation_body and patch_error is not None:
+        try:
+            adapter.patch_comment(issue_number, reservation_id, final_body)
+        except Exception:
+            pass
+        try:
+            final_readback = adapter.get_comment(issue_number, reservation_id)
+        except Exception as exc:
+            raise TraceabilityError("uncertain PATCH retry readback unavailable; reconcile_required") from exc
+    _verify_comment(final_readback, issue_number, reservation_id, login, final_body)
+
+    _publication_issue(adapter, issue_number, draft["task_uid"])
+    if _publication_login(adapter) != login:
+        raise TraceabilityError("authenticated publisher changed during final readback")
+    _publication_admin(adapter, login)
+    final_comments = _publication_comments(adapter, issue_number)
+    final_active = _active_record_comments(final_comments, draft["task_uid"], draft["change_id"])
+    if len(final_active) != 1 or final_active[0].get("id") != reservation_id:
+        raise TraceabilityError("active record uniqueness readback mismatch; reconcile_required")
+    _verify_comment(final_active[0], issue_number, reservation_id, login, final_body)
+    return _publication_result(final_record, final_body)
 
 
 class ImmutableSourceReader:
@@ -2168,20 +2763,71 @@ def _load_json(path: Path) -> Any:
         raise TraceabilityError(f"cannot read JSON input {path}: {_error_text(exc)}") from exc
 
 
-def main(argv: list[str] | None = None) -> int:
+def _load_canonical_draft(path: Path) -> dict[str, Any]:
+    try:
+        raw = path.read_bytes()
+        text = raw.decode("utf-8")
+        record = json.loads(text)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise TraceabilityError(f"cannot read canonical publication draft {path}: {_error_text(exc)}") from exc
+    if not isinstance(record, dict) or canonical_bytes(record) != raw:
+        raise TraceabilityError("publication draft file must contain exact canonical UTF-8 JSON bytes")
+    return record
+
+
+def main(
+    argv: list[str] | None = None,
+    *,
+    publisher_factory: Callable[[Path], Any] | None = None,
+) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("validate-leaf", "validate-aggregate", "reverse-consumers"))
+    parser.add_argument(
+        "command",
+        choices=("validate-leaf", "validate-aggregate", "reverse-consumers", "publish-record"),
+    )
     parser.add_argument("--record", type=Path)
     parser.add_argument("--binding", type=Path)
     parser.add_argument("--candidate", type=Path)
     parser.add_argument("--evidence", type=Path)
     parser.add_argument("--contract-ref", type=Path)
-    parser.add_argument("--source-commit", required=True)
+    parser.add_argument("--source-commit")
     parser.add_argument("--effective-tool-commit")
     parser.add_argument("--record-source-commit")
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--reader-kind", default="github_live_query")
+    parser.add_argument("--draft", type=Path)
+    parser.add_argument(
+        "--enable-publication",
+        action="store_true",
+        help="explicitly authorize POST/PATCH; only use after compatible merge and separate operational enablement",
+    )
     args = parser.parse_args(argv)
+    if args.command == "publish-record":
+        if not args.draft:
+            parser.error("publish-record requires --draft")
+        try:
+            draft = _load_canonical_draft(args.draft)
+            adapter = (publisher_factory or GitHubTraceabilityPublisher)(args.repo_root)
+            if args.enable_publication:
+                result = publish_traceability_record(
+                    draft,
+                    adapter,
+                    before_write=adapter.before_write,
+                    enable_publication=True,
+                )
+            else:
+                result = preflight_traceability_publication(draft, adapter)
+        except Exception as exc:
+            print(json.dumps({"status": "pending", "error": _error_text(exc)}, sort_keys=True))
+            return 2
+        print(json.dumps(result, sort_keys=True))
+        status = result.get("status") if isinstance(result, dict) else None
+        return 0 if status in {"preflight_passed", "already_published", None} else 2
+
+    if args.enable_publication:
+        parser.error("--enable-publication is valid only with publish-record")
+    if not args.source_commit:
+        parser.error(f"{args.command} requires --source-commit")
     authority = GitHubAuthorityReader(args.repo_root)
     effective_tool_commit = args.effective_tool_commit or args.source_commit
     record_source_commit = args.record_source_commit or args.source_commit
