@@ -52,6 +52,7 @@ class RecordPrBranchIdentityTest(unittest.TestCase):
                 "number": 7,
                 "headRefName": "task/repaired",
                 "headRefOid": self.head,
+                "headRepository": {"nameWithOwner": "eng-cc/oasis7"},
                 "baseRefName": "main",
                 "state": "OPEN",
             })
@@ -70,6 +71,7 @@ class RecordPrBranchIdentityTest(unittest.TestCase):
                     "number": 7,
                     "headRefName": "task/canonical",
                     "headRefOid": self.head,
+                    "headRepository": {"nameWithOwner": "eng-cc/oasis7"},
                     "baseRefName": "main",
                     "state": "OPEN",
                 })
@@ -78,6 +80,24 @@ class RecordPrBranchIdentityTest(unittest.TestCase):
         MODULE.run_text = exact_run_text
         live = MODULE.validate_record_pr_identity(self.args, self.record, 7)
         self.assertEqual(live["headRefName"], "task/canonical")
+
+    def test_foreign_head_repository_is_rejected(self) -> None:
+        def foreign_run_text(command: list[str]) -> str:
+            if command[:3] == ["gh", "pr", "view"]:
+                return json.dumps({
+                    "number": 7,
+                    "headRefName": "task/canonical",
+                    "headRefOid": self.head,
+                    "headRepository": {"nameWithOwner": "fork/oasis7"},
+                    "baseRefName": "main",
+                    "state": "OPEN",
+                })
+            return self.original_run_text(command)
+
+        MODULE.run_text = foreign_run_text
+        with self.assertRaises(MODULE._CommandExit) as caught:
+            MODULE.validate_record_pr_identity(self.args, self.record, 7)
+        self.assertIn("head repository differs", str(caught.exception))
 
 
 if __name__ == "__main__":

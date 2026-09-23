@@ -2043,12 +2043,15 @@ def validate_record_pr_identity(args: argparse.Namespace, record: dict[str, Any]
         }
     live = json.loads(run_text([
         "gh", "pr", "view", str(pr_number), "--repo", args.repo,
-        "--json", "number,headRefName,headRefOid,baseRefName,state",
+        "--json", "number,headRefName,headRefOid,headRepository,baseRefName,state",
     ]))
     if int(live.get("number") or 0) != pr_number:
         die("record-pr: live PR number readback does not match requested PR")
     if str(live.get("state") or "").upper() != "OPEN":
         die("record-pr: live PR is not open/draft at record time")
+    head_repository = live.get("headRepository")
+    if not isinstance(head_repository, dict) or str(head_repository.get("nameWithOwner") or "") != args.repo:
+        die("record-pr: live PR head repository differs from canonical task repository")
     expected_branch = str(record.get("task_branch") or "")
     expected_base = str(record.get("default_branch") or "")
     live_branch = str(live.get("headRefName") or "")
