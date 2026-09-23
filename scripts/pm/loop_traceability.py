@@ -8,6 +8,17 @@ may inject deterministic readers, whose evidence is never live authority.
 
 from __future__ import annotations
 
+import sys as _sys
+
+if __name__ == "__main__" and any(
+    argument == "publish-record" or argument == "--enable-publication"
+    for argument in _sys.argv[1:]
+):
+    raise SystemExit(
+        "publish-record must use scripts/pm/publish-traceability-record.sh; "
+        "it checks the publisher import root before isolated Python startup"
+    )
+
 import argparse
 from copy import deepcopy
 from datetime import datetime
@@ -43,6 +54,7 @@ APPROVAL_MARKER = "oasis7-equivalence-approval"
 REPOSITORY = "eng-cc/oasis7"
 OID = re.compile(r"[0-9a-f]{40}\Z")
 UID = re.compile(r"task_[0-9a-f]{32}\Z")
+_TRUSTED_LAUNCHER_ACTIVE = False
 DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 SAFE_PATH = re.compile(r"^[^/\\][^\\]*$")
 
@@ -441,6 +453,8 @@ class GitHubTraceabilityPublisher:
         self.repo_root = Path(repo_root or Path.cwd()).resolve()
 
     def api(self, path: str, *, method: str | None = None, body: Any = None, paginate: bool = False) -> Any:
+        if method is not None and method.upper() != "GET" and not _TRUSTED_LAUNCHER_ACTIVE:
+            raise TraceabilityError("GitHub mutation requires the trusted isolated operational launcher")
         command = ["gh", "api", path]
         if paginate:
             command.extend(["--paginate", "--slurp"])
@@ -889,6 +903,8 @@ def publish_traceability_record(
     draft, intent_identity = _publication_draft_identity(record)
     issue_number = intent_identity["issue_number"]
     if isinstance(adapter, GitHubTraceabilityPublisher):
+        if not _TRUSTED_LAUNCHER_ACTIVE:
+            raise TraceabilityError("production publication requires the trusted isolated operational launcher")
         if enable_publication is not True:
             raise TraceabilityError("production publication requires explicit enable_publication opt-in")
         adapter.require_postmerge_enablement()
@@ -2805,6 +2821,12 @@ def main(
     if args.command == "publish-record":
         if not args.draft:
             parser.error("publish-record requires --draft")
+        if args.enable_publication and publisher_factory is None and not _TRUSTED_LAUNCHER_ACTIVE:
+            print(json.dumps({
+                "status": "pending",
+                "error": "publisher mutation requires its trusted isolated operational launcher",
+            }, sort_keys=True))
+            return 2
         try:
             draft = _load_canonical_draft(args.draft)
             adapter = (publisher_factory or GitHubTraceabilityPublisher)(args.repo_root)
@@ -2854,6 +2876,28 @@ def main(
         result = reverse_consumers(_load_json(args.contract_ref), authority_reader=authority, reader_kind=args.reader_kind)
     print(json.dumps(result, sort_keys=True))
     return 0 if result.get("status") == "passed" else 2
+
+
+def _trusted_launcher_main(argv: list[str]) -> int:
+    """Run the publication CLI only from the isolated shell launcher's process."""
+    global _TRUSTED_LAUNCHER_ACTIVE
+    if not _sys.flags.isolated or not _sys.flags.no_site:
+        print(json.dumps({
+            "status": "pending",
+            "error": "publisher launcher requires isolated Python with site initialization disabled",
+        }, sort_keys=True))
+        return 2
+    if _TRUSTED_LAUNCHER_ACTIVE:
+        print(json.dumps({
+            "status": "pending",
+            "error": "nested publisher launcher invocation is not permitted",
+        }, sort_keys=True))
+        return 2
+    _TRUSTED_LAUNCHER_ACTIVE = True
+    try:
+        return main(argv)
+    finally:
+        _TRUSTED_LAUNCHER_ACTIVE = False
 
 
 if __name__ == "__main__":

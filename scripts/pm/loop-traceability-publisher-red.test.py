@@ -13,12 +13,15 @@ import importlib.util
 import io
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import unittest
 
 
 HERE = Path(__file__).resolve().parent
+PUBLISHER_LAUNCHER = HERE / "publish-traceability-record.sh"
+TRACEABILITY_SCRIPT = HERE / "loop_traceability.py"
 REPOSITORY = "eng-cc/oasis7"
 ISSUE_NUMBER = 3913
 TASK_UID = "task_" + "d" * 32
@@ -289,6 +292,167 @@ class TraceabilityPublisherTests(unittest.TestCase):
         with self.assertRaises((TRACE.TraceabilityError, ValueError, RuntimeError)):
             operation()
 
+    def _launcher_fixture(self, root: Path):
+        repo = root
+        pm = repo / "scripts" / "pm"
+        pm.mkdir(parents=True)
+        launcher = pm / PUBLISHER_LAUNCHER.name
+        shutil.copy2(PUBLISHER_LAUNCHER, launcher)
+        invocation_log = repo / "launcher-invocation.json"
+        fake_publisher = pm / "loop_traceability.py"
+        fake_publisher.write_text(
+            "import json\n"
+            "import sys\n"
+            "from pathlib import Path\n"
+            "def _trusted_launcher_main(argv):\n"
+            f"    Path({str(invocation_log)!r}).write_text(json.dumps({{\n"
+            "        'argv': argv, 'trusted_launcher': True,\n"
+            "        'isolated': sys.flags.isolated, 'no_site': sys.flags.no_site,\n"
+            "    }))\n"
+            "    return 0\n",
+            encoding="utf-8",
+        )
+        subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+        subprocess.run(["git", "-C", str(repo), "add", "scripts/pm"], check=True)
+        subprocess.run(
+            [
+                "git", "-C", str(repo), "-c", "user.name=Test", "-c", "user.email=test@example.com",
+                "commit", "-q", "-m", "trusted publisher fixture",
+            ],
+            check=True,
+        )
+        return repo, launcher, invocation_log, pm
+
+    def test_launcher_rejects_untracked_import_shadow_before_python_startup(self):
+        with tempfile.TemporaryDirectory(prefix="oasis7-publisher-launcher-shadow-") as directory:
+            repo, launcher, invocation_log, pm = self._launcher_fixture(Path(directory))
+            draft = repo / "draft.json"
+            draft.write_bytes(b"{}")
+            (repo / ".gitignore").write_text("scripts/pm/json.py\n", encoding="utf-8")
+            subprocess.run(["git", "-C", str(repo), "add", ".gitignore"], check=True)
+            subprocess.run(
+                [
+                    "git", "-C", str(repo), "-c", "user.name=Test", "-c", "user.email=test@example.com",
+                    "commit", "-q", "-m", "ignore the shadow path",
+                ],
+                check=True,
+            )
+            shadow_ran = repo / "shadow-ran.txt"
+            (pm / "json.py").write_text(
+                f"open({str(shadow_ran)!r}, 'w').write('executed')\n",
+                encoding="utf-8",
+            )
+
+            result = subprocess.run(
+                [str(launcher), "--draft", str(draft), "--enable-publication"],
+                cwd=repo,
+                text=True,
+                capture_output=True,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("untracked", result.stderr.lower())
+            self.assertFalse(shadow_ran.exists(), "untracked import shadow ran before the trust gate")
+            self.assertFalse(invocation_log.exists(), "Python publisher started before the trust gate")
+
+    def test_launcher_allows_exact_untracked_draft_outside_import_root(self):
+        with tempfile.TemporaryDirectory(prefix="oasis7-publisher-launcher-draft-") as directory:
+            repo, launcher, invocation_log, _pm = self._launcher_fixture(Path(directory))
+            draft = repo / "draft.json"
+            draft.write_bytes(b"{}")
+
+            result = subprocess.run(
+                [str(launcher), "--draft", str(draft)],
+                cwd=repo,
+                text=True,
+                capture_output=True,
+            )
+
+            self.assertEqual(result.returncode, 0, result.stderr)
+            invocation = json.loads(invocation_log.read_text(encoding="utf-8"))
+            self.assertEqual(invocation["argv"][:3], ["publish-record", "--draft", str(draft.resolve())])
+            self.assertTrue(invocation["trusted_launcher"])
+            self.assertEqual(invocation["isolated"], 1)
+            self.assertEqual(invocation["no_site"], 1)
+
+    def test_direct_python_publish_record_refuses_before_untracked_import_shadow(self):
+        with tempfile.TemporaryDirectory(prefix="oasis7-publisher-direct-python-") as directory:
+            repo = Path(directory)
+            pm = repo / "scripts" / "pm"
+            pm.mkdir(parents=True)
+            script = pm / "loop_traceability.py"
+            shutil.copyfile(TRACEABILITY_SCRIPT, script)
+            shadow_ran = repo / "shadow-ran.txt"
+            (pm / "json.py").write_text(
+                f"open({str(shadow_ran)!r}, 'w').write('executed')\n",
+                encoding="utf-8",
+            )
+            draft = repo / "draft.json"
+            draft.write_bytes(b"{}")
+
+            result = subprocess.run(
+                [
+                    "python3", str(script), "publish-record", "--draft", str(draft),
+                    "--repo-root", str(repo), "--enable-publication",
+                ],
+                cwd=repo,
+                text=True,
+                capture_output=True,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("publish-traceability-record.sh", result.stderr)
+            self.assertFalse(shadow_ran.exists(), "direct Python path executed untracked import code")
+            self.assertFalse((repo / ".git" / "oasis7-traceability-publications").exists())
+
+    def test_direct_production_api_requires_launcher_before_api_or_journal(self):
+        with tempfile.TemporaryDirectory(prefix="oasis7-publisher-direct-api-") as directory:
+            repo = Path(directory)
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            publisher = TRACE.GitHubTraceabilityPublisher(repo)
+            api_calls = []
+            journal = repo / ".git" / "oasis7-traceability-publications"
+            draft_path = repo / "draft.json"
+            draft_path.write_bytes(TRACE.canonical_bytes(self.record))
+            original_run = subprocess.run
+
+            def record_api_call(*args, **kwargs):
+                api_calls.append((args, kwargs))
+                raise AssertionError("unexpected GitHub subprocess before launcher authorization")
+
+            subprocess.run = record_api_call
+            try:
+                with self.assertRaisesRegex(TRACE.TraceabilityError, "trusted isolated operational launcher"):
+                    TRACE.publish_traceability_record(
+                        self.record,
+                        publisher,
+                        before_write=publisher.before_write,
+                        enable_publication=True,
+                    )
+                with self.assertRaisesRegex(TRACE.TraceabilityError, "trusted isolated operational launcher"):
+                    publisher.post_reservation(ISSUE_NUMBER, "not-authorized")
+                with self.assertRaisesRegex(TRACE.TraceabilityError, "trusted isolated operational launcher"):
+                    publisher.patch_comment(ISSUE_NUMBER, RESERVATION_ID, "not-authorized")
+
+                output = io.StringIO()
+                with redirect_stdout(output):
+                    exit_code = TRACE.main(
+                        [
+                            "publish-record", "--draft", str(draft_path), "--repo-root", str(repo),
+                            "--enable-publication",
+                        ],
+                        publisher_factory=lambda _root: publisher,
+                    )
+            finally:
+                subprocess.run = original_run
+
+            self.assertEqual(api_calls, [])
+            self.assertFalse(journal.exists())
+            self.assertEqual(exit_code, 2)
+            self.assertIn("trusted isolated operational launcher", json.loads(output.getvalue())["error"])
+            self.assertEqual(api_calls, [])
+            self.assertFalse(journal.exists())
+
     def test_first_publication_binds_server_assigned_id_and_exact_canonical_body(self):
         result = self.publish()
 
@@ -555,17 +719,8 @@ class TraceabilityPublisherTests(unittest.TestCase):
                 TRACE.publish_traceability_record(self.record, publisher)
 
             subprocess.run(["git", "-C", str(repo), "switch", "-q", "-c", "candidate"], check=True)
-            output = io.StringIO()
-            with redirect_stdout(output):
-                exit_code = TRACE.main(
-                    [
-                        "publish-record", "--draft", str(repo / "draft.json"), "--repo-root", str(repo),
-                        "--enable-publication",
-                    ],
-                    publisher_factory=lambda _root: publisher,
-                )
-            self.assertEqual(exit_code, 2)
-            self.assertEqual(json.loads(output.getvalue())["status"], "pending")
+            with self.assertRaisesRegex(TRACE.TraceabilityError, "live default-branch HEAD"):
+                publisher.require_postmerge_enablement()
             self.assertFalse((repo / ".git" / "oasis7-traceability-publications").exists())
 
     def test_cli_default_preflight_does_not_create_intent_or_write_comments(self):
