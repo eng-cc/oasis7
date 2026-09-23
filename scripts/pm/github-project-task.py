@@ -2076,6 +2076,21 @@ def validate_record_pr_identity(args: argparse.Namespace, record: dict[str, Any]
     canonical = pathlib.Path(str(record.get("canonical_worktree") or "")).expanduser().resolve()
     if not canonical.is_dir():
         die("record-pr: canonical task worktree is unavailable for branch identity readback")
+    worktree_registry = run_text(["git", "-C", str(canonical), "worktree", "list", "--porcelain"])
+    registered_branch = ""
+    registered_path = ""
+    for line in worktree_registry.splitlines() + [""]:
+        if line.startswith("worktree "):
+            registered_path = str(pathlib.Path(line.removeprefix("worktree ")).resolve())
+        elif line.startswith("branch refs/heads/") and registered_path == str(canonical):
+            registered_branch = line.removeprefix("branch refs/heads/")
+        elif not line:
+            registered_path = ""
+    if registered_branch != expected_branch:
+        die(
+            "record-pr: canonical task worktree is registered to a different branch; "
+            "run migrate-task-branch-identity before recording the PR"
+        )
     branch_head = run_text(["git", "-C", str(canonical), "rev-parse", f"refs/heads/{expected_branch}^{{commit}}"])
     if branch_head != live_head:
         die("record-pr: live PR head OID differs from canonical task branch head")

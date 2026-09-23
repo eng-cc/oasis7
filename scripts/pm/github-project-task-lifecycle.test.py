@@ -284,6 +284,8 @@ class MoveTaskLifecycleContract(unittest.TestCase):
             def run_text(command: list[str], **_: object) -> str:
                 if command[:3] == ["gh", "pr", "view"]:
                     return live_pr
+                if command[:4] == ["git", "-C", str(root), "worktree"]:
+                    return f"worktree {root}\nbranch refs/heads/task/lifecycle-move-contract\n"
                 if command[:3] == ["git", "-C", str(root)]:
                     return "a" * 40
                 raise AssertionError(f"unexpected command: {command}")

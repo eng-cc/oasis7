@@ -99,6 +99,24 @@ class RecordPrBranchIdentityTest(unittest.TestCase):
             MODULE.validate_record_pr_identity(self.args, self.record, 7)
         self.assertIn("head repository differs", str(caught.exception))
 
+    def test_worktree_on_wrong_branch_is_rejected_even_when_task_ref_remains(self) -> None:
+        subprocess.run(["git", "-C", str(self.worktree), "checkout", "-qb", "wrong/branch"], check=True)
+        def canonical_pr_run_text(command: list[str]) -> str:
+            if command[:3] == ["gh", "pr", "view"]:
+                return json.dumps({
+                    "number": 7,
+                    "headRefName": "task/canonical",
+                    "headRefOid": self.head,
+                    "headRepository": {"nameWithOwner": "eng-cc/oasis7"},
+                    "baseRefName": "main",
+                    "state": "OPEN",
+                })
+            return self.original_run_text(command)
+        MODULE.run_text = canonical_pr_run_text
+        with self.assertRaises(MODULE._CommandExit) as caught:
+            MODULE.validate_record_pr_identity(self.args, self.record, 7)
+        self.assertIn("worktree is registered to a different branch", str(caught.exception))
+
 
 if __name__ == "__main__":
     unittest.main()
