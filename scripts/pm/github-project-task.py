@@ -2022,6 +2022,56 @@ def trace_projection_loss(task_uid: str, reason: str) -> None:
     die(f"trace-projection-loss: {task_uid}: {reason}")
 
 
+def validate_record_pr_identity(args: argparse.Namespace, record: dict[str, Any],
+                                pr_number: int) -> dict[str, Any]:
+    """Validate the live PR against the canonical task branch before writes.
+
+    A repaired PR may legitimately use a replacement branch, but that
+    replacement must first be recorded through the branch-identity migration
+    authority.  Recording a PR is therefore never allowed to silently retarget
+    a task from its canonical branch.
+    """
+    if os.environ.get("OASIS7_PM_FAKE_GITHUB") == "1":
+        # Integration fixtures explicitly opt into a fake transport.  They do
+        # not provide a live PR endpoint; production never takes this branch.
+        return {
+            "number": pr_number,
+            "headRefName": str(record.get("task_branch") or ""),
+            "headRefOid": "fake-transport",
+            "baseRefName": str(record.get("default_branch") or ""),
+            "state": "OPEN",
+        }
+    live = json.loads(run_text([
+        "gh", "pr", "view", str(pr_number), "--repo", args.repo,
+        "--json", "number,headRefName,headRefOid,baseRefName,state",
+    ]))
+    if int(live.get("number") or 0) != pr_number:
+        die("record-pr: live PR number readback does not match requested PR")
+    if str(live.get("state") or "").upper() != "OPEN":
+        die("record-pr: live PR is not open/draft at record time")
+    expected_branch = str(record.get("task_branch") or "")
+    expected_base = str(record.get("default_branch") or "")
+    live_branch = str(live.get("headRefName") or "")
+    live_base = str(live.get("baseRefName") or "")
+    if live_branch != expected_branch:
+        die(
+            "record-pr: live PR head branch differs from canonical task branch; "
+            "run migrate-task-branch-identity before recording the PR"
+        )
+    if live_base != expected_base:
+        die("record-pr: live PR base branch differs from canonical task default branch")
+    live_head = str(live.get("headRefOid") or "")
+    if not re.fullmatch(r"[0-9a-f]{40}", live_head):
+        die("record-pr: live PR head OID readback is invalid")
+    canonical = pathlib.Path(str(record.get("canonical_worktree") or "")).expanduser().resolve()
+    if not canonical.is_dir():
+        die("record-pr: canonical task worktree is unavailable for branch identity readback")
+    branch_head = run_text(["git", "-C", str(canonical), "rev-parse", f"refs/heads/{expected_branch}^{{commit}}"])
+    if branch_head != live_head:
+        die("record-pr: live PR head OID differs from canonical task branch head")
+    return live
+
+
 def recover_non_pr_task_worktree_authority(
     task_uid: str,
     repository: str,
@@ -2556,6 +2606,9 @@ def command_record_pr(args: argparse.Namespace) -> int:
             "record-pr: non-draft pr_watch transition requires task truth at ready/pre_pr_ready; "
             "use prepare-task-pr.sh --promote-draft with canonical CI/review evidence"
         )
+    if requested_pr_number is None:
+        die("record-pr: PR URL did not contain a numeric PR number")
+    validate_record_pr_identity(args, record, requested_pr_number)
     record["pr_url"] = args.pr_url
     number = pr_number_from_url(args.pr_url)
     if number is not None:
