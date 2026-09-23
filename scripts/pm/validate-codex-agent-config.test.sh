@@ -123,7 +123,7 @@ fi
 new_fixture wrong-adapter-model
 fixture="$FIXTURE"
 rewrite "$fixture/.codex/agents/runtime_engineer.toml" \
-  'model = "gpt-5.6-luna"' \
+  'model = "gpt-6-luna"' \
   'model = "gpt-5.5"'
 expect_fail wrong_adapter_model "$fixture"
 
