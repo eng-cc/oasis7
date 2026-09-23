@@ -2639,7 +2639,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/governed-industry-market-and-emergency-supply.prd.md",
-      "content_sha256": "214132cc8af8d56dff0a265f1582b4d2afa881751dc1c3365f8ed55334403eb9",
+      "content_sha256": "6656655daa5cde873503ec218abfda67c7f6a2f0484dcaeb226b3616da94559d",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2653,7 +2653,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/prd.md",
-      "content_sha256": "d2aa0090e730c8ab37e957a232bea4d137b87a977f0e5eaf55727efce16c1d57",
+      "content_sha256": "20190c1e640325ce2dfc6815c7e667cbddb04e3e411a44ff8a33070753a77952",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",

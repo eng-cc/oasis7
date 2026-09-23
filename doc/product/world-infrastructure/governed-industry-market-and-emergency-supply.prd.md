@@ -11,7 +11,7 @@
 
 ## 迁移状态
 
-本页保留工业扩展、结算资产、市场地理和危机保供语义的历史 provenance，避免迁移时丢失规则。它已不再是权威世界基础设施的 active authority、路线图或验收入口：基础设施只提供最终性、权威状态、复制、存储、恢复和确定性执行边界。旧 AC-1 至 AC-5 的产品语义已由 [`世界规则与玩法系统`](../world-rules-core-gameplay/prd.md) 下的稳定专题锚点接收；本页暂不删除，因为 PRD-GAME-018 等专业文档仍有旧源活跃 backlink，且后续 S1 尚需修复专业引用。专业实现、数值、runtime/P2P 合同和当前公开 claim 仍由各自专业 authority 拥有。
+本页保留工业扩展、结算资产、市场地理和危机保供语义的历史 provenance，避免迁移时丢失规则。它已不再是权威世界基础设施的 active authority、路线图或验收入口：基础设施只提供最终性、权威状态、复制、存储、恢复和确定性执行边界。旧 AC-1 至 AC-5 的产品语义已由 [`世界规则与玩法系统`](../world-rules-core-gameplay/prd.md) 下的稳定专题锚点接收；专业 PRD-GAME-018、game index、README 与 active product topics 已不再使用本页作为 semantic authority。删除仍需独立 S1 退休 gate、历史 provenance/readback、inventory 更新及 owner/QA 批准；本页继续保持 `superseded`、只读且非权威。专业实现、数值、runtime/P2P 合同和当前公开 claim 仍由各自专业 authority 拥有。
 
 
 本文定义基础工业规则与玩家/Agent 创造的受治理能力如何共同扩展世界，市场如何在全球发现和物理结算之间保持一致，以及常态价格和紧急保供的制度边界。它不定义配方、价格、税费、版税、汇率、订单簿、物流、escrow、危机阈值或任何 runtime/UI 实现。
@@ -20,7 +20,7 @@
 
 - 接收 authority：[`受治理的区域能力与扩展`](../world-rules-core-gameplay/governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-009)、[`工业需求目标与生产交付结算`](../world-rules-core-gameplay/industrial-demand-goals-and-settlement.prd.md#req-sc31-009)与 [`常态市场与有界紧急保供`](../world-rules-core-gameplay/market-normal-state-and-emergency-supply.prd.md#req-wr-es-004)。
 - 剩余语义：旧 AC-1 至 AC-5 的提案/模拟/试点/准入、许可/开放、OC/世界资格分离、发现/物理物流/escrow，以及常态/紧急保供语义均已有唯一 active REQ/AC 锚点；专业 PRD、runtime、P2P、testing 仍拥有各自合同和证据。本页仅保留历史 provenance。
-- 未闭合条件：[`PRD-GAME-018`](../../game/gameplay/gameplay-industrial-creation-and-cross-region-market-contract.prd.md#ac-game-018-03) 及其他专业引用仍使用本页旧 `AC-1` 至 `AC-4` provenance；另有 AC-3 pending wording 需要专业 owner 按新产品锚点修复。产品任务不修改 `doc/game/**`，因此本页在 S1 引用修复完成前保留且不能作为 active authority。
+- 未闭合条件：专业 PRD-GAME-018、game index、README 与 active product topics 已完成旧 `AC-1` 至 `AC-4` provenance 的语义接收；本页仍须经过独立 S1 退休 gate、历史 provenance/readback、inventory 更新及 owner/QA 批准后方可删除。产品任务不修改 `doc/game/**`，因此本页继续保留且不能作为 active authority。
 - 稳定引用：本页的历史 AC 保持可读；当前产品入口经 [`世界规则与玩法系统`](../world-rules-core-gameplay/prd.md#活跃产品专题) 下的工业、市场和保供专题接收，专业执行与验证仍由各自 authority 拥有。
 - 删除条件：专业引用全部切换到新产品锚点、旧源路径不再被 active 文档使用、专业实现/经济 authority 仍可达且治理/链接检查通过；满足前不得删除本页。
 
