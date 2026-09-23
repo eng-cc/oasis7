@@ -34,6 +34,8 @@
 
 ## 1. 产品承诺
 
+<!-- source-first provenance: doc/game/design.md#3-设计结构:20-34 is module navigation and integration context only; this section remains the canonical product-promises authority. PE-001..003 are owned by playability-evidence-and-claim-boundaries.prd.md#req-wr-pe-001 through #req-wr-pe-003. -->
+
 玩家通过可读、有代价、有反馈的行动持续影响同一个持久世界，并在权威规则内与其他玩家、Agent 和区域系统产生可审计的涌现结果。产品不设置全体玩家共享的胜利或通关终局；玩家持续完成有边界、可归因的阶段成果，并在同一世界中形成新的能力、区域价值或下一阶段方向。
 
 长期推荐围绕三条相连但不强制线性的抱负轴展开：建立并守住可恢复的能力、用该能力服务区域需求、获得有限且可审计的区域影响。组织、协议或治理等文明尺度项目只作为玩家自愿进入的共同扩展，不能取代独立成长或成为唯一有效路线。
