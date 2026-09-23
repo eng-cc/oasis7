@@ -775,6 +775,9 @@ for name,filename in [('integration_ci','integration_ci.py'),('ci_ready_receipt_
 if request['require_strict']:
  pr,run,base,head=module.selected_live(request['repository'],request['uid'],request['issue'],request['pr'],'required-gate',request['app'],allow_ready_pr=True,base_ref=request['base_ref'],integration_run_id=request.get('integration_run_id'),require_integration=True,require_dispatch=request.get('require_dispatch',False))
 else:
+ # Ordinary mode deliberately reads source-bound PR CI. An unrelated target
+ # advance is not a strict integration request and must not be promoted to
+ # one by passing require_integration=True here.
  pr,run,base,head=module.selected_live(request['repository'],request['uid'],request['issue'],request['pr'],'required-gate',request['app'],allow_ready_pr=True,base_ref=request['base_ref'])
 planner=module.planner_for_run(request['repository'],run,base_oid=base,head_oid=head)
 proof={'integration_base_oid':base,'base_ref':pr.get('base',{}).get('ref'),'head_oid':head,'check_run_id':run['id'],'check_app_id':run['app']['id'],'planner_digest':module.hashlib.sha256(json.dumps(planner,sort_keys=True,separators=(',',':')).encode()).hexdigest(),'ci_validation_mode':'trusted_integration' if run.get('_integration') else 'ordinary_pr'}
