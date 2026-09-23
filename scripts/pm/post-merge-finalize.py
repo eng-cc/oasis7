@@ -116,11 +116,18 @@ def fail(message: str) -> None:
     raise SystemExit(f"post-merge-finalize: {message}")
 
 def _validate_cleanup_intent(terminal_path: pathlib.Path, task_uid: str,
-                             record: dict, terminal: dict) -> None:
+                             record: dict, terminal: dict,
+                             already_finalized: bool) -> None:
     """Do not finalize task truth while remote-branch cleanup is blocked."""
     intent_path=terminal_path.with_name("cleanup-intent.json")
     if not intent_path.exists():
-        return
+        if terminal.get("cleanup_intent_required") is True:
+            fail("current-protocol terminal receipt requires cleanup intent")
+        if "cleanup_intent_required" in terminal:
+            fail("terminal receipt cleanup intent marker is malformed")
+        if already_finalized:
+            return
+        fail("legacy terminal receipt without cleanup intent requires an already-finalized task")
     try:
         intent=json.loads(intent_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
@@ -234,7 +241,7 @@ def _write_terminal_locked(root: pathlib.Path, task_uid: str, terminal_receipt_p
     already_finalized=(record.get("workflow_phase")=="post_merge_done" and
         (record.get("phase_receipts") or {}).get("post_merge_done")==terminal and
         (stored_terminal_digest==terminal_digest or (not stored_terminal_digest and fixture_legacy)))
-    _validate_cleanup_intent(terminal_path,task_uid,record,terminal)
+    _validate_cleanup_intent(terminal_path,task_uid,record,terminal,already_finalized)
     # The lock protects the validation snapshot only. Remote effects use the
     # durable ledger and never hold the mapping lock across a network call.
     lock_handle.close(); lock_fd=-1

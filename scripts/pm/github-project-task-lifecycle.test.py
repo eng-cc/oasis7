@@ -84,6 +84,7 @@ def record_pr_live_issue(record: dict[str, object]) -> dict[str, object]:
         "task_uid": UID,
         "issue_number": 2001,
         "issue_url": "https://github.com/eng-cc/oasis7/issues/2001",
+        "issue_state": "OPEN",
         "owner_role": record["owner_role"],
         "module": record["module"],
         "priority": record["priority"],
@@ -314,6 +315,41 @@ class MoveTaskLifecycleContract(unittest.TestCase):
             comment.assert_not_called()
             update_project.assert_not_called()
             merge_mapping.assert_not_called()
+
+    def test_record_pr_rejects_closed_live_issue_before_any_task_write(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            record = mapping_record(status="ready", phase="pre_pr_ready")
+            record.update(record_pr_identity(root))
+            mapping_path = self.write_mapping(root, record)
+            before = self.digest(mapping_path)
+            live_issue = record_pr_live_issue(record)
+            live_issue["issue_state"] = "CLOSED"
+            failure = None
+            with (
+                mock.patch.object(MODULE, "github_issue_record", return_value=live_issue),
+                mock.patch.object(MODULE, "authoritative_repository_identity", return_value=record_pr_identity(root)),
+                mock.patch.object(MODULE, "github_pull_request", return_value=record_pr_live_pr(), create=True) as live_pr,
+                mock.patch.object(MODULE, "run_text", return_value="a" * 40),
+                mock.patch.object(MODULE, "update_issue_body") as update_issue,
+                mock.patch.object(MODULE, "issue_comment", return_value="comment-url") as comment,
+                mock.patch.object(MODULE, "update_project_fields", return_value=0) as update_project,
+                mock.patch.object(MODULE, "merge_task_mapping") as merge_mapping,
+                mock.patch.object(MODULE, "synchronize_live_issue_traceability", return_value=[]) as sync_traceability,
+            ):
+                try:
+                    MODULE.command_record_pr(record_pr_args(root))
+                except MODULE._CommandExit as exc:
+                    failure = exc
+            self.assertEqual(before, self.digest(mapping_path))
+            update_issue.assert_not_called()
+            comment.assert_not_called()
+            update_project.assert_not_called()
+            merge_mapping.assert_not_called()
+            sync_traceability.assert_not_called()
+            live_pr.assert_not_called()
+            self.assertIsNotNone(failure, "closed Issue must be rejected before record-pr writers")
+            self.assertIn("live task Issue is not OPEN", str(failure))
 
     def test_record_pr_rejects_stale_live_pr_head_before_any_task_write(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

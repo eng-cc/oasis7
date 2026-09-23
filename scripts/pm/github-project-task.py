@@ -680,6 +680,8 @@ def validate_record_pr_live_identity(
         die("record-pr: authoritative task Issue was not found")
     if live_issue.get("task_uid") != args.task_uid:
         die("record-pr: live task Issue UID mismatch")
+    if str(live_issue.get("issue_state") or "").strip().upper() != "OPEN":
+        die("record-pr: live task Issue is not OPEN")
     for key in (
         "issue_number", "issue_url", "owner_role", "module", "priority",
         "status", "workflow_phase", "worktree_hint",

@@ -170,11 +170,13 @@ PY
     >"$root/retry.out"
   [[ ! -e "$worktree" ]]
   ! git -C "$repo" show-ref --verify --quiet "refs/heads/$branch"
-  python3 - "$receipts/cleanup-intent.json" <<'PY'
+  python3 - "$receipts/cleanup-intent.json" "$receipts/terminal-cleanup-receipt.json" <<'PY'
 import json
 import sys
 journal = json.load(open(sys.argv[1], encoding="utf-8"))
 assert all(journal[key] for key in ("worktree_removed", "branch_deleted", "terminal_receipt_committed")), journal
+terminal = json.load(open(sys.argv[2], encoding="utf-8"))
+assert terminal.get("cleanup_intent_required") is True, terminal
 PY
   if [[ "$legacy" == 1 ]]; then
     python3 - "$receipts/cleanup-intent.json" "$repo" "$branch_tip" <<'PY'

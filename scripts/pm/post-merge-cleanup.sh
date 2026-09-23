@@ -565,6 +565,7 @@ import datetime as d,hashlib,json,os,pathlib,sys
 mapping=json.load(open(sys.argv[2],encoding='utf-8')); record=(mapping.get('tasks') or {}).get(sys.argv[3]) or {}
 merge=pathlib.Path(sys.argv[4]); sync=pathlib.Path(sys.argv[5])
 out={"receipt_type":"oasis7_terminal_cleanup","issuer":"post-merge-cleanup",
+ "cleanup_intent_required":True,
  "task_uid":sys.argv[3],"repository":sys.argv[6],"issue_number":record.get("issue_number"),
  "pr_number":int(sys.argv[7]),"worktree":sys.argv[8],"branch":sys.argv[9],
  "merge_receipt_sha256":hashlib.sha256(merge.read_bytes()).hexdigest(),

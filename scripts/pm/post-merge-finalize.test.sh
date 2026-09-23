@@ -11,7 +11,10 @@ cat >"$FIXTURE/.pm/github-project-sync/tasks.json" <<EOF
 {"tasks":{"$UID_VALUE":{"task_uid":"$UID_VALUE","repository":"fixture/repo","canonical_worktree":"$TMPDIR/canonical-task-worktree","task_branch":"task/finalize","default_branch":"main","issue_number":11,"pr_number":22,"workflow_phase":"main_sync","merge_receipt":{"state":"MERGED"},"phase_receipts":{"main_sync":{"receipt_type":"oasis7_main_sync"}}}}}
 EOF
 cat >"$TERMINAL" <<EOF
-{"receipt_type":"oasis7_terminal_cleanup","issuer":"post-merge-cleanup","task_uid":"$UID_VALUE","repository":"fixture/repo","issue_number":11,"pr_number":22,"worktree":"$TMPDIR/canonical-task-worktree","branch":"task/finalize"}
+{"receipt_type":"oasis7_terminal_cleanup","issuer":"post-merge-cleanup","cleanup_intent_required":true,"task_uid":"$UID_VALUE","repository":"fixture/repo","issue_number":11,"pr_number":22,"worktree":"$TMPDIR/canonical-task-worktree","branch":"task/finalize"}
+EOF
+cat >"$RECEIPT_ROOT/cleanup-intent.json" <<EOF
+{"receipt_type":"oasis7_cleanup_intent","task_uid":"$UID_VALUE","repository":"fixture/repo","worktree":"$TMPDIR/canonical-task-worktree","branch":"task/finalize","worktree_removed":true,"branch_deleted":true,"terminal_receipt_committed":true}
 EOF
 cat >"$FIXTURE/scripts/pm/github-project-task.py" <<'PY'
 #!/usr/bin/env python3
@@ -50,6 +53,20 @@ assert retry['status']=='already_finalized',retry
 r=next(iter(mapping['tasks'].values())); assert r['workflow_phase']=='post_merge_done',r
 PY
 [[ "$(grep -c '^issue close 11 -R fixture/repo --reason completed$' "$GH_LOG")" == 1 ]]
+
+# Current-protocol terminal receipts require their matching cleanup journal,
+# even when the terminal task mapping is already committed.
+cp "$TERMINAL" "$TMPDIR/terminal.current.json"
+cp "$RECEIPT_ROOT/cleanup-intent.json" "$TMPDIR/cleanup-intent.current.json"
+rm "$RECEIPT_ROOT/cleanup-intent.json"
+before_missing_intent="$(wc -l <"$GH_LOG")"
+if python3 "$ROOT_DIR/scripts/pm/post-merge-finalize.py" --repo-root "$FIXTURE" \
+  --task-uid "$UID_VALUE" --terminal-receipt "$TERMINAL" >/dev/null 2>"$TMPDIR/missing-current-intent.err"; then
+  echo "expected current-protocol terminal receipt to require cleanup intent" >&2; exit 1
+fi
+grep -F "current-protocol terminal receipt requires cleanup intent" "$TMPDIR/missing-current-intent.err" >/dev/null
+[[ "$(wc -l <"$GH_LOG")" == "$before_missing_intent" ]]
+cp "$TMPDIR/cleanup-intent.current.json" "$RECEIPT_ROOT/cleanup-intent.json"
 
 # A terminal-shaped receipt cannot bypass a durable unresolved cleanup blocker.
 python3 - "$RECEIPT_ROOT/cleanup-intent.json" "$UID_VALUE" "$TMPDIR/canonical-task-worktree" <<'PY'
@@ -147,4 +164,48 @@ fi
 if ! grep -Eqi 'not allowed|invalid choice' "$TMPDIR/set-phase.err"; then
   echo "expected transition-policy rejection, got:" >&2; cat "$TMPDIR/set-phase.err" >&2; exit 1
 fi
+
+# A markerless legacy receipt with no journal is blocked while pending, but is
+# eligible for idempotent finalization after its exact terminal bytes and digest
+# are already bound into task truth.
+python3 - "$FIXTURE/.pm/github-project-sync/tasks.json" "$TERMINAL" "$RECEIPT_ROOT/cleanup-intent.json" <<'PY'
+import hashlib,json,pathlib,sys
+mapping=pathlib.Path(sys.argv[1]); terminal=pathlib.Path(sys.argv[2]); intent=pathlib.Path(sys.argv[3])
+receipt=json.loads(terminal.read_text(encoding="utf-8")); receipt.pop("cleanup_intent_required",None)
+receipt["repository"]="fixture/repo"
+receipt.pop("merge_receipt_sha256",None); receipt.pop("main_sync_receipt_sha256",None)
+terminal.write_text(json.dumps(receipt)+"\n",encoding="utf-8")
+intent.unlink(missing_ok=True)
+m=json.loads(mapping.read_text(encoding="utf-8")); r=m["tasks"]["task_11111111111111111111111111111111"]
+r.update(repository="fixture/repo",workflow_phase="main_sync",merge_receipt={"state":"MERGED"})
+r.pop("merge_receipt_sha256",None)
+r["phase_receipts"]={"main_sync":{"receipt_type":"oasis7_main_sync"}}
+r["phase_receipt_sha256"]={}
+mapping.write_text(json.dumps(m)+"\n",encoding="utf-8")
+PY
+before_legacy_pending="$(wc -l <"$GH_LOG")"
+if python3 "$ROOT_DIR/scripts/pm/post-merge-finalize.py" --repo-root "$FIXTURE" \
+  --task-uid "$UID_VALUE" --terminal-receipt "$TERMINAL" >/dev/null 2>"$TMPDIR/missing-legacy-intent.err"; then
+  echo "expected pending markerless legacy receipt without cleanup intent to fail closed" >&2; exit 1
+fi
+grep -F "legacy terminal receipt without cleanup intent requires an already-finalized task" "$TMPDIR/missing-legacy-intent.err" >/dev/null || {
+  cat "$TMPDIR/missing-legacy-intent.err" >&2; exit 1;
+}
+[[ "$(wc -l <"$GH_LOG")" == "$before_legacy_pending" ]]
+python3 - "$FIXTURE/.pm/github-project-sync/tasks.json" "$TERMINAL" <<'PY'
+import hashlib,json,pathlib,sys
+mapping=pathlib.Path(sys.argv[1]); terminal=pathlib.Path(sys.argv[2]); receipt=json.loads(terminal.read_text(encoding="utf-8"))
+m=json.loads(mapping.read_text(encoding="utf-8")); r=m["tasks"]["task_11111111111111111111111111111111"]
+r["workflow_phase"]="post_merge_done"
+r.setdefault("phase_receipts",{})["post_merge_done"]=receipt
+r.setdefault("phase_receipt_sha256",{})["post_merge_done"]=hashlib.sha256(terminal.read_bytes()).hexdigest()
+mapping.write_text(json.dumps(m)+"\n",encoding="utf-8")
+PY
+python3 "$ROOT_DIR/scripts/pm/post-merge-finalize.py" --repo-root "$FIXTURE" \
+  --task-uid "$UID_VALUE" --terminal-receipt "$TERMINAL" >"$TMPDIR/legacy-finalized.json"
+python3 - "$TMPDIR/legacy-finalized.json" <<'PY'
+import json,sys
+result=json.loads(open(sys.argv[1],encoding="utf-8").read().splitlines()[-1])
+assert result["status"]=="already_finalized",result
+PY
 echo "post-merge-finalize.test: OK"
