@@ -58,9 +58,14 @@ esac
 
 # Do not use --exclude-standard: ignored/untracked import candidates are still
 # executable Python inputs when scripts/pm is added to sys.path below.
-while IFS= read -r -d '' untracked_path; do
-    die "untracked publisher import input is not allowed: scripts/pm/$untracked_path"
-done < <(git -C "$repo_root" ls-files --others -z -- scripts/pm)
+if git -C "$repo_root" ls-files --others -z -- scripts/pm | while IFS= read -r -d '' untracked_path; do
+    printf 'publisher launcher: untracked publisher import input is not allowed: scripts/pm/%s\n' "$untracked_path" >&2
+    exit 2
+done; then
+    :
+else
+    die "cannot verify untracked publisher import inputs"
+fi
 
 bootstrap='import sys
 publisher_root, repository_root, draft_path, enable = sys.argv[1:5]

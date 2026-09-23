@@ -12,7 +12,9 @@ from contextlib import redirect_stdout
 import importlib.util
 import io
 import json
+import os
 from pathlib import Path
+import shlex
 import shutil
 import subprocess
 import tempfile
@@ -354,6 +356,43 @@ class TraceabilityPublisherTests(unittest.TestCase):
             self.assertIn("untracked", result.stderr.lower())
             self.assertFalse(shadow_ran.exists(), "untracked import shadow ran before the trust gate")
             self.assertFalse(invocation_log.exists(), "Python publisher started before the trust gate")
+
+    def test_launcher_fails_closed_when_untracked_scan_command_fails(self):
+        with tempfile.TemporaryDirectory(prefix="oasis7-publisher-launcher-scan-failure-") as directory:
+            repo, launcher, invocation_log, _pm = self._launcher_fixture(Path(directory))
+            draft = repo / "draft.json"
+            draft.write_bytes(b"{}")
+
+            real_git = shutil.which("git")
+            self.assertIsNotNone(real_git, "test requires the real git executable")
+            fake_bin = repo / "fake-bin"
+            fake_bin.mkdir()
+            fake_git = fake_bin / "git"
+            fake_git.write_text(
+                "#!/usr/bin/env bash\n"
+                "if [[ \"${3-}\" == \"ls-files\" ]]; then\n"
+                "    printf 'simulated ls-files failure\\n' >&2\n"
+                "    exit 73\n"
+                "fi\n"
+                f"exec {shlex.quote(real_git or 'git')} \"$@\"\n",
+                encoding="utf-8",
+            )
+            fake_git.chmod(0o755)
+            env = dict(os.environ)
+            env["PATH"] = str(fake_bin) + os.pathsep + env.get("PATH", "")
+
+            result = subprocess.run(
+                [str(launcher), "--draft", str(draft)],
+                cwd=repo,
+                env=env,
+                text=True,
+                capture_output=True,
+            )
+
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("simulated ls-files failure", result.stderr)
+            self.assertIn("untracked", result.stderr.lower())
+            self.assertFalse(invocation_log.exists(), "Python publisher started after the import-root scan failed")
 
     def test_launcher_allows_exact_untracked_draft_outside_import_root(self):
         with tempfile.TemporaryDirectory(prefix="oasis7-publisher-launcher-draft-") as directory:
