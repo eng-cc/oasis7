@@ -9,7 +9,7 @@
 - Product PRD-ID：`PRD-PRODUCT-002`
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：`2026-08-13`
+- Last reviewed：`2026-09-23`
 - 后继文档：`无`
 - 下层专业域：[`doc/game/prd.md`](../../game/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 

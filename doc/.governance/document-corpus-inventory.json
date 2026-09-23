@@ -2653,7 +2653,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/prd.md",
-      "content_sha256": "d0b9f7e4db5d9437c7d929d88a654a05a183798dadfb5c6179a5d6310dbe50fd",
+      "content_sha256": "5a619fce29ebc1055e64280b83930e6ac4ed9c6b39ba5fcace46423578a5cd04",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
