@@ -770,11 +770,11 @@ def can_reuse_source_review(
     current_target_root: pathlib.Path | str | None = None,
     *, require_fresh_integration: bool = True,
 ) -> bool:
-    """Return whether trusted integration proves safe source-review reuse.
+    """Return whether trusted CI evidence proves safe source-review reuse.
 
     ``tested_tree_oid`` belongs to integration execution provenance and is
     retained in the receipt/audit digest, but it is not a source-review reuse
-    boundary.  Applicability is independently verified and digest-bound.  A
+    boundary.  Applicability is independently verified and digest-bound.
     An ordinary source-bound PR CI receipt may be reused on promotion/closeout
     when trusted applicability and target closure prove an advance unrelated;
     a strict/high-risk/related/unknown path still requires fresh current-target
