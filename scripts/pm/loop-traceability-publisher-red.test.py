@@ -357,23 +357,35 @@ class TraceabilityPublisherTests(unittest.TestCase):
 
     def test_launcher_allows_exact_untracked_draft_outside_import_root(self):
         with tempfile.TemporaryDirectory(prefix="oasis7-publisher-launcher-draft-") as directory:
-            repo, launcher, invocation_log, _pm = self._launcher_fixture(Path(directory))
+            repo, launcher, invocation_log, pm = self._launcher_fixture(Path(directory))
             draft = repo / "draft.json"
             draft.write_bytes(b"{}")
 
-            result = subprocess.run(
-                [str(launcher), "--draft", str(draft)],
-                cwd=repo,
-                text=True,
-                capture_output=True,
-            )
+            # Keep this explicit even when the local Python runtime happens to
+            # default to dont_write_bytecode: the launcher must not create an
+            # untracked import root that its next clean preflight rejects.
+            launcher_text = launcher.read_text(encoding="utf-8")
+            self.assertIn("exec python3 -B -I -S -c", launcher_text)
 
-            self.assertEqual(result.returncode, 0, result.stderr)
-            invocation = json.loads(invocation_log.read_text(encoding="utf-8"))
-            self.assertEqual(invocation["argv"][:3], ["publish-record", "--draft", str(draft.resolve())])
-            self.assertTrue(invocation["trusted_launcher"])
-            self.assertEqual(invocation["isolated"], 1)
-            self.assertEqual(invocation["no_site"], 1)
+            for attempt in range(2):
+                with self.subTest(attempt=attempt + 1):
+                    result = subprocess.run(
+                        [str(launcher), "--draft", str(draft)],
+                        cwd=repo,
+                        text=True,
+                        capture_output=True,
+                    )
+
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertFalse(
+                        (pm / "__pycache__").exists(),
+                        "publisher startup created bytecode in the guarded import root",
+                    )
+                    invocation = json.loads(invocation_log.read_text(encoding="utf-8"))
+                    self.assertEqual(invocation["argv"][:3], ["publish-record", "--draft", str(draft.resolve())])
+                    self.assertTrue(invocation["trusted_launcher"])
+                    self.assertEqual(invocation["isolated"], 1)
+                    self.assertEqual(invocation["no_site"], 1)
 
     def test_direct_python_publish_record_refuses_before_untracked_import_shadow(self):
         with tempfile.TemporaryDirectory(prefix="oasis7-publisher-direct-python-") as directory:

@@ -71,4 +71,4 @@ if enable == "1":
     args.append("--enable-publication")
 raise SystemExit(loop_traceability._trusted_launcher_main(args))'
 
-exec python3 -I -S -c "$bootstrap" "$pm_root" "$repo_root" "$draft_path" "$enable_publication"
+exec python3 -B -I -S -c "$bootstrap" "$pm_root" "$repo_root" "$draft_path" "$enable_publication"
