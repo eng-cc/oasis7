@@ -775,11 +775,12 @@ def can_reuse_source_review(
     ``tested_tree_oid`` belongs to integration execution provenance and is
     retained in the receipt/audit digest, but it is not a source-review reuse
     boundary.  Applicability is independently verified and digest-bound.  A
-    complete plan still requires a fresh integration identity on the
-    promotion/closeout path; ``require_fresh_integration=False`` is reserved
-    for idempotent plan lookup while creating or refreshing an immutable plan.
-    Promotion and closeout may pass ``current_target_oid`` and
-    ``current_target_root`` to prove that an ordinary target advance is
+    An ordinary source-bound PR CI receipt may be reused on promotion/closeout
+    when trusted applicability and target closure prove an advance unrelated;
+    a strict/high-risk/related/unknown path still requires fresh current-target
+    integration evidence. ``require_fresh_integration`` controls freshness for
+    subsequent trusted-integration joins, while ``current_target_oid`` and
+    ``current_target_root`` let promotion/closeout prove an ordinary advance is
     unrelated to the verified projection.
     """
     try:
