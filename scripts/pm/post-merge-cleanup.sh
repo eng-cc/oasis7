@@ -5,6 +5,91 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DURABLE_STORE="$SCRIPT_DIR/workflow-durable-store.py"
 journal_write() { python3 "$DURABLE_STORE" write-journal --path "$1" --json "$2"; }
 
+record_remote_branch_blocker() {
+  local observed_tip="$1" blocker_json
+  [[ -f "$INTENT_JOURNAL" ]] || die "cannot persist remote branch blocker without cleanup intent"
+  blocker_json="$(python3 - "$INTENT_JOURNAL" "$TASK_UID" "$RECORDED_REPOSITORY" "$WORKTREE" "$BRANCH" "$BRANCH_TIP" "$observed_tip" <<'PY'
+import datetime,json,pathlib,sys
+path=pathlib.Path(sys.argv[1]); task_uid,repository,worktree,branch,expected_tip,observed_tip=sys.argv[2:]
+journal=json.loads(path.read_text(encoding='utf-8'))
+identity={'task_uid':task_uid,'repository':repository,'worktree':worktree,'branch':branch}
+for key,value in identity.items():
+    if journal.get(key)!=value:
+        raise SystemExit(f'post-merge-cleanup: cannot persist blocker; cleanup intent {key} mismatch')
+if journal.get('branch_tip')!=expected_tip:
+    raise SystemExit('post-merge-cleanup: cannot persist blocker; cleanup intent branch tip mismatch')
+now=datetime.datetime.now(datetime.timezone.utc).isoformat()
+blocker=journal.get('remote_branch_blocker')
+history=journal.get('remote_branch_blocker_history') or []
+if not isinstance(history,list):
+    raise SystemExit('post-merge-cleanup: remote branch blocker history is malformed')
+if blocker is not None:
+    if not isinstance(blocker,dict) or any(blocker.get(key)!=value for key,value in {
+        'schema':'oasis7_cleanup_blocker_v1','kind':'remote_branch_tip_mismatch',
+        'branch':branch,'expected_tip':expected_tip,
+    }.items()):
+        raise SystemExit('post-merge-cleanup: existing remote branch blocker identity mismatch')
+    if blocker.get('resolved') is True:
+        history.append(blocker)
+        blocker=None
+if blocker is None:
+    blocker={'schema':'oasis7_cleanup_blocker_v1','kind':'remote_branch_tip_mismatch',
+        'branch':branch,'expected_tip':expected_tip,'observed_tip':observed_tip,
+        'observed_tips':[observed_tip],'resolved':False,'created_at':now,'updated_at':now}
+else:
+    observed_tips=blocker.get('observed_tips')
+    if not isinstance(observed_tips,list):
+        raise SystemExit('post-merge-cleanup: remote branch blocker observations are malformed')
+    if observed_tip not in observed_tips:
+        observed_tips.append(observed_tip)
+    blocker.update(observed_tip=observed_tip,observed_tips=observed_tips,updated_at=now)
+journal['remote_branch_blocker']=blocker
+if history:
+    journal['remote_branch_blocker_history']=history
+journal['revision']=int(journal.get('revision',0))+1
+print(json.dumps(journal))
+PY
+)" || die "remote branch blocker persistence failed"
+  journal_write "$INTENT_JOURNAL" "$blocker_json" || die "remote branch blocker persistence failed"
+}
+
+resolve_remote_branch_blocker() {
+  local resolution="$1" resolved_tip="$2" resolution_json
+  [[ -f "$INTENT_JOURNAL" ]] || return 0
+  resolution_json="$(python3 - "$INTENT_JOURNAL" "$TASK_UID" "$RECORDED_REPOSITORY" "$WORKTREE" "$BRANCH" "$BRANCH_TIP" "$resolution" "$resolved_tip" <<'PY'
+import datetime,json,pathlib,sys
+path=pathlib.Path(sys.argv[1]); task_uid,repository,worktree,branch,expected_tip,resolution,resolved_tip=sys.argv[2:]
+journal=json.loads(path.read_text(encoding='utf-8'))
+identity={'task_uid':task_uid,'repository':repository,'worktree':worktree,'branch':branch}
+for key,value in identity.items():
+    if journal.get(key)!=value:
+        raise SystemExit(f'post-merge-cleanup: cannot resolve blocker; cleanup intent {key} mismatch')
+if journal.get('branch_tip')!=expected_tip:
+    raise SystemExit('post-merge-cleanup: cannot resolve blocker; cleanup intent branch tip mismatch')
+blocker=journal.get('remote_branch_blocker')
+if blocker is None:
+    print('')
+    raise SystemExit(0)
+if not isinstance(blocker,dict):
+    raise SystemExit('post-merge-cleanup: cannot resolve malformed remote branch blocker')
+if blocker.get('resolved') is True:
+    print('')
+    raise SystemExit(0)
+if any(blocker.get(key)!=value for key,value in {
+    'schema':'oasis7_cleanup_blocker_v1','kind':'remote_branch_tip_mismatch',
+    'branch':branch,'expected_tip':expected_tip,
+}.items()):
+    raise SystemExit('post-merge-cleanup: cannot resolve remote branch blocker identity mismatch')
+blocker.update(resolved=True,resolution=resolution,resolved_tip=resolved_tip,
+    resolved_at=datetime.datetime.now(datetime.timezone.utc).isoformat())
+journal['revision']=int(journal.get('revision',0))+1
+print(json.dumps(journal))
+PY
+)" || die "remote branch blocker resolution failed"
+  [[ -n "$resolution_json" ]] || return 0
+  journal_write "$INTENT_JOURNAL" "$resolution_json" || die "remote branch blocker resolution failed"
+}
+
 # Git for Windows porcelain uses forward slashes while native Python resolves
 # Windows paths with backslashes. Normalize before comparing worktree identity.
 normalize_path_identity() {
@@ -376,6 +461,10 @@ if p.exists():
  old=json.loads(p.read_text());
  for key,value in identity.items():
   if old.get(key)!=value: raise SystemExit(f'post-merge-cleanup: cleanup intent mismatch on retry: {key}')
+ # Preserve forward-compatible durable state such as blocker history while
+ # updating the known identity and progress fields below.
+ expected.update(old)
+ expected.update(identity)
  # Legacy journals intentionally lack the derived identity fields.  Preserve
  # existing values exactly; only after all live receipt/proof checks above may
  # this transaction add a missing field as a one-time backfill.
@@ -424,13 +513,34 @@ PY
       || die "remote task branch readback failed"
     if [[ -n "$REMOTE_BRANCH_LINE" ]]; then
       REMOTE_BRANCH_TIP="$(printf '%s\n' "$REMOTE_BRANCH_LINE" | awk 'NR==1 {print $1}')"
-      [[ "$REMOTE_BRANCH_TIP" == "$BRANCH_TIP" ]] \
-        || die "remote task branch tip disagrees with merged PR head"
-      git -C "$REPO_ROOT" push --force-with-lease="refs/heads/$BRANCH:$REMOTE_BRANCH_TIP" \
-        origin ":refs/heads/$BRANCH" >/dev/null \
-        || die "remote task branch deletion failed"
-      [[ -z "$(git -C "$REPO_ROOT" ls-remote --heads origin "refs/heads/$BRANCH")" ]] \
+      if [[ "$REMOTE_BRANCH_TIP" != "$BRANCH_TIP" ]]; then
+        record_remote_branch_blocker "$REMOTE_BRANCH_TIP"
+        die "durable cleanup blocker: remote task branch tip disagrees with merged PR head; inspect cleanup-intent.json before resuming"
+      fi
+      if ! git -C "$REPO_ROOT" push --force-with-lease="refs/heads/$BRANCH:$REMOTE_BRANCH_TIP" \
+        origin ":refs/heads/$BRANCH" >/dev/null; then
+        REMOTE_BRANCH_LINE="$(git -C "$REPO_ROOT" ls-remote --heads origin "refs/heads/$BRANCH")" \
+          || die "remote task branch deletion failed and readback is unavailable"
+        REMOTE_BRANCH_TIP="$(printf '%s\n' "$REMOTE_BRANCH_LINE" | awk 'NR==1 {print $1}')"
+        if [[ -n "$REMOTE_BRANCH_TIP" && "$REMOTE_BRANCH_TIP" != "$BRANCH_TIP" ]]; then
+          record_remote_branch_blocker "$REMOTE_BRANCH_TIP"
+          die "durable cleanup blocker: remote task branch tip changed during deletion; inspect cleanup-intent.json before resuming"
+        fi
+        die "remote task branch deletion failed"
+      fi
+      REMOTE_BRANCH_LINE="$(git -C "$REPO_ROOT" ls-remote --heads origin "refs/heads/$BRANCH")" \
         || die "remote task branch deletion readback failed"
+      if [[ -n "$REMOTE_BRANCH_LINE" ]]; then
+        REMOTE_BRANCH_TIP="$(printf '%s\n' "$REMOTE_BRANCH_LINE" | awk 'NR==1 {print $1}')"
+        if [[ "$REMOTE_BRANCH_TIP" != "$BRANCH_TIP" ]]; then
+          record_remote_branch_blocker "$REMOTE_BRANCH_TIP"
+          die "durable cleanup blocker: remote task branch tip changed during deletion; inspect cleanup-intent.json before resuming"
+        fi
+        die "remote task branch deletion readback failed"
+      fi
+      resolve_remote_branch_blocker "matching_tip_deleted" "$BRANCH_TIP"
+    else
+      resolve_remote_branch_blocker "remote_ref_absent" ""
     fi
   fi
   if [[ "$ALREADY_TERMINAL" == 1 ]]; then

@@ -215,6 +215,159 @@ PY
   fi
 }
 
+run_stale_remote_tip_case() {
+  local name="stale_remote_tip"
+  local root="$TMPDIR/$name"
+  local repo="$root/repo" remote="$root/origin.git" worktree="$root/task-worktree"
+  local replacement_worktree="$root/replacement-worktree"
+  local branch="task/cleanup-$name" replacement_branch="test/remote-$name"
+  local uid="task_22222222222222222222222222222222"
+  local base branch_tip main_commit replacement_tip receipts observed_at
+  mkdir -p "$repo" "$root/bin"
+  git init --bare -q "$remote"
+  git -C "$remote" symbolic-ref HEAD refs/heads/main
+  git -C "$repo" init -q -b main
+  git -C "$repo" config user.email test@example.invalid
+  git -C "$repo" config user.name Test
+  printf 'base\n' >"$repo/file"
+  git -C "$repo" add file
+  git -C "$repo" commit -qm base
+  base="$(git -C "$repo" rev-parse HEAD)"
+  git -C "$repo" worktree add -qb "$branch" "$worktree"
+  printf 'task change\n' >>"$worktree/file"
+  git -C "$worktree" add file
+  git -C "$worktree" commit -qm task-change
+  branch_tip="$(git -C "$worktree" rev-parse HEAD)"
+  git -C "$repo" merge --ff-only "$branch" >/dev/null
+  main_commit="$(git -C "$repo" rev-parse main)"
+  git -C "$repo" remote add origin "$remote"
+  git -C "$repo" push -q origin main "$branch"
+
+  mkdir -p "$repo/.pm/github-project-sync"
+  cat >"$repo/.pm/github-project-sync/tasks.json" <<EOF
+{"version":1,"tasks":{"$uid":{"task_uid":"$uid","status":"done","issue_number":1,"pr_number":1,"pr_url":"https://github.com/eng-cc/oasis7/pull/1","repository":"eng-cc/oasis7","canonical_worktree":"$worktree","task_branch":"$branch","default_branch":"main"}}}
+EOF
+  receipts="$(python3 "$ROOT_DIR/scripts/pm/canonical-receipt-root.py" --default-worktree "$repo" --task-uid "$uid" --create)"
+  observed_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+  cat >"$receipts/merge-receipt.json" <<EOF
+{"receipt_type":"oasis7_pr_merge","issuer":"github_live_query","evidence_mode":"production","repository":"eng-cc/oasis7","default_branch":"main","pr_number":1,"pr_url":"https://github.com/eng-cc/oasis7/pull/1","state":"MERGED","merged_at":"$observed_at","head_oid":"$branch_tip","base_ref":"main","observed_at":"$observed_at"}
+EOF
+  python3 - "$receipts/merge-receipt.json" "$receipts/main-sync-receipt.json" "$uid" "$main_commit" "$observed_at" <<'PY'
+import hashlib,json,pathlib,sys
+merge=pathlib.Path(sys.argv[1]); output=pathlib.Path(sys.argv[2])
+output.write_text(json.dumps({
+    "receipt_type":"oasis7_main_sync", "issuer":"post-merge-main-sync",
+    "integration_mode":"ancestry", "task_uid":sys.argv[3],
+    "repository":"eng-cc/oasis7", "default_branch":"main",
+    "main_commit":sys.argv[4], "remote_main_commit":sys.argv[4],
+    "merge_receipt_sha256":hashlib.sha256(merge.read_bytes()).hexdigest(),
+    "observed_at":sys.argv[5],
+})+"\n",encoding="utf-8")
+PY
+  cat >"$root/bin/gh" <<'EOF'
+#!/usr/bin/env bash
+case "$*" in
+  "repo view --json nameWithOwner,defaultBranchRef")
+    printf '%s\n' '{"nameWithOwner":"eng-cc/oasis7","defaultBranchRef":{"name":"main"}}'
+    ;;
+  *)
+    printf '{"number":1,"url":"https://github.com/eng-cc/oasis7/pull/1","state":"MERGED","mergedAt":"%s","headRefOid":"%s","baseRefName":"main"}\n' \
+      "$TEST_MERGED_AT" "${TEST_HEAD_OID:?}"
+    ;;
+esac
+EOF
+  chmod +x "$root/bin/gh"
+
+  local cleanup_args=("$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" --repo-root "$repo" --worktree "$worktree"
+    --branch "$branch" --main-ref main --task-uid "$uid"
+    --pr-receipt "$receipts/merge-receipt.json" --main-sync-receipt "$receipts/main-sync-receipt.json"
+    --terminal-receipt-output "$receipts/terminal-cleanup-receipt.json")
+  set +e
+  env PATH="$root/bin:$PATH" TEST_HEAD_OID="$branch_tip" TEST_MERGED_AT="$observed_at" \
+    "$FAULT_FIXTURE" --isolation-root "$root" --fault TPM_CLEANUP_FAULT_AFTER_WORKTREE_REMOVE -- \
+    "${cleanup_args[@]}" >"$root/first.out" 2>"$root/first.err"
+  local first_status=$?
+  set -e
+  [[ "$first_status" == 86 ]] || { cat "$root/first.err" >&2; echo "stale remote: expected crash fixture status 86, got $first_status" >&2; return 1; }
+  [[ ! -e "$worktree" ]]
+  git -C "$repo" show-ref --verify --quiet "refs/heads/$branch"
+
+  git -C "$repo" worktree add -qb "$replacement_branch" "$replacement_worktree" "$branch_tip"
+  printf 'replacement tip\n' >>"$replacement_worktree/file"
+  git -C "$replacement_worktree" add file
+  git -C "$replacement_worktree" commit -qm replacement-tip
+  replacement_tip="$(git -C "$replacement_worktree" rev-parse HEAD)"
+  git -C "$repo" push -q --force origin "$replacement_branch:refs/heads/$branch"
+  git -C "$repo" worktree remove --force "$replacement_worktree"
+  git -C "$repo" branch -D "$replacement_branch" >/dev/null
+
+  local merge_digest sync_digest
+  merge_digest="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$receipts/merge-receipt.json")"
+  sync_digest="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$receipts/main-sync-receipt.json")"
+  set +e
+  env PATH="$root/bin:$PATH" TEST_HEAD_OID="$branch_tip" TEST_MERGED_AT="$observed_at" \
+    bash "${cleanup_args[@]}" >"$root/stale.out" 2>"$root/stale.err"
+  local stale_status=$?
+  set -e
+  [[ "$stale_status" != 0 ]] || { echo "stale remote: cleanup must not delete a branch whose tip changed" >&2; return 1; }
+  python3 - "$receipts/cleanup-intent.json" "$uid" "$branch" "$branch_tip" "$replacement_tip" <<'PY'
+import json,sys
+journal=json.load(open(sys.argv[1],encoding="utf-8"))
+uid,branch,expected,observed=sys.argv[2:]
+assert journal.get("task_uid")==uid and journal.get("branch")==branch, journal
+assert journal.get("worktree_removed") is True and journal.get("branch_deleted") is True, journal
+blocker=journal.get("remote_branch_blocker")
+assert blocker and blocker.get("schema")=="oasis7_cleanup_blocker_v1", blocker
+assert blocker.get("kind")=="remote_branch_tip_mismatch", blocker
+assert blocker.get("branch")==branch, blocker
+assert blocker.get("expected_tip")==expected, blocker
+assert blocker.get("observed_tip")==observed, blocker
+assert blocker.get("resolved") is False, blocker
+assert journal.get("terminal_receipt_committed") is False, journal
+PY
+  [[ "$(git -C "$repo" ls-remote --heads origin "refs/heads/$branch" | awk 'NR==1 {print $1}')" == "$replacement_tip" ]]
+  [[ ! -e "$receipts/terminal-cleanup-receipt.json" ]]
+  [[ "$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$receipts/merge-receipt.json")" == "$merge_digest" ]]
+  [[ "$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$receipts/main-sync-receipt.json")" == "$sync_digest" ]]
+
+  set +e
+  env PATH="$root/bin:$PATH" TEST_HEAD_OID="$branch_tip" TEST_MERGED_AT="$observed_at" \
+    bash "${cleanup_args[@]}" >"$root/retry.out" 2>"$root/retry.err"
+  local retry_status=$?
+  set -e
+  [[ "$retry_status" != 0 ]]
+  grep -F "durable cleanup blocker: remote task branch tip disagrees with merged PR head" "$root/retry.err" >/dev/null
+  python3 - "$receipts/cleanup-intent.json" "$branch_tip" "$replacement_tip" <<'PY'
+import json,sys
+journal=json.load(open(sys.argv[1],encoding="utf-8")); blocker=journal.get("remote_branch_blocker")
+assert blocker and blocker.get("resolved") is False, journal
+assert blocker.get("expected_tip")==sys.argv[2] and blocker.get("observed_tip")==sys.argv[3], blocker
+assert journal.get("terminal_receipt_committed") is False, journal
+PY
+
+  # Once an operator or external process restores the merged exact head,
+  # cleanup may safely delete that exact ref and resolve the durable blocker.
+  git -C "$repo" push -q --force origin "$branch_tip:refs/heads/$branch" >/dev/null 2>&1
+  env PATH="$root/bin:$PATH" TEST_HEAD_OID="$branch_tip" TEST_MERGED_AT="$observed_at" \
+    bash "${cleanup_args[@]}" >"$root/recovered.out"
+  ! git -C "$repo" ls-remote --heads origin "refs/heads/$branch" | grep -q .
+  python3 - "$receipts/cleanup-intent.json" "$branch_tip" <<'PY'
+import json,sys
+journal=json.load(open(sys.argv[1],encoding="utf-8")); blocker=journal.get("remote_branch_blocker")
+assert blocker and blocker.get("resolved") is True, journal
+assert blocker.get("resolution")=="matching_tip_deleted", blocker
+assert blocker.get("resolved_tip")==sys.argv[2], blocker
+assert blocker.get("resolved_at"), blocker
+assert journal.get("terminal_receipt_committed") is True, journal
+PY
+  [[ "$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$receipts/merge-receipt.json")" == "$merge_digest" ]]
+  [[ "$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$receipts/main-sync-receipt.json")" == "$sync_digest" ]]
+}
+
+# A replaced remote branch tip is never deleted based on the old merge receipt;
+# the blocker must survive retries and retain the immutable merge receipts.
+run_stale_remote_tip_case
+
 # Squash/rebase cleanup must resume with a force-delete only after the exact
 # patch-equivalence proof has passed; plain branch -d cannot prove that state.
 run_case patch_equivalence patch_equivalence 0 0

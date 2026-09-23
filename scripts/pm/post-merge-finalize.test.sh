@@ -51,6 +51,40 @@ r=next(iter(mapping['tasks'].values())); assert r['workflow_phase']=='post_merge
 PY
 [[ "$(grep -c '^issue close 11 -R fixture/repo --reason completed$' "$GH_LOG")" == 1 ]]
 
+# A terminal-shaped receipt cannot bypass a durable unresolved cleanup blocker.
+python3 - "$RECEIPT_ROOT/cleanup-intent.json" "$UID_VALUE" "$TMPDIR/canonical-task-worktree" <<'PY'
+import json,pathlib,sys
+path=pathlib.Path(sys.argv[1]); uid,worktree=sys.argv[2:]
+path.write_text(json.dumps({
+    "receipt_type":"oasis7_cleanup_intent", "task_uid":uid,
+    "repository":"fixture/repo", "worktree":str(pathlib.Path(worktree).resolve()),
+    "branch":"task/finalize", "branch_tip":"a"*40,
+    "remote_branch_blocker":{
+        "schema":"oasis7_cleanup_blocker_v1", "kind":"remote_branch_tip_mismatch",
+        "branch":"task/finalize", "expected_tip":"a"*40,
+        "observed_tip":"b"*40, "resolved":False,
+    },
+})+"\n",encoding="utf-8")
+PY
+before_blocked="$(wc -l <"$GH_LOG")"
+if python3 "$ROOT_DIR/scripts/pm/post-merge-finalize.py" --repo-root "$FIXTURE" \
+  --task-uid "$UID_VALUE" --terminal-receipt "$TERMINAL" >/dev/null 2>"$TMPDIR/blocked.err"; then
+  echo "expected finalizer to reject unresolved cleanup blocker" >&2; exit 1
+fi
+grep -F "unresolved durable blocker" "$TMPDIR/blocked.err" >/dev/null
+[[ "$(wc -l <"$GH_LOG")" == "$before_blocked" ]]
+python3 - "$RECEIPT_ROOT/cleanup-intent.json" <<'PY'
+import json,sys
+path=sys.argv[1]; intent=json.load(open(path,encoding="utf-8"))
+intent["remote_branch_blocker"].update(
+    resolved=True, resolution="matching_tip_deleted", resolved_tip="a"*40,
+    resolved_at="2026-09-23T00:00:00+00:00",
+)
+json.dump(intent,open(path,"w",encoding="utf-8"))
+PY
+python3 "$ROOT_DIR/scripts/pm/post-merge-finalize.py" --repo-root "$FIXTURE" \
+  --task-uid "$UID_VALUE" --terminal-receipt "$TERMINAL" >/dev/null
+
 cp "$TERMINAL" "$TMPDIR/terminal.valid.json"
 python3 - "$TERMINAL" <<'PY'
 import json,sys

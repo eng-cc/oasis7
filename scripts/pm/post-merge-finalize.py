@@ -115,6 +115,53 @@ def _ensure_terminal_project(mapping: dict, record: dict, ledger_path: pathlib.P
 def fail(message: str) -> None:
     raise SystemExit(f"post-merge-finalize: {message}")
 
+def _validate_cleanup_intent(terminal_path: pathlib.Path, task_uid: str,
+                             record: dict, terminal: dict) -> None:
+    """Do not finalize task truth while remote-branch cleanup is blocked."""
+    intent_path=terminal_path.with_name("cleanup-intent.json")
+    if not intent_path.exists():
+        return
+    try:
+        intent=json.loads(intent_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        fail(f"cleanup intent is unreadable: {exc}")
+    if not isinstance(intent,dict):
+        fail("cleanup intent is malformed")
+    expected={
+        "receipt_type":"oasis7_cleanup_intent",
+        "task_uid":task_uid,
+        "repository":record.get("repository"),
+        "branch":terminal.get("branch"),
+    }
+    for key,value in expected.items():
+        if intent.get(key)!=value:
+            fail(f"cleanup intent {key} identity mismatch")
+    intent_worktree=intent.get("worktree")
+    receipt_worktree=terminal.get("worktree")
+    if not intent_worktree or not receipt_worktree or pathlib.Path(str(intent_worktree)).expanduser().resolve()!=pathlib.Path(str(receipt_worktree)).expanduser().resolve():
+        fail("cleanup intent worktree identity mismatch")
+    blocker=intent.get("remote_branch_blocker")
+    if blocker is None:
+        return
+    branch_tip=intent.get("branch_tip")
+    if not isinstance(blocker,dict) or any(blocker.get(key)!=value for key,value in {
+        "schema":"oasis7_cleanup_blocker_v1",
+        "kind":"remote_branch_tip_mismatch",
+        "branch":terminal.get("branch"),
+        "expected_tip":branch_tip,
+    }.items()):
+        fail("cleanup intent remote branch blocker identity mismatch")
+    if not isinstance(branch_tip,str) or not branch_tip or not isinstance(blocker.get("observed_tip"),str) or not blocker.get("observed_tip"):
+        fail("cleanup intent remote branch blocker tip is malformed")
+    if blocker.get("resolved") is not True:
+        fail("cleanup intent has unresolved durable blocker: remote task branch tip disagrees with merged PR head")
+    resolution=blocker.get("resolution")
+    if (resolution not in {"matching_tip_deleted","remote_ref_absent"}
+            or not blocker.get("resolved_at")
+            or (resolution=="matching_tip_deleted" and blocker.get("resolved_tip")!=branch_tip)
+            or (resolution=="remote_ref_absent" and blocker.get("resolved_tip")!="")):
+        fail("cleanup intent remote branch blocker resolution is malformed")
+
 def _write_terminal_tombstone(terminal_path: pathlib.Path, record: dict,
                               terminal_digest: str) -> pathlib.Path:
     """Publish the app-facing prohibition on recreating a finalized checkout."""
@@ -187,6 +234,7 @@ def _write_terminal_locked(root: pathlib.Path, task_uid: str, terminal_receipt_p
     already_finalized=(record.get("workflow_phase")=="post_merge_done" and
         (record.get("phase_receipts") or {}).get("post_merge_done")==terminal and
         (stored_terminal_digest==terminal_digest or (not stored_terminal_digest and fixture_legacy)))
+    _validate_cleanup_intent(terminal_path,task_uid,record,terminal)
     # The lock protects the validation snapshot only. Remote effects use the
     # durable ledger and never hold the mapping lock across a network call.
     lock_handle.close(); lock_fd=-1
