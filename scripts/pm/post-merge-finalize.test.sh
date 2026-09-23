@@ -40,6 +40,36 @@ PY
 elif [[ "$*" == issue\ view* ]]; then printf '{"state":"CLOSED"}\n'; else printf '{}\n'; fi
 SH
 chmod +x "$TMPDIR/bin/gh"; export PATH="$TMPDIR/bin:$PATH" GH_LOG="$TMPDIR/gh.log" LIVE_BODY="$TMPDIR/live-comment-body"
+: >"$GH_LOG"
+
+# A matching current-protocol journal is insufficient unless it proves every
+# cleanup step completed; rejection must precede GitHub calls and task writes.
+cp "$RECEIPT_ROOT/cleanup-intent.json" "$TMPDIR/cleanup-intent.complete.json"
+for flag in worktree_removed branch_deleted terminal_receipt_committed; do
+  for state in false missing; do
+    python3 - "$RECEIPT_ROOT/cleanup-intent.json" "$flag" "$state" <<'PY'
+import json,sys
+from pathlib import Path
+path=Path(sys.argv[1]); flag,state=sys.argv[2:]
+journal=json.loads(path.read_text(encoding="utf-8"))
+if state=="false": journal[flag]=False
+else: journal.pop(flag,None)
+path.write_text(json.dumps(journal)+"\n",encoding="utf-8")
+PY
+    cp "$FIXTURE/.pm/github-project-sync/tasks.json" "$TMPDIR/mapping.before"
+    before_incomplete="$(wc -l <"$GH_LOG")"
+    if python3 "$ROOT_DIR/scripts/pm/post-merge-finalize.py" --repo-root "$FIXTURE" \
+      --task-uid "$UID_VALUE" --terminal-receipt "$TERMINAL" >/dev/null 2>"$TMPDIR/incomplete.err"; then
+      echo "expected finalizer to reject $state cleanup intent flag $flag" >&2; exit 1
+    fi
+    grep -F "cleanup intent progress is incomplete: $flag" "$TMPDIR/incomplete.err" >/dev/null || {
+      cat "$TMPDIR/incomplete.err" >&2; exit 1;
+    }
+    [[ "$(wc -l <"$GH_LOG")" == "$before_incomplete" ]]
+    cmp -s "$TMPDIR/mapping.before" "$FIXTURE/.pm/github-project-sync/tasks.json"
+    cp "$TMPDIR/cleanup-intent.complete.json" "$RECEIPT_ROOT/cleanup-intent.json"
+  done
+done
 
 python3 "$ROOT_DIR/scripts/pm/post-merge-finalize.py" --repo-root "$FIXTURE" \
   --task-uid "$UID_VALUE" --terminal-receipt "$TERMINAL" >"$TMPDIR/first.json"
@@ -76,6 +106,7 @@ path.write_text(json.dumps({
     "receipt_type":"oasis7_cleanup_intent", "task_uid":uid,
     "repository":"fixture/repo", "worktree":str(pathlib.Path(worktree).resolve()),
     "branch":"task/finalize", "branch_tip":"a"*40,
+    "worktree_removed":True, "branch_deleted":True, "terminal_receipt_committed":True,
     "remote_branch_blocker":{
         "schema":"oasis7_cleanup_blocker_v1", "kind":"remote_branch_tip_mismatch",
         "branch":"task/finalize", "expected_tip":"a"*40,

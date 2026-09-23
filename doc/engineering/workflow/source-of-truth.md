@@ -1,5 +1,5 @@
 # Engineering Workflow Source of Truth
-Version: **v1.19.3**
+Version: **v1.19.4**
 Last Updated: **2026-09-23**
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
@@ -727,7 +727,7 @@ python3 ./scripts/pm/post-merge-finalize.py \
 | 4 | main-sync receipt | local/default remote heads match and ancestry or exact patch equivalence is verified | repeat step 4 |
 | 5 | cleanup receipt | intent journal proves cleanup | repeat step 5 |
 | 6 | `post_merge_done` | phase persisted and issue closed | repeat step 6 |
-Current cleanup receipts set `cleanup_intent_required: true`; finalization requires adjacent `cleanup-intent.json` with matching task, repository, worktree, and branch. A remote tip mismatch persists an identity-bound `remote_branch_blocker`; cleanup neither deletes that ref nor emits a new terminal receipt while blocked. Retry resolves only after the ref is absent or the exact merged tip is deleted by force-with-lease and readback; finalization rejects unresolved or malformed blockers before GitHub effects.
+Current cleanup receipts set `cleanup_intent_required: true`; before any finalizer effect, adjacent `cleanup-intent.json` must match task, repository, worktree, and branch and prove `worktree_removed`, `branch_deleted`, and `terminal_receipt_committed` are all `true`. Missing or false progress flags fail closed with no GitHub effects; resume by rerunning `post-merge-cleanup.sh`. A remote tip mismatch persists an identity-bound `remote_branch_blocker`; cleanup neither deletes that ref nor emits a new terminal receipt while blocked. Retry resolves only after the ref is absent or the exact merged tip is deleted by force-with-lease and readback; finalization rejects unresolved or malformed blockers before GitHub effects.
 Absent intent is legacy-compatible only for a markerless receipt whose mapping is already `post_merge_done`, stores the identical `phase_receipts.post_merge_done`, and binds its current bytes with `phase_receipt_sha256.post_merge_done`; this permits idempotent recovery of fully committed pre-journal state. Missing intent for a current-marker receipt or a markerless receipt still at `main_sync` fails closed; never infer or synthesize intent from receipt fields, and require explicit reconciliation for pending legacy state.
 
 All six steps require readback; never reorder or substitute caller-authored

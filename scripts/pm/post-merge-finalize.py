@@ -147,6 +147,9 @@ def _validate_cleanup_intent(terminal_path: pathlib.Path, task_uid: str,
     receipt_worktree=terminal.get("worktree")
     if not intent_worktree or not receipt_worktree or pathlib.Path(str(intent_worktree)).expanduser().resolve()!=pathlib.Path(str(receipt_worktree)).expanduser().resolve():
         fail("cleanup intent worktree identity mismatch")
+    for flag in ("worktree_removed", "branch_deleted", "terminal_receipt_committed"):
+        if intent.get(flag) is not True:
+            fail(f"cleanup intent progress is incomplete: {flag}")
     blocker=intent.get("remote_branch_blocker")
     if blocker is None:
         return
