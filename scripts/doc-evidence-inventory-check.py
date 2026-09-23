@@ -12,6 +12,7 @@ import sys
 
 LIFECYCLES = {
     "CURRENT_NAVIGATION",
+    "CURRENT_OPERATOR_INPUT",
     "WINDOW_OBSERVATION",
     "HISTORICAL_PROVENANCE",
     "AMBIGUOUS_LIFECYCLE",
@@ -30,13 +31,14 @@ REQUIRED_FIELDS = {
     "path", "lifecycle", "semantic_role", "retention_owner", "domain_owner",
     "required_followup_roles", "authority", "backlink", "disposition", "rationale", "residual_risk",
 }
-EXPECTED_SNAPSHOT = "144e9f4bf1f4d18c27e2fb17823cc89343d97206"
+EXPECTED_SNAPSHOT = "ddbc5a7d081cffd0c17697397ee89fbd69a98cd6"
 EXPECTED_LIFECYCLE_COUNTS = {
     "AMBIGUOUS_LIFECYCLE": 0,
     "ARCHIVED_PROVENANCE": 7,
     "CURRENT_NAVIGATION": 1,
+    "CURRENT_OPERATOR_INPUT": 2,
     "WINDOW_OBSERVATION": 23,
-    "HISTORICAL_PROVENANCE": 87,
+    "HISTORICAL_PROVENANCE": 88,
     "SUPPORTING_ARTIFACT": 6,
     "TEMPLATE_NOT_EVIDENCE": 1,
 }
@@ -47,6 +49,18 @@ def classification(path: str) -> tuple[str, str, str, str, str]:
     name = Path(path).name
     if path == "doc/testing/evidence/README.md":
         return ("CURRENT_NAVIGATION", "hotspot_landing", "repository_health_engineer", "doc/testing/README.md", "retain")
+    active_operator_inputs = {
+        "public-testnet-governed-bootstrap-validator-triad-bootstrap-peers-2026-09-15.txt": "public_testnet_bootstrap_peer_input",
+        "public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json": "public_testnet_bootstrap_registry_input",
+    }
+    if name in active_operator_inputs:
+        return (
+            "CURRENT_OPERATOR_INPUT",
+            active_operator_inputs[name],
+            "blockchain_ops_engineer",
+            "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md",
+            "retain",
+        )
     current_public_testnet_prefixes = (
         "doc/testing/evidence/public-testnet-api-viewer-projection-2026-07-05",
         "doc/testing/evidence/public-testnet-claims-boundary-review-2026-07-06.md",
@@ -169,6 +183,8 @@ def generated_inventory(root: Path) -> dict[str, object]:
             "public_testnet_governed_bootstrap",
             "public_testnet_governed_bootstrap_replay",
             "public_testnet_faucet_transition",
+            "public_testnet_bootstrap_peer_input",
+            "public_testnet_bootstrap_registry_input",
         }
         if batch4_source:
             followup_roles = ["blockchain_ops_engineer", "runtime_engineer", "liveops_community"]
@@ -204,6 +220,7 @@ def generated_inventory(root: Path) -> dict[str, object]:
         elif semantic_role == "audit_template":
             followup_roles = ["blockchain_ops_engineer", "producer_system_designer", "qa_engineer"]
         batch7_source = lifecycle == "WINDOW_OBSERVATION"
+        active_operator_input = lifecycle == "CURRENT_OPERATOR_INPUT"
         if batch7_source:
             followup_roles = ["blockchain_ops_engineer", "runtime_engineer", "viewer_engineer", "liveops_community", "qa_engineer"]
         batch2_reviewed = entry_name.startswith((
@@ -221,24 +238,28 @@ def generated_inventory(root: Path) -> dict[str, object]:
             "backlink": "doc/testing/evidence/README.md",
             "disposition": disposition,
             "rationale": (
-                "Batch-7 cross-role disposition: retained bounded observation-window evidence; never a continuously current endpoint, fleet, readiness, recovery, or release claim."
-                if batch7_source
+                "Current operator input consumed by the governed bootstrap runbook and deployment tooling; this classification does not establish live health, readiness, deployment completion, or public status."
+                if active_operator_input
                 else (
-                    "Batch-6 cross-role disposition: retained historical candidate/validation/closeout, manifest-backed visual provenance, supporting asset, or explicit non-evidence template."
-                    if batch6_source
+                    "Batch-7 cross-role disposition: retained bounded observation-window evidence; never a continuously current endpoint, fleet, readiness, recovery, or release claim."
+                    if batch7_source
                     else (
-                        "Batch-5 cross-role disposition: retained dated governance, topology, triad, incident, or launcher diagnostic provenance; not current finality, security, network health, UX, or readiness."
-                        if batch5_source
+                        "Batch-6 cross-role disposition: retained historical candidate/validation/closeout, manifest-backed visual provenance, supporting asset, or explicit non-evidence template."
+                        if batch6_source
                         else (
-                            "Batch-4 cross-role disposition: retained transition/bootstrap provenance; not current deployment, recovery, readiness, operator action, or public status."
-                            if batch4_source
+                            "Batch-5 cross-role disposition: retained dated governance, topology, triad, incident, or launcher diagnostic provenance; not current finality, security, network health, UX, or readiness."
+                            if batch5_source
                             else (
-                                "Batch-3 cross-role disposition: retained historical rehearsal, incident, and recovery provenance; not current network status, public availability, or release input."
-                                if batch3_source
+                                "Batch-4 cross-role disposition: retained transition/bootstrap provenance; not current deployment, recovery, readiness, operator action, or public status."
+                                if batch4_source
                                 else (
-                                    "Batch-2 cross-role reviewed classification; dated evidence is retained without current release claims."
-                                    if batch2_reviewed
-                                    else "QA-conservative batch-1 classification; dated naming alone is not a deletion decision."
+                                    "Batch-3 cross-role disposition: retained historical rehearsal, incident, and recovery provenance; not current network status, public availability, or release input."
+                                    if batch3_source
+                                    else (
+                                        "Batch-2 cross-role reviewed classification; dated evidence is retained without current release claims."
+                                        if batch2_reviewed
+                                        else "QA-conservative batch-1 classification; dated naming alone is not a deletion decision."
+                                    )
                                 )
                             )
                         )
@@ -246,21 +267,25 @@ def generated_inventory(root: Path) -> dict[str, object]:
                 )
             ),
             "residual_risk": (
-                "Dated pass, ready, running, endpoint, height, hash, peer, and faucet results can conflict across windows; current action requires a newly captured atomic window."
-                if batch7_source
+                "The committed peer and registry inputs may become stale; operator use still requires the governing runbook, exact consumer validation, and fresh same-window health/readiness evidence."
+                if active_operator_input
                 else (
-                    "Historical pass/closeout/visual/signer wording and captured assets are window-bound; templates are never evidence, and current claims require fresh candidate-bound validation."
-                    if batch6_source
+                    "Dated pass, ready, running, endpoint, height, hash, peer, and faucet results can conflict across windows; current action requires a newly captured atomic window."
+                    if batch7_source
                     else (
-                        "Dated pass, current-version, finality, signer, topology, height, recovery, and UX wording is window-bound; present claims require current authorities and fresh same-window evidence."
-                        if batch5_source
+                        "Historical pass/closeout/visual/signer wording and captured assets are window-bound; templates are never evidence, and current claims require fresh candidate-bound validation."
+                        if batch6_source
                         else (
-                            "Historical endpoints, signer and peer identities, runtime hashes, faucet state, and live-candidate wording are stale-window facts; current action requires formal runbooks and fresh same-window evidence."
-                            if batch4_source
+                            "Dated pass, current-version, finality, signer, topology, height, recovery, and UX wording is window-bound; present claims require current authorities and fresh same-window evidence."
+                            if batch5_source
                             else (
-                                "Historical pass, live, endpoint, operator-access, and rollback wording is window-bound and may be stale; current operator recovery, public status, and claims require the formal public-testnet runbook plus fresh lane and claims evidence."
-                                if batch3_source
-                                else "Topic validity and currentness require the listed domain owner and QA confirmation."
+                                "Historical endpoints, signer and peer identities, runtime hashes, faucet state, and live-candidate wording are stale-window facts; current action requires formal runbooks and fresh same-window evidence."
+                                if batch4_source
+                                else (
+                                    "Historical pass, live, endpoint, operator-access, and rollback wording is window-bound and may be stale; current operator recovery, public status, and claims require the formal public-testnet runbook plus fresh lane and claims evidence."
+                                    if batch3_source
+                                    else "Topic validity and currentness require the listed domain owner and QA confirmation."
+                                )
                             )
                         )
                     )
@@ -268,8 +293,15 @@ def generated_inventory(root: Path) -> dict[str, object]:
             ),
         }
         if batch4_source:
-            entry["evidence_window"] = "2026-06-governed-bootstrap" if "2026-06" in path else "2026-05-live-candidate-transition"
-            entry["claim_boundary"] = "historical_provenance_only_not_current_readiness_operator_sop_or_public_claim"
+            if active_operator_input:
+                entry["evidence_window"] = "current-committed-bootstrap-input"
+                entry["claim_boundary"] = "current_operator_input_only_not_current_health_readiness_deployment_completion_or_public_status"
+            elif "validator-triad" in path and "2026-09-15" in path:
+                entry["evidence_window"] = "2026-09-15-validator-triad-candidate-staging"
+                entry["claim_boundary"] = "historical_provenance_only_not_current_readiness_operator_sop_or_public_claim"
+            else:
+                entry["evidence_window"] = "2026-06-governed-bootstrap" if "2026-06" in path else "2026-05-live-candidate-transition"
+                entry["claim_boundary"] = "historical_provenance_only_not_current_readiness_operator_sop_or_public_claim"
             entry["content_sha256"] = hashlib.sha256((root / path).read_bytes()).hexdigest()
         if batch5_source:
             entry["evidence_window"] = "2026-03-governance-drill" if semantic_role == "historical_governance_registry_drill" else "2026-04-to-2026-07-p2p-transition"
@@ -311,7 +343,7 @@ def generated_inventory(root: Path) -> dict[str, object]:
         "version": 1,
         "scope": "doc/testing/evidence/** excluding inventory.json",
         "snapshot": EXPECTED_SNAPSHOT,
-        "freshness_boundary": "2026-08-02 batch-1 inventory; it records classification, not a release-readiness verdict.",
+        "freshness_boundary": "2026-09-21 frozen-HEAD corpus inventory; CURRENT_OPERATOR_INPUT identifies exact runbook/tool inputs only and does not establish current runtime, recovery, fleet health, deployment completion/readiness, or public status.",
         "entries": entries,
     }
 
@@ -326,6 +358,11 @@ def check(root: Path, inventory_path: Path) -> list[str]:
         errors.append("schema-version: expected 1")
     if data.get("snapshot") != EXPECTED_SNAPSHOT:
         errors.append(f"snapshot: expected {EXPECTED_SNAPSHOT}")
+    generated = generated_inventory(root)
+    if data.get("scope") != generated["scope"]:
+        errors.append(f"scope: expected {generated['scope']}")
+    if data.get("freshness_boundary") != generated["freshness_boundary"]:
+        errors.append("freshness-boundary: committed boundary differs from reviewed generator")
     entries = data.get("entries")
     if not isinstance(entries, list):
         return errors + ["schema-entries: expected list"]
@@ -378,7 +415,7 @@ def check(root: Path, inventory_path: Path) -> list[str]:
     }
     if lifecycle_counts != EXPECTED_LIFECYCLE_COUNTS:
         errors.append(f"lifecycle-counts: {lifecycle_counts}")
-    generated_entries = generated_inventory(root)["entries"]
+    generated_entries = generated["entries"]
     if entries != generated_entries:
         errors.append("classification-drift: committed entries differ from reviewed generator")
     legacy_sources = [
@@ -398,14 +435,44 @@ def check(root: Path, inventory_path: Path) -> list[str]:
             "public_testnet_governed_bootstrap",
             "public_testnet_governed_bootstrap_replay",
             "public_testnet_faucet_transition",
+            "public_testnet_bootstrap_peer_input",
+            "public_testnet_bootstrap_registry_input",
         }
     ]
-    if len(batch4_entries) != 27:
-        errors.append(f"public-testnet-transition-count: expected 27, got {len(batch4_entries)}")
+    if len(batch4_entries) != 30:
+        errors.append(f"public-testnet-transition-count: expected 30, got {len(batch4_entries)}")
     for entry in batch4_entries:
         for field in ("evidence_window", "claim_boundary", "content_sha256"):
             if not isinstance(entry.get(field), str) or not entry[field].strip():
                 errors.append(f"public-testnet-transition-{field}: {entry.get('path')}")
+    triad_boundary_fields = ("lifecycle", "semantic_role", "evidence_window", "claim_boundary")
+    expected_triad_boundaries = {
+        "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-bootstrap-peers-2026-09-15.txt": (
+            "CURRENT_OPERATOR_INPUT",
+            "public_testnet_bootstrap_peer_input",
+            "current-committed-bootstrap-input",
+            "current_operator_input_only_not_current_health_readiness_deployment_completion_or_public_status",
+        ),
+        "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json": (
+            "CURRENT_OPERATOR_INPUT",
+            "public_testnet_bootstrap_registry_input",
+            "current-committed-bootstrap-input",
+            "current_operator_input_only_not_current_health_readiness_deployment_completion_or_public_status",
+        ),
+        "doc/testing/evidence/public-testnet-validator-triad-authority-2026-09-15.json": (
+            "HISTORICAL_PROVENANCE",
+            "public_testnet_transition",
+            "2026-09-15-validator-triad-candidate-staging",
+            "historical_provenance_only_not_current_readiness_operator_sop_or_public_claim",
+        ),
+    }
+    actual_triad_boundaries = {
+        entry.get("path"): tuple(entry.get(field) for field in triad_boundary_fields)
+        for entry in entries
+        if isinstance(entry, dict) and entry.get("path") in expected_triad_boundaries
+    }
+    if actual_triad_boundaries != expected_triad_boundaries:
+        errors.append("current-operator-input-boundary: expected exact path-bound triad classifications")
     batch5_entries = [
         entry for entry in entries if isinstance(entry, dict) and entry.get("semantic_role") in {
             "historical_governance_registry_drill",

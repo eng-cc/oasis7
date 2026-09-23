@@ -69,6 +69,13 @@ class AuthoritativeMappingContract(unittest.TestCase):
             with self.subTest(field=key):
                 self.assertEqual(expected, record.get(key), record)
 
+    def test_identity_rejects_missing_supplied_worktree_hint(self) -> None:
+        missing = pathlib.Path(self.tmp.name) / "not-created-yet"
+        with self.assertRaises(SystemExit):
+            MODULE.authoritative_repository_identity(
+                self.worktree, "eng-cc/oasis7", str(missing)
+            )
+
     def test_bootstrap_persists_complete_normalized_repository_identity(self) -> None:
         args = self.args()
         with (

@@ -12,6 +12,12 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
 CHECKER = ROOT / "scripts/product-doc-governance-check.py"
+REAL_RETIRED_HISTORY = Path(
+    "doc/product/world-infrastructure/world-continuity-governance-and-recovery.prd.md"
+)
+FIXTURE_RETIRED_HISTORY = Path(
+    "doc/product/world-infrastructure/fixture-retired-history.prd.md"
+)
 COPY_PATHS = (
     "README.md",
     "doc/product",
@@ -75,6 +81,42 @@ def make_fixture() -> Path:
             shutil.copytree(source, target)
         else:
             shutil.copy2(source, target)
+    (root / REAL_RETIRED_HISTORY).unlink(missing_ok=True)
+    module_root = root / "doc/product/world-infrastructure/prd.md"
+    module_text = re.sub(
+        r"^- \[[^\n]*\]\(world-continuity-governance-and-recovery\.prd\.md[^)]*\)[^\n]*\n?",
+        "",
+        module_root.read_text(encoding="utf-8"),
+        count=1,
+        flags=re.MULTILINE,
+    )
+    migration_heading = "### 非权威迁移索引\n"
+    assert migration_heading in module_text, "fixture module root missing migration index"
+    module_root.write_text(
+        module_text.replace(
+            migration_heading,
+            migration_heading
+            + f"- [Fixture retired history]({FIXTURE_RETIRED_HISTORY.name}): test-only provenance.\n",
+            1,
+        ),
+        encoding="utf-8",
+    )
+    (root / FIXTURE_RETIRED_HISTORY).write_text(
+        """# Fixture retired history
+
+## Document identity
+
+- 生命周期：`retired`
+
+## Historical navigation
+
+This synthetic page preserves non-authoritative migration provenance for tests.
+It is not an active product identity, authority, roadmap, or acceptance source.
+""",
+        encoding="utf-8",
+    )
+    assert not (root / REAL_RETIRED_HISTORY).exists()
+    assert (root / FIXTURE_RETIRED_HISTORY).is_file()
     return root
 
 
@@ -169,7 +211,7 @@ def set_all_module_display_names(root: Path) -> None:
 
 def add_historical_legacy_prose(root: Path) -> None:
     """Historical migration prose may retain old labels without active identity."""
-    path = root / "doc/product/world-infrastructure/world-continuity-governance-and-recovery.prd.md"
+    path = root / FIXTURE_RETIRED_HISTORY
     path.write_text(
         path.read_text(encoding="utf-8")
         + (
@@ -202,8 +244,8 @@ def add_invalid_retired_migration_fragment(root: Path) -> None:
     """A retired migration mapping must preserve navigable fragment targets."""
     replace(
         root / "doc/product/world-infrastructure/prd.md",
-        "(world-continuity-governance-and-recovery.prd.md)",
-        "(world-continuity-governance-and-recovery.prd.md#missing-retired-migration-fragment)",
+        f"({FIXTURE_RETIRED_HISTORY.name})",
+        f"({FIXTURE_RETIRED_HISTORY.name}#missing-retired-migration-fragment)",
     )
 
 
@@ -405,7 +447,7 @@ def main() -> None:
     scenario(
         "topic-lifecycle",
         lambda root: replace(
-            root / "doc/product/world-infrastructure/world-continuity-governance-and-recovery.prd.md",
+            root / FIXTURE_RETIRED_HISTORY,
             "- 生命周期：`retired`",
             "- 生命周期：`active`",
         ),
@@ -556,7 +598,7 @@ def main() -> None:
         "topic-missing",
         lambda root: replace(
             root / "doc/product/world-infrastructure/prd.md",
-            "(world-continuity-governance-and-recovery.prd.md)",
+            f"({FIXTURE_RETIRED_HISTORY.name})",
             "(missing-world-continuity.prd.md)",
         ),
     )

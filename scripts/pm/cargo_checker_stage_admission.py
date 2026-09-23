@@ -482,6 +482,51 @@ def _git(repo_root: Path, *args: str) -> str:
         raise AdmissionError(f"local git identity readback failed: {' '.join(args)}") from exc
 
 
+def _git_bytes(repo_root: Path, *args: str) -> bytes:
+    try:
+        return subprocess.check_output(
+            ["git", "-C", str(repo_root), *args], stderr=subprocess.PIPE
+        )
+    except Exception as exc:
+        raise AdmissionError(f"local git object readback failed: {' '.join(args)}") from exc
+
+
+def _recover_planner_source_object(
+    repo_root: Path, source_head: str, authority_bytes: bytes
+) -> None:
+    """Fetch the approved planner source object through its immutable PR ref.
+
+    A GitHub Actions merge checkout may not retain the source PR's commit
+    object after squash merge and branch deletion.  The server-advertised PR
+    ref is the only recovery locator: verify its exact OID first, fetch only
+    that ref, then compare the resulting source-tree bytes with the already
+    verified merged authority bytes.
+    """
+    source_ref = f"refs/pull/{PLANNER_PR}/head"
+    try:
+        advertised = _git_bytes(repo_root, "ls-remote", "origin", source_ref)
+    except AdmissionError as exc:
+        raise AdmissionError("approved planner source ref is unavailable") from exc
+
+    records = [line.split() for line in advertised.decode("utf-8", errors="replace").splitlines() if line.strip()]
+    if len(records) != 1 or len(records[0]) != 2 or records[0][1] != source_ref:
+        raise AdmissionError("approved planner source ref readback is malformed or mismatched")
+    advertised_oid = records[0][0]
+    if OID_RE.fullmatch(advertised_oid) is None or advertised_oid != source_head:
+        raise AdmissionError("approved planner source advertised OID mismatch")
+
+    try:
+        _git_bytes(repo_root, "fetch", "--no-write-fetch-head", "--no-tags", "origin", source_ref)
+    except AdmissionError as exc:
+        raise AdmissionError("approved planner source ref fetch failed") from exc
+    try:
+        fetched = _git_bytes(repo_root, "show", f"{source_head}:{PLANNER_PATH}")
+    except AdmissionError as exc:
+        raise AdmissionError("approved planner source object is unavailable after fetch") from exc
+    if fetched != authority_bytes:
+        raise AdmissionError("approved planner source-head bytes differ from merged authority")
+
+
 def verify_executing_planner(
     planner_path: Path, authority: dict[str, Any], repo_root: Path
 ) -> dict[str, Any]:
@@ -517,7 +562,8 @@ def verify_executing_planner(
                 stderr=subprocess.PIPE,
             )
         except Exception as exc:
-            raise AdmissionError("approved planner source-head object is unavailable locally") from exc
+            _recover_planner_source_object(repo_root, source_head, expected)
+            source_bytes = expected
         if source_bytes != data:
             raise AdmissionError("executing planner does not match approved source head")
     return {
@@ -525,6 +571,7 @@ def verify_executing_planner(
         "authority_path": PLANNER_PATH,
         "merged_commit": merged_commit,
         "source_head": source_head,
+        "source_ref": f"refs/pull/{PLANNER_PR}/head",
         "bytes_sha256": expected_digest,
         "size": len(data),
     }

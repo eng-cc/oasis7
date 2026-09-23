@@ -366,10 +366,12 @@ def authoritative_repository_identity(root: pathlib.Path, repository: str, workt
     """Resolve the task/repository identity from the registered git worktree."""
     root = root.resolve(strict=True)
     requested = pathlib.Path(worktree_hint or root).expanduser()
-    # A stale/missing hint is not authority.  The active command root is the
-    # authoritative registered worktree fallback and is persisted separately
-    # as canonical_worktree.
-    canonical = (requested if requested.exists() else root).resolve(strict=True)
+    # A supplied hint is an identity claim, not a preference. Falling back to
+    # the command root when it is absent can silently bind a new task to an
+    # unrelated coordination worktree.
+    if worktree_hint and not requested.exists():
+        die(f"canonical worktree hint does not exist: {requested}")
+    canonical = requested.resolve(strict=True)
     def resolved_common_dir(worktree: pathlib.Path) -> pathlib.Path:
         value = pathlib.Path(run_text(["git", "-C", str(worktree), "rev-parse", "--git-common-dir"]))
         return value.resolve() if value.is_absolute() else (worktree / value).resolve()
@@ -896,6 +898,21 @@ def update_project_fields(
     updated, skipped = sync.update_fields(project_id, project_item_id, task, fields)
     if task.get("loop_binding") and any(item.split(":", 1)[0] in {"Loop", "Change ID"} and not item.endswith(":unchanged") for item in skipped):
         die("loop Project projection incomplete; reconcile before retry")
+    # The shell integration harness uses a fake GitHub transport. Production
+    # task records always require authoritative Project readback.
+    if task.get("loop_binding") and not os.environ.get("OASIS7_PM_FAKE_GITHUB"):
+        expected = sync.project_field_values(task)
+        try:
+            live_values = sync.read_project_item_field_values(project_id, project_item_id)
+        except Exception as exc:
+            die("start outcome uncertain: loop Project projection readback unavailable; reconcile before retry: " + str(exc))
+        mismatches = [
+            f"{name}={live_values.get(name)!r}, expected={value!r}"
+            for name, value in expected.items()
+            if name in {"Loop", "Change ID"} and live_values.get(name) != value
+        ]
+        if mismatches:
+            die("loop Project projection readback mismatch; reconcile before retry: " + "; ".join(mismatches))
     if skipped:
         print(f"github-project-task: skipped fields: {', '.join(skipped)}", file=sys.stderr)
     if require_lifecycle_projection:

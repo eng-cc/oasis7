@@ -21,6 +21,26 @@ def load_impact_projection(path, expected):
   except Exception as exc:
     die(f"impact projection is invalid: {exc}")
   return value
+
+def policy_full_projection_for_unverified_closure(projection):
+  closure=projection.get("closure_status")
+  if not isinstance(closure,dict) or closure.get("status")=="complete": return False
+  status=closure.get("status")
+  reasons=projection.get("ci_reasons")
+  identity=projection.get("planner_identity")
+  capabilities=sorted(CAPABILITIES)
+  return (
+    isinstance(status,str)
+    and isinstance(reasons,list)
+    and "dependency_closure_unverified:"+status in reasons
+    and projection.get("ci_scope")=="full"
+    and projection.get("test_profile")=="full"
+    and projection.get("ci_capabilities")==capabilities
+    and isinstance(identity,dict)
+    and identity.get("scope")=="full"
+    and identity.get("selected_capabilities")==capabilities
+  )
+
 def config(path):
   try: raw=Path(path).read_bytes(); c=json.loads(raw)
   except Exception as e: die(f"invalid config: {e}")
@@ -119,18 +139,41 @@ def main():
   actual_capabilities=sorted(capabilities or {"required_gate_baseline"})
   actual_scope=vals["scope"]
   if projection["planner_config_sha256"] != digest: die("impact projection planner config identity mismatch")
-  # The source projection remains digest-bound evidence, while a trusted
-  # integration revalidation may retain the source projection's targeted or
-  # minimal scope, but target-only paths can widen its executed gate to full.
-  # In that case require the full capability set; full escalation and legacy
-  # workflow dispatch are always full-only.  The projection digest remains the
-  # immutable source evidence link in every mode.
+  # Integration execution may include target-only paths, but the projection's
+  # source plan must still match the independently resolved source-only diff.
+  if a.event_name=="workflow_dispatch" and a.run_mode=="integration_revalidation":
+   source_paths=(projection["changed_paths"] if a.changed_path else
+     git_paths(argparse.Namespace(base_ref=a.scope_base_oid,head_ref=a.head_ref,event_name="pull_request")))
+   if source_paths is None or sorted(source_paths)!=projection["changed_paths"]:
+    die("impact projection source changed paths identity mismatch")
+   source_cmd=[sys.executable,str(Path(__file__).resolve()),"--event-name","pull_request","--config",a.config]
+   for source_path in source_paths: source_cmd.extend(("--changed-path",source_path))
+   source_plan=subprocess.run(source_cmd,text=True,capture_output=True)
+   if source_plan.returncode: die("impact projection source planner cannot be verified: "+source_plan.stderr.strip())
+   source_fields=dict(line.split("=",1) for line in source_plan.stdout.splitlines() if "=" in line)
+   source_capabilities=source_fields.get("selected_capabilities","").split(";")
+   unverified_closure=projection["closure_status"]["status"]!="complete"
+   policy_full=policy_full_projection_for_unverified_closure(projection)
+   if unverified_closure and not policy_full:
+    die("impact projection with unverified dependency closure is not full")
+   if policy_full:
+    if actual_scope!="full" or actual_capabilities!=sorted(CAPABILITIES):
+     die("unverified dependency closure integration execution scope is not full")
+   else:
+    if projection["ci_scope"]!=source_fields.get("scope"):
+     die("impact projection source scope identity mismatch")
+    if projection["ci_capabilities"]!=source_capabilities:
+     die("impact projection source capabilities identity mismatch")
+   if not set(source_capabilities).issubset(set(actual_capabilities)|{"required_gate_baseline"}):
+    die("integration execution omits source capabilities")
+  # Full-only modes still require the complete gate; other modes require
+  # equality unless independently verified target-only paths widen execution.
   full_only_mode = a.run_mode=="full_escalation" or (a.run_mode=="legacy" and a.event_name=="workflow_dispatch")
-  integration_widened_to_full = a.run_mode=="integration_revalidation" and actual_scope=="full"
-  if not full_only_mode and not integration_widened_to_full:
+  integration_widened = a.run_mode=="integration_revalidation" and a.event_name=="workflow_dispatch"
+  if not full_only_mode and not integration_widened:
    if projection["ci_scope"] != actual_scope: die("impact projection planner scope identity mismatch")
    if projection["ci_capabilities"] != actual_capabilities: die("impact projection planner capabilities identity mismatch")
-  elif actual_scope != "full" or actual_capabilities != sorted(CAPABILITIES):
+  elif full_only_mode and (actual_scope != "full" or actual_capabilities != sorted(CAPABILITIES)):
    die("full-only impact projection execution scope is not full")
   vals.update({"impact_projection_schema":projection["schema"],"impact_projection_digest":projection["projection_digest"],"impact_projection_status":"verified","test_profile":projection["test_profile"],"declared_tests":";".join(projection["declared_tests"]),"planner_digest":projection["planner_digest"]})
  text="\n".join(f"{k}={v}" for k,v in vals.items())+"\n"
