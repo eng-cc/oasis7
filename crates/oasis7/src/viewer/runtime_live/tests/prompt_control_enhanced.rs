@@ -6,6 +6,8 @@ mod prompt_control_enhanced_core;
 mod prompt_control_enhanced_hosted;
 #[path = "prompt_control_enhanced_preview.rs"]
 mod prompt_control_enhanced_preview_tests;
+#[path = "prompt_control_enhanced_race.rs"]
+mod prompt_control_enhanced_race;
 
 fn configure_hosted_local_mock_provider_env(contract: &str) {
     // SAFETY: Callers hold the canonical provider environment lock.

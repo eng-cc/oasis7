@@ -46,6 +46,21 @@ fn hosted_prompt_control_runtime_state(
 }
 
 #[cfg(not(target_arch = "wasm32"))]
+fn hosted_prompt_control_full_mutation_fingerprint(
+    server: &ViewerRuntimeLiveServer,
+    agent_id: &str,
+) -> serde_json::Value {
+    serde_json::json!({
+        "runtime_state": hosted_prompt_control_runtime_state(server, agent_id),
+        "agent_player_bindings": server.llm_sidecar.agent_player_bindings,
+        "player_auth_last_nonce": server.llm_sidecar.player_auth_last_nonce,
+        "binding_epoch_by_agent": server.prompt_control_authority.binding_epoch_by_agent,
+        "pending_virtual_events": format!("{:?}", server.pending_virtual_events),
+        "session_revoke_metadata": format!("{:?}", server.session_revoke_metadata),
+    })
+}
+
+#[cfg(not(target_arch = "wasm32"))]
 fn hosted_prompt_control_negotiated_protocol() -> crate::viewer::protocol::NegotiatedViewerProtocol
 {
     crate::viewer::protocol::NegotiatedViewerProtocol {
@@ -245,6 +260,99 @@ fn runtime_prompt_control_hosted_local_mock_chain_linked_revoked_apply_and_rollb
             "revoked PromptControl must not prepare or settle Hosted local-mock runtime state"
         );
     }
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn runtime_prompt_control_hosted_expired_grant_has_full_no_mutation_fingerprint() {
+    let _llm_guard = lock_test_llm_env();
+    let _strong_auth_guard = lock_test_hosted_strong_auth_env();
+    configure_hosted_local_mock_provider_env("worldsim_provider_v1");
+    let (backend_public_key, backend_private_key) = test_signer(115);
+    // SAFETY: This test/setup code mutates process environment in a controlled scope.
+    unsafe {
+        oasis7::env_mut::set_var(
+            HOSTED_STRONG_AUTH_GRANT_PUBLIC_KEY_ENV,
+            backend_public_key.as_str(),
+        );
+    }
+
+    let mut server = hosted_local_mock_runtime_server();
+    let agent_id = server
+        .world
+        .state()
+        .agents
+        .keys()
+        .next()
+        .cloned()
+        .expect("seed agent");
+    let (public_key, private_key) = test_signer(116);
+    let registration = register_runtime_session(
+        &mut server,
+        "player-hosted-expired-fingerprint",
+        Some(agent_id.as_str()),
+        1,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let authority_epoch = server.prompt_control_authority.authority_epoch.clone();
+    let mut request = signed_prompt_control_apply_request(
+        crate::viewer::PromptControlApplyRequest {
+            agent_id: agent_id.clone(),
+            player_id: "player-hosted-expired-fingerprint".to_string(),
+            expected_version: Some(0),
+            updated_by: Some("player-hosted-expired-fingerprint".to_string()),
+            system_prompt_override: Some(Some("must not prepare after expiry".to_string())),
+            request_id: Some("hosted-expired-fingerprint".to_string()),
+            session_epoch: registration.session_epoch,
+            binding_epoch: registration.binding_epoch,
+            expected_authority_epoch: Some(authority_epoch),
+            ..Default::default()
+        },
+        crate::viewer::PromptControlAuthIntent::Apply,
+        2,
+        public_key.as_str(),
+        private_key.as_str(),
+    );
+    let now = test_now_unix_ms();
+    request.strong_auth_grant = Some(
+        crate::viewer::sign_hosted_prompt_control_strong_auth_grant(
+            "prompt_control_apply",
+            "player-hosted-expired-fingerprint",
+            public_key.as_str(),
+            agent_id.as_str(),
+            now.saturating_sub(10_000),
+            now.saturating_sub(1_000),
+            backend_public_key.as_str(),
+            backend_private_key.as_str(),
+        )
+        .expect("sign expired Hosted strong-auth grant"),
+    );
+
+    let before = hosted_prompt_control_full_mutation_fingerprint(&server, agent_id.as_str());
+    let negotiated = hosted_prompt_control_negotiated_protocol();
+    let error = server
+        .handle_prompt_control_for_protocol(
+            crate::viewer::PromptControlCommand::Apply { request },
+            &negotiated,
+        )
+        .expect_err("expired Hosted grant must be rejected before preparation");
+    assert_eq!(error.code, "auth_invalid");
+    assert_eq!(error.reason_code.as_deref(), Some("auth_invalid"));
+    assert_eq!(
+        error.status,
+        Some(crate::viewer::protocol::PromptControlResultStatus::Blocked)
+    );
+    assert_eq!(
+        error.value_visibility,
+        Some(crate::viewer::protocol::PromptControlValueVisibility::Hidden)
+    );
+    assert_eq!(
+        hosted_prompt_control_full_mutation_fingerprint(&server, agent_id.as_str()),
+        before,
+        "expired grant must not consume nonce, install Hosted fixtures, enqueue events, or cache a result"
+    );
+    clear_hosted_strong_auth_env();
 }
 
 #[test]

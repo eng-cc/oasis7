@@ -1,5 +1,43 @@
 use super::*;
 
+fn read_raw_chain_sync_responses(
+    peer: &std::net::TcpStream,
+    timeout: Duration,
+) -> Vec<serde_json::Value> {
+    use std::io::{BufRead, BufReader};
+
+    let stream = peer.try_clone().expect("clone chain sync peer");
+    stream
+        .set_read_timeout(Some(timeout))
+        .expect("set chain sync read timeout");
+    let mut reader = BufReader::new(stream);
+    let mut responses = Vec::new();
+    loop {
+        let mut line = String::new();
+        match reader.read_line(&mut line) {
+            Ok(0) => break,
+            Ok(_) => {
+                let trimmed = line.trim_end();
+                if !trimmed.is_empty() {
+                    responses.push(
+                        serde_json::from_str(trimmed).expect("decode raw chain sync response"),
+                    );
+                }
+            }
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::WouldBlock | std::io::ErrorKind::TimedOut
+                ) =>
+            {
+                break;
+            }
+            Err(error) => panic!("read raw chain sync response failed: {error}"),
+        }
+    }
+    responses
+}
+
 #[test]
 fn chain_linked_runtime_empty_poll_does_not_advance_world() {
     let execution_world_dir = runtime_live_temp_dir("chain_sync_idle");
@@ -377,4 +415,427 @@ fn chain_linked_runtime_revalidates_initial_snapshot_after_previous_session() {
         })
         .expect("second session snapshot response");
     assert_eq!(snapshot.time, server.world.state().time);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn hosted_local_mock_chain_cold_start_fences_prompt_retry_and_reconnects_exact_head() {
+    let _env_guard = runtime_provider_env_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+    let _provider_env_snapshot = HostedLocalMockProviderEnvSnapshot::capture();
+    configure_hosted_local_mock_provider_env();
+    let _strong_auth_guard = lock_test_hosted_strong_auth_env();
+    let (backend_public_key, backend_private_key) = test_signer(117);
+    unsafe {
+        oasis7::env_mut::set_var(
+            HOSTED_STRONG_AUTH_GRANT_PUBLIC_KEY_ENV,
+            backend_public_key.as_str(),
+        );
+    }
+
+    let execution_world_dir = runtime_live_temp_dir("chain_sync_prompt_cold_start");
+    let agent_id = "hosted-chain-recovery-agent";
+    let player_id = "hosted-chain-recovery-player";
+    let mut execution_world = crate::runtime::World::new_production_hardened();
+    execution_world
+        .bind_cognition_runtime(
+            VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID,
+            "hosted-chain-recovery-branch",
+            0,
+            Some(
+                "blake3:1111111111111111111111111111111111111111111111111111111111111111"
+                    .to_string(),
+            ),
+            "verified",
+            0,
+        )
+        .expect("bind authoritative chain cognition runtime");
+    execution_world.submit_action(RuntimeAction::RegisterAgent {
+        agent_id: agent_id.to_string(),
+        pos: crate::geometry::GeoPos::new(2, 3, 0),
+    });
+    execution_world
+        .step()
+        .expect("register authoritative chain Agent");
+    let chain_world_height = execution_world.state().time;
+    execution_world
+        .save_to_dir_with_chain_resource_context(
+            execution_world_dir.as_path(),
+            crate::runtime::ChainResourceDerivationContext {
+                world_id: VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID,
+                chain_id: "hosted-chain-recovery-chain",
+                genesis_ref: Some("hosted-chain-recovery-genesis"),
+                created_at_height: 1,
+                manifest_height: chain_world_height,
+                commit_block_hash: Some("hosted-chain-recovery-block-1"),
+                tick: chain_world_height,
+            },
+            "hosted-chain-recovery-world-config",
+            "hosted-chain-recovery-generation",
+        )
+        .expect("persist exact chain world");
+
+    let persisted_world = crate::runtime::World::load_from_dir(execution_world_dir.as_path())
+        .expect("reload persisted chain world");
+    assert_eq!(persisted_world.state().time, execution_world.state().time);
+    assert_eq!(
+        persisted_world.state().agents,
+        execution_world.state().agents
+    );
+    assert_eq!(
+        persisted_world.journal().events,
+        execution_world.journal().events
+    );
+    let persisted_manifest = persisted_world.chain_resource_manifest();
+    assert_eq!(
+        persisted_manifest.world_id,
+        VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID
+    );
+    assert_eq!(persisted_manifest.chain_id, "hosted-chain-recovery-chain");
+    assert_eq!(persisted_manifest.created_at_height, 1);
+    assert_eq!(persisted_manifest.manifest_height, chain_world_height);
+    assert_eq!(
+        persisted_manifest.created_at_block_hash.as_deref(),
+        Some("hosted-chain-recovery-block-1")
+    );
+    let persisted_world_hash = super::super::super::authoritative::compute_runtime_snapshot_hash(
+        &persisted_world.snapshot(),
+    )
+    .expect("hash persisted chain world");
+    assert_eq!(
+        persisted_world_hash,
+        super::super::super::authoritative::compute_runtime_snapshot_hash(
+            &persisted_world.snapshot(),
+        )
+        .expect("recompute persisted chain world hash")
+    );
+    let assert_persisted_journal_prefix = |actual: &[crate::runtime::WorldEvent]| {
+        let persisted_events = persisted_world.journal().events.as_slice();
+        assert!(actual.len() >= persisted_events.len());
+        assert_eq!(&actual[..persisted_events.len()], persisted_events);
+        let hosted_init_events = &actual[persisted_events.len()..];
+        assert!(!hosted_init_events.is_empty());
+        assert!(hosted_init_events.iter().all(|event| matches!(
+            &event.body,
+            crate::runtime::WorldEventBody::CapabilityAuthorization(_)
+                | crate::runtime::WorldEventBody::Governance(_)
+                | crate::runtime::WorldEventBody::ModuleEvent(_)
+                | crate::runtime::WorldEventBody::ManifestUpdated(_)
+        )));
+    };
+
+    let chain_status = TestChainStatusServer::start(execution_world_dir.clone());
+    chain_status
+        .committed_height
+        .store(chain_world_height, Ordering::SeqCst);
+    let viewer_config = || {
+        ViewerRuntimeLiveServerConfig::formal_release_default()
+            .with_hosted_public_join_mode(true)
+            .with_decision_mode(ViewerLiveDecisionMode::Llm)
+            .with_chain_status_bind(chain_status.addr.clone())
+            .with_chain_poll_interval(Duration::from_millis(50))
+    };
+
+    let mut first_viewer =
+        ViewerRuntimeLiveServer::new(viewer_config()).expect("start first chain viewer");
+    let mut first_sync_session = RuntimeLiveSession::new();
+    first_sync_session.playing = false;
+    first_sync_session.subscribed.insert(ViewerStream::Events);
+    first_sync_session.subscribed.insert(ViewerStream::Snapshot);
+    let (mut first_sync_writer, first_sync_peer) = test_writer_pair();
+    assert!(
+        first_viewer
+            .sync_chain_linked_runtime(&mut first_sync_session, &mut first_sync_writer)
+            .expect("first authoritative chain sync")
+    );
+    let first_sync_responses =
+        read_raw_chain_sync_responses(&first_sync_peer, Duration::from_millis(200));
+    assert!(
+        first_sync_responses
+            .iter()
+            .any(|response| response.to_string().contains("snapshot"))
+    );
+    assert_eq!(
+        first_viewer.world.state().time,
+        persisted_world.state().time
+    );
+    assert_eq!(
+        first_viewer.world.state().agents,
+        persisted_world.state().agents
+    );
+    assert_persisted_journal_prefix(first_viewer.world.journal().events.as_slice());
+    assert_eq!(
+        first_viewer.world.chain_resource_manifest(),
+        persisted_world.chain_resource_manifest()
+    );
+
+    let (player_public_key, player_private_key) = test_signer(118);
+    let registration = register_runtime_session(
+        &mut first_viewer,
+        player_id,
+        Some(agent_id),
+        1,
+        player_public_key.as_str(),
+        player_private_key.as_str(),
+    );
+    let authority_epoch = first_viewer
+        .prompt_control_authority
+        .authority_epoch
+        .clone();
+    let issued_at_unix_ms = test_now_unix_ms().saturating_sub(1_000);
+    let strong_auth_grant = |operation: &str| {
+        crate::viewer::sign_hosted_prompt_control_strong_auth_grant(
+            operation,
+            player_id,
+            player_public_key.as_str(),
+            agent_id,
+            issued_at_unix_ms,
+            issued_at_unix_ms.saturating_add(60_000),
+            backend_public_key.as_str(),
+            backend_private_key.as_str(),
+        )
+        .expect("sign Hosted local-mock strong-auth grant")
+    };
+    let negotiated = crate::viewer::protocol::NegotiatedViewerProtocol {
+        version: crate::viewer::VIEWER_PROTOCOL_VERSION,
+        capabilities: vec![crate::viewer::protocol::PROMPT_CONTROL_RESULT_CAPABILITY.to_string()],
+    };
+
+    let mut preview_request = signed_prompt_control_apply_request(
+        crate::viewer::PromptControlApplyRequest {
+            agent_id: agent_id.to_string(),
+            player_id: player_id.to_string(),
+            expected_version: Some(0),
+            updated_by: Some(player_id.to_string()),
+            system_prompt_override: Some(Some("chain-preview-only".to_string())),
+            request_id: Some("chain-recovery-preview".to_string()),
+            session_epoch: registration.session_epoch,
+            binding_epoch: registration.binding_epoch,
+            expected_authority_epoch: Some(authority_epoch.clone()),
+            ..Default::default()
+        },
+        crate::viewer::PromptControlAuthIntent::Preview,
+        2,
+        player_public_key.as_str(),
+        player_private_key.as_str(),
+    );
+    preview_request.strong_auth_grant = Some(strong_auth_grant("prompt_control_preview"));
+    let preview = first_viewer
+        .handle_prompt_control_for_protocol(
+            crate::viewer::PromptControlCommand::Preview {
+                request: preview_request,
+            },
+            &negotiated,
+        )
+        .expect("Hosted local-mock Preview must be authoritative");
+    assert_eq!(
+        preview.status,
+        Some(crate::viewer::protocol::PromptControlResultStatus::Accepted)
+    );
+    assert_eq!(preview.mutation_count, Some(0));
+
+    let mut apply_request = signed_prompt_control_apply_request(
+        crate::viewer::PromptControlApplyRequest {
+            agent_id: agent_id.to_string(),
+            player_id: player_id.to_string(),
+            expected_version: Some(0),
+            updated_by: Some(player_id.to_string()),
+            short_term_goal_override: Some(Some("chain-apply-runtime-only".to_string())),
+            request_id: Some("chain-recovery-apply".to_string()),
+            session_epoch: registration.session_epoch,
+            binding_epoch: registration.binding_epoch,
+            expected_authority_epoch: Some(authority_epoch.clone()),
+            ..Default::default()
+        },
+        crate::viewer::PromptControlAuthIntent::Apply,
+        3,
+        player_public_key.as_str(),
+        player_private_key.as_str(),
+    );
+    apply_request.strong_auth_grant = Some(strong_auth_grant("prompt_control_apply"));
+    let old_apply_request = apply_request.clone();
+    let apply = first_viewer
+        .handle_prompt_control_for_protocol(
+            crate::viewer::PromptControlCommand::Apply {
+                request: apply_request,
+            },
+            &negotiated,
+        )
+        .expect("Hosted local-mock Apply must be authoritative");
+    assert_eq!(
+        apply.status,
+        Some(crate::viewer::protocol::PromptControlResultStatus::Applied)
+    );
+    assert_eq!(apply.mutation_count, Some(1));
+
+    let mut cold_viewer =
+        ViewerRuntimeLiveServer::new(viewer_config()).expect("cold-start second chain viewer");
+    assert_ne!(
+        cold_viewer.prompt_control_authority.authority_epoch,
+        authority_epoch
+    );
+    let mut cold_sync_session = RuntimeLiveSession::new();
+    cold_sync_session.playing = false;
+    cold_sync_session.subscribed.insert(ViewerStream::Events);
+    cold_sync_session.subscribed.insert(ViewerStream::Snapshot);
+    let (mut cold_sync_writer, cold_sync_peer) = test_writer_pair();
+    assert!(
+        cold_viewer
+            .sync_chain_linked_runtime(&mut cold_sync_session, &mut cold_sync_writer)
+            .expect("cold-start chain sync")
+    );
+    let _ = read_raw_chain_sync_responses(&cold_sync_peer, Duration::from_millis(200));
+    assert_eq!(cold_viewer.world.state().time, chain_world_height);
+    assert_eq!(
+        cold_viewer.world.state().agents,
+        persisted_world.state().agents
+    );
+    assert_persisted_journal_prefix(cold_viewer.world.journal().events.as_slice());
+    let stale_error = cold_viewer
+        .handle_prompt_control_for_protocol(
+            crate::viewer::PromptControlCommand::Apply {
+                request: old_apply_request,
+            },
+            &negotiated,
+        )
+        .expect_err("old PromptControl result retry must be fenced after cold start");
+    assert_eq!(stale_error.code, "prompt_control_result_unknown");
+    assert_eq!(stale_error.reason_code.as_deref(), Some("result_unknown"));
+    assert_eq!(
+        stale_error.status,
+        Some(crate::viewer::protocol::PromptControlResultStatus::Blocked)
+    );
+    assert_eq!(
+        stale_error.value_visibility,
+        Some(crate::viewer::protocol::PromptControlValueVisibility::Hidden)
+    );
+    assert_eq!(cold_viewer.prompt_control_authority.result_ledger.len(), 0);
+
+    let reconnect_registration = register_runtime_session(
+        &mut cold_viewer,
+        player_id,
+        Some(agent_id),
+        1,
+        player_public_key.as_str(),
+        player_private_key.as_str(),
+    );
+    let expected_snapshot_hash = super::super::super::authoritative::compute_runtime_snapshot_hash(
+        &cold_viewer.world.snapshot(),
+    )
+    .expect("hash cold-start chain snapshot");
+    let (reconnect_ack, emit_snapshot_after_ack) = cold_viewer
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::ReconnectSync {
+            request: AuthoritativeReconnectSyncRequest {
+                player_id: player_id.to_string(),
+                session_pubkey: Some(player_public_key.clone()),
+                last_known_log_cursor: None,
+                expected_reorg_epoch: Some(cold_viewer.reorg_epoch),
+            },
+        })
+        .expect("current session reconnect");
+    assert!(!emit_snapshot_after_ack);
+    assert_eq!(
+        reconnect_ack.status,
+        AuthoritativeRecoveryStatus::CatchUpReady
+    );
+    assert_eq!(reconnect_ack.snapshot_height, chain_world_height);
+    assert_eq!(reconnect_ack.snapshot_hash, expected_snapshot_hash);
+    assert_eq!(reconnect_ack.player_id.as_deref(), Some(player_id));
+    assert_eq!(reconnect_ack.agent_id.as_deref(), Some(agent_id));
+    assert_eq!(
+        reconnect_ack.session_epoch,
+        reconnect_registration.session_epoch
+    );
+    assert_eq!(
+        reconnect_ack.binding_epoch,
+        reconnect_registration.binding_epoch
+    );
+
+    cold_viewer
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::RevokeSession {
+            request: AuthoritativeSessionRevokeRequest {
+                player_id: player_id.to_string(),
+                session_pubkey: Some(player_public_key.clone()),
+                revoke_reason: "chain-recovery-revoked".to_string(),
+                revoked_by: Some("runtime-test".to_string()),
+            },
+        })
+        .expect("revoke current session");
+    let revoked_reconnect = cold_viewer
+        .handle_authoritative_recovery(AuthoritativeRecoveryCommand::ReconnectSync {
+            request: AuthoritativeReconnectSyncRequest {
+                player_id: player_id.to_string(),
+                session_pubkey: Some(player_public_key),
+                last_known_log_cursor: None,
+                expected_reorg_epoch: Some(cold_viewer.reorg_epoch),
+            },
+        })
+        .expect_err("revoked session must be denied on reconnect");
+    assert_eq!(revoked_reconnect.code, "session_revoked");
+
+    let mut next_chain_world = crate::runtime::World::load_from_dir(execution_world_dir.as_path())
+        .expect("reload exact chain world for subsequent sync");
+    next_chain_world.step().expect("advance chain world once");
+    let next_chain_height = next_chain_world.state().time;
+    next_chain_world
+        .save_to_dir_with_chain_resource_context(
+            execution_world_dir.as_path(),
+            crate::runtime::ChainResourceDerivationContext {
+                world_id: VIEWER_FORMAL_RELEASE_DEFAULT_WORLD_ID,
+                chain_id: "hosted-chain-recovery-chain",
+                genesis_ref: Some("hosted-chain-recovery-genesis"),
+                created_at_height: 1,
+                manifest_height: next_chain_height,
+                commit_block_hash: Some("hosted-chain-recovery-block-2"),
+                tick: next_chain_height,
+            },
+            "hosted-chain-recovery-world-config",
+            "hosted-chain-recovery-generation",
+        )
+        .expect("persist subsequent exact chain world");
+    chain_status
+        .committed_height
+        .store(next_chain_height, Ordering::SeqCst);
+    cold_viewer.latest_player_gameplay_feedback =
+        Some(crate::simulator::PlayerGameplayRecentFeedback {
+            action: "chain_sync".to_string(),
+            stage: "blocked".to_string(),
+            effect: "stale chain sync feedback".to_string(),
+            intent_summary: None,
+            target_agent_id: None,
+            reason: Some("test-only stale feedback".to_string()),
+            hint: None,
+            delta_logical_time: 0,
+            delta_event_seq: 0,
+        });
+    let mut followup_session = RuntimeLiveSession::new();
+    followup_session.playing = false;
+    followup_session.subscribed.insert(ViewerStream::Events);
+    followup_session.subscribed.insert(ViewerStream::Snapshot);
+    let (mut followup_writer, followup_peer) = test_writer_pair();
+    assert!(
+        cold_viewer
+            .sync_chain_linked_runtime(&mut followup_session, &mut followup_writer)
+            .expect("one subsequent chain sync")
+    );
+    let followup_responses =
+        read_raw_chain_sync_responses(&followup_peer, Duration::from_millis(200));
+    assert_eq!(
+        followup_responses
+            .iter()
+            .filter(|response| response.to_string().contains("snapshot"))
+            .count(),
+        1
+    );
+    assert!(cold_viewer.latest_player_gameplay_feedback.is_none());
+
+    let (mut duplicate_writer, duplicate_peer) = test_writer_pair();
+    assert!(
+        !cold_viewer
+            .sync_chain_linked_runtime(&mut followup_session, &mut duplicate_writer)
+            .expect("repeat same chain head sync")
+    );
+    assert!(read_raw_chain_sync_responses(&duplicate_peer, Duration::from_millis(100)).is_empty());
+    assert!(cold_viewer.latest_player_gameplay_feedback.is_none());
 }
