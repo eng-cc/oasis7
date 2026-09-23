@@ -539,7 +539,7 @@
     },
     {
       "path": "doc/engineering/workflow/source-of-truth.md",
-      "content_sha256": "9f78bb9675c7c6e9b61534960d69c1d8d55f8125fcd607f13adaf75bf7896861",
+      "content_sha256": "8a78b5b29bea6401b2fd20d0288ec1153eb97cd21cfbea1cb3d32b61aaab5953",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -2891,7 +2891,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/prd.md",
-      "content_sha256": "a6f924b1a5d2ba3e83ff530019c02ce08a4907f73bab2fe9084b509b314fb50e",
+      "content_sha256": "86c0b03866707f3ec5608f8e58e3544f3534ceb0944d7f8081392ed71d8dcd4d",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
