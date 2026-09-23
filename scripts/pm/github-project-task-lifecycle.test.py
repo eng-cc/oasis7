@@ -261,8 +261,35 @@ class MoveTaskLifecycleContract(unittest.TestCase):
     def test_record_pr_preserves_authoritative_ready_writer(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
-            mapping_path = self.write_mapping(root, mapping_record(status="ready", phase="pre_pr_ready"))
+            record = mapping_record(status="ready", phase="pre_pr_ready")
+            record.update(
+                {
+                    "task_branch": "task/lifecycle-move-contract",
+                    "default_branch": "main",
+                    "canonical_worktree": str(root),
+                }
+            )
+            mapping_path = self.write_mapping(root, record)
+            live_pr = json.dumps(
+                {
+                    "number": 2001,
+                    "headRefName": "task/lifecycle-move-contract",
+                    "headRefOid": "a" * 40,
+                    "headRepository": {"nameWithOwner": "eng-cc/oasis7"},
+                    "baseRefName": "main",
+                    "state": "OPEN",
+                }
+            )
+
+            def run_text(command: list[str], **_: object) -> str:
+                if command[:3] == ["gh", "pr", "view"]:
+                    return live_pr
+                if command[:3] == ["git", "-C", str(root)]:
+                    return "a" * 40
+                raise AssertionError(f"unexpected command: {command}")
+
             with (
+                mock.patch.object(MODULE, "run_text", side_effect=run_text),
                 mock.patch.object(MODULE, "update_issue_body"),
                 mock.patch.object(MODULE, "issue_comment", return_value="comment-url"),
                 mock.patch.object(MODULE, "merge_task_mapping") as merge_mapping,
