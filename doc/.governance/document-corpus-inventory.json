@@ -511,7 +511,7 @@
     },
     {
       "path": "doc/engineering/workflow/local-codex-three-loop.design.md",
-      "content_sha256": "02ef317e3428e9e3154f7031689cd6d1f0423627f39a4854f803bafa0c007911",
+      "content_sha256": "e7db2792ff0cabfcd5d0bcb94ff7315ece38e32e293ad8a2a3754d231b35fca1",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -567,7 +567,7 @@
     },
     {
       "path": "doc/engineering/workflow/three-loop-role-adaptation.design.md",
-      "content_sha256": "af851112899b951bb239535f6788df407825211960ee521a0f3371a942d2483e",
+      "content_sha256": "de6982ac642fc3b5e1b19daca1e80b7b4eaec758626a59be8ec2162757f454c8",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -2639,7 +2639,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/governed-industry-market-and-emergency-supply.prd.md",
-      "content_sha256": "214132cc8af8d56dff0a265f1582b4d2afa881751dc1c3365f8ed55334403eb9",
+      "content_sha256": "eb9a1b935acd1ed507fdd88029cf7baaf00b7176da1ddc253712fa4ee11831df",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2653,7 +2653,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/prd.md",
-      "content_sha256": "d2aa0090e730c8ab37e957a232bea4d137b87a977f0e5eaf55727efce16c1d57",
+      "content_sha256": "d0b9f7e4db5d9437c7d929d88a654a05a183798dadfb5c6179a5d6310dbe50fd",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
