@@ -117,9 +117,34 @@ PY
     printf '[{"number":2003,"state":"OPEN","title":"[PM] No-cache task","url":"https://github.com/eng-cc/oasis7/issues/2003"}]\n'
     ;;
   "issue view 2003 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason")
-    cat <<'JSON'
-{"body":"<!-- oasis7-pm-task -->\ntask_uid: task_99999999999999999999999999999999\n\nGitHub-backed oasis7 PM task.\n\nTask metadata:\n- owner_role: `tpm`\n- module: `engineering`\n- status: `ready`\n- workflow_phase: `pre_pr_ready`\n- priority: `P2`\n- worktree_hint: `/tmp/no-cache-worktree`\n","number":2003,"title":"[PM] No-cache task","url":"https://github.com/eng-cc/oasis7/issues/2003","state":"OPEN","stateReason":null}
-JSON
+    printf '{"body":"<!-- oasis7-pm-task -->\\ntask_uid: task_99999999999999999999999999999999\\n\\nGitHub-backed oasis7 PM task.\\n\\nTask metadata:\\n- owner_role: `tpm`\\n- module: `engineering`\\n- status: `ready`\\n- workflow_phase: `pre_pr_ready`\\n- priority: `P2`\\n- worktree_hint: `%s`\\n","number":2003,"title":"[PM] No-cache task","url":"https://github.com/eng-cc/oasis7/issues/2003","state":"OPEN","stateReason":null}\n' "$(dirname "$(dirname "$(dirname "$GH_MAPPING_PATH")")")"
+    ;;
+  pr\ view*)
+    # Keep record-pr fully offline while exercising the same readback shape as
+    # the live GitHub API.  Prefer the recovered cache identity; the no-cache
+    # fixture below deliberately supplies a registered fallback branch.
+    python3 - "$GH_MAPPING_PATH" "$*" <<'PY'
+import json, pathlib, subprocess, sys
+mapping_path, invocation = sys.argv[1:]
+number = 2003 if " 2003 " in invocation else 2001
+identity = {}
+try:
+    payload = json.loads(pathlib.Path(mapping_path).read_text())
+    identity = next(iter(payload.get("tasks", {}).values()), {})
+except (FileNotFoundError, json.JSONDecodeError):
+    pass
+branch = identity.get("task_branch") or "task/recovered-record"
+base = identity.get("default_branch") or branch
+try:
+    oid = subprocess.check_output(
+        ["git", "-C", str(identity["canonical_worktree"]), "rev-parse",
+         f"refs/heads/{branch}^{{commit}}"], text=True).strip()
+except (KeyError, subprocess.CalledProcessError, FileNotFoundError):
+    oid = "a" * 40
+print(json.dumps({"number": number, "headRefName": branch,
+                  "headRefOid": oid, "headRepository": {"nameWithOwner": "eng-cc/oasis7"},
+                  "baseRefName": base, "state": "OPEN"}))
+PY
     ;;
   "issue edit 2003 -R eng-cc/oasis7 --body-file "*)
     printf '%s\n' '--- issue edit body 2003 ---' >> "$GH_EDIT_BODY_LOG"
@@ -241,12 +266,13 @@ rm -f "$TMPDIR/xcrun_db"
 # The fixture's closeout interruption path can leave mktemp's Darwin `tmp*`
 # scratch file in the fixture repository.  This is confined to the disposable
 # fixture; the production freeze check still reports every other untracked path.
-printf '*.json\n*.log\n*.md\n*.err\n.pm/\nworktree/\ngh-comments/\nproject-live-state\nproject-live-status\nproject-live-phase\nxcrun_db\ntmp*\n' > "$TMPDIR/.gitignore"
+printf '*.json\n*.log\n*.md\n*.err\n__pycache__/\n.pm/\nworktree/\ngh-comments/\nproject-live-state\nproject-live-status\nproject-live-phase\nxcrun_db\ntmp*\n' > "$TMPDIR/.gitignore"
 git -C "$TMPDIR" init -q
 git -C "$TMPDIR" config user.email test@example.com
 git -C "$TMPDIR" config user.name Test
 git -C "$TMPDIR" add .
 git -C "$TMPDIR" commit -qm initial
+git -C "$TMPDIR" worktree add -q -b task/lifecycle-smoke "$TMPDIR/worktree" HEAD
 export PATH="$TMPDIR/bin:$PATH"
 export GH_CALL_LOG="$TMPDIR/gh-calls.log"
 export GH_MAPPING_PATH="$TMPDIR/.pm/github-project-sync/tasks.json"
@@ -687,6 +713,13 @@ PY
 NO_CACHE_ROOT="$TMPDIR/no-cache"
 mkdir -p "$NO_CACHE_ROOT"
 NO_CACHE_UID="task_99999999999999999999999999999999"
+git -C "$NO_CACHE_ROOT" init -q
+git -C "$NO_CACHE_ROOT" config user.email test@example.com
+git -C "$NO_CACHE_ROOT" config user.name Test
+printf 'recovered task fixture\n' > "$NO_CACHE_ROOT/README.md"
+git -C "$NO_CACHE_ROOT" add README.md
+git -C "$NO_CACHE_ROOT" commit -qm initial
+git -C "$NO_CACHE_ROOT" branch -M task/recovered-record
 set +e
 python3 "$TMPDIR/github-project-task.py" move-task "$NO_CACHE_ROOT" \
   --repo eng-cc/oasis7 \

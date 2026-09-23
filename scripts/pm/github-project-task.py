@@ -1472,6 +1472,13 @@ def require_record(args: argparse.Namespace) -> tuple[pathlib.Path, dict[str, An
             die(f"task_uid not found in mapping and GitHub issue lookup failed: {args.task_uid}: {exc}")
         if not record:
             die(f"task_uid not found in mapping or GitHub issue body: {args.task_uid}")
+        # GitHub Issue recovery historically reconstructed only the serialized
+        # task fields.  Branch identity is authoritative git state, so
+        # rehydrate it from the registered canonical worktree before any
+        # command (notably record-pr) validates or writes lifecycle state.
+        worktree_hint = str(record.get("worktree_hint") or "")
+        if worktree_hint:
+            record.update(authoritative_repository_identity(root, args.repo, worktree_hint))
         mapping.setdefault("tasks", {})[args.task_uid] = record
     return mapping_path, mapping, record
 

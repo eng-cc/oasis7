@@ -300,6 +300,33 @@ class MoveTaskLifecycleContract(unittest.TestCase):
             self.assertEqual(0, result)
             merge_mapping.assert_called_once()
 
+    def test_recovered_issue_rehydrates_branch_identity_before_record_pr(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            recovered = mapping_record(status="ready", phase="pre_pr_ready")
+            recovered["worktree_hint"] = str(root / "canonical-worktree")
+            identity = {
+                "repository": "eng-cc/oasis7",
+                "canonical_worktree": str(root / "canonical-worktree"),
+                "task_branch": "task/recovered-record",
+                "default_branch": "main",
+            }
+            with (
+                mock.patch.object(MODULE, "github_issue_record", return_value=recovered),
+                mock.patch.object(MODULE, "authoritative_repository_identity", return_value=identity) as resolve_identity,
+            ):
+                mapping_path, _, record = MODULE.require_record(
+                    Namespace(
+                        root=root,
+                        mapping=".pm/github-project-sync/tasks.json",
+                        repo="eng-cc/oasis7",
+                        task_uid=UID,
+                    )
+                )
+            resolve_identity.assert_called_once_with(root, "eng-cc/oasis7", str(root / "canonical-worktree"))
+            self.assertEqual(identity, {key: record[key] for key in identity})
+            self.assertEqual(root / ".pm/github-project-sync/tasks.json", mapping_path)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
