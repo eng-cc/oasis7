@@ -398,7 +398,10 @@ class CheckerStageAdmissionTest(unittest.TestCase):
         self.assertIn(PLANNER_SOURCE_REF, advertised[0])
         fetched = [argv for argv in calls if "fetch" in argv]
         self.assertTrue(fetched, calls)
-        self.assertTrue(any(PLANNER_SOURCE_REF in argv for argv in fetched), calls)
+        self.assertEqual(
+            fetched[0][3:],
+            ["fetch", "--no-write-fetch-head", "--no-tags", "origin", PLANNER_SOURCE_REF],
+        )
 
     def test_executing_planner_rejects_wrong_advertised_source_oid(self):
         result, calls, error = self._run_missing_planner_source_case(advertised_oid="0" * 40)

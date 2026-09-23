@@ -516,7 +516,7 @@ def _recover_planner_source_object(
         raise AdmissionError("approved planner source advertised OID mismatch")
 
     try:
-        _git_bytes(repo_root, "fetch", "--no-tags", "origin", source_ref)
+        _git_bytes(repo_root, "fetch", "--no-write-fetch-head", "--no-tags", "origin", source_ref)
     except AdmissionError as exc:
         raise AdmissionError("approved planner source ref fetch failed") from exc
     try:
