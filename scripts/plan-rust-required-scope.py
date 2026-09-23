@@ -21,6 +21,26 @@ def load_impact_projection(path, expected):
   except Exception as exc:
     die(f"impact projection is invalid: {exc}")
   return value
+
+def policy_full_projection_for_unverified_closure(projection):
+  closure=projection.get("closure_status")
+  if not isinstance(closure,dict) or closure.get("status")=="complete": return False
+  status=closure.get("status")
+  reasons=projection.get("ci_reasons")
+  identity=projection.get("planner_identity")
+  capabilities=sorted(CAPABILITIES)
+  return (
+    isinstance(status,str)
+    and isinstance(reasons,list)
+    and "dependency_closure_unverified:"+status in reasons
+    and projection.get("ci_scope")=="full"
+    and projection.get("test_profile")=="full"
+    and projection.get("ci_capabilities")==capabilities
+    and isinstance(identity,dict)
+    and identity.get("scope")=="full"
+    and identity.get("selected_capabilities")==capabilities
+  )
+
 def config(path):
   try: raw=Path(path).read_bytes(); c=json.loads(raw)
   except Exception as e: die(f"invalid config: {e}")
@@ -131,11 +151,19 @@ def main():
    source_plan=subprocess.run(source_cmd,text=True,capture_output=True)
    if source_plan.returncode: die("impact projection source planner cannot be verified: "+source_plan.stderr.strip())
    source_fields=dict(line.split("=",1) for line in source_plan.stdout.splitlines() if "=" in line)
-   if projection["ci_scope"]!=source_fields.get("scope"):
-    die("impact projection source scope identity mismatch")
    source_capabilities=source_fields.get("selected_capabilities","").split(";")
-   if projection["ci_capabilities"]!=source_capabilities:
-    die("impact projection source capabilities identity mismatch")
+   unverified_closure=projection["closure_status"]["status"]!="complete"
+   policy_full=policy_full_projection_for_unverified_closure(projection)
+   if unverified_closure and not policy_full:
+    die("impact projection with unverified dependency closure is not full")
+   if policy_full:
+    if actual_scope!="full" or actual_capabilities!=sorted(CAPABILITIES):
+     die("unverified dependency closure integration execution scope is not full")
+   else:
+    if projection["ci_scope"]!=source_fields.get("scope"):
+     die("impact projection source scope identity mismatch")
+    if projection["ci_capabilities"]!=source_capabilities:
+     die("impact projection source capabilities identity mismatch")
    if not set(source_capabilities).issubset(set(actual_capabilities)|{"required_gate_baseline"}):
     die("integration execution omits source capabilities")
   # Full-only modes still require the complete gate; other modes require

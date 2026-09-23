@@ -31,7 +31,7 @@ class TargetedProjectionPromotionTests(unittest.TestCase):
   self.git('add','README','scripts/ci-required-scope.v2.json');self.git('commit','-qm','base')
   self.scope_base=self.git('rev-parse','HEAD')
   self.git('switch','-q','-c','source')
-  self.changed_path='doc/product/world-rules-core-gameplay.prd.md'
+  self.changed_path='site/index.html'
   changed=self.root/self.changed_path
   changed.parent.mkdir(parents=True)
   changed.write_text('source change\n',encoding='utf-8')
@@ -49,8 +49,8 @@ class TargetedProjectionPromotionTests(unittest.TestCase):
    'source_head_oid':self.source_head,
    'scope_base_oid':self.scope_base,
    'changed_paths':[self.changed_path],
-   'change_class':'workflow-doc',
-   'manual_roles':[],
+   'change_class':'unknown',
+   'manual_roles':['repository_health_engineer','qa_engineer'],
    'domain_role':None,
    'test_profile':'required',
    'declared_tests':['required_gate_baseline'],
@@ -62,21 +62,31 @@ class TargetedProjectionPromotionTests(unittest.TestCase):
     'sha256':'sha256:'+hashlib.sha256((HERE.parents[1]/'scripts/ci-required-scope.v2.json').read_bytes()).hexdigest(),
    }]},
   }
-  input_path=self.root/'projection-input.json'
+  self.payload=payload
+  self.input_path=self.root/'projection-input.json'
   self.projection_path=self.root/'projection.json'
-  input_path.write_text(json.dumps(payload),encoding='utf-8')
-  result=subprocess.run([
-   str(HERE/'workflow-impact-projection.py'),'--root',str(HERE.parents[1]),
-   '--input',str(input_path),'--out',str(self.projection_path),
-  ],text=True,capture_output=True)
-  self.assertEqual(result.returncode,0,result.stderr)
-  self.projection=json.loads(self.projection_path.read_text(encoding='utf-8'))
+  self.write_projection()
 
  def tearDown(self):
   self.temp.cleanup()
 
  def git(self,*args):
   return subprocess.check_output(['git','-C',str(self.root),*args],text=True).strip()
+
+ def write_projection(self):
+  self.input_path.write_text(json.dumps(self.payload),encoding='utf-8')
+  if self.projection_path.exists():
+   self.projection_path.unlink()
+  result=subprocess.run([
+   str(HERE/'workflow-impact-projection.py'),'--root',str(HERE.parents[1]),
+   '--input',str(self.input_path),'--out',str(self.projection_path),
+  ],text=True,capture_output=True)
+  self.assertEqual(result.returncode,0,result.stderr)
+  self.projection=json.loads(self.projection_path.read_text(encoding='utf-8'))
+
+ def canonical_digest(self,value):
+  encoded=json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode('utf-8')
+  return 'sha256:'+hashlib.sha256(encoded).hexdigest()
 
  def planner(self,event,base):
   result=subprocess.run([
@@ -91,9 +101,12 @@ class TargetedProjectionPromotionTests(unittest.TestCase):
 
  def test_targeted_pr_projection_is_accepted_and_upgraded_by_trusted_integration(self):
   pr=self.planner('pull_request',self.scope_base)
-  self.assertEqual(pr['scope'],'minimal')
+  self.assertEqual(pr['scope'],'targeted')
   self.assertEqual(pr['impact_projection_status'],'verified')
   self.assertEqual(pr['impact_projection_digest'],self.projection['projection_digest'])
+  self.assertEqual(self.projection['closure_status']['status'],'complete')
+  self.assertEqual(self.projection['ci_scope'],pr['scope'])
+  self.assertEqual(self.projection['ci_capabilities'],pr['selected_capabilities'].split(';'))
 
   # The integration target has advanced with a target-only commit.  The
   # trusted workflow must execute the targeted gate while retaining the source
@@ -104,18 +117,74 @@ class TargetedProjectionPromotionTests(unittest.TestCase):
   self.assertEqual(integration['impact_projection_status'],'verified')
   self.assertEqual(integration['impact_projection_digest'],self.projection['projection_digest'])
   self.assertEqual(integration['test_profile'],'required')
-  self.assertEqual(integration['selected_capabilities'],'workflow_governance')
+  self.assertEqual(integration['selected_capabilities'],'site_quality;workflow_governance')
   self.assertEqual(integration['needs_rust_toolchain'],'false')
   self.assertEqual(integration['changed_path_count'],'2')
 
+ def test_unknown_closure_full_projection_is_accepted_with_exact_source_paths(self):
+  self.payload['closure_status']={
+   'status':'unknown','reason':'dependency closure is unavailable',
+  }
+  self.write_projection()
+  all_capabilities=sorted(json.loads((HERE.parents[1]/'scripts/ci-required-scope.v2.json').read_text())['capabilities'])
+  self.assertEqual(self.projection['ci_scope'],'full')
+  self.assertEqual(self.projection['test_profile'],'full')
+  self.assertEqual(self.projection['ci_capabilities'],all_capabilities)
+
+  source=self.planner('pull_request',self.scope_base)
+  self.assertEqual(source['scope'],'full')
+  self.assertEqual(source['changed_path_count'],'1')
+  self.assertEqual(source['changed_paths'],self.changed_path)
+
+  integration=self.planner('workflow_dispatch',self.integration_base)
+  self.assertEqual(integration['scope'],'full',integration)
+  self.assertEqual(integration['selected_capabilities'],';'.join(all_capabilities))
+  self.assertEqual(integration['impact_projection_status'],'verified')
+  self.assertEqual(integration['impact_projection_digest'],self.projection['projection_digest'])
+
+ def test_unknown_closure_under_scoped_projection_is_rejected(self):
+  changed=dict(self.projection)
+  changed['closure_status']={
+   'status':'unknown','reason':'dependency closure is unavailable','evidence':[],
+  }
+  changed['ci_reasons']=changed['ci_reasons']+['dependency_closure_unverified:unknown']
+  changed['projection_digest']=self.canonical_digest({
+   key:value for key,value in changed.items() if key!='projection_digest'
+  })
+  self.projection_path.write_text(json.dumps(changed),encoding='utf-8')
+  result=subprocess.run([
+   sys.executable,str(HERE.parents[1]/'scripts/plan-rust-required-scope.py'),
+   '--event-name','workflow_dispatch','--run-mode','integration_revalidation',
+   '--base-ref',self.integration_base,'--head-ref',self.source_head,
+   '--task-uid',self.uid,'--scope-base-oid',self.scope_base,
+   '--impact-projection',str(self.projection_path),
+  ],cwd=self.root,text=True,capture_output=True)
+  self.assertNotEqual(result.returncode,0)
+  self.assertIn('unverified dependency closure is not full',result.stderr)
+
+ def test_integration_rejects_projection_with_different_source_paths(self):
+  changed=dict(self.projection)
+  changed['changed_paths']=sorted([self.changed_path,'README'])
+  changed['changed_paths_digest']=self.canonical_digest(changed['changed_paths'])
+  changed['projection_digest']=self.canonical_digest({
+   key:value for key,value in changed.items() if key!='projection_digest'
+  })
+  self.projection_path.write_text(json.dumps(changed),encoding='utf-8')
+  result=subprocess.run([
+   sys.executable,str(HERE.parents[1]/'scripts/plan-rust-required-scope.py'),
+   '--event-name','workflow_dispatch','--run-mode','integration_revalidation',
+   '--base-ref',self.integration_base,'--head-ref',self.source_head,
+   '--task-uid',self.uid,'--scope-base-oid',self.scope_base,
+   '--impact-projection',str(self.projection_path),
+  ],cwd=self.root,text=True,capture_output=True)
+  self.assertNotEqual(result.returncode,0)
+  self.assertIn('source changed paths identity mismatch',result.stderr)
+
  def test_recomputed_projection_cannot_claim_wrong_source_scope(self):
-  def digest(value):
-   canonical=json.dumps(value,ensure_ascii=False,sort_keys=True,separators=(',',':')).encode('utf-8')
-   return 'sha256:'+hashlib.sha256(canonical).hexdigest()
-  changed=dict(self.projection,ci_scope='targeted',ci_capabilities=['workflow_governance'])
-  changed['planner_identity']=dict(changed['planner_identity'],scope='targeted',selected_capabilities=['workflow_governance'])
-  changed['planner_digest']=digest(changed['planner_identity'])
-  changed['projection_digest']=digest({k:v for k,v in changed.items() if k!='projection_digest'})
+  changed=dict(self.projection,ci_scope='minimal',ci_capabilities=['required_gate_baseline'])
+  changed['planner_identity']=dict(changed['planner_identity'],scope='minimal',selected_capabilities=['required_gate_baseline'])
+  changed['planner_digest']=self.canonical_digest(changed['planner_identity'])
+  changed['projection_digest']=self.canonical_digest({k:v for k,v in changed.items() if k!='projection_digest'})
   self.projection_path.write_text(json.dumps(changed),encoding='utf-8')
   result=subprocess.run([
    sys.executable,str(HERE.parents[1]/'scripts/plan-rust-required-scope.py'),
