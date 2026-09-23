@@ -52,6 +52,56 @@ class LoopTests(unittest.TestCase):
         self.assertEqual(module.admission_purpose('publish-contract'), 'new_tasks')
         self.assertEqual(module.admission_purpose('resume-check'), 'in_flight')
 
+    def test_recovery_adapter_binds_old_policy_and_attested_merged_bridge(self):
+        binding = {'policy_commit': module.LEGACY_RECOVERY_POLICY, 'policy_digest': 'sha256:' + '1' * 64}
+        contracts = SimpleNamespace()
+        outputs = {
+            ('rev-parse', 'HEAD'): '4' * 40,
+            ('status', '--porcelain', '--untracked-files=all', '--',
+             'scripts/pm/loop.py', 'scripts/pm/loop_recovery.py'): '',
+        }
+
+        def git(root, *args):
+            if args in outputs:
+                return outputs[args]
+            raise AssertionError(args)
+
+        def run(command, **kwargs):
+            self.assertEqual(command[:3], ['git', '-C', str(Path(module.__file__).resolve().parents[2])])
+            self.assertIn(command[3:], [
+                ['merge-base', '--is-ancestor', '3b383190916ac99123a2fc9cbc0d3a8ef0d9c516', '4' * 40],
+                ['merge-base', '--is-ancestor', '4' * 40, 'refs/remotes/origin/main'],
+            ])
+            return subprocess.CompletedProcess(command, 0, '', '')
+
+        with patch.object(module, '_git', side_effect=git), \
+             patch.object(module, '_trusted_module', return_value=contracts), \
+             patch.object(module.subprocess, 'run', side_effect=run), \
+             patch.object(module.subprocess, 'check_output', side_effect=lambda command: (
+                 Path(module.__file__).resolve().parents[2] / command[-1].split(':', 1)[1]
+             ).read_bytes()):
+            adapter = module._recovery_publication_adapter(
+                Path('/old'), Path('/target'), binding, require_legacy=True
+            )
+        self.assertIs(adapter.contracts, contracts)
+        self.assertEqual(adapter.policy_commit, module.LEGACY_RECOVERY_POLICY)
+        self.assertEqual(adapter.bridge_commit, '4' * 40)
+        self.assertRegex(adapter.bridge_digest, r'^sha256:[0-9a-f]{64}$')
+
+    def test_recovery_adapter_rejects_dirty_bridge(self):
+        binding = {'policy_commit': module.LEGACY_RECOVERY_POLICY, 'policy_digest': 'sha256:' + '1' * 64}
+        with patch.object(module, '_git', side_effect=['4' * 40, ' M scripts/pm/loop.py']):
+            with self.assertRaisesRegex(ValueError, 'bridge helper bytes are dirty'):
+                module._recovery_publication_adapter(Path('/old'), Path('/target'), binding)
+
+    def test_recovery_adapter_rejects_wrong_legacy_policy(self):
+        with self.assertRaisesRegex(ValueError, 'exact legacy policy commit'):
+            module._recovery_publication_adapter(
+                Path('/old'), Path('/target'),
+                {'policy_commit': 'd' * 40, 'policy_digest': 'sha256:' + '1' * 64},
+                require_legacy=True,
+            )
+
     def dependency_command(self, command, bodies, *, search=None, terminal_pass=True):
         uid, dependency_uid = 'task_' + 'a' * 32, 'task_' + 'b' * 32
         task = {'task_uid': uid, 'repository': 'fixture/repo', 'loop_binding': {'task_uid': uid, 'dependencies': [dependency_uid]}}
