@@ -26,6 +26,8 @@ NORMATIVE_BLOB = "c" * 40
 PLANNER_COMMIT = "d" * 40
 PLANNER_TREE = "e" * 40
 PLANNER_BLOB = "f" * 40
+PLANNER_SOURCE_HEAD = "88988102318fa2e3c9e84f483d01cb99575e5387"
+PLANNER_SOURCE_REF = "refs/pull/3821/head"
 CHECKER_BASE = "1" * 40
 CHECKER_HEAD = "2" * 40
 CHECKER_SCOPE = "3" * 40
@@ -321,6 +323,115 @@ class CheckerStageAdmissionTest(unittest.TestCase):
                               "sha256:" + hashlib.sha256(_planner_bytes()).hexdigest(),
                               "authority_size": len(_planner_bytes())}, root,
                 )
+
+    def _run_missing_planner_source_case(
+        self,
+        *,
+        advertised_oid=PLANNER_SOURCE_HEAD,
+        advertised_ref=PLANNER_SOURCE_REF,
+        source_bytes=None,
+        remote_unavailable=False,
+    ):
+        """Model a merge checkout missing the approved planner source object.
+
+        The trusted planner receipt still binds the exact source-head OID.  The
+        RED contract requires the adapter to read the advertised PR ref,
+        fetch only that ref, and then verify the fetched planner bytes against
+        the already verified merged authority bytes.
+        """
+        calls = []
+        fetched = False
+        authority_bytes = _planner_bytes()
+        source_bytes = authority_bytes if source_bytes is None else source_bytes
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            planner = root / MODULE.PLANNER_PATH
+            planner.parent.mkdir(parents=True)
+            planner.write_bytes(authority_bytes)
+
+            def check_output(command, **kwargs):
+                nonlocal fetched
+                argv = [str(value) for value in command]
+                calls.append(argv)
+                if "ls-remote" in argv:
+                    if remote_unavailable:
+                        raise subprocess.CalledProcessError(128, argv, stderr=b"remote unavailable")
+                    return f"{advertised_oid}\t{advertised_ref}\n".encode()
+                if "fetch" in argv:
+                    fetched = True
+                    return b""
+                if "show" in argv:
+                    spec = argv[-1]
+                    if spec == f"{PLANNER_COMMIT}:{MODULE.PLANNER_PATH}":
+                        return authority_bytes
+                    if spec == f"{PLANNER_SOURCE_HEAD}:{MODULE.PLANNER_PATH}":
+                        if not fetched:
+                            raise subprocess.CalledProcessError(
+                                128, argv, stderr=b"fatal: bad object: approved source head unavailable"
+                            )
+                        return source_bytes
+                raise AssertionError(f"unexpected git command: {argv}")
+
+            authority = {
+                "authority_path": MODULE.PLANNER_PATH,
+                "authority_bytes": authority_bytes,
+                "authority_bytes_sha256": "sha256:" + hashlib.sha256(authority_bytes).hexdigest(),
+                "authority_size": len(authority_bytes),
+                "merged_commit": PLANNER_COMMIT,
+                "source_head": PLANNER_SOURCE_HEAD,
+                "source_ref": PLANNER_SOURCE_REF,
+            }
+            try:
+                with patch.object(MODULE.subprocess, "check_output", side_effect=check_output):
+                    result = MODULE.verify_executing_planner(planner, authority, root)
+            except Exception as exc:  # return the RED failure for negative cases
+                return None, calls, exc
+            return result, calls, None
+
+    def test_executing_planner_recovers_missing_source_object_from_exact_pr_ref(self):
+        result, calls, error = self._run_missing_planner_source_case()
+        self.assertIsNone(error, error)
+        self.assertEqual(PLANNER_SOURCE_HEAD, result["source_head"])
+        advertised = [argv for argv in calls if "ls-remote" in argv]
+        self.assertTrue(advertised, calls)
+        self.assertIn(PLANNER_SOURCE_REF, advertised[0])
+        fetched = [argv for argv in calls if "fetch" in argv]
+        self.assertTrue(fetched, calls)
+        self.assertEqual(
+            fetched[0][3:],
+            ["fetch", "--no-write-fetch-head", "--no-tags", "origin", PLANNER_SOURCE_REF],
+        )
+
+    def test_executing_planner_rejects_wrong_advertised_source_oid(self):
+        result, calls, error = self._run_missing_planner_source_case(advertised_oid="0" * 40)
+        self.assertIsNone(result)
+        self.assertTrue(any("ls-remote" in argv for argv in calls), calls)
+        self.assertIsNotNone(error)
+        self.assertRegex(str(error), r"source.*(?:OID|identity)|advertised|ref")
+
+    def test_executing_planner_rejects_wrong_advertised_source_ref(self):
+        result, calls, error = self._run_missing_planner_source_case(
+            advertised_ref="refs/heads/main"
+        )
+        self.assertIsNone(result)
+        self.assertTrue(any("ls-remote" in argv for argv in calls), calls)
+        self.assertIsNotNone(error)
+        self.assertRegex(str(error), r"source.*(?:ref|OID|identity)|advertised")
+
+    def test_executing_planner_rejects_unavailable_source_ref(self):
+        result, calls, error = self._run_missing_planner_source_case(remote_unavailable=True)
+        self.assertIsNone(result)
+        self.assertTrue(any("ls-remote" in argv for argv in calls), calls)
+        self.assertIsNotNone(error)
+        self.assertRegex(str(error), r"source.*(?:object|ref)|fetch|unavailable")
+
+    def test_executing_planner_rejects_tampered_fetched_source_bytes(self):
+        result, calls, error = self._run_missing_planner_source_case(source_bytes=b"tampered")
+        self.assertIsNone(result)
+        self.assertTrue(any("ls-remote" in argv for argv in calls), calls)
+        self.assertIsNotNone(error)
+        self.assertRegex(str(error), r"planner.*(?:bytes|match|authority)")
 
     def test_checker_identity_rejects_wrong_head_and_scope(self):
         api = _authority_api()
