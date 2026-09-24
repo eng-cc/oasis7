@@ -27,6 +27,7 @@ COPY_PATHS = (
     "doc/core/prd.md",
     "doc/engineering/doc-governance/doc-structure-standard.design.md",
     "doc/world-runtime/prd.md",
+    "doc/world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md",
     "doc/p2p/prd.md",
     "doc/testing/prd.md",
     "doc/world-simulator/prd.md",
