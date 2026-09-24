@@ -36,6 +36,7 @@ PLANNER_ISSUE = 3818
 PLANNER_TASK_UID = "task_e21604f5cdb3476c8e146332a68a05b4"
 CHECKER_ISSUE = 3827
 CHECKER_TASK_UID = "task_be264ac2833044969d3c2c50b2b83cea"
+GITHUB_ACTIONS_APP_ID = 15368
 NORMATIVE_PATH = "doc/engineering/workflow/source-of-truth.md"
 PLANNER_PATH = "scripts/pm/cargo_package_profile_planner.py"
 CHECKER_SCOPE = (
@@ -916,29 +917,44 @@ def verify_live_check_identity(
     response = gh_api(f"repos/{repository}/commits/{check_head}/check-runs?per_page=100")
     if not isinstance(response, dict) or not isinstance(response.get("check_runs"), list):
         raise AdmissionError("live check-run readback is malformed")
-    marker = f"/actions/runs/{run_id}"
+    run_path = re.compile(rf"/actions/runs/{re.escape(str(run_id))}(?:/|$)")
     matches = [
         item
         for item in response["check_runs"]
-        if item.get("name") == check_name and marker in str(item.get("details_url") or "")
+        if item.get("name") == check_name
+        and run_path.search(str(item.get("details_url") or "")) is not None
     ]
     if len(matches) != 1:
         raise AdmissionError("live check-run/app identity is missing or ambiguous")
     check = matches[0]
     app = check.get("app") or {}
     app_id = app.get("id")
-    if not isinstance(app_id, int) or app_id <= 0:
-        raise AdmissionError("live check app identity is missing")
-    if check.get("head_sha") not in (None, check_head):
+    if app_id != GITHUB_ACTIONS_APP_ID:
+        raise AdmissionError("live check app identity mismatch")
+    check_run_id = check.get("id")
+    if not isinstance(check_run_id, int) or check_run_id <= 0:
+        raise AdmissionError("live check-run identity is missing")
+    if check.get("head_sha") != check_head:
         raise AdmissionError("live check-run head identity mismatch")
     return {
         "check_name": check_name,
-        "check_run_id": check.get("id"),
+        "check_run_id": check_run_id,
         "check_app_id": app_id,
         "check_app_slug": app.get("slug"),
         "check_head": check_head,
         "workflow_run_id": str(run_id),
     }
+
+
+def resolve_live_check_head(args: argparse.Namespace) -> str:
+    """Select the check's actual head while keeping runner/workflow SHAs intact."""
+    if os.environ.get("GITHUB_EVENT_NAME") != "pull_request":
+        return args.check_head or args.head_oid
+    source_check_head = os.environ.get("OASIS7_CARGO_STAGE_CHECK_HEAD", "")
+    _require_oid(source_check_head, "source check head")
+    if source_check_head != args.head_oid:
+        raise AdmissionError("source check head does not match validated PR head")
+    return source_check_head
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -1063,7 +1079,7 @@ def main(argv: list[str] | None = None) -> int:
                 args.repo_root,
             )
             check = verify_live_check_identity(
-                args.repository, args.check_head or args.head_oid, args.run_id, args.check_name
+                args.repository, resolve_live_check_head(args), args.run_id, args.check_name
             )
             receipt = build_postrun_receipt(
                 preflight,
