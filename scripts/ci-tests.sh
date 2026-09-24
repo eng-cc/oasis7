@@ -240,6 +240,17 @@ run_operational_contract_tests() {
   run bash ./scripts/testnet-packages-windows-governed-closure.test.sh
   run_provider_remote_https_smoke
   run bash ./scripts/p2p-public-testnet-bootstrap-fresh-validator-host.test.sh
+  run bash ./scripts/p2p-public-testnet-rebuild-validators-triad-staggered.test.sh
+  run python3 ./scripts/p2p-public-testnet-validator-triad-authority.test.py
+  run python3 ./scripts/p2p-public-testnet-third-validator-admission.test.py
+  run python3 ./scripts/p2p-public-testnet-third-validator-host-staging.test.py
+  run python3 ./scripts/p2p-public-testnet-third-validator-runtime-status.test.py
+  run python3 ./scripts/p2p-public-testnet-validator-triad-host-adapter-contract.test.py
+  run python3 ./scripts/p2p-public-testnet-validator-triad-host-adapter-fd-no-leak.test.py
+  run python3 ./scripts/p2p-public-testnet-validator-triad-host-adapter-wrapper-fd.test.py
+  run python3 ./scripts/p2p-public-testnet-validator-triad-host-adapter-production-negative.test.py
+  run python3 ./scripts/p2p-public-testnet-validator-triad-identity-v2-admission.test.py
+  run python3 ./scripts/p2p-public-testnet-validator-triad-host-adapter-remote-backup.test.py
   run bash ./scripts/p2p-public-testnet-service-readback.test.sh
   run bash ./scripts/p2p-public-testnet-package-node-upgrade.test.sh
   run bash ./scripts/p2p-public-testnet-package-node-upgrade-health.test.sh
