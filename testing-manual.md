@@ -141,6 +141,7 @@
 - ordinary PR 的 `required-gate` 是 impact-scoped premerge 最小 blocking set：先拦截改动影响面的缺陷，再在不降低充分度的前提下优化速度；基础 required 含 `oasis7 + consensus + distfs + viewer`，GitHub 可按 planner 追加 `node + net/libp2p` support shard；
 - `full` 不是 ordinary PR 默认，只用于 release、高风险、历史缺陷升级、信号触发或 schedule 回归；planner 的 `scope=full` 仅表示 required tier 内 fail-closed 覆盖扩张，不等于选择 full tier；
 - `required-gate` 已补充 changed-path scope planner；
+- Required-gate P0 的规范目标见 [capability-selection contract](doc/engineering/workflow/source-of-truth.md#required-gate-capability-split) 与 [实施设计](doc/engineering/workflow/ci-required-gate-p0-on-demand.design.md)。S0 只采纳合同；兼容 reader/producer、runner、workflow、receipt、负例和 hosted 验证全部完成并经授权启用前，现有执行仍按 legacy 合同判定，文档合入本身不表示新选择器已生效。
 - `wasm-determinism-gate` 负责 `m1/m4/m5` hash / receipt evidence 独立 gate；
 - 若目标是“整应用充分测试”，仍需在此基础上叠加 UI 闭环层（S6）与压力层（S8）。
 
