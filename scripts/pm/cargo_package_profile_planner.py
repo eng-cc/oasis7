@@ -338,18 +338,29 @@ def _read_current_planner_task_from_github(repo: Path) -> dict[str, Any]:
     body = issue.get("body")
     if not isinstance(body, str):
         raise PlanError("live current planner task body is unavailable")
-    task_match = re.search(r"(?m)^task_uid:\s*(task_[0-9a-f]+)\s*$", body)
-    if task_match is None:
-        raise PlanError("live current planner task UID is missing")
-    if task_match.group(1) != CURRENT_PLANNER_TASK_UID:
-        raise PlanError("live current planner task UID mismatch")
-    pr_match = re.search(
-        rf"https://github\.com/{re.escape(CURRENT_PLANNER_REPOSITORY)}/pull/(\d+)\b",
+    task_uid_fields = re.findall(
+        r"(?mi)^[ \t]*(?:[-*][ \t]*)?task_uid[ \t]*[:=][ \t]*([^ \t\r\n]+)[ \t]*$",
         body,
     )
-    if pr_match is None:
+    if not task_uid_fields:
+        raise PlanError("live current planner task UID is missing")
+    if len(task_uid_fields) != 1:
+        raise PlanError("live current planner task UID is duplicated or ambiguous")
+    task_uid = task_uid_fields[0]
+    if re.fullmatch(r"task_[0-9a-f]+", task_uid) is None:
+        raise PlanError("live current planner task UID is malformed")
+    if task_uid != CURRENT_PLANNER_TASK_UID:
+        raise PlanError("live current planner task UID mismatch")
+    github_urls = re.findall(r"https://github\.com/[^\s<>`\"']+", body)
+    pr_urls = [url.rstrip(".,;") for url in github_urls if "/pull/" in url]
+    if not pr_urls:
         raise PlanError("live current planner reciprocal PR link is unavailable")
-    current_pr_number = int(pr_match.group(1))
+    if len(pr_urls) != 1:
+        raise PlanError("live current planner reciprocal PR link is duplicated or ambiguous")
+    pr_match = re.fullmatch(r"https://github\.com/([^/]+)/([^/]+)/pull/(\d+)", pr_urls[0])
+    if pr_match is None or f"{pr_match.group(1)}/{pr_match.group(2)}" != CURRENT_PLANNER_REPOSITORY:
+        raise PlanError("live current planner reciprocal PR link identity mismatch")
+    current_pr_number = int(pr_match.group(3))
 
     comment_result = subprocess.run(
         [
@@ -379,16 +390,20 @@ def _read_current_planner_task_from_github(repo: Path) -> dict[str, Any]:
     evidence = comment.get("body")
     if not isinstance(evidence, str):
         raise PlanError("live current planner task evidence body is unavailable")
-    task_evidence = re.search(
-        rf"(?:Task UID:\s*|identity authority=UID\s*){re.escape(task_match.group(1))}\b",
+    task_evidence = re.findall(
+        r"(?:\bTask UID:\s*|\bidentity authority=UID\s*|\bUID\s+)(task_[0-9a-f]+)\b",
         evidence,
     )
-    if task_evidence is None:
+    if task_evidence != [task_uid]:
         raise PlanError("live current planner task evidence UID mismatch")
-    base_match = re.search(r"trusted base ([0-9a-f]{40})\b", evidence)
+    base_matches = re.findall(
+        r"(?:trusted base |N1 PR #3997 merged at (?:commit=)?)([0-9a-f]{40})\b",
+        evidence,
+    )
     branch_match = re.search(r"branch ([^,\s]+)", evidence)
-    if base_match is None or branch_match is None:
+    if len(base_matches) != 1 or branch_match is None:
         raise PlanError("live current planner task base or branch is missing")
+    trusted_base = base_matches[0]
     pr_result = subprocess.run(
         ["gh", "api", f"repos/{CURRENT_PLANNER_REPOSITORY}/pulls/{current_pr_number}"],
         capture_output=True,
@@ -420,7 +435,7 @@ def _read_current_planner_task_from_github(repo: Path) -> dict[str, Any]:
     live_base_sha = base.get("sha")
     if not isinstance(live_base_sha, str) or OID_PATTERN.fullmatch(live_base_sha) is None:
         raise PlanError("live current planner PR base SHA is missing")
-    if not _is_ancestor(repo, base_match.group(1), live_base_sha):
+    if not _is_ancestor(repo, trusted_base, live_base_sha):
         raise PlanError("live current planner PR base is not descended from trusted task base")
     if head.get("ref") != branch_match.group(1):
         raise PlanError("live current planner PR head branch mismatch")
@@ -432,8 +447,8 @@ def _read_current_planner_task_from_github(repo: Path) -> dict[str, Any]:
     return {
         "repository": CURRENT_PLANNER_REPOSITORY,
         "issue_number": CURRENT_PLANNER_ISSUE,
-        "task_uid": task_match.group(1),
-        "initial_base": base_match.group(1),
+        "task_uid": task_uid,
+        "initial_base": trusted_base,
         "integration_base": live_base_sha,
         "branch": branch_match.group(1),
         "pr_number": current_pr_number,

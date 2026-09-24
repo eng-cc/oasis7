@@ -733,8 +733,10 @@ resolver = "2"
             "issue_url": "https://api.github.com/repos/eng-cc/oasis7/issues/3999",
             "html_url": "https://github.com/eng-cc/oasis7/issues/3999#issuecomment-5822600447",
             "body": (
-                f"identity authority=UID {task_uid}, canonical worktree {root}, "
-                f"branch source, trusted base {merged_commit};"
+                f"P1 is a code-side planner-authority leaf; canonical worktree {root}, "
+                f"branch task/engineering-cargo-standalone-lock-planner, UID {task_uid}, "
+                f"owner repository_health_engineer. Dependencies=N1 PR #3997 merged at {merged_commit} "
+                "and live authority readback."
             ),
         }
         pr = {
@@ -742,7 +744,7 @@ resolver = "2"
             "state": "open",
             "head": {
                 "sha": source_head,
-                "ref": "source",
+                "ref": "task/engineering-cargo-standalone-lock-planner",
                 "repo": {"full_name": "eng-cc/oasis7"},
             },
             "base": {
@@ -813,6 +815,71 @@ resolver = "2"
         ):
             with self.assertRaisesRegex(Exception, "reciprocal PR"):
                 self.api._read_current_planner_task_from_github(root)
+
+    def test_live_current_task_rejects_duplicate_or_conflicting_identity_fields(self) -> None:
+        temp, root, _predecessor_scope, _predecessor_head, merged_commit, source_head = self._authority_fixture()
+        self.addCleanup(temp.cleanup)
+        task_uid = self.api.CURRENT_PLANNER_TASK_UID
+        issue = {
+            "number": 3999,
+            "body": (
+                f"task_uid: {task_uid}\n"
+                "PR: https://github.com/eng-cc/oasis7/pull/4921\n"
+            ),
+        }
+        evidence = {
+            "issue_url": "https://api.github.com/repos/eng-cc/oasis7/issues/3999",
+            "html_url": "https://github.com/eng-cc/oasis7/issues/3999#issuecomment-5822600447",
+            "body": (
+                f"identity authority=UID {task_uid}, canonical worktree {root}, "
+                f"branch source, trusted base {merged_commit};"
+            ),
+        }
+        pr = {
+            "number": 4921,
+            "state": "open",
+            "head": {
+                "sha": source_head,
+                "ref": "source",
+                "repo": {"full_name": "eng-cc/oasis7"},
+            },
+            "base": {
+                "sha": merged_commit,
+                "ref": "main",
+                "repo": {"full_name": "eng-cc/oasis7"},
+            },
+        }
+        real_run = self.api.subprocess.run
+
+        def read_task(issue_payload):
+            def fake_gh_run(command, **kwargs):
+                if command[0] != "gh":
+                    return real_run(command, **kwargs)
+                if "/issues/comments/" in command[2]:
+                    payload = evidence
+                elif "/pulls/" in command[2]:
+                    payload = pr
+                else:
+                    payload = issue_payload
+                return subprocess.CompletedProcess(command, 0, json.dumps(payload), "")
+
+            with patch.object(self.api, "_canonical_repository", return_value="eng-cc/oasis7"), patch.object(
+                self.api.subprocess, "run", side_effect=fake_gh_run
+            ):
+                return self.api._read_current_planner_task_from_github(root)
+
+        self.assertEqual(4921, read_task(issue)["pr_number"])
+        invalid_issue_bodies = (
+            issue["body"] + f"task_uid: {task_uid}\n",
+            issue["body"] + "task_uid: task_00000000000000000000000000000000\n",
+            issue["body"] + "PR: https://github.com/eng-cc/oasis7/pull/4921\n",
+            issue["body"] + "PR: https://github.com/eng-cc/oasis7/pull/4922\n",
+            issue["body"] + "PR: https://github.com/other/repository/pull/4921\n",
+        )
+        for body in invalid_issue_bodies:
+            with self.subTest(issue_body=body):
+                with self.assertRaisesRegex(self.api.PlanError, "duplicate|ambiguous|mismatch"):
+                    read_task({**issue, "body": body})
 
     def test_current_task_identity_rejects_fabricated_match_and_wrong_head_base(self) -> None:
         temp, root, predecessor_scope, predecessor_head, merged_commit, source_head = self._authority_fixture()
