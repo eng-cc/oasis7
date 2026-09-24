@@ -30,6 +30,10 @@ for required_contract in \
   'OASIS7_CI_NEEDS_PYTHON' \
   'OASIS7_CI_NEEDS_MARKDOWN' \
   'Cargo tooling contracts require the planned Rust toolchain resource' \
+  'net libp2p selector must match its planner-derived net selector' \
+  'viewer WASM selector must match its planner-derived viewer selector' \
+  'pixel-world WASM selector must match its planner-derived library selector' \
+  'Rust baseline selector must match the planned Rust toolchain resource' \
   'must be explicitly true or false' \
   'unsupported required-gate execution contract'; do
   if ! grep -Fq "$required_contract" <<<"$validator_source"; then
@@ -103,7 +107,7 @@ for strict_mapping in \
   'OASIS7_CI_RUN_PIXEL_WORLD_BRIDGE_LIB_TESTS OASIS7_CI_NEEDS_RUST_TOOLCHAIN OASIS7_CI_NEEDS_SYSTEM_DEPS OASIS7_CI_NEEDS_WASM_TARGET' \
   'OASIS7_CI_RUN_PIXEL_WORLD_BRIDGE_WASM_CHECK OASIS7_CI_NEEDS_RUST_TOOLCHAIN OASIS7_CI_NEEDS_SYSTEM_DEPS OASIS7_CI_NEEDS_WASM_TARGET' \
   'OASIS7_CI_RUN_LAUNCHER_WEB_BUILD OASIS7_CI_NEEDS_RUST_TOOLCHAIN OASIS7_CI_NEEDS_NODE OASIS7_CI_NEEDS_SYSTEM_DEPS OASIS7_CI_NEEDS_WASM_TARGET OASIS7_CI_NEEDS_TRUNK' \
-  'OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS OASIS7_CI_NEEDS_RUST_TOOLCHAIN' \
+  'OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS OASIS7_CI_NEEDS_RUST_TOOLCHAIN OASIS7_CI_NEEDS_SYSTEM_DEPS' \
   'OASIS7_CI_RUN_SCENARIO_REGRESSION OASIS7_CI_NEEDS_RUST_TOOLCHAIN' \
   'OASIS7_CI_RUN_DOC_CHECKER_CONTRACTS OASIS7_CI_NEEDS_PYTHON OASIS7_CI_NEEDS_MARKDOWN' \
   'OASIS7_CI_RUN_RUST_BASELINE OASIS7_CI_NEEDS_RUST_TOOLCHAIN' \
@@ -127,7 +131,7 @@ for workflow_mapping in \
   '"run_pixel_world_bridge_lib_tests": ("needs_rust_toolchain", "needs_system_deps", "needs_wasm_target")' \
   '"run_pixel_world_bridge_wasm_check": ("needs_rust_toolchain", "needs_system_deps", "needs_wasm_target")' \
   '"run_launcher_web_build": ("needs_rust_toolchain", "needs_node", "needs_system_deps", "needs_wasm_target", "needs_trunk")' \
-  '"run_oasis7_workspace_support_crate_tests": ("needs_rust_toolchain",)' \
+  '"run_oasis7_workspace_support_crate_tests": ("needs_rust_toolchain", "needs_system_deps")' \
   '"run_scenario_regression": ("needs_rust_toolchain",)' \
   '"run_doc_checker_contracts": ("needs_python", "needs_markdown")' \
   '"run_cargo_tooling_contracts": ("needs_rust_toolchain",)' \
@@ -147,6 +151,14 @@ for selector_field in \
     exit 1
   fi
 done
+
+system_deps_step="$(sed -n '/name: Install system deps/,/name: Install product-document Markdown parser/p' "$workflow")"
+if ! grep -Fq "outputs.needs_system_deps == 'true'" <<<"$system_deps_step" || \
+   ! grep -Fq "outputs.execution_contract != 'required-domain-split/v1'" <<<"$system_deps_step" || \
+   ! grep -Fq "outputs.run_oasis7_workspace_support_crate_tests == 'true'" <<<"$system_deps_step"; then
+  echo "versioned system-dependency installation must follow planned resources while legacy keeps its selector fallback" >&2
+  exit 1
+fi
 
 python3 - "$ROOT_DIR" "$workflow" <<'PY'
 import json
@@ -238,6 +250,33 @@ with tempfile.TemporaryDirectory(prefix="oasis7-workflow-preflight-") as temp:
     expected_rust = "run_pixel_world_bridge_lib_tests requires planned resources: needs_rust_toolchain, needs_wasm_target"
     if rejected_rust.returncode == 0 or expected_rust not in rejected_rust.stderr:
         raise SystemExit("workflow artifact preflight accepted a selected pixel-world WASM check without Rust/WASM resources")
+
+    mismatched_alias = dict(mismatched)
+    mismatched_alias.update(
+        run_pixel_world_bridge_lib_tests="false",
+        run_pixel_world_bridge_wasm_check="true",
+        run_rust_baseline="true",
+        needs_rust_toolchain="true",
+        needs_system_deps="true",
+        needs_wasm_target="true",
+    )
+    rejected_alias = invoke(mismatched_alias)
+    if rejected_alias.returncode == 0 or "run_pixel_world_bridge_wasm_check must match planner-derived run_pixel_world_bridge_lib_tests" not in rejected_alias.stderr:
+        raise SystemExit("workflow artifact preflight accepted contradictory planner-derived pixel-world aliases")
+
+    missing_workspace_deps = dict(mismatched)
+    missing_workspace_deps.update(
+        run_pixel_world_bridge_lib_tests="false",
+        run_pixel_world_bridge_wasm_check="false",
+        run_oasis7_workspace_support_crate_tests="true",
+        run_rust_baseline="true",
+        needs_rust_toolchain="true",
+        needs_system_deps="false",
+    )
+    rejected_workspace = invoke(missing_workspace_deps)
+    expected_workspace = "run_oasis7_workspace_support_crate_tests requires planned resources: needs_system_deps"
+    if rejected_workspace.returncode == 0 or expected_workspace not in rejected_workspace.stderr:
+        raise SystemExit("workflow artifact preflight accepted workspace-support tests without native system dependencies")
 PY
 
 macos_package_job="$(sed -n '/^  testnet-packages-macos-arm64-contract:/,/^  public-testnet-fleet-health-contract:/p' "$workflow")"

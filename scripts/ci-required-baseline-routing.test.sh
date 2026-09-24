@@ -73,6 +73,18 @@ ci_fixture_assert_lacks 'TOOL:'
 grep -Fq 'Cargo tooling contracts require the planned Rust toolchain resource' "$ci_fixture_work/output.log"
 
 if ci_fixture_run required strict \
+  OASIS7_CI_RUN_PIXEL_WORLD_BRIDGE_WASM_CHECK=true \
+  OASIS7_CI_RUN_RUST_BASELINE=true \
+  OASIS7_CI_NEEDS_RUST_TOOLCHAIN=true \
+  OASIS7_CI_NEEDS_SYSTEM_DEPS=true \
+  OASIS7_CI_NEEDS_WASM_TARGET=true; then
+  echo "pixel-world WASM selector must not diverge from its planner-derived library selector" >&2
+  exit 1
+fi
+ci_fixture_assert_lacks 'TOOL:cargo:'
+grep -Fq 'pixel-world WASM selector must match its planner-derived library selector' "$ci_fixture_work/output.log"
+
+if ci_fixture_run required strict \
   OASIS7_CI_RUN_PIXEL_WORLD_BRIDGE_LIB_TESTS=true \
   OASIS7_CI_RUN_PIXEL_WORLD_BRIDGE_WASM_CHECK=true; then
   echo "selected pixel-world WASM bridge must reject missing Rust and WASM resources" >&2
@@ -92,6 +104,16 @@ if ci_fixture_run required strict \
 fi
 ci_fixture_assert_lacks 'TOOL:cargo:'
 grep -Fq 'OASIS7_CI_RUN_PIXEL_WORLD_BRIDGE_LIB_TESTS requires planned resource OASIS7_CI_NEEDS_WASM_TARGET' "$ci_fixture_work/output.log"
+
+if ci_fixture_run required strict \
+  OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS=true \
+  OASIS7_CI_RUN_RUST_BASELINE=true \
+  OASIS7_CI_NEEDS_RUST_TOOLCHAIN=true; then
+  echo "selected workspace-support launcher tests must reject missing system dependencies" >&2
+  exit 1
+fi
+ci_fixture_assert_lacks 'SCRIPT:'
+grep -Fq 'OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS requires planned resource OASIS7_CI_NEEDS_SYSTEM_DEPS' "$ci_fixture_work/output.log"
 
 if ci_fixture_run required strict \
   OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS=true \

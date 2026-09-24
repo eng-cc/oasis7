@@ -240,8 +240,18 @@ class IntegrationTests(unittest.TestCase):
 
  def test_required_gate_registers_review_plan_suite(self):
   driver=(HERE.parents[1]/'scripts/ci-tests.sh').read_text()
-  operational=driver.split('run_operational_contract_tests() {',1)[1].split('\n}',1)[0]
-  self.assertIn('run python3 ./scripts/pm/review-plan.test.py',operational)
+  def function_body(name):
+   return driver.split(name+'() {',1)[1].split('\n}',1)[0]
+  workflow_operational=function_body('run_workflow_governance_operational_contract_tests')
+  self.assertIn('run python3 ./scripts/pm/review-plan.test.py',workflow_operational)
+  required=function_body('run_required_gate_capability_contracts')
+  self.assertIn('OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS run_workflow_governance_contract_tests',required)
+  legacy=function_body('run_legacy_mixed_operational_contract_tests')
+  self.assertIn('run_workflow_governance_operational_contract_tests',legacy)
+  full_capabilities=function_body('run_all_required_gate_capability_contract_tests')
+  self.assertIn('run_workflow_governance_contract_tests',full_capabilities)
+  for full_tier in ('run_full_core_tier_tests','run_full_support_tier_tests','run_full_required_superset'):
+   self.assertIn('run_all_required_gate_capability_contract_tests',function_body(full_tier))
 
  def test_real_parallel_merge_keeps_source_and_tests_current_base(self):
   self.assertTrue((HERE/'integration_ci.py').exists(),'manual integration recovery helper missing')

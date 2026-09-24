@@ -1069,6 +1069,11 @@ wasm_build_output="$(plan_for_path crates/oasis7_wasm_build/src/lib.rs)"
 assert_key_equals "$wasm_build_output" scope targeted
 assert_key_equals "$wasm_build_output" run_oasis7_workspace_support_crate_tests true
 assert_key_equals "$wasm_build_output" run_launcher_web_build false
+assert_key_equals "$wasm_build_output" needs_rust_toolchain true
+assert_key_equals "$wasm_build_output" needs_system_deps true
+assert_key_equals "$wasm_build_output" needs_wasm_target false
+assert_key_equals "$wasm_build_output" needs_node false
+assert_key_equals "$wasm_build_output" needs_trunk false
 assert_reason_contains "$wasm_build_output" "wasm_support:crates/oasis7_wasm_build/src/lib.rs"
 
 wasm_store_output="$(plan_for_path crates/oasis7_wasm_store/src/lib.rs)"

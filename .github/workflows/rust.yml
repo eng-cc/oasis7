@@ -488,7 +488,7 @@ jobs:
                   "run_pixel_world_bridge_lib_tests": ("needs_rust_toolchain", "needs_system_deps", "needs_wasm_target"),
                   "run_pixel_world_bridge_wasm_check": ("needs_rust_toolchain", "needs_system_deps", "needs_wasm_target"),
                   "run_launcher_web_build": ("needs_rust_toolchain", "needs_node", "needs_system_deps", "needs_wasm_target", "needs_trunk"),
-                  "run_oasis7_workspace_support_crate_tests": ("needs_rust_toolchain",),
+                  "run_oasis7_workspace_support_crate_tests": ("needs_rust_toolchain", "needs_system_deps"),
                   "run_scenario_regression": ("needs_rust_toolchain",),
                   "run_operational_contracts": (),
                   "run_workflow_governance_contracts": (),
@@ -575,7 +575,15 @@ jobs:
         if: ${{ steps.scope.outputs.needs_trunk == 'true' }}
         run: cargo install trunk --locked
       - name: Install system deps
-        if: ${{ steps.scope.outputs.needs_system_deps == 'true' || steps.scope.outputs.run_oasis7_required_tests == 'true' || steps.scope.outputs.run_viewer_contract_tests == 'true' || steps.scope.outputs.run_viewer_wasm_check == 'true' || steps.scope.outputs.run_viewer_perf_smoke == 'true' || steps.scope.outputs.run_launcher_web_build == 'true' || steps.scope.outputs.run_oasis7_workspace_support_crate_tests == 'true' }}
+        if: >-
+          ${{ steps.scope.outputs.needs_system_deps == 'true' ||
+              (steps.scope.outputs.execution_contract != 'required-domain-split/v1' &&
+               (steps.scope.outputs.run_oasis7_required_tests == 'true' ||
+                steps.scope.outputs.run_viewer_contract_tests == 'true' ||
+                steps.scope.outputs.run_viewer_wasm_check == 'true' ||
+                steps.scope.outputs.run_viewer_perf_smoke == 'true' ||
+                steps.scope.outputs.run_launcher_web_build == 'true' ||
+                steps.scope.outputs.run_oasis7_workspace_support_crate_tests == 'true')) }}
         run: |
           apt_options=(
             -o Acquire::Retries=3

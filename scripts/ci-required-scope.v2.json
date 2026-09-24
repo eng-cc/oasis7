@@ -13,7 +13,7 @@
     "viewer_performance_report": ["node", "system_deps"],
     "pixel_world_bridge": ["rust_toolchain", "system_deps", "wasm_target"],
     "launcher_web": ["rust_toolchain", "node", "system_deps", "wasm_target", "trunk"],
-    "workspace_support": ["rust_toolchain"],
+    "workspace_support": ["rust_toolchain", "system_deps"],
     "scenario_regression": ["rust_toolchain"],
     "operational_contracts": [],
     "packaging_contracts": [],
