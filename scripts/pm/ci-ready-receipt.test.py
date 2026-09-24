@@ -14,11 +14,19 @@ UID="task_12345678901234567890123456789012"
 def pr(): return {"draft":True,"state":"open","merged":False,"body":f"Task: {UID}\n\nRefs #1","head":{"sha":"a"*40},"base":{"sha":"b"*40,"ref":"main"}}
 def plan():
   p={"scope":"targeted","selected_capabilities":"pixel_world_bridge;viewer_js_required","reason_summary":"fixture","changed_path_count":"1","planner_config_sha256":"sha256:" + "c"*64}; p.update({k:"false" for k in M.RUN_FIELDS}); p["run_rust_baseline"]="true"; p["run_pixel_world_bridge_lib_tests"]="true"; p["run_pixel_world_bridge_wasm_check"]="true"; return p
-def run(conclusion="success",app=42): return {"id":9,"name":"required-gate","status":"completed","conclusion":conclusion,"completed_at":"2026-07-14T00:00:00Z","head_sha":"a"*40,"pull_requests":[{"number":7,"base":{"sha":"b"*40},"head":{"sha":"a"*40}}],"app":{"id":app},"output":{"summary":f"<!-- {M.PLAN_MARKER} -->\n```json\n{json.dumps(plan())}\n```"}}
+def versioned_plan():
+  p=plan(); p["selected_capabilities"]="packaging_contracts;pixel_world_bridge;viewer_js_required"
+  p["execution_contract"]=M.EXECUTION_CONTRACT
+  p.update({field:"false" for field in M.VERSIONED_SELECTOR_FIELDS})
+  p["run_packaging_contracts"]="true"
+  p.update({field:"false" for field in M.VERSIONED_RESOURCE_FIELDS})
+  p["needs_python"]="true"; p["needs_markdown"]="true"
+  return p
+def run(conclusion="success",app=42,planner=None): return {"id":9,"name":"required-gate","status":"completed","conclusion":conclusion,"completed_at":"2026-07-14T00:00:00Z","head_sha":"a"*40,"pull_requests":[{"number":7,"base":{"sha":"b"*40},"head":{"sha":"a"*40}}],"app":{"id":app},"output":{"summary":f"<!-- {M.PLAN_MARKER} -->\n```json\n{json.dumps(planner if planner is not None else plan())}\n```"}}
 def null_summary_run(run_id=12345):
   r=run(); r["output"]={"summary":None,"text":None}; r["details_url"]=f"https://github.com/eng-cc/oasis7/actions/runs/{run_id}/job/9"; return r
 def artifact(run_id=12345,expired=False):
-  return {"id":77,"name":"oasis7-required-plan-v1","expired":expired,"workflow_run":{"id":run_id}}
+  return {"id":77,"name":"oasis7-required-plan-v1","expired":expired,"created_at":"2026-09-25T10:10:00Z","workflow_run":{"id":run_id}}
 def envelope(run_id=12345,repository="eng-cc/oasis7",head_oid="a"*40,base_oid="b"*40,check_name="required-gate",planner=None):
   return {"schema":"oasis7-required-plan-v1","repository":repository,"workflow_run_id":run_id,
     "head_oid":head_oid,"base_oid":base_oid,"check_name":check_name,"planner":planner if planner is not None else plan()}
@@ -44,11 +52,29 @@ def stage_artifact_zip(receipt=None):
   out=io.BytesIO()
   with zipfile.ZipFile(out,"w") as z: z.writestr("post-run-receipt.json",json.dumps(receipt if receipt is not None else stage_receipt()))
   return out.getvalue()
+def action_job(job_id,name,runner,*,run_id=12345,attempt=2,check_run_id=None,status="completed",conclusion="success",head_sha="f"*40):
+  return {"id":job_id,"run_id":run_id,"run_attempt":attempt,"name":name,
+    "status":status,"conclusion":conclusion,"head_sha":head_sha,
+    "labels":[runner] if runner else [],
+    "check_run_url":f"https://api.github.com/repos/eng-cc/oasis7/check-runs/{check_run_id if check_run_id is not None else job_id+100000}"}
+def selected_action_context(children,*,run_id=12345,attempt=2,gate_job_id=9009,gate_check_id=9,artifact_created="2026-09-25T10:10:00Z"):
+  gate=action_job(gate_job_id,"required-gate","ubuntu-24.04",run_id=run_id,attempt=attempt,check_run_id=gate_check_id)
+  gate.update(started_at="2026-09-25T10:00:00Z",completed_at="2026-09-25T10:20:00Z")
+  plan_meta=artifact(run_id); plan_meta["created_at"]=artifact_created
+  def read(*args):
+    path=args[-1]
+    if path==f"repos/eng-cc/oasis7/actions/runs/{run_id}/artifacts?per_page=100&page=1":return {"artifacts":[plan_meta]}
+    if path==f"repos/eng-cc/oasis7/actions/jobs/{gate_job_id}":return gate
+    if path==f"repos/eng-cc/oasis7/actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100&page=1":return {"jobs":[gate,*children]}
+    raise AssertionError(path)
+  return read
 
 class ReceiptTest(unittest.TestCase):
-  def api(self, r=None, runs=None):
+  def api(self, r=None, runs=None, actions=None):
     def read(*args):
       path=args[-1]
+      if actions is not None and ("/actions/jobs/" in path or "/attempts/" in path or "/artifacts?" in path):
+        return actions(*args)
       if '/pulls/' in path:return r or pr()
       if '/check-runs?' in path:return {"check_runs":runs if runs is not None else [run()]}
       if '/runs?' in path:return {'workflow_runs':[]}
@@ -81,6 +107,58 @@ class ReceiptTest(unittest.TestCase):
     self.assertEqual(issued["integration_base_oid"],issued["base_oid"])
     self.assertEqual("main", issued["base_ref"])
     self.assertEqual("ordinary_pr", issued["ci_validation_mode"])
+
+  def test_versioned_receipt_records_and_binds_the_execution_contract(self):
+    versioned_run=run(planner=versioned_plan())
+    versioned_run["output"]={"summary":None,"text":None}
+    versioned_run["details_url"]="https://github.com/eng-cc/oasis7/actions/runs/12345/job/9009"
+    children=[
+      action_job(9101,M.WINDOWS_ROLLOUT_JOB,"windows-2022",status="completed",conclusion="skipped"),
+      action_job(9102,M.MACOS_PACKAGE_JOB,"ubuntu-24.04",check_run_id=9202),
+      *(action_job(9110+i,f"{M.FLEET_HEALTH_JOB} ({runner})",runner,status="completed",conclusion="skipped")
+        for i,runner in enumerate(M.FLEET_HEALTH_RUNNERS)),
+    ]
+    actions=selected_action_context(children)
+    argv=[str(P),"--repository","eng-cc/oasis7","--task-uid",UID,"--task-issue-number","1","--pr-number","7","--check-app-id","42","--planner-digest","auto"]
+    output=io.StringIO()
+    with self.api(runs=[versioned_run],actions=actions),patch.object(M,"artifact_bytes",return_value=artifact_zip(envelope(planner=versioned_plan()))):
+      planner=M.planner_for_run("eng-cc/oasis7",versioned_run,base_oid="b"*40,head_oid="a"*40)
+      digest=M.hashlib.sha256(json.dumps(planner,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+      argv[-1]=digest
+      with patch.object(sys,"argv",argv),redirect_stdout(output): M.main()
+    issued=json.loads(output.getvalue())
+    self.assertEqual(M.EXECUTION_CONTRACT,issued["execution_contract"])
+    self.assertEqual(M.EXECUTION_CONTRACT,issued["planner"]["execution_contract"])
+    for field in M.VERSIONED_SELECTOR_FIELDS:
+      self.assertIn(field,issued["planner"])
+    identity=M.review_evidence_identity(issued)
+    self.assertEqual(M.EXECUTION_CONTRACT,identity["execution_contract"])
+    for field in M.VERSIONED_SELECTOR_FIELDS:
+      self.assertEqual(issued["planner"][field],identity[field])
+    child_evidence=issued["planner"]["selected_child_job_outcomes"]
+    self.assertEqual(12345,child_evidence["workflow_run_id"])
+    self.assertEqual(2,child_evidence["run_attempt"])
+    self.assertEqual([M.MACOS_PACKAGE_JOB],[job["name"] for job in child_evidence["jobs"]])
+    tampered=json.loads(json.dumps(issued))
+    tampered["planner"]["run_packaging_contracts"]=False
+    tampered["planner"]["selected_capabilities"].remove("packaging_contracts")
+    with self.assertRaisesRegex(ValueError,"planner digest mismatch"):
+      M.review_evidence_identity(tampered)
+    resource_tampered=json.loads(json.dumps(issued))
+    resource_tampered["planner"]["needs_node"]=True
+    with self.assertRaisesRegex(ValueError,"planner digest mismatch"):
+      M.review_evidence_identity(resource_tampered)
+    child_tampered=json.loads(json.dumps(issued))
+    child_tampered["planner"]["selected_child_job_outcomes"]["jobs"][0]["check_run_id"]+=1
+    with self.assertRaisesRegex(ValueError,"planner digest mismatch"):
+      M.review_evidence_identity(child_tampered)
+    contradictory=json.loads(json.dumps(issued))
+    contradictory["planner"]["run_packaging_contracts"]=False
+    contradictory["planner_digest"]=M.hashlib.sha256(
+      json.dumps(contradictory["planner"],sort_keys=True,separators=(",",":")).encode()
+    ).hexdigest()
+    with self.assertRaisesRegex(ValueError,"contradicts selected capabilities"):
+      M.review_evidence_identity(contradictory)
 
   def test_success(self):
     with self.api(): self.assertEqual("a"*40,M.live("eng-cc/oasis7",UID,1,7,"required-gate","42")[3])
@@ -163,6 +241,45 @@ class ReceiptTest(unittest.TestCase):
     ).hexdigest()
     self.assertNotEqual(digest(planner), digest(changed_planner),
                         "non-Rust gate selector changes must alter planner authority")
+
+  def test_versioned_planner_digest_binds_contract_and_each_new_selector(self):
+    legacy=M.canonical_planner(plan())
+    versioned=M.canonical_planner(versioned_plan())
+    digest=lambda value: M.hashlib.sha256(
+      json.dumps(value,sort_keys=True,separators=(",",":")).encode()
+    ).hexdigest()
+    self.assertNotIn("execution_contract",legacy)
+    self.assertNotIn("run_packaging_contracts",legacy)
+    self.assertEqual(M.EXECUTION_CONTRACT,versioned["execution_contract"])
+    self.assertNotEqual(digest(legacy),digest(versioned))
+    for capability in M.VERSIONED_SELECTOR_CAPABILITIES.values():
+      changed_raw=versioned_plan()
+      selected={"packaging_contracts","pixel_world_bridge","viewer_js_required"}
+      if capability in selected:
+        selected.remove(capability)
+      else:
+        selected.add(capability)
+      changed_raw["selected_capabilities"]=";".join(sorted(selected))
+      for selector, selected_capability in M.VERSIONED_SELECTOR_CAPABILITIES.items():
+        changed_raw[selector]="true" if selected_capability in selected else "false"
+      changed=M.canonical_planner(changed_raw)
+      self.assertNotEqual(digest(versioned),digest(changed),capability)
+    changed_resource=versioned_plan(); changed_resource["needs_node"]="true"
+    self.assertNotEqual(digest(versioned),digest(M.canonical_planner(changed_resource)),"needs_node")
+
+  def test_planner_rejects_unknown_partial_and_mixed_execution_contracts(self):
+    unknown=versioned_plan(); unknown["execution_contract"]="required-domain-split/v999"
+    partial=versioned_plan(); partial.pop("run_doc_checker_contracts")
+    mixed=plan(); mixed["run_packaging_contracts"]="false"
+    noncanonical=versioned_plan(); noncanonical["run_packaging_contracts"]="TRUE"
+    nonstring=versioned_plan(); nonstring["run_packaging_contracts"]=True
+    resource_partial=versioned_plan(); resource_partial.pop("needs_wasm_target")
+    resource_nonstring=versioned_plan(); resource_nonstring["needs_node"]=False
+    baseline_resource_missing=versioned_plan(); baseline_resource_missing["needs_python"]="false"
+    for raw in (unknown,partial,mixed,noncanonical,nonstring,resource_partial,resource_nonstring,baseline_resource_missing):
+      with self.subTest(raw=raw):
+        with self.assertRaisesRegex(SystemExit,"execution[-_]contract|incomplete|versioned|baseline"):
+          M.canonical_planner(raw)
   def test_invalid_or_missing_capability_selection_fails_closed(self):
     for selected in (None,"viewer_js_required;pixel_world_bridge","viewer-js"):
       raw=plan()
@@ -245,11 +362,28 @@ class ReceiptTest(unittest.TestCase):
   def test_uncertain_missing_planner(self):
     bad=run(); bad["output"]={"summary":"no marker"}
     with self.assertRaisesRegex(SystemExit,"uncertain"): M.planner_from_run(bad)
+  def test_selected_children_require_same_run_job_identity(self):
+    selected=run(planner={**plan(),"run_operational_contracts":"true"})
+    planner=M.canonical_planner({**plan(),"run_operational_contracts":"true"})
+    digest=M.hashlib.sha256(json.dumps(planner,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+    argv=[str(P),"--repository","eng-cc/oasis7","--task-uid",UID,"--task-issue-number","1","--pr-number","7","--check-app-id","42","--planner-digest",digest]
+    with self.api(runs=[selected]),patch.object(sys,"argv",argv),redirect_stdout(io.StringIO()):
+      with self.assertRaisesRegex(SystemExit,"selected child jobs require same-run workflow attempt evidence"):
+        M.main()
   def planner_from_artifact(self,meta=None,payload=None,data=None,run_id=12345):
     check=null_summary_run(run_id)
     artifacts={"artifacts":[meta if meta is not None else artifact(run_id)]}
     blob=artifact_zip(payload) if data is None else data
     with patch.object(M,"gh",return_value=artifacts),patch.object(M,"artifact_bytes",return_value=blob,create=True):
+      return M.planner_for_run("eng-cc/oasis7",check,base_oid="b"*40,head_oid="a"*40)
+  def planner_with_selected_children(self,raw,children,*,run_id=12345,attempt=2,gate_job_id=9009,gate_check_id=9,artifact_created="2026-09-25T10:10:00Z"):
+    check=null_summary_run(run_id)
+    check["id"]=gate_check_id
+    check["details_url"]=f"https://github.com/eng-cc/oasis7/actions/runs/{run_id}/job/{gate_job_id}"
+    payload=envelope(run_id=run_id,planner=raw)
+    actions=selected_action_context(children,run_id=run_id,attempt=attempt,
+      gate_job_id=gate_job_id,gate_check_id=gate_check_id,artifact_created=artifact_created)
+    with patch.object(M,"gh",side_effect=actions),patch.object(M,"artifact_bytes",return_value=artifact_zip(payload)):
       return M.planner_for_run("eng-cc/oasis7",check,base_oid="b"*40,head_oid="a"*40)
   def test_null_summary_uses_same_workflow_run_planner_artifact(self):
     self.assertEqual("targeted",self.planner_from_artifact()["scope"])
@@ -277,6 +411,58 @@ class ReceiptTest(unittest.TestCase):
         payload=envelope(**changed)
         with self.assertRaisesRegex(SystemExit,"mismatch|wrong|uncertain"):
           self.planner_from_artifact(payload=payload)
+  def test_versioned_packaging_selection_requires_mac_and_permits_unselected_skips(self):
+    children=[
+      action_job(9101,M.WINDOWS_ROLLOUT_JOB,"windows-2022",status="completed",conclusion="skipped"),
+      action_job(9102,M.MACOS_PACKAGE_JOB,"ubuntu-24.04",check_run_id=9202),
+      *(action_job(9110+i,f"{M.FLEET_HEALTH_JOB} ({runner})",runner,status="completed",conclusion="skipped")
+        for i,runner in enumerate(M.FLEET_HEALTH_RUNNERS)),
+    ]
+    raw=versioned_plan()
+    planner=self.planner_with_selected_children(raw,children)
+    outcome=planner["selected_child_job_outcomes"]
+    self.assertEqual(12345,outcome["workflow_run_id"])
+    self.assertEqual(2,outcome["run_attempt"])
+    self.assertEqual(9009,outcome["required_gate_job_id"])
+    self.assertEqual(9,outcome["required_gate_check_run_id"])
+    self.assertEqual([M.MACOS_PACKAGE_JOB],[job["name"] for job in outcome["jobs"]])
+    source_digest=M.hashlib.sha256(json.dumps(M.canonical_planner(raw),sort_keys=True,separators=(",",":")).encode()).hexdigest()
+    self.assertEqual(source_digest,outcome["source_planner_digest"])
+  def test_legacy_operational_selection_requires_windows_macos_and_all_fleet_children(self):
+    raw=plan(); raw["run_operational_contracts"]="true"
+    children=[
+      action_job(9101,M.WINDOWS_ROLLOUT_JOB,"windows-2022"),
+      action_job(9102,M.MACOS_PACKAGE_JOB,"ubuntu-24.04"),
+      *(action_job(9110+i,f"{M.FLEET_HEALTH_JOB} ({runner})",runner)
+        for i,runner in enumerate(M.FLEET_HEALTH_RUNNERS)),
+    ]
+    planner=self.planner_with_selected_children(raw,children)
+    names={job["name"] for job in planner["selected_child_job_outcomes"]["jobs"]}
+    expected={M.WINDOWS_ROLLOUT_JOB,M.MACOS_PACKAGE_JOB}
+    expected.update(f"{M.FLEET_HEALTH_JOB} ({runner})" for runner in M.FLEET_HEALTH_RUNNERS)
+    self.assertEqual(expected,names)
+  def test_selected_child_failure_cancelled_skipped_or_missing_fails_closed(self):
+    raw=versioned_plan()
+    valid=action_job(9102,M.MACOS_PACKAGE_JOB,"ubuntu-24.04",check_run_id=9202)
+    cases=(
+      ("failed",[{**valid,"conclusion":"failure"}]),
+      ("cancelled",[{**valid,"conclusion":"cancelled"}]),
+      ("skipped",[{**valid,"conclusion":"skipped"}]),
+      ("missing",[]),
+    )
+    for label,mac_jobs in cases:
+      children=[action_job(9101,M.WINDOWS_ROLLOUT_JOB,"windows-2022",status="completed",conclusion="skipped"),*mac_jobs]
+      with self.subTest(label=label):
+        with self.assertRaisesRegex(SystemExit,"selected child job"):
+          self.planner_with_selected_children(raw,children)
+  def test_selected_child_wrong_attempt_and_plan_artifact_outside_attempt_fail_closed(self):
+    raw=versioned_plan()
+    mac=action_job(9102,M.MACOS_PACKAGE_JOB,"ubuntu-24.04",check_run_id=9202,attempt=1)
+    with self.assertRaisesRegex(SystemExit,"wrong workflow attempt"):
+      self.planner_with_selected_children(raw,[mac])
+    mac=action_job(9102,M.MACOS_PACKAGE_JOB,"ubuntu-24.04",check_run_id=9202)
+    with self.assertRaisesRegex(SystemExit,"not bound to required-gate workflow attempt"):
+      self.planner_with_selected_children(raw,[mac],artifact_created="2026-09-25T10:30:00Z")
   def test_pre_envelope_trusted_workflow_accepts_only_complete_full_coverage(self):
     proof={"workflow_run_id":12345,"workflow_sha":"b"*40,
       "workflow_ref":"eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main",

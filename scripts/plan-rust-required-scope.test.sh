@@ -2,15 +2,17 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+VERSIONED_TEST_CONFIG="$ROOT_DIR/scripts/fixtures/ci-required-scope.versioned-test.json"
 
 plan_for_path() {
   "$ROOT_DIR/scripts/plan-rust-required-scope.sh" \
     --event-name pull_request \
+    --config "$VERSIONED_TEST_CONFIG" \
     --changed-path "$1"
 }
 
 plan_for_paths() {
-  local args=(--event-name pull_request)
+  local args=(--event-name pull_request --config "$VERSIONED_TEST_CONFIG")
   local path
   for path in "$@"; do
     args+=(--changed-path "$path")
@@ -79,6 +81,9 @@ assert_key_equals "$product_doc_output" scope minimal
 assert_key_equals "$product_doc_output" run_rust_baseline false
 assert_key_equals "$product_doc_output" needs_rust_toolchain false
 assert_key_equals "$product_doc_output" needs_node false
+assert_key_equals "$product_doc_output" needs_python true
+assert_key_equals "$product_doc_output" needs_markdown true
+assert_key_equals "$product_doc_output" execution_contract required-domain-split/v1
 assert_key_matches "$product_doc_output" planner_config_sha256 '^sha256:[0-9a-f]{64}$'
 assert_reason_contains "$product_doc_output" "governance_doc:doc/product/world-rules-core-gameplay.prd.md"
 
@@ -122,6 +127,8 @@ launcher_output="$(plan_for_path crates/oasis7_client_launcher/src/lib.rs)"
 assert_key_equals "$launcher_output" needs_node true
 assert_key_equals "$launcher_output" needs_trunk true
 assert_key_equals "$launcher_output" needs_rust_toolchain true
+assert_key_equals "$launcher_output" needs_wasm_target true
+assert_key_equals "$launcher_output" needs_system_deps true
 
 overlap_output="$(plan_for_paths crates/oasis7_node/src/network_bridge.rs crates/oasis7_net/src/lib.rs)"
 assert_key_equals "$overlap_output" scope targeted
@@ -150,8 +157,9 @@ static_governance_output="$(plan_for_paths \
   scripts/product-doc-governance-check.test.py \
   scripts/testing-manual-active-contract.test.sh \
   scripts/unified-world-code-terminology-scan.test.sh)"
-assert_key_equals "$static_governance_output" scope minimal
-assert_key_equals "$static_governance_output" selected_capabilities required_gate_baseline
+assert_key_equals "$static_governance_output" scope targeted
+assert_key_equals "$static_governance_output" selected_capabilities doc_checker_contracts
+assert_key_equals "$static_governance_output" run_doc_checker_contracts true
 assert_key_equals "$static_governance_output" run_rust_baseline false
 assert_key_equals "$static_governance_output" needs_rust_toolchain false
 assert_key_equals "$static_governance_output" needs_node false
@@ -184,18 +192,23 @@ assert_key_equals "$rust_gate_helper_output" scope full
 assert_key_equals "$rust_gate_helper_output" run_rust_baseline true
 assert_key_equals "$rust_gate_helper_output" needs_rust_toolchain true
 for rust_gate_helper_path in \
-  scripts/cargo-dev.sh \
-  scripts/cargo-dev-lib.sh \
-  scripts/cargo-dev-lib.test.sh \
-  scripts/cargo-dev-windows-toolchain.test.sh \
-  scripts/check-standalone-tool-lockfiles.sh \
-  scripts/check-standalone-tool-lockfiles.test.sh \
   scripts/check-rust-file-size.sh \
   scripts/check-rust-file-size.test.sh \
   scripts/check-rustsec-ignore-baseline.sh \
   scripts/ensure-cargo-deny.sh; do
   assert_reason_contains "$rust_gate_helper_output" "shared_required_gate:$rust_gate_helper_path"
 done
+for cargo_tooling_path in \
+  scripts/cargo-dev.sh \
+  scripts/cargo-dev-lib.sh \
+  scripts/cargo-dev-lib.test.sh \
+  scripts/cargo-dev-windows-toolchain.test.sh \
+  scripts/check-standalone-tool-lockfiles.test.sh; do
+  assert_reason_contains "$rust_gate_helper_output" \
+    "cargo_tooling_contracts:$cargo_tooling_path"
+done
+assert_reason_contains "$rust_gate_helper_output" \
+  "shared_required_gate:scripts/check-standalone-tool-lockfiles.sh"
 assert_reason_absent "$rust_gate_helper_output" "unclassified_or_unresolvable:"
 
 launcher_dependency_output="$(plan_for_paths \
@@ -291,10 +304,12 @@ packaging_contract_output="$(plan_for_paths \
   scripts/packaging-artifact-size-contract.test.sh \
   scripts/copy-viewer-web-dist.test.sh \
   scripts/native-packaging-contract.test.sh \
-  scripts/package-workflow-cache-reuse-contract.test.sh)"
+  scripts/package-workflow-cache-reuse-contract.test.sh \
+  scripts/testnet-packages-macos-arm64-contract.test.sh)"
 assert_key_equals "$packaging_contract_output" scope targeted
 assert_key_equals "$packaging_contract_output" selected_capabilities packaging_contracts
-assert_key_equals "$packaging_contract_output" run_operational_contracts true
+assert_key_equals "$packaging_contract_output" run_packaging_contracts true
+assert_key_equals "$packaging_contract_output" run_operational_contracts false
 assert_key_equals "$packaging_contract_output" run_rust_baseline false
 assert_key_equals "$packaging_contract_output" needs_rust_toolchain false
 assert_key_equals "$packaging_contract_output" needs_node false
@@ -306,7 +321,8 @@ for packaging_path in \
   scripts/packaging-artifact-size-contract.test.sh \
   scripts/copy-viewer-web-dist.test.sh \
   scripts/native-packaging-contract.test.sh \
-  scripts/package-workflow-cache-reuse-contract.test.sh; do
+  scripts/package-workflow-cache-reuse-contract.test.sh \
+  scripts/testnet-packages-macos-arm64-contract.test.sh; do
   assert_reason_contains "$packaging_contract_output" \
     "packaging_contracts:$packaging_path"
 done
@@ -342,7 +358,10 @@ governance_helper_output="$(plan_for_paths \
   scripts/pm/prepare-task-pr-review-risk.test.py \
   scripts/prepare-task-pr.test.sh \
   scripts/plan-rust-required-scope.test.sh)"
-assert_key_equals "$governance_helper_output" scope minimal
+assert_key_equals "$governance_helper_output" scope targeted
+assert_key_equals "$governance_helper_output" selected_capabilities workflow_governance
+assert_key_equals "$governance_helper_output" run_workflow_governance_contracts true
+assert_key_equals "$governance_helper_output" run_operational_contracts false
 assert_key_equals "$governance_helper_output" run_rust_baseline false
 assert_key_equals "$governance_helper_output" needs_rust_toolchain false
 assert_key_equals "$governance_helper_output" needs_node false
@@ -362,8 +381,9 @@ traceability_governance_output="$(plan_for_paths \
   scripts/product-doc-content-check.py \
   scripts/product-doc-content-check.test.py \
   scripts/product-doc-content-callers.test.sh)"
-assert_key_equals "$traceability_governance_output" scope minimal
-assert_key_equals "$traceability_governance_output" selected_capabilities required_gate_baseline
+assert_key_equals "$traceability_governance_output" scope targeted
+assert_key_equals "$traceability_governance_output" selected_capabilities doc_checker_contracts
+assert_key_equals "$traceability_governance_output" run_doc_checker_contracts true
 assert_key_equals "$traceability_governance_output" run_rust_baseline false
 assert_key_equals "$traceability_governance_output" needs_rust_toolchain false
 assert_key_equals "$traceability_governance_output" needs_node false
@@ -380,19 +400,15 @@ assert_reason_absent "$traceability_governance_output" "unclassified_or_unresolv
 
 # Document inventory helpers form a document-only static-validation closure:
 # the two inventory checkers inspect JSON/Markdown snapshots (the corpus
-# checker delegates only to the evidence checker), the report uses Python
-# stdlib to count Markdown files, and the pinned Markdown adapter is consumed
-# only by product-document gates.  None invokes Rust, Node, runtime, build,
-# launcher, or generated-artifact paths, so keep each exact path on the
-# minimal governance lane.
+# checker delegates only to the evidence checker), and the report uses Python
+# stdlib to count Markdown files. Keep this inventory separate from the
+# Markdown parser and checker implementation dependency contract.
 document_governance_paths=(
   scripts/doc-evidence-inventory-check.py
   scripts/doc-evidence-inventory-check.test.py
   scripts/document-corpus-inventory-check.py
   scripts/document-corpus-inventory-check.test.py
   scripts/doc-inventory-report.sh
-  scripts/doc-governance-requirements.txt
-  scripts/product_doc_markdown.py
 )
 document_governance_output="$(plan_for_paths "${document_governance_paths[@]}")"
 assert_key_equals "$document_governance_output" scope minimal
@@ -455,7 +471,8 @@ for workflow_contract_path in "${workflow_contract_paths[@]}"; do
   workflow_contract_output="$(plan_for_path "$workflow_contract_path")"
   assert_key_equals "$workflow_contract_output" scope targeted
   assert_key_equals "$workflow_contract_output" selected_capabilities workflow_governance
-  assert_key_equals "$workflow_contract_output" run_operational_contracts true
+  assert_key_equals "$workflow_contract_output" run_workflow_governance_contracts true
+  assert_key_equals "$workflow_contract_output" run_operational_contracts false
   assert_key_equals "$workflow_contract_output" run_rust_baseline false
   assert_key_equals "$workflow_contract_output" needs_rust_toolchain false
   assert_reason_contains "$workflow_contract_output" \
@@ -488,7 +505,8 @@ assert_reason_absent "$pm_workflow_output" "unclassified_or_unresolvable:"
 receipt_governance_output="$(plan_for_path scripts/pm/ci-ready-receipt.py)"
 assert_key_equals "$receipt_governance_output" scope targeted
 assert_key_equals "$receipt_governance_output" selected_capabilities workflow_governance
-assert_key_equals "$receipt_governance_output" run_operational_contracts true
+assert_key_equals "$receipt_governance_output" run_workflow_governance_contracts true
+assert_key_equals "$receipt_governance_output" run_operational_contracts false
 assert_key_equals "$receipt_governance_output" run_rust_baseline false
 assert_key_equals "$receipt_governance_output" needs_rust_toolchain false
 assert_reason_contains "$receipt_governance_output" \
@@ -504,7 +522,8 @@ assert_key_equals "$pm_gameplay_union_output" selected_capabilities \
   'oasis7_required;viewer_js_required;workflow_governance'
 assert_key_equals "$pm_gameplay_union_output" run_oasis7_required_tests true
 assert_key_equals "$pm_gameplay_union_output" run_viewer_contract_tests true
-assert_key_equals "$pm_gameplay_union_output" run_operational_contracts true
+assert_key_equals "$pm_gameplay_union_output" run_operational_contracts false
+assert_key_equals "$pm_gameplay_union_output" run_workflow_governance_contracts true
 assert_key_equals "$pm_gameplay_union_output" run_rust_baseline true
 assert_key_equals "$pm_gameplay_union_output" needs_rust_toolchain true
 assert_reason_contains "$pm_gameplay_union_output" \
@@ -532,7 +551,8 @@ workflow_governance_output="$(plan_for_paths \
   .agents/skills/requesting-repo-owned-review/SKILL.md \
   doc/engineering/workflow/source-of-truth.md)"
 assert_key_equals "$workflow_governance_output" scope targeted
-assert_key_equals "$workflow_governance_output" run_operational_contracts true
+assert_key_equals "$workflow_governance_output" run_workflow_governance_contracts true
+assert_key_equals "$workflow_governance_output" run_operational_contracts false
 assert_key_equals "$workflow_governance_output" run_rust_baseline false
 assert_key_equals "$workflow_governance_output" needs_rust_toolchain false
 assert_key_equals "$workflow_governance_output" run_oasis7_required_tests false
@@ -565,7 +585,7 @@ for registry_path in \
     peer_registry_contract_failures=$((peer_registry_contract_failures + 1))
   fi
 done
-if ! sed -n '/^run_required_gate_checks() {$/,/^}$/p' \
+if ! sed -n '/^run_operational_identity_contract_tests() {$/,/^}$/p' \
   "$ROOT_DIR/scripts/ci-tests.sh" \
   | grep -Fxq \
     '  run python3 ./scripts/p2p-public-testnet-peer-registry.test.py'; then
@@ -599,7 +619,7 @@ assert_reason_contains "$clean_room_scope_output" \
   "operational_contracts:scripts/fixtures/oasis7-governance-root.v1.json"
 assert_reason_absent "$clean_room_scope_output" "unclassified_or_unresolvable:"
 
-if ! sed -n '/^run_required_gate_checks() {$/,/^}$/p' \
+if ! sed -n '/^run_operational_identity_contract_tests() {$/,/^}$/p' \
   "$ROOT_DIR/scripts/ci-tests.sh" \
   | grep -Fq \
     'run python3 ./scripts/p2p-public-testnet-identity-v2-evidence-aggregate.test.py'; then
@@ -645,6 +665,11 @@ assert_key_equals "$viewer_web_wrapper_output" run_viewer_contract_tests true
 assert_key_equals "$viewer_web_wrapper_output" run_viewer_wasm_check true
 assert_key_equals "$viewer_web_wrapper_output" run_launcher_web_build false
 assert_key_equals "$viewer_web_wrapper_output" run_oasis7_required_tests false
+assert_key_equals "$viewer_web_wrapper_output" needs_rust_toolchain true
+assert_key_equals "$viewer_web_wrapper_output" needs_node true
+assert_key_equals "$viewer_web_wrapper_output" needs_system_deps true
+assert_key_equals "$viewer_web_wrapper_output" needs_wasm_target true
+assert_key_equals "$viewer_web_wrapper_output" needs_trunk false
 assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/build-viewer-software-safe.sh"
 assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/viewer-dependency-preflight.sh"
 assert_reason_contains "$viewer_web_wrapper_output" "viewer_web_wrapper:scripts/viewer-dependency-preflight.test.sh"
@@ -709,7 +734,8 @@ worktree_harness_lib_output="$(plan_for_path scripts/worktree-harness-lib.sh)"
 assert_key_equals "$worktree_harness_lib_output" scope targeted
 assert_key_equals "$worktree_harness_lib_output" selected_capabilities \
   'launcher_web;viewer_js_required;workflow_governance'
-assert_key_equals "$worktree_harness_lib_output" run_operational_contracts true
+assert_key_equals "$worktree_harness_lib_output" run_workflow_governance_contracts true
+assert_key_equals "$worktree_harness_lib_output" run_operational_contracts false
 assert_reason_contains "$worktree_harness_lib_output" \
   "viewer_launcher_wrapper:scripts/worktree-harness-lib.sh"
 assert_reason_contains "$worktree_harness_lib_output" \
@@ -844,6 +870,102 @@ assert_key_equals "$role_template_output" run_codex_agent_config_validation fals
 assert_reason_contains "$role_template_output" \
   "governance_doc:.agents/roles/templates/subagent-slice-card.md"
 
+review_skill_output="$(plan_for_path .agents/skills/requesting-repo-owned-review/SKILL.md)"
+assert_key_equals "$review_skill_output" scope targeted
+assert_key_equals "$review_skill_output" selected_capabilities workflow_governance
+assert_key_equals "$review_skill_output" run_workflow_governance_contracts true
+assert_key_equals "$review_skill_output" run_operational_contracts false
+assert_key_equals "$review_skill_output" run_rust_baseline false
+assert_reason_contains "$review_skill_output" \
+  "workflow_skill_contract:.agents/skills/requesting-repo-owned-review/SKILL.md"
+
+doc_checker_output="$(plan_for_paths \
+  scripts/product-doc-governance-check.py \
+  scripts/product-doc-governance-check.test.py \
+  scripts/product-doc-content-check.py \
+  scripts/product-doc-content-check.test.py \
+  scripts/system-design-traceability-check.py \
+  scripts/system-design-traceability-check.test.py \
+  scripts/product-doc-content-callers.test.sh \
+  scripts/doc-governance-check.test.sh \
+  scripts/product_doc_markdown.py \
+  scripts/doc-governance-requirements.txt)"
+assert_key_equals "$doc_checker_output" scope targeted
+assert_key_equals "$doc_checker_output" selected_capabilities doc_checker_contracts
+assert_key_equals "$doc_checker_output" run_doc_checker_contracts true
+assert_key_equals "$doc_checker_output" run_cargo_tooling_contracts false
+assert_key_equals "$doc_checker_output" run_rust_baseline false
+assert_key_equals "$doc_checker_output" needs_rust_toolchain false
+assert_key_equals "$doc_checker_output" needs_python true
+assert_key_equals "$doc_checker_output" needs_markdown true
+
+cargo_tooling_output="$(plan_for_paths \
+  scripts/cargo-dev.sh \
+  scripts/cargo-dev-lib.sh \
+  scripts/cargo-dev-lib.test.sh \
+  scripts/cargo-dev-windows-toolchain.test.sh \
+  scripts/cargo-dev-worktree-isolation.test.sh \
+  scripts/pm/new-task-worktree-cargo-cache-migration.test.sh)"
+assert_key_equals "$cargo_tooling_output" scope targeted
+assert_key_equals "$cargo_tooling_output" selected_capabilities \
+  'cargo_tooling_contracts;workflow_governance'
+assert_key_equals "$cargo_tooling_output" run_cargo_tooling_contracts true
+assert_key_equals "$cargo_tooling_output" run_workflow_governance_contracts true
+assert_key_equals "$cargo_tooling_output" run_doc_checker_contracts false
+assert_key_equals "$cargo_tooling_output" run_rust_baseline true
+assert_key_equals "$cargo_tooling_output" needs_rust_toolchain true
+assert_key_equals "$cargo_tooling_output" needs_node false
+assert_key_equals "$cargo_tooling_output" needs_system_deps false
+assert_key_equals "$cargo_tooling_output" needs_trunk false
+assert_key_equals "$cargo_tooling_output" needs_wasm_target false
+assert_key_equals "$cargo_tooling_output" needs_python true
+assert_key_equals "$cargo_tooling_output" needs_markdown true
+
+legacy_config="$(mktemp)"
+python3 - "$ROOT_DIR/scripts/ci-required-scope.v2.json" "$legacy_config" <<'PY'
+import json
+import sys
+
+source, destination = sys.argv[1:]
+config = json.load(open(source, encoding="utf-8"))
+config.pop("execution_contract", None)
+config.pop("resource_requirements", None)
+config.pop("baseline_resources", None)
+config["capabilities"] = [
+    item for item in config["capabilities"]
+    if item not in {"doc_checker_contracts", "cargo_tooling_contracts"}
+]
+config["selector_ownership"] = [
+    item for item in config["selector_ownership"]
+    if item.get("planner_field") not in {
+        "run_doc_checker_contracts", "run_cargo_tooling_contracts",
+        "run_packaging_contracts", "run_workflow_governance_contracts",
+    }
+]
+for item in config["selector_ownership"]:
+    if item.get("planner_field") in {
+        "run_packaging_contracts", "run_workflow_governance_contracts",
+    }:
+        item["planner_field"] = "run_operational_contracts"
+config["rules"] = [
+    rule for rule in config["rules"]
+    if not set(rule.get("capabilities", [])) & {
+        "doc_checker_contracts", "cargo_tooling_contracts",
+    }
+]
+json.dump(config, open(destination, "w", encoding="utf-8"))
+PY
+legacy_packaging_output="$("$ROOT_DIR/scripts/plan-rust-required-scope.sh" \
+  --event-name pull_request --config "$legacy_config" \
+  --changed-path scripts/testnet-packages-macos-arm64-contract.test.sh)"
+assert_key_equals "$legacy_packaging_output" execution_contract ""
+assert_key_equals "$legacy_packaging_output" run_operational_contracts true
+if [[ -n "$(value_for_key "$legacy_packaging_output" run_packaging_contracts)" ]]; then
+  echo "legacy planner must not synthesize versioned selector fields" >&2
+  exit 1
+fi
+rm -f "$legacy_config"
+
 invalid_config="$(mktemp)"
 trap 'rm -f "$invalid_config"; rm -rf "${missing_selector_source_dir:-}"' EXIT
 printf '{not json}\n' >"$invalid_config"
@@ -949,6 +1071,11 @@ wasm_build_output="$(plan_for_path crates/oasis7_wasm_build/src/lib.rs)"
 assert_key_equals "$wasm_build_output" scope targeted
 assert_key_equals "$wasm_build_output" run_oasis7_workspace_support_crate_tests true
 assert_key_equals "$wasm_build_output" run_launcher_web_build false
+assert_key_equals "$wasm_build_output" needs_rust_toolchain true
+assert_key_equals "$wasm_build_output" needs_system_deps true
+assert_key_equals "$wasm_build_output" needs_wasm_target false
+assert_key_equals "$wasm_build_output" needs_node false
+assert_key_equals "$wasm_build_output" needs_trunk false
 assert_reason_contains "$wasm_build_output" "wasm_support:crates/oasis7_wasm_build/src/lib.rs"
 
 wasm_store_output="$(plan_for_path crates/oasis7_wasm_store/src/lib.rs)"
@@ -1040,6 +1167,8 @@ assert_key_equals "$pixel_world_bridge_output" scope targeted
 assert_key_equals "$pixel_world_bridge_output" run_pixel_world_bridge_lib_tests true
 assert_key_equals "$pixel_world_bridge_output" run_pixel_world_bridge_wasm_check true
 assert_key_equals "$pixel_world_bridge_output" run_oasis7_workspace_support_crate_tests false
+assert_key_equals "$pixel_world_bridge_output" needs_rust_toolchain true
+assert_key_equals "$pixel_world_bridge_output" needs_system_deps true
 assert_key_equals "$pixel_world_bridge_output" needs_wasm_target true
 assert_key_equals "$pixel_world_bridge_output" selected_capabilities pixel_world_bridge
 assert_reason_contains "$pixel_world_bridge_output" "pixel_world_bridge:crates/pixel_world_bridge/src/render.rs"
@@ -1093,10 +1222,10 @@ import pathlib
 import sys
 
 root, head, base, output = map(pathlib.Path, sys.argv[1:])
-scope_config = root / "scripts/ci-required-scope.v2.json"
+stable_contract = root / "Cargo.toml"
 evidence = {
-    "path": "scripts/ci-required-scope.v2.json",
-    "sha256": "sha256:" + hashlib.sha256(scope_config.read_bytes()).hexdigest(),
+    "path": "Cargo.toml",
+    "sha256": "sha256:" + hashlib.sha256(stable_contract.read_bytes()).hexdigest(),
 }
 payload = {
     "task_uid": "task_" + "2" * 32,
@@ -1165,8 +1294,10 @@ integration_output="$("$ROOT_DIR/scripts/plan-rust-required-scope.sh" \
 assert_key_equals "$integration_output" scope full
 assert_key_equals "$integration_output" impact_projection_status verified
 assert_key_equals "$integration_output" impact_projection_digest "$integration_projection_digest"
+effective_shared_required_output="$("$ROOT_DIR/scripts/plan-rust-required-scope.sh" \
+  --event-name pull_request --changed-path .github/workflows/rust.yml)"
 assert_key_equals "$integration_output" selected_capabilities \
-  "$(value_for_key "$shared_required_output" selected_capabilities)"
+  "$(value_for_key "$effective_shared_required_output" selected_capabilities)"
 
 python3 - "$integration_projection" "$integration_tampered_projection" <<'PY'
 import json

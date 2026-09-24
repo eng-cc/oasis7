@@ -6,19 +6,39 @@ checker="$repo_root/scripts/check-launcher-p2p-dependency-surface.sh"
 ci_tests="$repo_root/scripts/ci-tests.sh"
 
 required_gate_line='  run bash ./scripts/check-launcher-p2p-dependency-surface.test.sh'
-if [[ "$(grep -F -xc -- "$required_gate_line" "$ci_tests" || true)" -ne 1 ]]; then
-  echo "scripts/ci-tests.sh must contain exactly one required-gate invocation: $required_gate_line" >&2
-  exit 1
-fi
-if ! awk -v expected="$required_gate_line" '
-  $0 == "run_required_gate_checks() {" { in_required_gate=1; next }
-  in_required_gate && $0 == expected { found=1 }
-  in_required_gate && $0 == "}" { exit found ? 0 : 1 }
-  END { if (!found) exit 1 }
-' "$ci_tests"; then
-  echo "required-gate invocation must be unconditional inside run_required_gate_checks" >&2
-  exit 1
-fi
+function_body() {
+  local name="$1"
+  awk -v start="$name() {" '
+    $0 == start { capture=1; next }
+    capture && $0 == "}" { exit }
+    capture { print }
+  ' "$ci_tests"
+}
+require_exact_route() {
+  local label="$1" body="$2" route="$3" expected_count="$4"
+  local actual_count
+  actual_count=$(grep -F -c -- "$route" <<<"$body" || true)
+  if [[ "$actual_count" -ne "$expected_count" ]]; then
+    echo "$label must contain $expected_count route(s) for: $route (found $actual_count)" >&2
+    exit 1
+  fi
+}
+
+baseline_cargo_tooling=$(function_body run_cargo_tooling_baseline_contract_tests)
+cargo_tooling=$(function_body run_cargo_tooling_contract_tests)
+legacy_baseline=$(function_body run_legacy_required_gate_contract_baseline)
+legacy_dispatch=$(function_body run_required_gate_checks)
+versioned_dispatch=$(function_body run_required_gate_capability_contracts)
+full_capabilities=$(function_body run_all_required_gate_capability_contract_tests)
+
+require_exact_route "Cargo-tooling baseline" "$baseline_cargo_tooling" "$required_gate_line" 1
+require_exact_route "Cargo-tooling capability" "$cargo_tooling" "run_cargo_tooling_baseline_contract_tests" 1
+require_exact_route "Cargo-tooling capability" "$cargo_tooling" "$required_gate_line" 0
+require_exact_route "Legacy required baseline" "$legacy_baseline" "run_cargo_tooling_baseline_contract_tests" 1
+require_exact_route "Legacy required baseline" "$legacy_baseline" "$required_gate_line" 0
+require_exact_route "Legacy required dispatch" "$legacy_dispatch" "run_legacy_required_gate_contract_baseline" 1
+require_exact_route "Versioned required dispatch" "$versioned_dispatch" '"Cargo tooling contracts" OASIS7_CI_RUN_CARGO_TOOLING_CONTRACTS run_cargo_tooling_contract_tests' 1
+require_exact_route "Full required capability suite" "$full_capabilities" "run_cargo_tooling_contract_tests" 1
 
 tmp_dir=$(mktemp -d)
 trap 'rm -rf "$tmp_dir"' EXIT

@@ -137,13 +137,13 @@ require_key "$site_plan" needs_rust_toolchain false
 require_key "$site_plan" selected_capabilities site_quality
 require_reason_contains "$site_plan" site_quality:site/index.html
 
-operational_contracts_source="$(sed -n '/^run_operational_contract_tests() {/,/^}/p' "$ci_tests")"
-if ! grep -Fqx '  run python3 ./scripts/pm/ci-ready-receipt.test.py' <<<"$operational_contracts_source"; then
-  echo "workflow-governance receipt contract is not wired into run_operational_contract_tests" >&2
+workflow_governance_operational_source="$(sed -n '/^run_workflow_governance_operational_contract_tests() {/,/^}/p' "$ci_tests")"
+if ! grep -Fqx '  run python3 ./scripts/pm/ci-ready-receipt.test.py' <<<"$workflow_governance_operational_source"; then
+  echo "workflow-governance receipt contract is not wired into run_workflow_governance_operational_contract_tests" >&2
   exit 1
 fi
-if ! grep -Fqx '  run ./scripts/ci-required-scope-audit-contract.test.sh' <<<"$operational_contracts_source"; then
-  echo "required scope audit contract is not wired into run_operational_contract_tests" >&2
+if ! grep -Fqx '  run ./scripts/ci-required-scope-audit-contract.test.sh' <<<"$workflow_governance_operational_source"; then
+  echo "required scope audit contract is not wired into run_workflow_governance_operational_contract_tests" >&2
   exit 1
 fi
 
@@ -152,7 +152,7 @@ if ! grep -Fqx '    run_required_component "site quality contracts" "${OASIS7_CI
   exit 1
 fi
 
-packaging_runner_source="$(sed -n '/^run_packaging_contract_tests() {/,/^}/p' "$ci_tests")"
+packaging_runner_source="$(sed -n '/^run_packaging_artifact_contract_tests() {/,/^}/p' "$ci_tests")"
 if ! grep -Fqx '  run bash ./scripts/native-packaging-contract.test.sh' <<<"$packaging_runner_source"; then
   echo "packaging contract runner is not wired to native packaging fixtures" >&2
   exit 1
@@ -169,8 +169,10 @@ if ! grep -Fqx '  run bash ./scripts/package-workflow-cache-reuse-contract.test.
   echo "packaging contract runner is not wired to package workflow cache fixtures" >&2
   exit 1
 fi
-if ! grep -Fqx '  run_packaging_contract_tests' <<<"$(sed -n '/^run_operational_contract_tests() {/,/^}/p' "$ci_tests")"; then
-  echo "operational contract runner must include the focused packaging runner" >&2
+legacy_mixed_contract_source="$(sed -n '/^run_legacy_mixed_operational_contract_tests() {/,/^}/p' "$ci_tests")"
+if ! grep -Fqx '  run_packaging_artifact_contract_tests' <<<"$legacy_mixed_contract_source" || \
+   ! grep -Fqx '  run_packaging_artifact_contract_tests' <<<"$(sed -n '/^run_packaging_contract_tests() {/,/^}/p' "$ci_tests")"; then
+  echo "legacy mixed contract runner must include the focused packaging artifact runner" >&2
   exit 1
 fi
 
@@ -219,11 +221,23 @@ for item in ownership:
         raise SystemExit(f"selector ownership name is missing or duplicated: {name!r}")
     declared[name] = item
 inventory = set(re.findall(r"OASIS7_CI_RUN_[A-Z0-9_]+", ci_tests_path.read_text(encoding="utf-8")))
-if inventory != set(declared):
+execution_contract = config.get("execution_contract", "")
+versioned_selector_names = {
+    "OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS",
+    "OASIS7_CI_RUN_PACKAGING_CONTRACTS",
+    "OASIS7_CI_RUN_DOC_CHECKER_CONTRACTS",
+    "OASIS7_CI_RUN_CARGO_TOOLING_CONTRACTS",
+}
+active_inventory = inventory
+if execution_contract == "":
+    active_inventory = inventory - versioned_selector_names
+elif execution_contract != "required-domain-split/v1":
+    raise SystemExit(f"unsupported effective required-gate execution contract: {execution_contract}")
+if active_inventory != set(declared):
     raise SystemExit(
         "selector ownership drift: "
-        f"missing={sorted(inventory - set(declared))}, "
-        f"stale={sorted(set(declared) - inventory)}"
+        f"missing={sorted(active_inventory - set(declared))}, "
+        f"stale={sorted(set(declared) - active_inventory)}"
     )
 for name, item in declared.items():
     mode = item.get("mode")
@@ -265,6 +279,19 @@ planner_outputs = {
     if "=" in line
     for key, value in [line.split("=", 1)]
 }
+if execution_contract == "" and any(
+    field in planner_outputs
+    for field in (
+        "execution_contract",
+        "run_workflow_governance_contracts",
+        "run_packaging_contracts",
+        "run_doc_checker_contracts",
+        "run_cargo_tooling_contracts",
+        "needs_python",
+        "needs_markdown",
+    )
+):
+    raise SystemExit("legacy effective planner unexpectedly emitted versioned contract fields")
 
 # Every public-testnet package/rollout/observer/fleet-health implementation
 # source must stay paired with an operational fixture that invokes or imports
@@ -395,9 +422,14 @@ for name, item in declared.items():
                 f"{name} -> {field}"
             )
     else:
-        if name in workflow_text:
+        env_prefix = f"          {name}:"
+        env_assignment = next(
+            (line for line in run_tier_body.splitlines() if line.startswith(env_prefix)),
+            "",
+        )
+        if "steps.scope.outputs." in env_assignment:
             raise SystemExit(
-                f"manual-only selector is unexpectedly auto-wired in workflow: {name}"
+                f"manual-only selector is unexpectedly planner-wired in workflow: {name}"
             )
         expected_default = f"${{{name}:-false}}"
         if expected_default not in ci_tests_path.read_text(encoding="utf-8"):
@@ -409,8 +441,8 @@ PY
 # This is intentionally a direct-source guard.  Operational contract fixtures
 # may mention Cargo or use fake Cargo binaries in their own test processes, but
 # the runner itself must not gain a real Rust toolchain invocation unnoticed.
-if grep -Eiq '(^|[[:space:];|&()])(cargo|rustup)([[:space:]]|$)' <<<"$operational_contracts_source" || \
-   grep -Eiq '(^|[[:space:];|&()])run_cargo([[:space:]]|$)' <<<"$operational_contracts_source"; then
+if grep -Eiq '(^|[[:space:];|&()])(cargo|rustup)([[:space:]]|$)' <<<"$legacy_mixed_contract_source" || \
+   grep -Eiq '(^|[[:space:];|&()])run_cargo([[:space:]]|$)' <<<"$legacy_mixed_contract_source"; then
   echo "operational contract runner must not invoke Cargo or rustup directly" >&2
   exit 1
 fi
@@ -423,10 +455,14 @@ require_ci_tests_line '  run_required_component "standalone tool lockfiles" "${O
 workflow="$repo_root/.github/workflows/rust.yml"
 for job in windows-package-rollout-behavior testnet-packages-macos-arm64-contract public-testnet-fleet-health-contract; do
   if ! awk -v job="$job" '
-    $0 ~ "^  " job ":" { active=1; next }
-    active && /^  [A-Za-z0-9_-]+:/ { exit }
-    active && /if:.*github.event_name == .pull_request.*&& needs.required-gate.outputs.run_operational_contracts == .true./ { found=1 }
-    END { exit(found ? 0 : 1) }
+    $0 ~ "^  " job ":" { active=1 }
+    active && !($0 ~ "^  " job ":") && /^  [A-Za-z0-9_-]+:/ { active=0 }
+    active { body=body $0 "\n" }
+    END {
+      event_scoped=(body ~ /github.event_name == .pull_request./ && body ~ /workflow_dispatch/)
+      planner_scoped=(body ~ /needs.required-gate.outputs.run_operational_contracts == .true./ || body ~ /needs.required-gate.outputs.run_packaging_contracts == .true./)
+      exit(event_scoped && planner_scoped ? 0 : 1)
+    }
   ' "$workflow"; then
     echo "operational PR job is not planner-scoped: $job" >&2
     exit 1
