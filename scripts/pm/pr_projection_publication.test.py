@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import copy
+import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+from urllib.parse import urlencode
 
 ROOT = Path(__file__).parent
 sys.path.insert(0, str(ROOT))
@@ -178,6 +180,60 @@ class PublicationMatrixTests(unittest.TestCase):
             self.assertEqual([], adapter.events)
             with journal.locked():
                 self.assertEqual([], journal.read()["actions"])
+
+    def test_pr_discovery_filters_large_history_server_side(self):
+        repository = "eng-cc/oasis7"
+        source_ref = "task/engineering-ci-parallel-reuse-c1"
+        target_ref = "main"
+        publication, _projection = make_publication(
+            7002, repository=repository, branch=source_ref,
+        )
+        matching = {
+            "number": 41, "html_url": f"https://github.com/{repository}/pull/41",
+            "body": "Task: " + UID, "state": "open", "draft": True,
+            "merged_at": None,
+            "head": {"ref": source_ref, "sha": publication["source_head_oid"],
+                     "repo": {"full_name": repository}},
+            "base": {"ref": target_ref, "repo": {"full_name": repository}},
+        }
+        fork_match = copy.deepcopy(matching)
+        fork_match["number"] = 42
+        fork_match["head"]["repo"]["full_name"] = "fork/oasis7"
+        large_history = [
+            {"head": {"ref": f"old/branch-{index}"},
+             "base": {"ref": "main"}}
+            for index in range(10_000)
+        ] + [matching, fork_match]
+        expected_query = urlencode({
+            "state": "all", "head": f"eng-cc:{source_ref}",
+            "base": target_ref, "per_page": 100,
+        })
+        expected_path = f"repos/{repository}/pulls?{expected_query}"
+        with tempfile.TemporaryDirectory() as temp:
+            args = type("Args", (), {
+                "repo": repository, "issue_number": 123,
+                "task_uid": UID, "task_helper": str(Path(temp) / "github-project-task.py"),
+            })()
+            adapter = publish_module.GitHubPublicationAdapter(Path(temp), args, publication)
+
+            def fake_gh(*command, timeout):
+                endpoint = command[1] if len(command) > 1 else ""
+                if endpoint != expected_path:
+                    raise TimeoutError("scanning the fake repository PR history exceeds timeout")
+                self.assertEqual(("api", expected_path, "--paginate", "--slurp"), command)
+                self.assertEqual(4.5, timeout)
+                filtered = [
+                    item for item in large_history
+                    if item.get("head", {}).get("ref") == source_ref
+                    and item.get("base", {}).get("ref") == target_ref
+                ]
+                return json.dumps([filtered])
+
+            with patch.object(adapter, "gh", side_effect=fake_gh) as gh:
+                result = adapter.find_task_prs(UID, source_ref, target_ref, timeout_seconds=4.5)
+
+        gh.assert_called_once()
+        self.assertEqual([41], [item["number"] for item in result["pull_requests"]])
 
     def test_30_ordered_create_publications(self):
         with tempfile.TemporaryDirectory() as temp:

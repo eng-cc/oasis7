@@ -13,6 +13,7 @@ import sys
 import tempfile
 import types
 from typing import Any
+from urllib.parse import urlencode
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
@@ -269,7 +270,12 @@ class GitHubPublicationAdapter:
 
     def find_task_prs(self, task_uid: str, source_ref: str, target_ref: str,
                       *, timeout_seconds: float = 5.0) -> dict[str, Any]:
-        raw = self.gh("api", f"repos/{self.args.repo}/pulls?state=all&per_page=100",
+        owner = self.args.repo.split("/", 1)[0]
+        query = urlencode({
+            "state": "all", "head": f"{owner}:{source_ref}",
+            "base": target_ref, "per_page": 100,
+        })
+        raw = self.gh("api", f"repos/{self.args.repo}/pulls?{query}",
                       "--paginate", "--slurp", timeout=timeout_seconds)
         try:
             pages = json.loads(raw)
