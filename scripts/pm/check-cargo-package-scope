@@ -705,6 +705,12 @@ def check_cross_package_edges(
                 if second is None or (second.group(1) is not None and "\\" in second.group(1)):
                     raise ScopeError("unresolved_generated_output", f"{path} has non-literal output path")
                 check_output(second.group(1) or second.group(3))
+            # A build script runs arbitrary Rust at build time.  Path-pattern
+            # checks above preserve a precise reason for known cross-package
+            # writes, but cannot prove the absence of writes through aliases,
+            # options, helper functions, or additional filesystem APIs.
+            if not re.fullmatch(r"\s*fn\s+main\s*\(\s*\)\s*\{\s*\}\s*", text):
+                raise ScopeError("unresolved_generated_output", f"{path} is not a provably inert build script")
 
 
 def evaluate(args: argparse.Namespace) -> dict[str, Any]:

@@ -502,6 +502,31 @@ path = "src/lib.rs"
             "cross_package_generated_output",
         )
 
+    def test_comment_separated_build_copy_is_rejected(self) -> None:
+        repo, base = self._fixture()
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(root, "crates/alpha/build.rs",
+                'fn main() { std::fs /*gap*/ :: copy("src/input.rs", "../beta/src/shared.rs").unwrap(); }\n'),
+            "unresolved_generated_output",
+        )
+
+    def test_open_options_build_write_is_rejected(self) -> None:
+        repo, base = self._fixture()
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(root, "crates/alpha/build.rs",
+                'use std::io::Write;\nfn main() { std::fs::OpenOptions::new().write(true).open("../beta/src/shared.rs").unwrap().write_all(b"x").unwrap(); }\n'),
+            "unresolved_generated_output",
+        )
+
+    def test_inert_build_script_is_allowed(self) -> None:
+        repo, base = self._fixture()
+        self._assert_allowed(
+            repo, base, "alpha",
+            lambda root: self._write(root, "crates/alpha/build.rs", "fn main() {}\n"),
+        )
+
     def test_manifest_activates_unchanged_cross_package_path_is_rejected(self) -> None:
         repo, _ = self._fixture()
         self._write(repo, "crates/alpha/src/lib.rs",
