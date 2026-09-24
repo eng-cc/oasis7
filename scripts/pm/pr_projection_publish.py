@@ -21,12 +21,17 @@ sys.path.insert(0, str(HERE))
 import pr_projection_journal
 import pr_projection_publication as publication
 
+LOCAL_COMMAND_TIMEOUT_SECONDS = 15.0
+# Remote Git ref advertisement can take longer than the short local and GitHub
+# admission reads; keep its bounded network budget separate from those limits.
+REMOTE_GIT_READ_TIMEOUT_SECONDS = 30.0
+
 
 class PublishInputError(RuntimeError):
     pass
 
 
-def command_output(args: list[str], *, timeout: float = 15.0) -> str:
+def command_output(args: list[str], *, timeout: float = LOCAL_COMMAND_TIMEOUT_SECONDS) -> str:
     try:
         return subprocess.run(args, check=True, text=True, encoding="utf-8",
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -245,7 +250,7 @@ class GitHubPublicationAdapter:
     def read_source_ref(self, source_ref: str) -> str | None:
         ref = f"refs/heads/{source_ref}"
         output = command_output(["git", "-C", str(self.root), "ls-remote",
-                                 self.args.remote, ref], timeout=5.0)
+                                 self.args.remote, ref], timeout=REMOTE_GIT_READ_TIMEOUT_SECONDS)
         if not output:
             return None
         rows = output.splitlines()

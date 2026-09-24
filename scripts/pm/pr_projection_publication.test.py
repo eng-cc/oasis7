@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import json
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -234,6 +235,54 @@ class PublicationMatrixTests(unittest.TestCase):
 
         gh.assert_called_once()
         self.assertEqual([41], [item["number"] for item in result["pull_requests"]])
+
+    def test_remote_source_ref_read_allows_slow_success_under_separate_budget(self):
+        publication, _projection = make_publication(7003)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            args = type("Args", (), {
+                "repo": publication["repository"], "issue_number": 123,
+                "task_uid": UID, "task_helper": str(root / "github-project-task.py"),
+                "remote": "origin",
+            })()
+            adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+            observed_timeouts = []
+
+            def simulated_remote_run(command, **kwargs):
+                timeout = kwargs["timeout"]
+                observed_timeouts.append(timeout)
+                if 11.0 > timeout:
+                    raise subprocess.TimeoutExpired(command, timeout)
+                return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+            with patch.object(publish_module.subprocess, "run", side_effect=simulated_remote_run):
+                self.assertIsNone(adapter.read_source_ref(publication["source_ref"]))
+
+        self.assertEqual([30.0], observed_timeouts)
+        self.assertGreater(publish_module.REMOTE_GIT_READ_TIMEOUT_SECONDS, 11.0)
+        self.assertEqual(15.0, publish_module.LOCAL_COMMAND_TIMEOUT_SECONDS)
+
+    def test_remote_source_ref_timeout_fails_closed(self):
+        publication, _projection = make_publication(7004)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            args = type("Args", (), {
+                "repo": publication["repository"], "issue_number": 123,
+                "task_uid": UID, "task_helper": str(root / "github-project-task.py"),
+                "remote": "origin",
+            })()
+            adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+            observed_timeouts = []
+
+            def simulated_timeout(command, **kwargs):
+                observed_timeouts.append(kwargs["timeout"])
+                raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+            with patch.object(publish_module.subprocess, "run", side_effect=simulated_timeout):
+                with self.assertRaisesRegex(publish_module.PublishInputError, "command failed: git"):
+                    adapter.read_source_ref(publication["source_ref"])
+
+        self.assertEqual([30.0], observed_timeouts)
 
     def test_30_ordered_create_publications(self):
         with tempfile.TemporaryDirectory() as temp:
