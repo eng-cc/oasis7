@@ -1438,6 +1438,10 @@ fi
 
 COMPARISON_COMMIT_REF="${COMPARISON_REF}^{commit}"
 COMPARISON_HEAD="$(git rev-parse "$COMPARISON_COMMIT_REF")"
+SOURCE_SCOPE_BASE="$(git -C "$SOURCE_WORKTREE" merge-base "$COMPARISON_HEAD" "$SOURCE_HEAD")" \
+  || die "source projection merge-base is unavailable"
+[[ "$SOURCE_SCOPE_BASE" =~ ^[0-9a-f]{40,64}$ ]] \
+  || die "source projection merge-base is invalid"
 
 # Promotion reviews the ancestor scope OID; live admission keeps the CI integration OID.
 # The live receipt validator below remains authoritative for the PR/check
@@ -1456,6 +1460,13 @@ PY
 )" || die "promote_draft could not read ci_ready_receipt base identity"
   [[ "$PROMOTE_DRAFT_RECEIPT_BASE_OID" =~ ^[0-9a-f]{40,64}$ ]] || die "promote_draft ci_ready_receipt has invalid base identity"
   REVIEW_COMPARISON_OID="$(python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); print(r.get("scope_base_oid",r["base_oid"]))' "$PROMOTE_DRAFT_RECEIPT")"
+fi
+if [[ -z "$REVIEW_COMPARISON_OID" ]]; then
+  if [[ "$LEGACY_REVIEW_V1" == "1" ]]; then
+    REVIEW_COMPARISON_OID="$COMPARISON_HEAD"
+  else
+    REVIEW_COMPARISON_OID="$SOURCE_SCOPE_BASE"
+  fi
 fi
 BASE_WORKTREE=""
 if [[ -n "$LOCAL_BASE_REF" ]]; then
@@ -1535,7 +1546,7 @@ PLANNER_SCRIPT="$SOURCE_WORKTREE/scripts/plan-rust-required-scope.sh"
 if [[ -x "$PLANNER_SCRIPT" ]]; then
   PLANNER_ARGS=(--event-name pull_request --base-ref "$COMPARISON_REF" --head-ref "$SOURCE_HEAD")
   if [[ -n "$IMPACT_PROJECTION" ]]; then
-    PLANNER_ARGS+=(--impact-projection "$IMPACT_PROJECTION" --task-uid "$BOUND_TASK_UID" --scope-base-oid "$COMPARISON_HEAD")
+    PLANNER_ARGS+=(--impact-projection "$IMPACT_PROJECTION" --task-uid "$BOUND_TASK_UID" --scope-base-oid "$SOURCE_SCOPE_BASE")
   fi
   if RUST_SCOPE_OUTPUT="$(cd "$SOURCE_WORKTREE" && "$PLANNER_SCRIPT" "${PLANNER_ARGS[@]}" 2>/dev/null)"; then
     LOCAL_REQUIRED_SCOPE="$(plan_kv_get "$RUST_SCOPE_OUTPUT" "scope")"
@@ -1631,8 +1642,6 @@ fi
 # required tests.  The policy must already exist at the trusted comparison OID;
 # a policy introduced by this candidate cannot authorize its own enforcement.
 CARGO_PACKAGE_SCOPE_AUTHORITY_DIR="$(mktemp -d)"
-SOURCE_SCOPE_BASE="$(git -C "$SOURCE_WORKTREE" merge-base "$COMPARISON_HEAD" "$SOURCE_HEAD")" \
-  || die "Cargo package scope source merge-base is unavailable"
 CARGO_PACKAGE_SCOPE_CHECKER="$CARGO_PACKAGE_SCOPE_AUTHORITY_DIR/check-cargo-package-scope"
 CARGO_PACKAGE_SCOPE_POLICY="$SOURCE_WORKTREE/.pm/cargo-package-scope-policy.json"
 CARGO_PACKAGE_SCOPE_RELEVANT="$(python3 - "$SOURCE_WORKTREE" "$COMPARISON_HEAD" "$SOURCE_HEAD" <<'PY'
@@ -1785,7 +1794,7 @@ if [[ -n "$REVIEW_CHANGE_CLASS" ]]; then
   ROLE_SELECTOR_ARGS=(--change-class "$REVIEW_CHANGE_CLASS" --changed-path-list "$LOCAL_REQUIRED_CHANGED_PATHS" --json)
   if [[ -n "$IMPACT_PROJECTION" ]]; then
     [[ -f "$IMPACT_PROJECTION" ]] || die "impact projection is not readable: $IMPACT_PROJECTION"
-    ROLE_SELECTOR_ARGS+=(--impact-projection "$IMPACT_PROJECTION" --task-uid "$BOUND_TASK_UID" --source-head-oid "$SOURCE_HEAD" --scope-base-oid "$COMPARISON_HEAD")
+    ROLE_SELECTOR_ARGS+=(--impact-projection "$IMPACT_PROJECTION" --task-uid "$BOUND_TASK_UID" --source-head-oid "$SOURCE_HEAD" --scope-base-oid "$SOURCE_SCOPE_BASE")
   fi
   [[ -z "$REVIEW_DOMAIN_ROLE" ]] || ROLE_SELECTOR_ARGS+=(--domain-role "$REVIEW_DOMAIN_ROLE")
   [[ "$REVIEW_VERIFICATION_AFFECTED" == "0" ]] || ROLE_SELECTOR_ARGS+=(--verification-affected)

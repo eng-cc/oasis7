@@ -160,6 +160,25 @@ class PublicationMatrixTests(unittest.TestCase):
         self.assertEqual("https://github.com/example/oasis7/pull/999",
                          argv[argv.index("--pr-url") + 1])
 
+    def test_target_oid_cannot_be_substituted_for_projection_source_scope(self):
+        publication, projection = make_publication(7001)
+        target_oid = "e" * 40
+        self.assertNotEqual(publication["source_scope_oid"], target_oid)
+        projection["scope_base_oid"] = target_oid
+        with tempfile.TemporaryDirectory() as temp:
+            adapter = FakeAdapter(publication, projection)
+            journal = self.journal(temp, publication)
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "impact projection scope_base_oid",
+            ):
+                publication_module.publish_create(
+                    adapter, journal, publication=publication,
+                    projection=projection, body="Task: " + UID + "\nRefs #1",
+                )
+            self.assertEqual([], adapter.events)
+            with journal.locked():
+                self.assertEqual([], journal.read()["actions"])
+
     def test_30_ordered_create_publications(self):
         with tempfile.TemporaryDirectory() as temp:
             for index in range(30):
