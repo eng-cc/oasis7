@@ -187,7 +187,7 @@ Viewer 与 pure API 可以使用不同布局和 payload，但对同一候选、�
 
 ### 5.4 Agent authority 变化与高后果结果
 
-runtime 以当前授权来源复核高后果请求及适用累计额度，再独立执行世界/安全校验；检查失败时不产生对应世界效果。授权变化影响待决请求时，只重新评估尚未提交的意图。权威结果关联适用的建议、有效决定/override、阻断原因与恢复下一步；重连和重试不能代替新决定或产生第二次效果。
+runtime 以当前授权来源复核高后果请求及适用累计额度，再独立执行世界/安全校验；检查失败时不产生对应世界效果。授权或硬边界变化影响待决请求时，所有尚未产生权威世界效果的请求都按变化后的当前授权与前置条件重新评估，包括已提交或已接受的请求；提交/接受状态、客户端排队或生命周期事件本身不证明世界效果已生效。按现有合同继续、拒绝、过期、取消或要求新的有效确认；已有权威世界结果不得被改写为未发生。权威结果关联适用的建议、有效决定/override、阻断原因与恢复下一步；重连和重试不能代替新决定或产生第二次效果。
 
 ## 6. 接口与数据合同
 
@@ -199,7 +199,7 @@ runtime 以当前授权来源复核高后果请求及适用累计额度，再独
 | agency projection / DES-WR-IA-005, DES-WR-IA-008 | `WorldSnapshot.player_gameplay` / receipt -> Viewer/API | 同候选、调用者、时间/版本边界 | 只读投影；local feedback 仅 provisional overlay | 四类 invariant 或结构化 unavailable | 两入口语义等价，不要求 payload 相同 |
 | resume / DES-WR-IA-006 | snapshot/journal/receipt -> continuation surface | world/session + continuation identity | 恢复必须幂等或显式冲突 | resumed/stale/replan-required | 旧快照缺字段时不得伪造当前值 |
 | authorization / DES-WR-IA-010 | owner/organization authority -> runtime decision | 专业 authority 定义的主体、范围、对象与有效期 | 权威判定时复核；不由 Agent 或 WASM grant 推导 | 失效/超限/未知时无效果 | 不新增凭据或授权 schema |
-| pending-action recheck / DES-WR-IA-011 | authority change -> pending intent | 既有 request/intent identity + 生效边界 | 仅未提交行动重评；已提交结果不可改写 | 按现有合同继续、拒绝、过期、取消或新确认 | 转让合同留在 gameplay/ownership authority |
+| pending-action recheck / DES-WR-IA-011 | authority change -> any pending intent without an authoritative world effect | 既有 request/intent identity + 生效边界；submitted/accepted 状态本身不证明世界效果已生效 | 每个尚未产生权威世界效果的请求都重评，包括已提交或已接受请求；已有权威世界结果不得被改写为未发生 | 按现有合同继续、拒绝、过期、取消或新确认 | 转让合同留在 gameplay/ownership authority |
 | attribution / DES-WR-IA-012 | Agent reason + owner/organization decision + runtime result -> receipt/projection | 既有意图、authority 来源与权威结果 | 与结果保持同一因果关联 | 区分异议、override、硬阻断和执行结果 | 遵守 DES-WR-IA-007/008 隐私边界 |
 
 具体字段集合继续由 [`PRD-GAME-014`](../../game/gameplay/gameplay-indirect-control-agency-contract.prd.md#2-user-experience-functionality) 与各专业 authority 管理；本文只冻结跨组件语义和禁止条件。
