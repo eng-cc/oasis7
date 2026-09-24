@@ -830,6 +830,9 @@ def verify_terminal_proof(
                                    for entry in operations.values())):
                     add_blocker(blockers, "stale identity: terminal finalizer ledger has no committed operation proof")
                 if phase == "closed_without_merge":
+                    producer_shaped_ledger = (
+                        ledger.get("schema") == "oasis7_non_merge_finalizer_ledger_v1"
+                    )
                     required_effects = (
                         "issue_body_update", "project_update", "evidence_comment", "issue_close",
                     )
@@ -839,10 +842,14 @@ def verify_terminal_proof(
                                 or entry.get("effect") != effect
                                 or entry.get("operation_id") != non_merge_operation_id(task, effect)
                                 or entry.get("committed") is not True
-                                or "readback" not in entry):
+                                or not producer_shaped_ledger
+                                or entry.get("readback") is not True
+                                or "result" not in entry):
                             add_blocker(blockers, f"stale identity: non-merge terminal ledger lacks bound committed {effect} readback")
                             continue
-                        readback = entry.get("readback")
+                        # The producer records readback as a completion marker
+                        # and persists the actual snapshot under result.
+                        readback = entry.get("result")
                         if effect in {"issue_body_update", "issue_close"}:
                             expected_issue_url = str(task.get("issue_url") or "")
                             if (not isinstance(readback, dict)

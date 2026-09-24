@@ -193,24 +193,28 @@ class WorkflowNextTest(unittest.TestCase):
                 operations = {
                     "issue_body_update": {
                         "operation_id": operation_id("issue_body_update"),
-                        "effect": "issue_body_update", "readback": issue_readback,
+                        "effect": "issue_body_update", "readback": True,
+                        "result": issue_readback,
                         "committed": True,
                     },
                     "project_update": {
                         "operation_id": operation_id("project_update"),
                         "effect": "project_update",
-                        "readback": {"Status": "Done", "PM Status": "done", "Workflow Phase": "done"},
+                        "readback": True,
+                        "result": {"Status": "Done", "PM Status": "done", "Workflow Phase": "done"},
                         "committed": True,
                     },
                     "evidence_comment": {
                         "operation_id": operation_id("evidence_comment"),
                         "effect": "evidence_comment",
-                        "readback": f"https://github.com/fixture/repo/issues/{task['issue_number']}#issuecomment-99",
+                        "readback": True,
+                        "result": f"https://github.com/fixture/repo/issues/{task['issue_number']}#issuecomment-99",
                         "committed": True,
                     },
                     "issue_close": {
                         "operation_id": operation_id("issue_close"),
-                        "effect": "issue_close", "readback": issue_readback,
+                        "effect": "issue_close", "readback": True,
+                        "result": issue_readback,
                         "committed": True,
                     },
                 }
@@ -854,6 +858,46 @@ class WorkflowNextTest(unittest.TestCase):
                 self.assertNotEqual(code, 0, payload)
                 self.assertTrue(any("ledger" in item.lower() or effect in item.lower()
                                     for item in payload["blockers"]), payload)
+
+    def test_non_merge_ledger_result_snapshots_bind_issue_and_project_identity(self) -> None:
+        cases = (
+            ("issue_body_update", "result", {"number": 12}),
+            ("issue_close", "result", {"url": "https://github.com/fixture/other/issues/11"}),
+            ("project_update", "result", {"Workflow Phase": "execution"}),
+        )
+        for effect, field, updates in cases:
+            with self.subTest(effect=effect, updates=updates):
+                self.write_mapping(status="done", workflow_phase="closed_without_merge")
+                self.install_terminal_proof(
+                    "closed_without_merge", non_merge_reason="not_planned",
+                )
+                ledger_path = self.root / ".git/oasis7-workflow-receipts" / UID / "non-merge-finalizer-ledger.json"
+                ledger = json.loads(ledger_path.read_text())
+                ledger["operations"][effect][field].update(updates)
+                ledger_path.write_text(json.dumps(ledger, sort_keys=True) + "\n")
+
+                code, payload = self.run_query()
+
+                self.assertNotEqual(code, 0, payload)
+                self.assertTrue(any("ledger" in item.lower() and "identity" in item.lower()
+                                    or "project readback" in item.lower()
+                                    for item in payload["blockers"]), payload)
+
+    def test_non_merge_ledger_requires_true_readback_completion_marker(self) -> None:
+        self.write_mapping(status="done", workflow_phase="closed_without_merge")
+        self.install_terminal_proof(
+            "closed_without_merge", non_merge_reason="not_planned",
+        )
+        ledger_path = self.root / ".git/oasis7-workflow-receipts" / UID / "non-merge-finalizer-ledger.json"
+        ledger = json.loads(ledger_path.read_text())
+        ledger["operations"]["issue_close"]["readback"] = False
+        ledger_path.write_text(json.dumps(ledger, sort_keys=True) + "\n")
+
+        code, payload = self.run_query()
+
+        self.assertNotEqual(code, 0, payload)
+        self.assertTrue(any("lacks bound committed issue_close readback" in item
+                            for item in payload["blockers"]), payload)
 
     def test_matching_invalid_snapshot_and_checkpoint_fail_closed(self) -> None:
         self.write_mapping(status="committed", workflow_phase="execution")
