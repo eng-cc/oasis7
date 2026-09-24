@@ -94,6 +94,7 @@
 | `doc/world-runtime/templates/runtime-release-gate-metrics-template.md` | `template` | release gate 指标模板 |
 | `doc/world-runtime/templates/runtime-security-numeric-regression-template.md` | `template` | 安全与数值语义回归模板 |
 | `doc/world-runtime/checklists/runtime-core-boundary-acceptance-checklist.md` | `checklist` | runtime 核心边界验收清单 |
+| [`integration/node-contribution-points-runtime-closure.md`](integration/node-contribution-points-runtime-closure.md) | `retained technical draft` | 节点积分 MVP 的 runtime closure 草案与溯源材料；当前专业规则见 [`doc/p2p/node/node-contribution-points.prd.md`](../p2p/node/node-contribution-points.prd.md)。草案尚未完整吸收到当前合同，不证明当前实现或 readiness。 |
 
 已退役删除的 2026-03 runtime P0 candidate / T7.2 / T7.3 / T7.4 role handoff root 文档不再作为补充入口；对应结论从上方 evidence、GitHub task issue evidence comments 与 Git history 追溯。
 
