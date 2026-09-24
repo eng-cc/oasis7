@@ -456,6 +456,42 @@ path = "src/lib.rs"
 
         self._assert_rejected(repo, base, "alpha", mutate, "cross_package_symlink")
 
+    def test_unchanged_other_package_symlink_into_changed_source_is_rejected(self) -> None:
+        repo, _ = self._fixture()
+        self._write(repo, "crates/alpha/src/shared.rs", "pub fn shared() {}\n")
+        (repo / "crates/beta/src/linked.rs").symlink_to("../../alpha/src/shared.rs")
+        self._write(repo, "crates/beta/src/lib.rs", "mod linked;\npub fn beta() {}\n")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "base with reverse symlink edge")
+        base = self._git(repo, "rev-parse", "HEAD")
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(root, "crates/alpha/src/shared.rs", "pub fn changed() {}\n"),
+            "cross_package_symlink",
+        )
+
+    def test_raw_string_cross_package_include_is_rejected(self) -> None:
+        repo, base = self._fixture()
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(
+                root, "crates/alpha/src/lib.rs",
+                'include!(r#"../../beta/src/shared.rs"#);\npub fn alpha() {}\n',
+            ),
+            "cross_package_include",
+        )
+
+    def test_raw_string_cross_package_path_is_rejected(self) -> None:
+        repo, base = self._fixture()
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(
+                root, "crates/alpha/src/lib.rs",
+                '#[path = r##"../../beta/src/shared.rs"##]\nmod imported;\n',
+            ),
+            "cross_package_path",
+        )
+
     def test_unchanged_other_package_path_into_changed_source_is_rejected(self) -> None:
         repo, _ = self._fixture()
         (repo / "crates/beta/src/lib.rs").write_text(

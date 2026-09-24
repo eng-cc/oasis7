@@ -604,16 +604,20 @@ def check_cross_package_edges(
     packages: dict[str, list[tuple[str, str]]],
     changed: set[str],
 ) -> None:
+    # Rust paths may use an ordinary or a raw string literal.  Keep the raw
+    # delimiter matched to its closing delimiter, including multiple hashes.
+    literal = r'(?:"([^"\n]+)"|r(#{0,255})"([^"\n]+)"\2)'
     for path in paths:
         owner = owner_for(path, packages)
         if owner is None or not path.endswith(".rs"):
             continue
         text = source_text(repo, head, path)
-        for pattern, reason in (
-            (r"\binclude!\s*\(\s*\"([^\"]+)\"", "cross_package_include"),
-            (r"#\s*\[\s*path\s*=\s*\"([^\"]+)\"", "cross_package_path"),
+        for prefix, reason in (
+            (r"\binclude!\s*\(\s*", "cross_package_include"),
+            (r"#\s*\[\s*path\s*=\s*", "cross_package_path"),
         ):
-            for target in re.findall(pattern, text):
+            for match in re.finditer(prefix + literal, text):
+                target = match.group(1) or match.group(3)
                 resolved = resolve_relative(path, target)
                 target_owner = owner_for(resolved, packages) if resolved else None
                 if target_owner is not None and target_owner != owner and (path in changed or resolved in changed):
@@ -647,15 +651,23 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         head_metadata = cargo_metadata(head_root)
         base_packages = package_roots(base_root, base_metadata)
         head_packages = package_roots(head_root, head_metadata)
-        for path in normalized_paths:
-            for root, packages in ((base_root, base_packages), (head_root, head_packages)):
+        changed = set(normalized_paths)
+        for revision, root, packages in (
+            (args.base, base_root, base_packages),
+            (args.head, head_root, head_packages),
+        ):
+            for path in tracked_paths(repo, revision):
                 link = root / path
                 if not link.is_symlink():
                     continue
                 try:
                     physical = link.resolve(strict=True).relative_to(root.resolve()).as_posix()
                 except (OSError, ValueError) as exc:
-                    raise ScopeError("ambiguous_package_attribution", f"unresolved or escaping symlink: {path}") from exc
+                    if path in changed:
+                        raise ScopeError("ambiguous_package_attribution", f"unresolved or escaping symlink: {path}") from exc
+                    continue
+                if path not in changed and physical not in changed:
+                    continue
                 lexical_owner = owner_for(path, packages)
                 physical_owner = owner_for(physical, packages)
                 if lexical_owner != physical_owner or physical_owner is None:
