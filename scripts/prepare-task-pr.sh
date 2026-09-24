@@ -1438,6 +1438,10 @@ fi
 
 COMPARISON_COMMIT_REF="${COMPARISON_REF}^{commit}"
 COMPARISON_HEAD="$(git rev-parse "$COMPARISON_COMMIT_REF")"
+SOURCE_SCOPE_BASE="$(git -C "$SOURCE_WORKTREE" merge-base "$COMPARISON_HEAD" "$SOURCE_HEAD")" \
+  || die "source projection merge-base is unavailable"
+[[ "$SOURCE_SCOPE_BASE" =~ ^[0-9a-f]{40,64}$ ]] \
+  || die "source projection merge-base is invalid"
 
 # Promotion reviews the ancestor scope OID; live admission keeps the CI integration OID.
 # The live receipt validator below remains authoritative for the PR/check
@@ -1456,6 +1460,13 @@ PY
 )" || die "promote_draft could not read ci_ready_receipt base identity"
   [[ "$PROMOTE_DRAFT_RECEIPT_BASE_OID" =~ ^[0-9a-f]{40,64}$ ]] || die "promote_draft ci_ready_receipt has invalid base identity"
   REVIEW_COMPARISON_OID="$(python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); print(r.get("scope_base_oid",r["base_oid"]))' "$PROMOTE_DRAFT_RECEIPT")"
+fi
+if [[ -z "$REVIEW_COMPARISON_OID" ]]; then
+  if [[ "$LEGACY_REVIEW_V1" == "1" ]]; then
+    REVIEW_COMPARISON_OID="$COMPARISON_HEAD"
+  else
+    REVIEW_COMPARISON_OID="$SOURCE_SCOPE_BASE"
+  fi
 fi
 BASE_WORKTREE=""
 if [[ -n "$LOCAL_BASE_REF" ]]; then
@@ -1552,7 +1563,7 @@ if [[ -x "$PLANNER_SCRIPT" || -n "$IMPACT_PROJECTION" ]]; then
       || die "trusted base impact-projection verifier is unavailable"
     PLANNER_RUNNER=(python3 -I "$TRUSTED_REQUIRED_SCOPE_DIR/scripts/plan-rust-required-scope.py")
     PLANNER_ARGS+=(--config "$TRUSTED_REQUIRED_SCOPE_DIR/scripts/ci-required-scope.v2.json")
-    PLANNER_ARGS+=(--impact-projection "$IMPACT_PROJECTION" --task-uid "$BOUND_TASK_UID" --scope-base-oid "$COMPARISON_HEAD")
+    PLANNER_ARGS+=(--impact-projection "$IMPACT_PROJECTION" --task-uid "$BOUND_TASK_UID" --scope-base-oid "$SOURCE_SCOPE_BASE")
   fi
   if [[ -n "$IMPACT_PROJECTION" ]]; then
     if ! RUST_SCOPE_OUTPUT="$(cd "$SOURCE_WORKTREE" && "${PLANNER_RUNNER[@]}" "${PLANNER_ARGS[@]}" 2>&1)"; then
@@ -1680,8 +1691,6 @@ fi
 # required tests.  The policy must already exist at the trusted comparison OID;
 # a policy introduced by this candidate cannot authorize its own enforcement.
 CARGO_PACKAGE_SCOPE_AUTHORITY_DIR="$(mktemp -d)"
-SOURCE_SCOPE_BASE="$(git -C "$SOURCE_WORKTREE" merge-base "$COMPARISON_HEAD" "$SOURCE_HEAD")" \
-  || die "Cargo package scope source merge-base is unavailable"
 CARGO_PACKAGE_SCOPE_CHECKER="$CARGO_PACKAGE_SCOPE_AUTHORITY_DIR/check-cargo-package-scope"
 CARGO_PACKAGE_SCOPE_POLICY="$SOURCE_WORKTREE/.pm/cargo-package-scope-policy.json"
 CARGO_PACKAGE_SCOPE_RELEVANT="$(python3 - "$SOURCE_WORKTREE" "$COMPARISON_HEAD" "$SOURCE_HEAD" <<'PY'
@@ -1834,7 +1843,7 @@ if [[ -n "$REVIEW_CHANGE_CLASS" ]]; then
   ROLE_SELECTOR_ARGS=(--change-class "$REVIEW_CHANGE_CLASS" --changed-path-list "$LOCAL_REQUIRED_CHANGED_PATHS" --json)
   if [[ -n "$IMPACT_PROJECTION" ]]; then
     [[ -f "$IMPACT_PROJECTION" ]] || die "impact projection is not readable: $IMPACT_PROJECTION"
-    ROLE_SELECTOR_ARGS+=(--impact-projection "$IMPACT_PROJECTION" --task-uid "$BOUND_TASK_UID" --source-head-oid "$SOURCE_HEAD" --scope-base-oid "$COMPARISON_HEAD")
+    ROLE_SELECTOR_ARGS+=(--impact-projection "$IMPACT_PROJECTION" --task-uid "$BOUND_TASK_UID" --source-head-oid "$SOURCE_HEAD" --scope-base-oid "$SOURCE_SCOPE_BASE")
   fi
   [[ -z "$REVIEW_DOMAIN_ROLE" ]] || ROLE_SELECTOR_ARGS+=(--domain-role "$REVIEW_DOMAIN_ROLE")
   [[ "$REVIEW_VERIFICATION_AFFECTED" == "0" ]] || ROLE_SELECTOR_ARGS+=(--verification-affected)
@@ -2134,6 +2143,43 @@ CLEANUP_CMD_1="$(render_cmd \
 CLEANUP_CMD_2=""
 
 PR_URL=""
+if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" == "1" && -n "$LOCAL_ROLE_REVIEW_TASK_UID" && -n "$IMPACT_PROJECTION" ]]; then
+  command -v gh >/dev/null 2>&1 || die "gh not found in PATH"
+  CURRENT_REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
+  C1_BODY_PATH="$BODY_FILE"
+  C1_REMOVE_BODY=0
+  if [[ -z "$C1_BODY_PATH" ]]; then
+    C1_BODY_PATH="$(mktemp)"
+    C1_REMOVE_BODY=1
+    printf '%s\n' "$GENERATED_PR_BODY" >"$C1_BODY_PATH"
+  fi
+  C1_PUBLISH_ARGS=(
+    --worktree "$SOURCE_WORKTREE"
+    --repo "$CURRENT_REPO"
+    --issue-number "$TASK_ISSUE_NUMBER"
+    --task-uid "$LOCAL_ROLE_REVIEW_TASK_UID"
+    --remote "$REMOTE_NAME"
+    --source-ref "$SOURCE_BRANCH"
+    --target-ref "$BASE_BRANCH"
+    --source-head "$SOURCE_HEAD"
+    --target-oid "$COMPARISON_HEAD"
+    --projection "$IMPACT_PROJECTION"
+    --body-file "$C1_BODY_PATH"
+    --task-helper "$ROOT_DIR/scripts/pm/github-project-task.py"
+    --json
+  )
+  if [[ -n "$PR_TITLE" ]]; then
+    C1_PUBLISH_ARGS+=(--title "$PR_TITLE")
+  fi
+  if ! C1_PUBLISH_OUTPUT="$(python3 "$ROOT_DIR/scripts/pm/pr_projection_publish.py" "${C1_PUBLISH_ARGS[@]}" 2>&1)"; then
+    [[ "$C1_REMOVE_BODY" == "1" ]] && rm -f "$C1_BODY_PATH"
+    die "ordered C1 PR publication failed; rerun the same prepare-task-pr command to reconcile its journal: $C1_PUBLISH_OUTPUT"
+  fi
+  [[ "$C1_REMOVE_BODY" == "1" ]] && rm -f "$C1_BODY_PATH"
+  PR_URL="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["pr_url"])' "$C1_PUBLISH_OUTPUT")" \
+    || die "ordered C1 PR publication returned malformed success output"
+  CREATE_PR=0
+fi
 if [[ "$CREATE_PR" == "1" ]]; then
   command -v gh >/dev/null 2>&1 || die '`gh` not found in PATH'
   if [[ -z "$REMOTE_SOURCE_REF" ]]; then
