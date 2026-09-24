@@ -196,7 +196,7 @@ def evaluate_evidence_applicability(
     try:
         source_identity = _common_identity(source_plan, "source plan")
         target_identity = _common_identity(target_snapshot, "target snapshot")
-        _identity(target_snapshot.get("target_oid"), "target_snapshot.target_oid")
+        target_oid = _identity(target_snapshot.get("target_oid"), "target_snapshot.target_oid")
         if source_identity != target_identity:
             return _blocked("TASK_SOURCE_IDENTITY_MISMATCH")
 
@@ -215,6 +215,8 @@ def evaluate_evidence_applicability(
             source_plan.get("required_review_roles"), "source_plan.required_review_roles",
         ))
         input_scope = validate_input_scope_snapshot(target_snapshot.get("input_scope"))
+        if input_scope["target_oid"] != target_oid:
+            raise ValueError("target input scope belongs to a different target commit")
         target_units = tuple(input_scope["required_test_units"])
         projected_target_units = _string_list(
             target_snapshot.get("required_test_units"), "target_snapshot.required_test_units",

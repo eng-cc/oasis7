@@ -276,6 +276,16 @@ class ApplicabilityDecisionTests(unittest.TestCase):
         self.assertEqual("blocked", result_status(decision, "test_evidence"))
         self.assertIn("APPLICABILITY_INPUT_INVALID", decision.blockers)
 
+    def test_mismatched_outer_target_oid_blocks_valid_stale_input_scope(self):
+        target = target_snapshot()
+        target["target_oid"] = "e" * 40
+        decision = self.evaluate(target=target)
+
+        self.assertEqual("blocked", result_status(decision, "source_review"))
+        self.assertEqual("blocked", result_status(decision, "test_evidence"))
+        self.assertEqual("blocked", result_status(decision, "merge_readiness"))
+        self.assertIn("APPLICABILITY_INPUT_INVALID", decision.blockers)
+
     def test_product_result_must_cover_the_full_obligation_set(self):
         evidence = evidence_set()
         evidence["tests"][1]["obligation_ids"] = []
