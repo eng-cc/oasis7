@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RED contract for the repository-owned Cargo package scope checker.
+"""Acceptance contract for the repository-owned Cargo package scope checker.
 
 CLI contract under test:
 
@@ -13,11 +13,8 @@ scope exits non-zero and emits a stable machine-readable reason (or the same
 reason in stderr).  The checker must derive package identity from Cargo
 metadata, not from a guessed ``crates/<name>`` path.
 
-This file deliberately creates all fixtures at runtime so the RED slice is
-self-contained and cannot accidentally depend on a production fixture.  The
-checker is intentionally absent on the C1 base; every test therefore fails
-with the explicit missing-implementation signature until the next agent adds
-the production command.
+This file deliberately creates all fixtures at runtime so scope checks remain
+self-contained and cannot accidentally depend on a production fixture.
 """
 
 from __future__ import annotations
@@ -380,6 +377,47 @@ enabled = true
 
         self._assert_rejected(repo, base, "alpha", mutate, "root_manifest_scope")
 
+    def test_new_package_with_workspace_metadata_membership_policy_is_rejected(self) -> None:
+        repo, base = self._fixture()
+        workspace = repo / "Cargo.toml"
+        workspace.write_text(
+            workspace.read_text(encoding="utf-8")
+            + '\n[workspace.metadata]\nmembership_policy = "legacy"\n',
+            encoding="utf-8",
+        )
+        self._git(repo, "add", "Cargo.toml")
+        self._git(repo, "commit", "-qm", "prepare existing workspace metadata")
+        base = self._git(repo, "rev-parse", "HEAD")
+
+        def mutate(root: Path) -> None:
+            workspace = root / "Cargo.toml"
+            workspace.write_text(
+                workspace.read_text(encoding="utf-8")
+                .replace(
+                    'members = ["crates/alpha", "crates/beta"]',
+                    'members = ["crates/alpha", "crates/beta", "crates/gamma"]',
+                )
+                .replace('membership_policy = "legacy"', 'membership_policy = "strict"'),
+                encoding="utf-8",
+            )
+            (root / "crates/gamma/Cargo.toml").parent.mkdir(parents=True, exist_ok=True)
+            (root / "crates/gamma/Cargo.toml").write_text(
+                """[package]
+name = "gamma"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+""",
+                encoding="utf-8",
+            )
+            self._write(root, "crates/gamma/src/lib.rs", "pub fn gamma() {}\n")
+            with (root / "Cargo.lock").open("a", encoding="utf-8") as handle:
+                handle.write('\n[[package]]\nname = "gamma"\nversion = "0.1.0"\n')
+
+        self._assert_rejected(repo, base, "gamma", mutate, "root_manifest_scope")
+
     def test_unattributable_root_lock_change_is_rejected(self) -> None:
         repo, base = self._fixture()
 
@@ -566,13 +604,24 @@ path = "src/lib.rs"
 
     def test_new_package_with_mechanical_member_and_lock_registration_is_allowed(self) -> None:
         repo, base = self._fixture()
+        workspace = repo / "Cargo.toml"
+        workspace.write_text(
+            workspace.read_text(encoding="utf-8").replace(
+                'members = ["crates/alpha", "crates/beta"]',
+                'members = [\n    "crates/alpha",\n    "crates/beta",\n]',
+            ),
+            encoding="utf-8",
+        )
+        self._git(repo, "add", "Cargo.toml")
+        self._git(repo, "commit", "-qm", "prepare multiline workspace members")
+        base = self._git(repo, "rev-parse", "HEAD")
 
         def mutate(root: Path) -> None:
             workspace = root / "Cargo.toml"
             workspace.write_text(
                 workspace.read_text(encoding="utf-8").replace(
-                    'members = ["crates/alpha", "crates/beta"]',
-                    'members = ["crates/alpha", "crates/beta", "crates/gamma"]',
+                    '    "crates/beta",\n]',
+                    '    "crates/beta",\n    "crates/gamma",\n]',
                 ),
                 encoding="utf-8",
             )

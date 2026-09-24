@@ -262,15 +262,88 @@ def cross_package_dependency_edges(
     return edges
 
 
-def workspace_members(text: str) -> set[str]:
-    match = re.search(r"(?ms)^\s*members\s*=\s*\[(.*?)\]", text)
-    if not match:
-        return set()
-    try:
-        value = ast.literal_eval("[" + match.group(1) + "]")
-    except (SyntaxError, ValueError):
-        return set()
-    return {str(item).replace("\\", "/") for item in value if isinstance(item, str)}
+def workspace_members_and_manifest(text: str) -> tuple[set[str], str] | None:
+    def array_end(start: int) -> int | None:
+        depth = 0
+        quote: str | None = None
+        escaped = False
+        comment = False
+        opened = False
+        for index in range(start, len(text)):
+            char = text[index]
+            if comment:
+                if char == "\n":
+                    comment = False
+                continue
+            if quote is not None:
+                if quote == '"' and escaped:
+                    escaped = False
+                elif quote == '"' and char == "\\":
+                    escaped = True
+                elif char == quote:
+                    quote = None
+                continue
+            if char == "#":
+                comment = True
+            elif char in ("'", '"'):
+                if text.startswith(char * 3, index):
+                    return None
+                quote = char
+            elif char == "[":
+                opened = True
+                depth += 1
+            elif char == "]":
+                depth -= 1
+                if depth < 0:
+                    return None
+                if opened and depth == 0:
+                    return index + 1
+        return None
+
+    in_workspace = False
+    offset = 0
+    skip_until = 0
+    assignments: list[tuple[set[str], int, int]] = []
+    for line in text.splitlines(keepends=True):
+        line_start = offset
+        offset += len(line)
+        if line_start < skip_until:
+            continue
+        content = line.split("#", 1)[0].strip()
+        if content.startswith("[") and content.endswith("]"):
+            in_workspace = content == "[workspace]"
+        if not in_workspace:
+            continue
+        match = re.match(r"^[ \t]*members[ \t]*=[ \t]*", line)
+        if not match:
+            continue
+        value_start = line_start + match.end()
+        value_end = array_end(value_start)
+        if value_end is None:
+            return None
+        line_end = text.find("\n", value_end)
+        if line_end < 0:
+            line_end = len(text)
+        tail = text[value_end:line_end].strip()
+        if tail and not tail.startswith("#"):
+            return None
+        try:
+            value = ast.literal_eval(text[value_start:value_end])
+        except (SyntaxError, ValueError):
+            return None
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            return None
+        members = [item.replace("\\", "/") for item in value]
+        if len(members) != len(set(members)):
+            return None
+        assignments.append((set(members), value_start, value_end))
+        skip_until = value_end
+
+    if len(assignments) != 1:
+        return None
+    members, value_start, value_end = assignments[0]
+    without_members = text[:value_start] + "[]" + text[value_end:]
+    return members, without_members
 
 
 def lock_records(text: str) -> dict[str, list[dict[str, Any]]]:
@@ -499,20 +572,18 @@ def root_manifest_is_mechanical(repo: Path, base: str, head: str, new_manifest_p
     new_blob = git_blob(repo, head, "Cargo.toml")
     if old_blob is None or new_blob is None:
         return False
-    old_members = workspace_members(old_blob.decode("utf-8", errors="replace"))
-    new_members = workspace_members(new_blob.decode("utf-8", errors="replace"))
+    old_parsed = workspace_members_and_manifest(old_blob.decode("utf-8", errors="replace"))
+    new_parsed = workspace_members_and_manifest(new_blob.decode("utf-8", errors="replace"))
+    if old_parsed is None or new_parsed is None:
+        return False
+    old_members, old_manifest = old_parsed
+    new_members, new_manifest = new_parsed
     if not new_members or not new_members.issuperset(old_members):
         return False
     added = new_members - old_members
     if added != new_manifest_paths:
         return False
-    diff = git(repo, "diff", "--unified=0", base, head, "--", "Cargo.toml").stdout
-    for line in diff.splitlines():
-        if not line or line.startswith(("+++", "---", "@@")) or line[0] not in "+-":
-            continue
-        if "members" not in line[1:]:
-            return False
-    return True
+    return old_manifest == new_manifest
 
 
 def source_text(repo: Path, head: str, path: str) -> str:
