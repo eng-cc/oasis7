@@ -256,7 +256,7 @@
       "residual_risk": "Historical pass/closeout/visual/signer wording and captured assets are window-bound; templates are never evidence, and current claims require fresh candidate-bound validation.",
       "evidence_window": "dated-historical-or-supporting-evidence",
       "claim_boundary": "historical_or_supporting_provenance_only_not_current_gate_or_visual_acceptance",
-      "content_sha256": "f7e0f804ace2db88e9922d8e8695c8e98702fad1fbf00d3df5536e440a3c4485"
+      "content_sha256": "df49c67c8f42a263344388eb08b2ce25f6f0363bd8bd00956b812ab260aec791"
     },
     {
       "path": "doc/testing/evidence/closed-beta-runtime-s10-2026-03-22.md",

@@ -19,7 +19,7 @@
     },
     {
       "path": "doc/testing/evidence/inventory.json",
-      "content_sha256": "4a0f70ac3c4970e3afebe8b9e5969d89243dc20bb880f75e2078c22335b28aee"
+      "content_sha256": "e4a2c74f954a0613033bf4cf245023becc38dbd88edefcf085b90ce9b56f10b3"
     }
   ],
   "delegates": [
@@ -28,7 +28,7 @@
       "exact_scope": "doc/testing/evidence/** excluding inventory.json",
       "checker_command": "python3 scripts/doc-evidence-inventory-check.py --repo-root <repo-root>",
       "expected_version": 1,
-      "sha256": "4a0f70ac3c4970e3afebe8b9e5969d89243dc20bb880f75e2078c22335b28aee",
+      "sha256": "e4a2c74f954a0613033bf4cf245023becc38dbd88edefcf085b90ce9b56f10b3",
       "object_count": 128
     }
   ],
@@ -496,8 +496,22 @@
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
     },
     {
+      "path": "doc/engineering/workflow/ci-parallel-evidence-reuse.design.md",
+      "content_sha256": "0f4c3cf5ff03a6984c62d186b41a2e51110814a8e752f24cae3bdf90d9f3eff9",
+      "registry_type": "professional_domain",
+      "structural_owner": "repository_health_engineer",
+      "authority_entry": "doc/engineering/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "repository_health_engineer",
+      "object_kind": "design",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "engineering-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
       "path": "doc/engineering/workflow/ci-projection-publication.design.md",
-      "content_sha256": "789806a3ad373823dbbc2bc841748015fb35aba52d9131b0384a5d940550d255",
+      "content_sha256": "21d55a17508fb4b9aeb8c2dc170201fae0c434f797192d1c98534d7fa2df777c",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -539,7 +553,7 @@
     },
     {
       "path": "doc/engineering/workflow/source-of-truth.md",
-      "content_sha256": "7c8091bb8b26abc02c5d2c879f1eb89535525a23877cc885e39cd8eab0d5d4a2",
+      "content_sha256": "baa90c33de051cfd80b654a69f5086e781b2a4ce4ec82f23d0de46edcb18df16",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -2345,7 +2359,7 @@
     },
     {
       "path": "doc/product/README.md",
-      "content_sha256": "966e6a40c01dc7ee2fdc82d89260679d7ca6ad89c106838aac3d27033d667734",
+      "content_sha256": "41b58c588941cca23e6bd59644db887b2b6e534e4963a75257206aba3e0cc931",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2625,27 +2639,13 @@
     },
     {
       "path": "doc/product/world-infrastructure/prd.md",
-      "content_sha256": "9d55f20a4f395aa556f034c56d4c34939ee1f52ce2e5e749b8b641414e50e0fc",
+      "content_sha256": "6a2ad6afb2721512a6b7d90cf8d1185333da2d2d08a96b09893477c562c821b8",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
       "authority_layer": "product_overlay",
       "semantic_decision_owner": "producer_system_designer",
       "object_kind": "markdown_record",
-      "lifecycle_candidate": "active_candidate",
-      "inventory_disposition": "retain_for_owner_review",
-      "routing_batch": "product-corpus-review",
-      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
-    },
-    {
-      "path": "doc/product/world-infrastructure/world-continuity-governance-and-recovery.prd.md",
-      "content_sha256": "ff7f1d1babdd1fe4e4a4e417e40c305c1255ce31591362f12bf069e726797e75",
-      "registry_type": "product_overlay",
-      "structural_owner": "producer_system_designer",
-      "authority_entry": "doc/product/README.md",
-      "authority_layer": "product_overlay",
-      "semantic_decision_owner": "producer_system_designer",
-      "object_kind": "prd",
       "lifecycle_candidate": "active_candidate",
       "inventory_disposition": "retain_for_owner_review",
       "routing_batch": "product-corpus-review",
@@ -3493,7 +3493,7 @@
     },
     {
       "path": "doc/scripts/prd.md",
-      "content_sha256": "16a9dcbe492f8b274d1cb355364c0e8d964b8c3740126c6c47c17a325d4f78a8",
+      "content_sha256": "1b3a90550af6f1fd7f31c0243536f8dc990096d582e2366728a737bf9ce2d0a3",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/scripts/README.md",
