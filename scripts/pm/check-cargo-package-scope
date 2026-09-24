@@ -239,40 +239,79 @@ def cross_package_dependency_edges(
     return edges
 
 
-def workspace_members(text: str) -> set[str]:
-    match = re.search(r"(?ms)^\s*members\s*=\s*\[(.*?)\]", text)
+def workspace_member_match(text: str) -> re.Match[str] | None:
+    return re.search(r"(?ms)^[ \t]*members[ \t]*=[ \t]*\[(.*?)\]", text)
+
+
+def workspace_member_entries(text: str) -> list[str] | None:
+    match = workspace_member_match(text)
     if not match:
-        return set()
+        return None
     try:
         value = ast.literal_eval("[" + match.group(1) + "]")
     except (SyntaxError, ValueError):
-        return set()
-    return {str(item).replace("\\", "/") for item in value if isinstance(item, str)}
+        return None
+    if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
+        return None
+    return [item.replace("\\", "/") for item in value]
+
+
+def workspace_manifest_without_members(text: str) -> str | None:
+    match = workspace_member_match(text)
+    if not match:
+        return None
+    return text[: match.start(1)] + "<workspace-members>" + text[match.end(1) :]
 
 
 def lock_records(text: str) -> dict[str, list[dict[str, str]]]:
     records: dict[str, list[dict[str, str]]] = {}
     current: dict[str, str] | None = None
     in_package = False
+    in_dependencies = False
+    dependencies_seen = False
+    dependencies: list[str] = []
+
+    def finish_record() -> None:
+        if current and current.get("name"):
+            if dependencies_seen:
+                current["dependencies"] = json.dumps(dependencies, separators=(",", ":"))
+            records.setdefault(current["name"], []).append(current)
+
     for line in text.splitlines():
         if line.strip() == "[[package]]":
-            if current and current.get("name"):
-                records.setdefault(current["name"], []).append(current)
+            finish_record()
             current = {}
             in_package = True
+            in_dependencies = False
+            dependencies_seen = False
+            dependencies = []
             continue
         if line.startswith("[[") or (line.startswith("[") and not line.startswith("[[")):
-            if current and current.get("name"):
-                records.setdefault(current["name"], []).append(current)
+            finish_record()
             current = None
             in_package = False
+            in_dependencies = False
             continue
         if in_package and current is not None:
+            if in_dependencies:
+                if line.strip() == "]":
+                    in_dependencies = False
+                else:
+                    dependency = re.match(r'^\s*"([^"\\]*(?:\\.[^"\\]*)*)"\s*,?\s*$', line)
+                    if dependency:
+                        dependencies.append(dependency.group(1))
+                continue
+            if line.strip() == "dependencies = [":
+                dependencies_seen = True
+                in_dependencies = True
+                continue
+            if line.strip() == "dependencies = []":
+                dependencies_seen = True
+                continue
             match = re.match(r'^\s*(name|version|source|checksum)\s*=\s*"([^"]*)"', line)
             if match:
                 current[match.group(1)] = match.group(2)
-    if current and current.get("name"):
-        records.setdefault(current["name"], []).append(current)
+    finish_record()
     return records
 
 
@@ -284,21 +323,268 @@ def lock_change_names(repo: Path, base: str, head: str) -> set[str]:
     return {name for name in set(before) | set(after) if before.get(name) != after.get(name)}
 
 
-def lock_diff_has_unattributable_lines(repo: Path, base: str, head: str) -> bool:
+def lock_dependency_identity(dependency: str) -> tuple[str, str | None, str | None] | None:
+    source: str | None = None
+    identity = dependency
+    if identity.endswith(")") and " (" in identity:
+        identity, source = identity.rsplit(" (", 1)
+        source = source[:-1]
+    parts = identity.split()
+    if len(parts) == 1:
+        name, version = parts[0], None
+    elif len(parts) == 2:
+        name, version = parts
+    else:
+        return None
+    return name, version, source
+
+
+def lock_dependency_target(
+    dependency: str, records: dict[str, list[dict[str, str]]]
+) -> dict[str, str] | None:
+    identity = lock_dependency_identity(dependency)
+    if identity is None:
+        return None
+    name, version, source = identity
+    candidates = records.get(name, [])
+    if version is not None:
+        candidates = [record for record in candidates if record.get("version") == version]
+    if source is not None:
+        candidates = [record for record in candidates if record.get("source") == source]
+    return candidates[0] if len(candidates) == 1 else None
+
+
+def lock_dependency_matches_manifest_target(
+    dependency: str,
+    records: dict[str, list[dict[str, str]]],
+    metadata: dict[str, Any],
+    package_name: str | None,
+) -> bool:
+    identity = lock_dependency_identity(dependency)
+    if identity is None or package_name is None:
+        return False
+    name, _, _ = identity
+    lock_target = lock_dependency_target(dependency, records)
+    if lock_target is None:
+        return False
+
+    package = next(
+        (item for item in metadata["packages"] if item.get("name") == package_name),
+        None,
+    )
+    if package is None:
+        return False
+    for manifest_dependency in package.get("dependencies", []):
+        if not isinstance(manifest_dependency, dict) or manifest_dependency.get("name") != name:
+            continue
+        dependency_path = manifest_dependency.get("path")
+        if isinstance(dependency_path, str):
+            target_path = Path(dependency_path).resolve()
+            target_package = next(
+                (
+                    item
+                    for item in metadata["packages"]
+                    if Path(str(item.get("manifest_path", ""))).resolve().parent == target_path
+                ),
+                None,
+            )
+            if target_package is not None and all(
+                lock_target.get(field) == str(target_package.get(field))
+                for field in ("name", "version")
+            ) and lock_target.get("source") == target_package.get("source"):
+                return True
+        elif isinstance(manifest_dependency.get("source"), str):
+            if lock_target.get("source") == manifest_dependency["source"]:
+                return True
+    return False
+
+
+def lock_line_owners(text: str) -> tuple[dict[int, str], dict[int, str]]:
+    package_owners: dict[int, str] = {}
+    dependency_owners: dict[int, str] = {}
+    current_package: str | None = None
+    in_package = False
+    in_dependencies = False
+
+    for line_number, line in enumerate(text.splitlines(), start=1):
+        if line.strip() == "[[package]]":
+            current_package = None
+            in_package = True
+            in_dependencies = False
+            continue
+        if line.startswith("[[") or (line.startswith("[") and not line.startswith("[[")):
+            current_package = None
+            in_package = False
+            in_dependencies = False
+            continue
+        if not in_package:
+            continue
+
+        if in_dependencies:
+            if current_package is not None:
+                package_owners[line_number] = current_package
+                dependency_owners[line_number] = current_package
+            if line.strip() == "]":
+                in_dependencies = False
+            continue
+
+        if line.strip() == "dependencies = [":
+            if current_package is not None:
+                package_owners[line_number] = current_package
+                dependency_owners[line_number] = current_package
+            in_dependencies = True
+            continue
+        if line.strip() == "dependencies = []":
+            if current_package is not None:
+                package_owners[line_number] = current_package
+                dependency_owners[line_number] = current_package
+            continue
+
+        name_match = re.match(r'^\s*name\s*=\s*"([^"]*)"', line)
+        if name_match:
+            current_package = name_match.group(1)
+        if current_package is not None:
+            package_owners[line_number] = current_package
+
+    return package_owners, dependency_owners
+
+
+def manifest_dependency_signatures(metadata: dict[str, Any], package_name: str) -> dict[str, list[str]]:
+    result: dict[str, list[str]] = {}
+    package = next(
+        (item for item in metadata["packages"] if item.get("name") == package_name),
+        None,
+    )
+    if package is None:
+        return result
+
+    for dependency in package.get("dependencies", []):
+        if not isinstance(dependency, dict) or not isinstance(dependency.get("name"), str):
+            continue
+        signature = dict(dependency)
+        # Cargo metadata materializes workspace paths under a temporary root;
+        # the resolved path is not part of the manifest dependency contract.
+        signature.pop("path", None)
+        features = signature.get("features")
+        if isinstance(features, list):
+            signature["features"] = sorted(features)
+        signature["kind"] = signature.get("kind") or "normal"
+        result.setdefault(dependency["name"], []).append(
+            json.dumps(signature, sort_keys=True, separators=(",", ":"))
+        )
+    for signatures in result.values():
+        signatures.sort()
+    return result
+
+
+def changed_manifest_dependency_names(
+    base_metadata: dict[str, Any], head_metadata: dict[str, Any], package_name: str | None
+) -> set[str]:
+    if package_name is None:
+        return set()
+    before = manifest_dependency_signatures(base_metadata, package_name)
+    after = manifest_dependency_signatures(head_metadata, package_name)
+    return {
+        name
+        for name in set(before) | set(after)
+        if before.get(name, []) != after.get(name, [])
+    }
+
+
+def lock_diff_has_unattributable_lines(
+    repo: Path,
+    base: str,
+    head: str,
+    primary_package: str | None,
+    changed_manifest_dependencies: set[str],
+    base_metadata: dict[str, Any],
+    head_metadata: dict[str, Any],
+) -> bool:
+    old_text = (git_blob(repo, base, "Cargo.lock") or b"").decode("utf-8", errors="replace")
+    new_text = (git_blob(repo, head, "Cargo.lock") or b"").decode("utf-8", errors="replace")
+    old_package_owners, old_dependency_owners = lock_line_owners(old_text)
+    new_package_owners, new_dependency_owners = lock_line_owners(new_text)
+    old_records = lock_records(old_text)
+    new_records = lock_records(new_text)
     diff = git(repo, "diff", "--unified=0", base, head, "--", "Cargo.lock").stdout
+    changed_dependency_names: set[str] = set()
+    changed_dependency_entries: list[tuple[str, str]] = []
+    saw_dependency_region = False
+    old_line_number: int | None = None
+    new_line_number: int | None = None
+
     for line in diff.splitlines():
-        if not line or line.startswith(("+++", "---", "@@")):
+        hunk = re.match(r"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@", line)
+        if hunk:
+            old_line_number = int(hunk.group(1))
+            new_line_number = int(hunk.group(2))
             continue
-        if line[0] not in "+-":
+        if not line or line.startswith(("+++", "---", "\\")):
             continue
+        if line.startswith("+"):
+            side = "new"
+            line_number = new_line_number
+            if new_line_number is not None:
+                new_line_number += 1
+        elif line.startswith("-"):
+            side = "old"
+            line_number = old_line_number
+            if old_line_number is not None:
+                old_line_number += 1
+        elif line.startswith(" "):
+            if old_line_number is not None:
+                old_line_number += 1
+            if new_line_number is not None:
+                new_line_number += 1
+            continue
+        else:
+            continue
+
         content = line[1:].strip()
         if not content:
             continue
-        if content == "[[package]]" or re.match(r"^(name|version|source|checksum)\s*=", content):
+
+        if side == "old":
+            package_owner = old_package_owners.get(line_number or -1)
+            dependency_owner = old_dependency_owners.get(line_number or -1)
+        else:
+            package_owner = new_package_owners.get(line_number or -1)
+            dependency_owner = new_dependency_owners.get(line_number or -1)
+
+        if dependency_owner is not None:
+            saw_dependency_region = True
+            if dependency_owner != primary_package:
+                return True
+            if content in ("dependencies = [", "dependencies = []", "]"):
+                continue
+            dependency = re.fullmatch(r'"([^"\\]*(?:\\.[^"\\]*)*)",?', content)
+            if dependency is None:
+                return True
+            dependency_name = dependency.group(1).split(" ", 1)[0]
+            changed_dependency_names.add(dependency_name)
+            changed_dependency_entries.append((side, dependency.group(1)))
             continue
-        if content.startswith("dependencies ="):
+
+        if content == "[[package]]":
+            continue
+        if package_owner is not None and re.match(r"^(name|version|source|checksum)\s*=", content):
             continue
         return True
+
+    if not saw_dependency_region:
+        return False
+    if (
+        not changed_dependency_names
+        or not changed_dependency_names.issubset(changed_manifest_dependencies)
+    ):
+        return True
+    for side, dependency in changed_dependency_entries:
+        records = old_records if side == "old" else new_records
+        metadata = base_metadata if side == "old" else head_metadata
+        if not lock_dependency_matches_manifest_target(
+            dependency, records, metadata, primary_package
+        ):
+            return True
     return False
 
 
@@ -307,20 +593,27 @@ def root_manifest_is_mechanical(repo: Path, base: str, head: str, new_manifest_p
     new_blob = git_blob(repo, head, "Cargo.toml")
     if old_blob is None or new_blob is None:
         return False
-    old_members = workspace_members(old_blob.decode("utf-8", errors="replace"))
-    new_members = workspace_members(new_blob.decode("utf-8", errors="replace"))
+    old_text = old_blob.decode("utf-8", errors="replace")
+    new_text = new_blob.decode("utf-8", errors="replace")
+    old_entries = workspace_member_entries(old_text)
+    new_entries = workspace_member_entries(new_text)
+    if old_entries is None or new_entries is None:
+        return False
+    old_members = set(old_entries)
+    new_members = set(new_entries)
     if not new_members or not new_members.issuperset(old_members):
         return False
     added = new_members - old_members
     if added != new_manifest_paths:
         return False
-    diff = git(repo, "diff", "--unified=0", base, head, "--", "Cargo.toml").stdout
-    for line in diff.splitlines():
-        if not line or line.startswith(("+++", "---", "@@")) or line[0] not in "+-":
-            continue
-        if "members" not in line[1:]:
-            return False
-    return True
+    added_entries = [entry for entry in new_entries if entry not in old_members]
+    if len(added_entries) != len(added) or set(added_entries) != added:
+        return False
+    if [entry for entry in new_entries if entry not in added] != old_entries:
+        return False
+    old_without_members = workspace_manifest_without_members(old_text)
+    new_without_members = workspace_manifest_without_members(new_text)
+    return old_without_members is not None and old_without_members == new_without_members
 
 
 def source_text(repo: Path, head: str, path: str) -> str:
@@ -441,7 +734,18 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         if new_manifest_paths != {str(Path(package_manifest_paths(head_packages)[primary_package]).parent).replace("\\", "/")}:
             raise ScopeError("root_manifest_scope", "root manifest registers more than primary package")
     if root_lock_changed:
-        if lock_diff_has_unattributable_lines(repo, args.base, args.head):
+        changed_dependencies = changed_manifest_dependency_names(
+            base_metadata, head_metadata, primary_package
+        )
+        if lock_diff_has_unattributable_lines(
+            repo,
+            args.base,
+            args.head,
+            primary_package,
+            changed_dependencies,
+            base_metadata,
+            head_metadata,
+        ):
             raise ScopeError("unattributable_lock_change", "Cargo.lock contains non-package or non-mechanical changes")
         lock_names = lock_change_names(repo, args.base, args.head)
         if not lock_names or primary_package is None or not lock_names.issubset({primary_package}):

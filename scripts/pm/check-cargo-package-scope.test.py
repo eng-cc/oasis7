@@ -59,15 +59,42 @@ class CargoPackageScopeContract(unittest.TestCase):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
 
-    def _fixture(self) -> tuple[Path, str]:
+    def _set_lock_dependencies(self, repo: Path, package: str, dependencies: list[str]) -> None:
+        lock = repo / "Cargo.lock"
+        lines = lock.read_text(encoding="utf-8").splitlines()
+        start = next(
+            index
+            for index, line in enumerate(lines[:-1])
+            if line == "[[package]]" and lines[index + 1] == f'name = "{package}"'
+        )
+        end = next(
+            (index for index in range(start + 1, len(lines)) if lines[index] == "[[package]]"),
+            len(lines),
+        )
+        record = lines[start:end]
+        record = [line for line in record if line != "dependencies = [" and line != "]" and not line.startswith(' "')]
+        if dependencies:
+            record.extend(["dependencies = [", *(f' "{item}",' for item in dependencies), "]"])
+        lines[start:end] = record
+        lock.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
+    def _fixture(self, *, inline_members: bool = False) -> tuple[Path, str]:
         temp = tempfile.TemporaryDirectory(prefix="cargo-package-scope-")
         self._temps.append(temp)
         repo = Path(temp.name)
+        members = (
+            'members = ["crates/alpha", "crates/beta"]'
+            if inline_members
+            else '''members = [
+    "crates/alpha",
+    "crates/beta",
+]'''
+        )
         self._write(
             repo,
             "Cargo.toml",
-            """[workspace]
-members = ["crates/alpha", "crates/beta"]
+            f"""[workspace]
+{members}
 resolver = "2"
 """,
         )
@@ -123,6 +150,39 @@ path = "src/lib.rs"
         self._git(repo, "add", "-A")
         self._git(repo, "commit", "-qm", message)
         return self._git(repo, "rev-parse", "HEAD")
+
+    def _add_workspace_package(self, root: Path, name: str) -> None:
+        workspace = root / "Cargo.toml"
+        text = workspace.read_text(encoding="utf-8")
+        inline_members = 'members = ["crates/alpha", "crates/beta"]'
+        if inline_members in text:
+            text = text.replace(
+                inline_members,
+                f'members = ["crates/alpha", "crates/beta", "crates/{name}"]',
+            )
+        else:
+            text = text.replace(
+                '    "crates/beta",\n', f'    "crates/beta",\n    "crates/{name}",\n'
+            )
+        workspace.write_text(
+            text,
+            encoding="utf-8",
+        )
+        self._write(
+            root,
+            f"crates/{name}/Cargo.toml",
+            f'''[package]
+name = "{name}"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+''',
+        )
+        self._write(root, f"crates/{name}/src/lib.rs", f"pub fn {name}() {{}}\n")
+        with (root / "Cargo.lock").open("a", encoding="utf-8") as handle:
+            handle.write(f'\n[[package]]\nname = "{name}"\nversion = "0.1.0"\n')
 
     def _run_checker(self, repo: Path, base: str, head: str, primary: str) -> subprocess.CompletedProcess[str]:
         if not CHECKER.is_file():
@@ -217,19 +277,14 @@ path = "src/lib.rs"
         repo, base = self._fixture()
 
         def mutate(root: Path) -> None:
+            self._add_workspace_package(root, "gamma")
             (root / "Cargo.toml").write_text(
-                """[workspace]
-members = ["crates/alpha", "crates/beta"]
-resolver = "2"
-
-[workspace.metadata.unrelated_policy_change]
-enabled = true
-""",
+                (root / "Cargo.toml").read_text(encoding="utf-8")
+                + '\n[workspace.metadata.unrelated_policy_change]\nenabled = true\n',
                 encoding="utf-8",
             )
-            (root / "crates/alpha/src/lib.rs").write_text("pub fn alpha() { 3; }\n", encoding="utf-8")
 
-        self._assert_rejected(repo, base, "alpha", mutate, "root_manifest_scope")
+        self._assert_rejected(repo, base, "gamma", mutate, "root_manifest_scope")
 
     def test_unattributable_root_lock_change_is_rejected(self) -> None:
         repo, base = self._fixture()
@@ -237,6 +292,14 @@ enabled = true
         def mutate(root: Path) -> None:
             with (root / "Cargo.lock").open("a", encoding="utf-8") as handle:
                 handle.write("\n# unrelated lockfile mutation\n")
+
+        self._assert_rejected(repo, base, "alpha", mutate, "unattributable_lock_change")
+
+    def test_unattributable_package_dependency_list_change_is_rejected(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            self._set_lock_dependencies(root, "alpha", ["beta 0.1.0"])
 
         self._assert_rejected(repo, base, "alpha", mutate, "unattributable_lock_change")
 
@@ -271,8 +334,80 @@ enabled = true
                 + '\n[dev-dependencies]\nbeta = { path = "../beta" }\n',
                 encoding="utf-8",
             )
+            self._set_lock_dependencies(root, "alpha", ["beta 0.1.0"])
 
         self._assert_rejected(repo, base, "alpha", mutate, "cross_package_dependency")
+
+    def test_removed_cross_package_dependency_with_matching_lock_delta_is_allowed(self) -> None:
+        repo, _ = self._fixture()
+
+        def add_dependency(root: Path) -> None:
+            manifest = root / "crates/alpha/Cargo.toml"
+            manifest.write_text(
+                manifest.read_text(encoding="utf-8")
+                + '\n[dependencies]\nbeta = { path = "../beta" }\n',
+                encoding="utf-8",
+            )
+            self._set_lock_dependencies(root, "alpha", ["beta 0.1.0"])
+
+        dependency_base = self._head(repo, add_dependency, "fixture with cross-package dependency")
+
+        def remove_dependency(root: Path) -> None:
+            manifest = root / "crates/alpha/Cargo.toml"
+            manifest.write_text(
+                manifest.read_text(encoding="utf-8").replace(
+                    '\n[dependencies]\nbeta = { path = "../beta" }\n', ""
+                ),
+                encoding="utf-8",
+            )
+            self._set_lock_dependencies(root, "alpha", [])
+
+        head = self._head(repo, remove_dependency, "remove cross-package dependency")
+        result = self._run_checker(repo, dependency_base, head, "alpha")
+        self.assertEqual(
+            0,
+            result.returncode,
+            f"expected matching dependency removal to be allowed; stdout={result.stdout!r} stderr={result.stderr!r}",
+        )
+        self.assertEqual("allowed", json.loads(result.stdout).get("status"), result.stdout)
+
+    def test_changed_manifest_requirement_cannot_retarget_lock_dependency(self) -> None:
+        for lock_target in (
+            "beta 9.9.9",
+            "beta 0.1.0 (registry+https://example.invalid/index)",
+        ):
+            with self.subTest(lock_target=lock_target):
+                repo, _ = self._fixture()
+
+                def add_dependency(root: Path) -> None:
+                    manifest = root / "crates/alpha/Cargo.toml"
+                    manifest.write_text(
+                        manifest.read_text(encoding="utf-8")
+                        + '\n[dependencies]\nbeta = { path = "../beta", version = "^0.1.0" }\n',
+                        encoding="utf-8",
+                    )
+                    self._set_lock_dependencies(root, "alpha", ["beta 0.1.0"])
+                    with (root / "Cargo.lock").open("a", encoding="utf-8") as handle:
+                        handle.write(
+                            '\n[[package]]\nname = "beta"\nversion = "9.9.9"\n'
+                            'source = "registry+https://example.invalid/index"\n'
+                        )
+
+                dependency_base = self._head(repo, add_dependency, "fixture with locked path dependency")
+
+                def tamper_lock_target(root: Path) -> None:
+                    manifest = root / "crates/alpha/Cargo.toml"
+                    manifest.write_text(
+                        manifest.read_text(encoding="utf-8").replace(
+                            'version = "^0.1.0"', 'version = "~0.1.0"'
+                        ),
+                        encoding="utf-8",
+                    )
+                    self._set_lock_dependencies(root, "alpha", [lock_target])
+
+                self._assert_rejected(
+                    repo, dependency_base, "alpha", tamper_lock_target, "unattributable_lock_change"
+                )
 
     def test_generated_output_into_another_package_is_rejected(self) -> None:
         repo, base = self._fixture()
@@ -307,35 +442,30 @@ enabled = true
 
         self._assert_rejected(repo, base, "alpha", mutate, "policy_self_modification")
 
-    def test_new_package_with_mechanical_member_and_lock_registration_is_allowed(self) -> None:
+    def test_new_package_with_multiline_member_and_lock_registration_is_allowed(self) -> None:
         repo, base = self._fixture()
 
         def mutate(root: Path) -> None:
-            workspace = root / "Cargo.toml"
-            workspace.write_text(
-                workspace.read_text(encoding="utf-8").replace(
-                    'members = ["crates/alpha", "crates/beta"]',
-                    'members = ["crates/alpha", "crates/beta", "crates/gamma"]',
-                ),
-                encoding="utf-8",
-            )
-            (root / "crates/gamma/Cargo.toml").parent.mkdir(parents=True, exist_ok=True)
-            (root / "crates/gamma/Cargo.toml").write_text(
-                """[package]
-name = "gamma"
-version = "0.1.0"
-edition = "2021"
-
-[lib]
-path = "src/lib.rs"
-""",
-                encoding="utf-8",
-            )
-            self._write(root, "crates/gamma/src/lib.rs", "pub fn gamma() {}\n")
-            with (root / "Cargo.lock").open("a", encoding="utf-8") as handle:
-                handle.write("\n[[package]]\nname = \"gamma\"\nversion = \"0.1.0\"\n")
+            self._add_workspace_package(root, "gamma")
 
         self._assert_allowed(repo, base, "gamma", mutate)
+
+    def test_new_package_with_inline_member_and_lock_registration_is_allowed(self) -> None:
+        repo, base = self._fixture(inline_members=True)
+
+        def mutate(root: Path) -> None:
+            self._add_workspace_package(root, "gamma")
+
+        self._assert_allowed(repo, base, "gamma", mutate)
+
+    def test_multiple_new_workspace_packages_are_rejected(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            self._add_workspace_package(root, "gamma")
+            self._add_workspace_package(root, "delta")
+
+        self._assert_rejected(repo, base, "gamma", mutate, "multiple_business_packages")
 
     def test_package_local_manifest_and_matching_lock_update_are_allowed(self) -> None:
         repo, base = self._fixture()
