@@ -153,6 +153,10 @@ pub struct ViewerLiveServer {
 }
 
 #[derive(Debug)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Viewer request transport keeps the protocol request inline for direct dispatch"
+)]
 enum LiveLoopSignal {
     Request(ViewerRequest),
     LlmDecisionRequested,
@@ -596,10 +600,10 @@ impl ViewerLiveServer {
         emit_idle_metrics: bool,
     ) -> Result<(), ViewerLiveServerError> {
         let has_progress = step.event.is_some() || step.decision_trace.is_some();
-        if let Some(trace) = step.decision_trace {
-            if session.subscribed.contains(&ViewerStream::Events) {
-                send_response(writer, &ViewerResponse::DecisionTrace { trace })?;
-            }
+        if let Some(trace) = step.decision_trace
+            && session.subscribed.contains(&ViewerStream::Events)
+        {
+            send_response(writer, &ViewerResponse::DecisionTrace { trace })?;
         }
 
         if let Some(event) = step.event {
@@ -638,6 +642,10 @@ struct LiveWorld {
     consensus_bridge: Option<LiveConsensusBridge>,
 }
 
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Viewer live driver keeps the script and built-in runner variants in one dispatch enum"
+)]
 enum LiveDriver {
     Script(LiveScript),
     Llm(AgentRunner<LlmAgentBehavior<OpenAiChatCompletionClient>>),

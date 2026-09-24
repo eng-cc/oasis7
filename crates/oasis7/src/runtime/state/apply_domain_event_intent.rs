@@ -286,13 +286,13 @@ impl WorldState {
             _ => unreachable!("apply_domain_event_intent received unsupported event"),
         };
         validate_common_intent(intent)?;
-        if let Some(envelope_event_seq) = envelope_event_seq {
-            if intent.event_seq != envelope_event_seq {
-                return Err(invalid_intent(format!(
-                    "event_seq {} does not match world event envelope {}",
-                    intent.event_seq, envelope_event_seq
-                )));
-            }
+        if let Some(envelope_event_seq) = envelope_event_seq
+            && intent.event_seq != envelope_event_seq
+        {
+            return Err(invalid_intent(format!(
+                "event_seq {} does not match world event envelope {}",
+                intent.event_seq, envelope_event_seq
+            )));
         }
         validate_receipt_reference(intent, committed_receipt_event_id)?;
         validate_runtime_acceptance_source(intent)?;

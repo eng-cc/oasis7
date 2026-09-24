@@ -2,10 +2,12 @@ use std::fs;
 
 use super::*;
 
+type BudgetCapture = Arc<Mutex<Vec<(u64, u64, Vec<String>)>>>;
+
 #[derive(Clone)]
 struct BudgetCapturingFetchCommitNetwork {
     response: super::replication::FetchCommitResponse,
-    budgets: Arc<Mutex<Vec<(u64, u64, Vec<String>)>>>,
+    budgets: BudgetCapture,
 }
 
 impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
@@ -84,7 +86,7 @@ impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>
 
 #[derive(Clone)]
 struct SlowFirstProviderFetchCommitNetwork {
-    budgets: Arc<Mutex<Vec<(u64, u64, Vec<String>)>>>,
+    budgets: BudgetCapture,
 }
 
 impl oasis7_proto::distributed_net::DistributedNetwork<WorldError>

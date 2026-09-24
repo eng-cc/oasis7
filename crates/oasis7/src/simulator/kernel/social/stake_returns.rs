@@ -13,14 +13,14 @@ impl WorldKernel {
         if let Some(stake) = fact.stake.as_ref() {
             self.ensure_social_stake_return_fits(&fact.actor, stake, &mut projected_returns)?;
         }
-        if let Some(challenge) = fact.challenge.as_ref() {
-            if let Some(stake) = challenge.stake.as_ref() {
-                self.ensure_social_stake_return_fits(
-                    &challenge.challenger,
-                    stake,
-                    &mut projected_returns,
-                )?;
-            }
+        if let Some(challenge) = fact.challenge.as_ref()
+            && let Some(stake) = challenge.stake.as_ref()
+        {
+            self.ensure_social_stake_return_fits(
+                &challenge.challenger,
+                stake,
+                &mut projected_returns,
+            )?;
         }
         Ok(())
     }

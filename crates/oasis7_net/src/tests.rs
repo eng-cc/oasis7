@@ -210,7 +210,7 @@ fn libp2p_smoke_request_response_and_pubsub_work_between_peers() {
         .into_iter()
         .find(|addr| addr.to_string().contains("127.0.0.1"))
         .expect("listening addr")
-        .with(libp2p::multiaddr::Protocol::P2p(net1.peer_id().into()));
+        .with(libp2p::multiaddr::Protocol::P2p(net1.peer_id()));
 
     net1.register_handler(
         "/aw/rr/1.0.0/ping",
@@ -592,13 +592,13 @@ impl proto_net::DistributedNetwork<WorldError> for SpyNetwork {
                         .provider_failures_remaining
                         .lock()
                         .expect("lock provider failures");
-                    if let Some(remaining) = failures_remaining.get_mut(provider_id) {
-                        if *remaining > 0 {
-                            *remaining -= 1;
-                            return Err(WorldError::NetworkProtocolUnavailable {
-                                protocol: format!("provider {provider_id} unavailable"),
-                            });
-                        }
+                    if let Some(remaining) = failures_remaining.get_mut(provider_id)
+                        && *remaining > 0
+                    {
+                        *remaining -= 1;
+                        return Err(WorldError::NetworkProtocolUnavailable {
+                            protocol: format!("provider {provider_id} unavailable"),
+                        });
                     }
                 }
 

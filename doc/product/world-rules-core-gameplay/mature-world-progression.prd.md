@@ -6,7 +6,7 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：2026-09-13
+- Last reviewed：2026-09-20
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`gameplay-mature-world-progression-contract.prd.md`](../../game/gameplay/gameplay-mature-world-progression-contract.prd.md)
 
 本文是长期产品分册，承载玩家完成首个持续能力后，在已有组织、治理和历史的成熟世界中继续形成独立价值的产品承诺。长期目标不是世界通关，而是持续完成有边界、可审计并留下世界后果的阶段成果。它不冻结状态字段、数值、Agent 决策顺序、界面结构、任务状态或当前放行结论。
@@ -64,6 +64,12 @@
 - 资格、邀请、预览或推荐只表示可以考虑或尝试申领，不产生世界内资格、容量、排队顺位、优先级或其他世界效果；提交到权威结果前保持待决。只有按当前权限、资格、容量、期限和反滥用条件接受的有界 hold/排队可以暂时预留，且仍不等于已分配；只有 receipt 支持的结果才形成可使用机会。receipt 必须能追溯认可来源、地点/作用域、容量单位、期限和实际世界效果，但不冻结字段名或 schema。并发、重复提交或重连重试至多产生一个结算效果，其余请求必须明确拒绝、释放或保持待决，并给出原因和独立下一步。
 - 结算前若容量、来源、期限、资格或反滥用事实变化，必须按当前条件重新校验；不得自动重提、续期、跨区域携带或用历史认可补签。伪造、刷取、重复申领、循环背书、付费换取、批量自动化或其他不相称来源，只能按预先声明且可复核的审核/处置规则拒绝、暂停或撤销未来效果；未经审核的怀疑不得直接变成惩罚。处置必须保留历史并说明事实类别、当前效果、复核路径和下一次可重新取得资格的条件。
 - 本分册拥有上述成熟世界中的通用成长、区域杠杆与机会组合语义；[`Frontier 扩展与世界信息边界`](frontier-expansion-and-world-information-boundaries.prd.md#req-wr-fi-002)继续主责 pioneer priority 的特定转让/到期/消费边界，[`受治理的区域能力与扩展`](governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-001)继续主责区域设施报价/提交容量。二者不得被泛化为所有认可或机会的替代权威。
+
+### 2.6 长期经济审计与治理影响
+
+- 成熟世界的长期经济审计不能只核对区域 levy。对同一候选版本和证据窗口，必须能够追溯适用的权威资源 source/sink（包括非 levy 的形成、消耗、转换、转移、结算或损失）、关键经济变化，以及治理决定对资源、资格、成本、义务、权限或可替代路线的影响；产品层只冻结这些结果应被审计和解释的边界，不冻结指标、公式或字段。
+- 正常路径应把资源 source/sink、经济变化和治理影响连到同一世界因果链，并区分正常结果、待核验与异常；单节点、单专题或短时 green 不能单独掩盖异常，也不能把局部经济样例扩写为长期世界健康或当前发行结论。
+- 若 source/sink、关键变化、治理影响或候选/窗口对应关系缺失、冲突、过期或无法核验，结果保持 `blocked`、`hold` 或更窄的目标性结论，不静默补齐、重试或放行。恢复路径是取得适用权威证据、在同一候选和窗口重新核对并保留原有缺口/异常历史；补证本身不产生新的世界效果或 release verdict。
 
 ## 3. 失败、恢复与独立性
 
@@ -128,6 +134,7 @@
 - MW-9：成熟世界样例证明系统围绕三条长期推荐轴提供一个当前主目标、继续路径及少量实质不同的分支或主动换向；文明尺度项目保持自愿共同扩展，后台治理/转译/反支配护栏只在实质相关时进入玩家决策。
 - MW-10：区域服务筹资样例区分可排他服务的自愿费用与不可排他公共品的有界 levy；缺少 charter 授权、用途/受益范围、上限或预算、到期、公开账目或复核任一条件时，征费原子拒绝且不阻断玩家的基本独立、通行或恢复路径。样例同时区分待审、已授权未结算、receipt 支持的已结算与失效/撤销，并证明失效授权不会重试、累积欠费或产生资格/治理旁路。
 - MW-11：成熟世界的认可与机会样例证明认可追溯到相称世界事实或可复核的审核/治理决定，并能读出来源、范围、用途、期限和复核边界；资格/邀请/预览/推荐不产生世界资格、容量、排队顺位、优先级或其他世界效果，认可不自动变成资产、OC、治理、区域控制或全局权力。结算前条件变化会重新校验，不自动重提、续期、跨区域携带或用历史认可补签；receipt 可追溯认可来源、地点/作用域、容量单位、期限和实际效果但不冻结 schema。认可不可出售、出租、转让、拆分、叠加或代理/组织代持。反滥用必须按预声明、可复核的处置规则执行，未经审核的怀疑不得直接惩罚，处置保留历史并提供事实类别、当前效果、复核路径和再获资格条件。失效/拒绝/撤销回到独立行动、补证、替代路线或恢复选择；并发、重复或重连请求至多一个结算效果，其余明确拒绝、释放或待决并给出原因和下一步。情境声誉、pioneer priority 与区域设施容量分别回链 CR-003、FI-002 与 GR-001，不互相扩大 authority。
+- MW-12：同一候选版本和证据窗口的长期经济审计覆盖适用的非 levy 资源 source/sink、关键经济变化与治理影响，并能把正常结果、待核验和异常连到同一世界因果链；单节点、单专题、短时或局部 green 不得掩盖缺证或异常。source/sink、变化、治理影响或候选对应关系缺失、冲突、过期或无法核验时保持 `blocked`、`hold` 或更窄结论；恢复必须在取得适用权威证据后重新核对同一候选/窗口，且保留缺口历史，不产生静默经济效果或当前 release verdict。
 
 ### 6.1 验收追踪
 
@@ -141,6 +148,7 @@
 | MW-9 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-GAME-007 / PRD-GAME-014 / PRD-GAME-015 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 三条长期推荐轴、单一主目标、继续/分支/换向、文明项目自愿性与后台护栏组合证据 | test_tier_required |
 | MW-10 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / viewer_engineer / qa_engineer | PRD-GAME-015 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | 自愿服务费/有界 levy 分类、完整授权、原子拒绝、无隐性独立路径门槛、结算状态与失效后的申诉/恢复组合证据 | test_tier_full |
 | MW-11 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / viewer_engineer / qa_engineer | PRD-GAME-015 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md`; [`沟通、合同、声誉与 R&D 连续性`](communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003); [`Frontier 扩展与世界信息边界`](frontier-expansion-and-world-information-boundaries.prd.md#req-wr-fi-002); [`受治理的区域能力与扩展`](governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-001) | 认可来源/范围/期限/复核、失效保留历史与独立恢复、预览/待决/hold/receipt、并发单次效果、拒绝/释放下一步及 CR/FI/GR 专题不越权的组合证据 | test_tier_full |
+| MW-12 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer / liveops_community | PRD-GAME-015 / PRD-GAME-018 / PRD-WORLD_RUNTIME-001 / PRD-P2P-001 / PRD-P2P-002 / PRD-P2P-003 / PRD-WORLD_SIMULATOR-042 / PRD-WORLD_SIMULATOR-045 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md`; [`同候选门禁`](../player-entry-distribution/access-modes-and-release-readiness.prd.md#req-entry-candidate-001) | 同一候选/窗口的非 levy 资源 source/sink、关键经济变化、治理影响、正常/失败/恢复与异常不被单节点/单专题/短时 green 掩盖；缺证保持 blocked/hold/窄结论，不生成当前 release verdict，并与 S8/S9/S10 专业 evidence 组合核对 | test_tier_full |
 
 ## 6.2 产品要求、叶子验收与未决问题
 
@@ -185,8 +193,20 @@
 - 要求：产品必须要求认可追溯到相称的世界事实或可复核的审核/治理决定，并绑定来源、地点/作用域、用途、开始与到期边界及适用的复核/申诉；认可不得自动产生资产、行动成功、OC、治理权、区域控制或全局权力。预览、邀请、推荐和资格不产生世界内资格、容量、排队顺位、优先级或其他世界效果，提交到权威结果前保持待决；只有当前条件接受的有界 hold/排队仍是待决，只有 receipt 支持的结果才形成可使用机会，receipt 可追溯认可来源、地点/作用域、容量单位、期限和实际世界效果但不冻结字段或 schema。结算前事实变化必须重新校验，不得自动重提、续期、跨区域携带或用历史认可补签；失效、拒绝、暂停或撤销必须保留历史并提供独立行动、补证、替代路线、恢复或复核的下一步。认可不得出售、出租、转让、拆分、叠加或被代理/组织代持；反滥用只能依预声明且可复核的审核/处置规则处理，未经审核的怀疑不得直接惩罚；并发、重复和重连重试至多产生一个结算效果。
 - 理由：成熟世界成长可以让局部贡献打开有限机会，但不能把情境证据或一次成功套利成永久权力、隐藏排队或第二次世界效果。
 - 上位承诺：成熟世界成长主线、独立路线与有界认可/机会组合边界；入口侧组合追踪见[`免费进入、世界内成长与有界认可`](../player-entry-distribution/free-entry-world-progression-and-recognition.prd.md#req-entry-free-002)。
-- 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)。情境声誉、pioneer priority 与区域设施容量分别由 CR-003、FI-002 与 GR-001 保持其窄范围 authority；成熟世界 gameplay contract 仅继续承接既有成长/恢复语义，不作为本要求的 generic recognition authority。
+- 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)，以及 [`PRD-GAME-015 成熟世界认可与有限机会专业执行叶子`](../../game/gameplay/gameplay-mature-world-progression-contract.prd.md#prd-game-015-recognition-opportunity)。该 gameplay leaf 承接玩家动作、生命周期、失败恢复与专业验收；情境声誉、pioneer priority 与区域设施容量分别由 CR-003、FI-002 与 GR-001 保持其窄范围 authority，不能被 generic recognition 语义扩张。
 - 验收：[AC-WR-MW-004](#ac-wr-mw-004)。
+
+<a id="req-wr-mw-005"></a>
+### REQ-WR-MW-005：长期经济审计必须覆盖资源流、关键变化与治理影响
+
+- 性质：`边界要求`
+- 适用条件：同一候选版本和证据窗口内，对成熟世界长期经济健康、候选门禁或公开 claim 输入进行产品审计。
+- 要求：审计必须覆盖适用的权威资源 source/sink（包括非 levy 的形成、消耗、转换、转移、结算或损失）、关键经济变化及治理影响，并把它们绑定到同一候选/窗口的世界因果链。正常结果、待核验和异常必须可区分；单节点、单专题、短时或局部 green 不得代签完整审计。source/sink、变化、治理影响或候选对应关系缺失、冲突、过期或无法核验时，产品结论只能保持 `blocked`、`hold` 或更窄的目标性结论。
+- 失败与恢复：不得静默补齐、重试、放行或把历史结果当作当前证据；恢复必须先取得适用权威证据，再在同一候选/窗口重新核对，并保留原缺口、异常和处置历史。补证不产生新的世界效果、经济结算或 release verdict。
+- 理由：CR-5 的长期经济健康不仅是 levy 合规，也包括非 levy 资源守恒、关键经济变化与治理影响是否可审计，以及异常能否被及时识别而非由局部 green 掩盖。
+- 上位承诺：长期经济与发行健康、同候选证据边界。
+- 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)。
+- 验收：[AC-WR-MW-005](#ac-wr-mw-005)。
 
 <a id="ac-wr-mw-001"></a>
 ### AC-WR-MW-001：阶段成果形成可归因的区域价值
@@ -220,10 +240,20 @@
 - 当：认可被使用、到期、拒绝、暂停或撤销，或主体提交、重连、重复申领并在结算前遇到容量、资格、期限或反滥用条件变化。
 - 则：玩家能读到认可与机会的当前边界及其相称事实/审核来源；预览/邀请/推荐/资格不产生世界资格、容量、排队顺位、优先级或其他世界效果，提交保持待决，有界 hold/排队不等于已分配，只有一份当前有效 receipt 产生可使用机会，且 receipt 可追溯认可来源、地点/作用域、容量单位、期限和实际世界效果。结算前事实变化触发当前条件重验，不自动重提、续期、跨区域携带或历史认可补签；认可不出售、出租、转让、拆分、叠加或代理/组织代持。反滥用仅按预声明且可复核的审核/处置规则执行，未经审核的怀疑不直接惩罚，处置保留历史并给出事实类别、当前效果、复核路径和再获资格条件。其他请求原子拒绝、释放或保持待决，不产生第二次分配、隐藏欠费或优先级；失效/拒绝/撤销保留历史并给出独立行动、补证、替代路线、恢复或复核下一步。情境声誉回链 CR-003，pioneer priority 回链 FI-002，区域设施容量回链 GR-001，均不扩大其自身 authority。
 
+<a id="ac-wr-mw-005"></a>
+### AC-WR-MW-005：经济审计缺口不能由局部 green 代签
+
+- 覆盖要求：REQ-WR-MW-005。
+- 给定：同一候选版本和证据窗口，包含适用的非 levy 资源 source/sink、关键经济变化、治理决定/影响、正常样例，以及缺失、冲突、过期、异常或仅单节点/单专题/短时 green 的对照证据。
+- 当：评审长期经济健康、候选门禁或公开 claim 输入。
+- 则（正常）：完整审计能把资源 source/sink、关键变化和治理影响追溯到同一候选/窗口的世界因果链，并区分正常结果、待核验和异常；专业 evidence 仍由各自 authority 提供，产品层不代签实现或当前 readiness。
+- 则（失败）：任一适用 source/sink、关键变化、治理影响或候选对应关系缺证、冲突、过期或无法核验，结果保持 `blocked`、`hold` 或更窄结论；单节点、单专题、短时或局部 green 不能抵消缺口或异常。
+- 则（恢复）：下一步必须是取得适用权威证据并重跑同一候选/窗口的核对，保留原缺口、异常和处置历史；不得静默重试、补造经济效果、升级 release verdict 或把文档迁移当作 fresh evidence。
+
 ### 6.3 未决问题与证据边界
 
-- 尚未决定：成熟世界三条推荐轴和 fresh mature-world sample 何时具备同一候选的 gameplay、runtime、Agent、Viewer 与 QA 证据；影响 MW-1 至 MW-10 的当前路线 verdict，决策负责角色为 `producer_system_designer` 联合 gameplay、runtime、Agent、Viewer 与 QA，触发条件是进入相应实现或公开 claim 审查前，解决前临时不承诺 mature-world 体验已通过。
-- 本分册证据只能证明指定成熟世界样本、入口、版本/窗口和环境中的成长与恢复行为；历史完成态、文档迁移或局部专业 green 不能证明真实留存、完整区域经济或发行 readiness。
+- 尚未决定：成熟世界三条推荐轴、MW-11 认可/机会样例、MW-12 长期经济审计和 fresh mature-world sample 何时具备同一候选的 gameplay、runtime、Agent、Viewer、blockchain 与 QA 证据；影响 MW-1 至 MW-12 的当前路线 verdict，决策负责角色为 `producer_system_designer` 联合 gameplay、runtime、Agent、Viewer、blockchain_ops_engineer 与 QA，触发条件是进入相应实现或公开 claim 审查前，解决前临时不承诺 mature-world 体验、认可/机会、长期经济审计或相关链上证据已通过。
+- 本分册证据只能证明指定成熟世界样本、入口、版本/窗口和环境中的成长、认可/机会与恢复行为；历史完成态、文档迁移或局部专业 green 不能证明真实留存、完整区域经济、认可/机会闭合或发行 readiness。
 
 具体字段、状态转换、Agent 决策顺序、界面呈现和 pass/watch/block 证据由专业域文档与 GitHub task issue evidence 维护，不复制到本产品分册。
 
@@ -233,6 +263,7 @@
 - 不承诺完整职业树、固定专业化数值或全局影响力成长曲线。
 - 不把区域专业化扩展为默认战争、联盟或全局治理主线。
 - 不规定服务费、levy、预算、上限、期限、受益计算、资格、账目格式、申诉程序或任何扣减/结算实现。
+- 不定义资源 source/sink 的实现、经济公式、关键变化指标、治理影响阈值、异常检测算法、证据 schema、S8/S9/S10 执行步骤或 release gate/runbook；本分册只定义长期经济审计应覆盖的产品边界和缺证时的结论边界。
 - 不把文明尺度共同项目、目标作用域、canonical 转译或治理校验包装成逐动作的玩家表单、重复确认或默认主线。
 - 不用历史任务完成态、旧样本或本次文档整理声称当前 mature-world 体验已经通过。
 
@@ -243,4 +274,5 @@
 | [REQ-WR-MW-001](#req-wr-mw-001) / [AC-WR-MW-001](#ac-wr-mw-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`gameplay-mature-world-progression-contract.prd.md`](../../game/gameplay/gameplay-mature-world-progression-contract.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-WR-MW-002](#req-wr-mw-002) / [AC-WR-MW-002](#ac-wr-mw-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`gameplay-mature-world-progression-contract.prd.md`](../../game/gameplay/gameplay-mature-world-progression-contract.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-WR-MW-003](#req-wr-mw-003) / [AC-WR-MW-003](#ac-wr-mw-003) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`gameplay-mature-world-progression-contract.prd.md`](../../game/gameplay/gameplay-mature-world-progression-contract.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
-| [REQ-WR-MW-004](#req-wr-mw-004) / [AC-WR-MW-004](#ac-wr-mw-004) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[`communication-contracts-reputation-and-rd-continuity.prd.md`](communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)、[`frontier-expansion-and-world-information-boundaries.prd.md`](frontier-expansion-and-world-information-boundaries.prd.md#req-wr-fi-002)、[`governed-regional-capabilities-and-extensions.prd.md`](governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-001) | 本专题对应要求/验收、入口 [`REQ-ENTRY-FREE-002`](../player-entry-distribution/free-entry-world-progression-and-recognition.prd.md#req-entry-free-002) / [`AC-ENTRY-FREE-002`](../player-entry-distribution/free-entry-world-progression-and-recognition.prd.md#ac-entry-free-002) 与 FE-3/FE-6/FE-7 的组合追踪；认可、容量竞争、失效恢复和 specialized authority 的边界可导航；既有成熟世界 gameplay contract 不被冒称为 generic recognition authority | `test_tier_full` |
+| [REQ-WR-MW-004](#req-wr-mw-004) / [AC-WR-MW-004](#ac-wr-mw-004) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`gameplay-mature-world-progression-contract.prd.md`](../../game/gameplay/gameplay-mature-world-progression-contract.prd.md#prd-game-015-recognition-opportunity)、[`gameplay-mature-world-progression-contract.prd.md`](../../game/gameplay/gameplay-mature-world-progression-contract.prd.md#prd-game-015-recognition-opportunity-acceptance)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[`communication-contracts-reputation-and-rd-continuity.prd.md`](communication-contracts-reputation-and-rd-continuity.prd.md#req-wr-cr-003)、[`frontier-expansion-and-world-information-boundaries.prd.md`](frontier-expansion-and-world-information-boundaries.prd.md#req-wr-fi-002)、[`governed-regional-capabilities-and-extensions.prd.md`](governed-regional-capabilities-and-extensions.prd.md#req-wr-gr-001) | 本专题对应要求/验收、入口 [`REQ-ENTRY-FREE-002`](../player-entry-distribution/free-entry-world-progression-and-recognition.prd.md#req-entry-free-002) / [`AC-ENTRY-FREE-002`](../player-entry-distribution/free-entry-world-progression-and-recognition.prd.md#ac-entry-free-002) 与 FE-3/FE-6/FE-7 的组合追踪；generic recognition 的 gameplay leaf 与 acceptance anchor 可追溯，认可、容量竞争、失效恢复和 specialized authority 的边界可导航，且不扩大 CR/FI/GR authority | `test_tier_full` |
+| [REQ-WR-MW-005](#req-wr-mw-005) / [AC-WR-MW-005](#ac-wr-mw-005) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 同一候选/窗口的非 levy 资源 source/sink、关键经济变化、治理影响与正常/失败/恢复/异常边界的可导航追踪；专业证据按 S8/S9/S10 及对应 authority 核对，产品层不生成当前 release verdict | `test_tier_full` |

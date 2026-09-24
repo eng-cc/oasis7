@@ -951,6 +951,10 @@ pub(crate) fn has_enhanced_prompt_identity_rollback(
         || request.expected_authority_epoch.is_some()
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Prompt-control identity normalization mirrors the stable signed protocol payload"
+)]
 pub(crate) fn normalize_prompt_control_operation_identity(
     operation: &str,
     preview: bool,

@@ -361,10 +361,10 @@ impl CognitionScheduler {
         wake_id: &str,
     ) -> Result<Option<SchedulerWakeV1>, SchedulerError> {
         let mut removed = self.in_flight.remove(wake_id);
-        if removed.is_none() {
-            if let Some(index) = self.active.iter().position(|wake| wake.wake_id == wake_id) {
-                removed = Some(self.active.remove(index));
-            }
+        if removed.is_none()
+            && let Some(index) = self.active.iter().position(|wake| wake.wake_id == wake_id)
+        {
+            removed = Some(self.active.remove(index));
         }
         if removed.is_none() {
             removed = self.backpressure.remove(wake_id);
@@ -711,7 +711,8 @@ impl CognitionScheduler {
         let promotion = if self.policy.aging_after_ticks == 0 {
             age
         } else {
-            age / self.policy.aging_after_ticks
+            age.checked_div(self.policy.aging_after_ticks)
+                .unwrap_or_default()
         } as i64;
         (wake.initial_priority + promotion).clamp(0, 7)
     }

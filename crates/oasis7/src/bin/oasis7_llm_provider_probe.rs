@@ -325,19 +325,17 @@ mod tests {
                 break;
             }
             bytes.extend_from_slice(&buffer[..read]);
-            if expected_len.is_none() {
-                if let Some(boundary) = bytes.windows(4).position(|window| window == b"\r\n\r\n") {
-                    if let Some(content_length) =
-                        parse_content_length_from_header_bytes(&bytes[..boundary])
-                    {
-                        expected_len = Some(boundary + 4 + content_length);
-                    }
-                }
+            if expected_len.is_none()
+                && let Some(boundary) = bytes.windows(4).position(|window| window == b"\r\n\r\n")
+                && let Some(content_length) =
+                    parse_content_length_from_header_bytes(&bytes[..boundary])
+            {
+                expected_len = Some(boundary + 4 + content_length);
             }
-            if let Some(expected_len) = expected_len {
-                if bytes.len() >= expected_len {
-                    break;
-                }
+            if let Some(expected_len) = expected_len
+                && bytes.len() >= expected_len
+            {
+                break;
             }
         }
 

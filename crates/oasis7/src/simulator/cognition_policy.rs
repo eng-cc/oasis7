@@ -38,7 +38,7 @@ fn normalized_text(
     invalid: &'static str,
 ) -> Result<String, CognitionError> {
     let normalized: String = value.nfc().collect::<String>().trim().to_string();
-    if normalized.as_bytes().len() > max_bytes {
+    if normalized.len() > max_bytes {
         return Err(error(
             too_large,
             "bounded cognition text exceeds its byte limit",
@@ -516,16 +516,15 @@ impl MemoryWriteStore {
             .iter_mut()
             .rev()
             .find(|entry| entry.get("intent_digest").and_then(Value::as_str) == Some(digest))
+            && let Some(object) = entry.as_object_mut()
         {
-            if let Some(object) = entry.as_object_mut() {
-                object.insert("agent_id".to_string(), json!(context.agent_id));
-                object.insert(
-                    "agent_session_id".to_string(),
-                    json!(context.agent_session_id),
-                );
-                object.insert("agent_turn_id".to_string(), json!(context.agent_turn_id));
-                object.insert("request_digest".to_string(), json!(context.request_digest));
-            }
+            object.insert("agent_id".to_string(), json!(context.agent_id));
+            object.insert(
+                "agent_session_id".to_string(),
+                json!(context.agent_session_id),
+            );
+            object.insert("agent_turn_id".to_string(), json!(context.agent_turn_id));
+            object.insert("request_digest".to_string(), json!(context.request_digest));
         }
     }
 

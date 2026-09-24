@@ -4,6 +4,7 @@ use super::hosted_player_session::{
     HostedPlayerSessionAdmissionSnapshot, HostedPlayerSessionIssueGrant,
     HostedPlayerSessionIssueResponse, HostedPlayerSessionIssuer,
 };
+#[cfg(test)]
 use super::{Level, emit_stderr_or_event};
 use lettre::message::Mailbox;
 use lettre::transport::smtp::authentication::Credentials;
@@ -143,6 +144,7 @@ enum HostedLoginDeliveryPlan {
 }
 
 impl HostedAccountIdentityBroker {
+    #[cfg(not(test))]
     pub(super) fn from_env() -> Result<Self, String> {
         Ok(Self {
             store_backend: HostedAccountStoreBackend::from_env()?,
@@ -182,6 +184,10 @@ impl HostedAccountIdentityBroker {
         }
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Stable response API preserves the established structured error payload."
+    )]
     pub(super) fn reserve_login_start(
         &mut self,
         deployment_mode: DeploymentMode,
@@ -274,6 +280,7 @@ impl HostedAccountIdentityBroker {
         })
     }
 
+    #[cfg(test)]
     pub(super) fn start_login(
         &mut self,
         deployment_mode: DeploymentMode,
@@ -330,6 +337,7 @@ impl HostedAccountIdentityBroker {
         }
     }
 
+    #[cfg(test)]
     pub(super) fn complete_login(
         &mut self,
         deployment_mode: DeploymentMode,
@@ -695,6 +703,10 @@ impl HostedLoginSmtpConfig {
         Ok(())
     }
 
+    #[expect(
+        clippy::wrong_self_convention,
+        reason = "Established adapter method name reflects its mailbox source and remains API-compatible."
+    )]
     fn from_mailbox(&self) -> Result<Mailbox, String> {
         let raw = if let Some(name) = self.from_name.as_deref() {
             format!("{name} <{}>", self.from_email)
@@ -831,6 +843,7 @@ fn build_login_challenge_id(issued_at_unix_ms: u64, sequence: u64) -> String {
     format!("hosted-login-challenge-{issued_at_unix_ms:016x}-{sequence:08x}")
 }
 
+#[cfg(not(test))]
 fn random_otp_secret() -> [u8; 32] {
     let mut secret = [0u8; 32];
     fill_os_random(&mut secret);

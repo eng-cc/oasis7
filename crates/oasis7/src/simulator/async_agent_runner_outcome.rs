@@ -13,9 +13,7 @@ use super::{
 /// behavior. `AgentBehavior::decide` is intentionally an infallible interface,
 /// so provider failures cross the actor boundary in the decision trace.
 fn provider_error_code(trace: &AgentDecisionTrace) -> Option<String> {
-    let Some(error) = trace.llm_error.as_deref() else {
-        return None;
-    };
+    let error = trace.llm_error.as_deref()?;
 
     let structured_code = trace
         .llm_output

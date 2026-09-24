@@ -161,7 +161,7 @@ pub(super) fn branch_recommendations(
         IndustryStage::Bootstrap => return Vec::new(),
     };
     candidates
-        .into_iter()
+        .iter()
         .filter(|candidate| enabled(candidate.action_id.as_str()))
         .take(3)
         .cloned()

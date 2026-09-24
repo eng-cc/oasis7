@@ -142,6 +142,10 @@ impl MembershipSyncClient {
         )
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Public signing API keeps explicit key-id and signer seams for compatibility"
+    )]
     pub fn publish_key_revocation_signed_by_key_id(
         &self,
         world_id: &str,
@@ -501,6 +505,10 @@ impl MembershipSyncClient {
         }
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Public restore API keeps explicit DHT, verification, policy, and audit-store seams"
+    )]
     pub fn restore_membership_from_dht_verified_with_audit_store(
         &self,
         world_id: &str,

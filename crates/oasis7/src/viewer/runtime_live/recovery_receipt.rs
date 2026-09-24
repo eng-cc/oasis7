@@ -122,6 +122,10 @@ pub(super) fn rollback_runtime_error(
 }
 
 impl ViewerRuntimeLiveServer {
+    #[expect(
+        clippy::result_large_err,
+        reason = "Recovery protocol errors preserve the stable typed error envelope"
+    )]
     pub(super) fn get_authenticated_rollback_receipt(
         &mut self,
         request: crate::viewer::protocol::RollbackReceiptAccessRequest,
@@ -177,6 +181,10 @@ impl ViewerRuntimeLiveServer {
         Ok(ack)
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Recovery protocol errors preserve the stable typed error envelope"
+    )]
     pub(super) fn persist_current_recovery_generation(
         &mut self,
         ack: &AuthoritativeRecoveryAck<u64>,
@@ -246,6 +254,10 @@ impl ViewerRuntimeLiveServer {
         }
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Recovery protocol errors preserve the stable typed error envelope"
+    )]
     pub(super) fn get_rollback_receipt(
         &self,
         authorization_nonce: String,
@@ -390,6 +402,10 @@ impl ViewerRuntimeLiveServer {
         })
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Recovery protocol errors preserve the stable typed error envelope"
+    )]
     pub(super) fn reevaluate_rollback_readiness(
         &mut self,
         authorization_nonce: String,

@@ -7,15 +7,16 @@
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)
+- 配套专业系统设计：[`Indirect Control Agency Execution and Continuation`](../../world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md#des-wr-ia-010)（DES-WR-IA-010..012，授权范围、待决行动复核与责任因果映射）
 - Last reviewed：2026-09-13
 
-本文定义玩家或组织如何为 Agent 设定并持续管理自治与委托：授权如何持续、待决行动如何受授权变化影响、Agent 如何提出异议，以及结果如何归因。Agent 的取得、维护、容量、转让条件与关联经济权利由[世界规则与玩法系统的 Agent 资产专题](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#agent-asset-economy)负责；本专题不把这些经济条件重新立法。它不定义 runtime 状态机、授权字段、签名、模型行为、界面、数值成本或测试步骤。
+本文定义玩家或组织如何为 Agent 设定并持续管理自治与委托：授权如何持续、待决行动如何受授权变化影响、Agent 如何提出异议，以及结果如何归因。Agent 的取得、维护、容量、转让条件与关联经济权利由[世界规则与玩法系统的 Agent 资产专题](../world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md#agent-asset-economy)负责；本专题不把这些经济条件重新立法。它不定义 runtime 状态机、授权字段、签名、模型行为、界面、数值成本或测试步骤；跨组件 technical authority、pending-action recheck 与 receipt 因果边界见配套专业系统设计。
 
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
 - 设计判定 task issue：#3680。
-- 设计适用性理由：本 PRD 已直接承载授权、转让、责任与恢复的产品决策和验收；独立 design 不会增加另一套玩家信息层级或交互 authority。
+- 设计适用性理由：本 PRD 已直接承载授权、转让、责任与恢复的产品决策和验收；独立产品交互 design 不会增加另一套玩家信息层级或交互 authority。专业 runtime system design 承接技术关系，不改变此项产品 design 豁免。
 - 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 <a id="agent-delegation-boundary"></a>
 ## 1. 产品目标

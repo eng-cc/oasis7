@@ -300,17 +300,17 @@ impl WorldKernel {
             };
         }
 
-        if let Some(existing) = self.model.module_artifacts.get(&wasm_hash) {
-            if existing.wasm_bytes != wasm_bytes {
-                return WorldEventKind::ActionRejected {
-                    reason: RejectReason::RuleDenied {
-                        notes: vec![format!(
-                            "deploy module artifact rejected: hash {} already exists with different bytes",
-                            wasm_hash
-                        )],
-                    },
-                };
-            }
+        if let Some(existing) = self.model.module_artifacts.get(&wasm_hash)
+            && existing.wasm_bytes != wasm_bytes
+        {
+            return WorldEventKind::ActionRejected {
+                reason: RejectReason::RuleDenied {
+                    notes: vec![format!(
+                        "deploy module artifact rejected: hash {} already exists with different bytes",
+                        wasm_hash
+                    )],
+                },
+            };
         }
 
         self.model.module_artifacts.insert(

@@ -1,4 +1,9 @@
 impl PosNodeEngine {
+    #[cfg(test)]
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Legacy test tick seam preserves the existing consensus harness call shape"
+    )]
     pub(super) fn tick(
         &mut self,
         node_id: &str,
@@ -26,6 +31,10 @@ impl PosNodeEngine {
         )
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable node tick state-machine seam keeps network, execution, and progress channels explicit"
+    )]
     pub(super) fn tick_with_progress(
         &mut self,
         node_id: &str,
@@ -193,11 +202,10 @@ impl PosNodeEngine {
 
         let mut decision = if self.pending.is_some() {
             self.advance_pending_attestations(now_ms)?
-        } else if hold_for_replication_probe {
-            self.idle_pending_decision()?
-        } else if !consensus_participation_safe {
-            self.idle_pending_decision()?
-        } else if !self.allow_local_proposals {
+        } else if hold_for_replication_probe
+            || !consensus_participation_safe
+            || !self.allow_local_proposals
+        {
             self.idle_pending_decision()?
         } else if self.next_slot <= current_slot
             && (observed_tick.tick_phase == self.proposal_tick_phase
@@ -270,7 +278,7 @@ impl PosNodeEngine {
             && self.last_execution_height >= decision.height;
         if let Err(err) = with_execution_hook(&mut execution_hook, |hook| {
             self.broadcast_local_replication(
-                gossip.as_deref(),
+                gossip,
                 replication_network.as_deref(),
                 node_id,
                 world_id,
@@ -293,13 +301,12 @@ impl PosNodeEngine {
         }
         if matches!(decision.status, PosConsensusStatus::Committed)
             && decision.height > prev_committed_height
-        {
-            if let Some(latency_ms) = self.pending.as_ref().and_then(|proposal| {
+            && let Some(latency_ms) = self.pending.as_ref().and_then(|proposal| {
                 (proposal.height == decision.height)
                     .then(|| now_ms.saturating_sub(proposal.opened_at_ms))
-            }) {
-                self.record_finality_latency(latency_ms);
-            }
+            })
+        {
+            self.record_finality_latency(latency_ms);
         }
         if let Err(err) = self.apply_decision(&decision) {
             self.rollback_local_committed_execution_after_failure(
@@ -319,18 +326,10 @@ impl PosNodeEngine {
             self.last_committed_at_ms = Some(now_ms);
         }
         if let Some(endpoint) = consensus_network.as_ref() {
-            if let Err(err) =
-                self.broadcast_local_commit_network(endpoint, node_id, world_id, now_ms, &decision)
-            {
-                return Err(err);
-            }
+            self.broadcast_local_commit_network(endpoint, node_id, world_id, now_ms, &decision)?;
         }
         if let Some(endpoint) = gossip.as_ref() {
-            if let Err(err) =
-                self.broadcast_local_commit(endpoint, node_id, world_id, now_ms, &decision)
-            {
-                return Err(err);
-            }
+            self.broadcast_local_commit(endpoint, node_id, world_id, now_ms, &decision)?;
         }
         self.rebroadcast_replicated_commit_head(
             consensus_network.as_deref(),
@@ -341,39 +340,33 @@ impl PosNodeEngine {
             replication.as_deref(),
         )?;
         if let Some(endpoint) = gossip.as_ref() {
-            if let Err(err) = self.ingest_peer_messages(
+            self.ingest_peer_messages(
                 endpoint,
                 node_id,
                 world_id,
                 replication.as_deref_mut(),
                 current_slot,
-            ) {
-                return Err(err);
-            }
+            )?;
         }
         if let Some(endpoint) = consensus_network.as_ref() {
-            if let Err(err) = self.ingest_consensus_network_messages(
+            self.ingest_consensus_network_messages(
                 endpoint,
                 node_id,
                 world_id,
                 current_slot,
                 replication.as_deref_mut(),
-            ) {
-                return Err(err);
-            }
+            )?;
         }
         if let Some(endpoint) = replication_network.as_ref() {
-            if let Err(err) = with_execution_hook(&mut execution_hook, |hook| {
+            with_execution_hook(&mut execution_hook, |hook| {
                 self.ingest_network_replications(
                     endpoint,
                     node_id,
                     world_id,
-                    replication.as_deref_mut(),
+                    replication,
                     hook,
                 )
-            }) {
-                return Err(err);
-            }
+            })?;
         }
         if local_execution_applied
             && (self.committed_height < decision.height
@@ -392,7 +385,7 @@ impl PosNodeEngine {
                     previous_execution_height,
                     previous_execution_block_hash.as_deref(),
                     previous_execution_state_root.as_deref(),
-                    execution_hook.as_deref_mut(),
+                    execution_hook,
                     &err,
                 )?;
             }
@@ -416,7 +409,7 @@ impl PosNodeEngine {
         };
 
         let consensus_snapshot = self.snapshot_from_decision(&decision);
-        if let Some(callback) = progress_callback.as_deref_mut() {
+        if let Some(callback) = progress_callback {
             callback(consensus_snapshot.clone())?;
         }
         Ok(NodeEngineTickResult {
@@ -455,6 +448,10 @@ impl PosNodeEngine {
         Ok(())
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable local execution rollback seam keeps prior bindings and failure context explicit"
+    )]
     fn rollback_local_committed_execution_after_failure(
         &mut self,
         world_id: &str,

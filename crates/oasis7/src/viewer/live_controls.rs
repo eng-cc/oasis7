@@ -379,11 +379,7 @@ impl LiveLoopBackpressure {
                 LiveLoopSignalStatsSnapshot {
                     enqueued,
                     handled,
-                    avg_handle_us: if handled > 0 {
-                        total_nanos / handled / 1_000
-                    } else {
-                        0
-                    },
+                    avg_handle_us: total_nanos.checked_div(handled).unwrap_or(0) / 1_000,
                     max_handle_us: max_nanos / 1_000,
                 }
             }),
@@ -1024,15 +1020,12 @@ fn read_requests(
                 if trimmed.is_empty() {
                     continue;
                 }
-                match serde_json::from_str::<ViewerRequest>(trimmed) {
-                    Ok(request) => {
-                        if tx.send(LiveLoopSignal::Request(request)).is_err() {
-                            loop_running.store(false, Ordering::SeqCst);
-                            break;
-                        }
-                        backpressure.record_enqueued(LiveLoopSignalKind::Request);
+                if let Ok(request) = serde_json::from_str::<ViewerRequest>(trimmed) {
+                    if tx.send(LiveLoopSignal::Request(request)).is_err() {
+                        loop_running.store(false, Ordering::SeqCst);
+                        break;
                     }
-                    Err(_) => {}
+                    backpressure.record_enqueued(LiveLoopSignalKind::Request);
                 }
             }
             Err(_) => {

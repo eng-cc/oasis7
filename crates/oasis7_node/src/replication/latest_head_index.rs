@@ -381,15 +381,14 @@ fn load_indexed_latest_commit_message(
     }
     if let Some(payload) = crate::replication_state_reconcile::parse_replication_commit_payload(
         message.payload.as_slice(),
-    ) {
-        if payload.world_id != world_id || payload.height != index.height {
-            return Err(NodeError::Replication {
-                reason: format!(
-                    "latest commit payload/index height mismatch world={} index_height={}",
-                    world_id, index.height
-                ),
-            });
-        }
+    ) && (payload.world_id != world_id || payload.height != index.height)
+    {
+        return Err(NodeError::Replication {
+            reason: format!(
+                "latest commit payload/index height mismatch world={} index_height={}",
+                world_id, index.height
+            ),
+        });
     }
     Ok(Some(message))
 }
@@ -465,20 +464,20 @@ pub(super) fn prepare_latest_commit_head_persist(
             });
         }
     }
-    if let Some(current) = current_index.as_ref() {
-        if height == current.height {
-            load_indexed_latest_commit_message(root_dir, message.world_id.as_str(), current)?;
-            if (current.record_content_hash != next_index.record_content_hash
-                || current.message_hash != next_index.message_hash)
-                && !allow_same_height_replacement
-            {
-                return Err(NodeError::Replication {
-                    reason: format!(
-                        "latest commit head conflict at world={} height={}",
-                        message.world_id, height
-                    ),
-                });
-            }
+    if let Some(current) = current_index.as_ref()
+        && height == current.height
+    {
+        load_indexed_latest_commit_message(root_dir, message.world_id.as_str(), current)?;
+        if (current.record_content_hash != next_index.record_content_hash
+            || current.message_hash != next_index.message_hash)
+            && !allow_same_height_replacement
+        {
+            return Err(NodeError::Replication {
+                reason: format!(
+                    "latest commit head conflict at world={} height={}",
+                    message.world_id, height
+                ),
+            });
         }
     }
     Ok((next_index, current_index))

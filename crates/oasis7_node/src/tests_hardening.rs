@@ -161,15 +161,13 @@ fn wait_until(deadline: Instant, mut predicate: impl FnMut() -> bool) -> bool {
     false
 }
 
+type TestHandler = Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>;
+
 #[derive(Clone, Default)]
 struct TestInMemoryNetwork {
     retained: Arc<Mutex<HashMap<String, Vec<Vec<u8>>>>>,
     subscribers: Arc<Mutex<Vec<TestNetworkInbox>>>,
-    handlers: Arc<
-        Mutex<
-            HashMap<String, Vec<Arc<dyn Fn(&[u8]) -> Result<Vec<u8>, WorldError> + Send + Sync>>>,
-        >,
-    >,
+    handlers: Arc<Mutex<HashMap<String, Vec<TestHandler>>>>,
 }
 
 type TestNetworkInbox = Arc<Mutex<HashMap<String, Vec<Vec<u8>>>>>;

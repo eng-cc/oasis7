@@ -11,6 +11,10 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn build_chain_status_payload_marks_replication_gap_blocked_unhealthy() {
     let mut consensus = NodeConsensusSnapshot::default();
     consensus.committed_height = 10;

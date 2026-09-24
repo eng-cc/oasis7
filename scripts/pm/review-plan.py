@@ -34,6 +34,7 @@ CANONICAL_REVIEW_ROLES = {
 def effective_mode(*, review_schema: str, loop_status: str,
                    has_ci_ready_receipt: bool,
                    trusted_integration_artifact: bool,
+                   ordinary_pr_ci: bool = False,
                    incremental_review_context: bool = False) -> dict[str, object]:
     """Describe the policy and review path that actually produced a plan.
 
@@ -47,7 +48,9 @@ def effective_mode(*, review_schema: str, loop_status: str,
         raise ContractError(f"unsupported review schema for effective mode: {review_schema}")
     if loop_status not in {"legacy", "passed"}:
         raise ContractError(f"unsupported loop admission status for effective mode: {loop_status}")
-    if type(has_ci_ready_receipt) is not bool or type(trusted_integration_artifact) is not bool:
+    if (type(has_ci_ready_receipt) is not bool
+            or type(trusted_integration_artifact) is not bool
+            or type(ordinary_pr_ci) is not bool):
         raise ContractError("effective mode receipt flags must be boolean")
     if type(incremental_review_context) is not bool:
         raise ContractError("effective mode incremental context flag must be boolean")
@@ -57,15 +60,15 @@ def effective_mode(*, review_schema: str, loop_status: str,
         if trusted_integration_artifact and not has_ci_ready_receipt:
             raise ContractError("v2 effective mode cannot attest integration without a ci-ready receipt")
         if has_ci_ready_receipt and not trusted_integration_artifact:
-            raise ContractError(
-                "v2 effective mode requires a trusted ci-ready receipt"
-            )
+            if not ordinary_pr_ci:
+                raise ContractError("v2 effective mode requires a trusted ci-ready receipt")
         source_review = "separated"
-        integration_validation = (
-            "trusted_integration" if has_ci_ready_receipt
-            else "pending_trusted_integration"
-        )
+        integration_validation = ("trusted_integration" if trusted_integration_artifact
+                                  else "ordinary_pr_ci" if ordinary_pr_ci
+                                  else "pending_trusted_integration")
         enabled = ["source_review_integration_separation"]
+        if ordinary_pr_ci:
+            enabled.append("risk_triggered_integration_revalidation")
         if incremental_review_context:
             enabled.append("incremental_review_context")
         fallback = "legacy_task_without_loop_binding" if legacy_policy else None
@@ -641,6 +644,8 @@ def live_verify_v2_receipt(path: Path, receipt: dict[str, Any]) -> dict[str, Any
                "--pr-number", str(receipt["pr_number"]), "--check-name", str(receipt["check_name"]),
                "--check-app-id", str(receipt["check_app_id"]), "--planner-digest", str(receipt["planner_digest"]),
                "--receipt", str(path), "--refresh-same-identity", "--json"]
+    if receipt.get("base_ref"):
+        command.extend(("--base-ref", str(receipt["base_ref"])))
     result = subprocess.run(command, text=True, capture_output=True)
     if result.returncode:
         detail = result.stderr.strip() or result.stdout.strip() or "live receipt verification failed"
@@ -1106,8 +1111,9 @@ def main() -> int:
                 )
             else:
                 assert receipt_value is not None
-                if not identity_module.has_live_integration_attestation(receipt_value):
-                    raise ContractError("v2 review plan requires a live ci-ready receipt with trusted integration artifact provenance")
+                if not (identity_module.has_live_integration_attestation(receipt_value)
+                        or identity_module.has_live_pr_ci_attestation(receipt_value)):
+                    raise ContractError("v2 review plan requires a live source-bound PR CI or trusted integration receipt")
                 path_digest = args.changed_paths_digest or changed_paths_digest(args.changed_path_list)
                 try:
                     source_identity = identity_module.source_review_identity(
@@ -1119,10 +1125,13 @@ def main() -> int:
                         review_policy_digest=args.review_policy_digest,
                         input_contract_digest=args.input_contract_digest,
                     )
-                    integration_identity = identity_module.integration_ci_identity(receipt_value)
+                    if identity_module.has_live_integration_attestation(receipt_value):
+                        integration_identity = identity_module.integration_ci_identity(receipt_value)
                 except (TypeError, ValueError) as exc:
                     raise ContractError(f"invalid v2 review identity: {exc}") from exc
-                if integration_identity["source_head_oid"] != args.head or integration_identity["task_uid"] != args.task_uid:
+                if (integration_identity is not None
+                        and (integration_identity["source_head_oid"] != args.head
+                             or integration_identity["task_uid"] != args.task_uid)):
                     raise ContractError("v2 integration CI identity does not match task/source head")
                 applicability_identity = identity_module.review_applicability_identity(source_identity)
                 applicability = {
@@ -1145,6 +1154,10 @@ def main() -> int:
             trusted_integration_artifact=(
                 receipt_value is not None
                 and load_identity_module().has_live_integration_attestation(receipt_value)
+            ),
+            ordinary_pr_ci=(
+                receipt_value is not None
+                and load_identity_module().has_live_pr_ci_attestation(receipt_value)
             ),
             incremental_review_context=incremental_context is not None,
         )
@@ -1169,6 +1182,9 @@ def main() -> int:
                  if integration_identity is not None else None),
                 applicability, impact_projection,
             )
+            if receipt_value is not None and identity_module.has_live_pr_ci_attestation(receipt_value):
+                identity["ci_validation_mode"] = "ordinary_pr"
+                identity["ci_ready_receipt_digest"] = identity_module.review_evidence_digest(receipt_value)
         else:
             identity = plan_identity(args.task_uid, args.head, evidence_digest,
                                      comparison_ref, comparison_oid, roles, slices)

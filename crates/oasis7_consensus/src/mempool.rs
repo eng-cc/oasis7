@@ -72,10 +72,9 @@ impl ActionMempool {
         }
         if let Some(idempotency_lookup_key) =
             actor_idempotency_lookup_key(action.actor_id.as_str(), action.idempotency_key.as_str())
+            && self.idempotency_index.contains_key(&idempotency_lookup_key)
         {
-            if self.idempotency_index.contains_key(&idempotency_lookup_key) {
-                return false;
-            }
+            return false;
         }
 
         let actor_count = self
@@ -118,14 +117,12 @@ impl ActionMempool {
         }
         if let Some(idempotency_lookup_key) =
             actor_idempotency_lookup_key(action.actor_id.as_str(), action.idempotency_key.as_str())
-        {
-            if self
+            && self
                 .idempotency_index
                 .get(&idempotency_lookup_key)
                 .is_some_and(|existing| existing == action_id)
-            {
-                self.idempotency_index.remove(&idempotency_lookup_key);
-            }
+        {
+            self.idempotency_index.remove(&idempotency_lookup_key);
         }
         Some(action)
     }

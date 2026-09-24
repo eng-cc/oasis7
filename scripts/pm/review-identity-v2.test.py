@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
 import importlib.util
+import hashlib
+import json
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -66,6 +70,81 @@ def integration_receipt(**changes):
     return value
 
 
+def ordinary_receipt(**changes):
+    value = {
+        "receipt_type": "oasis7_ci_ready_receipt",
+        "issuer": "github_live_query",
+        "repository": "eng-cc/oasis7",
+        "task_uid": UID,
+        "task_issue_number": 1,
+        "pr_number": 7,
+        "base_oid": SOURCE_SCOPE,
+        "head_oid": HEAD,
+        "base_ref": "main",
+        "check_name": "required-gate",
+        "check_app_id": 42,
+        "check_run_id": 13,
+        "planner_digest": "5" * 64,
+        "planner_config_sha256": "sha256:" + "6" * 64,
+        "run_rust_baseline": True,
+        "conclusion": "success",
+        "ci_validation_mode": "ordinary_pr",
+        "live_validation": "ci-ready-receipt-live",
+        "impact_projection_schema": PROJECTION_SCHEMA,
+        "impact_projection_digest": PROJECTION_DIGEST,
+        "impact_projection_planner_digest": PROJECTION_PLANNER_DIGEST,
+    }
+    value.update(changes)
+    return value
+
+
+def ordinary_plan(source, *, change_class="mechanical-doc", include_projection=True):
+    paths = ["doc/change.md"]
+    changed_paths_digest = "sha256:" + hashlib.sha256(
+        json.dumps(paths, sort_keys=True, separators=(",", ":")).encode()
+    ).hexdigest()
+    source["changed_paths_digest"] = changed_paths_digest.removeprefix("sha256:")
+    plan = {
+        "schema": "oasis7-review-plan/v2",
+        "source_review_identity": source,
+        "source_review_digest": MODULE.source_review_digest(source),
+        "impact_projection_schema": PROJECTION_SCHEMA,
+        "impact_projection_digest": PROJECTION_DIGEST,
+        "impact_projection_planner_digest": PROJECTION_PLANNER_DIGEST,
+        "professional_review_applicability": verified_applicability(source),
+        "effective_mode": {
+            "effective_policy": "loop-bound",
+            "review_schema": "oasis7-review-plan/v2",
+            "source_review_mode": "separated",
+            "integration_validation_mode": "ordinary_pr_ci",
+            "enabled_optimizations": ["source_review_integration_separation"],
+            "fallback_reason": None,
+        },
+    }
+    if include_projection:
+        projection = {
+            "schema": PROJECTION_SCHEMA,
+            "task_uid": source["task_uid"],
+            "source_head_oid": source["source_head_oid"],
+            "scope_base_oid": source["source_scope_oid"],
+            "changed_paths": paths,
+            "changed_paths_digest": changed_paths_digest,
+            "change_class": change_class,
+            "review_escalated": False,
+            "verification_affected": False,
+            "closure_status": {"status": "complete"},
+            "consumed_contracts": [],
+            "public_semantics": [],
+            "review_reasons": [],
+        }
+        projection["projection_digest"] = "sha256:" + hashlib.sha256(
+            json.dumps(projection, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        plan["impact_projection"] = projection
+        plan["impact_projection_digest"] = projection["projection_digest"]
+    return plan
+
+
 def applicability_identity(source):
     return MODULE.review_applicability_identity(source)
 
@@ -105,6 +184,168 @@ def v2_plan(source, accepted, applicability=None):
 
 
 class ReviewIdentityV2Test(unittest.TestCase):
+    def _target_relation_case(self, target_path):
+        temp = tempfile.TemporaryDirectory()
+        root = Path(temp.name)
+
+        def git(*args):
+            return subprocess.check_output(["git", "-C", str(root), *args], text=True).strip()
+
+        subprocess.run(["git", "init", str(root)], check=True, capture_output=True)
+        subprocess.run(["git", "-C", str(root), "config", "user.email", "test@example.invalid"], check=True)
+        subprocess.run(["git", "-C", str(root), "config", "user.name", "Review Test"], check=True)
+        (root / "README").write_text("stable\n", encoding="utf-8")
+        (root / "contracts").mkdir()
+        (root / "contracts" / "stable.md").write_text("v1\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(root), "add", "README", "contracts/stable.md"], check=True)
+        subprocess.run(["git", "-C", str(root), "commit", "-m", "base"], check=True, capture_output=True)
+        base = git("rev-parse", "HEAD")
+        subprocess.run(["git", "-C", str(root), "checkout", "-b", "source"], check=True, capture_output=True)
+        (root / "doc").mkdir()
+        (root / "doc" / "change.md").write_text("source\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(root), "add", "doc/change.md"], check=True)
+        subprocess.run(["git", "-C", str(root), "commit", "-m", "source"], check=True, capture_output=True)
+        source_head = git("rev-parse", "HEAD")
+        subprocess.run(["git", "-C", str(root), "checkout", "-b", "target", base], check=True, capture_output=True)
+        target_file = root / target_path
+        target_file.parent.mkdir(parents=True, exist_ok=True)
+        target_file.write_text("target\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(root), "add", target_path], check=True)
+        subprocess.run(["git", "-C", str(root), "commit", "-m", "target"], check=True, capture_output=True)
+        target_head = git("rev-parse", "HEAD")
+
+        changed_paths = ["doc/change.md"]
+        changed_paths_digest = "sha256:" + hashlib.sha256(
+            json.dumps(changed_paths, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        source = MODULE.source_review_identity(
+            task_uid=UID, bootstrap_epoch=1, repository="eng-cc/oasis7", pr_number=7,
+            source_head_oid=source_head, source_scope_oid=base,
+            changed_paths_digest=changed_paths_digest.removeprefix("sha256:"),
+            ordered_role_ids=["qa_engineer", "repository_health_engineer"],
+            role_contract_digest="1" * 64, review_policy_digest="2" * 64,
+            input_contract_digest="3" * 64,
+        )
+        projection = {
+            "schema": PROJECTION_SCHEMA, "task_uid": UID,
+            "source_head_oid": source_head, "scope_base_oid": base,
+            "changed_paths": changed_paths, "changed_paths_digest": changed_paths_digest,
+            "change_class": "mechanical-doc", "review_escalated": False,
+            "verification_affected": False,
+            "closure_status": {"status": "complete", "evidence": [{"path": "README"}]},
+            "consumed_contracts": [{"id": "stable-contract", "path": "contracts/stable.md"}],
+            "affected_consumers": [{"path": "contracts/stable.md"}],
+            "public_semantics": [], "review_reasons": [],
+        }
+        projection["projection_digest"] = "sha256:" + hashlib.sha256(
+            json.dumps(projection, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        plan = {
+            "schema": "oasis7-review-plan/v2", "source_review_identity": source,
+            "source_review_digest": MODULE.source_review_digest(source),
+            "impact_projection_schema": PROJECTION_SCHEMA,
+            "impact_projection": projection,
+            "impact_projection_digest": projection["projection_digest"],
+            "impact_projection_planner_digest": PROJECTION_PLANNER_DIGEST,
+            "professional_review_applicability": verified_applicability(source),
+            "effective_mode": {"effective_policy": "loop-bound"},
+        }
+        receipt = ordinary_receipt(
+            base_oid=base, head_oid=source_head,
+            impact_projection_digest=projection["projection_digest"],
+            impact_projection_planner_digest=PROJECTION_PLANNER_DIGEST,
+        )
+        return temp, root, plan, receipt, target_head
+
+    def test_ordinary_receipt_reuses_only_low_risk_bound_projection(self):
+        source = MODULE.source_review_identity(**source_fields())
+        low_risk = ordinary_plan(source)
+        low_receipt = ordinary_receipt(
+            impact_projection_digest=low_risk["impact_projection_digest"],
+            impact_projection_planner_digest=low_risk["impact_projection_planner_digest"],
+        )
+        self.assertTrue(MODULE.can_reuse_source_review(
+            low_risk, low_receipt
+        ))
+        stable = ordinary_plan(source)
+        stable_projection = stable["impact_projection"]
+        stable_projection["consumed_contracts"] = [{"id": "stable-contract", "revision": "v1"}]
+        stable_projection["affected_consumers"] = ["stable-consumer"]
+        stable_projection.pop("projection_digest", None)
+        stable_projection["projection_digest"] = "sha256:" + hashlib.sha256(
+            json.dumps(stable_projection, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        stable["impact_projection_digest"] = stable_projection["projection_digest"]
+        stable_receipt = ordinary_receipt(
+            impact_projection_digest=stable["impact_projection_digest"],
+            impact_projection_planner_digest=stable["impact_projection_planner_digest"],
+        )
+        self.assertTrue(MODULE.can_reuse_source_review(stable, stable_receipt))
+        high_risk = ordinary_plan(source, change_class="workflow-doc")
+        high_receipt = ordinary_receipt(
+            impact_projection_digest=high_risk["impact_projection_digest"],
+            impact_projection_planner_digest=high_risk["impact_projection_planner_digest"],
+        )
+        self.assertFalse(MODULE.can_reuse_source_review(
+            high_risk, high_receipt
+        ))
+        semantic = ordinary_plan(source)
+        semantic_projection = semantic["impact_projection"]
+        semantic_projection["public_semantics"] = ["wire shape changed"]
+        semantic_projection.pop("projection_digest", None)
+        semantic_projection["projection_digest"] = "sha256:" + hashlib.sha256(
+            json.dumps(semantic_projection, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        semantic["impact_projection_digest"] = semantic_projection["projection_digest"]
+        semantic_receipt = ordinary_receipt(
+            impact_projection_digest=semantic["impact_projection_digest"],
+            impact_projection_planner_digest=semantic["impact_projection_planner_digest"],
+        )
+        self.assertFalse(MODULE.can_reuse_source_review(semantic, semantic_receipt))
+        legacy = ordinary_plan(source)
+        legacy["effective_mode"] = {**legacy["effective_mode"], "effective_policy": "legacy"}
+        self.assertFalse(MODULE.can_reuse_source_review(legacy, low_receipt))
+        tampered = dict(low_risk)
+        tampered["impact_projection"] = {
+            **low_risk["impact_projection"], "review_escalated": True,
+        }
+        self.assertFalse(MODULE.can_reuse_source_review(tampered, low_receipt))
+        missing = ordinary_plan(source, include_projection=False)
+        self.assertFalse(MODULE.can_reuse_source_review(
+            missing, ordinary_receipt(
+                impact_projection_digest=missing["impact_projection_digest"],
+                impact_projection_planner_digest=missing["impact_projection_planner_digest"],
+            )
+        ))
+
+    def test_ordinary_reuse_rejects_related_target_advance(self):
+        temp, root, plan, receipt, target = self._target_relation_case("contracts/stable.md")
+        self.addCleanup(temp.cleanup)
+        self.assertFalse(MODULE.can_reuse_source_review(
+            plan, receipt, current_target_oid=target, current_target_root=root,
+        ))
+
+    def test_ordinary_reuse_allows_unrelated_target_advance(self):
+        temp, root, plan, receipt, target = self._target_relation_case("unrelated.md")
+        self.addCleanup(temp.cleanup)
+        self.assertTrue(MODULE.can_reuse_source_review(
+            plan, receipt, current_target_oid=target, current_target_root=root,
+        ))
+
+    def test_ordinary_reuse_fails_closed_for_unmapped_contract_on_target_advance(self):
+        temp, root, plan, receipt, target = self._target_relation_case("unrelated.md")
+        self.addCleanup(temp.cleanup)
+        projection = plan["impact_projection"]
+        projection["consumed_contracts"] = [{"id": "stable-contract", "revision": "v1"}]
+        projection["projection_digest"] = "sha256:" + hashlib.sha256(
+            json.dumps(projection, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        plan["impact_projection_digest"] = projection["projection_digest"]
+        receipt["impact_projection_digest"] = projection["projection_digest"]
+        self.assertFalse(MODULE.can_reuse_source_review(
+            plan, receipt, current_target_oid=target, current_target_root=root,
+        ))
+
     def test_bootstrap_epoch_uses_positive_integer_snapshot_identity(self):
         identity = MODULE.source_review_identity(**source_fields())
         self.assertEqual(identity["bootstrap_epoch"], 1)

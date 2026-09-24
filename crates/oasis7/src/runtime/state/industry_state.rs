@@ -227,19 +227,14 @@ pub struct FactoryRecycleReceiptV1 {
     pub durability_ppm: i64,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum FactoryProductionStatus {
+    #[default]
     Idle,
     Running,
     Blocked,
     Paused,
-}
-
-impl Default for FactoryProductionStatus {
-    fn default() -> Self {
-        Self::Idle
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

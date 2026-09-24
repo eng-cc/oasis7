@@ -220,10 +220,12 @@ pub(super) fn build_rebuild_status_with_signer(
     if snapshot.consensus.last_execution_height == 0 {
         failed_gates.push("execution_height_zero".to_string());
     }
-    if checkpoint.is_none() {
-        failed_gates.push("checkpoint_unavailable".to_string());
-    } else if !checkpoint_matches_runtime_heads(&snapshot, checkpoint.as_ref().expect("checked")) {
-        failed_gates.push("checkpoint_head_mismatch".to_string());
+    match checkpoint.as_ref() {
+        None => failed_gates.push("checkpoint_unavailable".to_string()),
+        Some(checkpoint) if !checkpoint_matches_runtime_heads(&snapshot, checkpoint) => {
+            failed_gates.push("checkpoint_head_mismatch".to_string());
+        }
+        Some(_) => {}
     }
     let readiness_status = if failed_gates.is_empty() {
         "ready"

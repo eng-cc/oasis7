@@ -14,24 +14,21 @@ use super::error::WorldError;
 use super::events::ModuleProfileChanges;
 use super::events::{DomainEvent, IndustryStage, MaterialTransitPriority};
 use super::gameplay_state::{
-    AgentClaimState, AllianceState, CrisisState, CrisisStatus, EconomicContractState,
-    EconomicContractStatus, GOVERNANCE_IDENTITY_DEFAULT_MAX_VOTE_WEIGHT, GameplayPolicyState,
+    AgentClaimState, AllianceState, CrisisState, EconomicContractState,
+    GOVERNANCE_IDENTITY_DEFAULT_MAX_VOTE_WEIGHT, GameplayPolicyState,
     GovernanceIdentityProfileState, GovernanceIdentityStatus, GovernanceProposalState,
-    GovernanceProposalStatus, GovernanceVoteBallotState, GovernanceVoteState,
-    GovernanceVoteWeightSnapshotState, MetaProgressState, StarterOcClaimState,
-    WarParticipantOutcome, WarState,
+    GovernanceVoteState, GovernanceVoteWeightSnapshotState, MetaProgressState, StarterOcClaimState,
+    WarState,
 };
 use super::governance::{
     GovernanceFinalitySignerRegistry, GovernanceMainTokenControllerRegistry,
     GovernanceValidatorAdmissionRecord,
 };
 use super::main_token::{
-    MAIN_TOKEN_TREASURY_BUCKET_NODE_SERVICE_REWARD, MainTokenAccountBalance, MainTokenConfig,
-    MainTokenEpochIssuanceRecord, MainTokenGenesisAllocationBucketState,
-    MainTokenNodePointsBridgeDistribution, MainTokenNodePointsBridgeEpochRecord,
+    MainTokenAccountBalance, MainTokenConfig, MainTokenEpochIssuanceRecord,
+    MainTokenGenesisAllocationBucketState, MainTokenNodePointsBridgeEpochRecord,
     MainTokenScheduledPolicyUpdate, MainTokenSupplyState, MainTokenTreasuryDistributionRecord,
     RestrictedStarterClaimGrantState, RestrictedStarterClaimLiveopsPoolTopUpRecord,
-    main_token_bucket_unlocked_amount,
 };
 use super::node_points::EpochSettlementReport;
 use super::reward_asset::{
@@ -40,7 +37,7 @@ use super::reward_asset::{
     SystemOrderPoolBudget, reward_mint_signature_v1, verify_reward_mint_signature_v2,
 };
 use super::types::{ActionId, MaterialLedgerId, ProposalId, WorldEventId, WorldTime};
-use super::util::{deserialize_btreemap_u64_keys, hash_json};
+use super::util::deserialize_btreemap_u64_keys;
 
 mod apply_domain_event_core;
 mod apply_domain_event_gameplay;
@@ -125,7 +122,6 @@ fn default_factory_production_state() -> FactoryProductionState {
 fn default_module_release_required_roles() -> Vec<String> {
     state_defaults::default_module_release_required_roles()
 }
-const ALLIANCE_MIN_MEMBER_COUNT: usize = 2;
 pub use self::industry_state::{
     AgentLocationAuthorityV1, FACTORY_BUILD_STARTED_MODERN_VERSION, FactoryBuildPowerObligationV1,
     FactoryConstructionPowerMode, FactoryConstructionPowerProfileV1, FactoryProductionSnapshot,
@@ -361,21 +357,16 @@ pub struct ModuleInstanceState {
     pub installed_at: WorldTime,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ModuleReleaseRequestStatus {
+    #[default]
     Requested,
     Shadowed,
     PartiallyApproved,
     Approved,
     Rejected,
     Applied,
-}
-
-impl Default for ModuleReleaseRequestStatus {
-    fn default() -> Self {
-        Self::Requested
-    }
 }
 
 /// One rebuild attestation submitted for a module release request.
@@ -1144,10 +1135,10 @@ impl WorldState {
                 if let Some(cell) = self.agents.get_mut(from_agent_id) {
                     cell.mailbox.push_back(event.clone());
                 }
-                if from_agent_id != to_agent_id {
-                    if let Some(cell) = self.agents.get_mut(to_agent_id) {
-                        cell.mailbox.push_back(event.clone());
-                    }
+                if from_agent_id != to_agent_id
+                    && let Some(cell) = self.agents.get_mut(to_agent_id)
+                {
+                    cell.mailbox.push_back(event.clone());
                 }
             }
             DomainEvent::DataAccessGranted {
@@ -1161,10 +1152,10 @@ impl WorldState {
                 if let Some(cell) = self.agents.get_mut(owner_agent_id) {
                     cell.mailbox.push_back(event.clone());
                 }
-                if owner_agent_id != grantee_agent_id {
-                    if let Some(cell) = self.agents.get_mut(grantee_agent_id) {
-                        cell.mailbox.push_back(event.clone());
-                    }
+                if owner_agent_id != grantee_agent_id
+                    && let Some(cell) = self.agents.get_mut(grantee_agent_id)
+                {
+                    cell.mailbox.push_back(event.clone());
                 }
             }
             _ => {

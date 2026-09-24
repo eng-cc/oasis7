@@ -2,10 +2,12 @@
 """Behavior contract for deterministic, reusable review planning."""
 from __future__ import annotations
 
+import io
 import json
 import hashlib
 import importlib.util
 import os
+from contextlib import redirect_stdout
 from pathlib import Path
 import subprocess
 import tempfile
@@ -331,6 +333,84 @@ class ReviewPlanTests(unittest.TestCase):
         self.assertTrue(retry["reused"])
         self.assertEqual(first["epoch"], retry["epoch"])
         self.assertNotIn("integration_ci_identity", first)
+
+    def test_v2_identity_without_strict_integration_is_pending(self) -> None:
+        source_plan = self.source_plan()
+        identity = REVIEW_PLAN.plan_identity_v2(
+            TASK, self.head, self.comparison_ref, self.comparison_oid,
+            source_plan["roles"], source_plan["expected_slices"],
+            source_plan["source_review_identity"], source_plan["source_review_digest"],
+            None, None, source_plan["professional_review_applicability"],
+            source_plan["impact_projection"],
+        )
+        self.assertEqual("pending", identity["integration_ci_status"])
+        self.assertNotIn("integration_ci_identity", identity)
+
+    def test_v2_ordinary_receipt_builds_source_plan_without_integration_identity(self) -> None:
+        source_plan = self.source_plan()
+        source = source_plan["source_review_identity"]
+        projection = source_plan["impact_projection"]
+        receipt = {
+            "receipt_type": "oasis7_ci_ready_receipt",
+            "issuer": "github_live_query",
+            "repository": "example/repo",
+            "task_uid": TASK,
+            "task_issue_number": 1,
+            "pr_number": 2,
+            "base_oid": self.comparison_oid,
+            "head_oid": self.head,
+            "base_ref": "main",
+            "check_name": "required-gate",
+            "check_app_id": 42,
+            "check_run_id": 7,
+            "planner_digest": "c" * 64,
+            "planner_config_sha256": "sha256:" + "d" * 64,
+            "run_rust_baseline": True,
+            "conclusion": "success",
+            "ci_validation_mode": "ordinary_pr",
+            "live_validation": "ci-ready-receipt-live",
+            "impact_projection_schema": projection["schema"],
+            "impact_projection_digest": projection["projection_digest"],
+            "impact_projection_planner_digest": projection["planner_digest"],
+            "scope_base_oid": self.comparison_oid,
+            "integration_base_oid": self.comparison_oid,
+        }
+        receipt_path = self.root / "ordinary-receipt.json"
+        receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+        out = self.root / "ordinary-receipt-plan.json"
+        argv = [
+            str(SCRIPT), "--root", str(self.root), "--task-uid", TASK,
+            "--head", self.head, "--ci-ready-receipt", str(receipt_path),
+            "--impact-projection", str(self.root / "source-review-input-impact.json"),
+            "--review-schema", REVIEW_PLAN.V2_SCHEMA, "--change-class", "workflow-doc",
+            "--comparison-ref", self.comparison_ref, "--comparison-oid", self.comparison_oid,
+            "--bootstrap-epoch", "1",
+            "--role-contract-digest", source["role_contract_digest"],
+            "--review-policy-digest", source["review_policy_digest"],
+            "--input-contract-digest", source["input_contract_digest"],
+            "--changed-paths-digest", source["changed_paths_digest"], "--out", str(out),
+        ]
+        with patch.object(REVIEW_PLAN, "live_verify_v2_receipt", return_value=receipt), \
+             patch.object(REVIEW_PLAN.sys, "argv", argv), redirect_stdout(io.StringIO()):
+            self.assertEqual(0, REVIEW_PLAN.main())
+        written = json.loads(out.read_text(encoding="utf-8"))
+        self.assertEqual("pending", written["integration_ci_status"])
+        self.assertEqual("ordinary_pr", written["ci_validation_mode"])
+        self.assertNotIn("integration_ci_identity", written)
+
+    def test_v2_live_receipt_refresh_forwards_bound_target_ref(self) -> None:
+        receipt = {
+            "repository": "example/repo", "task_uid": TASK, "task_issue_number": 1,
+            "pr_number": 2, "check_name": "required-gate", "check_app_id": 42,
+            "planner_digest": "c" * 64, "base_ref": "release",
+        }
+        path = self.root / "bound-receipt.json"
+        path.write_text(json.dumps(receipt), encoding="utf-8")
+        completed = subprocess.CompletedProcess([], 0, stdout=json.dumps(receipt), stderr="")
+        with patch.object(REVIEW_PLAN.subprocess, "run", return_value=completed) as run:
+            REVIEW_PLAN.live_verify_v2_receipt(path, receipt)
+        command = run.call_args.args[0]
+        self.assertEqual("release", command[command.index("--base-ref") + 1])
 
     def test_ci_receipt_refresh_reuses_review_epoch_but_authority_drift_does_not(self) -> None:
         authority = {"receipt_type": "oasis7_ci_ready_receipt", "issuer": "github_live_query",

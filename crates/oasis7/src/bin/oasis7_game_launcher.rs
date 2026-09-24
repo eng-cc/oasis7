@@ -45,7 +45,7 @@ mod url_encoding;
 #[path = "oasis7_game_launcher/viewer_live_command.rs"]
 mod viewer_live_command;
 use chain_command::{
-    build_oasis7_chain_runtime_args, chain_config_path, chain_execution_world_dir, chain_world_id,
+    build_oasis7_chain_runtime_args, chain_execution_world_dir,
     missing_execution_world_persistence_files,
 };
 use cli::{
@@ -128,6 +128,7 @@ const VIEWER_PLAYER_ID_ENV: &str = "OASIS7_VIEWER_PLAYER_ID";
 const VIEWER_AUTH_PUBLIC_KEY_ENV: &str = "OASIS7_VIEWER_AUTH_PUBLIC_KEY";
 const VIEWER_AUTH_PRIVATE_KEY_ENV: &str = "OASIS7_VIEWER_AUTH_PRIVATE_KEY";
 const VIEWER_AUTH_BOOTSTRAP_OBJECT: &str = "__OASIS7_VIEWER_AUTH_ENV";
+#[cfg(not(test))]
 const HOSTED_PLAYER_SESSION_LEDGER_PATH_ENV: &str = "OASIS7_HOSTED_PLAYER_SESSION_LEDGER_PATH";
 const NODE_CONFIG_FILE_NAME: &str = "config.toml";
 const NODE_TABLE_KEY: &str = "node";
@@ -426,21 +427,21 @@ fn run_launcher(options: &CliOptions, trace_session_id: &str) -> Result<(), Stri
     println!("- web static root: {}", viewer_static_dir.display());
     println!("Press Ctrl+C to stop.");
 
-    if options.open_browser {
-        if let Err(err) = open_browser(&game_url) {
-            let stderr_message = format!("warning: failed to open browser automatically: {err}");
-            emit_stderr_or_event(
-                Level::WARN,
-                stderr_message.as_str(),
-                "game launcher failed to open browser automatically",
-            );
-            let browser_fallback_message = format!("open this URL manually: {game_url}");
-            emit_stderr_or_event(
-                Level::INFO,
-                browser_fallback_message.as_str(),
-                "game launcher browser fallback url",
-            );
-        }
+    if options.open_browser
+        && let Err(err) = open_browser(&game_url)
+    {
+        let stderr_message = format!("warning: failed to open browser automatically: {err}");
+        emit_stderr_or_event(
+            Level::WARN,
+            stderr_message.as_str(),
+            "game launcher failed to open browser automatically",
+        );
+        let browser_fallback_message = format!("open this URL manually: {game_url}");
+        emit_stderr_or_event(
+            Level::INFO,
+            browser_fallback_message.as_str(),
+            "game launcher browser fallback url",
+        );
     }
 
     let monitor_result =
@@ -585,6 +586,10 @@ fn start_static_http_server(
     })
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Stable protocol and runtime seam keeps independently validated inputs explicit."
+)]
 fn run_static_http_loop(
     listener: TcpListener,
     deployment_mode: DeploymentMode,
@@ -732,7 +737,7 @@ fn wait_until_ready(
             Path::new(execution_world_dir.as_str()),
             Duration::from_secs(30),
             world_child,
-            chain_child.as_deref_mut(),
+            chain_child,
         )?;
     }
     Ok(())
@@ -782,15 +787,14 @@ fn monitor_world_chain_and_server(
         {
             return Err(format!("oasis7_viewer_live exited unexpectedly: {status}"));
         }
-        if let Some(chain_child) = chain_child.as_deref_mut() {
-            if let Some(status) = chain_child
+        if let Some(chain_child) = chain_child.as_deref_mut()
+            && let Some(status) = chain_child
                 .try_wait()
                 .map_err(|err| format!("failed to query oasis7_chain_runtime status: {err}"))?
-            {
-                return Err(format!(
-                    "oasis7_chain_runtime exited unexpectedly: {status}"
-                ));
-            }
+        {
+            return Err(format!(
+                "oasis7_chain_runtime exited unexpectedly: {status}"
+            ));
         }
 
         match server.error_rx.try_recv() {
@@ -801,15 +805,15 @@ fn monitor_world_chain_and_server(
             Err(TryRecvError::Empty) => {}
         }
 
-        if let Some(handle) = server.join_handle.as_ref() {
-            if handle.is_finished() {
-                return Err("static HTTP server exited unexpectedly".to_string());
-            }
+        if let Some(handle) = server.join_handle.as_ref()
+            && handle.is_finished()
+        {
+            return Err("static HTTP server exited unexpectedly".to_string());
         }
-        if let Some(handle) = server.runtime_presence_join_handle.as_ref() {
-            if handle.is_finished() {
-                return Err("runtime presence monitor exited unexpectedly".to_string());
-            }
+        if let Some(handle) = server.runtime_presence_join_handle.as_ref()
+            && handle.is_finished()
+        {
+            return Err("runtime presence monitor exited unexpectedly".to_string());
         }
 
         thread::sleep(Duration::from_millis(400));
@@ -852,7 +856,7 @@ fn wait_for_tcp_ready(
             Err(_) => thread::sleep(Duration::from_millis(200)),
         }
     }
-    poll_startup_health(world_child, chain_child.as_deref_mut())?;
+    poll_startup_health(world_child, chain_child)?;
     Err(format!("timeout after {}s", timeout.as_secs()))
 }
 
@@ -886,7 +890,7 @@ fn wait_for_http_ready(
         thread::sleep(Duration::from_millis(200));
     }
 
-    poll_startup_health(world_child, chain_child.as_deref_mut())?;
+    poll_startup_health(world_child, chain_child)?;
     Err(format!("timeout after {}s", timeout.as_secs()))
 }
 
@@ -905,14 +909,14 @@ fn poll_startup_health(
             "oasis7_viewer_live exited during startup: {status}"
         ));
     }
-    if let Some(chain_child) = chain_child {
-        if let Some(status) = chain_child.try_wait().map_err(|err| {
+    if let Some(chain_child) = chain_child
+        && let Some(status) = chain_child.try_wait().map_err(|err| {
             format!("failed to query oasis7_chain_runtime status during startup: {err}")
-        })? {
-            return Err(format!(
-                "oasis7_chain_runtime exited during startup: {status}"
-            ));
-        }
+        })?
+    {
+        return Err(format!(
+            "oasis7_chain_runtime exited during startup: {status}"
+        ));
     }
     Ok(())
 }
@@ -1054,7 +1058,7 @@ fn open_browser(url: &str) -> Result<(), String> {
         if status.success() {
             return Ok(());
         }
-        return Err(format!("`open` exited with status {status}"));
+        Err(format!("`open` exited with status {status}"))
     }
 
     #[cfg(target_os = "windows")]

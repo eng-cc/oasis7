@@ -615,7 +615,7 @@ fn module_call_rejects_effect_with_unbound_cap_slot() {
             WorldEventBody::ModuleCallFailed(failure) => Some(failure),
             _ => None,
         })
-        .last()
+        .next_back()
         .expect("failure event");
     assert_eq!(failed.code, ModuleCallErrorCode::CapsDenied);
     assert!(failed.detail.contains("cap_slot not bound"));
@@ -721,7 +721,7 @@ fn module_call_policy_denied_records_failure() {
             WorldEventBody::ModuleCallFailed(failure) => Some(failure),
             _ => None,
         })
-        .last()
+        .next_back()
         .unwrap();
     assert_eq!(failed.code, ModuleCallErrorCode::PolicyDenied);
 }

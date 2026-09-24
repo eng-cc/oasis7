@@ -596,10 +596,10 @@ fn extract_host_header(headers: &[(String, String)]) -> Option<String> {
 
 fn normalize_host_header(raw: &str) -> String {
     let value = raw.trim();
-    if value.starts_with('[') {
-        if let Some((host, _)) = value.rsplit_once(']') {
-            return host.trim_start_matches('[').to_string();
-        }
+    if value.starts_with('[')
+        && let Some((host, _)) = value.rsplit_once(']')
+    {
+        return host.trim_start_matches('[').to_string();
     }
     if let Some((host, _port)) = value.rsplit_once(':') {
         if host.contains(':') {
@@ -657,6 +657,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::field_reassign_with_default,
+        reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+    )]
     fn hosted_mode_rejects_remote_private_state_request() {
         let mut config = LauncherConfig::default();
         config.deployment_mode = "hosted_public_join".to_string();
@@ -687,6 +691,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::field_reassign_with_default,
+        reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+    )]
     fn hosted_mode_rejects_remote_private_control_plane_matrix() {
         let _guard = hosted_strong_auth_test_env_lock().lock().expect("env lock");
         clear_hosted_strong_auth_env();
@@ -747,6 +755,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::field_reassign_with_default,
+        reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+    )]
     fn public_snapshot_exposes_hosted_access_contract() {
         let _guard = hosted_strong_auth_test_env_lock().lock().expect("env lock");
         clear_hosted_strong_auth_env();
@@ -786,6 +798,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::field_reassign_with_default,
+        reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+    )]
     fn public_snapshot_keeps_asset_lane_blocked_when_prompt_reauth_env_is_ready() {
         let _guard = hosted_strong_auth_test_env_lock().lock().expect("env lock");
         clear_hosted_strong_auth_env();

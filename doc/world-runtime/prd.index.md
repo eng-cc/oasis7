@@ -39,7 +39,7 @@
 - `doc/world-runtime/wasm/wasm-sdk.prd.md`：默认 no_std、共享 Canonical-CBOR wire、codec 错误与 builtin 兼容主入口。
 - `doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md`：retention / GC / replay contract 与 storage budget 主入口。
 - `doc/world-runtime/runtime/agent-cognition-lifecycle.prd.md`：Agent cognition 的非阻塞调度、MVCC action envelope、durable journal/recovery 与 runtime-owned continuation 主入口。
-- `doc/world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md`：承接间接控制产品/玩法要求的 runtime、Agent、Viewer/API authority、状态、receipt、恢复与验证映射。
+- `doc/world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md`：承接间接控制与 Agent 自治/委托/责任产品要求的 runtime、Agent、Viewer/API authority、待决行动复核、receipt、恢复与验证映射。
 - `doc/world-runtime/runtime/chain-pos-control-plane.prd.md`：链 PoS 时间、tick 相位、控制面 status 与恢复合同主入口。
 - `doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md`：线上模块发布合法性与默认 binary-only 边界主入口。
 - `doc/world-runtime/module/player-published-entities.prd.md`：玩家发布实体与模块发布链路衔接入口。
@@ -94,6 +94,7 @@
 | `doc/world-runtime/templates/runtime-release-gate-metrics-template.md` | `template` | release gate 指标模板 |
 | `doc/world-runtime/templates/runtime-security-numeric-regression-template.md` | `template` | 安全与数值语义回归模板 |
 | `doc/world-runtime/checklists/runtime-core-boundary-acceptance-checklist.md` | `checklist` | runtime 核心边界验收清单 |
+| [`integration/node-contribution-points-runtime-closure.md`](integration/node-contribution-points-runtime-closure.md) | `retained technical draft` | 节点积分 MVP 的 runtime closure 草案与溯源材料；当前专业规则见 [`doc/p2p/node/node-contribution-points.prd.md`](../p2p/node/node-contribution-points.prd.md)。草案尚未完整吸收到当前合同，不证明当前实现或 readiness。 |
 
 已退役删除的 2026-03 runtime P0 candidate / T7.2 / T7.3 / T7.4 role handoff root 文档不再作为补充入口；对应结论从上方 evidence、GitHub task issue evidence comments 与 Git history 追溯。
 

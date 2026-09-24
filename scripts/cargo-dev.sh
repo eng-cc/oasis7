@@ -6,11 +6,12 @@ usage() {
   cat <<'USAGE'
 Usage: ./scripts/cargo-dev.sh [--print-target-dir] <cargo-args...>
 
-Run cargo with a repo-family shared development target dir so multiple git
-worktrees can reuse build artifacts.
+Run cargo with a worktree-scoped shared development target dir so one worktree
+can reuse build artifacts without selecting artifacts from a divergent source.
 
 Default behavior:
-- Computes a stable cache namespace from `git rev-parse --git-common-dir`
+- Computes a stable cache namespace from the git common dir and current
+  worktree source root
 - Stores shared targets under `<repo-parent>/.oasis7-cache/cargo-target/`
 - Unsets `RUSTC_WRAPPER` to match the repository's default cargo invocation rule
 
@@ -20,11 +21,15 @@ Options:
 
 Environment:
   OASIS7_CARGO_SHARED_TARGET_DIR
-      Override the resolved shared target dir.
+      Override the resolved target dir. This is an explicit escape hatch from
+      worktree isolation and should only be used for compatible sources.
 
 Notes:
 - This wrapper is for local development commands such as `check`, `test`, `run`,
   and `build`.
+- If the current worktree has a legacy managed `target` symlink, an actual
+  development invocation atomically replaces only that symlink with the
+  current worktree namespace and preserves the old cache directory.
 - Do not use it for deterministic wasm / release flows that require
   `CARGO_TARGET_DIR` to stay unset.
 
@@ -106,16 +111,18 @@ HOST_TRIPLE="$("$RUSTC_BIN" -vV | sed -n 's/^host: //p')"
 RUSTC_RELEASE="$("$RUSTC_BIN" -vV | sed -n 's/^release: //p')"
 
 cache_namespace() {
-  "$PYTHON_BIN" - "$COMMON_GIT_DIR" <<'PY'
+  "$PYTHON_BIN" - "$COMMON_GIT_DIR" "$REPO_ROOT" <<'PY'
 from __future__ import annotations
 
 import hashlib
 import pathlib
 import sys
 
-path = pathlib.Path(sys.argv[1]).resolve()
-digest = hashlib.sha256(str(path).encode("utf-8")).hexdigest()[:12]
-print(f"git-{digest}")
+common_dir = pathlib.Path(sys.argv[1]).resolve()
+source_root = pathlib.Path(sys.argv[2]).resolve()
+common_digest = hashlib.sha256(str(common_dir).encode("utf-8")).hexdigest()[:12]
+source_digest = hashlib.sha256(str(source_root).encode("utf-8")).hexdigest()[:12]
+print(f"git-{common_digest}/worktree-{source_digest}")
 PY
 }
 
@@ -137,6 +144,57 @@ case "${1:-}" in
     exit 0
     ;;
 esac
+
+if [[ -L "$REPO_ROOT/target" && -z "${OASIS7_CARGO_SHARED_TARGET_DIR:-}" ]]; then
+  CURRENT_TARGET="$("$PYTHON_BIN" - "$REPO_ROOT/target" <<'PY'
+import os
+import sys
+
+print(os.path.realpath(sys.argv[1]))
+PY
+)"
+  EXPECTED_TARGET="$("$PYTHON_BIN" - "$TARGET_DIR" <<'PY'
+import os
+import sys
+
+print(os.path.realpath(sys.argv[1]))
+PY
+)"
+  if [[ "$CURRENT_TARGET" != "$EXPECTED_TARGET" ]]; then
+    if ! "$PYTHON_BIN" - "$REPO_ROOT/target" "$CANONICAL_REPO_ROOT" <<'PY'
+import os
+import pathlib
+import sys
+
+old_target = pathlib.Path(os.path.realpath(sys.argv[1]))
+cache_root = pathlib.Path(sys.argv[2]).resolve().parent / ".oasis7-cache" / "cargo-target"
+try:
+    old_target.relative_to(cache_root)
+except ValueError:
+    raise SystemExit(1)
+raise SystemExit(0)
+PY
+    then
+      echo "error: worktree target symlink points outside the managed Cargo cache; repair $REPO_ROOT/target before using cargo-dev.sh" >&2
+      exit 1
+    fi
+    MIGRATION_DIR="$(mktemp -d "$REPO_ROOT/target.migration.XXXXXX")"
+    if ! ln -s "$TARGET_DIR" "$MIGRATION_DIR/target" || \
+      ! "$PYTHON_BIN" - "$MIGRATION_DIR/target" "$REPO_ROOT/target" <<'PY'
+import os
+import sys
+
+os.replace(sys.argv[1], sys.argv[2])
+PY
+    then
+      unlink "$MIGRATION_DIR/target" >/dev/null 2>&1 || true
+      rmdir "$MIGRATION_DIR" >/dev/null 2>&1 || true
+      echo "error: failed to migrate worktree target symlink; legacy cache was preserved" >&2
+      exit 1
+    fi
+    rmdir "$MIGRATION_DIR" >/dev/null 2>&1 || true
+  fi
+fi
 
 mkdir -p "$TARGET_DIR"
 exec env -u RUSTC_WRAPPER CARGO_TARGET_DIR="$TARGET_DIR" "$CARGO_BIN" "$@"

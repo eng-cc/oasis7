@@ -715,6 +715,34 @@ def update_fields(
     return updated, skipped
 
 
+def read_project_item_field_values(project_id: str, item_id: str) -> dict[str, str]:
+    """Read back the authoritative Project fields for one item after mutation."""
+    token = github_token()
+    query = """
+    query($project: ID!, $item: ID!) {
+      node(id: $item) {
+        ... on ProjectV2Item {
+          project { id }
+          fieldValues(first: 100) { nodes {
+            ... on ProjectV2ItemFieldTextValue { text field { ... on ProjectV2FieldCommon { name } } }
+            ... on ProjectV2ItemFieldSingleSelectValue { name field { ... on ProjectV2FieldCommon { name } } }
+          } }
+        }
+      }
+    }
+    """
+    payload = graphql_request(token, query, {"project": project_id, "item": item_id})
+    node = ((payload.get("data") or {}).get("node") or {})
+    if str(((node.get("project") or {}).get("id") or "")) != project_id:
+        raise RuntimeError("Project item belongs to a different Project")
+    values: dict[str, str] = {}
+    for value in ((node.get("fieldValues") or {}).get("nodes") or []):
+        field_name = str(((value.get("field") or {}).get("name") or ""))
+        if field_name:
+            values[field_name] = str(value.get("name") or value.get("text") or "")
+    return values
+
+
 def confirmed_project_field_values(
     current_values: dict[str, str],
     task: OrderedDict[str, Any],

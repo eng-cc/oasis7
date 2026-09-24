@@ -52,18 +52,13 @@ fn default_logistics_route_available() -> bool {
     true
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum IndustryStage {
+    #[default]
     Bootstrap,
     ScaleOut,
     Governance,
-}
-
-impl Default for IndustryStage {
-    fn default() -> Self {
-        Self::Bootstrap
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -86,17 +81,12 @@ pub enum MainTokenFeeKind {
     ModuleFee,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum MaterialTransitPriority {
     Urgent,
+    #[default]
     Standard,
-}
-
-impl Default for MaterialTransitPriority {
-    fn default() -> Self {
-        Self::Standard
-    }
 }
 
 /// An envelope wrapping an action with its ID.

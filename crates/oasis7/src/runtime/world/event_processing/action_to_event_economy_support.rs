@@ -73,6 +73,10 @@ pub(super) fn aggregate_material_stacks_for_admission(
     Ok(aggregated)
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Collect-data authentication fields are a stable signed request schema."
+)]
 pub(super) fn authenticated_collect_data_to_event(
     world: &World,
     action_id: ActionId,

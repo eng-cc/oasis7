@@ -154,25 +154,7 @@ mod execution_bridge {
     use oasis7_node::{NodeExecutionCommitContext, NodeExecutionCommitResult, NodeExecutionHook};
     use oasis7_proto::storage_profile::StorageProfileConfig;
 
-    #[derive(Debug, Default)]
-    pub(super) struct ExecutionBridgeRecord {
-        pub(super) latest_state_ref: Option<String>,
-        pub(super) snapshot_ref: Option<String>,
-        pub(super) journal_ref: Option<String>,
-        pub(super) simulator_mirror: Option<ExecutionSimulatorMirrorRecord>,
-    }
-
-    #[derive(Debug, Default)]
-    pub(super) struct ExecutionSimulatorMirrorRecord {
-        pub(super) snapshot_ref: String,
-        pub(super) journal_ref: String,
-    }
-
-    mod driver_observability {
-        include!("oasis7_chain_runtime/execution_bridge/driver_observability.rs");
-    }
-
-    pub(crate) use self::driver_observability::{
+    pub(crate) use super::execution_bridge_real_tests::real_execution_bridge::driver_observability::{
         ExecutionBridgeCommitTimingSnapshot, record_execution_bridge_module_tick_routing_metrics,
         reset_execution_bridge_commit_timing_for_tests, snapshot_execution_bridge_commit_timing,
         snapshot_execution_bridge_module_tick_routing_metrics,
@@ -563,6 +545,7 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
             }
             #[cfg(test)]
             {
+                let _ = baseline;
                 NodeRuntimeExecutionDriver::new_with_storage_profile(
                     paths.execution_bridge_state_path.clone(),
                     paths.execution_world_dir.clone(),
@@ -706,27 +689,27 @@ fn run_chain_runtime(options: CliOptions) -> Result<(), String> {
             stop_runtime(&runtime);
             return Err(server_err);
         }
-        if let Some(worker) = reward_runtime_worker.as_mut() {
-            if let Some(worker_err) = poll_worker_error(worker)? {
-                stop_chain_status_server(&mut status_server);
-                stop_reward_runtime_worker(&mut reward_runtime_worker);
-                stop_storage_metrics_worker(&mut storage_metrics_worker);
-                stop_runtime(&runtime);
-                return Err(worker_err);
-            }
+        if let Some(worker) = reward_runtime_worker.as_mut()
+            && let Some(worker_err) = poll_worker_error(worker)?
+        {
+            stop_chain_status_server(&mut status_server);
+            stop_reward_runtime_worker(&mut reward_runtime_worker);
+            stop_storage_metrics_worker(&mut storage_metrics_worker);
+            stop_runtime(&runtime);
+            return Err(worker_err);
         }
 
         if let Ok(snapshot) = runtime.lock().map(|locked| locked.snapshot()) {
             current_degraded_reason = snapshot.last_error.clone();
-            if let Some(err) = snapshot.last_error {
-                if err != last_error {
-                    emit_stderr_or_event(
-                        Level::WARN,
-                        format!("node runtime reported error: {err}").as_str(),
-                        "node runtime reported error",
-                    );
-                    last_error = err;
-                }
+            if let Some(err) = snapshot.last_error
+                && err != last_error
+            {
+                emit_stderr_or_event(
+                    Level::WARN,
+                    format!("node runtime reported error: {err}").as_str(),
+                    "node runtime reported error",
+                );
+                last_error = err;
             }
         }
         if current_degraded_reason != last_storage_metrics_degraded_reason {

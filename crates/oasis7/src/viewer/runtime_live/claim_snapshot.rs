@@ -95,10 +95,11 @@ pub(super) fn build_player_agent_claim_snapshot(
             } else {
                 None
             };
-            let eligible_balance_after = blocked_reason
-                .is_none()
-                .then(|| eligible_claim_balance.saturating_sub(total_upfront_amount))
-                .unwrap_or(0);
+            let eligible_balance_after = if blocked_reason.is_none() {
+                eligible_claim_balance.saturating_sub(total_upfront_amount)
+            } else {
+                0
+            };
             let upkeep_runway_epochs = if blocked_reason.is_none() && quote.upkeep_per_epoch > 0 {
                 eligible_balance_after / quote.upkeep_per_epoch
             } else {

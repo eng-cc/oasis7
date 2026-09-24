@@ -114,7 +114,7 @@ fn assert_facility_snapshot_reconciles(initially_present: bool) {
             true,
             RenderSnapshot::Changed {
                 version,
-                state: Some(state),
+                state: Some(Box::new(state)),
             },
         );
         assert!(!runtime.hit_regions_dirty);

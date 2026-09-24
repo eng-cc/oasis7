@@ -18,6 +18,7 @@
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
 | [Cargo package scope and impact-scoped integration verification](../../engineering/workflow/source-of-truth.md#cargo-package-scope-and-impact-scoped-verification) | 将 package identity、`H/B/T`、`B -> T` impact selection 与 high-risk escalation 投影到 CI 分级设计；仅在 trusted analysis 下允许 impact-scoped `integration_revalidation`。 | [包身份与 exact integration 目标语义](ci-tiered-execution.design.md#package-aware-exact-integration-target) | `producer_system_designer` 定义语义；runtime/QA/CI 实现与验证另行负责。 | 本次不实现 planner、workflow、Cargo metadata 解析或 enforcement；当前 path-based 行为保持现状。 |
+| [Required-gate capability-selection contract](../../engineering/workflow/source-of-truth.md#required-gate-capability-split) | 将 P0-R1–R5 的 baseline 保留、独立测试能力、scope/readiness 分离、兼容版本与非自启用边界映射到 CI 分级材料。 | [本专题承接](ci-tiered-execution.design.md#required-gate-capability-selection) | `repository_health_engineer` 维护 workflow contract；`qa_engineer` 验收；operational job 边界由 `blockchain_ops_engineer` 复核。 | 本行只作追溯；canonical source 是规范，代码及 hosted 行为在验证和授权启用前仍属未实现。 |
 
 <a id="package-aware-exact-integration-target"></a>
 ### 2.2 包身份与 exact integration 目标语义（批准目标；当前实现未强制）
@@ -28,6 +29,11 @@
 - exact integration 绑定 `H`（source head）、`B`（target commit）与 `T`（tested tree），选择真实 `B -> T` impact，不把 `B..H` 当作 integration impact；planner 还要冻结 package、rules、profiles、commands/results、toolchain、targets/features 与 policy version。
 - `integration_revalidation` 仅在 trusted analysis 证明 impact-scoped 足够时可用；unknown impact 与 high-risk API/default/feature/dependency、ABI/signature、state-root/persistence/consensus profiles 进入 `full_escalation`。取消、超时、缺失或 unexpected skip fail closed。
 - 当前 planner 仍以 changed paths/config rules 计算 capability；`scope=full` 只是 required tier 内的覆盖扩张。本设计只记录批准目标与当前差距，不声称 package-aware `H/B/T` enforcement 已存在。
+
+<a id="required-gate-capability-selection"></a>
+### 2.3 Required-gate capability selection（P0 目标；实现尚未启用）
+
+P0-R1–R5 的规范和实施/验证映射分别见 [canonical source](../../engineering/workflow/source-of-truth.md#required-gate-capability-split) 与 [P0 design](../../engineering/workflow/ci-required-gate-p0-on-demand.design.md#p0-requirements)。本设计不复述其 capability、receipt 或 activation contract；S0 文档合入不表示当前 workflow 已实现这些目标。
 
 ## 3. 关键接口 / 入口
 - `pre-commit` legacy hook 静默 no-op 入口；`commit` tier 仅供显式调用
@@ -51,6 +57,7 @@
 | 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
 | [Cargo package scope and impact-scoped integration verification](../../engineering/workflow/source-of-truth.md#cargo-package-scope-and-impact-scoped-verification) + `PRD-TESTING-CI-TIERED-004` | [ci-tiered-execution.design.md#package-aware-exact-integration-target](ci-tiered-execution.design.md#package-aware-exact-integration-target) | 文档必须把批准目标的 package identity、`H/B/T` 与 `B -> T` impact selection 映射到 CI 分级；立即 normative 的 write/migration、high-risk、fail-closed obligations 必须保留；当前 path-based planner 的非 package-aware status 与 reduced-route inactive boundary 必须成为 negative assertion。 | [ci-required-scope-audit-contract.test.sh](../../../scripts/ci-required-scope-audit-contract.test.sh) 的 required-tier planner/current-policy contract；`PRD-TESTING-CI-TIERED-004` 的 V0 文档/negative-boundary review；本次还运行 `./scripts/doc-governance-check.sh` 与 `git diff --check`。Future activation requires trusted Cargo metadata, `H/B/T` impact, producer/receipt/gate identity, and high-risk/full fail-closed receipt evidence. | 当前 task evidence 与 V0 negative assertion；future trusted CI receipt plus explicit activation record before reduced `integration_revalidation`. | 本次不证明 planner 已执行 package-aware selection、`H/B/T` binding、trusted reduced integration revalidation 或 full-escalation activation。 |
+| [Required-gate capability-selection contract](../../engineering/workflow/source-of-truth.md#required-gate-capability-split) | [本专题承接](ci-tiered-execution.design.md#required-gate-capability-selection) | 仅记录 P0-R1–R5 对 CI 分级材料的承接；当前 runner 不据此改变选择或覆盖。 | [ci-required-scope-audit-contract.test.sh](../../../scripts/ci-required-scope-audit-contract.test.sh) 保留现行共享 gate/full 负边界；P0-T01–T20 的新增与扩展场景见 linked P0 design，尚待 C1–C4 实施。 | S0 source/doc check output and a7-based design trace; later code task records tested-tree and hosted evidence. | 本次不证明新 capability selection, receipt compatibility, producer separation, hosted coverage or activation. |
 
 ## 5. 设计演进计划
 - 先冻结门禁与执行分层。

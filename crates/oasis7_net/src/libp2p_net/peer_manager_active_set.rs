@@ -146,37 +146,37 @@ pub(super) fn candidate_status_with_active_set(
         has_issue = true;
     }
 
-    if candidate.counts_toward_share_limits {
-        if let Some(bucket) = candidate.ipv4_subnet_bucket.as_deref() {
-            let projected_bucket_count = active_set_stats
-                .ipv4_subnet_counts
-                .get(bucket)
-                .copied()
-                .unwrap_or(0)
-                .saturating_add(1);
-            if let Some(limit) = policy.max_ipv4_subnet_active_peers {
-                if projected_bucket_count > limit {
-                    hard_block = true;
-                }
-            } else if policy.applies_share_limits(projected_active_peer_count)
-                && projected_bucket_count >= 2
-                && meets_or_exceeds_share_limit(
-                    projected_bucket_count,
-                    projected_active_peer_count,
-                    policy.block_ipv4_subnet_share_per_mille,
-                )
-            {
+    if candidate.counts_toward_share_limits
+        && let Some(bucket) = candidate.ipv4_subnet_bucket.as_deref()
+    {
+        let projected_bucket_count = active_set_stats
+            .ipv4_subnet_counts
+            .get(bucket)
+            .copied()
+            .unwrap_or(0)
+            .saturating_add(1);
+        if let Some(limit) = policy.max_ipv4_subnet_active_peers {
+            if projected_bucket_count > limit {
                 hard_block = true;
-            } else if policy.applies_share_limits(projected_active_peer_count)
-                && projected_bucket_count >= 2
-                && exceeds_share_limit(
-                    projected_bucket_count,
-                    projected_active_peer_count,
-                    policy.max_ipv4_subnet_share_per_mille,
-                )
-            {
-                has_issue = true;
             }
+        } else if policy.applies_share_limits(projected_active_peer_count)
+            && projected_bucket_count >= 2
+            && meets_or_exceeds_share_limit(
+                projected_bucket_count,
+                projected_active_peer_count,
+                policy.block_ipv4_subnet_share_per_mille,
+            )
+        {
+            hard_block = true;
+        } else if policy.applies_share_limits(projected_active_peer_count)
+            && projected_bucket_count >= 2
+            && exceeds_share_limit(
+                projected_bucket_count,
+                projected_active_peer_count,
+                policy.max_ipv4_subnet_share_per_mille,
+            )
+        {
+            has_issue = true;
         }
     }
 
@@ -219,63 +219,63 @@ pub(super) fn candidate_status_with_active_set(
         }
     }
 
-    if candidate.counts_toward_share_limits {
-        if let Some(source_operator) = candidate.source_operator.as_deref() {
-            let projected_bucket_count = active_set_stats
-                .operator_counts
-                .get(source_operator)
-                .copied()
-                .unwrap_or(0)
-                .saturating_add(1);
-            if policy.applies_share_limits(projected_active_peer_count)
-                && projected_bucket_count >= 2
-                && meets_or_exceeds_share_limit(
-                    projected_bucket_count,
-                    projected_active_peer_count,
-                    policy.block_operator_share_per_mille,
-                )
-            {
-                hard_block = true;
-            } else if policy.applies_share_limits(projected_active_peer_count)
-                && projected_bucket_count >= 2
-                && exceeds_share_limit(
-                    projected_bucket_count,
-                    projected_active_peer_count,
-                    policy.max_operator_share_per_mille,
-                )
-            {
-                has_issue = true;
-            }
+    if candidate.counts_toward_share_limits
+        && let Some(source_operator) = candidate.source_operator.as_deref()
+    {
+        let projected_bucket_count = active_set_stats
+            .operator_counts
+            .get(source_operator)
+            .copied()
+            .unwrap_or(0)
+            .saturating_add(1);
+        if policy.applies_share_limits(projected_active_peer_count)
+            && projected_bucket_count >= 2
+            && meets_or_exceeds_share_limit(
+                projected_bucket_count,
+                projected_active_peer_count,
+                policy.block_operator_share_per_mille,
+            )
+        {
+            hard_block = true;
+        } else if policy.applies_share_limits(projected_active_peer_count)
+            && projected_bucket_count >= 2
+            && exceeds_share_limit(
+                projected_bucket_count,
+                projected_active_peer_count,
+                policy.max_operator_share_per_mille,
+            )
+        {
+            has_issue = true;
         }
     }
 
-    if candidate.counts_toward_share_limits {
-        if let Some(source_asn) = candidate.source_asn.as_deref() {
-            let projected_bucket_count = active_set_stats
-                .asn_counts
-                .get(source_asn)
-                .copied()
-                .unwrap_or(0)
-                .saturating_add(1);
-            if policy.applies_share_limits(projected_active_peer_count)
-                && projected_bucket_count >= 2
-                && meets_or_exceeds_share_limit(
-                    projected_bucket_count,
-                    projected_active_peer_count,
-                    policy.block_asn_share_per_mille,
-                )
-            {
-                hard_block = true;
-            } else if policy.applies_share_limits(projected_active_peer_count)
-                && projected_bucket_count >= 2
-                && exceeds_share_limit(
-                    projected_bucket_count,
-                    projected_active_peer_count,
-                    policy.max_asn_share_per_mille,
-                )
-            {
-                has_issue = true;
-            }
+    if candidate.counts_toward_share_limits
+        && let Some(source_asn) = candidate.source_asn.as_deref()
+    {
+        let projected_bucket_count = active_set_stats
+            .asn_counts
+            .get(source_asn)
+            .copied()
+            .unwrap_or(0)
+            .saturating_add(1);
+        if policy.applies_share_limits(projected_active_peer_count)
+            && projected_bucket_count >= 2
+            && meets_or_exceeds_share_limit(
+                projected_bucket_count,
+                projected_active_peer_count,
+                policy.block_asn_share_per_mille,
+            )
+        {
+            hard_block = true;
+        } else if policy.applies_share_limits(projected_active_peer_count)
+            && projected_bucket_count >= 2
+            && exceeds_share_limit(
+                projected_bucket_count,
+                projected_active_peer_count,
+                policy.max_asn_share_per_mille,
+            )
+        {
+            has_issue = true;
         }
     }
 

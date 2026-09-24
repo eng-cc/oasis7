@@ -461,6 +461,10 @@ impl WorldKernel {
         }
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable module-market settlement seam preserves deterministic sale inputs."
+    )]
     fn settle_module_artifact_sale(
         &mut self,
         buyer_agent_id: &str,
@@ -519,15 +523,15 @@ impl WorldKernel {
                     )],
                 });
             }
-            if let Some(expected_listing_order_id) = listing_order_id {
-                if listing.order_id != expected_listing_order_id {
-                    return Err(RejectReason::RuleDenied {
-                        notes: vec![format!(
-                            "module artifact sale rejected: listing order mismatch listing={} event={}",
-                            listing.order_id, expected_listing_order_id
-                        )],
-                    });
-                }
+            if let Some(expected_listing_order_id) = listing_order_id
+                && listing.order_id != expected_listing_order_id
+            {
+                return Err(RejectReason::RuleDenied {
+                    notes: vec![format!(
+                        "module artifact sale rejected: listing order mismatch listing={} event={}",
+                        listing.order_id, expected_listing_order_id
+                    )],
+                });
             }
         }
 

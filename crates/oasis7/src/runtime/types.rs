@@ -11,19 +11,14 @@ pub type ProposalId = u64;
 pub type PatchPath = Vec<String>;
 
 /// Material ledger identifier used by M4 economy state.
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash, Default)]
 #[serde(try_from = "String", into = "String")]
 pub enum MaterialLedgerId {
+    #[default]
     World,
     Agent(String),
     Site(String),
     Factory(String),
-}
-
-impl Default for MaterialLedgerId {
-    fn default() -> Self {
-        Self::World
-    }
 }
 
 impl MaterialLedgerId {

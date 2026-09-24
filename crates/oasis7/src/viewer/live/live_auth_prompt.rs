@@ -1,6 +1,10 @@
 use super::*;
 
 impl LiveWorld {
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     pub(crate) fn prompt_control_preview(
         &mut self,
         request: PromptControlApplyRequest,
@@ -47,6 +51,10 @@ impl LiveWorld {
         })
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     pub(crate) fn prompt_control_apply(
         &mut self,
         request: PromptControlApplyRequest,
@@ -127,6 +135,10 @@ impl LiveWorld {
         })
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     pub(crate) fn prompt_control_rollback(
         &mut self,
         request: PromptControlRollbackRequest,
@@ -299,6 +311,10 @@ impl LiveWorld {
         })
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     pub(crate) fn verify_and_consume_prompt_control_apply_auth(
         &mut self,
         intent: PromptControlAuthIntent,
@@ -335,6 +351,10 @@ impl LiveWorld {
         Ok(())
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     pub(crate) fn verify_and_consume_prompt_control_rollback_auth(
         &mut self,
         request: &PromptControlRollbackRequest,
@@ -405,6 +425,10 @@ impl LiveWorld {
             .map(|profile| profile.version)
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     pub(crate) fn current_prompt_profile(
         &self,
         agent_id: &str,
@@ -432,10 +456,10 @@ impl LiveWorld {
         agent_id: &str,
         version: u64,
     ) -> Option<AgentPromptProfile> {
-        if let Some(profile) = self.kernel.model().agent_prompt_profiles.get(agent_id) {
-            if profile.version == version {
-                return Some(profile.clone());
-            }
+        if let Some(profile) = self.kernel.model().agent_prompt_profiles.get(agent_id)
+            && profile.version == version
+        {
+            return Some(profile.clone());
         }
         self.kernel.journal().iter().rev().find_map(|event| {
             let crate::simulator::WorldEventKind::AgentPromptUpdated { profile, .. } = &event.kind
@@ -450,6 +474,10 @@ impl LiveWorld {
         })
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     pub(crate) fn apply_prompt_profile_to_driver(
         &mut self,
         profile: &AgentPromptProfile,
@@ -495,6 +523,10 @@ impl LiveWorld {
         }
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     pub(crate) fn bind_agent_player_access(
         &mut self,
         agent_id: &str,

@@ -19,8 +19,10 @@ use serde::{Deserialize, Serialize};
 #[path = "oasis7_testnet_faucet/support.rs"]
 mod faucet_support;
 
+#[cfg(test)]
+use faucet_support::prune_tracker_map;
 use faucet_support::{
-    ClaimReservation, faucet_claim_status_code, prune_faucet_state_trackers, prune_tracker_map,
+    ClaimReservation, faucet_claim_status_code, prune_faucet_state_trackers,
     rollback_claim_reservation,
 };
 
@@ -929,21 +931,21 @@ impl FaucetService {
         now_ms: i64,
         cooldown_ms: i64,
     ) -> Option<FaucetClaimResponse> {
-        if let Some(last_ms) = state.last_account_claim_unix_ms.get(target_account_id) {
-            if now_ms.saturating_sub(*last_ms) < cooldown_ms {
-                return Some(self.claim_error_response(
-                    "cooldown_active",
-                    format!("account is still in cooldown: account_id={target_account_id}"),
-                ));
-            }
+        if let Some(last_ms) = state.last_account_claim_unix_ms.get(target_account_id)
+            && now_ms.saturating_sub(*last_ms) < cooldown_ms
+        {
+            return Some(self.claim_error_response(
+                "cooldown_active",
+                format!("account is still in cooldown: account_id={target_account_id}"),
+            ));
         }
-        if let Some(last_ms) = state.last_ip_claim_unix_ms.get(remote_ip) {
-            if now_ms.saturating_sub(*last_ms) < cooldown_ms {
-                return Some(self.claim_error_response(
-                    "ip_cooldown_active",
-                    format!("ip is still in cooldown: ip={remote_ip}"),
-                ));
-            }
+        if let Some(last_ms) = state.last_ip_claim_unix_ms.get(remote_ip)
+            && now_ms.saturating_sub(*last_ms) < cooldown_ms
+        {
+            return Some(self.claim_error_response(
+                "ip_cooldown_active",
+                format!("ip is still in cooldown: ip={remote_ip}"),
+            ));
         }
         None
     }

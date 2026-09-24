@@ -24,6 +24,10 @@ pub struct ReceiptSigner {
 }
 
 #[derive(Debug, Clone)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Signer modes retain their existing private representation; boxing would add churn without changing runtime behavior."
+)]
 enum ReceiptSignerMode {
     HmacSha256 {
         key: Vec<u8>,
@@ -395,6 +399,10 @@ impl ReceiptSigner {
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Receipt signature verification keeps the stable serialized preimage and verification context together."
+)]
 fn verify_single_ed25519_signature(
     receipt: &EffectReceipt,
     signer_node_id: &str,

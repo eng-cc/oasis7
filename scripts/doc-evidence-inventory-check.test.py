@@ -57,6 +57,33 @@ def main() -> None:
     root = fixture()
     try:
         run(root)
+        inventory = json.loads((root / "doc/testing/evidence/inventory.json").read_text(encoding="utf-8"))
+        fields = ("lifecycle", "semantic_role", "evidence_window", "claim_boundary")
+        triad_boundaries = {
+            entry["path"]: tuple(entry[field] for field in fields)
+            for entry in inventory["entries"]
+            if "validator-triad" in entry["path"] and "2026-09-15" in entry["path"]
+        }
+        assert triad_boundaries == {
+            "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-bootstrap-peers-2026-09-15.txt": (
+                "CURRENT_OPERATOR_INPUT",
+                "public_testnet_bootstrap_peer_input",
+                "current-committed-bootstrap-input",
+                "current_operator_input_only_not_current_health_readiness_deployment_completion_or_public_status",
+            ),
+            "doc/testing/evidence/public-testnet-governed-bootstrap-validator-triad-registry-2026-09-15.json": (
+                "CURRENT_OPERATOR_INPUT",
+                "public_testnet_bootstrap_registry_input",
+                "current-committed-bootstrap-input",
+                "current_operator_input_only_not_current_health_readiness_deployment_completion_or_public_status",
+            ),
+            "doc/testing/evidence/public-testnet-validator-triad-authority-2026-09-15.json": (
+                "HISTORICAL_PROVENANCE",
+                "public_testnet_transition",
+                "2026-09-15-validator-triad-candidate-staging",
+                "historical_provenance_only_not_current_readiness_operator_sop_or_public_claim",
+            ),
+        }
     finally:
         shutil.rmtree(root)
 
@@ -92,6 +119,36 @@ def main() -> None:
         path.write_text(json.dumps(data), encoding="utf-8")
     semantic_drift.expected = "lifecycle-counts"  # type: ignore[attr-defined]
     mutate(fixture(), semantic_drift)
+
+    def missing_freshness_boundary(root: Path) -> None:
+        path = root / "doc/testing/evidence/inventory.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        del data["freshness_boundary"]
+        path.write_text(json.dumps(data), encoding="utf-8")
+    missing_freshness_boundary.expected = "freshness-boundary"  # type: ignore[attr-defined]
+    mutate(fixture(), missing_freshness_boundary)
+
+    def mutated_freshness_boundary(root: Path) -> None:
+        path = root / "doc/testing/evidence/inventory.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        data["freshness_boundary"] = "operator inputs establish current readiness"
+        path.write_text(json.dumps(data), encoding="utf-8")
+    mutated_freshness_boundary.expected = "freshness-boundary"  # type: ignore[attr-defined]
+    mutate(fixture(), mutated_freshness_boundary)
+
+    def swapped_triad_identity(root: Path) -> None:
+        path = root / "doc/testing/evidence/inventory.json"
+        data = json.loads(path.read_text(encoding="utf-8"))
+        peer = next(entry for entry in data["entries"] if entry["path"].endswith("validator-triad-bootstrap-peers-2026-09-15.txt"))
+        authority = next(entry for entry in data["entries"] if entry["path"].endswith("validator-triad-authority-2026-09-15.json"))
+        fields = ("lifecycle", "semantic_role", "evidence_window", "claim_boundary")
+        peer_values = {field: peer[field] for field in fields}
+        for field in fields:
+            peer[field] = authority[field]
+            authority[field] = peer_values[field]
+        path.write_text(json.dumps(data), encoding="utf-8")
+    swapped_triad_identity.expected = "current-operator-input-boundary"  # type: ignore[attr-defined]
+    mutate(fixture(), swapped_triad_identity)
 
     def stale_navigation(root: Path) -> None:
         path = root / "doc/testing/evidence/README.md"

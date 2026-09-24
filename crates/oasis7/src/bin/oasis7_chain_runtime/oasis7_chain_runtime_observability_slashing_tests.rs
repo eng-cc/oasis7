@@ -97,6 +97,10 @@ fn register_slashing_agent(world: &mut World, agent_id: &str) {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn build_chain_status_payload_marks_consensus_misbehavior_critical() {
     let mut consensus = NodeConsensusSnapshot::default();
     consensus.committed_height = 8;

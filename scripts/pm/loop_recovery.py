@@ -163,7 +163,9 @@ def recovery_status(common, uid):
             'next_step': 'Read back each recorded remote object or confirm old child termination using its existing action journal; do not repeat the operation.' if pending else None}
 
 
-def reconcile(common, uid, root, tool_root=None, *, reservation_fd=None):
+def reconcile(common, uid, root, tool_root=None, *, reservation_fd=None,
+              supersede_invalid_publication=None, manual_request_ref=None,
+              publication_adapter=None):
     """Read back known push/child effects; unknown operations stay blocked."""
     for action in recovery_status(common, uid)['pending_actions']:
         evidence = None
@@ -212,7 +214,14 @@ def reconcile(common, uid, root, tool_root=None, *, reservation_fd=None):
                     if checked.returncode == 0:
                         evidence = {'issue_number': action['issue_number'], 'project_cache_refresh': json.loads(refreshed.stdout), 'snapshot_validation': checked.stdout.strip()}
         elif action['kind'] == 'publish_contract':
-            from loop_contracts import GitHubAuthority, MARKER, REPOSITORY, contract_digest, validate_contracts
+            if publication_adapter is None:
+                continue
+            contracts = publication_adapter.contracts
+            GitHubAuthority = contracts.GitHubAuthority
+            MARKER = contracts.MARKER
+            REPOSITORY = contracts.REPOSITORY
+            contract_digest = contracts.contract_digest
+            validate_contracts = contracts.validate_contracts
             binding = action.get('binding')
             if not isinstance(binding, dict) or binding.get('task_uid') != uid or action.get('repository') != REPOSITORY:
                 continue
@@ -239,7 +248,33 @@ def reconcile(common, uid, root, tool_root=None, *, reservation_fd=None):
                              'publication_ref': {'issue_number': number, 'comment_id': comment['id']},
                              'consumed_clauses': [c for ref in expected['content_refs'] for c in ref['clauses']]}
                 checked = validate_contracts(root, root, {**binding, 'input_contracts': [reference]}, authority, purpose='new_tasks')
-                if checked['status'] == 'passed': evidence = {'publication_ref': reference['publication_ref'], 'validation': checked}
+                if checked['status'] == 'passed':
+                    evidence = {'publication_ref': reference['publication_ref'], 'validation': checked}
+                elif supersede_invalid_publication == action['action_id']:
+                    canonical_action = 'publication:' + hashlib.sha256(action['expected'].encode()).hexdigest()
+                    exact_blocker = (
+                        checked.get('blockers') == ['contract does not cover target delivery']
+                        and checked.get('blocker_codes') in (None, [])
+                    )
+                    if (action['action_id'] == canonical_action and exact_blocker
+                            and isinstance(manual_request_ref, str) and manual_request_ref.strip()):
+                        evidence = {
+                            'publication_ref': reference['publication_ref'],
+                            'validation': checked,
+                            'publication_payload_digest': 'sha256:' + hashlib.sha256(
+                                (comment.get('body') or '').encode()
+                            ).hexdigest(),
+                            'supersession': {
+                                'action_id': action['action_id'],
+                                'manual_request_ref': manual_request_ref,
+                                'blocker_code': 'target_delivery_not_covered',
+                                'remote_preserved': True,
+                                'policy_commit': publication_adapter.policy_commit,
+                                'policy_digest': publication_adapter.policy_digest,
+                                'bridge_commit': publication_adapter.bridge_commit,
+                                'bridge_digest': publication_adapter.bridge_digest,
+                            },
+                        }
         if evidence:
             record_action(common, uid, {**action, 'reconciled': True, 'readback_evidence': evidence})
     return recovery_status(common, uid)

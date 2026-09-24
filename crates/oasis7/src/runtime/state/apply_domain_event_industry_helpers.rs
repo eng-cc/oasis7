@@ -1,7 +1,9 @@
 use super::*;
 
+#[cfg(test)]
 const SETTLED_INDUSTRY_HISTORY_LIMIT: usize = 64;
 
+#[cfg(test)]
 impl WorldState {
     fn is_current_factory_failure_disposition(&self, job_id: ActionId) -> bool {
         let Some(disposition) = self.factory_production_failure_dispositions.get(&job_id) else {

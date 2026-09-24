@@ -431,28 +431,28 @@ fn verify(args: Args) -> Result<serde_json::Value, String> {
     let proof = decode_proof_from_path(args.proof_path.as_path(), args.format)?;
     proof.validate_contract()?;
     let proof_hash = proof.proof_hash()?;
-    if let Some(expected) = args.expect_hash.as_deref() {
-        if proof_hash != expected {
-            return Err(format!(
-                "proof hash mismatch: expected={expected} actual={proof_hash}"
-            ));
-        }
+    if let Some(expected) = args.expect_hash.as_deref()
+        && proof_hash != expected
+    {
+        return Err(format!(
+            "proof hash mismatch: expected={expected} actual={proof_hash}"
+        ));
     }
-    if let Some(expected) = args.expect_world_id.as_deref() {
-        if proof.world_id != expected {
-            return Err(format!(
-                "world_id mismatch: expected={expected} actual={}",
-                proof.world_id
-            ));
-        }
+    if let Some(expected) = args.expect_world_id.as_deref()
+        && proof.world_id != expected
+    {
+        return Err(format!(
+            "world_id mismatch: expected={expected} actual={}",
+            proof.world_id
+        ));
     }
-    if let Some(expected) = args.expect_height {
-        if proof.height != expected {
-            return Err(format!(
-                "height mismatch: expected={expected} actual={}",
-                proof.height
-            ));
-        }
+    if let Some(expected) = args.expect_height
+        && proof.height != expected
+    {
+        return Err(format!(
+            "height mismatch: expected={expected} actual={}",
+            proof.height
+        ));
     }
     Ok(json!({
         "schema_version": "oasis7.world_head_proof_verifier.v1",

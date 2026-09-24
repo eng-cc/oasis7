@@ -53,10 +53,10 @@ impl ModuleVisualEntity {
     }
 
     pub fn resolved_label(&self) -> String {
-        if let Some(label) = self.label.as_deref() {
-            if !label.trim().is_empty() {
-                return label.to_string();
-            }
+        if let Some(label) = self.label.as_deref()
+            && !label.trim().is_empty()
+        {
+            return label.to_string();
         }
         if self.kind.trim().is_empty() {
             return self.entity_id.clone();

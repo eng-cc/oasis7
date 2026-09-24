@@ -1,6 +1,10 @@
 use super::*;
 
 impl ViewerRuntimeLiveServer {
+    #[expect(
+        clippy::result_large_err,
+        reason = "Prompt-control protocol errors preserve the stable typed error envelope"
+    )]
     pub(super) fn handle_enhanced_prompt_rollback(
         &mut self,
         request: PromptControlRollbackRequest,
@@ -48,7 +52,7 @@ impl ViewerRuntimeLiveServer {
                 PromptControlResultStatus::Blocked,
             ));
         }
-        if !self.llm_sidecar.supports_prompt_control() {
+        if !self.llm_sidecar.supports_prompt_control_result() {
             return Err(prompt_control_enhanced_error(
                 "agent_provider_prompt_control_unsupported",
                 "prompt_control is not supported when runtime live uses ProviderBacked(Local HTTP)",
@@ -112,11 +116,11 @@ impl ViewerRuntimeLiveServer {
                     player_id.as_str(),
                     verified.public_key.as_str(),
                 ))
-            && !self
+            && self
                 .llm_sidecar
                 .agent_player_bindings
                 .get(agent_id.as_str())
-                .is_some_and(|bound_player| bound_player != player_id.as_str())
+                .is_none_or(|bound_player| bound_player == player_id.as_str())
         {
             return Err(prompt_control_result_unknown_error(&request_id));
         }
@@ -278,6 +282,12 @@ impl ViewerRuntimeLiveServer {
                     )
                 })?;
         }
+        self.prepare_hosted_local_mock_prompt_context_after_authorization(
+            request_id.as_str(),
+            operation,
+            false,
+        )
+        .map_err(|error| *error)?;
         let current = self
             .current_prompt_profile(agent_id.as_str())
             .map_err(|_| {

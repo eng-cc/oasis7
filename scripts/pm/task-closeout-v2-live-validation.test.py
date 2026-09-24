@@ -31,6 +31,12 @@ class TaskCloseoutV2LiveValidationTest(unittest.TestCase):
         source = (PM / "task-closeout.sh").read_text(encoding="utf-8")
         self.assertNotIn('${CI_RECEIPT_ARGS[@]}', source)
 
+    def test_v2_reuse_checks_live_target_oid(self):
+        source = (PM / "task-closeout.sh").read_text(encoding="utf-8")
+        self.assertIn("--json baseRefOid --jq '.baseRefOid'", source)
+        self.assertIn('--no-write-fetch-head', source)
+        self.assertIn('current_target_oid=current_target_oid, current_target_root=root', source)
+
     def test_nested_traceability_record_cannot_hide_aggregate_mode(self):
         source = (PM / "task-closeout.sh").read_text(encoding="utf-8")
         self.assertIn("def record_declares_aggregate(value):", source)

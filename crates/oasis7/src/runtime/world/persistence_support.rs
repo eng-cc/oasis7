@@ -103,6 +103,10 @@ fn sidecar_generation_recovery_metadata_rel_path(generation_id: &str, staging: b
     )
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Sidecar generation fields map directly to the durable recovery record schema."
+)]
 fn build_sidecar_generation_record(
     generation_id: String,
     snapshot_manifest_path: String,

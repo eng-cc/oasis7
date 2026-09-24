@@ -1,6 +1,10 @@
 use super::*;
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Scenario fixture mutates only the fields under test."
+)]
 fn asteroid_fragment_generator_produces_locations_within_bounds() {
     let space = SpaceConfig {
         width_cm: 100_000,
@@ -26,6 +30,10 @@ fn asteroid_fragment_generator_produces_locations_within_bounds() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Scenario fixture mutates only the fields under test."
+)]
 fn asteroid_fragment_generator_respects_min_fragment_spacing() {
     let space = SpaceConfig {
         width_cm: 200_000,
@@ -60,6 +68,10 @@ fn asteroid_fragment_generator_respects_min_fragment_spacing() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Scenario fixture mutates only the fields under test."
+)]
 fn asteroid_fragment_emission_scales_with_radius_exponent() {
     let space = SpaceConfig {
         width_cm: 20_000,
@@ -109,6 +121,10 @@ fn asteroid_fragment_default_mix_is_conservative_for_high_radiation_materials() 
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Scenario fixture mutates only the fields under test."
+)]
 fn asteroid_fragment_default_calibration_keeps_small_silicate_non_extreme() {
     let space = SpaceConfig {
         width_cm: 100_000,
@@ -140,6 +156,10 @@ fn asteroid_fragment_default_calibration_keeps_small_silicate_non_extreme() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Scenario fixture mutates only the fields under test."
+)]
 fn asteroid_fragment_default_calibration_preserves_high_radiation_outliers() {
     let space = SpaceConfig {
         width_cm: 100_000,
@@ -170,6 +190,10 @@ fn asteroid_fragment_default_calibration_preserves_high_radiation_outliers() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Scenario fixture mutates only the fields under test."
+)]
 fn asteroid_fragment_generator_enforces_min_fragments_floor() {
     let space = SpaceConfig {
         width_cm: 100_000,
@@ -192,6 +216,10 @@ fn asteroid_fragment_generator_enforces_min_fragments_floor() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Scenario fixture mutates only the fields under test."
+)]
 fn asteroid_fragment_generator_biases_distribution_toward_core_zone() {
     let space = SpaceConfig {
         width_cm: 400_000,
@@ -236,6 +264,10 @@ fn asteroid_fragment_generator_biases_distribution_toward_core_zone() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Scenario fixture mutates only the fields under test."
+)]
 fn asteroid_fragment_config_sanitize_clamps_starter_balance_fields() {
     let mut config = AsteroidFragmentConfig::default();
     config.max_fragments_per_chunk = 12;
@@ -254,6 +286,10 @@ fn asteroid_fragment_config_sanitize_clamps_starter_balance_fields() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Scenario fixture mutates only the fields under test."
+)]
 fn asteroid_fragment_material_distribution_core_metal_rim_volatile_biases_zones() {
     let space = SpaceConfig {
         width_cm: 800_000,

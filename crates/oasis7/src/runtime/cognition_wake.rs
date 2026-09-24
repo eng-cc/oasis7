@@ -738,6 +738,10 @@ pub enum ContinuationStatusV1 {
 /// it under the same transaction; no adapter may mark a wake consumed merely
 /// by acknowledging a lease.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Continuation proposals are persisted as this stable enum shape; boxing would change replay serialization and API."
+)]
 pub enum CognitionWakeDispositionV1 {
     Terminal {
         status: ContinuationStatusV1,

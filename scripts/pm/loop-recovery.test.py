@@ -6,6 +6,7 @@ import subprocess
 import sys
 import os
 import json
+from types import SimpleNamespace
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('recovery', Path(__file__).with_name('loop_recovery.py'))
@@ -128,15 +129,101 @@ class RecoveryTests(unittest.TestCase):
                       'repository': 'eng-cc/oasis7', 'issue_number': 1, 'binding': {'task_uid': uid}}
             module.record_action(Path(tmp), uid, action)
             with patch.object(loop_contracts, 'GitHubAuthority') as authority, patch.object(loop_contracts, 'validate_contracts') as validate:
+                adapter = SimpleNamespace(
+                    contracts=loop_contracts, policy_commit='d' * 40,
+                    policy_digest='sha256:' + '1' * 64,
+                    bridge_commit='3' * 40, bridge_digest='sha256:' + '2' * 64,
+                )
                 authority.return_value.api.return_value = [[comment, comment]]
                 validate.return_value = {'status': 'passed'}
-                self.assertEqual(module.reconcile(Path(tmp), uid, Path(tmp))['status'], 'reconcile_required')
+                self.assertEqual(module.reconcile(Path(tmp), uid, Path(tmp), publication_adapter=adapter)['status'], 'reconcile_required')
                 validate.assert_not_called()
                 authority.return_value.api.return_value = [[comment]]
                 validate.return_value = {'status': 'blocked'}
-                self.assertEqual(module.reconcile(Path(tmp), uid, Path(tmp))['status'], 'reconcile_required')
+                self.assertEqual(module.reconcile(Path(tmp), uid, Path(tmp), publication_adapter=adapter)['status'], 'reconcile_required')
                 validate.return_value = {'status': 'passed'}
-                self.assertEqual(module.reconcile(Path(tmp), uid, Path(tmp))['status'], 'can_continue')
+                self.assertEqual(module.reconcile(Path(tmp), uid, Path(tmp), publication_adapter=adapter)['status'], 'can_continue')
                 self.assertTrue(all(call.kwargs == {'paginate': True} for call in authority.return_value.api.call_args_list))
+
+    def test_invalid_publication_supersession_requires_exact_action_and_sole_stable_blocker(self):
+        import loop_contracts
+        uid = 'task_' + 'a' * 32
+        contract = {'contract_id': 'c', 'revision': 1, 'content_refs': [{'clauses': ['one']}]}
+        expected = json.dumps(contract, sort_keys=True)
+        action_id = 'publication:' + __import__('hashlib').sha256(expected.encode()).hexdigest()
+        payload = {'marker': loop_contracts.MARKER, 'task_uid': uid, 'contract': contract,
+                   'contract_digest': loop_contracts.contract_digest(contract)}
+        comment = {'id': 42, 'body': json.dumps(payload)}
+        action = {'action_id': action_id, 'kind': 'publish_contract', 'expected': expected,
+                  'repository': 'eng-cc/oasis7', 'issue_number': 1,
+                  'binding': {'task_uid': uid, 'manual_request_ref': 'original-request'}}
+
+        def pending_result(tmp, comments, validation, **kwargs):
+            module.record_action(Path(tmp), uid, action)
+            authority = unittest.mock.Mock()
+            authority.return_value.api.return_value = [comments]
+            contracts = SimpleNamespace(
+                GitHubAuthority=authority,
+                MARKER=loop_contracts.MARKER,
+                REPOSITORY=loop_contracts.REPOSITORY,
+                contract_digest=loop_contracts.contract_digest,
+                validate_contracts=unittest.mock.Mock(return_value=validation),
+            )
+            adapter = SimpleNamespace(
+                contracts=contracts,
+                policy_commit='d' * 40,
+                policy_digest='sha256:' + '1' * 64,
+                bridge_commit='3' * 40,
+                bridge_digest='sha256:' + '2' * 64,
+            )
+            with patch.dict(sys.modules, {'loop_contracts': SimpleNamespace()}):
+                return module.reconcile(
+                    Path(tmp), uid, Path(tmp), publication_adapter=adapter, **kwargs
+                )
+
+        blocker = {'status': 'blocked', 'blockers': ['contract does not cover target delivery']}
+        with tempfile.TemporaryDirectory() as tmp:
+            self.assertEqual(pending_result(tmp, [comment], blocker)['status'], 'reconcile_required')
+        with tempfile.TemporaryDirectory() as tmp:
+            result = pending_result(
+                tmp, [comment], blocker, supersede_invalid_publication=action_id,
+                manual_request_ref='current-user-authorization',
+            )
+            self.assertEqual(result['status'], 'can_continue')
+            journal = next(module._directory(Path(tmp)).glob('*.actions.jsonl'))
+            resolution = json.loads(journal.read_text().splitlines()[-1])
+            self.assertEqual(resolution['readback_evidence']['supersession']['action_id'], action_id)
+            self.assertEqual(resolution['readback_evidence']['supersession']['manual_request_ref'],
+                             'current-user-authorization')
+            self.assertEqual(resolution['readback_evidence']['supersession']['blocker_code'],
+                             'target_delivery_not_covered')
+            self.assertEqual(resolution['readback_evidence']['publication_ref'],
+                             {'issue_number': 1, 'comment_id': 42})
+            self.assertEqual(resolution['readback_evidence']['supersession']['policy_commit'],
+                             'd' * 40)
+            self.assertEqual(resolution['readback_evidence']['supersession']['bridge_commit'],
+                             '3' * 40)
+            self.assertEqual(resolution['readback_evidence']['supersession']['bridge_digest'],
+                             'sha256:' + '2' * 64)
+        for selected, comments, validation in (
+            ('publication:wrong', [comment], blocker),
+            (action_id, [comment, comment], blocker),
+            (action_id, [comment], {'status': 'blocked',
+                                    'blockers': ['contract does not cover target delivery', 'other'],
+                                    'blocker_codes': ['target_delivery_not_covered', 'other']}),
+            (action_id, [comment], {'status': 'blocked', 'blockers': ['other'],
+                                    'blocker_codes': ['other']}),
+            (action_id, [comment], {'status': 'blocked',
+                                    'blockers': ['contract does not cover target delivery'],
+                                    'blocker_codes': ['different_authority']}),
+        ):
+            with self.subTest(selected=selected, comments=len(comments), validation=validation):
+                with tempfile.TemporaryDirectory() as tmp:
+                    result = pending_result(
+                        tmp, comments, validation,
+                        supersede_invalid_publication=selected,
+                        manual_request_ref='current-user-authorization',
+                    )
+                    self.assertEqual(result['status'], 'reconcile_required')
 
 if __name__ == '__main__': unittest.main()

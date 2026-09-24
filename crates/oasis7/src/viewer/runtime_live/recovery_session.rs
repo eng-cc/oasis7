@@ -180,7 +180,7 @@ impl ViewerRuntimeLiveServer {
                 .llm_sidecar
                 .agent_public_key_bindings
                 .get(agent_id.as_str())
-                .map_or(true, |bound| bound == old_pubkey);
+                .is_none_or(|bound| bound == old_pubkey);
             if should_replace {
                 self.llm_sidecar
                     .agent_public_key_bindings
@@ -203,6 +203,7 @@ impl ViewerRuntimeLiveServer {
         );
     }
 
+    #[cfg(test)]
     pub(super) fn bind_player_session_agent(
         &mut self,
         agent_id: &str,

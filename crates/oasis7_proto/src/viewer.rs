@@ -530,6 +530,10 @@ pub enum ViewerControl {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "ViewerResponse is a public wire/API enum; boxing a response branch would break existing Rust pattern matches even though serde could preserve its bytes."
+)]
 pub enum ViewerResponse<Snapshot, Event, DecisionTrace, Metrics, Time> {
     HelloAck {
         server: String,

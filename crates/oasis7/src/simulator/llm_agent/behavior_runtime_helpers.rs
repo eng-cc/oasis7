@@ -467,27 +467,26 @@ impl<C: LlmCompletionClient> LlmAgentBehavior<C> {
         let target_known_too_far = visible_target_distance
             .is_some_and(|distance| distance > DEFAULT_MAX_MOVE_DISTANCE_CM_PER_TICK);
         let target_blocked_by_history = self.move_distance_exceeded_targets.contains(to);
-        if target_known_too_far || target_blocked_by_history {
-            if let Some((relay_location_id, relay_distance_from_self)) =
+        if (target_known_too_far || target_blocked_by_history)
+            && let Some((relay_location_id, relay_distance_from_self)) =
                 self.find_exploration_move_relay(to, observation)
-            {
-                return (
-                    Action::MoveAgent {
-                        agent_id: self.agent_id.clone(),
-                        to: relay_location_id.clone(),
-                    },
-                    Some(format!(
-                        "move_agent fallback relay after move_distance_exceeded: target={} target_distance_cm={} blocked_by_history={} rerouted_via={} relay_distance_cm={}",
-                        to,
-                        visible_target_distance
-                            .map(|distance| distance.to_string())
-                            .unwrap_or_else(|| "unknown".to_string()),
-                        target_blocked_by_history,
-                        relay_location_id,
-                        relay_distance_from_self
-                    )),
-                );
-            }
+        {
+            return (
+                Action::MoveAgent {
+                    agent_id: self.agent_id.clone(),
+                    to: relay_location_id.clone(),
+                },
+                Some(format!(
+                    "move_agent fallback relay after move_distance_exceeded: target={} target_distance_cm={} blocked_by_history={} rerouted_via={} relay_distance_cm={}",
+                    to,
+                    visible_target_distance
+                        .map(|distance| distance.to_string())
+                        .unwrap_or_else(|| "unknown".to_string()),
+                    target_blocked_by_history,
+                    relay_location_id,
+                    relay_distance_from_self
+                )),
+            );
         }
 
         (

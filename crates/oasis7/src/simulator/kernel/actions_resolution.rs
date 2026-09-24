@@ -613,11 +613,10 @@ impl WorldKernel {
         if let Err(reason) = self.remove_from_owner(&owner, ResourceKind::Data, hardware_cost) {
             return WorldEventKind::ActionRejected { reason };
         }
-        if data_output > 0 {
-            if let Err(reason) = self.add_to_owner(&owner, ResourceKind::Data, data_output) {
+        if data_output > 0
+            && let Err(reason) = self.add_to_owner(&owner, ResourceKind::Data, data_output) {
                 return WorldEventKind::ActionRejected { reason };
             }
-        }
 
         WorldEventKind::RecipeScheduled {
             owner,

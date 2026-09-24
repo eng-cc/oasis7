@@ -201,7 +201,7 @@ impl ViewerRuntimeLiveServer {
             data_output: 0,
             finished_product_id: primary_output.kind.clone(),
             finished_product_units: primary_output.amount,
-            local_shortage_delay_ticks: i64::from(local_shortage_delay_ticks),
+            local_shortage_delay_ticks,
             shortage_reason,
             recommended_pre_step: quote.recommended_pre_step,
             runway_before_ticks: quote.runway_before_ticks,

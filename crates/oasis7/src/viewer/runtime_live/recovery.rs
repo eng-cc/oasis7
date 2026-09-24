@@ -14,6 +14,10 @@ use crate::viewer::{
 mod session_mutations;
 
 impl ViewerRuntimeLiveServer {
+    #[expect(
+        clippy::result_large_err,
+        reason = "Recovery protocol errors preserve the stable typed error envelope"
+    )]
     pub(super) fn handle_authoritative_recovery_for_protocol(
         &mut self,
         command: AuthoritativeRecoveryCommand,
@@ -49,6 +53,10 @@ impl ViewerRuntimeLiveServer {
         self.handle_authoritative_recovery(command)
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Recovery protocol errors preserve the stable typed error envelope"
+    )]
     pub(super) fn handle_authoritative_recovery(
         &mut self,
         command: AuthoritativeRecoveryCommand,
@@ -90,6 +98,10 @@ impl ViewerRuntimeLiveServer {
         }
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Recovery protocol errors preserve the stable typed error envelope"
+    )]
     fn rollback_to_stable_checkpoint(
         &mut self,
         request: AuthoritativeRollbackRequest,
@@ -97,6 +109,10 @@ impl ViewerRuntimeLiveServer {
         self.rollback_to_stable_checkpoint_payload(request, None)
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Recovery protocol errors preserve the stable typed error envelope"
+    )]
     pub(super) fn rollback_to_stable_checkpoint_payload(
         &mut self,
         request: AuthoritativeRollbackRequest,
@@ -747,6 +763,10 @@ impl ViewerRuntimeLiveServer {
         Ok(ack)
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Recovery protocol errors preserve the stable typed error envelope"
+    )]
     fn register_session_key(
         &mut self,
         request: AuthoritativeSessionRegisterRequest,
@@ -917,10 +937,10 @@ impl ViewerRuntimeLiveServer {
                 self.enqueue_virtual_event(event);
             }
             if binding_transition {
-                if affected_agents.is_empty() {
-                    if let Some(agent_id) = bound_agent_id.as_deref() {
-                        affected_agents.insert(agent_id.to_string());
-                    }
+                if affected_agents.is_empty()
+                    && let Some(agent_id) = bound_agent_id.as_deref()
+                {
+                    affected_agents.insert(agent_id.to_string());
                 }
                 for agent_id in affected_agents {
                     self.prompt_control_authority

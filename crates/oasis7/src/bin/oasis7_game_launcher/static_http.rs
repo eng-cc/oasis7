@@ -62,6 +62,10 @@ struct HostedTestLoginRequest {
     public_key: String,
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Stable protocol and runtime seam keeps independently validated inputs explicit."
+)]
 pub(super) fn handle_http_connection(
     mut stream: TcpStream,
     root_dir: &Path,
@@ -445,16 +449,6 @@ fn hosted_player_session_admission(
     Ok(issuer.admission(deployment_mode))
 }
 
-fn issue_hosted_player_session(
-    deployment_mode: DeploymentMode,
-    hosted_session_issuer: &Arc<Mutex<HostedPlayerSessionIssuer>>,
-) -> Result<HostedPlayerSessionIssueResponse, String> {
-    let mut issuer = hosted_session_issuer
-        .lock()
-        .map_err(|_| "hosted session issuer lock poisoned".to_string())?;
-    Ok(issuer.issue(deployment_mode))
-}
-
 fn issue_hosted_test_login(
     deployment_mode: DeploymentMode,
     public_key: &str,
@@ -496,6 +490,10 @@ fn release_hosted_player_session(
     Ok(issuer.release(deployment_mode, player_id, release_token))
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Stable protocol and runtime seam keeps independently validated inputs explicit."
+)]
 fn issue_strong_auth_grant(
     deployment_mode: DeploymentMode,
     player_id: &str,
@@ -560,22 +558,22 @@ fn read_http_request_bytes(stream: &mut TcpStream) -> Result<Vec<u8>, String> {
                 "request exceeded max size of {MAX_HTTP_REQUEST_BYTES} bytes"
             ));
         }
-        if expected_total_len.is_none() {
-            if let Some((header_end, delimiter_len)) = find_header_terminator(buffer.as_slice()) {
-                let header = String::from_utf8_lossy(&buffer[..header_end]);
-                let content_length = parse_content_length(header.as_ref())?;
-                expected_total_len = Some(
-                    header_end
-                        .saturating_add(delimiter_len)
-                        .saturating_add(content_length),
-                );
-            }
+        if expected_total_len.is_none()
+            && let Some((header_end, delimiter_len)) = find_header_terminator(buffer.as_slice())
+        {
+            let header = String::from_utf8_lossy(&buffer[..header_end]);
+            let content_length = parse_content_length(header.as_ref())?;
+            expected_total_len = Some(
+                header_end
+                    .saturating_add(delimiter_len)
+                    .saturating_add(content_length),
+            );
         }
-        if let Some(expected_total_len) = expected_total_len {
-            if buffer.len() >= expected_total_len {
-                buffer.truncate(expected_total_len);
-                break;
-            }
+        if let Some(expected_total_len) = expected_total_len
+            && buffer.len() >= expected_total_len
+        {
+            buffer.truncate(expected_total_len);
+            break;
         }
     }
     Ok(buffer)

@@ -2,7 +2,6 @@ use super::super::util::{hash_json, sha256_hex};
 use super::super::{
     GovernanceEvent, GovernanceExecutionPolicy, GovernanceFinalityCertificate,
     GovernanceFinalityEpochSnapshot, GovernanceFinalitySignerRegistry,
-    GovernanceIdentityPenaltyRecord, GovernanceIdentityPenaltyStatus,
     GovernanceIdentityProfileState, GovernanceIdentityStatus,
     GovernanceMainTokenControllerRegistry, GovernanceThresholdSignerPolicy,
     MAIN_TOKEN_TREASURY_BUCKET_ECOSYSTEM_POOL, Manifest, ManifestPatch, Proposal, ProposalDecision,
@@ -27,7 +26,6 @@ const LOCAL_GOVERNANCE_FINALITY_SIGNERS: [(&str, &str); 2] = [
         "oasis7-governance-local-finality-signer-2-v1",
     ),
 ];
-const IDENTITY_PENALTY_DETECTION_SOURCE: &str = "world.threat_heatmap.v1";
 pub(super) const DEFAULT_GOVERNANCE_VALIDATOR_STAKE: u64 = 100;
 
 pub(super) fn local_governance_finality_signer_public_keys() -> Vec<(String, String)> {
@@ -181,15 +179,15 @@ impl World {
         )
     }
 
-    pub(super) fn restricted_starter_claim_admin_registry_controller_account_id<'a>(
-        registry: &'a GovernanceMainTokenControllerRegistry,
-    ) -> Result<&'a str, WorldError> {
+    pub(super) fn restricted_starter_claim_admin_registry_controller_account_id(
+        registry: &GovernanceMainTokenControllerRegistry,
+    ) -> Result<&str, WorldError> {
         Self::ecosystem_treasury_controller_account_id(registry, "restricted claim admin registry")
     }
 
-    pub(super) fn validator_admission_controller_account_id<'a>(
-        registry: &'a GovernanceMainTokenControllerRegistry,
-    ) -> Result<&'a str, WorldError> {
+    pub(super) fn validator_admission_controller_account_id(
+        registry: &GovernanceMainTokenControllerRegistry,
+    ) -> Result<&str, WorldError> {
         let controller_account_id = registry.genesis_controller_account_id.trim();
         if controller_account_id.is_empty() {
             return Err(WorldError::GovernancePolicyInvalid {

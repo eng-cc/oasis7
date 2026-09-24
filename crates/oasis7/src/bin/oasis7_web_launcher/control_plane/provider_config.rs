@@ -1,4 +1,6 @@
-use super::support::{resolve_launcher_bin_from_config, resolve_viewer_static_dir_for_launcher};
+#[cfg(test)]
+use super::support::resolve_launcher_bin_from_config;
+use super::support::resolve_viewer_static_dir_for_launcher;
 use super::*;
 
 #[cfg(test)]
@@ -155,12 +157,10 @@ pub(super) fn collect_agent_provider_config_issues(
     }
     match effective_provider_base_url(config) {
         Ok(base_url) => {
-            if let Some(transport) = provider_transport {
-                if validate_provider_base_url_for_transport(base_url.as_str(), transport).is_err() {
-                    issues.push(
-                        "agent provider URL is invalid for the selected transport".to_string(),
-                    );
-                }
+            if let Some(transport) = provider_transport
+                && validate_provider_base_url_for_transport(base_url.as_str(), transport).is_err()
+            {
+                issues.push("agent provider URL is invalid for the selected transport".to_string());
             }
         }
         Err(_) => {

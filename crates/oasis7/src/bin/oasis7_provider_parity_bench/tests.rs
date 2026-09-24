@@ -422,57 +422,6 @@ fn parity_target_route_round_trip_uses_outer_context_endpoints() {
     );
 }
 
-fn read_http_json(stream: &mut std::net::TcpStream) -> (String, serde_json::Value) {
-    let mut bytes = Vec::new();
-    let header_end = loop {
-        let mut chunk = [0_u8; 4096];
-        let read = stream.read(&mut chunk).expect("read HTTP request");
-        assert!(read > 0, "HTTP request closed before headers");
-        bytes.extend_from_slice(&chunk[..read]);
-        if let Some(index) = bytes.windows(4).position(|window| window == b"\r\n\r\n") {
-            break index;
-        }
-    };
-    let header_len = header_end + 4;
-    let headers = String::from_utf8_lossy(&bytes[..header_end]);
-    let path = headers
-        .lines()
-        .next()
-        .and_then(|line| line.split_whitespace().nth(1))
-        .unwrap_or_default()
-        .to_string();
-    let content_length = headers
-        .lines()
-        .find_map(|line| {
-            let (name, value) = line.split_once(':')?;
-            (name.eq_ignore_ascii_case("content-length"))
-                .then(|| value.trim().parse::<usize>().ok())
-        })
-        .flatten()
-        .expect("HTTP request content length");
-    while bytes.len() < header_len + content_length {
-        let mut chunk = [0_u8; 4096];
-        let read = stream.read(&mut chunk).expect("read HTTP request body");
-        assert!(read > 0, "HTTP request closed before body");
-        bytes.extend_from_slice(&chunk[..read]);
-    }
-    let value = serde_json::from_slice(&bytes[header_len..header_len + content_length])
-        .expect("decode HTTP request JSON");
-    (path, value)
-}
-
-fn write_http_json(stream: &mut std::net::TcpStream, value: &serde_json::Value) {
-    let body = serde_json::to_vec(value).expect("encode HTTP response JSON");
-    let response = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
-        body.len()
-    );
-    stream
-        .write_all(response.as_bytes())
-        .expect("write HTTP response headers");
-    stream.write_all(&body).expect("write HTTP response body");
-}
-
 #[test]
 fn parse_options_accepts_provider_player_parity_execution_mode() {
     let options = parse_options(

@@ -366,10 +366,12 @@ def authoritative_repository_identity(root: pathlib.Path, repository: str, workt
     """Resolve the task/repository identity from the registered git worktree."""
     root = root.resolve(strict=True)
     requested = pathlib.Path(worktree_hint or root).expanduser()
-    # A stale/missing hint is not authority.  The active command root is the
-    # authoritative registered worktree fallback and is persisted separately
-    # as canonical_worktree.
-    canonical = (requested if requested.exists() else root).resolve(strict=True)
+    # A supplied hint is an identity claim, not a preference. Falling back to
+    # the command root when it is absent can silently bind a new task to an
+    # unrelated coordination worktree.
+    if worktree_hint and not requested.exists():
+        die(f"canonical worktree hint does not exist: {requested}")
+    canonical = requested.resolve(strict=True)
     def resolved_common_dir(worktree: pathlib.Path) -> pathlib.Path:
         value = pathlib.Path(run_text(["git", "-C", str(worktree), "rev-parse", "--git-common-dir"]))
         return value.resolve() if value.is_absolute() else (worktree / value).resolve()
@@ -656,6 +658,96 @@ def github_issue_record(repo: str, task_uid: str) -> dict[str, Any] | None:
     return record
 
 
+def github_pull_request(repo: str, pr_number: int) -> dict[str, Any]:
+    """Read the canonical PR object directly from the requested repository."""
+    payload = json.loads(run_text(["gh", "api", f"repos/{repo}/pulls/{pr_number}"]))
+    if not isinstance(payload, dict):
+        die("record-pr: live PR readback is malformed")
+    return payload
+
+
+def validate_record_pr_live_identity(
+    args: argparse.Namespace,
+    record: dict[str, Any],
+    pr_number: int,
+) -> dict[str, Any]:
+    """Bind record-pr to the live task Issue, registered worktree and live PR head."""
+    try:
+        live_issue = github_issue_record(args.repo, args.task_uid)
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError, RuntimeError) as exc:
+        die(f"record-pr: live task Issue readback failed: {exc}")
+    if not live_issue:
+        die("record-pr: authoritative task Issue was not found")
+    if live_issue.get("task_uid") != args.task_uid:
+        die("record-pr: live task Issue UID mismatch")
+    if str(live_issue.get("issue_state") or "").strip().upper() != "OPEN":
+        die("record-pr: live task Issue is not OPEN")
+    for key in (
+        "issue_number", "issue_url", "owner_role", "module", "priority",
+        "status", "workflow_phase", "worktree_hint",
+    ):
+        if live_issue.get(key) != record.get(key):
+            die(f"record-pr: live task Issue {key} differs from cached task truth")
+    for key in ("pr_url", "pr_number"):
+        if live_issue.get(key) != record.get(key):
+            die(f"record-pr: live task Issue {key} differs from cached PR binding")
+
+    if record.get("task_uid") != args.task_uid or str(record.get("repository") or "") != args.repo:
+        die("record-pr: cached task repository identity is missing or mismatched")
+    worktree = str(record.get("canonical_worktree") or "")
+    if not worktree or str(record.get("worktree_hint") or "") != worktree:
+        die("record-pr: canonical task worktree identity is missing or mismatched")
+    try:
+        identity = authoritative_repository_identity(args.root.resolve(), args.repo, worktree)
+    except (OSError, subprocess.CalledProcessError, RuntimeError, ValueError) as exc:
+        die(f"record-pr: canonical task repository identity readback failed: {exc}")
+    for key in ("repository", "canonical_worktree", "task_branch", "default_branch"):
+        if not record.get(key) or str(record.get(key)) != identity.get(key):
+            label = "branch" if key == "task_branch" else key
+            die(f"record-pr: canonical task {label} identity mismatch")
+    try:
+        canonical_head = run_text([
+            "git", "-C", identity["canonical_worktree"], "rev-parse", "--verify", "HEAD^{commit}",
+        ])
+    except (OSError, subprocess.CalledProcessError, RuntimeError) as exc:
+        die(f"record-pr: canonical task HEAD readback failed: {exc}")
+    if not re.fullmatch(r"[0-9a-fA-F]{40,64}", canonical_head):
+        die("record-pr: canonical task HEAD identity is malformed")
+
+    try:
+        live_pr = github_pull_request(args.repo, pr_number)
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError, RuntimeError) as exc:
+        die(f"record-pr: live PR readback failed: {exc}")
+    expected_url = f"https://github.com/{args.repo}/pull/{pr_number}"
+    if type(live_pr.get("number")) is not int or live_pr.get("number") != pr_number:
+        die("record-pr: live PR number does not match requested PR")
+    if str(live_pr.get("html_url") or "").casefold() != expected_url.casefold():
+        die("record-pr: live PR URL does not match requested repository and number")
+    if str(live_pr.get("state") or "").casefold() != "open" or live_pr.get("merged_at") is not None:
+        die("record-pr: live PR is stale, closed, or merged")
+    head = live_pr.get("head")
+    base = live_pr.get("base")
+    if not isinstance(head, dict) or not isinstance(base, dict):
+        die("record-pr: live PR head/base identity is malformed")
+    head_repo = head.get("repo")
+    base_repo = base.get("repo")
+    if (not isinstance(head_repo, dict)
+            or str(head_repo.get("full_name") or "").casefold() != args.repo.casefold()):
+        die("record-pr: live PR head repository does not match task repository")
+    if (not isinstance(base_repo, dict)
+            or str(base_repo.get("full_name") or "").casefold() != args.repo.casefold()):
+        die("record-pr: live PR base repository does not match task repository")
+    if str(head.get("ref") or "") != identity["task_branch"]:
+        die("record-pr: live PR branch does not match canonical task branch")
+    if str(base.get("ref") or "") != identity["default_branch"]:
+        die("record-pr: live PR base branch does not match canonical repository default branch")
+    if str(head.get("sha") or "").casefold() != canonical_head.casefold():
+        die("record-pr: live PR head does not match canonical task HEAD")
+    if type(live_pr.get("draft")) is not bool or live_pr.get("draft") != bool(getattr(args, "draft_candidate", False)):
+        die("record-pr: live PR draft state does not match requested task transition")
+    return live_issue
+
+
 def task_from_record(uid: str, record: dict[str, Any]) -> OrderedDict[str, Any]:
     task = OrderedDict(
         [
@@ -896,6 +988,21 @@ def update_project_fields(
     updated, skipped = sync.update_fields(project_id, project_item_id, task, fields)
     if task.get("loop_binding") and any(item.split(":", 1)[0] in {"Loop", "Change ID"} and not item.endswith(":unchanged") for item in skipped):
         die("loop Project projection incomplete; reconcile before retry")
+    # The shell integration harness uses a fake GitHub transport. Production
+    # task records always require authoritative Project readback.
+    if task.get("loop_binding") and not os.environ.get("OASIS7_PM_FAKE_GITHUB"):
+        expected = sync.project_field_values(task)
+        try:
+            live_values = sync.read_project_item_field_values(project_id, project_item_id)
+        except Exception as exc:
+            die("start outcome uncertain: loop Project projection readback unavailable; reconcile before retry: " + str(exc))
+        mismatches = [
+            f"{name}={live_values.get(name)!r}, expected={value!r}"
+            for name, value in expected.items()
+            if name in {"Loop", "Change ID"} and live_values.get(name) != value
+        ]
+        if mismatches:
+            die("loop Project projection readback mismatch; reconcile before retry: " + "; ".join(mismatches))
     if skipped:
         print(f"github-project-task: skipped fields: {', '.join(skipped)}", file=sys.stderr)
     if require_lifecycle_projection:
@@ -2539,6 +2646,9 @@ def command_record_pr(args: argparse.Namespace) -> int:
             "record-pr: non-draft pr_watch transition requires task truth at ready/pre_pr_ready; "
             "use prepare-task-pr.sh --promote-draft with canonical CI/review evidence"
         )
+    if requested_pr_number is None:
+        die("record-pr: PR number is missing or malformed")
+    live_issue = validate_record_pr_live_identity(args, record, requested_pr_number)
     record["pr_url"] = args.pr_url
     number = pr_number_from_url(args.pr_url)
     if number is not None:
@@ -2556,7 +2666,9 @@ def command_record_pr(args: argparse.Namespace) -> int:
         "recorded_at": now(),
     })
     record["updated_at"] = now()
-    cleared_traceability = synchronize_live_issue_traceability(args.repo, args.task_uid, record)
+    cleared_traceability = synchronize_live_issue_traceability(
+        args.repo, args.task_uid, record, live=live_issue,
+    )
     task = task_from_record(args.task_uid, record)
     updated_fields = 0
     if record.get("project_item_id"):

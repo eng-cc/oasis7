@@ -106,13 +106,15 @@ impl FeedbackStore {
         validate_signed_timestamp_range_only(request.timestamp_ms, request.expires_at_ms)?;
         let content_hash = feedback_create_content_hash(&request)?;
         verify_signed_request(
-            FeedbackActionKind::Create,
-            request.feedback_id.as_str(),
-            request.author_public_key_hex.as_str(),
-            content_hash.as_str(),
-            request.nonce.as_str(),
-            request.timestamp_ms,
-            request.expires_at_ms,
+            FeedbackSignedPayload::new(
+                FeedbackActionKind::Create,
+                request.feedback_id.as_str(),
+                request.author_public_key_hex.as_str(),
+                content_hash.as_str(),
+                request.nonce.as_str(),
+                request.timestamp_ms,
+                request.expires_at_ms,
+            ),
             request.signature_hex.as_str(),
         )?;
 
@@ -228,13 +230,15 @@ impl FeedbackStore {
             FeedbackActionKind::Create => String::new(),
         };
         verify_signed_request(
-            event_record.action,
-            event_record.feedback_id.as_str(),
-            event_record.actor_public_key_hex.as_str(),
-            signed_content_hash.as_str(),
-            event_record.nonce.as_str(),
-            event_record.timestamp_ms,
-            event_record.expires_at_ms,
+            FeedbackSignedPayload::new(
+                event_record.action,
+                event_record.feedback_id.as_str(),
+                event_record.actor_public_key_hex.as_str(),
+                signed_content_hash.as_str(),
+                event_record.nonce.as_str(),
+                event_record.timestamp_ms,
+                event_record.expires_at_ms,
+            ),
             event_record.signature_hex.as_str(),
         )?;
         self.claim_nonce_idempotent(

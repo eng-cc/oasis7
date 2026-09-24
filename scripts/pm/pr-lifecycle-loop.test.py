@@ -56,7 +56,12 @@ class ProductionLoopTests(unittest.TestCase):
         self.assertEqual(result['readiness_receipt']['head_oid'],'b'*40)
         checked.assert_called_once()
 
-    def run_gate(self, admission=None, fresh=None, ready=True):
+    def test_legacy_admission_keeps_strict_integration_contract(self):
+        with patch.object(gate, 'live_integration_admission', return_value=None) as checked:
+            self.run_gate()
+        self.assertTrue(checked.call_args.kwargs['require_strict'])
+
+    def run_gate(self, admission=None, fresh=None, ready=True, admission_result=None):
         data = {'number': 12, 'repository': 'owner/repo', 'baseRefOid': 'a' * 40, 'headRefOid': 'b' * 40,
                 'state': 'OPEN', 'isDraft': False, 'body': 'Task: task_uid\nRefs #1',
                 'baseRefName': 'main', 'headRefName': 'codex/task',
@@ -65,9 +70,14 @@ class ProductionLoopTests(unittest.TestCase):
             result = {'ready_for_merge': ready, 'status': 'ready' if ready else 'held', 'blockers': [] if ready else ['hold']}
             if ready and evidence_mode == 'production': result['readiness_receipt'] = {'head_oid': data['headRefOid']}
             return result
-        with patch.object(gate, 'decision', side_effect=decide), patch.object(gate, 'local_loop_admission', side_effect=admission,return_value={'status':'legacy'}) as check, patch.object(gate, 'read_pr_identity', return_value=fresh or data):
+        with patch.object(gate, 'decision', side_effect=decide), patch.object(gate, 'local_loop_admission', side_effect=admission,return_value=admission_result if admission_result is not None else {'status':'legacy'}) as check, patch.object(gate, 'read_pr_identity', return_value=fresh or data):
             result = gate.production_decision(data, False, Path('/canonical'), 'task_uid', None)
         return result, check
+
+    def test_current_admission_uses_classifier_auto_mode(self):
+        with patch.object(gate, 'live_integration_admission', return_value=None) as checked:
+            self.run_gate(admission_result={'status': 'passed'})
+        self.assertEqual(checked.call_args.kwargs['require_strict'], 'auto')
 
     def test_revoked_contract_cannot_mint_receipt(self):
         result, _ = self.run_gate(admission=ValueError('contract revoked'))
@@ -158,13 +168,16 @@ print(json.dumps(result))
 '''); gh.chmod(0o755)
         self.env = dict(os.environ,PATH=str(binary)+os.pathsep+os.environ['PATH'],CI_FIXTURE=str(self.state))
 
-    def check(self, run_base='a', artifact_base='a', integration_run_id=None):
+    def check(self, run_base='a', artifact_base='a', integration_run_id=None, require_strict=None):
         pr={'draft':False,'state':'open','merged':False,'body':f'Task: {self.uid}\nRefs #1','head':{'sha':'b'*40},'base':{'ref':'main','sha':'a'*40}}
         run={'id':9,'name':'required-gate','app':{'id':42},'head_sha':'b'*40,'status':'completed','conclusion':'success','completed_at':'2026-01-01','details_url':'https://github.com/owner/repo/actions/runs/8','pull_requests':[{'number':12,'head':{'sha':'b'*40},'base':{'ref':'main','sha':run_base*40}}]}
         artifact={'schema':'oasis7-required-plan-v1','repository':'owner/repo','workflow_run_id':8,'head_oid':'b'*40,'base_oid':artifact_base*40,'check_name':'required-gate','planner':self.plan}
         self.state.write_text(json.dumps({'pr':pr,'run':run,'artifact':artifact}))
         with patch.dict(os.environ,self.env):
-            return gate.live_integration_admission(self.data,self.root,self.uid,self.root,self.context,integration_run_id)
+            return gate.live_integration_admission(
+                self.data, self.root, self.uid, self.root, self.context,
+                integration_run_id, require_strict=require_strict,
+            )
 
     def test_explicit_locator_is_forwarded_and_never_bypasses_live_discovery(self):
         with self.assertRaisesRegex(ValueError,"locator absent"):
@@ -181,6 +194,12 @@ print(json.dumps(result))
         self.assertEqual(proof['head_oid'],'b'*40)
         self.assertEqual(proof['integration_base_oid'],'a'*40)
         self.assertEqual(proof['check_run_id'],9)
+
+    def test_ordinary_mode_reuses_source_bound_ci_after_unrelated_target_advance(self):
+        proof = self.check(run_base='c', artifact_base='c', require_strict=False)
+        self.assertEqual(proof['ci_validation_mode'], 'ordinary_pr')
+        self.assertEqual(proof['integration_base_oid'], 'c' * 40)
+        self.assertEqual(proof['head_oid'], 'b' * 40)
 
     def test_missing_or_ambiguous_app_pin_blocks(self):
         for pins in ([None],[42,43]):

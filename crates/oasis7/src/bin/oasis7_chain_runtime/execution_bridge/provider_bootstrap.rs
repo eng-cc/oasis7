@@ -1,10 +1,12 @@
+#[cfg(any(not(test), feature = "test_tier_required"))]
 use std::fs;
+#[cfg(any(not(test), feature = "test_tier_required"))]
 use std::path::{Path, PathBuf};
 
 use oasis7::runtime::{ProviderBackedBootstrapAuthorityV1, World as RuntimeWorld};
-use oasis7_node::{
-    NodeReplicatedExecutionInputV1, NodeRuntime, PROVIDER_BACKED_BOOTSTRAP_EXECUTION_INPUT_KIND,
-};
+#[cfg(any(not(test), feature = "test_tier_required"))]
+use oasis7_node::NodeRuntime;
+use oasis7_node::{NodeReplicatedExecutionInputV1, PROVIDER_BACKED_BOOTSTRAP_EXECUTION_INPUT_KIND};
 
 use super::driver::NodeRuntimeExecutionDriver;
 
@@ -83,6 +85,7 @@ pub(super) fn decode_provider_backed_bootstrap_execution_input(
 /// Load explicit authority bundles before entering the chain runtime loop.
 /// The input is entirely caller supplied; an empty list leaves the writer
 /// unchanged and no authority or allowance is synthesized.
+#[cfg(any(not(test), feature = "test_tier_required"))]
 fn load_provider_backed_bootstrap_authorities(
     paths: &[PathBuf],
 ) -> Result<Vec<ProviderBackedBootstrapAuthorityV1>, String> {
@@ -111,6 +114,7 @@ fn load_provider_backed_bootstrap_authorities(
 /// must happen before it enters the consensus queue. The validation copy must
 /// retain the exact current snapshot/journal/module state while preventing a
 /// successful preflight from publishing any runtime or cognition changes.
+#[cfg(any(not(test), feature = "test_tier_required"))]
 fn detached_execution_world_for_bootstrap(world_dir: &Path) -> Result<RuntimeWorld, String> {
     // Load the durable world exactly as it was persisted. The execution
     // driver's `load_execution_world` helper applies a storage-profile
@@ -145,6 +149,7 @@ fn detached_execution_world_for_bootstrap(world_dir: &Path) -> Result<RuntimeWor
     Ok(detached)
 }
 
+#[cfg(any(not(test), feature = "test_tier_required"))]
 fn validate_provider_backed_bootstrap_before_admission(
     world_dir: &Path,
     authorities: &[ProviderBackedBootstrapAuthorityV1],
@@ -164,6 +169,7 @@ fn validate_provider_backed_bootstrap_before_admission(
 /// replicated execution input. The input is queued in the node consensus
 /// engine and is committed only when the authoritative proposer includes it;
 /// materializing nodes receive the exact ordered bytes through the block.
+#[cfg(any(not(test), feature = "test_tier_required"))]
 pub(crate) fn publish_provider_backed_bootstrap_from_paths(
     runtime: &NodeRuntime,
     world_dir: &Path,

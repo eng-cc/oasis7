@@ -222,19 +222,8 @@ fn collect_execution_committed_action_anchors(
             payload_hash: action.payload_hash.clone(),
         })
         .collect();
-    anchors.sort_by(|left, right| left.action_id.cmp(&right.action_id));
+    anchors.sort_by_key(|left| left.action_id);
     anchors
-}
-
-pub(super) fn build_execution_external_effect_materialization(
-    execution_world: &RuntimeWorld,
-    context: &NodeExecutionCommitContext,
-) -> Result<ExecutionExternalEffectMaterialization, String> {
-    build_execution_external_effect_materialization_with_pre_step_root(
-        execution_world,
-        context,
-        None,
-    )
 }
 
 pub(super) fn execution_world_snapshot_root(
@@ -336,13 +325,13 @@ fn load_execution_replay_record_input(
                     record.height, external_effect.height
                 ));
             }
-            if let Some(node_block_hash) = record.node_block_hash.as_deref() {
-                if external_effect.node_block_hash != node_block_hash {
-                    return Err(format!(
-                        "execution replay input node_block_hash mismatch height={} expected={} actual={}",
-                        record.height, node_block_hash, external_effect.node_block_hash
-                    ));
-                }
+            if let Some(node_block_hash) = record.node_block_hash.as_deref()
+                && external_effect.node_block_hash != node_block_hash
+            {
+                return Err(format!(
+                    "execution replay input node_block_hash mismatch height={} expected={} actual={}",
+                    record.height, node_block_hash, external_effect.node_block_hash
+                ));
             }
             Some(external_effect)
         }
@@ -361,10 +350,10 @@ fn find_nearest_execution_checkpoint_manifest(
     if target_height == 0 {
         return Ok(None);
     }
-    if let Some(latest) = load_latest_execution_checkpoint_manifest(execution_records_dir)? {
-        if latest.height <= target_height {
-            return Ok(Some(latest));
-        }
+    if let Some(latest) = load_latest_execution_checkpoint_manifest(execution_records_dir)?
+        && latest.height <= target_height
+    {
+        return Ok(Some(latest));
     }
     let checkpoint_root = execution_checkpoint_root_dir(execution_records_dir);
     if !checkpoint_root.exists() {

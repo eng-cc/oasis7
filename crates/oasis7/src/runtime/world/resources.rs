@@ -989,11 +989,7 @@ impl World {
                 reason: "material kind cannot be empty".to_string(),
             });
         }
-        let ledger = self
-            .state
-            .material_ledgers
-            .entry(ledger_id)
-            .or_insert_with(BTreeMap::new);
+        let ledger = self.state.material_ledgers.entry(ledger_id).or_default();
         if amount == 0 {
             ledger.remove(&material_kind);
         } else {
@@ -1041,11 +1037,7 @@ impl World {
                 ),
             });
         }
-        let ledger = self
-            .state
-            .material_ledgers
-            .entry(ledger_id)
-            .or_insert_with(BTreeMap::new);
+        let ledger = self.state.material_ledgers.entry(ledger_id).or_default();
         if next == 0 {
             ledger.remove(&material_kind);
         } else {

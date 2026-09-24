@@ -140,6 +140,10 @@ fn path_matches_route_tuple(
     current == to_ledger
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "DFS carries each deterministic route-search accumulator explicitly."
+)]
 fn find_paths_dfs(
     world: &World,
     current: &MaterialLedgerId,
@@ -411,6 +415,10 @@ pub(super) fn material_transit_loss_amount(amount: i64, distance_km: i64, loss_b
 /// Route availability and capacity are intentionally evaluated here but not reserved. The
 /// action evaluator and the quote both consume this same pure result; the action still performs
 /// the authoritative reservation and ledger checks while applying the resulting event.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Transfer path resolution preserves the action/quote input tuple explicitly."
+)]
 pub(super) fn resolve_logistics_transfer_path(
     world: &World,
     from_ledger: &MaterialLedgerId,
@@ -456,10 +464,10 @@ pub(super) fn resolve_logistics_transfer_path(
     };
 
     let mut requested_route_ids = route_ids.to_vec();
-    if requested_route_ids.is_empty() {
-        if let Some(route_id) = route_id {
-            requested_route_ids.push(route_id.to_string());
-        }
+    if requested_route_ids.is_empty()
+        && let Some(route_id) = route_id
+    {
+        requested_route_ids.push(route_id.to_string());
     }
     let graph_mode = !requested_route_ids.is_empty() || auto_reroute;
     let path_selection = if graph_mode {
@@ -531,6 +539,10 @@ fn route_capacity_available_amount(world: &World, route_ids: &[String]) -> Optio
         .and_then(|capacities| capacities.into_iter().min())
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Blocked-path diagnostics mirror the route quote input tuple for deterministic recovery hints."
+)]
 fn blocked_route_path_plan(
     world: &World,
     from_ledger: &MaterialLedgerId,
@@ -549,13 +561,9 @@ fn blocked_route_path_plan(
     } else {
         route_ids.to_vec()
     };
-    let Some(normalized_kind) = normalize_logistics_route_kind(kind) else {
-        return None;
-    };
+    let normalized_kind = normalize_logistics_route_kind(kind)?;
     if let Some(route_id) = route_id {
-        let Some(route) = world.state.logistics_routes.get(route_id) else {
-            return None;
-        };
+        let route = world.state.logistics_routes.get(route_id)?;
         if route_ids.is_empty()
             && !logistics_route_matches(
                 route,
@@ -638,6 +646,10 @@ impl World {
 
     /// Derives the existing transfer priority, loss, and timing rules without
     /// reserving materials or consuming a transit slot.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Public quote API preserves its stable transfer request argument order."
+    )]
     pub fn logistics_transfer_quote(
         &self,
         requester_agent_id: &str,
@@ -663,6 +675,10 @@ impl World {
 
     /// Derives a route-aware transfer quote without reserving materials, capacity, or a
     /// journal entry. Empty route bindings retain the legacy direct-transfer semantics.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Public route-aware quote API preserves its stable transfer request argument order."
+    )]
     pub fn logistics_transfer_quote_with_path(
         &self,
         requester_agent_id: &str,
@@ -691,6 +707,10 @@ impl World {
 
     /// Derives a route-aware transfer quote while preserving the legacy route
     /// binding as a distinct input for exact action/quote tuple validation.
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Public route-bound quote API preserves its stable transfer request argument order."
+    )]
     pub fn logistics_transfer_quote_with_route_id(
         &self,
         requester_agent_id: &str,
@@ -877,9 +897,9 @@ impl World {
             "route_unavailable"
         } else if source_amount_before < amount {
             "reduce_amount_or_source_materials"
-        } else if !path_capacity_available {
-            "wait_for_transit_capacity"
-        } else if effective_distance_km > 0 && inflight_before >= MATERIAL_TRANSFER_MAX_INFLIGHT {
+        } else if !path_capacity_available
+            || effective_distance_km > 0 && inflight_before >= MATERIAL_TRANSFER_MAX_INFLIGHT
+        {
             "wait_for_transit_capacity"
         } else if electricity_available < tariff_electricity_total {
             "restore_power_or_use_lower_tariff_route"

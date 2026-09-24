@@ -327,12 +327,13 @@ impl SequencerMainloop {
     fn ensure_lease(&mut self, now_ms: i64) -> LeaseDecision {
         self.lease.expire_if_needed(now_ms);
 
-        if let Some(current) = self.lease.current().cloned() {
-            if current.holder_id == self.config.node_id && current.expires_at_ms > now_ms {
-                return self
-                    .lease
-                    .renew(&current.lease_id, now_ms, self.config.lease_ttl_ms);
-            }
+        if let Some(current) = self.lease.current().cloned()
+            && current.holder_id == self.config.node_id
+            && current.expires_at_ms > now_ms
+        {
+            return self
+                .lease
+                .renew(&current.lease_id, now_ms, self.config.lease_ttl_ms);
         }
 
         self.lease

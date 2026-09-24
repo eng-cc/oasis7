@@ -26,6 +26,7 @@ pub(super) fn run_runtime_presence_monitor(
     );
 }
 
+#[cfg(test)]
 pub(super) fn query_runtime_bound_players(live_bind: &str) -> Result<BTreeSet<String>, String> {
     query_runtime_bound_players_with_probe_sequence(live_bind).map(|(_, players)| players)
 }
@@ -178,6 +179,10 @@ impl ViewerRuntimeProbeClient {
     }
 }
 
+#[expect(
+    clippy::large_enum_variant,
+    reason = "Stable runtime enum preserves established variant payload ownership and wire behavior."
+)]
 enum ViewerResponseLine {
     Response(ViewerResponse),
     Snapshot(BTreeSet<String>),
@@ -222,26 +227,6 @@ struct RuntimePresenceSnapshotWire {
 #[derive(Debug, serde::Deserialize)]
 struct RuntimePresenceModelWire {
     agent_player_bindings: BTreeMap<String, String>,
-}
-
-#[cfg(test)]
-fn runtime_players_from_response(response: &ViewerResponse) -> Option<BTreeSet<String>> {
-    let ViewerResponse::Snapshot { snapshot } = response else {
-        return None;
-    };
-    Some(runtime_players_from_snapshot(snapshot))
-}
-
-#[cfg(test)]
-fn runtime_players_from_snapshot(snapshot: &WorldSnapshot) -> BTreeSet<String> {
-    snapshot
-        .model
-        .agent_player_bindings
-        .values()
-        .map(|player_id| player_id.trim())
-        .filter(|player_id| !player_id.is_empty())
-        .map(ToOwned::to_owned)
-        .collect()
 }
 
 fn is_timeout_error(err: &std::io::Error) -> bool {

@@ -86,6 +86,10 @@ pub fn decision_from_proposal<TAction: Clone, TStatus: Copy>(
     }
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Node state-machine adapter keeps explicit stake, epoch, vote, and reason seams"
+)]
 pub fn insert_attestation<TAction, TStatus: NodePosStatusAdapter>(
     validators: &BTreeMap<String, u64>,
     total_stake: u64,
@@ -159,6 +163,10 @@ pub fn insert_attestation<TAction, TStatus: NodePosStatusAdapter>(
     Ok(())
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "Node proposal state-machine adapter keeps explicit consensus transition seams"
+)]
 pub fn propose_next_head<TAction: Clone, TStatus: NodePosStatusAdapter>(
     validators: &BTreeMap<String, u64>,
     total_stake: u64,

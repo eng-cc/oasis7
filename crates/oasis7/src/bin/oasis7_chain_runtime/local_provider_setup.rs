@@ -319,6 +319,10 @@ mod tests {
     use oasis7::runtime::{Action, DomainEvent, WorldEventBody};
 
     #[test]
+    #[expect(
+        clippy::field_reassign_with_default,
+        reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+    )]
     fn local_setup_persists_real_runtime_order_and_reuses_durable_bundle() {
         let root = std::env::temp_dir().join(format!(
             "oasis7-local-provider-setup-{}-{}",
@@ -469,6 +473,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::field_reassign_with_default,
+        reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+    )]
     fn local_setup_renews_expired_grant_without_refill_and_preserves_history() {
         let root = std::env::temp_dir().join(format!(
             "oasis7-local-provider-lifetime-{}-{}",
@@ -595,6 +603,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::field_reassign_with_default,
+        reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+    )]
     fn local_setup_reuses_at_240_but_reissues_at_239() {
         let root = std::env::temp_dir().join(format!(
             "oasis7-local-provider-boundary-{}-{}",
@@ -713,6 +725,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::field_reassign_with_default,
+        reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+    )]
     fn local_setup_recovers_after_authority_publication_interruption() {
         let root = std::env::temp_dir().join(format!(
             "oasis7-local-provider-recovery-{}-{}",

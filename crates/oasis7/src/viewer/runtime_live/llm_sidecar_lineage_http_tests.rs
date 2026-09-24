@@ -30,10 +30,10 @@ fn provider_dispatch_http_restart_fence_issues_one_request() {
             if line == "\r\n" || line == "\n" {
                 break;
             }
-            if let Some((name, value)) = line.split_once(':') {
-                if name.eq_ignore_ascii_case("content-length") {
-                    content_length = value.trim().parse().expect("provider content length");
-                }
+            if let Some((name, value)) = line.split_once(':')
+                && name.eq_ignore_ascii_case("content-length")
+            {
+                content_length = value.trim().parse().expect("provider content length");
             }
         }
         let mut body = vec![0_u8; content_length];

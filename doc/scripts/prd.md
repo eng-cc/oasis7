@@ -57,6 +57,7 @@
 - 每个常见脚本意图只有一个推荐稳定入口；辅助与 fallback 路径必须声明触发条件，且永远不能替代 canonical 路径。
 - 对外发布的脚本契约必须说明最小调用、改变验证范围的选项和失败类别；可变参数、默认值与机器可读字段以当前脚本行为、`--help` 和测试为实现权威。`dry-run`、`skip-*`、语法或 help 成功不能被解释为完整门禁通过。
 - Worktree harness 的产品承诺是 machine-readable、worktree-scoped 的启动与证据隔离；teardown 终止运行栈并保留证据。其 `ready` / `smoke` 只证明本地 launcher/Viewer reachability 边界，不证明 headed S6、玩法、持久化、replay/recovery、共识或发布就绪。
+- Worktree harness 发布 `state.json` 与 `session.meta` 时必须原子替换完整记录，避免并发读取看到部分状态，并保持既有记录格式可兼容读取；旧记录缺少稳定进程身份且对应进程仍存活时，必须拒绝发送信号，确认进程已退出后才可清理陈旧记录。`ready`、`status`、`url` 与重复 `up` 仅在记录的 PID、PGID 和稳定 leader identity 一致时承认进程仍属于该 harness；`down` 发出 TERM 前须核对进程组归属，再使用有界等待和 KILL 升级。端口分配按同一仓库 worktree 家族串行保留，过期保留仅在核对 owner 存活状态后回收。
 - 每个请求从绑定单一 task truth 的独立 task worktree 开始；复用必须有用户明确授权。Bootstrap 部分失败时必须保留已创建的 branch/worktree，并返回可执行的 refresh/retry 恢复指令。
 - 已完成工作默认通过 repository GitHub PR lifecycle 进入受保护 `main`，并使用 source-bound review evidence 与 canonical post-merge cleanup；具体状态、门禁和 receipt 规则只由 `doc/engineering/workflow/source-of-truth.md` 定义。
 - `land-task-worktree.sh` 仅保留为 local-only / fallback 兼容工具，不是默认最终集成路径，也不能绕过 canonical cleanup。
@@ -85,7 +86,7 @@
   - PRD-SCRIPTS-007C: As a `producer_system_designer`, I want a `.pm` rebase conflict helper, so that same-PR rebase maintenance can distinguish retired signal inbox conflicts, generated-view conflicts, and canonical task/memory/stage conflicts that still require manual judgment.
   - PRD-SCRIPTS-008: As a `producer_system_designer`, I want every completed task worktree deleted after PR merge or explicit local-only fallback completion, so that the local workspace and branch namespace do not fill with stale finished slices.
   - PRD-SCRIPTS-008A: As a `producer_system_designer`, I want a read-only worktree cleanup report, so that I can identify stale finished slices before they accumulate into branch/worktree drift.
-  - PRD-SCRIPTS-009: As a 开发者, I want a repo-family shared cargo development wrapper, so that multiple git worktrees can reuse Rust build artifacts without weakening deterministic wasm/release gates.
+  - PRD-SCRIPTS-009: As a 开发者, I want a worktree-scoped shared cargo development wrapper, so that each git worktree can reuse its own Rust build artifacts without cross-worktree contamination or weakening deterministic wasm/release gates.
 - Critical User Flows:
   1. Flow-SCR-001: `调用主入口脚本 -> 执行检查/测试 -> 输出结构化结果`
   2. Flow-SCR-002: `CI 触发脚本 -> 失败定位到参数/环境 -> 修复后重跑`
@@ -99,7 +100,7 @@
   6C. Flow-SCR-006C: `git rebase origin/main -> 命中 .pm/** 冲突 -> rebase-conflict-helper.sh --json -> 若命中 retired signal inbox 则删除退休文件或人工归档 -> 若命中 registry/backlog 视图则保留 main 删除并执行 sync-views -> 其余 canonical task/memory/stage 冲突人工处理`
   6E. Flow-SCR-006E: `workflow-behavior-eval.sh -> 跑 task-worktree bootstrap smoke -> 校验可选/必需 routing scenarios 与 subagent contract surface -> 跑 PM runtime/closeout smoke -> 跑 prepare-task-pr fixture test -> 跑 pr-review-thread-closeout fixture test -> 输出统一 workflow eval 摘要`
   7. Flow-SCR-007: `用户只说“先写一版 / 先不要提交 / 顺手改一下” -> 仍判定为新需求 -> 先切独立 worktree 再开始编辑；若已在错误 worktree 开工 -> 立即说明并切走`
-  8. Flow-SCR-008: `cargo-dev.sh check/test/run -> 解析当前 repo family 的 shared target namespace -> 导出稳定 CARGO_TARGET_DIR -> 以 env -u RUSTC_WRAPPER cargo 执行开发态命令`
+  8. Flow-SCR-008: `cargo-dev.sh check/test/run -> 解析当前 repo family + worktree source identity 的 target namespace -> 导出稳定 CARGO_TARGET_DIR -> 以 env -u RUSTC_WRAPPER cargo 执行开发态命令`
   9. Flow-SCR-009: `local smoke / regression / drill script -> source cargo-dev-lib.sh -> 调用 oasis7_cargo_dev build/test/run -> 本地复用 shared target；CI 或显式 raw 环境回退原始 cargo target 语义`
   9. Flow-SCR-009: `worktree-gc-report.sh -> 扫描 git worktree + `.pm/github-project-sync/tasks.json` / GitHub issue status -> 标注 prunable / closed clean worktree cleanup 候选 -> 输出只读汇总与建议命令`
 - Functional Specification Matrix:
@@ -117,7 +118,7 @@
 | `.pm` rebase conflict helper | `rebase_in_progress`、`summary.total_conflicted_paths`、`summary.retired_signal_conflicts`、`summary.generated_view_conflicts`、`summary.manual_conflicts`、`conflicts[].category`、`conflicts[].recommended_action`、`resolved_now` | 在 active rebase 中只读分类 `.pm/**` 未合并路径；不自动修复任何 `.pm/**` 路径 | `rebase_conflicted -> classified -> manual_resolution_pending` | `.pm/inbox/signals.jsonl` 已退休，命中时只提示删除退休文件或人工归档；`.pm/registry/tasks.yaml` 与 `.pm/roles/*/backlog/*.yaml` 只提示保留 `main` 删除并执行 `sync-views.sh` | `producer_system_designer` / `qa_engineer` 可读，scripts owner 维护入口 |
 | PR review thread closeout | `pr_number`、`thread_id`、`is_resolved`、`is_outdated`、`path`、`line`、`latest_comment`、`review_decision`、`merge_state_status` | 通过统一入口读取当前 PR review threads，并在显式 resolve 时批量关闭指定 unresolved thread | `reported -> patched -> resolved -> rechecked` | 默认 PR 取当前 branch 关联 PR；`--resolve-all-unresolved` 只处理当前 unresolved thread；每次 resolve 后都必须回报最新 PR state | `producer_system_designer` 定流程，scripts owner 维护入口 |
 | worktree lifecycle report | `worktree_path`、`branch`、`prunable_reason`、`dirty`、`pm_task_uid`、`pm_task_status`、`cleanup_candidate`、`cleanup_commands[]` | 通过统一入口只读盘点当前 repo 的 worktree 生命周期状态，并给出建议 cleanup 命令 | `discovered -> classified -> cleanup_candidate/retained` | 默认同时看 `git worktree list --porcelain` 与 GitHub-backed task mapping / issue status；prunable 和 closed clean worktree 优先暴露 | `producer_system_designer` 定流程，scripts owner 维护入口 |
-| shared cargo dev cache | `shared_target_dir`、`cache_namespace`、`host_triple`、`rustc_release` | 通过 `cargo-dev.sh` 为手工开发态 `cargo` 命令注入稳定共享 `CARGO_TARGET_DIR`；通过 `cargo-dev-lib.sh` 为本地 smoke / regression / drill / longrun 脚本复用同一入口 | `idle -> cache_ready -> cargo_running -> success/failed` | 默认按 `git-common-dir` 派生 repo-family namespace，并按 host/toolchain 拆分目录；CI、deterministic wasm、release、hash/receipt evidence 流程继续保留原始 cargo 语义 | 开发者可执行，scripts owner 维护入口 |
+| shared cargo dev cache | `shared_target_dir`、`cache_namespace`、`worktree_source_identity`、`host_triple`、`rustc_release` | 通过 `cargo-dev.sh` 为手工开发态 `cargo` 命令注入当前 worktree 内稳定共享的 `CARGO_TARGET_DIR`；通过 `cargo-dev-lib.sh` 为本地 smoke / regression / drill / longrun 脚本复用同一入口 | `idle -> cache_ready -> cargo_running -> success/failed` | 默认按 `git-common-dir` 与当前 worktree source root 派生 repo-family/worktree namespace，并按 host/toolchain 拆分目录；不同 worktree 默认不得互选 artifacts；CI、deterministic wasm、release、hash/receipt evidence 流程继续保留原始 cargo 语义 | 开发者可执行，scripts owner 维护入口 |
 - Acceptance Criteria:
   - AC-1: scripts PRD 明确脚本分类、入口、约束。
   - AC-2: scripts project 文档维护脚本治理任务。
@@ -154,9 +155,9 @@
   - AC-20B: 新增 `scripts/worktree-gc-report.sh`，默认只读输出当前 repo 的 worktree 生命周期报告，并在 `--json` 模式下至少包含 `repo_root`、`current_worktree`、`summary.total_worktrees`、`summary.cleanup_candidates`、以及每个 worktree 的 `path`、`branch`、`prunable`、`dirty`、`pm_task_uid`、`pm_task_status`、`cleanup_candidate` 与 `cleanup_commands`。
   - AC-21: `AGENTS.md`、`doc/scripts/prd.md` 与 task-worktree bootstrap 专题必须统一写明：文档/脚本/测试/话术改动也算新需求，不能因为改动小而复用已有 worktree。
   - AC-22: 上述正式文档必须统一列出“复用当前 worktree / 就在这里改 / 不要切新 worktree”为允许例外的显式表述，并明确“先写一版 / 先不要提交 / 顺手改一下”不构成复用授权；若已切错 worktree，必须立即切走。
-  - AC-23: 新增 `scripts/cargo-dev.sh`，为本地开发态 `cargo check/test/run/build` 提供 repo-family 共享缓存入口，并默认使用 `env -u RUSTC_WRAPPER cargo ...`。
+  - AC-23: 新增 `scripts/cargo-dev.sh`，为本地开发态 `cargo check/test/run/build` 提供 worktree-scoped shared cache 入口，并默认使用 `env -u RUSTC_WRAPPER cargo ...`。
   - AC-23A: 新增 `scripts/cargo-dev-lib.sh`，为本地 smoke / playtest / prewarm / regression / drill / longrun 脚本提供 `oasis7_cargo_dev` 与 shared-target debug binary 解析 helper；默认本地复用 `cargo-dev.sh`，但在 `CI=1`、`OASIS7_CARGO_DEV_SHARED=0` 或 `OASIS7_FORCE_RAW_CARGO=1` 时回退到原始 cargo target 语义。
-  - AC-24: `scripts/cargo-dev.sh --print-target-dir` 必须输出稳定共享目录；同一 repo family 下不同 worktree 输出一致，且可通过环境变量覆盖。
+  - AC-24: `scripts/cargo-dev.sh --print-target-dir` 必须输出当前 worktree 内稳定目录；同一 worktree 重复调用输出一致，默认不同 worktree 输出不同 namespace，且可通过环境变量显式覆盖。
   - AC-25: 正式文档必须明确：`scripts/cargo-dev.sh` / `scripts/cargo-dev-lib.sh` 只服务开发态缓存复用，不适用于要求 `CARGO_TARGET_DIR` 为空的 deterministic wasm / release 构建链路，也不得替代 CI canonical required/full 验收命令。
   - AC-26: 根 `AGENTS.md` 的 cargo 规则必须与 `scripts/cargo-dev.sh` / `testing-manual.md` 对齐，明确“原始 cargo 命令走 `env -u RUSTC_WRAPPER cargo ...`，开发态共享缓存可走 `./scripts/cargo-dev.sh ...`，但 deterministic wasm / release 仍必须保持 `CARGO_TARGET_DIR` 为空”。
 - Non-Goals:
@@ -209,7 +210,7 @@
   - local-only landing compatibility：`land-task-worktree.sh` 仍可用于用户显式要求的本地合流或离线应急，但帮助文案和正式文档必须明确它不是默认最终合流入口。
   - task cleanup：已完成任务的 task `worktree` 若长期不删，会让后续搜索、branch 占用检查与本地磁盘占用持续失真；因此 cleanup 必须成为 PR 合入后的必做步骤。
   - worktree lifecycle report：缺失路径、prunable 记录、dirty worktree 与未绑定 GitHub-backed task mapping 的 worktree 都必须 truthfully 报告，不允许脚本为了“看起来整洁”而隐式删除或跳过。
-  - shared cargo dev cache：同一 repo family 的多个 worktree 必须映射到同一 shared target namespace，但 deterministic wasm / release 脚本若要求 `CARGO_TARGET_DIR` 为空，必须继续走原始 cargo 入口而不是 `cargo-dev.sh`。
+  - shared cargo dev cache：同一 repo family 的每个 worktree 必须映射到自己的 stable source-identity target namespace；同一 worktree 可复用该 namespace，默认不同 worktree 不得共享编译 artifacts。deterministic wasm / release 脚本若要求 `CARGO_TARGET_DIR` 为空，必须继续走原始 cargo 入口而不是 `cargo-dev.sh`。
 - Non-Functional Requirements:
   - NFR-SCR-1: 核心脚本具备可读帮助信息与失败语义说明。
   - NFR-SCR-2: 主入口脚本在 Linux/macOS 环境可执行一致。
@@ -224,7 +225,7 @@
   - NFR-SCR-11: 已完成 task 的 cleanup 语义必须清晰一致，不允许不同文档同时出现“建议删除”和“必须删除”两套口径；PR 合入后的本地同步/cleanup 与 local-only fallback cleanup 不得混成两套默认流程。
   - NFR-SCR-12: worktree 例外授权与错误 worktree 处置口径在 `AGENTS.md`、模块 PRD 与专题文档之间必须保持一致，不允许根规则更严、模块专题更松。
   - NFR-SCR-12A: worktree 生命周期报告的 JSON 字段必须稳定、只读且不混入人类说明文本，便于 agent 直接消费 cleanup 候选。
-  - NFR-SCR-13: 开发态 shared cargo target 目录必须稳定且默认落在工作区外部缓存位置，避免污染仓库源码树或让不同 repo family 相互踩缓存。
+  - NFR-SCR-13: 开发态 shared cargo target 目录必须按 worktree source identity 稳定且默认落在工作区外部缓存位置，避免污染仓库源码树或让不同 worktree / repo family 相互踩缓存。
 - Security & Privacy: 脚本不得在默认输出中泄漏密钥；涉及网络调用时需要显式参数与最小权限。
 
 ## 5. Risks & Roadmap

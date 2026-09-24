@@ -2,19 +2,6 @@
 use super::*;
 use serde::ser::SerializeMap;
 
-pub(crate) fn is_module_marketplace_event(event: &DomainEvent) -> bool {
-    matches!(
-        event,
-        DomainEvent::ModuleArtifactDeployed { .. }
-            | DomainEvent::ModuleArtifactListed { .. }
-            | DomainEvent::ModuleArtifactDelisted { .. }
-            | DomainEvent::ModuleArtifactDestroyed { .. }
-            | DomainEvent::ModuleArtifactBidPlaced { .. }
-            | DomainEvent::ModuleArtifactBidCancelled { .. }
-            | DomainEvent::ModuleArtifactSaleCompleted { .. }
-    )
-}
-
 #[derive(Debug)]
 pub(crate) struct PreparedModuleMarketplace {
     events: Vec<DomainEvent>,
@@ -494,15 +481,15 @@ impl PreparedModuleMarketplace {
                         reason: format!("module artifact listing mismatch for hash {}", wasm_hash),
                     });
                 }
-                if let Some(expected_listing_order_id) = listing_order_id {
-                    if listing.order_id != *expected_listing_order_id {
-                        return Err(WorldError::ResourceBalanceInvalid {
-                            reason: format!(
-                                "module artifact sale listing order mismatch: hash={} listing_order_id={} event_order_id={}",
-                                wasm_hash, listing.order_id, expected_listing_order_id
-                            ),
-                        });
-                    }
+                if let Some(expected_listing_order_id) = listing_order_id
+                    && listing.order_id != *expected_listing_order_id
+                {
+                    return Err(WorldError::ResourceBalanceInvalid {
+                        reason: format!(
+                            "module artifact sale listing order mismatch: hash={} listing_order_id={} event_order_id={}",
+                            wasm_hash, listing.order_id, expected_listing_order_id
+                        ),
+                    });
                 }
                 let owner = self.module_artifact_owners.get(wasm_hash).ok_or_else(|| {
                     WorldError::ResourceBalanceInvalid {

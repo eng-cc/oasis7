@@ -4,6 +4,10 @@ use ed25519_dalek::{Signature, Verifier, VerifyingKey};
 use sha2::{Digest, Sha256};
 
 impl ViewerRuntimeLiveServer {
+    #[expect(
+        clippy::result_large_err,
+        reason = "Recovery protocol errors preserve the stable typed error envelope"
+    )]
     pub(super) fn verify_compensation_operator(
         &self,
         authority: &crate::viewer::protocol::RollbackOperatorAuthorization,
@@ -98,6 +102,10 @@ impl ViewerRuntimeLiveServer {
             })
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Recovery protocol errors preserve the stable typed error envelope"
+    )]
     pub(super) fn transition_rollback_compensation(
         &mut self,
         request: crate::viewer::protocol::RollbackCompensationTransitionRequest,
@@ -162,6 +170,10 @@ impl ViewerRuntimeLiveServer {
         Ok(ack)
     }
 
+    #[expect(
+        clippy::result_large_err,
+        reason = "Recovery protocol errors preserve the stable typed error envelope"
+    )]
     pub(super) fn resolve_rollback_attribution(
         &mut self,
         request: crate::viewer::protocol::RollbackAttributionResolutionRequest,

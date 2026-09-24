@@ -51,6 +51,10 @@ pub(super) struct PublicationLifecycleObserver {
 }
 
 impl PublicationLifecycleObserver {
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable protocol and runtime seam keeps independently validated inputs explicit."
+    )]
     pub(super) fn new(
         node_id: String,
         player_id: String,
@@ -322,6 +326,7 @@ pub(super) fn validate_current_catch_up_binding(
     Ok(())
 }
 
+#[cfg(test)]
 pub(super) fn reconcile(
     snapshot: &NodeSnapshot,
     manifest: Option<&LoadedNetworkTierManifest>,

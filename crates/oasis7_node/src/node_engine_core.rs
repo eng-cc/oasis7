@@ -22,6 +22,7 @@ struct ObservedPosTick {
 }
 
 impl PosNodeEngine {
+    #[cfg(test)]
     pub(super) fn new(config: &NodeConfig) -> Result<Self, NodeError> {
         Self::new_with_pending_consensus_action_queue_bytes(config, Arc::new(AtomicUsize::new(0)))
     }
@@ -67,35 +68,35 @@ impl PosNodeEngine {
                 ),
             });
         }
-        if enforce_consensus_signature {
-            if let Some(expected_public_key) = validator_signers.get(config.node_id.as_str()) {
-                let Some(actual_public_key) = consensus_signer_public_key.as_deref() else {
-                    return Err(NodeError::InvalidConfig {
-                        reason: format!(
-                            "consensus signer binding missing local signer keypair for validator {}",
-                            config.node_id
-                        ),
-                    });
-                };
-                if actual_public_key != expected_public_key {
-                    return Err(NodeError::InvalidConfig {
-                        reason: format!(
-                            "consensus signer binding mismatch for local validator {}: expected={} actual={}",
-                            config.node_id, expected_public_key, actual_public_key
-                        ),
-                    });
-                }
-            }
-        }
-        if let Some(bound_player_id) = validator_players.get(config.node_id.as_str()) {
-            if bound_player_id != &config.player_id {
+        if enforce_consensus_signature
+            && let Some(expected_public_key) = validator_signers.get(config.node_id.as_str())
+        {
+            let Some(actual_public_key) = consensus_signer_public_key.as_deref() else {
                 return Err(NodeError::InvalidConfig {
                     reason: format!(
-                        "node_id {} is bound to validator player {}, but config player_id is {}",
-                        config.node_id, bound_player_id, config.player_id
+                        "consensus signer binding missing local signer keypair for validator {}",
+                        config.node_id
+                    ),
+                });
+            };
+            if actual_public_key != expected_public_key {
+                return Err(NodeError::InvalidConfig {
+                    reason: format!(
+                        "consensus signer binding mismatch for local validator {}: expected={} actual={}",
+                        config.node_id, expected_public_key, actual_public_key
                     ),
                 });
             }
+        }
+        if let Some(bound_player_id) = validator_players.get(config.node_id.as_str())
+            && bound_player_id != &config.player_id
+        {
+            return Err(NodeError::InvalidConfig {
+                reason: format!(
+                    "node_id {} is bound to validator player {}, but config player_id is {}",
+                    config.node_id, bound_player_id, config.player_id
+                ),
+            });
         }
         Ok(Self {
             validators,
@@ -538,6 +539,10 @@ impl PosNodeEngine {
         .map_err(node_pos_error)
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable consensus attestation seam mirrors the signed state-machine payload fields"
+    )]
     pub(super) fn insert_attestation(
         &self,
         proposal: &mut PendingProposal,
@@ -597,22 +602,22 @@ impl PosNodeEngine {
                     incoming_already_reserved,
                 )
                 .map_err(|err| {
-                    if incoming_already_reserved {
-                        if let Err(recovery_err) = reserve_action_payload_bytes(
+                    if incoming_already_reserved
+                        && let Err(recovery_err) = reserve_action_payload_bytes(
                             &self.pending_consensus_action_queue_bytes,
                             self.max_pending_consensus_action_queue_bytes,
                             proposal_payload_bytes,
-                        ) {
-                            self.pending_consensus_action_reservation_bytes = 0;
-                            self.pending_consensus_action_reservation_owned = false;
-                            self.pending = None;
-                            return NodeError::Consensus {
-                                reason: format!(
-                                    "requeue rejected consensus actions failed at height {} and proposal reservation could not be restored: {}; original error: {}",
-                                    decision.height, recovery_err, err
-                                ),
-                            };
-                        }
+                        )
+                    {
+                        self.pending_consensus_action_reservation_bytes = 0;
+                        self.pending_consensus_action_reservation_owned = false;
+                        self.pending = None;
+                        return NodeError::Consensus {
+                            reason: format!(
+                                "requeue rejected consensus actions failed at height {} and proposal reservation could not be restored: {}; original error: {}",
+                                decision.height, recovery_err, err
+                            ),
+                        };
                     }
                     NodeError::Consensus {
                         reason: format!(
@@ -670,6 +675,10 @@ impl PosNodeEngine {
         )
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Stable commit execution seam keeps expected peer bindings explicit for recovery validation"
+    )]
     pub(super) fn apply_committed_execution_with_expected(
         &mut self,
         node_id: &str,
@@ -744,21 +753,19 @@ impl PosNodeEngine {
         }
         if let (Some(expected_block), Some(expected_state)) =
             (expected_execution_block_hash, expected_execution_state_root)
+            && (result.execution_block_hash != expected_block
+                || result.execution_state_root != expected_state)
         {
-            if result.execution_block_hash != expected_block
-                || result.execution_state_root != expected_state
-            {
-                return Err(NodeError::Execution {
-                    reason: format!(
-                        "execution hook returned peer mismatch at height {}: local_block={} peer_block={} local_state={} peer_state={}",
-                        decision.height,
-                        result.execution_block_hash,
-                        expected_block,
-                        result.execution_state_root,
-                        expected_state
-                    ),
-                });
-            }
+            return Err(NodeError::Execution {
+                reason: format!(
+                    "execution hook returned peer mismatch at height {}: local_block={} peer_block={} local_state={} peer_state={}",
+                    decision.height,
+                    result.execution_block_hash,
+                    expected_block,
+                    result.execution_state_root,
+                    expected_state
+                ),
+            });
         }
 
         self.last_execution_height = result.execution_height;

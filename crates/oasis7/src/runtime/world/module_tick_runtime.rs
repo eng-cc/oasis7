@@ -196,8 +196,8 @@ impl World {
         }
         let oldest_overdue_ticks = self
             .module_tick_schedule
-            .iter()
-            .filter_map(|(_, wake_at)| (*wake_at <= now).then_some(now.saturating_sub(*wake_at)))
+            .values()
+            .filter_map(|wake_at| (*wake_at <= now).then_some(now.saturating_sub(*wake_at)))
             .max();
 
         let world_config_hash = self.current_manifest_hash()?;
@@ -240,6 +240,10 @@ impl World {
         self.finalize_prepared_module_route(staged.prepare_tick_route(routed))
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Tick routing receives explicit deterministic scheduling and sandbox context."
+    )]
     fn route_tick_to_staged(
         &self,
         staged: &mut TrustedCommandStage<'_>,

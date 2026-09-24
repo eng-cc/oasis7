@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+from types import SimpleNamespace
 
 from loop_recovery import Busy, Reservation, common_dir, recovery_status, reconcile, record_action
 from loop_gate import live_binding
@@ -17,6 +18,10 @@ from loop_gate import live_binding
 TRACEABILITY_BOUNDARY_COMMANDS = {
     'bind', 'resume-check', 'doctor', 'publish-contract', 'promotion', 'merge',
 }
+
+RECOVERY_BRIDGE_BASE = '3b383190916ac99123a2fc9cbc0d3a8ef0d9c516'
+LEGACY_RECOVERY_POLICY = 'ddbc5a7d081cffd0c17697397ee89fbd69a98cd6'
+RECOVERY_BRIDGE_FILES = ('scripts/pm/loop.py', 'scripts/pm/loop_recovery.py')
 
 
 def admission_purpose(command):
@@ -132,6 +137,53 @@ def _trusted_module(root, target, binding, name):
 def trusted_module(root, target, binding, name):
     """Expose the single pinned-loader boundary to lifecycle callers."""
     return _trusted_module(root, target, binding, name)
+
+
+def _recovery_publication_adapter(tool_root, target_root, binding, *, require_legacy=False):
+    """Bind old contract authority to the narrow, merged recovery bridge."""
+    if require_legacy and binding.get('policy_commit') != LEGACY_RECOVERY_POLICY:
+        raise ValueError('mixed-epoch recovery requires exact legacy policy commit')
+    bridge_root = Path(__file__).resolve().parents[2]
+    bridge_commit = _git(bridge_root, 'rev-parse', 'HEAD')
+    dirty = _git(
+        bridge_root, 'status', '--porcelain', '--untracked-files=all', '--',
+        *RECOVERY_BRIDGE_FILES,
+    )
+    if dirty:
+        raise ValueError('recovery bridge helper bytes are dirty')
+    ancestry = [(bridge_commit, 'refs/remotes/origin/main',
+                 'recovery bridge is not merged to origin/main')]
+    if require_legacy:
+        ancestry.insert(0, (RECOVERY_BRIDGE_BASE, bridge_commit,
+                            'recovery bridge predates supersession authority'))
+    for older, newer, message in ancestry:
+        checked = subprocess.run(
+            ['git', '-C', str(bridge_root), 'merge-base', '--is-ancestor', older, newer],
+            capture_output=True, text=True,
+        )
+        if checked.returncode:
+            raise ValueError(message)
+    file_digests = {}
+    for relative in RECOVERY_BRIDGE_FILES:
+        path = bridge_root / relative
+        expected = subprocess.check_output(
+            ['git', '-C', str(bridge_root), 'show', bridge_commit + ':' + relative]
+        )
+        if path.is_symlink() or path.read_bytes() != expected:
+            raise ValueError('recovery bridge helper bytes differ: ' + relative)
+        file_digests[relative] = hashlib.sha256(expected).hexdigest()
+    bridge_digest = 'sha256:' + hashlib.sha256(json.dumps(
+        {'commit': bridge_commit, 'files': file_digests},
+        sort_keys=True, separators=(',', ':'),
+    ).encode()).hexdigest()
+    contracts = _trusted_module(tool_root, target_root, binding, 'loop_contracts')
+    return SimpleNamespace(
+        contracts=contracts,
+        policy_commit=binding.get('policy_commit'),
+        policy_digest=binding.get('policy_digest'),
+        bridge_commit=bridge_commit,
+        bridge_digest=bridge_digest,
+    )
 
 
 def dependency_issue(repository, uid):
@@ -326,6 +378,7 @@ def main():
     parser.add_argument('--tool-root', type=Path)
     parser.add_argument('--task-uid', required=True)
     parser.add_argument('--manual-request-ref')
+    parser.add_argument('--supersede-invalid-publication')
     parser.add_argument('--loop-binding', type=Path)
     parser.add_argument('--contract', type=Path)
     parser.add_argument('--migrate-epoch', type=int)
@@ -340,6 +393,8 @@ def main():
             subprocess.run(['git', '-C', str(root), 'fetch', '--no-tags', 'origin', 'main:refs/remotes/origin/main'], check=True, capture_output=True)
         if args.command in ('bind', 'resume-check', 'recover', 'publish-contract') and not args.manual_request_ref:
             raise ValueError('explicit current manual request reference required')
+        if args.supersede_invalid_publication and args.command != 'recover':
+            raise ValueError('--supersede-invalid-publication is valid only with recover')
         if args.command == 'bind':
             if not args.loop_binding: raise ValueError('--loop-binding required')
             binding = json.loads(args.loop_binding.read_text())
@@ -396,8 +451,18 @@ def main():
             if args.command == 'validate-scope' and not args.base: raise ValueError('--base required')
             if args.command == 'recover':
                 task = recovery_task(root, task, args.tool_root)
+                publication_adapter = _recovery_publication_adapter(
+                    args.tool_root, root, task['loop_binding'],
+                    require_legacy=bool(args.supersede_invalid_publication),
+                )
                 with Reservation(common_dir(root), args.task_uid, (task.get('loop_binding') or {}).get('write_scope', []), recovery=True) as reservation:
-                    recovery = reconcile(common_dir(root), args.task_uid, root, args.tool_root, reservation_fd=reservation.handle.fileno())
+                    recovery = reconcile(
+                        common_dir(root), args.task_uid, root, args.tool_root,
+                        reservation_fd=reservation.handle.fileno(),
+                        supersede_invalid_publication=args.supersede_invalid_publication,
+                        manual_request_ref=args.manual_request_ref,
+                        publication_adapter=publication_adapter,
+                    )
                 if recovery['pending_actions']:
                     print(json.dumps(recovery, sort_keys=True))
                     return 2
@@ -449,7 +514,13 @@ def main():
                 )
                 if result['status'] in ('passed', 'legacy') and args.command == 'recover':
                     with Reservation(common_dir(root), args.task_uid, (task.get('loop_binding') or {}).get('write_scope', []), recovery=True) as reservation:
-                        result.update(reconcile(common_dir(root), args.task_uid, root, args.tool_root, reservation_fd=reservation.handle.fileno()))
+                        result.update(reconcile(
+                            common_dir(root), args.task_uid, root, args.tool_root,
+                            reservation_fd=reservation.handle.fileno(),
+                            supersede_invalid_publication=args.supersede_invalid_publication,
+                            manual_request_ref=args.manual_request_ref,
+                            publication_adapter=publication_adapter,
+                        ))
             if args.command == 'publish-contract' and result['status'] == 'passed':
                 if not args.contract: raise ValueError('--contract required')
                 validator = _trusted_module(args.tool_root, root, task['loop_binding'], 'loop_contracts')

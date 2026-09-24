@@ -426,6 +426,10 @@ fn live_world_llm_bootstrap_script_mode_advances_tick() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn live_world_llm_event_driven_gate_avoids_repeated_empty_ticks() {
     let _env_guard = set_test_llm_env();
     let config = WorldConfig::default();
@@ -454,6 +458,10 @@ fn live_world_llm_event_driven_gate_avoids_repeated_empty_ticks() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn live_world_llm_mailbox_preserves_multiple_requests() {
     let _env_guard = set_test_llm_env();
     let config = WorldConfig::default();
@@ -489,6 +497,10 @@ fn live_world_llm_mailbox_preserves_multiple_requests() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn live_world_event_drive_gate_tracks_llm_mailbox() {
     let _env_guard = set_test_llm_env();
     let config = WorldConfig::default();
@@ -508,6 +520,10 @@ fn live_world_event_drive_gate_tracks_llm_mailbox() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn live_world_non_consensus_path_is_event_drive_only() {
     let script_config = WorldConfig::default();
     let script_init = WorldInitConfig::from_scenario(WorldScenario::Minimal, &script_config);
@@ -528,6 +544,10 @@ fn live_world_non_consensus_path_is_event_drive_only() {
 }
 
 #[test]
+#[expect(
+    clippy::field_reassign_with_default,
+    reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
+)]
 fn live_world_script_event_drive_stops_requeue_on_idle_step() {
     let config = WorldConfig::default();
     let mut init = WorldInitConfig::default();
@@ -613,7 +633,7 @@ fn sync_llm_runner_long_term_memory_writes_back_to_world_model() {
     let mut behavior = LlmAgentBehavior::from_env("agent-0").expect("build llm behavior");
     let runtime_entry = crate::simulator::LongTermMemoryEntry::new("mem-9", 15, "runtime memory")
         .with_tag("runtime");
-    behavior.restore_long_term_memory_entries(&[runtime_entry.clone()]);
+    behavior.restore_long_term_memory_entries(std::slice::from_ref(&runtime_entry));
 
     let mut runner = AgentRunner::new();
     runner.register(behavior);

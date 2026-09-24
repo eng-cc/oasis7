@@ -23,19 +23,10 @@ pub(super) struct MockChainTx {
     pub(super) block_height: Option<u64>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub(super) struct MockChainState {
     pub(super) committed_height: u64,
     pub(super) txs: Vec<MockChainTx>,
-}
-
-impl Default for MockChainState {
-    fn default() -> Self {
-        Self {
-            committed_height: 0,
-            txs: Vec::new(),
-        }
-    }
 }
 
 pub(super) struct MockChainServer {

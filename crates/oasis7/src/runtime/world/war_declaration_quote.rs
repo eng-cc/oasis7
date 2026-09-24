@@ -355,6 +355,10 @@ fn war_duration_ticks(intensity: u32) -> u64 {
         .saturating_add(u64::from(intensity).saturating_mul(WAR_DURATION_TICKS_PER_INTENSITY))
 }
 
+#[expect(
+    clippy::too_many_arguments,
+    reason = "War quote fingerprint fields define the stable deterministic preimage and remain explicit."
+)]
 fn quote_fingerprint(
     time: u64,
     actor_id: &str,

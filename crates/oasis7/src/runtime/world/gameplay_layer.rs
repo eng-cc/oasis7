@@ -133,15 +133,15 @@ impl World {
             });
         }
 
-        if let Some(max_players) = gameplay.max_players {
-            if max_players < gameplay.min_players {
-                return Err(WorldError::ModuleChangeInvalid {
-                    reason: format!(
-                        "module gameplay contract max_players < min_players for {}",
-                        module.module_id
-                    ),
-                });
-            }
+        if let Some(max_players) = gameplay.max_players
+            && max_players < gameplay.min_players
+        {
+            return Err(WorldError::ModuleChangeInvalid {
+                reason: format!(
+                    "module gameplay contract max_players < min_players for {}",
+                    module.module_id
+                ),
+            });
         }
 
         Ok(())

@@ -8,6 +8,10 @@ impl ViewerRuntimeLiveServer {
         self.set_latest_player_gameplay_feedback_with_causality(feedback, None);
     }
 
+    #[expect(
+        clippy::too_many_arguments,
+        reason = "Gameplay feedback fields map directly to the stable player-facing DTO"
+    )]
     pub(super) fn make_player_gameplay_feedback(
         action: impl Into<String>,
         stage: impl Into<String>,

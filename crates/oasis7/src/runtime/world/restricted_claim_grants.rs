@@ -72,25 +72,25 @@ impl World {
         self.state
             .restricted_starter_claim_grants
             .iter()
-            .filter_map(|(account_id, grant)| {
-                (grant.status == RestrictedStarterClaimGrantStatus::Issued
-                    && current_epoch >= grant.expires_at_epoch)
-                    .then(|| {
-                        let expired_amount =
-                            self.main_token_restricted_starter_claim_balance(account_id.as_str());
-                        WorldEventBody::Domain(DomainEvent::RestrictedStarterClaimGrantExpired {
-                            beneficiary_account_id: account_id.clone(),
-                            issuer_id: grant.issuer_id.clone(),
-                            issuance_reason: grant.issuance_reason.clone(),
-                            spend_scope: grant.spend_scope.clone(),
-                            source_treasury_bucket_id: grant.source_treasury_bucket_id.clone(),
-                            issued_amount: grant.issued_amount,
-                            expired_amount,
-                            issued_at_epoch: grant.issued_at_epoch,
-                            expired_at_epoch: current_epoch,
-                            configured_expires_at_epoch: grant.expires_at_epoch,
-                        })
-                    })
+            .filter(|(_, grant)| {
+                grant.status == RestrictedStarterClaimGrantStatus::Issued
+                    && current_epoch >= grant.expires_at_epoch
+            })
+            .map(|(account_id, grant)| {
+                let expired_amount =
+                    self.main_token_restricted_starter_claim_balance(account_id.as_str());
+                WorldEventBody::Domain(DomainEvent::RestrictedStarterClaimGrantExpired {
+                    beneficiary_account_id: account_id.clone(),
+                    issuer_id: grant.issuer_id.clone(),
+                    issuance_reason: grant.issuance_reason.clone(),
+                    spend_scope: grant.spend_scope.clone(),
+                    source_treasury_bucket_id: grant.source_treasury_bucket_id.clone(),
+                    issued_amount: grant.issued_amount,
+                    expired_amount,
+                    issued_at_epoch: grant.issued_at_epoch,
+                    expired_at_epoch: current_epoch,
+                    configured_expires_at_epoch: grant.expires_at_epoch,
+                })
             })
             .collect()
     }

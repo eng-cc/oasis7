@@ -82,6 +82,18 @@ class PublicationIntegration(unittest.TestCase):
                 self.assertEqual(json.loads(state.read_text())['comments'], [])
                 journals = list((root / '.git/oasis7-loop-recovery').glob('*.actions.jsonl'))
                 self.assertEqual(journals, [], 'side-effect-free preflight must not leave pending actions')
+            invalid = copy.deepcopy(contract)
+            invalid['scope'] = ['different delivery']
+            source.write_text(json.dumps(invalid))
+            rejected = subprocess.run(command, env=env, text=True, capture_output=True)
+            self.assertNotEqual(rejected.returncode, 0, rejected.stdout)
+            self.assertIn('contract does not cover target delivery', rejected.stdout)
+            self.assertEqual(json.loads(state.read_text())['comments'], [])
+            self.assertEqual(
+                list((root / '.git/oasis7-loop-recovery').glob('*.actions.jsonl')),
+                [],
+                'invalid output coverage must fail before publication intent is recorded',
+            )
             upstream = copy.deepcopy(contract)
             upstream.update(contract_id='UP', owner_loop='product')
             upstream['eligibility']['new_tasks'] = False

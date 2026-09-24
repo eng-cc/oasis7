@@ -19,6 +19,10 @@ AUTHORITY_FIELDS = (
 )
 
 SOURCE_REVIEW_SCHEMA = "oasis7-review-plan/v2"
+REQUIRED_PLAN_V1_SCHEMA = "oasis7-required-plan-v1"
+REQUIRED_PLAN_V2_SCHEMA = "oasis7-required-plan-v2"
+INPUT_SCOPE_REUSE_CAPABILITY = "input-scope-reuse/v1"
+SUPPORTED_REQUIRED_PLAN_CAPABILITIES = frozenset({INPUT_SCOPE_REUSE_CAPABILITY})
 SOURCE_REVIEW_FIELDS = (
     "task_uid", "bootstrap_epoch", "repository", "pr_number", "source_head_oid",
     "source_scope_oid", "changed_paths_digest", "ordered_role_ids",
@@ -58,6 +62,38 @@ PROJECTION_BINDING_FIELDS = (
     "impact_projection_planner_digest",
 )
 PROJECTION_SCHEMA = "oasis7-workflow-impact-projection/v2"
+
+
+def read_required_plan_capabilities(plan: Any) -> tuple[str, ...] | None:
+    """Read protocol capabilities without changing the legacy v1 lane.
+
+    ``None`` means the existing v1 envelope has no capability protocol and must
+    continue through its legacy consumer.  A v2 envelope is accepted only when
+    it explicitly requires the one capability this reader understands.  This
+    is a protocol reader, not an enablement decision: callers still need an
+    effective policy that explicitly enables the capability.
+    """
+    if not isinstance(plan, dict):
+        raise ValueError("required plan envelope must be an object")
+    schema = plan.get("schema")
+    if schema == REQUIRED_PLAN_V1_SCHEMA:
+        if "required_capabilities" in plan:
+            raise ValueError("legacy required-plan v1 cannot declare capabilities")
+        return None
+    if schema != REQUIRED_PLAN_V2_SCHEMA:
+        raise ValueError("required plan schema is unsupported")
+
+    capabilities = plan.get("required_capabilities")
+    if (not isinstance(capabilities, list)
+            or any(not isinstance(item, str) or not item for item in capabilities)
+            or capabilities != sorted(set(capabilities))):
+        raise ValueError("required-plan v2 capabilities are malformed")
+    unknown = sorted(set(capabilities) - SUPPORTED_REQUIRED_PLAN_CAPABILITIES)
+    if unknown:
+        raise ValueError("required-plan v2 has unsupported capabilities: " + ",".join(unknown))
+    if capabilities != [INPUT_SCOPE_REUSE_CAPABILITY]:
+        raise ValueError("required-plan v2 must explicitly require input-scope-reuse/v1")
+    return tuple(capabilities)
 
 
 def _require_oid(value: Any, field: str) -> str:
@@ -303,6 +339,245 @@ def has_live_integration_attestation(receipt: dict[str, Any]) -> bool:
     )
 
 
+def is_ordinary_pr_ci_receipt(receipt: dict[str, Any]) -> bool:
+    """Recognize source-bound PR CI without treating it as target integration.
+
+    The mode is emitted by the live receipt helper.  Missing mode remains a
+    read-only compatibility shape for older ordinary receipts; live
+    validation still re-reads the check run before this helper is consulted.
+    """
+    if not isinstance(receipt, dict) or receipt.get("receipt_type") != "oasis7_ci_ready_receipt":
+        return False
+    if receipt.get("issuer") != "github_live_query" or receipt.get("trusted_integration_artifact") is True:
+        return False
+    if receipt.get("ci_validation_mode") not in (None, "ordinary_pr"):
+        return False
+    if receipt.get("conclusion") != "success":
+        return False
+    required = ("repository", "task_uid", "task_issue_number", "pr_number", "base_oid",
+                "head_oid", "check_name", "check_app_id", "check_run_id", "planner_digest")
+    if not all(receipt.get(field) not in (None, "") for field in required):
+        return False
+    # New ordinary receipts bind the target ref in addition to its recorded
+    # base OID. Older receipts without a validation mode remain compatibility
+    # inputs and are still revalidated by the live helper before reuse.
+    return receipt.get("ci_validation_mode") != "ordinary_pr" or bool(receipt.get("base_ref"))
+
+
+def has_live_pr_ci_attestation(receipt: dict[str, Any]) -> bool:
+    """Return whether a receipt is a live, source-bound ordinary PR check."""
+    return is_ordinary_pr_ci_receipt(receipt) and (
+        receipt.get("live_validation") in (None, "ci-ready-receipt-live")
+    )
+
+
+def projection_requires_strict_integration(plan: dict[str, Any]) -> bool:
+    """Fail closed for ordinary receipts when the bound projection is risky.
+
+    Promotion and closeout receive an immutable v2 plan plus a refreshed CI
+    receipt, but do not have the live PR payload used by the merge gate.  The
+    plan's already verified impact projection therefore remains the authority
+    for rejecting an ordinary receipt on high-risk or unknown source scope.
+    """
+    projection = plan.get("impact_projection") if isinstance(plan, dict) else None
+    if not isinstance(projection, dict):
+        return True
+    source = plan.get("source_review_identity")
+    if not isinstance(source, dict):
+        return True
+    projection_digest = projection.get("projection_digest")
+    if (not isinstance(projection_digest, str)
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", projection_digest)):
+        return True
+    projection_body = {key: value for key, value in projection.items() if key != "projection_digest"}
+    expected_projection_digest = "sha256:" + hashlib.sha256(
+        json.dumps(projection_body, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    if (projection_digest != expected_projection_digest
+            or plan.get("impact_projection_digest") != projection_digest):
+        return True
+    if (projection.get("source_head_oid") != source.get("source_head_oid")
+            or projection.get("scope_base_oid") != source.get("source_scope_oid")):
+        return True
+    changed_paths = projection.get("changed_paths")
+    changed_paths_digest = projection.get("changed_paths_digest")
+    if (not isinstance(changed_paths, list)
+            or changed_paths != sorted(set(changed_paths))
+            or any(not isinstance(path, str) or not path for path in changed_paths)
+            or not isinstance(changed_paths_digest, str)
+            or changed_paths_digest != "sha256:" + hashlib.sha256(
+                json.dumps(changed_paths, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+            ).hexdigest()
+            or source.get("changed_paths_digest") != changed_paths_digest.removeprefix("sha256:")):
+        return True
+    # Explicit public behavior changes are strict by structure; consuming a
+    # stable contract alone does not imply that the target changed it.
+    if projection.get("public_semantics"):
+        return True
+    if projection.get("review_escalated") is True or projection.get("verification_affected") is True:
+        return True
+    if projection.get("change_class") in {"workflow-doc", "unknown", "mixed"}:
+        return True
+    closure = projection.get("closure_status")
+    if not isinstance(closure, dict) or closure.get("status") != "complete":
+        return True
+    risk_text = json.dumps(
+        [reason for reason in projection.get("review_reasons", [])
+         if isinstance(reason, str) and not reason.startswith("input:")],
+        sort_keys=True,
+    ).lower()
+    risk_terms = ("api", "abi", "persistence", "serialization", "state-root", "consensus",
+                  "security", "dependency", "permission", "workflow", "validation", "contract",
+                  "schema", "migration", "wasm", "replay", "recovery", "critical")
+    if any(term in risk_text for term in risk_terms):
+        return True
+    high_risk_paths = (".github/workflows/", ".codex/", "scripts/pm/", "cargo.toml", "cargo.lock")
+    return any(
+        any(path.lower().startswith(prefix) or path.lower() == prefix.rstrip("/")
+            for prefix in high_risk_paths)
+        for path in projection.get("changed_paths", [])
+    )
+
+
+def _related_path(path: str, other: str) -> bool:
+    left, right = path.strip("/"), other.strip("/")
+    return left == right or left.startswith(right + "/") or right.startswith(left + "/")
+
+
+def _relation_path(value: Any) -> str | None:
+    """Return a repository-relative path from a trusted relation locator."""
+    if not isinstance(value, str) or not value.strip():
+        return None
+    path = value.strip().split("#", 1)[0].strip("/")
+    if (not path or path.startswith(".") or "\x00" in path
+            or "\\" in path or any(part in {"", ".", ".."} for part in path.split("/"))):
+        return None
+    return path
+
+
+def _source_path_exists(root: pathlib.Path, source_head: str, path: str) -> bool:
+    try:
+        return subprocess.run(
+            ["git", "-C", str(root), "cat-file", "-e", f"{source_head}:{path}"],
+            check=False, capture_output=True,
+        ).returncode == 0
+    except OSError:
+        return False
+
+
+def _target_relation_paths(
+    projection: dict[str, Any], *, root: pathlib.Path, source_head: str,
+) -> tuple[list[str], bool]:
+    """Collect verified contract/consumer paths for target-only drift checks."""
+    relations = [
+        path for path in (projection.get("changed_paths") or [])
+        if isinstance(path, str)
+    ]
+    unmapped = False
+
+    def mapped_candidates(candidates: list[Any]) -> list[str]:
+        mapped: list[str] = []
+        for value in candidates:
+            path = _relation_path(value)
+            if path and _source_path_exists(root, source_head, path):
+                mapped.append(path)
+        return mapped
+
+    for item in projection.get("affected_consumers") or []:
+        candidates: list[Any] = []
+        if isinstance(item, str):
+            candidates.append(item)
+        elif isinstance(item, dict):
+            candidates.extend(item.get(key) for key in ("path", "consumer_path", "contract_path"))
+            refs = item.get("references")
+            if isinstance(refs, list):
+                candidates.extend(ref.get("path") for ref in refs if isinstance(ref, dict))
+        mapped = mapped_candidates(candidates)
+        if mapped:
+            relations.extend(mapped)
+        else:
+            unmapped = True
+
+    for item in projection.get("consumed_contracts") or []:
+        candidates: list[Any] = []
+        if isinstance(item, str):
+            candidates.append(item)
+        elif isinstance(item, dict):
+            candidates.extend(item.get(key) for key in ("path", "contract_path"))
+            for container_key in ("consumed_clause_refs", "content_refs", "clauses"):
+                refs = item.get(container_key)
+                if isinstance(refs, list):
+                    candidates.extend(ref.get("path") for ref in refs if isinstance(ref, dict))
+            nested = item.get("contract")
+            if isinstance(nested, dict):
+                candidates.append(nested.get("path"))
+                refs = nested.get("content_refs")
+                if isinstance(refs, list):
+                    candidates.extend(ref.get("path") for ref in refs if isinstance(ref, dict))
+        mapped = mapped_candidates(candidates)
+        if mapped:
+            relations.extend(mapped)
+        else:
+            unmapped = True
+
+    closure = projection.get("closure_status") or {}
+    evidence = closure.get("evidence") if isinstance(closure, dict) else None
+    if evidence is not None and not isinstance(evidence, list):
+        unmapped = True
+    if isinstance(evidence, list):
+        for item in evidence:
+            path = _relation_path(item.get("path")) if isinstance(item, dict) else None
+            if path and _source_path_exists(root, source_head, path):
+                relations.append(path)
+            else:
+                unmapped = True
+    return relations, unmapped
+
+
+def _target_advance_requires_strict(
+    plan: dict[str, Any], *, root: pathlib.Path | str | None, current_target_oid: str,
+) -> bool:
+    """Return whether a live target advance is related or unverifiable.
+
+    Ordinary CI is allowed to reuse source review only when the current target
+    advance can be proven unrelated from the verified projection.  A missing
+    target object, non-ancestor scope, or unmapped contract/consumer therefore
+    fails closed.
+    """
+    if root is None:
+        return True
+    try:
+        source = _validate_source_identity(plan.get("source_review_identity"))
+        target = _require_oid(current_target_oid, "current_target_oid")
+        scope = _require_oid(source["source_scope_oid"], "source_scope_oid")
+        source_head = _require_oid(source["source_head_oid"], "source_head_oid")
+    except (TypeError, ValueError, KeyError):
+        return True
+    if target == scope:
+        return False
+    root_path = pathlib.Path(root).resolve()
+    try:
+        subprocess.run(
+            ["git", "-C", str(root_path), "merge-base", "--is-ancestor", scope, target],
+            check=True, capture_output=True,
+        )
+        changed = subprocess.check_output(
+            ["git", "-C", str(root_path), "diff", "--name-only", f"{scope}..{target}"],
+            text=True,
+        ).splitlines()
+    except (OSError, subprocess.CalledProcessError):
+        return True
+    projection = plan.get("impact_projection")
+    if not isinstance(projection, dict):
+        return True
+    relations, unmapped = _target_relation_paths(
+        projection, root=root_path, source_head=source_head,
+    )
+    if unmapped or not relations:
+        return True
+    return any(_related_path(path, relation) for path in changed for relation in relations)
+
+
 def _require_projection_digest(value: Any, field: str) -> str:
     if not isinstance(value, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", value):
         raise ValueError(f"{field} must be a prefixed SHA-256 digest")
@@ -527,6 +802,8 @@ def can_reuse_source_review(
     plan: dict[str, Any], latest_receipt: dict[str, Any],
     current_source_identity: dict[str, Any] | None = None,
     current_applicability: dict[str, Any] | None = None,
+    current_target_oid: str | None = None,
+    current_target_root: pathlib.Path | str | None = None,
     *, require_fresh_integration: bool = True,
 ) -> bool:
     """Return whether trusted integration proves safe source-review reuse.
@@ -537,11 +814,12 @@ def can_reuse_source_review(
     complete plan still requires a fresh integration identity on the
     promotion/closeout path; ``require_fresh_integration=False`` is reserved
     for idempotent plan lookup while creating or refreshing an immutable plan.
+    Promotion and closeout may pass ``current_target_oid`` and
+    ``current_target_root`` to prove that an ordinary target advance is
+    unrelated to the verified projection.
     """
     try:
         if plan.get("schema") != SOURCE_REVIEW_SCHEMA:
-            return False
-        if not has_live_integration_attestation(latest_receipt):
             return False
         source = _validate_source_identity(plan.get("source_review_identity"))
         if plan.get("source_review_digest") != source_review_digest(source):
@@ -551,6 +829,30 @@ def can_reuse_source_review(
         if current_source_identity is not None and _validate_source_identity(current_source_identity) != source:
             return False
         _validate_projection_binding(plan, latest_receipt)
+        applicability = _verified_review_applicability(
+            plan.get("professional_review_applicability")
+        )
+        if applicability != review_applicability_identity(source):
+            return False
+        if has_live_pr_ci_attestation(latest_receipt):
+            mode = plan.get("effective_mode")
+            if not isinstance(mode, dict) or mode.get("effective_policy") == "legacy":
+                return False
+            if projection_requires_strict_integration(plan):
+                return False
+            if latest_receipt.get("task_uid") != source["task_uid"]:
+                return False
+            if latest_receipt.get("head_oid") != source["source_head_oid"]:
+                return False
+            if current_applicability is not None:
+                if _verified_review_applicability(current_applicability) != applicability:
+                    return False
+            if current_target_oid is not None and _target_advance_requires_strict(
+                    plan, root=current_target_root, current_target_oid=current_target_oid):
+                return False
+            return True
+        if not has_live_integration_attestation(latest_receipt):
+            return False
         accepted_raw = plan.get("integration_ci_identity")
         accepted: dict[str, Any] | None = None
         if accepted_raw is not None:
@@ -559,11 +861,6 @@ def can_reuse_source_review(
                 return False
             if accepted.get("conclusion") != "success":
                 return False
-        applicability = _verified_review_applicability(
-            plan.get("professional_review_applicability")
-        )
-        if applicability != review_applicability_identity(source):
-            return False
         if current_applicability is not None:
             if _verified_review_applicability(current_applicability) != applicability:
                 return False
@@ -614,6 +911,14 @@ def review_evidence_identity(receipt: dict[str, Any]) -> dict[str, Any]:
     if missing:
         raise ValueError("CI receipt is missing review authority fields: " + ",".join(missing))
     result = {field: receipt[field] for field in AUTHORITY_FIELDS}
+    if receipt.get("ci_validation_mode") is not None:
+        if receipt.get("ci_validation_mode") not in {"ordinary_pr", "trusted_integration"}:
+            raise ValueError("CI receipt validation mode is invalid")
+        result["ci_validation_mode"] = receipt["ci_validation_mode"]
+    if receipt.get("base_ref") is not None:
+        if not isinstance(receipt.get("base_ref"), str) or not receipt["base_ref"].strip():
+            raise ValueError("CI receipt target ref is invalid")
+        result["base_ref"] = receipt["base_ref"]
     if 'scope_base_oid' in receipt or 'integration_base_oid' in receipt:
         if not re.fullmatch(r'[0-9a-f]{40,64}', str(receipt.get('scope_base_oid', ''))) or receipt.get('integration_base_oid') != receipt['base_oid']:
             raise ValueError('CI receipt scope/integration authority is incomplete')

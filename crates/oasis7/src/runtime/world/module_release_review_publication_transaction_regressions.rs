@@ -106,17 +106,17 @@ fn direct_shadow_missing_mapping_preserves_request() {
 
 #[test]
 fn raw_shadow_postprepare_failure_preserves_world() {
-    assert_raw_postprepare_failure(|id| shadow(id), ModuleReleaseRequestStatus::Requested);
+    assert_raw_postprepare_failure(shadow, ModuleReleaseRequestStatus::Requested);
 }
 
 #[test]
 fn raw_role_approved_postprepare_failure_preserves_world() {
-    assert_raw_postprepare_failure(|id| approval(id), ModuleReleaseRequestStatus::Shadowed);
+    assert_raw_postprepare_failure(approval, ModuleReleaseRequestStatus::Shadowed);
 }
 
 #[test]
 fn raw_rejected_postprepare_failure_preserves_world() {
-    assert_raw_postprepare_failure(|id| rejection(id), ModuleReleaseRequestStatus::Requested);
+    assert_raw_postprepare_failure(rejection, ModuleReleaseRequestStatus::Requested);
 }
 
 fn assert_raw_postprepare_failure(

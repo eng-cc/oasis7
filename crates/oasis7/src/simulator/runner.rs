@@ -51,15 +51,15 @@ impl AgentQuota {
 
     /// Check if the quota is exhausted.
     pub fn is_exhausted(&self, action_count: u64, decision_count: u64) -> bool {
-        if let Some(max) = self.max_actions {
-            if action_count >= max {
-                return true;
-            }
+        if let Some(max) = self.max_actions
+            && action_count >= max
+        {
+            return true;
         }
-        if let Some(max) = self.max_decisions {
-            if decision_count >= max {
-                return true;
-            }
+        if let Some(max) = self.max_decisions
+            && decision_count >= max
+        {
+            return true;
         }
         false
     }
@@ -377,10 +377,10 @@ impl<B: AgentBehavior> AgentRunner<B> {
             return false;
         }
         let quota = agent.quota.as_ref().or(self.default_quota.as_ref());
-        if let Some(q) = quota {
-            if q.is_exhausted(agent.action_count, agent.decision_count) {
-                return false;
-            }
+        if let Some(q) = quota
+            && q.is_exhausted(agent.action_count, agent.decision_count)
+        {
+            return false;
         }
         !agent.is_rate_limited(now, self.rate_limit_policy.as_ref())
     }
