@@ -32,8 +32,8 @@
 
 ### 非权威迁移索引
 
-- [`世界连续性与恢复（历史引用）`](world-continuity-governance-and-recovery.prd.md)：已退休的旧路径；CR-1/2 仍导航至基础设施接收页，CR-3/4/5/6 的产品语义分别导航至世界规则 GCB/ES/CC 与根 SC-34，旧页仅保留 provenance 和存量专业链接，不构成 active authority 或验收。
-- 区域 charter、地点 tenure 与公共融资已由世界规则与玩法系统的区域专题接收，不构成本模块 authority。工业/市场/保供产品语义已由世界规则与玩法系统接收；对应专题和稳定条款由该模块根入口列出，本模块不重复声明 authority。PRD-GAME-018 消费对应的 GR/SC31/ES 产品锚点见[世界规则与玩法系统模块入口](../world-rules-core-gameplay/prd.md)。消费/组合说明：普通治理当前接收与 GG-1..5 历史映射见世界规则与玩法系统[模块入口](../world-rules-core-gameplay/prd.md)中的普通共同决策专题 §6.3；本模块不拥有该产品 authority。连续性 `retired` 源的 CR-3/CR-4/CR-5/CR-6 由世界规则 GCB/ES/CC 与根 SC-34 接收，但旧页继续保留至 S1 清理专业/历史 backlinks。原 frontier 与区域能力/扩展迁移债务已由世界规则与玩法系统吸收，不再保留在本模块索引。
+- 连续性 CR-1/2 的产品语义由本模块活跃专题 DC-1/DC-2 与 DE-1/DE-3 接收；CR-3/4/5/6 的跨模块产品映射见产品总入口。原 CR-1..6 条款及完整映射保留在 Git 历史提交 `a83c57893de2ec4217fb7c1a04d30575ebd783e6`，仅作为来源 provenance，不构成 active authority 或验收。
+- 区域 charter、地点 tenure 与公共融资已由世界规则与玩法系统的区域专题接收，不构成本模块 authority。工业/市场/保供产品语义已由世界规则与玩法系统接收；对应专题和稳定条款由该模块根入口列出，本模块不重复声明 authority。PRD-GAME-018 消费对应的 GR/SC31/ES 产品锚点见[世界规则与玩法系统模块入口](../world-rules-core-gameplay/prd.md)。消费/组合说明：普通治理当前接收与 GG-1..5 历史映射见世界规则与玩法系统[模块入口](../world-rules-core-gameplay/prd.md)中的普通共同决策专题 §6.3；本模块不拥有该产品 authority。原 frontier 与区域能力/扩展迁移债务已由世界规则与玩法系统吸收，不再保留在本模块索引。
 
 此前的区域设施、市场/工业、charter、frontier 与普通治理分册已从本模块退休：它们是上层 gameplay/world-rule 产品语义，不能再作为基础设施的 taxonomy 或验收门槛。对应专业域与其他产品模块继续拥有其规则、实现合同和现状证据；本次退休不宣称这些能力已迁移、实现或公开可用。
 
