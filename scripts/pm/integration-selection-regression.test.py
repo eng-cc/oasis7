@@ -142,20 +142,32 @@ class SelectionTests(unittest.TestCase):
    self.assertEqual([('rev-parse','HEAD')],[call.args[1:] for call in git.call_args_list])
 
  def test_workflow_base_diverge_accepts_only_approved_executor_and_keeps_b_frozen(self):
-  workflow_sha='9'*40;approved='sha256:'+'8'*64
+  approved='sha256:'+'8'*64
   pr={**self.pr,'base':{'sha':'7'*40,'ref':'main','repo':{'full_name':'owner/repo'}},'head':{'sha':HEAD,'repo':{'full_name':'owner/repo'}}}
   def api(*args):
    return pr if '/pulls/' in args[-1] else {'default_branch':'main'}
-  run_head='6'*40
-  with patch.object(integration,'gh',side_effect=api),patch.dict(integration.os.environ,{'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_REF':'refs/heads/main','GITHUB_SHA':run_head,'GITHUB_WORKFLOW_SHA':workflow_sha}),patch.object(integration,'git',side_effect=[workflow_sha,'','']) as git,patch.object(integration,'_executor_contract',return_value=({},approved)) as executor,patch.object(integration,'compose',return_value={'base_oid':BASE,'head_oid':HEAD,'scope_base_oid':'d'*40,'tested_tree_oid':'e'*40,'tested_commit_oid':'f'*40}) as compose:
+  run_head='6'*40;workflow_sha=run_head
+  with patch.object(integration,'gh',side_effect=api),patch.dict(integration.os.environ,{'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_REF':'refs/heads/main','GITHUB_SHA':run_head,'GITHUB_WORKFLOW_SHA':workflow_sha,'GITHUB_RUN_ATTEMPT':'1'}),patch.object(integration,'git',side_effect=[workflow_sha,'','']) as git,patch.object(integration,'_executor_contract',return_value=({},approved)) as executor,patch.object(integration,'compose',return_value={'base_oid':BASE,'head_oid':HEAD,'scope_base_oid':'d'*40,'tested_tree_oid':'e'*40,'tested_commit_oid':'f'*40}) as compose:
    result=integration.prepare(Path('/unused'),'owner/repo',UID,12,BASE,HEAD,approved_executor_contract_digests=[approved],integration_worktree='/tmp/oasis7-integration')
   self.assertEqual(BASE,result['base_oid'])
   self.assertEqual(workflow_sha,result['workflow_sha'])
   self.assertEqual(run_head,result['workflow_run_head_sha'])
+  self.assertEqual(1,result['workflow_run_attempt'])
   self.assertEqual(approved,result['executor_contract_digest'])
   self.assertEqual(('merge-base','--is-ancestor',BASE,run_head),git.call_args_list[2].args[1:])
   executor.assert_called_once()
   compose.assert_called_once_with(Path('/unused'),BASE,HEAD,worktree_path='/tmp/oasis7-integration')
+
+ def test_workflow_base_diverge_rejects_unverifiable_w_e_relation(self):
+  workflow_sha='9'*40;run_head='6'*40;approved='sha256:'+'8'*64
+  pr={**self.pr,'base':{'sha':'7'*40,'ref':'main','repo':{'full_name':'owner/repo'}},'head':{'sha':HEAD,'repo':{'full_name':'owner/repo'}}}
+  def api(*args):
+   return pr if '/pulls/' in args[-1] else {'default_branch':'main'}
+  with patch.object(integration,'gh',side_effect=api),patch.dict(integration.os.environ,{'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_REF':'refs/heads/main','GITHUB_SHA':run_head,'GITHUB_WORKFLOW_SHA':workflow_sha,'GITHUB_RUN_ATTEMPT':'1'}),patch.object(integration,'git',return_value=workflow_sha) as git,patch.object(integration,'_executor_contract') as executor,patch.object(integration,'compose') as compose:
+   with self.assertRaisesRegex(ValueError,'must match the workflow-dispatch run head'):
+    integration.prepare(Path('/unused'),'owner/repo',UID,12,BASE,HEAD,approved_executor_contract_digests=[approved],integration_worktree='/tmp/oasis7-integration')
+  git.assert_not_called()
+  executor.assert_not_called();compose.assert_not_called()
 
  def test_workflow_base_diverge_with_unapproved_executor_fails_before_fetch(self):
   workflow_sha='9'*40

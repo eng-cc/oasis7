@@ -144,11 +144,33 @@ class ValidationRequestTests(unittest.TestCase):
         key = contract.validation_request_key(identity)
         with tempfile.TemporaryDirectory() as directory:
             contract.reserve_validation_request(directory, key, identity, "1" * 40)
-            for expected in (1, 2):
-                record = contract.mark_validation_dispatch_started(directory, key)
-                self.assertEqual(expected, record["dispatch_attempts"])
+            record = contract.mark_validation_dispatch_started(directory, key)
+            self.assertEqual(1, record["dispatch_attempts"])
             with self.assertRaisesRegex(ValueError, "VALIDATION_REQUEST_RETRY_LIMIT"):
                 contract.mark_validation_dispatch_started(directory, key)
+
+    def test_delayed_empty_readback_keeps_uncertain_request_pending_without_redispatch(self):
+        identity = request_identity()
+        key = contract.validation_request_key(identity)
+        sends = []
+
+        with tempfile.TemporaryDirectory() as directory:
+            first, disposition = contract.ensure_validation_request(
+                directory, key, identity, "1" * 40,
+                readback=lambda *_args: None,
+                dispatch=lambda record: sends.append(record["request_key"]),
+            )
+            retry, retry_disposition = contract.ensure_validation_request(
+                directory, key, identity, "2" * 40,
+                readback=lambda *_args: None,
+                dispatch=lambda _record: self.fail("uncertain key must not dispatch twice"),
+            )
+
+        self.assertEqual("pending", disposition)
+        self.assertEqual("pending", retry_disposition)
+        self.assertEqual(1, first["dispatch_attempts"])
+        self.assertEqual("1" * 40, retry["integration_base_oid"])
+        self.assertEqual([key], sends)
 
     def test_dispatch_response_loss_recovers_by_key_without_duplicate_send(self):
         identity = request_identity()

@@ -328,41 +328,79 @@ class ProvenanceTests(unittest.TestCase):
   with patch.object(self.api,'gh',side_effect=self.read),patch.object(self.api.subprocess,'check_output',return_value=raw.getvalue()):
    return self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42)
  def test_keyed_request_preflight_requires_key_in_authoritative_run_name(self):
-  required='run-name: oasis7-ci|${{ inputs.request_key }}\non:\n  workflow_dispatch:\n    inputs:\n      request_key:\n      validation_request_b64:'
+  required=('run-name: '+self.api.KEYED_RUN_NAME+'\non:\n  workflow_dispatch:\n    inputs:\n'
+            '      run_mode:\n      task_uid:\n      pr_number:\n      integration_base:\n'
+            '      expected_head:\n      request_key:\n      validation_request_b64:')
   missing_title=required.replace('|${{ inputs.request_key }}','|${{ inputs.expected_head }}')
+  key_only_title=required.replace(self.api.KEYED_RUN_NAME,'oasis7-ci|${{ inputs.request_key }}')
   self.assertTrue(self.api.keyed_request_workflow_ready(required))
   self.assertFalse(self.api.keyed_request_workflow_ready(missing_title))
+  self.assertFalse(self.api.keyed_request_workflow_ready(key_only_title))
   self.assertFalse(self.api.keyed_request_workflow_ready(required+'\nrun-name: duplicate'))
  def test_keyed_request_preflight_ignores_comment_only_input_declarations(self):
-  workflow='run-name: oasis7-ci|${{ inputs.request_key }}\non:\n  workflow_dispatch:\n    inputs:\n      run_mode:\n        required: true\n# request_key:\n# validation_request_b64:\n# inputs.request_key\n'
+  workflow=('run-name: '+self.api.KEYED_RUN_NAME+'\non:\n  workflow_dispatch:\n    inputs:\n'
+            '      run_mode:\n        required: true\n# request_key:\n'
+            '# validation_request_b64:\n# inputs.request_key\n')
   self.assertFalse(self.api.keyed_request_workflow_ready(workflow))
  def test_new_default_workflow_run_authority_passes(self):
   check,proof=self.verify();self.assertEqual(check['id'],10);self.assertEqual(proof['head_oid'],self.head)
  def test_keyed_workflow_base_divergence_requires_approved_w_contract(self):
   from integration_executor_contract import executor_contract_from_contents
-  workflow_sha='9'*40;run_head='6'*40;request_key='sha256:'+'8'*64
+  workflow_sha='6'*40;run_head='6'*40;request_key='sha256:'+'8'*64
   executor_digest=executor_contract_from_contents(self.executor_contents)['digest']
   self.run['head_sha']=run_head
-  self.payload.update(workflow_sha=workflow_sha,workflow_run_head_sha=run_head,request_key=request_key,executor_contract_digest=executor_digest)
+  self.payload.update(workflow_sha=workflow_sha,workflow_run_head_sha=run_head,workflow_run_attempt=1,request_key=request_key,executor_contract_digest=executor_digest)
   raw=io.BytesIO()
   with zipfile.ZipFile(raw,'w') as archive:archive.writestr(self.api.ARTIFACT+'.json',json.dumps(self.payload))
   with patch.object(self.api,'gh',side_effect=self.read),patch.object(self.api.subprocess,'check_output',return_value=raw.getvalue()):
-   check,proof=self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42,request_key=request_key,approved_executor_contract_digests=[executor_digest])
+   check,proof=self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42,request_key=request_key,expected_attempt=1,approved_executor_contract_digests=[executor_digest])
   self.assertEqual(workflow_sha,proof['workflow_sha'])
   self.assertEqual(self.base,proof['base_oid'])
   self.assertEqual(run_head,proof['workflow_run_head_sha'])
   self.assertEqual(run_head,check['head_sha'])
  def test_keyed_workflow_base_divergence_rejects_revoked_w_contract(self):
   from integration_executor_contract import executor_contract_from_contents
-  workflow_sha='9'*40;run_head='6'*40;request_key='sha256:'+'8'*64
+  workflow_sha='6'*40;run_head='6'*40;request_key='sha256:'+'8'*64
   executor_digest=executor_contract_from_contents(self.executor_contents)['digest']
   self.run['head_sha']=run_head
-  self.payload.update(workflow_sha=workflow_sha,workflow_run_head_sha=run_head,request_key=request_key,executor_contract_digest=executor_digest)
+  self.payload.update(workflow_sha=workflow_sha,workflow_run_head_sha=run_head,workflow_run_attempt=1,request_key=request_key,executor_contract_digest=executor_digest)
   raw=io.BytesIO()
   with zipfile.ZipFile(raw,'w') as archive:archive.writestr(self.api.ARTIFACT+'.json',json.dumps(self.payload))
   with patch.object(self.api,'gh',side_effect=self.read),patch.object(self.api.subprocess,'check_output',return_value=raw.getvalue()):
    with self.assertRaisesRegex(ValueError,'EXECUTOR_CONTRACT_CHANGED'):
+    self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42,request_key=request_key,expected_attempt=1,approved_executor_contract_digests=['sha256:'+'7'*64])
+ def test_keyed_verification_rejects_artifact_selected_workflow_sha(self):
+  from integration_executor_contract import executor_contract_from_contents
+  run_head='6'*40;request_key='sha256:'+'8'*64
+  executor_digest=executor_contract_from_contents(self.executor_contents)['digest']
+  self.run['head_sha']=run_head
+  self.payload.update(workflow_sha='9'*40,workflow_run_head_sha=run_head,workflow_run_attempt=1,request_key=request_key,executor_contract_digest=executor_digest)
+  raw=io.BytesIO()
+  with zipfile.ZipFile(raw,'w') as archive:archive.writestr(self.api.ARTIFACT+'.json',json.dumps(self.payload))
+  with patch.object(self.api,'gh',side_effect=self.read),patch.object(self.api.subprocess,'check_output',return_value=raw.getvalue()):
+   with self.assertRaisesRegex(ValueError,'artifact authority'):
+    self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42,request_key=request_key,expected_attempt=1,approved_executor_contract_digests=[executor_digest])
+ def test_keyed_verification_requires_expected_run_attempt(self):
+  request_key='sha256:'+'8'*64
+  with patch.object(self.api,'gh',side_effect=self.read):
+   with self.assertRaisesRegex(ValueError,'expected attempt is required'):
     self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42,request_key=request_key,approved_executor_contract_digests=['sha256:'+'7'*64])
+ def test_keyed_verification_rejects_different_api_run_attempt(self):
+  self.run['run_attempt']=2
+  with patch.object(self.api,'gh',side_effect=self.read):
+   with self.assertRaisesRegex(ValueError,'attempt mismatch'):
+    self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42,request_key='sha256:'+'8'*64,expected_attempt=1,approved_executor_contract_digests=['sha256:'+'7'*64])
+ def test_keyed_verification_rejects_artifact_attempt_from_another_attempt(self):
+  from integration_executor_contract import executor_contract_from_contents
+  run_head='6'*40;request_key='sha256:'+'8'*64
+  executor_digest=executor_contract_from_contents(self.executor_contents)['digest']
+  self.run['head_sha']=run_head
+  self.payload.update(workflow_sha=run_head,workflow_run_head_sha=run_head,workflow_run_attempt=2,request_key=request_key,executor_contract_digest=executor_digest)
+  raw=io.BytesIO()
+  with zipfile.ZipFile(raw,'w') as archive:archive.writestr(self.api.ARTIFACT+'.json',json.dumps(self.payload))
+  with patch.object(self.api,'gh',side_effect=self.read),patch.object(self.api.subprocess,'check_output',return_value=raw.getvalue()):
+   with self.assertRaisesRegex(ValueError,'artifact authority'):
+    self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42,request_key=request_key,expected_attempt=1,approved_executor_contract_digests=[executor_digest])
  def test_old_event_or_candidate_workflow_cannot_refresh(self):
   for key,value in [('event','pull_request'),('head_sha','0'*40),('head_branch','candidate'),('conclusion','failure')]:
    old=self.run[key];self.run[key]=value

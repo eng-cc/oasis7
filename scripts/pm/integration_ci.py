@@ -18,6 +18,7 @@ ARTIFACT='oasis7-required-plan-v1'
 OID=re.compile(r'[0-9a-f]{40}')
 DISCOVERY_PAGE_SIZE=100
 DISCOVERY_MAX_PAGES=10
+KEYED_RUN_NAME='oasis7-ci|${{ github.event_name }}|${{ inputs.run_mode }}|${{ inputs.task_uid }}|${{ inputs.pr_number }}|${{ inputs.integration_base }}|${{ inputs.expected_head }}|${{ inputs.request_key }}'
 
 def gh(*args):
     return json.loads(subprocess.check_output(['gh',*args],text=True))
@@ -212,12 +213,16 @@ def keyed_request_workflow_ready(workflow):
     inputs=one_mapping_child(workflow_dispatch,'inputs')
     if inputs is None: return False
     input_fields=direct_children(inputs)
-    required_inputs={key for key in ('request_key','validation_request_b64')
+    required_inputs={key for key in (
+        'run_mode','task_uid','pr_number','integration_base','expected_head',
+        'request_key','validation_request_b64',
+    )
                      if len([item for item in input_fields if item['key']==key])==1
                      and next(item for item in input_fields if item['key']==key)['value']==''}
     run_name=run_names[0]['value']
-    return ({'request_key','validation_request_b64'}<=required_inputs
-            and '|${{ inputs.request_key }}' in run_name)
+    return (set(('run_mode','task_uid','pr_number','integration_base','expected_head',
+                 'request_key','validation_request_b64'))<=required_inputs
+            and run_name==KEYED_RUN_NAME)
 
 def git_common_dir(root):
     value=Path(git(root,'rev-parse','--git-common-dir'))
@@ -258,17 +263,29 @@ def prepare(root,repository,uid,number,base,head,*,approved_executor_contract_di
     execution_sha=os.environ.get('GITHUB_SHA','')
     if not OID.fullmatch(workflow_sha) or not OID.fullmatch(execution_sha):
         raise ValueError('integration workflow/run identity is invalid')
-    different_executor=workflow_sha!=base
-    _,branch=identity(repository,uid,number,base,head,allow_base_advance=True)
+    keyed_mode=workflow_sha!=base or approved_executor_contract_digests is not None
+    _,branch=identity(repository,uid,number,base,head,allow_base_advance=keyed_mode)
     if os.environ.get('GITHUB_EVENT_NAME')!='workflow_dispatch' or os.environ.get('GITHUB_REF')!=f'refs/heads/{branch}':
         raise ValueError('integration workflow must execute canonical default-branch authority')
+    # GitHub executes the workflow version present at the workflow_dispatch
+    # event's commit/ref. E is independently visible as the Actions run head,
+    # so keyed mode accepts W only when the runner's W agrees with that E.
+    if keyed_mode and workflow_sha!=execution_sha:
+        raise ValueError('trusted workflow SHA must match the workflow-dispatch run head')
+    if not keyed_mode and (workflow_sha!=base or execution_sha!=base):
+        raise ValueError('integration workflow must execute immutable current default-branch authority')
     if git(root,'rev-parse','HEAD')!=workflow_sha: raise ValueError('runner checkout differs from trusted workflow identity')
     executor_digest=None
-    if different_executor or approved_executor_contract_digests is not None:
+    run_attempt=None
+    if keyed_mode:
         if not approved_executor_contract_digests:
             raise ValueError('EXECUTOR_CONTRACT_CHANGED: no approved executor contract')
         _,executor_digest=_executor_contract(root,approved_executor_contract_digests)
-    if approved_executor_contract_digests is not None and not integration_worktree:
+        attempt_value=os.environ.get('GITHUB_RUN_ATTEMPT','')
+        if not attempt_value.isdigit() or int(attempt_value)<1:
+            raise ValueError('integration workflow attempt identity is invalid')
+        run_attempt=int(attempt_value)
+    if keyed_mode and not integration_worktree:
         raise ValueError('executor-contract integration requires an independent integration worktree')
     git(root,'fetch','--no-tags','--no-write-fetch-head','origin',base,head)
     try:
@@ -278,6 +295,7 @@ def prepare(root,repository,uid,number,base,head,*,approved_executor_contract_di
     result=compose(root,base,head,worktree_path=integration_worktree if integration_worktree else None)
     result.update(task_uid=uid,pr_number=int(number),workflow_sha=workflow_sha,workflow_run_head_sha=execution_sha,workflow_ref=f'{repository}/{WORKFLOW}@refs/heads/{branch}',integration_mode='integration_revalidation')
     if executor_digest is not None: result['executor_contract_digest']=executor_digest
+    if run_attempt is not None: result['workflow_run_attempt']=run_attempt
     return result
 
 def dispatch(repository,uid,number,impact_projection):
@@ -377,7 +395,7 @@ def dispatch_request(repository,uid,number,impact_projection,request_identity,ef
             'base_oid':record['integration_base_oid'],'head_oid':head,
             'run_id':record.get('run_id'),'run_attempt':record.get('run_attempt')}
 
-def verified_run(repository,uid,number,base,head,run_id,app_id,*,request_key=None,approved_executor_contract_digests=None):
+def verified_run(repository,uid,number,base,head,run_id,app_id,*,request_key=None,expected_attempt=None,approved_executor_contract_digests=None):
     if not str(app_id or '').isdigit() or not str(run_id or '').isdigit():
         raise ValueError('numeric non-null app and workflow run identity required')
     _,branch=identity(repository,uid,number,base,head,allow_base_advance=request_key is not None)
@@ -388,6 +406,11 @@ def verified_run(repository,uid,number,base,head,run_id,app_id,*,request_key=Non
         raise ValueError('manual integration run provenance/status mismatch')
     if request_key is not None and not re.fullmatch(r'sha256:[0-9a-f]{64}',request_key):
         raise ValueError('manual integration request key is invalid')
+    if request_key is not None and (type(expected_attempt) is not int or expected_attempt<1):
+        raise ValueError('manual integration expected attempt is required')
+    if request_key is not None and (type(run.get('run_attempt')) is not int
+                                    or run['run_attempt']!=expected_attempt):
+        raise ValueError('manual integration workflow attempt mismatch')
     checks=pages(repository,f"check-suites/{run['check_suite_id']}/check-runs",'check_runs')
     selected=[c for c in checks if c.get('name')=='required-gate' and str(c.get('app',{}).get('id'))==str(app_id) and c.get('conclusion')=='success']
     if len(selected)!=1: raise ValueError('manual required-gate app/run identity missing')
@@ -401,12 +424,15 @@ def verified_run(repository,uid,number,base,head,run_id,app_id,*,request_key=Non
     with zipfile.ZipFile(io.BytesIO(raw)) as archive:
         if archive.namelist()!=[ARTIFACT+'.json']: raise ValueError('manual integration artifact members mismatch')
         payload=json.loads(archive.read(ARTIFACT+'.json'))
-    workflow_sha=payload.get('workflow_sha') if request_key is not None else base
     execution_sha=run.get('head_sha') if request_key is not None else base
+    # Never choose the executor source revision from the downloaded artifact.
+    # In keyed workflow_dispatch mode, the API run head is E and W must equal E.
+    workflow_sha=execution_sha
     expected={'schema':ARTIFACT,'repository':repository,'workflow_run_id':int(run_id),'base_oid':base,'head_oid':head,'task_uid':uid,'pr_number':int(number),'workflow_sha':workflow_sha,'workflow_ref':f'{repository}/{WORKFLOW}@refs/heads/{branch}','integration_mode':'integration_revalidation','check_name':'required-gate'}
     if request_key is not None:
         expected['request_key']=request_key
         expected['workflow_run_head_sha']=execution_sha
+        expected['workflow_run_attempt']=expected_attempt
         if not approved_executor_contract_digests:
             raise ValueError('effective executor contract policy is missing or invalid')
         if not OID.fullmatch(str(workflow_sha or '')) or not OID.fullmatch(str(execution_sha or '')):

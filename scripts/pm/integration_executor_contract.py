@@ -29,7 +29,10 @@ EXECUTOR_CONTRACT_PATHS = (
     "scripts/pm/workflow-impact-projection.py",
     "scripts/viewer-dependency-preflight.sh",
 )
-MAX_DISPATCH_ATTEMPTS = 2
+# A missing workflow run after a dispatch can be delayed API visibility, not
+# proof that GitHub did not accept the request. Never issue a second send for
+# that same key.
+MAX_DISPATCH_ATTEMPTS = 1
 
 _UID_RE = re.compile(r"task_[0-9a-f]{32}\Z")
 _OID_RE = re.compile(r"[0-9a-f]{40,64}\Z")
@@ -253,6 +256,10 @@ def reserve_validation_request(
                     or not 0 <= record["dispatch_attempts"] <= MAX_DISPATCH_ATTEMPTS
                     or record.get("status") not in {"prepared", "dispatch_uncertain", "observed"}):
                 raise ValueError("validation request journal state is invalid")
+            if ((record["status"] == "prepared" and record["dispatch_attempts"] != 0)
+                    or (record["status"] == "dispatch_uncertain"
+                        and record["dispatch_attempts"] != 1)):
+                raise ValueError("validation request journal transition is invalid")
             if record["status"] == "observed":
                 if (type(record.get("run_id")) is not int or record["run_id"] < 1
                         or type(record.get("run_attempt")) is not int or record["run_attempt"] < 1):
@@ -326,7 +333,7 @@ def ensure_validation_request(
     readback,
     dispatch,
 ) -> tuple[dict[str, Any], str]:
-    """Read back by stable key before every bounded dispatch attempt.
+    """Read back by stable key before the single bounded dispatch.
 
     ``readback`` must return None only after complete authoritative discovery;
     exceptions mean uncertain coverage and prevent any dispatch. ``dispatch``
@@ -355,6 +362,11 @@ def ensure_validation_request(
             return observed, "reused"
         if record["status"] == "observed":
             raise ValueError("previously observed validation request is missing from complete readback")
+        if record["dispatch_attempts"] > 0:
+            # GitHub's workflow-run listing is eventually consistent. A
+            # complete empty readback immediately after dispatch does not
+            # prove that the event was rejected, so retain pending state.
+            return record, "pending"
         if record["dispatch_attempts"] >= MAX_DISPATCH_ATTEMPTS:
             raise ValueError("VALIDATION_REQUEST_RETRY_LIMIT")
         record = mark_validation_dispatch_started(directory, request_key)
