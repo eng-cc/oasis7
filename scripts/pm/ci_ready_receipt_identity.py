@@ -19,6 +19,10 @@ AUTHORITY_FIELDS = (
 )
 
 SOURCE_REVIEW_SCHEMA = "oasis7-review-plan/v2"
+REQUIRED_PLAN_V1_SCHEMA = "oasis7-required-plan-v1"
+REQUIRED_PLAN_V2_SCHEMA = "oasis7-required-plan-v2"
+INPUT_SCOPE_REUSE_CAPABILITY = "input-scope-reuse/v1"
+SUPPORTED_REQUIRED_PLAN_CAPABILITIES = frozenset({INPUT_SCOPE_REUSE_CAPABILITY})
 SOURCE_REVIEW_FIELDS = (
     "task_uid", "bootstrap_epoch", "repository", "pr_number", "source_head_oid",
     "source_scope_oid", "changed_paths_digest", "ordered_role_ids",
@@ -58,6 +62,38 @@ PROJECTION_BINDING_FIELDS = (
     "impact_projection_planner_digest",
 )
 PROJECTION_SCHEMA = "oasis7-workflow-impact-projection/v2"
+
+
+def read_required_plan_capabilities(plan: Any) -> tuple[str, ...] | None:
+    """Read protocol capabilities without changing the legacy v1 lane.
+
+    ``None`` means the existing v1 envelope has no capability protocol and must
+    continue through its legacy consumer.  A v2 envelope is accepted only when
+    it explicitly requires the one capability this reader understands.  This
+    is a protocol reader, not an enablement decision: callers still need an
+    effective policy that explicitly enables the capability.
+    """
+    if not isinstance(plan, dict):
+        raise ValueError("required plan envelope must be an object")
+    schema = plan.get("schema")
+    if schema == REQUIRED_PLAN_V1_SCHEMA:
+        if "required_capabilities" in plan:
+            raise ValueError("legacy required-plan v1 cannot declare capabilities")
+        return None
+    if schema != REQUIRED_PLAN_V2_SCHEMA:
+        raise ValueError("required plan schema is unsupported")
+
+    capabilities = plan.get("required_capabilities")
+    if (not isinstance(capabilities, list)
+            or any(not isinstance(item, str) or not item for item in capabilities)
+            or capabilities != sorted(set(capabilities))):
+        raise ValueError("required-plan v2 capabilities are malformed")
+    unknown = sorted(set(capabilities) - SUPPORTED_REQUIRED_PLAN_CAPABILITIES)
+    if unknown:
+        raise ValueError("required-plan v2 has unsupported capabilities: " + ",".join(unknown))
+    if capabilities != [INPUT_SCOPE_REUSE_CAPABILITY]:
+        raise ValueError("required-plan v2 must explicitly require input-scope-reuse/v1")
+    return tuple(capabilities)
 
 
 def _require_oid(value: Any, field: str) -> str:
