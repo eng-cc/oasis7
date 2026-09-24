@@ -2085,6 +2085,43 @@ CLEANUP_CMD_1="$(render_cmd \
 CLEANUP_CMD_2=""
 
 PR_URL=""
+if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" == "1" && -n "$LOCAL_ROLE_REVIEW_TASK_UID" && -n "$IMPACT_PROJECTION" ]]; then
+  command -v gh >/dev/null 2>&1 || die "gh not found in PATH"
+  CURRENT_REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
+  C1_BODY_PATH="$BODY_FILE"
+  C1_REMOVE_BODY=0
+  if [[ -z "$C1_BODY_PATH" ]]; then
+    C1_BODY_PATH="$(mktemp)"
+    C1_REMOVE_BODY=1
+    printf '%s\n' "$GENERATED_PR_BODY" >"$C1_BODY_PATH"
+  fi
+  C1_PUBLISH_ARGS=(
+    --worktree "$SOURCE_WORKTREE"
+    --repo "$CURRENT_REPO"
+    --issue-number "$TASK_ISSUE_NUMBER"
+    --task-uid "$LOCAL_ROLE_REVIEW_TASK_UID"
+    --remote "$REMOTE_NAME"
+    --source-ref "$SOURCE_BRANCH"
+    --target-ref "$BASE_BRANCH"
+    --source-head "$SOURCE_HEAD"
+    --target-oid "$COMPARISON_HEAD"
+    --projection "$IMPACT_PROJECTION"
+    --body-file "$C1_BODY_PATH"
+    --task-helper "$ROOT_DIR/scripts/pm/github-project-task.py"
+    --json
+  )
+  if [[ -n "$PR_TITLE" ]]; then
+    C1_PUBLISH_ARGS+=(--title "$PR_TITLE")
+  fi
+  if ! C1_PUBLISH_OUTPUT="$(python3 "$ROOT_DIR/scripts/pm/pr_projection_publish.py" "${C1_PUBLISH_ARGS[@]}" 2>&1)"; then
+    [[ "$C1_REMOVE_BODY" == "1" ]] && rm -f "$C1_BODY_PATH"
+    die "ordered C1 PR publication failed; rerun the same prepare-task-pr command to reconcile its journal: $C1_PUBLISH_OUTPUT"
+  fi
+  [[ "$C1_REMOVE_BODY" == "1" ]] && rm -f "$C1_BODY_PATH"
+  PR_URL="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["pr_url"])' "$C1_PUBLISH_OUTPUT")" \
+    || die "ordered C1 PR publication returned malformed success output"
+  CREATE_PR=0
+fi
 if [[ "$CREATE_PR" == "1" ]]; then
   command -v gh >/dev/null 2>&1 || die '`gh` not found in PATH'
   if [[ -z "$REMOTE_SOURCE_REF" ]]; then

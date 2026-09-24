@@ -2649,6 +2649,67 @@ def command_record_pr(args: argparse.Namespace) -> int:
     if requested_pr_number is None:
         die("record-pr: PR number is missing or malformed")
     live_issue = validate_record_pr_live_identity(args, record, requested_pr_number)
+    publication_binding = None
+    publication_module = None
+    binding_comment_exists = False
+    if getattr(args, "publication_binding_json", None):
+        publication_module = load_pr_projection_publication_module()
+        try:
+            publication_binding = json.loads(
+                pathlib.Path(args.publication_binding_json).read_text(encoding="utf-8")
+            )
+            publication_binding = publication_module.validate_publication_binding(publication_binding)
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            die(f"record-pr: CI publication binding is invalid: {exc}")
+        if (publication_binding["repository"], publication_binding["task_uid"],
+                publication_binding["pr_number"], publication_binding["pr_url"]) != (
+                args.repo, args.task_uid, requested_pr_number, args.pr_url):
+            die("record-pr: CI publication binding differs from canonical Task/PR identity")
+        comments = github_issue_comments(args.repo, int(record["issue_number"]))
+        publication_records = []
+        binding_records = []
+        for comment in comments:
+            body = str(comment.get("body") or "")
+            if "<!-- oasis7-ci-publication/v1 -->" in body:
+                try:
+                    publication_records.append(publication_module.parse_publication_comment(body))
+                except ValueError as exc:
+                    die(f"record-pr: malformed CI publication intent: {exc}")
+            if "<!-- oasis7-ci-publication-binding/v1 -->" in body:
+                try:
+                    binding_records.append(publication_module.parse_publication_binding_comment(body))
+                except ValueError as exc:
+                    die(f"record-pr: malformed CI publication binding: {exc}")
+        matching_publications = [
+            item for item in publication_records
+            if item.get("publication_id") == publication_binding["publication_id"]
+        ]
+        if len(matching_publications) != 1:
+            die("record-pr: exact unique CI publication intent is not present on Task Issue")
+        intent = matching_publications[0]
+        conflicting_same_head = [
+            item for item in publication_records
+            if (item.get("task_uid") == intent["task_uid"]
+                    and item.get("source_head_oid") == intent["source_head_oid"]
+                    and item.get("source_scope_oid") == intent["source_scope_oid"]
+                    and item.get("publication_id") != intent["publication_id"])
+        ]
+        if conflicting_same_head:
+            die("record-pr: same-H Task publication conflict requires explicit invalidation")
+        try:
+            publication_module.validate_publication_binding(
+                publication_binding, intent,
+            )
+        except ValueError as exc:
+            die(f"record-pr: CI publication binding does not match its intent: {exc}")
+        matching_bindings = [
+            item for item in binding_records
+            if item.get("publication_id") == publication_binding["publication_id"]
+        ]
+        if matching_bindings:
+            if len(matching_bindings) != 1 or matching_bindings[0] != publication_binding:
+                die("record-pr: conflicting reciprocal CI publication binding already exists")
+            binding_comment_exists = True
     record["pr_url"] = args.pr_url
     number = pr_number_from_url(args.pr_url)
     if number is not None:
@@ -2704,6 +2765,13 @@ def command_record_pr(args: argparse.Namespace) -> int:
         ),
     )
     record.setdefault("evidence_comments", []).append(comment_url)
+    binding_comment_url = None
+    if publication_binding is not None and not binding_comment_exists:
+        body = publication_module.publication_binding_comment(publication_binding)
+        binding_comment_url = verified_issue_comment(
+            args.repo, int(record["issue_number"]), body,
+        )
+        record.setdefault("evidence_comments", []).append(binding_comment_url)
     merge_task_mapping(mapping_path, args.task_uid, record, clear_keys=cleared_traceability)
     payload = {
         "task_uid": args.task_uid,
@@ -2715,9 +2783,36 @@ def command_record_pr(args: argparse.Namespace) -> int:
         "pr_number": record.get("pr_number"),
         "comment_url": comment_url,
         "updated_field_values": updated_fields,
+        "publication_binding_comment_url": binding_comment_url,
     }
     print(json.dumps(payload, indent=2, sort_keys=True) if args.json else f"record-pr: recorded {args.pr_url} for {args.task_uid}")
     return 0
+
+
+def load_pr_projection_publication_module() -> Any:
+    path = pathlib.Path(__file__).with_name("pr_projection_publication.py")
+    spec = importlib.util.spec_from_file_location("pr_projection_publication_impl", path)
+    if spec is None or spec.loader is None:
+        die(f"record-pr: cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def github_issue_comments(repository: str, issue_number: int) -> list[dict[str, Any]]:
+    try:
+        pages = json.loads(run_text([
+            "gh", "api", f"repos/{repository}/issues/{issue_number}/comments",
+            "--paginate", "--slurp",
+        ]))
+    except (subprocess.SubprocessError, json.JSONDecodeError) as exc:
+        die(f"record-pr: Task publication comment readback failed: {exc}")
+    if not isinstance(pages, list):
+        die("record-pr: Task publication comment response is malformed")
+    comments = [item for page in pages for item in (page if isinstance(page, list) else [page])]
+    if any(not isinstance(item, dict) or not isinstance(item.get("body"), str) for item in comments):
+        die("record-pr: Task publication comment entry is malformed")
+    return comments
 
 
 def command_set_merge_hold(args: argparse.Namespace) -> int:
@@ -2876,6 +2971,7 @@ def build_parser() -> argparse.ArgumentParser:
     record_pr.add_argument("--role", default="tpm")
     record_pr.add_argument("--validation-command", default="./scripts/prepare-task-pr.sh --create")
     record_pr.add_argument("--draft-candidate", action="store_true")
+    record_pr.add_argument("--publication-binding-json")
     record_pr.add_argument("--json", action="store_true")
     record_pr.set_defaults(func=command_record_pr)
 
