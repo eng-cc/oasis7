@@ -240,13 +240,29 @@ elif args[:2] == ["api", "graphql"]:
                       "projectItems": {"nodes": [project_item]}}
         print(json.dumps({"data": {"s0": {"nodes": [issue_node]}}}))
     else:
+        body = path("GH_ISSUE_BODY").read_text()
         if os.environ.get("GH_PROJECT_DRIFT") == "1":
-            content = {"body": "task_uid: task_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n",
+            body = "task_uid: task_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\n"
+            content = {"body": body,
                        "number": 99, "url": f"https://github.com/{repo}/issues/99"}
         else:
-            content = {"body": f"task_uid: {uid}\n", "number": issue, "url": issue_url}
-        nodes = [{"name": values.get(name, ""), "field": {"name": name}}
-                 for name in ("Status", "PM Status", "Workflow Phase")]
+            content = {"body": body, "number": issue, "url": issue_url}
+        def issue_field(name):
+            match = next((line for line in body.splitlines()
+                          if line.startswith(f"- {name}: `") and line.endswith("`")), "")
+            return match[len(f"- {name}: `"):-1] if match else ""
+
+        nodes = [
+            {"name": values.get("Status", ""), "field": {"name": "Status"}},
+            {"text": uid, "field": {"name": "Task UID"}},
+            {"name": issue_field("owner_role"), "field": {"name": "Owner Role"}},
+            {"name": issue_field("module"), "field": {"name": "Module"}},
+            {"name": values.get("PM Status", ""), "field": {"name": "PM Status"}},
+            {"name": values.get("Workflow Phase", ""), "field": {"name": "Workflow Phase"}},
+            {"name": issue_field("priority"), "field": {"name": "Priority"}},
+            {"text": issue_field("worktree_hint"), "field": {"name": "Canonical Worktree"}},
+            {"name": "n/a", "field": {"name": "Test Tier Required"}},
+        ]
         node = {"id": "ITEM1", "project": {"id": "P1", "number": 1,
                 "owner": {"login": "fixture"}}, "content": content,
                 "fieldValues": {"pageInfo": {"hasNextPage": False}, "nodes": nodes}}
@@ -1672,6 +1688,26 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(finalized.returncode, 0, finalized.stderr)
         self.assertEqual(self.read_json(self.closes), ["completed"])
         self.assertEqual(len(self.read_json(self.comments)), 3)
+
+        terminal_record = self.read_json(mapping_path)["tasks"][UID]
+        terminal_issue_body = self.issue_body.read_text()
+        terminal_project_fields = self.read_json(self.project_fields)
+        audit = subprocess.run([
+            sys.executable, str(ROOT / "scripts/pm/github-project-workflow.py"),
+            str(self.root), "--repo", REPO, "--project-owner", "fixture",
+            "--project-number", "1", "--json", "audit", "--task-uid", UID,
+        ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+
+        with self.subTest(readback="local terminal phase"):
+            self.assertEqual(terminal_record["workflow_phase"], "closed_without_merge")
+        with self.subTest(readback="Issue terminal phase"):
+            self.assertIn("- workflow_phase: `closed_without_merge`", terminal_issue_body)
+        with self.subTest(readback="Project terminal projection"):
+            self.assertEqual(terminal_project_fields, {
+                "Status": "Done", "PM Status": "done", "Workflow Phase": "done",
+            })
+        with self.subTest(readback="post-finalization audit"):
+            self.assertEqual(audit.returncode, 0, audit.stdout + audit.stderr)
 
     def test_stale_default_refresh_recovers_task_worktree_non_pr_closeout(self) -> None:
         """C0: classification/closeout in the task worktree must repair a stale default cache."""

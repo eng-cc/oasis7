@@ -35,6 +35,30 @@ STATUS_PHASES = {
 SNAPSHOT_SCHEMA = "oasis7.bootstrap-task-snapshot/v1"
 CHECKPOINT_SCHEMA = "tpm-production-supervisor/v2"
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
+NON_MERGE_REASONS = {"superseded", "duplicate", "not_planned", "non_pr_completed"}
+NON_MERGE_RECEIPT_REQUIRED_FIELDS = (
+    "issue_number", "project_item_id", "project_identity", "reason",
+    "evidence_sha256", "evidence", "previous_status",
+    "previous_workflow_phase", "pr_number", "pr_url", "pr_state", "mergedAt",
+)
+PROJECT_IDENTITY_FIELDS = ("owner", "number", "id")
+NON_MERGE_PR_HEAD_FIELDS = (
+    "headRefOid", "headRefName", "headRepositoryOwner", "headRepositoryName",
+)
+
+
+def non_merge_operation_id(task: dict[str, Any], effect: str) -> str:
+    pr_head = {
+        key: task[key] for key in NON_MERGE_PR_HEAD_FIELDS if key in task
+    }
+    payload = {
+        "task_uid": task.get("task_uid"),
+        "phase": "closed_without_merge",
+        "effect": effect,
+        "pr_head": pr_head,
+    }
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(canonical).hexdigest()
 
 
 def parse_args() -> argparse.Namespace:
@@ -427,6 +451,7 @@ def verify_terminal_proof(
     task: dict[str, Any],
     blockers: list[str],
     sources: list[str],
+    project: dict[str, Any] | None = None,
 ) -> None:
     """Require durable proof before exposing a terminal command or completion."""
     if phase not in {"task_done", "main_sync", "closed_without_merge", "post_merge_done"}:
@@ -514,16 +539,132 @@ def verify_terminal_proof(
             if (terminal.get("task_uid") != task.get("task_uid")
                     or terminal.get("repository") != task.get("repository")):
                 add_blocker(blockers, "stale identity: terminal receipt task/repository identity drift")
-            expected_worktree = pathlib.Path(str(task.get("canonical_worktree") or "")).resolve()
-            receipt_worktree = terminal.get("worktree")
-            if not receipt_worktree:
-                add_blocker(blockers, "stale identity: terminal receipt worktree identity is missing")
-            elif pathlib.Path(str(receipt_worktree)).expanduser().resolve() != expected_worktree:
-                add_blocker(blockers, "stale identity: terminal receipt worktree identity drift")
-            if not terminal.get("branch"):
-                add_blocker(blockers, "stale identity: terminal receipt branch identity is missing")
-            elif str(terminal.get("branch")) != str(task.get("task_branch") or ""):
-                add_blocker(blockers, "stale identity: terminal receipt branch identity drift")
+            non_merge_producer_receipt = (
+                phase == "closed_without_merge"
+                and terminal.get("receipt_type") == "oasis7_closed_without_merge"
+                and terminal.get("reason") in NON_MERGE_REASONS
+            )
+            non_pr_completed = (
+                non_merge_producer_receipt
+                and terminal.get("reason") == "non_pr_completed"
+            )
+            if phase == "closed_without_merge":
+                if terminal.get("receipt_type") != "oasis7_closed_without_merge":
+                    add_blocker(blockers, "stale identity: non-merge terminal receipt type is unsupported")
+                if terminal.get("reason") not in NON_MERGE_REASONS:
+                    add_blocker(blockers, "stale identity: non-merge terminal receipt reason is missing or unsupported")
+                if non_merge_producer_receipt:
+                    if terminal.get("issuer") != "non-merge-finalize":
+                        add_blocker(blockers, "stale identity: non-merge terminal receipt issuer is unsupported")
+                    if (type(terminal.get("schema_version")) is not int
+                            or terminal.get("schema_version") != 1):
+                        add_blocker(blockers, "stale identity: non-merge terminal receipt schema version is unsupported")
+                    for key in NON_MERGE_RECEIPT_REQUIRED_FIELDS:
+                        if key not in terminal:
+                            add_blocker(blockers, f"stale identity: non-merge terminal receipt required field {key} is missing")
+                    if "issue_number" in terminal and str(terminal.get("issue_number") or "") != str(task.get("issue_number") or ""):
+                        add_blocker(blockers, "stale identity: non-merge terminal receipt Issue identity drift")
+                    if "project_item_id" in terminal and str(terminal.get("project_item_id") or "") != str(task.get("project_item_id") or ""):
+                        add_blocker(blockers, "stale identity: non-merge terminal receipt Project item identity drift")
+                    expected_project_identity = {
+                        key: str(project.get(key) or "") for key in PROJECT_IDENTITY_FIELDS
+                    } if isinstance(project, dict) else {}
+                    if not all(expected_project_identity.values()):
+                        add_blocker(blockers, "stale identity: task Project identity is incomplete for non-merge receipt validation")
+                    if terminal.get("project_identity") != expected_project_identity:
+                        add_blocker(blockers, "stale identity: non-merge terminal receipt Project identity drift")
+                    receipt_reason = str(terminal.get("reason") or "")
+                    if (not task.get("closed_without_merge_reason")
+                            or receipt_reason != str(task.get("closed_without_merge_reason") or "")):
+                        add_blocker(blockers, "stale identity: non-merge terminal receipt reason is not bound to task truth")
+                    evidence_digest = terminal.get("evidence_sha256")
+                    task_evidence_digest = task.get("closed_without_merge_evidence_sha256")
+                    if (not isinstance(evidence_digest, str)
+                            or not SHA256_RE.fullmatch(evidence_digest)
+                            or evidence_digest != task_evidence_digest):
+                        add_blocker(blockers, "stale identity: non-merge terminal receipt evidence digest is not bound to task truth")
+                    if not isinstance(terminal.get("evidence"), dict):
+                        add_blocker(blockers, "stale identity: non-merge terminal receipt evidence payload is missing or malformed")
+                    if not isinstance(terminal.get("previous_status"), str) or not terminal.get("previous_status"):
+                        add_blocker(blockers, "stale identity: non-merge terminal receipt previous status is missing or malformed")
+                    if not isinstance(terminal.get("previous_workflow_phase"), str):
+                        add_blocker(blockers, "stale identity: non-merge terminal receipt previous workflow phase is malformed")
+                if non_pr_completed:
+                    if str(task.get("completion_mode") or "") != "non_pr_task":
+                        add_blocker(blockers, "stale identity: non_pr_completed receipt lacks non-PR task classification")
+                    if (task.get("pr_number") not in (None, "")
+                            or task.get("pr_url") not in (None, "")
+                            or terminal.get("pr_number") not in (None, "")
+                            or terminal.get("pr_url") not in (None, "")):
+                        add_blocker(blockers, "stale identity: non_pr_completed receipt carries PR identity")
+                    if (terminal.get("previous_status") != "done"
+                            or terminal.get("previous_workflow_phase") != "task_done"):
+                        add_blocker(blockers, "stale identity: non_pr_completed receipt has invalid prior task phase")
+                if non_merge_producer_receipt:
+                    task_pr_number = str(task.get("pr_number") or "")
+                    task_pr_url = str(task.get("pr_url") or task.get("pull_request_url") or "")
+                    receipt_pr_number = str(terminal.get("pr_number") or "")
+                    receipt_pr_url = str(terminal.get("pr_url") or "")
+                    if bool(task_pr_number) != bool(task_pr_url):
+                        add_blocker(blockers, "stale identity: task non-merge PR identity is incomplete")
+                    if receipt_pr_number != task_pr_number:
+                        add_blocker(blockers, "stale identity: non-merge terminal receipt PR number identity drift")
+                    if receipt_pr_url != task_pr_url:
+                        add_blocker(blockers, "stale identity: non-merge terminal receipt PR URL identity drift")
+                    pr_bound = bool(task_pr_number and task_pr_url)
+                    if receipt_reason in {"superseded", "duplicate"} and not pr_bound:
+                        add_blocker(blockers, f"stale identity: {receipt_reason} terminal receipt lacks bound PR identity")
+                    if receipt_reason == "non_pr_completed" and (task_pr_number or task_pr_url):
+                        add_blocker(blockers, "stale identity: non_pr_completed task carries PR identity")
+                    if pr_bound:
+                        if str(terminal.get("pr_state") or "").upper() != "CLOSED":
+                            add_blocker(blockers, "stale identity: non-merge terminal receipt PR state is not CLOSED")
+                        if terminal.get("mergedAt") not in (None, ""):
+                            add_blocker(blockers, "stale identity: non-merge terminal receipt PR has mergedAt authority")
+                        for key, task_key in (("headRefOid", "headRefOid"), ("headRefName", "headRefName")):
+                            expected = task.get(task_key)
+                            if key == "headRefName" and expected in (None, ""):
+                                expected = task.get("task_branch")
+                            if not expected:
+                                add_blocker(blockers, f"stale identity: task PR {key} head authority is missing")
+                            if not terminal.get(key) or str(terminal.get(key)) != str(expected or ""):
+                                add_blocker(blockers, f"stale identity: non-merge terminal receipt PR {key} head identity drift")
+                    elif (terminal.get("pr_state") not in (None, "")
+                          or terminal.get("mergedAt") not in (None, "")
+                          or terminal.get("headRefOid") not in (None, "")
+                          or terminal.get("headRefName") not in (None, "")):
+                        add_blocker(blockers, "stale identity: non-merge terminal receipt carries unbound PR authority")
+                if non_merge_producer_receipt:
+                    expected_worktree = pathlib.Path(str(task.get("canonical_worktree") or "")).resolve()
+                    receipt_worktree = terminal.get("worktree")
+                    if (receipt_worktree
+                            and pathlib.Path(str(receipt_worktree)).expanduser().resolve() != expected_worktree):
+                        add_blocker(blockers, "stale identity: terminal receipt worktree identity drift")
+                    if (terminal.get("branch")
+                            and str(terminal.get("branch")) != str(task.get("task_branch") or "")):
+                        add_blocker(blockers, "stale identity: terminal receipt branch identity drift")
+                else:
+                    expected_worktree = pathlib.Path(str(task.get("canonical_worktree") or "")).resolve()
+                    receipt_worktree = terminal.get("worktree")
+                    if not receipt_worktree:
+                        add_blocker(blockers, "stale identity: terminal receipt worktree identity is missing")
+                    elif pathlib.Path(str(receipt_worktree)).expanduser().resolve() != expected_worktree:
+                        add_blocker(blockers, "stale identity: terminal receipt worktree identity drift")
+                    if not terminal.get("branch"):
+                        add_blocker(blockers, "stale identity: terminal receipt branch identity is missing")
+                    elif str(terminal.get("branch")) != str(task.get("task_branch") or ""):
+                        add_blocker(blockers, "stale identity: terminal receipt branch identity drift")
+            else:
+                expected_worktree = pathlib.Path(str(task.get("canonical_worktree") or "")).resolve()
+                receipt_worktree = terminal.get("worktree")
+                if not receipt_worktree:
+                    add_blocker(blockers, "stale identity: terminal receipt worktree identity is missing")
+                elif pathlib.Path(str(receipt_worktree)).expanduser().resolve() != expected_worktree:
+                    add_blocker(blockers, "stale identity: terminal receipt worktree identity drift")
+                if not terminal.get("branch"):
+                    add_blocker(blockers, "stale identity: terminal receipt branch identity is missing")
+                elif str(terminal.get("branch")) != str(task.get("task_branch") or ""):
+                    add_blocker(blockers, "stale identity: terminal receipt branch identity drift")
             tombstone_path = receipt_root / "terminal-tombstone.json"
             sources.append(str(tombstone_path))
             tombstone, error = load_json(tombstone_path)
@@ -542,6 +683,22 @@ def verify_terminal_proof(
                     add_blocker(blockers, "stale identity: terminal tombstone digest drift")
                 if tombstone.get("checkout_recreation_forbidden") is not True:
                     add_blocker(blockers, "stale identity: terminal tombstone lacks cleanup prohibition")
+                if phase == "closed_without_merge":
+                    for key in ("issue_number", "pr_number", "canonical_worktree", "task_branch"):
+                        if key not in tombstone:
+                            add_blocker(blockers, f"stale identity: non-merge terminal tombstone {key} identity is missing")
+                    if str(tombstone.get("issue_number") or "") != str(task.get("issue_number") or ""):
+                        add_blocker(blockers, "stale identity: non-merge terminal tombstone Issue identity drift")
+                    if str(tombstone.get("pr_number") or "") != str(task.get("pr_number") or ""):
+                        add_blocker(blockers, "stale identity: non-merge terminal tombstone PR identity drift")
+                    tombstone_worktree = tombstone.get("canonical_worktree")
+                    expected_worktree = task.get("canonical_worktree")
+                    if (not tombstone_worktree
+                            or pathlib.Path(str(tombstone_worktree)).expanduser().resolve()
+                            != pathlib.Path(str(expected_worktree or "")).expanduser().resolve()):
+                        add_blocker(blockers, "stale identity: non-merge terminal tombstone canonical worktree identity drift")
+                    if str(tombstone.get("task_branch") or "") != str(task.get("task_branch") or ""):
+                        add_blocker(blockers, "stale identity: non-merge terminal tombstone task branch identity drift")
             ledger_names = (("non-merge-finalizer-ledger.json",
                              "non-merge-finalizer-ledger-migrated.json")
                             if phase == "closed_without_merge"
@@ -555,16 +712,75 @@ def verify_terminal_proof(
             else:
                 if ledger.get("task_uid") != task.get("task_uid"):
                     add_blocker(blockers, "stale identity: terminal finalizer ledger task UID drift")
-                if ledger.get("schema") not in {"oasis7_non_merge_finalizer_ledger_v1",
-                                                  "oasis7_finalizer_ledger_v1"}:
+                if (phase == "closed_without_merge"
+                        and ledger.get("schema") != "oasis7_non_merge_finalizer_ledger_v1"):
+                    add_blocker(blockers, "stale identity: non-merge terminal ledger schema is unsupported")
+                elif ledger.get("schema") not in {"oasis7_non_merge_finalizer_ledger_v1",
+                                                    "oasis7_finalizer_ledger_v1"}:
                     add_blocker(blockers, "stale identity: terminal finalizer ledger schema is unsupported")
-                if type(ledger.get("revision")) is not int or ledger.get("revision") < 1:
+                non_merge_schema_without_revision = (
+                    phase == "closed_without_merge"
+                    and ledger.get("schema") == "oasis7_non_merge_finalizer_ledger_v1"
+                )
+                if (not non_merge_schema_without_revision
+                        and (type(ledger.get("revision")) is not int or ledger.get("revision") < 1)):
                     add_blocker(blockers, "stale identity: terminal finalizer ledger revision is missing or invalid")
                 operations = ledger.get("operations")
                 if (not isinstance(operations, dict)
                         or not any(isinstance(entry, dict) and entry.get("committed") is True
                                    for entry in operations.values())):
                     add_blocker(blockers, "stale identity: terminal finalizer ledger has no committed operation proof")
+                if phase == "closed_without_merge":
+                    required_effects = (
+                        "issue_body_update", "project_update", "evidence_comment", "issue_close",
+                    )
+                    for effect in required_effects:
+                        entry = operations.get(effect) if isinstance(operations, dict) else None
+                        if (not isinstance(entry, dict)
+                                or entry.get("effect") != effect
+                                or entry.get("operation_id") != non_merge_operation_id(task, effect)
+                                or entry.get("committed") is not True
+                                or "readback" not in entry):
+                            add_blocker(blockers, f"stale identity: non-merge terminal ledger lacks bound committed {effect} readback")
+                            continue
+                        readback = entry.get("readback")
+                        if effect in {"issue_body_update", "issue_close"}:
+                            expected_issue_url = str(task.get("issue_url") or "")
+                            if (not isinstance(readback, dict)
+                                    or str(readback.get("number") or "") != str(task.get("issue_number") or "")
+                                    or str(readback.get("url") or "") != expected_issue_url):
+                                add_blocker(blockers, f"stale identity: non-merge terminal ledger {effect} Issue readback identity drift")
+                            elif effect == "issue_body_update":
+                                body = readback.get("body")
+                                if (not isinstance(body, str)
+                                        or not re.search(r"(?m)^- status: `done`$", body)
+                                        or not re.search(r"(?m)^- workflow_phase: `closed_without_merge`$", body)):
+                                    add_blocker(blockers, "stale identity: non-merge terminal ledger Issue body readback lacks terminal projection")
+                            elif effect == "issue_close":
+                                expected_reason = (
+                                    "COMPLETED" if task.get("closed_without_merge_reason") == "non_pr_completed"
+                                    else "NOT_PLANNED"
+                                )
+                                if (str(readback.get("state") or "").upper() != "CLOSED"
+                                        or str(readback.get("stateReason") or "").upper() != expected_reason):
+                                    add_blocker(blockers, "stale identity: non-merge terminal ledger issue_close readback is not the expected closed Issue")
+                        elif effect == "project_update":
+                            expected_fields = {
+                                "Status": "Done", "PM Status": "done", "Workflow Phase": "done",
+                            }
+                            if (not isinstance(readback, dict)
+                                    or any(str(readback.get(key) or "") != value
+                                           for key, value in expected_fields.items())):
+                                add_blocker(blockers, "stale identity: non-merge terminal ledger Project readback lacks terminal fields")
+                        elif effect == "evidence_comment":
+                            comment_url = str(readback or "")
+                            issue_marker = (
+                                f"https://github.com/{task.get('repository')}/issues/"
+                                f"{task.get('issue_number')}#issuecomment-"
+                            )
+                            if (not comment_url.startswith(issue_marker)
+                                    or not comment_url[len(issue_marker):].isdigit()):
+                                add_blocker(blockers, "stale identity: non-merge terminal ledger evidence_comment readback identity drift")
 
 
 def command_for(
@@ -732,7 +948,11 @@ def main() -> int:
         checkpoint = verify_checkpoint(checkpoint_path, root, task, blockers, sources)
         if checkpoint and checkpoint.get("phase") not in (None, "", phase):
             add_blocker(blockers, "ambiguous state: durable workflow checkpoint phase disagrees with task mapping")
-    verify_terminal_proof(root, phase, task, blockers, sources)
+    project = mapping.get("project")
+    verify_terminal_proof(
+        root, phase, task, blockers, sources,
+        project=project if isinstance(project, dict) else None,
+    )
     payload["evidence_sources"] = list(dict.fromkeys(sources))
     default_root = None
     if phase in {"task_done", "main_sync"}:
