@@ -221,6 +221,28 @@ def package_manifest_paths(packages: dict[str, list[tuple[str, str]]]) -> dict[s
     }
 
 
+def build_script_paths(root: Path, metadata: dict[str, Any]) -> dict[str, set[str]]:
+    """Use Cargo's active custom-build targets, including manifest-selected paths."""
+    scripts: dict[str, set[str]] = {}
+    for package in metadata["packages"]:
+        name = package.get("name")
+        if not isinstance(name, str):
+            raise ScopeError("cargo_metadata_unavailable", "package name is unavailable")
+        manifest = Path(str(package.get("manifest_path", ""))).resolve()
+        for target in package.get("targets", []):
+            if not isinstance(target, dict) or "custom-build" not in target.get("kind", []):
+                continue
+            source = Path(str(target.get("src_path", "")))
+            try:
+                physical = source.resolve(strict=True)
+                physical.relative_to(manifest.parent)
+                relative = physical.relative_to(root.resolve()).as_posix()
+            except (OSError, ValueError) as exc:
+                raise ScopeError("cross_package_symlink", f"custom build target leaves package: {name}") from exc
+            scripts.setdefault(name, set()).add(relative)
+    return scripts
+
+
 def cross_package_dependency_edges(
     root: Path,
     metadata: dict[str, Any],
@@ -652,6 +674,7 @@ def check_cross_package_edges(
     paths: Iterable[str],
     packages: dict[str, list[tuple[str, str]]],
     changed: set[str],
+    build_scripts: dict[str, set[str]],
 ) -> None:
     # Rust paths may use an ordinary or a raw string literal.  Keep the raw
     # delimiter matched to its closing delimiter, including multiple hashes.
@@ -683,9 +706,12 @@ def check_cross_package_edges(
                     owner in affected_packages or target_owner in affected_packages
                 ):
                     raise ScopeError(reason, f"{path} reaches {resolved}")
-        if owner in affected_packages and Path(path).name == "build.rs":
+        if owner in affected_packages and path in build_scripts.get(owner, set()):
             def check_output(target: str) -> None:
-                resolved = resolve_relative(path, target)
+                # Cargo executes build scripts with the package root as cwd,
+                # even when the script itself lives in a nested directory.
+                manifest = package_manifest_paths(packages).get(owner)
+                resolved = resolve_relative(manifest, target) if manifest else None
                 target_owner = owner_for(resolved, packages) if resolved else None
                 if target_owner is not None and target_owner != owner:
                     raise ScopeError("cross_package_generated_output", f"{path} writes {resolved}")
@@ -734,6 +760,7 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         head_metadata = cargo_metadata(head_root)
         base_packages = package_roots(base_root, base_metadata)
         head_packages = package_roots(head_root, head_metadata)
+        head_build_scripts = build_script_paths(head_root, head_metadata)
         changed = set(normalized_paths)
         package_changed = any(
             owner_for(path, head_packages) or owner_for(path, base_packages)
@@ -891,7 +918,7 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
                 f"Cargo.lock source for {primary_package} does not match Cargo metadata",
             )
 
-    check_cross_package_edges(repo, args.head, tracked_paths(repo, args.head), head_packages, set(normalized_paths))
+    check_cross_package_edges(repo, args.head, tracked_paths(repo, args.head), head_packages, set(normalized_paths), head_build_scripts)
     return {
         "status": "allowed",
         "primary_package": primary_package,

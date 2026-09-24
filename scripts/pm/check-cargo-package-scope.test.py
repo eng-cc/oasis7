@@ -527,6 +527,73 @@ path = "src/lib.rs"
             lambda root: self._write(root, "crates/alpha/build.rs", "fn main() {}\n"),
         )
 
+    def test_custom_build_target_writing_other_package_is_rejected(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            manifest = root / "crates/alpha/Cargo.toml"
+            manifest.write_text(
+                manifest.read_text(encoding="utf-8").replace(
+                    'edition = "2021"', 'edition = "2021"\nbuild = "scripts/generator.rs"'
+                ), encoding="utf-8",
+            )
+            self._write(root, "crates/alpha/scripts/generator.rs",
+                'fn main() { std::fs::write("../beta/src/shared.rs", "pub fn overwritten() {}\\n").unwrap(); }\n')
+
+        head = self._head(repo, mutate, "custom build target fixture")
+        compiled = subprocess.run(
+            ["cargo", "check", "--offline", "-p", "alpha"], cwd=repo,
+            check=False, text=True, capture_output=True,
+        )
+        self.assertEqual(0, compiled.returncode, compiled.stderr)
+        self.assertIn("overwritten", (repo / "crates/beta/src/shared.rs").read_text(encoding="utf-8"))
+        result = self._run_checker(repo, base, head, "alpha")
+        self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("cross_package_generated_output", result.stdout + result.stderr)
+
+    def test_inert_custom_build_target_is_allowed(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            manifest = root / "crates/alpha/Cargo.toml"
+            manifest.write_text(manifest.read_text(encoding="utf-8").replace(
+                'edition = "2021"', 'edition = "2021"\nbuild = "scripts/generator.rs"'),
+                encoding="utf-8")
+            self._write(root, "crates/alpha/scripts/generator.rs", "fn main() {}\n")
+
+        self._assert_allowed(repo, base, "alpha", mutate)
+
+    def test_custom_build_target_symlink_into_other_package_is_rejected(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            manifest = root / "crates/alpha/Cargo.toml"
+            manifest.write_text(manifest.read_text(encoding="utf-8").replace(
+                'edition = "2021"', 'edition = "2021"\nbuild = "scripts/generator.rs"'),
+                encoding="utf-8")
+            self._write(root, "crates/beta/src/generator.rs", "fn main() {}\n")
+            link = root / "crates/alpha/scripts/generator.rs"
+            link.parent.mkdir(parents=True, exist_ok=True)
+            link.symlink_to("../../beta/src/generator.rs")
+
+        self._assert_rejected(repo, base, "alpha", mutate, "cross_package_symlink")
+
+    def test_manifest_only_activates_existing_custom_build_target(self) -> None:
+        repo, _ = self._fixture()
+        manifest = repo / "crates/alpha/Cargo.toml"
+        manifest.write_text(manifest.read_text(encoding="utf-8").replace(
+            'edition = "2021"', 'edition = "2021"\nbuild = false'), encoding="utf-8")
+        self._write(repo, "crates/alpha/scripts/generator.rs",
+            'fn main() { std::fs::write("../beta/src/shared.rs", "pub fn overwritten() {}\\n").unwrap(); }\n')
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "dormant custom build target")
+        base = self._git(repo, "rev-parse", "HEAD")
+        self._assert_rejected(repo, base, "alpha",
+            lambda root: self._write(root, "crates/alpha/Cargo.toml",
+                (root / "crates/alpha/Cargo.toml").read_text(encoding="utf-8")
+                .replace("build = false", 'build = "scripts/generator.rs"')),
+            "cross_package_generated_output")
+
     def test_manifest_activates_unchanged_cross_package_path_is_rejected(self) -> None:
         repo, _ = self._fixture()
         self._write(repo, "crates/alpha/src/lib.rs",
