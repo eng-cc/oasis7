@@ -35,6 +35,22 @@ class PrepareTaskPrReviewRiskTests(unittest.TestCase):
         self.assertIn('--changed-path-list "$LOCAL_REQUIRED_CHANGED_PATHS"', source)
         self.assertIn('REQUIRED_REVIEW_ROLES="$(python3 -c', source)
 
+    def test_source_scope_binds_projection_and_review_while_target_binds_integration(self):
+        source = PREPARE.read_text(encoding="utf-8")
+        scope_assignment = (
+            'SOURCE_SCOPE_BASE="$(git -C "$SOURCE_WORKTREE" merge-base '
+            '"$COMPARISON_HEAD" "$SOURCE_HEAD")"'
+        )
+        self.assertIn(scope_assignment, source)
+        self.assertLess(source.index(scope_assignment), source.index('PLANNER_ARGS=('))
+        self.assertEqual(2, source.count('--scope-base-oid "$SOURCE_SCOPE_BASE"'))
+        self.assertNotIn('--scope-base-oid "$COMPARISON_HEAD"', source)
+        self.assertIn('--source-head-oid "$SOURCE_HEAD" --scope-base-oid "$SOURCE_SCOPE_BASE"', source)
+        self.assertIn('REVIEW_COMPARISON_OID="$SOURCE_SCOPE_BASE"', source)
+        self.assertIn('REVIEW_COMPARISON_OID="$COMPARISON_HEAD"', source)
+        self.assertIn('--integration-base "$COMPARISON_HEAD"', source)
+        self.assertIn('--target-oid "$COMPARISON_HEAD"', source)
+
     def test_prepare_task_pr_forwards_repeatable_manual_roles_to_selector_in_order(self):
         source = PREPARE.read_text(encoding="utf-8")
         self.assertIn('--review-manual-role <role>', source)
