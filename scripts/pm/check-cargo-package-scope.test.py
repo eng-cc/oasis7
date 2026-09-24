@@ -466,6 +466,24 @@ path = "src/lib.rs"
             "cross_package_path",
         )
 
+    def test_nested_comment_separated_cross_package_include_is_rejected(self) -> None:
+        repo, base = self._fixture()
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(root, "crates/alpha/src/lib.rs",
+                'include/* outer /* inner */ outer */!/* gap */("../../beta/src/shared.rs");\n'),
+            "cross_package_include",
+        )
+
+    def test_nested_comment_separated_cross_package_path_is_rejected(self) -> None:
+        repo, base = self._fixture()
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(root, "crates/alpha/src/lib.rs",
+                '#/* outer /* inner */ outer */[path = "../../beta/src/shared.rs"]\nmod linked;\n'),
+            "cross_package_path",
+        )
+
     def test_computed_build_output_into_another_package_is_rejected(self) -> None:
         repo, base = self._fixture()
         self._assert_rejected(
@@ -473,6 +491,15 @@ path = "src/lib.rs"
             lambda root: self._write(root, "crates/alpha/build.rs",
                 'fn main() { std::fs::write(concat!("../beta/src/", "generated.rs"), "").unwrap(); }\n'),
             "unresolved_generated_output",
+        )
+
+    def test_build_copy_into_another_package_is_rejected(self) -> None:
+        repo, base = self._fixture()
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(root, "crates/alpha/build.rs",
+                'fn main() { std::fs::copy("src/input.rs", "../beta/src/shared.rs").unwrap(); }\n'),
+            "cross_package_generated_output",
         )
 
     def test_manifest_activates_unchanged_cross_package_path_is_rejected(self) -> None:

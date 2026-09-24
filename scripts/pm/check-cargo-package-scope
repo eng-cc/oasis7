@@ -597,6 +597,55 @@ def source_text(repo: Path, head: str, path: str) -> str:
     return blob.decode("utf-8", errors="replace")
 
 
+def without_rust_comments(source: str) -> str:
+    """Remove nested Rust comments while preserving string literal contents."""
+    output: list[str] = []
+    index = 0
+    while index < len(source):
+        if source.startswith("//", index):
+            end = source.find("\n", index)
+            index = len(source) if end < 0 else end
+            output.append(" ")
+        elif source.startswith("/*", index):
+            depth = 1
+            index += 2
+            while index < len(source) and depth:
+                if source.startswith("/*", index):
+                    depth += 1
+                    index += 2
+                elif source.startswith("*/", index):
+                    depth -= 1
+                    index += 2
+                else:
+                    index += 1
+            if depth:
+                raise ScopeError("unresolved_rust_source_reference", "unterminated Rust block comment")
+            output.append(" ")
+        elif source[index] == '"':
+            start = index
+            index += 1
+            while index < len(source):
+                if source[index] == "\\":
+                    index += 2
+                elif source[index] == '"':
+                    index += 1
+                    break
+                else:
+                    index += 1
+            output.append(source[start:index])
+        elif source[index] == "r" and (raw := re.match(r'r(#{0,255})"', source[index:])):
+            closing = '"' + raw.group(1)
+            end = source.find(closing, index + raw.end())
+            if end < 0:
+                raise ScopeError("unresolved_rust_source_reference", "unterminated Rust raw string")
+            output.append(source[index:end + len(closing)])
+            index = end + len(closing)
+        else:
+            output.append(source[index])
+            index += 1
+    return "".join(output)
+
+
 def check_cross_package_edges(
     repo: Path,
     head: str,
@@ -612,11 +661,9 @@ def check_cross_package_edges(
         owner = owner_for(path, packages)
         if owner is None or not path.endswith(".rs"):
             continue
-        # Rust comments separate tokens just like whitespace.  Erasing them
-        # before matching closes comment-separated spellings of these edges.
-        text = re.sub(r"/\*.*?\*/|//[^\n]*", "", source_text(repo, head, path), flags=re.DOTALL)
+        text = without_rust_comments(source_text(repo, head, path))
         for prefix, terminator, reason in (
-            (r"\binclude!\s*\(\s*", ")", "cross_package_include"),
+            (r"\binclude\s*!\s*\(\s*", ")", "cross_package_include"),
             (r"#\s*\[\s*path\s*=\s*", "]", "cross_package_path"),
         ):
             for reference in re.finditer(prefix, text):
@@ -637,15 +684,27 @@ def check_cross_package_edges(
                 ):
                     raise ScopeError(reason, f"{path} reaches {resolved}")
         if owner in affected_packages and Path(path).name == "build.rs":
-            for reference in re.finditer(r"(?:fs::write|File::create|create_dir_all)\s*\(\s*", text):
-                match = re.match(literal, text[reference.end():])
-                if match is None or (match.group(1) is not None and "\\" in match.group(1)):
-                    raise ScopeError("unresolved_generated_output", f"{path} has non-literal output path")
-                target = match.group(1) or match.group(3)
+            def check_output(target: str) -> None:
                 resolved = resolve_relative(path, target)
                 target_owner = owner_for(resolved, packages) if resolved else None
                 if target_owner is not None and target_owner != owner:
                     raise ScopeError("cross_package_generated_output", f"{path} writes {resolved}")
+
+            for reference in re.finditer(r"(?:fs::write|File::create|create_dir_all)\s*\(\s*", text):
+                match = re.match(literal, text[reference.end():])
+                if match is None or (match.group(1) is not None and "\\" in match.group(1)):
+                    raise ScopeError("unresolved_generated_output", f"{path} has non-literal output path")
+                check_output(match.group(1) or match.group(3))
+            for reference in re.finditer(r"fs::(?:copy|rename|hard_link|symlink)\s*\(\s*", text):
+                first = re.match(literal, text[reference.end():])
+                if first is None:
+                    raise ScopeError("unresolved_generated_output", f"{path} has non-literal source path")
+                rest = text[reference.end() + first.end():]
+                separator = re.match(r"\s*,\s*", rest)
+                second = re.match(literal, rest[separator.end():]) if separator else None
+                if second is None or (second.group(1) is not None and "\\" in second.group(1)):
+                    raise ScopeError("unresolved_generated_output", f"{path} has non-literal output path")
+                check_output(second.group(1) or second.group(3))
 
 
 def evaluate(args: argparse.Namespace) -> dict[str, Any]:
