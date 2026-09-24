@@ -470,6 +470,31 @@ path = "src/lib.rs"
             "cross_package_symlink",
         )
 
+    def test_unchanged_other_package_directory_symlink_into_changed_descendant_is_rejected(self) -> None:
+        repo, _ = self._fixture()
+        self._write(repo, "crates/alpha/src/mod.rs", "pub fn shared() {}\n")
+        (repo / "crates/beta/src/alias").symlink_to("../../alpha/src", target_is_directory=True)
+        self._write(repo, "crates/beta/src/lib.rs", "pub mod alias;\npub fn beta() {}\n")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "base with reverse directory symlink edge")
+        base = self._git(repo, "rev-parse", "HEAD")
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(root, "crates/alpha/src/mod.rs", "pub fn changed() {}\n"),
+            "cross_package_symlink",
+        )
+
+    def test_computed_cross_package_include_is_rejected(self) -> None:
+        repo, base = self._fixture()
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(
+                root, "crates/alpha/src/lib.rs",
+                'include!(concat!("../../beta/src/", "shared.rs"));\npub fn alpha() {}\n',
+            ),
+            "unresolved_rust_source_reference",
+        )
+
     def test_raw_string_cross_package_include_is_rejected(self) -> None:
         repo, base = self._fixture()
         self._assert_rejected(
