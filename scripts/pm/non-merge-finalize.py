@@ -36,6 +36,7 @@ MERGE_AUTHORITY_FIELDS = (
     "cleanup_authority",
 )
 STATUS_LINE_RE = re.compile(r"(?m)^- status: `([^`]+)`$")
+WORKFLOW_PHASE_LINE_RE = re.compile(r"(?m)^- workflow_phase: `([^`]*)`$")
 PR_HEAD_REQUIRED_FIELDS = ("headRefOid", "headRefName")
 PR_HEAD_OPTIONAL_FIELDS = ("headRepositoryOwner", "headRepositoryName")
 PR_HEAD_FIELDS = PR_HEAD_REQUIRED_FIELDS + PR_HEAD_OPTIONAL_FIELDS
@@ -1096,11 +1097,30 @@ def _update_issue_body(record: dict, task_uid: str, issue: dict,
     statuses = STATUS_LINE_RE.findall(body)
     if len(statuses) != 1:
         fail("Issue body is missing exactly one canonical status field")
-    updated_body, count = re.subn(
+    phases = WORKFLOW_PHASE_LINE_RE.findall(body)
+    if len(phases) > 1:
+        fail("Issue body contains duplicate canonical workflow_phase fields")
+    updated_body, status_count = re.subn(
         STATUS_LINE_RE, "- status: `done`", body, count=1,
     )
-    if count != 1:
+    if status_count != 1:
         fail("Issue body is missing exactly one canonical status field")
+    if phases:
+        updated_body, phase_count = re.subn(
+            WORKFLOW_PHASE_LINE_RE,
+            "- workflow_phase: `closed_without_merge`",
+            updated_body,
+            count=1,
+        )
+    else:
+        updated_body, phase_count = re.subn(
+            STATUS_LINE_RE,
+            "- status: `done`\n- workflow_phase: `closed_without_merge`",
+            updated_body,
+            count=1,
+        )
+    if phase_count != 1:
+        fail("Issue body is missing exactly one canonical workflow_phase field")
     _ledger_transition(ledger_path, task_uid, "issue_body_update", "intent", pr_head=pr_head)
     if updated_body != body:
         _ledger_transition(ledger_path, task_uid, "issue_body_update", "action", pr_head=pr_head)
@@ -1119,6 +1139,9 @@ def _update_issue_body(record: dict, task_uid: str, issue: dict,
     readback_statuses = STATUS_LINE_RE.findall(str(readback.get("body") or ""))
     if readback_statuses != ["done"]:
         fail("Issue body status readback mismatch")
+    readback_phases = WORKFLOW_PHASE_LINE_RE.findall(str(readback.get("body") or ""))
+    if readback_phases != ["closed_without_merge"]:
+        fail("Issue body workflow_phase readback mismatch")
     _ledger_transition(ledger_path, task_uid, "issue_body_update", "readback", readback, pr_head)
     _ledger_transition(ledger_path, task_uid, "issue_body_update", "committed", pr_head=pr_head)
     return readback

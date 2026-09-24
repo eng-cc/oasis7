@@ -57,6 +57,7 @@
 - 每个常见脚本意图只有一个推荐稳定入口；辅助与 fallback 路径必须声明触发条件，且永远不能替代 canonical 路径。
 - 对外发布的脚本契约必须说明最小调用、改变验证范围的选项和失败类别；可变参数、默认值与机器可读字段以当前脚本行为、`--help` 和测试为实现权威。`dry-run`、`skip-*`、语法或 help 成功不能被解释为完整门禁通过。
 - Worktree harness 的产品承诺是 machine-readable、worktree-scoped 的启动与证据隔离；teardown 终止运行栈并保留证据。其 `ready` / `smoke` 只证明本地 launcher/Viewer reachability 边界，不证明 headed S6、玩法、持久化、replay/recovery、共识或发布就绪。
+- Worktree harness 发布 `state.json` 与 `session.meta` 时必须原子替换完整记录，避免并发读取看到部分状态，并保持既有记录格式可兼容读取；旧记录缺少稳定进程身份且对应进程仍存活时，必须拒绝发送信号，确认进程已退出后才可清理陈旧记录。`ready`、`status`、`url` 与重复 `up` 仅在记录的 PID、PGID 和稳定 leader identity 一致时承认进程仍属于该 harness；`down` 发出 TERM 前须核对进程组归属，再使用有界等待和 KILL 升级。端口分配按同一仓库 worktree 家族串行保留，过期保留仅在核对 owner 存活状态后回收。
 - 每个请求从绑定单一 task truth 的独立 task worktree 开始；复用必须有用户明确授权。Bootstrap 部分失败时必须保留已创建的 branch/worktree，并返回可执行的 refresh/retry 恢复指令。
 - 已完成工作默认通过 repository GitHub PR lifecycle 进入受保护 `main`，并使用 source-bound review evidence 与 canonical post-merge cleanup；具体状态、门禁和 receipt 规则只由 `doc/engineering/workflow/source-of-truth.md` 定义。
 - `land-task-worktree.sh` 仅保留为 local-only / fallback 兼容工具，不是默认最终集成路径，也不能绕过 canonical cleanup。
