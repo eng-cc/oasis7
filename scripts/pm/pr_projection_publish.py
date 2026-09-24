@@ -334,10 +334,16 @@ class GitHubPublicationAdapter:
         uids = re.findall(r"^task_uid:\s*(task_[0-9a-f]{32})$", body, re.MULTILINE)
         if uids != [task_uid]:
             raise RuntimeError("Task issue UID readback mismatch")
-        urls = re.findall(r"^- pr_url:\s*\x60([^\x60]+)\x60$", body, re.MULTILINE)
-        if len(urls) > 1:
+        url_lines = re.findall(r"^- pr_url:.*$", body, re.MULTILINE)
+        if len(url_lines) > 1:
             raise RuntimeError("Task issue PR binding is ambiguous")
-        number = publication.pr_number_from_url(urls[0]) if urls else None
+        if url_lines:
+            match = re.fullmatch(r"- pr_url:\s*`([^`]+)`", url_lines[0])
+            if match is None:
+                raise RuntimeError("Task issue PR binding is malformed")
+            number = publication.pr_number_from_url(match.group(1), self.args.repo)
+        else:
+            number = None
         if number is not None:
             self.pr_number = number
         return {"task_uid": task_uid, "pr_number": number}

@@ -96,6 +96,24 @@ def build_publication_binding(publication: dict[str, Any], pr_number: int,
     return binding
 
 
+def pr_number_from_url(pr_url: Any, repository: str) -> int:
+    """Parse one canonical GitHub PR URL bound to the expected repository."""
+    if (not isinstance(repository, str)
+            or re.fullmatch(r"[^/\s]+/[^/\s]+", repository) is None):
+        raise ContractError("expected PR repository identity is malformed")
+    if not isinstance(pr_url, str):
+        raise ContractError("PR URL is malformed")
+    match = re.fullmatch(
+        r"https://github\.com/([^/\s]+)/([^/\s]+)/pull/([1-9][0-9]*)",
+        pr_url,
+    )
+    if match is None:
+        raise ContractError("PR URL is malformed")
+    if f"{match.group(1)}/{match.group(2)}" != repository:
+        raise ContractError("PR URL repository mismatch")
+    return int(match.group(3))
+
+
 def validate_publication_binding(value: Any, publication: dict[str, Any] | None = None) -> dict[str, Any]:
     required = {"schema", "repository", "task_uid", "publication_id", "pr_number", "pr_url", "binding_digest"}
     if not isinstance(value, dict) or set(value) != required or value.get("schema") != PUBLICATION_BINDING_SCHEMA:

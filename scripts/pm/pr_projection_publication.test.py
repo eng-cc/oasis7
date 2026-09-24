@@ -134,6 +134,20 @@ class FakeClock:
 
 
 class PublicationMatrixTests(unittest.TestCase):
+    def read_live_task_binding(self, body, repository="eng-cc/oasis7"):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            publication, _projection = make_publication(7010, repository=repository)
+            args = type("Args", (), {
+                "repo": repository, "issue_number": 123, "task_uid": UID,
+                "task_helper": str(root / "github-project-task.py"),
+            })()
+            adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+            issue = {"number": 123, "state": "open", "body": body}
+            with patch.object(adapter, "gh", return_value=json.dumps(issue)):
+                result = adapter.read_task_pr_binding(UID)
+            return result, adapter.pr_number
+
     def journal(self, temp, publication):
         return journal_module.open_journal(
             temp, publication["repository"], publication["source_ref"],
@@ -181,6 +195,42 @@ class PublicationMatrixTests(unittest.TestCase):
             self.assertEqual([], adapter.events)
             with journal.locked():
                 self.assertEqual([], journal.read()["actions"])
+
+    def test_task_binding_readback_accepts_valid_and_absent_pr_url(self):
+        valid, remembered_number = self.read_live_task_binding(
+            f"task_uid: {UID}\n- pr_url: `https://github.com/eng-cc/oasis7/pull/3989`\n",
+        )
+        self.assertEqual({"task_uid": UID, "pr_number": 3989}, valid)
+        self.assertEqual(3989, remembered_number)
+
+        absent, remembered_number = self.read_live_task_binding(f"task_uid: {UID}\n")
+        self.assertEqual({"task_uid": UID, "pr_number": None}, absent)
+        self.assertIsNone(remembered_number)
+
+    def test_task_binding_readback_rejects_wrong_repo_and_malformed_identity(self):
+        with self.assertRaisesRegex(publication_module.ContractError, "repository mismatch"):
+            self.read_live_task_binding(
+                f"task_uid: {UID}\n- pr_url: `https://github.com/other/oasis7/pull/3989`\n",
+            )
+        with self.assertRaisesRegex(publication_module.ContractError, "PR URL is malformed"):
+            self.read_live_task_binding(
+                f"task_uid: {UID}\n- pr_url: `https://github.com/eng-cc/oasis7/pull/not-a-number`\n",
+            )
+        with self.assertRaisesRegex(RuntimeError, "Task issue PR binding is malformed"):
+            self.read_live_task_binding(
+                f"task_uid: {UID}\n- pr_url: https://github.com/eng-cc/oasis7/pull/3989\n",
+            )
+        with self.assertRaisesRegex(RuntimeError, "Task issue PR binding is ambiguous"):
+            self.read_live_task_binding(
+                f"task_uid: {UID}\n"
+                "- pr_url: `https://github.com/eng-cc/oasis7/pull/3989`\n"
+                "- pr_url: `https://github.com/eng-cc/oasis7/pull/3990`\n",
+            )
+        with self.assertRaisesRegex(RuntimeError, "canonical Task issue UID mismatch"):
+            self.read_live_task_binding(
+                f"task_uid: {'task_' + 'b' * 32}\n"
+                "- pr_url: `https://github.com/eng-cc/oasis7/pull/3989`\n",
+            )
 
     def test_pr_discovery_filters_large_history_server_side(self):
         repository = "eng-cc/oasis7"
@@ -342,6 +392,43 @@ class PublicationMatrixTests(unittest.TestCase):
             self.assertEqual("published", result["status"])
             self.assertEqual(1, len(adapter.prs))
             self.assertEqual(1, adapter.events.count("create-pr"))
+
+    def test_task_binding_readback_recovers_after_record_pr_without_repeating_write(self):
+        class PostWriteReadbackFailureAdapter(FakeAdapter):
+            def __init__(self, publication, projection):
+                super().__init__(publication, projection)
+                self.binding_reads = 0
+
+            def read_task_pr_binding(self, task_uid):
+                self.events.append("read-task-pr-binding")
+                self.binding_reads += 1
+                if self.binding_reads == 1:
+                    return {"task_uid": task_uid, "pr_number": None}
+                if self.binding_reads == 2:
+                    raise RuntimeError("simulated Task PR binding readback failure")
+                return {"task_uid": task_uid, "pr_number": 1}
+
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection = make_publication(504)
+            adapter = PostWriteReadbackFailureAdapter(publication, projection)
+            journal = self.journal(temp, publication)
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "NETWORK_UNCERTAIN",
+            ):
+                publication_module.publish_create(
+                    adapter, journal, publication=publication,
+                    projection=projection, body="Task: " + UID + "\nRefs #1",
+                )
+
+            result = publication_module.publish_create(
+                adapter, journal, publication=publication,
+                projection=projection, body="Task: " + UID + "\nRefs #1",
+            )
+            self.assertEqual("published", result["status"])
+            self.assertEqual(1, len(adapter.prs))
+            self.assertEqual(1, adapter.events.count("create-pr"))
+            self.assertEqual(1, adapter.events.count("record-pr"))
+            self.assertEqual(1, adapter.events.count("publish-reciprocal"))
 
     def test_restart_after_create_effect_reuses_the_single_matching_pr(self):
         class SimulatedCrash(BaseException):
