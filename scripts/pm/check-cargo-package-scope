@@ -76,6 +76,10 @@ def changed_files(repo: Path, base: str, head: str) -> tuple[list[str], list[str
     return paths, rename_endpoints
 
 
+def tracked_paths(repo: Path, revision: str) -> list[str]:
+    return [safe_relative(path) for path in git(repo, "ls-tree", "-r", "--name-only", "-z", revision).stdout.split("\0") if path]
+
+
 def safe_relative(path: str) -> str:
     value = path.replace("\\", "/")
     pure = PurePosixPath(value)
@@ -598,6 +602,7 @@ def check_cross_package_edges(
     head: str,
     paths: Iterable[str],
     packages: dict[str, list[tuple[str, str]]],
+    changed: set[str],
 ) -> None:
     for path in paths:
         owner = owner_for(path, packages)
@@ -611,9 +616,9 @@ def check_cross_package_edges(
             for target in re.findall(pattern, text):
                 resolved = resolve_relative(path, target)
                 target_owner = owner_for(resolved, packages) if resolved else None
-                if target_owner is not None and target_owner != owner:
+                if target_owner is not None and target_owner != owner and (path in changed or resolved in changed):
                     raise ScopeError(reason, f"{path} reaches {resolved}")
-        if Path(path).name == "build.rs":
+        if path in changed and Path(path).name == "build.rs":
             for target in re.findall(r"(?:fs::write|File::create|create_dir_all)\s*\(\s*\"([^\"]+)\"", text):
                 resolved = resolve_relative(path, target)
                 target_owner = owner_for(resolved, packages) if resolved else None
@@ -642,6 +647,19 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         head_metadata = cargo_metadata(head_root)
         base_packages = package_roots(base_root, base_metadata)
         head_packages = package_roots(head_root, head_metadata)
+        for path in normalized_paths:
+            for root, packages in ((base_root, base_packages), (head_root, head_packages)):
+                link = root / path
+                if not link.is_symlink():
+                    continue
+                try:
+                    physical = link.resolve(strict=True).relative_to(root.resolve()).as_posix()
+                except (OSError, ValueError) as exc:
+                    raise ScopeError("ambiguous_package_attribution", f"unresolved or escaping symlink: {path}") from exc
+                lexical_owner = owner_for(path, packages)
+                physical_owner = owner_for(physical, packages)
+                if lexical_owner != physical_owner or physical_owner is None:
+                    raise ScopeError("cross_package_symlink", f"{path} resolves to {physical}")
         base_dependency_edges = cross_package_dependency_edges(
             base_root, base_metadata, base_packages
         )
@@ -771,7 +789,7 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
                 f"Cargo.lock source for {primary_package} does not match Cargo metadata",
             )
 
-    check_cross_package_edges(repo, args.head, normalized_paths, head_packages)
+    check_cross_package_edges(repo, args.head, tracked_paths(repo, args.head), head_packages, set(normalized_paths))
     return {
         "status": "allowed",
         "primary_package": primary_package,
