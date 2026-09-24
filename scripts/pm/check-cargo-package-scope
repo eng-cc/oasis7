@@ -76,6 +76,10 @@ def changed_files(repo: Path, base: str, head: str) -> tuple[list[str], list[str
     return paths, rename_endpoints
 
 
+def tracked_paths(repo: Path, revision: str) -> list[str]:
+    return [safe_relative(path) for path in git(repo, "ls-tree", "-r", "--name-only", "-z", revision).stdout.split("\0") if path]
+
+
 def safe_relative(path: str) -> str:
     value = path.replace("\\", "/")
     pure = PurePosixPath(value)
@@ -217,62 +221,204 @@ def package_manifest_paths(packages: dict[str, list[tuple[str, str]]]) -> dict[s
     }
 
 
+def build_script_paths(root: Path, metadata: dict[str, Any]) -> dict[str, set[str]]:
+    """Use Cargo's active custom-build targets, including manifest-selected paths."""
+    scripts: dict[str, set[str]] = {}
+    for package in metadata["packages"]:
+        name = package.get("name")
+        if not isinstance(name, str):
+            raise ScopeError("cargo_metadata_unavailable", "package name is unavailable")
+        manifest = Path(str(package.get("manifest_path", ""))).resolve()
+        for target in package.get("targets", []):
+            if not isinstance(target, dict) or "custom-build" not in target.get("kind", []):
+                continue
+            source = Path(str(target.get("src_path", "")))
+            try:
+                physical = source.resolve(strict=True)
+                physical.relative_to(manifest.parent)
+                relative = physical.relative_to(root.resolve()).as_posix()
+            except (OSError, ValueError) as exc:
+                raise ScopeError("cross_package_symlink", f"custom build target leaves package: {name}") from exc
+            scripts.setdefault(name, set()).add(relative)
+    return scripts
+
+
 def cross_package_dependency_edges(
     root: Path,
     metadata: dict[str, Any],
     packages: dict[str, list[tuple[str, str]]],
 ) -> set[tuple[str, str, str]]:
+    """Return workspace-to-workspace dependency edges from Cargo metadata.
+
+    Path dependencies are resolved by their manifest location.  A dependency
+    whose package name matches another workspace package but has no path is
+    retained as a tagged edge as well: registry/git (or otherwise non-path)
+    sources must not disguise a cross-package edge.
+    """
     edges: set[tuple[str, str, str]] = set()
+    package_names = set(packages)
     for package in metadata["packages"]:
         source = package["name"]
         for dependency in package.get("dependencies", []):
-            if not isinstance(dependency, dict) or not dependency.get("path"):
+            if not isinstance(dependency, dict):
                 continue
-            dependency_path = Path(str(dependency["path"])).resolve()
-            try:
-                dependency_rel = dependency_path.relative_to(root.resolve()).as_posix()
-            except ValueError:
+            dependency_path = dependency.get("path")
+            if dependency_path:
+                resolved_path = Path(str(dependency_path)).resolve()
+                try:
+                    dependency_rel = resolved_path.relative_to(root.resolve()).as_posix()
+                except ValueError:
+                    continue
+                target = owner_for(dependency_rel, packages)
+                if target is not None and target != source:
+                    edges.add((source, target, str(dependency.get("kind") or "normal")))
                 continue
-            target = owner_for(dependency_rel, packages)
-            if target is not None and target != source:
-                edges.add((source, target, str(dependency.get("kind") or "normal")))
+
+            target = dependency.get("name")
+            if not isinstance(target, str) or target not in package_names or target == source:
+                continue
+            raw_source = str(dependency.get("source") or "")
+            if raw_source.startswith("registry+"):
+                edge_kind = "registry"
+            elif raw_source.startswith("git+"):
+                edge_kind = "git"
+            else:
+                edge_kind = "non_path"
+            edges.add((source, target, edge_kind))
     return edges
 
 
-def workspace_members(text: str) -> set[str]:
-    match = re.search(r"(?ms)^\s*members\s*=\s*\[(.*?)\]", text)
-    if not match:
-        return set()
-    try:
-        value = ast.literal_eval("[" + match.group(1) + "]")
-    except (SyntaxError, ValueError):
-        return set()
-    return {str(item).replace("\\", "/") for item in value if isinstance(item, str)}
+def workspace_members_and_manifest(text: str) -> tuple[set[str], str] | None:
+    def array_end(start: int) -> int | None:
+        depth = 0
+        quote: str | None = None
+        escaped = False
+        comment = False
+        opened = False
+        for index in range(start, len(text)):
+            char = text[index]
+            if comment:
+                if char == "\n":
+                    comment = False
+                continue
+            if quote is not None:
+                if quote == '"' and escaped:
+                    escaped = False
+                elif quote == '"' and char == "\\":
+                    escaped = True
+                elif char == quote:
+                    quote = None
+                continue
+            if char == "#":
+                comment = True
+            elif char in ("'", '"'):
+                if text.startswith(char * 3, index):
+                    return None
+                quote = char
+            elif char == "[":
+                opened = True
+                depth += 1
+            elif char == "]":
+                depth -= 1
+                if depth < 0:
+                    return None
+                if opened and depth == 0:
+                    return index + 1
+        return None
+
+    in_workspace = False
+    offset = 0
+    skip_until = 0
+    assignments: list[tuple[set[str], int, int]] = []
+    for line in text.splitlines(keepends=True):
+        line_start = offset
+        offset += len(line)
+        if line_start < skip_until:
+            continue
+        content = line.split("#", 1)[0].strip()
+        if content.startswith("[") and content.endswith("]"):
+            in_workspace = content == "[workspace]"
+        if not in_workspace:
+            continue
+        match = re.match(r"^[ \t]*members[ \t]*=[ \t]*", line)
+        if not match:
+            continue
+        value_start = line_start + match.end()
+        value_end = array_end(value_start)
+        if value_end is None:
+            return None
+        line_end = text.find("\n", value_end)
+        if line_end < 0:
+            line_end = len(text)
+        tail = text[value_end:line_end].strip()
+        if tail and not tail.startswith("#"):
+            return None
+        try:
+            value = ast.literal_eval(text[value_start:value_end])
+        except (SyntaxError, ValueError):
+            return None
+        if not isinstance(value, list) or not all(isinstance(item, str) for item in value):
+            return None
+        members = [item.replace("\\", "/") for item in value]
+        if len(members) != len(set(members)):
+            return None
+        assignments.append((set(members), value_start, value_end))
+        skip_until = value_end
+
+    if len(assignments) != 1:
+        return None
+    members, value_start, value_end = assignments[0]
+    without_members = text[:value_start] + "[]" + text[value_end:]
+    return members, without_members
 
 
-def lock_records(text: str) -> dict[str, list[dict[str, str]]]:
-    records: dict[str, list[dict[str, str]]] = {}
-    current: dict[str, str] | None = None
+def lock_records(text: str) -> dict[str, list[dict[str, Any]]]:
+    records: dict[str, list[dict[str, Any]]] = {}
+    current: dict[str, Any] | None = None
     in_package = False
+    in_dependencies = False
+
+    def append_current() -> None:
+        if current and current.get("name"):
+            records.setdefault(current["name"], []).append(current)
+
     for line in text.splitlines():
         if line.strip() == "[[package]]":
-            if current and current.get("name"):
-                records.setdefault(current["name"], []).append(current)
+            append_current()
             current = {}
             in_package = True
+            in_dependencies = False
             continue
         if line.startswith("[[") or (line.startswith("[") and not line.startswith("[[")):
-            if current and current.get("name"):
-                records.setdefault(current["name"], []).append(current)
+            append_current()
             current = None
             in_package = False
+            in_dependencies = False
             continue
         if in_package and current is not None:
+            stripped = line.strip()
+            if in_dependencies:
+                if stripped == "]":
+                    in_dependencies = False
+                else:
+                    match = re.fullmatch(r'"([^"]+)",?', stripped)
+                    if match:
+                        current.setdefault("dependencies", []).append(match.group(1))
+                continue
+            inline_dependencies = re.fullmatch(r"dependencies\s*=\s*\[(.*)\]", stripped)
+            if inline_dependencies:
+                current["dependencies"] = re.findall(
+                    r'"([^"]+)"', inline_dependencies.group(1)
+                )
+                continue
+            if re.match(r"^dependencies\s*=\s*\[$", stripped):
+                current["dependencies"] = []
+                in_dependencies = True
+                continue
             match = re.match(r'^\s*(name|version|source|checksum)\s*=\s*"([^"]*)"', line)
             if match:
                 current[match.group(1)] = match.group(2)
-    if current and current.get("name"):
-        records.setdefault(current["name"], []).append(current)
+    append_current()
     return records
 
 
@@ -284,21 +430,166 @@ def lock_change_names(repo: Path, base: str, head: str) -> set[str]:
     return {name for name in set(before) | set(after) if before.get(name) != after.get(name)}
 
 
+def lock_workspace_record(repo: Path, revision: str, package: str) -> dict[str, Any] | None:
+    blob = git_blob(repo, revision, "Cargo.lock")
+    if blob is None:
+        return None
+    records = lock_records(blob.decode("utf-8", errors="replace"))
+    workspace_records = [record for record in records.get(package, []) if "source" not in record]
+    if len(workspace_records) != 1:
+        return None
+    return workspace_records[0]
+
+
+def lock_dependency_names(repo: Path, revision: str, package: str) -> set[str] | None:
+    record = lock_workspace_record(repo, revision, package)
+    if record is None:
+        return None
+    return {
+        dependency.split(" ", 1)[0]
+        for dependency in record.get("dependencies", [])
+    }
+
+
+def lock_dependency_references_are_canonical(
+    repo: Path,
+    revision: str,
+    package: str,
+    metadata: dict[str, Any],
+) -> bool:
+    blob = git_blob(repo, revision, "Cargo.lock")
+    if blob is None:
+        return False
+    records = lock_records(blob.decode("utf-8", errors="replace"))
+    workspace_records = [record for record in records.get(package, []) if "source" not in record]
+    if len(workspace_records) != 1:
+        return False
+    dependencies = workspace_records[0].get("dependencies", [])
+    if not isinstance(dependencies, list) or not all(isinstance(item, str) for item in dependencies):
+        return False
+    if len(dependencies) != len(set(dependencies)):
+        return False
+
+    package_metadata = metadata_package(metadata, package)
+    metadata_dependencies = package_metadata.get("dependencies") if package_metadata else None
+    if not isinstance(metadata_dependencies, list):
+        return False
+    metadata_name_counts: dict[str, int] = {}
+    for dependency in metadata_dependencies:
+        if not isinstance(dependency, dict) or not isinstance(dependency.get("name"), str):
+            return False
+        name = dependency["name"]
+        metadata_name_counts[name] = metadata_name_counts.get(name, 0) + 1
+
+    canonical_names: dict[str, str] = {}
+    for name, candidates in records.items():
+        if not candidates:
+            continue
+        identities: set[tuple[str, str | None]] = set()
+        for candidate in candidates:
+            version = candidate.get("version")
+            source = candidate.get("source")
+            if not isinstance(version, str) or not version:
+                return False
+            if source is not None and (not isinstance(source, str) or not source):
+                return False
+            identity = (version, source)
+            if identity in identities:
+                return False
+            identities.add(identity)
+
+        for candidate in candidates:
+            version = candidate["version"]
+            if len(candidates) == 1:
+                reference = name
+            else:
+                reference = f"{name} {version}"
+                same_version = [item for item in candidates if item["version"] == version]
+                if len(same_version) > 1:
+                    source = candidate.get("source")
+                    if source is not None:
+                        reference += f" ({source})"
+                    elif sum(item.get("source") is None for item in same_version) != 1:
+                        return False
+            if reference in canonical_names:
+                return False
+            canonical_names[reference] = name
+
+    actual_name_counts: dict[str, int] = {}
+    for dependency in dependencies:
+        name = canonical_names.get(dependency)
+        if name is None:
+            return False
+        actual_name_counts[name] = actual_name_counts.get(name, 0) + 1
+        if actual_name_counts[name] > metadata_name_counts.get(name, 0):
+            return False
+    return True
+
+
+def metadata_package(metadata: dict[str, Any], package: str) -> dict[str, Any] | None:
+    matches = [
+        item
+        for item in metadata.get("packages", [])
+        if isinstance(item, dict) and item.get("name") == package
+    ]
+    if len(matches) != 1:
+        return None
+    return matches[0]
+
+
+def metadata_dependency_names(metadata: dict[str, Any], package: str) -> set[str] | None:
+    match = metadata_package(metadata, package)
+    if match is None:
+        return None
+    dependencies = match.get("dependencies", [])
+    if not isinstance(dependencies, list):
+        return None
+    names = {
+        dependency.get("name")
+        for dependency in dependencies
+        if isinstance(dependency, dict) and isinstance(dependency.get("name"), str)
+    }
+    return names
+
+
 def lock_diff_has_unattributable_lines(repo: Path, base: str, head: str) -> bool:
-    diff = git(repo, "diff", "--unified=0", base, head, "--", "Cargo.lock").stdout
-    for line in diff.splitlines():
-        if not line or line.startswith(("+++", "---", "@@")):
-            continue
-        if line[0] not in "+-":
-            continue
-        content = line[1:].strip()
-        if not content:
-            continue
-        if content == "[[package]]" or re.match(r"^(name|version|source|checksum)\s*=", content):
-            continue
-        if content.startswith("dependencies ="):
-            continue
-        return True
+    def is_mechanical_lock(text: str) -> bool:
+        in_dependencies = False
+        for line in text.splitlines():
+            content = line.strip()
+            if not content:
+                continue
+            if content in {
+                "# This file is automatically @generated by Cargo.",
+                "# It is not intended for manual editing.",
+            }:
+                continue
+            if content == "[[package]]":
+                in_dependencies = False
+                continue
+            if in_dependencies:
+                if content == "]":
+                    in_dependencies = False
+                    continue
+                if re.fullmatch(r'"[^"]+",?', content):
+                    continue
+                return False
+            if content in {"dependencies = [", "dependencies = []"}:
+                in_dependencies = content.endswith("[")
+                continue
+            if re.fullmatch(r'dependencies\s*=\s*\[(?:\s*"[^"]+",?\s*)*\]', content):
+                continue
+            if re.fullmatch(r"version\s*=\s*\d+", content):
+                continue
+            if re.fullmatch(r'(name|version|source|checksum)\s*=\s*"[^"]*"', content):
+                continue
+            return False
+        return not in_dependencies
+
+    for revision in (base, head):
+        lock_blob = git_blob(repo, revision, "Cargo.lock")
+        if lock_blob is None or not is_mechanical_lock(lock_blob.decode("utf-8", errors="replace")):
+            return True
     return False
 
 
@@ -307,20 +598,18 @@ def root_manifest_is_mechanical(repo: Path, base: str, head: str, new_manifest_p
     new_blob = git_blob(repo, head, "Cargo.toml")
     if old_blob is None or new_blob is None:
         return False
-    old_members = workspace_members(old_blob.decode("utf-8", errors="replace"))
-    new_members = workspace_members(new_blob.decode("utf-8", errors="replace"))
+    old_parsed = workspace_members_and_manifest(old_blob.decode("utf-8", errors="replace"))
+    new_parsed = workspace_members_and_manifest(new_blob.decode("utf-8", errors="replace"))
+    if old_parsed is None or new_parsed is None:
+        return False
+    old_members, old_manifest = old_parsed
+    new_members, new_manifest = new_parsed
     if not new_members or not new_members.issuperset(old_members):
         return False
     added = new_members - old_members
     if added != new_manifest_paths:
         return False
-    diff = git(repo, "diff", "--unified=0", base, head, "--", "Cargo.toml").stdout
-    for line in diff.splitlines():
-        if not line or line.startswith(("+++", "---", "@@")) or line[0] not in "+-":
-            continue
-        if "members" not in line[1:]:
-            return False
-    return True
+    return old_manifest == new_manifest
 
 
 def source_text(repo: Path, head: str, path: str) -> str:
@@ -330,32 +619,125 @@ def source_text(repo: Path, head: str, path: str) -> str:
     return blob.decode("utf-8", errors="replace")
 
 
+def without_rust_comments(source: str) -> str:
+    """Remove nested Rust comments while preserving string literal contents."""
+    output: list[str] = []
+    index = 0
+    while index < len(source):
+        if source.startswith("//", index):
+            end = source.find("\n", index)
+            index = len(source) if end < 0 else end
+            output.append(" ")
+        elif source.startswith("/*", index):
+            depth = 1
+            index += 2
+            while index < len(source) and depth:
+                if source.startswith("/*", index):
+                    depth += 1
+                    index += 2
+                elif source.startswith("*/", index):
+                    depth -= 1
+                    index += 2
+                else:
+                    index += 1
+            if depth:
+                raise ScopeError("unresolved_rust_source_reference", "unterminated Rust block comment")
+            output.append(" ")
+        elif source[index] == '"':
+            start = index
+            index += 1
+            while index < len(source):
+                if source[index] == "\\":
+                    index += 2
+                elif source[index] == '"':
+                    index += 1
+                    break
+                else:
+                    index += 1
+            output.append(source[start:index])
+        elif source[index] == "r" and (raw := re.match(r'r(#{0,255})"', source[index:])):
+            closing = '"' + raw.group(1)
+            end = source.find(closing, index + raw.end())
+            if end < 0:
+                raise ScopeError("unresolved_rust_source_reference", "unterminated Rust raw string")
+            output.append(source[index:end + len(closing)])
+            index = end + len(closing)
+        else:
+            output.append(source[index])
+            index += 1
+    return "".join(output)
+
+
 def check_cross_package_edges(
     repo: Path,
     head: str,
     paths: Iterable[str],
     packages: dict[str, list[tuple[str, str]]],
+    changed: set[str],
+    build_scripts: dict[str, set[str]],
+    active_build_packages: set[str],
 ) -> None:
+    # Rust paths may use an ordinary or a raw string literal.  Keep the raw
+    # delimiter matched to its closing delimiter, including multiple hashes.
+    literal = r'(?:"([^"\n]+)"|r(#{0,255})"([^"\n]+)"\2)'
+    affected_packages = {owner_for(path, packages) for path in changed} - {None}
     for path in paths:
         owner = owner_for(path, packages)
         if owner is None or not path.endswith(".rs"):
             continue
-        text = source_text(repo, head, path)
-        for pattern, reason in (
-            (r"\binclude!\s*\(\s*\"([^\"]+)\"", "cross_package_include"),
-            (r"#\s*\[\s*path\s*=\s*\"([^\"]+)\"", "cross_package_path"),
+        text = without_rust_comments(source_text(repo, head, path))
+        for prefix, terminator, reason in (
+            (r"\binclude\s*!\s*\(\s*", ")", "cross_package_include"),
+            (r"#\s*\[\s*path\s*=\s*", "]", "cross_package_path"),
         ):
-            for target in re.findall(pattern, text):
+            for reference in re.finditer(prefix, text):
+                match = re.match(literal, text[reference.end():])
+                if match is None or not text[reference.end() + match.end():].lstrip().startswith(terminator):
+                    if affected_packages:
+                        raise ScopeError("unresolved_rust_source_reference", f"{path} has non-literal {reason}")
+                    continue
+                target = match.group(1) or match.group(3)
+                if match.group(1) is not None and "\\" in target:
+                    if affected_packages:
+                        raise ScopeError("unresolved_rust_source_reference", f"{path} has escaped {reason}")
+                    continue
                 resolved = resolve_relative(path, target)
                 target_owner = owner_for(resolved, packages) if resolved else None
-                if target_owner is not None and target_owner != owner:
+                if target_owner is not None and target_owner != owner and (
+                    owner in affected_packages or target_owner in affected_packages
+                ):
                     raise ScopeError(reason, f"{path} reaches {resolved}")
-        if Path(path).name == "build.rs":
-            for target in re.findall(r"(?:fs::write|File::create|create_dir_all)\s*\(\s*\"([^\"]+)\"", text):
-                resolved = resolve_relative(path, target)
+        if owner in active_build_packages and path in build_scripts.get(owner, set()):
+            def check_output(target: str) -> None:
+                # Cargo executes build scripts with the package root as cwd,
+                # even when the script itself lives in a nested directory.
+                manifest = package_manifest_paths(packages).get(owner)
+                resolved = resolve_relative(manifest, target) if manifest else None
                 target_owner = owner_for(resolved, packages) if resolved else None
                 if target_owner is not None and target_owner != owner:
                     raise ScopeError("cross_package_generated_output", f"{path} writes {resolved}")
+
+            for reference in re.finditer(r"(?:fs::write|File::create|create_dir_all)\s*\(\s*", text):
+                match = re.match(literal, text[reference.end():])
+                if match is None or (match.group(1) is not None and "\\" in match.group(1)):
+                    raise ScopeError("unresolved_generated_output", f"{path} has non-literal output path")
+                check_output(match.group(1) or match.group(3))
+            for reference in re.finditer(r"fs::(?:copy|rename|hard_link|symlink)\s*\(\s*", text):
+                first = re.match(literal, text[reference.end():])
+                if first is None:
+                    raise ScopeError("unresolved_generated_output", f"{path} has non-literal source path")
+                rest = text[reference.end() + first.end():]
+                separator = re.match(r"\s*,\s*", rest)
+                second = re.match(literal, rest[separator.end():]) if separator else None
+                if second is None or (second.group(1) is not None and "\\" in second.group(1)):
+                    raise ScopeError("unresolved_generated_output", f"{path} has non-literal output path")
+                check_output(second.group(1) or second.group(3))
+            # A build script runs arbitrary Rust at build time.  Path-pattern
+            # checks above preserve a precise reason for known cross-package
+            # writes, but cannot prove the absence of writes through aliases,
+            # options, helper functions, or additional filesystem APIs.
+            if not re.fullmatch(r"\s*fn\s+main\s*\(\s*\)\s*\{\s*\}\s*", text):
+                raise ScopeError("unresolved_generated_output", f"{path} is not a provably inert build script")
 
 
 def evaluate(args: argparse.Namespace) -> dict[str, Any]:
@@ -379,15 +761,42 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         head_metadata = cargo_metadata(head_root)
         base_packages = package_roots(base_root, base_metadata)
         head_packages = package_roots(head_root, head_metadata)
-        added_dependency_edges = cross_package_dependency_edges(
-            head_root, head_metadata, head_packages
-        ) - cross_package_dependency_edges(base_root, base_metadata, base_packages)
-    if added_dependency_edges:
-        detail = ", ".join(
-            f"{source} -[{kind}]-> {target}"
-            for source, target, kind in sorted(added_dependency_edges)
+        head_build_scripts = build_script_paths(head_root, head_metadata)
+        changed = set(normalized_paths)
+        package_changed = any(
+            owner_for(path, head_packages) or owner_for(path, base_packages)
+            for path in changed
         )
-        raise ScopeError("cross_package_dependency", detail)
+        for revision, root, packages in (
+            (args.base, base_root, base_packages),
+            (args.head, head_root, head_packages),
+        ):
+            for path in tracked_paths(repo, revision):
+                link = root / path
+                if not link.is_symlink():
+                    continue
+                try:
+                    physical = link.resolve(strict=True).relative_to(root.resolve()).as_posix()
+                except (OSError, ValueError) as exc:
+                    if path in changed or (package_changed and owner_for(path, packages)):
+                        raise ScopeError("ambiguous_package_attribution", f"unresolved or escaping symlink: {path}") from exc
+                    continue
+                touches_changed = package_changed or path in changed or physical in changed or (
+                    link.is_dir() and any(item.startswith(physical + "/") for item in changed)
+                )
+                if not touches_changed:
+                    continue
+                lexical_owner = owner_for(path, packages)
+                physical_owner = owner_for(physical, packages)
+                if lexical_owner != physical_owner or physical_owner is None:
+                    raise ScopeError("cross_package_symlink", f"{path} resolves to {physical}")
+        base_dependency_edges = cross_package_dependency_edges(
+            base_root, base_metadata, base_packages
+        )
+        head_dependency_edges = cross_package_dependency_edges(
+            head_root, head_metadata, head_packages
+        )
+        added_dependency_edges = head_dependency_edges - base_dependency_edges
     requested_primary = None if args.primary_package == "auto" else args.primary_package
     if requested_primary is not None and requested_primary not in head_packages:
         raise ScopeError("unknown_primary_package", args.primary_package)
@@ -396,6 +805,7 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
     head_package_names = set(head_packages)
     added_names = head_package_names - base_package_names
     package_owners: set[str] = set()
+    unowned_paths: list[str] = []
     unowned_rust: list[str] = []
     for path in normalized_paths:
         if path in ("Cargo.toml", "Cargo.lock") or path == policy_path:
@@ -403,8 +813,10 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         owner = owner_for(path, head_packages) or owner_for(path, base_packages)
         if owner is not None:
             package_owners.add(owner)
-        elif path.endswith(".rs") or Path(path).name == "Cargo.toml":
-            unowned_rust.append(path)
+        else:
+            unowned_paths.append(path)
+            if path.endswith(".rs") or Path(path).name == "Cargo.toml":
+                unowned_rust.append(path)
     if unowned_rust:
         raise ScopeError("ambiguous_package_attribution", ", ".join(unowned_rust))
 
@@ -425,6 +837,36 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         primary_package = next(iter(package_owners))
     if package_owners and package_owners != {primary_package}:
         raise ScopeError("primary_package_mismatch", ", ".join(sorted(package_owners)))
+    if unowned_paths and primary_package is not None:
+        raise ScopeError("ambiguous_package_attribution", ", ".join(unowned_paths))
+
+    if added_dependency_edges:
+        base_package_names = set(base_packages)
+        base_edge_pairs = {(source, target) for source, target, _ in base_dependency_edges}
+        invalid_edges: list[tuple[str, str, str]] = []
+        for source, target, kind in sorted(added_dependency_edges):
+            if kind != "normal":
+                invalid_edges.append((source, target, kind))
+                continue
+            if source not in base_package_names or target not in base_package_names:
+                invalid_edges.append((source, target, kind))
+                continue
+            if package_owners != {source} or target in package_owners:
+                invalid_edges.append((source, target, kind))
+                continue
+            if (source, target) in base_edge_pairs:
+                invalid_edges.append((source, target, kind))
+                continue
+            if any(
+                edge_source == target and edge_target == source
+                for edge_source, edge_target, _ in head_dependency_edges
+            ):
+                invalid_edges.append((source, target, kind))
+        if invalid_edges:
+            detail = ", ".join(
+                f"{source} -[{kind}]-> {target}" for source, target, kind in invalid_edges
+            )
+            raise ScopeError("cross_package_dependency", detail)
 
     root_manifest_changed = "Cargo.toml" in normalized_paths
     root_lock_changed = "Cargo.lock" in normalized_paths
@@ -446,8 +888,51 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         lock_names = lock_change_names(repo, args.base, args.head)
         if not lock_names or primary_package is None or not lock_names.issubset({primary_package}):
             raise ScopeError("unattributable_lock_change", ", ".join(sorted(lock_names)) or "unknown lock change")
+        expected_dependencies = metadata_dependency_names(head_metadata, primary_package)
+        actual_dependencies = lock_dependency_names(repo, args.head, primary_package)
+        if expected_dependencies is None or actual_dependencies is None:
+            raise ScopeError("unattributable_lock_change", "workspace package lock dependency record is unavailable")
+        if actual_dependencies != expected_dependencies:
+            raise ScopeError(
+                "unattributable_lock_change",
+                f"Cargo.lock dependencies for {primary_package} do not match Cargo metadata",
+            )
+        if not lock_dependency_references_are_canonical(
+            repo, args.head, primary_package, head_metadata
+        ):
+            raise ScopeError(
+                "unattributable_lock_change",
+                f"Cargo.lock dependency records for {primary_package} are duplicated or non-canonical",
+            )
+        metadata_identity = metadata_package(head_metadata, primary_package)
+        lock_identity = lock_workspace_record(repo, args.head, primary_package)
+        if metadata_identity is None or lock_identity is None:
+            raise ScopeError("unattributable_lock_change", "workspace package lock identity is unavailable")
+        if lock_identity.get("version") != metadata_identity.get("version"):
+            raise ScopeError(
+                "unattributable_lock_change",
+                f"Cargo.lock version for {primary_package} does not match Cargo metadata",
+            )
+        if lock_identity.get("source") != metadata_identity.get("source"):
+            raise ScopeError(
+                "unattributable_lock_change",
+                f"Cargo.lock source for {primary_package} does not match Cargo metadata",
+            )
 
-    check_cross_package_edges(repo, args.head, normalized_paths, head_packages)
+    active_build_packages = set(package_owners)
+    while True:
+        dependencies = {
+            target for source, target, _ in head_dependency_edges
+            if source in active_build_packages
+        }
+        expanded = active_build_packages | dependencies
+        if expanded == active_build_packages:
+            break
+        active_build_packages = expanded
+    check_cross_package_edges(
+        repo, args.head, tracked_paths(repo, args.head), head_packages,
+        set(normalized_paths), head_build_scripts, active_build_packages,
+    )
     return {
         "status": "allowed",
         "primary_package": primary_package,
