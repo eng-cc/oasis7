@@ -347,7 +347,7 @@ class MoveTaskLifecycleContract(unittest.TestCase):
                 status="committed",
                 workflow_phase="verification",
                 pr_url="https://github.com/eng-cc/oasis7/pull/2001",
-                pr_number=2001,
+                pr_number="2001",
             )
             identity = record_pr_identity(root)
             intent_comment = {
@@ -393,6 +393,33 @@ class MoveTaskLifecycleContract(unittest.TestCase):
             self.assertEqual("https://github.com/eng-cc/oasis7/pull/2001", persisted["pr_url"])
             self.assertEqual(2001, persisted["pr_number"])
             self.assertEqual(2, len(persisted["evidence_comments"]))
+
+    def test_record_pr_recovery_rejects_malformed_or_foreign_pr_number(self) -> None:
+        for value in ("02001", 2002):
+            with self.subTest(pr_number=value), tempfile.TemporaryDirectory() as directory:
+                root = pathlib.Path(directory)
+                record = mapping_record(status="committed", phase="execution")
+                record.update(record_pr_identity(root))
+                request = record_pr_args(root)
+                request.draft_candidate = True
+                live_issue = record_pr_live_issue(record)
+                live_issue.update(
+                    status="committed",
+                    workflow_phase="verification",
+                    pr_url="https://github.com/eng-cc/oasis7/pull/2001",
+                    pr_number=value,
+                )
+                with mock.patch.object(MODULE, "github_issue_record", return_value=live_issue):
+                    with self.assertRaisesRegex(
+                        MODULE._CommandExit,
+                        "neither cached truth nor the exact publication poststate",
+                    ):
+                        MODULE.validate_record_pr_live_identity(
+                            request,
+                            record,
+                            2001,
+                            allow_exact_publication_poststate=True,
+                        )
 
     def test_record_pr_rejects_mixed_partial_publication_poststate(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

@@ -442,6 +442,24 @@ def pr_number_from_url(pr_url: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def same_pr_number(left: Any, right: Any) -> bool:
+    """Compare canonical numeric PR identities across Issue and mapping encodings."""
+    def canonical(value: Any) -> str | None:
+        if type(value) is int and value > 0:
+            return str(value)
+        if isinstance(value, str) and re.fullmatch(r"[1-9][0-9]*", value):
+            return value
+        return None
+
+    left_empty = left is None or (isinstance(left, str) and left == "")
+    right_empty = right is None or (isinstance(right, str) and right == "")
+    if left_empty or right_empty:
+        return left_empty and right_empty
+    left_number = canonical(left)
+    right_number = canonical(right)
+    return left_number is not None and left_number == right_number
+
+
 ISSUE_LIST_SECTIONS = ("Source refs:", "Doc refs:", "Related PRD:", "Acceptance:")
 
 
@@ -693,13 +711,12 @@ def validate_record_pr_live_identity(
             "status": expected_status,
             "workflow_phase": expected_phase,
             "pr_url": expected_url,
-            "pr_number": pr_number,
         }.items()
-    )
+    ) and same_pr_number(live_issue.get("pr_number"), pr_number)
     cached_projection_matches = all(
         live_issue.get(key) == record.get(key)
-        for key in ("status", "workflow_phase", "pr_url", "pr_number")
-    )
+        for key in ("status", "workflow_phase", "pr_url")
+    ) and same_pr_number(live_issue.get("pr_number"), record.get("pr_number"))
     if allow_exact_publication_poststate and not exact_publication_poststate and not cached_projection_matches:
         die("record-pr: live Task Issue is neither cached truth nor the exact publication poststate")
     for key in (
@@ -711,7 +728,12 @@ def validate_record_pr_live_identity(
                 continue
             die(f"record-pr: live task Issue {key} differs from cached task truth")
     for key in ("pr_url", "pr_number"):
-        if live_issue.get(key) != record.get(key):
+        matches = (
+            same_pr_number(live_issue.get(key), record.get(key))
+            if key == "pr_number"
+            else live_issue.get(key) == record.get(key)
+        )
+        if not matches:
             if exact_publication_poststate:
                 continue
             die(f"record-pr: live task Issue {key} differs from cached PR binding")
