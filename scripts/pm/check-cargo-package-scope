@@ -607,12 +607,14 @@ def check_cross_package_edges(
     # Rust paths may use an ordinary or a raw string literal.  Keep the raw
     # delimiter matched to its closing delimiter, including multiple hashes.
     literal = r'(?:"([^"\n]+)"|r(#{0,255})"([^"\n]+)"\2)'
-    package_source_changed = any(path.endswith(".rs") and owner_for(path, packages) for path in changed)
+    affected_packages = {owner_for(path, packages) for path in changed} - {None}
     for path in paths:
         owner = owner_for(path, packages)
         if owner is None or not path.endswith(".rs"):
             continue
-        text = source_text(repo, head, path)
+        # Rust comments separate tokens just like whitespace.  Erasing them
+        # before matching closes comment-separated spellings of these edges.
+        text = re.sub(r"/\*.*?\*/|//[^\n]*", "", source_text(repo, head, path), flags=re.DOTALL)
         for prefix, terminator, reason in (
             (r"\binclude!\s*\(\s*", ")", "cross_package_include"),
             (r"#\s*\[\s*path\s*=\s*", "]", "cross_package_path"),
@@ -620,20 +622,26 @@ def check_cross_package_edges(
             for reference in re.finditer(prefix, text):
                 match = re.match(literal, text[reference.end():])
                 if match is None or not text[reference.end() + match.end():].lstrip().startswith(terminator):
-                    if package_source_changed:
+                    if affected_packages:
                         raise ScopeError("unresolved_rust_source_reference", f"{path} has non-literal {reason}")
                     continue
                 target = match.group(1) or match.group(3)
                 if match.group(1) is not None and "\\" in target:
-                    if package_source_changed:
+                    if affected_packages:
                         raise ScopeError("unresolved_rust_source_reference", f"{path} has escaped {reason}")
                     continue
                 resolved = resolve_relative(path, target)
                 target_owner = owner_for(resolved, packages) if resolved else None
-                if target_owner is not None and target_owner != owner and (path in changed or resolved in changed):
+                if target_owner is not None and target_owner != owner and (
+                    owner in affected_packages or target_owner in affected_packages
+                ):
                     raise ScopeError(reason, f"{path} reaches {resolved}")
-        if path in changed and Path(path).name == "build.rs":
-            for target in re.findall(r"(?:fs::write|File::create|create_dir_all)\s*\(\s*\"([^\"]+)\"", text):
+        if owner in affected_packages and Path(path).name == "build.rs":
+            for reference in re.finditer(r"(?:fs::write|File::create|create_dir_all)\s*\(\s*", text):
+                match = re.match(literal, text[reference.end():])
+                if match is None or (match.group(1) is not None and "\\" in match.group(1)):
+                    raise ScopeError("unresolved_generated_output", f"{path} has non-literal output path")
+                target = match.group(1) or match.group(3)
                 resolved = resolve_relative(path, target)
                 target_owner = owner_for(resolved, packages) if resolved else None
                 if target_owner is not None and target_owner != owner:

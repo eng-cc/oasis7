@@ -448,6 +448,63 @@ path = "src/lib.rs"
 
         self._assert_rejected(repo, base, "alpha", mutate, "cross_package_path")
 
+    def test_comment_separated_cross_package_include_is_rejected(self) -> None:
+        repo, base = self._fixture()
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(root, "crates/alpha/src/lib.rs",
+                'include/* gap */!/* gap */(/* gap */"../../beta/src/shared.rs");\n'),
+            "cross_package_include",
+        )
+
+    def test_comment_separated_cross_package_path_is_rejected(self) -> None:
+        repo, base = self._fixture()
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(root, "crates/alpha/src/lib.rs",
+                '#/* gap */[path/* gap */=/* gap */"../../beta/src/shared.rs"]\nmod linked;\n'),
+            "cross_package_path",
+        )
+
+    def test_computed_build_output_into_another_package_is_rejected(self) -> None:
+        repo, base = self._fixture()
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(root, "crates/alpha/build.rs",
+                'fn main() { std::fs::write(concat!("../beta/src/", "generated.rs"), "").unwrap(); }\n'),
+            "unresolved_generated_output",
+        )
+
+    def test_manifest_activates_unchanged_cross_package_path_is_rejected(self) -> None:
+        repo, _ = self._fixture()
+        self._write(repo, "crates/alpha/src/lib.rs",
+            '#[cfg(feature = "import_beta")]\n#[path = "../../beta/src/shared.rs"]\nmod linked;\n')
+        self._write(repo, "crates/alpha/Cargo.toml",
+            (repo / "crates/alpha/Cargo.toml").read_text(encoding="utf-8") + "\n[features]\nimport_beta = []\n")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "base with dormant path edge")
+        base = self._git(repo, "rev-parse", "HEAD")
+        self._assert_rejected(repo, base, "alpha",
+            lambda root: self._write(root, "crates/alpha/Cargo.toml",
+                (root / "crates/alpha/Cargo.toml").read_text(encoding="utf-8")
+                .replace("[features]\n", '[features]\ndefault = ["import_beta"]\n')),
+            "cross_package_path")
+
+    def test_manifest_activates_unchanged_computed_include_is_rejected(self) -> None:
+        repo, _ = self._fixture()
+        self._write(repo, "crates/alpha/src/lib.rs",
+            '#[cfg(feature = "import_beta")]\ninclude!(concat!("../../beta/src/", "shared.rs"));\n')
+        self._write(repo, "crates/alpha/Cargo.toml",
+            (repo / "crates/alpha/Cargo.toml").read_text(encoding="utf-8") + "\n[features]\nimport_beta = []\n")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "base with dormant computed edge")
+        base = self._git(repo, "rev-parse", "HEAD")
+        self._assert_rejected(repo, base, "alpha",
+            lambda root: self._write(root, "crates/alpha/Cargo.toml",
+                (root / "crates/alpha/Cargo.toml").read_text(encoding="utf-8")
+                .replace("[features]\n", '[features]\ndefault = ["import_beta"]\n')),
+            "unresolved_rust_source_reference")
+
     def test_escaped_cross_package_include_is_rejected(self) -> None:
         repo, base = self._fixture()
         self._assert_rejected(
