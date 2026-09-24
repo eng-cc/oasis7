@@ -15,7 +15,7 @@
     },
     {
       "path": "doc/.governance/document-semantic-review-overrides.json",
-      "content_sha256": "83122735befdfc1c268fd3105c1bd86ec9a7a053d0da5024f6906fcea898bf17"
+      "content_sha256": "13dd6c826503c93a755aa6d02cb857c4f308f6a306ea0e4f81605dabb362ab6d"
     },
     {
       "path": "doc/testing/evidence/inventory.json",
@@ -1673,7 +1673,7 @@
     },
     {
       "path": "doc/p2p/node/README.md",
-      "content_sha256": "7e231fd28bc44b210d250136402294803e7d8cde4ca0f1014b63d050615dce54",
+      "content_sha256": "7c59a08763f1c7cb18fd2f60ea9edd111df2ef9008a6906a2dc42173e1f94588",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1701,7 +1701,7 @@
     },
     {
       "path": "doc/p2p/node/node-contribution-points.prd.md",
-      "content_sha256": "5d399a1c82642c729b30104a73f3eff3c90a6ec61a4c589b40647ee74aabba4d",
+      "content_sha256": "84481eb6fe13a82803c4d1ce2549b73fe0bd0f7a738ce3c037d05d056e7d21f4",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1883,7 +1883,7 @@
     },
     {
       "path": "doc/p2p/prd.index.md",
-      "content_sha256": "3df043e816a293a0f1d4b350f81cf0d7f3fc5a71e25f8717b77b028fb93f085d",
+      "content_sha256": "5454a10a427f3be5d86404f74695be4288976e724c67eb0befdbd5d8ac48c890",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -2373,7 +2373,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/agent-authority-ownership-and-accountability.prd.md",
-      "content_sha256": "b24c179fa8e1f1fe14ddedb4c5831da5344b694161a34525fbfce5777a9f5088",
+      "content_sha256": "0ff5b66277c063f68fbbce820f5551b5f76af86fed680875066b161275a5a077",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2471,7 +2471,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/prd.md",
-      "content_sha256": "a900192976e1ea45ffbef5cd1b9abcb25d20272d46ae8a036877396cd616f2b7",
+      "content_sha256": "9c75d0ab1250cf7b1eaa32f328d17e3d0584f4d86564344f652b04e27514744a",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2625,7 +2625,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/distributed-consensus-and-state-availability.prd.md",
-      "content_sha256": "dbed60e9a397e14fa0750390c32d90962c8fee3eae1a29d2d7705cc09a460d49",
+      "content_sha256": "5342a3e0090fdef38314dde27ec34210f89ed08cecb72cf5b756a9c59d81f508",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -5369,7 +5369,7 @@
     },
     {
       "path": "doc/world-runtime/prd.index.md",
-      "content_sha256": "dfe576a4278aa4b57ffdcfb4ee31ed7f3865b7c7887c35c8bc10043f0d971340",
+      "content_sha256": "8342bb65f65e839220631391528de0e8a63e6535f428573323f6fa2b05d95393",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5453,7 +5453,7 @@
     },
     {
       "path": "doc/world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md",
-      "content_sha256": "6dcdd95e6ca88b155c29b08788ff12b9e29c1376dc8150fb4e3d39d00613f402",
+      "content_sha256": "ce7a20e547f611e5650e49782e83a3d0f390499e23ed97ac21865ebd32cd48a8",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",

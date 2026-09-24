@@ -6,7 +6,7 @@
 审计轮次: 5
 ## 专业权威口径
 - 本文件是节点贡献积分产品与专业规则的当前主入口。
-- 既有 runtime closure、multi-node closure test、存储系统奖励池与基础在线时长奖励增量文档的有效语义已合并到本三件套；源文件删除后，历史过程由 Git history 与对应 GitHub task evidence 追溯。
+- 本三件套是节点贡献积分规则的当前专业权威。runtime closure 草案仍保留在 [world-runtime integration draft](../../world-runtime/integration/node-contribution-points-runtime-closure.md) 作为技术设计与溯源材料；其采样器和 epoch 闭环细节尚未完整吸收到当前合同，也不构成当前实现或 readiness 证据。multi-node closure test、存储系统奖励池与基础在线时长奖励增量文档的有效语义已合并到本三件套，相关源文件已删除；历史过程由 Git history 与对应 GitHub task evidence 追溯。
 - 本文件定义专业积分与结算合同，不承诺玩家可用性、当前数值平衡、公开网络经济安全或 release readiness。
 
 ## 1. Executive Summary

@@ -32,7 +32,7 @@
   - 节点奖励怎么计、贡献分如何结算
   - 可赎回 power asset 与治理签名阶段如何拆分
   - 奖励、执行验证与原生交易结算的关系是什么
-- 说明: contribution points 的 runtime/multi-node/storage-pool/uptime 增量、redeemable power asset 的 audit/signature 增量及 native settlement 专题均已合并进稳定权威并删除源文件；builtin fallback 转入 WASM pipeline。历史 reward leader/failover 完成态因无当前实现而退役，不构成现行能力。
+- 说明: runtime closure 草案仍保留在 [world-runtime integration draft](../../world-runtime/integration/node-contribution-points-runtime-closure.md)，尚未完整吸收到当前专业合同，也不证明当前实现或 readiness；当前节点贡献积分规则见 [`node-contribution-points.prd.md`](node-contribution-points.prd.md)。multi-node closure test、storage-pool、uptime 增量、redeemable power asset 的 audit/signature 增量及 native settlement 专题的有效语义已合并进稳定权威，相关源文件已删除；builtin fallback 转入 WASM pipeline。历史 reward leader/failover 完成态因无当前实现而退役，不构成现行能力。
 
 ### 2. 身份、复制、网络与 signer binding
 - 首读入口:
