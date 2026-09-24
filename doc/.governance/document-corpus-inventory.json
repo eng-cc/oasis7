@@ -2765,7 +2765,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md",
-      "content_sha256": "3228b8d734a416fb37a2055cd77c3bcab331aad0bb1a06a0e63bd76e22985d78",
+      "content_sha256": "9445a5fbb6844804efe290cafa54b139a5e50ba1c94b9c79996892a86c34cfc6",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
