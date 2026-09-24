@@ -548,6 +548,7 @@ jobs:
           OASIS7_CARGO_SCOPE_BASE: ${{ steps.scope.outputs.source_scope_base }}
           OASIS7_CARGO_SCOPE_HEAD: ${{ steps.scope.outputs.head_oid }}
           OASIS7_CARGO_SCOPE_INTEGRATION_BASE: ${{ steps.scope.outputs.integration_base_oid }}
+          OASIS7_CARGO_STAGE_CHECK_HEAD: ${{ steps.scope.outputs.head_oid }}
           OASIS7_CARGO_STAGE_PR_NUMBER: ${{ steps.checker-stage.outputs.pr_number }}
           OASIS7_CARGO_STAGE_TASK_UID: ${{ steps.checker-stage.outputs.task_uid }}
           OASIS7_CARGO_STAGE_RECEIPT: ${{ steps.checker-stage.outputs.receipt }}
