@@ -464,17 +464,79 @@ def verify_terminal_proof(
     phase_receipts = phase_receipts if isinstance(phase_receipts, dict) else {}
     phase_digests = task.get("phase_receipt_sha256")
     phase_digests = phase_digests if isinstance(phase_digests, dict) else {}
+    selected_phase_receipt_path: pathlib.Path | None = None
+
+    def verify_migrated_source(
+        canonical_path: pathlib.Path,
+        migrated_value: dict[str, Any],
+        label: str,
+        *,
+        allow_missing_source: bool = False,
+    ) -> None:
+        source_missing = False
+        sources.append(str(canonical_path))
+        try:
+            source_bytes = canonical_path.read_bytes()
+        except FileNotFoundError:
+            source_missing = True
+            if not allow_missing_source:
+                add_blocker(blockers, f"stale identity: migrated {label} immutable source is missing")
+            source_bytes = b""
+        except OSError as exc:
+            add_blocker(blockers, f"stale identity: migrated {label} immutable source is unreadable ({exc})")
+            return
+        if not source_missing and not source_bytes:
+            add_blocker(blockers, f"stale identity: migrated {label} immutable source is empty")
+        if migrated_value.get("migrated_from") != canonical_path.name:
+            add_blocker(blockers, f"stale identity: migrated {label} source identity drift")
+        source_digest = hashlib.sha256(source_bytes).hexdigest()
+        if migrated_value.get("migrated_from_sha256") != source_digest:
+            add_blocker(blockers, f"stale identity: migrated {label} source digest mismatch")
 
     def require_phase_receipt(name: str, filenames: tuple[str, ...]) -> dict[str, Any] | None:
+        nonlocal selected_phase_receipt_path
         expected = phase_receipts.get(name)
         digest = phase_digests.get(name)
         candidates = [receipt_root / filename for filename in filenames]
+        if len(candidates) > 1 and isinstance(digest, str) and SHA256_RE.fullmatch(digest):
+            matching: list[tuple[pathlib.Path, dict[str, Any]]] = []
+            for candidate in candidates:
+                if not candidate.is_file():
+                    continue
+                try:
+                    raw = candidate.read_bytes()
+                    value = json.loads(raw.decode("utf-8"))
+                except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+                    continue
+                if (hashlib.sha256(raw).hexdigest() == digest
+                        and (expected is None or value == expected)
+                        and isinstance(value, dict)):
+                    matching.append((candidate, value))
+            if len(matching) > 1:
+                sources.extend(str(path) for path, _ in matching)
+                add_blocker(blockers, f"stale identity: multiple {name.replace('_', '-')} receipts match task mapping authority")
+                return None
+            if len(matching) == 1:
+                selected_phase_receipt_path, value = matching[0]
+                receipt = verify_bound_json_file(
+                    selected_phase_receipt_path, digest, expected,
+                    f"{name.replace('_', '-')} receipt", blockers, sources,
+                )
+                if (receipt is not None
+                        and selected_phase_receipt_path != candidates[0]):
+                    verify_migrated_source(
+                        candidates[0], receipt,
+                        f"{name.replace('_', '-')} receipt",
+                    )
+                return receipt
         for candidate in candidates:
             if candidate.is_file():
+                selected_phase_receipt_path = candidate
                 return verify_bound_json_file(candidate, digest, expected,
                                               f"{name.replace('_', '-')} receipt", blockers, sources)
         # Keep the missing-proof message deterministic while still checking
         # the digest contract against the canonical candidate path.
+        selected_phase_receipt_path = candidates[0]
         return verify_bound_json_file(candidates[0], digest, expected,
                                       f"{name.replace('_', '-')} receipt", blockers, sources)
 
@@ -629,10 +691,37 @@ def verify_terminal_proof(
                                 add_blocker(blockers, f"stale identity: task PR {key} head authority is missing")
                             if not terminal.get(key) or str(terminal.get(key)) != str(expected or ""):
                                 add_blocker(blockers, f"stale identity: non-merge terminal receipt PR {key} head identity drift")
+                        task_repository_head = {
+                            key: task.get(key) for key in (
+                                "headRepositoryOwner", "headRepositoryName",
+                            )
+                        }
+                        receipt_repository_head = {
+                            key: terminal.get(key) for key in (
+                                "headRepositoryOwner", "headRepositoryName",
+                            )
+                        }
+                        task_repository_head_bound = any(
+                            value not in (None, "")
+                            for value in task_repository_head.values()
+                        )
+                        if task_repository_head_bound:
+                            if any(value in (None, "")
+                                   for value in task_repository_head.values()):
+                                add_blocker(blockers, "stale identity: task PR head repository authority is incomplete")
+                            for key, expected in task_repository_head.items():
+                                if not expected or str(terminal.get(key) or "") != str(expected):
+                                    label = "owner" if key.endswith("Owner") else "name"
+                                    add_blocker(blockers, f"stale identity: non-merge terminal receipt PR head repository {label} identity drift")
+                        elif any(value not in (None, "")
+                                 for value in receipt_repository_head.values()):
+                            add_blocker(blockers, "stale identity: non-merge terminal receipt carries unbound PR head repository authority")
                     elif (terminal.get("pr_state") not in (None, "")
                           or terminal.get("mergedAt") not in (None, "")
                           or terminal.get("headRefOid") not in (None, "")
-                          or terminal.get("headRefName") not in (None, "")):
+                          or terminal.get("headRefName") not in (None, "")
+                          or terminal.get("headRepositoryOwner") not in (None, "")
+                          or terminal.get("headRepositoryName") not in (None, "")):
                         add_blocker(blockers, "stale identity: non-merge terminal receipt carries unbound PR authority")
                 if non_merge_producer_receipt:
                     expected_worktree = pathlib.Path(str(task.get("canonical_worktree") or "")).resolve()
@@ -699,17 +788,27 @@ def verify_terminal_proof(
                         add_blocker(blockers, "stale identity: non-merge terminal tombstone canonical worktree identity drift")
                     if str(tombstone.get("task_branch") or "") != str(task.get("task_branch") or ""):
                         add_blocker(blockers, "stale identity: non-merge terminal tombstone task branch identity drift")
-            ledger_names = (("non-merge-finalizer-ledger.json",
-                             "non-merge-finalizer-ledger-migrated.json")
-                            if phase == "closed_without_merge"
-                            else ("finalizer-ledger.json",))
-            ledger_path = next((receipt_root / name for name in ledger_names
-                                if (receipt_root / name).is_file()), receipt_root / ledger_names[0])
+            if phase == "closed_without_merge":
+                canonical_ledger_path = receipt_root / "non-merge-finalizer-ledger.json"
+                migrated_ledger_path = receipt_root / "non-merge-finalizer-ledger-migrated.json"
+                receipt_is_migrated = (
+                    selected_phase_receipt_path
+                    == receipt_root / "closed-without-merge-receipt-migrated.json"
+                )
+                ledger_path = migrated_ledger_path if receipt_is_migrated else canonical_ledger_path
+            else:
+                canonical_ledger_path = receipt_root / "finalizer-ledger.json"
+                ledger_path = canonical_ledger_path
             ledger = load_json(ledger_path)[0] if ledger_path.is_file() else None
             sources.append(str(ledger_path))
             if not isinstance(ledger, dict):
                 add_blocker(blockers, "stale identity: terminal finalizer ledger is missing or unreadable")
             else:
+                if phase == "closed_without_merge" and ledger_path == migrated_ledger_path:
+                    verify_migrated_source(
+                        canonical_ledger_path, ledger,
+                        "non-merge terminal ledger", allow_missing_source=True,
+                    )
                 if ledger.get("task_uid") != task.get("task_uid"):
                     add_blocker(blockers, "stale identity: terminal finalizer ledger task UID drift")
                 if (phase == "closed_without_merge"
