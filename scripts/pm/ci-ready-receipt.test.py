@@ -14,7 +14,15 @@ UID="task_12345678901234567890123456789012"
 def pr(): return {"draft":True,"state":"open","merged":False,"body":f"Task: {UID}\n\nRefs #1","head":{"sha":"a"*40},"base":{"sha":"b"*40,"ref":"main"}}
 def plan():
   p={"scope":"targeted","selected_capabilities":"pixel_world_bridge;viewer_js_required","reason_summary":"fixture","changed_path_count":"1","planner_config_sha256":"sha256:" + "c"*64}; p.update({k:"false" for k in M.RUN_FIELDS}); p["run_rust_baseline"]="true"; p["run_pixel_world_bridge_lib_tests"]="true"; p["run_pixel_world_bridge_wasm_check"]="true"; return p
-def run(conclusion="success",app=42): return {"id":9,"name":"required-gate","status":"completed","conclusion":conclusion,"completed_at":"2026-07-14T00:00:00Z","head_sha":"a"*40,"pull_requests":[{"number":7,"base":{"sha":"b"*40},"head":{"sha":"a"*40}}],"app":{"id":app},"output":{"summary":f"<!-- {M.PLAN_MARKER} -->\n```json\n{json.dumps(plan())}\n```"}}
+def versioned_plan():
+  p=plan(); p["selected_capabilities"]="packaging_contracts;pixel_world_bridge;viewer_js_required"
+  p["execution_contract"]=M.EXECUTION_CONTRACT
+  p.update({field:"false" for field in M.VERSIONED_SELECTOR_FIELDS})
+  p["run_packaging_contracts"]="true"
+  p.update({field:"false" for field in M.VERSIONED_RESOURCE_FIELDS})
+  p["needs_python"]="true"; p["needs_markdown"]="true"
+  return p
+def run(conclusion="success",app=42,planner=None): return {"id":9,"name":"required-gate","status":"completed","conclusion":conclusion,"completed_at":"2026-07-14T00:00:00Z","head_sha":"a"*40,"pull_requests":[{"number":7,"base":{"sha":"b"*40},"head":{"sha":"a"*40}}],"app":{"id":app},"output":{"summary":f"<!-- {M.PLAN_MARKER} -->\n```json\n{json.dumps(planner if planner is not None else plan())}\n```"}}
 def null_summary_run(run_id=12345):
   r=run(); r["output"]={"summary":None,"text":None}; r["details_url"]=f"https://github.com/eng-cc/oasis7/actions/runs/{run_id}/job/9"; return r
 def artifact(run_id=12345,expired=False):
@@ -81,6 +89,39 @@ class ReceiptTest(unittest.TestCase):
     self.assertEqual(issued["integration_base_oid"],issued["base_oid"])
     self.assertEqual("main", issued["base_ref"])
     self.assertEqual("ordinary_pr", issued["ci_validation_mode"])
+
+  def test_versioned_receipt_records_and_binds_the_execution_contract(self):
+    versioned_run=run(planner=versioned_plan())
+    planner=M.planner_from_run(versioned_run)
+    digest=M.hashlib.sha256(json.dumps(planner,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+    argv=[str(P),"--repository","eng-cc/oasis7","--task-uid",UID,"--task-issue-number","1","--pr-number","7","--check-app-id","42","--planner-digest",digest]
+    output=io.StringIO()
+    with self.api(runs=[versioned_run]),patch.object(sys,"argv",argv),redirect_stdout(output): M.main()
+    issued=json.loads(output.getvalue())
+    self.assertEqual(M.EXECUTION_CONTRACT,issued["execution_contract"])
+    self.assertEqual(M.EXECUTION_CONTRACT,issued["planner"]["execution_contract"])
+    for field in M.VERSIONED_SELECTOR_FIELDS:
+      self.assertIn(field,issued["planner"])
+    identity=M.review_evidence_identity(issued)
+    self.assertEqual(M.EXECUTION_CONTRACT,identity["execution_contract"])
+    for field in M.VERSIONED_SELECTOR_FIELDS:
+      self.assertEqual(issued["planner"][field],identity[field])
+    tampered=json.loads(json.dumps(issued))
+    tampered["planner"]["run_packaging_contracts"]=False
+    tampered["planner"]["selected_capabilities"].remove("packaging_contracts")
+    with self.assertRaisesRegex(ValueError,"planner digest mismatch"):
+      M.review_evidence_identity(tampered)
+    resource_tampered=json.loads(json.dumps(issued))
+    resource_tampered["planner"]["needs_node"]=True
+    with self.assertRaisesRegex(ValueError,"planner digest mismatch"):
+      M.review_evidence_identity(resource_tampered)
+    contradictory=json.loads(json.dumps(issued))
+    contradictory["planner"]["run_packaging_contracts"]=False
+    contradictory["planner_digest"]=M.hashlib.sha256(
+      json.dumps(contradictory["planner"],sort_keys=True,separators=(",",":")).encode()
+    ).hexdigest()
+    with self.assertRaisesRegex(ValueError,"contradicts selected capabilities"):
+      M.review_evidence_identity(contradictory)
 
   def test_success(self):
     with self.api(): self.assertEqual("a"*40,M.live("eng-cc/oasis7",UID,1,7,"required-gate","42")[3])
@@ -163,6 +204,45 @@ class ReceiptTest(unittest.TestCase):
     ).hexdigest()
     self.assertNotEqual(digest(planner), digest(changed_planner),
                         "non-Rust gate selector changes must alter planner authority")
+
+  def test_versioned_planner_digest_binds_contract_and_each_new_selector(self):
+    legacy=M.canonical_planner(plan())
+    versioned=M.canonical_planner(versioned_plan())
+    digest=lambda value: M.hashlib.sha256(
+      json.dumps(value,sort_keys=True,separators=(",",":")).encode()
+    ).hexdigest()
+    self.assertNotIn("execution_contract",legacy)
+    self.assertNotIn("run_packaging_contracts",legacy)
+    self.assertEqual(M.EXECUTION_CONTRACT,versioned["execution_contract"])
+    self.assertNotEqual(digest(legacy),digest(versioned))
+    for capability in M.VERSIONED_SELECTOR_CAPABILITIES.values():
+      changed_raw=versioned_plan()
+      selected={"packaging_contracts","pixel_world_bridge","viewer_js_required"}
+      if capability in selected:
+        selected.remove(capability)
+      else:
+        selected.add(capability)
+      changed_raw["selected_capabilities"]=";".join(sorted(selected))
+      for selector, selected_capability in M.VERSIONED_SELECTOR_CAPABILITIES.items():
+        changed_raw[selector]="true" if selected_capability in selected else "false"
+      changed=M.canonical_planner(changed_raw)
+      self.assertNotEqual(digest(versioned),digest(changed),capability)
+    changed_resource=versioned_plan(); changed_resource["needs_node"]="true"
+    self.assertNotEqual(digest(versioned),digest(M.canonical_planner(changed_resource)),"needs_node")
+
+  def test_planner_rejects_unknown_partial_and_mixed_execution_contracts(self):
+    unknown=versioned_plan(); unknown["execution_contract"]="required-domain-split/v999"
+    partial=versioned_plan(); partial.pop("run_doc_checker_contracts")
+    mixed=plan(); mixed["run_packaging_contracts"]="false"
+    noncanonical=versioned_plan(); noncanonical["run_packaging_contracts"]="TRUE"
+    nonstring=versioned_plan(); nonstring["run_packaging_contracts"]=True
+    resource_partial=versioned_plan(); resource_partial.pop("needs_wasm_target")
+    resource_nonstring=versioned_plan(); resource_nonstring["needs_node"]=False
+    baseline_resource_missing=versioned_plan(); baseline_resource_missing["needs_python"]="false"
+    for raw in (unknown,partial,mixed,noncanonical,nonstring,resource_partial,resource_nonstring,baseline_resource_missing):
+      with self.subTest(raw=raw):
+        with self.assertRaisesRegex(SystemExit,"execution[-_]contract|incomplete|versioned|baseline"):
+          M.canonical_planner(raw)
   def test_invalid_or_missing_capability_selection_fails_closed(self):
     for selected in (None,"viewer_js_required;pixel_world_bridge","viewer-js"):
       raw=plan()

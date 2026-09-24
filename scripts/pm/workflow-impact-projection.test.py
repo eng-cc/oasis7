@@ -54,8 +54,8 @@ class WorkflowImpactProjectionTests(unittest.TestCase):
             "public_semantics": [],
             "affected_consumers": ["required-ci"],
             "closure_status": {"status": "complete", "reason": "verified", "evidence": [{
-                "path": "scripts/ci-required-scope.v2.json",
-                "sha256": "sha256:" + hashlib.sha256((ROOT / "scripts/ci-required-scope.v2.json").read_bytes()).hexdigest(),
+                "path": "Cargo.toml",
+                "sha256": "sha256:" + hashlib.sha256((ROOT / "Cargo.toml").read_bytes()).hexdigest(),
             }]},
         }
 

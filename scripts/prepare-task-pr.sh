@@ -1538,6 +1538,19 @@ if [[ -x "$PLANNER_SCRIPT" ]]; then
     PLANNER_ARGS+=(--impact-projection "$IMPACT_PROJECTION" --task-uid "$BOUND_TASK_UID" --scope-base-oid "$COMPARISON_HEAD")
   fi
   if RUST_SCOPE_OUTPUT="$(cd "$SOURCE_WORKTREE" && "$PLANNER_SCRIPT" "${PLANNER_ARGS[@]}" 2>/dev/null)"; then
+    PLANNER_EXECUTION_CONTRACT="$(plan_kv_get "$RUST_SCOPE_OUTPUT" "execution_contract")"
+    case "$PLANNER_EXECUTION_CONTRACT" in
+      ""|required-domain-split/v1) ;;
+      *) die "required-scope planner returned unsupported execution contract: $PLANNER_EXECUTION_CONTRACT" ;;
+    esac
+    LOCAL_REQUIRED_VERSIONED_ENV=""
+    if [[ "$PLANNER_EXECUTION_CONTRACT" == "required-domain-split/v1" ]]; then
+      LOCAL_REQUIRED_RENDERER="$SOURCE_WORKTREE/scripts/pm/required-gate-local-env.py"
+      [[ -f "$LOCAL_REQUIRED_RENDERER" ]] || die "versioned required-gate local renderer is unavailable"
+      if ! LOCAL_REQUIRED_VERSIONED_ENV="$(printf '%s\n' "$RUST_SCOPE_OUTPUT" | python3 "$LOCAL_REQUIRED_RENDERER")"; then
+        die "required-scope planner output failed versioned local environment validation"
+      fi
+    fi
     LOCAL_REQUIRED_SCOPE="$(plan_kv_get "$RUST_SCOPE_OUTPUT" "scope")"
     LOCAL_REQUIRED_SCOPE="${LOCAL_REQUIRED_SCOPE:-unavailable}"
     LOCAL_REQUIRED_CHANGED_PATH_COUNT="$(plan_kv_get "$RUST_SCOPE_OUTPUT" "changed_path_count")"
@@ -1572,7 +1585,8 @@ if [[ -x "$PLANNER_SCRIPT" ]]; then
       LOCAL_REQUIRED_EXTRA_COMMANDS+=("$PRODUCT_DOC_FULL_CORPUS_COMMAND")
     fi
 
-    if [[ "$LOCAL_REQUIRED_SCOPE" != "minimal" ]]; then
+    if [[ "$PLANNER_EXECUTION_CONTRACT" == "required-domain-split/v1" || \
+          "$LOCAL_REQUIRED_SCOPE" != "minimal" ]]; then
       RUN_OASIS7_REQUIRED_TESTS="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_oasis7_required_tests" "false")"
       RUN_SCENARIO_REGRESSION="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_scenario_regression" "false")"
       RUN_CONSENSUS_TESTS="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_consensus_tests" "false")"
@@ -1592,6 +1606,9 @@ if [[ -x "$PLANNER_SCRIPT" ]]; then
       RUN_CODEX_AGENT_CONFIG_VALIDATION="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_codex_agent_config_validation" "false")"
       RUN_COMPILE_METRICS_CONTRACT_TESTS="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_compile_metrics_contract_tests" "false")"
       RUN_RUST_BASELINE="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_rust_baseline" "false")"
+      if [[ "$PLANNER_EXECUTION_CONTRACT" == "required-domain-split/v1" ]]; then
+        [[ -n "$LOCAL_REQUIRED_VERSIONED_ENV" ]] || die "versioned required-gate environment was not rendered"
+      fi
       LOCAL_REQUIRED_COMMAND="OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS=$RUN_OASIS7_REQUIRED_TESTS \
 OASIS7_CI_RUN_SCENARIO_REGRESSION=$RUN_SCENARIO_REGRESSION \
 OASIS7_CI_RUN_CONSENSUS_TESTS=$RUN_CONSENSUS_TESTS \
@@ -1612,6 +1629,9 @@ OASIS7_CI_RUN_CODEX_AGENT_CONFIG_VALIDATION=$RUN_CODEX_AGENT_CONFIG_VALIDATION \
 OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS=$RUN_COMPILE_METRICS_CONTRACT_TESTS \
 OASIS7_CI_RUN_RUST_BASELINE=$RUN_RUST_BASELINE \
 ./scripts/ci-tests.sh required"
+      if [[ -n "$LOCAL_REQUIRED_VERSIONED_ENV" ]]; then
+        LOCAL_REQUIRED_COMMAND="$LOCAL_REQUIRED_VERSIONED_ENV $LOCAL_REQUIRED_COMMAND"
+      fi
     fi
     if [[ -z "$LOCAL_REQUIRED_COMMAND" ]]; then
       LOCAL_REQUIRED_COMMAND="git diff --check"

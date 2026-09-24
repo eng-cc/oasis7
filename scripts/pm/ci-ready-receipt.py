@@ -29,11 +29,45 @@ RUN_FIELDS=(
     "run_codex_agent_config_validation", "run_compile_metrics_contract_tests",
     "run_required_gate_baseline", "run_rust_baseline",
 )
+EXECUTION_CONTRACT="required-domain-split/v1"
+VERSIONED_SELECTOR_FIELDS=(
+    "run_workflow_governance_contracts", "run_packaging_contracts",
+    "run_doc_checker_contracts", "run_cargo_tooling_contracts",
+)
+VERSIONED_SELECTOR_CAPABILITIES={
+    "run_workflow_governance_contracts":"workflow_governance",
+    "run_packaging_contracts":"packaging_contracts",
+    "run_doc_checker_contracts":"doc_checker_contracts",
+    "run_cargo_tooling_contracts":"cargo_tooling_contracts",
+}
+VERSIONED_RESOURCE_FIELDS=(
+    "needs_python", "needs_markdown", "needs_rust_toolchain", "needs_node",
+    "needs_system_deps", "needs_trunk", "needs_wasm_target",
+)
 
 def canonical_planner(raw):
-    required=("scope","selected_capabilities","reason_summary","changed_path_count","planner_config_sha256",*RUN_FIELDS)
+    if not isinstance(raw,dict): raise SystemExit("ci-ready-receipt: uncertain planner metadata is not an object")
+    execution_contract=raw.get("execution_contract")
+    if execution_contract is None:
+        if any(field in raw for field in VERSIONED_SELECTOR_FIELDS+VERSIONED_RESOURCE_FIELDS[:2]):
+            raise SystemExit("ci-ready-receipt: uncertain mixed execution-contract planner metadata")
+        run_fields=RUN_FIELDS
+    elif execution_contract==EXECUTION_CONTRACT:
+        run_fields=RUN_FIELDS+VERSIONED_SELECTOR_FIELDS
+    else:
+        raise SystemExit("ci-ready-receipt: uncertain unsupported execution_contract")
+    required=("scope","selected_capabilities","reason_summary","changed_path_count","planner_config_sha256",*run_fields)
+    if execution_contract is not None:
+        required=required+VERSIONED_RESOURCE_FIELDS
     if any(k not in raw for k in required): raise SystemExit("ci-ready-receipt: uncertain incomplete planner metadata")
-    if any(str(raw[k]).lower() not in ("true","false") for k in RUN_FIELDS): raise SystemExit("ci-ready-receipt: uncertain non-boolean planner metadata")
+    if execution_contract is not None:
+        versioned_boolean_fields=run_fields+VERSIONED_RESOURCE_FIELDS
+        if any(type(raw[k]) is not str or raw[k] not in ("true", "false") for k in versioned_boolean_fields):
+            raise SystemExit("ci-ready-receipt: uncertain non-boolean planner metadata for versioned execution contract")
+        if raw["needs_python"]!="true" or raw["needs_markdown"]!="true":
+            raise SystemExit("ci-ready-receipt: required-gate baseline document checks require Python and Markdown")
+    elif any(str(raw[k]).lower() not in ("true","false") for k in run_fields):
+        raise SystemExit("ci-ready-receipt: uncertain non-boolean planner metadata")
     try: changed=int(raw["changed_path_count"])
     except Exception: raise SystemExit("ci-ready-receipt: uncertain invalid changed_path_count")
     if not re.fullmatch(r"sha256:[0-9a-f]{64}",str(raw["planner_config_sha256"])): raise SystemExit("ci-ready-receipt: uncertain invalid planner config digest")
@@ -42,7 +76,16 @@ def canonical_planner(raw):
     if capabilities != sorted(set(capabilities)) or any(not re.fullmatch(r"[a-z0-9_]+", item) for item in capabilities):
         raise SystemExit("ci-ready-receipt: uncertain invalid selected_capabilities")
     plan={"schema":PLAN_MARKER,"scope":str(raw["scope"]),"selected_capabilities":capabilities,"reason_summary":str(raw["reason_summary"]),"changed_path_count":changed,"planner_config_sha256":str(raw["planner_config_sha256"])}
-    plan.update({k:str(raw[k]).lower()=="true" for k in RUN_FIELDS})
+    if execution_contract is not None:
+        selected=set(capabilities)
+        for field, capability in VERSIONED_SELECTOR_CAPABILITIES.items():
+            value=str(raw[field]).lower()=="true"
+            if value != (capability in selected):
+                raise SystemExit(f"ci-ready-receipt: uncertain contradictory planner selector: {field}")
+        plan["execution_contract"]=EXECUTION_CONTRACT
+    plan.update({k:str(raw[k]).lower()=="true" for k in run_fields})
+    if execution_contract is not None:
+        plan.update({field:raw[field]=="true" for field in VERSIONED_RESOURCE_FIELDS})
     projection_fields=("impact_projection_schema","impact_projection_digest","impact_projection_status","test_profile","declared_tests","planner_digest")
     present=[field for field in projection_fields if field in raw]
     if present:
@@ -253,7 +296,8 @@ def cargo_package_profile_for_run(repository, check_run, proof, planner, *, task
             return _checker_stage_disposition(repository,check_run,proof,artifacts,workflow_source,task_uid=task_uid,task_issue_number=task_issue_number,pr_number=pr_number)
         if b"cargo-package-profile-envelope" in workflow_source:
             raise SystemExit("ci-ready-receipt: package profile artifact missing from envelope-capable trusted workflow")
-        if planner.get("scope")!="full" or not all(planner.get(field) is True for field in RUN_FIELDS):
+        planner_run_fields=RUN_FIELDS+VERSIONED_SELECTOR_FIELDS if planner.get("execution_contract")==EXECUTION_CONTRACT else RUN_FIELDS
+        if planner.get("scope")!="full" or not all(planner.get(field) is True for field in planner_run_fields):
             raise SystemExit("ci-ready-receipt: pre-envelope trusted workflow requires complete conservative full coverage")
         return {
           "schema":"oasis7-cargo-package-profile-bootstrap-compatibility/v1",
@@ -425,6 +469,8 @@ def main():
       "task_uid":a.task_uid,"task_issue_number":a.task_issue_number,"pr_number":a.pr_number,"base_oid":base_oid,"head_oid":head_oid,
       "check_name":a.check_name,"check_app_id":(run.get("app") or {}).get("id"),"check_run_id":run.get("id"),
       "planner_digest":trusted_planner_digest,"planner":planner,"planner_config_sha256":planner["planner_config_sha256"],"run_rust_baseline":planner["run_rust_baseline"],"conclusion":"success","observed_at":now()}
+    if planner.get("execution_contract")==EXECUTION_CONTRACT:
+        payload["execution_contract"]=EXECUTION_CONTRACT
     if old is None or "base_ref" in old:
         payload["base_ref"] = pr.get("base", {}).get("ref")
     if old is None or "ci_validation_mode" in old:

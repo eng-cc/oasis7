@@ -53,6 +53,144 @@ while [[ $# -gt 0 ]]; do
       ;;
   esac
 done
+
+required_gate_execution_contract="legacy"
+validate_required_gate_execution_contract() {
+  [[ "$tier" == "required" ]] || return 0
+
+  local contract="${OASIS7_CI_EXECUTION_CONTRACT:-}"
+  local new_selectors=(
+    OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS
+    OASIS7_CI_RUN_PACKAGING_CONTRACTS
+    OASIS7_CI_RUN_DOC_CHECKER_CONTRACTS
+    OASIS7_CI_RUN_CARGO_TOOLING_CONTRACTS
+  )
+  local new_resource_fields=(
+    OASIS7_CI_NEEDS_PYTHON
+    OASIS7_CI_NEEDS_MARKDOWN
+  )
+  local planner_selectors=(
+    OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS
+    OASIS7_CI_RUN_CONSENSUS_TESTS
+    OASIS7_CI_RUN_DISTFS_TESTS
+    OASIS7_CI_RUN_OASIS7_NODE_TESTS
+    OASIS7_CI_RUN_OASIS7_NET_TESTS
+    OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS
+    OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS
+    OASIS7_CI_RUN_VIEWER_WASM_CHECK
+    OASIS7_CI_RUN_VIEWER_PERF_SMOKE
+    OASIS7_CI_RUN_PIXEL_WORLD_BRIDGE_LIB_TESTS
+    OASIS7_CI_RUN_PIXEL_WORLD_BRIDGE_WASM_CHECK
+    OASIS7_CI_RUN_LAUNCHER_WEB_BUILD
+    OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS
+    OASIS7_CI_RUN_SCENARIO_REGRESSION
+    OASIS7_CI_RUN_OPERATIONAL_CONTRACTS
+    OASIS7_CI_RUN_SITE_CONTRACT_TESTS
+    OASIS7_CI_RUN_CODEX_AGENT_CONFIG_VALIDATION
+    OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS
+    OASIS7_CI_RUN_RUST_BASELINE
+    OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS
+    OASIS7_CI_RUN_PACKAGING_CONTRACTS
+    OASIS7_CI_RUN_DOC_CHECKER_CONTRACTS
+    OASIS7_CI_RUN_CARGO_TOOLING_CONTRACTS
+  )
+  local planner_resources=(
+    OASIS7_CI_NEEDS_PYTHON
+    OASIS7_CI_NEEDS_MARKDOWN
+    OASIS7_CI_NEEDS_RUST_TOOLCHAIN
+    OASIS7_CI_NEEDS_NODE
+    OASIS7_CI_NEEDS_SYSTEM_DEPS
+    OASIS7_CI_NEEDS_TRUNK
+    OASIS7_CI_NEEDS_WASM_TARGET
+  )
+  local variable value any_new_selector=false
+
+  case "$contract" in
+    "")
+      for variable in "${new_selectors[@]}" "${new_resource_fields[@]}"; do
+        if [[ -n "${!variable:-}" ]]; then
+          any_new_selector=true
+          break
+        fi
+      done
+      if [[ "$any_new_selector" == true ]]; then
+        echo "error: new required-gate selector/resource values require OASIS7_CI_EXECUTION_CONTRACT" >&2
+        return 1
+      fi
+      required_gate_execution_contract="legacy"
+      ;;
+    required-domain-split/v1)
+      for variable in "${planner_selectors[@]}" "${planner_resources[@]}"; do
+        value="${!variable:-}"
+        if [[ "$value" != true && "$value" != false ]]; then
+          echo "error: ${variable} must be explicitly true or false for ${contract}" >&2
+          return 1
+        fi
+      done
+      if [[ "${OASIS7_CI_NEEDS_PYTHON}" != true || "${OASIS7_CI_NEEDS_MARKDOWN}" != true ]]; then
+        echo "error: required-gate baseline document checks require planned Python and Markdown resources" >&2
+        return 1
+      fi
+      if [[ "${OASIS7_CI_RUN_CARGO_TOOLING_CONTRACTS}" == true && "${OASIS7_CI_NEEDS_RUST_TOOLCHAIN}" != true ]]; then
+        echo "error: Cargo tooling contracts require the planned Rust toolchain resource" >&2
+        return 1
+      fi
+      require_planned_resources() {
+        local selector="$1"; shift
+        local resource
+        [[ "${!selector}" == true ]] || return 0
+        for resource in "$@"; do
+          if [[ "${!resource}" != true ]]; then
+            echo "error: ${selector} requires planned resource ${resource} for ${contract}" >&2
+            return 1
+          fi
+        done
+      }
+      require_planned_resources OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS OASIS7_CI_NEEDS_RUST_TOOLCHAIN OASIS7_CI_NEEDS_SYSTEM_DEPS || return 1
+      require_planned_resources OASIS7_CI_RUN_CONSENSUS_TESTS OASIS7_CI_NEEDS_RUST_TOOLCHAIN || return 1
+      require_planned_resources OASIS7_CI_RUN_DISTFS_TESTS OASIS7_CI_NEEDS_RUST_TOOLCHAIN || return 1
+      require_planned_resources OASIS7_CI_RUN_OASIS7_NODE_TESTS OASIS7_CI_NEEDS_RUST_TOOLCHAIN || return 1
+      require_planned_resources OASIS7_CI_RUN_OASIS7_NET_TESTS OASIS7_CI_NEEDS_RUST_TOOLCHAIN || return 1
+      require_planned_resources OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS OASIS7_CI_NEEDS_RUST_TOOLCHAIN || return 1
+      require_planned_resources OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS OASIS7_CI_NEEDS_RUST_TOOLCHAIN OASIS7_CI_NEEDS_NODE OASIS7_CI_NEEDS_SYSTEM_DEPS OASIS7_CI_NEEDS_WASM_TARGET || return 1
+      require_planned_resources OASIS7_CI_RUN_VIEWER_WASM_CHECK OASIS7_CI_NEEDS_RUST_TOOLCHAIN OASIS7_CI_NEEDS_NODE OASIS7_CI_NEEDS_SYSTEM_DEPS OASIS7_CI_NEEDS_WASM_TARGET || return 1
+      require_planned_resources OASIS7_CI_RUN_VIEWER_PERF_SMOKE OASIS7_CI_NEEDS_NODE OASIS7_CI_NEEDS_SYSTEM_DEPS || return 1
+      require_planned_resources OASIS7_CI_RUN_PIXEL_WORLD_BRIDGE_LIB_TESTS OASIS7_CI_NEEDS_RUST_TOOLCHAIN OASIS7_CI_NEEDS_SYSTEM_DEPS OASIS7_CI_NEEDS_WASM_TARGET || return 1
+      require_planned_resources OASIS7_CI_RUN_PIXEL_WORLD_BRIDGE_WASM_CHECK OASIS7_CI_NEEDS_RUST_TOOLCHAIN OASIS7_CI_NEEDS_SYSTEM_DEPS OASIS7_CI_NEEDS_WASM_TARGET || return 1
+      require_planned_resources OASIS7_CI_RUN_LAUNCHER_WEB_BUILD OASIS7_CI_NEEDS_RUST_TOOLCHAIN OASIS7_CI_NEEDS_NODE OASIS7_CI_NEEDS_SYSTEM_DEPS OASIS7_CI_NEEDS_WASM_TARGET OASIS7_CI_NEEDS_TRUNK || return 1
+      require_planned_resources OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS OASIS7_CI_NEEDS_RUST_TOOLCHAIN || return 1
+      require_planned_resources OASIS7_CI_RUN_SCENARIO_REGRESSION OASIS7_CI_NEEDS_RUST_TOOLCHAIN || return 1
+      require_planned_resources OASIS7_CI_RUN_DOC_CHECKER_CONTRACTS OASIS7_CI_NEEDS_PYTHON OASIS7_CI_NEEDS_MARKDOWN || return 1
+      require_planned_resources OASIS7_CI_RUN_CARGO_TOOLING_CONTRACTS OASIS7_CI_NEEDS_RUST_TOOLCHAIN || return 1
+      require_planned_resources OASIS7_CI_RUN_RUST_BASELINE OASIS7_CI_NEEDS_RUST_TOOLCHAIN || return 1
+
+      if [[ "${OASIS7_CI_RUN_OASIS7_NET_LIBP2P_TESTS}" != "${OASIS7_CI_RUN_OASIS7_NET_TESTS}" ]]; then
+        echo "error: net libp2p selector must match its planner-derived net selector for ${contract}" >&2
+        return 1
+      fi
+      if [[ "${OASIS7_CI_RUN_VIEWER_WASM_CHECK}" != "${OASIS7_CI_RUN_VIEWER_CONTRACT_TESTS}" ]]; then
+        echo "error: viewer WASM selector must match its planner-derived viewer selector for ${contract}" >&2
+        return 1
+      fi
+      if [[ "${OASIS7_CI_RUN_PIXEL_WORLD_BRIDGE_WASM_CHECK}" != "${OASIS7_CI_RUN_PIXEL_WORLD_BRIDGE_LIB_TESTS}" ]]; then
+        echo "error: pixel-world WASM selector must match its planner-derived library selector for ${contract}" >&2
+        return 1
+      fi
+      if [[ "${OASIS7_CI_RUN_RUST_BASELINE}" != "${OASIS7_CI_NEEDS_RUST_TOOLCHAIN}" ]]; then
+        echo "error: Rust baseline selector must match the planned Rust toolchain resource for ${contract}" >&2
+        return 1
+      fi
+      required_gate_execution_contract="required-domain-split/v1"
+      ;;
+    *)
+      echo "error: unsupported required-gate execution contract: ${contract}" >&2
+      return 1
+      ;;
+  esac
+}
+
+validate_required_gate_execution_contract || exit 1
+
 cd "$repo_root"
 if [[ -n "$impact_projection" && ! -f "$impact_projection" ]]; then
   echo "ci-tests: impact projection cannot be read: $impact_projection" >&2
@@ -106,6 +244,17 @@ run_required_component() {
     "$@"
   else
     echo "skip: ${label} reason=${skip_reason} claim_boundary=not_covered_by_this_required_run"
+  fi
+}
+
+run_required_gate_capability_component() {
+  local label="$1"
+  local selector_name="$2"
+  local function_name="$3"
+  if [[ "${!selector_name:-}" == true ]]; then
+    "$function_name"
+  else
+    echo "skip: ${label} reason=disabled_by_scope_planner claim_boundary=not_covered_by_this_required_run"
   fi
 }
 
@@ -196,15 +345,48 @@ run_provider_remote_https_smoke() {
   run ./scripts/provider-remote-https/provider-bridge-contract-smoke.test.sh
 }
 
-run_packaging_contract_tests() {
-  run bash ./scripts/native-packaging-contract.test.sh
-  run bash ./scripts/packaging-artifact-size-contract.test.sh
-  run bash ./scripts/package-workflow-cache-reuse-contract.test.sh
-  run bash ./scripts/copy-viewer-web-dist.test.sh
+run_doc_checker_contract_tests() {
+  run python3 ./scripts/product-doc-governance-check.test.py
+  run python3 ./scripts/product-doc-content-check.test.py
+  run_system_design_traceability_tests
+  run bash ./scripts/product-doc-content-callers.test.sh
+  run bash ./scripts/doc-governance-check.test.sh
+  run bash ./scripts/pm/find-python-with-module.test.sh
 }
 
-run_operational_contract_tests() {
-  run_packaging_contract_tests
+run_cargo_tooling_baseline_contract_tests() {
+  run bash ./scripts/cargo-dev-windows-toolchain.test.sh
+  run bash ./scripts/cargo-dev-worktree-isolation.test.sh
+  run bash ./scripts/pm/new-task-worktree-cargo-cache-migration.test.sh
+}
+
+run_cargo_tooling_contract_tests() {
+  run_cargo_tooling_baseline_contract_tests
+  run bash ./scripts/cargo-dev-lib.test.sh
+  run bash ./scripts/check-standalone-tool-lockfiles.test.sh
+  run ./scripts/check-standalone-tool-lockfiles.sh
+  run bash ./scripts/check-launcher-p2p-dependency-surface.test.sh
+}
+
+run_workflow_governance_baseline_contract_tests() {
+  run bash ./scripts/testing-manual-active-contract.test.sh
+  run bash ./scripts/ci-tests-argument-contract.test.sh
+  run bash ./scripts/ci-tests-full-superset-contract.test.sh
+  run bash ./scripts/rust-required-gate-apt-contract.test.sh
+  run ./scripts/plan-rust-required-scope.test.sh
+  run_workflow_impact_projection_contract_tests
+  run python3 ./scripts/pm/check-cargo-package-scope.test.py
+  run python3 ./scripts/pm/cargo-checker-stage-admission.test.py
+  echo "DISPATCH:run_checker_stage_changed_path_contract_tests"
+  run_checker_stage_changed_path_contract_tests
+  run ./scripts/rust-required-gate-compile-command-contract.test.sh
+  run bash ./scripts/rust-full-tier-trunk-prerequisite-contract.test.sh
+  run bash ./scripts/ci-required-baseline-routing.test.sh
+  run bash ./scripts/ci-required-domain-isolation.test.sh
+}
+
+run_workflow_governance_operational_contract_tests() {
+  run ./scripts/ci-required-scope-audit-contract.test.sh
   run python3 ./scripts/pm/ci-ready-receipt.test.py
   run python3 ./scripts/pm/review-plan.test.py
   run python3 ./scripts/pm/subagent-task-packet.test.py
@@ -228,7 +410,36 @@ run_operational_contract_tests() {
   run python3 ./scripts/pm/github-project-admission.test.py
   run python3 ./scripts/pm/loop-bootstrap.test.py
   run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/loop-bootstrap.integration.test.py
-  run ./scripts/ci-required-scope-audit-contract.test.sh
+}
+
+run_workflow_governance_contract_tests() {
+  run_workflow_governance_baseline_contract_tests
+  run_workflow_governance_operational_contract_tests
+}
+
+run_packaging_artifact_contract_tests() {
+  run bash ./scripts/native-packaging-contract.test.sh
+  run bash ./scripts/packaging-artifact-size-contract.test.sh
+  run bash ./scripts/package-workflow-cache-reuse-contract.test.sh
+  run bash ./scripts/copy-viewer-web-dist.test.sh
+}
+
+run_packaging_contract_tests() {
+  run_packaging_artifact_contract_tests
+  run bash ./scripts/release-packages-trunk-cache-contract.test.sh
+  run bash ./scripts/testnet-packages-macos-arm64-contract.test.sh
+}
+
+run_operational_identity_contract_tests() {
+  run python3 ./scripts/p2p-public-testnet-full-network-clean-room.test.py
+  run python3 ./scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py
+  run python3 ./scripts/p2p-public-testnet-identity-v2-signing-tool.test.py
+  run python3 ./scripts/p2p-public-testnet-identity-v2-cli-bridge.test.py
+  run python3 ./scripts/p2p-public-testnet-identity-v2-evidence-aggregate.test.py
+  run python3 ./scripts/p2p-public-testnet-peer-registry.test.py
+}
+
+run_operational_node_contract_tests() {
   run ./scripts/game-world-state-sync-commit-module-required.test.sh
   run ./scripts/state-sync-closure-evidence-template.test.sh
   run ./scripts/s10-five-node-game-soak-summary.test.sh
@@ -247,6 +458,29 @@ run_operational_contract_tests() {
   run bash ./scripts/p2p-public-testnet-package-node-upgrade-rollback-contract.test.sh
   run bash ./scripts/p2p-observer-checkpoint-closure-probe.test.sh
   run python3 ./scripts/p2p-observer-checkpoint-closure-probe-safety.test.py
+}
+
+run_operational_contract_tests() {
+  run_operational_identity_contract_tests
+  run_operational_node_contract_tests
+}
+
+run_legacy_mixed_operational_contract_tests() {
+  run_workflow_governance_operational_contract_tests
+  run_packaging_artifact_contract_tests
+  run_operational_node_contract_tests
+}
+
+run_all_required_gate_capability_contract_tests() {
+  run_doc_checker_contract_tests
+  run_cargo_tooling_contract_tests
+  run_workflow_governance_contract_tests
+  run_packaging_contract_tests
+  run_operational_contract_tests
+  run bash ./scripts/ci-tests-pixel-world-required-contract.test.sh
+  run bash ./scripts/ci-tests-codex-agent-config-required-contract.test.sh
+  run_compile_metrics_contract_tests
+  run bash ./scripts/viewer-performance-report-only-contract.test.sh
 }
 
 run_provider_bridge_live_gate() {
@@ -770,54 +1004,51 @@ run_cargo_package_profile_completion_check() {
 
 run_required_gate_checks() {
   run_product_doc_governance_check
-  run python3 ./scripts/product-doc-governance-check.test.py
-  run python3 ./scripts/product-doc-content-check.test.py
-  run_system_design_traceability_tests
-  run bash ./scripts/product-doc-content-callers.test.sh
-  run python3 ./scripts/p2p-public-testnet-full-network-clean-room.test.py
-  run python3 ./scripts/p2p-public-testnet-full-network-clean-room-adapter.test.py
-  run python3 ./scripts/p2p-public-testnet-identity-v2-signing-tool.test.py
-  run python3 ./scripts/p2p-public-testnet-identity-v2-cli-bridge.test.py
-  run python3 ./scripts/p2p-public-testnet-identity-v2-evidence-aggregate.test.py
-  run python3 ./scripts/p2p-public-testnet-peer-registry.test.py
   run ./scripts/lint-skills.sh
   run ./scripts/check-windows-paths.sh
   run bash ./scripts/check-script-executable-bits.sh
-  run bash ./scripts/cargo-dev-windows-toolchain.test.sh
-  run bash ./scripts/cargo-dev-worktree-isolation.test.sh
-  run bash ./scripts/pm/new-task-worktree-cargo-cache-migration.test.sh
-  run bash ./scripts/doc-governance-check.test.sh
-  run bash ./scripts/testing-manual-active-contract.test.sh
-  run bash ./scripts/ci-tests-argument-contract.test.sh
-  run bash ./scripts/ci-tests-full-superset-contract.test.sh
-  run bash ./scripts/ci-tests-pixel-world-required-contract.test.sh
-  run bash ./scripts/ci-tests-codex-agent-config-required-contract.test.sh
-  run_required_component "compile metrics contract" "${OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS:-}" "disabled_by_scope_planner" run_compile_metrics_contract_tests
-  run bash ./scripts/release-packages-trunk-cache-contract.test.sh
-  run bash ./scripts/rust-required-gate-apt-contract.test.sh
-  run bash ./scripts/viewer-performance-report-only-contract.test.sh
-  run bash ./scripts/pm/find-python-with-module.test.sh
-  run_required_component "standalone tool lockfiles" "${OASIS7_CI_RUN_RUST_BASELINE:-}" "disabled_by_scope_planner" run_standalone_tool_lockfiles_checks
-  run bash ./scripts/check-launcher-p2p-dependency-surface.test.sh
-  run ./scripts/plan-rust-required-scope.test.sh
-  run_workflow_impact_projection_contract_tests
   run_workflow_impact_projection_consumer
-  run python3 ./scripts/pm/check-cargo-package-scope.test.py
-  run python3 ./scripts/pm/cargo-checker-stage-admission.test.py
-  run_checker_stage_changed_path_contract_tests
   run_cargo_package_scope_check
   run_cargo_package_profile_completion_check
-  run ./scripts/rust-required-gate-compile-command-contract.test.sh
-  run bash ./scripts/rust-full-tier-trunk-prerequisite-contract.test.sh
   run ./scripts/unified-world-code-terminology-scan.test.sh
-  run_required_component "operational contracts" "${OASIS7_CI_RUN_OPERATIONAL_CONTRACTS:-}" "disabled_by_scope_planner" run_operational_contract_tests
   run_required_component "provider bridge live gate" "${OASIS7_CI_RUN_PROVIDER_LIVE_GATE:-false}" "explicit_opt_in_not_enabled" run_provider_bridge_live_gate
-  run_required_component "cargo-dev library contract" "${OASIS7_CI_RUN_RUST_BASELINE:-}" "disabled_by_scope_planner" run ./scripts/cargo-dev-lib.test.sh
   run_required_component "newapi bridge Rust baseline" "${OASIS7_CI_RUN_RUST_BASELINE:-}" "disabled_by_scope_planner" run_newapi_bridge_service_accounting_tests
   run ./scripts/check-rust-file-size.test.sh
   run ./scripts/check-rust-file-size.sh
   run_required_component "cargo fmt" "${OASIS7_CI_RUN_RUST_BASELINE:-}" "disabled_by_scope_planner" run env -u RUSTC_WRAPPER cargo fmt --all -- --check
   run_required_component "RustSec advisory check" "${OASIS7_CI_RUN_RUST_BASELINE:-}" "disabled_by_scope_planner" run_rustsec_advisory_check
+
+  if [[ "$tier" == commit || ( "$tier" == required && "$required_gate_execution_contract" == legacy ) ]]; then
+    run_legacy_required_gate_contract_baseline
+    run_required_component "operational contracts" "${OASIS7_CI_RUN_OPERATIONAL_CONTRACTS:-}" "disabled_by_scope_planner" run_legacy_mixed_operational_contract_tests
+  fi
+}
+
+run_legacy_required_gate_contract_baseline() {
+  run_doc_checker_contract_tests
+  run_cargo_tooling_baseline_contract_tests
+  run_operational_identity_contract_tests
+  run_workflow_governance_baseline_contract_tests
+  run bash ./scripts/release-packages-trunk-cache-contract.test.sh
+  run bash ./scripts/check-launcher-p2p-dependency-surface.test.sh
+  run bash ./scripts/ci-tests-pixel-world-required-contract.test.sh
+  run bash ./scripts/ci-tests-codex-agent-config-required-contract.test.sh
+  run_required_component "compile metrics contract" "${OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS:-}" "disabled_by_scope_planner" run_compile_metrics_contract_tests
+  run bash ./scripts/viewer-performance-report-only-contract.test.sh
+  run_required_component "standalone tool lockfiles" "${OASIS7_CI_RUN_RUST_BASELINE:-}" "disabled_by_scope_planner" run_standalone_tool_lockfiles_checks
+  run_required_component "cargo-dev library contract" "${OASIS7_CI_RUN_RUST_BASELINE:-}" "disabled_by_scope_planner" run ./scripts/cargo-dev-lib.test.sh
+}
+
+run_required_gate_capability_contracts() {
+  run_required_gate_capability_component "document checker contracts" OASIS7_CI_RUN_DOC_CHECKER_CONTRACTS run_doc_checker_contract_tests
+  run_required_gate_capability_component "Cargo tooling contracts" OASIS7_CI_RUN_CARGO_TOOLING_CONTRACTS run_cargo_tooling_contract_tests
+  run_required_gate_capability_component "workflow governance contracts" OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS run_workflow_governance_contract_tests
+  run_required_gate_capability_component "packaging contracts" OASIS7_CI_RUN_PACKAGING_CONTRACTS run_packaging_contract_tests
+  run_required_gate_capability_component "operational contracts" OASIS7_CI_RUN_OPERATIONAL_CONTRACTS run_operational_contract_tests
+  run_required_component "pixel-world required contract" "${OASIS7_CI_RUN_PIXEL_WORLD_BRIDGE_LIB_TESTS:-}" "disabled_by_scope_planner" run bash ./scripts/ci-tests-pixel-world-required-contract.test.sh
+  run_required_component "Codex agent-config required contract" "${OASIS7_CI_RUN_CODEX_AGENT_CONFIG_VALIDATION:-}" "disabled_by_scope_planner" run bash ./scripts/ci-tests-codex-agent-config-required-contract.test.sh
+  run_required_component "compile metrics contract" "${OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS:-}" "disabled_by_scope_planner" run_compile_metrics_contract_tests
+  run_required_component "viewer performance report contract" "${OASIS7_CI_RUN_VIEWER_PERF_SMOKE:-false}" "report_only_scope_not_selected" run bash ./scripts/viewer-performance-report-only-contract.test.sh
 }
 
 run_commit_gate_checks() {
@@ -829,10 +1060,12 @@ run_commit_gate_checks() {
 
 run_full_core_tier_tests() {
   run_required_gate_checks
+  run_all_required_gate_capability_contract_tests
   run_oasis7_full_tier_tests
 }
 
 run_full_support_tier_tests() {
+  run_all_required_gate_capability_contract_tests
   run_oasis7_consensus_tests
   run_oasis7_distfs_tests
   run_oasis7_node_tests
@@ -847,7 +1080,7 @@ run_full_support_tier_tests() {
 
 run_full_required_superset() {
   run_required_gate_checks
-  run_system_design_traceability_tests
+  run_all_required_gate_capability_contract_tests
   run_site_contract_tests
   run_oasis7_required_tier_tests
   run_scenario_regression_tests
@@ -871,6 +1104,9 @@ case "$tier" in
     ;;
   required)
     run_required_gate_checks
+    if [[ "$required_gate_execution_contract" == required-domain-split/v1 ]]; then
+      run_required_gate_capability_contracts
+    fi
     run_required_component "oasis7 required tests" "${OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS:-}" "disabled_by_scope_planner" run_oasis7_required_tier_tests
     run_required_component "scenario regression" "${OASIS7_CI_RUN_SCENARIO_REGRESSION:-}" "disabled_by_scope_planner" run_scenario_regression_tests
     run_required_component "oasis7_consensus tests" "${OASIS7_CI_RUN_CONSENSUS_TESTS:-}" "disabled_by_scope_planner" run_oasis7_consensus_tests

@@ -79,7 +79,12 @@ jobs:
       issues: read
       pull-requests: read
     outputs:
+      execution_contract: ${{ steps.scope.outputs.execution_contract }}
       run_operational_contracts: ${{ steps.scope.outputs.run_operational_contracts }}
+      run_workflow_governance_contracts: ${{ steps.scope.outputs.run_workflow_governance_contracts }}
+      run_packaging_contracts: ${{ steps.scope.outputs.run_packaging_contracts }}
+      run_doc_checker_contracts: ${{ steps.scope.outputs.run_doc_checker_contracts }}
+      run_cargo_tooling_contracts: ${{ steps.scope.outputs.run_cargo_tooling_contracts }}
       run_site_contract_tests: ${{ steps.scope.outputs.run_site_contract_tests }}
     steps:
       - uses: actions/checkout@v6
@@ -365,6 +370,7 @@ jobs:
           echo "task_uid=${task_uid}" >>"${GITHUB_OUTPUT}"
       - name: Report planned scope
         run: |
+          echo "execution_contract=${{ steps.scope.outputs.execution_contract }}"
           echo "scope=${{ steps.scope.outputs.scope }}"
           echo "selected_capabilities=${{ steps.scope.outputs.selected_capabilities }}"
           echo "reason_summary=${{ steps.scope.outputs.reason_summary }}"
@@ -384,13 +390,20 @@ jobs:
           echo "run_oasis7_workspace_support_crate_tests=${{ steps.scope.outputs.run_oasis7_workspace_support_crate_tests }}"
           echo "run_scenario_regression=${{ steps.scope.outputs.run_scenario_regression }}"
           echo "run_operational_contracts=${{ steps.scope.outputs.run_operational_contracts }}"
+          echo "run_workflow_governance_contracts=${{ steps.scope.outputs.run_workflow_governance_contracts }}"
+          echo "run_packaging_contracts=${{ steps.scope.outputs.run_packaging_contracts }}"
+          echo "run_doc_checker_contracts=${{ steps.scope.outputs.run_doc_checker_contracts }}"
+          echo "run_cargo_tooling_contracts=${{ steps.scope.outputs.run_cargo_tooling_contracts }}"
           echo "run_site_contract_tests=${{ steps.scope.outputs.run_site_contract_tests }}"
           echo "run_codex_agent_config_validation=${{ steps.scope.outputs.run_codex_agent_config_validation }}"
           echo "run_compile_metrics_contract_tests=${{ steps.scope.outputs.run_compile_metrics_contract_tests }}"
           echo "run_required_gate_baseline=${{ steps.scope.outputs.run_required_gate_baseline }}"
           echo "needs_node=${{ steps.scope.outputs.needs_node }}"
+          echo "needs_python=${{ steps.scope.outputs.needs_python }}"
+          echo "needs_markdown=${{ steps.scope.outputs.needs_markdown }}"
           echo "needs_system_deps=${{ steps.scope.outputs.needs_system_deps }}"
           echo "needs_trunk=${{ steps.scope.outputs.needs_trunk }}"
+          echo "needs_wasm_target=${{ steps.scope.outputs.needs_wasm_target }}"
           echo "run_rust_baseline=${{ steps.scope.outputs.run_rust_baseline }}"
           echo "needs_rust_toolchain=${{ steps.scope.outputs.needs_rust_toolchain }}"
           echo "planner_config_sha256=${{ steps.scope.outputs.planner_config_sha256 }}"
@@ -405,7 +418,7 @@ jobs:
           python3 -I - <<'PY'
           import json, os, pathlib
           source=json.loads(os.environ["PLAN_JSON"])
-          fields=(
+          legacy_fields=(
               "scope", "selected_capabilities", "reason_summary", "changed_path_count",
               "source_scope_base", "integration_base", "source_head",
               "run_oasis7_required_tests", "run_consensus_tests", "run_distfs_tests",
@@ -416,9 +429,91 @@ jobs:
               "run_scenario_regression", "run_operational_contracts", "run_site_contract_tests", "run_codex_agent_config_validation", "run_compile_metrics_contract_tests", "run_required_gate_baseline",
               "run_rust_baseline", "needs_rust_toolchain", "planner_config_sha256",
           )
+          execution_contract=source.get("execution_contract", "")
+          if execution_contract == "required-domain-split/v1":
+              split_fields=(
+                  "execution_contract", "run_workflow_governance_contracts", "run_packaging_contracts",
+                  "run_doc_checker_contracts", "run_cargo_tooling_contracts",
+                  "needs_python", "needs_markdown", "needs_node", "needs_system_deps", "needs_trunk", "needs_wasm_target",
+              )
+              fields=legacy_fields + split_fields
+              selector_fields=(
+                  "run_oasis7_required_tests", "run_consensus_tests", "run_distfs_tests",
+                  "run_oasis7_node_tests", "run_oasis7_net_tests", "run_oasis7_net_libp2p_tests",
+                  "run_viewer_contract_tests", "run_viewer_wasm_check", "run_viewer_perf_smoke",
+                  "run_pixel_world_bridge_lib_tests", "run_pixel_world_bridge_wasm_check",
+                  "run_launcher_web_build", "run_oasis7_workspace_support_crate_tests",
+                  "run_scenario_regression", "run_operational_contracts", "run_site_contract_tests",
+                  "run_codex_agent_config_validation", "run_compile_metrics_contract_tests", "run_rust_baseline",
+                  "run_workflow_governance_contracts", "run_packaging_contracts",
+                  "run_doc_checker_contracts", "run_cargo_tooling_contracts",
+              )
+              resource_fields=(
+                  "needs_python", "needs_markdown", "needs_rust_toolchain", "needs_node",
+                  "needs_system_deps", "needs_trunk", "needs_wasm_target",
+              )
+          elif execution_contract == "":
+              new_fields=(
+                  "run_workflow_governance_contracts", "run_packaging_contracts",
+                  "run_doc_checker_contracts", "run_cargo_tooling_contracts", "needs_python", "needs_markdown",
+              )
+              mixed=[field for field in new_fields if source.get(field) not in (None, "")]
+              if mixed:
+                  raise SystemExit(f"unversioned planner contains versioned fields: {', '.join(mixed)}")
+              fields=legacy_fields
+          else:
+              raise SystemExit(f"unsupported required-gate execution contract: {execution_contract}")
           missing=[field for field in fields if field not in source]
           if missing:
               raise SystemExit(f"missing required planner outputs: {', '.join(missing)}")
+          if execution_contract == "required-domain-split/v1":
+              for field in selector_fields + resource_fields:
+                  if source[field] not in ("true", "false"):
+                      raise SystemExit(f"{field} must be explicitly true or false for {execution_contract}")
+              if source["needs_python"] != "true" or source["needs_markdown"] != "true":
+                  raise SystemExit("required-gate baseline document checks require planned Python and Markdown resources")
+          if execution_contract == "required-domain-split/v1":
+              if source["run_cargo_tooling_contracts"] == "true" and source["needs_rust_toolchain"] != "true":
+                  raise SystemExit("Cargo tooling contracts require the planned Rust toolchain resource")
+              selector_resources={
+                  "run_oasis7_required_tests": ("needs_rust_toolchain", "needs_system_deps"),
+                  "run_consensus_tests": ("needs_rust_toolchain",),
+                  "run_distfs_tests": ("needs_rust_toolchain",),
+                  "run_oasis7_node_tests": ("needs_rust_toolchain",),
+                  "run_oasis7_net_tests": ("needs_rust_toolchain",),
+                  "run_oasis7_net_libp2p_tests": ("needs_rust_toolchain",),
+                  "run_viewer_contract_tests": ("needs_rust_toolchain", "needs_node", "needs_system_deps", "needs_wasm_target"),
+                  "run_viewer_wasm_check": ("needs_rust_toolchain", "needs_node", "needs_system_deps", "needs_wasm_target"),
+                  "run_viewer_perf_smoke": ("needs_node", "needs_system_deps"),
+                  "run_pixel_world_bridge_lib_tests": ("needs_rust_toolchain", "needs_system_deps", "needs_wasm_target"),
+                  "run_pixel_world_bridge_wasm_check": ("needs_rust_toolchain", "needs_system_deps", "needs_wasm_target"),
+                  "run_launcher_web_build": ("needs_rust_toolchain", "needs_node", "needs_system_deps", "needs_wasm_target", "needs_trunk"),
+                  "run_oasis7_workspace_support_crate_tests": ("needs_rust_toolchain",),
+                  "run_scenario_regression": ("needs_rust_toolchain",),
+                  "run_operational_contracts": (),
+                  "run_workflow_governance_contracts": (),
+                  "run_packaging_contracts": (),
+                  "run_doc_checker_contracts": ("needs_python", "needs_markdown"),
+                  "run_cargo_tooling_contracts": ("needs_rust_toolchain",),
+                  "run_site_contract_tests": (),
+                  "run_codex_agent_config_validation": (),
+                  "run_compile_metrics_contract_tests": (),
+                  "run_rust_baseline": ("needs_rust_toolchain",),
+              }
+              for selector, required_resources in selector_resources.items():
+                  if source[selector] != "true":
+                      continue
+                  missing_resources=[name for name in required_resources if source[name] != "true"]
+                  if missing_resources:
+                      raise SystemExit(f"{selector} requires planned resources: {', '.join(missing_resources)}")
+              for derived, source_field in (
+                  ("run_oasis7_net_libp2p_tests", "run_oasis7_net_tests"),
+                  ("run_viewer_wasm_check", "run_viewer_contract_tests"),
+                  ("run_pixel_world_bridge_wasm_check", "run_pixel_world_bridge_lib_tests"),
+                  ("run_rust_baseline", "needs_rust_toolchain"),
+              ):
+                  if source[derived] != source[source_field]:
+                      raise SystemExit(f"{derived} must match planner-derived {source_field}")
           planner={field:source[field] for field in fields}
           if source.get("impact_projection_status") == "verified":
               projection_fields=("impact_projection_schema", "impact_projection_digest",
@@ -473,7 +568,7 @@ jobs:
         if: ${{ steps.scope.outputs.needs_node == 'true' }}
         run: npm ci --prefix crates/oasis7_viewer
       - uses: Swatinem/rust-cache@v2
-        if: ${{ steps.scope.outputs.run_oasis7_required_tests == 'true' || steps.scope.outputs.run_consensus_tests == 'true' || steps.scope.outputs.run_distfs_tests == 'true' || steps.scope.outputs.run_oasis7_node_tests == 'true' || steps.scope.outputs.run_oasis7_net_tests == 'true' || steps.scope.outputs.run_oasis7_net_libp2p_tests == 'true' || steps.scope.outputs.run_viewer_wasm_check == 'true' || steps.scope.outputs.run_viewer_contract_tests == 'true' || steps.scope.outputs.run_launcher_web_build == 'true' || steps.scope.outputs.run_oasis7_workspace_support_crate_tests == 'true' }}
+        if: ${{ steps.scope.outputs.run_oasis7_required_tests == 'true' || steps.scope.outputs.run_consensus_tests == 'true' || steps.scope.outputs.run_distfs_tests == 'true' || steps.scope.outputs.run_oasis7_node_tests == 'true' || steps.scope.outputs.run_oasis7_net_tests == 'true' || steps.scope.outputs.run_oasis7_net_libp2p_tests == 'true' || steps.scope.outputs.run_viewer_wasm_check == 'true' || steps.scope.outputs.run_viewer_contract_tests == 'true' || steps.scope.outputs.run_launcher_web_build == 'true' || steps.scope.outputs.run_oasis7_workspace_support_crate_tests == 'true' || steps.scope.outputs.run_cargo_tooling_contracts == 'true' }}
         with:
           shared-key: ci-required-gate-v1
       - name: Install trunk
@@ -524,6 +619,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           INTEGRATION_MODE: ${{ inputs.run_mode }}
+          OASIS7_CI_EXECUTION_CONTRACT: ${{ steps.scope.outputs.execution_contract }}
           OASIS7_PRODUCT_DOC_BASE: ${{ steps.scope.outputs.source_scope_base }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ steps.scope.outputs.head_oid }}
           OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS: ${{ steps.scope.outputs.run_oasis7_required_tests }}
@@ -541,10 +637,23 @@ jobs:
           OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS: ${{ steps.scope.outputs.run_oasis7_workspace_support_crate_tests }}
           OASIS7_CI_RUN_SCENARIO_REGRESSION: ${{ steps.scope.outputs.run_scenario_regression }}
           OASIS7_CI_RUN_OPERATIONAL_CONTRACTS: ${{ steps.scope.outputs.run_operational_contracts }}
+          OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS: ${{ steps.scope.outputs.run_workflow_governance_contracts }}
+          OASIS7_CI_RUN_PACKAGING_CONTRACTS: ${{ steps.scope.outputs.run_packaging_contracts }}
+          OASIS7_CI_RUN_DOC_CHECKER_CONTRACTS: ${{ steps.scope.outputs.run_doc_checker_contracts }}
+          OASIS7_CI_RUN_CARGO_TOOLING_CONTRACTS: ${{ steps.scope.outputs.run_cargo_tooling_contracts }}
           OASIS7_CI_RUN_SITE_CONTRACT_TESTS: ${{ steps.scope.outputs.run_site_contract_tests }}
           OASIS7_CI_RUN_CODEX_AGENT_CONFIG_VALIDATION: ${{ steps.scope.outputs.run_codex_agent_config_validation }}
           OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS: ${{ steps.scope.outputs.run_compile_metrics_contract_tests }}
           OASIS7_CI_RUN_RUST_BASELINE: ${{ steps.scope.outputs.run_rust_baseline }}
+          OASIS7_CI_NEEDS_PYTHON: ${{ steps.scope.outputs.needs_python }}
+          OASIS7_CI_NEEDS_MARKDOWN: ${{ steps.scope.outputs.needs_markdown }}
+          OASIS7_CI_NEEDS_RUST_TOOLCHAIN: ${{ steps.scope.outputs.needs_rust_toolchain }}
+          OASIS7_CI_NEEDS_NODE: ${{ steps.scope.outputs.needs_node }}
+          OASIS7_CI_NEEDS_SYSTEM_DEPS: ${{ steps.scope.outputs.needs_system_deps }}
+          OASIS7_CI_NEEDS_TRUNK: ${{ steps.scope.outputs.needs_trunk }}
+          OASIS7_CI_NEEDS_WASM_TARGET: ${{ steps.scope.outputs.needs_wasm_target }}
+          OASIS7_CI_RUN_HOSTED_ACCOUNT_SMOKE: "false"
+          OASIS7_CI_RUN_PROVIDER_LIVE_GATE: "false"
           OASIS7_CARGO_SCOPE_BASE: ${{ steps.scope.outputs.source_scope_base }}
           OASIS7_CARGO_SCOPE_HEAD: ${{ steps.scope.outputs.head_oid }}
           OASIS7_CARGO_SCOPE_INTEGRATION_BASE: ${{ steps.scope.outputs.integration_base_oid }}
@@ -765,7 +874,10 @@ jobs:
       issues: read
       pull-requests: read
     needs: required-gate
-    if: (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')) && needs.required-gate.outputs.run_operational_contracts == 'true'
+    if: >-
+      (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')) &&
+      ((needs.required-gate.outputs.execution_contract == 'required-domain-split/v1' && needs.required-gate.outputs.run_packaging_contracts == 'true') ||
+       (needs.required-gate.outputs.execution_contract != 'required-domain-split/v1' && needs.required-gate.outputs.run_operational_contracts == 'true'))
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6

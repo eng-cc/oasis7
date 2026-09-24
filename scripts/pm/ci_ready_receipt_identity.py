@@ -21,6 +21,21 @@ AUTHORITY_FIELDS = (
 SOURCE_REVIEW_SCHEMA = "oasis7-review-plan/v2"
 REQUIRED_PLAN_V1_SCHEMA = "oasis7-required-plan-v1"
 REQUIRED_PLAN_V2_SCHEMA = "oasis7-required-plan-v2"
+REQUIRED_DOMAIN_SPLIT_EXECUTION_CONTRACT = "required-domain-split/v1"
+VERSIONED_PLANNER_SELECTOR_FIELDS = (
+    "run_workflow_governance_contracts", "run_packaging_contracts",
+    "run_doc_checker_contracts", "run_cargo_tooling_contracts",
+)
+VERSIONED_PLANNER_SELECTOR_CAPABILITIES = {
+    "run_workflow_governance_contracts": "workflow_governance",
+    "run_packaging_contracts": "packaging_contracts",
+    "run_doc_checker_contracts": "doc_checker_contracts",
+    "run_cargo_tooling_contracts": "cargo_tooling_contracts",
+}
+VERSIONED_PLANNER_RESOURCE_FIELDS = (
+    "needs_python", "needs_markdown", "needs_rust_toolchain", "needs_node",
+    "needs_system_deps", "needs_trunk", "needs_wasm_target",
+)
 INPUT_SCOPE_REUSE_CAPABILITY = "input-scope-reuse/v1"
 SUPPORTED_REQUIRED_PLAN_CAPABILITIES = frozenset({INPUT_SCOPE_REUSE_CAPABILITY})
 SOURCE_REVIEW_FIELDS = (
@@ -911,6 +926,42 @@ def review_evidence_identity(receipt: dict[str, Any]) -> dict[str, Any]:
     if missing:
         raise ValueError("CI receipt is missing review authority fields: " + ",".join(missing))
     result = {field: receipt[field] for field in AUTHORITY_FIELDS}
+    execution_contract = receipt.get("execution_contract")
+    if execution_contract is None:
+        planner = receipt.get("planner")
+        versioned_fields = VERSIONED_PLANNER_SELECTOR_FIELDS + VERSIONED_PLANNER_RESOURCE_FIELDS[:2]
+        if any(field in receipt for field in VERSIONED_PLANNER_SELECTOR_FIELDS) or (
+            isinstance(planner, dict) and any(field in planner for field in versioned_fields)
+        ):
+            raise ValueError("versioned planner fields require execution_contract")
+    else:
+        if execution_contract != REQUIRED_DOMAIN_SPLIT_EXECUTION_CONTRACT:
+            raise ValueError("CI receipt execution_contract is unsupported")
+        planner = receipt.get("planner")
+        if not isinstance(planner, dict) or planner.get("execution_contract") != execution_contract:
+            raise ValueError("versioned CI receipt planner contract is missing or mismatched")
+        selected_capabilities = planner.get("selected_capabilities")
+        if (not isinstance(selected_capabilities, list)
+                or any(not isinstance(capability, str) for capability in selected_capabilities)
+                or selected_capabilities != sorted(set(selected_capabilities))):
+            raise ValueError("versioned CI receipt selected capabilities are malformed")
+        for field in VERSIONED_PLANNER_SELECTOR_FIELDS:
+            if type(planner.get(field)) is not bool:
+                raise ValueError("versioned CI receipt planner selector is missing or malformed: " + field)
+            if planner[field] != (VERSIONED_PLANNER_SELECTOR_CAPABILITIES[field] in selected_capabilities):
+                raise ValueError("versioned CI receipt planner selector contradicts selected capabilities: " + field)
+        for field in VERSIONED_PLANNER_RESOURCE_FIELDS:
+            if type(planner.get(field)) is not bool:
+                raise ValueError("versioned CI receipt planner resource is missing or malformed: " + field)
+        if planner["needs_python"] is not True or planner["needs_markdown"] is not True:
+            raise ValueError("versioned CI receipt baseline requires Python and Markdown resources")
+        planner_digest = hashlib.sha256(
+            json.dumps(planner, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+        if planner_digest != receipt.get("planner_digest"):
+            raise ValueError("versioned CI receipt planner digest mismatch")
+        result["execution_contract"] = execution_contract
+        result.update({field: planner[field] for field in VERSIONED_PLANNER_SELECTOR_FIELDS})
     if receipt.get("ci_validation_mode") is not None:
         if receipt.get("ci_validation_mode") not in {"ordinary_pr", "trusted_integration"}:
             raise ValueError("CI receipt validation mode is invalid")
