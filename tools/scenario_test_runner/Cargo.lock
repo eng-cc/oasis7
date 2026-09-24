@@ -1564,6 +1564,7 @@ dependencies = [
  "hmac 0.13.0",
  "lettre",
  "multiaddr",
+ "oasis7_client_api",
  "oasis7_distfs",
  "oasis7_launcher_ui",
  "oasis7_node",
@@ -1585,6 +1586,16 @@ dependencies = [
  "tungstenite",
  "unicode-normalization",
  "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "oasis7_client_api"
+version = "0.1.0"
+dependencies = [
+ "ed25519-dalek",
+ "hex",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
