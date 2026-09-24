@@ -9,7 +9,7 @@
 - Last reviewed：2026-09-20
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
-本文定义普通共同治理可处理的有限事项，以及它与玩家基本保护、系统安全权威和宪制修订之间不可绕过的产品边界。本文同时接收 GG-2 的治理主体/控制权公平与 GG-3 的外部 OC、游戏内治理权分离语义，建立稳定的产品 REQ/AC；它不定义资格参数、权重、阈值、锁定时长、身份技术、隐私机制、链上结构、runtime/P2P 状态机或当前可用性结论。
+本文定义普通共同治理可处理的有限事项，以及它与玩家基本保护、系统安全权威和宪制修订之间不可绕过的产品边界。本文直接接收 GG-2 的治理主体/控制权公平与 GG-3 的外部 OC、游戏内治理权分离语义，建立稳定的产品 REQ/AC；§6.3 保留历史 GG-1..5 至当前接收锚点与组合验收的 crosswalk；它不定义资格参数、权重、阈值、锁定时长、身份技术、隐私机制、链上结构、runtime/P2P 状态机或当前可用性结论。
 
 ## 设计适用性与生命周期闭合
 
@@ -198,7 +198,7 @@ OC 作为外部链上资产保持可自由转让；持有、转入或转出本�
 
 ## 6.3 迁移闭合与边界
 
-- 历史 GG-1..5 的产品承诺按下表由稳定 REQ/AC 与组合验收接收；旧 [`全局治理、组织连续性与宪制护栏`](../world-infrastructure/global-governance-organization-continuity-and-constitutional-guardrails.prd.md) 只保留迁移 provenance，不再作为 active authority、路线图或验收入口。
+- 历史 GG-1..5 的产品承诺按下表由稳定 REQ/AC 与组合验收接收。
 
 | 历史承诺 | 当前 active REQ / AC 接收方 | 组合验收覆盖 |
 | --- | --- | --- |
@@ -209,7 +209,6 @@ OC 作为外部链上资产保持可自由转让；持有、转入或转出本�
 | GG-5：受保护底线及宪制变更程序 | [REQ-WR-GCB-001](#req-wr-gcb-001) / [AC-WR-GCB-001](#ac-wr-gcb-001) 与 [REQ-WR-GCB-002](#req-wr-gcb-002) / [AC-WR-GCB-002](#ac-wr-gcb-002) | GCB-1/2（`test_tier_full`）及 GCB-3/4（均为 `test_tier_full`，包括紧急 containment 与宪制修订分离） |
 
 本 crosswalk 指向目标规则与组合验收，不改变各 REQ/AC 追踪行的测试层级，也不构成实现、当前可用性或发行 readiness 证据。
-- 旧源在 S1 修复所有活跃专业引用、确认专业 authority 可达并通过治理/链接检查前继续保留；本页的稳定 REQ/AC、专业 authority 和本节边界不等于实现、当前可用性或发行 readiness。
 
 ## 7. 组合验收
 
