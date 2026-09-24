@@ -2345,7 +2345,7 @@
     },
     {
       "path": "doc/product/README.md",
-      "content_sha256": "c5f146e1f297534ce33f19399d21864603ce08189015d62d62bb67a4967ccd7b",
+      "content_sha256": "966e6a40c01dc7ee2fdc82d89260679d7ca6ad89c106838aac3d27033d667734",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2624,22 +2624,8 @@
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
     },
     {
-      "path": "doc/product/world-infrastructure/governed-industry-market-and-emergency-supply.prd.md",
-      "content_sha256": "eb9a1b935acd1ed507fdd88029cf7baaf00b7176da1ddc253712fa4ee11831df",
-      "registry_type": "product_overlay",
-      "structural_owner": "producer_system_designer",
-      "authority_entry": "doc/product/README.md",
-      "authority_layer": "product_overlay",
-      "semantic_decision_owner": "producer_system_designer",
-      "object_kind": "prd",
-      "lifecycle_candidate": "active_candidate",
-      "inventory_disposition": "retain_for_owner_review",
-      "routing_batch": "product-corpus-review",
-      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
-    },
-    {
       "path": "doc/product/world-infrastructure/prd.md",
-      "content_sha256": "9fe7ccec113407d76d4be17b5e0c91b62cc45bee817ae584243f906972363296",
+      "content_sha256": "9d55f20a4f395aa556f034c56d4c34939ee1f52ce2e5e749b8b641414e50e0fc",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
