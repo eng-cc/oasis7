@@ -448,6 +448,28 @@ path = "src/lib.rs"
 
         self._assert_rejected(repo, base, "alpha", mutate, "cross_package_path")
 
+    def test_escaped_cross_package_include_is_rejected(self) -> None:
+        repo, base = self._fixture()
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(
+                root, "crates/alpha/src/lib.rs",
+                'include!("\\x2e\\x2e/\\x2e\\x2e/beta/src/shared.rs");\n',
+            ),
+            "unresolved_rust_source_reference",
+        )
+
+    def test_escaped_cross_package_path_is_rejected(self) -> None:
+        repo, base = self._fixture()
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(
+                root, "crates/alpha/src/lib.rs",
+                '#[path = "\\x2e\\x2e/\\x2e\\x2e/beta/src/shared.rs"]\nmod imported;\n',
+            ),
+            "unresolved_rust_source_reference",
+        )
+
     def test_changed_symlink_into_another_package_is_rejected(self) -> None:
         repo, base = self._fixture()
 
@@ -455,6 +477,52 @@ path = "src/lib.rs"
             (root / "crates/alpha/src/linked.rs").symlink_to("../../beta/src/shared.rs")
 
         self._assert_rejected(repo, base, "alpha", mutate, "cross_package_symlink")
+
+    def test_changed_module_activates_unchanged_cross_package_file_symlink(self) -> None:
+        repo, _ = self._fixture()
+        (repo / "crates/alpha/src/linked.rs").symlink_to("../../beta/src/shared.rs")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "base with inactive file symlink")
+        base = self._git(repo, "rev-parse", "HEAD")
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(root, "crates/alpha/src/lib.rs", "mod linked;\npub fn alpha() {}\n"),
+            "cross_package_symlink",
+        )
+
+    def test_changed_module_activates_unchanged_cross_package_directory_symlink(self) -> None:
+        repo, _ = self._fixture()
+        (repo / "crates/alpha/src/alias").symlink_to("../../beta/src", target_is_directory=True)
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "base with inactive directory symlink")
+        base = self._git(repo, "rev-parse", "HEAD")
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(root, "crates/alpha/src/lib.rs", "pub mod alias;\npub fn alpha() {}\n"),
+            "cross_package_symlink",
+        )
+
+    def test_manifest_feature_activates_unchanged_cross_package_symlink(self) -> None:
+        repo, _ = self._fixture()
+        (repo / "crates/alpha/src/linked.rs").symlink_to("../../beta/src/shared.rs")
+        self._write(repo, "crates/alpha/src/lib.rs", "#[cfg(feature = \"use_link\")]\nmod linked;\n")
+        self._write(
+            repo, "crates/alpha/Cargo.toml",
+            (repo / "crates/alpha/Cargo.toml").read_text(encoding="utf-8")
+            + "\n[features]\nuse_link = []\n",
+        )
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "base with dormant feature symlink")
+        base = self._git(repo, "rev-parse", "HEAD")
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(
+                root, "crates/alpha/Cargo.toml",
+                (root / "crates/alpha/Cargo.toml").read_text(encoding="utf-8")
+                .replace("[features]\n", '[features]\ndefault = ["use_link"]\n'),
+            ),
+            "cross_package_symlink",
+        )
 
     def test_unchanged_other_package_symlink_into_changed_source_is_rejected(self) -> None:
         repo, _ = self._fixture()

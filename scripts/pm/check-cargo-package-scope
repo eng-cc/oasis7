@@ -624,6 +624,10 @@ def check_cross_package_edges(
                         raise ScopeError("unresolved_rust_source_reference", f"{path} has non-literal {reason}")
                     continue
                 target = match.group(1) or match.group(3)
+                if match.group(1) is not None and "\\" in target:
+                    if package_source_changed:
+                        raise ScopeError("unresolved_rust_source_reference", f"{path} has escaped {reason}")
+                    continue
                 resolved = resolve_relative(path, target)
                 target_owner = owner_for(resolved, packages) if resolved else None
                 if target_owner is not None and target_owner != owner and (path in changed or resolved in changed):
@@ -658,6 +662,10 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         base_packages = package_roots(base_root, base_metadata)
         head_packages = package_roots(head_root, head_metadata)
         changed = set(normalized_paths)
+        package_changed = any(
+            owner_for(path, head_packages) or owner_for(path, base_packages)
+            for path in changed
+        )
         for revision, root, packages in (
             (args.base, base_root, base_packages),
             (args.head, head_root, head_packages),
@@ -669,10 +677,10 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
                 try:
                     physical = link.resolve(strict=True).relative_to(root.resolve()).as_posix()
                 except (OSError, ValueError) as exc:
-                    if path in changed:
+                    if path in changed or (package_changed and owner_for(path, packages)):
                         raise ScopeError("ambiguous_package_attribution", f"unresolved or escaping symlink: {path}") from exc
                     continue
-                touches_changed = path in changed or physical in changed or (
+                touches_changed = package_changed or path in changed or physical in changed or (
                     link.is_dir() and any(item.startswith(physical + "/") for item in changed)
                 )
                 if not touches_changed:
