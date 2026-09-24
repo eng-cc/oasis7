@@ -2345,7 +2345,7 @@
     },
     {
       "path": "doc/product/README.md",
-      "content_sha256": "adf782d79623d087c764929efc1788a75b558d9d4b178baf9f5329b6cc2e29b8",
+      "content_sha256": "c5f146e1f297534ce33f19399d21864603ce08189015d62d62bb67a4967ccd7b",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2624,20 +2624,6 @@
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
     },
     {
-      "path": "doc/product/world-infrastructure/global-governance-organization-continuity-and-constitutional-guardrails.prd.md",
-      "content_sha256": "1ede776e334e6782d29662c7f287791411e682face26dc8c997a2b48fb62c469",
-      "registry_type": "product_overlay",
-      "structural_owner": "producer_system_designer",
-      "authority_entry": "doc/product/README.md",
-      "authority_layer": "product_overlay",
-      "semantic_decision_owner": "producer_system_designer",
-      "object_kind": "prd",
-      "lifecycle_candidate": "active_candidate",
-      "inventory_disposition": "retain_for_owner_review",
-      "routing_batch": "product-corpus-review",
-      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
-    },
-    {
       "path": "doc/product/world-infrastructure/governed-industry-market-and-emergency-supply.prd.md",
       "content_sha256": "eb9a1b935acd1ed507fdd88029cf7baaf00b7176da1ddc253712fa4ee11831df",
       "registry_type": "product_overlay",
@@ -2653,7 +2639,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/prd.md",
-      "content_sha256": "5a619fce29ebc1055e64280b83930e6ac4ed9c6b39ba5fcace46423578a5cd04",
+      "content_sha256": "9fe7ccec113407d76d4be17b5e0c91b62cc45bee817ae584243f906972363296",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2765,7 +2751,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/governed-common-decisions-and-constitutional-boundaries.prd.md",
-      "content_sha256": "e7ed141805d3032241df77a00e23124b6f0fbb58e752b67ac1a52fd9f34f71d0",
+      "content_sha256": "0f7bc5bd8922b76716fd009bb1a288e8c38c8aca49618b35b881cbbc4f8a9674",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
