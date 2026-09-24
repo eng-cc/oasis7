@@ -25,7 +25,7 @@ def planner_for_path(path: str) -> tuple[dict[str, str], str]:
             "--event-name",
             "pull_request",
             "--config",
-            str(ROOT / "scripts/ci-required-scope.v2.json"),
+            str(ROOT / "scripts/fixtures/ci-required-scope.versioned-test.json"),
             "--changed-path",
             path,
         ],

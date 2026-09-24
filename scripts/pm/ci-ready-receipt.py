@@ -44,6 +44,10 @@ VERSIONED_RESOURCE_FIELDS=(
     "needs_python", "needs_markdown", "needs_rust_toolchain", "needs_node",
     "needs_system_deps", "needs_trunk", "needs_wasm_target",
 )
+WINDOWS_ROLLOUT_JOB="windows-package-rollout-behavior"
+MACOS_PACKAGE_JOB="testnet-packages-macos-arm64-contract"
+FLEET_HEALTH_JOB="public-testnet-fleet-health-contract"
+FLEET_HEALTH_RUNNERS=("ubuntu-24.04", "windows-2022", "macos-14")
 
 def canonical_planner(raw):
     if not isinstance(raw,dict): raise SystemExit("ci-ready-receipt: uncertain planner metadata is not an object")
@@ -110,6 +114,180 @@ def gh(*args):
     except Exception as exc:
         raise SystemExit(f"ci-ready-receipt: uncertain GitHub read: {exc}")
 
+def _positive_int(value, field):
+    if isinstance(value,bool):
+        raise SystemExit(f"ci-ready-receipt: uncertain invalid {field}")
+    try: result=int(value)
+    except (TypeError,ValueError):
+        raise SystemExit(f"ci-ready-receipt: uncertain invalid {field}")
+    if result<1 or str(value)!=str(result):
+        raise SystemExit(f"ci-ready-receipt: uncertain invalid {field}")
+    return result
+
+def _check_run_id_from_url(value, repository, *, field):
+    expected=f"https://api.github.com/repos/{repository}/check-runs/"
+    match=re.fullmatch(re.escape(expected)+r"([0-9]+)",str(value or ""))
+    if not match:
+        raise SystemExit(f"ci-ready-receipt: uncertain {field} check-run URL")
+    return _positive_int(match.group(1),f"{field} check-run id")
+
+def _workflow_job_details(check_run, repository):
+    expected_prefix=f"https://github.com/{repository}/actions/runs/"
+    match=re.fullmatch(re.escape(expected_prefix)+r"([0-9]+)/job/([0-9]+)(?:\?.*)?",str(check_run.get("details_url") or ""))
+    if not match:
+        raise SystemExit("ci-ready-receipt: uncertain required-gate workflow job URL")
+    return int(match.group(1)),int(match.group(2))
+
+def _selected_child_groups(planner):
+    operational=planner.get("run_operational_contracts") is True
+    versioned=planner.get("execution_contract")==EXECUTION_CONTRACT
+    packaging=(planner.get("run_packaging_contracts") is True) if versioned else operational
+    return {
+        WINDOWS_ROLLOUT_JOB: operational,
+        MACOS_PACKAGE_JOB: packaging,
+        FLEET_HEALTH_JOB: operational,
+    }
+
+def _github_time(value, field):
+    if not isinstance(value,str) or not value:
+        raise SystemExit(f"ci-ready-receipt: uncertain missing {field}")
+    try: parsed=dt.datetime.fromisoformat(value.replace("Z","+00:00"))
+    except ValueError as exc:
+        raise SystemExit(f"ci-ready-receipt: uncertain malformed {field}: {exc}")
+    if parsed.tzinfo is None:
+        raise SystemExit(f"ci-ready-receipt: uncertain timezone missing from {field}")
+    return parsed.astimezone(dt.timezone.utc)
+
+def _job_identity(job, repository, workflow_run_id, run_attempt, *, field):
+    if not isinstance(job,dict):
+        raise SystemExit(f"ci-ready-receipt: uncertain malformed {field} job")
+    job_id=_positive_int(job.get("id"),f"{field} job id")
+    if _positive_int(job.get("run_id"),f"{field} workflow run id")!=workflow_run_id:
+        raise SystemExit(f"ci-ready-receipt: uncertain {field} belongs to wrong workflow run")
+    if _positive_int(job.get("run_attempt"),f"{field} workflow run attempt")!=run_attempt:
+        raise SystemExit(f"ci-ready-receipt: uncertain {field} belongs to wrong workflow attempt")
+    check_run_id=_check_run_id_from_url(job.get("check_run_url"),repository,field=field)
+    head_sha=job.get("head_sha")
+    if not isinstance(head_sha,str) or not re.fullmatch(r"[0-9a-f]{40,64}",head_sha):
+        raise SystemExit(f"ci-ready-receipt: uncertain {field} head SHA")
+    labels=job.get("labels")
+    if not isinstance(labels,list) or any(not isinstance(label,str) for label in labels):
+        raise SystemExit(f"ci-ready-receipt: uncertain {field} runner labels")
+    return {
+        "job_id":job_id,"check_run_id":check_run_id,"run_id":workflow_run_id,
+        "run_attempt":run_attempt,"head_sha":head_sha,
+        "status":job.get("status"),"conclusion":job.get("conclusion"),
+        "labels":sorted(set(labels)),"name":job.get("name"),
+    }
+
+def _selected_child_job_outcomes(repository, check_run, workflow_run_id, planner, artifact):
+    selected=_selected_child_groups(planner)
+    if not any(selected.values()):
+        return planner
+
+    details_run_id,gate_job_id=_workflow_job_details(check_run,repository)
+    if details_run_id!=workflow_run_id:
+        raise SystemExit("ci-ready-receipt: uncertain required-gate job belongs to wrong workflow run")
+    gate=gh("api",f"repos/{repository}/actions/jobs/{gate_job_id}")
+    gate_identity=_job_identity(gate,repository,workflow_run_id,
+      _positive_int(gate.get("run_attempt"),"required-gate workflow run attempt"),field="required-gate")
+    if gate_identity["job_id"]!=gate_job_id or gate.get("name")!=check_run.get("name"):
+        raise SystemExit("ci-ready-receipt: uncertain required-gate job/check identity mismatch")
+    expected_check_run_id=_positive_int(check_run.get("id"),"required-gate check-run id")
+    if gate_identity["check_run_id"]!=expected_check_run_id:
+        raise SystemExit("ci-ready-receipt: uncertain required-gate job/check identity mismatch")
+    if (gate.get("status")!="completed" or str(gate.get("conclusion") or "").lower()!="success"
+            or gate.get("status")!=check_run.get("status")
+            or str(gate.get("conclusion") or "").lower()!=str(check_run.get("conclusion") or "").lower()):
+        raise SystemExit("ci-ready-receipt: required-gate workflow job is not completed successfully")
+    run_attempt=gate_identity["run_attempt"]
+    integration=check_run.get("_integration") or {}
+    if integration:
+        if (_positive_int(integration.get("workflow_run_id"),"integration workflow run id")!=workflow_run_id
+                or _positive_int(integration.get("run_attempt"),"integration workflow run attempt")!=run_attempt):
+            raise SystemExit("ci-ready-receipt: required-gate job differs from trusted integration run/attempt")
+
+    gate_started=_github_time(gate.get("started_at"),"required-gate job start")
+    gate_completed=_github_time(gate.get("completed_at"),"required-gate job completion")
+    artifact_created=_github_time(artifact.get("created_at"),"planner artifact creation time")
+    if gate_completed<gate_started or not gate_started<=artifact_created<=gate_completed:
+        raise SystemExit("ci-ready-receipt: planner artifact is not bound to required-gate workflow attempt")
+
+    jobs=[]
+    for page in range(1,101):
+        response=gh("api",f"repos/{repository}/actions/runs/{workflow_run_id}/attempts/{run_attempt}/jobs?per_page=100&page={page}")
+        batch=response.get("jobs") if isinstance(response,dict) else None
+        if not isinstance(batch,list):
+            raise SystemExit("ci-ready-receipt: uncertain malformed workflow attempt jobs response")
+        jobs.extend(batch)
+        if len(batch)<100: break
+    else:
+        raise SystemExit("ci-ready-receipt: uncertain workflow attempt job pagination overflow")
+
+    identities=[]; seen_job_ids=set()
+    for raw in jobs:
+        identity=_job_identity(raw,repository,workflow_run_id,run_attempt,field="workflow attempt")
+        if identity["job_id"] in seen_job_ids:
+            raise SystemExit("ci-ready-receipt: uncertain duplicate workflow attempt job id")
+        seen_job_ids.add(identity["job_id"])
+        if identity["head_sha"]!=gate_identity["head_sha"]:
+            raise SystemExit("ci-ready-receipt: uncertain child job belongs to a different workflow head")
+        identities.append(identity)
+    gate_matches=[item for item in identities if item["job_id"]==gate_job_id]
+    if len(gate_matches)!=1 or gate_matches[0]!=gate_identity:
+        raise SystemExit("ci-ready-receipt: required-gate job is absent from its exact workflow attempt")
+
+    selected_outcomes=[]
+    expected_names=(WINDOWS_ROLLOUT_JOB,MACOS_PACKAGE_JOB)
+    for name in expected_names:
+        if not selected[name]: continue
+        matches=[item for item in identities if item["name"]==name]
+        if len(matches)!=1:
+            raise SystemExit(f"ci-ready-receipt: selected child job missing or ambiguous: {name}")
+        selected_outcomes.append(_require_successful_child(matches[0],name,
+          "windows-2022" if name==WINDOWS_ROLLOUT_JOB else "ubuntu-24.04"))
+    if selected[FLEET_HEALTH_JOB]:
+        fleet_jobs=[item for item in identities if item["name"]==FLEET_HEALTH_JOB or str(item["name"] or "").startswith(FLEET_HEALTH_JOB+" (")]
+        by_runner={}
+        for item in fleet_jobs:
+            matched=[runner for runner in FLEET_HEALTH_RUNNERS if item["name"]==f"{FLEET_HEALTH_JOB} ({runner})"]
+            if len(matched)!=1:
+                raise SystemExit("ci-ready-receipt: selected fleet-health child has unexpected name")
+            runner=matched[0]
+            if runner in by_runner:
+                raise SystemExit(f"ci-ready-receipt: selected fleet-health child is ambiguous: {runner}")
+            by_runner[runner]=item
+        if set(by_runner)!=set(FLEET_HEALTH_RUNNERS):
+            missing=sorted(set(FLEET_HEALTH_RUNNERS)-set(by_runner))
+            raise SystemExit("ci-ready-receipt: selected fleet-health child job missing: "+",".join(missing))
+        selected_outcomes.extend(_require_successful_child(by_runner[runner],
+          f"{FLEET_HEALTH_JOB} ({runner})",runner) for runner in FLEET_HEALTH_RUNNERS)
+    check_run_ids=[item["check_run_id"] for item in selected_outcomes]
+    if len(check_run_ids)!=len(set(check_run_ids)):
+        raise SystemExit("ci-ready-receipt: uncertain selected child jobs share a check-run identity")
+
+    source_digest=hashlib.sha256(json.dumps(planner,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+    result=dict(planner)
+    result["selected_child_job_outcomes"]={
+        "schema":"oasis7-selected-child-job-outcomes/v1",
+        "workflow_run_id":workflow_run_id,"run_attempt":run_attempt,
+        "required_gate_job_id":gate_job_id,"required_gate_check_run_id":expected_check_run_id,
+        "plan_artifact_id":_positive_int(artifact.get("id"),"planner artifact id"),
+        "plan_artifact_created_at":artifact_created.isoformat().replace("+00:00","Z"),
+        "source_planner_digest":source_digest,
+        "jobs":selected_outcomes,
+    }
+    return result
+
+def _require_successful_child(identity, expected_name, expected_runner):
+    if identity["name"]!=expected_name:
+        raise SystemExit(f"ci-ready-receipt: selected child job name mismatch: {expected_name}")
+    if expected_runner not in identity["labels"]:
+        raise SystemExit(f"ci-ready-receipt: selected child job runner mismatch: {expected_name}")
+    if identity["status"]!="completed" or str(identity["conclusion"] or "").lower()!="success":
+        raise SystemExit(f"ci-ready-receipt: selected child job is not completed successfully: {expected_name}")
+    return {key:identity[key] for key in ("name","job_id","check_run_id","run_id","run_attempt","status","conclusion","labels")}
+
 def artifact_bytes(repository, artifact_id):
     try:
         return subprocess.check_output(
@@ -154,7 +332,8 @@ def planner_for_run(repository, check_run, *, base_oid, head_oid):
             raise SystemExit(f"ci-ready-receipt: uncertain planner artifact identity mismatch: {key}")
     if not isinstance(envelope.get("planner"),dict):
         raise SystemExit("ci-ready-receipt: uncertain incomplete planner artifact envelope")
-    return canonical_planner(envelope["planner"])
+    planner=canonical_planner(envelope["planner"])
+    return _selected_child_job_outcomes(repository,check_run,workflow_run_id,planner,artifact)
 
 def _trusted_workflow_source(repository, workflow_sha):
     response=gh("api",f"repos/{repository}/contents/.github/workflows/rust.yml?ref={workflow_sha}")
@@ -462,6 +641,8 @@ def main():
     # the marker or canonical planner fields are absent.
     planner=(planner_for_run(a.repository,run,base_oid=base_oid,head_oid=head_oid)
              if run.get("details_url") else planner_from_run(run))
+    if not run.get("details_url") and any(_selected_child_groups(planner).values()):
+        raise SystemExit("ci-ready-receipt: selected child jobs require same-run workflow attempt evidence")
     trusted_planner_digest=hashlib.sha256(json.dumps(planner,sort_keys=True,separators=(",",":")).encode()).hexdigest()
     if a.planner_digest not in ("auto",trusted_planner_digest):
         raise SystemExit("ci-ready-receipt: uncertain planner_digest does not match live check metadata")

@@ -346,9 +346,23 @@ class ProvenanceTests(unittest.TestCase):
    envelope[key+'_digest']='sha256:'+hashlib.sha256(value).hexdigest()
   profile_payloads['envelope']=(json.dumps(envelope)+'\n').encode()
   artifact_names={11:self.api.ARTIFACT,21:'cargo-package-profile-envelope',22:'cargo-package-profile-plan',23:'cargo-package-profile-results',24:'cargo-package-profile-receipt'}
+  gate_job={
+   'id':10,'run_id':9,'run_attempt':1,'name':'required-gate','status':'completed','conclusion':'success',
+   'head_sha':self.base,'labels':['ubuntu-24.04'],
+   'check_run_url':'https://api.github.com/repos/owner/repo/check-runs/10',
+   'started_at':'2026-09-09T00:00:00Z','completed_at':'2026-09-09T01:00:00Z',
+  }
+  child_jobs=[
+   {'id':20,'run_id':9,'run_attempt':1,'name':'windows-package-rollout-behavior','status':'completed','conclusion':'success','head_sha':self.base,'labels':['windows-2022'],'check_run_url':'https://api.github.com/repos/owner/repo/check-runs/20'},
+   {'id':21,'run_id':9,'run_attempt':1,'name':'testnet-packages-macos-arm64-contract','status':'completed','conclusion':'success','head_sha':self.base,'labels':['ubuntu-24.04'],'check_run_url':'https://api.github.com/repos/owner/repo/check-runs/21'},
+   *({'id':30+i,'run_id':9,'run_attempt':1,'name':f'public-testnet-fleet-health-contract ({runner})','status':'completed','conclusion':'success','head_sha':self.base,'labels':[runner],'check_run_url':f'https://api.github.com/repos/owner/repo/check-runs/{30+i}'} for i,runner in enumerate(('ubuntu-24.04','windows-2022','macos-14'))),
+  ]
   def reader(*args):
-   if '/compare/' in args[-1]:return {'merge_base_commit':{'sha':self.payload['scope_base_oid']}}
-   if 'artifacts?' in args[-1]:return {'artifacts':[{'id':identifier,'name':name,'expired':False,'workflow_run':{'id':9}} for identifier,name in artifact_names.items()]}
+   path=args[-1]
+   if '/compare/' in path:return {'merge_base_commit':{'sha':self.payload['scope_base_oid']}}
+   if path=='repos/owner/repo/actions/jobs/10':return gate_job
+   if path=='repos/owner/repo/actions/runs/9/attempts/1/jobs?per_page=100&page=1':return {'jobs':[gate_job,*child_jobs]}
+   if 'artifacts?' in path:return {'artifacts':[{'id':identifier,'name':name,'expired':False,'created_at':'2026-09-09T00:30:00Z','workflow_run':{'id':9}} for identifier,name in artifact_names.items()]}
    return self.read(*args)
   def profile_artifact(repository,identifier):
    if identifier==11:return raw.getvalue()

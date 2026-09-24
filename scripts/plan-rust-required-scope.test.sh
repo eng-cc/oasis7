@@ -2,15 +2,17 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+VERSIONED_TEST_CONFIG="$ROOT_DIR/scripts/fixtures/ci-required-scope.versioned-test.json"
 
 plan_for_path() {
   "$ROOT_DIR/scripts/plan-rust-required-scope.sh" \
     --event-name pull_request \
+    --config "$VERSIONED_TEST_CONFIG" \
     --changed-path "$1"
 }
 
 plan_for_paths() {
-  local args=(--event-name pull_request)
+  local args=(--event-name pull_request --config "$VERSIONED_TEST_CONFIG")
   local path
   for path in "$@"; do
     args+=(--changed-path "$path")
@@ -1292,8 +1294,10 @@ integration_output="$("$ROOT_DIR/scripts/plan-rust-required-scope.sh" \
 assert_key_equals "$integration_output" scope full
 assert_key_equals "$integration_output" impact_projection_status verified
 assert_key_equals "$integration_output" impact_projection_digest "$integration_projection_digest"
+effective_shared_required_output="$("$ROOT_DIR/scripts/plan-rust-required-scope.sh" \
+  --event-name pull_request --changed-path .github/workflows/rust.yml)"
 assert_key_equals "$integration_output" selected_capabilities \
-  "$(value_for_key "$shared_required_output" selected_capabilities)"
+  "$(value_for_key "$effective_shared_required_output" selected_capabilities)"
 
 python3 - "$integration_projection" "$integration_tampered_projection" <<'PY'
 import json

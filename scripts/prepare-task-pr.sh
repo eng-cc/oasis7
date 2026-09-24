@@ -1532,12 +1532,40 @@ fi
 LOCAL_REQUIRED_EXTRA_COMMANDS+=("$SYSTEM_DESIGN_TRACEABILITY_COMMAND")
 
 PLANNER_SCRIPT="$SOURCE_WORKTREE/scripts/plan-rust-required-scope.sh"
-if [[ -x "$PLANNER_SCRIPT" ]]; then
+if [[ -x "$PLANNER_SCRIPT" || -n "$IMPACT_PROJECTION" ]]; then
   PLANNER_ARGS=(--event-name pull_request --base-ref "$COMPARISON_REF" --head-ref "$SOURCE_HEAD")
+  PLANNER_RUNNER=("$PLANNER_SCRIPT")
   if [[ -n "$IMPACT_PROJECTION" ]]; then
+    TRUSTED_REQUIRED_SCOPE_DIR="$(mktemp -d)"
+    mkdir -p "$TRUSTED_REQUIRED_SCOPE_DIR/scripts/pm"
+    git -C "$SOURCE_WORKTREE" show "$COMPARISON_HEAD:scripts/plan-rust-required-scope.py" \
+      >"$TRUSTED_REQUIRED_SCOPE_DIR/scripts/plan-rust-required-scope.py" \
+      || die "trusted base required-scope planner is unavailable"
+    git -C "$SOURCE_WORKTREE" show "$COMPARISON_HEAD:scripts/ci-required-scope.v2.json" \
+      >"$TRUSTED_REQUIRED_SCOPE_DIR/scripts/ci-required-scope.v2.json" \
+      || die "trusted base required-scope config is unavailable"
+    git -C "$SOURCE_WORKTREE" show "$COMPARISON_HEAD:scripts/ci-tests.sh" \
+      >"$TRUSTED_REQUIRED_SCOPE_DIR/scripts/ci-tests.sh" \
+      || die "trusted base required-gate selector source is unavailable"
+    git -C "$SOURCE_WORKTREE" show "$COMPARISON_HEAD:scripts/pm/workflow-impact-projection.py" \
+      >"$TRUSTED_REQUIRED_SCOPE_DIR/scripts/pm/workflow-impact-projection.py" \
+      || die "trusted base impact-projection verifier is unavailable"
+    PLANNER_RUNNER=(python3 -I "$TRUSTED_REQUIRED_SCOPE_DIR/scripts/plan-rust-required-scope.py")
+    PLANNER_ARGS+=(--config "$TRUSTED_REQUIRED_SCOPE_DIR/scripts/ci-required-scope.v2.json")
     PLANNER_ARGS+=(--impact-projection "$IMPACT_PROJECTION" --task-uid "$BOUND_TASK_UID" --scope-base-oid "$COMPARISON_HEAD")
   fi
-  if RUST_SCOPE_OUTPUT="$(cd "$SOURCE_WORKTREE" && "$PLANNER_SCRIPT" "${PLANNER_ARGS[@]}" 2>/dev/null)"; then
+  if [[ -n "$IMPACT_PROJECTION" ]]; then
+    if ! RUST_SCOPE_OUTPUT="$(cd "$SOURCE_WORKTREE" && "${PLANNER_RUNNER[@]}" "${PLANNER_ARGS[@]}" 2>&1)"; then
+      printf '%s\n' "$RUST_SCOPE_OUTPUT" >&2
+      die "trusted base required-scope planner rejected the impact projection"
+    fi
+  else
+    RUST_SCOPE_OUTPUT=""
+    if ! RUST_SCOPE_OUTPUT="$(cd "$SOURCE_WORKTREE" && "${PLANNER_RUNNER[@]}" "${PLANNER_ARGS[@]}" 2>/dev/null)"; then
+      RUST_SCOPE_OUTPUT=""
+    fi
+  fi
+  if [[ -n "$RUST_SCOPE_OUTPUT" ]]; then
     PLANNER_EXECUTION_CONTRACT="$(plan_kv_get "$RUST_SCOPE_OUTPUT" "execution_contract")"
     case "$PLANNER_EXECUTION_CONTRACT" in
       ""|required-domain-split/v1) ;;
@@ -1645,6 +1673,7 @@ OASIS7_CI_RUN_RUST_BASELINE=$RUN_RUST_BASELINE \
       CLAIM_READY_COMMAND="$(render_cmd "./scripts/pm/claim-ready.sh" "--claim-type" "ready_for_pr" "--verification-profile" "repository_required")"
     fi
   fi
+  [[ -z "${TRUSTED_REQUIRED_SCOPE_DIR:-}" ]] || rm -rf "$TRUSTED_REQUIRED_SCOPE_DIR"
 fi
 
 # The package-scope result is an additive audit.  It never selects or removes
