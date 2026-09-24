@@ -206,7 +206,7 @@ OC 作为外部链上资产保持可自由转让；持有、转入或转出本�
 | GG-2：治理主体聚合与控制权公平 | [REQ-WR-GCB-004](#req-wr-gcb-004) / [AC-WR-GCB-004](#ac-wr-gcb-004) | GCB-7（`test_tier_full`） |
 | GG-3：外部 OC 与游戏内治理权隔离 | [REQ-WR-GCB-005](#req-wr-gcb-005) / [AC-WR-GCB-005](#ac-wr-gcb-005) | GCB-8（`test_tier_full`） |
 | GG-4：组织保护底线、解散及不活跃连续性 | [REQ-WR-OC-001](organization-continuity-dissolution-and-dormancy-protection.prd.md#req-wr-oc-001) / [AC-WR-OC-001](organization-continuity-dissolution-and-dormancy-protection.prd.md#ac-wr-oc-001)；[REQ-WR-OC-002](organization-continuity-dissolution-and-dormancy-protection.prd.md#req-wr-oc-002) / [AC-WR-OC-002](organization-continuity-dissolution-and-dormancy-protection.prd.md#ac-wr-oc-002) | OC-1..4（OC-1/2 与 OC-3/4 均属 `test_tier_full`） |
-| GG-5：受保护底线及宪制变更程序 | [REQ-WR-GCB-001](#req-wr-gcb-001) / [AC-WR-GCB-001](#ac-wr-gcb-001) 与 [REQ-WR-GCB-002](#req-wr-gcb-002) / [AC-WR-GCB-002](#ac-wr-gcb-002) | GCB-1/2（`test_tier_full`）及 GCB-3（GCB-3/4 同属 `test_tier_full`） |
+| GG-5：受保护底线及宪制变更程序 | [REQ-WR-GCB-001](#req-wr-gcb-001) / [AC-WR-GCB-001](#ac-wr-gcb-001) 与 [REQ-WR-GCB-002](#req-wr-gcb-002) / [AC-WR-GCB-002](#ac-wr-gcb-002) | GCB-1/2（`test_tier_full`）及 GCB-3/4（均为 `test_tier_full`，包括紧急 containment 与宪制修订分离） |
 
 本 crosswalk 指向目标规则与组合验收，不改变各 REQ/AC 追踪行的测试层级，也不构成实现、当前可用性或发行 readiness 证据。
 - 旧源在 S1 修复所有活跃专业引用、确认专业 authority 可达并通过治理/链接检查前继续保留；本页的稳定 REQ/AC、专业 authority 和本节边界不等于实现、当前可用性或发行 readiness。
