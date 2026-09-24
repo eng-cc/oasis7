@@ -352,6 +352,81 @@ def lock_dependency_names(repo: Path, revision: str, package: str) -> set[str] |
     }
 
 
+def lock_dependency_references_are_canonical(
+    repo: Path,
+    revision: str,
+    package: str,
+    metadata: dict[str, Any],
+) -> bool:
+    blob = git_blob(repo, revision, "Cargo.lock")
+    if blob is None:
+        return False
+    records = lock_records(blob.decode("utf-8", errors="replace"))
+    workspace_records = [record for record in records.get(package, []) if "source" not in record]
+    if len(workspace_records) != 1:
+        return False
+    dependencies = workspace_records[0].get("dependencies", [])
+    if not isinstance(dependencies, list) or not all(isinstance(item, str) for item in dependencies):
+        return False
+    if len(dependencies) != len(set(dependencies)):
+        return False
+
+    package_metadata = metadata_package(metadata, package)
+    metadata_dependencies = package_metadata.get("dependencies") if package_metadata else None
+    if not isinstance(metadata_dependencies, list):
+        return False
+    metadata_name_counts: dict[str, int] = {}
+    for dependency in metadata_dependencies:
+        if not isinstance(dependency, dict) or not isinstance(dependency.get("name"), str):
+            return False
+        name = dependency["name"]
+        metadata_name_counts[name] = metadata_name_counts.get(name, 0) + 1
+
+    canonical_names: dict[str, str] = {}
+    for name, candidates in records.items():
+        if not candidates:
+            continue
+        identities: set[tuple[str, str | None]] = set()
+        for candidate in candidates:
+            version = candidate.get("version")
+            source = candidate.get("source")
+            if not isinstance(version, str) or not version:
+                return False
+            if source is not None and (not isinstance(source, str) or not source):
+                return False
+            identity = (version, source)
+            if identity in identities:
+                return False
+            identities.add(identity)
+
+        for candidate in candidates:
+            version = candidate["version"]
+            if len(candidates) == 1:
+                reference = name
+            else:
+                reference = f"{name} {version}"
+                same_version = [item for item in candidates if item["version"] == version]
+                if len(same_version) > 1:
+                    source = candidate.get("source")
+                    if source is not None:
+                        reference += f" ({source})"
+                    elif sum(item.get("source") is None for item in same_version) != 1:
+                        return False
+            if reference in canonical_names:
+                return False
+            canonical_names[reference] = name
+
+    actual_name_counts: dict[str, int] = {}
+    for dependency in dependencies:
+        name = canonical_names.get(dependency)
+        if name is None:
+            return False
+        actual_name_counts[name] = actual_name_counts.get(name, 0) + 1
+        if actual_name_counts[name] > metadata_name_counts.get(name, 0):
+            return False
+    return True
+
+
 def metadata_package(metadata: dict[str, Any], package: str) -> dict[str, Any] | None:
     matches = [
         item
@@ -511,6 +586,7 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
     head_package_names = set(head_packages)
     added_names = head_package_names - base_package_names
     package_owners: set[str] = set()
+    unowned_paths: list[str] = []
     unowned_rust: list[str] = []
     for path in normalized_paths:
         if path in ("Cargo.toml", "Cargo.lock") or path == policy_path:
@@ -518,8 +594,10 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         owner = owner_for(path, head_packages) or owner_for(path, base_packages)
         if owner is not None:
             package_owners.add(owner)
-        elif path.endswith(".rs") or Path(path).name == "Cargo.toml":
-            unowned_rust.append(path)
+        else:
+            unowned_paths.append(path)
+            if path.endswith(".rs") or Path(path).name == "Cargo.toml":
+                unowned_rust.append(path)
     if unowned_rust:
         raise ScopeError("ambiguous_package_attribution", ", ".join(unowned_rust))
 
@@ -540,6 +618,8 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         primary_package = next(iter(package_owners))
     if package_owners and package_owners != {primary_package}:
         raise ScopeError("primary_package_mismatch", ", ".join(sorted(package_owners)))
+    if unowned_paths and primary_package is not None:
+        raise ScopeError("ambiguous_package_attribution", ", ".join(unowned_paths))
 
     if added_dependency_edges:
         base_package_names = set(base_packages)
@@ -597,6 +677,13 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
             raise ScopeError(
                 "unattributable_lock_change",
                 f"Cargo.lock dependencies for {primary_package} do not match Cargo metadata",
+            )
+        if not lock_dependency_references_are_canonical(
+            repo, args.head, primary_package, head_metadata
+        ):
+            raise ScopeError(
+                "unattributable_lock_change",
+                f"Cargo.lock dependency records for {primary_package} are duplicated or non-canonical",
             )
         metadata_identity = metadata_package(head_metadata, primary_package)
         lock_identity = lock_workspace_record(repo, args.head, primary_package)

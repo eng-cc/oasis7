@@ -213,6 +213,19 @@ path = "src/lib.rs"
             ),
         )
 
+    def test_one_package_source_change_with_unowned_root_readme_is_rejected(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            (root / "crates/alpha/src/lib.rs").write_text(
+                "pub fn alpha() { println!(\"changed\"); }\n", encoding="utf-8"
+            )
+            (root / "README.md").write_text("Unowned root-level change.\n", encoding="utf-8")
+
+        self._assert_rejected(
+            repo, base, "alpha", mutate, "ambiguous_package_attribution"
+        )
+
     def test_existing_normal_path_dependency_to_unchanged_target_is_allowed(self) -> None:
         repo, base = self._fixture()
 
@@ -276,6 +289,32 @@ path = "src/lib.rs"
             )
 
         self._assert_rejected_behavior(repo, base, "alpha", mutate)
+
+    def test_generated_lock_dependency_version_suffix_is_rejected(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            self._add_normal_path_dependency_with_generated_lockfile(root)
+            lock = root / "Cargo.lock"
+            content = lock.read_text(encoding="utf-8")
+            self.assertIn(' "beta",', content)
+            lock.write_text(content.replace(' "beta",', ' "beta 0.1.0",', 1), encoding="utf-8")
+
+        self._assert_rejected(repo, base, "alpha", mutate, "unattributable_lock_change")
+
+    def test_generated_lock_duplicate_dependency_entry_is_rejected(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            self._add_normal_path_dependency_with_generated_lockfile(root)
+            lock = root / "Cargo.lock"
+            content = lock.read_text(encoding="utf-8")
+            self.assertIn(' "beta",', content)
+            lock.write_text(
+                content.replace(' "beta",', ' "beta",\n "beta",', 1), encoding="utf-8"
+            )
+
+        self._assert_rejected(repo, base, "alpha", mutate, "unattributable_lock_change")
 
     def test_source_only_change_with_forged_lock_version_is_rejected(self) -> None:
         repo, base = self._fixture()
