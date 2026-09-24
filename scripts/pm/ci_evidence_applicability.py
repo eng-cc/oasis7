@@ -125,6 +125,17 @@ def _positive_int(value: Any, field: str) -> int:
     return value
 
 
+def _positive_numeric_id(value: Any, field: str) -> str:
+    """Normalize a positive GitHub numeric ID without accepting bools."""
+    if isinstance(value, bool):
+        raise ValueError(f"{field} must be a positive numeric ID")
+    if isinstance(value, int) and value > 0:
+        return str(value)
+    if isinstance(value, str) and re.fullmatch(r"[1-9][0-9]*", value):
+        return value
+    raise ValueError(f"{field} must be a positive numeric ID")
+
+
 def _matches_common_identity(record: Any, expected: dict[str, Any], label: str) -> bool:
     actual = _common_identity(record, label)
     return all(actual[field] == expected[field] for field in _COMMON_IDENTITY_FIELDS)
@@ -140,8 +151,9 @@ def evaluate_evidence_applicability(
 
     The v2 envelope must explicitly require the known capability.  Reuse is
     still off unless ``effective_policy.enabled_capabilities`` explicitly
-    includes it.  Identity/provenance uncertainty blocks; known missing or
-    changed obligations are returned as required revalidation work.
+    includes it and the policy binds the trusted ``check_app_id``. Evidence
+    must carry that same app ID. Identity/provenance uncertainty blocks; known
+    missing or changed obligations are returned as required revalidation work.
     """
     try:
         capabilities = read_required_plan_capabilities(source_plan)
@@ -166,6 +178,12 @@ def evaluate_evidence_applicability(
     if INPUT_SCOPE_REUSE_CAPABILITY not in enabled:
         # Disabled means the existing full/legacy gate remains authoritative.
         return _decision(_DISABLED, _DISABLED, _DISABLED)
+    try:
+        expected_check_app_id = _positive_numeric_id(
+            effective_policy.get("check_app_id"), "effective_policy.check_app_id",
+        )
+    except ValueError:
+        return _blocked("EFFECTIVE_POLICY_INVALID")
 
     if not isinstance(source_plan, dict) or source_plan.get("schema") != REQUIRED_PLAN_V2_SCHEMA:
         return _blocked("UNSUPPORTED_PROTOCOL")
@@ -281,12 +299,17 @@ def evaluate_evidence_applicability(
                 required_units.append(unit)
                 continue
             record_digest = _digest(record.get("input_digest"), "test.input_digest")
+            check_app_id = _positive_numeric_id(record.get("check_app_id"), "test.check_app_id")
             _positive_int(record.get("run_id"), "test.run_id")
             _positive_int(record.get("run_attempt"), "test.run_attempt")
             _positive_int(record.get("check_run_id"), "test.check_run_id")
             _positive_int(record.get("artifact_id"), "test.artifact_id")
         except (TypeError, ValueError):
             blockers.append("TEST_PROVENANCE_INVALID")
+            required_units.append(unit)
+            continue
+        if check_app_id != expected_check_app_id:
+            blockers.append("TEST_APP_IDENTITY_MISMATCH")
             required_units.append(unit)
             continue
         status = record.get("status")

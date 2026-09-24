@@ -67,6 +67,7 @@ def evidence_set(*, test_input_digest=INPUT_DIGEST, review_digest=DIGEST):
             "source_head_oid": HEAD,
             "run_id": 10,
             "run_attempt": 1,
+            "check_app_id": 42,
             "check_run_id": 20,
             "artifact_id": 30,
         }],
@@ -74,7 +75,7 @@ def evidence_set(*, test_input_digest=INPUT_DIGEST, review_digest=DIGEST):
 
 
 def enabled_policy():
-    return {"enabled_capabilities": [CAPABILITY]}
+    return {"enabled_capabilities": [CAPABILITY], "check_app_id": 42}
 
 
 def publication_v1():
@@ -254,6 +255,26 @@ class ApplicabilityDecisionTests(unittest.TestCase):
                 decision = self.evaluate(evidence=evidence)
                 self.assertEqual("blocked", result_status(decision, "test_evidence"))
                 self.assertEqual("blocked", result_status(decision, "merge_readiness"))
+
+    def test_missing_check_app_identity_blocks_test_reuse(self):
+        missing_app = evidence_set()
+        del missing_app["tests"][0]["check_app_id"]
+        decision = self.evaluate(evidence=missing_app)
+        self.assertEqual("blocked", result_status(decision, "test_evidence"))
+        self.assertEqual("blocked", result_status(decision, "merge_readiness"))
+
+    def test_wrong_check_app_identity_blocks_test_reuse(self):
+        wrong_app = evidence_set()
+        wrong_app["tests"][0]["check_app_id"] = 41
+        decision = self.evaluate(evidence=wrong_app)
+        self.assertEqual("blocked", result_status(decision, "test_evidence"))
+        self.assertEqual("blocked", result_status(decision, "merge_readiness"))
+
+    def test_missing_trusted_check_app_policy_blocks_reuse(self):
+        decision = self.evaluate(policy={"enabled_capabilities": [CAPABILITY]})
+
+        self.assertEqual("blocked", result_status(decision, "test_evidence"))
+        self.assertEqual("blocked", result_status(decision, "merge_readiness"))
 
     def test_failed_test_attempt_is_a_blocker_even_when_older_inputs_match(self):
         evidence = evidence_set()
