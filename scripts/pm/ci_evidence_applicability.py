@@ -17,6 +17,7 @@ from ci_ready_receipt_identity import (
     REQUIRED_PLAN_V2_SCHEMA,
     read_required_plan_capabilities,
 )
+from ci_input_scope import aggregate_product_corpus_results, validate_input_scope_snapshot
 
 _UID_RE = re.compile(r"task_[0-9a-f]{32}\Z")
 _OID_RE = re.compile(r"[0-9a-f]{40,64}\Z")
@@ -213,19 +214,17 @@ def evaluate_evidence_applicability(
         source_roles = set(_string_list(
             source_plan.get("required_review_roles"), "source_plan.required_review_roles",
         ))
-        target_units = _string_list(
+        input_scope = validate_input_scope_snapshot(target_snapshot.get("input_scope"))
+        target_units = tuple(input_scope["required_test_units"])
+        projected_target_units = _string_list(
             target_snapshot.get("required_test_units"), "target_snapshot.required_test_units",
         )
+        if projected_target_units != target_units:
+            raise ValueError("target required units disagree with the complete input-scope snapshot")
         target_roles = _string_list(
             target_snapshot.get("required_review_roles"), "target_snapshot.required_review_roles",
         )
-        input_fingerprints = target_snapshot.get("input_fingerprints")
-        if not isinstance(input_fingerprints, dict):
-            raise ValueError("target_snapshot.input_fingerprints must be an object")
-        fingerprints = {
-            unit: _digest(input_fingerprints.get(unit), f"input_fingerprints.{unit}")
-            for unit in target_units
-        }
+        fingerprints = input_scope["input_fingerprints"]
     except (TypeError, ValueError, KeyError):
         return _blocked("APPLICABILITY_INPUT_INVALID")
 
@@ -236,7 +235,15 @@ def evaluate_evidence_applicability(
     if any(not isinstance(item, dict) for item in reviews + tests):
         return _blocked("EVIDENCE_RECORD_INVALID")
 
-    blockers: list[str] = []
+    corpus_result = aggregate_product_corpus_results(input_scope, tests)
+    if corpus_result["status"] == "blocked":
+        corpus_blockers = tuple(
+            "TEST_" + code for code in corpus_result["blockers"]
+        )
+    else:
+        corpus_blockers = ()
+
+    blockers: list[str] = list(corpus_blockers)
     reused_units: list[str] = []
     required_units: list[str] = []
     required_roles: list[str] = []
@@ -313,7 +320,7 @@ def evaluate_evidence_applicability(
             required_units.append(unit)
             continue
         status = record.get("status")
-        if record_digest != fingerprints[unit]:
+        if record_digest != fingerprints.get(unit):
             required_units.append(unit)
         elif status == "passed":
             reused_units.append(unit)
