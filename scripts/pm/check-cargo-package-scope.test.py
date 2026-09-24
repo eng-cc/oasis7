@@ -78,18 +78,23 @@ class CargoPackageScopeContract(unittest.TestCase):
         lines[start:end] = record
         lock.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-    def _fixture(self) -> tuple[Path, str]:
+    def _fixture(self, *, inline_members: bool = False) -> tuple[Path, str]:
         temp = tempfile.TemporaryDirectory(prefix="cargo-package-scope-")
         self._temps.append(temp)
         repo = Path(temp.name)
+        members = (
+            'members = ["crates/alpha", "crates/beta"]'
+            if inline_members
+            else '''members = [
+    "crates/alpha",
+    "crates/beta",
+]'''
+        )
         self._write(
             repo,
             "Cargo.toml",
-            """[workspace]
-members = [
-    "crates/alpha",
-    "crates/beta",
-]
+            f"""[workspace]
+{members}
 resolver = "2"
 """,
         )
@@ -148,10 +153,19 @@ path = "src/lib.rs"
 
     def _add_workspace_package(self, root: Path, name: str) -> None:
         workspace = root / "Cargo.toml"
-        workspace.write_text(
-            workspace.read_text(encoding="utf-8").replace(
+        text = workspace.read_text(encoding="utf-8")
+        inline_members = 'members = ["crates/alpha", "crates/beta"]'
+        if inline_members in text:
+            text = text.replace(
+                inline_members,
+                f'members = ["crates/alpha", "crates/beta", "crates/{name}"]',
+            )
+        else:
+            text = text.replace(
                 '    "crates/beta",\n', f'    "crates/beta",\n    "crates/{name}",\n'
-            ),
+            )
+        workspace.write_text(
+            text,
             encoding="utf-8",
         )
         self._write(
@@ -357,6 +371,44 @@ path = "src/lib.rs"
         )
         self.assertEqual("allowed", json.loads(result.stdout).get("status"), result.stdout)
 
+    def test_changed_manifest_requirement_cannot_retarget_lock_dependency(self) -> None:
+        for lock_target in (
+            "beta 9.9.9",
+            "beta 0.1.0 (registry+https://example.invalid/index)",
+        ):
+            with self.subTest(lock_target=lock_target):
+                repo, _ = self._fixture()
+
+                def add_dependency(root: Path) -> None:
+                    manifest = root / "crates/alpha/Cargo.toml"
+                    manifest.write_text(
+                        manifest.read_text(encoding="utf-8")
+                        + '\n[dependencies]\nbeta = { path = "../beta", version = "^0.1.0" }\n',
+                        encoding="utf-8",
+                    )
+                    self._set_lock_dependencies(root, "alpha", ["beta 0.1.0"])
+                    with (root / "Cargo.lock").open("a", encoding="utf-8") as handle:
+                        handle.write(
+                            '\n[[package]]\nname = "beta"\nversion = "9.9.9"\n'
+                            'source = "registry+https://example.invalid/index"\n'
+                        )
+
+                dependency_base = self._head(repo, add_dependency, "fixture with locked path dependency")
+
+                def tamper_lock_target(root: Path) -> None:
+                    manifest = root / "crates/alpha/Cargo.toml"
+                    manifest.write_text(
+                        manifest.read_text(encoding="utf-8").replace(
+                            'version = "^0.1.0"', 'version = "~0.1.0"'
+                        ),
+                        encoding="utf-8",
+                    )
+                    self._set_lock_dependencies(root, "alpha", [lock_target])
+
+                self._assert_rejected(
+                    repo, dependency_base, "alpha", tamper_lock_target, "unattributable_lock_change"
+                )
+
     def test_generated_output_into_another_package_is_rejected(self) -> None:
         repo, base = self._fixture()
 
@@ -392,6 +444,14 @@ path = "src/lib.rs"
 
     def test_new_package_with_multiline_member_and_lock_registration_is_allowed(self) -> None:
         repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            self._add_workspace_package(root, "gamma")
+
+        self._assert_allowed(repo, base, "gamma", mutate)
+
+    def test_new_package_with_inline_member_and_lock_registration_is_allowed(self) -> None:
+        repo, base = self._fixture(inline_members=True)
 
         def mutate(root: Path) -> None:
             self._add_workspace_package(root, "gamma")
