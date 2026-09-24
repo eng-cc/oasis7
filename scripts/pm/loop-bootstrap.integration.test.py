@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Real shell + temporary Git + fake GitHub manual bootstrap/resume acceptance."""
+import concurrent.futures
 import json
 import hashlib
 import os
@@ -12,11 +13,16 @@ import unittest
 ROOT = Path(__file__).resolve().parents[2]
 UID = 'task_' + '1' * 32
 FAKE = r'''#!/usr/bin/env python3
-import json, os, pathlib, sys
+import fcntl, json, os, pathlib, sys
 a=sys.argv[1:]; p=pathlib.Path(os.environ['FAKE_GH_STATE'])
+lock_path=p.with_name(p.name+'.lock'); lock_handle=lock_path.open('a+')
+fcntl.flock(lock_handle.fileno(),fcntl.LOCK_EX)
 s=json.loads(p.read_text()) if p.exists() else {'creates':0,'fields':{}}
+def save():
+ tmp=p.with_name(p.name+'.'+str(os.getpid())+'.tmp')
+ tmp.write_text(json.dumps(s)); os.replace(tmp,p)
 def emit(v):
- p.write_text(json.dumps(s)); print(json.dumps(v) if not isinstance(v,str) else v)
+ save(); print(json.dumps(v) if not isinstance(v,str) else v)
 def val(k): return a[a.index(k)+1]
 url='https://github.com/eng-cc/oasis7/issues/1'
 if a[:2]==['issue','list']:
@@ -29,9 +35,9 @@ elif a[:2] in (['issue','create'],['issue','edit']):
  s['body']=pathlib.Path(val('--body-file')).read_text()
  if a[1]=='create': s['creates']+=1
  if a[1]=='create' and os.environ.get('FAKE_LOSS') and not s.get('lost'):
-  s['lost']=True; p.write_text(json.dumps(s)); raise SystemExit('created but response lost')
+  s['lost']=True; save(); raise SystemExit('created but response lost')
  if a[1]=='edit' and '- status: `committed`' in s['body'] and os.environ.get('FAKE_LIFECYCLE')=='move-task':
-  p.write_text(json.dumps(s)); raise SystemExit('move succeeded but response lost')
+  save(); raise SystemExit('move succeeded but response lost')
  emit(url)
 elif a[:2]==['issue','view']: emit({'number':1,'url':url,'title':'[PM] fixture','state':'OPEN','stateReason':None,'body':s['body']})
 elif a[:2]==['issue','comment']:
@@ -39,7 +45,7 @@ elif a[:2]==['issue','comment']:
   raise SystemExit('start outcome unavailable')
  comments=s.setdefault('comments',[]); comments.append({'id':len(comments)+1,'body':pathlib.Path(val('--body-file')).read_text()})
  if 'Evidence Phase: start\n' in comments[-1]['body'] and os.environ.get('FAKE_LIFECYCLE')=='workflow-report':
-  p.write_text(json.dumps(s)); raise SystemExit('start succeeded but response lost')
+  save(); raise SystemExit('start succeeded but response lost')
  emit(url+'#issuecomment-'+str(len(comments)))
 elif a[:1]==['api'] and a[1].startswith('repos/eng-cc/oasis7/issues?'):
  emit([{'id':1,'number':1,'body':s['body']}] if s.get('body') else [])
@@ -62,6 +68,38 @@ else: raise SystemExit('unsupported fake gh '+repr(a))
 '''
 
 class BootstrapEndToEnd(unittest.TestCase):
+    def test_fake_github_adapter_serializes_state_read_modify_write(self):
+        with tempfile.TemporaryDirectory() as directory:
+            temp = Path(directory)
+            binary = temp / 'bin'; binary.mkdir()
+            gh = binary / 'gh'; gh.write_text(FAKE); gh.chmod(0o755)
+            state = temp / 'github.json'
+            state.write_text(json.dumps({'creates': 0, 'fields': {}, 'body': 'fixture', 'comments': []}))
+            env = dict(os.environ, PATH=str(binary)+os.pathsep+os.environ['PATH'],
+                       FAKE_GH_STATE=str(state), PYTHONDONTWRITEBYTECODE='1')
+            bodies = []
+            for index in range(24):
+                body = temp / f'comment-{index}.md'
+                body.write_text(f'parallel fake comment {index}')
+                bodies.append(body)
+
+            def comment(body):
+                return subprocess.run(
+                    [str(gh), 'issue', 'comment', '1', '-R', 'eng-cc/oasis7',
+                     '--body-file', str(body)],
+                    env=env, text=True, capture_output=True,
+                )
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
+                results = list(pool.map(comment, bodies))
+            self.assertTrue(all(result.returncode == 0 for result in results),
+                            ''.join(result.stderr for result in results))
+            persisted = json.loads(state.read_text())
+            self.assertEqual(
+                {f'parallel fake comment {index}' for index in range(len(bodies))},
+                {comment['body'] for comment in persisted['comments']},
+            )
+
     def test_uncertain_start_never_reposts(self):
         self.test_full_flags_and_explicit_resume_reuse_task(lifecycle='workflow-report-uncertain')
 
