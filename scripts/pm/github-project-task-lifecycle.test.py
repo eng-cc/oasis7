@@ -69,6 +69,52 @@ def record_pr_args(root: pathlib.Path) -> Namespace:
     )
 
 
+def record_pr_identity(root: pathlib.Path) -> dict[str, object]:
+    return {
+        "repository": "eng-cc/oasis7",
+        "canonical_worktree": str(root.resolve()),
+        "worktree_hint": str(root.resolve()),
+        "task_branch": "task/lifecycle-move-contract",
+        "default_branch": "main",
+    }
+
+
+def record_pr_live_issue(record: dict[str, object]) -> dict[str, object]:
+    return {
+        "task_uid": UID,
+        "issue_number": 2001,
+        "issue_url": "https://github.com/eng-cc/oasis7/issues/2001",
+        "issue_state": "OPEN",
+        "owner_role": record["owner_role"],
+        "module": record["module"],
+        "priority": record["priority"],
+        "status": record["status"],
+        "workflow_phase": record["workflow_phase"],
+        "worktree_hint": record["worktree_hint"],
+    }
+
+
+def record_pr_live_pr(**overrides: object) -> dict[str, object]:
+    pr: dict[str, object] = {
+        "number": 2001,
+        "html_url": "https://github.com/eng-cc/oasis7/pull/2001",
+        "state": "open",
+        "merged_at": None,
+        "draft": False,
+        "head": {
+            "ref": "task/lifecycle-move-contract",
+            "sha": "a" * 40,
+            "repo": {"full_name": "eng-cc/oasis7"},
+        },
+        "base": {
+            "ref": "main",
+            "repo": {"full_name": "eng-cc/oasis7"},
+        },
+    }
+    pr.update(overrides)
+    return pr
+
+
 class MoveTaskLifecycleContract(unittest.TestCase):
     def write_mapping(self, root: pathlib.Path, record: dict[str, object]) -> pathlib.Path:
         path = root / ".pm/github-project-sync/tasks.json"
@@ -213,6 +259,160 @@ class MoveTaskLifecycleContract(unittest.TestCase):
             comment.assert_not_called()
             update_project.assert_not_called()
 
+    def test_record_pr_rejects_replaced_canonical_branch_before_any_task_write(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            record = mapping_record(status="ready", phase="pre_pr_ready")
+            record.update(record_pr_identity(root))
+            mapping_path = self.write_mapping(root, record)
+            before = self.digest(mapping_path)
+            with (
+                mock.patch.object(MODULE, "github_issue_record", return_value=record_pr_live_issue(record)),
+                mock.patch.object(MODULE, "authoritative_repository_identity", return_value={
+                    **record_pr_identity(root),
+                    "task_branch": "task/lifecycle-move-contract-repaired",
+                }),
+                mock.patch.object(MODULE, "github_pull_request", return_value=record_pr_live_pr(), create=True) as live_pr,
+                mock.patch.object(MODULE, "run_text", return_value="a" * 40),
+                mock.patch.object(MODULE, "update_issue_body") as update_issue,
+                mock.patch.object(MODULE, "issue_comment", return_value="comment-url") as comment,
+                mock.patch.object(MODULE, "update_project_fields", return_value=0) as update_project,
+                mock.patch.object(MODULE, "merge_task_mapping") as merge_mapping,
+            ):
+                with self.assertRaisesRegex(MODULE._CommandExit, "canonical task branch identity mismatch"):
+                    MODULE.command_record_pr(record_pr_args(root))
+            self.assertEqual(before, self.digest(mapping_path))
+            live_pr.assert_not_called()
+            update_issue.assert_not_called()
+            comment.assert_not_called()
+            update_project.assert_not_called()
+            merge_mapping.assert_not_called()
+
+    def test_record_pr_rejects_stale_live_task_truth_before_any_task_write(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            record = mapping_record(status="ready", phase="pre_pr_ready")
+            record.update(record_pr_identity(root))
+            mapping_path = self.write_mapping(root, record)
+            before = self.digest(mapping_path)
+            live_issue = record_pr_live_issue(record)
+            live_issue["workflow_phase"] = "execution"
+            with (
+                mock.patch.object(MODULE, "github_issue_record", return_value=live_issue),
+                mock.patch.object(MODULE, "authoritative_repository_identity", return_value=record_pr_identity(root)),
+                mock.patch.object(MODULE, "github_pull_request", return_value=record_pr_live_pr(), create=True) as live_pr,
+                mock.patch.object(MODULE, "run_text", return_value="a" * 40),
+                mock.patch.object(MODULE, "update_issue_body") as update_issue,
+                mock.patch.object(MODULE, "issue_comment", return_value="comment-url") as comment,
+                mock.patch.object(MODULE, "update_project_fields", return_value=0) as update_project,
+                mock.patch.object(MODULE, "merge_task_mapping") as merge_mapping,
+            ):
+                with self.assertRaisesRegex(MODULE._CommandExit, "live task Issue workflow_phase differs from cached task truth"):
+                    MODULE.command_record_pr(record_pr_args(root))
+            self.assertEqual(before, self.digest(mapping_path))
+            live_pr.assert_not_called()
+            update_issue.assert_not_called()
+            comment.assert_not_called()
+            update_project.assert_not_called()
+            merge_mapping.assert_not_called()
+
+    def test_record_pr_rejects_closed_live_issue_before_any_task_write(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            record = mapping_record(status="ready", phase="pre_pr_ready")
+            record.update(record_pr_identity(root))
+            mapping_path = self.write_mapping(root, record)
+            before = self.digest(mapping_path)
+            live_issue = record_pr_live_issue(record)
+            live_issue["issue_state"] = "CLOSED"
+            failure = None
+            with (
+                mock.patch.object(MODULE, "github_issue_record", return_value=live_issue),
+                mock.patch.object(MODULE, "authoritative_repository_identity", return_value=record_pr_identity(root)),
+                mock.patch.object(MODULE, "github_pull_request", return_value=record_pr_live_pr(), create=True) as live_pr,
+                mock.patch.object(MODULE, "run_text", return_value="a" * 40),
+                mock.patch.object(MODULE, "update_issue_body") as update_issue,
+                mock.patch.object(MODULE, "issue_comment", return_value="comment-url") as comment,
+                mock.patch.object(MODULE, "update_project_fields", return_value=0) as update_project,
+                mock.patch.object(MODULE, "merge_task_mapping") as merge_mapping,
+                mock.patch.object(MODULE, "synchronize_live_issue_traceability", return_value=[]) as sync_traceability,
+            ):
+                try:
+                    MODULE.command_record_pr(record_pr_args(root))
+                except MODULE._CommandExit as exc:
+                    failure = exc
+            self.assertEqual(before, self.digest(mapping_path))
+            update_issue.assert_not_called()
+            comment.assert_not_called()
+            update_project.assert_not_called()
+            merge_mapping.assert_not_called()
+            sync_traceability.assert_not_called()
+            live_pr.assert_not_called()
+            self.assertIsNotNone(failure, "closed Issue must be rejected before record-pr writers")
+            self.assertIn("live task Issue is not OPEN", str(failure))
+
+    def test_record_pr_rejects_stale_live_pr_head_before_any_task_write(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            record = mapping_record(status="ready", phase="pre_pr_ready")
+            record.update(record_pr_identity(root))
+            mapping_path = self.write_mapping(root, record)
+            before = self.digest(mapping_path)
+            with (
+                mock.patch.object(MODULE, "github_issue_record", return_value=record_pr_live_issue(record)),
+                mock.patch.object(MODULE, "authoritative_repository_identity", return_value=record_pr_identity(root)),
+                mock.patch.object(MODULE, "github_pull_request", return_value=record_pr_live_pr(
+                    head={
+                        "ref": "task/lifecycle-move-contract",
+                        "sha": "b" * 40,
+                        "repo": {"full_name": "eng-cc/oasis7"},
+                    },
+                ), create=True),
+                mock.patch.object(MODULE, "run_text", return_value="a" * 40),
+                mock.patch.object(MODULE, "update_issue_body") as update_issue,
+                mock.patch.object(MODULE, "issue_comment", return_value="comment-url") as comment,
+                mock.patch.object(MODULE, "update_project_fields", return_value=0) as update_project,
+                mock.patch.object(MODULE, "merge_task_mapping") as merge_mapping,
+            ):
+                with self.assertRaisesRegex(MODULE._CommandExit, "live PR head does not match canonical task HEAD"):
+                    MODULE.command_record_pr(record_pr_args(root))
+            self.assertEqual(before, self.digest(mapping_path))
+            update_issue.assert_not_called()
+            comment.assert_not_called()
+            update_project.assert_not_called()
+            merge_mapping.assert_not_called()
+
+    def test_record_pr_rejects_foreign_live_pr_branch_before_any_task_write(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            record = mapping_record(status="ready", phase="pre_pr_ready")
+            record.update(record_pr_identity(root))
+            mapping_path = self.write_mapping(root, record)
+            before = self.digest(mapping_path)
+            with (
+                mock.patch.object(MODULE, "github_issue_record", return_value=record_pr_live_issue(record)),
+                mock.patch.object(MODULE, "authoritative_repository_identity", return_value=record_pr_identity(root)),
+                mock.patch.object(MODULE, "github_pull_request", return_value=record_pr_live_pr(
+                    head={
+                        "ref": "task/lifecycle-move-contract",
+                        "sha": "a" * 40,
+                        "repo": {"full_name": "outside/fork"},
+                    },
+                ), create=True),
+                mock.patch.object(MODULE, "run_text", return_value="a" * 40),
+                mock.patch.object(MODULE, "update_issue_body") as update_issue,
+                mock.patch.object(MODULE, "issue_comment", return_value="comment-url") as comment,
+                mock.patch.object(MODULE, "update_project_fields", return_value=0) as update_project,
+                mock.patch.object(MODULE, "merge_task_mapping") as merge_mapping,
+            ):
+                with self.assertRaisesRegex(MODULE._CommandExit, "live PR head repository does not match task repository"):
+                    MODULE.command_record_pr(record_pr_args(root))
+            self.assertEqual(before, self.digest(mapping_path))
+            update_issue.assert_not_called()
+            comment.assert_not_called()
+            update_project.assert_not_called()
+            merge_mapping.assert_not_called()
+
     def test_record_pr_cannot_rewrite_terminal_task(self) -> None:
         for phase in ("post_merge_done", "closed_without_merge"):
             with self.subTest(phase=phase), tempfile.TemporaryDirectory() as directory:
@@ -261,8 +461,14 @@ class MoveTaskLifecycleContract(unittest.TestCase):
     def test_record_pr_preserves_authoritative_ready_writer(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = pathlib.Path(directory)
-            mapping_path = self.write_mapping(root, mapping_record(status="ready", phase="pre_pr_ready"))
+            record = mapping_record(status="ready", phase="pre_pr_ready")
+            record.update(record_pr_identity(root))
+            mapping_path = self.write_mapping(root, record)
             with (
+                mock.patch.object(MODULE, "github_issue_record", return_value=record_pr_live_issue(record)),
+                mock.patch.object(MODULE, "authoritative_repository_identity", return_value=record_pr_identity(root)),
+                mock.patch.object(MODULE, "github_pull_request", return_value=record_pr_live_pr(), create=True),
+                mock.patch.object(MODULE, "run_text", return_value="a" * 40),
                 mock.patch.object(MODULE, "update_issue_body"),
                 mock.patch.object(MODULE, "issue_comment", return_value="comment-url"),
                 mock.patch.object(MODULE, "merge_task_mapping") as merge_mapping,
