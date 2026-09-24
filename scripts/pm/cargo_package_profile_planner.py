@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
@@ -22,14 +23,37 @@ MAX_INDEPENDENT_WORKSPACES = 128
 AUTHORITY_STAGE = "normative_source"
 PLANNER_STAGE = "planner_authority"
 AUTHORITY_PATH = "doc/engineering/workflow/source-of-truth.md"
-AUTHORITY_FRAGMENT = "cargo-checker-authority-upgrade"
+AUTHORITY_FRAGMENT = "cargo-package-scope-and-impact-scoped-verification"
+AUTHORITY_CONTRACT_FRAGMENT = "cargo-checker-authority-upgrade"
 APPROVED_NORMATIVE_REPOSITORY = "eng-cc/oasis7"
-APPROVED_NORMATIVE_ISSUE = 3814
-APPROVED_NORMATIVE_COMMENT = 5743059557
-APPROVED_NORMATIVE_PR = 3815
+APPROVED_NORMATIVE_ISSUE = 3996
+APPROVED_NORMATIVE_COMMENT = 5822424913
+APPROVED_NORMATIVE_PR = 3997
+APPROVED_NORMATIVE_TASK_UID = "task_a14e1a1d51a44519ab0aa94632d90df4"
 CURRENT_PLANNER_REPOSITORY = "eng-cc/oasis7"
-CURRENT_PLANNER_ISSUE = 3818
-CURRENT_PLANNER_COMMENT = 5743122124
+CURRENT_PLANNER_ISSUE = 3999
+CURRENT_PLANNER_COMMENT = 5822600447
+CURRENT_PLANNER_TASK_UID = "task_978dcc0005b9415cbc45e59b21b095e0"
+APPROVED_NORMATIVE_EXPECTED = {
+    "repository": "eng-cc/oasis7",
+    "default_branch": "main",
+    "stage": "normative_source",
+    "task_uid": APPROVED_NORMATIVE_TASK_UID,
+    "pr_number": APPROVED_NORMATIVE_PR,
+    "source_head": "6dcc49fc1a3a726bc09ab88a96ac3065a7535bf0",
+    "source_scope_base": "747750afc6788d8a16421f84099edae8ab3e8520",
+    "authority_path": "doc/engineering/workflow/source-of-truth.md",
+    "predecessor_file_sha256": "sha256:6af4fbc942407cb8c44bdc383793062d1463b62ffc3fbeedbc81f79f36324ed5",
+    "merged_commit": "4f97540c34aefca41d8bf790cbf09b3176f07de3",
+    "merged_tree": "82b8e5ad75d44c48739165b8bd26b5896eaa783a",
+    "authority_blob": "b6d1c5fa854bde6f63d14db1cfd31eb5f8a23705",
+    "authority_size": 159647,
+    "authority_bytes_sha256": "sha256:7ffc099266de2affb9b9726468edc45b91af55cb531537749ef8361407f4902e",
+    "stable_fragment": "cargo-package-scope-and-impact-scoped-verification",
+    "stable_fragment_sha256": "sha256:03bb8e833ed707662267633eec3747b46eaa698765a89e6a44d3c3fa679bbae0",
+    "authority_contract_fragment": "cargo-checker-authority-upgrade",
+    "authority_contract_fragment_sha256": "sha256:16c3593deb204c7e38ae551ac553075abd24fd81e5f09d6ac9af3b0a38a9f45a",
+}
 PLANNER_WRITE_SCOPE = (
     "scripts/pm/cargo_package_profile_planner.py",
     "scripts/pm/cargo-package-profile-planner.test.py",
@@ -132,19 +156,19 @@ def _fragment_bytes(value: bytes, anchor: str) -> bytes:
 
 def _parse_approved_normative_comment(body: str) -> dict[str, Any]:
     """Parse the fixed live readback comment, never a candidate-local file."""
-    if "stage=normative_source" not in body or "immutable, not candidate authority" not in body:
+    if re.findall(r"\bstage=([^;]+)", body) != ["normative_source"] or "immutable, not candidate authority" not in body:
         raise PlanError("live approved normative source comment is not an immutable readback")
 
     def match(pattern: str, field: str) -> str:
-        found = re.search(pattern, body)
-        if found is None:
-            raise PlanError(f"live approved normative source is missing {field}")
-        return found.group(1)
+        found = re.findall(pattern, body)
+        if len(found) != 1:
+            raise PlanError(f"live approved normative source {field} is missing or ambiguous")
+        return found[0]
 
     pr_number = int(match(r"\bPR=(\d+)\b", "PR identity"))
     if pr_number != APPROVED_NORMATIVE_PR:
         raise PlanError("live approved normative source PR identity mismatch")
-    return {
+    receipt = {
         "repository": match(r"\brepository=([^;]+)", "repository"),
         "default_branch": match(r"\bdefault_branch=([^;]+)", "default branch"),
         "stage": AUTHORITY_STAGE,
@@ -166,33 +190,55 @@ def _parse_approved_normative_comment(body: str) -> dict[str, Any]:
         "authority_bytes_sha256": "sha256:" + match(
             r"\bdecoded bytes sha256=([0-9a-f]{64})\b", "authority file digest"
         ),
-        "stable_fragment": match(r"\bStable fragment anchor=([^ ]+)\b", "stable fragment"),
+        "stable_fragment": match(r"\bStable fragment anchor=([^ ,;]+)", "stable fragment"),
         "stable_fragment_sha256": "sha256:" + match(
-            r"\bsha256 including final LF=([0-9a-f]{64})\b", "stable fragment digest"
+            r"\bStable fragment anchor=[^,;]+[,;] sha256 including final LF=([0-9a-f]{64})\b",
+            "stable fragment digest",
+        ),
+        "authority_contract_fragment": match(
+            r"\bAdjacent staged-authority fragment anchor=([^,;.]+)",
+            "staged-authority fragment",
+        ),
+        "authority_contract_fragment_sha256": "sha256:" + match(
+            r"\bAdjacent staged-authority fragment anchor=[^,;.]+[,;.] sha256 including final LF=([0-9a-f]{64})\b",
+            "staged-authority fragment digest",
         ),
     }
+    for field, expected in APPROVED_NORMATIVE_EXPECTED.items():
+        if receipt.get(field) != expected:
+            raise PlanError(f"live approved normative source {field} mismatch")
+    return receipt
 
 
 def _read_approved_normative_source_from_github(repo: Path) -> dict[str, Any]:
-    """Read the immutable predecessor receipt from the fixed GitHub comment."""
+    """Read and independently verify the immutable N1 receipt on GitHub."""
     if _canonical_repository(repo) != APPROVED_NORMATIVE_REPOSITORY:
         raise PlanError("live approved normative source repository mismatch")
-    comment_result = subprocess.run(
-        [
-            "gh",
-            "api",
-            f"repos/{APPROVED_NORMATIVE_REPOSITORY}/issues/comments/{APPROVED_NORMATIVE_COMMENT}",
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
+
+    def read_json(endpoint: str, label: str) -> dict[str, Any]:
+        result = subprocess.run(
+            ["gh", "api", endpoint], capture_output=True, text=True, check=False
+        )
+        if result.returncode != 0 or not result.stdout.strip():
+            raise PlanError(f"live approved normative source {label} readback is unavailable")
+        try:
+            value = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            raise PlanError(f"live approved normative source {label} is not valid JSON") from exc
+        if not isinstance(value, dict):
+            raise PlanError(f"live approved normative source {label} readback is malformed")
+        return value
+
+    repository = read_json(f"repos/{APPROVED_NORMATIVE_REPOSITORY}", "repository")
+    if repository.get("full_name") != APPROVED_NORMATIVE_REPOSITORY:
+        raise PlanError("live approved normative source repository identity mismatch")
+    if repository.get("default_branch") != "main":
+        raise PlanError("live approved normative source default branch mismatch")
+
+    comment = read_json(
+        f"repos/{APPROVED_NORMATIVE_REPOSITORY}/issues/comments/{APPROVED_NORMATIVE_COMMENT}",
+        "comment",
     )
-    if comment_result.returncode != 0 or not comment_result.stdout.strip():
-        raise PlanError("live approved normative source GitHub readback is unavailable")
-    try:
-        comment = json.loads(comment_result.stdout)
-    except json.JSONDecodeError as exc:
-        raise PlanError("live approved normative source comment is not valid JSON") from exc
     expected_issue_url = (
         f"https://api.github.com/repos/{APPROVED_NORMATIVE_REPOSITORY}/issues/{APPROVED_NORMATIVE_ISSUE}"
     )
@@ -207,19 +253,10 @@ def _read_approved_normative_source_from_github(repo: Path) -> dict[str, Any]:
         raise PlanError("live approved normative source comment body is unavailable")
     receipt = _parse_approved_normative_comment(body)
 
-    pr_result = subprocess.run(
-        ["gh", "api", f"repos/{APPROVED_NORMATIVE_REPOSITORY}/pulls/{APPROVED_NORMATIVE_PR}"],
-        capture_output=True,
-        text=True,
-        check=False,
+    pr = read_json(
+        f"repos/{APPROVED_NORMATIVE_REPOSITORY}/pulls/{APPROVED_NORMATIVE_PR}", "PR"
     )
-    if pr_result.returncode != 0 or not pr_result.stdout.strip():
-        raise PlanError("live approved normative source PR readback is unavailable")
-    try:
-        pr = json.loads(pr_result.stdout)
-    except json.JSONDecodeError as exc:
-        raise PlanError("live approved normative source PR is not valid JSON") from exc
-    if pr.get("state") != "closed" or pr.get("merged") is not True:
+    if pr.get("number") != APPROVED_NORMATIVE_PR or pr.get("state") != "closed" or pr.get("merged") is not True:
         raise PlanError("live approved normative source PR is not merged")
     if pr.get("merge_commit_sha") != receipt["merged_commit"]:
         raise PlanError("live approved normative source merged commit mismatch")
@@ -237,8 +274,46 @@ def _read_approved_normative_source_from_github(repo: Path) -> dict[str, Any]:
         raise PlanError("live approved normative source base repository mismatch")
     if base.get("ref") != receipt["default_branch"]:
         raise PlanError("live approved normative source base branch mismatch")
+    if base.get("sha") != receipt["source_scope_base"]:
+        raise PlanError("live approved normative source base SHA mismatch")
     if head.get("sha") != receipt["source_head"]:
         raise PlanError("live approved normative source head SHA mismatch")
+
+    commit = read_json(
+        f"repos/{APPROVED_NORMATIVE_REPOSITORY}/git/commits/{receipt['merged_commit']}",
+        "merged commit",
+    )
+    if commit.get("sha") != receipt["merged_commit"]:
+        raise PlanError("live approved normative source merged commit identity mismatch")
+    tree = commit.get("tree")
+    if not isinstance(tree, dict) or tree.get("sha") != receipt["merged_tree"]:
+        raise PlanError("live approved normative source merged tree mismatch")
+
+    content = read_json(
+        f"repos/{APPROVED_NORMATIVE_REPOSITORY}/contents/{AUTHORITY_PATH}?ref={receipt['merged_commit']}",
+        "authority path",
+    )
+    encoded = content.get("content")
+    if content.get("encoding") != "base64" or not isinstance(encoded, str):
+        raise PlanError("live approved normative source authority bytes are unavailable")
+    try:
+        authority_bytes = base64.b64decode("".join(encoded.split()), validate=True)
+    except (ValueError, base64.binascii.Error) as exc:
+        raise PlanError("live approved normative source authority bytes are malformed") from exc
+    if content.get("path") != receipt["authority_path"]:
+        raise PlanError("live approved normative source authority path mismatch")
+    if content.get("sha") != receipt["authority_blob"]:
+        raise PlanError("live approved normative source authority blob mismatch")
+    if content.get("size") != len(authority_bytes) or len(authority_bytes) != receipt["authority_size"]:
+        raise PlanError("live approved normative source authority size mismatch")
+    if _digest_bytes(authority_bytes) != receipt["authority_bytes_sha256"]:
+        raise PlanError("live approved normative source authority digest mismatch")
+    if _digest_bytes(_fragment_bytes(authority_bytes, AUTHORITY_FRAGMENT)) != receipt["stable_fragment_sha256"]:
+        raise PlanError("live approved normative source stable fragment digest mismatch")
+    if _digest_bytes(_fragment_bytes(authority_bytes, AUTHORITY_CONTRACT_FRAGMENT)) != receipt[
+        "authority_contract_fragment_sha256"
+    ]:
+        raise PlanError("live approved normative source staged-authority fragment digest mismatch")
     return receipt
 
 
@@ -266,6 +341,8 @@ def _read_current_planner_task_from_github(repo: Path) -> dict[str, Any]:
     task_match = re.search(r"(?m)^task_uid:\s*(task_[0-9a-f]+)\s*$", body)
     if task_match is None:
         raise PlanError("live current planner task UID is missing")
+    if task_match.group(1) != CURRENT_PLANNER_TASK_UID:
+        raise PlanError("live current planner task UID mismatch")
     pr_match = re.search(
         rf"https://github\.com/{re.escape(CURRENT_PLANNER_REPOSITORY)}/pull/(\d+)\b",
         body,
@@ -389,9 +466,16 @@ def _authority_receipt_identity(receipt: dict[str, Any]) -> dict[str, Any]:
         "authority_bytes_sha256",
         "stable_fragment",
         "stable_fragment_sha256",
+        "authority_contract_fragment",
+        "authority_contract_fragment_sha256",
     )
     identity = {field: receipt.get(field) for field in fields}
-    for field in ("predecessor_file_sha256", "authority_bytes_sha256", "stable_fragment_sha256"):
+    for field in (
+        "predecessor_file_sha256",
+        "authority_bytes_sha256",
+        "stable_fragment_sha256",
+        "authority_contract_fragment_sha256",
+    ):
         identity[field] = _require_digest(identity[field], field)
     return identity
 
@@ -456,8 +540,8 @@ def _validate_approved_normative_source(
     current_task_base_sha = current_task.get("base_sha")
     current_task_base_repository = current_task.get("base_repository")
     current_task_base_ref = current_task.get("base_ref")
-    if not isinstance(current_task_uid, str) or not current_task_uid.startswith("task_"):
-        raise PlanError("live current planner task UID is invalid")
+    if current_task_uid != CURRENT_PLANNER_TASK_UID:
+        raise PlanError("live current planner task UID mismatch")
     if current_task_issue_number != CURRENT_PLANNER_ISSUE:
         raise PlanError("live current planner task issue identity is invalid")
     if not isinstance(current_task_pr_number, int) or current_task_pr_number <= 0:
@@ -508,11 +592,20 @@ def _validate_approved_normative_source(
         "source_head": "predecessor_source_head",
         "source_scope_base": "predecessor_source_scope_base",
         "predecessor_file_sha256": "predecessor_file_sha256",
+        "merged_commit": "predecessor_authority_commit",
+        "merged_tree": "predecessor_authority_tree",
+        "authority_path": "predecessor_authority_path",
+        "authority_blob": "predecessor_authority_blob",
+        "authority_bytes_sha256": "predecessor_authority_digest",
+        "stable_fragment": "predecessor_authority_fragment",
+        "stable_fragment_sha256": "predecessor_authority_fragment_sha256",
+        "authority_contract_fragment": "predecessor_authority_contract_fragment",
+        "authority_contract_fragment_sha256": "predecessor_authority_contract_fragment_sha256",
     }
     for receipt_field, binding_field in predecessor_fields.items():
         if receipt_field not in receipt:
             raise PlanError(f"trusted authority {receipt_field} binding mismatch")
-        if receipt_field == "predecessor_file_sha256":
+        if receipt_field.endswith("sha256"):
             receipt_value = _require_digest(receipt[receipt_field], receipt_field)
             binding_value = _require_digest(authority_binding.get(binding_field), binding_field)
         else:
@@ -520,10 +613,6 @@ def _validate_approved_normative_source(
             binding_value = authority_binding.get(binding_field)
         if binding_value != receipt_value:
             raise PlanError(f"trusted authority {receipt_field} binding mismatch")
-    if authority_binding.get("predecessor_authority_digest") != authority_binding.get(
-        "predecessor_file_sha256"
-    ):
-        raise PlanError("planner authority predecessor digest binding mismatch")
 
     task_uid = _binding_value(authority_binding, "task_uid")
     pr_number = _binding_value(authority_binding, "pr_number")
@@ -590,6 +679,11 @@ def _validate_approved_normative_source(
     fragment = _fragment_bytes(merged_bytes, AUTHORITY_FRAGMENT)
     if _require_digest(receipt.get("stable_fragment_sha256"), "stable fragment") != _digest_bytes(fragment):
         raise PlanError("trusted authority fragment digest mismatch")
+    authority_contract_fragment = _fragment_bytes(merged_bytes, AUTHORITY_CONTRACT_FRAGMENT)
+    if _require_digest(
+        receipt.get("authority_contract_fragment_sha256"), "staged-authority fragment"
+    ) != _digest_bytes(authority_contract_fragment):
+        raise PlanError("trusted staged-authority fragment digest mismatch")
     live_authority_bytes = _blob(repo, live_default_tip, AUTHORITY_PATH)
     scope_authority_bytes = _blob(repo, source_scope_base, AUTHORITY_PATH)
     if _digest_bytes(scope_authority_bytes) != merged_digest:
@@ -602,6 +696,12 @@ def _validate_approved_normative_source(
     live_fragment = _fragment_bytes(live_authority_bytes, AUTHORITY_FRAGMENT)
     if _digest_bytes(live_fragment) != _digest_bytes(scope_fragment):
         raise PlanError("live default branch authority fragment changed after approval")
+    scope_contract_fragment = _fragment_bytes(scope_authority_bytes, AUTHORITY_CONTRACT_FRAGMENT)
+    if _digest_bytes(scope_contract_fragment) != _digest_bytes(authority_contract_fragment):
+        raise PlanError("current source scope staged-authority fragment changed after approval")
+    live_contract_fragment = _fragment_bytes(live_authority_bytes, AUTHORITY_CONTRACT_FRAGMENT)
+    if _digest_bytes(live_contract_fragment) != _digest_bytes(scope_contract_fragment):
+        raise PlanError("live default branch staged-authority fragment changed after approval")
 
     predecessor_bytes = _blob(repo, predecessor_scope, AUTHORITY_PATH)
     predecessor_digest = _require_digest(receipt.get("predecessor_file_sha256"), "predecessor file")
@@ -631,8 +731,18 @@ def _validate_approved_normative_source(
         "authority_size": len(merged_bytes),
         "stable_fragment": AUTHORITY_FRAGMENT,
         "stable_fragment_sha256": _digest_bytes(fragment),
+        "authority_contract_fragment": AUTHORITY_CONTRACT_FRAGMENT,
+        "authority_contract_fragment_sha256": _digest_bytes(authority_contract_fragment),
         "predecessor_file_sha256": predecessor_digest,
-        "predecessor_authority_digest": predecessor_digest,
+        "predecessor_authority_commit": merged_commit,
+        "predecessor_authority_tree": merged_tree,
+        "predecessor_authority_path": AUTHORITY_PATH,
+        "predecessor_authority_blob": authority_blob,
+        "predecessor_authority_digest": merged_digest,
+        "predecessor_authority_fragment": AUTHORITY_FRAGMENT,
+        "predecessor_authority_fragment_sha256": _digest_bytes(fragment),
+        "predecessor_authority_contract_fragment": AUTHORITY_CONTRACT_FRAGMENT,
+        "predecessor_authority_contract_fragment_sha256": _digest_bytes(authority_contract_fragment),
         "planner_stage": PLANNER_STAGE,
         "planner_task_uid": task_uid,
         "planner_pr_number": pr_number,
