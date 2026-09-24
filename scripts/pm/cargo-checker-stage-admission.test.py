@@ -266,6 +266,67 @@ class CheckerStageAdmissionTest(unittest.TestCase):
         self.assertIn("cargo-checker-stage-admission-receipt-", workflow)
         self.assertIn("steps.checker-stage.outputs.pr_number == ''", workflow)
 
+    def test_workflow_uses_source_head_for_checker_stage_check_lookup(self):
+        workflow = (Path(__file__).parents[2] / ".github/workflows/rust.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("OASIS7_CARGO_SCOPE_HEAD: ${{ steps.scope.outputs.head_oid }}", workflow)
+        self.assertIn(
+            "OASIS7_CARGO_STAGE_CHECK_HEAD: ${{ steps.scope.outputs.head_oid }}", workflow
+        )
+
+    def test_pr_check_head_uses_source_head_without_overwriting_workflow_shas(self):
+        source_head = "5" * 40
+        synthetic_merge_sha = "6" * 40
+        workflow_sha = "7" * 40
+        args = type("Args", (), {"head_oid": source_head, "check_head": synthetic_merge_sha})()
+        with patch.dict(
+            MODULE.os.environ,
+            {
+                "GITHUB_EVENT_NAME": "pull_request",
+                "GITHUB_SHA": synthetic_merge_sha,
+                "GITHUB_WORKFLOW_SHA": workflow_sha,
+                "OASIS7_CARGO_STAGE_CHECK_HEAD": source_head,
+            },
+        ):
+            self.assertEqual(source_head, MODULE.resolve_live_check_head(args))
+            self.assertEqual(synthetic_merge_sha, MODULE.os.environ["GITHUB_SHA"])
+            self.assertEqual(workflow_sha, MODULE.os.environ["GITHUB_WORKFLOW_SHA"])
+        with patch.dict(
+            MODULE.os.environ,
+            {
+                "GITHUB_EVENT_NAME": "pull_request",
+                "GITHUB_SHA": synthetic_merge_sha,
+                "OASIS7_CARGO_STAGE_CHECK_HEAD": "8" * 40,
+            },
+        ):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "source check head does not match"):
+                MODULE.resolve_live_check_head(args)
+
+    def test_pr_check_head_rejects_missing_stage_source_head(self):
+        args = type("Args", (), {"head_oid": "5" * 40, "check_head": "6" * 40})()
+        with patch.dict(
+            MODULE.os.environ,
+            {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_SHA": "6" * 40},
+            clear=True,
+        ):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "source check head"):
+                MODULE.resolve_live_check_head(args)
+
+    def test_pr_check_head_rejects_malformed_stage_source_head(self):
+        args = type("Args", (), {"head_oid": "5" * 40, "check_head": "6" * 40})()
+        with patch.dict(
+            MODULE.os.environ,
+            {
+                "GITHUB_EVENT_NAME": "pull_request",
+                "GITHUB_SHA": "6" * 40,
+                "OASIS7_CARGO_STAGE_CHECK_HEAD": "not-a-full-oid",
+            },
+            clear=True,
+        ):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "source check head"):
+                MODULE.resolve_live_check_head(args)
+
     def test_authority_chain_reads_both_fixed_live_server_readbacks(self):
         with patch.object(MODULE, "gh_api", side_effect=_authority_api()):
             chain = MODULE.verify_authority_chain(REPOSITORY)
@@ -762,6 +823,35 @@ class CheckerStageAdmissionTest(unittest.TestCase):
         self.assertEqual(15368, check["check_app_id"])
         self.assertEqual(123, check["check_run_id"])
         with patch.object(MODULE, "gh_api", return_value={"check_runs": []}):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "missing or ambiguous"):
+                MODULE.verify_live_check_identity(REPOSITORY, check_head, "99")
+        wrong_run = json.loads(json.dumps(response))
+        wrong_run["check_runs"][0]["details_url"] = (
+            f"https://github.com/{REPOSITORY}/actions/runs/990/job/1"
+        )
+        with patch.object(MODULE, "gh_api", return_value=wrong_run):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "missing or ambiguous"):
+                MODULE.verify_live_check_identity(REPOSITORY, check_head, "99")
+        wrong_head = json.loads(json.dumps(response))
+        wrong_head["check_runs"][0]["head_sha"] = "6" * 40
+        with patch.object(MODULE, "gh_api", return_value=wrong_head):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "head identity mismatch"):
+                MODULE.verify_live_check_identity(REPOSITORY, check_head, "99")
+        wrong_app = json.loads(json.dumps(response))
+        wrong_app["check_runs"][0]["app"] = {"id": 42, "slug": "untrusted-app"}
+        with patch.object(MODULE, "gh_api", return_value=wrong_app):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "app identity mismatch"):
+                MODULE.verify_live_check_identity(REPOSITORY, check_head, "99")
+
+    def test_postrun_rejects_duplicate_live_check_run_matches(self):
+        check_head = "5" * 40
+        check = {
+            "id": 123, "name": "required-gate", "head_sha": check_head,
+            "details_url": f"https://github.com/{REPOSITORY}/actions/runs/99/job/1",
+            "app": {"id": 15368, "slug": "github-actions"},
+        }
+        duplicate = dict(check, id=124)
+        with patch.object(MODULE, "gh_api", return_value={"check_runs": [check, duplicate]}):
             with self.assertRaisesRegex(MODULE.AdmissionError, "missing or ambiguous"):
                 MODULE.verify_live_check_identity(REPOSITORY, check_head, "99")
 
