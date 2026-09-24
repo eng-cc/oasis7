@@ -180,13 +180,22 @@ if marker not in step or "\n          PY" not in step:
     raise SystemExit("could not extract required planner artifact preflight")
 artifact_code = textwrap.dedent(step.split(marker, 1)[1].split("\n          PY", 1)[0])
 planner_result = subprocess.run(
-    [sys.executable, str(root / "scripts/plan-rust-required-scope.py"), "--event-name", "workflow_dispatch"],
+    [
+        sys.executable,
+        str(root / "scripts/plan-rust-required-scope.py"),
+        "--event-name",
+        "workflow_dispatch",
+        "--config",
+        str(root / "scripts/fixtures/ci-required-scope.versioned-test.json"),
+    ],
     cwd=root,
     text=True,
     capture_output=True,
     check=True,
 )
 planner = dict(line.split("=", 1) for line in planner_result.stdout.splitlines() if "=" in line)
+if planner.get("execution_contract") != "required-domain-split/v1":
+    raise SystemExit("versioned artifact-preflight vector did not use the versioned test fixture")
 planner.update(head_oid="a" * 40, base_oid="b" * 40, integration_base_oid="b" * 40)
 
 with tempfile.TemporaryDirectory(prefix="oasis7-workflow-preflight-") as temp:

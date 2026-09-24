@@ -405,6 +405,24 @@ class ProvenanceTests(unittest.TestCase):
   self.assertLess(required.index(mkdir),required.index(helper))
   self.assertLess(required.index(helper),required.index(planner))
 
+ def test_markerless_pull_request_still_selects_immutable_base_planner(self):
+  workflow=(HERE.parents[1]/'.github/workflows/rust.yml').read_text()
+  required=workflow[workflow.index('  required-gate:'):workflow.index('  windows-package-rollout-behavior:')]
+  scope=required[required.index('      - id: scope\n'):required.index('      - name: Report planned scope')]
+  pr_start=scope.index('          if [[ "${GITHUB_EVENT_NAME}" == pull_request')
+  dispatch_start=scope.index('          elif [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]; then',pr_start)
+  pr_branch=scope[pr_start:dispatch_start]
+  self.assertTrue(pr_branch.startswith('          if [[ "${GITHUB_EVENT_NAME}" == pull_request ]]; then'))
+  planner='planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py")'
+  projection_guard='if [[ -f "${RUNNER_TEMP}/impact-projection.json" ]]; then'
+  self.assertIn('git show "${base_ref}:scripts/plan-rust-required-scope.py"',pr_branch)
+  self.assertIn('git show "${base_ref}:scripts/ci-required-scope.v2.json"',pr_branch)
+  self.assertIn('git show "${base_ref}:scripts/pm/workflow-impact-projection.py"',pr_branch)
+  self.assertIn(planner,pr_branch)
+  self.assertIn(projection_guard,pr_branch)
+  self.assertLess(pr_branch.index(planner),pr_branch.index(projection_guard))
+  self.assertNotIn('planner=(./scripts/plan-rust-required-scope.sh)',pr_branch)
+
  def test_premerge_activation_cannot_dispatch_candidate(self):
   with patch.object(self.api,'gh',side_effect=[self.pr,self.pr,{'default_branch':'main'},{'content':'bm8gbW9kZQ=='}]),patch.object(self.api.subprocess,'run') as run:
    with self.assertRaisesRegex(ValueError,'activation pending'):self.api.dispatch('owner/repo',self.uid,12,None)
