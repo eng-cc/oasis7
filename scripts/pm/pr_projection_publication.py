@@ -483,7 +483,6 @@ def _record_and_bind(adapter: Any, journal: PublicationJournal,
                      publication: dict[str, Any], pr: dict[str, Any]) -> dict[str, Any]:
     number = pr["number"]
     action = "record-pr:" + publication["publication_id"]
-    prior = _prior(journal, action)
     journal.intent(action, "record_pr", {
         "publication_id": publication["publication_id"], "task_uid": publication["task_uid"],
         "pr_number": number,
@@ -499,31 +498,22 @@ def _record_and_bind(adapter: Any, journal: PublicationJournal,
     if isinstance(live, dict) and live.get("pr_number") not in (None, number):
         journal.disposition("CONFLICT")
         raise PublicationError("TASK_IDENTITY_CONFLICT", "Task is bound to another PR")
-    # The Issue URL is only one projection of record-pr.  A prior uncertain
-    # action must retry the canonical transition even when that URL is already
-    # visible; the helper verifies/reconciles Project, Issue, evidence and the
-    # task mapping before returning success.
-    record_pr_confirmed = (
-        isinstance(prior, dict)
-        and prior.get("state") == "observed"
-        and prior.get("observed") == {"pr_number": number}
-    )
-    if not record_pr_confirmed:
-        try:
-            adapter.record_pr(publication["task_uid"], number, publication["publication_id"])
-        except Exception as exc:
-            journal.uncertain(action, "NETWORK_UNCERTAIN")
-            # Do not convert a matching Issue-body URL into proof that the
-            # helper reached its final task-mapping write.
-            raise PublicationError("NETWORK_UNCERTAIN", f"record-pr transition did not confirm: {exc}") from exc
-        try:
-            live = adapter.read_task_pr_binding(publication["task_uid"])
-        except Exception as exc:
-            journal.uncertain(action, "NETWORK_UNCERTAIN")
-            raise PublicationError("NETWORK_UNCERTAIN", f"Task PR binding readback failed: {exc}") from exc
-        if not isinstance(live, dict) or live.get("task_uid") != publication["task_uid"] or live.get("pr_number") != number:
-            journal.uncertain(action, "NETWORK_UNCERTAIN")
-            raise PublicationError("NETWORK_UNCERTAIN", "record-pr lacks exact Task readback")
+    # The Issue URL is only one projection of record-pr.  Re-run the canonical
+    # live transition on every publication retry: an observed local journal
+    # action cannot prove that Issue, Project, or mapping state has not drifted.
+    try:
+        adapter.record_pr(publication["task_uid"], number, publication["publication_id"])
+    except Exception as exc:
+        journal.uncertain(action, "NETWORK_UNCERTAIN")
+        raise PublicationError("NETWORK_UNCERTAIN", f"record-pr transition did not confirm: {exc}") from exc
+    try:
+        live = adapter.read_task_pr_binding(publication["task_uid"])
+    except Exception as exc:
+        journal.uncertain(action, "NETWORK_UNCERTAIN")
+        raise PublicationError("NETWORK_UNCERTAIN", f"Task PR binding readback failed: {exc}") from exc
+    if not isinstance(live, dict) or live.get("task_uid") != publication["task_uid"] or live.get("pr_number") != number:
+        journal.uncertain(action, "NETWORK_UNCERTAIN")
+        raise PublicationError("NETWORK_UNCERTAIN", "record-pr lacks exact Task readback")
     journal.observe(action, {"pr_number": number}, phase="METADATA_CONFIRMED")
 
     url = f"https://github.com/{publication['repository']}/pull/{number}"

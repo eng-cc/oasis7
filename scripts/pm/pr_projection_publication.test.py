@@ -487,6 +487,55 @@ class PublicationMatrixTests(unittest.TestCase):
             self.assertEqual(1, len(adapter.prs))
             self.assertNotIn("push", adapter.events)
             self.assertNotIn("create-pr", adapter.events)
+            self.assertEqual(1, adapter.events.count("record-pr"))
+            self.assertEqual(1, len(adapter.bindings), "exact reciprocal comment is reused")
+
+    def test_observed_record_pr_retry_rejects_drift_with_matching_issue_url(self):
+        class LifecycleDriftAdapter(FakeAdapter):
+            def __init__(self, publication, projection, *, initial_head):
+                super().__init__(publication, projection, initial_head=initial_head)
+                self.lifecycle_state = "committed/verification"
+
+            def record_pr(self, task_uid, number, publication_id):
+                if self.lifecycle_state != "committed/verification":
+                    self.events.append("record-pr")
+                    raise RuntimeError("canonical helper rejected live Task lifecycle drift")
+                super().record_pr(task_uid, number, publication_id)
+
+        with tempfile.TemporaryDirectory() as temp:
+            lease_oid = "9" * 40
+            publication, projection = make_publication(508)
+            adapter = LifecycleDriftAdapter(
+                publication, projection, initial_head=lease_oid,
+            )
+            journal = self.journal(temp, publication)
+            initial = publication_module.publish_create(
+                adapter, journal, publication=publication, projection=projection,
+                body=f"Task: {UID}\nRefs #1", expected_remote_oid=lease_oid,
+            )
+            self.assertEqual("published", initial["status"])
+            self.assertEqual({"task_uid": UID, "pr_number": 1}, adapter.pr_binding)
+            self.assertEqual(1, len(adapter.bindings))
+
+            # The Issue URL still resolves to the exact PR, but lifecycle truth
+            # drifted after the journal had recorded successful record-pr.
+            adapter.lifecycle_state = "execution"
+            adapter.events.clear()
+            with self.assertRaisesRegex(
+                publication_module.PublicationError,
+                "NETWORK_UNCERTAIN: record-pr transition did not confirm",
+            ):
+                publication_module.publish_create(
+                    adapter, journal, publication=publication, projection=projection,
+                    body=f"Task: {UID}\nRefs #1",
+                )
+
+            self.assertEqual({"task_uid": UID, "pr_number": 1}, adapter.pr_binding)
+            self.assertEqual(1, adapter.events.count("record-pr"))
+            self.assertNotIn("push", adapter.events)
+            self.assertNotIn("create-pr", adapter.events)
+            self.assertEqual(1, len(adapter.prs))
+            self.assertEqual(1, len(adapter.bindings), "retry does not duplicate reciprocal comment")
 
     def test_entrypoint_recovers_exact_created_pr_before_task_url_write(self):
         class FirstRecordPrFailureAdapter(FakeAdapter):
