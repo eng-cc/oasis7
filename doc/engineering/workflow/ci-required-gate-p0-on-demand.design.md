@@ -1,14 +1,14 @@
 # 合入前门禁 P0：公共基线瘦身、能力独立执行与影响闭包解耦
 
-**设计 ID：OASIS7-CI-P0-SCOPE-1**  
-**版本：1.0.0**  
-**状态：S0 候选规范已写入 canonical source，等待 review/merge；实施、验证与启用待完成**  
-**Owner：repository_health_engineer；独立验证：qa_engineer；协调：tpm**  
-**模块：engineering/workflow、testing/ci**  
-**审读日期：2026-09-24（Asia/Singapore）**  
-**固定源码基线：`eng-cc/oasis7@9d404f6ea863e0ec11aed0e8c6beb759189ce5fe`**  
-**诊断样本基线：`55e59b0b68a2843b873ab6c0a626ab2e0a88394f` 及相应 PR source head**  
-**S0 bootstrap HEAD：`a7bdf5ff5e934e04e5261e2a9518297ba475fb03`（前序规范 v1.20.0；代码事实仍固定于上方基线）**  
+**设计 ID：OASIS7-CI-P0-SCOPE-1**<br>
+**版本：1.0.0**<br>
+**状态：S0 候选规范已写入 canonical source，等待 review/merge；实施、验证与启用待完成**<br>
+**Owner：repository_health_engineer；独立验证：qa_engineer；协调：tpm**<br>
+**模块：engineering/workflow、testing/ci**<br>
+**审读日期：2026-09-24（Asia/Singapore）**<br>
+**固定源码基线：`eng-cc/oasis7@9d404f6ea863e0ec11aed0e8c6beb759189ce5fe`**<br>
+**诊断样本基线：`55e59b0b68a2843b873ab6c0a626ab2e0a88394f` 及相应 PR source head**<br>
+**S0 bootstrap HEAD：`a7bdf5ff5e934e04e5261e2a9518297ba475fb03`（前序规范 v1.20.0；代码事实仍固定于上方基线）**<br>
 **建议落位：`doc/engineering/workflow/ci-required-gate-p0-on-demand.design.md`**
 
 本文承接用户要求“把 P0 项，做成设计文档给我”，其中 P0 是上一轮诊断明确提出的三项：拆除公共基线中的无条件重自测；拆开 workflow、packaging、operational 三类能力的执行开关；分离影响范围闭包与 CI/复审就绪状态。本文不宣称这些改动已经发生，也不创建、绑定或修改任何 GitHub Task/PR。
