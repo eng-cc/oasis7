@@ -1,5 +1,6 @@
 """Manual integration revalidation uses current target and unchanged source."""
 import importlib.util
+import base64
 import hashlib
 import json
 import io
@@ -258,6 +259,22 @@ class IntegrationTests(unittest.TestCase):
    self.assertEqual(git('rev-parse','HEAD^{tree}'),result['tested_tree_oid'])
    self.assertEqual(result['scope_base_oid'],original)
    self.assertTrue((root/'target').exists());self.assertTrue((root/'source').exists())
+ def test_independent_merge_worktree_preserves_trusted_checkout(self):
+  spec=importlib.util.spec_from_file_location('integration_ci',HERE/'integration_ci.py');api=importlib.util.module_from_spec(spec);spec.loader.exec_module(api)
+  with tempfile.TemporaryDirectory() as tmp:
+   root=Path(tmp)/'trusted';root.mkdir()
+   destination=Path(tmp)/'integration'
+   def git(path,*args):return subprocess.check_output(['git','-C',str(path),*args],text=True).strip()
+   git(root,'init','-q','-b','main');git(root,'config','user.name','Test');git(root,'config','user.email','test@example.invalid')
+   (root/'base').write_text('base');git(root,'add','.');git(root,'commit','-qm','base');original=git(root,'rev-parse','HEAD')
+   git(root,'switch','-q','-c','source');(root/'source').write_text('source');git(root,'add','.');git(root,'commit','-qm','source');head=git(root,'rev-parse','HEAD')
+   git(root,'switch','-q','--detach',original);(root/'target').write_text('target');git(root,'add','.');git(root,'commit','-qm','target');base=git(root,'rev-parse','HEAD')
+   result=api.compose(root,base,head,worktree_path=destination)
+   self.assertEqual(base,git(root,'rev-parse','HEAD'))
+   self.assertEqual(result['tested_commit_oid'],git(destination,'rev-parse','HEAD'))
+   self.assertEqual(result['tested_tree_oid'],git(destination,'rev-parse','HEAD^{tree}'))
+   self.assertEqual([base,head],git(destination,'rev-list','--parents','-n','1','HEAD').split()[1:])
+   self.assertEqual(destination.resolve(),Path(result['integration_worktree']))
 
 class ProvenanceTests(unittest.TestCase):
  def setUp(self):
@@ -266,13 +283,20 @@ class ProvenanceTests(unittest.TestCase):
   self.pr={'state':'open','merged':False,'draft':True,'body':'Task: '+self.uid+'\nRefs #1','base':{'sha':self.base,'ref':'main','repo':{'full_name':'owner/repo'}},'head':{'sha':self.head,'repo':{'full_name':'owner/repo'}}}
   self.run={'run_attempt':1,'created_at':'2026-09-09T00:00:00Z','run_started_at':'2026-09-09T00:00:00Z','event':'workflow_dispatch','head_branch':'main','head_sha':self.base,'path':self.api.WORKFLOW,'status':'completed','conclusion':'success','repository':{'full_name':'owner/repo'},'check_suite_id':8}
   self.payload=dict(schema=self.api.ARTIFACT,repository='owner/repo',workflow_run_id=9,base_oid=self.base,head_oid=self.head,task_uid=self.uid,pr_number=12,workflow_sha=self.base,workflow_ref='owner/repo/.github/workflows/rust.yml@refs/heads/main',integration_mode='integration_revalidation',check_name='required-gate',scope_base_oid='d'*40,tested_tree_oid='e'*40,tested_commit_oid='f'*40)
+  from integration_executor_contract import EXECUTOR_CONTRACT_PATHS
+  self.executor_contents={path:('trusted fixture '+path).encode() for path in EXECUTOR_CONTRACT_PATHS}
  def read(self,*args):
   path=args[-1]
   if '/workflows/rust.yml/runs?' in path:return {'workflow_runs':[{**self.run,'id':9,'display_title':f'oasis7-ci|workflow_dispatch|integration_revalidation|{self.uid}|12|{self.base}|{self.head}'}]}
+  if '/contents/' in path:
+   relative=path.split('/contents/',1)[1].split('?ref=',1)[0]
+   if relative not in self.executor_contents:self.fail(path)
+   return {'type':'file','path':relative,'encoding':'base64','content':base64.b64encode(self.executor_contents[relative]).decode()}
+  if '/compare/' in path:return {'merge_base_commit':{'sha':self.base}}
   if path.endswith('/pulls/12'):return self.pr
   if path=='repos/owner/repo':return {'default_branch':'main'}
   if path.endswith('/runs/9'):return self.run
-  if 'check-runs' in path:return {'check_runs':[{'id':10,'name':'required-gate','app':{'id':42},'conclusion':'success','status':'completed','head_sha':self.base,'details_url':'https://github.com/owner/repo/actions/runs/9/job/10'}]}
+  if 'check-runs' in path:return {'check_runs':[{'id':10,'name':'required-gate','app':{'id':42},'conclusion':'success','status':'completed','head_sha':self.run['head_sha'],'details_url':'https://github.com/owner/repo/actions/runs/9/job/10'}]}
   if 'artifacts?' in path:return {'artifacts':[{'id':11,'name':self.api.ARTIFACT,'expired':False,'workflow_run':{'id':9}}]}
   self.fail(path)
  def test_identity_requires_one_complete_canonical_task_field(self):
@@ -303,8 +327,42 @@ class ProvenanceTests(unittest.TestCase):
   with zipfile.ZipFile(raw,'w') as archive:archive.writestr(self.api.ARTIFACT+'.json',json.dumps(self.payload))
   with patch.object(self.api,'gh',side_effect=self.read),patch.object(self.api.subprocess,'check_output',return_value=raw.getvalue()):
    return self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42)
+ def test_keyed_request_preflight_requires_key_in_authoritative_run_name(self):
+  required='run-name: oasis7-ci|${{ inputs.request_key }}\non:\n  workflow_dispatch:\n    inputs:\n      request_key:\n      validation_request_b64:'
+  missing_title=required.replace('|${{ inputs.request_key }}','|${{ inputs.expected_head }}')
+  self.assertTrue(self.api.keyed_request_workflow_ready(required))
+  self.assertFalse(self.api.keyed_request_workflow_ready(missing_title))
+  self.assertFalse(self.api.keyed_request_workflow_ready(required+'\nrun-name: duplicate'))
+ def test_keyed_request_preflight_ignores_comment_only_input_declarations(self):
+  workflow='run-name: oasis7-ci|${{ inputs.request_key }}\non:\n  workflow_dispatch:\n    inputs:\n      run_mode:\n        required: true\n# request_key:\n# validation_request_b64:\n# inputs.request_key\n'
+  self.assertFalse(self.api.keyed_request_workflow_ready(workflow))
  def test_new_default_workflow_run_authority_passes(self):
   check,proof=self.verify();self.assertEqual(check['id'],10);self.assertEqual(proof['head_oid'],self.head)
+ def test_keyed_workflow_base_divergence_requires_approved_w_contract(self):
+  from integration_executor_contract import executor_contract_from_contents
+  workflow_sha='9'*40;run_head='6'*40;request_key='sha256:'+'8'*64
+  executor_digest=executor_contract_from_contents(self.executor_contents)['digest']
+  self.run['head_sha']=run_head
+  self.payload.update(workflow_sha=workflow_sha,workflow_run_head_sha=run_head,request_key=request_key,executor_contract_digest=executor_digest)
+  raw=io.BytesIO()
+  with zipfile.ZipFile(raw,'w') as archive:archive.writestr(self.api.ARTIFACT+'.json',json.dumps(self.payload))
+  with patch.object(self.api,'gh',side_effect=self.read),patch.object(self.api.subprocess,'check_output',return_value=raw.getvalue()):
+   check,proof=self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42,request_key=request_key,approved_executor_contract_digests=[executor_digest])
+  self.assertEqual(workflow_sha,proof['workflow_sha'])
+  self.assertEqual(self.base,proof['base_oid'])
+  self.assertEqual(run_head,proof['workflow_run_head_sha'])
+  self.assertEqual(run_head,check['head_sha'])
+ def test_keyed_workflow_base_divergence_rejects_revoked_w_contract(self):
+  from integration_executor_contract import executor_contract_from_contents
+  workflow_sha='9'*40;run_head='6'*40;request_key='sha256:'+'8'*64
+  executor_digest=executor_contract_from_contents(self.executor_contents)['digest']
+  self.run['head_sha']=run_head
+  self.payload.update(workflow_sha=workflow_sha,workflow_run_head_sha=run_head,request_key=request_key,executor_contract_digest=executor_digest)
+  raw=io.BytesIO()
+  with zipfile.ZipFile(raw,'w') as archive:archive.writestr(self.api.ARTIFACT+'.json',json.dumps(self.payload))
+  with patch.object(self.api,'gh',side_effect=self.read),patch.object(self.api.subprocess,'check_output',return_value=raw.getvalue()):
+   with self.assertRaisesRegex(ValueError,'EXECUTOR_CONTRACT_CHANGED'):
+    self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42,request_key=request_key,approved_executor_contract_digests=['sha256:'+'7'*64])
  def test_old_event_or_candidate_workflow_cannot_refresh(self):
   for key,value in [('event','pull_request'),('head_sha','0'*40),('head_branch','candidate'),('conclusion','failure')]:
    old=self.run[key];self.run[key]=value
@@ -382,7 +440,14 @@ class ProvenanceTests(unittest.TestCase):
   self.assertLess(required.index(helper),required.index(planner))
 
  def test_premerge_activation_cannot_dispatch_candidate(self):
-  with patch.object(self.api,'gh',side_effect=[self.pr,self.pr,{'default_branch':'main'},{'content':'bm8gbW9kZQ=='}]),patch.object(self.api.subprocess,'run') as run:
+  def api(*args):
+   path=args[-1]
+   if path.endswith('/pulls/12'):return self.pr
+   if path=='repos/owner/repo':return {'default_branch':'main'}
+   if path=='repos/owner/repo/git/ref/heads/main':return {'object':{'sha':self.base}}
+   if path.endswith('/contents/.github/workflows/rust.yml?ref='+self.base):return {'content':'bm8gbW9kZQ=='}
+   self.fail(path)
+  with patch.object(self.api,'gh',side_effect=api),patch.object(self.api.subprocess,'run') as run:
    with self.assertRaisesRegex(ValueError,'activation pending'):self.api.dispatch('owner/repo',self.uid,12,None)
    run.assert_not_called()
 
