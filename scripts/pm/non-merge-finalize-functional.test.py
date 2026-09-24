@@ -641,6 +641,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
 
     def test_deferred_closeout_publishes_blocked_phase_to_issue_project_and_cache(self) -> None:
         mapping_path = self.mapping()
+        self.env["GH_REFRESH_TASK"] = "1"
         result = subprocess.run([
             sys.executable, str(PROJECT_TASK), "closeout-task", str(self.root),
             "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
