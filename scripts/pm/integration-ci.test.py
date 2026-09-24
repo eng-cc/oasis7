@@ -342,6 +342,89 @@ class ProvenanceTests(unittest.TestCase):
             '      run_mode:\n        required: true\n# request_key:\n'
             '# validation_request_b64:\n# inputs.request_key\n')
   self.assertFalse(self.api.keyed_request_workflow_ready(workflow))
+ def test_prepared_request_retry_keeps_journaled_base_after_main_advances(self):
+  from integration_executor_contract import (
+   EXECUTOR_CONTRACT_PATHS, executor_contract_from_contents,
+   reserve_validation_request, validation_request_key,
+  )
+
+  contract=executor_contract_from_contents({
+   path:('trusted fixture '+path).encode() for path in EXECUTOR_CONTRACT_PATHS
+  })
+  projection_digest='sha256:'+'1'*64
+  request_identity={
+   'repository':'owner/repo',
+   'task_uid':self.uid,
+   'pr_number':12,
+   'bootstrap_epoch':'epoch-1',
+   'source_head_oid':self.head,
+   'publication_id':'publication-1',
+   'source_projection_digest':projection_digest,
+   'unit_ids':['required-gate'],
+   'input_fingerprints':{'required-gate':'sha256:'+'2'*64},
+   'executor_contract_digest':contract['digest'],
+   'purpose':'integration_revalidation',
+   'applicability_mode':'input_scoped',
+   'snapshot_target_oid':None,
+  }
+  request_key=validation_request_key(request_identity)
+  original_base='3'*40
+  advanced_base='4'*40
+  workflow=(
+   'run-name: '+self.api.KEYED_RUN_NAME+'\non:\n  workflow_dispatch:\n    inputs:\n'
+   '      run_mode:\n      task_uid:\n      pr_number:\n      integration_base:\n'
+   '      expected_head:\n      request_key:\n      validation_request_b64:\n'
+  )
+  with tempfile.TemporaryDirectory() as directory:
+   reserve_validation_request(directory,request_key,request_identity,original_base)
+   projection_path=Path(directory)/'projection.json'
+   projection_path.write_text(
+    json.dumps({'projection_digest':projection_digest}),encoding='utf-8',
+   )
+   dispatches=[]
+
+   def read_api(*args):
+    path=args[-1]
+    if path.endswith('/pulls/12'):
+     return self.pr
+    if path=='repos/owner/repo':
+     return {'default_branch':'main'}
+    if '/actions/workflows/rust.yml/runs?' in path:
+     return {'workflow_runs':[]}
+    if path.startswith(f'repos/owner/repo/contents/{self.api.WORKFLOW}?'):
+     return {
+      'type':'file','path':self.api.WORKFLOW,'encoding':'base64',
+      'content':base64.b64encode(workflow.encode()).decode(),
+     }
+    self.fail(path)
+
+   with patch.object(self.api,'gh',side_effect=read_api), \
+        patch.object(self.api,'default_branch_head',return_value=advanced_base), \
+        patch.object(self.api,'github_executor_contract',return_value=contract), \
+        patch.object(self.api.subprocess,'run',side_effect=lambda args,**_kwargs: dispatches.append(args)):
+    result=self.api.dispatch_request(
+     'owner/repo',self.uid,12,projection_path,request_identity,
+     {
+      'enabled_capabilities':['input-scope-reuse/v1'],
+      'approved_executor_contract_digests':[contract['digest']],
+     },
+     state_dir=directory,
+    )
+
+  self.assertEqual('pending',result['status'])
+  self.assertEqual(original_base,result['base_oid'])
+  self.assertEqual(1,len(dispatches))
+  fields={}
+  args=dispatches[0]
+  for index,value in enumerate(args[:-1]):
+   if value=='-f':
+    name,field_value=args[index+1].split('=',1)
+    fields[name]=field_value
+  self.assertEqual(original_base,fields['integration_base'])
+  payload=json.loads(base64.b64decode(fields['validation_request_b64']))
+  self.assertEqual(original_base,payload['integration_base_oid'])
+  self.assertEqual(request_key,payload['request_key'])
+
  def test_new_default_workflow_run_authority_passes(self):
   check,proof=self.verify();self.assertEqual(check['id'],10);self.assertEqual(proof['head_oid'],self.head)
  def test_keyed_workflow_base_divergence_requires_approved_w_contract(self):

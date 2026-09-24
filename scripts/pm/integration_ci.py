@@ -365,8 +365,6 @@ def dispatch_request(repository,uid,number,impact_projection,request_identity,ef
     if not keyed_request_workflow_ready(workflow):
         raise ValueError('activation pending: default workflow lacks idempotent request identity inputs')
 
-    request=identity_value|{'request_key':key,'integration_base_oid':base}
-    request_b64=base64.b64encode(helper.canonical_bytes(request)).decode('ascii')
     directory=Path(state_dir) if state_dir is not None else git_common_dir('.')
 
     def readback(request_key,frozen_base):
@@ -377,6 +375,8 @@ def dispatch_request(repository,uid,number,impact_projection,request_identity,ef
 
     def send(record):
         frozen_base=record['integration_base_oid']
+        request=record['identity']|{'request_key':key,'integration_base_oid':frozen_base}
+        request_b64=base64.b64encode(helper.canonical_bytes(request)).decode('ascii')
         # Re-read the exact source/target binding before every remote side effect.
         identity(repository,uid,number,frozen_base,head,allow_base_advance=True)
         subprocess.run([
