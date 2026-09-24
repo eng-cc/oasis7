@@ -12,9 +12,6 @@ import tempfile
 
 ROOT = Path(__file__).resolve().parent.parent
 CHECKER = ROOT / "scripts/product-doc-governance-check.py"
-REAL_RETIRED_HISTORY = Path(
-    "doc/product/world-infrastructure/world-continuity-governance-and-recovery.prd.md"
-)
 FIXTURE_RETIRED_HISTORY = Path(
     "doc/product/world-infrastructure/fixture-retired-history.prd.md"
 )
@@ -30,6 +27,7 @@ COPY_PATHS = (
     "doc/core/prd.md",
     "doc/engineering/doc-governance/doc-structure-standard.design.md",
     "doc/world-runtime/prd.md",
+    "doc/world-runtime/runtime/indirect-control-agency-execution-and-continuation.design.md",
     "doc/p2p/prd.md",
     "doc/testing/prd.md",
     "doc/world-simulator/prd.md",
@@ -81,15 +79,8 @@ def make_fixture() -> Path:
             shutil.copytree(source, target)
         else:
             shutil.copy2(source, target)
-    (root / REAL_RETIRED_HISTORY).unlink(missing_ok=True)
     module_root = root / "doc/product/world-infrastructure/prd.md"
-    module_text = re.sub(
-        r"^- \[[^\n]*\]\(world-continuity-governance-and-recovery\.prd\.md[^)]*\)[^\n]*\n?",
-        "",
-        module_root.read_text(encoding="utf-8"),
-        count=1,
-        flags=re.MULTILINE,
-    )
+    module_text = module_root.read_text(encoding="utf-8")
     migration_heading = "### 非权威迁移索引\n"
     assert migration_heading in module_text, "fixture module root missing migration index"
     module_root.write_text(
@@ -115,7 +106,6 @@ It is not an active product identity, authority, roadmap, or acceptance source.
 """,
         encoding="utf-8",
     )
-    assert not (root / REAL_RETIRED_HISTORY).exists()
     assert (root / FIXTURE_RETIRED_HISTORY).is_file()
     return root
 

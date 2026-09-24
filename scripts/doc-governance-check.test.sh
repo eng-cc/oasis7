@@ -153,8 +153,15 @@ chmod +x "$TMPDIR/bin/python3"
 git -C "$FIXTURE" init -q -b main
 git -C "$FIXTURE" config user.email test@example.invalid
 git -C "$FIXTURE" config user.name Test
+mkdir -p "$FIXTURE/doc/testing/nested"
+printf '%s\n' '# historical fixture source' >"$FIXTURE/doc/testing/nested/historical-source.md"
 git -C "$FIXTURE" add .
 git -C "$FIXTURE" commit -qm fixture
+fixture_history_commit="$(git -C "$FIXTURE" rev-parse HEAD^{commit})"
+rm "$FIXTURE/doc/testing/nested/historical-source.md"
+printf 'Pinned repository history: eng-cc/oasis7@%s:doc/testing/nested/historical-source.md#fixture.\n' "$fixture_history_commit" >>"$FIXTURE/doc/README.md"
+printf 'Pinned GitHub history: [fixture](https://github.com/eng-cc/oasis7/blob/%s/doc/testing/nested/historical-source.md).\n' "$fixture_history_commit" >>"$FIXTURE/doc/README.md"
+cp "$FIXTURE/doc/README.md" "$TMPDIR/doc-readme-pinned-history.md"
 
 set +e
 (
@@ -184,6 +191,28 @@ if ! grep -Fqx 'doc-governance-check: OK' "$TMPDIR/check.out"; then
   cat "$TMPDIR/check.err" >&2
   exit 1
 fi
+
+printf 'Moving branch history: eng-cc/oasis7@main:doc/testing/nested/historical-source.md.\n' >>"$FIXTURE/doc/README.md"
+if (
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh
+) >"$TMPDIR/moving-history.out" 2>"$TMPDIR/moving-history.err"; then
+  echo "doc-governance-check.test: moving-branch history reference unexpectedly passed" >&2
+  exit 1
+fi
+grep -Fq 'doc/README.md references missing markdown path: doc/testing/nested/historical-source.md' "$TMPDIR/moving-history.out"
+cp "$TMPDIR/doc-readme-pinned-history.md" "$FIXTURE/doc/README.md"
+
+printf 'Missing active documentation: doc/testing/nested/missing-active.md\n' >>"$FIXTURE/doc/README.md"
+if (
+  cd "$FIXTURE"
+  OASIS7_TEST_PYTHON="$REAL_PYTHON" RG_INVOCATION_LOG="$TMPDIR/rg.log" REAL_RG="$REAL_RG" PATH="$TMPDIR/bin:$PATH" ./scripts/doc-governance-check.sh
+) >"$TMPDIR/missing-active-path.out" 2>"$TMPDIR/missing-active-path.err"; then
+  echo "doc-governance-check.test: genuine missing active markdown path unexpectedly passed" >&2
+  exit 1
+fi
+grep -Fq 'doc/README.md references missing markdown path: doc/testing/nested/missing-active.md' "$TMPDIR/missing-active-path.out"
+cp "$TMPDIR/doc-readme-pinned-history.md" "$FIXTURE/doc/README.md"
 
 if ! (
   cd "$FIXTURE"

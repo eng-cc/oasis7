@@ -69,7 +69,7 @@ class WorkflowNextTest(unittest.TestCase):
         }
         snapshot = self.root / ".pm/scratch" / UID / "bootstrap-task-snapshot.json"
         snapshot.unlink(missing_ok=True)
-        self.mapping.write_text(json.dumps({"version": 1, "project": {"owner": "fixture", "number": 1}, "tasks": {UID: task}}))
+        self.mapping.write_text(json.dumps({"version": 1, "project": {"owner": "fixture", "number": 1, "id": "PROJECT1"}, "tasks": {UID: task}}))
         subprocess.run(
             [sys.executable, str(BOOTSTRAP), "create", "--repo-root", str(self.root),
              "--task-uid", UID, "--request-identity", "Workflow next fixture", "--producer", "fixture"],
@@ -77,9 +77,11 @@ class WorkflowNextTest(unittest.TestCase):
             capture_output=True,
         )
         task.update(updates)
-        self.mapping.write_text(json.dumps({"version": 1, "project": {"owner": "fixture", "number": 1}, "tasks": {UID: task}}))
+        self.mapping.write_text(json.dumps({"version": 1, "project": {"owner": "fixture", "number": 1, "id": "PROJECT1"}, "tasks": {UID: task}}))
 
-    def install_terminal_proof(self, phase: str, *, producer_shaped_merge: bool = False) -> None:
+    def install_terminal_proof(self, phase: str, *, producer_shaped_merge: bool = False,
+                               non_merge_reason: str = "non_pr_completed",
+                               non_merge_receipt_overrides: dict[str, object] | None = None) -> None:
         receipt_root = self.root / ".git/oasis7-workflow-receipts" / UID
         receipt_root.mkdir(parents=True, exist_ok=True)
 
@@ -118,11 +120,37 @@ class WorkflowNextTest(unittest.TestCase):
             task.setdefault("phase_receipt_sha256", {})["main_sync"] = sync_digest
         if phase in {"closed_without_merge", "post_merge_done"}:
             if phase == "closed_without_merge":
-                terminal, terminal_digest = write("closed-without-merge-receipt.json", {
+                evidence_digest = "a" * 64
+                task["closed_without_merge_reason"] = non_merge_reason
+                task["closed_without_merge_evidence_sha256"] = evidence_digest
+                if non_merge_reason in {"superseded", "duplicate"}:
+                    task.update({"headRefOid": "a" * 40, "headRefName": task["task_branch"]})
+                terminal_value = {
                     "receipt_type": "oasis7_closed_without_merge",
                     "schema_version": 1, "issuer": "non-merge-finalize",
                     "task_uid": UID, "repository": "fixture/repo",
-                })
+                    "issue_number": task["issue_number"],
+                    "project_item_id": task["project_item_id"],
+                    "project_identity": {key: str(mapping["project"][key])
+                                         for key in ("owner", "number", "id")},
+                    "reason": non_merge_reason,
+                    "evidence_sha256": evidence_digest,
+                    "evidence": {"text": "fixture terminal evidence"},
+                    "previous_status": "done" if non_merge_reason == "non_pr_completed" else "committed",
+                    "previous_workflow_phase": "task_done" if non_merge_reason == "non_pr_completed" else "execution",
+                    "pr_number": task.get("pr_number"), "pr_url": task.get("pr_url"),
+                    "pr_state": "CLOSED" if task.get("pr_number") else None,
+                    "mergedAt": None,
+                }
+                if non_merge_reason in {"superseded", "duplicate"}:
+                    terminal_value.update({
+                        "headRefOid": "a" * 40,
+                        "headRefName": task["task_branch"],
+                    })
+                terminal_value.update(non_merge_receipt_overrides or {})
+                terminal, terminal_digest = write(
+                    "closed-without-merge-receipt.json", terminal_value,
+                )
                 ledger_name = "non-merge-finalizer-ledger.json"
             else:
                 terminal, terminal_digest = write("terminal-cleanup-receipt.json", {
@@ -133,18 +161,171 @@ class WorkflowNextTest(unittest.TestCase):
                     "branch": task.get("task_branch") or "task/fixture",
                 })
                 ledger_name = "finalizer-ledger.json"
-            write(ledger_name, {"schema": "oasis7_finalizer_ledger_v1",
-                                "task_uid": UID, "revision": 1,
-                                "operations": {"terminal": {"committed": True}}})
+            if phase == "closed_without_merge":
+                bound_head = {
+                    key: task[key] for key in (
+                        "headRefOid", "headRefName", "headRepositoryOwner", "headRepositoryName",
+                    ) if key in task
+                }
+
+                def operation_id(effect: str) -> str:
+                    payload = {
+                        "task_uid": UID,
+                        "phase": "closed_without_merge",
+                        "effect": effect,
+                        "pr_head": bound_head,
+                    }
+                    encoded = json.dumps(payload, sort_keys=True, separators=(",", ":")).encode()
+                    return hashlib.sha256(encoded).hexdigest()
+
+                previous_body = (
+                    "- status: `done`\n"
+                    "- workflow_phase: `closed_without_merge`\n"
+                )
+                close_state_reason = "COMPLETED" if non_merge_reason == "non_pr_completed" else "NOT_PLANNED"
+                issue_readback = {
+                    "state": "CLOSED",
+                    "stateReason": close_state_reason,
+                    "body": previous_body,
+                    "number": task["issue_number"],
+                    "url": task["issue_url"],
+                }
+                operations = {
+                    "issue_body_update": {
+                        "operation_id": operation_id("issue_body_update"),
+                        "effect": "issue_body_update", "readback": True,
+                        "result": issue_readback,
+                        "committed": True,
+                    },
+                    "project_update": {
+                        "operation_id": operation_id("project_update"),
+                        "effect": "project_update",
+                        "readback": True,
+                        "result": {"Status": "Done", "PM Status": "done", "Workflow Phase": "done"},
+                        "committed": True,
+                    },
+                    "evidence_comment": {
+                        "operation_id": operation_id("evidence_comment"),
+                        "effect": "evidence_comment",
+                        "readback": True,
+                        "result": f"https://github.com/fixture/repo/issues/{task['issue_number']}#issuecomment-99",
+                        "committed": True,
+                    },
+                    "issue_close": {
+                        "operation_id": operation_id("issue_close"),
+                        "effect": "issue_close", "readback": True,
+                        "result": issue_readback,
+                        "committed": True,
+                    },
+                }
+                write(ledger_name, {
+                    "schema": "oasis7_non_merge_finalizer_ledger_v1",
+                    "task_uid": UID,
+                    "operations": operations,
+                })
+            else:
+                write(ledger_name, {"schema": "oasis7_finalizer_ledger_v1",
+                                    "task_uid": UID, "revision": 1,
+                                    "operations": {"terminal": {"committed": True}}})
             write("terminal-tombstone.json", {
                 "schema": "oasis7_terminal_tombstone_v1", "task_uid": UID,
-                "repository": "fixture/repo", "workflow_phase": phase,
+                "repository": "fixture/repo", "issue_number": task["issue_number"],
+                "pr_number": task.get("pr_number"),
+                "canonical_worktree": task["canonical_worktree"],
+                "task_branch": task["task_branch"], "workflow_phase": phase,
                 "terminal_receipt_sha256": terminal_digest,
                 "checkout_recreation_forbidden": True,
             })
             task.setdefault("phase_receipts", {})[phase] = terminal
             task.setdefault("phase_receipt_sha256", {})[phase] = terminal_digest
         self.mapping.write_text(json.dumps(mapping))
+
+    def migrate_installed_non_merge_proof(self) -> None:
+        receipt_root = self.root / ".git/oasis7-workflow-receipts" / UID
+        mapping = json.loads(self.mapping.read_text())
+        task = mapping["tasks"][UID]
+
+        receipt_path = receipt_root / "closed-without-merge-receipt.json"
+        legacy_receipt = {
+            key: task["phase_receipts"]["closed_without_merge"][key]
+            for key in ("receipt_type", "task_uid", "repository", "reason",
+                        "pr_number", "pr_url", "pr_state", "mergedAt")
+            if key in task["phase_receipts"]["closed_without_merge"]
+        }
+        receipt_path.write_text(json.dumps(legacy_receipt, sort_keys=True) + "\n")
+        receipt_source_digest = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+        migrated_receipt = dict(task["phase_receipts"]["closed_without_merge"])
+        migrated_receipt.update({
+            "migrated_from": receipt_path.name,
+            "migrated_from_sha256": receipt_source_digest,
+        })
+        migrated_receipt_path = receipt_root / "closed-without-merge-receipt-migrated.json"
+        migrated_receipt_path.write_text(json.dumps(migrated_receipt, sort_keys=True) + "\n")
+        migrated_receipt_digest = hashlib.sha256(migrated_receipt_path.read_bytes()).hexdigest()
+        task["phase_receipts"]["closed_without_merge"] = migrated_receipt
+        task["phase_receipt_sha256"]["closed_without_merge"] = migrated_receipt_digest
+        task["closed_without_merge_receipt"] = migrated_receipt
+
+        ledger_path = receipt_root / "non-merge-finalizer-ledger.json"
+        current_ledger = json.loads(ledger_path.read_text())
+        legacy_ledger = {
+            "schema": "oasis7_finalizer_ledger_v1",
+            "revision": 1,
+            "task_uid": UID,
+            "operations": {},
+        }
+        migrated_ledger = dict(current_ledger)
+        migrated_operations = {}
+        for effect, entry in current_ledger["operations"].items():
+            old_operation_id = f"legacy-{effect}"
+            old_entry = dict(entry)
+            old_entry["operation_id"] = old_operation_id
+            old_entry.pop("migrated_from_operation_id", None)
+            legacy_ledger["operations"][effect] = old_entry
+            new_entry = dict(entry)
+            new_entry["migrated_from_operation_id"] = old_operation_id
+            migrated_operations[effect] = new_entry
+        migrated_ledger["operations"] = migrated_operations
+        ledger_path.write_text(json.dumps(legacy_ledger, sort_keys=True) + "\n")
+        migrated_ledger.update({
+            "migrated_from": ledger_path.name,
+            "migrated_from_sha256": hashlib.sha256(ledger_path.read_bytes()).hexdigest(),
+        })
+        migrated_ledger_path = receipt_root / "non-merge-finalizer-ledger-migrated.json"
+        migrated_ledger_path.write_text(json.dumps(migrated_ledger, sort_keys=True) + "\n")
+
+        tombstone_path = receipt_root / "terminal-tombstone.json"
+        tombstone = json.loads(tombstone_path.read_text())
+        tombstone["terminal_receipt_sha256"] = migrated_receipt_digest
+        tombstone_path.write_text(json.dumps(tombstone, sort_keys=True) + "\n")
+        self.mapping.write_text(json.dumps(mapping))
+
+    def rewrite_non_merge_terminal_receipt(
+        self, *, remove: tuple[str, ...] = (),
+        overrides: dict[str, object] | None = None,
+        tombstone_overrides: dict[str, object] | None = None,
+    ) -> None:
+        receipt_root = self.root / ".git/oasis7-workflow-receipts" / UID
+        receipt_path = receipt_root / "closed-without-merge-receipt.json"
+        receipt = json.loads(receipt_path.read_text())
+        for key in remove:
+            receipt.pop(key, None)
+        receipt.update(overrides or {})
+        receipt_path.write_text(json.dumps(receipt, sort_keys=True) + "\n")
+        digest = hashlib.sha256(receipt_path.read_bytes()).hexdigest()
+
+        mapping = json.loads(self.mapping.read_text())
+        task = mapping["tasks"][UID]
+        task.setdefault("phase_receipts", {})["closed_without_merge"] = receipt
+        task.setdefault("phase_receipt_sha256", {})["closed_without_merge"] = digest
+        task["closed_without_merge_receipt"] = receipt
+        self.mapping.write_text(json.dumps(mapping))
+
+        tombstone_path = receipt_root / "terminal-tombstone.json"
+        tombstone = json.loads(tombstone_path.read_text())
+        tombstone["terminal_receipt_sha256"] = digest
+        tombstone.update(tombstone_overrides or {})
+        tombstone_path.write_text(json.dumps(tombstone, sort_keys=True) + "\n")
 
     def run_query(self, *extra: str, repo_root: Path | None = None) -> tuple[int, dict]:
         query_root = repo_root or self.root
@@ -394,6 +575,328 @@ class WorkflowNextTest(unittest.TestCase):
         self.assertNotEqual(code, 0, payload)
         self.assertEqual(payload["next_command"], [], payload)
         self.assertTrue(any("terminal" in item.lower() or "receipt" in item.lower()
+                            for item in payload["blockers"]), payload)
+
+    def test_non_pr_terminal_receipt_and_ledger_use_producer_schema(self) -> None:
+        self.write_mapping(
+            status="done", workflow_phase="closed_without_merge",
+            completion_mode="non_pr_task",
+        )
+        self.install_terminal_proof("closed_without_merge")
+
+        code, payload = self.run_query()
+
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload["identity_status"], "bound", payload)
+        self.assertEqual(payload["workflow_phase"], "closed_without_merge", payload)
+        self.assertEqual(payload["next_action"], "completed", payload)
+        self.assertEqual(payload["next_command"], [], payload)
+        self.assertEqual(payload["blockers"], [], payload)
+
+    def test_non_pr_bound_non_merge_reasons_use_non_merge_producer_schema(self) -> None:
+        for reason in ("not_planned", "superseded", "duplicate"):
+            with self.subTest(reason=reason):
+                updates: dict[str, object] = {}
+                if reason in {"superseded", "duplicate"}:
+                    updates.update({
+                        "pr_number": 7,
+                        "pr_url": "https://github.com/fixture/repo/pull/7",
+                    })
+                self.write_mapping(
+                    status="done", workflow_phase="closed_without_merge", **updates,
+                )
+                self.install_terminal_proof(
+                    "closed_without_merge", non_merge_reason=reason,
+                )
+
+                code, payload = self.run_query()
+
+                self.assertEqual(code, 0, payload)
+                self.assertEqual(payload["identity_status"], "bound", payload)
+                self.assertEqual(payload["workflow_phase"], "closed_without_merge", payload)
+                self.assertEqual(payload["next_action"], "completed", payload)
+                self.assertEqual(payload["next_command"], [], payload)
+                self.assertEqual(payload["blockers"], [], payload)
+
+    def test_non_merge_terminal_producer_schema_still_checks_optional_worktree_and_branch(self) -> None:
+        self.write_mapping(status="done", workflow_phase="closed_without_merge")
+        self.install_terminal_proof(
+            "closed_without_merge", non_merge_reason="not_planned",
+            non_merge_receipt_overrides={
+                "worktree": str(self.root / "forged-task"),
+                "branch": "task/forged",
+            },
+        )
+
+        code, payload = self.run_query()
+
+        self.assertNotEqual(code, 0, payload)
+        self.assertTrue(any("terminal receipt worktree identity drift" in item
+                            for item in payload["blockers"]), payload)
+        self.assertTrue(any("terminal receipt branch identity drift" in item
+                            for item in payload["blockers"]), payload)
+
+    def test_non_merge_receipt_binds_optional_pr_head_repository_pair(self) -> None:
+        self.write_mapping(
+            status="done", workflow_phase="closed_without_merge",
+            pr_number=7, pr_url="https://github.com/fixture/repo/pull/7",
+            headRepositoryOwner="fixture", headRepositoryName="repo",
+        )
+        self.install_terminal_proof(
+            "closed_without_merge", non_merge_reason="duplicate",
+            non_merge_receipt_overrides={
+                "headRepositoryOwner": "fixture",
+                "headRepositoryName": "repo",
+            },
+        )
+
+        code, payload = self.run_query()
+
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload["blockers"], [], payload)
+
+        for key, foreign_value in (
+                ("headRepositoryOwner", "foreign-owner"),
+                ("headRepositoryName", "foreign-repo")):
+            with self.subTest(key=key):
+                self.write_mapping(
+                    status="done", workflow_phase="closed_without_merge",
+                    pr_number=7, pr_url="https://github.com/fixture/repo/pull/7",
+                    headRepositoryOwner="fixture", headRepositoryName="repo",
+                )
+                receipt_repository = {
+                    "headRepositoryOwner": "fixture",
+                    "headRepositoryName": "repo",
+                }
+                receipt_repository[key] = foreign_value
+                self.install_terminal_proof(
+                    "closed_without_merge", non_merge_reason="duplicate",
+                    non_merge_receipt_overrides=receipt_repository,
+                )
+
+                code, payload = self.run_query()
+
+                self.assertNotEqual(code, 0, payload)
+                self.assertTrue(any("head repository" in item.lower()
+                                    for item in payload["blockers"]), payload)
+
+        self.write_mapping(
+            status="done", workflow_phase="closed_without_merge",
+            pr_number=7, pr_url="https://github.com/fixture/repo/pull/7",
+        )
+        self.install_terminal_proof(
+            "closed_without_merge", non_merge_reason="duplicate",
+            non_merge_receipt_overrides={
+                "headRepositoryOwner": "fixture",
+                "headRepositoryName": "repo",
+            },
+        )
+
+        code, payload = self.run_query()
+
+        self.assertNotEqual(code, 0, payload)
+        self.assertTrue(any("unbound PR head repository authority" in item
+                            for item in payload["blockers"]), payload)
+
+    def test_non_merge_migrated_receipt_and_ledger_are_selected_with_legacy_sources(self) -> None:
+        self.write_mapping(
+            status="done", workflow_phase="closed_without_merge",
+            pr_number=7, pr_url="https://github.com/fixture/repo/pull/7",
+        )
+        self.install_terminal_proof(
+            "closed_without_merge", non_merge_reason="duplicate",
+        )
+        self.migrate_installed_non_merge_proof()
+
+        code, payload = self.run_query()
+
+        self.assertEqual(code, 0, payload)
+        self.assertEqual(payload["identity_status"], "bound", payload)
+        self.assertEqual(payload["workflow_phase"], "closed_without_merge", payload)
+        self.assertEqual(payload["next_action"], "completed", payload)
+        self.assertEqual(payload["next_command"], [], payload)
+        self.assertEqual(payload["blockers"], [], payload)
+
+    def test_non_merge_migrated_proofs_reject_immutable_source_digest_drift(self) -> None:
+        self.write_mapping(
+            status="done", workflow_phase="closed_without_merge",
+            pr_number=7, pr_url="https://github.com/fixture/repo/pull/7",
+        )
+        self.install_terminal_proof(
+            "closed_without_merge", non_merge_reason="duplicate",
+        )
+        self.migrate_installed_non_merge_proof()
+        receipt_root = self.root / ".git/oasis7-workflow-receipts" / UID
+        (receipt_root / "closed-without-merge-receipt.json").write_text("changed legacy receipt\n")
+        (receipt_root / "non-merge-finalizer-ledger.json").write_text("changed legacy ledger\n")
+
+        code, payload = self.run_query()
+
+        self.assertNotEqual(code, 0, payload)
+        self.assertTrue(any("migrated closed-without-merge receipt source digest mismatch" in item
+                            for item in payload["blockers"]), payload)
+        self.assertTrue(any("migrated non-merge terminal ledger source digest mismatch" in item
+                            for item in payload["blockers"]), payload)
+
+    def test_non_merge_receipt_requires_issue_and_project_identity_for_each_reason(self) -> None:
+        for reason in ("superseded", "duplicate", "not_planned", "non_pr_completed"):
+            for missing in ("issue_number", "project_item_id", "project_identity"):
+                with self.subTest(reason=reason, missing=missing):
+                    updates: dict[str, object] = {}
+                    if reason in {"superseded", "duplicate"}:
+                        updates.update({
+                            "pr_number": 7,
+                            "pr_url": "https://github.com/fixture/repo/pull/7",
+                        })
+                    if reason == "non_pr_completed":
+                        updates["completion_mode"] = "non_pr_task"
+                    self.write_mapping(
+                        status="done", workflow_phase="closed_without_merge", **updates,
+                    )
+                    self.install_terminal_proof(
+                        "closed_without_merge", non_merge_reason=reason,
+                    )
+                    self.rewrite_non_merge_terminal_receipt(remove=(missing,))
+
+                    code, payload = self.run_query()
+
+                    self.assertNotEqual(code, 0, payload)
+                    self.assertTrue(any("terminal receipt" in item.lower()
+                                        and ("identity" in item.lower() or "project" in item.lower())
+                                        for item in payload["blockers"]), payload)
+
+    def test_duplicate_receipt_requires_exact_closed_unmerged_pr_authority(self) -> None:
+        cases = (
+            ({"pr_number": 8, "pr_url": "https://github.com/fixture/repo/pull/8"}, "PR"),
+            ({"pr_state": "MERGED", "mergedAt": "2026-09-24T00:00:00Z"}, "merged"),
+            ({"headRefOid": "f" * 40}, "head"),
+        )
+        for overrides, marker in cases:
+            with self.subTest(marker=marker):
+                self.write_mapping(
+                    status="done", workflow_phase="closed_without_merge",
+                    pr_number=7, pr_url="https://github.com/fixture/repo/pull/7",
+                )
+                self.install_terminal_proof(
+                    "closed_without_merge", non_merge_reason="duplicate",
+                )
+                self.rewrite_non_merge_terminal_receipt(overrides=overrides)
+
+                code, payload = self.run_query()
+
+                self.assertNotEqual(code, 0, payload)
+                self.assertTrue(any("pr" in item.lower() or "merged" in item.lower()
+                                    for item in payload["blockers"]), payload)
+
+    def test_non_merge_receipt_reason_and_evidence_digest_match_task_truth(self) -> None:
+        cases = (
+            ({"evidence_sha256": "b" * 64}, "evidence digest"),
+            ({}, "reason"),
+        )
+        for overrides, marker in cases:
+            with self.subTest(marker=marker):
+                self.write_mapping(status="done", workflow_phase="closed_without_merge")
+                self.install_terminal_proof(
+                    "closed_without_merge", non_merge_reason="not_planned",
+                )
+                self.rewrite_non_merge_terminal_receipt(overrides=overrides)
+                if marker == "reason":
+                    mapping = json.loads(self.mapping.read_text())
+                    mapping["tasks"][UID]["closed_without_merge_reason"] = "superseded"
+                    self.mapping.write_text(json.dumps(mapping))
+
+                code, payload = self.run_query()
+
+                self.assertNotEqual(code, 0, payload)
+                self.assertTrue(any(marker in item.lower() for item in payload["blockers"]), payload)
+
+    def test_non_merge_tombstone_binds_task_terminal_identity(self) -> None:
+        self.write_mapping(status="done", workflow_phase="closed_without_merge")
+        self.install_terminal_proof(
+            "closed_without_merge", non_merge_reason="not_planned",
+        )
+        self.rewrite_non_merge_terminal_receipt(
+            tombstone_overrides={"issue_number": 12, "task_branch": "task/foreign"},
+        )
+
+        code, payload = self.run_query()
+
+        self.assertNotEqual(code, 0, payload)
+        self.assertTrue(any("tombstone" in item.lower()
+                            and "identity" in item.lower() for item in payload["blockers"]), payload)
+
+    def test_non_merge_ledger_requires_committed_issue_close_operation(self) -> None:
+        cases = (
+            ("issue_close", "operation_id", "c" * 64),
+            ("issue_close", "readback", None),
+            ("issue_body_update", "operation", None),
+            ("migrated ledger", "migration marker", None),
+        )
+        for effect, mutation, value in cases:
+            with self.subTest(effect=effect, mutation=mutation):
+                self.write_mapping(status="done", workflow_phase="closed_without_merge")
+                self.install_terminal_proof(
+                    "closed_without_merge", non_merge_reason="not_planned",
+                )
+                ledger_path = self.root / ".git/oasis7-workflow-receipts" / UID / "non-merge-finalizer-ledger.json"
+                ledger = json.loads(ledger_path.read_text())
+                if mutation == "migration marker":
+                    for missing_effect in ("issue_body_update", "project_update", "evidence_comment"):
+                        ledger["operations"].pop(missing_effect)
+                    ledger["migrated_from"] = "unverified-source.json"
+                    ledger["migrated_from_sha256"] = "d" * 64
+                elif mutation == "operation":
+                    ledger["operations"].pop(effect)
+                elif value is None:
+                    ledger["operations"][effect].pop(mutation)
+                else:
+                    ledger["operations"][effect][mutation] = value
+                ledger_path.write_text(json.dumps(ledger, sort_keys=True) + "\n")
+
+                code, payload = self.run_query()
+
+                self.assertNotEqual(code, 0, payload)
+                self.assertTrue(any("ledger" in item.lower() or effect in item.lower()
+                                    for item in payload["blockers"]), payload)
+
+    def test_non_merge_ledger_result_snapshots_bind_issue_and_project_identity(self) -> None:
+        cases = (
+            ("issue_body_update", "result", {"number": 12}),
+            ("issue_close", "result", {"url": "https://github.com/fixture/other/issues/11"}),
+            ("project_update", "result", {"Workflow Phase": "execution"}),
+        )
+        for effect, field, updates in cases:
+            with self.subTest(effect=effect, updates=updates):
+                self.write_mapping(status="done", workflow_phase="closed_without_merge")
+                self.install_terminal_proof(
+                    "closed_without_merge", non_merge_reason="not_planned",
+                )
+                ledger_path = self.root / ".git/oasis7-workflow-receipts" / UID / "non-merge-finalizer-ledger.json"
+                ledger = json.loads(ledger_path.read_text())
+                ledger["operations"][effect][field].update(updates)
+                ledger_path.write_text(json.dumps(ledger, sort_keys=True) + "\n")
+
+                code, payload = self.run_query()
+
+                self.assertNotEqual(code, 0, payload)
+                self.assertTrue(any("ledger" in item.lower() and "identity" in item.lower()
+                                    or "project readback" in item.lower()
+                                    for item in payload["blockers"]), payload)
+
+    def test_non_merge_ledger_requires_true_readback_completion_marker(self) -> None:
+        self.write_mapping(status="done", workflow_phase="closed_without_merge")
+        self.install_terminal_proof(
+            "closed_without_merge", non_merge_reason="not_planned",
+        )
+        ledger_path = self.root / ".git/oasis7-workflow-receipts" / UID / "non-merge-finalizer-ledger.json"
+        ledger = json.loads(ledger_path.read_text())
+        ledger["operations"]["issue_close"]["readback"] = False
+        ledger_path.write_text(json.dumps(ledger, sort_keys=True) + "\n")
+
+        code, payload = self.run_query()
+
+        self.assertNotEqual(code, 0, payload)
+        self.assertTrue(any("lacks bound committed issue_close readback" in item
                             for item in payload["blockers"]), payload)
 
     def test_matching_invalid_snapshot_and_checkpoint_fail_closed(self) -> None:

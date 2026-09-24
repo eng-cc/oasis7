@@ -2,6 +2,7 @@
 
 - 设计 ID：OASIS7-CI-PROJECTION-PUBLICATION-1
 - 状态：Proposed；本文的 schema、CLI、错误码、测试和能力均未实现或验收
+- 配套设计：[ci-parallel-evidence-reuse.design.md](./ci-parallel-evidence-reuse.design.md)，同为 Proposed / disabled
 - Owner role：repository_health_engineer；独立验证角色：qa_engineer
 - 模块：engineering/workflow；审读基线：`eng-cc/oasis7@bba55ffa83434518513cf08df1fad7ae950be491`
 - Task truth：`task_e9f33b806d6040fe8136bbc62ce1a797`，GitHub Issue [#3871](https://github.com/eng-cc/oasis7/issues/3871)；用户提案见该任务的设计输入
@@ -11,9 +12,11 @@
 
 当前 `scripts/prepare-task-pr.sh` 对已有 PR 先发布代码并复用 PR，而 `.github/workflows/rust.yml` 从 PR 事件 body 读取 impact projection，同时从事件 head 读取源提交；因此新 head 可能与旧投影相遇。`scripts/pm/workflow-impact-projection.py` 对 source head 的严格拒绝是正确的，不能放宽。required-plan artifact 目前使用固定名称和 `overwrite: true`；只恢复一次 run 而不隔离 attempt 会混合证据。
 
-目标：标准发布路径使投影与候选 head 对齐；对 body 晚发布、网络不确定和客户端退出提供同 head 恢复；每份被接受的投影精确绑定 Task、source、scope、可信 planner；run/attempt 证据闭合；正常路径不增加第二轮 required-gate。非目标：改变 Rust 测试矩阵、风险触发集成策略、合并权限、source review/integration 的既有身份划分，或引入服务、GitHub App、自动 loop、日常 PR close/reopen 和空提交恢复。
+目标：标准发布路径使投影与候选 head 对齐；对 body 晚发布、网络不确定和客户端退出提供同 head 恢复；每份被接受的投影精确绑定 Task、source、scope、可信 planner；run/attempt 证据闭合；正常路径不增加第二轮 required-gate。非目标：改变 Rust 测试矩阵、启用风险触发集成/证据复用新策略、合并权限、source review/integration 的既有身份划分，或引入服务、GitHub App、自动 loop、日常 PR close/reopen 和空提交恢复。整体输入适用性和并行复用规则由配套设计及 canonical `source-of-truth.md` 维护；本文只定义 publication、resolver 和恢复细节，不能单独启用 `input-scope-reuse/v1`。
 
 ## 2. 上游约束与相关角色
+
+本文与 [CI 身份一致发布与并行证据复用设计](./ci-parallel-evidence-reuse.design.md)互补：本文仍为 Proposed publication 协议；配套设计将其绑定到完整证据适用性规则。两者冲突先更新 canonical `source-of-truth.md` 并显式裁定，再实现；不得以本文件中的旧 leaf 表、schema 或 CI 成功声明新 capability 已启用。
 
 以下固定引用均属于 `eng-cc/oasis7`；实施任务必须再冻结实际消费的发布提交。用户请求是纯工程缺陷修复，不产生产品 AC。专业接受的准确上游定位是 [Issue #3871 的冻结 acceptance evidence](https://github.com/eng-cc/oasis7/issues/3871#issuecomment-5751018462)：(1) 基于当前源码冻结 repo-owned 十二段设计与 professional acceptance；(2) 记录有序代码依赖、信任边界、恢复及 attempt-bound evidence gate，不声称尚未实现的能力。对应 typed 关系为 `trace.upstream_refs[type=professional_acceptance, applicability=required, required=true]`，其 evidence locator 为 `https://github.com/eng-cc/oasis7/issues/3871#issuecomment-5751018462`；`trace.system_design[applicability=required, required=true]` 指向本文 DES-CIP 条款。此处只是 S1 的设计映射，TPM 须在 task truth 中冻结/回读实际 typed 记录；不得把本段视为已写入机器合同。产品 N/A 要按写作规范记录 reason、范围、owner、evidence locator 和复核触发。TPM 管理任务、依赖和 PR 主链；repository health 审计文档/代码合同；QA 收口验证门禁；CI 实施专业角色由 TPM 派发。
 
@@ -129,14 +132,16 @@ CI 保留 read 权限，不增 `pull-requests: write`、`contents: write` 或 `a
 
 | 叶子 | PR/交付 | 依赖与退出条件 |
 | --- | --- | --- |
-| S1 | system 文档 PR：本设计、专业验收、CLI/错误/验证合同 | 独立 review，冻结实际文档提交和 Task 引用 |
-| C1 | code PR：解析、resolver/publisher 核心、binding、v2 双读、fake tests | 消费 S1；先固定跨叶接口，不启用正式 emitter |
-| C2 | code PR：可信 workflow resolver、attempt-bound 所有消费者与 receipt | C1 在可信 main；consumer first，emitter 后启用 |
-| C3 | code PR：prepare helper 发布/journal/resume/recover | C2 实际支持协议；旧 workflow 不开放 recover |
-| V1 | 现有验证 task：hosted 新建/续更/晚投影/重跑/负例 | C1-C3 冻结组合，记录 H/B/M/T/W/R/A/D |
-| S2 | system/doc PR：manual 和 skill 操作说明 | V1 证据，不能以合并代替能力证明 |
+| S0 | canonical source 与两份 Proposed system design 对齐 | 先于代码叶子；独立 review 并冻结 source / publication 输入 |
+| C0 | code PR：schema/capability、publication/evidence parser、纯适用性决策接口，默认禁用 | 消费 S0；兼容和负例通过，不激活 capability |
+| C1 | code PR：首次 PR 编号绑定、publication/resolver、精确发布和 journal 恢复 | C0；fake 时序与丢响应矩阵通过 |
+| C2 | code PR：完整输入闭包、验证单元与 product 全量覆盖聚合 | C0；与 C1 可并行，边界不得交叉 |
+| C3 | code PR：B/W 独立身份、executor 合同、幂等集成请求 | C0；与 C1/C2 可并行，不接最终 workflow |
+| C4 | code PR：trusted CI 接线、attempt artifact、receipt/lifecycle 全消费者 | C1/C2/C3；consumer first，最后接线 |
+| V1 | verification task：fake、hosted、20 次无关前进与平台 required-check 验证 | 固定组合候选；QA 独立判断，叶子通过不等于组合通过 |
+| S1 | system/doc PR：manual、操作说明和结果边界 | V1 事实；不得以合并代替能力证明 |
 
-这些是实施叶子标签，不伪造任务编号。当前 PM helper 是单 PR projection；同一 Task UID 第二个 PR 必须 fail closed，TPM 应以 coordinating Issue 和**有序 linked delivery tasks**映射这些叶子，每个 delivery task 各自有单 PR 主链，协调任务须等 required delivery 全部合并后才能完成；不能仅凭本表绕过 ordered multi-PR contract。所有 loop 手动触发，文档与代码 PR 分离。
+这些是配套设计中的实施叶子标签，不伪造任务编号。当前 PM helper 是单 PR projection；同一 Task UID 第二个 PR 必须 fail closed，TPM 应以 coordinating Issue 和**有序 linked delivery tasks**映射这些叶子，每个 delivery task 各自有单 PR 主链，协调任务须等 required delivery 全部合并后才能完成；不能仅凭本表绕过 ordered multi-PR contract。所有 loop 手动触发，文档与代码 PR 分离。
 
 拟新增 `scripts/pm/projection_publication_contract.py`、`pr_projection_resolver.py`、`pr_projection_publication.py` 及对应测试；拟修改 `scripts/prepare-task-pr.sh`、`.github/workflows/rust.yml`、`scripts/pm/workflow-impact-projection.py`、`scripts/plan-rust-required-scope.py`、`scripts/pm/ci-ready-receipt.py`、`ci_ready_receipt_identity.py`。实施前还需审计 PLAN_ARTIFACT/PLAN_MEMBER、Cargo profile、lifecycle/closeout 的全部间接消费者。legacy v1 仅按旧规则读取，缺新 resolver 的旧 run 返回 `UNSUPPORTED_RUN_PROTOCOL`；旧失败 PR 要有真实新 workflow 事件，必要时经现有任务授权一次 close/reopen 并证明新 W/B，绝非日常 recovery。回滚只能在新的可信基线禁用 live 读取，保留有序发布、严格校验、v2 reader 和历史 artifact；在途 run 行为仍由其 W/B 决定。
 
@@ -147,6 +152,8 @@ CI 保留 read 权限，不增 `pull-requests: write`、`contents: write` 或 `a
 ### DES-CIP-08：事件捕获和 hosted 证据
 
 ### 11.1 验证映射表
+
+本节各行的 C1/C2/C3 测试阶段引用来自本设计早期拆分，仅表示待实现义务，并非 task identity。执行时以 §10.2 的组合阶段边界为准：schema/parser 与决策接口映射 C0，publication/resolver/recovery 映射 C1，完整输入闭包映射 C2，B/W 与集成请求映射 C3，可信 workflow、attempt artifacts 和 receipt/lifecycle consumers 映射 C4。不得据旧阶段标签创建或合并任务。
 
 | 上游 requirement / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source、scenario/layer、candidate/environment | evidence target | 未证明范围 |
 | --- | --- | --- | --- | --- | --- |
@@ -165,7 +172,7 @@ CI 保留 read 权限，不增 `pull-requests: write`、`contents: write` 或 `a
 | `pr-projection-resolver.test.py`: event/live/invalid | CIP-02/03 | 有效 P0 不取未来 P1；过期事件只取同 H/S/D；live H2、坏 digest/同 H 错配置拒绝 | 不证明最新 main 集成复验 |
 | `ci-projection-publication.integration.test.py`: attempts/recover/missing/trust | CIP-02/04/05/08 | A1/A2 不混、缺 v2 不 fallback；整轮 attempt2；删 marker 不降级；候选恶意模块不执行 | fake 不证明 hosted |
 
-C1/C2 后运行这三个 proposed Python 测试，并复跑现存 `bash scripts/plan-rust-required-scope.test.sh`、`python3 scripts/pm/workflow-impact-consumers.test.py`、`python3 scripts/pm/ci-ready-receipt.test.py`（执行前核对冻结候选路径）。Hosted V1 必须包含新建 PR、已有 PR H0→H1、晚投影、同 run A2 和坏投影拒绝；记录真实 source/integration/tested tree、workflow、check/app/artifact/projection 身份。V1 未完成前只写“实现已合入，hosted 验证待完成”，不宣告缺陷根治。
+C1/C4 发布与 receipt 消费者落地后运行这三个 proposed Python 测试，并复跑现存 `bash scripts/plan-rust-required-scope.test.sh`、`python3 scripts/pm/workflow-impact-consumers.test.py`、`python3 scripts/pm/ci-ready-receipt.test.py`（执行前核对冻结候选路径）。Hosted V1 必须包含新建 PR、已有 PR H0→H1、晚投影、同 run A2 和坏投影拒绝；记录真实 source/integration/tested tree、workflow、check/app/artifact/projection 身份。V1 未完成前只写“实现已合入，hosted 验证待完成”，不宣告缺陷根治。
 
 ## 12. 决策、长期风险与未决问题
 

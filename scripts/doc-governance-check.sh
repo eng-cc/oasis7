@@ -277,6 +277,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+import subprocess
 import sys
 
 
@@ -294,18 +295,67 @@ exempt_docs = {
 }
 
 reference_re = re.compile(r"doc/[A-Za-z0-9_./-]+\.md")
+# Historical references are exempt only when they pin this repository's exact
+# 40-hex commit and the named Markdown blob exists in that commit.
+historical_reference_re = re.compile(
+    r"(?:eng-cc/oasis7@(?P<repo_commit>[0-9a-fA-F]{40}):|https://github\.com/eng-cc/oasis7/blob/(?P<web_commit>[0-9a-fA-F]{40})/)"
+    r"(?P<path>doc/[A-Za-z0-9_./-]+\.md)(?=[#?)/\s`]|$)"
+)
 skip_markers = ("*", "?", "[", "]", "{", "}", "YYYY-MM-DD")
+historical_object_cache: dict[tuple[str, str], bool] = {}
+
+
+def historical_blob_exists(commit: str, ref_path: str) -> bool:
+    normalized = Path(ref_path)
+    if normalized.is_absolute() or ".." in normalized.parts:
+        return False
+    key = (commit.lower(), ref_path)
+    if key not in historical_object_cache:
+        commit_result = subprocess.run(
+            ["git", "cat-file", "-t", key[0]],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        blob_result = subprocess.run(
+            ["git", "cat-file", "-t", f"{key[0]}:{ref_path}"],
+            capture_output=True,
+            text=True,
+            check=False,
+        ) if commit_result.returncode == 0 and commit_result.stdout.strip() == "commit" else None
+        historical_object_cache[key] = (
+            blob_result is not None
+            and blob_result.returncode == 0
+            and blob_result.stdout.strip() == "blob"
+        )
+    return historical_object_cache[key]
 
 for file in doc_files:
     if file in exempt_docs:
         continue
     path = Path(file)
     text = path.read_text(encoding="utf-8")
-    for ref_path in sorted(set(reference_re.findall(text))):
+    historical_matches = list(historical_reference_re.finditer(text))
+    unresolved_references = set()
+    for reference_match in reference_re.finditer(text):
+        ref_path = reference_match.group(0)
         if any(marker in ref_path for marker in skip_markers):
             continue
         if not Path(ref_path).is_file():
-            print(f"{file}\t{ref_path}")
+            pinned_historical_ref = any(
+                history_match.span("path") == reference_match.span()
+                and history_match.group("path") == ref_path
+                and historical_blob_exists(
+                    history_match.group("repo_commit") or history_match.group("web_commit"),
+                    ref_path,
+                )
+                for history_match in historical_matches
+            )
+            if pinned_historical_ref:
+                continue
+            unresolved_references.add(ref_path)
+    for ref_path in sorted(unresolved_references):
+        print(f"{file}\t{ref_path}")
 PY
 
   rm -f "$exempt_tmp"
