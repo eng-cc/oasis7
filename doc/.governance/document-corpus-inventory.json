@@ -539,7 +539,7 @@
     },
     {
       "path": "doc/engineering/workflow/source-of-truth.md",
-      "content_sha256": "7cdee1ec2aa5afae93f7c76b0c671a6b98ff771e8b74a7ca0583b68ed0c0073f",
+      "content_sha256": "7c8091bb8b26abc02c5d2c879f1eb89535525a23877cc885e39cd8eab0d5d4a2",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -2345,7 +2345,7 @@
     },
     {
       "path": "doc/product/README.md",
-      "content_sha256": "a278747b410822dc5755f2ca269408c5de19ffd2950f4ec91e8fb65d33ff80d1",
+      "content_sha256": "adf782d79623d087c764929efc1788a75b558d9d4b178baf9f5329b6cc2e29b8",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
