@@ -1,6 +1,6 @@
 # Engineering Workflow Source of Truth
-Version: **v1.19.4**
-Last Updated: **2026-09-23**
+Version: **v1.20.0**
+Last Updated: **2026-09-24**
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7.
 Mandatory rule:
@@ -55,8 +55,26 @@ Target unattended execution requires four independently observable producer clas
 | Receipt-bound main-sync and safe-cleanup helpers | implemented | Production helpers validate durable receipts and fail closed. |
 | Fake-GitHub lifecycle fixtures | test-only | They test reducers; they are not production evidence. |
 | Human-operated pre-PR role review | implemented | TPM starts trusted same-head CI and source-bound professional review concurrently, then joins both current identities before readiness or promotion. |
+| Input-scoped CI evidence reuse (`input-scope-reuse/v1`) | proposed / disabled | The normative target contract is documented in this source and its design companion; no current code or task may consume it to relax existing checks. |
 | Unattended pre-PR review attestation | blocked | No trusted runtime provenance-attestation producer exists; unattended automation must stop at `capability_blocked`. |
 | Production supervisor from intake through merge | blocked | Without trusted production producers, automation is `capability_blocked`. |
+
+## Proposed CI input-scoped evidence reuse contract
+
+This target contract is detailed in [ci-parallel-evidence-reuse.design.md](./ci-parallel-evidence-reuse.design.md). Publication identity and recovery remain detailed in [ci-projection-publication.design.md](./ci-projection-publication.design.md). The `input-scope-reuse/v1` capability is **proposed and disabled**. Until compatible implementation, independent fake and hosted verification, platform required-check verification, and explicit authorization through the existing enablement process are complete, current checks and risk-triggered integration rules remain controlling. An implementation or documentation merge alone does not enable reuse.
+
+For an explicitly admitted task after enablement, separate `initial_validation_level` (`standard` or `elevated`) from `applicability_mode` (`input_scoped` or explicitly selected `snapshot_exact`). Risk raises first-validation requirements; it does not by itself make unrelated later target advances invalidate evidence. `input_scoped` is the default, including for elevated engineering work. Use `snapshot_exact` only when the task explicitly freezes a tested candidate tree. A target push does not create a task, background run, or CI dispatch. At an existing resume, promotion, or merge boundary, read and freeze the current target Q, then assess changes since the last fully verified applicability point. Until the capability is active and admitted for a task, the existing risk-triggered integration policy remains controlling.
+
+Reuse only when trusted, complete input manifests and obligation sets prove the original test and source-review evidence still applies. Preserve immutable execution identity `(H,B,M,T,W,R,A)` and source-review identity; record reused evidence and its applicability decision separately. Never rewrite receipts, claim Q was tested, or treat plan/diagnostic artifacts as passing tests. Record integration base B and trusted workflow/executor W independently; `W != B` is not itself a failure when the approved executor contract and requested B are independently verified.
+
+Revalidate only units and roles whose actual consumed inputs, obligations, effective policy, review context, or environment/freshness contract changed. Evaluate additions, deletions, renames, dependency and consumer edges, shared inputs, and cross-document links using complete old/new membership. Path non-overlap or an author's claim is not proof of unrelatedness. Unknown closure, untrusted provenance, revoked policy, missing evidence, or an applicable newer pending/failed attempt fails closed and follows the conservative validation route; it never falls back to an older green receipt. Main advancement alone must not create a freshness requirement. The acceptance target is zero source commits, role redispatches, heavy CI executions, and task phase rollbacks across twenty advances proven unrelated to all required inputs.
+
+The product full-corpus obligation remains complete. While the capability is disabled, current product `--full-corpus` behavior is unchanged. After enablement, reused product-document results must still prove complete current-tree coverage and relationships, including additions, deletions, renames, and cross-document links; changed-range checks alone cannot replace that proof. If closure is missing, stale, or ambiguous, run the existing complete validation or fail closed. System-design validation remains changed-scope-only.
+
+Merge readiness continues to require current live task/PR/hold/permission checks and the applicable latest-attempt failure barrier. Re-read the target immediately before merge and assess any new interval. Ordinary merge remains optimistic because the API has no target-base compare-and-swap; read back the actual merge result and block release or final completion for any newly discovered required validation. This capability does not create server-side atomic integration or change existing merge authorization.
+
+For tasks admitted to the enabled capability, this contract supersedes only the existing strict-mode rule that requires a new latest-target integration run solely because Q advanced. All high-risk classification, required-check, source identity, related-input, policy, completeness, provenance, and latest-attempt failure requirements remain in force. The risk-triggered policy below remains controlling for disabled or non-admitted tasks.
+
 ## Lifecycle ownership
 TPM is the accountable workflow coordinator / integrator and continuation owner.
 A professional **phase owner** owns only its bounded slice; the **task owner role** remains
