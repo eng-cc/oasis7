@@ -63,6 +63,10 @@
 | 上游 requirement／professional acceptance | 具体义务与适用条件 | 本设计条款 | 外部 owner／依赖 | 排除或未证明范围 |
 | --- | --- | --- | --- | --- |
 | [Issue #3951 冻结的 professional acceptance](https://github.com/eng-cc/oasis7/issues/3951#issuecomment-5810526692) | 无关目标变化不触发源码、评审和重型测试重做 | 本文 `#des-cir-01`、`#des-cir-04` | TPM 冻结用户要求；QA 20 次前进验证 | Issue evidence 是任务验收定位；不将聊天记录冒充已发布机器合同 |
+| [Issue #3951 冻结的 professional acceptance](https://github.com/eng-cc/oasis7/issues/3951#issuecomment-5810526692) | 保留严格 source／Task／run／attempt 身份和 required-gate 的 fail-closed 判定 | 本文 `#des-cir-01`、`#des-cir-06`、`#des-cir-09` | repository health 定义身份合同；QA 验证错身份与坏证据负例 | 新能力仍为 Proposed；设计映射不授权放宽当前门禁 |
+| [Issue #3951 冻结的 professional acceptance](https://github.com/eng-cc/oasis7/issues/3951#issuecomment-5810526692) | 真实输入或义务变化时，只补受影响测试单元和专业角色 | 本文 `#des-cir-04`、`#des-cir-05` | 可信 planner 和 QA 完整性验证 | 未证明输入闭包时保守扩大范围，不声称细粒度复用 |
+| [Issue #3951 冻结的 professional acceptance](https://github.com/eng-cc/oasis7/issues/3951#issuecomment-5810526692) | publication／binding 恢复有界、幂等，等待或失败不得伪装为通过 | 本文 `#des-cir-02`、`#des-cir-03`、`#des-cir-08` | publisher、resolver 与 QA 乱序／丢响应验证 | GitHub API 不提供跨调用原子事务 |
+| [Issue #3951 冻结的 professional acceptance](https://github.com/eng-cc/oasis7/issues/3951#issuecomment-5810526692) | 启用前取得独立 QA、hosted 行为和平台 required-check 证据 | 本文 `#des-cir-09`、`#des-cir-10` | QA 独立组合验收；TPM 保留协调任务 | S0 文档门禁通过不等于代码能力或 hosted 验收通过 |
 | `source-of-truth.md#manual-three-loop-transition` | 本地手动、单 Task/PR 主链、保留准入与权限边界 | 本文 `#des-cir-02`、`#des-cir-09` | TPM、现有 PM adapter | 不增加自动任务或第四个 loop |
 | `source-of-truth.md#split-source-review-integration-contract` | 严格区分 source、review、integration、run/attempt 身份 | 本文 `#des-cir-01`、`#des-cir-05`、`#des-cir-06` | receipt 与 lifecycle consumers | 新能力未启用前仍按当前高风险 current-target 规则执行 |
 | `ci-projection-publication.design.md#des-cip-01`、`#des-cip-02` | 首次创建和源码更新不暴露可被错误消费的半发布状态 | 本文 `#des-cir-02`、`#des-cir-03` | 既有 publisher/resolver 设计 | 不是跨 GitHub API 原子事务 |
