@@ -18,6 +18,7 @@ from urllib.parse import urlencode
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
+from projection_publication_contract import ContractError, decode_marker
 import pr_projection_journal
 import pr_projection_publication as publication
 
@@ -400,6 +401,72 @@ class GitHubPublicationAdapter:
                 "--input", "-", timeout=5.0, input_json={"body": body})
 
 
+def _is_exact_create_retry(pr: dict[str, Any], publication_value: dict[str, Any],
+                           projection_value: dict[str, Any]) -> bool:
+    """Recognize an existing draft that exactly represents this create candidate."""
+    if (not isinstance(pr, dict) or not isinstance(publication_value, dict)
+            or not isinstance(projection_value, dict)
+            or pr.get("repository") != publication_value.get("repository")
+            or pr.get("source_ref") != publication_value.get("source_ref")
+            or pr.get("target_ref") != publication_value.get("target_ref")
+            or pr.get("head_oid") != publication_value.get("source_head_oid")
+            or pr.get("state") != "open" or pr.get("merged") is not False
+            or pr.get("draft") is not True
+            or type(pr.get("number")) is not int or pr["number"] < 1
+            or not isinstance(pr.get("body"), str)):
+        return False
+
+    consumed = projection_value.get("consumed_contracts")
+    if not isinstance(consumed, list):
+        return False
+    try:
+        clauses = [
+            item if isinstance(item, str) else json.dumps(
+                item, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            )
+            for item in consumed
+        ]
+        expected_contract, _marker = publication.prepare(
+            task_uid=publication_value["task_uid"],
+            source_head_oid=publication_value["source_head_oid"],
+            scope_base_oid=publication_value["source_scope_oid"],
+            projection_digest=publication_value["projection_digest"],
+            clauses=clauses,
+        )
+        return decode_marker(pr["body"]) == expected_contract
+    except (ContractError, KeyError, TypeError, ValueError):
+        return False
+
+
+def _prior_create_push_lease(journal: pr_projection_journal.PublicationJournal,
+                             publication_value: dict[str, Any]) -> str | None:
+    """Return the exact lease from an existing create push intent, if present."""
+    action_id = "push:" + publication_value["publication_id"]
+    with journal.locked():
+        matches = [
+            action for action in journal.read()["actions"]
+            if isinstance(action, dict) and action.get("action_id") == action_id
+        ]
+        if len(matches) > 1:
+            raise pr_projection_journal.JournalError("duplicate source push action")
+        if not matches:
+            return None
+        expected = matches[0].get("expected")
+        if (not isinstance(expected, dict)
+                or set(expected) != {"source_ref", "new_oid", "lease_oid"}
+                or expected.get("source_ref") != publication_value["source_ref"]
+                or expected.get("new_oid") != publication_value["source_head_oid"]):
+            raise pr_projection_journal.JournalError(
+                "prior source push action conflicts with publication identity",
+            )
+        lease_oid = expected.get("lease_oid")
+        if (lease_oid is not None
+                and (not isinstance(lease_oid, str)
+                     or re.fullmatch(r"[0-9a-f]{40,64}", lease_oid) is None)):
+            raise pr_projection_journal.JournalError("prior source push lease is malformed")
+        return lease_oid
+
+
 def publish(args: argparse.Namespace) -> dict[str, Any]:
     root = Path(args.worktree).resolve(strict=True)
     candidate, projection_value = task_publication(root, args)
@@ -426,11 +493,24 @@ def publish(args: argparse.Namespace) -> dict[str, Any]:
         if (f"Task: {args.task_uid}" not in pr["body"]
                 or f"Refs #{args.issue_number}" not in pr["body"]):
             raise PublishInputError("existing PR body lost canonical Task identity")
-        result = publication.publish_update(
-            adapter, journal, publication=candidate, projection=projection_value,
-            pr_number=pr["number"], old_head_oid=pr["head_oid"], body=body,
-            legacy_projection_b64=legacy_projection_b64,
-        )
+        if _is_exact_create_retry(pr, candidate, projection_value):
+            # A previous create may already have pushed H1 and created this
+            # exact draft even if its final response or Task URL write was
+            # lost. Re-enter the create reconciler so it can reuse the original
+            # push intent (or skip it for a bound PR) instead of inventing an
+            # H1 lease for the same publication action.
+            prior_lease = _prior_create_push_lease(journal, candidate)
+            result = publication.publish_create(
+                adapter, journal, publication=candidate, projection=projection_value,
+                body=pr["body"], expected_remote_oid=prior_lease,
+                legacy_projection_b64=legacy_projection_b64,
+            )
+        else:
+            result = publication.publish_update(
+                adapter, journal, publication=candidate, projection=projection_value,
+                pr_number=pr["number"], old_head_oid=pr["head_oid"], body=body,
+                legacy_projection_b64=legacy_projection_b64,
+            )
     else:
         remote_oid = adapter.read_source_ref(candidate["source_ref"])
         result = publication.publish_create(

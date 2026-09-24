@@ -311,10 +311,133 @@ class MoveTaskLifecycleContract(unittest.TestCase):
                     MODULE.command_record_pr(record_pr_args(root))
             self.assertEqual(before, self.digest(mapping_path))
             live_pr.assert_not_called()
-            update_issue.assert_not_called()
-            comment.assert_not_called()
+
+    def test_record_pr_reconciles_exact_publication_poststate_after_partial_write(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            record = mapping_record(status="committed", phase="execution")
+            record.update(record_pr_identity(root))
+            mapping_path = self.write_mapping(root, record)
+            publication_module = MODULE.load_pr_projection_publication_module()
+            publication = publication_module.build_task_publication(
+                repository="eng-cc/oasis7",
+                repository_id=7,
+                task_uid=UID,
+                bootstrap_epoch=1,
+                source_repository_id=7,
+                source_ref="task/lifecycle-move-contract",
+                target_ref="main",
+                source_head_oid="a" * 40,
+                source_scope_oid="b" * 40,
+                planner_authority_oid="c" * 40,
+                planner_config_sha256="sha256:" + "d" * 64,
+                policy_digest=publication_module.digest({"policy": "test"}),
+                projection_digest=publication_module.digest({"projection": "test"}),
+            )
+            binding = publication_module.build_publication_binding(
+                publication, 2001, "https://github.com/eng-cc/oasis7/pull/2001",
+            )
+            binding_path = root / "publication-binding.json"
+            binding_path.write_text(json.dumps(binding), encoding="utf-8")
+            request = record_pr_args(root)
+            request.draft_candidate = True
+            request.publication_binding_json = str(binding_path)
+            live_issue = record_pr_live_issue(record)
+            live_issue.update(
+                status="committed",
+                workflow_phase="verification",
+                pr_url="https://github.com/eng-cc/oasis7/pull/2001",
+                pr_number=2001,
+            )
+            identity = record_pr_identity(root)
+            intent_comment = {
+                "body": publication_module.publication_comment(publication),
+                "html_url": "https://github.com/eng-cc/oasis7/issues/2001#issuecomment-2002",
+            }
+            existing_comments = [intent_comment]
+            written_comments: list[str] = []
+
+            def verified_comment(_repo: str, _issue: int, body: str) -> str:
+                written_comments.append(body)
+                comment_url = f"https://github.com/eng-cc/oasis7/issues/2001#issuecomment-{2002 + len(written_comments)}"
+                existing_comments.append({"body": body, "html_url": comment_url})
+                if "<!-- oasis7-ci-publication-binding/v1 -->" in body:
+                    raise RuntimeError("simulated lost response after reciprocal comment write")
+                return comment_url
+
+            with (
+                mock.patch.object(MODULE, "github_issue_record", return_value=live_issue),
+                mock.patch.object(MODULE, "authoritative_repository_identity", return_value=identity),
+                mock.patch.object(MODULE, "github_pull_request", return_value=record_pr_live_pr(draft=True)),
+                mock.patch.object(MODULE, "github_issue_comments", side_effect=lambda *_: list(existing_comments)),
+                mock.patch.object(MODULE, "run_text", return_value="a" * 40),
+                mock.patch.object(MODULE, "synchronize_live_issue_traceability", return_value=[]),
+                mock.patch.object(MODULE, "update_project_fields", return_value=7) as update_project,
+                mock.patch.object(MODULE, "update_issue_body") as update_issue,
+                mock.patch.object(MODULE, "verified_issue_comment", side_effect=verified_comment),
+                mock.patch.object(MODULE, "load_pr_projection_publication_module", return_value=publication_module),
+                mock.patch("builtins.print"),
+            ):
+                with self.assertRaisesRegex(RuntimeError, "lost response"):
+                    MODULE.command_record_pr(request)
+                self.assertEqual("execution", json.loads(mapping_path.read_text(encoding="utf-8"))["tasks"][UID]["workflow_phase"])
+                self.assertEqual(0, MODULE.command_record_pr(request))
+
+            self.assertEqual(2, update_project.call_count)
+            self.assertEqual(2, update_issue.call_count)
+            self.assertEqual(2, len(written_comments), "evidence and reciprocal binding are restored")
+            self.assertEqual(3, len(existing_comments), "recovery reuses both comments written before the lost response")
+            persisted = json.loads(mapping_path.read_text(encoding="utf-8"))["tasks"][UID]
+            self.assertEqual("committed", persisted["status"])
+            self.assertEqual("verification", persisted["workflow_phase"])
+            self.assertEqual("https://github.com/eng-cc/oasis7/pull/2001", persisted["pr_url"])
+            self.assertEqual(2001, persisted["pr_number"])
+            self.assertEqual(2, len(persisted["evidence_comments"]))
+
+    def test_record_pr_rejects_mixed_partial_publication_poststate(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            record = mapping_record(status="committed", phase="execution")
+            record.update(record_pr_identity(root))
+            mapping_path = self.write_mapping(root, record)
+            publication_module = MODULE.load_pr_projection_publication_module()
+            publication = publication_module.build_task_publication(
+                repository="eng-cc/oasis7", repository_id=7, task_uid=UID,
+                bootstrap_epoch=1, source_repository_id=7,
+                source_ref="task/lifecycle-move-contract", target_ref="main",
+                source_head_oid="a" * 40, source_scope_oid="b" * 40,
+                planner_authority_oid="c" * 40, planner_config_sha256="sha256:" + "d" * 64,
+                policy_digest=publication_module.digest({"policy": "test"}),
+                projection_digest=publication_module.digest({"projection": "test"}),
+            )
+            binding_path = root / "publication-binding.json"
+            binding_path.write_text(json.dumps(publication_module.build_publication_binding(
+                publication, 2001, "https://github.com/eng-cc/oasis7/pull/2001",
+            )), encoding="utf-8")
+            request = record_pr_args(root)
+            request.draft_candidate = True
+            request.publication_binding_json = str(binding_path)
+            live_issue = record_pr_live_issue(record)
+            live_issue.update(
+                status="committed", workflow_phase="execution",
+                pr_url="https://github.com/eng-cc/oasis7/pull/2001", pr_number=2001,
+            )
+            before = self.digest(mapping_path)
+            with (
+                mock.patch.object(MODULE, "github_issue_record", return_value=live_issue),
+                mock.patch.object(MODULE, "github_issue_comments", return_value=[{
+                    "body": publication_module.publication_comment(publication),
+                    "html_url": "https://github.com/eng-cc/oasis7/issues/2001#issuecomment-2002",
+                }]),
+                mock.patch.object(MODULE, "authoritative_repository_identity", return_value=record_pr_identity(root)),
+                mock.patch.object(MODULE, "update_project_fields") as update_project,
+                mock.patch.object(MODULE, "update_issue_body") as update_issue,
+            ):
+                with self.assertRaisesRegex(MODULE._CommandExit, "neither cached truth nor the exact publication poststate"):
+                    MODULE.command_record_pr(request)
+            self.assertEqual(before, self.digest(mapping_path))
             update_project.assert_not_called()
-            merge_mapping.assert_not_called()
+            update_issue.assert_not_called()
 
     def test_record_pr_rejects_closed_live_issue_before_any_task_write(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

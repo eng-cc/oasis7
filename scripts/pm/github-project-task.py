@@ -670,6 +670,8 @@ def validate_record_pr_live_identity(
     args: argparse.Namespace,
     record: dict[str, Any],
     pr_number: int,
+    *,
+    allow_exact_publication_poststate: bool = False,
 ) -> dict[str, Any]:
     """Bind record-pr to the live task Issue, registered worktree and live PR head."""
     try:
@@ -682,14 +684,36 @@ def validate_record_pr_live_identity(
         die("record-pr: live task Issue UID mismatch")
     if str(live_issue.get("issue_state") or "").strip().upper() != "OPEN":
         die("record-pr: live task Issue is not OPEN")
+    expected_status = "committed" if bool(getattr(args, "draft_candidate", False)) else "pr_watch"
+    expected_phase = "verification" if bool(getattr(args, "draft_candidate", False)) else "pr_watch"
+    expected_url = f"https://github.com/{args.repo}/pull/{pr_number}"
+    exact_publication_poststate = allow_exact_publication_poststate and all(
+        live_issue.get(key) == value
+        for key, value in {
+            "status": expected_status,
+            "workflow_phase": expected_phase,
+            "pr_url": expected_url,
+            "pr_number": pr_number,
+        }.items()
+    )
+    cached_projection_matches = all(
+        live_issue.get(key) == record.get(key)
+        for key in ("status", "workflow_phase", "pr_url", "pr_number")
+    )
+    if allow_exact_publication_poststate and not exact_publication_poststate and not cached_projection_matches:
+        die("record-pr: live Task Issue is neither cached truth nor the exact publication poststate")
     for key in (
         "issue_number", "issue_url", "owner_role", "module", "priority",
         "status", "workflow_phase", "worktree_hint",
     ):
         if live_issue.get(key) != record.get(key):
+            if exact_publication_poststate and key in {"status", "workflow_phase"}:
+                continue
             die(f"record-pr: live task Issue {key} differs from cached task truth")
     for key in ("pr_url", "pr_number"):
         if live_issue.get(key) != record.get(key):
+            if exact_publication_poststate:
+                continue
             die(f"record-pr: live task Issue {key} differs from cached PR binding")
 
     if record.get("task_uid") != args.task_uid or str(record.get("repository") or "") != args.repo:
@@ -2648,10 +2672,10 @@ def command_record_pr(args: argparse.Namespace) -> int:
         )
     if requested_pr_number is None:
         die("record-pr: PR number is missing or malformed")
-    live_issue = validate_record_pr_live_identity(args, record, requested_pr_number)
     publication_binding = None
     publication_module = None
     binding_comment_exists = False
+    comments: list[dict[str, Any]] = []
     if getattr(args, "publication_binding_json", None):
         publication_module = load_pr_projection_publication_module()
         try:
@@ -2710,6 +2734,12 @@ def command_record_pr(args: argparse.Namespace) -> int:
             if len(matching_bindings) != 1 or matching_bindings[0] != publication_binding:
                 die("record-pr: conflicting reciprocal CI publication binding already exists")
             binding_comment_exists = True
+    live_issue = validate_record_pr_live_identity(
+        args,
+        record,
+        requested_pr_number,
+        allow_exact_publication_poststate=(publication_binding is not None and is_draft_candidate),
+    )
     record["pr_url"] = args.pr_url
     number = pr_number_from_url(args.pr_url)
     if number is not None:
@@ -2746,25 +2776,43 @@ def command_record_pr(args: argparse.Namespace) -> int:
         else:
             updated_fields = update_project_fields(args, task, str(record["project_item_id"]))
     update_issue_body(args.repo, int(record["issue_number"]), task)
-    comment_url = issue_comment(
-        args.repo,
-        int(record["issue_number"]),
-        evidence_body(
-            args.task_uid,
-            args.role,
-            target_phase,
-            {
-                "Completed": "Draft Candidate Action recorded without advancing PR watch." if is_draft_candidate else "PR created and task moved to PR watch.",
-                "Pending": "Wait for same-head CI receipt." if is_draft_candidate else "Watch required checks, mergeability, comments, and review threads.",
-                "Action": "record-pr",
-                "Validation Command": args.validation_command,
-                "Expected Result": f"Task phase is {target_phase} and PR URL is mapped.",
-                "Actual Result": args.pr_url,
-                "Blocker / Next Action": "Obtain the same-head CI receipt, complete role review and ready closeout, then promote the draft." if is_draft_candidate else "Continue normal PR watch/fix/merge unless manual packaging hold is explicitly recorded.",
-            },
-        ),
+    evidence_comment = evidence_body(
+        args.task_uid,
+        args.role,
+        target_phase,
+        {
+            "Completed": "Draft Candidate Action recorded without advancing PR watch." if is_draft_candidate else "PR created and task moved to PR watch.",
+            "Pending": "Wait for same-head CI receipt." if is_draft_candidate else "Watch required checks, mergeability, comments, and review threads.",
+            "Action": "record-pr",
+            "Validation Command": args.validation_command,
+            "Expected Result": f"Task phase is {target_phase} and PR URL is mapped.",
+            "Actual Result": args.pr_url,
+            "Blocker / Next Action": "Obtain the same-head CI receipt, complete role review and ready closeout, then promote the draft." if is_draft_candidate else "Continue normal PR watch/fix/merge unless manual packaging hold is explicitly recorded.",
+        },
     )
-    record.setdefault("evidence_comments", []).append(comment_url)
+    comment_url = None
+    if publication_binding is not None:
+        def normalized_evidence(body: str) -> str:
+            return re.sub(r"^Recorded At: [^\n]*\n", "", body.replace("\r\n", "\n"), flags=re.MULTILINE)
+
+        matching_evidence = [
+            item for item in comments
+            if normalized_evidence(str(item.get("body") or "")) == normalized_evidence(evidence_comment)
+        ]
+        if len(matching_evidence) > 1:
+            die("record-pr: duplicate lifecycle evidence comments make reconciliation ambiguous")
+        if matching_evidence:
+            comment_url = str(matching_evidence[0].get("html_url") or matching_evidence[0].get("url") or "")
+            if not comment_url:
+                die("record-pr: existing lifecycle evidence comment lacks URL identity")
+        else:
+            comment_url = verified_issue_comment(
+                args.repo, int(record["issue_number"]), evidence_comment,
+            )
+    else:
+        comment_url = issue_comment(args.repo, int(record["issue_number"]), evidence_comment)
+    if comment_url not in record.setdefault("evidence_comments", []):
+        record["evidence_comments"].append(comment_url)
     binding_comment_url = None
     if publication_binding is not None and not binding_comment_exists:
         body = publication_module.publication_binding_comment(publication_binding)
@@ -2772,6 +2820,18 @@ def command_record_pr(args: argparse.Namespace) -> int:
             args.repo, int(record["issue_number"]), body,
         )
         record.setdefault("evidence_comments", []).append(binding_comment_url)
+    elif publication_binding is not None:
+        matching_comment_urls = [
+            str(comment.get("html_url") or comment.get("url") or "")
+            for comment in comments
+            if "<!-- oasis7-ci-publication-binding/v1 -->" in str(comment.get("body") or "")
+            and publication_module.parse_publication_binding_comment(str(comment.get("body") or "")) == publication_binding
+        ]
+        if len(matching_comment_urls) != 1 or not matching_comment_urls[0]:
+            die("record-pr: existing reciprocal binding comment readback is ambiguous")
+        binding_comment_url = matching_comment_urls[0]
+        if binding_comment_url not in record.setdefault("evidence_comments", []):
+            record["evidence_comments"].append(binding_comment_url)
     merge_task_mapping(mapping_path, args.task_uid, record, clear_keys=cleared_traceability)
     payload = {
         "task_uid": args.task_uid,

@@ -499,20 +499,23 @@ def _record_and_bind(adapter: Any, journal: PublicationJournal,
     if isinstance(live, dict) and live.get("pr_number") not in (None, number):
         journal.disposition("CONFLICT")
         raise PublicationError("TASK_IDENTITY_CONFLICT", "Task is bound to another PR")
-    if not isinstance(live, dict) or live.get("pr_number") != number:
-        if prior is not None:
-            journal.uncertain(action, "NETWORK_UNCERTAIN")
-            raise PublicationError("NETWORK_UNCERTAIN", "record-pr may have landed; refusing duplicate transition")
+    # The Issue URL is only one projection of record-pr.  A prior uncertain
+    # action must retry the canonical transition even when that URL is already
+    # visible; the helper verifies/reconciles Project, Issue, evidence and the
+    # task mapping before returning success.
+    record_pr_confirmed = (
+        isinstance(prior, dict)
+        and prior.get("state") == "observed"
+        and prior.get("observed") == {"pr_number": number}
+    )
+    if not record_pr_confirmed:
         try:
             adapter.record_pr(publication["task_uid"], number, publication["publication_id"])
         except Exception as exc:
             journal.uncertain(action, "NETWORK_UNCERTAIN")
-            try:
-                live = adapter.read_task_pr_binding(publication["task_uid"])
-            except Exception as read_exc:
-                raise PublicationError("NETWORK_UNCERTAIN", f"Task PR binding readback failed: {read_exc}") from exc
-            if not isinstance(live, dict) or live.get("pr_number") != number:
-                raise PublicationError("NETWORK_UNCERTAIN", f"record-pr response uncertain: {exc}") from exc
+            # Do not convert a matching Issue-body URL into proof that the
+            # helper reached its final task-mapping write.
+            raise PublicationError("NETWORK_UNCERTAIN", f"record-pr transition did not confirm: {exc}") from exc
         try:
             live = adapter.read_task_pr_binding(publication["task_uid"])
         except Exception as exc:

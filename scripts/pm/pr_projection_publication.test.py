@@ -157,6 +157,24 @@ class PublicationMatrixTests(unittest.TestCase):
             projection_digest=publication["projection_digest"],
         )
 
+    def run_publish_entrypoint(self, temp, publication, projection, adapter, journal):
+        root = Path(temp)
+        body_file = root / "body.md"
+        body_file.write_text(f"Task: {UID}\nRefs #1\n", encoding="utf-8")
+        projection_file = root / "projection.json"
+        projection_file.write_text("{}\n", encoding="utf-8")
+        args = type("Args", (), {
+            "worktree": str(root), "task_uid": UID, "issue_number": 1,
+            "body_file": str(body_file), "projection": str(projection_file),
+        })()
+        with (
+            patch.object(publish_module, "task_publication", return_value=(publication, projection)),
+            patch.object(publish_module, "GitHubPublicationAdapter", return_value=adapter),
+            patch.object(publish_module, "repo_common_dir", return_value=root),
+            patch.object(publish_module.pr_projection_journal, "open_journal", return_value=journal),
+        ):
+            return publish_module.publish(args)
+
     def test_record_pr_passes_canonical_repository_to_task_helper(self):
         publication, _projection = make_publication(7000, repository="example/oasis7")
         with tempfile.TemporaryDirectory() as temp:
@@ -445,7 +463,73 @@ class PublicationMatrixTests(unittest.TestCase):
             self.assertEqual(1, len(adapter.prs))
             self.assertEqual(1, adapter.events.count("create-pr"))
 
-    def test_task_binding_readback_recovers_after_record_pr_without_repeating_write(self):
+    def test_entrypoint_retries_exact_published_pr_without_reusing_push_lease(self):
+        with tempfile.TemporaryDirectory() as temp:
+            lease_oid = "8" * 40
+            publication, projection = make_publication(506)
+            adapter = FakeAdapter(publication, projection, initial_head=lease_oid)
+            journal = self.journal(temp, publication)
+            initial = publication_module.publish_create(
+                adapter, journal, publication=publication, projection=projection,
+                body=f"Task: {UID}\nRefs #1", expected_remote_oid=lease_oid,
+            )
+            self.assertEqual("published", initial["status"])
+            self.assertEqual(1, len(adapter.prs))
+            self.assertEqual(1, adapter.pr_binding["pr_number"])
+            adapter.events.clear()
+
+            result = self.run_publish_entrypoint(
+                temp, publication, projection, adapter, journal,
+            )
+
+            self.assertEqual("published", result["status"])
+            self.assertEqual(1, result["pr_number"])
+            self.assertEqual(1, len(adapter.prs))
+            self.assertNotIn("push", adapter.events)
+            self.assertNotIn("create-pr", adapter.events)
+
+    def test_entrypoint_recovers_exact_created_pr_before_task_url_write(self):
+        class FirstRecordPrFailureAdapter(FakeAdapter):
+            def __init__(self, publication, projection, *, initial_head):
+                super().__init__(publication, projection, initial_head=initial_head)
+                self.record_attempts = 0
+
+            def record_pr(self, task_uid, number, publication_id):
+                self.record_attempts += 1
+                if self.record_attempts == 1:
+                    self.events.append("record-pr")
+                    raise RuntimeError("simulated interruption before Task URL write")
+                super().record_pr(task_uid, number, publication_id)
+
+        with tempfile.TemporaryDirectory() as temp:
+            lease_oid = "7" * 40
+            publication, projection = make_publication(507)
+            adapter = FirstRecordPrFailureAdapter(
+                publication, projection, initial_head=lease_oid,
+            )
+            journal = self.journal(temp, publication)
+            with self.assertRaisesRegex(publication_module.PublicationError, "NETWORK_UNCERTAIN"):
+                publication_module.publish_create(
+                    adapter, journal, publication=publication, projection=projection,
+                    body=f"Task: {UID}\nRefs #1", expected_remote_oid=lease_oid,
+                )
+            self.assertEqual(1, len(adapter.prs))
+            self.assertIsNone(adapter.pr_binding)
+            adapter.events.clear()
+
+            result = self.run_publish_entrypoint(
+                temp, publication, projection, adapter, journal,
+            )
+
+            self.assertEqual("published", result["status"])
+            self.assertEqual(1, result["pr_number"])
+            self.assertEqual(1, len(adapter.prs))
+            self.assertEqual(1, adapter.pr_binding["pr_number"])
+            self.assertEqual(2, adapter.record_attempts)
+            self.assertNotIn("push", adapter.events)
+            self.assertNotIn("create-pr", adapter.events)
+
+    def test_uncertain_record_pr_retries_full_transition_when_issue_binding_is_visible(self):
         class PostWriteReadbackFailureAdapter(FakeAdapter):
             def __init__(self, publication, projection):
                 super().__init__(publication, projection)
@@ -479,7 +563,47 @@ class PublicationMatrixTests(unittest.TestCase):
             self.assertEqual("published", result["status"])
             self.assertEqual(1, len(adapter.prs))
             self.assertEqual(1, adapter.events.count("create-pr"))
-            self.assertEqual(1, adapter.events.count("record-pr"))
+            self.assertEqual(2, adapter.events.count("record-pr"))
+            self.assertEqual(1, adapter.events.count("publish-reciprocal"))
+
+    def test_partial_record_pr_failure_cannot_be_confirmed_by_issue_url_alone(self):
+        class PartialRecordPrAdapter(FakeAdapter):
+            def __init__(self, publication, projection):
+                super().__init__(publication, projection)
+                self.mapping_complete = False
+
+            def record_pr(self, task_uid, number, publication_id):
+                super().record_pr(task_uid, number, publication_id)
+                if self.events.count("record-pr") == 1:
+                    raise RuntimeError("simulated failure after Issue body write, before task mapping")
+                self.mapping_complete = True
+
+            def publish_reciprocal_binding(self, value):
+                if not self.mapping_complete:
+                    raise AssertionError("publication advanced before complete record-pr recovery")
+                super().publish_reciprocal_binding(value)
+
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection = make_publication(505)
+            adapter = PartialRecordPrAdapter(publication, projection)
+            journal = self.journal(temp, publication)
+            with self.assertRaisesRegex(publication_module.PublicationError, "NETWORK_UNCERTAIN"):
+                publication_module.publish_create(
+                    adapter, journal, publication=publication,
+                    projection=projection, body="Task: " + UID + "\nRefs #1",
+                )
+            self.assertEqual(1, adapter.prs[0]["number"])
+            self.assertEqual(1, adapter.pr_binding["pr_number"])
+            self.assertEqual([], adapter.bindings)
+            self.assertFalse(adapter.mapping_complete)
+
+            result = publication_module.publish_create(
+                adapter, journal, publication=publication,
+                projection=projection, body="Task: " + UID + "\nRefs #1",
+            )
+            self.assertEqual("published", result["status"])
+            self.assertTrue(adapter.mapping_complete)
+            self.assertEqual(2, adapter.events.count("record-pr"))
             self.assertEqual(1, adapter.events.count("publish-reciprocal"))
 
     def test_restart_after_create_effect_reuses_the_single_matching_pr(self):
