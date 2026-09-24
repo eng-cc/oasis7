@@ -135,6 +135,10 @@ def wait_for_binding(read_snapshot: Any, *, task_uid: str, source_head_oid: str,
                 snapshots.append(snapshot)
         if len(snapshots) == 2 and _canonical(snapshots[0]) == _canonical(snapshots[1]):
             snapshot = snapshots[0]
+            if not isinstance(snapshot.get("publication"), dict):
+                raise ResolverError("Task publication readback is incomplete")
+            if not isinstance(snapshot.get("binding"), dict):
+                raise ResolverError("reciprocal Task/PR binding readback is incomplete")
             if (snapshot.get("repository") != repository
                     or snapshot.get("pr_number") != pr_number):
                 raise ResolverError("live PR repository or number mismatch")

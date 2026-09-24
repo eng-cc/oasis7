@@ -350,6 +350,58 @@ class PublicationMatrixTests(unittest.TestCase):
                 self.assertLess(adapter.events.index("create-pr"), adapter.events.index("record-pr"))
                 self.assertLess(adapter.events.index("record-pr"), adapter.events.index("publish-reciprocal"))
 
+    def test_create_rejects_task_bound_pr_missing_from_exact_discovery_before_writes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection = make_publication(490)
+            other_pr = {
+                "repository": publication["repository"], "source_ref": "task/older-branch",
+                "target_ref": publication["target_ref"], "head_oid": publication["source_head_oid"],
+                "body": "old body", "state": "open", "merged": False,
+                "draft": True, "number": 99,
+            }
+            adapter = FakeAdapter(publication, projection, initial_pr=other_pr)
+            adapter.pr_binding = {"task_uid": UID, "pr_number": 99}
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "TASK_IDENTITY_CONFLICT",
+            ):
+                publication_module.publish_create(
+                    adapter, self.journal(temp, publication), publication=publication,
+                    projection=projection, body=f"Task: {UID}\nRefs #1",
+                )
+            self.assertNotIn("task-intent", adapter.events)
+            self.assertNotIn("push", adapter.events)
+            self.assertNotIn("create-pr", adapter.events)
+            self.assertNotIn("record-pr", adapter.events)
+            self.assertNotIn("publish-reciprocal", adapter.events)
+
+    def test_create_reconciles_exact_existing_task_bound_pr_without_duplicate(self):
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection = make_publication(491)
+            _, marker = publication_module.prepare(
+                task_uid=UID, source_head_oid=publication["source_head_oid"],
+                scope_base_oid=SCOPE, projection_digest=publication["projection_digest"],
+            )
+            body = publication_module.replace_projection_marker(
+                f"Task: {UID}\nRefs #1", marker,
+            )
+            pr = {
+                "repository": publication["repository"], "source_ref": publication["source_ref"],
+                "target_ref": publication["target_ref"], "head_oid": publication["source_head_oid"],
+                "body": body, "state": "open", "merged": False,
+                "draft": True, "number": 17,
+            }
+            adapter = FakeAdapter(publication, projection,
+                                  initial_head=publication["source_head_oid"], initial_pr=pr)
+            result = publication_module.publish_create(
+                adapter, self.journal(temp, publication), publication=publication,
+                projection=projection, body=f"Task: {UID}\nRefs #1",
+            )
+            self.assertEqual(17, result["pr_number"])
+            self.assertEqual(1, len(adapter.prs))
+            self.assertNotIn("push", adapter.events)
+            self.assertNotIn("create-pr", adapter.events)
+            self.assertEqual(1, adapter.events.count("publish-reciprocal"))
+
     def test_30_ordered_existing_pr_updates(self):
         with tempfile.TemporaryDirectory() as temp:
             for index in range(30):
@@ -402,9 +454,9 @@ class PublicationMatrixTests(unittest.TestCase):
             def read_task_pr_binding(self, task_uid):
                 self.events.append("read-task-pr-binding")
                 self.binding_reads += 1
-                if self.binding_reads == 1:
+                if self.binding_reads in (1, 2):
                     return {"task_uid": task_uid, "pr_number": None}
-                if self.binding_reads == 2:
+                if self.binding_reads == 3:
                     raise RuntimeError("simulated Task PR binding readback failure")
                 return {"task_uid": task_uid, "pr_number": 1}
 
@@ -492,6 +544,54 @@ class PublicationMatrixTests(unittest.TestCase):
             self.assertNotIn("patch-pr", adapter.events)
             self.assertNotIn("push", adapter.events)
 
+    def test_update_rejects_different_task_bound_pr_before_writes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_head = "a" * 40
+            publication, projection = make_publication(492, head="b" * 40)
+            pr = {
+                "repository": publication["repository"], "source_ref": publication["source_ref"],
+                "target_ref": publication["target_ref"], "head_oid": old_head,
+                "body": f"Task: {UID}\nRefs #1", "state": "open", "merged": False,
+                "draft": True, "number": 1,
+            }
+            adapter = FakeAdapter(publication, projection, initial_head=old_head, initial_pr=pr)
+            adapter.pr_binding = {"task_uid": UID, "pr_number": 99}
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "TASK_IDENTITY_CONFLICT",
+            ):
+                publication_module.publish_update(
+                    adapter, self.journal(temp, publication), publication=publication,
+                    projection=projection, pr_number=1, old_head_oid=old_head, body=pr["body"],
+                )
+            self.assertEqual(["read-task-pr-binding"], adapter.events)
+
+    def test_update_preserves_live_manual_pr_body(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_head = "c" * 40
+            new_head = "d" * 40
+            publication, projection = make_publication(493, head=new_head)
+            _, old_marker = publication_module.prepare(
+                task_uid=UID, source_head_oid=old_head, scope_base_oid=SCOPE,
+                projection_digest=digest({"old": "projection"}),
+            )
+            manual_prefix = f"Manually edited PR summary\n\nTask: {UID}\nRefs #1"
+            pr = {
+                "repository": publication["repository"], "source_ref": publication["source_ref"],
+                "target_ref": publication["target_ref"], "head_oid": old_head,
+                "body": manual_prefix + "\n\n" + old_marker,
+                "state": "open", "merged": False, "draft": True, "number": 1,
+            }
+            adapter = FakeAdapter(publication, projection, initial_head=old_head, initial_pr=pr)
+            adapter.pr_binding = {"task_uid": UID, "pr_number": 1}
+            publication_module.publish_update(
+                adapter, self.journal(temp, publication), publication=publication,
+                projection=projection, pr_number=1, old_head_oid=old_head,
+                body=f"Generated replacement summary\n\nTask: {UID}\nRefs #1",
+            )
+            self.assertTrue(adapter.prs[0]["body"].startswith(manual_prefix))
+            self.assertNotIn("Generated replacement summary", adapter.prs[0]["body"])
+            self.assertEqual(1, adapter.prs[0]["body"].count("oasis7-ci-impact-publication:v2"))
+
     def test_h1_with_stale_body_repairs_metadata_without_moving_head(self):
         with tempfile.TemporaryDirectory() as temp:
             head = "9" * 40
@@ -544,6 +644,37 @@ class PublicationMatrixTests(unittest.TestCase):
             self.assertEqual(projection["projection_digest"], result["projection_digest"])
             self.assertEqual([5.0, 5.0], timeouts)
         self.assertEqual([], clock.sleeps)
+
+    def test_complete_snapshot_requires_publication_and_reciprocal_binding(self):
+        publication, _projection = make_publication(2500)
+        _, body = publication_module.prepare(
+            task_uid=UID, source_head_oid=publication["source_head_oid"],
+            scope_base_oid=SCOPE, projection_digest=publication["projection_digest"],
+        )
+        binding = publication_module.build_publication_binding(
+            publication, 1, f"https://github.com/{publication['repository']}/pull/1",
+        )
+        complete = {
+            "complete": True, "publication": publication, "binding": binding,
+            "body": body, "repository": publication["repository"],
+            "repository_id": publication["repository_id"],
+            "source_repository_id": publication["source_repository_id"],
+            "source_ref": publication["source_ref"], "target_ref": publication["target_ref"],
+            "head_oid": publication["source_head_oid"], "state": "open",
+            "merged": False, "pr_number": 1,
+        }
+        for missing in ("publication", "binding"):
+            snapshot = dict(complete)
+            snapshot.pop(missing)
+            with self.subTest(missing=missing):
+                with self.assertRaises(resolver_module.ResolverError):
+                    resolver_module.wait_for_binding(
+                        lambda _timeout, snapshot=snapshot: snapshot,
+                        task_uid=UID, source_head_oid=publication["source_head_oid"],
+                        scope_base_oid=SCOPE, repository=publication["repository"],
+                        pr_number=1, planner_config_sha256=CONFIG,
+                        clock=FakeClock().clock, sleep=lambda _duration: None,
+                    )
 
     def test_unstable_snapshots_use_bounded_three_round_schedule(self):
         clock = FakeClock()

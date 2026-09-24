@@ -341,6 +341,42 @@ def _pr_matches(pr: dict[str, Any], publication: dict[str, Any], body: str) -> b
     )
 
 
+def _preflight_task_pr_binding(adapter: Any, publication: dict[str, Any], *,
+                              expected_pr_number: int | None = None,
+                              reconcile_exact_create: bool = False,
+                              body: str | None = None) -> dict[str, Any] | None:
+    """Read the canonical Task PR link before any publication mutation."""
+    try:
+        binding = adapter.read_task_pr_binding(publication["task_uid"])
+    except Exception as exc:
+        raise PublicationError("NETWORK_UNCERTAIN", f"Task PR binding preflight failed: {exc}") from exc
+    if not isinstance(binding, dict) or binding.get("task_uid") != publication["task_uid"]:
+        raise PublicationError("TASK_IDENTITY_CONFLICT", "live Task PR binding UID is invalid")
+    number = binding.get("pr_number")
+    if number is None:
+        return None
+    if type(number) is not int or number < 1:
+        raise PublicationError("TASK_IDENTITY_CONFLICT", "live Task PR binding number is invalid")
+    if expected_pr_number is not None:
+        if number != expected_pr_number:
+            raise PublicationError("TASK_IDENTITY_CONFLICT", "Task is bound to another PR")
+        return None
+    if not reconcile_exact_create:
+        raise PublicationError("TASK_IDENTITY_CONFLICT", "Task already has a PR binding")
+    try:
+        live_pr = adapter.read_pr(publication["repository"], number)
+    except Exception as exc:
+        raise PublicationError("NETWORK_UNCERTAIN", f"bound PR preflight failed: {exc}") from exc
+    if not isinstance(live_pr, dict) or live_pr.get("number") != number:
+        raise PublicationError("NETWORK_UNCERTAIN", "bound PR readback is incomplete")
+    if not isinstance(body, str) or not _pr_matches(live_pr, publication, body):
+        raise PublicationError(
+            "TASK_IDENTITY_CONFLICT",
+            "Task is bound to a PR that does not match this create candidate",
+        )
+    return live_pr
+
+
 def _create_pr(adapter: Any, journal: PublicationJournal,
                publication: dict[str, Any], body: str, *,
                clock: Callable[[], float] = time.monotonic,
@@ -548,9 +584,15 @@ def publish_create(adapter: Any, journal: PublicationJournal, *, publication: di
     body = replace_projection_marker(body, marker, legacy_projection_b64=legacy_projection_b64)
     try:
         with journal.locked():
+            bound_pr = _preflight_task_pr_binding(
+                adapter, publication, reconcile_exact_create=True, body=body,
+            )
             _intent(adapter, journal, publication)
-            _push(adapter, journal, publication, expected_remote_oid)
-            pr = _create_pr(adapter, journal, publication, body, clock=clock, sleep=sleep)
+            if bound_pr is not None:
+                pr = bound_pr
+            else:
+                _push(adapter, journal, publication, expected_remote_oid)
+                pr = _create_pr(adapter, journal, publication, body, clock=clock, sleep=sleep)
             binding = _record_and_bind(adapter, journal, publication, pr)
             return {"status": "published", "task_uid": publication["task_uid"],
                     "publication_id": publication["publication_id"], "pr_number": pr["number"],
@@ -580,7 +622,9 @@ def publish_update(adapter: Any, journal: PublicationJournal, *, publication: di
     body = replace_projection_marker(body, marker, legacy_projection_b64=legacy_projection_b64)
     try:
         with journal.locked():
-            _intent(adapter, journal, publication)
+            _preflight_task_pr_binding(
+                adapter, publication, expected_pr_number=pr_number,
+            )
             current = adapter.read_pr(publication["repository"], pr_number)
             head = current.get("head_oid") if isinstance(current, dict) else None
             if head not in (old_head_oid, publication["source_head_oid"]):
@@ -589,6 +633,10 @@ def publish_update(adapter: Any, journal: PublicationJournal, *, publication: di
             old_body = current.get("body")
             if not isinstance(old_body, str):
                 raise PublicationError("EVENT_PROJECTION_INVALID", "live PR body is not text")
+            body = replace_projection_marker(
+                old_body, marker, legacy_projection_b64=legacy_projection_b64,
+            )
+            _intent(adapter, journal, publication)
 
             action = "patch-body:" + publication["publication_id"]
             body_hash = lambda text: "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
