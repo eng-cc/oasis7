@@ -675,6 +675,7 @@ def check_cross_package_edges(
     packages: dict[str, list[tuple[str, str]]],
     changed: set[str],
     build_scripts: dict[str, set[str]],
+    active_build_packages: set[str],
 ) -> None:
     # Rust paths may use an ordinary or a raw string literal.  Keep the raw
     # delimiter matched to its closing delimiter, including multiple hashes.
@@ -706,7 +707,7 @@ def check_cross_package_edges(
                     owner in affected_packages or target_owner in affected_packages
                 ):
                     raise ScopeError(reason, f"{path} reaches {resolved}")
-        if owner in affected_packages and path in build_scripts.get(owner, set()):
+        if owner in active_build_packages and path in build_scripts.get(owner, set()):
             def check_output(target: str) -> None:
                 # Cargo executes build scripts with the package root as cwd,
                 # even when the script itself lives in a nested directory.
@@ -918,7 +919,20 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
                 f"Cargo.lock source for {primary_package} does not match Cargo metadata",
             )
 
-    check_cross_package_edges(repo, args.head, tracked_paths(repo, args.head), head_packages, set(normalized_paths), head_build_scripts)
+    active_build_packages = set(package_owners)
+    while True:
+        dependencies = {
+            target for source, target, _ in head_dependency_edges
+            if source in active_build_packages
+        }
+        expanded = active_build_packages | dependencies
+        if expanded == active_build_packages:
+            break
+        active_build_packages = expanded
+    check_cross_package_edges(
+        repo, args.head, tracked_paths(repo, args.head), head_packages,
+        set(normalized_paths), head_build_scripts, active_build_packages,
+    )
     return {
         "status": "allowed",
         "primary_package": primary_package,

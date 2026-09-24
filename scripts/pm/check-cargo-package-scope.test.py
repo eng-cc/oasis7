@@ -236,6 +236,28 @@ path = "src/lib.rs"
 
         self._assert_allowed(repo, base, "alpha", mutate)
 
+    def test_new_normal_dependency_executes_target_build_script_into_source_package(self) -> None:
+        repo, _ = self._fixture()
+        self._write(repo, "crates/beta/build.rs",
+            'fn main() { std::fs::write("../alpha/src/generated.rs", "pub fn generated() {}\\n").unwrap(); }\n')
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "base with beta build script")
+        base = self._git(repo, "rev-parse", "HEAD")
+
+        def mutate(root: Path) -> None:
+            manifest = root / "crates/alpha/Cargo.toml"
+            manifest.write_text(manifest.read_text(encoding="utf-8")
+                + '\n[dependencies]\nbeta = { path = "../beta" }\n', encoding="utf-8")
+
+        head = self._head(repo, mutate, "alpha depends on beta")
+        compiled = subprocess.run(["cargo", "check", "--offline", "-p", "alpha"],
+            cwd=repo, check=False, text=True, capture_output=True)
+        self.assertEqual(0, compiled.returncode, compiled.stderr)
+        self.assertIn("generated", (repo / "crates/alpha/src/generated.rs").read_text(encoding="utf-8"))
+        result = self._run_checker(repo, base, head, "alpha")
+        self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("cross_package_generated_output", result.stdout + result.stderr)
+
     def _add_normal_path_dependency_with_generated_lockfile(self, root: Path) -> None:
         manifest = root / "crates/alpha/Cargo.toml"
         manifest.write_text(
