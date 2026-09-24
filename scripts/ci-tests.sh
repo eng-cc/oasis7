@@ -358,6 +358,7 @@ run_cargo_tooling_baseline_contract_tests() {
   run bash ./scripts/cargo-dev-windows-toolchain.test.sh
   run bash ./scripts/cargo-dev-worktree-isolation.test.sh
   run bash ./scripts/pm/new-task-worktree-cargo-cache-migration.test.sh
+  run bash ./scripts/check-launcher-p2p-dependency-surface.test.sh
 }
 
 run_cargo_tooling_contract_tests() {
@@ -365,7 +366,6 @@ run_cargo_tooling_contract_tests() {
   run bash ./scripts/cargo-dev-lib.test.sh
   run bash ./scripts/check-standalone-tool-lockfiles.test.sh
   run ./scripts/check-standalone-tool-lockfiles.sh
-  run bash ./scripts/check-launcher-p2p-dependency-surface.test.sh
 }
 
 run_workflow_governance_baseline_contract_tests() {
@@ -1030,7 +1030,6 @@ run_legacy_required_gate_contract_baseline() {
   run_operational_identity_contract_tests
   run_workflow_governance_baseline_contract_tests
   run bash ./scripts/release-packages-trunk-cache-contract.test.sh
-  run bash ./scripts/check-launcher-p2p-dependency-surface.test.sh
   run bash ./scripts/ci-tests-pixel-world-required-contract.test.sh
   run bash ./scripts/ci-tests-codex-agent-config-required-contract.test.sh
   run_required_component "compile metrics contract" "${OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS:-}" "disabled_by_scope_planner" run_compile_metrics_contract_tests
