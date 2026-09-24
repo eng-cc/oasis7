@@ -303,6 +303,30 @@ class CheckerStageAdmissionTest(unittest.TestCase):
             with self.assertRaisesRegex(MODULE.AdmissionError, "source check head does not match"):
                 MODULE.resolve_live_check_head(args)
 
+    def test_pr_check_head_rejects_missing_stage_source_head(self):
+        args = type("Args", (), {"head_oid": "5" * 40, "check_head": "6" * 40})()
+        with patch.dict(
+            MODULE.os.environ,
+            {"GITHUB_EVENT_NAME": "pull_request", "GITHUB_SHA": "6" * 40},
+            clear=True,
+        ):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "source check head"):
+                MODULE.resolve_live_check_head(args)
+
+    def test_pr_check_head_rejects_malformed_stage_source_head(self):
+        args = type("Args", (), {"head_oid": "5" * 40, "check_head": "6" * 40})()
+        with patch.dict(
+            MODULE.os.environ,
+            {
+                "GITHUB_EVENT_NAME": "pull_request",
+                "GITHUB_SHA": "6" * 40,
+                "OASIS7_CARGO_STAGE_CHECK_HEAD": "not-a-full-oid",
+            },
+            clear=True,
+        ):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "source check head"):
+                MODULE.resolve_live_check_head(args)
+
     def test_authority_chain_reads_both_fixed_live_server_readbacks(self):
         with patch.object(MODULE, "gh_api", side_effect=_authority_api()):
             chain = MODULE.verify_authority_chain(REPOSITORY)
@@ -817,6 +841,18 @@ class CheckerStageAdmissionTest(unittest.TestCase):
         wrong_app["check_runs"][0]["app"] = {"id": 42, "slug": "untrusted-app"}
         with patch.object(MODULE, "gh_api", return_value=wrong_app):
             with self.assertRaisesRegex(MODULE.AdmissionError, "app identity mismatch"):
+                MODULE.verify_live_check_identity(REPOSITORY, check_head, "99")
+
+    def test_postrun_rejects_duplicate_live_check_run_matches(self):
+        check_head = "5" * 40
+        check = {
+            "id": 123, "name": "required-gate", "head_sha": check_head,
+            "details_url": f"https://github.com/{REPOSITORY}/actions/runs/99/job/1",
+            "app": {"id": 15368, "slug": "github-actions"},
+        }
+        duplicate = dict(check, id=124)
+        with patch.object(MODULE, "gh_api", return_value={"check_runs": [check, duplicate]}):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "missing or ambiguous"):
                 MODULE.verify_live_check_identity(REPOSITORY, check_head, "99")
 
     def test_postrun_receipt_is_durable_and_complete(self):
