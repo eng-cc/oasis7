@@ -76,6 +76,32 @@ assert_key_matches() {
   fi
 }
 
+# The checked-in W policy is the policy used for production planning, so keep
+# its domain-split contract live instead of testing only the versioned fixture.
+if ! cmp -s "$ROOT_DIR/scripts/ci-required-scope.v2.json" "$VERSIONED_TEST_CONFIG"; then
+  echo "trusted W policy drifted from the versioned contract fixture" >&2
+  exit 1
+fi
+trusted_policy_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh \
+  --event-name pull_request --changed-path doc/product/example.prd.md)"
+assert_key_equals "$trusted_policy_output" execution_contract required-domain-split/v1
+assert_key_equals "$trusted_policy_output" run_required_gate_baseline true
+assert_key_equals "$trusted_policy_output" run_rust_baseline false
+assert_key_equals "$trusted_policy_output" needs_python true
+assert_key_equals "$trusted_policy_output" needs_markdown true
+
+trusted_doc_checker_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh \
+  --event-name pull_request --changed-path scripts/product-doc-governance-check.test.py)"
+assert_key_equals "$trusted_doc_checker_output" run_doc_checker_contracts true
+assert_key_equals "$trusted_doc_checker_output" run_cargo_tooling_contracts false
+assert_key_equals "$trusted_doc_checker_output" needs_rust_toolchain false
+
+trusted_cargo_tooling_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh \
+  --event-name pull_request --changed-path scripts/cargo-dev-lib.test.sh)"
+assert_key_equals "$trusted_cargo_tooling_output" run_cargo_tooling_contracts true
+assert_key_equals "$trusted_cargo_tooling_output" run_doc_checker_contracts false
+assert_key_equals "$trusted_cargo_tooling_output" needs_rust_toolchain true
+
 product_doc_output="$(plan_for_path doc/product/world-rules-core-gameplay.prd.md)"
 assert_key_equals "$product_doc_output" scope minimal
 assert_key_equals "$product_doc_output" run_rust_baseline false
@@ -84,6 +110,7 @@ assert_key_equals "$product_doc_output" needs_node false
 assert_key_equals "$product_doc_output" needs_python true
 assert_key_equals "$product_doc_output" needs_markdown true
 assert_key_equals "$product_doc_output" execution_contract required-domain-split/v1
+assert_key_equals "$product_doc_output" required_test_units required_gate_baseline
 assert_key_matches "$product_doc_output" planner_config_sha256 '^sha256:[0-9a-f]{64}$'
 assert_reason_contains "$product_doc_output" "governance_doc:doc/product/world-rules-core-gameplay.prd.md"
 
@@ -96,6 +123,7 @@ site_output="$(plan_for_path site/index.html)"
 assert_key_equals "$site_output" scope targeted
 assert_key_equals "$site_output" selected_capabilities site_quality
 assert_key_equals "$site_output" run_site_contract_tests true
+assert_key_equals "$site_output" required_test_units 'required_gate_baseline;site_quality'
 assert_key_equals "$site_output" run_rust_baseline false
 assert_key_equals "$site_output" needs_rust_toolchain false
 assert_key_equals "$site_output" needs_node false

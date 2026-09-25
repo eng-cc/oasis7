@@ -535,4 +535,24 @@ for job in windows-package-rollout-behavior testnet-packages-macos-arm64-contrac
   fi
 done
 
+for step in \
+  "Prepare exact manual integration from trusted default workflow" \
+  "Verify fleet-health collection contract"; do
+  if ! awk -v step="$step" '
+    $0 == "  public-testnet-fleet-health-contract:" { in_job=1; next }
+    in_job && /^  [A-Za-z0-9_-]+:/ { exit }
+    in_job && ($0 == "      - name: " step || $0 == "        name: " step) {
+      in_step=1
+      next
+    }
+    in_step && /^      - / { in_step=0 }
+    in_step && $0 == "        shell: bash" { has_bash_shell=1 }
+    in_step && $0 == "        run: |" { has_run=1 }
+    END { exit(has_bash_shell && has_run ? 0 : 1) }
+  ' "$workflow"; then
+    echo "fleet-health step must explicitly select Bash for its Bash run block: $step" >&2
+    exit 1
+  fi
+done
+
 echo "ci required scope audit contract: passed"

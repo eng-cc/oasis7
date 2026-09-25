@@ -65,9 +65,16 @@ class WorkflowImpactProjectionTests(unittest.TestCase):
             check=True,
         ).stdout
         trusted_capabilities = json.loads(trusted_config)["capabilities"]
-        # The versioned fixture now matches active trusted CI policy. Compare
-        # against the legacy compatibility config as a distinct alternate.
-        alternate_config = (ROOT / "scripts/fixtures/ci-required-scope.legacy-test.json").read_bytes()
+        candidate_config = json.loads(
+            (ROOT / "scripts/fixtures/ci-required-scope.versioned-test.json").read_text(encoding="utf-8")
+        )
+        # The versioned fixture may equal the current trusted-base config after
+        # an unrelated main update.  Model a deterministic candidate policy
+        # edit so this authority assertion does not depend on that coincidence.
+        candidate_config["rules"][-1]["match"].append("candidate-only/fixture/**")
+        candidate_config_bytes = json.dumps(
+            candidate_config, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")
         payload = self.base_input()
         payload.update({
             "source_head_oid": source_head,
@@ -98,7 +105,7 @@ class WorkflowImpactProjectionTests(unittest.TestCase):
         )
         self.assertNotEqual(
             projection["planner_config_sha256"],
-            "sha256:" + hashlib.sha256(alternate_config).hexdigest(),
+            "sha256:" + hashlib.sha256(candidate_config_bytes).hexdigest(),
         )
         with tempfile.TemporaryDirectory() as raw_directory:
             authority_root = Path(raw_directory)

@@ -335,6 +335,330 @@ def planner_for_run(repository, check_run, *, base_oid, head_oid):
     planner=canonical_planner(envelope["planner"])
     return _selected_child_job_outcomes(repository,check_run,workflow_run_id,planner,artifact)
 
+
+def _verified_v2_required_evidence(repository, check_run, proof, *, request_key,
+                                   request_identity, task_uid, pr_number,
+                                   integration_base_oid, head_oid):
+    """Validate exact-attempt v2 plan and every required result artifact.
+
+    Runtime proof supplies live artifact/check locators and the independently
+    trusted planner binding. Artifact payloads remain claims until their full
+    identity, input closure, policy and result obligations match that proof.
+    """
+    try:
+        import ci_input_scope as input_scope
+        import ci_required_artifact_v2 as required_v2
+        import integration_executor_contract as request_contract
+
+        def require(condition, message):
+            if not condition:
+                raise ValueError(message)
+
+        def positive_int(value, field):
+            if type(value) is not int or value <= 0:
+                raise ValueError(f"{field} must be a positive integer")
+            return value
+
+        plan_artifact_id = positive_int(
+            proof.get("required_plan_v2_artifact_id"), "v2 plan artifact ID",
+        )
+        run_id = positive_int(proof.get("workflow_run_id"), "workflow run ID")
+        run_attempt = positive_int(proof.get("run_attempt"), "workflow run attempt")
+        check_app_id = positive_int(proof.get("check_app_id"), "check app ID")
+        check_run_id = positive_int(proof.get("check_run_id"), "check-run ID")
+        if (run_id != proof.get("request_id") or run_id != proof.get("run_id")
+                or run_attempt != proof.get("run_attempt")
+                or check_run_id != check_run.get("id")
+                or check_app_id != (check_run.get("app") or {}).get("id")
+                or check_run.get("name") != "required-gate"
+                or check_run.get("status") != "completed"
+                or str(check_run.get("conclusion") or "").lower() != "success"):
+            raise ValueError("v2 plan check or exact attempt identity mismatch")
+
+        plan_name = required_v2.plan_artifact_name(run_id, run_attempt)
+        if proof.get("required_plan_v2_artifact_name") != plan_name:
+            raise ValueError("v2 plan artifact name is missing or belongs to another attempt")
+        plan = required_v2.validate_plan_payload(
+            proof.get("required_plan_v2_payload"), require_complete=True,
+        )
+        if not isinstance(plan, dict):
+            raise ValueError("v2 plan payload is malformed")
+
+        policy_context = proof.get("trusted_policy_context")
+        trusted_policy = policy_context.get("effective_policy") if isinstance(policy_context, dict) else None
+        effective_policy_identity = proof.get("effective_policy_identity")
+        if (not isinstance(trusted_policy, dict)
+                or not isinstance(effective_policy_identity, dict)
+                or policy_context.get("effective_policy_identity") != effective_policy_identity
+                or request_contract.effective_policy_digest(trusted_policy)
+                   != effective_policy_identity.get("digest")
+                or effective_policy_identity.get("digest")
+                   != request_identity.get("effective_policy_digest")
+                or effective_policy_identity.get("schema")
+                   != request_contract.EFFECTIVE_POLICY_IDENTITY_SCHEMA
+                or "input-scope-reuse/v1" not in trusted_policy.get("enabled_capabilities", [])):
+            raise ValueError("v2 reuse policy is missing, disabled, or not authenticated")
+        planner_authority = proof.get("planner_inventory_authority")
+        require(isinstance(planner_authority, dict), "trusted planner authority is missing")
+        if (policy_context.get("planner_inventory_authority") != planner_authority
+                or str(trusted_policy.get("check_app_id")) != str(check_app_id)):
+            raise ValueError("v2 planner authority or required-check app differs from trusted policy")
+
+        workflow_ref = proof.get("workflow_ref")
+        workflow_sha = proof.get("workflow_sha")
+        tested_commit_oid = proof.get("tested_commit_oid")
+        tested_tree_oid = proof.get("tested_tree_oid")
+        source_scope_oid = proof.get("source_scope_oid")
+        expected = {
+            "request_key": request_key,
+            "request_identity": request_identity,
+            "repository": repository,
+            "task_uid": task_uid,
+            "pr_number": pr_number,
+            "bootstrap_epoch": request_identity.get("bootstrap_epoch"),
+            "source_head_oid": head_oid,
+            "source_scope_oid": source_scope_oid,
+            "source_projection_digest": request_identity.get("source_projection_digest"),
+            "integration_base_oid": integration_base_oid,
+            "tested_commit_oid": tested_commit_oid,
+            "tested_tree_oid": tested_tree_oid,
+            "workflow_ref": workflow_ref,
+            "workflow_sha": workflow_sha,
+            "workflow_run_id": run_id,
+            "run_attempt": run_attempt,
+            "check_name": "required-gate",
+            "check_app_id": check_app_id,
+            "check_run_id": check_run_id,
+            "job_id": proof.get("job_id"),
+            "job_name": proof.get("job_name"),
+            "executor_contract_digest": request_identity.get("executor_contract_digest"),
+            "effective_policy_identity": effective_policy_identity,
+            "planner_inventory_authority": planner_authority,
+        }
+        for field, value in expected.items():
+            if plan.get(field) != value:
+                raise ValueError("v2 plan identity mismatch: " + field)
+        projection = plan.get("planner_output")
+        if (not isinstance(projection, dict)
+                or projection.get("source_scope_base") != source_scope_oid
+                or projection.get("impact_projection_digest")
+                   != request_identity.get("source_projection_digest")):
+            raise ValueError("v2 plan source scope or projection does not match trusted W output")
+
+        issuer = plan.get("planner_inventory_issuer")
+        if not isinstance(issuer, dict):
+            raise ValueError("v2 plan planner inventory issuer is missing")
+        trusted_inventory = proof.get("trusted_planner_inventory")
+        expected_inventory = {
+            "schema": input_scope.TRUSTED_PLANNER_INVENTORY_SCHEMA,
+            "authority": planner_authority,
+            "producer": {
+                "run_id": run_id,
+                "run_attempt": run_attempt,
+                "check_app_id": check_app_id,
+                "check_run_id": check_run_id,
+                "artifact_id": plan_artifact_id,
+            },
+            "target_oid": tested_commit_oid,
+            "target_tree_oid": tested_tree_oid,
+            "unit_ids": plan.get("unit_ids"),
+            "inventory_digest": plan.get("planner_inventory_digest"),
+        }
+        if trusted_inventory != expected_inventory:
+            raise ValueError("v2 planner inventory binding is not tied to live W/R/A/check/artifact")
+        input_scope_snapshot = input_scope.validate_input_scope_snapshot(
+            plan.get("input_scope"), trusted_planner_inventory=trusted_inventory,
+        )
+        if input_scope_snapshot["closure_status"]["status"] != "complete":
+            raise ValueError("v2 planner inventory closure is incomplete")
+        if (input_scope_snapshot["target_oid"] != tested_commit_oid
+                or input_scope_snapshot["target_tree_oid"] != tested_tree_oid
+                or input_scope_snapshot["required_test_units"] != plan.get("unit_ids")
+                or plan.get("required_test_units") != plan.get("unit_ids")
+                or plan.get("unit_ids") != sorted(set(plan.get("unit_ids", [])))):
+            raise ValueError("v2 input scope does not cover the complete exact unit inventory")
+        recomputed_inventory_digest = input_scope.planner_inventory_digest(
+            plan.get("unit_specs"), plan.get("product_corpus"),
+            tested_commit_oid, tested_tree_oid,
+        )
+        if (recomputed_inventory_digest != trusted_inventory["inventory_digest"]
+                or plan.get("planner_inventory_digest") != recomputed_inventory_digest
+                or plan.get("planner_inventory_issuer") != {
+                    key: value for key, value in trusted_inventory.items()
+                    if key != "producer"
+                } | {"producer": {
+                    key: trusted_inventory["producer"][key]
+                    for key in ("run_id", "run_attempt", "check_app_id", "check_run_id")
+                }}):
+            raise ValueError("v2 unit contracts or embedded issuer do not match trusted inventory")
+        specs = plan.get("unit_specs")
+        if (not isinstance(specs, list)
+                or sorted(spec.get("unit_id") for spec in specs if isinstance(spec, dict))
+                   != plan.get("unit_ids")):
+            raise ValueError("v2 complete unit contract list is malformed")
+        specs_by_id = {spec["unit_id"]: spec for spec in specs}
+        fingerprints = input_scope_snapshot["input_fingerprints"]
+        if plan.get("input_fingerprints") != fingerprints:
+            raise ValueError("v2 plan fingerprints do not match the complete input scope")
+        required_child_jobs = {
+            unit_id: sorted(
+                [MACOS_PACKAGE_JOB] if unit_id == "packaging_contracts" else
+                [WINDOWS_ROLLOUT_JOB,
+                 *(f"{FLEET_HEALTH_JOB} ({runner})" for runner in FLEET_HEALTH_RUNNERS)]
+                if unit_id == "operational_contracts" else []
+            )
+            for unit_id in plan["unit_ids"]
+        }
+        if plan.get("execution_job_requirements") != required_child_jobs:
+            raise ValueError("v2 execution job requirements differ from the trusted unit mapping")
+
+        raw_results = proof.get("required_result_v2_artifacts")
+        if not isinstance(raw_results, list) or len(raw_results) != len(plan["unit_ids"]):
+            raise ValueError("v2 result artifact set is missing required units")
+        seen_artifact_ids = set()
+        seen_names = set()
+        results_by_unit = {}
+        normalized_results = []
+        for raw in raw_results:
+            if not isinstance(raw, dict) or set(raw) != {"artifact_id", "name", "payload"}:
+                raise ValueError("v2 result artifact locator is malformed")
+            result_artifact_id = positive_int(raw["artifact_id"], "v2 result artifact ID")
+            result_name = required_v2.result_artifact_name(run_id, run_attempt, raw["payload"].get("unit_id") if isinstance(raw["payload"], dict) else "")
+            if (raw["name"] != result_name or result_artifact_id == plan_artifact_id
+                    or result_artifact_id in seen_artifact_ids or result_name in seen_names):
+                raise ValueError("v2 result artifact is duplicate or belongs to another attempt")
+            if not isinstance(raw["payload"], dict):
+                raise ValueError("v2 result payload is malformed")
+            result = required_v2.validate_result_payload(
+                raw["payload"], plan=plan, plan_artifact_id=plan_artifact_id,
+                expected_unit_id=raw["payload"].get("unit_id"),
+            )
+            unit_id = result.get("unit_id")
+            if unit_id not in specs_by_id or unit_id in results_by_unit:
+                raise ValueError("v2 result unit is missing, duplicated, or outside the inventory")
+            for field, value in expected.items():
+                if field in result and result.get(field) != value:
+                    raise ValueError("v2 result identity mismatch: " + field)
+            if (result.get("plan_artifact_id") != plan_artifact_id
+                    or result.get("planner_inventory_digest") != trusted_inventory["inventory_digest"]
+                    or result.get("input_digest") != fingerprints.get(unit_id)
+                    or result.get("obligation_ids") != specs_by_id[unit_id].get("obligation_set")
+                    or result.get("status") != "passed"
+                    or result.get("disposition") != "executed"
+                    or result.get("exit_code") != 0):
+                raise ValueError("v2 result does not discharge its exact input-bound obligation")
+            if (result.get("job_id") != proof.get("job_id")
+                    or result.get("job_name") != proof.get("job_name")
+                    or result.get("check_app_id") != check_app_id
+                    or result.get("check_run_id") != check_run_id):
+                raise ValueError("v2 result direct executor differs from the verified required-gate check")
+            seen_artifact_ids.add(result_artifact_id)
+            seen_names.add(result_name)
+            results_by_unit[unit_id] = result
+            normalized_results.append({
+                "artifact_id": result_artifact_id,
+                "name": result_name,
+                "payload": result,
+            })
+        if set(results_by_unit) != set(plan["unit_ids"]):
+            raise ValueError("v2 result artifacts do not cover the complete required inventory")
+
+        execution_jobs = proof.get("execution_jobs")
+        if not isinstance(execution_jobs, list) or not execution_jobs:
+            raise ValueError("v2 exact-attempt execution job proof is missing")
+        job_keys = set()
+        verified_jobs = []
+        expected_job_fields = {
+            "workflow_run_id", "run_attempt", "job_id", "job_name", "check_name",
+            "check_app_id", "check_run_id", "head_sha", "status", "conclusion", "labels",
+        }
+        for job in execution_jobs:
+            if not isinstance(job, dict) or set(job) != expected_job_fields:
+                raise ValueError("v2 exact-attempt execution job record is malformed")
+            if (job["workflow_run_id"] != run_id or job["run_attempt"] != run_attempt
+                    or job["check_app_id"] != check_app_id or job["head_sha"] != workflow_sha):
+                raise ValueError("v2 execution job belongs to another run, attempt, app, or workflow SHA")
+            if (not isinstance(job["labels"], list)
+                    or any(not isinstance(label, str) for label in job["labels"])
+                    or job["labels"] != sorted(set(job["labels"]))):
+                raise ValueError("v2 exact-attempt job runner labels are malformed")
+            if (job["status"] not in ("queued", "in_progress", "completed")
+                    or (job["status"] == "completed" and job["conclusion"] not in (
+                        "success", "failure", "cancelled", "skipped", "timed_out",
+                        "action_required", "neutral", "stale",
+                    ))
+                    or (job["status"] != "completed" and job["conclusion"] is not None)):
+                raise ValueError("v2 exact-attempt workflow job state is malformed")
+            job_id = positive_int(job["job_id"], "workflow job ID")
+            child_check_id = positive_int(job["check_run_id"], "workflow job check-run ID")
+            if (job_id, child_check_id) in job_keys:
+                raise ValueError("v2 exact-attempt execution job is duplicated")
+            job_keys.add((job_id, child_check_id))
+            verified_jobs.append(job)
+        gate_jobs = [job for job in verified_jobs if job["job_name"] == "required-gate"]
+        if (len(gate_jobs) != 1 or gate_jobs[0]["job_id"] != proof.get("job_id")
+                or gate_jobs[0]["check_run_id"] != check_run_id
+                or gate_jobs[0]["check_name"] != "required-gate"):
+            raise ValueError("v2 exact-attempt required-gate job/check locator mismatch")
+        jobs_by_name = {}
+        for job in verified_jobs:
+            jobs_by_name.setdefault(job["job_name"], []).append(job)
+        all_required_job_names = {"required-gate"}
+        for children in required_child_jobs.values():
+            all_required_job_names.update(children)
+        for name in all_required_job_names:
+            if len(jobs_by_name.get(name, [])) != 1:
+                raise ValueError("v2 required exact-attempt job is missing or ambiguous: " + name)
+            selected_job = jobs_by_name[name][0]
+            if (selected_job["status"] != "completed"
+                    or selected_job["conclusion"] != "success"):
+                raise ValueError("v2 required exact-attempt job is pending or failed: " + name)
+        verified_job_pairs = {(job["job_id"], job["check_run_id"]): job for job in verified_jobs}
+        for unit_id, result in results_by_unit.items():
+            result_jobs = result.get("execution_jobs")
+            expected_names = sorted(["required-gate", *required_child_jobs[unit_id]])
+            if (not isinstance(result_jobs, list)
+                    or sorted(job.get("job_name") for job in result_jobs if isinstance(job, dict))
+                       != expected_names):
+                raise ValueError("v2 result omits or duplicates a required execution job")
+            result_pairs = set()
+            for job in result_jobs:
+                if not isinstance(job, dict):
+                    raise ValueError("v2 result execution job record is malformed")
+                pair = (job.get("job_id"), job.get("check_run_id"))
+                if (pair not in verified_job_pairs or pair in result_pairs
+                        or job != verified_job_pairs[pair]):
+                    raise ValueError("v2 result execution jobs differ from live attempt proof")
+                result_pairs.add(pair)
+            expected_pairs = {
+                (jobs_by_name[name][0]["job_id"], jobs_by_name[name][0]["check_run_id"])
+                for name in expected_names
+            }
+            if result_pairs != expected_pairs:
+                raise ValueError("v2 result exact job set differs from trusted per-unit requirements")
+
+        planner = canonical_planner(plan.get("planner_output"))
+        if planner["planner_config_sha256"] != plan.get("planner_config_sha256"):
+            raise ValueError("v2 planner config digest does not match the W-replayed planner")
+        normalized_results.sort(key=lambda item: item["payload"]["unit_id"])
+        verified_jobs.sort(key=lambda item: (item["job_name"], item["job_id"]))
+        return {
+            "planner": planner,
+            "request_key": request_key,
+            "request_identity": request_identity,
+            "source_scope_oid": source_scope_oid,
+            "trusted_policy_context": policy_context,
+            "effective_policy_identity": effective_policy_identity,
+            "required_plan_v2_artifact_id": plan_artifact_id,
+            "required_plan_v2_artifact_name": plan_name,
+            "required_plan_v2_payload": plan,
+            "required_result_v2_artifacts": normalized_results,
+            "trusted_planner_inventory": trusted_inventory,
+            "execution_jobs": verified_jobs,
+        }
+    except (KeyError, TypeError, ValueError, ImportError, AttributeError) as exc:
+        raise SystemExit("ci-ready-receipt: trusted v2 required evidence blocked: " + str(exc)) from exc
+
 def _trusted_workflow_source(repository, workflow_sha):
     response=gh("api",f"repos/{repository}/contents/.github/workflows/rust.yml?ref={workflow_sha}")
     if response.get("encoding")!="base64" or not isinstance(response.get("content"),str):
@@ -618,10 +942,24 @@ def main():
     p.add_argument("--refresh-same-identity",action="store_true",
                    help="refresh only observed_at after complete live identity/planner validation")
     p.add_argument('--integration-run-id',type=int,help='new trusted manual integration workflow run')
+    p.add_argument('--request-key',help='explicit authorized keyed integration request from the canonical local journal')
     a=p.parse_args()
     existing=json.loads(Path(a.receipt).read_text()) if a.receipt else {}
+    if existing.get('request_key') and a.request_key!=existing['request_key']:
+        raise SystemExit('ci-ready-receipt: explicit --request-key is required and must match the existing keyed receipt')
     bound_base_ref = a.base_ref or existing.get("base_ref")
-    pr,run,base_oid,head_oid=selected_live(a.repository,a.task_uid,a.task_issue_number,a.pr_number,a.check_name,a.check_app_id,a.allow_ready_pr,bound_base_ref,a.integration_run_id or existing.get('integration_run_id'))
+    pr,run,base_oid,head_oid=selected_live(a.repository,a.task_uid,a.task_issue_number,a.pr_number,a.check_name,a.check_app_id,a.allow_ready_pr,bound_base_ref,a.integration_run_id or existing.get('integration_run_id'),request_key=a.request_key)
+    keyed_v2_evidence = None
+    if a.request_key is not None:
+        proof=run.get('_integration') or {}
+        if proof.get('request_key')!=a.request_key:
+            raise SystemExit('ci-ready-receipt: keyed integration request identity mismatch')
+        keyed_v2_evidence = _verified_v2_required_evidence(
+            a.repository, run, proof, request_key=a.request_key,
+            request_identity=proof.get("request_identity"),
+            task_uid=a.task_uid, pr_number=a.pr_number,
+            integration_base_oid=base_oid, head_oid=head_oid,
+        )
     old=None
     if a.receipt:
         old=json.loads(Path(a.receipt).read_text(encoding="utf-8"))
@@ -639,8 +977,11 @@ def main():
     # artifact. Legacy/mock check runs without a workflow URL retain the
     # repository's signed check-summary contract and still fail closed when
     # the marker or canonical planner fields are absent.
-    planner=(planner_for_run(a.repository,run,base_oid=base_oid,head_oid=head_oid)
-             if run.get("details_url") else planner_from_run(run))
+    if keyed_v2_evidence is not None:
+        planner=keyed_v2_evidence["planner"]
+    else:
+        planner=(planner_for_run(a.repository,run,base_oid=base_oid,head_oid=head_oid)
+                 if run.get("details_url") else planner_from_run(run))
     if not run.get("details_url") and any(_selected_child_groups(planner).values()):
         raise SystemExit("ci-ready-receipt: selected child jobs require same-run workflow attempt evidence")
     trusted_planner_digest=hashlib.sha256(json.dumps(planner,sort_keys=True,separators=(",",":")).encode()).hexdigest()
@@ -661,13 +1002,28 @@ def main():
     if planner.get("impact_projection_status") == "verified":
         payload.update(impact_projection_schema=planner["impact_projection_schema"],impact_projection_digest=planner["impact_projection_digest"],impact_projection_planner_digest=planner["impact_projection_planner_digest"])
     if old is None or 'scope_base_oid' in old:
-        payload['scope_base_oid'] = scope_base_for_run(a.repository, base_oid, head_oid)
+        payload['scope_base_oid'] = (
+            keyed_v2_evidence["source_scope_oid"] if keyed_v2_evidence is not None
+            else scope_base_for_run(a.repository, base_oid, head_oid)
+        )
         payload['integration_base_oid'] = base_oid
     if run.get('_integration'):
         proof=run['_integration']
         payload.update(integration_run_id=proof['workflow_run_id'],tested_tree_oid=proof['tested_tree_oid'],tested_commit_oid=proof['tested_commit_oid'],workflow_sha=proof['workflow_sha'])
         if old is None or any(key in old for key in ('request_id', 'workflow_ref', 'run_attempt')):
             payload.update(workflow_ref=proof['workflow_ref'],request_id=proof['request_id'],request_created_at=proof['request_created_at'],run_id=proof['run_id'],run_attempt=proof['run_attempt'],live_validation='ci-ready-receipt-live',trusted_integration_artifact=True)
+        if keyed_v2_evidence is not None:
+            payload.update({
+                key: keyed_v2_evidence[key]
+                for key in (
+                    "request_key", "request_identity", "source_scope_oid",
+                    "trusted_policy_context", "effective_policy_identity",
+                    "required_plan_v2_artifact_id", "required_plan_v2_artifact_name",
+                    "required_plan_v2_payload", "required_result_v2_artifacts",
+                    "trusted_planner_inventory", "execution_jobs",
+                )
+            })
+            payload["bootstrap_epoch"] = keyed_v2_evidence["request_identity"]["bootstrap_epoch"]
         payload["cargo_package_profile"]=cargo_package_profile_for_run(
             a.repository,run,proof,planner,task_uid=a.task_uid,
             task_issue_number=a.task_issue_number,pr_number=a.pr_number)
@@ -685,23 +1041,130 @@ def main():
             refreshed = {**refreshed, "review_evidence_digest": payload["review_evidence_digest"]}
         payload = refreshed
     print(json.dumps(payload,sort_keys=True,indent=2 if a.json else None))
+def _trusted_validation_request(request_key,repository,uid,number,head_oid,
+                                expected_integration_base_oid=None):
+    """Load an explicitly selected request only from this repo's canonical journal."""
+    if not isinstance(request_key,str) or not re.fullmatch(r"sha256:[0-9a-f]{64}",request_key):
+        raise ValueError("explicit validation request key is invalid")
+    import integration_ci
+    import integration_executor_contract as request_contract
+    root=Path(__file__).resolve().parents[2]
+    journal_dir=integration_ci.git_common_dir(root)
+    path=request_contract._request_path(journal_dir,request_key)
+    if not path.is_file():
+        raise ValueError("validation request journal is missing")
+    record=request_contract._read_request_record(path,request_key)
+    identity=request_contract.validation_request_identity(record.get("identity"))
+    if (identity!=record.get("identity")
+            or request_contract.validation_request_key(identity)!=request_key):
+        raise ValueError("validation request journal identity does not match explicit key")
+    if record.get("status")!="observed":
+        raise ValueError("validation request journal has no observed workflow run")
+    expected={"repository":repository,"task_uid":uid,"pr_number":number,
+      "source_head_oid":head_oid}
+    for field,value in expected.items():
+        if identity.get(field)!=value:
+            raise ValueError(f"validation request journal identity mismatch: {field}")
+    integration_base_oid=record.get("integration_base_oid")
+    if not isinstance(integration_base_oid,str) or not re.fullmatch(r"[0-9a-f]{40,64}",integration_base_oid):
+        raise ValueError("validation request journal immutable integration base is invalid")
+    if (expected_integration_base_oid is not None
+            and integration_base_oid!=expected_integration_base_oid):
+        raise ValueError("validation request journal immutable integration base mismatch")
+    return record,identity
+
+
+def _require_historical_base_ancestor_of_target(repository,historical_base_oid,current_target_oid):
+    """Prove the journal's immutable B is still an ancestor of live PR target Q."""
+    if (not isinstance(historical_base_oid,str)
+            or not re.fullmatch(r"[0-9a-f]{40,64}",historical_base_oid)
+            or not isinstance(current_target_oid,str)
+            or not re.fullmatch(r"[0-9a-f]{40,64}",current_target_oid)):
+        raise ValueError("historical integration base or current PR target is invalid")
+    if historical_base_oid==current_target_oid:
+        return
+    comparison=gh(
+        "api",
+        f"repos/{repository}/compare/{historical_base_oid}...{current_target_oid}",
+    )
+    base_commit=comparison.get("base_commit") if isinstance(comparison,dict) else None
+    head_commit=comparison.get("head_commit") if isinstance(comparison,dict) else None
+    merge_base_commit=comparison.get("merge_base_commit") if isinstance(comparison,dict) else None
+    if (not isinstance(base_commit,dict) or not isinstance(head_commit,dict)
+            or not isinstance(merge_base_commit,dict)
+            or base_commit.get("sha")!=historical_base_oid
+            or head_commit.get("sha")!=current_target_oid
+            or merge_base_commit.get("sha")!=historical_base_oid):
+        raise ValueError("historical integration base is not an ancestor of current PR target")
+
+
 def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=False,base_ref=None,
-                  integration_run_id=None, require_integration=False, require_dispatch=False):
+                  integration_run_id=None, require_integration=False, require_dispatch=False,
+                  request_key=None):
     from integration_ci import current_request, verified_run
+    import integration_ci
     pr=gh('api',f'repos/{repository}/pulls/{number}')
     if (not allow_ready_pr and not pr.get('draft')) or f'Refs #{issue}' not in (pr.get('body') or '') or f'Task: {uid}' not in (pr.get('body') or ''):
         raise SystemExit('ci-ready-receipt: manual integration task/draft identity mismatch')
     if pr.get('state')!='open' or pr.get('merged'):
         raise SystemExit('ci-ready-receipt: integration PR not open')
     if base_ref and pr['base']['ref']!=base_ref: raise SystemExit('ci-ready-receipt: manual integration base ref mismatch')
-    base,head=pr['base']['sha'],pr['head']['sha']
+    current_target_oid,head=pr['base']['sha'],pr['head']['sha']
+    base=current_target_oid
     try:
-        selected=current_request(repository,uid,number,base,head,pr['base']['ref'])
+        request_record=None
+        request_identity=None
+        effective_policy=None
+        policy_context=None
+        if request_key is not None:
+            request_record,request_identity=_trusted_validation_request(
+              request_key,repository,uid,number,head)
+            base=request_record["integration_base_oid"]
+            current_target_oid=integration_ci.default_branch_head(repository,pr['base']['ref'])
+            _require_historical_base_ancestor_of_target(repository,base,current_target_oid)
+        selected=current_request(repository,uid,number,base,head,pr['base']['ref'],
+          request_key=request_key)
+        if request_key is not None and selected is None:
+            raise ValueError('explicit keyed current request is absent from complete readback')
         if selected is not None:
             if integration_run_id is not None and int(integration_run_id)!=selected["id"]:
                 raise ValueError('explicit integration locator superseded by current request')
             if check_name!='required-gate': raise ValueError('unsupported manual check')
-            check,proof=verified_run(repository,uid,number,base,head,selected["id"],app)
+            if request_key is not None:
+                if selected["id"]!=request_record["run_id"]:
+                    raise ValueError('current workflow run differs from durable validation request journal')
+                if selected["run_attempt"]<request_record["run_attempt"]:
+                    raise ValueError('current workflow attempt is older than durable validation request journal')
+                workflow_sha=selected.get('workflow_run_head_sha')
+                if not isinstance(workflow_sha,str) or not re.fullmatch(r'[0-9a-f]{40,64}',workflow_sha):
+                    raise ValueError('trusted workflow SHA is missing from current request readback')
+                policy_context=integration_ci.trusted_policy_context(
+                  repository,pr['base']['ref'],workflow_sha,workflow_sha)
+                effective_policy=policy_context.get('effective_policy')
+                import integration_executor_contract as request_contract
+                if (not isinstance(effective_policy,dict)
+                        or request_contract.effective_policy_digest(effective_policy)
+                          != request_identity['effective_policy_digest']):
+                    raise ValueError('journal request effective policy differs from trusted workflow W')
+                if str(effective_policy.get('check_app_id'))!=str(app):
+                    raise ValueError('check app differs from trusted workflow W policy')
+            if request_key is not None:
+                check,proof=verified_run(repository,uid,number,base,head,selected["id"],app,
+                  request_key=request_key,expected_attempt=selected["run_attempt"],
+                  request_identity=request_identity,effective_policy=effective_policy)
+            else:
+                check,proof=verified_run(repository,uid,number,base,head,selected["id"],app,
+                  expected_attempt=selected["run_attempt"])
+            if request_key is not None:
+                expected_context=policy_context
+                if (proof.get('workflow_run_id')!=selected['id']
+                        or proof.get('run_attempt')!=selected['run_attempt']
+                        or str(proof.get('check_app_id'))!=str((check.get('app') or {}).get('id'))
+                        or proof.get('check_run_id')!=check.get('id')
+                        or proof.get('trusted_policy_context')!=expected_context
+                        or proof.get('effective_policy_identity')!=expected_context.get('effective_policy_identity')
+                        or proof.get('planner_inventory_authority')!=expected_context.get('planner_inventory_authority')):
+                    raise ValueError('verified workflow attempt or trusted policy context mismatch')
             proof={**proof,
               "request_id": selected["id"],
               "request_created_at": dt.datetime.fromtimestamp(selected["requested_at"], dt.timezone.utc).isoformat(),
@@ -709,21 +1172,34 @@ def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=Fals
               "run_attempt": selected["run_attempt"],
               "check_app_id": (check.get("app") or {}).get("id"),
               "check_run_id": check.get("id")}
-            if current_request(repository,uid,number,base,head,pr['base']['ref'])!=selected:
+            if request_key is not None:
+                proof.update(request_key=request_key,request_identity=request_identity)
+            if current_request(repository,uid,number,base,head,pr['base']['ref'],
+              request_key=request_key)!=selected:
                 raise ValueError('current request changed during integration verification')
             fresh=gh('api',f'repos/{repository}/pulls/{number}')
             if (fresh.get('state')!='open' or fresh.get('merged')
                 or (not allow_ready_pr and not fresh.get('draft'))
                 or f'Refs #{issue}' not in (fresh.get('body') or '')
                 or f'Task: {uid}' not in (fresh.get('body') or '')
-                or fresh.get('base',{}).get('sha')!=base
+                or (request_key is None and fresh.get('base',{}).get('sha')!=current_target_oid)
                 or fresh.get('base',{}).get('ref')!=pr['base']['ref']
                 or fresh.get('head',{}).get('sha')!=head):
                 raise ValueError('PR identity or admission changed during integration verification')
+            if request_key is not None:
+                current_target_oid=integration_ci.default_branch_head(repository,fresh['base']['ref'])
+                if (not isinstance(current_target_oid,str)
+                        or not re.fullmatch(r'[0-9a-f]{40,64}',current_target_oid)):
+                    raise ValueError('current default-branch target is invalid')
+                _require_historical_base_ancestor_of_target(repository,base,current_target_oid)
+                proof.update(
+                  integration_base_oid=base,
+                  current_target_oid=current_target_oid,
+                )
             return fresh,{**check,'_integration':proof},base,head
         if integration_run_id is not None:
             raise ValueError('explicit integration locator absent from verified current request range')
-    except (ValueError,KeyError,OSError,subprocess.SubprocessError) as exc:
+    except (ValueError,KeyError,OSError,ImportError,TypeError,subprocess.SubprocessError) as exc:
         raise SystemExit('ci-ready-receipt: current request blocked: '+str(exc)) from exc
     if require_integration:
         if require_dispatch:
