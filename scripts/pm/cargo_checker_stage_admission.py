@@ -682,8 +682,9 @@ def _read_checker_task_binding(repository: str) -> dict[str, Any]:
     body = issue.get("body")
     if not isinstance(body, str):
         raise AdmissionError("checker task Issue body is unavailable")
-    uids = re.findall(r"(?m)^task_uid:\s*(task_[0-9a-f]{32})\s*$", body)
-    if uids != [CHECKER_TASK_UID]:
+    body = body.replace("\r\n", "\n")
+    uid_fields = re.findall(r"(?m)^task_uid:[ \t]*(.*?)[ \t]*$", body)
+    if uid_fields != [CHECKER_TASK_UID]:
         raise AdmissionError("checker task Issue UID binding mismatch")
     references = re.findall(
         rf"https://github\.com/{re.escape(repository)}/pull/(\d+)\b", body

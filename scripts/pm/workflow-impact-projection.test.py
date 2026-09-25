@@ -75,6 +75,25 @@ class WorkflowImpactProjectionTests(unittest.TestCase):
         candidate_config_bytes = json.dumps(
             candidate_config, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
         ).encode("utf-8")
+        with tempfile.TemporaryDirectory() as candidate_directory:
+            candidate_path = Path(candidate_directory) / "ci-required-scope.json"
+            candidate_path.write_bytes(candidate_config_bytes)
+            candidate_validation = subprocess.run(
+                [
+                    sys.executable,
+                    str(ROOT / "scripts/plan-rust-required-scope.py"),
+                    "--event-name",
+                    "pull_request",
+                    "--config",
+                    str(candidate_path),
+                    "--changed-path",
+                    "candidate-only/fixture/example.json",
+                ],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+            )
+        self.assertEqual(0, candidate_validation.returncode, candidate_validation.stderr)
         payload = self.base_input()
         payload.update({
             "source_head_oid": source_head,

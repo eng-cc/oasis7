@@ -723,8 +723,8 @@ def _verify_live_checker_stage_scope(repository, task_uid, task_issue_number, pr
     if not isinstance(issue,dict) or issue.get("number")!=CHECKER_ISSUE or issue.get("state")!="open" or issue.get("repository_url")!=f"https://api.github.com/repos/{repository}":
         raise SystemExit("ci-ready-receipt: checker-stage task Issue readback is unavailable")
     body=str(issue.get("body") or "").replace("\r\n","\n")
-    uids=re.findall(r"(?m)^task_uid:\s*(task_[0-9a-f]{32})\s*$",body)
-    if uids != [CHECKER_TASK_UID]:
+    uid_fields=re.findall(r"(?m)^task_uid:[ \t]*(.*?)[ \t]*$",body)
+    if uid_fields != [CHECKER_TASK_UID]:
         raise SystemExit("ci-ready-receipt: checker-stage task Issue UID binding is ambiguous")
     references=set(re.findall(rf"https://github\.com/{re.escape(repository)}/pull/(\d+)\b",body))
     references.update(re.findall(r"(?m)^-?\s*pr_number:\s*`?(\d+)`?\s*$",body))

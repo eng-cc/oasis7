@@ -758,6 +758,21 @@ class CheckerStageAdmissionTest(unittest.TestCase):
                     CHECKER_SCOPE, TESTED_TREE, Path("."),
                 )
 
+    def test_checker_task_binding_rejects_extra_duplicate_or_malformed_uid_fields(self):
+        for extra_field in (f"task_uid: {TASK_UID}", "task_uid: malformed"):
+            api = _authority_api()
+
+            def extra_uid(path, *, api=api, extra_field=extra_field):
+                response = api(path)
+                if path.endswith(f"issues/{SUCCESSOR_ISSUE}"):
+                    response = dict(response)
+                    response["body"] += extra_field + "\n"
+                return response
+
+            with self.subTest(extra_field=extra_field), patch.object(MODULE, "gh_api", side_effect=extra_uid):
+                with self.assertRaisesRegex(MODULE.AdmissionError, "Issue UID"):
+                    MODULE._read_checker_task_binding(REPOSITORY)
+
     def test_checker_identity_rejects_wrong_current_task_uid_even_when_body_is_live(self):
         api = _authority_api()
         with patch.object(MODULE, "gh_api", side_effect=api), \
