@@ -63,6 +63,10 @@ def main() -> int:
     root = args.repo_root.resolve(strict=True)
     if pathlib.Path(command("git", "-C", str(root), "rev-parse", "--show-toplevel").strip()).resolve() != root:
         fail("--repo-root must be the canonical default worktree")
+    registrations = command("git", "-C", str(root), "worktree", "list", "--porcelain").splitlines()
+    first = next((line.removeprefix("worktree ") for line in registrations if line.startswith("worktree ")), "")
+    if not first or pathlib.Path(first).resolve() != root:
+        fail("--repo-root must be the registered default worktree")
     inputs = [path.resolve(strict=True) for path in (args.record, args.candidate, args.evidence, args.receipt)]
     mapping = read_json(root / ".pm/github-project-sync/tasks.json")
     task = (mapping.get("tasks") or {}).get(args.task_uid)
@@ -104,6 +108,31 @@ def main() -> int:
     if not common.is_absolute():
         common = (root / common).resolve()
     durable = common / "oasis7-workflow-receipts" / args.task_uid
+    if args.preflight and task.get("workflow_phase") == "post_merge_done" and issue.get("state") == "CLOSED":
+        terminal_path = durable / "aggregate-terminal-receipt.json"
+        journal_path = durable / "aggregate-terminal-effects.json"
+        terminal = read_json(terminal_path)
+        journal = read_json(journal_path)
+        terminal_sha = hashlib.sha256(terminal_path.read_bytes()).hexdigest()
+        payload = {key: value for key, value in terminal.items() if key != "receipt_sha256"}
+        if (terminal.get("receipt_sha256") != digest(payload)
+                or terminal.get("task_uid") != args.task_uid
+                or terminal.get("repository") != repository
+                or terminal.get("issue_number") != issue_number
+                or terminal.get("aggregate_completion_receipt_sha256") != completion_sha
+                or (task.get("phase_receipt_sha256") or {}).get("post_merge_done") != terminal_sha
+                or journal.get("schema") != "oasis7.aggregate-terminal-effects/v1"
+                or journal.get("task_uid") != args.task_uid
+                or journal.get("terminal_receipt_sha256") != terminal_sha
+                or any(journal.get(key) is not True for key in
+                       ("phase_readback", "project_readback", "issue_closed_readback"))):
+            fail("completed coordinator terminal proof does not read back")
+        audit = json.loads(command(sys.executable, str(root / "scripts/pm/github-project-workflow.py"),
+                                   str(root), "audit", "--task-uid", args.task_uid, "--include-done", "--json"))
+        if audit.get("status") != "ok" or audit.get("selected_count") != 1:
+            fail("completed coordinator Project audit did not read back")
+        print(json.dumps({"status": "already_finalized", "task_uid": args.task_uid}, sort_keys=True))
+        return 0
     durable.mkdir(parents=True, exist_ok=True)
     lock = (durable / "aggregate-finalizer.lock").open("a+b")
     if fcntl is not None:

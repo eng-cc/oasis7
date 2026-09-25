@@ -2119,6 +2119,8 @@ def command_bind_aggregate_plan(args: argparse.Namespace) -> int:
     mapping_path, _mapping, original = require_record(args)
     if original.get("pr_number") or original.get("pr_url"):
         die("bind-aggregate-plan: coordinator cannot have a singular PR")
+    if original.get("completion_mode") not in {None, "", "ordered_delivery_aggregate"}:
+        die("bind-aggregate-plan: coordinator already uses a different completion route")
     if original.get("status") in {"done", "deferred"} or original.get("workflow_phase") in TERMINAL_WORKFLOW_PHASES:
         die("bind-aggregate-plan: terminal coordinator cannot be rebound")
     plan_path = pathlib.Path(args.plan).resolve(strict=True)
@@ -2152,6 +2154,12 @@ def command_bind_aggregate_plan(args: argparse.Namespace) -> int:
     issue_uid_lines = re.findall(r"(?m)^task_uid:\s*(task_[0-9a-f]{32})\s*$", str(issue.get("body") or ""))
     if issue.get("state") != "open" or issue_uid_lines != [args.task_uid]:
         die("bind-aggregate-plan: live coordinator Issue identity/state mismatch")
+    live_fields = issue_task_fields(str(issue.get("body") or ""))
+    if live_fields.get("completion_mode") not in {None, "", "ordered_delivery_aggregate"}:
+        die("bind-aggregate-plan: live coordinator already uses a different completion route")
+    live_pointer = (live_fields.get("aggregate_plan_comment_id"), live_fields.get("aggregate_plan_sha256"))
+    if any(live_pointer) and live_pointer != (str(args.comment_id), expected_sha):
+        die("bind-aggregate-plan: live immutable plan pointer differs")
     for child in plan.get("required_deliveries") or []:
         number = child.get("pr_number") if isinstance(child, dict) else None
         if not isinstance(number, int) or number <= 0:

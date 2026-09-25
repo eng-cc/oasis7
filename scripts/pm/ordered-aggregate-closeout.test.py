@@ -72,7 +72,11 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
         cls.task = load_module(TASK_PATH, "aggregate_closeout_task")
         cls.finalizer = load_module(FINALIZER_PATH, "aggregate_closeout_finalizer")
 
-    def invoke_binder(self, *, permission="admin", deliveries=None, promoted_pr=None):
+    def invoke_binder(
+        self, *, permission="admin", deliveries=None, promoted_pr=None,
+        cached_completion_mode="", cached_pointer=None, live_completion_mode=None,
+        live_pointer=None,
+    ):
         plan = plan_for(deliveries=deliveries)
         marker = "<!-- oasis7-aggregate-delivery-plan/v1 -->\n"
         body = marker + canonical_bytes(plan).decode()
@@ -80,8 +84,19 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
             plan_path = pathlib.Path(temp) / "plan.json"
             plan_path.write_text(json.dumps(plan), encoding="utf-8")
             record = {"task_uid": UID, "issue_number": 4035, "repository": REPO,
-                      "completion_mode": "", "status": "committed", "workflow_phase": ""}
-            issue = {"state": "open", "body": f"<!-- oasis7-pm-task -->\ntask_uid: {UID}\n"}
+                      "completion_mode": cached_completion_mode,
+                      "status": "committed", "workflow_phase": ""}
+            if cached_pointer is not None:
+                record.update(aggregate_plan_comment_id=cached_pointer[0], aggregate_plan_sha256=cached_pointer[1])
+            issue_body = f"<!-- oasis7-pm-task -->\ntask_uid: {UID}\n"
+            if live_completion_mode is not None:
+                issue_body += f"- completion_mode: `{live_completion_mode}`\n"
+            if live_pointer is not None:
+                issue_body += (
+                    f"- aggregate_plan_comment_id: `{live_pointer[0]}`\n"
+                    f"- aggregate_plan_sha256: `{live_pointer[1]}`\n"
+                )
+            issue = {"state": "open", "body": issue_body}
             events: list[tuple] = []
             writes: list[str] = []
 
@@ -154,6 +169,51 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
         self.assertEqual([event for event in events if event[0] == "pr_read"],
                          [("pr_read", 5101), ("pr_read", 5102)])
 
+    def test_binder_rejects_stale_cached_or_live_plan_pointers_before_writes(self):
+        stale_pointer = ("5999", "sha256:" + "9" * 64)
+        cases = (
+            ("stale cache", {"cached_pointer": stale_pointer}, "immutable coordinator plan is already bound"),
+            ("stale live pointer", {"live_completion_mode": "ordered_delivery_aggregate",
+                                    "live_pointer": stale_pointer}, "live immutable plan pointer differs"),
+        )
+        for name, options, message in cases:
+            with self.subTest(name=name):
+                outcome, events, writes = self.invoke_binder(**options)
+                self.assertIn(message, outcome or "")
+                self.assertEqual(writes, [])
+                self.assertFalse(any(event[0] == "issue_write" for event in events))
+                self.assertFalse(any(event[0] == "mapping_write" for event in events))
+
+    def test_binder_rejects_non_pr_completion_route_before_writes(self):
+        for options in (
+            {"cached_completion_mode": "non_pr_task"},
+            {"live_completion_mode": "non_pr_task"},
+        ):
+            with self.subTest(options=options):
+                outcome, events, writes = self.invoke_binder(**options)
+                expected = "coordinator already uses a different completion route"
+                self.assertIn(expected, outcome or "")
+                self.assertEqual(writes, [])
+                self.assertFalse(any(event[0] == "pr_read" for event in events))
+
+    def test_non_pr_task_rejects_aggregate_done_receipt_before_effects(self):
+        record = {"task_uid": UID, "status": "committed", "completion_mode": "non_pr_task",
+                  "non_pr_completion_evidence": "complete without a PR"}
+        args = Namespace(task_uid=UID, to_status="done", repo=REPO, role="tpm",
+                         claim_json=json.dumps({"claim_type": "task_complete", "status": "verified",
+                                                "allowed_to_claim": True, "verification_exit_code": 0}),
+                         pr_receipt=None, aggregate_receipt="aggregate.json", aggregate_plan="plan.json",
+                         aggregate_candidate="candidate.json", aggregate_evidence="evidence.json", json=False)
+        effects = []
+        with mock.patch.object(self.task, "require_record", return_value=(pathlib.Path("tasks.json"), {}, record)), \
+                mock.patch.object(self.task, "issue_comment", side_effect=lambda *a, **k: effects.append("comment")), \
+                mock.patch.object(self.task, "update_done_project_fields", side_effect=lambda *a, **k: effects.append("project")), \
+                mock.patch.object(self.task, "update_issue_body", side_effect=lambda *a, **k: effects.append("issue")), \
+                mock.patch.object(self.task, "merge_task_mapping", side_effect=lambda *a, **k: effects.append("mapping")):
+            with self.assertRaisesRegex(SystemExit, "aggregate receipt requires ordered aggregate task truth"):
+                self.task.command_closeout_task(args)
+        self.assertEqual(effects, [])
+
     def test_aggregate_done_without_receipt_fails_before_effects(self):
         record = {"task_uid": UID, "status": "committed", "completion_mode": "ordered_delivery_aggregate"}
         args = Namespace(task_uid=UID, to_status="done", claim_json=json.dumps({
@@ -191,7 +251,9 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
                     self.task.command_set_phase(args)
             self.assertEqual(effects, [])
 
-    def run_finalizer_retry(self, phase: str, issue_state: str):
+    def run_finalizer_retry(
+        self, phase: str, issue_state: str, *, preflight=False, registered_default=True,
+    ):
         with tempfile.TemporaryDirectory() as temp:
             root = pathlib.Path(temp).resolve()
             (root / ".git").mkdir()
@@ -220,6 +282,15 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
                 terminal = {**payload, "receipt_sha256": self.finalizer.digest(payload)}
                 terminal_path.write_text(json.dumps(terminal, sort_keys=True, indent=2) + "\n", encoding="utf-8")
                 terminal_sha = hashlib.sha256(terminal_path.read_bytes()).hexdigest()
+                if preflight:
+                    journal = {
+                        "schema": "oasis7.aggregate-terminal-effects/v1", "task_uid": UID,
+                        "terminal_receipt_sha256": terminal_sha, "phase_readback": True,
+                        "project_readback": True, "issue_closed_readback": True,
+                    }
+                    (durable / "aggregate-terminal-effects.json").write_text(
+                        json.dumps(journal, sort_keys=True, indent=2) + "\n", encoding="utf-8",
+                    )
             else:
                 terminal_sha = ""
             task = {"task_uid": UID, "completion_mode": "ordered_delivery_aggregate",
@@ -231,10 +302,26 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
             issue = {"state": issue_state, "body": f"task_uid: {UID}\n"}
             events: list[str] = []
 
+            def snapshot(directory: pathlib.Path):
+                if not directory.is_dir():
+                    return ()
+                return tuple((path.name, path.read_bytes()) for path in sorted(directory.iterdir()))
+
+            durable_before = snapshot(durable)
+            mapping_before = mapping_path.read_bytes()
+
             def fake_command(*argv):
                 argv = tuple(str(arg) for arg in argv)
                 if argv[:3] == ("git", "-C", str(root)) and argv[3:5] == ("rev-parse", "--show-toplevel"):
+                    events.append("show_top")
                     return str(root) + "\n"
+                if argv[:3] == ("git", "-C", str(root)) and argv[3:6] == ("worktree", "list", "--porcelain"):
+                    events.append("worktree_list")
+                    default_root = root if registered_default else root.parent / "registered-default"
+                    rows = [f"worktree {default_root}", "HEAD " + "1" * 40, "branch refs/heads/main"]
+                    if default_root != root:
+                        rows.extend((f"worktree {root}", "HEAD " + "2" * 40, "branch refs/heads/task/fixture"))
+                    return "\n".join(rows) + "\n"
                 if argv[:3] == ("git", "-C", str(root)) and argv[3:5] == ("rev-parse", "--git-common-dir"):
                     return str(common) + "\n"
                 if argv[:4] == ("gh", "issue", "view", str(issue_number)):
@@ -264,14 +351,21 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
             argv = [str(FINALIZER_PATH), "--repo-root", str(root), "--task-uid", UID,
                     "--record", str(plan_path), "--candidate", str(candidate_path),
                     "--evidence", str(evidence_path), "--receipt", str(receipt_path), "--json"]
+            if preflight:
+                argv.append("--preflight")
             with mock.patch.object(self.finalizer, "command", side_effect=fake_command), \
                     mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()):
-                result = self.finalizer.main()
+                try:
+                    result = self.finalizer.main()
+                except SystemExit as exc:
+                    result = str(exc)
             saved_task = json.loads(mapping_path.read_text())["tasks"][UID]
-            return result, events, saved_task, issue, terminal_path.is_file()
+            durable_after = snapshot(durable)
+            mapping_unchanged = mapping_before == mapping_path.read_bytes()
+            return result, events, saved_task, issue, terminal_path.is_file(), durable_before, durable_after, mapping_unchanged
 
     def test_finalizer_resumes_task_done_and_post_merge_open_retries(self):
-        result, events, task, issue, terminal_exists = self.run_finalizer_retry("task_done", "OPEN")
+        result, events, task, issue, terminal_exists, _before, _after, _mapping_same = self.run_finalizer_retry("task_done", "OPEN")
         self.assertEqual(result, 0)
         self.assertEqual(task["workflow_phase"], "post_merge_done")
         self.assertEqual(issue["state"], "CLOSED")
@@ -279,7 +373,7 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
         self.assertLess(events.index("project_audit"), events.index("issue_close"))
         self.assertTrue(terminal_exists)
 
-        result, events, task, issue, _terminal = self.run_finalizer_retry("post_merge_done", "OPEN")
+        result, events, task, issue, _terminal, _before, _after, _mapping_same = self.run_finalizer_retry("post_merge_done", "OPEN")
         self.assertEqual(result, 0)
         self.assertEqual(task["workflow_phase"], "post_merge_done")
         self.assertEqual(issue["state"], "CLOSED")
@@ -288,7 +382,7 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
         self.assertIn("issue_close", events)
 
     def test_finalizer_closed_retry_is_idempotent_without_open_only_validator(self):
-        result, events, task, issue, _terminal = self.run_finalizer_retry("post_merge_done", "CLOSED")
+        result, events, task, issue, _terminal, _before, _after, _mapping_same = self.run_finalizer_retry("post_merge_done", "CLOSED")
         self.assertEqual(result, 0)
         self.assertEqual(task["workflow_phase"], "post_merge_done")
         self.assertEqual(issue["state"], "CLOSED")
@@ -296,6 +390,32 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
         self.assertNotIn("set_phase", events)
         self.assertNotIn("issue_close", events)
         self.assertEqual(events.count("project_audit"), 1)
+
+    def test_finalizer_rejects_linked_task_worktree_before_receipt_or_remote_effects(self):
+        result, events, _task, issue, terminal_exists, before, after, mapping_unchanged = self.run_finalizer_retry(
+            "task_done", "OPEN", registered_default=False,
+        )
+        self.assertIn("registered default worktree", result)
+        self.assertEqual(events, ["show_top", "worktree_list"])
+        self.assertEqual(issue["state"], "OPEN")
+        self.assertFalse(terminal_exists)
+        self.assertEqual(before, after)
+        self.assertTrue(mapping_unchanged)
+
+    def test_closed_finalizer_preflight_validates_without_writing(self):
+        result, events, task, issue, terminal_exists, before, after, mapping_unchanged = self.run_finalizer_retry(
+            "post_merge_done", "CLOSED", preflight=True,
+        )
+        self.assertEqual(result, 0)
+        self.assertEqual(task["workflow_phase"], "post_merge_done")
+        self.assertEqual(issue["state"], "CLOSED")
+        self.assertTrue(terminal_exists)
+        self.assertEqual(before, after)
+        self.assertTrue(mapping_unchanged)
+        self.assertNotIn("aggregate-finalizer.lock", {name for name, _content in after})
+        self.assertEqual(events.count("project_audit"), 1)
+        self.assertNotIn("set_phase", events)
+        self.assertNotIn("issue_close", events)
 
     def test_single_pr_done_closeout_remains_receipt_optional(self):
         record = {"task_uid": UID, "status": "committed", "issue_number": 4035,
