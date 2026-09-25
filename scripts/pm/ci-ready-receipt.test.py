@@ -4,12 +4,52 @@ from contextlib import redirect_stdout, ExitStack
 from pathlib import Path
 from unittest.mock import patch
 import integration_ci
+import integration_executor_contract as request_contract
 
 P=Path(__file__).with_name("ci-ready-receipt.py")
 S=importlib.util.spec_from_file_location("ci_ready_receipt",P); M=importlib.util.module_from_spec(S); S.loader.exec_module(M)
 AP=Path(__file__).with_name("cargo_checker_stage_admission.py")
 AS=importlib.util.spec_from_file_location("cargo_checker_stage_admission",AP); A=importlib.util.module_from_spec(AS); AS.loader.exec_module(A)
 UID="task_12345678901234567890123456789012"
+
+KEYED_POLICY={"enabled_capabilities":["input-scope-reuse/v1"],
+  "approved_executor_contract_digests":["sha256:"+"9"*64],"check_app_id":42}
+
+def keyed_request_identity(repository="eng-cc/oasis7",task_uid=UID,pr_number=7,source_head_oid="a"*40):
+  return {"repository":repository,"task_uid":task_uid,"pr_number":pr_number,
+    "bootstrap_epoch":1,"source_head_oid":source_head_oid,"publication_id":"publication-1",
+    "source_projection_digest":"sha256:"+"1"*64,"unit_ids":["required-gate"],
+    "input_fingerprints":{"required-gate":"sha256:"+"2"*64},
+    "executor_contract_digest":"sha256:"+"8"*64,
+    "effective_policy_digest":request_contract.effective_policy_digest(KEYED_POLICY),
+    "purpose":"integration_revalidation","applicability_mode":"input_scoped",
+    "snapshot_target_oid":None}
+
+def write_request_journal(directory,*,identity=None,run_id=12345,run_attempt=1,status="observed"):
+  value=identity or keyed_request_identity()
+  key=request_contract.validation_request_key(value)
+  request_contract.reserve_validation_request(directory,key,value,"b"*40)
+  if status in ("dispatch_uncertain","observed"):
+    request_contract.mark_validation_dispatch_started(directory,key)
+  if status=="observed":
+    request_contract.mark_validation_request_observed(directory,key,run_id,run_attempt)
+  return key,value
+
+def trusted_policy_context(policy=KEYED_POLICY,workflow_sha="f"*40):
+  identity={"schema":request_contract.EFFECTIVE_POLICY_IDENTITY_SCHEMA,
+    "digest":request_contract.effective_policy_digest(policy)}
+  workflow_ref="eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main"
+  return {"schema":"oasis7-trusted-ci-reuse-policy-context/v1",
+    "repository":"eng-cc/oasis7","workflow_ref":workflow_ref,
+    "workflow_sha":workflow_sha,"policy_source_sha256":"sha256:"+"3"*64,
+    "effective_policy":policy,"effective_policy_identity":identity,
+    "planner_inventory_authority":{"schema":"oasis7-planner-inventory-authority/v1",
+      "repository":"eng-cc/oasis7","workflow_ref":workflow_ref,
+      "planner_authority_oid":workflow_sha,"planner_config_sha256":"sha256:"+"4"*64}}
+
+def keyed_request_entry(run_id=12345,attempt=2,workflow_sha="f"*40):
+  return {"id":run_id,"run_attempt":attempt,"requested_at":1780000001.0,
+    "workflow_run_head_sha":workflow_sha}
 
 def pr(): return {"draft":True,"state":"open","merged":False,"body":f"Task: {UID}\n\nRefs #1","head":{"sha":"a"*40},"base":{"sha":"b"*40,"ref":"main"}}
 def plan():
@@ -232,6 +272,183 @@ class ReceiptTest(unittest.TestCase):
           "eng-cc/oasis7",UID,7,"b"*40,"a"*40,12345,"42",expected_attempt=2
         )
         ordinary.assert_not_called()
+  def test_explicit_request_key_requires_matching_observed_common_dir_journal(self):
+    with tempfile.TemporaryDirectory() as temp:
+      journal=Path(temp)
+      key,identity=write_request_journal(journal)
+      with patch.object(integration_ci,"git_common_dir",return_value=journal):
+        record,observed=M._trusted_validation_request(key,"eng-cc/oasis7",UID,7,"a"*40,"b"*40)
+        self.assertEqual(identity,observed)
+        self.assertEqual(12345,record["run_id"])
+        for expected,pattern in (
+          (("owner/repo",UID,7,"a"*40,"b"*40),"repository"),
+          (("eng-cc/oasis7","task_ffffffffffffffffffffffffffffffff",7,"a"*40,"b"*40),"task_uid"),
+          (("eng-cc/oasis7",UID,8,"a"*40,"b"*40),"pr_number"),
+          (("eng-cc/oasis7",UID,7,"c"*40,"b"*40),"source_head_oid"),
+          (("eng-cc/oasis7",UID,7,"a"*40,"c"*40),"immutable integration base"),
+        ):
+          with self.subTest(expected=expected),self.assertRaisesRegex(ValueError,pattern):
+            M._trusted_validation_request(key,*expected)
+        with self.assertRaisesRegex(ValueError,"journal is missing"):
+          M._trusted_validation_request("sha256:"+"0"*64,"eng-cc/oasis7",UID,7,"a"*40,"b"*40)
+
+  def test_unobserved_request_journal_cannot_authorize_keyed_selection(self):
+    with tempfile.TemporaryDirectory() as temp:
+      journal=Path(temp)
+      key,_=write_request_journal(journal,status="dispatch_uncertain")
+      with patch.object(integration_ci,"git_common_dir",return_value=journal), \
+           patch.object(M,"gh",side_effect=[pr()]), \
+           patch.object(integration_ci,"current_request") as current:
+        with self.assertRaisesRegex(SystemExit,"journal has no observed workflow run"):
+          M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42",request_key=key)
+        current.assert_not_called()
+
+  def test_keyed_selection_passes_journal_identity_and_trusted_policy_to_verifier(self):
+    with tempfile.TemporaryDirectory() as temp:
+      journal=Path(temp)
+      key,identity=write_request_journal(journal,run_attempt=1)
+      request=keyed_request_entry(attempt=2)
+      context=trusted_policy_context(workflow_sha="f"*40)
+      check={"id":902,"name":"required-gate","app":{"id":42},
+        "status":"completed","conclusion":"success"}
+      proof={"workflow_run_id":12345,"run_attempt":2,"check_app_id":42,
+        "check_run_id":902,"plan_artifact_id":777,
+        "trusted_policy_context":context,
+        "effective_policy_identity":context["effective_policy_identity"],
+        "planner_inventory_authority":context["planner_inventory_authority"]}
+      with patch.object(integration_ci,"git_common_dir",return_value=journal), \
+           patch.object(M,"gh",side_effect=[pr(),pr()]), \
+           patch.object(integration_ci,"current_request",side_effect=[request,request]) as current, \
+           patch.object(integration_ci,"trusted_policy_context",return_value=context) as policy, \
+           patch.object(integration_ci,"verified_run",return_value=(check,proof)) as verified:
+        _,observed,_,_=M.selected_live(
+          "eng-cc/oasis7",UID,1,7,"required-gate","42",request_key=key)
+      self.assertEqual(2,observed["_integration"]["run_attempt"])
+      self.assertEqual(key,observed["_integration"]["request_key"])
+      self.assertEqual(identity,observed["_integration"]["request_identity"])
+      self.assertEqual(2,current.call_count)
+      self.assertEqual(key,current.call_args.kwargs["request_key"])
+      policy.assert_called_once_with("eng-cc/oasis7","main","f"*40,"f"*40)
+      verified.assert_called_once_with(
+        "eng-cc/oasis7",UID,7,"b"*40,"a"*40,12345,"42",
+        request_key=key,expected_attempt=2,request_identity=identity,
+        effective_policy=KEYED_POLICY)
+
+  def test_keyed_readback_rejects_run_attempt_app_check_and_policy_context_mismatch(self):
+    for changed in ("run", "attempt", "app", "check", "policy", "authority"):
+      with self.subTest(changed=changed),tempfile.TemporaryDirectory() as temp:
+        journal=Path(temp)
+        key,_=write_request_journal(journal,run_attempt=1)
+        request=keyed_request_entry(attempt=2)
+        context=trusted_policy_context(workflow_sha="f"*40)
+        proof={"workflow_run_id":12345,"run_attempt":2,"check_app_id":42,
+          "check_run_id":902,"plan_artifact_id":777,
+          "trusted_policy_context":context,
+          "effective_policy_identity":context["effective_policy_identity"],
+          "planner_inventory_authority":context["planner_inventory_authority"]}
+        if changed=="run": proof["workflow_run_id"]=12346
+        elif changed=="attempt": proof["run_attempt"]=1
+        elif changed=="app": proof["check_app_id"]=99
+        elif changed=="check": proof["check_run_id"]=903
+        elif changed=="policy": proof["effective_policy_identity"]={"schema":"oasis7-ci-effective-policy-identity/v1","digest":"sha256:"+"0"*64}
+        elif changed=="authority": proof["planner_inventory_authority"]={**context["planner_inventory_authority"],"planner_authority_oid":"e"*40}
+        check={"id":902,"name":"required-gate","app":{"id":42},
+          "status":"completed","conclusion":"success"}
+        with patch.object(integration_ci,"git_common_dir",return_value=journal), \
+             patch.object(M,"gh",side_effect=[pr()]), \
+             patch.object(integration_ci,"current_request",return_value=request), \
+             patch.object(integration_ci,"trusted_policy_context",return_value=context), \
+             patch.object(integration_ci,"verified_run",return_value=(check,proof)), \
+             patch.object(M,"live") as ordinary:
+          with self.assertRaisesRegex(SystemExit,"verified workflow attempt or trusted policy context mismatch"):
+            M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42",request_key=key)
+          ordinary.assert_not_called()
+
+  def test_keyed_request_change_during_verification_blocks_receipt(self):
+    with tempfile.TemporaryDirectory() as temp:
+      journal=Path(temp)
+      key,_=write_request_journal(journal,run_attempt=1)
+      first=keyed_request_entry(attempt=2)
+      second=keyed_request_entry(attempt=3)
+      context=trusted_policy_context(workflow_sha="f"*40)
+      check={"id":902,"name":"required-gate","app":{"id":42},
+        "status":"completed","conclusion":"success"}
+      proof={"workflow_run_id":12345,"run_attempt":2,"check_app_id":42,
+        "check_run_id":902,"plan_artifact_id":777,
+        "trusted_policy_context":context,
+        "effective_policy_identity":context["effective_policy_identity"],
+        "planner_inventory_authority":context["planner_inventory_authority"]}
+      with patch.object(integration_ci,"git_common_dir",return_value=journal), \
+           patch.object(M,"gh",side_effect=[pr()]), \
+           patch.object(integration_ci,"current_request",side_effect=[first,second]), \
+           patch.object(integration_ci,"trusted_policy_context",return_value=context), \
+           patch.object(integration_ci,"verified_run",return_value=(check,proof)), \
+           patch.object(M,"live") as ordinary:
+        with self.assertRaisesRegex(SystemExit,"current request changed during integration verification"):
+          M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42",request_key=key)
+        ordinary.assert_not_called()
+
+  def test_keyed_latest_attempt_failures_never_fall_back_to_older_or_ordinary_evidence(self):
+    for reason in ("check incomplete","check failure","artifact missing"):
+      with self.subTest(reason=reason),tempfile.TemporaryDirectory() as temp:
+        journal=Path(temp)
+        key,_=write_request_journal(journal,run_attempt=1)
+        request=keyed_request_entry(attempt=2)
+        context=trusted_policy_context(workflow_sha="f"*40)
+        def verify(*args,request_key=None,expected_attempt=None,request_identity=None,effective_policy=None):
+          if expected_attempt==1:
+            return ({"id":901,"name":"required-gate","app":{"id":42},
+              "status":"completed","conclusion":"success"},
+              {"workflow_run_id":12345,"run_attempt":1})
+          raise ValueError(reason)
+        with patch.object(integration_ci,"git_common_dir",return_value=journal), \
+             patch.object(M,"gh",side_effect=[pr()]), \
+             patch.object(integration_ci,"current_request",return_value=request) as current, \
+             patch.object(integration_ci,"trusted_policy_context",return_value=context), \
+             patch.object(integration_ci,"verified_run",side_effect=verify) as verified, \
+             patch.object(M,"live") as ordinary:
+          with self.assertRaisesRegex(SystemExit,"current request blocked: "+reason):
+            M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42",request_key=key)
+          current.assert_called_once_with(
+            "eng-cc/oasis7",UID,7,"b"*40,"a"*40,"main",request_key=key)
+          verified.assert_called_once()
+          self.assertEqual(2,verified.call_args.kwargs["expected_attempt"])
+          ordinary.assert_not_called()
+
+  def test_keyed_request_absence_and_missing_v2_inventory_do_not_use_v1_fallback(self):
+    with tempfile.TemporaryDirectory() as temp:
+      journal=Path(temp)
+      key,_=write_request_journal(journal)
+      with patch.object(integration_ci,"git_common_dir",return_value=journal), \
+           patch.object(M,"gh",side_effect=[pr()]), \
+           patch.object(integration_ci,"current_request",return_value=None), \
+           patch.object(M,"live") as ordinary:
+        with self.assertRaisesRegex(SystemExit,"explicit keyed current request is absent"):
+          M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42",request_key=key)
+        ordinary.assert_not_called()
+
+    keyed_run=run();key="sha256:"+"7"*64
+    keyed_run["_integration"]={"request_key":key}
+    argv=[str(P),"--repository","eng-cc/oasis7","--task-uid",UID,"--task-issue-number","1",
+      "--pr-number","7","--check-app-id","42","--planner-digest","auto","--request-key",key]
+    with patch.object(M,"selected_live",return_value=(pr(),keyed_run,"b"*40,"a"*40)), \
+         patch.object(M,"planner_for_run") as legacy_reader, \
+         patch.object(sys,"argv",argv):
+      with self.assertRaisesRegex(SystemExit,"full trusted v2 planner inventory/results are unavailable"):
+        M.main()
+      legacy_reader.assert_not_called()
+
+  def test_refresh_of_keyed_receipt_requires_explicit_request_key(self):
+    key="sha256:"+"6"*64
+    with tempfile.TemporaryDirectory() as temp:
+      receipt=Path(temp)/"receipt.json"
+      receipt.write_text(json.dumps({"request_key":key}),encoding="utf-8")
+      argv=[str(P),"--repository","eng-cc/oasis7","--task-uid",UID,"--task-issue-number","1",
+        "--pr-number","7","--check-app-id","42","--planner-digest","auto","--receipt",str(receipt)]
+      with patch.object(M,"selected_live") as selected,patch.object(sys,"argv",argv):
+        with self.assertRaisesRegex(SystemExit,"explicit --request-key is required"):
+          M.main()
+        selected.assert_not_called()
   def test_expected_base_ref_rejects_same_oid_pr_retarget(self):
     moved=pr(); moved["base"]["ref"]="release"
     moved_run=run(); moved_run["pull_requests"][0]["base"]["ref"]="release"

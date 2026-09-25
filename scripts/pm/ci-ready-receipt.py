@@ -618,10 +618,18 @@ def main():
     p.add_argument("--refresh-same-identity",action="store_true",
                    help="refresh only observed_at after complete live identity/planner validation")
     p.add_argument('--integration-run-id',type=int,help='new trusted manual integration workflow run')
+    p.add_argument('--request-key',help='explicit authorized keyed integration request from the canonical local journal')
     a=p.parse_args()
     existing=json.loads(Path(a.receipt).read_text()) if a.receipt else {}
+    if existing.get('request_key') and a.request_key!=existing['request_key']:
+        raise SystemExit('ci-ready-receipt: explicit --request-key is required and must match the existing keyed receipt')
     bound_base_ref = a.base_ref or existing.get("base_ref")
-    pr,run,base_oid,head_oid=selected_live(a.repository,a.task_uid,a.task_issue_number,a.pr_number,a.check_name,a.check_app_id,a.allow_ready_pr,bound_base_ref,a.integration_run_id or existing.get('integration_run_id'))
+    pr,run,base_oid,head_oid=selected_live(a.repository,a.task_uid,a.task_issue_number,a.pr_number,a.check_name,a.check_app_id,a.allow_ready_pr,bound_base_ref,a.integration_run_id or existing.get('integration_run_id'),request_key=a.request_key)
+    if a.request_key is not None:
+        proof=run.get('_integration') or {}
+        if proof.get('request_key')!=a.request_key:
+            raise SystemExit('ci-ready-receipt: keyed integration request identity mismatch')
+        raise SystemExit('ci-ready-receipt: full trusted v2 planner inventory/results are unavailable; refusing v1 or older evidence fallback')
     old=None
     if a.receipt:
         old=json.loads(Path(a.receipt).read_text(encoding="utf-8"))
@@ -685,9 +693,39 @@ def main():
             refreshed = {**refreshed, "review_evidence_digest": payload["review_evidence_digest"]}
         payload = refreshed
     print(json.dumps(payload,sort_keys=True,indent=2 if a.json else None))
+def _trusted_validation_request(request_key,repository,uid,number,head_oid,integration_base_oid):
+    """Load an explicitly selected request only from this repo's canonical journal."""
+    if not isinstance(request_key,str) or not re.fullmatch(r"sha256:[0-9a-f]{64}",request_key):
+        raise ValueError("explicit validation request key is invalid")
+    import integration_ci
+    import integration_executor_contract as request_contract
+    root=Path(__file__).resolve().parents[2]
+    journal_dir=integration_ci.git_common_dir(root)
+    path=request_contract._request_path(journal_dir,request_key)
+    if not path.is_file():
+        raise ValueError("validation request journal is missing")
+    record=request_contract._read_request_record(path,request_key)
+    identity=request_contract.validation_request_identity(record.get("identity"))
+    if (identity!=record.get("identity")
+            or request_contract.validation_request_key(identity)!=request_key):
+        raise ValueError("validation request journal identity does not match explicit key")
+    if record.get("status")!="observed":
+        raise ValueError("validation request journal has no observed workflow run")
+    expected={"repository":repository,"task_uid":uid,"pr_number":number,
+      "source_head_oid":head_oid}
+    for field,value in expected.items():
+        if identity.get(field)!=value:
+            raise ValueError(f"validation request journal identity mismatch: {field}")
+    if record.get("integration_base_oid")!=integration_base_oid:
+        raise ValueError("validation request journal immutable integration base mismatch")
+    return record,identity
+
+
 def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=False,base_ref=None,
-                  integration_run_id=None, require_integration=False, require_dispatch=False):
+                  integration_run_id=None, require_integration=False, require_dispatch=False,
+                  request_key=None):
     from integration_ci import current_request, verified_run
+    import integration_ci
     pr=gh('api',f'repos/{repository}/pulls/{number}')
     if (not allow_ready_pr and not pr.get('draft')) or f'Refs #{issue}' not in (pr.get('body') or '') or f'Task: {uid}' not in (pr.get('body') or ''):
         raise SystemExit('ci-ready-receipt: manual integration task/draft identity mismatch')
@@ -696,13 +734,56 @@ def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=Fals
     if base_ref and pr['base']['ref']!=base_ref: raise SystemExit('ci-ready-receipt: manual integration base ref mismatch')
     base,head=pr['base']['sha'],pr['head']['sha']
     try:
-        selected=current_request(repository,uid,number,base,head,pr['base']['ref'])
+        request_record=None
+        request_identity=None
+        effective_policy=None
+        policy_context=None
+        if request_key is not None:
+            request_record,request_identity=_trusted_validation_request(
+              request_key,repository,uid,number,head,base)
+        selected=current_request(repository,uid,number,base,head,pr['base']['ref'],
+          request_key=request_key)
+        if request_key is not None and selected is None:
+            raise ValueError('explicit keyed current request is absent from complete readback')
         if selected is not None:
             if integration_run_id is not None and int(integration_run_id)!=selected["id"]:
                 raise ValueError('explicit integration locator superseded by current request')
             if check_name!='required-gate': raise ValueError('unsupported manual check')
-            check,proof=verified_run(repository,uid,number,base,head,selected["id"],app,
-              expected_attempt=selected["run_attempt"])
+            if request_key is not None:
+                if selected["id"]!=request_record["run_id"]:
+                    raise ValueError('current workflow run differs from durable validation request journal')
+                if selected["run_attempt"]<request_record["run_attempt"]:
+                    raise ValueError('current workflow attempt is older than durable validation request journal')
+                workflow_sha=selected.get('workflow_run_head_sha')
+                if not isinstance(workflow_sha,str) or not re.fullmatch(r'[0-9a-f]{40,64}',workflow_sha):
+                    raise ValueError('trusted workflow SHA is missing from current request readback')
+                policy_context=integration_ci.trusted_policy_context(
+                  repository,pr['base']['ref'],workflow_sha,workflow_sha)
+                effective_policy=policy_context.get('effective_policy')
+                import integration_executor_contract as request_contract
+                if (not isinstance(effective_policy,dict)
+                        or request_contract.effective_policy_digest(effective_policy)
+                          != request_identity['effective_policy_digest']):
+                    raise ValueError('journal request effective policy differs from trusted workflow W')
+                if str(effective_policy.get('check_app_id'))!=str(app):
+                    raise ValueError('check app differs from trusted workflow W policy')
+            if request_key is not None:
+                check,proof=verified_run(repository,uid,number,base,head,selected["id"],app,
+                  request_key=request_key,expected_attempt=selected["run_attempt"],
+                  request_identity=request_identity,effective_policy=effective_policy)
+            else:
+                check,proof=verified_run(repository,uid,number,base,head,selected["id"],app,
+                  expected_attempt=selected["run_attempt"])
+            if request_key is not None:
+                expected_context=policy_context
+                if (proof.get('workflow_run_id')!=selected['id']
+                        or proof.get('run_attempt')!=selected['run_attempt']
+                        or str(proof.get('check_app_id'))!=str((check.get('app') or {}).get('id'))
+                        or proof.get('check_run_id')!=check.get('id')
+                        or proof.get('trusted_policy_context')!=expected_context
+                        or proof.get('effective_policy_identity')!=expected_context.get('effective_policy_identity')
+                        or proof.get('planner_inventory_authority')!=expected_context.get('planner_inventory_authority')):
+                    raise ValueError('verified workflow attempt or trusted policy context mismatch')
             proof={**proof,
               "request_id": selected["id"],
               "request_created_at": dt.datetime.fromtimestamp(selected["requested_at"], dt.timezone.utc).isoformat(),
@@ -710,7 +791,10 @@ def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=Fals
               "run_attempt": selected["run_attempt"],
               "check_app_id": (check.get("app") or {}).get("id"),
               "check_run_id": check.get("id")}
-            if current_request(repository,uid,number,base,head,pr['base']['ref'])!=selected:
+            if request_key is not None:
+                proof.update(request_key=request_key,request_identity=request_identity)
+            if current_request(repository,uid,number,base,head,pr['base']['ref'],
+              request_key=request_key)!=selected:
                 raise ValueError('current request changed during integration verification')
             fresh=gh('api',f'repos/{repository}/pulls/{number}')
             if (fresh.get('state')!='open' or fresh.get('merged')
@@ -724,7 +808,7 @@ def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=Fals
             return fresh,{**check,'_integration':proof},base,head
         if integration_run_id is not None:
             raise ValueError('explicit integration locator absent from verified current request range')
-    except (ValueError,KeyError,OSError,subprocess.SubprocessError) as exc:
+    except (ValueError,KeyError,OSError,ImportError,TypeError,subprocess.SubprocessError) as exc:
         raise SystemExit('ci-ready-receipt: current request blocked: '+str(exc)) from exc
     if require_integration:
         if require_dispatch:
