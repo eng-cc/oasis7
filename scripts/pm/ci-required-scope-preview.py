@@ -69,6 +69,10 @@ PLANNER_RESOURCES = (
     "needs_python", "needs_markdown", "needs_rust_toolchain", "needs_node",
     "needs_system_deps", "needs_trunk", "needs_wasm_target",
 )
+PLANNER_ENV_NAMES = {
+    # The public workflow env name intentionally omits the planner's crate prefix.
+    "run_oasis7_workspace_support_crate_tests": "OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS",
+}
 
 
 def fail(message: str) -> None:
@@ -312,7 +316,7 @@ def dispatcher_environment(
     env["PATH"] = str(Path(python_bin).resolve().parent) + os.pathsep + env.get("PATH", "")
     for key, value in fields.items():
         if key.startswith("run_"):
-            env["OASIS7_CI_" + key.upper()] = value
+            env[PLANNER_ENV_NAMES.get(key, "OASIS7_CI_" + key.upper())] = value
         elif key.startswith("needs_"):
             env["OASIS7_CI_" + key.upper()] = value
         elif key == "execution_contract":

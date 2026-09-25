@@ -568,7 +568,7 @@ run_workflow_impact_projection_contract_tests() {
 
 run_workflow_impact_projection_consumer() {
   [[ -n "$impact_projection" ]] || return 0
-  run python3 - "$impact_projection" "$repo_root" <<'PY'
+  run python3 - "$impact_projection" "$repo_root" "$driver_dir" <<'PY'
 import importlib.util
 import json
 import subprocess
@@ -577,6 +577,7 @@ from pathlib import Path
 
 projection_path = Path(sys.argv[1]).resolve()
 root = Path(sys.argv[2]).resolve()
+trusted_planner_root = Path(sys.argv[3]).resolve()
 spec = importlib.util.spec_from_file_location(
     "oasis7_workflow_impact_projection", root / "scripts/pm" / "workflow-impact-projection.py"
 )
@@ -586,7 +587,7 @@ helper = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(helper)
 projection = helper.load_verified_projection(projection_path, repo_root=root)
 paths = projection["changed_paths"]
-planner = [str(root / "scripts" / "plan-rust-required-scope.sh"),
+planner = [sys.executable, "-I", str(trusted_planner_root / "plan-rust-required-scope.py"),
            "--event-name", "pull_request", "--impact-projection", str(projection_path),
            "--task-uid", projection["task_uid"], "--head-ref", projection["source_head_oid"],
            "--scope-base-oid", projection["scope_base_oid"]]
