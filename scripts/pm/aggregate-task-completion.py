@@ -611,6 +611,59 @@ def _unique_child_issue_field(body: str, key: str, *, required: bool = True) -> 
     return value
 
 
+def _validate_child_project_readback(
+    mapping: dict[str, Any],
+    task: dict[str, Any],
+    delivery: dict[str, Any],
+    report: dict[str, Any],
+) -> None:
+    """Require an exact live Project item for every aggregate child delivery.
+
+    The general terminal audit keeps Project binding optional for legacy/singular
+    tasks. Aggregate evidence has a stronger contract: every required delivery
+    must be bound to its mapped item, and that live item must still identify the
+    same child Issue and terminal Project fields.
+    """
+    project = mapping.get("project")
+    if not isinstance(project, dict):
+        raise ReceiptError("aggregate child mapping omits its canonical Project identity")
+    owner = _nonempty(project.get("owner"), "aggregate child Project owner")
+    number = _positive_int(project.get("number"), "aggregate child Project number")
+    repository = _nonempty(project.get("repo"), "aggregate child Project repository")
+    if repository != REPOSITORY:
+        raise ReceiptError("aggregate child Project repository is not canonical")
+
+    project_item_id = _nonempty(task.get("project_item_id"), "aggregate child Project item ID")
+    live = report.get("live")
+    project_item = live.get("project_item") if isinstance(live, dict) else None
+    if not isinstance(project_item, dict):
+        raise ReceiptError(f"aggregate child {delivery['task_uid']} lacks a live Project item readback")
+    if project_item.get("id") != project_item_id:
+        raise ReceiptError(f"aggregate child {delivery['task_uid']} live Project item ID does not match mapping")
+    if (str(project_item.get("_project_owner") or "") != owner
+            or str(project_item.get("_project_number") or "") != str(number)):
+        raise ReceiptError(f"aggregate child {delivery['task_uid']} live Project identity does not match mapping")
+    if project_item.get("_field_values_has_next_page") is not False:
+        raise ReceiptError(f"aggregate child {delivery['task_uid']} Project field readback is incomplete")
+
+    content = project_item.get("content")
+    if not isinstance(content, dict):
+        raise ReceiptError(f"aggregate child {delivery['task_uid']} Project item lacks Issue content")
+    expected_url = f"https://github.com/{REPOSITORY}/issues/{delivery['issue_number']}"
+    if (str(content.get("number") or "") != str(delivery["issue_number"])
+            or content.get("url") != expected_url):
+        raise ReceiptError(f"aggregate child {delivery['task_uid']} Project item Issue identity does not match plan")
+    body = content.get("body")
+    if not isinstance(body, str):
+        raise ReceiptError(f"aggregate child {delivery['task_uid']} Project item Issue body is unavailable")
+    if _unique_child_issue_field(body, "task_uid") != delivery["task_uid"]:
+        raise ReceiptError(f"aggregate child {delivery['task_uid']} Project item Task UID is missing or ambiguous")
+
+    terminal_fields = {"Status": "Done", "PM Status": "done", "Workflow Phase": "done"}
+    if any(project_item.get(name) != value for name, value in terminal_fields.items()):
+        raise ReceiptError(f"aggregate child {delivery['task_uid']} Project fields are not terminal")
+
+
 def read_child_report(repo_root: pathlib.Path, delivery: dict[str, Any], default_branch: str) -> dict[str, Any]:
     mapping = _load_mapping(repo_root)
     task = (mapping.get("tasks") or {}).get(delivery["task_uid"])
@@ -620,6 +673,7 @@ def read_child_report(repo_root: pathlib.Path, delivery: dict[str, Any], default
     report = terminal_module.audit(repo_root, delivery["task_uid"])
     if not isinstance(report, dict) or report.get("status") != "reconciled":
         raise ReceiptError(f"child task {delivery['task_uid']} terminal readback is not reconciled")
+    _validate_child_project_readback(mapping, task, delivery, report)
 
     live_issue = _run_json([
         "gh", "issue", "view", str(delivery["issue_number"]), "-R", REPOSITORY,

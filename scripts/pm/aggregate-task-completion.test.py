@@ -244,7 +244,7 @@ class AggregateTaskCompletionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "child|PR|identity"):
             self.build(tuple(values))
 
-    def test_live_child_issue_rejects_duplicate_or_conflicting_identity_and_terminal_fields(self):
+    def test_live_child_issue_rejects_ambiguous_fields_and_requires_exact_project_item(self):
         plan, _candidate, _evidence, _coordinator, _comment, _reports = self.context()
         delivery = plan["required_deliveries"][0]
         uid = delivery["task_uid"]
@@ -272,18 +272,34 @@ class AggregateTaskCompletionTests(unittest.TestCase):
             "issue_number": delivery["issue_number"],
             "pr_number": delivery["pr_number"],
             "pr_url": delivery["pr_url"],
+            "project_item_id": "PVTI_child_a",
             "status": "done",
             "workflow_phase": "post_merge_done",
             "completion_mode": "pr_task",
             "claim_verifications": claims,
             "task_branch": task_branch,
         }
+        project_mapping = {"owner": "eng-cc", "number": 1, "repo": "eng-cc/oasis7"}
+        live_project_item = {
+            "id": "PVTI_child_a",
+            "_project_owner": "eng-cc",
+            "_project_number": 1,
+            "content": {
+                "body": f"task_uid: {uid}",
+                "number": delivery["issue_number"],
+                "url": f"https://github.com/eng-cc/oasis7/issues/{delivery['issue_number']}",
+            },
+            "_field_values_has_next_page": False,
+            "Status": "Done",
+            "PM Status": "done",
+            "Workflow Phase": "done",
+        }
         report = {
             "status": "reconciled",
             "live": {"pr": {
                 "state": "MERGED", "mergedAt": "2026-09-25T09:00:00Z",
                 "headRefName": task_branch,
-            }},
+            }, "project_item": live_project_item},
         }
         merged_at = "2026-09-25T09:00:00Z"
         live_pr = {
@@ -315,7 +331,10 @@ class AggregateTaskCompletionTests(unittest.TestCase):
             ):
                 (receipt_root / filename).write_text("{}\n", encoding="utf-8")
 
-            def read_child_with_body(body, mapped_task=task):
+            def read_child_with_body(
+                body, mapped_task=task, project_item=live_project_item,
+                mapped_project=project_mapping,
+            ):
                 live_issue = {
                     "number": delivery["issue_number"],
                     "url": f"https://github.com/eng-cc/oasis7/issues/{delivery['issue_number']}",
@@ -323,10 +342,15 @@ class AggregateTaskCompletionTests(unittest.TestCase):
                 }
                 terminal_audit = mock.Mock()
                 terminal_audit.audit.return_value = {
-                    **report, "receipt_root": str(receipt_root),
+                    **report,
+                    "live": {**report["live"], "project_item": project_item},
+                    "receipt_root": str(receipt_root),
                 }
                 with (
-                    mock.patch.object(self.helper, "_load_mapping", return_value={"tasks": {uid: mapped_task}}),
+                    mock.patch.object(
+                        self.helper, "_load_mapping",
+                        return_value={"project": mapped_project, "tasks": {uid: mapped_task}},
+                    ),
                     mock.patch.object(self.helper, "_import_terminal_audit", return_value=terminal_audit),
                     mock.patch.object(self.helper, "_run_json", side_effect=(live_issue, live_pr)),
                 ):
@@ -345,6 +369,68 @@ class AggregateTaskCompletionTests(unittest.TestCase):
                 body_without_completion_mode, task_without_completion_mode,
             )
             self.assertEqual(optional_mode_report["task"]["task_uid"], uid)
+
+            # A child delivery needs its own current, exact Project item proof.
+            for label, changed_task in (
+                ("missing mapped Project item", {key: value for key, value in task.items() if key != "project_item_id"}),
+                ("empty mapped Project item", {**task, "project_item_id": ""}),
+                ("mismatched mapped Project item", {**task, "project_item_id": "PVTI_other"}),
+            ):
+                with self.subTest(project_case=label):
+                    with self.assertRaises(self.helper.ReceiptError):
+                        read_child_with_body("\n".join(issue_fields), mapped_task=changed_task)
+
+            with self.subTest(project_case="missing live Project item"):
+                with self.assertRaises(self.helper.ReceiptError):
+                    read_child_with_body("\n".join(issue_fields), project_item={})
+
+            wrong_project_items = (
+                ("live item id", {**live_project_item, "id": "PVTI_other"}),
+                ("Project owner", {**live_project_item, "_project_owner": "another-owner"}),
+                ("Project number", {**live_project_item, "_project_number": 2}),
+                ("Issue number", {
+                    **live_project_item,
+                    "content": {**live_project_item["content"], "number": delivery["issue_number"] + 1},
+                }),
+                ("Issue URL", {
+                    **live_project_item,
+                    "content": {
+                        **live_project_item["content"],
+                        "url": f"https://github.com/eng-cc/oasis7/issues/{delivery['issue_number'] + 1}",
+                    },
+                }),
+                ("Issue Task UID", {
+                    **live_project_item,
+                    "content": {**live_project_item["content"], "body": f"task_uid: {task_uid('c')}"},
+                }),
+                ("duplicate Issue Task UID", {
+                    **live_project_item,
+                    "content": {**live_project_item["content"], "body": f"task_uid: {uid}\ntask_uid: {uid}"},
+                }),
+                ("conflicting duplicate Issue Task UID", {
+                    **live_project_item,
+                    "content": {**live_project_item["content"], "body": f"task_uid: {uid}\ntask_uid: {task_uid('c')}"},
+                }),
+                ("incomplete Project fields", {
+                    **live_project_item, "_field_values_has_next_page": True,
+                }),
+                ("wrong terminal Status", {**live_project_item, "Status": "In Progress"}),
+                ("wrong terminal PM Status", {**live_project_item, "PM Status": "in_progress"}),
+                ("wrong terminal Workflow Phase", {**live_project_item, "Workflow Phase": "post_merge_done"}),
+            )
+            for label, item in wrong_project_items:
+                with self.subTest(project_case=label):
+                    with self.assertRaises(self.helper.ReceiptError):
+                        read_child_with_body("\n".join(issue_fields), project_item=item)
+
+            for label, project in (
+                ("wrong mapped Project owner", {**project_mapping, "owner": "another-owner"}),
+                ("wrong mapped Project number", {**project_mapping, "number": 2}),
+                ("wrong mapped Project repository", {**project_mapping, "repo": "another/repo"}),
+            ):
+                with self.subTest(project_case=label):
+                    with self.assertRaises(self.helper.ReceiptError):
+                        read_child_with_body("\n".join(issue_fields), mapped_project=project)
 
             for field, duplicate_value in cases:
                 with self.subTest(field=field, duplicate_value=duplicate_value):
