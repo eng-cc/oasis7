@@ -7,16 +7,16 @@
 
 
 ## ROUND-002 口径归属（2026-03-05）
-- 本文档是 required/full 具体覆盖命令矩阵与覆盖边界的权威入口。
-- 其它文档（含 `pre-commit.prd.md`）仅引用命令矩阵，不再内联完整命令清单。
+- `testing-manual.md` 是当前 `required` / `full` 命令和测试层级矩阵的执行入口；本 PRD 记录覆盖目标与设计决策，不取代手册中的命令真值。
+- 其它文档（含本 PRD 与 `pre-commit.prd.md`）引用 [`testing-manual.md`](../../../testing-manual.md)，不维护第二份当前命令清单。
 
 ## 1. Executive Summary
 - Problem Statement: 关键链路（viewer 离线回放、wasmtime、在线联测）若未在 CI 中显式覆盖，容易在特性分支阶段漏检回归。
-- Proposed Solution: 在统一测试脚本下扩展 required/full 覆盖项，引入离线回放联测和 wasmtime 路径，并让 `egui` snapshot 在无 `wgpu` 环境可安全降级。
+- Proposed Solution: 由 [`testing-manual.md`](../../../testing-manual.md) 维护当前 required/full 执行矩阵，覆盖 viewer 离线回放与 wasmtime 路径。`egui_kittest` 无 `wgpu` snapshot 降级保留为历史/目标要求；在可运行实现和对应 gate 证据链接前，不计入当前自动化覆盖。
 - Success Criteria:
   - SC-1: CI 明确执行 viewer 离线回放联测与 wasmtime 特性测试。
   - SC-2: required/full 清单在 `scripts/ci-tests.sh` 保持统一管理。
-  - SC-3: `egui_kittest` 在无 `wgpu` 环境不阻断流水线，且输出可诊断 skip 原因。
+  - SC-3: `egui_kittest` 无 `wgpu` snapshot 降级目前是历史/目标口径；只有找到可运行的 snapshot 实现并链接对应 CI/gate 证据后，才可把它列为当前覆盖。
   - SC-4: 文档、任务、验证结果可追溯到同一专题闭环。
 
 ## 2. User Experience & Functionality
@@ -27,7 +27,7 @@
 - User Scenarios & Frequency:
   - PR 门禁：默认执行 required，验证核心路径。
   - 每日全量：执行 full，覆盖重型特性与联测。
-  - 环境受限 runner：无 `wgpu` 时执行 snapshot 降级路径。
+  - 历史/目标场景：若未来将 `egui_kittest` snapshot 接入无 `wgpu` runner，降级路径应输出可诊断 skip 原因；当前不作为已接线 CI 的事实描述。
 - User Stories:
   - PRD-TESTING-CI-COVER-001: As a CI 维护者, I want key integration paths explicitly covered, so that regressions are visible earlier.
   - PRD-TESTING-CI-COVER-002: As a 开发者, I want viewer offline integration to run headless and stable, so that tests do not depend on external UI resources.
@@ -35,18 +35,18 @@
 - Critical User Flows:
   1. Flow-COVER-001: `生成 snapshot/journal -> 运行 viewer_offline_integration -> 校验协议消息链路`
   2. Flow-COVER-002: `执行 full -> 运行 wasmtime/libp2p/viewer 联测 -> 汇总回归结果`
-  3. Flow-COVER-003: `snapshot 测试初始化 wgpu 失败 -> 输出 skip 原因 -> 继续执行其他用例`
+  3. Flow-COVER-003（历史/目标，未计入当前 CI 覆盖）: `snapshot 测试初始化 wgpu 失败 -> 输出 skip 原因 -> 继续执行其他用例`
 - Functional Specification Matrix:
 | 功能点 | 字段定义 | 按钮/动作行为 | 状态转换 | 排序/计算规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | 离线回放联测 | snapshot/journal 输入、协议输出断言 | 运行 `viewer_offline_integration` | `prepared -> replaying -> passed/failed` | 优先验证 `HelloAck/Snapshot/Event` | CI 自动执行 |
-| full 扩展覆盖 | wasmtime/libp2p/viewer_live 特性组合 | `scripts/ci-tests.sh full` 统一触发 | `queued -> running -> passed/failed` | full 在 required 之上追加 | 发布前必须通过 |
-| snapshot 降级保护 | wgpu 初始化结果、skip 原因 | 初始化失败时记录并跳过相关快照测试 | `init -> skip/report` 或 `init -> run` | 保证主流水线不被环境阻断 | 测试框架内部控制 |
+| full 扩展覆盖 | wasmtime/libp2p/viewer_live 特性组合 | 运行当前 full tier；命令见 [`testing-manual.md`](../../../testing-manual.md) | `queued -> running -> passed/failed` | full 在 required 之上追加 | 发布前必须通过 |
+| snapshot 降级保护（历史/目标） | 未来 runnable `egui_kittest` 实现的 wgpu 初始化结果、skip 原因 | 仅在实现与 gate 已链接后，初始化失败时记录并跳过快照测试 | `init -> skip/report` 或 `init -> run` | 当前不构成 required/full 的已验证覆盖 | 待对应测试/gate 接线并留存证据后确认 |
 - Acceptance Criteria:
   - AC-1: required/full 覆盖清单在文档和脚本一致。
   - AC-2: 离线回放联测可稳定完成并验证关键消息。
   - AC-3: `wasmtime` 路径纳入 CI 覆盖。
-  - AC-4: `egui` snapshot 在无 `wgpu` runner 下可降级并留痕。
+  - AC-4（目标；未满足前不得宣称当前已覆盖）: 可运行的 `egui_kittest` snapshot 在无 `wgpu` runner 下可降级并留痕，且文档关联对应实现与 gate 证据。
 - Non-Goals:
   - 不做 CI 缓存优化与并行矩阵调优。
   - 不引入 UI 真实渲染端到端依赖。
@@ -62,12 +62,12 @@
   - `.github/workflows/rust.yml`
   - `oasis7_viewer_demo`（`snapshot.json` / `journal.json`）
   - `viewer_offline_integration`
-  - `oasis7_viewer` `egui_kittest` snapshot
+  - `oasis7_viewer` `egui_kittest` snapshot（历史/目标；在关联可运行实现和 gate 证据前不视为当前 CI 覆盖）
 - Edge Cases & Error Handling:
   - wasmtime 依赖体积增长：执行耗时上升，需要保留分级策略平衡成本。
   - socket 端口竞争：联测必须使用随机端口与超时保护。
-  - 无 `wgpu` 环境：snapshot 测试输出 skip 原因，不阻断其他测试。
-  - skip 覆盖盲区：在有图形能力环境保留一次完整视觉快照校验。
+  - 无 `wgpu` 环境：作为目标，未来的可运行 snapshot 测试应输出 skip 原因；当前未证明该路径已接入 gate。
+  - skip 覆盖盲区：在有图形能力环境保留一次完整视觉快照校验，须在对应实现与 gate 接线后安排。
 - Non-Functional Requirements:
   - NFR-COVER-1: required 门禁持续稳定并保持较低执行开销。
   - NFR-COVER-2: full 门禁覆盖 wasmtime/libp2p/viewer 核心路径。
@@ -82,21 +82,21 @@
 - Technical Risks:
   - 风险-1: wasmtime 路径增加执行时长与依赖负担。
   - 风险-2: 联测端口冲突影响稳定性。
-  - 风险-3: 无 `wgpu` 环境 skip 导致该环境视觉覆盖下降。
+  - 风险-3: 若未来接入 snapshot 且无 `wgpu` 环境触发 skip，该环境的视觉覆盖会下降；这是目标接线后的残余风险，不是当前 CI 行为结论。
 
 ## 6. Validation & Decision Record
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
-| PRD-TESTING-CI-COVER-001 | T1/T2/T5/T6 | `test_tier_required` | required/full 清单与脚本接线验证 | CI 基础覆盖能力 |
-| PRD-TESTING-CI-COVER-002 | T1/T3 | `test_tier_required` | viewer 离线回放联测结果检查 | viewer 协议链路稳定性 |
-| PRD-TESTING-CI-COVER-003 | T2/T4/T8/T9 | `test_tier_full` | wasmtime/full 路径与 snapshot 降级验证 | 发布前深度回归保障 |
+| PRD-TESTING-CI-COVER-001 | T1/T2/T5/T6 | 按 [`testing-manual.md`](../../../testing-manual.md) 当前矩阵 | 对照 required/full 命令与 `scripts/ci-tests.sh` 实际接线 | CI 基础覆盖能力 |
+| PRD-TESTING-CI-COVER-002 | T1/T3 | `test_tier_required` | `viewer_offline_integration` 中 required-feature 用例及 required-tier 结果 | viewer 协议链路稳定性 |
+| PRD-TESTING-CI-COVER-003 | T2/T4/T8/T9 | `test_tier_full` + `wasmtime` | full-tier wasmtime 用例；`egui_kittest` snapshot 降级仅在 runnable implementation 与 gate 证据链接后验证 | 发布前深度回归保障 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
 | DEC-COVER-001 | 统一脚本维护 required/full 覆盖 | 分散到多脚本维护 | 集中维护可减少漂移。 |
 | DEC-COVER-002 | 离线回放使用 headless 协议联测 | 依赖真实 UI 渲染联测 | headless 更稳定且更适合 CI。 |
-| DEC-COVER-003 | 无 `wgpu` 环境下 snapshot 自动 skip | 直接失败阻断流水线 | 可避免环境噪声导致整体门禁失效。 |
+| DEC-COVER-003 | runnable snapshot 接线后的目标是无 `wgpu` 环境可诊断 skip；当前标注为历史/目标 | 未经实现和 gate 证据便声称已自动 skip | 在可复现实现与当前 CI 证据出现前，保留覆盖边界。 |
 
 ## 原文约束点映射（内容保真）
 - 原“目标（覆盖补齐 + CI 显式执行 + snapshot 降级）” -> 第 1 章与第 2 章 AC。
