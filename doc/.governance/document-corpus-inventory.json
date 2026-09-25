@@ -567,7 +567,7 @@
     },
     {
       "path": "doc/engineering/workflow/source-of-truth.md",
-      "content_sha256": "7ffc099266de2affb9b9726468edc45b91af55cb531537749ef8361407f4902e",
+      "content_sha256": "aa4b20691f8d63a2b0c6b2fd03ce6666eb6dc462338ff72fff621d38a1c817aa",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -1841,7 +1841,7 @@
     },
     {
       "path": "doc/p2p/observer/observer-sync-mode-runtime-metrics.design.md",
-      "content_sha256": "880d60bb1edbf592d9468e6f44c1c736fd1c8937a8b13a2baa6960b2c6116255",
+      "content_sha256": "2c678ae432fce25d7e8b3d68590b2af915dc801a284b2516980cc1773af278d1",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1855,7 +1855,7 @@
     },
     {
       "path": "doc/p2p/observer/observer-sync-mode-runtime-metrics.prd.md",
-      "content_sha256": "1ecb983b6a3bf7e24a68bb40dd2e28229410357509ea71a9557a877bb939e078",
+      "content_sha256": "afa857fb683fa12c0a80b3646da29a6a5538e93e2314bf1293969e92d8998252",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
