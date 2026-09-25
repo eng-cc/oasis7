@@ -42,6 +42,14 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 IMPLEMENTATION = ROOT / "scripts" / "pm" / "cargo_package_profile_planner.py"
+LIVE_CURRENT_PLANNER_TASK_COMMENT = """## Repository State Impact / Isolation Decision / Task Truth / Bootstrap Snapshot / Routed Next Phase
+P1 is a code-side planner-authority leaf under coordination #3994; no business Cargo package changes. New canonical worktree /Users/scc/ccwork/oasis7/.worktrees/oasis7-engineering-cargo-standalone-lock-planner, branch task/engineering-cargo-standalone-lock-planner, UID task_978dcc0005b9415cbc45e59b21b095e0, owner repository_health_engineer, Project-backed Issue #3999. Bootstrap complete, snapshot .pm/scratch/task_978dcc0005b9415cbc45e59b21b095e0/bootstrap-task-snapshot.json digest sha256:b21fa96a95b3cb92bea932a74ba2c83f30e35b0920284d3716a7d21556a42dcb; live mapping refreshed and workflow-next bound. Route: executing-project-tasks; bounded scope and merged normative authority are already specified, no brainstorming needed. Verification tier: focused planner authority tests, scope checks, required CI, role review, strict integration if selected by gate.
+
+Plan-Gap Evidence step_id=P1.1; acceptance_refs=#3999 acceptance 1-2, #3994 ordered contract, #3996 post-merge authority receipt https://github.com/eng-cc/oasis7/issues/3996#issuecomment-5822424913; dependencies=N1 PR #3997 merged at 4f97540c34aefca41d8bf790cbf09b3176f07de3 and live authority readback; verification_command=python3 scripts/pm/cargo-package-profile-planner.test.py plus python3 scripts/pm/check-cargo-package-scope.test.py, git diff --check; verification_evidence=expected exact command results and changed-path set in this Issue before freeze; write_scope=scripts/pm/cargo_package_profile_planner.py and scripts/pm/cargo-package-profile-planner.test.py only; out_of_scope=checker, stage-admission producer, scope policy, Cargo package, N1 normative source; required_role_slices=repository_health_engineer bounded implementation, followed by QA and repository-health full review before PR.
+
+Plan-Gap Evidence step_id=P1.2; acceptance_refs=#3999 acceptance 3 and canonical staged checker authority upgrade; dependencies=P1.1 complete and immutable verified head; verification_command=required-gate exact-head, fresh involved-role review, PR lifecycle gate, post-merge server readback; verification_evidence=CI receipt, role packet, PR gate, merged commit/tree/path/fragment digests and issue receipt; write_scope=PR/evidence only after code freeze; out_of_scope=C1 checker implementation and A2; required_role_slices=repository_health_engineer and qa_engineer reviews.
+
+Dispatch contract: owner repository_health_engineer; slice type implementation; integration owner TPM, order 1 implementation then 2 verification/review. Context checklist: identity/authority = UID/worktree/branch and N1 live receipt; governance = AGENTS.md, .agents/roles/repository_health_engineer.md, source-of-truth.md; task truth = this Project-backed Issue; user intent = unblock one-package A2 without gate bypass; scoped repo context = planner and focused tests only; collaboration boundary = specialist owns only declared files, others share worktree, no reverting others. Intended runtime is inherit current parent selection; adapter inactive on this surface, actual model/reasoning not attested. Formal sink: this Issue; return contract: implementation diff, focused verification, residual risk. TPM integrates and handles PR."""
 
 
 def git(repo: Path, *args: str) -> str:
@@ -732,12 +740,7 @@ resolver = "2"
         evidence = {
             "issue_url": "https://api.github.com/repos/eng-cc/oasis7/issues/3999",
             "html_url": "https://github.com/eng-cc/oasis7/issues/3999#issuecomment-5822600447",
-            "body": (
-                f"P1 is a code-side planner-authority leaf; canonical worktree {root}, "
-                f"branch task/engineering-cargo-standalone-lock-planner, UID {task_uid}, "
-                f"owner repository_health_engineer. Dependencies=N1 PR #3997 merged at {merged_commit} "
-                "and live authority readback."
-            ),
+            "body": LIVE_CURRENT_PLANNER_TASK_COMMENT,
         }
         pr = {
             "number": 4921,
@@ -755,6 +758,11 @@ resolver = "2"
         }
         real_run = self.api.subprocess.run
 
+        # The exact live N1 base OID is outside this temporary Git fixture.
+        # Preserve ancestry coverage here by modeling only its expected PR base.
+        def expected_live_base(_repo, _trusted_base, live_base_sha):
+            return live_base_sha == merged_commit
+
         def fake_gh_run(command, **kwargs):
             if command[0] != "gh":
                 return real_run(command, **kwargs)
@@ -768,9 +776,12 @@ resolver = "2"
 
         with patch.object(self.api, "_canonical_repository", return_value="eng-cc/oasis7"), patch.object(
             self.api.subprocess, "run", side_effect=fake_gh_run
-        ):
+        ), patch.object(self.api, "_is_ancestor", side_effect=expected_live_base):
             parsed = self.api._read_current_planner_task_from_github(root)
         self.assertEqual(4921, parsed["pr_number"])
+        self.assertEqual(self.api.CURRENT_PLANNER_TASK_UID, parsed["task_uid"])
+        self.assertEqual("4f97540c34aefca41d8bf790cbf09b3176f07de3", parsed["initial_base"])
+        self.assertEqual("task/engineering-cargo-standalone-lock-planner", parsed["branch"])
         self.assertEqual(source_head, parsed["head_sha"])
         self.assertEqual(merged_commit, parsed["base_sha"])
 
@@ -797,7 +808,7 @@ resolver = "2"
 
                 with patch.object(self.api, "_canonical_repository", return_value="eng-cc/oasis7"), patch.object(
                     self.api.subprocess, "run", side_effect=bad_gh_run
-                ):
+                ), patch.object(self.api, "_is_ancestor", side_effect=expected_live_base):
                     with self.assertRaisesRegex(Exception, "head|base|mismatch"):
                         self.api._read_current_planner_task_from_github(root)
 
