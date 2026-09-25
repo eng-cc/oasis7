@@ -87,6 +87,33 @@ def trusted_inventory_readback(issuer, *, artifact_id=30):
     return {**issuer, "producer": {**issuer["producer"], "artifact_id": artifact_id}}
 
 
+def trusted_source_attempt(plan=None, *, plan_artifact_id=30, result_artifacts=None):
+    plan = source_plan() if plan is None else plan
+    if result_artifacts is None:
+        records = evidence_set()["tests"]
+        result_artifacts = [
+            {
+                "unit_id": item["unit_id"],
+                "artifact_id": item["artifact_id"],
+                "name": item["artifact_name"],
+            }
+            for item in sorted(records, key=lambda item: item["unit_id"])
+        ]
+    return {
+        "schema": "oasis7-ci-trusted-source-attempt/v1",
+        "request_key": plan["request_key"],
+        "workflow_run_id": 10,
+        "run_attempt": 1,
+        "check_app_id": 42,
+        "check_run_id": 20,
+        "job_id": 40,
+        "job_name": "required-gate",
+        "plan_artifact_id": plan_artifact_id,
+        "plan_artifact_name": required_artifact.plan_artifact_name(10, 1),
+        "result_artifacts": result_artifacts,
+    }
+
+
 def source_plan(*, reuse_policies=None, applicability_mode="input_scoped",
                 snapshot_target_oid=None):
     specs = planner_unit_specs(reuse_policies)
@@ -126,6 +153,13 @@ def source_plan(*, reuse_policies=None, applicability_mode="input_scoped",
         "executor_contract_digest": DIGEST,
         "tested_commit_oid": issuer["target_oid"],
         "tested_tree_oid": issuer["target_tree_oid"],
+        "workflow_run_id": 10,
+        "run_attempt": 1,
+        "check_name": "required-gate",
+        "check_app_id": 42,
+        "check_run_id": 20,
+        "job_id": 40,
+        "job_name": "required-gate",
         "review_applicability_digest": DIGEST,
         "required_test_units": unit_ids,
         "input_fingerprints": input_fingerprints,
@@ -234,7 +268,8 @@ def evidence_set(*, test_input_digest=INPUT_DIGEST, review_digest=DIGEST,
             "run_attempt": 1,
             "check_app_id": 42,
             "check_run_id": 20,
-            "artifact_id": 30,
+            "artifact_id": 31,
+            "artifact_name": required_artifact.result_artifact_name(10, 1, "unit-a"),
             "inventory_digest": inventory_digest,
             "effective_policy_identity": effective_policy_identity(),
         }, {
@@ -251,7 +286,8 @@ def evidence_set(*, test_input_digest=INPUT_DIGEST, review_digest=DIGEST,
             "run_attempt": 1,
             "check_app_id": 42,
             "check_run_id": 20,
-            "artifact_id": 31,
+            "artifact_id": 32,
+            "artifact_name": required_artifact.result_artifact_name(10, 1, CORPUS_UNIT),
             "inventory_digest": inventory_digest,
             "effective_policy_identity": effective_policy_identity(),
         }],
@@ -411,7 +447,7 @@ class PublicationCompatibilityTests(unittest.TestCase):
 
 class ApplicabilityDecisionTests(unittest.TestCase):
     def evaluate(self, *, plan=None, evidence=None, target=None, policy=None,
-                 trusted_observation=None):
+                 trusted_observation=None, source_attempt=None):
         plan = source_plan() if plan is None else plan
         target = target_snapshot() if target is None else target
         policy = enabled_policy() if policy is None else policy
@@ -432,6 +468,9 @@ class ApplicabilityDecisionTests(unittest.TestCase):
             policy,
             trusted_source_inventory=trusted_inventory_readback(
                 plan["planner_inventory_issuer"], artifact_id=30,
+            ),
+            trusted_source_attempt=(
+                trusted_source_attempt(plan) if source_attempt is None else source_attempt
             ),
             trusted_target_observation=trusted_observation,
         )
@@ -771,6 +810,58 @@ class ApplicabilityDecisionTests(unittest.TestCase):
 
         self.assertEqual("blocked", result_status(decision, "merge_readiness"))
         self.assertIn("APPLICABILITY_INPUT_INVALID", decision.blockers)
+
+    def test_source_attempt_binding_is_required_and_closed_over_exact_artifact_locators(self):
+        plan = source_plan()
+        trusted_inventory = trusted_inventory_readback(plan["planner_inventory_issuer"])
+        target = target_snapshot()
+        policy = enabled_policy()
+        observation = trusted_target_observation(target, policy)
+        evidence = evidence_set(inventory_digest=plan["planner_inventory_issuer"]["inventory_digest"])
+
+        missing = applicability.evaluate_evidence_applicability(
+            plan, evidence, target, policy,
+            trusted_source_inventory=trusted_inventory,
+            trusted_target_observation=observation,
+        )
+        self.assertIn("SOURCE_ATTEMPT_BINDING_INVALID", missing.blockers)
+
+        base = trusted_source_attempt(plan)
+        variants = []
+        wrong_plan = dict(base)
+        wrong_plan["plan_artifact_id"] = 31
+        variants.append(("plan artifact", wrong_plan))
+        wrong_attempt = dict(base)
+        wrong_attempt["run_attempt"] = 2
+        variants.append(("attempt", wrong_attempt))
+        wrong_name = dict(base)
+        wrong_name["result_artifacts"] = [dict(item) for item in base["result_artifacts"]]
+        wrong_name["result_artifacts"][0]["name"] = "oasis7-required-result-v2-wrong"
+        variants.append(("result name", wrong_name))
+        missing_result = dict(base)
+        missing_result["result_artifacts"] = base["result_artifacts"][:-1]
+        variants.append(("missing result", missing_result))
+        duplicate_result = dict(base)
+        duplicate_result["result_artifacts"] = [
+            *base["result_artifacts"], dict(base["result_artifacts"][0]),
+        ]
+        variants.append(("duplicate result", duplicate_result))
+        misordered = dict(base)
+        misordered["result_artifacts"] = list(reversed(base["result_artifacts"]))
+        variants.append(("misordered result", misordered))
+
+        for label, source_attempt in variants:
+            with self.subTest(label=label):
+                decision = self.evaluate(source_attempt=source_attempt)
+                self.assertIn("SOURCE_ATTEMPT_BINDING_INVALID", decision.blockers)
+
+    def test_test_claim_artifact_id_and_name_must_match_trusted_source_attempt(self):
+        for field, value in (("artifact_id", 999), ("artifact_name", "oasis7-required-result-v2-swap")):
+            with self.subTest(field=field):
+                evidence = evidence_set()
+                evidence["tests"][0][field] = value
+                decision = self.evaluate(evidence=evidence)
+                self.assertIn("TEST_PROVENANCE_INVALID", decision.blockers)
 
     def test_wrong_pr_identity_and_duplicate_unit_evidence_block(self):
         target = target_snapshot()

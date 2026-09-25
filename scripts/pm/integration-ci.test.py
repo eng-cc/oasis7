@@ -408,6 +408,53 @@ class IntegrationTests(unittest.TestCase):
    self.assertEqual([base,head],git(destination,'rev-list','--parents','-n','1','HEAD').split()[1:])
    self.assertEqual(destination.resolve(),Path(result['integration_worktree']))
 
+class CurrentRequestSelectionTests(unittest.TestCase):
+ def setUp(self):
+  spec=importlib.util.spec_from_file_location('integration_ci_request_selection_test',HERE/'integration_ci.py')
+  self.api=importlib.util.module_from_spec(spec);spec.loader.exec_module(self.api)
+  self.uid='task_'+'1'*32
+  self.base='a'*40
+  self.head='b'*40
+
+ def run_row(self,run_id,request_key,*,created_at='2026-09-26T00:00:00Z',attempt=1):
+  return {
+   'id':run_id,'run_attempt':attempt,'created_at':created_at,
+   'event':'workflow_dispatch','path':self.api.WORKFLOW,
+   'head_sha':self.base,'head_branch':'main','repository':{'full_name':'owner/repo'},
+   'display_title':(
+    f'oasis7-ci|workflow_dispatch|integration_revalidation|{self.uid}|7|'
+    f'{self.base}|{self.head}|{request_key}'
+   ),
+  }
+
+ def select(self,rows,request_key):
+  with patch.object(self.api,'gh',return_value={'workflow_runs':rows}):
+   return self.api.current_request(
+    'owner/repo',self.uid,7,self.base,self.head,'main',request_key=request_key,
+   )
+
+ def test_remote_selection_orders_run_ids_numerically_on_timestamp_tie(self):
+  rows=[self.run_row(99,'sha256:'+'1'*64),self.run_row(100,'sha256:'+'1'*64)]
+  selected=self.select(rows,'sha256:'+'1'*64)
+  self.assertEqual(100,selected['id'])
+
+ def test_remote_selection_isolates_exact_request_key_and_attempt(self):
+  key_a='sha256:'+'1'*64
+  key_b='sha256:'+'2'*64
+  rows=[
+   self.run_row(99,key_a,attempt=99),
+   self.run_row(100,key_b,attempt=100),
+  ]
+  selected_a=self.select(rows,key_a)
+  selected_b=self.select(rows,key_b)
+  self.assertEqual((99,99),(selected_a['id'],selected_a['run_attempt']))
+  self.assertEqual((100,100),(selected_b['id'],selected_b['run_attempt']))
+
+ def test_remote_selection_rejects_timezone_naive_creation_time(self):
+  row=self.run_row(99,'sha256:'+'1'*64,created_at='2026-09-26T00:00:00')
+  with self.assertRaisesRegex(ValueError,'request time malformed'):
+   self.select([row],'sha256:'+'1'*64)
+
 class LocalTargetObservationTests(unittest.TestCase):
  def setUp(self):
   spec=importlib.util.spec_from_file_location('integration_ci_p1_test',HERE/'integration_ci.py')
@@ -430,6 +477,21 @@ class LocalTargetObservationTests(unittest.TestCase):
    'effective_policy_identity':plan['effective_policy_identity'],
    'planner_inventory_authority':plan['planner_inventory_authority'],
   }
+  artifact_helper=self.api._adjacent_module('ci_required_artifact_v2')
+  result_name=artifact_helper.result_artifact_name(
+   plan['workflow_run_id'],plan['run_attempt'],'unit-x',
+  )
+  plan_name=artifact_helper.plan_artifact_name(plan['workflow_run_id'],plan['run_attempt'])
+  gate_job=module.gate_job(plan)
+  trusted_attempt={
+   'schema':'oasis7-ci-trusted-source-attempt/v1',
+   'request_key':plan['request_key'],
+   'workflow_run_id':plan['workflow_run_id'],'run_attempt':plan['run_attempt'],
+   'check_app_id':plan['check_app_id'],'check_run_id':plan['check_run_id'],
+   'job_id':plan['job_id'],'job_name':'required-gate',
+   'plan_artifact_id':artifact_id,'plan_artifact_name':plan_name,
+   'result_artifacts':[{'unit_id':'unit-x','artifact_id':1235,'name':result_name}],
+  }
   proof={
    'request_key':plan['request_key'],'request_identity':plan['request_identity'],
    'integration_base_oid':plan['integration_base_oid'],
@@ -440,9 +502,12 @@ class LocalTargetObservationTests(unittest.TestCase):
    'effective_policy_identity':plan['effective_policy_identity'],
    'planner_inventory_authority':plan['planner_inventory_authority'],
    'required_plan_v2_artifact_id':artifact_id,
+   'required_plan_v2_artifact_name':plan_name,
    'required_plan_v2_payload':plan,
-   'required_result_v2_artifacts':[{'artifact_id':1235,'name':'result','payload':{}}],
-   'execution_jobs':[module.gate_job(plan)],
+   'required_result_v2_artifacts':[{'artifact_id':1235,'name':result_name,'payload':{'unit_id':'unit-x'}}],
+   'execution_jobs':[gate_job],
+   'job_id':plan['job_id'],'job_name':'required-gate',
+   'trusted_source_attempt':trusted_attempt,
    'trusted_planner_inventory':{
     **plan['planner_inventory_issuer'],
     'producer':{**plan['planner_inventory_issuer']['producer'],'artifact_id':artifact_id},
@@ -481,6 +546,21 @@ class LocalTargetObservationTests(unittest.TestCase):
      with self.subTest(field=field),patch.object(self.api,'git_common_dir',return_value=journal):
       with self.assertRaisesRegex(ValueError,'journal'):
        self.api._validate_source_request_journal('eng-cc/oasis7',proof,plan,identity)
+
+ def test_source_attempt_binding_rejects_cross_attempt_and_artifact_locators(self):
+  proof,plan=self.source_proof_fixture()
+  self.assertEqual(proof['trusted_source_attempt'],self.api._validate_trusted_source_attempt(proof,plan))
+  mutations=(
+   ('run_attempt',lambda item:item.__setitem__('run_attempt',item['run_attempt']+1)),
+   ('check_run_id',lambda item:item.__setitem__('check_run_id',item['check_run_id']+1)),
+   ('plan_artifact_id',lambda item:item.__setitem__('plan_artifact_id',item['plan_artifact_id']+1)),
+   ('result_artifacts',lambda item:item['result_artifacts'][0].__setitem__('artifact_id',9999)),
+  )
+  for field,mutate in mutations:
+   changed=json.loads(json.dumps(proof))
+   mutate(changed['trusted_source_attempt'])
+   with self.subTest(field=field),self.assertRaisesRegex(ValueError,'trusted attempt'):
+    self.api._validate_trusted_source_attempt(changed,plan)
 
  def test_local_target_reader_rejects_unbound_proof_before_live_reads(self):
   with patch.object(self.api,'identity') as read_pr, \
@@ -951,6 +1031,12 @@ class ProvenanceTests(unittest.TestCase):
    'workflow_run_id':9,'run_attempt':1,'check_app_id':42,'check_run_id':10,
    'job_id':10,'job_name':'required-gate','execution_jobs':[gate_job],
    'trusted_planner_inventory':{'producer':{'artifact_id':31}},
+   'trusted_source_attempt':{
+    'schema':'oasis7-ci-trusted-source-attempt/v1','request_key':request_key,
+    'workflow_run_id':9,'run_attempt':1,'check_app_id':42,'check_run_id':10,
+    'job_id':10,'job_name':'required-gate','plan_artifact_id':31,
+    'plan_artifact_name':'oasis7-required-plan-v2-9-a1','result_artifacts':[],
+   },
   }
   with patch.object(self.api,'gh',side_effect=self.read),patch.object(self.api.subprocess,'check_output',return_value=raw.getvalue()), \
        patch.object(self.api,'attempt_execution_jobs',return_value=[gate_job]), \
@@ -962,6 +1048,7 @@ class ProvenanceTests(unittest.TestCase):
   self.assertEqual(run_head,check['head_sha'])
   self.assertEqual(11,proof['plan_artifact_id'])
   self.assertEqual(31,proof['required_plan_v2_artifact_id'])
+  self.assertEqual(v2_proof['trusted_source_attempt'],proof['trusted_source_attempt'])
  def test_keyed_consumer_rejects_changed_request_payload(self):
   from integration_executor_contract import executor_contract_from_contents
   run_head='6'*40

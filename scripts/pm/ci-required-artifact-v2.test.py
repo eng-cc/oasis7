@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 from pathlib import Path
+import re
 import unittest
 
 
@@ -13,6 +14,43 @@ SPEC = importlib.util.spec_from_file_location("ci_required_artifact_v2", HERE / 
 ARTIFACT = importlib.util.module_from_spec(SPEC)
 assert SPEC is not None and SPEC.loader is not None
 SPEC.loader.exec_module(ARTIFACT)
+
+
+def assert_fleet_health_workflow_contract(workflow_text):
+    """Keep hosted matrix and exact integration-worktree execution explicit."""
+    job_match = re.search(
+        r"(?ms)^  public-testnet-fleet-health-contract:\n(.*?)(?=^  [A-Za-z0-9_.-]+:\s*$|\Z)",
+        workflow_text,
+    )
+    if job_match is None:
+        raise AssertionError("fleet-health job is missing")
+    job = job_match.group(1)
+    matrix_match = re.search(r"(?m)^\s+os:\s*\[([^\]]+)\]\s*$", job)
+    if matrix_match is None:
+        raise AssertionError("fleet-health OS matrix is missing")
+    matrix = {entry.strip() for entry in matrix_match.group(1).split(",")}
+    required_runners = {"ubuntu-24.04", "windows-2022", "macos-14"}
+    if not required_runners.issubset(matrix):
+        raise AssertionError("fleet-health matrix must include Ubuntu, Windows, and macOS")
+
+    integration_match = re.search(
+        r"(?ms)^      - id: integration\n(.*?)(?=^      - (?:id|name):|\Z)", job,
+    )
+    verify_match = re.search(
+        r"(?ms)^      - name: Verify fleet-health collection contract\n(.*?)(?=\Z)",
+        job,
+    )
+    if integration_match is None or verify_match is None:
+        raise AssertionError("fleet-health integration or verification step is missing")
+    integration_step = integration_match.group(1)
+    verify_step = verify_match.group(1)
+    for name, step in (("integration", integration_step), ("verification", verify_step)):
+        if not re.search(r"(?m)^        shell: bash\s*$", step):
+            raise AssertionError(f"fleet-health {name} step must select bash explicitly")
+        if not re.search(r"(?m)^        run: \|\s*$", step):
+            raise AssertionError(f"fleet-health {name} step must use a literal run block")
+    if "INTEGRATION_WORKTREE" not in verify_step or "steps.integration.outputs.worktree" not in verify_step:
+        raise AssertionError("fleet-health verification must run in the prepared integration worktree")
 
 
 def valid_plan():
@@ -174,6 +212,16 @@ class RequiredArtifactV2Tests(unittest.TestCase):
         }, ARTIFACT.execution_job_requirements(
             ["operational_contracts", "packaging_contracts", "unit-x"],
         ))
+
+    def test_fleet_health_workflow_keeps_windows_and_exact_integration_context(self):
+        workflow_path = HERE.parents[1] / ".github/workflows/rust.yml"
+        workflow = workflow_path.read_text(encoding="utf-8")
+        assert_fleet_health_workflow_contract(workflow)
+
+        without_windows = workflow.replace("ubuntu-24.04, windows-2022, macos-14", "ubuntu-24.04, macos-14", 1)
+        self.assertNotEqual(workflow, without_windows)
+        with self.assertRaisesRegex(AssertionError, "Windows"):
+            assert_fleet_health_workflow_contract(without_windows)
 
     def test_result_binds_exact_plan_artifact_and_successful_attempt_job(self):
         result = ARTIFACT.build_result_payload(self.plan, 123, "unit-x", [gate_job(self.plan)])

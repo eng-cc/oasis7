@@ -19,6 +19,7 @@ from typing import Any
 EXECUTOR_CONTRACT_SCHEMA = "oasis7-ci-executor-contract/v1"
 VALIDATION_REQUEST_SCHEMA = "oasis7-ci-validation-request/v2"
 EFFECTIVE_POLICY_IDENTITY_SCHEMA = "oasis7-ci-effective-policy-identity/v1"
+VALIDATION_INTENT_ORDER_SCHEMA = "oasis7-ci-validation-intent-order/v1"
 EXECUTOR_CONTRACT_PATHS = (
     ".github/workflows/rust.yml",
     "scripts/ci-required-scope.v2.json",
@@ -48,9 +49,12 @@ _KEY_FIELDS = {
 _REQUEST_ENVELOPE_FIELDS = {
     "schema", "request_key", "identity", "integration_base_oid",
 }
-_REQUEST_RECORD_FIELDS = {
+_REQUEST_RECORD_BASE_FIELDS = {
     "schema", "request_key", "identity", "integration_base_oid",
     "dispatch_attempts", "status", "run_id", "run_attempt",
+}
+_REQUEST_RECORD_FIELDS = _REQUEST_RECORD_BASE_FIELDS | {
+    "intent_order", "intent_order_schema",
 }
 
 
@@ -250,8 +254,15 @@ def _read_request_record(path: Path, request_key: str) -> dict[str, Any]:
         record = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError("validation request journal is unreadable") from exc
-    if not isinstance(record, dict) or set(record) != _REQUEST_RECORD_FIELDS:
+    if (not isinstance(record, dict)
+            or (set(record) != _REQUEST_RECORD_BASE_FIELDS
+                and set(record) != _REQUEST_RECORD_FIELDS)):
         raise ValueError("validation request journal fields are invalid")
+    if "intent_order" in record:
+        if (record.get("intent_order_schema") != VALIDATION_INTENT_ORDER_SCHEMA
+                or type(record["intent_order"]) is not int
+                or record["intent_order"] < 1):
+            raise ValueError("validation request journal intent order is invalid")
     if (record.get("schema") != VALIDATION_REQUEST_SCHEMA
             or record.get("request_key") != request_key):
         raise ValueError("validation request journal identity is invalid")
@@ -325,6 +336,94 @@ def _locked(path: Path):
     return Lock()
 
 
+def _intent_order_state_path(directory: Path) -> Path:
+    # Deliberately has no .json suffix: the lifecycle reader scans only request
+    # records in this directory.
+    return directory / ".validation-intent-order"
+
+
+def validation_intent_order_lock(directory: str | Path):
+    """Serialize request-intent writes with the lifecycle's cross-key scan."""
+    return _locked(_intent_order_state_path(Path(directory)))
+
+
+def _intent_order_records(directory: Path) -> list[tuple[Path, dict[str, Any]]]:
+    records = []
+    for path in sorted(directory.glob("*.json")):
+        if not re.fullmatch(r"[0-9a-f]{64}", path.stem):
+            continue
+        key = "sha256:" + path.stem
+        record = _read_request_record(path, key)
+        if "intent_order" in record:
+            records.append((path, record))
+    return records
+
+
+def _read_intent_order_state(state_path: Path) -> dict[str, Any]:
+    try:
+        state = json.loads(state_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError("validation intent order state is unreadable") from exc
+    if (not isinstance(state, dict)
+            or set(state) != {"schema", "next_order", "orders"}
+            or state.get("schema") != VALIDATION_INTENT_ORDER_SCHEMA
+            or type(state.get("next_order")) is not int
+            or state["next_order"] < 1
+            or not isinstance(state.get("orders"), dict)):
+        raise ValueError("validation intent order state is invalid")
+    orders = state["orders"]
+    if any(not re.fullmatch(r"[0-9a-f]{64}", key)
+           or type(order) is not int or order < 1
+           for key, order in orders.items()):
+        raise ValueError("validation intent order state is invalid")
+    values = list(orders.values())
+    if (len(values) != len(set(values))
+            or any(order >= state["next_order"] for order in values)):
+        raise ValueError("validation intent order sequence is inconsistent")
+    return state
+
+
+def validate_validation_intent_order_state(directory: str | Path) -> int | None:
+    """Validate the durable sequence and all versioned journal orders.
+
+    Callers that also inspect request records must hold
+    ``validation_intent_order_lock`` for the duration of that inspection.
+    Legacy records remain readable, but have no cross-key ordering authority.
+    """
+    directory = Path(directory)
+    state_path = _intent_order_state_path(directory)
+    records = _intent_order_records(directory) if directory.exists() else []
+    if not state_path.exists():
+        if records:
+            raise ValueError("validation intent order state is missing")
+        return None
+    state = _read_intent_order_state(state_path)
+    journal_orders = {path.stem: record["intent_order"] for path, record in records}
+    if journal_orders != state["orders"]:
+        raise ValueError("validation intent order sequence is inconsistent")
+    return state["next_order"]
+
+
+def _recover_pending_intent_order(directory: Path, request_key: str) -> None:
+    """Reconcile only the single record written just before a process crash."""
+    state_path = _intent_order_state_path(directory)
+    if not state_path.exists():
+        raise ValueError("validation intent order state is missing")
+    state = _read_intent_order_state(state_path)
+    records = _intent_order_records(directory)
+    journal_orders = {path.stem: record["intent_order"] for path, record in records}
+    state_orders = state["orders"]
+    unrecorded = {key: order for key, order in journal_orders.items() if key not in state_orders}
+    if (not unrecorded
+            or set(state_orders) - set(journal_orders)
+            or unrecorded != {request_key.removeprefix("sha256:"): state["next_order"]}):
+        raise ValueError("validation intent order sequence is inconsistent")
+    state["orders"].update(unrecorded)
+    state["next_order"] += 1
+    _atomic_write(state_path, state)
+    validate_validation_intent_order_state(directory)
+
+
 def reserve_validation_request(
     directory: str | Path, request_key: str, request_identity: Any,
     integration_base_oid: str,
@@ -335,44 +434,76 @@ def reserve_validation_request(
         raise ValueError("validation request key does not match its identity")
     if not isinstance(integration_base_oid, str) or not _OID_RE.fullmatch(integration_base_oid):
         raise ValueError("validation request integration base is invalid")
-    path = _request_path(Path(directory), request_key)
-    with _locked(path):
-        if path.exists():
-            record = _read_request_record(path, request_key)
-            if record.get("identity") != identity:
-                raise ValueError("validation request journal identity is invalid")
-            return record, False
-        record = {
-            "schema": VALIDATION_REQUEST_SCHEMA,
-            "request_key": request_key,
-            "identity": identity,
-            "integration_base_oid": integration_base_oid,
-            "dispatch_attempts": 0,
-            "status": "prepared",
-            "run_id": None,
-            "run_attempt": None,
-        }
-        _atomic_write(path, record)
-        return record, True
+    directory = Path(directory)
+    path = _request_path(directory, request_key)
+    with validation_intent_order_lock(directory):
+        with _locked(path):
+            if path.exists():
+                record = _read_request_record(path, request_key)
+                if record.get("identity") != identity:
+                    raise ValueError("validation request journal identity is invalid")
+                if "intent_order" in record:
+                    try:
+                        validate_validation_intent_order_state(directory)
+                    except ValueError as exc:
+                        if "sequence is inconsistent" not in str(exc):
+                            raise
+                        _recover_pending_intent_order(directory, request_key)
+                else:
+                    validate_validation_intent_order_state(directory)
+                return record, False
+            next_order = validate_validation_intent_order_state(directory)
+            state_path = _intent_order_state_path(directory)
+            if next_order is None:
+                next_order = 1
+                _atomic_write(state_path, {
+                    "schema": VALIDATION_INTENT_ORDER_SCHEMA,
+                    "next_order": next_order,
+                    "orders": {},
+                })
+            intent_order = next_order
+            record = {
+                "schema": VALIDATION_REQUEST_SCHEMA,
+                "request_key": request_key,
+                "identity": identity,
+                "integration_base_oid": integration_base_oid,
+                "dispatch_attempts": 0,
+                "status": "prepared",
+                "run_id": None,
+                "run_attempt": None,
+                "intent_order": intent_order,
+                "intent_order_schema": VALIDATION_INTENT_ORDER_SCHEMA,
+            }
+            _atomic_write(path, record)
+            state = _read_intent_order_state(state_path)
+            state["orders"][request_key.removeprefix("sha256:")] = intent_order
+            state["next_order"] = intent_order + 1
+            _atomic_write(state_path, state)
+            validate_validation_intent_order_state(directory)
+            return record, True
 
 
 def mark_validation_dispatch_started(
     directory: str | Path, request_key: str,
 ) -> dict[str, Any]:
     """Record an outbound side effect before calling GitHub; recovery must read back first."""
-    path = _request_path(Path(directory), request_key)
-    with _locked(path):
-        if not path.exists():
-            raise ValueError("validation request intent is missing")
-        record = _read_request_record(path, request_key)
-        if record.get("status") == "observed":
-            raise ValueError("validation request intent is invalid")
-        if record["dispatch_attempts"] >= MAX_DISPATCH_ATTEMPTS:
-            raise ValueError("VALIDATION_REQUEST_RETRY_LIMIT")
-        record["dispatch_attempts"] += 1
-        record["status"] = "dispatch_uncertain"
-        _atomic_write(path, record)
-        return record
+    directory = Path(directory)
+    path = _request_path(directory, request_key)
+    with validation_intent_order_lock(directory):
+        with _locked(path):
+            if not path.exists():
+                raise ValueError("validation request intent is missing")
+            record = _read_request_record(path, request_key)
+            if "intent_order" not in record:
+                raise ValueError("legacy validation request cannot start a new dispatch without immutable intent order")
+            if record.get("status") == "observed":
+                raise ValueError("validation request intent is invalid")
+            if record["dispatch_attempts"] >= MAX_DISPATCH_ATTEMPTS:
+                raise ValueError("VALIDATION_REQUEST_RETRY_LIMIT")
+            record["dispatch_attempts"] += 1
+            record["status"] = "dispatch_uncertain"
+            _atomic_write(path, record)
+            return record
 
 
 def mark_validation_request_observed(
@@ -381,20 +512,25 @@ def mark_validation_request_observed(
     """Bind a remote locator after exact request-key readback."""
     if type(run_id) is not int or run_id < 1 or type(run_attempt) is not int or run_attempt < 1:
         raise ValueError("observed validation run identity is invalid")
-    path = _request_path(Path(directory), request_key)
-    with _locked(path):
-        if not path.exists():
-            raise ValueError("validation request intent is missing")
-        record = _read_request_record(path, request_key)
-        observed = record.get("run_id")
-        if observed is not None and observed != run_id:
-            raise ValueError("validation request resolved to a different run")
-        if (observed == run_id and type(record.get("run_attempt")) is int
-                and run_attempt < record["run_attempt"]):
-            raise ValueError("validation request attempt readback moved backward")
-        record.update(status="observed", run_id=run_id, run_attempt=run_attempt)
-        _atomic_write(path, record)
-        return record
+    directory = Path(directory)
+    path = _request_path(directory, request_key)
+    with validation_intent_order_lock(directory):
+        with _locked(path):
+            if not path.exists():
+                raise ValueError("validation request intent is missing")
+            record = _read_request_record(path, request_key)
+            if ("intent_order" not in record
+                    and record.get("status") not in {"dispatch_uncertain", "observed"}):
+                raise ValueError("legacy validation request is not eligible for readback")
+            observed = record.get("run_id")
+            if observed is not None and observed != run_id:
+                raise ValueError("validation request resolved to a different run")
+            if (observed == run_id and type(record.get("run_attempt")) is int
+                    and run_attempt < record["run_attempt"]):
+                raise ValueError("validation request attempt readback moved backward")
+            record.update(status="observed", run_id=run_id, run_attempt=run_attempt)
+            _atomic_write(path, record)
+            return record
 
 
 def ensure_validation_request(

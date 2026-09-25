@@ -198,7 +198,15 @@ def v2_reader_fixture(*,attempt=2):
     "required_plan_v2_payload":plan_payload,
     "required_result_v2_artifacts":[{"artifact_id":7002,
       "name":ci_required_artifact_v2.result_artifact_name(12345,attempt,unit_id),"payload":result}],
-    "execution_jobs":[execution_job]}
+    "execution_jobs":[execution_job],
+    "trusted_source_attempt":{
+      "schema":"oasis7-ci-trusted-source-attempt/v1","request_key":key,
+      "workflow_run_id":12345,"run_attempt":attempt,"check_app_id":42,"check_run_id":902,
+      "job_id":9009,"job_name":"required-gate","plan_artifact_id":plan_artifact_id,
+      "plan_artifact_name":ci_required_artifact_v2.plan_artifact_name(12345,attempt),
+      "result_artifacts":[{"unit_id":unit_id,"artifact_id":7002,
+        "name":ci_required_artifact_v2.result_artifact_name(12345,attempt,unit_id)}],
+    }}
   snapshot={"closure_status":{"status":"complete"},"target_oid":"d"*40,
     "target_tree_oid":"c"*40,"required_test_units":[unit_id],
     "input_fingerprints":identity["input_fingerprints"]}
@@ -737,10 +745,12 @@ class ReceiptTest(unittest.TestCase):
     self.assertEqual(7001,issued["required_plan_v2_artifact_id"])
     self.assertEqual(key,issued["request_key"])
     self.assertEqual("e"*40,issued["source_scope_oid"])
+    self.assertEqual(proof["trusted_source_attempt"],issued["trusted_source_attempt"])
     digest=issued["review_evidence_digest"]
     tampered=json.loads(json.dumps(issued))
-    tampered["required_result_v2_artifacts"][0]["artifact_id"]+=1
-    self.assertNotEqual(digest,M.review_evidence_digest(tampered))
+    tampered["trusted_source_attempt"]["check_run_id"]+=1
+    with self.assertRaisesRegex(ValueError,"trusted source attempt mismatch"):
+      M.review_evidence_digest(tampered)
     self.assertEqual(digest,M.review_evidence_digest(issued))
 
   def test_refresh_of_keyed_receipt_requires_explicit_request_key(self):

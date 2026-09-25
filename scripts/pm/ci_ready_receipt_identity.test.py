@@ -68,6 +68,8 @@ def receipt():
         "check_name": "required-gate",
         "check_app_id": 42,
         "check_run_id": 902,
+        "job_id": 8101,
+        "job_name": "required-gate",
         "executor_contract_digest": request_identity["executor_contract_digest"],
         "effective_policy_identity": effective_policy_identity,
         "planner_inventory_authority": authority,
@@ -153,6 +155,24 @@ def receipt():
                 "conclusion": "success",
             },
         ],
+        "trusted_source_attempt": {
+            "schema": "oasis7-ci-trusted-source-attempt/v1",
+            "request_key": request_key,
+            "workflow_run_id": 12345,
+            "run_attempt": 2,
+            "check_app_id": 42,
+            "check_run_id": 902,
+            "job_id": 8101,
+            "job_name": "required-gate",
+            "plan_artifact_id": 7001,
+            "plan_artifact_name": "oasis7-required-plan-v2-12345-a2",
+            "result_artifacts": [{
+                "unit_id": unit_id,
+                "artifact_id": 7002,
+                "name": "oasis7-required-result-v2-12345-a2-"
+                    + hashlib.sha256(unit_id.encode()).hexdigest(),
+            }],
+        },
     }
 
 
@@ -173,7 +193,7 @@ class RequiredArtifactIdentityTests(unittest.TestCase):
         for change in (
             "bootstrap_epoch", "request_id", "request_created_at", "trusted_marker",
             "plan_artifact_id", "plan_payload", "result_artifact_id", "result_payload",
-            "trusted_inventory", "execution_job",
+            "trusted_inventory", "execution_job", "trusted_source_attempt",
         ):
             changed = copy.deepcopy(original)
             if change == "bootstrap_epoch":
@@ -194,6 +214,8 @@ class RequiredArtifactIdentityTests(unittest.TestCase):
                 changed["required_result_v2_artifacts"][0]["payload"]["status"] = "unknown"
             elif change == "trusted_inventory":
                 changed["trusted_planner_inventory"]["producer"]["artifact_id"] += 1
+            elif change == "trusted_source_attempt":
+                changed["trusted_source_attempt"]["result_artifacts"][0]["artifact_id"] += 1
             else:
                 changed["execution_jobs"][0]["job_id"] += 1
             with self.subTest(change=change):
