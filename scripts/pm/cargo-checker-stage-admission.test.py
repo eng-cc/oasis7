@@ -758,20 +758,37 @@ class CheckerStageAdmissionTest(unittest.TestCase):
                     CHECKER_SCOPE, TESTED_TREE, Path("."),
                 )
 
-    def test_checker_task_binding_rejects_extra_duplicate_or_malformed_uid_fields(self):
-        for extra_field in (f"task_uid: {TASK_UID}", "task_uid: malformed"):
+    def test_checker_task_binding_requires_one_exact_uid_field_line(self):
+        cases = (
+            ("duplicate", lambda body: body + f"task_uid: {TASK_UID}\n"),
+            ("malformed", lambda body: body + "task_uid: malformed\n"),
+            ("tab_separator", lambda body: body.replace(
+                f"task_uid: {TASK_UID}", f"task_uid:\t{TASK_UID}"
+            )),
+            ("extra_space", lambda body: body.replace(
+                f"task_uid: {TASK_UID}", f"task_uid:  {TASK_UID}"
+            )),
+        )
+        for name, mutate_body in cases:
             api = _authority_api()
 
-            def extra_uid(path, *, api=api, extra_field=extra_field):
+            def extra_uid(path, *, api=api, mutate_body=mutate_body):
                 response = api(path)
                 if path.endswith(f"issues/{SUCCESSOR_ISSUE}"):
                     response = dict(response)
-                    response["body"] += extra_field + "\n"
+                    response["body"] = mutate_body(response["body"])
                 return response
 
-            with self.subTest(extra_field=extra_field), patch.object(MODULE, "gh_api", side_effect=extra_uid):
+            with self.subTest(name=name), patch.object(MODULE, "gh_api", side_effect=extra_uid):
                 with self.assertRaisesRegex(MODULE.AdmissionError, "Issue UID"):
                     MODULE._read_checker_task_binding(REPOSITORY)
+
+    def test_checker_task_binding_normalizes_crlf_before_exact_uid_line_check(self):
+        issue = _authority_api()(f"repos/{REPOSITORY}/issues/{SUCCESSOR_ISSUE}")
+        issue["body"] = f"task_uid: {TASK_UID}\r\n"
+        with patch.object(MODULE, "gh_api", return_value=issue):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "reciprocal PR binding is unavailable"):
+                MODULE._read_checker_task_binding(REPOSITORY)
 
     def test_checker_identity_rejects_wrong_current_task_uid_even_when_body_is_live(self):
         api = _authority_api()

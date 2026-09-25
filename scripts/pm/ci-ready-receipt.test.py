@@ -216,22 +216,43 @@ def v2_reader_fixture(*,attempt=2):
   return key,identity,context,plan_payload,result,proof,snapshot
 
 class ReceiptTest(unittest.TestCase):
-  def test_checker_stage_live_issue_reader_rejects_extra_uid_fields(self):
-    for extra_field in (f"task_uid: {SUCCESSOR_UID}", "task_uid: malformed"):
+  def test_checker_stage_live_issue_reader_requires_one_exact_uid_field_line(self):
+    cases=(
+      ("duplicate", f"task_uid: {SUCCESSOR_UID}\ntask_uid: {SUCCESSOR_UID}"),
+      ("malformed", f"task_uid: {SUCCESSOR_UID}\ntask_uid: malformed"),
+      ("tab_separator", f"task_uid:\t{SUCCESSOR_UID}"),
+      ("extra_space", f"task_uid:  {SUCCESSOR_UID}"),
+    )
+    for name,uid_fields in cases:
       issue={"number":SUCCESSOR_ISSUE,"state":"open",
         "repository_url":"https://api.github.com/repos/eng-cc/oasis7",
-        "body":f"task_uid: {SUCCESSOR_UID}\n{extra_field}\n"
+        "body":f"{uid_fields}\n"
           f"- pr_url: https://github.com/eng-cc/oasis7/pull/{SUCCESSOR_PR}\n"}
       def read(*args):
         path=args[-1]
         if path.endswith(f"/issues/{SUCCESSOR_ISSUE}"):
           return issue
         self.fail(f"Issue UID parser continued to {path} after malformed binding")
-      with self.subTest(extra_field=extra_field),patch.object(M,"gh",side_effect=read):
+      with self.subTest(name=name),patch.object(M,"gh",side_effect=read):
         with self.assertRaisesRegex(SystemExit,"checker-stage task Issue UID binding"):
           M._verify_live_checker_stage_scope(
             "eng-cc/oasis7",SUCCESSOR_UID,SUCCESSOR_ISSUE,SUCCESSOR_PR,{}
           )
+
+  def test_checker_stage_live_issue_reader_normalizes_crlf_before_exact_uid_line_check(self):
+    issue={"number":SUCCESSOR_ISSUE,"state":"open",
+      "repository_url":"https://api.github.com/repos/eng-cc/oasis7",
+      "body":f"task_uid: {SUCCESSOR_UID}\r\n"}
+    def read(*args):
+      path=args[-1]
+      if path.endswith(f"/issues/{SUCCESSOR_ISSUE}"):
+        return issue
+      self.fail(f"CRLF UID reader continued to {path} without a reciprocal PR")
+    with patch.object(M,"gh",side_effect=read):
+      with self.assertRaisesRegex(SystemExit,"checker-stage reciprocal PR binding"):
+        M._verify_live_checker_stage_scope(
+          "eng-cc/oasis7",SUCCESSOR_UID,SUCCESSOR_ISSUE,SUCCESSOR_PR,{}
+        )
 
   def api(self, r=None, runs=None, actions=None):
     def read(*args):
