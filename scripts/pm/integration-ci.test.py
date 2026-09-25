@@ -239,6 +239,128 @@ class IntegrationTests(unittest.TestCase):
   before=workflow.split('integration_ci.py" prepare',1)[0]
   self.assertRegex(before,r'cp[^\n]*scripts/viewer-dependency-preflight\.sh[^\n]*integration-planner')
 
+ def test_projection_consumer_uses_trusted_driver_planner_and_keeps_exact_binding(self):
+  driver=(HERE.parents[1]/'scripts/ci-tests.sh').read_text()
+  consumer=driver.split('run_workflow_impact_projection_consumer() {',1)[1].split('\n}',1)[0]
+  self.assertIn('trusted_planner_root = Path(sys.argv[3]).resolve()',consumer)
+  self.assertIn('str(trusted_planner_root / "plan-rust-required-scope.py")',consumer)
+  self.assertNotIn('root / "scripts" / "plan-rust-required-scope.sh"',consumer)
+  for binding in (
+   '"--task-uid", projection["task_uid"]',
+   '"--head-ref", projection["source_head_oid"]',
+   '"--scope-base-oid", projection["scope_base_oid"]',
+   'planner.extend(("--changed-path", path))',
+   'planner_fields.get("impact_projection_digest") != expected_digest',
+   'planner_fields.get("impact_projection_status") != "verified"',
+  ):
+   self.assertIn(binding,consumer)
+  task_uid='task_'+'1'*32
+  source_head='a'*40
+  scope_base='b'*40
+  projection_digest='sha256:'+'c'*64
+  changed_path='scripts/ci-required-scope.v2.json'
+  with tempfile.TemporaryDirectory(prefix='oasis7-trusted-integration-planner-') as temporary:
+   root=Path(temporary)
+   candidate=root/'candidate'
+   trusted=root/'integration-planner'
+   candidate_scripts=candidate/'scripts'
+   candidate_pm=candidate_scripts/'pm'
+   trusted.mkdir()
+   candidate_pm.mkdir(parents=True)
+   (candidate_scripts/'ci-required-scope.v2.json').write_text('versioned-candidate-config\n')
+   projection={
+    'task_uid':task_uid,
+    'source_head_oid':source_head,
+    'scope_base_oid':scope_base,
+    'changed_paths':[changed_path],
+    'change_class':'workflow-doc',
+    'manual_roles':[],
+    'domain_role':None,
+    'verification_affected':False,
+    'projection_digest':projection_digest,
+   }
+   projection_path=candidate/'projection.json'
+   projection_path.write_text(json.dumps(projection),encoding='utf-8')
+   (candidate_pm/'workflow-impact-projection.py').write_text(textwrap.dedent('''\
+    import json
+    from pathlib import Path
+    def load_verified_projection(path, *, repo_root):
+        value = json.loads(Path(path).read_text(encoding="utf-8"))
+        if not (Path(repo_root) / "scripts/ci-required-scope.v2.json").is_file():
+            raise ValueError("candidate source config is missing")
+        return value
+   '''),encoding='utf-8')
+   selector_script=candidate_pm/'review-role-selector.py'
+   selector_script.write_text(textwrap.dedent(f'''\
+    #!/usr/bin/env python3
+    import json
+    import sys
+    args = sys.argv[1:]
+    def value(name): return args[args.index(name) + 1]
+    expected = {{
+        "--task-uid": {task_uid!r},
+        "--source-head-oid": {source_head!r},
+        "--scope-base-oid": {scope_base!r},
+    }}
+    if any(value(key) != wanted for key, wanted in expected.items()):
+        raise SystemExit("review selector identity changed")
+    print(json.dumps({{"impact_projection_digest": {projection_digest!r}, "impact_projection_status": "verified"}}))
+   '''),encoding='utf-8')
+   selector_script.chmod(0o755)
+   candidate_runner=candidate_scripts/'plan-rust-required-scope.sh'
+   candidate_runner.write_text('#!/bin/sh\necho candidate-planner-used > "$CANDIDATE_PLANNER_MARKER"\nexit 91\n')
+   candidate_runner.chmod(0o755)
+   (trusted/'ci-required-scope.v2.json').write_text('trusted-legacy-base-config\n')
+   trusted_marker=root/'trusted-planner-used'
+   (trusted/'plan-rust-required-scope.py').write_text(textwrap.dedent(f'''\
+    import os
+    import sys
+    from pathlib import Path
+    args = sys.argv[1:]
+    def value(name): return args[args.index(name) + 1]
+    expected = {{
+        "--event-name": "pull_request",
+        "--task-uid": {task_uid!r},
+        "--head-ref": {source_head!r},
+        "--scope-base-oid": {scope_base!r},
+        "--changed-path": {changed_path!r},
+    }}
+    if any(value(key) != wanted for key, wanted in expected.items()):
+        raise SystemExit("trusted planner identity or source path changed")
+    if Path(__file__).with_name("ci-required-scope.v2.json").read_text() != "trusted-legacy-base-config\\n":
+        raise SystemExit("planner did not use trusted base config")
+    if (Path.cwd() / "scripts/ci-required-scope.v2.json").read_text() != "versioned-candidate-config\\n":
+        raise SystemExit("candidate source config was not preserved")
+    Path(os.environ["TRUSTED_PLANNER_MARKER"]).write_text("trusted\\n")
+    print("impact_projection_digest={projection_digest}")
+    print("impact_projection_status=verified")
+   '''),encoding='utf-8')
+   start=driver.index('run_workflow_impact_projection_consumer() {')
+   end=driver.index('\n}\n\nproduct_doc_range()',start)+2
+   harness=root/'run-consumer.sh'
+   harness.write_text(
+    'set -euo pipefail\n'
+    'driver_dir="$TRUSTED_PLANNER_ROOT"\n'
+    'repo_root="$CANDIDATE_ROOT"\n'
+    'impact_projection="$PROJECTION_PATH"\n'
+    'run() { local executable="$1"; shift; "$executable" "$@"; }\n'
+    + driver[start:end]
+    + '\nrun_workflow_impact_projection_consumer\n',
+    encoding='utf-8',
+   )
+   env=os.environ.copy()
+   env.update({
+    'CANDIDATE_ROOT':str(candidate),
+    'CANDIDATE_PLANNER_MARKER':str(root/'candidate-planner-used'),
+    'PROJECTION_PATH':str(projection_path),
+    'TRUSTED_PLANNER_MARKER':str(trusted_marker),
+    'TRUSTED_PLANNER_ROOT':str(trusted),
+   })
+   result=subprocess.run(['bash',str(harness)],cwd=candidate,env=env,text=True,capture_output=True)
+   self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+   self.assertEqual(trusted_marker.read_text(),'trusted\n')
+   self.assertFalse((root/'candidate-planner-used').exists())
+
  def test_required_gate_registers_review_plan_suite(self):
   driver=(HERE.parents[1]/'scripts/ci-tests.sh').read_text()
   def function_body(name):
