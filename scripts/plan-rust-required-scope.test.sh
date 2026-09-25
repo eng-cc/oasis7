@@ -84,6 +84,7 @@ assert_key_equals "$product_doc_output" needs_node false
 assert_key_equals "$product_doc_output" needs_python true
 assert_key_equals "$product_doc_output" needs_markdown true
 assert_key_equals "$product_doc_output" execution_contract required-domain-split/v1
+assert_key_equals "$product_doc_output" required_test_units required_gate_baseline
 assert_key_matches "$product_doc_output" planner_config_sha256 '^sha256:[0-9a-f]{64}$'
 assert_reason_contains "$product_doc_output" "governance_doc:doc/product/world-rules-core-gameplay.prd.md"
 
@@ -96,6 +97,7 @@ site_output="$(plan_for_path site/index.html)"
 assert_key_equals "$site_output" scope targeted
 assert_key_equals "$site_output" selected_capabilities site_quality
 assert_key_equals "$site_output" run_site_contract_tests true
+assert_key_equals "$site_output" required_test_units 'required_gate_baseline;site_quality'
 assert_key_equals "$site_output" run_rust_baseline false
 assert_key_equals "$site_output" needs_rust_toolchain false
 assert_key_equals "$site_output" needs_node false
