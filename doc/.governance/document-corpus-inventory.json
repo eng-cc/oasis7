@@ -2639,7 +2639,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/distributed-consensus-and-state-availability.prd.md",
-      "content_sha256": "56c303c2759ded9ce4edf5551bf5ff3d23378743e8627d3600dcfeced02fa704",
+      "content_sha256": "41141ed4e7deb8fe94da08775c283dbc8af5cd89fe31664dfb84f7723160cf64",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
