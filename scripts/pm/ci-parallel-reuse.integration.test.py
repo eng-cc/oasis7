@@ -12,6 +12,9 @@ import copy
 import hashlib
 import importlib.util
 from pathlib import Path
+import tempfile
+import threading
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -28,7 +31,11 @@ FIXTURES = LOOP_FIXTURES._APPLICABILITY_FIXTURES
 
 
 class FakeProductionAdapter:
-    """Call the real Q adapter while counting effects in a fake outer loop."""
+    """Call the real Q adapter and count only effects this fake can observe.
+
+    This adapter does not model Codex orchestration phases, so it makes no
+    assertion about task-phase regressions.
+    """
 
     def __init__(self):
         self.source_proof, self.initial_inventory, self.applicability, self.initial_live = (
@@ -42,7 +49,6 @@ class FakeProductionAdapter:
             "source_commit_dispatches": 0,
             "role_dispatches": 0,
             "heavy_run_dispatches": 0,
-            "task_phase_regressions": 0,
         }
 
     @staticmethod
@@ -162,7 +168,6 @@ class ParallelReuseIntegrationTests(unittest.TestCase):
             "source_commit_dispatches": 0,
             "role_dispatches": 0,
             "heavy_run_dispatches": 0,
-            "task_phase_regressions": 0,
         }, adapter.counters)
 
     def test_related_input_selects_one_unit_for_revalidation(self):
@@ -201,6 +206,114 @@ class ParallelReuseIntegrationTests(unittest.TestCase):
         self.assertEqual(1, adapter.counters["fresh_q_observations"])
         self.assertEqual(0, adapter.counters["c0_applicability_decisions"])
         self.assertEqual(0, adapter.counters["heavy_run_dispatches"])
+
+
+class SlowReadbackIntentRaceTests(unittest.TestCase):
+    """Model a slow remote lookup racing a new durable request intent."""
+
+    @staticmethod
+    def identity(publication_id):
+        return {
+            "repository": "owner/repo",
+            "task_uid": "task_" + "a" * 32,
+            "pr_number": 7,
+            "bootstrap_epoch": 2,
+            "source_head_oid": "a" * 40,
+            "publication_id": publication_id,
+            "source_projection_digest": "sha256:" + "b" * 64,
+            "unit_ids": ["scope"],
+            "input_fingerprints": {"scope": "sha256:" + "c" * 64},
+            "executor_contract_digest": "sha256:" + "d" * 64,
+            "effective_policy_digest": "sha256:" + "e" * 64,
+            "purpose": "integration_revalidation",
+            "applicability_mode": "input_scoped",
+            "snapshot_target_oid": None,
+        }
+
+    def test_new_matching_intent_can_reserve_during_slow_readback_and_supersedes_old(self):
+        contract = LOOP_FIXTURES.request_contract
+        with tempfile.TemporaryDirectory() as directory:
+            older_identity = self.identity("older")
+            older_key = contract.validation_request_key(older_identity)
+            contract.reserve_validation_request(directory, older_key, older_identity, "1" * 40)
+            contract.mark_validation_dispatch_started(directory, older_key)
+            contract.mark_validation_request_observed(directory, older_key, 99, 1)
+
+            newer_identity = self.identity("newer")
+            newer_key = contract.validation_request_key(newer_identity)
+            readback_started = threading.Event()
+            release_readback = threading.Event()
+            reservation_done = threading.Event()
+            outcomes = {}
+
+            def current_request(*_args, request_key):
+                self.assertEqual(older_key, request_key)
+                readback_started.set()
+                if not release_readback.wait(timeout=5):
+                    raise TimeoutError("test did not release the simulated GitHub readback")
+                return {"id": 99, "run_attempt": 1}
+
+            integration = SimpleNamespace(
+                git_common_dir=lambda _root: Path(directory),
+                current_request=current_request,
+            )
+
+            def load_helper(_effective, name):
+                return integration if name == "integration_ci" else contract
+
+            def select_request():
+                try:
+                    outcomes["selected"] = GATE._latest_local_keyed_request_key(
+                        Path("/canonical"), Path("/effective"),
+                        repository="owner/repo", uid="task_" + "a" * 32,
+                        pr_number=7, base_oid="1" * 40, head_oid="a" * 40,
+                        branch="codex/task",
+                        task={"bootstrap_epoch": 2, "loop_binding": {"bootstrap_epoch": 2}},
+                        projection_digest="sha256:" + "b" * 64,
+                    )
+                except BaseException as exc:
+                    outcomes["selection_error"] = exc
+
+            def reserve_newer_request():
+                try:
+                    contract.reserve_validation_request(
+                        directory, newer_key, newer_identity, "1" * 40,
+                    )
+                except BaseException as exc:
+                    outcomes["reservation_error"] = exc
+                finally:
+                    reservation_done.set()
+
+            selector = threading.Thread(target=select_request, name="slow-readback-selector")
+            reserver = threading.Thread(target=reserve_newer_request, name="concurrent-intent-reserver")
+            reservation_completed_during_readback = False
+            with patch.object(GATE, "_load_effective_helper", side_effect=load_helper):
+                selector.start()
+                try:
+                    self.assertTrue(readback_started.wait(timeout=2), "selector never reached remote readback")
+                    reserver.start()
+                    reservation_completed_during_readback = reservation_done.wait(timeout=1)
+                finally:
+                    release_readback.set()
+                    selector.join(timeout=5)
+                    if reserver.ident is not None:
+                        reserver.join(timeout=5)
+
+            self.assertFalse(selector.is_alive(), "selector thread did not finish")
+            self.assertFalse(reserver.is_alive(), "reservation thread did not finish")
+            self.assertTrue(
+                reservation_completed_during_readback,
+                "a slow GitHub readback held the shared intent lock and blocked a new reservation",
+            )
+            self.assertNotIn("reservation_error", outcomes)
+            self.assertNotEqual(
+                older_key, outcomes.get("selected"),
+                "older green evidence was accepted after a newer matching intent was reserved",
+            )
+            self.assertRegex(
+                str(outcomes.get("selection_error", "")),
+                "latest keyed validation request intent has not been observed",
+            )
 
 
 if __name__ == "__main__":

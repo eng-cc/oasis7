@@ -1337,9 +1337,10 @@ def _latest_local_keyed_request_key(root: Path, effective: Path, *, repository: 
         'source_head_oid': head_oid,
         'source_projection_digest': projection_digest,
     }
-    intents: list[tuple[int | None, str, dict[str, Any]]] = []
-    with contract.validation_intent_order_lock(directory):
+    def latest_matching_intent() -> tuple[str, dict[str, Any]] | None:
+        """Read the newest matching durable intent while holding its journal lock."""
         contract.validate_validation_intent_order_state(directory)
+        intents: list[tuple[int | None, str, dict[str, Any]]] = []
         for path in sorted(directory.glob('*.json')):
             if not re.fullmatch(r'[0-9a-f]{64}', path.stem):
                 raise ValueError('validation request journal has a malformed key filename')
@@ -1370,23 +1371,55 @@ def _latest_local_keyed_request_key(root: Path, effective: Path, *, repository: 
             if len({item[0] for item in intents}) != len(intents):
                 raise ValueError('multiple matching validation intents share one immutable order')
             _intent_order, selected_key, selected_record = intents[-1]
-        selected_status = selected_record.get('status')
+        return selected_key, selected_record
+
+    def require_observed(record: dict[str, Any]) -> None:
+        selected_status = record.get('status')
         if selected_status != 'observed':
             if selected_status == 'dispatch_uncertain':
                 raise ValueError('latest keyed validation request dispatch is unresolved for the current Task/PR/source')
             raise ValueError('latest keyed validation request intent has not been observed')
+
+    # Select and snapshot local authority under the journal lock, then release
+    # it before the GitHub readback. Request reservation must not wait on a slow
+    # network operation.
+    with contract.validation_intent_order_lock(directory):
+        selected_intent = latest_matching_intent()
+        if selected_intent is None:
+            return None
+        selected_key, selected_record = selected_intent
+        require_observed(selected_record)
         selected_run_id = selected_record['run_id']
         selected_attempt = selected_record['run_attempt']
         selected_base_oid = selected_record['integration_base_oid']
-        selected = integration.current_request(
-            repository, uid, pr_number, selected_base_oid, head_oid, branch,
-            request_key=selected_key,
-        )
-        if (not isinstance(selected, dict) or selected.get('id') != selected_run_id
-                or type(selected.get('run_attempt')) is not int
-                or selected['run_attempt'] < selected_attempt):
-            raise ValueError('durable keyed validation request is absent from complete current-run readback')
-        return selected_key
+        selected_order = selected_record.get('intent_order')
+
+    selected = integration.current_request(
+        repository, uid, pr_number, selected_base_oid, head_oid, branch,
+        request_key=selected_key,
+    )
+    if (not isinstance(selected, dict) or selected.get('id') != selected_run_id
+            or type(selected.get('run_attempt')) is not int
+            or selected['run_attempt'] < selected_attempt):
+        raise ValueError('durable keyed validation request is absent from complete current-run readback')
+
+    # The journal may have advanced while remote evidence was being fetched.
+    # Recheck under the lock and never return a key that is no longer the
+    # newest matching intent. A newly reserved prepared/uncertain row retains
+    # its normal fail-closed barrier here.
+    with contract.validation_intent_order_lock(directory):
+        latest_intent = latest_matching_intent()
+        if latest_intent is None:
+            raise ValueError('latest keyed validation request intent changed during live readback')
+        latest_key, latest_record = latest_intent
+        require_observed(latest_record)
+        if latest_key != selected_key:
+            raise ValueError('latest keyed validation request intent changed during live readback')
+        if (latest_record.get('intent_order') != selected_order
+                or latest_record.get('run_id') != selected_run_id
+                or latest_record.get('run_attempt') != selected_attempt):
+            raise ValueError('durable keyed validation request changed during complete current-run readback')
+    return selected_key
 
 
 def live_integration_admission(data, root, uid, tool_root, admission, integration_run_id=None, *, require_strict=None):
