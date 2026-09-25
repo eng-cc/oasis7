@@ -413,6 +413,7 @@ class ReceiptTest(unittest.TestCase):
         "planner_inventory_authority":context["planner_inventory_authority"]}
       with patch.object(integration_ci,"git_common_dir",return_value=journal), \
            patch.object(M,"gh",side_effect=[pr(),pr()]), \
+           patch.object(integration_ci,"default_branch_head",return_value="b"*40), \
            patch.object(integration_ci,"current_request",side_effect=[request,request]) as current, \
            patch.object(integration_ci,"trusted_policy_context",return_value=context) as policy, \
            patch.object(integration_ci,"verified_run",return_value=(check,proof)) as verified:
@@ -428,6 +429,129 @@ class ReceiptTest(unittest.TestCase):
         "eng-cc/oasis7",UID,7,"b"*40,"a"*40,12345,"42",
         request_key=key,expected_attempt=2,request_identity=identity,
         effective_policy=KEYED_POLICY)
+
+  def test_keyed_selection_keeps_historical_base_separate_from_current_pr_target(self):
+    with tempfile.TemporaryDirectory() as temp:
+      journal=Path(temp)
+      key,identity=write_request_journal(journal,run_attempt=1)
+      historical_base="b"*40
+      live_target="c"*40
+      current_pr=pr();current_pr["base"]["sha"]=live_target
+      context=trusted_policy_context(workflow_sha="f"*40)
+      request=keyed_request_entry(attempt=2)
+      check={"id":902,"name":"required-gate","app":{"id":42},
+        "status":"completed","conclusion":"success"}
+      proof={"workflow_run_id":12345,"run_attempt":2,"check_app_id":42,
+        "check_run_id":902,"source_scope_oid":"e"*40,
+        "trusted_policy_context":context,
+        "effective_policy_identity":context["effective_policy_identity"],
+        "planner_inventory_authority":context["planner_inventory_authority"]}
+      def read(*args):
+        path=args[-1]
+        if path=="repos/eng-cc/oasis7/pulls/7":
+          return copy.deepcopy(current_pr)
+        if path==f"repos/eng-cc/oasis7/compare/{historical_base}...{live_target}":
+          return {"base_commit":{"sha":historical_base},"head_commit":{"sha":live_target},
+            "merge_base_commit":{"sha":historical_base}}
+        raise AssertionError(path)
+      with patch.object(integration_ci,"git_common_dir",return_value=journal), \
+           patch.object(M,"gh",side_effect=read), \
+           patch.object(integration_ci,"default_branch_head",return_value=live_target), \
+           patch.object(integration_ci,"current_request",side_effect=[request,request]) as current, \
+           patch.object(integration_ci,"trusted_policy_context",return_value=context), \
+           patch.object(integration_ci,"verified_run",return_value=(check,proof)) as verified:
+        fresh,observed,base,head=M.selected_live(
+          "eng-cc/oasis7",UID,1,7,"required-gate","42",request_key=key)
+      self.assertEqual(historical_base,base)
+      self.assertEqual(live_target,fresh["base"]["sha"])
+      self.assertEqual("a"*40,head)
+      self.assertEqual(historical_base,observed["_integration"]["integration_base_oid"])
+      self.assertEqual(live_target,observed["_integration"]["current_target_oid"])
+      self.assertEqual("e"*40,observed["_integration"]["source_scope_oid"])
+      self.assertEqual(2,current.call_count)
+      for call in current.call_args_list:
+        self.assertEqual(historical_base,call.args[3])
+      verified.assert_called_once_with(
+        "eng-cc/oasis7",UID,7,historical_base,"a"*40,12345,"42",
+        request_key=key,expected_attempt=2,request_identity=identity,
+        effective_policy=KEYED_POLICY)
+
+  def test_keyed_selection_rejects_historical_base_outside_current_target_ancestry(self):
+    with tempfile.TemporaryDirectory() as temp:
+      journal=Path(temp)
+      key,_=write_request_journal(journal,run_attempt=1)
+      historical_base="b"*40
+      live_target="c"*40
+      current_pr=pr();current_pr["base"]["sha"]=live_target
+      def read(*args):
+        path=args[-1]
+        if path=="repos/eng-cc/oasis7/pulls/7":return copy.deepcopy(current_pr)
+        if path==f"repos/eng-cc/oasis7/compare/{historical_base}...{live_target}":
+          return {"base_commit":{"sha":historical_base},"head_commit":{"sha":live_target},
+            "merge_base_commit":{"sha":"d"*40}}
+        raise AssertionError(path)
+      with patch.object(integration_ci,"git_common_dir",return_value=journal), \
+           patch.object(M,"gh",side_effect=read), \
+           patch.object(integration_ci,"default_branch_head",return_value=live_target), \
+           patch.object(integration_ci,"current_request") as current, \
+           patch.object(integration_ci,"verified_run") as verified:
+        with self.assertRaisesRegex(SystemExit,"historical integration base is not an ancestor of current PR target"):
+          M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42",request_key=key)
+        current.assert_not_called()
+        verified.assert_not_called()
+
+  def test_keyed_selection_allows_ancestral_target_advance_but_rejects_source_head_change(self):
+    for changed in ("target", "head"):
+      with self.subTest(changed=changed),tempfile.TemporaryDirectory() as temp:
+        journal=Path(temp)
+        key,_=write_request_journal(journal,run_attempt=1)
+        historical_base="b"*40
+        initial_target="c"*40
+        final_target="d"*40
+        initial_pr=pr();initial_pr["base"]["sha"]=initial_target
+        final_pr=copy.deepcopy(initial_pr)
+        if changed=="target":
+          final_pr["base"]["sha"]=final_target
+        else:
+          final_pr["head"]["sha"]="e"*40
+        context=trusted_policy_context(workflow_sha="f"*40)
+        request=keyed_request_entry(attempt=2)
+        check={"id":902,"name":"required-gate","app":{"id":42},
+          "status":"completed","conclusion":"success"}
+        proof={"workflow_run_id":12345,"run_attempt":2,"check_app_id":42,
+          "check_run_id":902,"source_scope_oid":"e"*40,
+          "trusted_policy_context":context,
+          "effective_policy_identity":context["effective_policy_identity"],
+          "planner_inventory_authority":context["planner_inventory_authority"]}
+        pr_reads=0
+        def read(*args):
+          nonlocal pr_reads
+          path=args[-1]
+          if path=="repos/eng-cc/oasis7/pulls/7":
+            pr_reads+=1
+            return copy.deepcopy(initial_pr if pr_reads==1 else final_pr)
+          if path.startswith(f"repos/eng-cc/oasis7/compare/{historical_base}..."):
+            target=path.split("...",1)[1]
+            return {"base_commit":{"sha":historical_base},"head_commit":{"sha":target},
+              "merge_base_commit":{"sha":historical_base}}
+          raise AssertionError(path)
+        with patch.object(integration_ci,"git_common_dir",return_value=journal), \
+             patch.object(M,"gh",side_effect=read), \
+             patch.object(integration_ci,"default_branch_head",
+               side_effect=[initial_target,final_target] if changed=="target" else [initial_target]), \
+             patch.object(integration_ci,"current_request",side_effect=[request,request]), \
+             patch.object(integration_ci,"trusted_policy_context",return_value=context), \
+             patch.object(integration_ci,"verified_run",return_value=(check,proof)), \
+             patch.object(M,"live") as ordinary:
+          if changed=="target":
+            _,observed,base,_=M.selected_live(
+              "eng-cc/oasis7",UID,1,7,"required-gate","42",request_key=key)
+            self.assertEqual(historical_base,base)
+            self.assertEqual(final_target,observed["_integration"]["current_target_oid"])
+          else:
+            with self.assertRaisesRegex(SystemExit,"PR identity or admission changed during integration verification"):
+              M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42",request_key=key)
+          ordinary.assert_not_called()
 
   def test_keyed_readback_rejects_run_attempt_app_check_and_policy_context_mismatch(self):
     for changed in ("run", "attempt", "app", "check", "policy", "authority"):
@@ -451,6 +575,7 @@ class ReceiptTest(unittest.TestCase):
           "status":"completed","conclusion":"success"}
         with patch.object(integration_ci,"git_common_dir",return_value=journal), \
              patch.object(M,"gh",side_effect=[pr()]), \
+             patch.object(integration_ci,"default_branch_head",return_value="b"*40), \
              patch.object(integration_ci,"current_request",return_value=request), \
              patch.object(integration_ci,"trusted_policy_context",return_value=context), \
              patch.object(integration_ci,"verified_run",return_value=(check,proof)), \
@@ -475,6 +600,7 @@ class ReceiptTest(unittest.TestCase):
         "planner_inventory_authority":context["planner_inventory_authority"]}
       with patch.object(integration_ci,"git_common_dir",return_value=journal), \
            patch.object(M,"gh",side_effect=[pr()]), \
+           patch.object(integration_ci,"default_branch_head",return_value="b"*40), \
            patch.object(integration_ci,"current_request",side_effect=[first,second]), \
            patch.object(integration_ci,"trusted_policy_context",return_value=context), \
            patch.object(integration_ci,"verified_run",return_value=(check,proof)), \
@@ -490,6 +616,16 @@ class ReceiptTest(unittest.TestCase):
         key,_=write_request_journal(journal,run_attempt=1)
         request=keyed_request_entry(attempt=2)
         context=trusted_policy_context(workflow_sha="f"*40)
+        historical_base="b"*40
+        live_target="c"*40
+        current_pr=pr();current_pr["base"]["sha"]=live_target
+        def read(*args):
+          path=args[-1]
+          if path=="repos/eng-cc/oasis7/pulls/7":return copy.deepcopy(current_pr)
+          if path==f"repos/eng-cc/oasis7/compare/{historical_base}...{live_target}":
+            return {"base_commit":{"sha":historical_base},"head_commit":{"sha":live_target},
+              "merge_base_commit":{"sha":historical_base}}
+          raise AssertionError(path)
         def verify(*args,request_key=None,expected_attempt=None,request_identity=None,effective_policy=None):
           if expected_attempt==1:
             return ({"id":901,"name":"required-gate","app":{"id":42},
@@ -497,7 +633,8 @@ class ReceiptTest(unittest.TestCase):
               {"workflow_run_id":12345,"run_attempt":1})
           raise ValueError(reason)
         with patch.object(integration_ci,"git_common_dir",return_value=journal), \
-             patch.object(M,"gh",side_effect=[pr()]), \
+             patch.object(M,"gh",side_effect=read), \
+             patch.object(integration_ci,"default_branch_head",return_value=live_target), \
              patch.object(integration_ci,"current_request",return_value=request) as current, \
              patch.object(integration_ci,"trusted_policy_context",return_value=context), \
              patch.object(integration_ci,"verified_run",side_effect=verify) as verified, \
@@ -505,7 +642,7 @@ class ReceiptTest(unittest.TestCase):
           with self.assertRaisesRegex(SystemExit,"current request blocked: "+reason):
             M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42",request_key=key)
           current.assert_called_once_with(
-            "eng-cc/oasis7",UID,7,"b"*40,"a"*40,"main",request_key=key)
+            "eng-cc/oasis7",UID,7,historical_base,"a"*40,"main",request_key=key)
           verified.assert_called_once()
           self.assertEqual(2,verified.call_args.kwargs["expected_attempt"])
           ordinary.assert_not_called()
@@ -516,6 +653,7 @@ class ReceiptTest(unittest.TestCase):
       key,_=write_request_journal(journal)
       with patch.object(integration_ci,"git_common_dir",return_value=journal), \
            patch.object(M,"gh",side_effect=[pr()]), \
+           patch.object(integration_ci,"default_branch_head",return_value="b"*40), \
            patch.object(integration_ci,"current_request",return_value=None), \
            patch.object(M,"live") as ordinary:
         with self.assertRaisesRegex(SystemExit,"explicit keyed current request is absent"):

@@ -1041,7 +1041,8 @@ def main():
             refreshed = {**refreshed, "review_evidence_digest": payload["review_evidence_digest"]}
         payload = refreshed
     print(json.dumps(payload,sort_keys=True,indent=2 if a.json else None))
-def _trusted_validation_request(request_key,repository,uid,number,head_oid,integration_base_oid):
+def _trusted_validation_request(request_key,repository,uid,number,head_oid,
+                                expected_integration_base_oid=None):
     """Load an explicitly selected request only from this repo's canonical journal."""
     if not isinstance(request_key,str) or not re.fullmatch(r"sha256:[0-9a-f]{64}",request_key):
         raise ValueError("explicit validation request key is invalid")
@@ -1064,9 +1065,37 @@ def _trusted_validation_request(request_key,repository,uid,number,head_oid,integ
     for field,value in expected.items():
         if identity.get(field)!=value:
             raise ValueError(f"validation request journal identity mismatch: {field}")
-    if record.get("integration_base_oid")!=integration_base_oid:
+    integration_base_oid=record.get("integration_base_oid")
+    if not isinstance(integration_base_oid,str) or not re.fullmatch(r"[0-9a-f]{40,64}",integration_base_oid):
+        raise ValueError("validation request journal immutable integration base is invalid")
+    if (expected_integration_base_oid is not None
+            and integration_base_oid!=expected_integration_base_oid):
         raise ValueError("validation request journal immutable integration base mismatch")
     return record,identity
+
+
+def _require_historical_base_ancestor_of_target(repository,historical_base_oid,current_target_oid):
+    """Prove the journal's immutable B is still an ancestor of live PR target Q."""
+    if (not isinstance(historical_base_oid,str)
+            or not re.fullmatch(r"[0-9a-f]{40,64}",historical_base_oid)
+            or not isinstance(current_target_oid,str)
+            or not re.fullmatch(r"[0-9a-f]{40,64}",current_target_oid)):
+        raise ValueError("historical integration base or current PR target is invalid")
+    if historical_base_oid==current_target_oid:
+        return
+    comparison=gh(
+        "api",
+        f"repos/{repository}/compare/{historical_base_oid}...{current_target_oid}",
+    )
+    base_commit=comparison.get("base_commit") if isinstance(comparison,dict) else None
+    head_commit=comparison.get("head_commit") if isinstance(comparison,dict) else None
+    merge_base_commit=comparison.get("merge_base_commit") if isinstance(comparison,dict) else None
+    if (not isinstance(base_commit,dict) or not isinstance(head_commit,dict)
+            or not isinstance(merge_base_commit,dict)
+            or base_commit.get("sha")!=historical_base_oid
+            or head_commit.get("sha")!=current_target_oid
+            or merge_base_commit.get("sha")!=historical_base_oid):
+        raise ValueError("historical integration base is not an ancestor of current PR target")
 
 
 def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=False,base_ref=None,
@@ -1080,7 +1109,8 @@ def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=Fals
     if pr.get('state')!='open' or pr.get('merged'):
         raise SystemExit('ci-ready-receipt: integration PR not open')
     if base_ref and pr['base']['ref']!=base_ref: raise SystemExit('ci-ready-receipt: manual integration base ref mismatch')
-    base,head=pr['base']['sha'],pr['head']['sha']
+    current_target_oid,head=pr['base']['sha'],pr['head']['sha']
+    base=current_target_oid
     try:
         request_record=None
         request_identity=None
@@ -1088,7 +1118,10 @@ def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=Fals
         policy_context=None
         if request_key is not None:
             request_record,request_identity=_trusted_validation_request(
-              request_key,repository,uid,number,head,base)
+              request_key,repository,uid,number,head)
+            base=request_record["integration_base_oid"]
+            current_target_oid=integration_ci.default_branch_head(repository,pr['base']['ref'])
+            _require_historical_base_ancestor_of_target(repository,base,current_target_oid)
         selected=current_request(repository,uid,number,base,head,pr['base']['ref'],
           request_key=request_key)
         if request_key is not None and selected is None:
@@ -1149,10 +1182,20 @@ def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=Fals
                 or (not allow_ready_pr and not fresh.get('draft'))
                 or f'Refs #{issue}' not in (fresh.get('body') or '')
                 or f'Task: {uid}' not in (fresh.get('body') or '')
-                or fresh.get('base',{}).get('sha')!=base
+                or (request_key is None and fresh.get('base',{}).get('sha')!=current_target_oid)
                 or fresh.get('base',{}).get('ref')!=pr['base']['ref']
                 or fresh.get('head',{}).get('sha')!=head):
                 raise ValueError('PR identity or admission changed during integration verification')
+            if request_key is not None:
+                current_target_oid=integration_ci.default_branch_head(repository,fresh['base']['ref'])
+                if (not isinstance(current_target_oid,str)
+                        or not re.fullmatch(r'[0-9a-f]{40,64}',current_target_oid)):
+                    raise ValueError('current default-branch target is invalid')
+                _require_historical_base_ancestor_of_target(repository,base,current_target_oid)
+                proof.update(
+                  integration_base_oid=base,
+                  current_target_oid=current_target_oid,
+                )
             return fresh,{**check,'_integration':proof},base,head
         if integration_run_id is not None:
             raise ValueError('explicit integration locator absent from verified current request range')
