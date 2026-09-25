@@ -1909,6 +1909,11 @@ def command_move_task(args: argparse.Namespace) -> int:
     mapping_path, mapping, record = require_record(args)
     previous = str(record.get("status") or "")
     previous_phase = str(record.get("workflow_phase") or "")
+    if args.to_status == "done" and record.get("completion_mode") == "ordered_delivery_aggregate":
+        die(
+            "move-task: ordered aggregate completion requires the exact aggregate receipt, plan, candidate, "
+            "and evidence through task-closeout.sh; generic move-task cannot publish aggregate task_done"
+        )
     if args.to_status in GATE_OWNED_STATUSES:
         canonical_writer = (
             "task-closeout.sh with canonical review/CI evidence"
@@ -2151,10 +2156,11 @@ def command_bind_aggregate_plan(args: argparse.Namespace) -> int:
     if permission.get("permission") != "admin":
         die("bind-aggregate-plan: plan author lacks repository admin authority")
     issue = json.loads(run_text(["gh", "api", f"repos/{args.repo}/issues/{original['issue_number']}"]))
-    issue_uid_lines = re.findall(r"(?m)^task_uid:\s*(task_[0-9a-f]{32})\s*$", str(issue.get("body") or ""))
-    if issue.get("state") != "open" or issue_uid_lines != [args.task_uid]:
+    issue_body = str(issue.get("body") or "").replace("\r\n", "\n")
+    issue_uid_fields = re.findall(r"(?m)^[ \t]*(?:-[ \t]+)?task_uid\b[^\n]*$", issue_body)
+    if issue.get("state") != "open" or issue_uid_fields != [f"task_uid: {args.task_uid}"]:
         die("bind-aggregate-plan: live coordinator Issue identity/state mismatch")
-    live_fields = issue_task_fields(str(issue.get("body") or ""))
+    live_fields = issue_task_fields(issue_body)
     if live_fields.get("completion_mode") not in {None, "", "ordered_delivery_aggregate"}:
         die("bind-aggregate-plan: live coordinator already uses a different completion route")
     live_pointer = (live_fields.get("aggregate_plan_comment_id"), live_fields.get("aggregate_plan_sha256"))

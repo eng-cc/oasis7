@@ -75,7 +75,7 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
     def invoke_binder(
         self, *, permission="admin", deliveries=None, promoted_pr=None,
         cached_completion_mode="", cached_pointer=None, live_completion_mode=None,
-        live_pointer=None,
+        live_pointer=None, live_issue_body=None,
     ):
         plan = plan_for(deliveries=deliveries)
         marker = "<!-- oasis7-aggregate-delivery-plan/v1 -->\n"
@@ -88,7 +88,9 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
                       "status": "committed", "workflow_phase": ""}
             if cached_pointer is not None:
                 record.update(aggregate_plan_comment_id=cached_pointer[0], aggregate_plan_sha256=cached_pointer[1])
-            issue_body = f"<!-- oasis7-pm-task -->\ntask_uid: {UID}\n"
+            issue_body = live_issue_body
+            if issue_body is None:
+                issue_body = f"<!-- oasis7-pm-task -->\ntask_uid: {UID}\n"
             if live_completion_mode is not None:
                 issue_body += f"- completion_mode: `{live_completion_mode}`\n"
             if live_pointer is not None:
@@ -195,6 +197,43 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
                 self.assertIn(expected, outcome or "")
                 self.assertEqual(writes, [])
                 self.assertFalse(any(event[0] == "pr_read" for event in events))
+
+    def test_binder_rejects_malformed_duplicate_coordinator_uid_before_writes(self):
+        body = f"<!-- oasis7-pm-task -->\ntask_uid: {UID}\ntask_uid: malformed\n"
+        outcome, events, writes = self.invoke_binder(live_issue_body=body)
+        self.assertIsNotNone(outcome)
+        self.assertEqual(writes, [])
+        self.assertFalse(any(event[0] == "issue_write" for event in events))
+        self.assertFalse(any(event[0] == "mapping_write" for event in events))
+
+    def test_move_task_rejects_cached_aggregate_closeout_without_exact_receipt(self):
+        record = {
+            "task_uid": UID, "issue_number": 4035, "issue_url": f"https://github.com/{REPO}/issues/4035",
+            "status": "committed", "workflow_phase": "execution",
+            "completion_mode": "ordered_delivery_aggregate", "project_item_id": "ITEM1",
+            "last_closed_at": "2026-09-25T10:00:00Z",
+            "claim_verifications": [{
+                "claim_type": "task_complete", "status": "verified", "verification_exit_code": 0,
+            }],
+        }
+        original = json.loads(json.dumps(record))
+        args = Namespace(task_uid=UID, to_status="done", repo=REPO, json=False)
+        effects = []
+        with mock.patch.object(self.task, "require_record",
+                               return_value=(pathlib.Path("tasks.json"), {}, record)), \
+                mock.patch.object(self.task, "synchronize_live_issue_traceability",
+                                  side_effect=lambda *a, **k: effects.append("traceability")), \
+                mock.patch.object(self.task, "update_issue_body",
+                                  side_effect=lambda *a, **k: effects.append("issue")), \
+                mock.patch.object(self.task, "merge_task_mapping",
+                                  side_effect=lambda *a, **k: effects.append("mapping")), \
+                mock.patch.object(self.task, "load_sync_module",
+                                  return_value=SimpleNamespace(workflow_phase_for=lambda _status: "task_done")), \
+                contextlib.redirect_stdout(io.StringIO()):
+            with self.assertRaisesRegex(SystemExit, "aggregate"):
+                self.task.command_move_task(args)
+        self.assertEqual(effects, [])
+        self.assertEqual(record, original)
 
     def test_non_pr_task_rejects_aggregate_done_receipt_before_effects(self):
         record = {"task_uid": UID, "status": "committed", "completion_mode": "non_pr_task",
