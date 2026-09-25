@@ -2,11 +2,13 @@
 """Focused contract tests for linked-delivery aggregate completion receipts."""
 from __future__ import annotations
 
+import base64
 import copy
 import hashlib
 import importlib.util
 import json
 import pathlib
+import tempfile
 import unittest
 from unittest import mock
 
@@ -241,6 +243,119 @@ class AggregateTaskCompletionTests(unittest.TestCase):
         values[5][uid]["task"]["pr_number"] = 9999
         with self.assertRaisesRegex(ValueError, "child|PR|identity"):
             self.build(tuple(values))
+
+    def test_live_child_issue_rejects_duplicate_or_conflicting_identity_and_terminal_fields(self):
+        plan, _candidate, _evidence, _coordinator, _comment, _reports = self.context()
+        delivery = plan["required_deliveries"][0]
+        uid = delivery["task_uid"]
+        task_branch = "task/aggregate-child-a"
+        claim = {
+            "claim_type": "task_complete", "status": "verified",
+            "verification_exit_code": 0,
+        }
+        claims = [claim]
+        encoded_claims = base64.urlsafe_b64encode(
+            json.dumps(claims, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).decode("ascii").rstrip("=")
+        issue_fields = [
+            f"task_uid: {uid}",
+            "- status: `done`",
+            "- workflow_phase: `post_merge_done`",
+            "- completion_mode: `pr_task`",
+            f"- pr_number: `{delivery['pr_number']}`",
+            f"- pr_url: `{delivery['pr_url']}`",
+            f"- claim_verifications_b64: `{encoded_claims}`",
+        ]
+        task = {
+            "task_uid": uid,
+            "repository": "eng-cc/oasis7",
+            "issue_number": delivery["issue_number"],
+            "pr_number": delivery["pr_number"],
+            "pr_url": delivery["pr_url"],
+            "status": "done",
+            "workflow_phase": "post_merge_done",
+            "completion_mode": "pr_task",
+            "claim_verifications": claims,
+            "task_branch": task_branch,
+        }
+        report = {
+            "status": "reconciled",
+            "live": {"pr": {
+                "state": "MERGED", "mergedAt": "2026-09-25T09:00:00Z",
+                "headRefName": task_branch,
+            }},
+        }
+        merged_at = "2026-09-25T09:00:00Z"
+        live_pr = {
+            "number": delivery["pr_number"], "url": delivery["pr_url"],
+            "state": "MERGED", "mergedAt": merged_at,
+            "mergeCommit": {"oid": "5" * 40}, "headRefOid": "4" * 40,
+            "baseRefName": "main", "body": f"Refs #{delivery['issue_number']}",
+        }
+
+        cases = (
+            ("status", "done"),
+            ("status", "in_progress"),
+            ("workflow_phase", "post_merge_done"),
+            ("workflow_phase", "task_done"),
+            ("task_uid", uid),
+            ("task_uid", task_uid("c")),
+            ("completion_mode", "pr_task"),
+            ("completion_mode", "non_pr_task"),
+            ("pr_number", str(delivery["pr_number"])),
+            ("pr_number", "5199"),
+            ("pr_url", delivery["pr_url"]),
+            ("pr_url", "https://github.com/eng-cc/oasis7/pull/5199"),
+        )
+        with tempfile.TemporaryDirectory() as raw_receipts:
+            receipt_root = pathlib.Path(raw_receipts)
+            for filename in (
+                "merge-receipt.json", "main-sync-receipt.json",
+                "terminal-cleanup-receipt.json", "terminal-tombstone.json",
+            ):
+                (receipt_root / filename).write_text("{}\n", encoding="utf-8")
+
+            def read_child_with_body(body, mapped_task=task):
+                live_issue = {
+                    "number": delivery["issue_number"],
+                    "url": f"https://github.com/eng-cc/oasis7/issues/{delivery['issue_number']}",
+                    "state": "CLOSED", "body": body,
+                }
+                terminal_audit = mock.Mock()
+                terminal_audit.audit.return_value = {
+                    **report, "receipt_root": str(receipt_root),
+                }
+                with (
+                    mock.patch.object(self.helper, "_load_mapping", return_value={"tasks": {uid: mapped_task}}),
+                    mock.patch.object(self.helper, "_import_terminal_audit", return_value=terminal_audit),
+                    mock.patch.object(self.helper, "_run_json", side_effect=(live_issue, live_pr)),
+                ):
+                    return self.helper.read_child_report(ROOT, delivery, "main")
+
+            valid_report = read_child_with_body("\n".join(issue_fields))
+            self.assertEqual(valid_report["task"]["task_uid"], uid)
+            self.assertEqual(valid_report["task"]["status"], "done")
+            self.assertEqual(valid_report["task"]["workflow_phase"], "post_merge_done")
+            task_without_completion_mode = dict(task)
+            task_without_completion_mode.pop("completion_mode")
+            body_without_completion_mode = "\n".join(
+                line for line in issue_fields if not line.startswith("- completion_mode:")
+            )
+            optional_mode_report = read_child_with_body(
+                body_without_completion_mode, task_without_completion_mode,
+            )
+            self.assertEqual(optional_mode_report["task"]["task_uid"], uid)
+
+            for field, duplicate_value in cases:
+                with self.subTest(field=field, duplicate_value=duplicate_value):
+                    duplicate = (
+                        f"task_uid: {duplicate_value}"
+                        if field == "task_uid"
+                        else f"- {field}: `{duplicate_value}`"
+                    )
+                    body = "\n".join((*issue_fields, duplicate))
+                    with self.assertRaises(self.helper.ReceiptError):
+                        read_child_with_body(body)
 
     def test_rejects_modified_receipt_digest(self):
         receipt = self.build()

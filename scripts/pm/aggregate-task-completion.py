@@ -581,6 +581,36 @@ def _issue_task_fields(repo_root: pathlib.Path, body: str) -> dict[str, Any]:
     return fields
 
 
+def _unique_child_issue_field(body: str, key: str, *, required: bool = True) -> str | None:
+    """Read one canonical child Issue field and reject ambiguous duplicates."""
+    matches = re.findall(
+        rf"(?m)^([ \t]*)(-[ \t]+)?{re.escape(key)}:[ \t]*([^\n]*)$", body,
+    )
+    if len(matches) > 1:
+        raise ReceiptError(f"child Issue repeats {key}")
+    if not matches:
+        if required:
+            raise ReceiptError(f"child Issue omits {key}")
+        return None
+    indent, bullet, raw_value = matches[0]
+    if key == "task_uid":
+        if indent or bullet:
+            raise ReceiptError("child Issue task_uid is not canonical")
+        value = raw_value.strip()
+        if "`" in value:
+            raise ReceiptError(f"child Issue {key} is malformed")
+    else:
+        if indent or not bullet:
+            raise ReceiptError(f"child Issue {key} is not canonical metadata")
+        wrapped = re.fullmatch(r"`([^`]+)`", raw_value.strip())
+        if not wrapped:
+            raise ReceiptError(f"child Issue {key} is malformed")
+        value = wrapped.group(1)
+    if not value:
+        raise ReceiptError(f"child Issue {key} is empty")
+    return value
+
+
 def read_child_report(repo_root: pathlib.Path, delivery: dict[str, Any], default_branch: str) -> dict[str, Any]:
     mapping = _load_mapping(repo_root)
     task = (mapping.get("tasks") or {}).get(delivery["task_uid"])
@@ -603,10 +633,20 @@ def read_child_report(repo_root: pathlib.Path, delivery: dict[str, Any], default
     audit_pr = report_live.get("pr") if isinstance(report_live.get("pr"), dict) else {}
     if str(live_issue.get("state") or "").upper() != "CLOSED":
         raise ReceiptError(f"child Issue #{delivery['issue_number']} is not closed")
-    issue_uids = re.findall(r"(?m)^task_uid:\s*(task_[0-9a-f]{32})\s*$", str(live_issue.get("body") or ""))
-    if issue_uids != [delivery["task_uid"]]:
+    issue_body = live_issue.get("body")
+    if not isinstance(issue_body, str):
+        raise ReceiptError(f"child Issue #{delivery['issue_number']} body is unavailable")
+    issue_body = issue_body.replace("\r\n", "\n")
+    issue_fields = {
+        key: _unique_child_issue_field(issue_body, key)
+        for key in ("task_uid", "status", "workflow_phase", "pr_number", "pr_url")
+    }
+    issue_fields["completion_mode"] = _unique_child_issue_field(
+        issue_body, "completion_mode", required=False,
+    )
+    if issue_fields["task_uid"] != delivery["task_uid"]:
         raise ReceiptError(f"child Issue #{delivery['issue_number']} Task UID mismatch")
-    live_fields = _issue_task_fields(repo_root, str(live_issue.get("body") or ""))
+    projected_fields = _issue_task_fields(repo_root, issue_body)
     if task.get("task_uid") != delivery["task_uid"] or task.get("repository") != REPOSITORY:
         raise ReceiptError(f"child task mapping identity mismatch: {delivery['task_uid']}")
     for key in ("issue_number", "pr_number", "pr_url"):
@@ -614,16 +654,24 @@ def read_child_report(repo_root: pathlib.Path, delivery: dict[str, Any], default
             raise ReceiptError(f"child task mapping {key} mismatch: {delivery['task_uid']}")
     if task.get("status") != "done" or task.get("workflow_phase") != "post_merge_done":
         raise ReceiptError(f"child task {delivery['task_uid']} is not terminal")
-    if live_fields.get("status") != task.get("status") or live_fields.get("workflow_phase") != task.get("workflow_phase"):
-        raise ReceiptError(f"child Issue terminal state disagrees with task mapping: {delivery['task_uid']}")
-    if live_fields.get("claim_verifications") != task.get("claim_verifications"):
+    for key in ("status", "workflow_phase"):
+        if issue_fields[key] != task.get(key):
+            raise ReceiptError(f"child Issue terminal state disagrees with task mapping: {delivery['task_uid']}")
+    completion_mode = task.get("completion_mode")
+    if completion_mode in (None, ""):
+        completion_mode = None
+    elif not isinstance(completion_mode, str):
+        raise ReceiptError(f"child task {delivery['task_uid']} has an invalid completion mode")
+    if issue_fields["completion_mode"] != completion_mode:
+        raise ReceiptError(f"child Issue completion mode disagrees with task mapping: {delivery['task_uid']}")
+    if projected_fields.get("claim_verifications") != task.get("claim_verifications"):
         raise ReceiptError(f"child Issue task_complete claim history disagrees with task mapping: {delivery['task_uid']}")
     if task.get("completion_mode") == "ordered_delivery_aggregate":
         raise ReceiptError("aggregate coordinator cannot be used as a child delivery")
     if live_issue.get("number") != delivery["issue_number"] or live_issue.get("url") != f"https://github.com/{REPOSITORY}/issues/{delivery['issue_number']}":
         raise ReceiptError(f"child Issue URL/number mismatch: {delivery['task_uid']}")
-    for key, expected in (("pr_number", delivery["pr_number"]), ("pr_url", delivery["pr_url"])):
-        if _parse_body_field(str(live_issue.get("body") or ""), key) != str(expected):
+    for key in ("pr_number", "pr_url"):
+        if issue_fields[key] != str(delivery[key]):
             raise ReceiptError(f"child Issue {key} does not reciprocate the planned PR")
     if live_pr.get("number") != delivery["pr_number"] or live_pr.get("url") != delivery["pr_url"]:
         raise ReceiptError(f"child PR number/URL mismatch: #{delivery['pr_number']}")
