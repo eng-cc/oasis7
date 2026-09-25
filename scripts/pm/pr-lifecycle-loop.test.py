@@ -131,7 +131,7 @@ class IntegrationAuthorityTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory(); self.addCleanup(self.temp.cleanup)
         self.root = Path(self.temp.name)
         directory = self.root / 'scripts/pm'; directory.mkdir(parents=True)
-        for name in ('ci-ready-receipt.py','ci_ready_receipt_identity.py','integration_ci.py'):
+        for name in ('ci-ready-receipt.py','ci_ready_receipt_identity.py','integration_ci.py','integration_executor_contract.py'):
             shutil.copy2(Path(__file__).with_name(name),directory/name)
         def git(*args): return subprocess.check_output(['git','-C',str(self.root),*args],text=True).strip()
         git('init','-q'); git('config','user.email','fixture@example.invalid'); git('config','user.name','Fixture')
@@ -157,6 +157,8 @@ import io,json,os,sys,zipfile
 s=json.load(open(os.environ['CI_FIXTURE'])); path=sys.argv[2]
 if '/workflows/rust.yml/runs?' in path: result={'workflow_runs':[]}
 elif '/pulls/' in path: result=s['pr']
+elif path == 'repos/owner/repo': result={'full_name':'owner/repo','default_branch':'main'}
+elif path == 'repos/owner/repo/git/ref/heads/main': result={'object':{'sha':'c'*40}}
 elif '/check-runs?' in path: result={'check_runs':[s['run']]}
 elif '/artifacts?' in path: result={'artifacts':[{'id':3,'name':'oasis7-required-plan-v1','expired':False,'workflow_run':{'id':8}}]}
 elif path.endswith('/artifacts/3/zip'):
@@ -194,6 +196,85 @@ print(json.dumps(result))
         self.assertEqual(proof['head_oid'],'b'*40)
         self.assertEqual(proof['integration_base_oid'],'a'*40)
         self.assertEqual(proof['check_run_id'],9)
+        self.assertEqual(proof['assessed_target_oid'],'c'*40)
+
+    def test_keyed_context_binds_task_epoch_source_and_check(self):
+        task = {'bootstrap_epoch': 3, 'loop_binding': {'bootstrap_epoch': 3}}
+        data = {**self.data, 'number': 12, 'repository': 'owner/repo', 'headRefOid': 'b' * 40}
+        effective_identity = {'schema': 'oasis7-ci-effective-policy-identity/v1', 'digest': 'sha256:' + '1' * 64}
+        planner_authority = {'planner_authority_oid': '2' * 40}
+        request_identity = {
+            'repository': 'owner/repo', 'task_uid': self.uid, 'pr_number': 12,
+            'bootstrap_epoch': 3, 'source_head_oid': 'b' * 40,
+            'source_projection_digest': 'sha256:' + 'e' * 64,
+            'effective_policy_digest': effective_identity['digest'],
+        }
+        plan = {
+            'schema': 'oasis7-required-plan-v2',
+            'request_key': 'sha256:' + 'd' * 64,
+            'request_identity': request_identity,
+            'repository': 'owner/repo', 'task_uid': self.uid, 'pr_number': 12,
+            'bootstrap_epoch': 3, 'source_head_oid': 'b' * 40,
+            'source_scope_oid': 'f' * 40,
+            'effective_policy_identity': effective_identity,
+            'planner_inventory_authority': planner_authority,
+            'check_name': 'required-gate', 'check_app_id': 42, 'check_run_id': 9,
+            'workflow_run_id': 10, 'run_attempt': 1,
+            'planner_output': {
+                'source_scope_base': 'f' * 40,
+                'impact_projection_digest': request_identity['source_projection_digest'],
+            },
+        }
+        proof = {
+            'request_key': 'sha256:' + 'd' * 64,
+            'request_identity': request_identity,
+            'assessed_target_oid': 'c' * 40,
+            'source_scope_oid': 'f' * 40,
+            'required_plan_v2_payload': plan,
+            'check_name': 'required-gate', 'check_app_id': 42, 'check_run_id': 9,
+            'effective_policy_identity': effective_identity,
+            'planner_inventory_authority': planner_authority,
+            'workflow_run_id': 10, 'run_id': 10, 'request_id': 10, 'run_attempt': 1,
+            'trusted_policy_context': {
+                'effective_policy_identity': effective_identity,
+                'planner_inventory_authority': planner_authority,
+            },
+        }
+        self.assertTrue(gate.validate_keyed_integration_identity(proof, data, self.uid, task))
+        for label, changed_proof, changed_task in (
+            ('epoch', proof, {**task, 'bootstrap_epoch': 4}),
+            ('head', {**proof, 'request_identity': {**proof['request_identity'], 'source_head_oid': '3' * 40}}, task),
+            ('scope', {**proof, 'required_plan_v2_payload': {**proof['required_plan_v2_payload'], 'source_scope_oid': '4' * 40}}, task),
+            ('app', {**proof, 'check_app_id': 43}, task),
+            ('policy', {**proof, 'effective_policy_identity': {'digest': 'sha256:' + '3' * 64}}, task),
+            ('target', {**proof, 'assessed_target_oid': 'invalid'}, task),
+        ):
+            with self.subTest(label=label), self.assertRaises(ValueError):
+                gate.validate_keyed_integration_identity(changed_proof, data, self.uid, changed_task)
+        bool_epoch_identity = {**proof['request_identity'], 'bootstrap_epoch': 1}
+        bool_epoch_plan = {
+            **proof['required_plan_v2_payload'],
+            'bootstrap_epoch': True,
+            'request_identity': bool_epoch_identity,
+        }
+        bool_epoch_proof = {
+            **proof,
+            'request_identity': bool_epoch_identity,
+            'required_plan_v2_payload': bool_epoch_plan,
+        }
+        with self.assertRaisesRegex(ValueError, 'required plan bootstrap_epoch'):
+            gate.validate_keyed_integration_identity(
+                bool_epoch_proof, data, self.uid,
+                {'bootstrap_epoch': 1, 'loop_binding': {'bootstrap_epoch': 1}},
+            )
+
+    def test_unkeyed_legacy_context_keeps_legacy_lane(self):
+        self.assertFalse(gate.validate_keyed_integration_identity(
+            {'ci_validation_mode': 'trusted_integration'}, self.data, self.uid, {'status': 'legacy'},
+        ))
+        for invalid in (True, '3', 0, -1):
+            with self.subTest(invalid_epoch=invalid), self.assertRaises(ValueError):
+                gate._positive_bootstrap_epoch(invalid)
 
     def test_ordinary_mode_reuses_source_bound_ci_after_unrelated_target_advance(self):
         proof = self.check(run_base='c', artifact_base='c', require_strict=False)

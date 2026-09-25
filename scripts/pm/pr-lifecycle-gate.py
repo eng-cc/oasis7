@@ -713,8 +713,219 @@ def _validate_live_integration_proof(
         raise ValueError('source-bound PR CI head changed; rerun required CI for the current source')
     if proof.get('base_ref') != data['baseRefName']:
         raise ValueError('source-bound PR CI target ref changed; rerun required CI for the current target ref')
+    if 'assessed_target_oid' in proof and not re.fullmatch(
+            r'[0-9a-f]{40,64}', str(proof.get('assessed_target_oid') or '')):
+        raise ValueError('fresh default-branch target identity is invalid')
+    if proof.get('check_name') is not None:
+        if proof.get('check_name') != 'required-gate':
+            raise ValueError('selected integration check is not required-gate')
+        policy = data.get('policy_discovery') or {}
+        required = policy.get('required_status_checks') or []
+        pins = {str(item['app_id']) for item in required
+                if isinstance(item, dict) and item.get('context') == 'required-gate'
+                and item.get('app_id') is not None}
+        if len(pins) != 1 or str(proof.get('check_app_id')) != next(iter(pins), None):
+            raise ValueError('selected integration check app differs from live required-check policy')
     if strict and proof.get('integration_base_oid') != data['baseRefOid']:
         raise ValueError('stale integration CI base/head; rerun required CI against current target without rebasing source')
+
+
+def _positive_bootstrap_epoch(value: Any, label: str = 'bootstrap_epoch') -> int:
+    if type(value) is not int or value <= 0:
+        raise ValueError(f'{label} must be a positive integer')
+    return value
+
+
+def validate_keyed_integration_identity(
+    proof: dict[str, Any], data: dict[str, Any], task_uid: str, task: dict[str, Any],
+) -> bool:
+    """Bind keyed workflow evidence to the current Task, PR, H/S, policy and check.
+
+    The live receipt reader authenticates the journal, W policy, request key,
+    artifacts, and exact attempt. These comparisons bind that proof to this
+    lifecycle caller's admitted Task and current PR identity.
+    """
+    request_key = proof.get('request_key')
+    request_identity = proof.get('request_identity')
+    if request_key is None:
+        if request_identity is not None:
+            raise ValueError('unkeyed integration proof carries a request identity')
+        return False
+    if not isinstance(request_key, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', request_key):
+        raise ValueError('keyed integration request key is malformed')
+    if not isinstance(request_identity, dict):
+        raise ValueError('keyed integration request identity is missing')
+    assessed_target_oid = proof.get('assessed_target_oid')
+    if not isinstance(assessed_target_oid, str) or not re.fullmatch(r'[0-9a-f]{40,64}', assessed_target_oid):
+        raise ValueError('keyed integration assessed target identity is missing or invalid')
+    epoch = _positive_bootstrap_epoch(task.get('bootstrap_epoch'))
+    binding = task.get('loop_binding')
+    if isinstance(binding, dict):
+        binding_epoch = _positive_bootstrap_epoch(
+            binding.get('bootstrap_epoch'), 'Task loop binding bootstrap_epoch',
+        )
+        if binding_epoch != epoch:
+            raise ValueError('keyed integration Task binding bootstrap epoch mismatch')
+    expected = {
+        'repository': data.get('repository'),
+        'task_uid': task_uid,
+        'pr_number': data.get('number'),
+        'bootstrap_epoch': epoch,
+        'source_head_oid': data.get('headRefOid'),
+    }
+    if any(type(request_identity.get(field)) is not type(value)
+           or request_identity.get(field) != value for field, value in expected.items()):
+        raise ValueError('keyed integration request identity differs from Task or PR')
+    projection_digest = request_identity.get('source_projection_digest')
+    if not isinstance(projection_digest, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', projection_digest):
+        raise ValueError('keyed integration source projection digest is invalid')
+
+    source_scope = proof.get('source_scope_oid')
+    if not isinstance(source_scope, str) or not re.fullmatch(r'[0-9a-f]{40,64}', source_scope):
+        raise ValueError('keyed integration source scope is missing or invalid')
+    plan = proof.get('required_plan_v2_payload')
+    planner_output = plan.get('planner_output') if isinstance(plan, dict) else None
+    if isinstance(plan, dict):
+        plan_epoch = _positive_bootstrap_epoch(
+            plan.get('bootstrap_epoch'), 'required plan bootstrap_epoch',
+        )
+        plan_pr_number = plan.get('pr_number')
+        if type(plan_pr_number) is not int or plan_pr_number <= 0:
+            raise ValueError('required plan PR number is invalid')
+    if (not isinstance(plan, dict)
+            or plan.get('schema') != 'oasis7-required-plan-v2'
+            or plan.get('request_key') != request_key
+            or plan.get('request_identity') != request_identity
+            or plan.get('repository') != expected['repository']
+            or plan.get('task_uid') != task_uid
+            or plan_pr_number != expected['pr_number']
+            or plan_epoch != epoch
+            or plan.get('source_head_oid') != expected['source_head_oid']
+            or plan.get('source_scope_oid') != source_scope
+            or not isinstance(planner_output, dict)
+            or planner_output.get('source_scope_base') != source_scope
+            or planner_output.get('impact_projection_digest') != projection_digest):
+        raise ValueError('keyed required-plan source identity differs from verified Task projection')
+
+    effective_identity = proof.get('effective_policy_identity')
+    policy_context = proof.get('trusted_policy_context')
+    planner_authority = proof.get('planner_inventory_authority')
+    if (not isinstance(effective_identity, dict)
+            or effective_identity.get('schema') != 'oasis7-ci-effective-policy-identity/v1'
+            or not re.fullmatch(r'sha256:[0-9a-f]{64}', str(effective_identity.get('digest') or ''))
+            or not isinstance(policy_context, dict)
+            or policy_context.get('effective_policy_identity') != effective_identity
+            or request_identity.get('effective_policy_digest') != effective_identity.get('digest')
+            or policy_context.get('planner_inventory_authority') != planner_authority
+            or plan.get('effective_policy_identity') != effective_identity
+            or plan.get('planner_inventory_authority') != planner_authority):
+        raise ValueError('keyed integration effective policy or planner authority mismatch')
+
+    check_app_id = proof.get('check_app_id')
+    check_run_id = proof.get('check_run_id')
+    if (proof.get('check_name') != 'required-gate'
+            or type(check_app_id) is not int or check_app_id <= 0
+            or type(check_run_id) is not int or check_run_id <= 0
+            or plan.get('check_name') != 'required-gate'
+            or type(plan.get('check_app_id')) is not int
+            or type(plan.get('check_run_id')) is not int
+            or plan.get('check_app_id') != check_app_id
+            or plan.get('check_run_id') != check_run_id):
+        raise ValueError('keyed integration check identity is invalid')
+    required = (data.get('policy_discovery') or {}).get('required_status_checks') or []
+    pinned_apps = {str(item['app_id']) for item in required
+                   if isinstance(item, dict) and item.get('context') == 'required-gate'
+                   and item.get('app_id') is not None}
+    if len(pinned_apps) != 1 or str(check_app_id) != next(iter(pinned_apps), None):
+        raise ValueError('keyed integration app differs from the current required-gate pin')
+    run_id = proof.get('workflow_run_id')
+    run_attempt = proof.get('run_attempt')
+    if (type(run_id) is not int or run_id <= 0
+            or type(run_attempt) is not int or run_attempt <= 0
+            or type(proof.get('run_id')) is not int
+            or type(proof.get('request_id')) is not int
+            or proof.get('run_id') != run_id or proof.get('request_id') != run_id
+            or type(plan.get('workflow_run_id')) is not int
+            or type(plan.get('run_attempt')) is not int
+            or plan.get('workflow_run_id') != run_id
+            or plan.get('run_attempt') != run_attempt):
+        raise ValueError('keyed integration workflow attempt identity is invalid')
+    return True
+
+
+def _load_effective_helper(effective: Path, name: str):
+    path = effective / 'scripts/pm' / (name + '.py')
+    if path.is_symlink() or not path.is_file():
+        raise ValueError('effective integration helper is unavailable: ' + name)
+    spec = importlib.util.spec_from_file_location('lifecycle_' + name, path)
+    if spec is None or spec.loader is None:
+        raise ValueError('effective integration helper cannot be loaded: ' + name)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _latest_local_keyed_request_key(root: Path, effective: Path, *, repository: str,
+                                    uid: str, pr_number: int, base_oid: str,
+                                    head_oid: str, branch: str, task: dict[str, Any],
+                                    projection_digest: str) -> str | None:
+    """Select the newest observed keyed request from the canonical journal.
+
+    A prepared request has not produced a remote side effect. An uncertain
+    dispatch for this exact Task/PR/H/projection blocks older green evidence;
+    its outcome must be read back before the gate can proceed.
+    """
+    binding = task.get('loop_binding')
+    if not isinstance(binding, dict):
+        return None
+    epoch = _positive_bootstrap_epoch(task.get('bootstrap_epoch'))
+    if binding.get('bootstrap_epoch') != epoch:
+        raise ValueError('Task loop binding bootstrap epoch mismatch')
+    if not isinstance(projection_digest, str) or not re.fullmatch(r'sha256:[0-9a-f]{64}', projection_digest):
+        raise ValueError('trusted source projection digest is invalid')
+    integration = _load_effective_helper(effective, 'integration_ci')
+    contract = _load_effective_helper(effective, 'integration_executor_contract')
+    directory = Path(integration.git_common_dir(root))
+    if not directory.exists():
+        return None
+    expected = {
+        'repository': repository,
+        'task_uid': uid,
+        'pr_number': pr_number,
+        'bootstrap_epoch': epoch,
+        'source_head_oid': head_oid,
+        'source_projection_digest': projection_digest,
+    }
+    observed: list[tuple[int, str, int]] = []
+    for path in sorted(directory.glob('*.json')):
+        if not re.fullmatch(r'[0-9a-f]{64}', path.stem):
+            raise ValueError('validation request journal has a malformed key filename')
+        key = 'sha256:' + path.stem
+        record = contract._read_request_record(path, key)
+        identity = record['identity']
+        if any(identity.get(field) != value for field, value in expected.items()):
+            continue
+        if record.get('integration_base_oid') != base_oid:
+            continue
+        if record.get('status') == 'dispatch_uncertain' and record.get('dispatch_attempts') == 1:
+            raise ValueError('keyed validation request dispatch is unresolved for the current Task/PR/source')
+        if record.get('status') == 'observed':
+            observed.append((record['run_id'], key, record['run_attempt']))
+    if not observed:
+        return None
+    observed.sort()
+    if len(observed) > 1 and observed[-1][0] == observed[-2][0]:
+        raise ValueError('multiple keyed validation requests share the newest workflow run identity')
+    selected_run_id, selected_key, selected_attempt = observed[-1]
+    selected = integration.current_request(
+        repository, uid, pr_number, base_oid, head_oid, branch,
+        request_key=selected_key,
+    )
+    if (not isinstance(selected, dict) or selected.get('id') != selected_run_id
+            or type(selected.get('run_attempt')) is not int
+            or selected['run_attempt'] < selected_attempt):
+        raise ValueError('durable keyed validation request is absent from complete current-run readback')
+    return selected_key
 
 
 def live_integration_admission(data, root, uid, tool_root, admission, integration_run_id=None, *, require_strict=None):
@@ -737,7 +948,8 @@ def live_integration_admission(data, root, uid, tool_root, admission, integratio
         # helpers or a caller-authored receipt as CI authority.
         subprocess.run(['git','-C',str(root),'fetch','--no-tags','origin','main:refs/remotes/origin/main'],check=True,capture_output=True)
         commit = subprocess.check_output(['git','-C',str(root),'rev-parse','refs/remotes/origin/main'],text=True).strip()
-    for name in ('ci-ready-receipt.py', 'ci_ready_receipt_identity.py', 'integration_ci.py'):
+    for name in ('ci-ready-receipt.py', 'ci_ready_receipt_identity.py', 'integration_ci.py',
+                 'integration_executor_contract.py'):
         relative = 'scripts/pm/' + name
         expected = subprocess.check_output(['git','-C',str(root),'show',commit + ':' + relative])
         path = effective / relative
@@ -756,8 +968,22 @@ def live_integration_admission(data, root, uid, tool_root, admission, integratio
               if require_strict == "auto" else True if require_strict is None else bool(require_strict))
     if integration_run_id is not None:
         strict = True
+    projection = None
+    request_key = None
+    if isinstance(task.get('loop_binding'), dict):
+        # The same W-validated projection used by the strictness classifier
+        # selects a local journal key; the key is never taken from PR text or
+        # an artifact payload.
+        projection = _load_trusted_projection(data, root, effective, uid, commit)
+        request_key = _latest_local_keyed_request_key(
+            Path(root), effective, repository=data['repository'], uid=uid,
+            pr_number=int(data['number']), base_oid=data['baseRefOid'],
+            head_oid=data['headRefOid'], branch=data['baseRefName'], task=task,
+            projection_digest=projection['projection_digest'],
+        )
     request = {'root': str(effective), 'repository': data['repository'], 'uid': uid,
-               'issue': task['issue_number'], 'pr': data['number'], 'app': next(iter(pins)),
+               'canonical_root': str(root), 'issue': task['issue_number'], 'pr': data['number'],
+               'app': next(iter(pins)), 'request_key': request_key,
                'base_ref': data['baseRefName'], 'integration_run_id': integration_run_id,
                'require_strict': strict,
                # ``None`` is the direct compatibility API: it retains the
@@ -765,27 +991,45 @@ def live_integration_admission(data, root, uid, tool_root, admission, integratio
                # production-selected strict mode carries an explicit policy
                # selector and must have a matching manual dispatch.
                'require_dispatch': bool(strict and require_strict is not None)}
-    # Isolated stdlib loader installs only the two byte-verified modules. No
+    # The isolated loader installs only byte-verified authority helpers. No
     # candidate directory/PYTHONPATH is added to the import search path.
     program = """import importlib.util,json,sys
 from pathlib import Path
 request=json.loads(sys.argv[1]); directory=Path(request['root'])/'scripts/pm'
-for name,filename in [('integration_ci','integration_ci.py'),('ci_ready_receipt_identity','ci_ready_receipt_identity.py'),('ci_live','ci-ready-receipt.py')]:
- spec=importlib.util.spec_from_file_location(name,directory/filename); module=importlib.util.module_from_spec(spec); sys.modules[name]=module; spec.loader.exec_module(module)
+loaded={}
+for name,filename in [('integration_ci','integration_ci.py'),('integration_executor_contract','integration_executor_contract.py'),('ci_ready_receipt_identity','ci_ready_receipt_identity.py'),('ci_live','ci-ready-receipt.py')]:
+ spec=importlib.util.spec_from_file_location(name,directory/filename); item=importlib.util.module_from_spec(spec); sys.modules[name]=item; spec.loader.exec_module(item); loaded[name]=item
+integration=loaded['integration_ci']; module=loaded['ci_live']
+repository=integration.gh('api',f"repos/{request['repository']}")
+if repository.get('full_name')!=request['repository'] or repository.get('default_branch')!=request['base_ref']:
+ raise ValueError('PR target ref is not the live repository default branch')
+assessed_target=integration.default_branch_head(request['repository'],request['base_ref'])
 if request['require_strict']:
- pr,run,base,head=module.selected_live(request['repository'],request['uid'],request['issue'],request['pr'],'required-gate',request['app'],allow_ready_pr=True,base_ref=request['base_ref'],integration_run_id=request.get('integration_run_id'),require_integration=True,require_dispatch=request.get('require_dispatch',False))
+ pr,run,base,head=module.selected_live(request['repository'],request['uid'],request['issue'],request['pr'],'required-gate',request['app'],allow_ready_pr=True,base_ref=request['base_ref'],integration_run_id=request.get('integration_run_id'),require_integration=True,require_dispatch=request.get('require_dispatch',False),request_key=request.get('request_key'))
 else:
- pr,run,base,head=module.selected_live(request['repository'],request['uid'],request['issue'],request['pr'],'required-gate',request['app'],allow_ready_pr=True,base_ref=request['base_ref'])
+ pr,run,base,head=module.selected_live(request['repository'],request['uid'],request['issue'],request['pr'],'required-gate',request['app'],allow_ready_pr=True,base_ref=request['base_ref'],request_key=request.get('request_key'))
+if request.get('request_key'):
+ body=(pr.get('body') or '').replace('\\r\\n','\\n')
+ import re
+ if (re.findall(r'^Task:[^\\n]*$',body,re.M)!=['Task: '+request['uid']]
+     or re.findall(r'^Refs #[1-9][0-9]*$',body,re.M)!=['Refs #'+str(request['issue'])]):
+  raise ValueError('keyed PR Task/Refs identity is not canonical')
 planner=module.planner_for_run(request['repository'],run,base_oid=base,head_oid=head)
-proof={'integration_base_oid':base,'base_ref':pr.get('base',{}).get('ref'),'head_oid':head,'check_run_id':run['id'],'check_app_id':run['app']['id'],'planner_digest':module.hashlib.sha256(json.dumps(planner,sort_keys=True,separators=(',',':')).encode()).hexdigest(),'ci_validation_mode':'trusted_integration' if run.get('_integration') else 'ordinary_pr'}
+proof={'integration_base_oid':base,'base_ref':pr.get('base',{}).get('ref'),'head_oid':head,'check_name':run.get('name'),'check_run_id':run['id'],'check_app_id':run['app']['id'],'planner_digest':module.hashlib.sha256(json.dumps(planner,sort_keys=True,separators=(',',':')).encode()).hexdigest(),'ci_validation_mode':'trusted_integration' if run.get('_integration') else 'ordinary_pr','assessed_target_oid':assessed_target}
 if run.get('_integration'):
  proof.update({key:run['_integration'][key] for key in ('workflow_run_id','workflow_sha','tested_tree_oid','tested_commit_oid')})
+ for key in ('request_key','request_identity','source_scope_oid','trusted_policy_context','effective_policy_identity','planner_inventory_authority','required_plan_v2_artifact_id','required_plan_v2_artifact_name','required_plan_v2_payload','required_result_v2_artifacts','trusted_planner_inventory','execution_jobs','run_id','run_attempt','request_id','job_id','job_name'):
+  if key in (run.get('_integration') or {}): proof[key]=run['_integration'][key]
+if integration.default_branch_head(request['repository'],request['base_ref'])!=assessed_target:
+ raise ValueError('default-branch target moved during live CI and Task verification')
 print(json.dumps(proof))
 """
     completed = subprocess.run([sys.executable,'-I','-c',program,json.dumps(request)],text=True,capture_output=True)
     if completed.returncode:
         raise ValueError((completed.stderr or completed.stdout).strip() or 'fresh integration CI unavailable')
     proof = json.loads(completed.stdout)
+    if proof.get('request_key') is not None:
+        validate_keyed_integration_identity(proof, data, uid, task)
     _validate_live_integration_proof(
         proof, data, strict=strict, allow_legacy_strict_fallback=require_strict is None,
     )
