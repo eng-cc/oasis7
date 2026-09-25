@@ -118,6 +118,8 @@ Compatibility declaration 只证明客户端能理解当前 manifest，不能选
 
 验证者集合及其轮换保有受治理的共识权威；sentry、relay、full/state-sync/archive、RPC/proof gateway 等非权威服务只能提供传播、存储或证明材料，不能通过暴露面、缓存或服务被攻破取得最终写入权。
 
+目标态参与边界：公网 IP 不是受治理 validator、full、storage 或 observer 角色参与网络的通用前置条件；每个角色仍须通过对应的治理 admission，并满足其技术可达性要求。该产品目标对应 [P2P reachability PRD §2 的首项验收标准](../../p2p/network/mainnet-private-reachability-architecture.prd.md#2-user-experience-functionality)，不表示当前软件支持、已有部署能力，也不证明 mainnet 或 release readiness。
+
 - 对应验收：[AC-DCS-003](#ac-dcs-003)。
 - 专业域权威：[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[`node triad 运维与可观测性`](../../p2p/node/node-triad-operations-observability.prd.md#权威边界)、[`public-testnet governed bootstrap runbook`](../../p2p/blockchain/public-testnet-governed-bootstrap.runbook.md#stable-authority-and-evidence-boundary)。
 
