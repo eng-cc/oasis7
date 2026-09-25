@@ -28,8 +28,15 @@ def product_corpus():
     )
 
 
-def planner_unit_specs():
+def planner_unit_specs(reuse_policies=None):
+    reuse_policies = reuse_policies or {}
     def unit(unit_id, obligation):
+        applicable_policy = {
+            "schema": "oasis7-required-unit-policy/v1",
+            "reuse_state": "active",
+            "reuse_eligible": True,
+        }
+        applicable_policy.update(reuse_policies.get(unit_id, {}))
         return {
             "unit_id": unit_id,
             "unit_contract": {"kind": "fixture-unit/v1", "id": unit_id},
@@ -38,8 +45,8 @@ def planner_unit_specs():
             "input_paths": ["src/" + unit_id + ".rs"],
             "member_roots": [],
             "dependency_edges": [],
-            "applicable_policy": {"fixture": "policy/v1"},
-            "environment_contract": {"fixture": "python/v1"},
+            "applicable_policy": applicable_policy,
+            "environment_contract": {"fixture": "python/v1", "reuse_eligible": True},
         }
     return [
         unit(CORPUS_UNIT, CORPUS_UNIT),
@@ -47,9 +54,9 @@ def planner_unit_specs():
     ]
 
 
-def planner_inventory_issuer(target_oid, target_tree_oid):
-    specs = planner_unit_specs()
-    corpus = product_corpus()
+def planner_inventory_issuer(target_oid, target_tree_oid, specs=None, corpus=None):
+    specs = planner_unit_specs() if specs is None else specs
+    corpus = product_corpus() if corpus is None else corpus
     return {
         "schema": input_scope.TRUSTED_PLANNER_INVENTORY_SCHEMA,
         "authority": {
@@ -78,7 +85,10 @@ def trusted_inventory_readback(issuer, *, artifact_id=30):
     return {**issuer, "producer": {**issuer["producer"], "artifact_id": artifact_id}}
 
 
-def source_plan():
+def source_plan(*, reuse_policies=None):
+    specs = planner_unit_specs(reuse_policies)
+    corpus = product_corpus()
+    issuer = planner_inventory_issuer(HEAD, HEAD, specs, corpus)
     return {
         "schema": PLAN_SCHEMA,
         "required_capabilities": [CAPABILITY],
@@ -90,31 +100,37 @@ def source_plan():
         "review_applicability_digest": DIGEST,
         "required_test_units": [CORPUS_UNIT, "unit-a"],
         "required_review_roles": ["runtime_engineer"],
-        "planner_inventory_issuer": planner_inventory_issuer(HEAD, HEAD),
+        "planner_inventory_issuer": issuer,
+        "unit_specs": specs,
+        "product_corpus": corpus,
     }
 
 
-def target_snapshot(*, input_digest=INPUT_DIGEST, review_digest=DIGEST, closure="complete"):
+def target_snapshot(*, input_digest=INPUT_DIGEST, review_digest=DIGEST,
+                    closure="complete", reuse_policies=None):
+    specs = planner_unit_specs(reuse_policies)
+    corpus = product_corpus()
+    issuer = planner_inventory_issuer(TARGET, TARGET, specs, corpus)
     if closure == "complete":
         scope = {
             "schema": input_scope.INPUT_SCOPE_SCHEMA,
             "target_oid": TARGET,
             "target_tree_oid": TARGET,
-            "planner_inventory_issuer": planner_inventory_issuer(TARGET, TARGET),
+            "planner_inventory_issuer": issuer,
             "closure_status": {"status": "complete", "reason": None},
             "required_test_units": [CORPUS_UNIT, "unit-a"],
             "input_fingerprints": {"unit-a": input_digest, CORPUS_UNIT: INPUT_DIGEST},
             "dependency_edges": [],
             "fallback_complete": True,
             "fallback_contract": None,
-            "product_corpus": product_corpus(),
+            "product_corpus": corpus,
         }
     else:
         scope = {
             "schema": input_scope.INPUT_SCOPE_SCHEMA,
             "target_oid": TARGET,
             "target_tree_oid": TARGET,
-            "planner_inventory_issuer": planner_inventory_issuer(TARGET, TARGET),
+            "planner_inventory_issuer": issuer,
             "closure_status": {"status": "unknown", "reason": "fixture closure unavailable"},
             "required_test_units": [CORPUS_UNIT, "unit-a"],
             "input_fingerprints": {},
@@ -123,7 +139,7 @@ def target_snapshot(*, input_digest=INPUT_DIGEST, review_digest=DIGEST, closure=
             "fallback_contract": input_scope.planner_fallback_contract(
                 [CORPUS_UNIT, "unit-a"], TARGET, TARGET,
             ),
-            "product_corpus": product_corpus(),
+            "product_corpus": corpus,
         }
     return {
         "repository": REPOSITORY,
@@ -139,10 +155,15 @@ def target_snapshot(*, input_digest=INPUT_DIGEST, review_digest=DIGEST, closure=
         "required_test_units": [CORPUS_UNIT, "unit-a"],
         "required_review_roles": ["runtime_engineer"],
         "input_scope": scope,
+        "unit_specs": specs,
+        "product_corpus": corpus,
     }
 
 
-def evidence_set(*, test_input_digest=INPUT_DIGEST, review_digest=DIGEST):
+def evidence_set(*, test_input_digest=INPUT_DIGEST, review_digest=DIGEST,
+                 inventory_digest=None):
+    if inventory_digest is None:
+        inventory_digest = planner_inventory_issuer(HEAD, HEAD)["inventory_digest"]
     return {
         "reviews": [{
             "role_id": "runtime_engineer",
@@ -169,7 +190,7 @@ def evidence_set(*, test_input_digest=INPUT_DIGEST, review_digest=DIGEST):
             "check_app_id": 42,
             "check_run_id": 20,
             "artifact_id": 30,
-            "inventory_digest": planner_inventory_issuer(HEAD, HEAD)["inventory_digest"],
+            "inventory_digest": inventory_digest,
             "effective_policy_identity": effective_policy_identity(),
         }, {
             "unit_id": CORPUS_UNIT,
@@ -186,7 +207,7 @@ def evidence_set(*, test_input_digest=INPUT_DIGEST, review_digest=DIGEST):
             "check_app_id": 42,
             "check_run_id": 20,
             "artifact_id": 31,
-            "inventory_digest": planner_inventory_issuer(HEAD, HEAD)["inventory_digest"],
+            "inventory_digest": inventory_digest,
             "effective_policy_identity": effective_policy_identity(),
         }],
     }
@@ -307,7 +328,9 @@ class ApplicabilityDecisionTests(unittest.TestCase):
         target = target_snapshot() if target is None else target
         return applicability.evaluate_evidence_applicability(
             plan,
-            evidence_set() if evidence is None else evidence,
+            evidence_set(
+                inventory_digest=plan["planner_inventory_issuer"]["inventory_digest"],
+            ) if evidence is None else evidence,
             target,
             enabled_policy() if policy is None else policy,
             trusted_source_inventory=trusted_inventory_readback(
@@ -352,6 +375,88 @@ class ApplicabilityDecisionTests(unittest.TestCase):
         self.assertEqual({"review", "test"}, {row["kind"] for row in decision.item_decisions})
         self.assertTrue(all(row["reason"] for row in decision.item_decisions))
         self.assertTrue(decision.evidence_locators)
+
+    def test_disabled_or_ineligible_unit_policy_revalidates_only_that_test_unit(self):
+        cases = (
+            (
+                {"unit-a": {"reuse_state": "disabled-pending-independent-activation"}},
+                {},
+                "TEST_REUSE_POLICY_DISABLED",
+            ),
+            (
+                {},
+                {"unit-a": {"reuse_eligible": False}},
+                "TEST_REUSE_POLICY_INELIGIBLE",
+            ),
+        )
+        for source_policies, target_policies, reason in cases:
+            with self.subTest(source_policies=source_policies, target_policies=target_policies):
+                plan = source_plan(reuse_policies=source_policies)
+                target = target_snapshot(reuse_policies=target_policies)
+                evidence = evidence_set(
+                    inventory_digest=plan["planner_inventory_issuer"]["inventory_digest"],
+                )
+                decision = self.evaluate(plan=plan, evidence=evidence, target=target)
+
+                self.assertEqual("reusable", result_status(decision, "source_review"))
+                self.assertEqual("revalidate", result_status(decision, "test_evidence"))
+                self.assertEqual("revalidate", result_status(decision, "merge_readiness"))
+                self.assertEqual((CORPUS_UNIT,), tuple(decision.reused_units))
+                self.assertEqual(("unit-a",), tuple(decision.required_test_units))
+                unit_decision = next(
+                    item for item in decision.item_decisions
+                    if item["kind"] == "test" and item["id"] == "unit-a"
+                )
+                self.assertEqual(reason, unit_decision["reason"])
+
+    def test_missing_per_unit_reuse_policy_blocks_instead_of_reusing(self):
+        plan = source_plan()
+        del plan["unit_specs"][0]["applicable_policy"]["reuse_eligible"]
+        plan["planner_inventory_issuer"] = planner_inventory_issuer(
+            HEAD, HEAD, plan["unit_specs"], plan["product_corpus"],
+        )
+        decision = self.evaluate(plan=plan)
+
+        self.assertEqual("blocked", result_status(decision, "test_evidence"))
+        self.assertEqual("blocked", result_status(decision, "merge_readiness"))
+        self.assertIn("APPLICABILITY_INPUT_INVALID", decision.blockers)
+
+    def test_unrecognized_reuse_state_blocks_with_per_unit_reason(self):
+        policies = {"unit-a": {"reuse_state": "maybe-active"}}
+        plan = source_plan(reuse_policies=policies)
+        target = target_snapshot(reuse_policies=policies)
+        evidence = evidence_set(
+            inventory_digest=plan["planner_inventory_issuer"]["inventory_digest"],
+        )
+        decision = self.evaluate(plan=plan, evidence=evidence, target=target)
+
+        self.assertEqual("reusable", result_status(decision, "source_review"))
+        self.assertEqual("blocked", result_status(decision, "test_evidence"))
+        self.assertEqual("blocked", result_status(decision, "merge_readiness"))
+        unit_decision = next(
+            item for item in decision.item_decisions
+            if item["kind"] == "test" and item["id"] == "unit-a"
+        )
+        self.assertEqual("TEST_REUSE_POLICY_STATE_UNRECOGNIZED", unit_decision["reason"])
+
+    def test_ineligible_reuse_policy_does_not_hide_failed_test_attempt(self):
+        plan = source_plan(reuse_policies={
+            "unit-a": {"reuse_state": "disabled-pending-independent-activation"},
+        })
+        target = target_snapshot()
+        evidence = evidence_set(
+            inventory_digest=plan["planner_inventory_issuer"]["inventory_digest"],
+        )
+        evidence["tests"][0]["status"] = "failed"
+        decision = self.evaluate(plan=plan, evidence=evidence, target=target)
+
+        self.assertEqual("blocked", result_status(decision, "test_evidence"))
+        self.assertEqual("blocked", result_status(decision, "merge_readiness"))
+        unit_decision = next(
+            item for item in decision.item_decisions
+            if item["kind"] == "test" and item["id"] == "unit-a"
+        )
+        self.assertEqual("TEST_EVIDENCE_NOT_ACCEPTED", unit_decision["reason"])
 
     def test_changed_test_input_revalidates_tests_without_invalidating_review(self):
         decision = self.evaluate(

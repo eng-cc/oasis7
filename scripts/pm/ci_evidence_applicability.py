@@ -17,8 +17,12 @@ from ci_ready_receipt_identity import (
     REQUIRED_PLAN_V2_SCHEMA,
     read_required_plan_capabilities,
 )
-from ci_input_scope import aggregate_product_corpus_results, validate_input_scope_snapshot
-from ci_input_scope import validate_planner_inventory_binding
+from ci_input_scope import (
+    aggregate_product_corpus_results,
+    planner_inventory_digest,
+    validate_input_scope_snapshot,
+    validate_planner_inventory_binding,
+)
 from integration_executor_contract import (
     EFFECTIVE_POLICY_IDENTITY_SCHEMA,
     effective_policy_digest,
@@ -34,6 +38,12 @@ _BLOCKED = "blocked"
 _REVALIDATE = "revalidate"
 _REUSABLE = "reusable"
 _DISABLED = "disabled"
+_UNIT_POLICY_SCHEMA = "oasis7-required-unit-policy/v1"
+_ACTIVE_REUSE_STATE = "active"
+_INACTIVE_REUSE_STATES = frozenset({
+    "disabled",
+    "disabled-pending-independent-activation",
+})
 
 
 @dataclass(frozen=True)
@@ -229,6 +239,74 @@ def _inventory_locator(binding: dict[str, Any], label: str) -> dict[str, Any]:
     }
 
 
+def _bound_unit_policies(
+    inventory_record: Any,
+    trusted_inventory: dict[str, Any],
+    expected_units: set[str],
+    label: str,
+) -> dict[str, dict[str, Any]]:
+    """Read per-unit reuse policy only from a digest-bound full inventory."""
+    if not isinstance(inventory_record, dict):
+        raise ValueError(f"{label} inventory record is missing")
+    unit_specs = inventory_record.get("unit_specs")
+    product_corpus = inventory_record.get("product_corpus")
+    digest = planner_inventory_digest(
+        unit_specs,
+        product_corpus,
+        trusted_inventory["target_oid"],
+        trusted_inventory["target_tree_oid"],
+    )
+    if digest != trusted_inventory["inventory_digest"]:
+        raise ValueError(f"{label} unit policies are not bound to the trusted inventory")
+    if not isinstance(unit_specs, list):
+        raise ValueError(f"{label} unit specs are malformed")
+    unit_ids = [spec.get("unit_id") if isinstance(spec, dict) else None for spec in unit_specs]
+    if (any(not isinstance(unit_id, str) or not unit_id for unit_id in unit_ids)
+            or len(unit_ids) != len(set(unit_ids))
+            or set(unit_ids) != expected_units):
+        raise ValueError(f"{label} unit policies do not cover the exact trusted unit set")
+
+    policies: dict[str, dict[str, Any]] = {}
+    for spec in unit_specs:
+        unit_id = spec["unit_id"]
+        policy = spec.get("applicable_policy")
+        environment = spec.get("environment_contract")
+        if (not isinstance(policy, dict)
+                or policy.get("schema") != _UNIT_POLICY_SCHEMA
+                or not isinstance(policy.get("reuse_state"), str)
+                or not policy["reuse_state"]
+                or type(policy.get("reuse_eligible")) is not bool):
+            raise ValueError(f"{label} unit {unit_id} has an invalid reuse policy")
+        if not isinstance(environment, dict) or type(environment.get("reuse_eligible")) is not bool:
+            raise ValueError(f"{label} unit {unit_id} has an invalid reuse environment policy")
+        policies[unit_id] = {
+            "reuse_state": policy["reuse_state"],
+            "reuse_eligible": policy["reuse_eligible"],
+            "environment_reuse_eligible": environment["reuse_eligible"],
+        }
+    return policies
+
+
+def _reuse_policy_disposition(
+    source_policy: dict[str, Any], target_policy: dict[str, Any],
+) -> tuple[str, str] | None:
+    recognized_states = {
+        _ACTIVE_REUSE_STATE, *_INACTIVE_REUSE_STATES,
+    }
+    if (source_policy["reuse_state"] not in recognized_states
+            or target_policy["reuse_state"] not in recognized_states):
+        return _BLOCKED, "TEST_REUSE_POLICY_STATE_UNRECOGNIZED"
+    if (source_policy["reuse_state"] in _INACTIVE_REUSE_STATES
+            or target_policy["reuse_state"] in _INACTIVE_REUSE_STATES):
+        return _REVALIDATE, "TEST_REUSE_POLICY_DISABLED"
+    if not source_policy["reuse_eligible"] or not target_policy["reuse_eligible"]:
+        return _REVALIDATE, "TEST_REUSE_POLICY_INELIGIBLE"
+    if (not source_policy["environment_reuse_eligible"]
+            or not target_policy["environment_reuse_eligible"]):
+        return _REVALIDATE, "TEST_REUSE_ENVIRONMENT_INELIGIBLE"
+    return None
+
+
 def _item_decision(kind: str, item_id: str, disposition: str, reason: str,
                    locator: dict[str, Any] | None = None) -> dict[str, Any]:
     return {
@@ -254,7 +332,11 @@ def evaluate_evidence_applicability(
     The live reader supplies both planner inventory bindings out of band. The
     target's assessed Q is separate from the commit/tree used to build its
     input inventory (M/T). Reuse remains disabled unless the v2 envelope and
-    trusted effective policy both select the capability.
+    trusted effective policy both select the capability. Both plan records
+    carry full `unit_specs` and `product_corpus` data; their canonical digest
+    must match the respective live binding, and a test unit is reusable only
+    when both its source and target policy explicitly mark reuse active and
+    eligible.
     """
     try:
         capabilities = read_required_plan_capabilities(source_plan)
@@ -365,6 +447,9 @@ def evaluate_evidence_applicability(
         )
         if source_inventory["unit_ids"] != sorted(source_units):
             raise ValueError("source required units disagree with trusted planner inventory")
+        source_unit_policies = _bound_unit_policies(
+            source_plan, source_inventory, source_units, "source",
+        )
         source_roles = set(_string_list(
             source_plan.get("required_review_roles"), "source_plan.required_review_roles",
         ))
@@ -372,6 +457,8 @@ def evaluate_evidence_applicability(
             target_snapshot.get("input_scope"),
             trusted_planner_inventory=trusted_target_inventory,
         )
+        if target_snapshot.get("product_corpus") != input_scope["product_corpus"]:
+            raise ValueError("target product corpus disagrees with its input-scope snapshot")
         input_scope_commit_oid = _identity(
             target_snapshot.get("input_scope_commit_oid"),
             "target_snapshot.input_scope_commit_oid",
@@ -384,6 +471,12 @@ def evaluate_evidence_applicability(
                 or input_scope["target_tree_oid"] != input_scope_tree_oid):
             raise ValueError("target input scope commit/tree disagree with the explicit M/T identity")
         target_units = tuple(input_scope["required_test_units"])
+        target_unit_policies = _bound_unit_policies(
+            target_snapshot,
+            trusted_target_inventory,
+            set(target_units),
+            "target",
+        )
         projected_target_units = _string_list(
             target_snapshot.get("required_test_units"), "target_snapshot.required_test_units",
         )
@@ -569,28 +662,43 @@ def evaluate_evidence_applicability(
             item_decisions.append(_item_decision(
                 "test", unit, "revalidate", "TEST_EFFECTIVE_POLICY_CHANGED", locator,
             ))
-        elif record_digest != fingerprints.get(unit):
+            continue
+        if record_digest != fingerprints.get(unit):
             required_units.append(unit)
             item_decisions.append(_item_decision(
                 "test", unit, "revalidate", "TEST_INPUT_FINGERPRINT_CHANGED", locator,
             ))
-        elif status == "passed":
-            reused_units.append(unit)
-            item_decisions.append(_item_decision(
-                "test", unit, "reusable", "TEST_EVIDENCE_MATCHED", locator,
-            ))
-        elif isinstance(status, str) and status in {"failed", "blocked", "pending"}:
+            continue
+        if isinstance(status, str) and status in {"failed", "blocked", "pending"}:
             blockers.append("TEST_EVIDENCE_NOT_ACCEPTED")
             required_units.append(unit)
             item_decisions.append(_item_decision(
                 "test", unit, "blocked", "TEST_EVIDENCE_NOT_ACCEPTED", locator,
             ))
-        else:
+            continue
+        if status != "passed":
             blockers.append("TEST_EVIDENCE_STATUS_UNSUPPORTED")
             required_units.append(unit)
             item_decisions.append(_item_decision(
                 "test", unit, "blocked", "TEST_EVIDENCE_STATUS_UNSUPPORTED", locator,
             ))
+            continue
+        policy_decision = _reuse_policy_disposition(
+            source_unit_policies[unit], target_unit_policies[unit],
+        )
+        if policy_decision is not None:
+            disposition, reason = policy_decision
+            if disposition == _BLOCKED:
+                blockers.append(reason)
+            required_units.append(unit)
+            item_decisions.append(_item_decision(
+                "test", unit, disposition, reason, locator,
+            ))
+            continue
+        reused_units.append(unit)
+        item_decisions.append(_item_decision(
+            "test", unit, "reusable", "TEST_EVIDENCE_MATCHED", locator,
+        ))
 
     source_review = (
         _BLOCKED if any(item.startswith("REVIEW_") for item in blockers)

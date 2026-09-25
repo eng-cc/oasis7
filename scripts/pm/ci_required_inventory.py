@@ -192,6 +192,13 @@ RUST_COMMANDS: dict[str, tuple[str, ...]] = {
 _UNIT_SCHEMA = "oasis7-required-test-unit/v1"
 _POLICY_SCHEMA = "oasis7-required-unit-policy/v1"
 _ENV_SCHEMA = "oasis7-required-unit-environment/v1"
+_PLAN_INVOCATION_SCHEMA = "oasis7-required-scope-invocation/v1"
+_TRUSTED_RUNNER_IMAGE = "ubuntu-24.04"
+_TRUSTED_PYTHON_IMPLEMENTATION = "CPython"
+_TRUSTED_PYTHON_VERSION = "3.12.3"
+_TRUSTED_MARKDOWN_PACKAGES = {"markdown-it-py": "3.0.0", "mdurl": "0.1.2"}
+_PLANNER_EVENT_NAMES = {"pull_request", "workflow_dispatch", "push", "schedule"}
+_PLANNER_RUN_MODES = {"legacy", "integration_revalidation", "full_escalation"}
 
 
 class InventoryError(ValueError):
@@ -409,41 +416,210 @@ def _product_environment_contract(
         if line.strip() and not line.lstrip().startswith("#")
     ]
     runtime_packages: dict[str, str] = {}
-    for distribution in ("markdown-it-py", "mdurl"):
+    for distribution in _TRUSTED_MARKDOWN_PACKAGES:
         try:
             runtime_packages[distribution] = package_version(distribution)
         except PackageNotFoundError:
             runtime_packages[distribution] = "unavailable"
+    runner = _observe_runner_identity()
+    python = _observe_python_identity()
+    python_matches = (
+        python["implementation"] == _TRUSTED_PYTHON_IMPLEMENTATION
+        and python["version"] == _TRUSTED_PYTHON_VERSION
+        and python["full_version"].startswith(_TRUSTED_PYTHON_VERSION + " ")
+        and python["cache_tag"] == "cpython-312"
+    )
     dependencies_match = (
         requirement_lines == ["markdown-it-py==3.0.0"]
-        and runtime_packages.get("markdown-it-py") == "3.0.0"
-        and runtime_packages.get("mdurl") not in {None, "unavailable"}
+        and runtime_packages == _TRUSTED_MARKDOWN_PACKAGES
     )
     reuse_eligible = (
         parser_matches and requirements_match and dependencies_match
-        and platform.python_implementation() == "CPython"
+        and runner["matches_trusted_W"] and python_matches
     )
     return {
         "schema": _ENV_SCHEMA,
-        "runner_image": "ubuntu-24.04",
-        "python_implementation": platform.python_implementation(),
-        "python_version": platform.python_version(),
-        "python_full_version": sys.version,
-        "python_cache_tag": sys.implementation.cache_tag,
+        "runner_image": runner["runner_image"],
+        "runner_identity": runner,
+        "runner_image_matches_trusted_W": runner["matches_trusted_W"],
+        "python_implementation": python["implementation"],
+        "python_version": python["version"],
+        "python_full_version": python["full_version"],
+        "python_cache_tag": python["cache_tag"],
+        "python_runtime_matches_trusted_W": python_matches,
         "runtime_packages": runtime_packages,
+        "markdown_runtime_matches_trusted_W": dependencies_match,
         "markdown_parser_matches_trusted_W": parser_matches,
         "markdown_requirements_match_trusted_W": requirements_match,
         "external_inputs": (
             "fully-bound-python-and-pinned-markdown-runtime"
-            if reuse_eligible else "unverified-markdown-runtime-or-target-parser"
+            if reuse_eligible else "unverified-runner-python-markdown-runtime-or-target-parser"
         ),
         "reuse_eligible": reuse_eligible,
     }
 
 
+def _observe_runner_identity() -> dict[str, Any]:
+    """Read the actual GitHub runner and OS identity; never infer it from W."""
+    release: dict[str, str] = {}
+    try:
+        for line in Path("/etc/os-release").read_text(encoding="utf-8").splitlines():
+            key, separator, value = line.partition("=")
+            if separator:
+                release[key] = value.strip().strip('"').strip("'")
+    except OSError:
+        pass
+    runner_os = os.environ.get("RUNNER_OS", "unavailable")
+    image_os = os.environ.get("ImageOS", "unavailable")
+    image_version = os.environ.get("ImageVersion", "unavailable")
+    matches = (
+        platform.system() == "Linux"
+        and runner_os == "Linux"
+        and image_os == "ubuntu24"
+        and bool(image_version)
+        and image_version != "unavailable"
+        and release.get("ID") == "ubuntu"
+        and release.get("VERSION_ID") == "24.04"
+    )
+    if matches:
+        image = _TRUSTED_RUNNER_IMAGE
+    elif image_os != "unavailable":
+        image = image_os
+    elif platform.system() == "Darwin":
+        mac_version = platform.mac_ver()[0]
+        image = "macos-" + ".".join(mac_version.split(".")[:2]) if mac_version else "macos-unknown"
+    else:
+        image = "unknown"
+    return {
+        "runner_image": image,
+        "runner_os": runner_os,
+        "image_os": image_os,
+        "image_version": image_version,
+        "os_id": release.get("ID", "unavailable"),
+        "os_version_id": release.get("VERSION_ID", "unavailable"),
+        "matches_trusted_W": matches,
+    }
+
+
+def _observe_python_identity() -> dict[str, str]:
+    """Record the interpreter that actually ran the product-corpus checker."""
+    return {
+        "implementation": platform.python_implementation(),
+        "version": platform.python_version(),
+        "full_version": sys.version,
+        "cache_tag": sys.implementation.cache_tag or "unavailable",
+    }
+
+
+def _canonical_digest(value: Any) -> str:
+    encoded = json.dumps(
+        value, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False,
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
+def _validate_changed_paths(changed_paths: list[str] | tuple[str, ...]) -> list[str]:
+    if not isinstance(changed_paths, (list, tuple)):
+        raise InventoryError("trusted planner changed paths must be a list")
+    paths: list[str] = []
+    for path in changed_paths:
+        if (not isinstance(path, str) or not path or "\x00" in path
+                or "\n" in path or "\r" in path or "\\" in path or path.startswith("/")
+                or any(part in {"", ".", ".."} for part in path.split("/"))):
+            raise InventoryError("trusted planner changed paths are malformed")
+        paths.append(path)
+    if len(paths) != len(set(paths)):
+        raise InventoryError("trusted planner changed paths must be unique")
+    return paths
+
+
+def _validate_ambient_github_identity(
+    repository: str, event_name: str, producer: dict[str, int],
+) -> None:
+    """When running in Actions, bind supplied run identity to ambient context."""
+    expected = {
+        "GITHUB_REPOSITORY": repository,
+        "GITHUB_EVENT_NAME": event_name,
+        "GITHUB_RUN_ID": str(producer["run_id"]),
+        "GITHUB_RUN_ATTEMPT": str(producer["run_attempt"]),
+    }
+    if not any(name in os.environ for name in expected):
+        return
+    mismatched = [name for name, value in expected.items() if os.environ.get(name) != value]
+    if mismatched:
+        raise InventoryError(
+            "producer identity does not match current GitHub run context: "
+            + ", ".join(mismatched)
+        )
+
+
+def _replay_trusted_planner(
+    planner_root: Path, planner_path: Path, config_path: Path,
+    plan: dict[str, str], *, event_name: str, run_mode: str,
+    changed_paths: list[str], base_ref: str | None, head_ref: str | None,
+    task_uid: str | None, scope_base_oid: str | None,
+    impact_projection: str | None,
+) -> tuple[dict[str, str], str]:
+    """Re-run W with the invocation context and reject supplied plan drift."""
+    if event_name not in _PLANNER_EVENT_NAMES:
+        raise InventoryError("trusted planner event_name is unsupported")
+    if run_mode not in _PLANNER_RUN_MODES:
+        raise InventoryError("trusted planner run_mode is unsupported")
+    if (base_ref is None) != (head_ref is None):
+        raise InventoryError("trusted planner base_ref and head_ref must be supplied together")
+    if base_ref is not None and not changed_paths:
+        raise InventoryError(
+            "trusted planner exact changed paths are required when commit refs are supplied"
+        )
+    for name, ref in (("base_ref", base_ref), ("head_ref", head_ref),
+                      ("scope_base_oid", scope_base_oid)):
+        if ref is not None and not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", ref):
+            raise InventoryError(f"trusted planner {name} must be a full commit OID")
+    if impact_projection is not None and not (task_uid and head_ref and scope_base_oid):
+        raise InventoryError("trusted planner projection identity is incomplete")
+    if task_uid is not None and not re.fullmatch(r"task_[0-9a-f]{32}", task_uid):
+        raise InventoryError("trusted planner task UID is malformed")
+
+    command = [
+        sys.executable, str(planner_path), "--event-name", event_name,
+        "--run-mode", run_mode, "--config", str(config_path),
+    ]
+    if base_ref is not None:
+        command.extend(("--base-ref", base_ref, "--head-ref", head_ref or ""))
+    if task_uid is not None:
+        command.extend(("--task-uid", task_uid))
+    if scope_base_oid is not None:
+        command.extend(("--scope-base-oid", scope_base_oid))
+    if impact_projection is not None:
+        command.extend(("--impact-projection", impact_projection))
+    for path in changed_paths:
+        command.append("--changed-path=" + path)
+    projection_path = Path(impact_projection) if impact_projection is not None else None
+    if projection_path is not None and (projection_path.is_symlink() or not projection_path.is_file()):
+        raise InventoryError("trusted planner impact projection is not a regular file")
+    projection_digest_before = _sha256(projection_path) if projection_path is not None else ""
+    try:
+        actual_text = subprocess.run(
+            command, cwd=planner_root, check=True, capture_output=True, text=True,
+        ).stdout
+    except (OSError, subprocess.CalledProcessError) as exc:
+        detail = exc.stderr.strip() if isinstance(exc, subprocess.CalledProcessError) else str(exc)
+        raise InventoryError("trusted W planner invocation failed: " + detail) from exc
+    projection_digest_after = _sha256(projection_path) if projection_path is not None else ""
+    if projection_digest_after != projection_digest_before:
+        raise InventoryError("trusted planner impact projection changed during invocation")
+    actual = _plan_mapping(actual_text)
+    if plan != actual:
+        raise InventoryError("planner output does not match trusted W invocation event and changed paths")
+    return actual, projection_digest_after
+
+
 def _validate_trusted_plan(
     planner_root: Path, plan: dict[str, str], repository: str, workflow_ref: str,
-    planner_authority_oid: str,
+    planner_authority_oid: str, *, event_name: str, run_mode: str,
+    changed_paths: list[str], base_ref: str | None, head_ref: str | None,
+    task_uid: str | None, scope_base_oid: str | None,
+    impact_projection: str | None, producer: dict[str, int],
 ) -> tuple[Any, Any, dict[str, Any], dict[str, Any]]:
     planner_path = planner_root / "scripts/plan-rust-required-scope.py"
     config_path = planner_root / "scripts/ci-required-scope.v2.json"
@@ -497,12 +673,37 @@ def _validate_trusted_plan(
         selector = spec["selector_env"]
         if capability != "required_gate_baseline" and (not selector or selector not in runner_text):
             raise InventoryError(f"trusted required-gate selector is missing: {capability}")
+    changed_paths = _validate_changed_paths(changed_paths)
+    plan, projection_digest = _replay_trusted_planner(
+        planner_root, planner_path, config_path, plan,
+        event_name=event_name, run_mode=run_mode, changed_paths=changed_paths,
+        base_ref=base_ref, head_ref=head_ref, task_uid=task_uid,
+        scope_base_oid=scope_base_oid, impact_projection=impact_projection,
+    )
     plan_units = selected_test_units(plan, capabilities)
+    selection = {
+        "schema": _PLAN_INVOCATION_SCHEMA,
+        "planner_authority_oid": planner_authority_oid,
+        "planner_config_sha256": config_digest,
+        "event_name": event_name,
+        "run_mode": run_mode,
+        "base_ref": base_ref or "",
+        "head_ref": head_ref or "",
+        "task_uid": task_uid or "",
+        "scope_base_oid": scope_base_oid or "",
+        "impact_projection_sha256": projection_digest,
+        "changed_paths": changed_paths,
+        "planner_output_sha256": _canonical_digest(plan),
+    }
+    selection_digest = _canonical_digest(selection)
     return planner, _load_module(c2_path, "trusted_ci_input_scope"), registry, {
         "config_digest": config_digest,
         "trusted_sources": _trusted_sources(planner_root),
         "plan_units": plan_units,
         "runner_text": runner_text,
+        "planner_selection": selection,
+        "planner_selection_digest": selection_digest,
+        "planner_invocation": {**selection, "producer": producer, "digest": selection_digest},
     }
 
 
@@ -647,6 +848,7 @@ def _unit_spec(
         "trusted_W": {
             "authority_oid": planner_facts["planner_authority_oid"],
             "sources": planner_facts["trusted_sources"],
+            "planner_invocation_digest": planner_facts["planner_selection_digest"],
         },
     }
     return {
@@ -673,6 +875,14 @@ def build_required_inventory(
     repository: str,
     workflow_ref: str,
     planner_authority_oid: str,
+    event_name: str,
+    run_mode: str,
+    changed_paths: list[str],
+    base_ref: str | None = None,
+    head_ref: str | None = None,
+    task_uid: str | None = None,
+    scope_base_oid: str | None = None,
+    impact_projection: str | None = None,
     run_id: int,
     run_attempt: int,
     check_app_id: int,
@@ -688,8 +898,21 @@ def build_required_inventory(
     trusted_root = Path(planner_root).resolve()
     target_root = Path(target_repo_root).resolve()
     plan = _plan_mapping(planner_output)
+    producer = {
+        "run_id": run_id,
+        "run_attempt": run_attempt,
+        "check_app_id": check_app_id,
+        "check_run_id": check_run_id,
+    }
+    if any(type(value) is not int or value <= 0 for value in producer.values()):
+        raise InventoryError("producer run, attempt, app, and check IDs must be positive integers")
+    _validate_ambient_github_identity(repository, event_name, producer)
     planner, c2, registry, planner_facts = _validate_trusted_plan(
         trusted_root, plan, repository, workflow_ref, planner_authority_oid,
+        event_name=event_name, run_mode=run_mode, changed_paths=changed_paths,
+        base_ref=base_ref, head_ref=head_ref, task_uid=task_uid,
+        scope_base_oid=scope_base_oid, impact_projection=impact_projection,
+        producer=producer,
     )
     selected_ids = selected_test_units(plan, tuple(planner.CAPABILITIES))
     repo = subprocess.run(
@@ -700,14 +923,6 @@ def build_required_inventory(
     if repo != target_commit:
         raise InventoryError("target working tree HEAD does not equal the planner target commit")
     _require_clean_checkout(target_root, "target M")
-    producer = {
-        "run_id": run_id,
-        "run_attempt": run_attempt,
-        "check_app_id": check_app_id,
-        "check_run_id": check_run_id,
-    }
-    if any(type(value) is not int or value <= 0 for value in producer.values()):
-        raise InventoryError("producer run, attempt, app, and check IDs must be positive integers")
     planner_facts["planner_authority_oid"] = planner_authority_oid
     planner_facts["producer"] = producer
     specs: list[dict[str, Any]] = []
@@ -749,6 +964,7 @@ def build_required_inventory(
                 "trusted_W": {
                     "authority_oid": planner_authority_oid,
                     "sources": planner_facts["trusted_sources"],
+                    "planner_invocation_digest": planner_facts["planner_selection_digest"],
                 },
             }
             specs.append({
@@ -829,6 +1045,7 @@ def build_required_inventory(
         "schema": "oasis7-required-test-inventory/v1",
         "planner_authority_oid": planner_authority_oid,
         "planner_config_sha256": planner_facts["config_digest"],
+        "planner_invocation": planner_facts["planner_invocation"],
         "selected_test_units": selected_ids,
         "unit_specs": specs,
         "product_corpus": product_corpus,
@@ -849,6 +1066,14 @@ def main() -> None:
     parser.add_argument("--repository", required=True)
     parser.add_argument("--workflow-ref", required=True)
     parser.add_argument("--planner-authority-oid", required=True)
+    parser.add_argument("--event-name", choices=sorted(_PLANNER_EVENT_NAMES), required=True)
+    parser.add_argument("--run-mode", choices=sorted(_PLANNER_RUN_MODES), required=True)
+    parser.add_argument("--changed-path", action="append", default=[])
+    parser.add_argument("--base-ref")
+    parser.add_argument("--head-ref")
+    parser.add_argument("--task-uid")
+    parser.add_argument("--scope-base-oid")
+    parser.add_argument("--impact-projection")
     parser.add_argument("--run-id", required=True, type=int)
     parser.add_argument("--run-attempt", required=True, type=int)
     parser.add_argument("--check-app-id", required=True, type=int)
@@ -867,6 +1092,14 @@ def main() -> None:
             repository=args.repository,
             workflow_ref=args.workflow_ref,
             planner_authority_oid=args.planner_authority_oid,
+            event_name=args.event_name,
+            run_mode=args.run_mode,
+            changed_paths=args.changed_path,
+            base_ref=args.base_ref,
+            head_ref=args.head_ref,
+            task_uid=args.task_uid,
+            scope_base_oid=args.scope_base_oid,
+            impact_projection=args.impact_projection,
             run_id=args.run_id,
             run_attempt=args.run_attempt,
             check_app_id=args.check_app_id,

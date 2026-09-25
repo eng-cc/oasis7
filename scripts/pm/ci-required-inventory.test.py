@@ -11,10 +11,15 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import ExitStack, contextmanager
 from pathlib import Path
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
+PLANNER_EVENT_NAME = "pull_request"
+PLANNER_RUN_MODE = "legacy"
+PLANNER_CHANGED_PATHS = ["crates/oasis7_consensus/src/lib.rs"]
 
 
 def load_module(path: Path, name: str):
@@ -39,6 +44,39 @@ class RequiredInventoryTests(unittest.TestCase):
     def copy_file(self, source: Path, destination: Path):
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, destination)
+
+    @contextmanager
+    def observed_product_runtime(
+        self, *, runner_image="ubuntu-24.04", python_implementation="CPython",
+        python_version="3.12.3", mdurl_version="0.1.2",
+    ):
+        runner = {
+            "runner_image": runner_image,
+            "runner_os": "Linux" if runner_image == "ubuntu-24.04" else "macOS",
+            "image_os": "ubuntu24" if runner_image == "ubuntu-24.04" else runner_image,
+            "image_version": "20260907.300.1",
+            "os_id": "ubuntu" if runner_image == "ubuntu-24.04" else "macos",
+            "os_version_id": "24.04" if runner_image == "ubuntu-24.04" else "14",
+            "matches_trusted_W": runner_image == "ubuntu-24.04",
+        }
+        python = {
+            "implementation": python_implementation,
+            "version": python_version,
+            "full_version": python_version + " (fixture)",
+            "cache_tag": "cpython-312" if python_version.startswith("3.12.") else "other",
+        }
+
+        def package(distribution):
+            return {
+                "markdown-it-py": "3.0.0",
+                "mdurl": mdurl_version,
+            }[distribution]
+
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(self.inventory, "_observe_runner_identity", return_value=runner))
+            stack.enter_context(patch.object(self.inventory, "_observe_python_identity", return_value=python))
+            stack.enter_context(patch.object(self.inventory, "package_version", side_effect=package))
+            yield
 
     def make_fixture(self, parent: Path):
         trusted = parent / "trusted-w"
@@ -131,23 +169,50 @@ class RequiredInventoryTests(unittest.TestCase):
         subprocess.run(["git", "commit", "-qm", "fixture"], cwd=target, check=True)
         plan = subprocess.run(
             [sys.executable, str(trusted / "scripts/plan-rust-required-scope.py"),
-             "--event-name", "pull_request", "--config",
+             "--event-name", PLANNER_EVENT_NAME, "--run-mode", PLANNER_RUN_MODE, "--config",
              str(trusted / "scripts/ci-required-scope.v2.json"),
-             "--changed-path", "crates/oasis7_consensus/src/lib.rs"],
+             *[arg for path in PLANNER_CHANGED_PATHS for arg in ("--changed-path", path)]],
             cwd=trusted, check=True, capture_output=True, text=True,
         ).stdout
         return trusted, target, plan
 
-    def build_fixture_inventory(self, trusted: Path, target: Path, plan: str):
+    def build_fixture_inventory(self, trusted: Path, target: Path, plan: str, **overrides):
         target_oid = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
         planner_oid = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=trusted, text=True).strip()
-        return self.inventory.build_required_inventory(
-            trusted, target, target_oid, plan,
-            repository="eng-cc/oasis7",
-            workflow_ref="eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main",
-            planner_authority_oid=planner_oid,
-            run_id=17, run_attempt=1, check_app_id=2, check_run_id=19,
-        )
+        inherit_github_context = overrides.pop("_inherit_github_context", False)
+        arguments = {
+            "event_name": PLANNER_EVENT_NAME,
+            "run_mode": PLANNER_RUN_MODE,
+            "changed_paths": PLANNER_CHANGED_PATHS,
+            "run_id": 17,
+            "run_attempt": 1,
+            "check_app_id": 2,
+            "check_run_id": 19,
+        }
+        arguments.update(overrides)
+
+        def build():
+            return self.inventory.build_required_inventory(
+                trusted, target, target_oid, plan,
+                repository="eng-cc/oasis7",
+                workflow_ref="eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main",
+                planner_authority_oid=planner_oid,
+                **arguments,
+            )
+
+        if inherit_github_context:
+            return build()
+        return self._build_with_github_context(build, arguments)
+
+    @staticmethod
+    def _build_with_github_context(build, arguments):
+        with patch.dict(os.environ, {
+            "GITHUB_REPOSITORY": "eng-cc/oasis7",
+            "GITHUB_EVENT_NAME": arguments["event_name"],
+            "GITHUB_RUN_ID": str(arguments["run_id"]),
+            "GITHUB_RUN_ATTEMPT": str(arguments["run_attempt"]),
+        }):
+            return build()
 
     def test_inventory_authority_must_match_the_trusted_w_checkout(self):
         with tempfile.TemporaryDirectory(prefix="ci-required-inventory-w-identity-") as temp:
@@ -159,8 +224,78 @@ class RequiredInventoryTests(unittest.TestCase):
                     repository="eng-cc/oasis7",
                     workflow_ref="eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main",
                     planner_authority_oid="1" * 40,
+                    event_name=PLANNER_EVENT_NAME,
+                    run_mode=PLANNER_RUN_MODE,
+                    changed_paths=PLANNER_CHANGED_PATHS,
                     run_id=17, run_attempt=1, check_app_id=2, check_run_id=19,
                 )
+
+    def test_mutated_self_consistent_plan_selection_is_rejected(self):
+        with tempfile.TemporaryDirectory(prefix="ci-required-inventory-plan-mutation-") as temp:
+            trusted, target, plan = self.make_fixture(Path(temp))
+            mutated = dict(self.inventory._plan_mapping(plan))
+            mutated["selected_capabilities"] = "required_gate_baseline"
+            mutated["required_test_units"] = "required_gate_baseline"
+            with self.assertRaisesRegex(self.inventory.InventoryError, "does not match trusted W invocation"):
+                self.build_fixture_inventory(trusted, target, mutated)
+
+    def test_plan_is_bound_to_exact_event_and_changed_path_invocation(self):
+        with tempfile.TemporaryDirectory(prefix="ci-required-inventory-plan-identity-") as temp:
+            trusted, target, plan = self.make_fixture(Path(temp))
+            with self.assertRaisesRegex(self.inventory.InventoryError, "does not match trusted W invocation"):
+                self.build_fixture_inventory(
+                    trusted, target, plan,
+                    event_name="workflow_dispatch",
+                )
+            with self.assertRaisesRegex(self.inventory.InventoryError, "does not match trusted W invocation"):
+                self.build_fixture_inventory(
+                    trusted, target, plan,
+                    changed_paths=["crates/oasis7_node/src/lib.rs"],
+                )
+            planner_oid = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=trusted, text=True,
+            ).strip()
+            with self.assertRaisesRegex(self.inventory.InventoryError, "exact changed paths are required"):
+                self.build_fixture_inventory(
+                    trusted, target, plan,
+                    changed_paths=[], base_ref=planner_oid, head_ref=planner_oid,
+                )
+
+    def test_run_attempt_is_bound_without_changing_selection_fingerprints(self):
+        with tempfile.TemporaryDirectory(prefix="ci-required-inventory-attempt-binding-") as temp:
+            trusted, target, plan = self.make_fixture(Path(temp))
+            first = self.build_fixture_inventory(trusted, target, plan)
+            retry = self.build_fixture_inventory(
+                trusted, target, plan, run_attempt=2, check_run_id=20,
+            )
+            self.assertEqual(first["planner_invocation"]["digest"], retry["planner_invocation"]["digest"])
+            self.assertNotEqual(
+                first["planner_invocation"]["producer"],
+                retry["planner_invocation"]["producer"],
+            )
+            self.assertEqual(
+                first["input_scope"]["input_fingerprints"],
+                retry["input_scope"]["input_fingerprints"],
+            )
+
+    def test_producer_run_attempt_must_match_ambient_actions_identity(self):
+        with tempfile.TemporaryDirectory(prefix="ci-required-inventory-ambient-run-") as temp:
+            trusted, target, plan = self.make_fixture(Path(temp))
+            with patch.dict(os.environ, {
+                "GITHUB_REPOSITORY": "eng-cc/oasis7",
+                "GITHUB_WORKFLOW_REF": "eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main",
+                "GITHUB_EVENT_NAME": PLANNER_EVENT_NAME,
+                "GITHUB_RUN_ID": "17",
+                "GITHUB_RUN_ATTEMPT": "1",
+            }, clear=True):
+                with self.assertRaisesRegex(
+                    self.inventory.InventoryError,
+                    "GITHUB_RUN_ATTEMPT",
+                ):
+                    self.build_fixture_inventory(
+                        trusted, target, plan, run_attempt=2,
+                        _inherit_github_context=True,
+                    )
 
     def test_cli_emits_inventory_for_the_exact_w_and_m_targets(self):
         with tempfile.TemporaryDirectory(prefix="ci-required-inventory-cli-") as temp:
@@ -173,19 +308,43 @@ class RequiredInventoryTests(unittest.TestCase):
                 json.dumps(dict(line.split("=", 1) for line in plan.splitlines())), encoding="utf-8",
             )
             output = root / "out/inventory.json"
+            cli_environment = os.environ.copy()
+            cli_environment.update({
+                "GITHUB_REPOSITORY": "eng-cc/oasis7",
+                "GITHUB_EVENT_NAME": PLANNER_EVENT_NAME,
+                "GITHUB_RUN_ID": "17",
+                "GITHUB_RUN_ATTEMPT": "1",
+            })
             subprocess.run([
                 sys.executable, str(ROOT / "scripts/pm/ci_required_inventory.py"),
                 "--planner-root", str(trusted), "--target-repo-root", str(target),
                 "--target-oid", target_oid, "--planner-output-json", str(plan_json),
                 "--repository", "eng-cc/oasis7",
                 "--workflow-ref", "eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main",
+                "--event-name", PLANNER_EVENT_NAME,
+                "--run-mode", PLANNER_RUN_MODE,
+                *[arg for path in PLANNER_CHANGED_PATHS for arg in ("--changed-path", path)],
                 "--planner-authority-oid", planner_oid, "--run-id", "17",
                 "--run-attempt", "1", "--check-app-id", "2", "--check-run-id", "19",
                 "--output", str(output),
-            ], check=True, capture_output=True, text=True)
+            ], check=True, capture_output=True, text=True, env=cli_environment)
             result = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(result["schema"], "oasis7-required-test-inventory/v1")
             self.assertEqual(result["input_scope"]["target_oid"], target_oid)
+            self.assertEqual(result["planner_invocation"]["event_name"], PLANNER_EVENT_NAME)
+            self.assertEqual(result["planner_invocation"]["changed_paths"], PLANNER_CHANGED_PATHS)
+            self.assertEqual(
+                result["planner_invocation"]["producer"],
+                result["planner_inventory_issuer"]["producer"],
+            )
+            baseline_contract = next(
+                item["unit_contract"] for item in result["unit_specs"]
+                if item["unit_id"] == "required_gate_baseline"
+            )
+            self.assertEqual(
+                baseline_contract["trusted_W"]["planner_invocation_digest"],
+                result["planner_invocation"]["digest"],
+            )
 
     def test_planner_unit_list_always_includes_baseline_and_matches_selected_capabilities(self):
         plan = {
@@ -216,6 +375,32 @@ class RequiredInventoryTests(unittest.TestCase):
         self.assertTrue(registry["consensus"]["obligations"])
         self.assertTrue(registry["required_gate_baseline"]["obligations"])
 
+    def test_runner_image_observation_requires_ubuntu24_and_github_image_markers(self):
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(self.inventory.platform, "system", return_value="Linux"))
+            stack.enter_context(patch.object(
+                self.inventory.Path, "read_text",
+                return_value='ID=ubuntu\nVERSION_ID="24.04"\n',
+            ))
+            stack.enter_context(patch.dict(os.environ, {
+                "RUNNER_OS": "Linux", "ImageOS": "ubuntu24", "ImageVersion": "20260907.300.1",
+            }, clear=True))
+            accepted = self.inventory._observe_runner_identity()
+        self.assertEqual(accepted["runner_image"], "ubuntu-24.04")
+        self.assertTrue(accepted["matches_trusted_W"])
+
+        with ExitStack() as stack:
+            stack.enter_context(patch.object(self.inventory.platform, "system", return_value="Darwin"))
+            stack.enter_context(patch.object(
+                self.inventory.Path, "read_text", side_effect=OSError("no os-release on macOS"),
+            ))
+            stack.enter_context(patch.dict(os.environ, {
+                "RUNNER_OS": "macOS", "ImageOS": "macos14", "ImageVersion": "20260907.300.1",
+            }, clear=True))
+            rejected = self.inventory._observe_runner_identity()
+        self.assertEqual(rejected["runner_image"], "macos14")
+        self.assertFalse(rejected["matches_trusted_W"])
+
     def test_package_dependency_closure_is_transitive_and_repo_scoped(self):
         metadata = {
             "workspace_root": "/tmp/oasis",
@@ -240,35 +425,36 @@ class RequiredInventoryTests(unittest.TestCase):
     def test_complete_scoped_package_and_product_fingerprints_survive_unrelated_package_change(self):
         with tempfile.TemporaryDirectory(prefix="ci-required-inventory-") as temp:
             trusted, target, plan = self.make_fixture(Path(temp))
-            before = self.build_fixture_inventory(trusted, target, plan)
-            self.assertEqual(before["closure_status"], "complete")
-            before_fingerprints = before["input_scope"]["input_fingerprints"]
-            self.assertIn("consensus", before_fingerprints)
-            doc_unit = "product-document::doc/product/demo.prd.md"
-            self.assertIn(doc_unit, before_fingerprints)
-            product_units = [item for item in before["unit_specs"]
-                             if item["unit_id"].startswith("product-")]
-            self.assertTrue(product_units)
-            self.assertTrue(all(item["applicable_policy"]["reuse_eligible"] for item in product_units))
-            baseline_fingerprint = before_fingerprints["required_gate_baseline"]
-            self.assertFalse(
-                next(item for item in before["unit_specs"]
-                     if item["unit_id"] == "required_gate_baseline")["applicable_policy"]["reuse_eligible"]
-            )
-            self.assertFalse(
-                next(item for item in before["unit_specs"]
-                     if item["unit_id"] == "consensus")["applicable_policy"]["reuse_eligible"]
-            )
+            with self.observed_product_runtime():
+                before = self.build_fixture_inventory(trusted, target, plan)
+                self.assertEqual(before["closure_status"], "complete")
+                before_fingerprints = before["input_scope"]["input_fingerprints"]
+                self.assertIn("consensus", before_fingerprints)
+                doc_unit = "product-document::doc/product/demo.prd.md"
+                self.assertIn(doc_unit, before_fingerprints)
+                product_units = [item for item in before["unit_specs"]
+                                 if item["unit_id"].startswith("product-")]
+                self.assertTrue(product_units)
+                self.assertTrue(all(item["applicable_policy"]["reuse_eligible"] for item in product_units))
+                baseline_fingerprint = before_fingerprints["required_gate_baseline"]
+                self.assertFalse(
+                    next(item for item in before["unit_specs"]
+                         if item["unit_id"] == "required_gate_baseline")["applicable_policy"]["reuse_eligible"]
+                )
+                self.assertFalse(
+                    next(item for item in before["unit_specs"]
+                         if item["unit_id"] == "consensus")["applicable_policy"]["reuse_eligible"]
+                )
 
-            node_source = target / "crates/oasis7_node/src/lib.rs"
-            node_source.write_text("pub fn node() { let _unrelated = true; }\n", encoding="utf-8")
-            subprocess.run(["git", "add", "."], cwd=target, check=True)
-            subprocess.run(["git", "commit", "-qm", "unrelated node package update"], cwd=target, check=True)
-            after = self.build_fixture_inventory(trusted, target, plan)
-            after_fingerprints = after["input_scope"]["input_fingerprints"]
-            self.assertEqual(before_fingerprints["consensus"], after_fingerprints["consensus"])
-            self.assertEqual(before_fingerprints[doc_unit], after_fingerprints[doc_unit])
-            self.assertNotEqual(baseline_fingerprint, after_fingerprints["required_gate_baseline"])
+                node_source = target / "crates/oasis7_node/src/lib.rs"
+                node_source.write_text("pub fn node() { let _unrelated = true; }\n", encoding="utf-8")
+                subprocess.run(["git", "add", "."], cwd=target, check=True)
+                subprocess.run(["git", "commit", "-qm", "unrelated node package update"], cwd=target, check=True)
+                after = self.build_fixture_inventory(trusted, target, plan)
+                after_fingerprints = after["input_scope"]["input_fingerprints"]
+                self.assertEqual(before_fingerprints["consensus"], after_fingerprints["consensus"])
+                self.assertEqual(before_fingerprints[doc_unit], after_fingerprints[doc_unit])
+                self.assertNotEqual(baseline_fingerprint, after_fingerprints["required_gate_baseline"])
 
     def test_changed_and_removed_product_documents_invalidate_their_exact_units(self):
         with tempfile.TemporaryDirectory(prefix="ci-required-inventory-product-mutation-") as temp:
@@ -320,6 +506,36 @@ class RequiredInventoryTests(unittest.TestCase):
             subprocess.run(["git", "add", "."], cwd=target, check=True)
             subprocess.run(["git", "commit", "-qm", "change target Markdown parser"], cwd=target, check=True)
             result = self.build_fixture_inventory(trusted, target, plan)
+            product_units = [item for item in result["unit_specs"]
+                             if item["unit_id"].startswith("product-")]
+            self.assertTrue(product_units)
+            self.assertTrue(all(not item["applicable_policy"]["reuse_eligible"] for item in product_units))
+
+    def test_macOS_runner_is_not_product_reuse_eligible(self):
+        with tempfile.TemporaryDirectory(prefix="ci-required-inventory-macos-runner-") as temp:
+            trusted, target, plan = self.make_fixture(Path(temp))
+            with self.observed_product_runtime(runner_image="macos-14"):
+                result = self.build_fixture_inventory(trusted, target, plan)
+            product_units = [item for item in result["unit_specs"]
+                             if item["unit_id"].startswith("product-")]
+            self.assertTrue(product_units)
+            self.assertTrue(all(not item["applicable_policy"]["reuse_eligible"] for item in product_units))
+
+    def test_python_runtime_drift_is_not_product_reuse_eligible(self):
+        with tempfile.TemporaryDirectory(prefix="ci-required-inventory-python-drift-") as temp:
+            trusted, target, plan = self.make_fixture(Path(temp))
+            with self.observed_product_runtime(python_version="3.13.0"):
+                result = self.build_fixture_inventory(trusted, target, plan)
+            product_units = [item for item in result["unit_specs"]
+                             if item["unit_id"].startswith("product-")]
+            self.assertTrue(product_units)
+            self.assertTrue(all(not item["applicable_policy"]["reuse_eligible"] for item in product_units))
+
+    def test_mdurl_drift_is_not_product_reuse_eligible(self):
+        with tempfile.TemporaryDirectory(prefix="ci-required-inventory-mdurl-drift-") as temp:
+            trusted, target, plan = self.make_fixture(Path(temp))
+            with self.observed_product_runtime(mdurl_version="0.1.3"):
+                result = self.build_fixture_inventory(trusted, target, plan)
             product_units = [item for item in result["unit_specs"]
                              if item["unit_id"].startswith("product-")]
             self.assertTrue(product_units)
