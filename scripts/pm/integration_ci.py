@@ -3,6 +3,7 @@
 import argparse
 import base64
 import datetime
+import hashlib
 import importlib.util
 import io
 import json
@@ -93,13 +94,22 @@ def current_request(repository,uid,number,base,head,branch,request_key=None):
                 attempt=run.get('run_attempt')
                 when=run.get('created_at')
                 if type(attempt) is not int or attempt<1 or not isinstance(when,str): raise ValueError('integration attempt identity unavailable')
-                try: timestamp=datetime.datetime.fromisoformat(when.replace('Z','+00:00')).timestamp()
+                if not re.fullmatch(r'\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})',when):
+                    raise ValueError('integration request time malformed')
+                try:
+                    parsed_time=datetime.datetime.fromisoformat(when.replace('Z','+00:00'))
+                    if parsed_time.tzinfo is None or parsed_time.utcoffset() is None:
+                        raise ValueError('integration request time malformed')
+                    timestamp=parsed_time.timestamp()
+                    sort_time=parsed_time.astimezone(datetime.timezone.utc)
                 except ValueError as exc: raise ValueError('integration request time malformed') from exc
                 matches.append({'id':run_id,'run_attempt':attempt,'requested_at':timestamp,
+                                '_requested_at_sort':sort_time,
                                 'execution_sha':run['head_sha'],'execution_branch':run['head_branch']})
         if len(batch)<DISCOVERY_PAGE_SIZE:
             if not matches: return None
-            selected=max(matches,key=lambda item:(item['requested_at'],item['id'],item['run_attempt']))
+            selected=max(matches,key=lambda item:(item['_requested_at_sort'],item['id'],item['run_attempt']))
+            selected.pop('_requested_at_sort')
             execution_sha=selected.pop('execution_sha')
             execution_branch=selected.pop('execution_branch')
             if execution_branch!=branch or (request_key is None and execution_sha!=base):
@@ -252,6 +262,127 @@ def _read_artifact_member(repository,artifact,run_id,name,member):
     except (zipfile.BadZipFile,KeyError) as exc:
         raise ValueError('keyed required artifact archive is malformed') from exc
 
+def _trusted_source_attempt(plan,plan_artifact,result_artifacts,gate,request_key,run_id,attempt,app_id,check_id):
+    """Create the closed R/A/check/job/artifact binding after exact live readback."""
+    if (not isinstance(request_key,str) or not re.fullmatch(r'sha256:[0-9a-f]{64}',request_key)
+            or any(type(value) is not int or value<1 for value in
+                   (run_id,attempt,app_id,check_id,plan_artifact.get('id'),gate.get('job_id')))
+            or gate.get('job_name')!='required-gate'
+            or gate.get('workflow_run_id')!=run_id or gate.get('run_attempt')!=attempt
+            or gate.get('check_app_id')!=app_id or gate.get('check_run_id')!=check_id):
+        raise ValueError('trusted source attempt live identity is malformed')
+    if (plan.get('request_key')!=request_key or plan.get('workflow_run_id')!=run_id
+            or plan.get('run_attempt')!=attempt or plan.get('check_app_id')!=app_id
+            or plan.get('check_run_id')!=check_id or plan.get('job_id')!=gate.get('job_id')
+            or plan.get('job_name')!='required-gate'):
+        raise ValueError('trusted source attempt differs from the validated required plan')
+    results=[]
+    for item in result_artifacts:
+        payload=item.get('payload')
+        unit_id=payload.get('unit_id') if isinstance(payload,dict) else None
+        if not isinstance(unit_id,str) or not unit_id:
+            raise ValueError('trusted source attempt result unit identity is malformed')
+        results.append({'unit_id':unit_id,'artifact_id':item.get('artifact_id'),'name':item.get('name')})
+    results.sort(key=lambda item:item['unit_id'])
+    if ([item['unit_id'] for item in results]!=plan.get('required_test_units')
+            or len({item['artifact_id'] for item in results})!=len(results)
+            or len({item['unit_id'] for item in results})!=len(results)):
+        raise ValueError('trusted source attempt result artifacts do not close the required plan')
+    return {
+        'schema':'oasis7-ci-trusted-source-attempt/v1',
+        'request_key':request_key,
+        'workflow_run_id':run_id,
+        'run_attempt':attempt,
+        'check_app_id':app_id,
+        'check_run_id':check_id,
+        'job_id':gate['job_id'],
+        'job_name':'required-gate',
+        'plan_artifact_id':plan_artifact['id'],
+        'plan_artifact_name':plan_artifact['name'],
+        'result_artifacts':results,
+    }
+
+def _validate_trusted_source_attempt(proof,plan):
+    fields={
+        'schema','request_key','workflow_run_id','run_attempt','check_app_id','check_run_id',
+        'job_id','job_name','plan_artifact_id','plan_artifact_name','result_artifacts',
+    }
+    value=proof.get('trusted_source_attempt') if isinstance(proof,dict) else None
+    if not isinstance(value,dict) or set(value)!=fields or value.get('schema')!='oasis7-ci-trusted-source-attempt/v1':
+        raise ValueError('source trusted attempt binding is missing or malformed')
+    if (not isinstance(value.get('request_key'),str)
+            or not re.fullmatch(r'sha256:[0-9a-f]{64}',value['request_key'])):
+        raise ValueError('source trusted attempt request key is malformed')
+    for field in ('workflow_run_id','run_attempt','check_app_id','check_run_id','job_id','plan_artifact_id'):
+        if type(value.get(field)) is not int or value[field]<1:
+            raise ValueError('source trusted attempt ID is invalid: '+field)
+    expected_scalars={
+        'request_key':proof.get('request_key'),
+        'workflow_run_id':proof.get('workflow_run_id'),
+        'run_attempt':proof.get('run_attempt'),
+        'check_app_id':proof.get('check_app_id'),
+        'check_run_id':proof.get('check_run_id'),
+        'job_id':proof.get('job_id'),
+        'job_name':'required-gate',
+        'plan_artifact_id':proof.get('required_plan_v2_artifact_id'),
+        'plan_artifact_name':proof.get('required_plan_v2_artifact_name'),
+    }
+    for field in ('workflow_run_id','run_attempt','check_app_id','check_run_id','job_id','plan_artifact_id'):
+        if type(expected_scalars[field]) is not int or expected_scalars[field]<1:
+            raise ValueError('verified source attempt ID is invalid: '+field)
+    if any(value.get(field)!=expected for field,expected in expected_scalars.items()):
+        raise ValueError('source trusted attempt identity differs from verified proof')
+    jobs=proof.get('execution_jobs')
+    gate=[job for job in jobs if isinstance(job,dict) and job.get('job_name')=='required-gate'] if isinstance(jobs,list) else []
+    if (len(gate)!=1 or gate[0].get('job_id')!=value['job_id']
+            or type(gate[0].get('job_id')) is not int
+            or type(gate[0].get('workflow_run_id')) is not int
+            or type(gate[0].get('run_attempt')) is not int
+            or type(gate[0].get('check_app_id')) is not int
+            or type(gate[0].get('check_run_id')) is not int
+            or gate[0].get('check_run_id')!=value['check_run_id']
+            or gate[0].get('check_app_id')!=value['check_app_id']
+            or gate[0].get('workflow_run_id')!=value['workflow_run_id']
+            or gate[0].get('run_attempt')!=value['run_attempt']):
+        raise ValueError('source trusted attempt required-gate job mismatch')
+    artifacts=proof.get('required_result_v2_artifacts')
+    if not isinstance(artifacts,list):
+        raise ValueError('source trusted attempt result artifact set is malformed')
+    expected_results=[]
+    for artifact in artifacts:
+        if (not isinstance(artifact,dict) or set(artifact)!={'artifact_id','name','payload'}
+                or not isinstance(artifact.get('payload'),dict)):
+            raise ValueError('source trusted attempt result artifact is malformed')
+        unit_id=artifact['payload'].get('unit_id')
+        if (not isinstance(unit_id,str) or not unit_id
+                or type(artifact.get('artifact_id')) is not int or artifact['artifact_id']<1
+                or not isinstance(artifact.get('name'),str)):
+            raise ValueError('source trusted attempt result locator is malformed')
+        expected_results.append({'unit_id':unit_id,'artifact_id':artifact['artifact_id'],'name':artifact['name']})
+    expected_results.sort(key=lambda item:item['unit_id'] if isinstance(item['unit_id'],str) else '')
+    observed=value.get('result_artifacts')
+    if (not isinstance(observed,list) or any(
+                not isinstance(item,dict) or set(item)!={'unit_id','artifact_id','name'}
+                or not isinstance(item.get('unit_id'),str) or not item['unit_id']
+                or type(item.get('artifact_id')) is not int or item['artifact_id']<1
+                or not isinstance(item.get('name'),str)
+                for item in observed)
+            or observed!=expected_results
+            or [item['unit_id'] for item in observed]!=plan.get('required_test_units')):
+        raise ValueError('source trusted attempt result artifacts differ from exact readback')
+    if (len({item['artifact_id'] for item in observed})!=len(observed)
+            or len({item['unit_id'] for item in observed})!=len(observed)
+            or value['plan_artifact_id'] in {item['artifact_id'] for item in observed}):
+        raise ValueError('source trusted attempt artifact IDs are duplicate')
+    for item in observed:
+        expected_name='oasis7-required-result-v2-{}-a{}-{}'.format(
+            value['workflow_run_id'],value['run_attempt'],
+            hashlib.sha256(item['unit_id'].encode('utf-8')).hexdigest(),
+        )
+        if item['name']!=expected_name:
+            raise ValueError('source trusted attempt result artifact name is invalid')
+    return value
+
 def _adjacent_source_matches_w(repository,revision,relative):
     try:
         local=Path(__file__).resolve().parents[2]/relative
@@ -357,6 +488,9 @@ def read_keyed_v2_evidence(repository,run,run_id,attempt,app_id,check,*,
                 raise ValueError(f'keyed result job proof differs from live attempt: {job["job_name"]}')
         result_artifacts.append({'artifact_id':artifact['id'],'name':name,'payload':payload})
         used_ids.add(artifact['id'])
+    trusted_source_attempt=_trusted_source_attempt(
+        plan,plan_artifact,result_artifacts,gate,request_key,run_id,attempt,int(app_id),int(check['id']),
+    )
     return {
         'required_plan_v2_artifact_id':plan_artifact['id'],
         'required_plan_v2_artifact_name':plan_name,
@@ -368,6 +502,7 @@ def read_keyed_v2_evidence(repository,run,run_id,attempt,app_id,check,*,
         'job_id':gate['job_id'],'job_name':gate['job_name'],
         'execution_jobs':execution_jobs,
         'trusted_planner_inventory':trusted_inventory,
+        'trusted_source_attempt':trusted_source_attempt,
     }
 
 def trusted_policy_context(repository,branch,workflow_sha,default_branch_sha):
@@ -641,6 +776,7 @@ def _validate_keyed_source_plan(repository,task_uid,pr_number,proof):
         'request_key','request_identity','integration_base_oid','source_scope_oid',
         'workflow_run_id','run_attempt','check_app_id','check_run_id','trusted_policy_context',
         'effective_policy_identity','planner_inventory_authority','required_plan_v2_artifact_id',
+        'required_plan_v2_artifact_name','trusted_source_attempt',
         'required_plan_v2_payload','required_result_v2_artifacts','execution_jobs',
         'trusted_planner_inventory',
     )
@@ -691,6 +827,7 @@ def _validate_keyed_source_plan(repository,task_uid,pr_number,proof):
     expected_inventory={**issuer,'producer':{**issuer['producer'],'artifact_id':artifact_id}}
     if proof['trusted_planner_inventory']!=expected_inventory:
         raise ValueError('source planner inventory is not bound to the live artifact')
+    _validate_trusted_source_attempt(proof,plan)
     invocation=plan['planner_invocation']
     if (invocation.get('base_ref')!=base or invocation.get('head_ref')!=head
             or invocation.get('scope_base_oid')!=scope or invocation.get('task_uid')!=task_uid
@@ -823,6 +960,12 @@ def trusted_local_target_inventory(repository,task_uid,pr_number,source_proof):
             'trusted_local_target_required_inventory',
         )
         try:
+            source_product_environment=inventory_module.trusted_product_environment_from_plan(
+                plan,source_proof['execution_jobs'],source_proof['trusted_source_attempt'],
+            )
+        except (OSError,ValueError,KeyError,TypeError) as exc:
+            raise ValueError('source product checker environment is not bound to the exact attempt') from exc
+        try:
             target_inventory=inventory_module.build_required_inventory(
                 planner_root,target_root,worktrees['input_scope_commit_oid'],planner_output,
                 repository=repository,workflow_ref=workflow_ref,
@@ -832,6 +975,7 @@ def trusted_local_target_inventory(repository,task_uid,pr_number,source_proof):
                 scope_base_oid=source_scope,impact_projection=str(projection_path),
                 run_id=plan['workflow_run_id'],run_attempt=plan['run_attempt'],
                 check_app_id=plan['check_app_id'],check_run_id=plan['check_run_id'],
+                trusted_source_product_environment=source_product_environment,
             )
         except (OSError,ValueError,KeyError,TypeError) as exc:
             raise ValueError('current Q complete required-unit inventory could not be built') from exc

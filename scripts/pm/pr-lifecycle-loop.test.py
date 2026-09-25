@@ -10,7 +10,10 @@ import subprocess
 import os
 import shutil
 import sys
+from types import SimpleNamespace
 from unittest.mock import patch
+
+import integration_executor_contract as request_contract
 
 
 _APPLICABILITY_FIXTURE_SPEC = importlib.util.spec_from_file_location(
@@ -346,15 +349,18 @@ class KeyedQApplicabilityTests(unittest.TestCase):
         plan.update({
             'workflow_run_id': 10,
             'run_attempt': 1,
+            'check_name': 'required-gate',
             'check_app_id': 42,
             'check_run_id': 20,
+            'job_id': 40,
+            'job_name': 'required-gate',
         })
         target = fixtures.target_snapshot()
         results = []
-        for item in fixtures.evidence_set()['tests']:
+        for item in sorted(fixtures.evidence_set()['tests'], key=lambda item: item['unit_id']):
             results.append({
                 'artifact_id': item['artifact_id'],
-                'name': f"oasis7-required-result-v2-{item['unit_id']}",
+                'name': item['artifact_name'],
                 'payload': {
                     'unit_id': item['unit_id'],
                     'obligation_ids': item.get('obligation_ids'),
@@ -374,7 +380,7 @@ class KeyedQApplicabilityTests(unittest.TestCase):
                 },
             })
         source_proof = {
-            'request_key': 'sha256:' + '8' * 64,
+            'request_key': plan['request_key'],
             'request_identity': {
                 'repository': fixtures.REPOSITORY,
                 'task_uid': fixtures.UID,
@@ -383,9 +389,12 @@ class KeyedQApplicabilityTests(unittest.TestCase):
                 'source_scope_oid': fixtures.SOURCE_SCOPE,
             },
             'required_plan_v2_payload': plan,
+            'required_plan_v2_artifact_id': 30,
+            'required_plan_v2_artifact_name': fixtures.required_artifact.plan_artifact_name(10, 1),
             'trusted_planner_inventory': fixtures.trusted_inventory_readback(
                 plan['planner_inventory_issuer'], artifact_id=30,
             ),
+            'trusted_source_attempt': fixtures.trusted_source_attempt(plan),
             'integration_base_oid': plan['integration_base_oid'],
             'source_scope_oid': plan['source_scope_oid'],
             'assessed_target_oid': target['target_oid'],
@@ -393,6 +402,8 @@ class KeyedQApplicabilityTests(unittest.TestCase):
             'run_attempt': 1,
             'check_app_id': 42,
             'check_run_id': 20,
+            'job_id': 40,
+            'job_name': 'required-gate',
             'required_result_v2_artifacts': results,
         }
         target_inventory = {
@@ -459,8 +470,28 @@ class KeyedQApplicabilityTests(unittest.TestCase):
 
         proof, inventory, applicability, live = self.evaluator_inputs()
         proof['required_result_v2_artifacts'] = []
-        with self.assertRaisesRegex(ValueError, 'requires revalidation or is blocked'):
+        with self.assertRaisesRegex(ValueError, 'result artifact set is incomplete'):
             gate.evaluate_keyed_q_applicability(proof, inventory, applicability, live)
+
+    def test_keyed_q_requires_trusted_source_attempt_and_exact_result_locators(self):
+        proof, inventory, applicability, live = self.evaluator_inputs()
+        proof.pop('trusted_source_attempt')
+        with self.assertRaisesRegex(ValueError, 'trusted inventory is missing'):
+            gate.evaluate_keyed_q_applicability(proof, inventory, applicability, live)
+
+        for mutation in ('plan-id', 'result-id', 'result-name', 'result-order'):
+            with self.subTest(mutation=mutation):
+                proof, inventory, applicability, live = self.evaluator_inputs()
+                if mutation == 'plan-id':
+                    proof['required_plan_v2_artifact_id'] = 31
+                elif mutation == 'result-id':
+                    proof['required_result_v2_artifacts'][0]['artifact_id'] = 999
+                elif mutation == 'result-name':
+                    proof['required_result_v2_artifacts'][0]['name'] = 'wrong-result-name'
+                else:
+                    proof['required_result_v2_artifacts'].reverse()
+                with self.assertRaisesRegex(ValueError, 'trusted source attempt|incomplete or out of order'):
+                    gate.evaluate_keyed_q_applicability(proof, inventory, applicability, live)
 
     def test_keyed_q_rejects_result_artifacts_from_wrong_R_A_or_check(self):
         for field, value in (
@@ -502,6 +533,192 @@ class KeyedQApplicabilityTests(unittest.TestCase):
         drifted_live = {**live, 'baseRefOid': 'd' * 40}
         with self.assertRaisesRegex(ValueError, 'target Q identity drift'):
             gate._validate_keyed_q_applicability(proof, drifted_live)
+
+    def test_keyed_q_readback_binds_the_c0_attempt_locator_and_per_unit_locators(self):
+        proof, inventory, applicability, live = self.evaluator_inputs()
+        assessment = gate.evaluate_keyed_q_applicability(proof, inventory, applicability, live)
+        proof['keyed_q_applicability'] = assessment
+
+        changed_attempt = json.loads(json.dumps(assessment))
+        changed_attempt['trusted_source_attempt']['check_run_id'] = 999
+        with self.assertRaisesRegex(ValueError, 'differs from exact source attempt'):
+            gate._validate_keyed_q_applicability(
+                {**proof, 'keyed_q_applicability': changed_attempt}, live,
+            )
+
+        changed_locator = json.loads(json.dumps(assessment))
+        test_row = next(
+            item for item in changed_locator['decision']['item_decisions']
+            if item['kind'] == 'test'
+        )
+        test_row['evidence_locator']['id']['artifact_id'] = 999
+        changed_locator['decision_digest'] = gate._canonical_digest(changed_locator['decision'])
+        with self.assertRaisesRegex(ValueError, 'per-unit locator differs'):
+            gate._validate_keyed_q_applicability(
+                {**proof, 'keyed_q_applicability': changed_locator}, live,
+            )
+
+
+class LocalKeyedIntentOrderingTests(unittest.TestCase):
+    def setUp(self):
+        self.repository = 'owner/repo'
+        self.uid = 'task_' + 'a' * 32
+        self.pr_number = 7
+        self.head_oid = 'a' * 40
+        self.projection_digest = 'sha256:' + 'b' * 64
+        self.base_oid = '1' * 40
+        self.task = {
+            'bootstrap_epoch': 2,
+            'loop_binding': {'bootstrap_epoch': 2},
+        }
+
+    def identity(self, publication_id):
+        return {
+            'repository': self.repository,
+            'task_uid': self.uid,
+            'pr_number': self.pr_number,
+            'bootstrap_epoch': 2,
+            'source_head_oid': self.head_oid,
+            'publication_id': publication_id,
+            'source_projection_digest': self.projection_digest,
+            'unit_ids': ['scope'],
+            'input_fingerprints': {'scope': 'sha256:' + 'c' * 64},
+            'executor_contract_digest': 'sha256:' + 'd' * 64,
+            'effective_policy_digest': 'sha256:' + 'e' * 64,
+            'purpose': 'integration_revalidation',
+            'applicability_mode': 'input_scoped',
+            'snapshot_target_oid': None,
+        }
+
+    def create_request(self, directory, publication_id, *, run_id=None, attempt=1,
+                       status='observed', base_oid=None):
+        identity = self.identity(publication_id)
+        key = request_contract.validation_request_key(identity)
+        record, _created = request_contract.reserve_validation_request(
+            directory, key, identity, base_oid or self.base_oid,
+        )
+        if status in {'dispatch_uncertain', 'observed'}:
+            record = request_contract.mark_validation_dispatch_started(directory, key)
+        if status == 'observed':
+            record = request_contract.mark_validation_request_observed(
+                directory, key, run_id, attempt,
+            )
+        return key, record
+
+    def select(self, directory, remote, *, allow_advanced_target=False):
+        calls = []
+
+        def current_request(*_args, request_key):
+            calls.append(request_key)
+            return remote.get(request_key)
+
+        integration = SimpleNamespace(
+            git_common_dir=lambda _root: Path(directory),
+            current_request=current_request,
+        )
+
+        def load_helper(_effective, name):
+            return integration if name == 'integration_ci' else request_contract
+
+        with patch.object(gate, '_load_effective_helper', side_effect=load_helper):
+            selected = gate._latest_local_keyed_request_key(
+                Path('/canonical'), Path('/effective'), repository=self.repository,
+                uid=self.uid, pr_number=self.pr_number, base_oid=self.base_oid,
+                head_oid=self.head_oid, branch='codex/task', task=self.task,
+                projection_digest=self.projection_digest,
+                allow_advanced_target=allow_advanced_target,
+            )
+        return selected, calls
+
+    def test_latest_intent_wins_even_when_its_run_id_is_numerically_lower(self):
+        with tempfile.TemporaryDirectory() as directory:
+            older, _ = self.create_request(directory, 'older', run_id=100)
+            newer, _ = self.create_request(directory, 'newer', run_id=99)
+            remote = {
+                older: {'id': 100, 'run_attempt': 3},
+                newer: {'id': 99, 'run_attempt': 1},
+            }
+            selected, calls = self.select(directory, remote)
+        self.assertEqual(newer, selected)
+        self.assertEqual([newer], calls)
+
+    def test_older_uncertain_intent_does_not_poison_later_observed_key(self):
+        with tempfile.TemporaryDirectory() as directory:
+            older, _ = self.create_request(directory, 'older', status='dispatch_uncertain')
+            newer, _ = self.create_request(directory, 'newer', run_id=99)
+            selected, calls = self.select(directory, {newer: {'id': 99, 'run_attempt': 1}})
+        self.assertEqual(newer, selected)
+        self.assertEqual([newer], calls)
+
+    def test_newer_uncertain_intent_blocks_fallback_to_older_green(self):
+        with tempfile.TemporaryDirectory() as directory:
+            older, _ = self.create_request(directory, 'older', run_id=100)
+            self.create_request(directory, 'newer', status='dispatch_uncertain')
+            with self.assertRaisesRegex(ValueError, 'latest keyed validation request dispatch is unresolved'):
+                self.select(directory, {older: {'id': 100, 'run_attempt': 1}})
+
+    def test_deleted_newest_modern_intent_blocks_fallback_to_older_green(self):
+        with tempfile.TemporaryDirectory() as directory:
+            older, _ = self.create_request(directory, 'older', run_id=100)
+            newer, _ = self.create_request(directory, 'newer', run_id=99)
+            (Path(directory) / (newer.removeprefix('sha256:') + '.json')).unlink()
+            remote_calls = []
+            integration = SimpleNamespace(
+                git_common_dir=lambda _root: Path(directory),
+                current_request=lambda *_args, request_key: remote_calls.append(request_key),
+            )
+
+            def load_helper(_effective, name):
+                return integration if name == 'integration_ci' else request_contract
+
+            with patch.object(gate, '_load_effective_helper', side_effect=load_helper):
+                with self.assertRaisesRegex(ValueError, 'intent order sequence is inconsistent'):
+                    gate._latest_local_keyed_request_key(
+                        Path('/canonical'), Path('/effective'), repository=self.repository,
+                        uid=self.uid, pr_number=self.pr_number, base_oid=self.base_oid,
+                        head_oid=self.head_oid, branch='codex/task', task=self.task,
+                        projection_digest=self.projection_digest,
+                    )
+            self.assertEqual([], remote_calls)
+
+    def test_selected_request_still_requires_its_latest_live_attempt(self):
+        with tempfile.TemporaryDirectory() as directory:
+            key, _ = self.create_request(directory, 'selected', run_id=99, attempt=2)
+            with self.assertRaisesRegex(ValueError, 'durable keyed validation request is absent'):
+                self.select(directory, {key: {'id': 99, 'run_attempt': 1}})
+
+    def test_duplicate_intent_order_is_not_a_tie_breakable_order(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first, first_record = self.create_request(directory, 'first', run_id=100)
+            second, second_record = self.create_request(directory, 'second', run_id=99)
+            path = Path(directory) / (second.removeprefix('sha256:') + '.json')
+            second_record['intent_order'] = first_record['intent_order']
+            path.write_text(json.dumps(second_record), encoding='utf-8')
+            with self.assertRaisesRegex(ValueError, 'intent order sequence is inconsistent'):
+                self.select(directory, {
+                    first: {'id': 100, 'run_attempt': 1},
+                    second: {'id': 99, 'run_attempt': 1},
+                })
+
+    def test_legacy_rows_are_usable_only_when_the_matching_intent_is_unique(self):
+        with tempfile.TemporaryDirectory() as directory:
+            first, _ = self.create_request(directory, 'first', run_id=100)
+            second, _ = self.create_request(directory, 'second', run_id=99)
+            for key in (first, second):
+                path = Path(directory) / (key.removeprefix('sha256:') + '.json')
+                record = json.loads(path.read_text(encoding='utf-8'))
+                record.pop('intent_order')
+                record.pop('intent_order_schema')
+                path.write_text(json.dumps(record), encoding='utf-8')
+            # Model records written before durable intent-order state existed.
+            # If a modern state map were present, removing these bindings would
+            # instead be tampering and the map validator would reject it first.
+            (Path(directory) / '.validation-intent-order').unlink()
+            with self.assertRaisesRegex(ValueError, 'ambiguous cross-key intent order'):
+                self.select(directory, {
+                    first: {'id': 100, 'run_attempt': 1},
+                    second: {'id': 99, 'run_attempt': 1},
+                })
 
     def test_unkeyed_v1_proof_keeps_legacy_readiness_path(self):
         uid = 'task_' + '1' * 32

@@ -123,6 +123,96 @@ class ValidationRequestTests(unittest.TestCase):
         )
         self.assertNotEqual(key, contract.validation_request_key(changed_policy))
 
+    def test_intent_order_is_durable_monotonic_and_stable_for_same_key_retry(self):
+        first_identity = request_identity()
+        second_identity = request_identity(
+            source_projection_digest="sha256:" + "9" * 64,
+        )
+        first_key = contract.validation_request_key(first_identity)
+        second_key = contract.validation_request_key(second_identity)
+        with tempfile.TemporaryDirectory() as directory:
+            first, created = contract.reserve_validation_request(
+                directory, first_key, first_identity, "1" * 40,
+            )
+            retry, retried = contract.reserve_validation_request(
+                directory, first_key, first_identity, "2" * 40,
+            )
+            second, second_created = contract.reserve_validation_request(
+                directory, second_key, second_identity, "3" * 40,
+            )
+            self.assertEqual(3, contract.validate_validation_intent_order_state(directory))
+
+        self.assertTrue(created)
+        self.assertFalse(retried)
+        self.assertTrue(second_created)
+        self.assertEqual(1, first["intent_order"])
+        self.assertEqual(first["intent_order"], retry["intent_order"])
+        self.assertEqual(2, second["intent_order"])
+
+    def test_intent_order_counter_corruption_or_disappearance_fails_closed(self):
+        identity = request_identity()
+        key = contract.validation_request_key(identity)
+        with tempfile.TemporaryDirectory() as directory:
+            contract.reserve_validation_request(directory, key, identity, "1" * 40)
+            state_path = Path(directory) / ".validation-intent-order"
+            state_path.write_text(json.dumps({
+                "schema": contract.VALIDATION_INTENT_ORDER_SCHEMA,
+                "next_order": 2,
+                "orders": {},
+            }), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "sequence is inconsistent"):
+                contract.validate_validation_intent_order_state(directory)
+            state_path.unlink()
+            with self.assertRaisesRegex(ValueError, "state is missing"):
+                contract.validate_validation_intent_order_state(directory)
+
+    def test_deleting_a_modern_journal_row_fails_closed(self):
+        first_identity = request_identity()
+        second_identity = request_identity(
+            source_projection_digest="sha256:" + "9" * 64,
+        )
+        first_key = contract.validation_request_key(first_identity)
+        second_key = contract.validation_request_key(second_identity)
+        with tempfile.TemporaryDirectory() as directory:
+            contract.reserve_validation_request(directory, first_key, first_identity, "1" * 40)
+            contract.reserve_validation_request(directory, second_key, second_identity, "2" * 40)
+            contract._request_path(Path(directory), second_key).unlink()
+            with self.assertRaisesRegex(ValueError, "sequence is inconsistent"):
+                contract.validate_validation_intent_order_state(directory)
+
+    def test_legacy_journal_remains_readable_but_cannot_start_unordered_dispatch(self):
+        identity = request_identity()
+        key = contract.validation_request_key(identity)
+        with tempfile.TemporaryDirectory() as directory:
+            record, _ = contract.reserve_validation_request(
+                directory, key, identity, "1" * 40,
+            )
+            path = Path(directory) / (key.removeprefix("sha256:") + ".json")
+            record.pop("intent_order")
+            record.pop("intent_order_schema")
+            path.write_text(json.dumps(record), encoding="utf-8")
+            (Path(directory) / ".validation-intent-order").unlink()
+            self.assertNotIn("intent_order", contract._read_request_record(path, key))
+            retry, created = contract.reserve_validation_request(
+                directory, key, identity, "1" * 40,
+            )
+            self.assertFalse(created)
+            self.assertNotIn("intent_order", retry)
+            with self.assertRaisesRegex(ValueError, "without immutable intent order"):
+                contract.mark_validation_dispatch_started(directory, key)
+
+    def test_partial_intent_order_marker_is_not_misread_as_legacy(self):
+        identity = request_identity()
+        key = contract.validation_request_key(identity)
+        with tempfile.TemporaryDirectory() as directory:
+            contract.reserve_validation_request(directory, key, identity, "1" * 40)
+            path = Path(directory) / (key.removeprefix("sha256:") + ".json")
+            record = json.loads(path.read_text(encoding="utf-8"))
+            del record["intent_order"]
+            path.write_text(json.dumps(record), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "journal fields"):
+                contract._read_request_record(path, key)
+
     def test_epoch_is_a_canonical_positive_integer(self):
         for value in (True, False, 0, -1, "1", "epoch-1"):
             with self.subTest(value=value), self.assertRaisesRegex(ValueError, "bootstrap epoch"):

@@ -84,13 +84,14 @@ REQUIRED_V2_RECEIPT_FIELDS = (
     "trusted_policy_context", "effective_policy_identity",
     "required_plan_v2_artifact_id", "required_plan_v2_artifact_name",
     "required_plan_v2_payload", "required_result_v2_artifacts",
-    "trusted_planner_inventory", "execution_jobs",
+    "trusted_planner_inventory", "execution_jobs", "trusted_source_attempt",
 )
 REQUIRED_V2_RECEIPT_DISCRIMINATORS = frozenset({
     "request_key", "request_identity", "source_scope_oid",
     "effective_policy_identity", "required_plan_v2_artifact_id",
     "required_plan_v2_artifact_name", "required_plan_v2_payload",
     "required_result_v2_artifacts", "trusted_planner_inventory",
+    "trusted_source_attempt",
 })
 
 
@@ -271,6 +272,58 @@ def _required_v2_evidence_identity(receipt: dict[str, Any]) -> dict[str, Any] | 
     jobs = receipt["execution_jobs"]
     if not isinstance(jobs, list) or not jobs:
         raise ValueError("v2 required evidence execution jobs are missing")
+    source_attempt = receipt["trusted_source_attempt"]
+    source_attempt_fields = {
+        "schema", "request_key", "workflow_run_id", "run_attempt", "check_app_id",
+        "check_run_id", "job_id", "job_name", "plan_artifact_id", "plan_artifact_name",
+        "result_artifacts",
+    }
+    if (not isinstance(source_attempt, dict) or set(source_attempt) != source_attempt_fields
+            or source_attempt.get("schema") != "oasis7-ci-trusted-source-attempt/v1"):
+        raise ValueError("v2 required evidence trusted source attempt is malformed")
+    if (not isinstance(source_attempt.get("request_key"), str)
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", source_attempt["request_key"])):
+        raise ValueError("v2 required evidence trusted source attempt request key is invalid")
+    for field, expected in (
+        ("request_key", receipt["request_key"]),
+        ("workflow_run_id", workflow_run_id),
+        ("run_attempt", run_attempt),
+        ("check_app_id", int(receipt["check_app_id"])),
+        ("check_run_id", int(receipt["check_run_id"])),
+        ("plan_artifact_id", artifact_id),
+        ("plan_artifact_name", expected_plan_name),
+        ("job_name", "required-gate"),
+    ):
+        if source_attempt.get(field) != expected:
+            raise ValueError("v2 required evidence trusted source attempt mismatch: " + field)
+    for field in ("workflow_run_id", "run_attempt", "check_app_id", "check_run_id", "job_id", "plan_artifact_id"):
+        if type(source_attempt.get(field)) is not int or source_attempt[field] <= 0:
+            raise ValueError("v2 required evidence trusted source attempt ID is invalid: " + field)
+    if source_attempt["job_id"] != plan.get("job_id") or plan.get("job_name") != "required-gate":
+        raise ValueError("v2 required evidence trusted source attempt job mismatch")
+    gate_jobs = [job for job in jobs if isinstance(job, dict) and job.get("job_name") == "required-gate"]
+    if (len(gate_jobs) != 1 or gate_jobs[0].get("job_id") != source_attempt["job_id"]
+            or gate_jobs[0].get("workflow_run_id") != workflow_run_id
+            or gate_jobs[0].get("run_attempt") != run_attempt
+            or gate_jobs[0].get("check_app_id") != source_attempt["check_app_id"]
+            or gate_jobs[0].get("check_run_id") != source_attempt["check_run_id"]
+            or gate_jobs[0].get("status") != "completed"
+            or gate_jobs[0].get("conclusion") != "success"):
+        raise ValueError("v2 required evidence trusted source attempt required-gate job mismatch")
+    source_results = source_attempt.get("result_artifacts")
+    expected_source_results = [
+        {"unit_id": unit, "artifact_id": item["artifact_id"], "name": item["name"]}
+        for unit, item in sorted(results_by_unit.items())
+    ]
+    if (not isinstance(source_results, list)
+            or any(not isinstance(item, dict) or set(item) != {"unit_id", "artifact_id", "name"}
+                   or not isinstance(item.get("unit_id"), str) or not item["unit_id"]
+                   or type(item.get("artifact_id")) is not int or item["artifact_id"] <= 0
+                   or not isinstance(item.get("name"), str)
+                   for item in source_results)
+            or source_results != expected_source_results):
+        raise ValueError("v2 required evidence trusted source attempt result locators mismatch")
+    result["trusted_source_attempt"] = source_attempt
     # Copy nested structures through canonical JSON so callers cannot smuggle
     # unserializable values into the digest authority.
     try:

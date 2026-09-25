@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import os
 import shutil
@@ -206,6 +207,75 @@ class RequiredInventoryTests(unittest.TestCase):
         if inherit_github_context:
             return build()
         return self._build_with_github_context(build, arguments)
+
+    @staticmethod
+    def trusted_source_product_environment(
+        *, python_version="3.12.3", mdurl_version="0.1.2",
+        runner_image="ubuntu-24.04", labels=None,
+    ):
+        runner_matches = runner_image == "ubuntu-24.04"
+        python = {
+            "implementation": "CPython", "version": python_version,
+            "full_version": python_version + " (trusted fixture)",
+            "cache_tag": "cpython-312" if python_version.startswith("3.12.") else "cpython-313",
+        }
+        runner = {
+            "runner_image": runner_image, "runner_os": "Linux" if runner_matches else "macOS",
+            "image_os": "ubuntu24" if runner_matches else runner_image,
+            "image_version": "20260907.300.1" if runner_matches else "14.0",
+            "os_id": "ubuntu" if runner_matches else "macos",
+            "os_version_id": "24.04" if runner_matches else "14",
+            "matches_trusted_W": runner_matches,
+        }
+        environment = {
+            "schema": "oasis7-required-unit-environment/v1",
+            "runner_image": runner_image,
+            "runner_identity": runner,
+            "runner_image_matches_trusted_W": runner_matches,
+            "python_implementation": python["implementation"],
+            "python_version": python["version"],
+            "python_full_version": python["full_version"],
+            "python_cache_tag": python["cache_tag"],
+            "python_runtime_matches_trusted_W": (
+                python_version == "3.12.3" and python["cache_tag"] == "cpython-312"
+            ),
+            "runtime_packages": {"markdown-it-py": "3.0.0", "mdurl": mdurl_version},
+            "markdown_runtime_matches_trusted_W": mdurl_version == "0.1.2",
+            "markdown_parser_matches_trusted_W": True,
+            "markdown_requirements_match_trusted_W": True,
+            "external_inputs": "fully-bound-python-and-pinned-markdown-runtime",
+            "reuse_eligible": (
+                runner_matches and python_version == "3.12.3" and mdurl_version == "0.1.2"
+            ),
+        }
+        source_attempt = {
+            "schema": "oasis7-ci-trusted-source-attempt/v1",
+            "request_key": "sha256:" + "1" * 64,
+            "workflow_run_id": 17, "run_attempt": 1,
+            "check_app_id": 2, "check_run_id": 19,
+            "job_id": 20, "job_name": "required-gate",
+            "plan_artifact_id": 21,
+            "plan_artifact_name": "oasis7-required-plan-v2-17-a1",
+            "result_artifacts": [{
+                "unit_id": "required_gate_baseline", "artifact_id": 22,
+                "name": "oasis7-required-result-v2-17-a1-" + hashlib.sha256(
+                    b"required_gate_baseline",
+                ).hexdigest(),
+            }],
+        }
+        required_gate_job = {
+            "workflow_run_id": 17, "run_attempt": 1, "job_id": 20,
+            "job_name": "required-gate", "check_name": "required-gate",
+            "check_app_id": 2, "check_run_id": 19, "head_sha": "a" * 40,
+            "status": "completed", "conclusion": "success",
+            "labels": labels if labels is not None else ["ubuntu-24.04"],
+        }
+        return {
+            "schema": "oasis7-trusted-source-product-environment/v1",
+            "trusted_source_attempt": source_attempt,
+            "required_gate_job": required_gate_job,
+            "environment_contract": environment,
+        }
 
     @staticmethod
     @contextmanager
@@ -576,6 +646,140 @@ class RequiredInventoryTests(unittest.TestCase):
                              if item["unit_id"].startswith("product-")]
             self.assertTrue(product_units)
             self.assertTrue(all(not item["applicable_policy"]["reuse_eligible"] for item in product_units))
+
+    def test_local_target_uses_authenticated_source_environment_not_operator_host(self):
+        with tempfile.TemporaryDirectory(prefix="ci-required-inventory-local-host-drift-") as temp:
+            trusted, target, plan = self.make_fixture(Path(temp))
+            source_environment = self.trusted_source_product_environment()
+            with self.observed_product_runtime(
+                runner_image="macos-14", python_version="3.13.0", mdurl_version="0.1.3",
+            ):
+                result = self.build_fixture_inventory(
+                    trusted, target, plan,
+                    trusted_source_product_environment=source_environment,
+                )
+            product_units = [item for item in result["unit_specs"]
+                             if item["unit_id"].startswith("product-")]
+            self.assertTrue(product_units)
+            self.assertTrue(all(item["applicable_policy"]["reuse_eligible"] for item in product_units))
+            self.assertTrue(all(
+                item["environment_contract"].get("source_attempt_digest")
+                and item["environment_contract"].get("source_gate_job_digest")
+                and item["environment_contract"].get("source_environment_eligible") is True
+                for item in product_units
+            ))
+
+    def test_actual_source_runtime_drift_keeps_product_units_ineligible(self):
+        changed_source_parser = self.trusted_source_product_environment()
+        changed_source_parser["environment_contract"]["markdown_parser_matches_trusted_W"] = False
+        changed_source_parser["environment_contract"]["reuse_eligible"] = False
+        changed_source_requirements = self.trusted_source_product_environment()
+        changed_source_requirements["environment_contract"]["markdown_requirements_match_trusted_W"] = False
+        changed_source_requirements["environment_contract"]["markdown_runtime_matches_trusted_W"] = False
+        changed_source_requirements["environment_contract"]["reuse_eligible"] = False
+        source_environments = (
+            self.trusted_source_product_environment(python_version="3.13.0"),
+            self.trusted_source_product_environment(mdurl_version="0.1.3"),
+            self.trusted_source_product_environment(runner_image="macos-14"),
+            changed_source_parser,
+            changed_source_requirements,
+        )
+        for source_environment in source_environments:
+            with self.subTest(environment=source_environment["environment_contract"]):
+                with tempfile.TemporaryDirectory(prefix="ci-required-inventory-source-runtime-drift-") as temp:
+                    trusted, target, plan = self.make_fixture(Path(temp))
+                    with self.observed_product_runtime(
+                        runner_image="ubuntu-24.04", python_version="3.12.3", mdurl_version="0.1.2",
+                    ):
+                        result = self.build_fixture_inventory(
+                            trusted, target, plan,
+                            trusted_source_product_environment=source_environment,
+                        )
+                    product_units = [item for item in result["unit_specs"]
+                                     if item["unit_id"].startswith("product-")]
+                    self.assertTrue(product_units)
+                    self.assertTrue(all(
+                        not item["applicable_policy"]["reuse_eligible"] for item in product_units
+                    ))
+
+    def test_local_target_rejects_missing_or_untrusted_source_environment(self):
+        with tempfile.TemporaryDirectory(prefix="ci-required-inventory-source-env-missing-") as temp:
+            trusted, target, plan = self.make_fixture(Path(temp))
+            wrong_schema = self.trusted_source_product_environment()
+            wrong_schema["schema"] = "oasis7-untrusted-product-environment/v1"
+            for source_environment in (
+                {"schema": "untrusted"},
+                wrong_schema,
+                self.trusted_source_product_environment(labels=["self-hosted", "ubuntu-24.04"]),
+            ):
+                with self.subTest(source_environment=source_environment), \
+                     self.assertRaisesRegex(self.inventory.InventoryError, "source product environment"):
+                    self.build_fixture_inventory(
+                        trusted, target, plan,
+                        trusted_source_product_environment=source_environment,
+                    )
+
+    def test_local_target_checker_drift_revalidates_with_trusted_source_environment(self):
+        with tempfile.TemporaryDirectory(prefix="ci-required-inventory-local-checker-drift-") as temp:
+            trusted, target, plan = self.make_fixture(Path(temp))
+            parser = target / "scripts/product_doc_markdown.py"
+            parser.write_text(parser.read_text(encoding="utf-8") + "\n# changed at Q\n", encoding="utf-8")
+            subprocess.run(["git", "add", "."], cwd=target, check=True)
+            subprocess.run(["git", "commit", "-qm", "change Q Markdown parser"], cwd=target, check=True)
+            with self.observed_product_runtime(runner_image="macos-14", python_version="3.13.0"):
+                result = self.build_fixture_inventory(
+                    trusted, target, plan,
+                    trusted_source_product_environment=self.trusted_source_product_environment(),
+                )
+            product_units = [item for item in result["unit_specs"]
+                             if item["unit_id"].startswith("product-")]
+            self.assertTrue(product_units)
+            self.assertTrue(all(not item["applicable_policy"]["reuse_eligible"] for item in product_units))
+
+    def test_source_environment_requires_exact_validated_product_plan_and_job(self):
+        with tempfile.TemporaryDirectory(prefix="ci-required-inventory-source-plan-binding-") as temp:
+            trusted, target, planner_output = self.make_fixture(Path(temp))
+            inventory = self.build_fixture_inventory(trusted, target, planner_output)
+            workflow_sha = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=trusted, text=True,
+            ).strip()
+            source_attempt = self.trusted_source_product_environment()["trusted_source_attempt"]
+            source_attempt["result_artifacts"] = [
+                {
+                    "unit_id": unit_id, "artifact_id": 22 + index,
+                    "name": "oasis7-required-result-v2-17-a1-" + hashlib.sha256(
+                        unit_id.encode("utf-8"),
+                    ).hexdigest(),
+                }
+                for index, unit_id in enumerate(inventory["selected_test_units"])
+            ]
+            source_job = self.trusted_source_product_environment()["required_gate_job"]
+            source_job["head_sha"] = workflow_sha
+            source_plan = {
+                "unit_specs": inventory["unit_specs"],
+                "product_corpus": inventory["product_corpus"],
+                "required_test_units": inventory["selected_test_units"],
+                "workflow_sha": workflow_sha,
+                "workflow_run_id": 17, "run_attempt": 1,
+                "check_app_id": 2, "check_run_id": 19,
+                "job_id": 20, "job_name": "required-gate",
+                "request_key": source_attempt["request_key"],
+            }
+            source_environment = self.inventory.trusted_product_environment_from_plan(
+                source_plan, [source_job], source_attempt,
+            )
+            first_product_unit = next(
+                (item for item in inventory["unit_specs"] if item["unit_id"].startswith("product-")),
+            )
+            self.assertEqual(
+                first_product_unit["environment_contract"],
+                source_environment["environment_contract"],
+            )
+            changed_attempt = dict(source_attempt, run_attempt=2)
+            with self.assertRaisesRegex(self.inventory.InventoryError, "trusted source product environment"):
+                self.inventory.trusted_product_environment_from_plan(
+                    source_plan, [source_job], changed_attempt,
+                )
 
     def test_missing_cargo_closure_falls_back_to_every_inventory_unit(self):
         with tempfile.TemporaryDirectory(prefix="ci-required-inventory-fallback-") as temp:

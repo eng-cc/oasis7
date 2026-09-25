@@ -600,6 +600,39 @@ def _verified_v2_required_evidence(repository, check_run, proof, *, request_key,
                 or gate_jobs[0]["check_run_id"] != check_run_id
                 or gate_jobs[0]["check_name"] != "required-gate"):
             raise ValueError("v2 exact-attempt required-gate job/check locator mismatch")
+        source_attempt = proof.get("trusted_source_attempt")
+        expected_source_attempt = {
+            "schema": "oasis7-ci-trusted-source-attempt/v1",
+            "request_key": request_key,
+            "workflow_run_id": run_id,
+            "run_attempt": run_attempt,
+            "check_app_id": check_app_id,
+            "check_run_id": check_run_id,
+            "job_id": gate_jobs[0]["job_id"],
+            "job_name": "required-gate",
+            "plan_artifact_id": plan_artifact_id,
+            "plan_artifact_name": plan_name,
+            "result_artifacts": [
+                {"unit_id": item["payload"]["unit_id"],
+                 "artifact_id": item["artifact_id"], "name": item["name"]}
+                for item in sorted(normalized_results, key=lambda item: item["payload"]["unit_id"])
+            ],
+        }
+        source_attempt_fields = set(expected_source_attempt)
+        if (not isinstance(source_attempt, dict) or set(source_attempt) != source_attempt_fields
+                or any(type(source_attempt.get(field)) is not int or source_attempt[field] <= 0
+                       for field in (
+                           "workflow_run_id", "run_attempt", "check_app_id", "check_run_id",
+                           "job_id", "plan_artifact_id",
+                       ))
+                or not isinstance(source_attempt.get("result_artifacts"), list)
+                or any(not isinstance(item, dict) or set(item) != {"unit_id", "artifact_id", "name"}
+                       or not isinstance(item.get("unit_id"), str) or not item["unit_id"]
+                       or type(item.get("artifact_id")) is not int or item["artifact_id"] <= 0
+                       or not isinstance(item.get("name"), str)
+                       for item in source_attempt["result_artifacts"])
+                or source_attempt != expected_source_attempt):
+            raise ValueError("v2 trusted source attempt differs from exact live readback")
         jobs_by_name = {}
         for job in verified_jobs:
             jobs_by_name.setdefault(job["job_name"], []).append(job)
@@ -655,6 +688,7 @@ def _verified_v2_required_evidence(repository, check_run, proof, *, request_key,
             "required_result_v2_artifacts": normalized_results,
             "trusted_planner_inventory": trusted_inventory,
             "execution_jobs": verified_jobs,
+            "trusted_source_attempt": expected_source_attempt,
         }
     except (KeyError, TypeError, ValueError, ImportError, AttributeError) as exc:
         raise SystemExit("ci-ready-receipt: trusted v2 required evidence blocked: " + str(exc)) from exc
@@ -1020,7 +1054,7 @@ def main():
                     "trusted_policy_context", "effective_policy_identity",
                     "required_plan_v2_artifact_id", "required_plan_v2_artifact_name",
                     "required_plan_v2_payload", "required_result_v2_artifacts",
-                    "trusted_planner_inventory", "execution_jobs",
+                    "trusted_planner_inventory", "execution_jobs", "trusted_source_attempt",
                 )
             })
             payload["bootstrap_epoch"] = keyed_v2_evidence["request_identity"]["bootstrap_epoch"]
