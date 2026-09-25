@@ -208,6 +208,7 @@ def main():
   vals["needs_python"]="true" if resources["python"] else "false"
   vals["needs_markdown"]="true" if resources["markdown"] else "false"
  vals.update({"run_oasis7_net_libp2p_tests":vals["run_oasis7_net_tests"],"run_viewer_wasm_check":vals["run_viewer_contract_tests"],"run_pixel_world_bridge_wasm_check":vals["run_pixel_world_bridge_lib_tests"],"run_rust_baseline":"true" if requires_rust else "false","needs_rust_toolchain":"true" if resources["rust_toolchain"] else "false","needs_node":"true" if resources["node"] else "false","needs_system_deps":"true" if resources["system_deps"] else "false","needs_wasm_target":"true" if resources["wasm_target"] else "false","needs_trunk":"true" if resources["trunk"] else "false","planner_config_sha256":digest,"source_scope_base":source_scope_base,"integration_base":a.base_ref or "","source_head":a.head_ref or "HEAD","selected_capabilities":";".join(sorted(capabilities or {"required_gate_baseline"})),"scope":"full" if full else ("targeted" if capabilities else "minimal"),"reason_summary":";".join(dict.fromkeys(reasons)),"changed_path_count":str(len(paths)),"changed_paths":";".join(paths)})
+ vals["required_test_units"]=";".join(sorted({"required_gate_baseline",*capabilities}))
  if projection is not None:
   actual_capabilities=sorted(capabilities or {"required_gate_baseline"})
   actual_scope=vals["scope"]

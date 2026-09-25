@@ -56,6 +56,48 @@ class InputScopeContractTests(unittest.TestCase):
         self.git("commit", "-q", "-m", message)
         return self.git("rev-parse", "HEAD")
 
+    def trusted_inventory_issuer(self, commit, unit_specs, product_corpus):
+        normalized_commit, tree_oid, _entries = inputs.git_tree_entries(str(self.root), commit)
+        return {
+            "schema": inputs.TRUSTED_PLANNER_INVENTORY_SCHEMA,
+            "authority": {
+                "schema": inputs.PLANNER_INVENTORY_AUTHORITY_SCHEMA,
+                "repository": "eng-cc/oasis7",
+                "workflow_ref": "eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main",
+                "planner_authority_oid": self.base,
+                "planner_config_sha256": "sha256:" + "a" * 64,
+            },
+            "producer": {
+                "run_id": 10, "run_attempt": 1,
+                "check_app_id": 30, "check_run_id": 40,
+            },
+            "target_oid": normalized_commit,
+            "target_tree_oid": tree_oid,
+            "unit_ids": sorted(spec["unit_id"] for spec in unit_specs),
+            "inventory_digest": inputs.planner_inventory_digest(
+                unit_specs, product_corpus, normalized_commit, tree_oid,
+            ),
+        }
+
+    @staticmethod
+    def trusted_inventory_readback(issuer, *, artifact_id=20):
+        return {
+            **issuer,
+            "producer": {**issuer["producer"], "artifact_id": artifact_id},
+        }
+
+    def select(self, prior, target, *, trusted_prior_inventory=None,
+               trusted_target_inventory=None):
+        return inputs.select_affected_units(
+            prior, target,
+            trusted_prior_inventory=(trusted_prior_inventory or self.trusted_inventory_readback(
+                prior["planner_inventory_issuer"],
+            )),
+            trusted_target_inventory=(trusted_target_inventory or self.trusted_inventory_readback(
+                target["planner_inventory_issuer"],
+            )),
+        )
+
     @staticmethod
     def unit(unit_id, path, member_root, *, edges=None):
         return {
@@ -85,8 +127,10 @@ class InputScopeContractTests(unittest.TestCase):
         if closure_status == "unknown" and fallback_unit_ids is None:
             fallback_unit_ids = [spec["unit_id"] for spec in [*unit_specs, *corpus_specs]]
             fallback_scope_complete = True
+        all_specs = [*unit_specs, *corpus_specs]
         return inputs.build_input_scope_snapshot(
-            str(self.root), commit, [*unit_specs, *corpus_specs], corpus,
+            str(self.root), commit, all_specs, corpus,
+            planner_inventory_issuer=self.trusted_inventory_issuer(commit, all_specs, corpus),
             closure_status=closure_status,
             closure_reason=closure_reason,
             fallback_unit_ids=fallback_unit_ids,
@@ -109,7 +153,7 @@ class InputScopeContractTests(unittest.TestCase):
     def test_changed_input_selects_only_the_affected_unit(self):
         self.write("pkg/a/a.rs", "fn a() { let changed = true; }\n")
         changed_commit = self.commit("change a")
-        result = inputs.select_affected_units(self.scope(self.base), self.scope(changed_commit))
+        result = self.select(self.scope(self.base), self.scope(changed_commit))
 
         self.assertEqual("complete", result["status"])
         self.assertEqual(["unit-a"], result["required_test_units"])
@@ -126,7 +170,7 @@ class InputScopeContractTests(unittest.TestCase):
         added = self.scope(added_commit, unit_specs=unit_specs)
         self.assertEqual(
             ["unit-a"],
-            inputs.select_affected_units(before, added)["required_test_units"],
+            self.select(before, added)["required_test_units"],
         )
 
         (self.root / "pkg/a/optional.rs").unlink()
@@ -134,7 +178,7 @@ class InputScopeContractTests(unittest.TestCase):
         deleted = self.scope(deleted_commit, unit_specs=unit_specs)
         self.assertEqual(
             ["unit-a"],
-            inputs.select_affected_units(added, deleted)["required_test_units"],
+            self.select(added, deleted)["required_test_units"],
         )
 
     def test_dependency_change_widens_to_consumers_over_edge_union(self):
@@ -147,7 +191,7 @@ class InputScopeContractTests(unittest.TestCase):
         changed_commit = self.commit("change dependency")
         after = self.scope(changed_commit, unit_specs=unit_specs)
 
-        result = inputs.select_affected_units(before, after)
+        result = self.select(before, after)
         self.assertEqual(["unit-a", "unit-b"], result["required_test_units"])
 
     def test_mode_change_invalidates_the_selected_unit(self):
@@ -158,7 +202,7 @@ class InputScopeContractTests(unittest.TestCase):
 
         self.assertEqual(
             ["unit-a"],
-            inputs.select_affected_units(before, after)["required_test_units"],
+            self.select(before, after)["required_test_units"],
         )
 
     def test_symlink_target_is_hashed_and_must_be_inside_declared_closure(self):
@@ -177,7 +221,7 @@ class InputScopeContractTests(unittest.TestCase):
         ])
         self.assertEqual(
             ["unit-a"],
-            inputs.select_affected_units(before, after)["required_test_units"],
+            self.select(before, after)["required_test_units"],
         )
 
         narrow = dict(scoped_link)
@@ -194,14 +238,14 @@ class InputScopeContractTests(unittest.TestCase):
             closure_status="unknown",
             closure_reason="dependency resolver unavailable",
         )
-        result = inputs.select_affected_units(prior, target)
+        result = self.select(prior, target)
 
         self.assertEqual("widened", result["status"])
         self.assertEqual(target["required_test_units"], result["required_test_units"])
         self.assertEqual([], result["reused_units"])
         self.assertEqual(
-            "trusted-planner-unit-inventory/v1",
-            target["fallback_contract"]["authority"],
+            "oasis7-ci-fallback-unit-manifest/v1",
+            target["fallback_contract"]["schema"],
         )
         self.assertEqual(
             target["required_test_units"],
@@ -212,7 +256,11 @@ class InputScopeContractTests(unittest.TestCase):
             unit for unit in target["required_test_units"] if unit != "unit-b"
         ]
         with self.assertRaises(inputs.InputScopeError):
-            inputs.validate_input_scope_snapshot(incomplete)
+            inputs.validate_input_scope_snapshot(
+                incomplete, trusted_planner_inventory=self.trusted_inventory_readback(
+                    target["planner_inventory_issuer"],
+                ),
+            )
 
     def test_unknown_closure_without_complete_fallback_is_rejected(self):
         with self.assertRaises(inputs.InputScopeError):
@@ -264,7 +312,7 @@ class InputScopeContractTests(unittest.TestCase):
         self.write("doc/engineering/authority.md", "# Rule\n\nChanged authority.\n")
         changed_commit = self.commit("change linked authority")
         after = self.scope(changed_commit)
-        result = inputs.select_affected_units(before, after)
+        result = self.select(before, after)
 
         self.assertIn(link_unit, result["required_test_units"])
 
@@ -305,7 +353,7 @@ class InputScopeContractTests(unittest.TestCase):
 
         self.assertIn(
             link_unit,
-            inputs.select_affected_units(before, after)["required_test_units"],
+            self.select(before, after)["required_test_units"],
         )
 
     def test_product_corpus_blocks_missing_non_product_repository_link_targets(self):
@@ -329,14 +377,14 @@ class InputScopeContractTests(unittest.TestCase):
         self.write("doc/product/core/gamma.prd.md", "# Gamma\n")
         added_commit = self.commit("add product document")
         added = self.scope(added_commit)
-        added_result = inputs.select_affected_units(before, added)
+        added_result = self.select(before, added)
         self.assertIn("product-corpus:membership", added_result["required_test_units"])
         self.assertIn("product-document::doc/product/core/gamma.prd.md", added_result["required_test_units"])
 
         (self.root / "doc/product/core/gamma.prd.md").unlink()
         deleted_commit = self.commit("delete product document")
         deleted = self.scope(deleted_commit)
-        deleted_result = inputs.select_affected_units(added, deleted)
+        deleted_result = self.select(added, deleted)
         self.assertIn("product-corpus:membership", deleted_result["required_test_units"])
         self.assertIn("product-document::doc/product/core/gamma.prd.md", deleted_result["retired_units"])
 
@@ -355,19 +403,35 @@ class InputScopeContractTests(unittest.TestCase):
             }
             for unit in sorted(by_unit)
         ]
-        self.assertEqual("complete", inputs.aggregate_product_corpus_results(scope, passed)["status"])
+        self.assertEqual("complete", inputs.aggregate_product_corpus_results(
+            scope, passed, trusted_planner_inventory=self.trusted_inventory_readback(
+                scope["planner_inventory_issuer"],
+            ),
+        )["status"])
 
-        missing = inputs.aggregate_product_corpus_results(scope, passed[:-1])
+        missing = inputs.aggregate_product_corpus_results(
+            scope, passed[:-1], trusted_planner_inventory=self.trusted_inventory_readback(
+                scope["planner_inventory_issuer"],
+            ),
+        )
         self.assertEqual("revalidate", missing["status"])
         self.assertTrue(missing["required_units"])
 
         legacy = [dict(item) for item in passed]
         legacy[0].pop("input_digest")
-        self.assertEqual("blocked", inputs.aggregate_product_corpus_results(scope, legacy)["status"])
+        self.assertEqual("blocked", inputs.aggregate_product_corpus_results(
+            scope, legacy, trusted_planner_inventory=self.trusted_inventory_readback(
+                scope["planner_inventory_issuer"],
+            ),
+        )["status"])
 
         incomplete = [dict(item) for item in passed]
         incomplete[0]["obligation_ids"] = []
-        self.assertEqual("blocked", inputs.aggregate_product_corpus_results(scope, incomplete)["status"])
+        self.assertEqual("blocked", inputs.aggregate_product_corpus_results(
+            scope, incomplete, trusted_planner_inventory=self.trusted_inventory_readback(
+                scope["planner_inventory_issuer"],
+            ),
+        )["status"])
 
     def test_missing_product_link_target_prevents_complete_corpus_snapshot(self):
         self.write(
@@ -386,6 +450,9 @@ class InputScopeContractTests(unittest.TestCase):
         with self.assertRaises(inputs.InputScopeError):
             inputs.build_input_scope_snapshot(
                 str(self.root), changed_commit, product_specs, corpus,
+                planner_inventory_issuer=self.trusted_inventory_issuer(
+                    changed_commit, product_specs, corpus,
+                ),
             )
 
     def test_snapshot_cannot_omit_corpus_units_or_ignore_unknown_fields(self):
@@ -397,11 +464,231 @@ class InputScopeContractTests(unittest.TestCase):
             "unit-b": scope["input_fingerprints"]["unit-b"],
         }
         with self.assertRaises(inputs.InputScopeError):
-            inputs.validate_input_scope_snapshot(missing_corpus_unit)
+            inputs.validate_input_scope_snapshot(
+                missing_corpus_unit, trusted_planner_inventory=self.trusted_inventory_readback(
+                    scope["planner_inventory_issuer"],
+                ),
+            )
 
         unknown_field = {**scope, "ignored": True}
         with self.assertRaises(inputs.InputScopeError):
-            inputs.validate_input_scope_snapshot(unknown_field)
+            inputs.validate_input_scope_snapshot(
+                unknown_field, trusted_planner_inventory=self.trusted_inventory_readback(
+                    scope["planner_inventory_issuer"],
+                ),
+            )
+
+    def test_snapshot_self_assertion_or_untrusted_subset_cannot_establish_inventory(self):
+        full = self.scope(self.base)
+        with self.assertRaisesRegex(inputs.InputScopeError, "trusted planner inventory"):
+            inputs.validate_input_scope_snapshot(full)
+
+        subset = dict(full)
+        subset_units = [unit for unit in full["required_test_units"] if unit != "unit-b"]
+        subset["required_test_units"] = subset_units
+        subset["input_fingerprints"] = {
+            unit: full["input_fingerprints"][unit] for unit in subset_units
+        }
+        with self.assertRaisesRegex(inputs.InputScopeError, "units disagree"):
+            inputs.validate_input_scope_snapshot(
+                subset, trusted_planner_inventory=self.trusted_inventory_readback(
+                    full["planner_inventory_issuer"],
+                ),
+            )
+
+        forged_issuer = dict(full["planner_inventory_issuer"])
+        forged_issuer["unit_ids"] = subset_units
+        forged_issuer["inventory_digest"] = "sha256:" + "0" * 64
+        subset["planner_inventory_issuer"] = forged_issuer
+        with self.assertRaisesRegex(inputs.InputScopeError, "not bound"):
+            inputs.validate_input_scope_snapshot(
+                subset, trusted_planner_inventory=self.trusted_inventory_readback(
+                    full["planner_inventory_issuer"],
+                ),
+            )
+
+    def test_inventory_binding_rejects_mismatched_issuer_or_attempt_locator(self):
+        scope = self.scope(self.base)
+        bad_locator = self.trusted_inventory_readback(scope["planner_inventory_issuer"])
+        bad_locator["producer"] = {**bad_locator["producer"], "run_attempt": 2}
+        with self.assertRaisesRegex(inputs.InputScopeError, "not bound"):
+            inputs.validate_input_scope_snapshot(
+                scope, trusted_planner_inventory=bad_locator,
+            )
+
+        malformed_authority = self.trusted_inventory_readback(
+            scope["planner_inventory_issuer"],
+        )
+        malformed_authority["authority"] = {
+            **malformed_authority["authority"],
+            "workflow_ref": "refs/heads/main",
+        }
+        with self.assertRaisesRegex(inputs.InputScopeError, "default-branch workflow"):
+            inputs.validate_input_scope_snapshot(
+                scope, trusted_planner_inventory=malformed_authority,
+            )
+
+    def local_target_observation(self, commit, unit_specs, product_corpus, *,
+                                 assessed_target_oid=None, source_head_oid=None,
+                                 source_scope_oid=None):
+        commit, tree_oid, _entries = inputs.git_tree_entries(str(self.root), commit)
+        planner_authority_oid = self.base
+        config_digest = "sha256:" + "9" * 64
+        invocation = {
+            "schema": inputs.LOCAL_PLANNER_INVOCATION_SCHEMA,
+            "planner_authority_oid": planner_authority_oid,
+            "planner_config_sha256": config_digest,
+            "event_name": "workflow_dispatch",
+            "run_mode": "integration_revalidation",
+            "base_ref": self.base,
+            "head_ref": source_head_oid or self.base,
+            "task_uid": "task_12345678901234567890123456789012",
+            "scope_base_oid": source_scope_oid or self.base,
+            "impact_projection_sha256": "sha256:" + "8" * 64,
+            "changed_paths": ["pkg/a/a.rs"],
+            "planner_output_sha256": "sha256:" + "7" * 64,
+        }
+        invocation["digest"] = inputs.local_planner_invocation_digest(invocation)
+        return inputs.build_target_observation(
+            authority={
+                "schema": inputs.PLANNER_INVENTORY_AUTHORITY_SCHEMA,
+                "repository": "eng-cc/oasis7",
+                "workflow_ref": "eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main",
+                "planner_authority_oid": planner_authority_oid,
+                "planner_config_sha256": config_digest,
+            },
+            planner_invocation=invocation,
+            repository="eng-cc/oasis7",
+            task_uid=invocation["task_uid"],
+            pr_number=7,
+            source_head_oid=source_head_oid or self.base,
+            source_scope_oid=source_scope_oid or self.base,
+            assessed_target_oid=assessed_target_oid or commit,
+            input_scope_commit_oid=commit,
+            input_scope_tree_oid=tree_oid,
+            effective_policy_identity={
+                "schema": inputs.EFFECTIVE_POLICY_IDENTITY_SCHEMA,
+                "digest": "sha256:" + "6" * 64,
+            },
+            unit_specs=unit_specs,
+            product_corpus=product_corpus,
+        )
+
+    def test_local_target_observation_is_distinct_from_execution_inventory(self):
+        specs = [self.unit("unit-a", "pkg/a/a.rs", "pkg/a")]
+        corpus_specs, corpus = inputs.build_product_corpus_unit_specs(
+            str(self.root), self.base,
+            command_checker_paths=[COMMAND_PATH],
+            applicable_policy={"policy": "product-v1"},
+            environment_contract={"python": "fixture-v1"},
+        )
+        specs.extend(corpus_specs)
+        observation = self.local_target_observation(self.base, specs, corpus)
+        scope = inputs.build_input_scope_snapshot(
+            str(self.root), self.base, specs, corpus,
+            target_observation=observation,
+        )
+
+        self.assertEqual(inputs.TARGET_INPUT_SCOPE_SCHEMA, scope["schema"])
+        self.assertEqual(inputs.TARGET_OBSERVATION_SCHEMA, observation["schema"])
+        self.assertEqual(observation, scope["target_observation"])
+        self.assertNotIn("producer", observation)
+        self.assertNotIn("artifact_id", observation)
+        self.assertNotIn("run_id", observation)
+        self.assertNotIn("status", observation)
+        validated = inputs.validate_input_scope_snapshot(
+            scope, trusted_target_observation=observation,
+        )
+        self.assertEqual(observation["assessed_target_oid"],
+                         validated["target_observation"]["assessed_target_oid"])
+
+    def test_local_target_observation_rejects_wrong_q_w_and_inventory(self):
+        specs = [self.unit("unit-a", "pkg/a/a.rs", "pkg/a")]
+        corpus_specs, corpus = inputs.build_product_corpus_unit_specs(
+            str(self.root), self.base,
+            command_checker_paths=[COMMAND_PATH],
+            applicable_policy={"policy": "product-v1"},
+            environment_contract={"python": "fixture-v1"},
+        )
+        specs.extend(corpus_specs)
+        observation = self.local_target_observation(self.base, specs, corpus)
+        scope = inputs.build_input_scope_snapshot(
+            str(self.root), self.base, specs, corpus, target_observation=observation,
+        )
+
+        wrong_q = {**observation, "assessed_target_oid": "b" * 40}
+        with self.assertRaisesRegex(inputs.InputScopeError, "not bound"):
+            inputs.validate_input_scope_snapshot(
+                scope, trusted_target_observation=wrong_q,
+            )
+        wrong_w = {**observation, "authority": {
+            **observation["authority"], "planner_authority_oid": "c" * 40,
+        }}
+        with self.assertRaisesRegex(inputs.InputScopeError, "trusted W|not bound"):
+            inputs.validate_input_scope_snapshot(
+                scope, trusted_target_observation=wrong_w,
+            )
+        wrong_inventory = {**observation, "inventory_digest": "sha256:" + "0" * 64}
+        with self.assertRaisesRegex(inputs.InputScopeError, "not bound"):
+            inputs.validate_input_scope_snapshot(
+                scope, trusted_target_observation=wrong_inventory,
+            )
+
+    def test_local_target_observation_rejects_success_claims_and_bad_invocation_digest(self):
+        specs = [self.unit("unit-a", "pkg/a/a.rs", "pkg/a")]
+        corpus_specs, corpus = inputs.build_product_corpus_unit_specs(
+            str(self.root), self.base,
+            command_checker_paths=[COMMAND_PATH],
+            applicable_policy={"policy": "product-v1"},
+            environment_contract={"python": "fixture-v1"},
+        )
+        specs.extend(corpus_specs)
+        observation = self.local_target_observation(self.base, specs, corpus)
+
+        with self.assertRaisesRegex(inputs.InputScopeError, "fields are incomplete or unsupported"):
+            inputs.validate_target_observation_binding(
+                {**observation, "test_status": "passed"}, observation,
+            )
+        for fake_remote_locator in (
+            {"artifact_id": 99},
+            {"producer": {"run_id": 10, "run_attempt": 1, "check_run_id": 20}},
+        ):
+            with self.subTest(fake_remote_locator=fake_remote_locator), self.assertRaisesRegex(
+                inputs.InputScopeError, "fields are incomplete or unsupported",
+            ):
+                inputs.validate_target_observation_binding(
+                    {**observation, **fake_remote_locator}, observation,
+                )
+        bad_invocation = {**observation, "planner_invocation": {
+            **observation["planner_invocation"], "digest": "sha256:" + "0" * 64,
+        }}
+        with self.assertRaisesRegex(inputs.InputScopeError, "invocation digest"):
+            inputs.validate_target_observation_binding(bad_invocation, observation)
+
+    def test_local_target_invocation_changed_paths_are_canonical(self):
+        specs = [self.unit("unit-a", "pkg/a/a.rs", "pkg/a")]
+        corpus_specs, corpus = inputs.build_product_corpus_unit_specs(
+            str(self.root), self.base,
+            command_checker_paths=[COMMAND_PATH],
+            applicable_policy={"policy": "product-v1"},
+            environment_contract={"python": "fixture-v1"},
+        )
+        specs.extend(corpus_specs)
+        observation = self.local_target_observation(self.base, specs, corpus)
+        invocation = {**observation["planner_invocation"], "changed_paths": ["z.rs", "a.rs"]}
+        invocation["digest"] = inputs.local_planner_invocation_digest(invocation)
+        malformed = {**observation, "planner_invocation": invocation}
+        with self.assertRaisesRegex(inputs.InputScopeError, "changed paths must be sorted and unique"):
+            inputs.validate_target_observation_binding(malformed, malformed)
+
+    def test_source_execution_inventory_still_requires_artifact_readback(self):
+        scope = self.scope(self.base)
+        binding = self.trusted_inventory_readback(scope["planner_inventory_issuer"])
+        del binding["producer"]["artifact_id"]
+        with self.assertRaisesRegex(inputs.InputScopeError, "producer locator is incomplete"):
+            inputs.validate_input_scope_snapshot(
+                scope, trusted_planner_inventory=binding,
+            )
 
 
 if __name__ == "__main__":

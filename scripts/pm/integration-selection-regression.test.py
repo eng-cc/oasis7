@@ -26,8 +26,9 @@ class SelectionTests(unittest.TestCase):
   if '/contents/' in path:return {'type':'file','path':integration.WORKFLOW,'encoding':'base64','content':base64.b64encode(getattr(self,'workflow','no integration mode').encode()).decode()}
   raise AssertionError(path)
  def check(self,locator=None,allow_ready_pr=False,require_integration=False,require_dispatch=False):
-  def verify(repo,uid,number,base,head,n,app):
+  def verify(repo,uid,number,base,head,n,app,*,expected_attempt=None,**kwargs):
    r=next(r for r in self.runs if r['id']==n)
+   self.assertEqual(r['run_attempt'],expected_attempt)
    if getattr(self,'verification_error',False):raise OSError('artifact read uncertain')
    if getattr(self,'race',False):self.runs.insert(0,run(30,status='queued',conclusion=None))
    if getattr(self,'pr_race',None):self.pr=self.pr_race
@@ -143,7 +144,7 @@ class SelectionTests(unittest.TestCase):
 
  def test_workflow_base_diverge_accepts_only_approved_executor_and_keeps_b_frozen(self):
   approved='sha256:'+'8'*64
-  pr={**self.pr,'base':{'sha':'7'*40,'ref':'main','repo':{'full_name':'owner/repo'}},'head':{'sha':HEAD,'repo':{'full_name':'owner/repo'}}}
+  pr={**self.pr,'base':{'sha':BASE,'ref':'main','repo':{'full_name':'owner/repo'}},'head':{'sha':HEAD,'repo':{'full_name':'owner/repo'}}}
   def api(*args):
    return pr if '/pulls/' in args[-1] else {'default_branch':'main'}
   run_head='6'*40;workflow_sha=run_head
@@ -160,7 +161,7 @@ class SelectionTests(unittest.TestCase):
 
  def test_workflow_base_diverge_rejects_unverifiable_w_e_relation(self):
   workflow_sha='9'*40;run_head='6'*40;approved='sha256:'+'8'*64
-  pr={**self.pr,'base':{'sha':'7'*40,'ref':'main','repo':{'full_name':'owner/repo'}},'head':{'sha':HEAD,'repo':{'full_name':'owner/repo'}}}
+  pr={**self.pr,'base':{'sha':BASE,'ref':'main','repo':{'full_name':'owner/repo'}},'head':{'sha':HEAD,'repo':{'full_name':'owner/repo'}}}
   def api(*args):
    return pr if '/pulls/' in args[-1] else {'default_branch':'main'}
   with patch.object(integration,'gh',side_effect=api),patch.dict(integration.os.environ,{'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_REF':'refs/heads/main','GITHUB_SHA':run_head,'GITHUB_WORKFLOW_SHA':workflow_sha,'GITHUB_RUN_ATTEMPT':'1'}),patch.object(integration,'git',return_value=workflow_sha) as git,patch.object(integration,'_executor_contract') as executor,patch.object(integration,'compose') as compose:
@@ -171,7 +172,7 @@ class SelectionTests(unittest.TestCase):
 
  def test_workflow_base_diverge_with_unapproved_executor_fails_before_fetch(self):
   workflow_sha='9'*40
-  pr={**self.pr,'base':{'sha':'7'*40,'ref':'main','repo':{'full_name':'owner/repo'}},'head':{'sha':HEAD,'repo':{'full_name':'owner/repo'}}}
+  pr={**self.pr,'base':{'sha':BASE,'ref':'main','repo':{'full_name':'owner/repo'}},'head':{'sha':HEAD,'repo':{'full_name':'owner/repo'}}}
   def api(*args):
    return pr if '/pulls/' in args[-1] else {'default_branch':'main'}
   with patch.object(integration,'gh',side_effect=api),patch.dict(integration.os.environ,{'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_REF':'refs/heads/main','GITHUB_SHA':workflow_sha,'GITHUB_WORKFLOW_SHA':workflow_sha}),patch.object(integration,'git',return_value=workflow_sha) as git,patch.object(integration,'compose') as compose:
