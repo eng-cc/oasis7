@@ -323,6 +323,11 @@ def _validate_plan(value: Any, *, require_complete: bool) -> dict[str, Any]:
             or plan["source_projection_digest"] != request_identity["source_projection_digest"]
             or plan["executor_contract_digest"] != request_identity["executor_contract_digest"]):
         raise RequiredArtifactError("required-plan differs from its request identity")
+    if (request_identity["applicability_mode"] == "snapshot_exact"
+            and request_identity["snapshot_target_oid"] != plan["tested_commit_oid"]):
+        raise RequiredArtifactError(
+            "snapshot-exact request target differs from the tested commit",
+        )
     policy_identity = _require_fields(
         plan["effective_policy_identity"], {"schema", "digest"}, "effective policy identity",
     )

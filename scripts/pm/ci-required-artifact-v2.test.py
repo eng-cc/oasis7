@@ -133,6 +133,24 @@ class RequiredArtifactV2Tests(unittest.TestCase):
             with self.subTest(field=field, bad=bad), self.assertRaises(ValueError):
                 ARTIFACT.validate_plan_payload(mutated)
 
+    def test_snapshot_exact_request_is_bound_to_the_commit_actually_tested(self):
+        exact_plan = dict(self.plan)
+        exact_identity = {
+            **self.plan["request_identity"],
+            "applicability_mode": "snapshot_exact",
+            "snapshot_target_oid": self.plan["tested_commit_oid"],
+        }
+        exact_plan["request_identity"] = exact_identity
+        exact_plan["request_key"] = ARTIFACT.request_key_for_identity(exact_identity)
+        self.assertEqual(exact_plan, ARTIFACT.validate_plan_payload(exact_plan))
+
+        moved_target_plan = dict(exact_plan)
+        moved_identity = {**exact_identity, "snapshot_target_oid": "9" * 40}
+        moved_target_plan["request_identity"] = moved_identity
+        moved_target_plan["request_key"] = ARTIFACT.request_key_for_identity(moved_identity)
+        with self.assertRaisesRegex(ValueError, "snapshot-exact request target"):
+            ARTIFACT.validate_plan_payload(moved_target_plan)
+
     def test_plan_rejects_unknown_closure_and_subset_inventory(self):
         mutated = dict(self.plan)
         mutated["closure_status"] = "unknown"

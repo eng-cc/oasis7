@@ -24,6 +24,10 @@ from ci_input_scope import (
     validate_planner_inventory_binding,
     validate_target_observation_binding,
 )
+from ci_required_artifact_v2 import (
+    request_key_for_identity,
+    validate_request_identity,
+)
 from integration_executor_contract import (
     EFFECTIVE_POLICY_IDENTITY_SCHEMA,
     effective_policy_digest,
@@ -460,6 +464,33 @@ def evaluate_evidence_applicability(
                 "TASK_SOURCE_IDENTITY_MISMATCH", identity=decision_identity,
                 effective_policy_identity=policy_identity,
             )
+
+        request_identity = validate_request_identity(source_plan.get("request_identity"))
+        if source_plan.get("request_key") != request_key_for_identity(request_identity):
+            raise ValueError("source plan request key differs from its request identity")
+        for field in (
+            "repository", "task_uid", "pr_number", "bootstrap_epoch", "source_head_oid",
+            "source_projection_digest", "executor_contract_digest",
+        ):
+            if source_plan.get(field) != request_identity[field]:
+                raise ValueError(f"source plan request identity differs at {field}")
+        source_units_for_request = _string_list(
+            source_plan.get("required_test_units"), "source_plan.required_test_units",
+        )
+        if source_units_for_request != tuple(request_identity["unit_ids"]):
+            raise ValueError("source plan request identity differs at required test units")
+        if source_plan.get("input_fingerprints") != request_identity["input_fingerprints"]:
+            raise ValueError("source plan request identity differs at input fingerprints")
+        if request_identity["applicability_mode"] == "snapshot_exact":
+            exact_target_oid = request_identity["snapshot_target_oid"]
+            tested_target_oid = _identity(
+                source_plan.get("tested_commit_oid"), "source_plan.tested_commit_oid",
+            )
+            if tested_target_oid != exact_target_oid or assessed_target_oid != exact_target_oid:
+                return _blocked(
+                    "SNAPSHOT_EXACT_TARGET_MISMATCH", identity=decision_identity,
+                    effective_policy_identity=policy_identity,
+                )
 
         source_review_digest = _digest(
             source_plan.get("review_applicability_digest"),

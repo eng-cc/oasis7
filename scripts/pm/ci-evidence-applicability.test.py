@@ -5,6 +5,7 @@ import unittest
 
 import ci_evidence_applicability as applicability
 import ci_input_scope as input_scope
+import ci_required_artifact_v2 as required_artifact
 import ci_ready_receipt_identity as receipt_identity
 import projection_publication_contract as publication
 
@@ -86,22 +87,48 @@ def trusted_inventory_readback(issuer, *, artifact_id=30):
     return {**issuer, "producer": {**issuer["producer"], "artifact_id": artifact_id}}
 
 
-def source_plan(*, reuse_policies=None):
+def source_plan(*, reuse_policies=None, applicability_mode="input_scoped",
+                snapshot_target_oid=None):
     specs = planner_unit_specs(reuse_policies)
     corpus = product_corpus()
     issuer = planner_inventory_issuer(HEAD, HEAD, specs, corpus)
-    return {
-        "schema": PLAN_SCHEMA,
-        "required_capabilities": [CAPABILITY],
+    unit_ids = [CORPUS_UNIT, "unit-a"]
+    input_fingerprints = {CORPUS_UNIT: INPUT_DIGEST, "unit-a": INPUT_DIGEST}
+    request_identity = {
         "repository": REPOSITORY,
         "task_uid": UID,
         "pr_number": 7,
+        "bootstrap_epoch": 1,
+        "source_head_oid": HEAD,
+        "publication_id": "publication-1",
+        "source_projection_digest": DIGEST,
+        "unit_ids": unit_ids,
+        "input_fingerprints": input_fingerprints,
+        "executor_contract_digest": DIGEST,
+        "effective_policy_digest": effective_policy_identity()["digest"],
+        "purpose": "integration_revalidation",
+        "applicability_mode": applicability_mode,
+        "snapshot_target_oid": snapshot_target_oid,
+    }
+    return {
+        "schema": PLAN_SCHEMA,
+        "required_capabilities": [CAPABILITY],
+        "request_identity": request_identity,
+        "request_key": required_artifact.request_key_for_identity(request_identity),
+        "repository": REPOSITORY,
+        "task_uid": UID,
+        "pr_number": 7,
+        "bootstrap_epoch": 1,
         "source_head_oid": HEAD,
         "source_scope_oid": SOURCE_SCOPE,
         "integration_base_oid": "1" * 40,
         "source_projection_digest": DIGEST,
+        "executor_contract_digest": DIGEST,
+        "tested_commit_oid": issuer["target_oid"],
+        "tested_tree_oid": issuer["target_tree_oid"],
         "review_applicability_digest": DIGEST,
-        "required_test_units": [CORPUS_UNIT, "unit-a"],
+        "required_test_units": unit_ids,
+        "input_fingerprints": input_fingerprints,
         "required_review_roles": ["runtime_engineer"],
         "planner_inventory_issuer": issuer,
         "unit_specs": specs,
@@ -111,7 +138,9 @@ def source_plan(*, reuse_policies=None):
 
 def target_snapshot(*, input_digest=INPUT_DIGEST, review_digest=DIGEST,
                     closure="complete", reuse_policies=None,
-                    assessed_target_oid=TARGET):
+                    assessed_target_oid=TARGET,
+                    input_scope_commit_oid=TARGET,
+                    input_scope_tree_oid=TARGET_TREE):
     specs = planner_unit_specs(reuse_policies)
     corpus = product_corpus()
     target_context = {
@@ -121,8 +150,8 @@ def target_snapshot(*, input_digest=INPUT_DIGEST, review_digest=DIGEST,
         "source_head_oid": HEAD,
         "source_scope_oid": SOURCE_SCOPE,
         "target_oid": assessed_target_oid,
-        "input_scope_commit_oid": TARGET,
-        "input_scope_tree_oid": TARGET_TREE,
+        "input_scope_commit_oid": input_scope_commit_oid,
+        "input_scope_tree_oid": input_scope_tree_oid,
         "unit_specs": specs,
         "product_corpus": corpus,
     }
@@ -130,8 +159,8 @@ def target_snapshot(*, input_digest=INPUT_DIGEST, review_digest=DIGEST,
     if closure == "complete":
         scope = {
             "schema": input_scope.TARGET_INPUT_SCOPE_SCHEMA,
-            "target_oid": TARGET,
-            "target_tree_oid": TARGET_TREE,
+            "target_oid": input_scope_commit_oid,
+            "target_tree_oid": input_scope_tree_oid,
             "target_observation": observation,
             "closure_status": {"status": "complete", "reason": None},
             "required_test_units": [CORPUS_UNIT, "unit-a"],
@@ -144,8 +173,8 @@ def target_snapshot(*, input_digest=INPUT_DIGEST, review_digest=DIGEST,
     else:
         scope = {
             "schema": input_scope.TARGET_INPUT_SCOPE_SCHEMA,
-            "target_oid": TARGET,
-            "target_tree_oid": TARGET_TREE,
+            "target_oid": input_scope_commit_oid,
+            "target_tree_oid": input_scope_tree_oid,
             "target_observation": observation,
             "closure_status": {"status": "unknown", "reason": "fixture closure unavailable"},
             "required_test_units": [CORPUS_UNIT, "unit-a"],
@@ -153,7 +182,7 @@ def target_snapshot(*, input_digest=INPUT_DIGEST, review_digest=DIGEST,
             "dependency_edges": [],
             "fallback_complete": True,
             "fallback_contract": input_scope.planner_fallback_contract(
-                [CORPUS_UNIT, "unit-a"], TARGET, TARGET_TREE,
+                [CORPUS_UNIT, "unit-a"], input_scope_commit_oid, input_scope_tree_oid,
             ),
             "product_corpus": corpus,
         }
@@ -165,8 +194,8 @@ def target_snapshot(*, input_digest=INPUT_DIGEST, review_digest=DIGEST,
         "source_scope_oid": SOURCE_SCOPE,
         "target_oid": assessed_target_oid,
         "prior_assessed_target_oid": None,
-        "input_scope_commit_oid": TARGET,
-        "input_scope_tree_oid": TARGET_TREE,
+        "input_scope_commit_oid": input_scope_commit_oid,
+        "input_scope_tree_oid": input_scope_tree_oid,
         "review_applicability_digest": review_digest,
         "required_test_units": [CORPUS_UNIT, "unit-a"],
         "required_review_roles": ["runtime_engineer"],
@@ -463,6 +492,38 @@ class ApplicabilityDecisionTests(unittest.TestCase):
         self.assertEqual(TARGET, target_locator["id"]["assessed_target_oid"])
         self.assertEqual(TARGET_TREE, target_locator["id"]["input_scope_tree_oid"])
         self.assertNotIn("artifact_id", target_locator["id"])
+
+    def test_snapshot_exact_reuses_only_when_tested_and_assessed_targets_match(self):
+        plan = source_plan(
+            applicability_mode="snapshot_exact", snapshot_target_oid=HEAD,
+        )
+        target = target_snapshot(
+            assessed_target_oid=HEAD,
+            input_scope_commit_oid=HEAD,
+            input_scope_tree_oid=HEAD,
+        )
+
+        decision = self.evaluate(plan=plan, target=target)
+
+        self.assertEqual("reusable", result_status(decision, "test_evidence"))
+        self.assertEqual((CORPUS_UNIT, "unit-a"), tuple(decision.reused_units))
+
+    def test_snapshot_exact_blocks_when_assessed_target_moved(self):
+        plan = source_plan(
+            applicability_mode="snapshot_exact", snapshot_target_oid=HEAD,
+        )
+        target = target_snapshot(
+            assessed_target_oid="e" * 40,
+            input_scope_commit_oid=HEAD,
+            input_scope_tree_oid=HEAD,
+        )
+
+        decision = self.evaluate(plan=plan, target=target)
+
+        self.assertEqual("blocked", result_status(decision, "test_evidence"))
+        self.assertEqual("blocked", result_status(decision, "merge_readiness"))
+        self.assertIn("SNAPSHOT_EXACT_TARGET_MISMATCH", decision.blockers)
+        self.assertEqual((), tuple(decision.reused_units))
 
     def test_disabled_or_ineligible_unit_policy_revalidates_only_that_test_unit(self):
         cases = (
