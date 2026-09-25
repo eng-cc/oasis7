@@ -240,8 +240,18 @@ class IntegrationTests(unittest.TestCase):
 
  def test_required_gate_registers_review_plan_suite(self):
   driver=(HERE.parents[1]/'scripts/ci-tests.sh').read_text()
-  operational=driver.split('run_operational_contract_tests() {',1)[1].split('\n}',1)[0]
-  self.assertIn('run python3 ./scripts/pm/review-plan.test.py',operational)
+  def function_body(name):
+   return driver.split(name+'() {',1)[1].split('\n}',1)[0]
+  workflow_operational=function_body('run_workflow_governance_operational_contract_tests')
+  self.assertIn('run python3 ./scripts/pm/review-plan.test.py',workflow_operational)
+  required=function_body('run_required_gate_capability_contracts')
+  self.assertIn('OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS run_workflow_governance_contract_tests',required)
+  legacy=function_body('run_legacy_mixed_operational_contract_tests')
+  self.assertIn('run_workflow_governance_operational_contract_tests',legacy)
+  full_capabilities=function_body('run_all_required_gate_capability_contract_tests')
+  self.assertIn('run_workflow_governance_contract_tests',full_capabilities)
+  for full_tier in ('run_full_core_tier_tests','run_full_support_tier_tests','run_full_required_superset'):
+   self.assertIn('run_all_required_gate_capability_contract_tests',function_body(full_tier))
 
  def test_real_parallel_merge_keeps_source_and_tests_current_base(self):
   self.assertTrue((HERE/'integration_ci.py').exists(),'manual integration recovery helper missing')
@@ -336,9 +346,23 @@ class ProvenanceTests(unittest.TestCase):
    envelope[key+'_digest']='sha256:'+hashlib.sha256(value).hexdigest()
   profile_payloads['envelope']=(json.dumps(envelope)+'\n').encode()
   artifact_names={11:self.api.ARTIFACT,21:'cargo-package-profile-envelope',22:'cargo-package-profile-plan',23:'cargo-package-profile-results',24:'cargo-package-profile-receipt'}
+  gate_job={
+   'id':10,'run_id':9,'run_attempt':1,'name':'required-gate','status':'completed','conclusion':'success',
+   'head_sha':self.base,'labels':['ubuntu-24.04'],
+   'check_run_url':'https://api.github.com/repos/owner/repo/check-runs/10',
+   'started_at':'2026-09-09T00:00:00Z','completed_at':'2026-09-09T01:00:00Z',
+  }
+  child_jobs=[
+   {'id':20,'run_id':9,'run_attempt':1,'name':'windows-package-rollout-behavior','status':'completed','conclusion':'success','head_sha':self.base,'labels':['windows-2022'],'check_run_url':'https://api.github.com/repos/owner/repo/check-runs/20'},
+   {'id':21,'run_id':9,'run_attempt':1,'name':'testnet-packages-macos-arm64-contract','status':'completed','conclusion':'success','head_sha':self.base,'labels':['ubuntu-24.04'],'check_run_url':'https://api.github.com/repos/owner/repo/check-runs/21'},
+   *({'id':30+i,'run_id':9,'run_attempt':1,'name':f'public-testnet-fleet-health-contract ({runner})','status':'completed','conclusion':'success','head_sha':self.base,'labels':[runner],'check_run_url':f'https://api.github.com/repos/owner/repo/check-runs/{30+i}'} for i,runner in enumerate(('ubuntu-24.04','windows-2022','macos-14'))),
+  ]
   def reader(*args):
-   if '/compare/' in args[-1]:return {'merge_base_commit':{'sha':self.payload['scope_base_oid']}}
-   if 'artifacts?' in args[-1]:return {'artifacts':[{'id':identifier,'name':name,'expired':False,'workflow_run':{'id':9}} for identifier,name in artifact_names.items()]}
+   path=args[-1]
+   if '/compare/' in path:return {'merge_base_commit':{'sha':self.payload['scope_base_oid']}}
+   if path=='repos/owner/repo/actions/jobs/10':return gate_job
+   if path=='repos/owner/repo/actions/runs/9/attempts/1/jobs?per_page=100&page=1':return {'jobs':[gate_job,*child_jobs]}
+   if 'artifacts?' in path:return {'artifacts':[{'id':identifier,'name':name,'expired':False,'created_at':'2026-09-09T00:30:00Z','workflow_run':{'id':9}} for identifier,name in artifact_names.items()]}
    return self.read(*args)
   def profile_artifact(repository,identifier):
    if identifier==11:return raw.getvalue()
@@ -380,6 +404,24 @@ class ProvenanceTests(unittest.TestCase):
   self.assertIn(helper,required)
   self.assertLess(required.index(mkdir),required.index(helper))
   self.assertLess(required.index(helper),required.index(planner))
+
+ def test_markerless_pull_request_still_selects_immutable_base_planner(self):
+  workflow=(HERE.parents[1]/'.github/workflows/rust.yml').read_text()
+  required=workflow[workflow.index('  required-gate:'):workflow.index('  windows-package-rollout-behavior:')]
+  scope=required[required.index('      - id: scope\n'):required.index('      - name: Report planned scope')]
+  pr_start=scope.index('          if [[ "${GITHUB_EVENT_NAME}" == pull_request')
+  dispatch_start=scope.index('          elif [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]; then',pr_start)
+  pr_branch=scope[pr_start:dispatch_start]
+  self.assertTrue(pr_branch.startswith('          if [[ "${GITHUB_EVENT_NAME}" == pull_request ]]; then'))
+  planner='planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py")'
+  projection_guard='if [[ -f "${RUNNER_TEMP}/impact-projection.json" ]]; then'
+  self.assertIn('git show "${base_ref}:scripts/plan-rust-required-scope.py"',pr_branch)
+  self.assertIn('git show "${base_ref}:scripts/ci-required-scope.v2.json"',pr_branch)
+  self.assertIn('git show "${base_ref}:scripts/pm/workflow-impact-projection.py"',pr_branch)
+  self.assertIn(planner,pr_branch)
+  self.assertIn(projection_guard,pr_branch)
+  self.assertLess(pr_branch.index(planner),pr_branch.index(projection_guard))
+  self.assertNotIn('planner=(./scripts/plan-rust-required-scope.sh)',pr_branch)
 
  def test_premerge_activation_cannot_dispatch_candidate(self):
   with patch.object(self.api,'gh',side_effect=[self.pr,self.pr,{'default_branch':'main'},{'content':'bm8gbW9kZQ=='}]),patch.object(self.api.subprocess,'run') as run:

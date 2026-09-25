@@ -8,6 +8,7 @@ import hashlib
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -21,14 +22,22 @@ SPEC.loader.exec_module(WORKFLOW_IMPACT)
 
 
 class WorkflowImpactProjectionTests(unittest.TestCase):
-    def run_projection(self, payload: dict[str, object], *, ok: bool = True) -> subprocess.CompletedProcess[str]:
+    def run_projection(
+        self,
+        payload: dict[str, object],
+        *,
+        ok: bool = True,
+        root: Path = ROOT,
+        planner_authority_oid: str | None = None,
+    ) -> subprocess.CompletedProcess[str]:
         with tempfile.TemporaryDirectory() as temp:
             input_path = Path(temp) / "projection-input.json"
             input_path.write_text(json.dumps(payload), encoding="utf-8")
+            command = [str(SCRIPT), "--root", str(root), "--input", str(input_path)]
+            if planner_authority_oid is not None:
+                command.extend(("--planner-authority-oid", planner_authority_oid))
             result = subprocess.run(
-                [
-                    str(SCRIPT), "--root", str(ROOT), "--input", str(input_path),
-                ],
+                command,
                 text=True,
                 capture_output=True,
             )
@@ -37,6 +46,121 @@ class WorkflowImpactProjectionTests(unittest.TestCase):
         if not ok and result.returncode == 0:
             self.fail(f"projection command unexpectedly passed: {result.stdout}")
         return result
+
+    def test_trusted_base_authority_preserves_full_scope_for_planner_and_config_edits(self) -> None:
+        base = subprocess.run(
+            ["git", "merge-base", "HEAD", "origin/main"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=True,
+        ).stdout.strip()
+        source_head = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=ROOT, text=True, capture_output=True, check=True
+        ).stdout.strip()
+        trusted_config = subprocess.run(
+            ["git", "show", f"{base}:scripts/ci-required-scope.v2.json"],
+            cwd=ROOT,
+            capture_output=True,
+            check=True,
+        ).stdout
+        trusted_capabilities = json.loads(trusted_config)["capabilities"]
+        candidate_config = (ROOT / "scripts/fixtures/ci-required-scope.versioned-test.json").read_bytes()
+        payload = self.base_input()
+        payload.update({
+            "source_head_oid": source_head,
+            "scope_base_oid": base,
+            "changed_paths": [
+                "scripts/ci-required-scope.v2.json",
+                "scripts/plan-rust-required-scope.py",
+            ],
+            "change_class": "mixed",
+            "manual_roles": ["repository_health_engineer", "qa_engineer"],
+            "closure_status": {"status": "complete", "reason": "verified", "evidence": [{
+                "path": "Cargo.toml",
+                "sha256": "sha256:" + hashlib.sha256((ROOT / "Cargo.toml").read_bytes()).hexdigest(),
+            }]},
+        })
+
+        projection = json.loads(self.run_projection(
+            payload,
+            planner_authority_oid=base,
+        ).stdout)
+
+        self.assertEqual("full", projection["ci_scope"])
+        self.assertEqual(sorted(trusted_capabilities), projection["ci_capabilities"])
+        self.assertEqual("full", projection["test_profile"])
+        self.assertEqual(
+            "sha256:" + hashlib.sha256(trusted_config).hexdigest(),
+            projection["planner_config_sha256"],
+        )
+        self.assertNotEqual(
+            projection["planner_config_sha256"],
+            "sha256:" + hashlib.sha256(candidate_config).hexdigest(),
+        )
+        with tempfile.TemporaryDirectory() as raw_directory:
+            authority_root = Path(raw_directory)
+            scripts = authority_root / "scripts"
+            (scripts / "pm").mkdir(parents=True)
+            for relative in (
+                "scripts/plan-rust-required-scope.py",
+                "scripts/ci-required-scope.v2.json",
+                "scripts/ci-tests.sh",
+                "scripts/pm/workflow-impact-projection.py",
+            ):
+                content = subprocess.run(
+                    ["git", "show", f"{base}:{relative}"],
+                    cwd=ROOT,
+                    capture_output=True,
+                    check=True,
+                ).stdout
+                target = authority_root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(content)
+            projection_path = authority_root / "projection.json"
+            projection_path.write_text(json.dumps(projection), encoding="utf-8")
+            command = [
+                sys.executable,
+                "-I",
+                str(scripts / "plan-rust-required-scope.py"),
+                "--event-name",
+                "pull_request",
+                "--base-ref",
+                base,
+                "--head-ref",
+                source_head,
+                "--task-uid",
+                str(payload["task_uid"]),
+                "--scope-base-oid",
+                base,
+                "--config",
+                str(scripts / "ci-required-scope.v2.json"),
+                "--impact-projection",
+                str(projection_path),
+            ]
+            for path in payload["changed_paths"]:
+                command.extend(("--changed-path", str(path)))
+            trusted_plan = subprocess.run(
+                command,
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+            )
+        self.assertEqual(0, trusted_plan.returncode, trusted_plan.stderr)
+        trusted_fields = dict(
+            line.split("=", 1) for line in trusted_plan.stdout.splitlines() if "=" in line
+        )
+        self.assertEqual("verified", trusted_fields["impact_projection_status"])
+        self.assertEqual(projection["projection_digest"], trusted_fields["impact_projection_digest"])
+
+    def test_trusted_planner_authority_must_equal_the_projection_scope_base(self) -> None:
+        payload = self.base_input()
+        result = self.run_projection(
+            payload,
+            ok=False,
+            planner_authority_oid="c" * 40,
+        )
+        self.assertIn("trusted planner authority must equal the immutable scope base OID", result.stderr)
 
     @staticmethod
     def base_input() -> dict[str, object]:
@@ -54,8 +178,8 @@ class WorkflowImpactProjectionTests(unittest.TestCase):
             "public_semantics": [],
             "affected_consumers": ["required-ci"],
             "closure_status": {"status": "complete", "reason": "verified", "evidence": [{
-                "path": "scripts/ci-required-scope.v2.json",
-                "sha256": "sha256:" + hashlib.sha256((ROOT / "scripts/ci-required-scope.v2.json").read_bytes()).hexdigest(),
+                "path": "Cargo.toml",
+                "sha256": "sha256:" + hashlib.sha256((ROOT / "Cargo.toml").read_bytes()).hexdigest(),
             }]},
         }
 

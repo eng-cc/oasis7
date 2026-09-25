@@ -2263,6 +2263,7 @@ if required.get("planner_config_sha256") != expected_digest:
     )
 
 expected_selectors = {
+    "OASIS7_CI_EXECUTION_CONTRACT": "required-domain-split/v1",
     "OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS": "false",
     "OASIS7_CI_RUN_SCENARIO_REGRESSION": "false",
     "OASIS7_CI_RUN_CONSENSUS_TESTS": "false",
@@ -2278,6 +2279,10 @@ expected_selectors = {
     "OASIS7_CI_RUN_LAUNCHER_WEB_BUILD": "false",
     "OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS": "false",
     "OASIS7_CI_RUN_OPERATIONAL_CONTRACTS": "false",
+    "OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS": "false",
+    "OASIS7_CI_RUN_PACKAGING_CONTRACTS": "false",
+    "OASIS7_CI_RUN_DOC_CHECKER_CONTRACTS": "false",
+    "OASIS7_CI_RUN_CARGO_TOOLING_CONTRACTS": "false",
     "OASIS7_CI_RUN_SITE_CONTRACT_TESTS": "false",
     "OASIS7_CI_RUN_CODEX_AGENT_CONFIG_VALIDATION": "false",
     "OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS": "false",
@@ -2289,14 +2294,27 @@ expected_selectors[expected_true_selector] = "true"
 missing = [
     f"{key}={value}"
     for key, value in expected_selectors.items()
-    if (key != "OASIS7_CI_RUN_SITE_CONTRACT_TESTS" or expected_true_selector == key)
-    and f"{key}={value}" not in command
+    if f"{key}={value}" not in command
 ]
 if missing:
     raise SystemExit(
         "local required command must explicitly serialize every planner selector; "
         f"missing {missing}: {command}"
     )
+
+planner_config = json.loads((fixture_root / "scripts/ci-required-scope.v2.json").read_text(encoding="utf-8"))
+resources = set(planner_config["baseline_resources"])
+for capability in expected_capabilities.split(";"):
+    resources.update(planner_config["resource_requirements"][capability])
+for resource in (
+    "python", "markdown", "rust_toolchain", "node", "system_deps", "trunk", "wasm_target"
+):
+    expected = "true" if resource in resources else "false"
+    environment_name = "OASIS7_CI_NEEDS_" + resource.upper()
+    if f"{environment_name}={expected}" not in command:
+        raise SystemExit(
+            f"local required command must serialize {environment_name}={expected}: {command}"
+        )
 PY
 }
 
@@ -2388,10 +2406,70 @@ from pathlib import Path
 
 required = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["local_required_validation"]
 command = required["recommended_required_command"] or ""
-if "OASIS7_CI_RUN_OPERATIONAL_CONTRACTS=true" not in command:
-    raise SystemExit(f"workflow-governance plan must enable operational contracts: {command}")
+if "OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS=true" not in command:
+    raise SystemExit(f"workflow-governance plan must enable its focused contract: {command}")
 PY
-assert_planner_selector_evidence "$workflow_governance_required_json" "workflow_governance" "$ROOT_DIR" "OASIS7_CI_RUN_OPERATIONAL_CONTRACTS"
+assert_planner_selector_evidence "$workflow_governance_required_json" "workflow_governance" "$ROOT_DIR" "OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS"
+
+reset_smoke_branch_to_base
+write_changed_path_fixture "scripts/ci-required-baseline-routing.test.sh"
+workflow_dispatch_required_json="$TMPDIR/workflow-dispatch-required.json"
+run_prepare "$TMPDIR/gh-workflow-dispatch-required.log" "$TMPDIR/git-workflow-dispatch-required.log" --json >"$workflow_dispatch_required_json"
+assert_planner_selector_evidence "$workflow_dispatch_required_json" "workflow_governance" "$ROOT_DIR" "OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS"
+
+reset_smoke_branch_to_base
+write_changed_path_fixture "scripts/testnet-packages-macos-arm64-contract.test.sh"
+packaging_required_json="$TMPDIR/packaging-required.json"
+run_prepare "$TMPDIR/gh-packaging-required.log" "$TMPDIR/git-packaging-required.log" --json >"$packaging_required_json"
+assert_planner_selector_evidence "$packaging_required_json" "packaging_contracts" "$ROOT_DIR" "OASIS7_CI_RUN_PACKAGING_CONTRACTS"
+
+reset_smoke_branch_to_base
+write_changed_path_fixture "scripts/product-doc-governance-check.test.py"
+doc_checker_required_json="$TMPDIR/doc-checker-required.json"
+run_prepare "$TMPDIR/gh-doc-checker-required.log" "$TMPDIR/git-doc-checker-required.log" --json >"$doc_checker_required_json"
+assert_planner_selector_evidence "$doc_checker_required_json" "doc_checker_contracts" "$ROOT_DIR" "OASIS7_CI_RUN_DOC_CHECKER_CONTRACTS"
+
+reset_smoke_branch_to_base
+write_changed_path_fixture "scripts/cargo-dev-lib.test.sh"
+cargo_tooling_required_json="$TMPDIR/cargo-tooling-required.json"
+run_prepare "$TMPDIR/gh-cargo-tooling-required.log" "$TMPDIR/git-cargo-tooling-required.log" --json >"$cargo_tooling_required_json"
+assert_planner_selector_evidence "$cargo_tooling_required_json" "cargo_tooling_contracts" "$ROOT_DIR" "OASIS7_CI_RUN_CARGO_TOOLING_CONTRACTS"
+
+reset_smoke_branch_to_base
+write_changed_path_fixture "doc/engineering/project.md"
+minimal_docs_required_json="$TMPDIR/minimal-docs-required.json"
+run_prepare "$TMPDIR/gh-minimal-docs-required.log" "$TMPDIR/git-minimal-docs-required.log" --json >"$minimal_docs_required_json"
+python3 - "$minimal_docs_required_json" <<'PY'
+from __future__ import annotations
+
+import json
+import sys
+from pathlib import Path
+
+required = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))["local_required_validation"]
+command = required["recommended_required_command"] or ""
+if required["scope"] != "minimal":
+    raise SystemExit(f"documentation-only planner input must remain minimal: {required}")
+if required.get("selected_capabilities") != "required_gate_baseline":
+    raise SystemExit(f"documentation-only planner input lost baseline identity: {required}")
+required_environment = {
+    "OASIS7_CI_EXECUTION_CONTRACT": "required-domain-split/v1",
+    "OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS": "false",
+    "OASIS7_CI_RUN_PACKAGING_CONTRACTS": "false",
+    "OASIS7_CI_RUN_DOC_CHECKER_CONTRACTS": "false",
+    "OASIS7_CI_RUN_CARGO_TOOLING_CONTRACTS": "false",
+    "OASIS7_CI_NEEDS_PYTHON": "true",
+    "OASIS7_CI_NEEDS_MARKDOWN": "true",
+    "OASIS7_CI_NEEDS_RUST_TOOLCHAIN": "false",
+    "OASIS7_CI_NEEDS_NODE": "false",
+    "OASIS7_CI_NEEDS_SYSTEM_DEPS": "false",
+    "OASIS7_CI_NEEDS_TRUNK": "false",
+    "OASIS7_CI_NEEDS_WASM_TARGET": "false",
+}
+missing = [f"{key}={value}" for key, value in required_environment.items() if f"{key}={value}" not in command]
+if missing:
+    raise SystemExit(f"minimal versioned plan must render its baseline and resources explicitly: {missing}: {command}")
+PY
 
 reset_smoke_branch_to_base
 write_changed_path_fixture "site/index.html"

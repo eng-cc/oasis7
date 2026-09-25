@@ -16,6 +16,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 from typing import Any, Optional
 
 
@@ -381,29 +382,84 @@ def parse_key_value_output(output: str, helper: str) -> dict[str, str]:
     return fields
 
 
-def run_scope_planner(root: Path, paths: list[str], force_full: bool) -> dict[str, str]:
-    helper = Path(__file__).parents[1] / "plan-rust-required-scope.py"
-    command = [
-        sys.executable,
-        str(helper),
-        "--event-name",
-        "workflow_dispatch" if force_full else "pull_request",
-    ]
-    for path in paths:
-        command.extend(("--changed-path", path))
-    result = subprocess.run(command, cwd=root, text=True, capture_output=True)
-    if result.returncode:
-        detail = result.stderr.strip() or result.stdout.strip() or "scope planner failed"
-        raise ProjectionError("required-scope planner failed: " + detail)
-    fields = parse_key_value_output(result.stdout, "required-scope planner")
-    if fields.get("scope") not in {"minimal", "targeted", "full"}:
-        raise ProjectionError("required-scope planner returned an invalid scope")
-    capabilities = fields.get("selected_capabilities")
-    if not isinstance(capabilities, str) or not capabilities:
-        raise ProjectionError("required-scope planner returned no capabilities")
-    if "reason_summary" not in fields:
-        raise ProjectionError("required-scope planner returned no reason summary")
-    return fields
+def run_scope_planner(
+    root: Path,
+    paths: list[str],
+    force_full: bool,
+    planner_authority_oid: Optional[str] = None,
+) -> dict[str, str]:
+    def execute(helper: Path, config_path: Optional[Path] = None) -> dict[str, str]:
+        command = [sys.executable]
+        if planner_authority_oid is not None:
+            command.append("-I")
+        command.extend([
+            str(helper),
+            "--event-name",
+            "workflow_dispatch" if force_full else "pull_request",
+        ])
+        if config_path is not None:
+            command.extend(("--config", str(config_path)))
+        for path in paths:
+            command.extend(("--changed-path", path))
+        result = subprocess.run(command, cwd=root, text=True, capture_output=True)
+        if result.returncode:
+            detail = result.stderr.strip() or result.stdout.strip() or "scope planner failed"
+            raise ProjectionError("required-scope planner failed: " + detail)
+        fields = parse_key_value_output(result.stdout, "required-scope planner")
+        if fields.get("scope") not in {"minimal", "targeted", "full"}:
+            raise ProjectionError("required-scope planner returned an invalid scope")
+        capabilities = fields.get("selected_capabilities")
+        if not isinstance(capabilities, str) or not capabilities:
+            raise ProjectionError("required-scope planner returned no capabilities")
+        if "reason_summary" not in fields:
+            raise ProjectionError("required-scope planner returned no reason summary")
+        return fields
+
+    if planner_authority_oid is None:
+        helper = Path(__file__).parents[1] / "plan-rust-required-scope.py"
+        return execute(helper)
+
+    _require_identity_string(planner_authority_oid, OID_RE, "planner_authority_oid")
+    try:
+        resolved_authority = subprocess.run(
+            ["git", "rev-parse", f"{planner_authority_oid}^{{commit}}"],
+            cwd=root,
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ProjectionError(
+            f"trusted planner authority cannot be resolved: {planner_authority_oid}"
+        ) from exc
+    if resolved_authority != planner_authority_oid:
+        raise ProjectionError("trusted planner authority is not a full commit OID")
+
+    with tempfile.TemporaryDirectory(prefix="oasis7-required-planner-") as raw_directory:
+        authority_root = Path(raw_directory)
+        scripts = authority_root / "scripts"
+        scripts.mkdir()
+        for relative in (
+            "scripts/plan-rust-required-scope.py",
+            "scripts/ci-required-scope.v2.json",
+            "scripts/ci-tests.sh",
+        ):
+            try:
+                content = subprocess.run(
+                    ["git", "show", f"{planner_authority_oid}:{relative}"],
+                    cwd=root,
+                    check=True,
+                    capture_output=True,
+                ).stdout
+                (authority_root / relative).write_bytes(content)
+            except (OSError, subprocess.CalledProcessError) as exc:
+                raise ProjectionError(
+                    f"trusted planner authority is missing {relative}"
+                ) from exc
+        return execute(
+            scripts / "plan-rust-required-scope.py",
+            scripts / "ci-required-scope.v2.json",
+        )
 
 
 def run_role_selector(
@@ -451,10 +507,20 @@ def run_role_selector(
     return value
 
 
-def build_projection(root: Path, value: dict[str, Any]) -> dict[str, Any]:
+def build_projection(
+    root: Path,
+    value: dict[str, Any],
+    planner_authority_oid: Optional[str] = None,
+) -> dict[str, Any]:
     task_uid = _require_identity_string(value["task_uid"], TASK_RE, "task_uid")
     source_head_oid = _require_identity_string(value["source_head_oid"], OID_RE, "source_head_oid")
     scope_base_oid = _require_identity_string(value["scope_base_oid"], OID_RE, "scope_base_oid")
+    if planner_authority_oid is not None:
+        _require_identity_string(planner_authority_oid, OID_RE, "planner_authority_oid")
+        if planner_authority_oid != scope_base_oid:
+            raise ProjectionError(
+                "trusted planner authority must equal the immutable scope base OID"
+            )
     paths = normalize_changed_paths(value["changed_paths"])
     change_class = value["change_class"]
     if not isinstance(change_class, str) or change_class not in CHANGE_CLASSES:
@@ -495,7 +561,12 @@ def build_projection(root: Path, value: dict[str, Any]) -> dict[str, Any]:
     if not paths:
         escalation_reasons.append("changed_paths_empty")
 
-    planner = run_scope_planner(root, paths, test_profile == "full" or bool(escalation_reasons))
+    planner = run_scope_planner(
+        root,
+        paths,
+        test_profile == "full" or bool(escalation_reasons),
+        planner_authority_oid,
+    )
     planner_reasons = [
         reason for reason in planner["reason_summary"].split(";") if reason
     ]
@@ -511,7 +582,7 @@ def build_projection(root: Path, value: dict[str, Any]) -> dict[str, Any]:
     # future planner revision fails to widen an unmatched path, rerun through
     # its explicit full event rather than maintaining a local capability list.
     if unmatched_paths and planner["scope"] != "full":
-        planner = run_scope_planner(root, paths, True)
+        planner = run_scope_planner(root, paths, True, planner_authority_oid)
         planner_reasons = [
             reason for reason in planner["reason_summary"].split(";") if reason
         ]
@@ -605,10 +676,18 @@ def main() -> int:
     parser.add_argument("--root", default=".")
     parser.add_argument("--input", required=True)
     parser.add_argument("--out")
+    parser.add_argument(
+        "--planner-authority-oid",
+        help="load the required-scope planner and config from this immutable commit; must equal scope_base_oid",
+    )
     args = parser.parse_args()
     try:
         root = Path(args.root).resolve()
-        payload = build_projection(root, load_input(Path(args.input).resolve()))
+        payload = build_projection(
+            root,
+            load_input(Path(args.input).resolve()),
+            args.planner_authority_oid,
+        )
         encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
         if args.out:
             write_output(Path(args.out).resolve(), payload)

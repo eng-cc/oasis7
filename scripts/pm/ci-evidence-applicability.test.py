@@ -4,6 +4,7 @@
 import unittest
 
 import ci_evidence_applicability as applicability
+import ci_input_scope as input_scope
 import ci_ready_receipt_identity as receipt_identity
 import projection_publication_contract as publication
 
@@ -14,8 +15,16 @@ HEAD = "a" * 40
 TARGET = "b" * 40
 DIGEST = f"sha256:{'c' * 64}"
 INPUT_DIGEST = f"sha256:{'d' * 64}"
+CORPUS_UNIT = "product-corpus:membership"
 CAPABILITY = "input-scope-reuse/v1"
 PLAN_SCHEMA = "oasis7-required-plan-v2"
+
+
+def product_corpus():
+    return input_scope.product_corpus_descriptor(
+        [CORPUS_UNIT],
+        [{"obligation_id": CORPUS_UNIT, "unit_id": CORPUS_UNIT}],
+    )
 
 
 def source_plan():
@@ -27,12 +36,40 @@ def source_plan():
         "pr_number": 7,
         "source_head_oid": HEAD,
         "review_applicability_digest": DIGEST,
-        "required_test_units": ["unit-a"],
+        "required_test_units": [CORPUS_UNIT, "unit-a"],
         "required_review_roles": ["runtime_engineer"],
     }
 
 
-def target_snapshot(*, input_digest=INPUT_DIGEST, review_digest=DIGEST):
+def target_snapshot(*, input_digest=INPUT_DIGEST, review_digest=DIGEST, closure="complete"):
+    if closure == "complete":
+        scope = {
+            "schema": input_scope.INPUT_SCOPE_SCHEMA,
+            "target_oid": TARGET,
+            "target_tree_oid": TARGET,
+            "closure_status": {"status": "complete", "reason": None},
+            "required_test_units": [CORPUS_UNIT, "unit-a"],
+            "input_fingerprints": {"unit-a": input_digest, CORPUS_UNIT: INPUT_DIGEST},
+            "dependency_edges": [],
+            "fallback_complete": True,
+            "fallback_contract": None,
+            "product_corpus": product_corpus(),
+        }
+    else:
+        scope = {
+            "schema": input_scope.INPUT_SCOPE_SCHEMA,
+            "target_oid": TARGET,
+            "target_tree_oid": TARGET,
+            "closure_status": {"status": "unknown", "reason": "fixture closure unavailable"},
+            "required_test_units": [CORPUS_UNIT, "unit-a"],
+            "input_fingerprints": {},
+            "dependency_edges": [],
+            "fallback_complete": True,
+            "fallback_contract": input_scope.planner_fallback_contract(
+                [CORPUS_UNIT, "unit-a"], TARGET, TARGET,
+            ),
+            "product_corpus": product_corpus(),
+        }
     return {
         "repository": REPOSITORY,
         "task_uid": UID,
@@ -40,9 +77,9 @@ def target_snapshot(*, input_digest=INPUT_DIGEST, review_digest=DIGEST):
         "source_head_oid": HEAD,
         "target_oid": TARGET,
         "review_applicability_digest": review_digest,
-        "required_test_units": ["unit-a"],
+        "required_test_units": [CORPUS_UNIT, "unit-a"],
         "required_review_roles": ["runtime_engineer"],
-        "input_fingerprints": {"unit-a": input_digest},
+        "input_scope": scope,
     }
 
 
@@ -70,6 +107,20 @@ def evidence_set(*, test_input_digest=INPUT_DIGEST, review_digest=DIGEST):
             "check_app_id": 42,
             "check_run_id": 20,
             "artifact_id": 30,
+        }, {
+            "unit_id": CORPUS_UNIT,
+            "obligation_ids": [CORPUS_UNIT],
+            "status": "passed",
+            "input_digest": INPUT_DIGEST,
+            "repository": REPOSITORY,
+            "task_uid": UID,
+            "pr_number": 7,
+            "source_head_oid": HEAD,
+            "run_id": 10,
+            "run_attempt": 1,
+            "check_app_id": 42,
+            "check_run_id": 20,
+            "artifact_id": 31,
         }],
     }
 
@@ -196,7 +247,7 @@ class ApplicabilityDecisionTests(unittest.TestCase):
         self.assertEqual("reusable", result_status(decision, "source_review"))
         self.assertEqual("reusable", result_status(decision, "test_evidence"))
         self.assertEqual("reusable", result_status(decision, "merge_readiness"))
-        self.assertEqual(("unit-a",), tuple(decision.reused_units))
+        self.assertEqual((CORPUS_UNIT, "unit-a"), tuple(decision.reused_units))
 
     def test_changed_test_input_revalidates_tests_without_invalidating_review(self):
         decision = self.evaluate(
@@ -207,6 +258,41 @@ class ApplicabilityDecisionTests(unittest.TestCase):
         self.assertEqual("revalidate", result_status(decision, "test_evidence"))
         self.assertEqual("revalidate", result_status(decision, "merge_readiness"))
         self.assertEqual(("unit-a",), tuple(decision.required_test_units))
+
+    def test_unknown_input_closure_widens_all_units_and_prevents_reuse(self):
+        decision = self.evaluate(target=target_snapshot(closure="unknown"))
+
+        self.assertEqual("reusable", result_status(decision, "source_review"))
+        self.assertEqual("revalidate", result_status(decision, "test_evidence"))
+        self.assertEqual("revalidate", result_status(decision, "merge_readiness"))
+        self.assertEqual((CORPUS_UNIT, "unit-a"), tuple(decision.required_test_units))
+        self.assertEqual((), tuple(decision.reused_units))
+
+    def test_input_scope_is_required_before_capability_evidence_can_be_consumed(self):
+        target = target_snapshot()
+        del target["input_scope"]
+        decision = self.evaluate(target=target)
+
+        self.assertEqual("blocked", result_status(decision, "test_evidence"))
+        self.assertIn("APPLICABILITY_INPUT_INVALID", decision.blockers)
+
+    def test_mismatched_outer_target_oid_blocks_valid_stale_input_scope(self):
+        target = target_snapshot()
+        target["target_oid"] = "e" * 40
+        decision = self.evaluate(target=target)
+
+        self.assertEqual("blocked", result_status(decision, "source_review"))
+        self.assertEqual("blocked", result_status(decision, "test_evidence"))
+        self.assertEqual("blocked", result_status(decision, "merge_readiness"))
+        self.assertIn("APPLICABILITY_INPUT_INVALID", decision.blockers)
+
+    def test_product_result_must_cover_the_full_obligation_set(self):
+        evidence = evidence_set()
+        evidence["tests"][1]["obligation_ids"] = []
+        decision = self.evaluate(evidence=evidence)
+
+        self.assertEqual("blocked", result_status(decision, "test_evidence"))
+        self.assertTrue(any("PRODUCT_CORPUS_OBLIGATION_MISMATCH" in item for item in decision.blockers))
 
     def test_review_input_change_does_not_invalidate_unchanged_test_unit(self):
         changed_review_digest = f"sha256:{'e' * 64}"

@@ -3,12 +3,27 @@
 import argparse, fnmatch, hashlib, importlib.util, json, re, subprocess, sys
 from pathlib import Path
 
-CAPABILITIES=("oasis7_required","consensus","distfs","node","net","viewer_js_required","viewer_performance_report","pixel_world_bridge","launcher_web","workspace_support","scenario_regression","operational_contracts","packaging_contracts","workflow_governance","codex_agent_config_validation","compile_metrics","required_gate_baseline","site_quality")
-# Packaging is a distinct planning capability, but the existing required-gate
-# workflow exposes one non-Rust operational-contract selector. Keep that
-# compatibility alias explicit until the workflow grows a separate output.
-FIELDS={"oasis7_required":"run_oasis7_required_tests","consensus":"run_consensus_tests","distfs":"run_distfs_tests","node":"run_oasis7_node_tests","net":"run_oasis7_net_tests","viewer_js_required":"run_viewer_contract_tests","viewer_performance_report":"run_viewer_perf_smoke","pixel_world_bridge":"run_pixel_world_bridge_lib_tests","launcher_web":"run_launcher_web_build","workspace_support":"run_oasis7_workspace_support_crate_tests","scenario_regression":"run_scenario_regression","operational_contracts":"run_operational_contracts","packaging_contracts":"run_operational_contracts","workflow_governance":"run_operational_contracts","codex_agent_config_validation":"run_codex_agent_config_validation","compile_metrics":"run_compile_metrics_contract_tests","required_gate_baseline":"run_required_gate_baseline","site_quality":"run_site_contract_tests"}
-PLANNER_OUTPUT_FIELDS=set(FIELDS.values())|{"run_oasis7_net_libp2p_tests","run_viewer_wasm_check","run_pixel_world_bridge_wasm_check","run_rust_baseline"}
+EXECUTION_CONTRACT="required-domain-split/v1"
+LEGACY_CAPABILITIES=("oasis7_required","consensus","distfs","node","net","viewer_js_required","viewer_performance_report","pixel_world_bridge","launcher_web","workspace_support","scenario_regression","operational_contracts","packaging_contracts","workflow_governance","codex_agent_config_validation","compile_metrics","required_gate_baseline","site_quality")
+CAPABILITIES=LEGACY_CAPABILITIES+ ("doc_checker_contracts","cargo_tooling_contracts")
+LEGACY_FIELDS={"oasis7_required":"run_oasis7_required_tests","consensus":"run_consensus_tests","distfs":"run_distfs_tests","node":"run_oasis7_node_tests","net":"run_oasis7_net_tests","viewer_js_required":"run_viewer_contract_tests","viewer_performance_report":"run_viewer_perf_smoke","pixel_world_bridge":"run_pixel_world_bridge_lib_tests","launcher_web":"run_launcher_web_build","workspace_support":"run_oasis7_workspace_support_crate_tests","scenario_regression":"run_scenario_regression","operational_contracts":"run_operational_contracts","packaging_contracts":"run_operational_contracts","workflow_governance":"run_operational_contracts","codex_agent_config_validation":"run_codex_agent_config_validation","compile_metrics":"run_compile_metrics_contract_tests","required_gate_baseline":"run_required_gate_baseline","site_quality":"run_site_contract_tests"}
+FIELDS={**LEGACY_FIELDS,"packaging_contracts":"run_packaging_contracts","workflow_governance":"run_workflow_governance_contracts","doc_checker_contracts":"run_doc_checker_contracts","cargo_tooling_contracts":"run_cargo_tooling_contracts"}
+DERIVED_OUTPUT_FIELDS={"run_oasis7_net_libp2p_tests","run_viewer_wasm_check","run_pixel_world_bridge_wasm_check","run_rust_baseline"}
+PLANNER_OUTPUT_FIELDS=set(FIELDS.values())|DERIVED_OUTPUT_FIELDS
+LEGACY_PLANNER_OUTPUT_FIELDS=set(LEGACY_FIELDS.values())|DERIVED_OUTPUT_FIELDS
+VERSIONED_SELECTOR_FIELDS={
+  "run_workflow_governance_contracts",
+  "run_packaging_contracts",
+  "run_doc_checker_contracts",
+  "run_cargo_tooling_contracts",
+}
+VERSIONED_SELECTOR_NAMES={
+  "OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS",
+  "OASIS7_CI_RUN_PACKAGING_CONTRACTS",
+  "OASIS7_CI_RUN_DOC_CHECKER_CONTRACTS",
+  "OASIS7_CI_RUN_CARGO_TOOLING_CONTRACTS",
+}
+RESOURCE_NAMES={"python","markdown","rust_toolchain","node","system_deps","trunk","wasm_target"}
 def die(m): raise SystemExit("plan-rust-required-scope: "+m)
 
 def load_impact_projection(path, expected):
@@ -22,13 +37,13 @@ def load_impact_projection(path, expected):
     die(f"impact projection is invalid: {exc}")
   return value
 
-def policy_full_projection_for_unverified_closure(projection):
+def policy_full_projection_for_unverified_closure(projection, capabilities=CAPABILITIES):
   closure=projection.get("closure_status")
   if not isinstance(closure,dict) or closure.get("status")=="complete": return False
   status=closure.get("status")
   reasons=projection.get("ci_reasons")
   identity=projection.get("planner_identity")
-  capabilities=sorted(CAPABILITIES)
+  capabilities=sorted(capabilities)
   return (
     isinstance(status,str)
     and isinstance(reasons,list)
@@ -44,7 +59,37 @@ def policy_full_projection_for_unverified_closure(projection):
 def config(path):
   try: raw=Path(path).read_bytes(); c=json.loads(raw)
   except Exception as e: die(f"invalid config: {e}")
-  if c.get("schema")!="oasis7-ci-required-scope/v2" or c.get("capabilities")!=list(CAPABILITIES) or c.get("unmatched")!="full" or not isinstance(c.get("rules"),list): die("invalid config schema")
+  if not isinstance(c,dict) or c.get("schema")!="oasis7-ci-required-scope/v2" or c.get("unmatched")!="full" or not isinstance(c.get("rules"),list): die("invalid config schema")
+  execution_contract=c.get("execution_contract")
+  if execution_contract is None:
+    if "resource_requirements" in c or "baseline_resources" in c:
+      die("legacy config cannot declare versioned resource fields")
+    if c.get("capabilities")!=list(LEGACY_CAPABILITIES): die("invalid legacy config schema")
+    legacy=True; allowed_capabilities=set(LEGACY_CAPABILITIES); allowed_outputs=LEGACY_PLANNER_OUTPUT_FIELDS
+  else:
+    if execution_contract!=EXECUTION_CONTRACT: die("unsupported execution_contract")
+    if c.get("capabilities")!=list(CAPABILITIES): die("invalid versioned config capabilities")
+    legacy=False; allowed_capabilities=set(CAPABILITIES); allowed_outputs=PLANNER_OUTPUT_FIELDS
+    baseline_resources=c.get("baseline_resources")
+    if (not isinstance(baseline_resources,list)
+        or any(not isinstance(item,str) or item not in RESOURCE_NAMES for item in baseline_resources)
+        or len(baseline_resources)!=len(set(baseline_resources))
+        or not {"python","markdown"}.issubset(baseline_resources)):
+      die("invalid versioned baseline resource requirements")
+    resource_requirements=c.get("resource_requirements")
+    if not isinstance(resource_requirements,dict) or set(resource_requirements)!=allowed_capabilities:
+      die("incomplete versioned resource requirements")
+    for capability, resources in resource_requirements.items():
+      if (not isinstance(resources,list)
+          or any(not isinstance(item,str) or item not in RESOURCE_NAMES for item in resources)
+          or len(resources)!=len(set(resources))):
+        die("invalid versioned resource requirement for "+capability)
+    doc_resources=set(resource_requirements["doc_checker_contracts"])
+    cargo_resources=set(resource_requirements["cargo_tooling_contracts"])
+    if doc_resources!={"python","markdown"} or "rust_toolchain" in doc_resources:
+      die("doc checker resource requirements must be Python and Markdown without Rust")
+    if "rust_toolchain" not in cargo_resources:
+      die("cargo tooling resource requirements must include Rust toolchain")
   ownership=c.get("selector_ownership")
   if not isinstance(ownership,list) or not ownership: die("invalid selector ownership registry")
   declared={}
@@ -55,7 +100,7 @@ def config(path):
     mode=item.get("mode")
     if mode=="planner-owned":
       field=item.get("planner_field")
-      if field not in PLANNER_OUTPUT_FIELDS or "owner" in item or "reason" in item: die("invalid planner-owned selector metadata")
+      if field not in allowed_outputs or "owner" in item or "reason" in item: die("invalid planner-owned selector metadata")
     elif mode=="manual-only":
       if not isinstance(item.get("owner"),str) or not item["owner"] or not isinstance(item.get("reason"),str) or not item["reason"] or "planner_field" in item: die("invalid manual-only selector metadata")
     else: die("invalid selector ownership mode")
@@ -67,8 +112,19 @@ def config(path):
     inventory=set(re.findall(r"OASIS7_CI_RUN_[A-Z0-9_]+",selector_source.read_text(encoding="utf-8")))
   except OSError as e:
     die(f"selector source is unreadable: {e}")
-  if inventory != set(declared):
+  expected_inventory=inventory if not legacy else inventory-VERSIONED_SELECTOR_NAMES
+  if expected_inventory != set(declared):
     die("selector ownership registry does not match ci-tests selectors")
+  if not legacy:
+    selector_fields={item.get("name"):item.get("planner_field") for item in ownership if item.get("mode")=="planner-owned"}
+    expected_versioned={
+      "OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS":"run_workflow_governance_contracts",
+      "OASIS7_CI_RUN_PACKAGING_CONTRACTS":"run_packaging_contracts",
+      "OASIS7_CI_RUN_DOC_CHECKER_CONTRACTS":"run_doc_checker_contracts",
+      "OASIS7_CI_RUN_CARGO_TOOLING_CONTRACTS":"run_cargo_tooling_contracts",
+    }
+    if any(selector_fields.get(name)!=field for name,field in expected_versioned.items()):
+      die("versioned selector ownership is incomplete or aliased")
   reasons=set()
   for r in c["rules"]:
     if not isinstance(r,dict) or not isinstance(r.get("match"),list) or not r["match"] or any(not isinstance(x,str) or not x for x in r["match"]): die("invalid config rule patterns")
@@ -76,8 +132,8 @@ def config(path):
     reasons.add(r["reason"])
     if not isinstance(r.get("full",False),bool) or not isinstance(r.get("minimal",False),bool): die("invalid config rule selectors")
     if not isinstance(r.get("requires_rust",False),bool): die("invalid config rule requires_rust selector")
-    if not isinstance(r.get("capabilities",[]),list) or any(not isinstance(x,str) for x in r.get("capabilities",[])) or (not r.get("full") and not r.get("minimal") and not r.get("capabilities")) or not set(r.get("capabilities",[])).issubset(CAPABILITIES): die("invalid config rule capabilities")
-  return c,"sha256:"+hashlib.sha256(raw).hexdigest()
+    if not isinstance(r.get("capabilities",[]),list) or any(not isinstance(x,str) for x in r.get("capabilities",[])) or (not r.get("full") and not r.get("minimal") and not r.get("capabilities")) or not set(r.get("capabilities",[])).issubset(allowed_capabilities): die("invalid config rule capabilities")
+  return c,"sha256:"+hashlib.sha256(raw).hexdigest(),legacy
 def git_paths(a):
   if not a.base_ref: return None
   try:
@@ -91,7 +147,9 @@ def git_paths(a):
   return paths
 def main():
  p=argparse.ArgumentParser(); p.add_argument("--event-name",required=True);p.add_argument("--run-mode",choices=("legacy","integration_revalidation","full_escalation"),default="legacy");p.add_argument("--base-ref");p.add_argument("--head-ref");p.add_argument("--task-uid");p.add_argument("--scope-base-oid");p.add_argument("--changed-path",action="append",default=[]);p.add_argument("--github-output");p.add_argument("--config",default=str(Path(__file__).with_name("ci-required-scope.v2.json")));p.add_argument("--impact-projection",help="verified digest-bound workflow impact projection");a=p.parse_args()
- c,digest=config(a.config); paths=a.changed_path or git_paths(a); projection=None
+ c,digest,legacy=config(a.config); active_capabilities=LEGACY_CAPABILITIES if legacy else CAPABILITIES
+ fields=LEGACY_FIELDS if legacy else FIELDS
+ paths=a.changed_path or git_paths(a); projection=None
  source_scope_base=""
  if a.base_ref and a.head_ref:
   try: source_scope_base=subprocess.check_output(["git","merge-base",a.base_ref,a.head_ref],text=True).strip()
@@ -123,18 +181,33 @@ def main():
  for path in paths:
   hits=[r for r in c["rules"] if any(fnmatch.fnmatchcase(path,x) for x in r["match"])]
   if not hits: full=True; reasons.append("unclassified_or_unresolvable:"+path)
-  minimal=any(r.get("minimal") for r in hits)
   for r in hits:
-   selected=r.get("capabilities",[])
-   if minimal: selected=[capability for capability in selected if capability!="workflow_governance"]
-   capabilities.update(selected)
+   capabilities.update(r.get("capabilities",[]))
    full|=bool(r.get("full")); explicit_rust|=bool(r.get("requires_rust",False)); reasons.append(r["reason"]+":"+path)
- if full: capabilities=set(CAPABILITIES)
- vals={f:"false" for f in FIELDS.values()}
- vals.update({FIELDS[x]:"true" for x in capabilities})
+ if full: capabilities=set(active_capabilities)
+ vals={f:"false" for f in fields.values()}
+ vals.update({fields[x]:"true" for x in capabilities})
  vals["run_required_gate_baseline"]="true"
- requires_rust=full or explicit_rust or bool(capabilities-{"workflow_governance","codex_agent_config_validation","compile_metrics","viewer_performance_report","operational_contracts","packaging_contracts","site_quality"})
- vals.update({"run_oasis7_net_libp2p_tests":vals["run_oasis7_net_tests"],"run_viewer_wasm_check":vals["run_viewer_contract_tests"],"run_pixel_world_bridge_wasm_check":vals["run_pixel_world_bridge_lib_tests"],"run_rust_baseline":"true" if requires_rust else "false","needs_rust_toolchain":"true" if requires_rust else "false","needs_node":"true" if capabilities & {"viewer_js_required","viewer_performance_report","launcher_web"} else "false","needs_system_deps":"true" if capabilities & {"oasis7_required","viewer_js_required","viewer_performance_report","pixel_world_bridge","launcher_web"} else "false","needs_wasm_target":"true" if capabilities & {"pixel_world_bridge","launcher_web"} else "false","needs_trunk":"true" if "launcher_web" in capabilities else "false","planner_config_sha256":digest,"source_scope_base":source_scope_base,"integration_base":a.base_ref or "","source_head":a.head_ref or "HEAD","selected_capabilities":";".join(sorted(capabilities or {"required_gate_baseline"})),"scope":"full" if full else ("targeted" if capabilities else "minimal"),"reason_summary":";".join(dict.fromkeys(reasons)),"changed_path_count":str(len(paths)),"changed_paths":";".join(paths)})
+ if legacy:
+  requires_rust=full or explicit_rust or bool(capabilities-{"workflow_governance","codex_agent_config_validation","compile_metrics","viewer_performance_report","operational_contracts","packaging_contracts","site_quality"})
+  resources={
+    "rust_toolchain":requires_rust,
+    "node":bool(capabilities & {"viewer_js_required","viewer_performance_report","launcher_web"}),
+    "system_deps":bool(capabilities & {"oasis7_required","viewer_js_required","viewer_performance_report","pixel_world_bridge","launcher_web"}),
+    "wasm_target":bool(capabilities & {"pixel_world_bridge","launcher_web"}),
+    "trunk":"launcher_web" in capabilities,
+  }
+ else:
+  resources=set(c["baseline_resources"])
+  for capability in capabilities:
+   resources.update(c["resource_requirements"][capability])
+  if explicit_rust: resources.add("rust_toolchain")
+  requires_rust="rust_toolchain" in resources
+  resources={name:name in resources for name in RESOURCE_NAMES}
+  vals["execution_contract"]=EXECUTION_CONTRACT
+  vals["needs_python"]="true" if resources["python"] else "false"
+  vals["needs_markdown"]="true" if resources["markdown"] else "false"
+ vals.update({"run_oasis7_net_libp2p_tests":vals["run_oasis7_net_tests"],"run_viewer_wasm_check":vals["run_viewer_contract_tests"],"run_pixel_world_bridge_wasm_check":vals["run_pixel_world_bridge_lib_tests"],"run_rust_baseline":"true" if requires_rust else "false","needs_rust_toolchain":"true" if resources["rust_toolchain"] else "false","needs_node":"true" if resources["node"] else "false","needs_system_deps":"true" if resources["system_deps"] else "false","needs_wasm_target":"true" if resources["wasm_target"] else "false","needs_trunk":"true" if resources["trunk"] else "false","planner_config_sha256":digest,"source_scope_base":source_scope_base,"integration_base":a.base_ref or "","source_head":a.head_ref or "HEAD","selected_capabilities":";".join(sorted(capabilities or {"required_gate_baseline"})),"scope":"full" if full else ("targeted" if capabilities else "minimal"),"reason_summary":";".join(dict.fromkeys(reasons)),"changed_path_count":str(len(paths)),"changed_paths":";".join(paths)})
  if projection is not None:
   actual_capabilities=sorted(capabilities or {"required_gate_baseline"})
   actual_scope=vals["scope"]
@@ -153,11 +226,11 @@ def main():
    source_fields=dict(line.split("=",1) for line in source_plan.stdout.splitlines() if "=" in line)
    source_capabilities=source_fields.get("selected_capabilities","").split(";")
    unverified_closure=projection["closure_status"]["status"]!="complete"
-   policy_full=policy_full_projection_for_unverified_closure(projection)
+   policy_full=policy_full_projection_for_unverified_closure(projection,active_capabilities)
    if unverified_closure and not policy_full:
     die("impact projection with unverified dependency closure is not full")
    if policy_full:
-    if actual_scope!="full" or actual_capabilities!=sorted(CAPABILITIES):
+    if actual_scope!="full" or actual_capabilities!=sorted(active_capabilities):
      die("unverified dependency closure integration execution scope is not full")
    else:
     if projection["ci_scope"]!=source_fields.get("scope"):
@@ -173,7 +246,7 @@ def main():
   if not full_only_mode and not integration_widened:
    if projection["ci_scope"] != actual_scope: die("impact projection planner scope identity mismatch")
    if projection["ci_capabilities"] != actual_capabilities: die("impact projection planner capabilities identity mismatch")
-  elif full_only_mode and (actual_scope != "full" or actual_capabilities != sorted(CAPABILITIES)):
+  elif full_only_mode and (actual_scope != "full" or actual_capabilities != sorted(active_capabilities)):
    die("full-only impact projection execution scope is not full")
   vals.update({"impact_projection_schema":projection["schema"],"impact_projection_digest":projection["projection_digest"],"impact_projection_status":"verified","test_profile":projection["test_profile"],"declared_tests":";".join(projection["declared_tests"]),"planner_digest":projection["planner_digest"]})
  text="\n".join(f"{k}={v}" for k,v in vals.items())+"\n"
