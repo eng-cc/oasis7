@@ -102,6 +102,8 @@ def current_request(repository,uid,number,base,head,branch,request_key=None):
     raise ValueError('integration discovery range exhausted; current request coverage incomplete')
 
 def identity(repository,uid,number,base,head,*,allow_base_advance=False):
+    if type(number) is not int or number<1:
+        raise ValueError('positive integer pull request number required')
     if not OID.fullmatch(base) or not OID.fullmatch(head): raise ValueError('exact base/source OIDs required')
     pr=gh('api',f'repos/{repository}/pulls/{number}')
     if pr.get('state')!='open' or pr.get('merged') or (not allow_base_advance and pr['base']['sha']!=base) or pr['head']['sha']!=head:
@@ -258,11 +260,70 @@ def _executor_contract(root,approved_digests):
     digest=helper.require_approved_executor_contract(contract,approved_digests)
     return contract,digest
 
-def prepare(root,repository,uid,number,base,head,*,approved_executor_contract_digests=None,integration_worktree=None):
+def decode_validation_request(encoded,request_key):
+    """Decode only the exact canonical v2 request body sent to the runner."""
+    helper=_adjacent_module('integration_executor_contract')
+    if not isinstance(encoded,str) or not encoded:
+        raise ValueError('validation request payload is required')
+    try:
+        raw=base64.b64decode(encoded,validate=True)
+        value=json.loads(raw.decode('utf-8'))
+    except (UnicodeDecodeError,json.JSONDecodeError,ValueError) as exc:
+        raise ValueError('validation request payload is malformed') from exc
+    if helper.canonical_bytes(value)!=raw:
+        raise ValueError('validation request payload is not canonical JSON')
+    envelope=helper.validation_request_envelope(value)
+    if envelope['request_key']!=request_key:
+        raise ValueError('validation request key does not match payload')
+    return envelope
+
+def decode_effective_policy(encoded):
+    """Decode canonical policy bytes; callers must source them from trusted W."""
+    helper=_adjacent_module('integration_executor_contract')
+    if not isinstance(encoded,str) or not encoded:
+        raise ValueError('effective executor policy payload is required')
+    try:
+        raw=base64.b64decode(encoded,validate=True)
+        value=json.loads(raw.decode('utf-8'))
+    except (UnicodeDecodeError,json.JSONDecodeError,ValueError) as exc:
+        raise ValueError('effective executor policy payload is malformed') from exc
+    if helper.canonical_bytes(value)!=raw:
+        raise ValueError('effective executor policy payload is not canonical JSON')
+    helper.effective_policy_digest(value)
+    return value
+
+def prepare(root,repository,uid,number,base,head,*,approved_executor_contract_digests=None,integration_worktree=None,request_key=None,validation_request_b64=None,effective_policy=None):
+    if type(number) is not int or number<1:
+        raise ValueError('positive integer pull request number required')
     workflow_sha=os.environ.get('GITHUB_WORKFLOW_SHA','')
     execution_sha=os.environ.get('GITHUB_SHA','')
     if not OID.fullmatch(workflow_sha) or not OID.fullmatch(execution_sha):
         raise ValueError('integration workflow/run identity is invalid')
+    validation_request=None
+    if request_key is not None or validation_request_b64 is not None or effective_policy is not None:
+        if request_key is None or validation_request_b64 is None or effective_policy is None:
+            raise ValueError('validation request identity is incomplete')
+        helper=_adjacent_module('integration_executor_contract')
+        identity_helper=_adjacent_module('ci_ready_receipt_identity')
+        policy_digest=helper.effective_policy_digest(effective_policy)
+        if identity_helper.INPUT_SCOPE_REUSE_CAPABILITY not in effective_policy['enabled_capabilities']:
+            raise ValueError(f'{identity_helper.INPUT_SCOPE_REUSE_CAPABILITY} is disabled')
+        policy_approved=effective_policy['approved_executor_contract_digests']
+        if not policy_approved:
+            raise ValueError('effective executor contract policy has no approved contract')
+        if (approved_executor_contract_digests is not None
+                and approved_executor_contract_digests!=policy_approved):
+            raise ValueError('effective executor contract policy identity mismatch')
+        approved_executor_contract_digests=policy_approved
+        validation_request=decode_validation_request(validation_request_b64,request_key)
+        request_identity=validation_request['identity']
+        if (validation_request['integration_base_oid']!=base
+                or request_identity['repository']!=repository
+                or request_identity['task_uid']!=uid
+                or request_identity['pr_number']!=int(number)
+                or request_identity['source_head_oid']!=head
+                or request_identity['effective_policy_digest']!=policy_digest):
+            raise ValueError('validation request does not match trusted execution identity')
     keyed_mode=workflow_sha!=base or approved_executor_contract_digests is not None
     _,branch=identity(repository,uid,number,base,head,allow_base_advance=keyed_mode)
     if os.environ.get('GITHUB_EVENT_NAME')!='workflow_dispatch' or os.environ.get('GITHUB_REF')!=f'refs/heads/{branch}':
@@ -281,6 +342,9 @@ def prepare(root,repository,uid,number,base,head,*,approved_executor_contract_di
         if not approved_executor_contract_digests:
             raise ValueError('EXECUTOR_CONTRACT_CHANGED: no approved executor contract')
         _,executor_digest=_executor_contract(root,approved_executor_contract_digests)
+        if (validation_request is not None
+                and validation_request['identity']['executor_contract_digest']!=executor_digest):
+            raise ValueError('validation request executor contract identity mismatch')
         attempt_value=os.environ.get('GITHUB_RUN_ATTEMPT','')
         if not attempt_value.isdigit() or int(attempt_value)<1:
             raise ValueError('integration workflow attempt identity is invalid')
@@ -296,9 +360,12 @@ def prepare(root,repository,uid,number,base,head,*,approved_executor_contract_di
     result.update(task_uid=uid,pr_number=int(number),workflow_sha=workflow_sha,workflow_run_head_sha=execution_sha,workflow_ref=f'{repository}/{WORKFLOW}@refs/heads/{branch}',integration_mode='integration_revalidation')
     if executor_digest is not None: result['executor_contract_digest']=executor_digest
     if run_attempt is not None: result['workflow_run_attempt']=run_attempt
+    if validation_request is not None: result['validation_request']=validation_request
     return result
 
 def dispatch(repository,uid,number,impact_projection):
+    if type(number) is not int or number<1:
+        raise ValueError('positive integer pull request number required')
     pr=gh('api',f'repos/{repository}/pulls/{number}')
     head=pr['head']['sha']
     repo=gh('api',f'repos/{repository}')
@@ -318,21 +385,24 @@ def dispatch(repository,uid,number,impact_projection):
 
 def dispatch_request(repository,uid,number,impact_projection,request_identity,effective_policy,*,state_dir=None):
     """Proposed idempotent request adapter; no current lifecycle caller enables it."""
+    if type(number) is not int or number<1:
+        raise ValueError('positive integer pull request number required')
     helper=_adjacent_module('integration_executor_contract')
     identity_helper=_adjacent_module('ci_ready_receipt_identity')
 
-    enabled=(effective_policy.get('enabled_capabilities')
-             if isinstance(effective_policy,dict) else None)
-    if (not isinstance(enabled,list) or any(not isinstance(item,str) for item in enabled)
-            or enabled!=sorted(set(enabled)) or identity_helper.INPUT_SCOPE_REUSE_CAPABILITY not in enabled):
+    policy_digest=helper.effective_policy_digest(effective_policy)
+    enabled=effective_policy['enabled_capabilities']
+    if identity_helper.INPUT_SCOPE_REUSE_CAPABILITY not in enabled:
         raise ValueError(f'{identity_helper.INPUT_SCOPE_REUSE_CAPABILITY} is disabled')
-    approved=effective_policy.get('approved_executor_contract_digests')
-    if not isinstance(approved,list) or not approved:
-        raise ValueError('effective executor contract policy is missing or invalid')
+    approved=effective_policy['approved_executor_contract_digests']
+    if not approved:
+        raise ValueError('effective executor contract policy has no approved contract')
     identity_value=helper.validation_request_identity(request_identity)
     if (identity_value['repository']!=repository or identity_value['task_uid']!=uid
             or identity_value['pr_number']!=int(number)):
         raise ValueError('validation request task/PR identity mismatch')
+    if identity_value['effective_policy_digest']!=policy_digest:
+        raise ValueError('validation request effective policy identity mismatch')
     projection_path=Path(impact_projection or '')
     if not projection_path.is_file(): raise ValueError('integration dispatch requires a readable impact projection')
     projection_raw=projection_path.read_bytes()
@@ -375,7 +445,12 @@ def dispatch_request(repository,uid,number,impact_projection,request_identity,ef
 
     def send(record):
         frozen_base=record['integration_base_oid']
-        request=record['identity']|{'request_key':key,'integration_base_oid':frozen_base}
+        request=helper.validation_request_envelope({
+            'schema':helper.VALIDATION_REQUEST_SCHEMA,
+            'request_key':key,
+            'identity':record['identity'],
+            'integration_base_oid':frozen_base,
+        })
         request_b64=base64.b64encode(helper.canonical_bytes(request)).decode('ascii')
         # Re-read the exact source/target binding before every remote side effect.
         identity(repository,uid,number,frozen_base,head,allow_base_advance=True)
@@ -395,22 +470,63 @@ def dispatch_request(repository,uid,number,impact_projection,request_identity,ef
             'base_oid':record['integration_base_oid'],'head_oid':head,
             'run_id':record.get('run_id'),'run_attempt':record.get('run_attempt')}
 
-def verified_run(repository,uid,number,base,head,run_id,app_id,*,request_key=None,expected_attempt=None,approved_executor_contract_digests=None):
+def verified_run(repository,uid,number,base,head,run_id,app_id,*,request_key=None,expected_attempt=None,request_identity=None,effective_policy=None,approved_executor_contract_digests=None):
+    """Verify live CI provenance; keyed callers must supply trusted policy and request identity."""
+    if type(number) is not int or number<1:
+        raise ValueError('positive integer pull request number required')
     if not str(app_id or '').isdigit() or not str(run_id or '').isdigit():
         raise ValueError('numeric non-null app and workflow run identity required')
+    helper=None
+    expected_request=None
+    if request_key is not None:
+        if not re.fullmatch(r'sha256:[0-9a-f]{64}',request_key):
+            raise ValueError('manual integration request key is invalid')
+        if type(expected_attempt) is not int or expected_attempt<1:
+            raise ValueError('manual integration expected attempt is required')
+        try:
+            helper=_adjacent_module('integration_executor_contract')
+        except ImportError as exc:
+            raise ValueError('EXECUTOR_CONTRACT_CHANGED: trusted contract helper unavailable') from exc
+        identity_helper=_adjacent_module('ci_ready_receipt_identity')
+        identity_value=helper.validation_request_identity(request_identity)
+        policy_digest=helper.effective_policy_digest(effective_policy)
+        if (identity_value['repository']!=repository or identity_value['task_uid']!=uid
+                or identity_value['pr_number']!=int(number)
+                or identity_value['source_head_oid']!=head
+                or identity_value['effective_policy_digest']!=policy_digest):
+            raise ValueError('manual integration request identity mismatch')
+        if helper.validation_request_key(identity_value)!=request_key:
+            raise ValueError('manual integration request key does not match its identity')
+        if str(effective_policy['check_app_id'])!=str(app_id):
+            raise ValueError('manual integration check app differs from effective policy')
+        if identity_helper.INPUT_SCOPE_REUSE_CAPABILITY not in effective_policy['enabled_capabilities']:
+            raise ValueError(f'{identity_helper.INPUT_SCOPE_REUSE_CAPABILITY} is disabled')
+        approved=effective_policy['approved_executor_contract_digests']
+        if not approved:
+            raise ValueError('effective executor contract policy has no approved contract')
+        if approved_executor_contract_digests is not None and approved_executor_contract_digests!=approved:
+            raise ValueError('effective executor contract policy identity mismatch')
+        approved_executor_contract_digests=approved
+        expected_request=helper.validation_request_envelope({
+            'schema':helper.VALIDATION_REQUEST_SCHEMA,
+            'request_key':request_key,
+            'identity':identity_value,
+            'integration_base_oid':base,
+        })
+    elif request_identity is not None or effective_policy is not None:
+        raise ValueError('manual integration keyed request identity is incomplete')
     _,branch=identity(repository,uid,number,base,head,allow_base_advance=request_key is not None)
     run=gh('api',f'repos/{repository}/actions/runs/{run_id}')
     expected={'event':'workflow_dispatch','head_branch':branch,'path':WORKFLOW,'status':'completed','conclusion':'success'}
     if request_key is None: expected['head_sha']=base
     if any(run.get(k)!=v for k,v in expected.items()) or run.get('repository',{}).get('full_name')!=repository:
         raise ValueError('manual integration run provenance/status mismatch')
-    if request_key is not None and not re.fullmatch(r'sha256:[0-9a-f]{64}',request_key):
-        raise ValueError('manual integration request key is invalid')
-    if request_key is not None and (type(expected_attempt) is not int or expected_attempt<1):
-        raise ValueError('manual integration expected attempt is required')
     if request_key is not None and (type(run.get('run_attempt')) is not int
                                     or run['run_attempt']!=expected_attempt):
         raise ValueError('manual integration workflow attempt mismatch')
+    expected_title=f'oasis7-ci|workflow_dispatch|integration_revalidation|{uid}|{number}|{base}|{head}|{request_key}'
+    if request_key is not None and run.get('display_title')!=expected_title:
+        raise ValueError('manual integration workflow request title mismatch')
     checks=pages(repository,f"check-suites/{run['check_suite_id']}/check-runs",'check_runs')
     selected=[c for c in checks if c.get('name')=='required-gate' and str(c.get('app',{}).get('id'))==str(app_id) and c.get('conclusion')=='success']
     if len(selected)!=1: raise ValueError('manual required-gate app/run identity missing')
@@ -433,14 +549,11 @@ def verified_run(repository,uid,number,base,head,run_id,app_id,*,request_key=Non
         expected['request_key']=request_key
         expected['workflow_run_head_sha']=execution_sha
         expected['workflow_run_attempt']=expected_attempt
+        expected['validation_request']=expected_request
         if not approved_executor_contract_digests:
             raise ValueError('effective executor contract policy is missing or invalid')
         if not OID.fullmatch(str(workflow_sha or '')) or not OID.fullmatch(str(execution_sha or '')):
             raise ValueError('manual integration workflow identity is invalid')
-        try:
-            helper=_adjacent_module('integration_executor_contract')
-        except ImportError as exc:
-            raise ValueError('EXECUTOR_CONTRACT_CHANGED: trusted contract helper unavailable') from exc
         actual=gh('api',f'repos/{repository}/compare/{base}...{execution_sha}')
         if actual.get('merge_base_commit',{}).get('sha')!=base:
             raise ValueError('frozen integration base is not an ancestor of workflow run target')
@@ -466,9 +579,23 @@ def main():
     parser.add_argument('--impact-projection')
     parser.add_argument('--approved-executor-contract-digest',action='append')
     parser.add_argument('--integration-worktree')
+    parser.add_argument('--request-key')
+    parser.add_argument('--validation-request-b64')
+    parser.add_argument('--effective-policy-b64')
     a=parser.parse_args()
     try:
-        result=dispatch(a.repository,a.task_uid,a.pr_number,a.impact_projection) if a.command=='dispatch' else prepare(Path(a.root),a.repository,a.task_uid,a.pr_number,a.base,a.head,approved_executor_contract_digests=a.approved_executor_contract_digest,integration_worktree=a.integration_worktree)
+        if a.command=='dispatch':
+            result=dispatch(a.repository,a.task_uid,a.pr_number,a.impact_projection)
+        else:
+            policy=decode_effective_policy(a.effective_policy_b64) if a.effective_policy_b64 else None
+            result=prepare(
+                Path(a.root),a.repository,a.task_uid,a.pr_number,a.base,a.head,
+                approved_executor_contract_digests=a.approved_executor_contract_digest,
+                integration_worktree=a.integration_worktree,
+                request_key=a.request_key,
+                validation_request_b64=a.validation_request_b64,
+                effective_policy=policy,
+            )
         if a.output: Path(a.output).write_text(json.dumps(result))
         print(json.dumps(result))
     except (ValueError,KeyError,OSError,subprocess.SubprocessError) as exc:

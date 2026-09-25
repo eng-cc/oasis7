@@ -17,7 +17,8 @@ import tempfile
 from typing import Any
 
 EXECUTOR_CONTRACT_SCHEMA = "oasis7-ci-executor-contract/v1"
-VALIDATION_REQUEST_SCHEMA = "oasis7-ci-validation-request/v1"
+VALIDATION_REQUEST_SCHEMA = "oasis7-ci-validation-request/v2"
+EFFECTIVE_POLICY_IDENTITY_SCHEMA = "oasis7-ci-effective-policy-identity/v1"
 EXECUTOR_CONTRACT_PATHS = (
     ".github/workflows/rust.yml",
     "scripts/ci-required-scope.v2.json",
@@ -41,13 +42,21 @@ _KEY_FIELDS = {
     "repository", "task_uid", "pr_number", "bootstrap_epoch",
     "source_head_oid", "publication_id", "source_projection_digest",
     "unit_ids", "input_fingerprints", "executor_contract_digest",
-    "purpose", "applicability_mode", "snapshot_target_oid",
+    "effective_policy_digest", "purpose", "applicability_mode",
+    "snapshot_target_oid",
+}
+_REQUEST_ENVELOPE_FIELDS = {
+    "schema", "request_key", "identity", "integration_base_oid",
+}
+_REQUEST_RECORD_FIELDS = {
+    "schema", "request_key", "identity", "integration_base_oid",
+    "dispatch_attempts", "status", "run_id", "run_attempt",
 }
 
 
 def canonical_bytes(value: Any) -> bytes:
     return json.dumps(value, ensure_ascii=False, sort_keys=True,
-                      separators=(",", ":")).encode("utf-8")
+                      separators=(",", ":"), allow_nan=False).encode("utf-8")
 
 
 def canonical_digest(value: Any) -> str:
@@ -136,6 +145,37 @@ def require_approved_executor_contract(
     return actual
 
 
+def effective_policy_digest(value: Any) -> str:
+    """Bind policy bytes; this digest records identity but grants no authority."""
+    if not isinstance(value, dict) or set(value) != {
+        "enabled_capabilities", "approved_executor_contract_digests", "check_app_id",
+    }:
+        raise ValueError("effective executor policy is incomplete or unsupported")
+    capabilities = value["enabled_capabilities"]
+    if (not isinstance(capabilities, list)
+            or any(not isinstance(item, str) or not item for item in capabilities)
+            or capabilities != sorted(set(capabilities))):
+        raise ValueError("effective executor policy capabilities are invalid")
+    approved = value["approved_executor_contract_digests"]
+    if (not isinstance(approved, list)
+            or any(not isinstance(item, str) for item in approved)
+            or approved != sorted(set(approved))):
+        raise ValueError("effective executor policy approvals are invalid")
+    for index, digest in enumerate(approved):
+        _valid_digest(digest, f"approved executor contract {index}")
+    if type(value["check_app_id"]) is not int or value["check_app_id"] < 1:
+        raise ValueError("effective executor policy check app ID is invalid")
+    normalized = {
+        "enabled_capabilities": list(capabilities),
+        "approved_executor_contract_digests": list(approved),
+        "check_app_id": value["check_app_id"],
+    }
+    return canonical_digest({
+        "schema": EFFECTIVE_POLICY_IDENTITY_SCHEMA,
+        "policy": normalized,
+    })
+
+
 def validation_request_identity(value: Any) -> dict[str, Any]:
     """Validate and normalize request identity; integration base is stored separately."""
     if not isinstance(value, dict) or set(value) != _KEY_FIELDS:
@@ -148,8 +188,8 @@ def validation_request_identity(value: Any) -> dict[str, Any]:
         raise ValueError("validation request task UID is invalid")
     if type(result["pr_number"]) is not int or result["pr_number"] < 1:
         raise ValueError("validation request PR number is invalid")
-    if not isinstance(result["bootstrap_epoch"], str) or not result["bootstrap_epoch"].strip():
-        raise ValueError("validation request bootstrap epoch is invalid")
+    if type(result["bootstrap_epoch"]) is not int or result["bootstrap_epoch"] < 1:
+        raise ValueError("validation request bootstrap epoch must be a positive integer")
     for field in ("source_head_oid",):
         if not isinstance(result[field], str) or not _OID_RE.fullmatch(result[field]):
             raise ValueError(f"validation request {field} is invalid")
@@ -157,6 +197,7 @@ def validation_request_identity(value: Any) -> dict[str, Any]:
         raise ValueError("validation request publication ID is invalid")
     _valid_digest(result["source_projection_digest"], "source projection digest")
     _valid_digest(result["executor_contract_digest"], "executor contract digest")
+    _valid_digest(result["effective_policy_digest"], "effective policy digest")
     units = result["unit_ids"]
     if (not isinstance(units, list) or not units
             or any(not isinstance(unit, str) or not unit.strip() for unit in units)
@@ -181,6 +222,62 @@ def validation_request_identity(value: Any) -> dict[str, Any]:
     result["unit_ids"] = sorted(units)
     result["input_fingerprints"] = {unit: fingerprints[unit] for unit in sorted(units)}
     return result
+
+
+def validation_request_envelope(value: Any) -> dict[str, Any]:
+    """Validate the canonical request body carried to and from the runner."""
+    if not isinstance(value, dict) or set(value) != _REQUEST_ENVELOPE_FIELDS:
+        raise ValueError("validation request payload fields are incomplete or unsupported")
+    if value.get("schema") != VALIDATION_REQUEST_SCHEMA:
+        raise ValueError("validation request payload schema is unsupported")
+    identity = validation_request_identity(value.get("identity"))
+    request_key = _valid_digest(value.get("request_key"), "validation request key")
+    if validation_request_key(identity) != request_key:
+        raise ValueError("validation request payload key does not match its identity")
+    base = value.get("integration_base_oid")
+    if not isinstance(base, str) or not _OID_RE.fullmatch(base):
+        raise ValueError("validation request payload integration base is invalid")
+    return {
+        "schema": VALIDATION_REQUEST_SCHEMA,
+        "request_key": request_key,
+        "identity": identity,
+        "integration_base_oid": base,
+    }
+
+
+def _read_request_record(path: Path, request_key: str) -> dict[str, Any]:
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError("validation request journal is unreadable") from exc
+    if not isinstance(record, dict) or set(record) != _REQUEST_RECORD_FIELDS:
+        raise ValueError("validation request journal fields are invalid")
+    if (record.get("schema") != VALIDATION_REQUEST_SCHEMA
+            or record.get("request_key") != request_key):
+        raise ValueError("validation request journal identity is invalid")
+    identity = validation_request_identity(record.get("identity"))
+    if identity != record["identity"] or validation_request_key(identity) != request_key:
+        raise ValueError("validation request journal identity is invalid")
+    base = record.get("integration_base_oid")
+    if not isinstance(base, str) or not _OID_RE.fullmatch(base):
+        raise ValueError("validation request journal base is invalid")
+    attempts = record.get("dispatch_attempts")
+    status = record.get("status")
+    if (type(attempts) is not int or not 0 <= attempts <= MAX_DISPATCH_ATTEMPTS
+            or not isinstance(status, str)
+            or status not in {"prepared", "dispatch_uncertain", "observed"}):
+        raise ValueError("validation request journal state is invalid")
+    if ((status == "prepared" and attempts != 0)
+            or (status == "dispatch_uncertain" and attempts != 1)):
+        raise ValueError("validation request journal transition is invalid")
+    if status == "observed":
+        if (type(record.get("run_id")) is not int or record["run_id"] < 1
+                or type(record.get("run_attempt")) is not int
+                or record["run_attempt"] < 1):
+            raise ValueError("observed validation request locator is invalid")
+    elif record.get("run_id") is not None or record.get("run_attempt") is not None:
+        raise ValueError("unobserved validation request has a run locator")
+    return record
 
 
 def validation_request_key(value: Any) -> str:
@@ -241,31 +338,9 @@ def reserve_validation_request(
     path = _request_path(Path(directory), request_key)
     with _locked(path):
         if path.exists():
-            try:
-                record = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError) as exc:
-                raise ValueError("validation request journal is unreadable") from exc
-            if (not isinstance(record, dict)
-                    or record.get("schema") != VALIDATION_REQUEST_SCHEMA
-                    or record.get("request_key") != request_key
-                    or record.get("identity") != identity
-                    or not isinstance(record.get("integration_base_oid"), str)
-                    or not _OID_RE.fullmatch(record["integration_base_oid"])):
+            record = _read_request_record(path, request_key)
+            if record.get("identity") != identity:
                 raise ValueError("validation request journal identity is invalid")
-            if (type(record.get("dispatch_attempts")) is not int
-                    or not 0 <= record["dispatch_attempts"] <= MAX_DISPATCH_ATTEMPTS
-                    or record.get("status") not in {"prepared", "dispatch_uncertain", "observed"}):
-                raise ValueError("validation request journal state is invalid")
-            if ((record["status"] == "prepared" and record["dispatch_attempts"] != 0)
-                    or (record["status"] == "dispatch_uncertain"
-                        and record["dispatch_attempts"] != 1)):
-                raise ValueError("validation request journal transition is invalid")
-            if record["status"] == "observed":
-                if (type(record.get("run_id")) is not int or record["run_id"] < 1
-                        or type(record.get("run_attempt")) is not int or record["run_attempt"] < 1):
-                    raise ValueError("observed validation request locator is invalid")
-            elif record.get("run_id") is not None or record.get("run_attempt") is not None:
-                raise ValueError("unobserved validation request has a run locator")
             return record, False
         record = {
             "schema": VALIDATION_REQUEST_SCHEMA,
@@ -289,8 +364,8 @@ def mark_validation_dispatch_started(
     with _locked(path):
         if not path.exists():
             raise ValueError("validation request intent is missing")
-        record = json.loads(path.read_text(encoding="utf-8"))
-        if record.get("request_key") != request_key or record.get("status") == "observed":
+        record = _read_request_record(path, request_key)
+        if record.get("status") == "observed":
             raise ValueError("validation request intent is invalid")
         if record["dispatch_attempts"] >= MAX_DISPATCH_ATTEMPTS:
             raise ValueError("VALIDATION_REQUEST_RETRY_LIMIT")
@@ -310,9 +385,7 @@ def mark_validation_request_observed(
     with _locked(path):
         if not path.exists():
             raise ValueError("validation request intent is missing")
-        record = json.loads(path.read_text(encoding="utf-8"))
-        if record.get("request_key") != request_key:
-            raise ValueError("validation request identity is invalid")
+        record = _read_request_record(path, request_key)
         observed = record.get("run_id")
         if observed is not None and observed != run_id:
             raise ValueError("validation request resolved to a different run")

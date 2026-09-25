@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,12 +11,22 @@ from pathlib import Path
 import integration_executor_contract as contract
 
 
+def effective_policy(**changes):
+    value = {
+        "enabled_capabilities": ["input-scope-reuse/v1"],
+        "approved_executor_contract_digests": ["sha256:" + "e" * 64],
+        "check_app_id": 42,
+    }
+    value.update(changes)
+    return value
+
+
 def request_identity(**changes):
     value = {
         "repository": "owner/repo",
         "task_uid": "task_" + "1" * 32,
         "pr_number": 12,
-        "bootstrap_epoch": "epoch-1",
+        "bootstrap_epoch": 1,
         "source_head_oid": "a" * 40,
         "publication_id": "pub-7",
         "source_projection_digest": "sha256:" + "b" * 64,
@@ -25,6 +36,7 @@ def request_identity(**changes):
             "required-gate": "sha256:" + "d" * 64,
         },
         "executor_contract_digest": "sha256:" + "e" * 64,
+        "effective_policy_digest": contract.effective_policy_digest(effective_policy()),
         "purpose": "integration_revalidation",
         "applicability_mode": "input_scoped",
         "snapshot_target_oid": None,
@@ -104,6 +116,37 @@ class ValidationRequestTests(unittest.TestCase):
         self.assertNotEqual(key, contract.validation_request_key(changed))
         changed_executor = request_identity(executor_contract_digest="sha256:" + "8" * 64)
         self.assertNotEqual(key, contract.validation_request_key(changed_executor))
+        changed_policy = request_identity(
+            effective_policy_digest=contract.effective_policy_digest(
+                effective_policy(approved_executor_contract_digests=["sha256:" + "8" * 64]),
+            ),
+        )
+        self.assertNotEqual(key, contract.validation_request_key(changed_policy))
+
+    def test_epoch_is_a_canonical_positive_integer(self):
+        for value in (True, False, 0, -1, "1", "epoch-1"):
+            with self.subTest(value=value), self.assertRaisesRegex(ValueError, "bootstrap epoch"):
+                contract.validation_request_identity(request_identity(bootstrap_epoch=value))
+        self.assertEqual(1, contract.validation_request_identity(request_identity())["bootstrap_epoch"])
+
+    def test_request_envelope_binds_key_identity_and_frozen_base(self):
+        identity = request_identity()
+        key = contract.validation_request_key(identity)
+        envelope = {
+            "schema": contract.VALIDATION_REQUEST_SCHEMA,
+            "request_key": key,
+            "identity": identity,
+            "integration_base_oid": "1" * 40,
+        }
+        self.assertEqual(envelope, contract.validation_request_envelope(envelope))
+        for changed in (
+            {**envelope, "request_key": "sha256:" + "0" * 64},
+            {**envelope, "integration_base_oid": True},
+            {**envelope, "identity": request_identity(bootstrap_epoch=2)},
+            {**envelope, "unexpected": "field"},
+        ):
+            with self.subTest(changed=changed), self.assertRaises(ValueError):
+                contract.validation_request_envelope(changed)
 
     def test_snapshot_exact_key_binds_its_target(self):
         value = request_identity(
@@ -138,6 +181,18 @@ class ValidationRequestTests(unittest.TestCase):
             self.assertEqual(9001, observed["run_id"])
             with self.assertRaisesRegex(ValueError, "different run"):
                 contract.mark_validation_request_observed(directory, key, 9002, 1)
+
+    def test_request_journal_rejects_unrecognized_or_noncanonical_identity_fields(self):
+        identity = request_identity()
+        key = contract.validation_request_key(identity)
+        with tempfile.TemporaryDirectory() as directory:
+            contract.reserve_validation_request(directory, key, identity, "1" * 40)
+            path = Path(directory) / (key.removeprefix("sha256:") + ".json")
+            record = json.loads(path.read_text(encoding="utf-8"))
+            record["unexpected"] = "untrusted extension"
+            path.write_text(json.dumps(record), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "journal fields"):
+                contract.reserve_validation_request(directory, key, identity, "1" * 40)
 
     def test_request_dispatch_retry_limit_is_finite(self):
         identity = request_identity()
