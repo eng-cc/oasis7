@@ -25,7 +25,9 @@ from ci_input_scope import (
     validate_target_observation_binding,
 )
 from ci_required_artifact_v2 import (
+    plan_artifact_name,
     request_key_for_identity,
+    result_artifact_name,
     validate_request_identity,
 )
 from integration_executor_contract import (
@@ -49,6 +51,7 @@ _INACTIVE_REUSE_STATES = frozenset({
     "disabled",
     "disabled-pending-independent-activation",
 })
+_TRUSTED_SOURCE_ATTEMPT_SCHEMA = "oasis7-ci-trusted-source-attempt/v1"
 
 
 @dataclass(frozen=True)
@@ -223,6 +226,101 @@ def _test_locator(record: dict[str, Any], unit_id: str) -> dict[str, Any]:
     }
 
 
+def _validate_trusted_source_attempt(
+    value: Any, source_plan: dict[str, Any], source_inventory: dict[str, Any],
+    source_units: set[str],
+) -> dict[str, Any]:
+    """Bind source test claims to the reader's exact live attempt locators."""
+    fields = {
+        "schema", "request_key", "workflow_run_id", "run_attempt", "check_app_id",
+        "check_run_id", "job_id", "job_name", "plan_artifact_id",
+        "plan_artifact_name", "result_artifacts",
+    }
+    if (not isinstance(value, dict) or set(value) != fields
+            or value.get("schema") != _TRUSTED_SOURCE_ATTEMPT_SCHEMA):
+        raise ValueError("trusted source attempt envelope is invalid")
+    request_key = _digest(value.get("request_key"), "trusted_source_attempt.request_key")
+    if request_key != source_plan.get("request_key"):
+        raise ValueError("trusted source attempt request key mismatch")
+    run_id = _positive_int(value.get("workflow_run_id"), "trusted_source_attempt.workflow_run_id")
+    attempt = _positive_int(value.get("run_attempt"), "trusted_source_attempt.run_attempt")
+    app_id = _positive_int(value.get("check_app_id"), "trusted_source_attempt.check_app_id")
+    check_run_id = _positive_int(value.get("check_run_id"), "trusted_source_attempt.check_run_id")
+    job_id = _positive_int(value.get("job_id"), "trusted_source_attempt.job_id")
+    job_name = value.get("job_name")
+    if not isinstance(job_name, str) or not job_name.strip():
+        raise ValueError("trusted source attempt job name is invalid")
+    plan_artifact_id = _positive_int(
+        value.get("plan_artifact_id"), "trusted_source_attempt.plan_artifact_id",
+    )
+    plan_artifact = value.get("plan_artifact_name")
+    if not isinstance(plan_artifact, str) or not plan_artifact:
+        raise ValueError("trusted source attempt plan artifact name is invalid")
+    if (type(source_plan.get("workflow_run_id")) is not int
+            or source_plan.get("workflow_run_id") != run_id
+            or type(source_plan.get("run_attempt")) is not int
+            or source_plan.get("run_attempt") != attempt
+            or type(source_plan.get("check_app_id")) is not int
+            or source_plan.get("check_app_id") != app_id
+            or type(source_plan.get("check_run_id")) is not int
+            or source_plan.get("check_run_id") != check_run_id
+            or type(source_plan.get("job_id")) is not int
+            or source_plan.get("job_id") != job_id
+            or source_plan.get("job_name") != job_name
+            or source_plan.get("check_name") != "required-gate"
+            or job_name != "required-gate"):
+        raise ValueError("trusted source attempt differs from the source plan execution identity")
+    producer = source_inventory.get("producer")
+    if (not isinstance(producer, dict)
+            or producer.get("run_id") != run_id
+            or producer.get("run_attempt") != attempt
+            or producer.get("check_app_id") != app_id
+            or producer.get("check_run_id") != check_run_id
+            or producer.get("artifact_id") != plan_artifact_id):
+        raise ValueError("trusted source attempt differs from live planner inventory readback")
+    if plan_artifact != plan_artifact_name(run_id, attempt):
+        raise ValueError("trusted source attempt plan artifact name is invalid")
+
+    raw_results = value.get("result_artifacts")
+    if not isinstance(raw_results, list):
+        raise ValueError("trusted source attempt result artifact set is invalid")
+    results: list[dict[str, Any]] = []
+    for artifact in raw_results:
+        if not isinstance(artifact, dict) or set(artifact) != {"unit_id", "artifact_id", "name"}:
+            raise ValueError("trusted source attempt result locator is invalid")
+        unit_id = artifact.get("unit_id")
+        artifact_id = _positive_int(
+            artifact.get("artifact_id"), "trusted_source_attempt.result_artifact_id",
+        )
+        name = artifact.get("name")
+        if not isinstance(unit_id, str) or not unit_id or not isinstance(name, str) or not name:
+            raise ValueError("trusted source attempt result locator is invalid")
+        if name != result_artifact_name(run_id, attempt, unit_id):
+            raise ValueError("trusted source attempt result artifact name is invalid")
+        results.append({"unit_id": unit_id, "artifact_id": artifact_id, "name": name})
+    unit_ids = [item["unit_id"] for item in results]
+    artifact_ids = [item["artifact_id"] for item in results]
+    names = [item["name"] for item in results]
+    if (unit_ids != sorted(source_units) or unit_ids != sorted(set(unit_ids))
+            or len(artifact_ids) != len(set(artifact_ids))
+            or plan_artifact_id in artifact_ids
+            or len(names) != len(set(names))):
+        raise ValueError("trusted source attempt result locators do not cover the exact unit inventory")
+    return {
+        "schema": _TRUSTED_SOURCE_ATTEMPT_SCHEMA,
+        "request_key": request_key,
+        "workflow_run_id": run_id,
+        "run_attempt": attempt,
+        "check_app_id": app_id,
+        "check_run_id": check_run_id,
+        "job_id": job_id,
+        "job_name": job_name,
+        "plan_artifact_id": plan_artifact_id,
+        "plan_artifact_name": plan_artifact,
+        "result_artifacts": results,
+    }
+
+
 def _inventory_locator(binding: dict[str, Any], label: str) -> dict[str, Any]:
     return {
         "kind": "trusted-planner-inventory",
@@ -356,6 +454,7 @@ def evaluate_evidence_applicability(
     effective_policy: Any,
     *,
     trusted_source_inventory: Any = None,
+    trusted_source_attempt: Any = None,
     trusted_target_observation: Any = None,
 ) -> ApplicabilityDecision:
     """Decide whether prior review/test evidence applies to a target snapshot.
@@ -508,6 +607,15 @@ def evaluate_evidence_applicability(
         )
         if source_inventory["unit_ids"] != sorted(source_units):
             raise ValueError("source required units disagree with trusted planner inventory")
+        try:
+            source_attempt = _validate_trusted_source_attempt(
+                trusted_source_attempt, source_plan, source_inventory, source_units,
+            )
+        except (TypeError, ValueError, KeyError):
+            return _blocked(
+                "SOURCE_ATTEMPT_BINDING_INVALID", identity=decision_identity,
+                effective_policy_identity=policy_identity,
+            )
         source_unit_policies = _bound_unit_policies(
             source_plan, source_inventory, source_units, "source",
         )
@@ -613,6 +721,7 @@ def evaluate_evidence_applicability(
     item_decisions: list[dict[str, Any]] = []
     evidence_locators: list[dict[str, Any]] = [
         _inventory_locator(source_inventory, "source"),
+        {"kind": "trusted-source-attempt", "id": source_attempt},
         _target_observation_locator(target_observation),
     ]
 
@@ -706,6 +815,10 @@ def evaluate_evidence_applicability(
             ))
             continue
         record = matching[0]
+        trusted_result = next(
+            item for item in source_attempt["result_artifacts"]
+            if item["unit_id"] == unit
+        )
         try:
             if not _matches_common_identity(record, source_identity, "test evidence"):
                 blockers.append("TEST_IDENTITY_MISMATCH")
@@ -723,6 +836,14 @@ def evaluate_evidence_applicability(
             _positive_int(record.get("run_attempt"), "test.run_attempt")
             _positive_int(record.get("check_run_id"), "test.check_run_id")
             _positive_int(record.get("artifact_id"), "test.artifact_id")
+            if (record.get("run_id") != source_attempt["workflow_run_id"]
+                    or record.get("run_attempt") != source_attempt["run_attempt"]
+                    or _positive_numeric_id(record.get("check_app_id"), "test.check_app_id")
+                       != str(source_attempt["check_app_id"])
+                    or record.get("check_run_id") != source_attempt["check_run_id"]
+                    or record.get("artifact_id") != trusted_result["artifact_id"]
+                    or record.get("artifact_name") != trusted_result["name"]):
+                raise ValueError("test evidence differs from trusted source attempt locator")
             locator = _test_locator(record, unit)
         except (TypeError, ValueError):
             blockers.append("TEST_PROVENANCE_INVALID")

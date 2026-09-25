@@ -194,6 +194,8 @@ RUST_COMMANDS: dict[str, tuple[str, ...]] = {
 _UNIT_SCHEMA = "oasis7-required-test-unit/v1"
 _POLICY_SCHEMA = "oasis7-required-unit-policy/v1"
 _ENV_SCHEMA = "oasis7-required-unit-environment/v1"
+_TRUSTED_SOURCE_PRODUCT_ENVIRONMENT_SCHEMA = "oasis7-trusted-source-product-environment/v1"
+_TRUSTED_SOURCE_ATTEMPT_SCHEMA = "oasis7-ci-trusted-source-attempt/v1"
 _PLAN_INVOCATION_SCHEMA = "oasis7-required-scope-invocation/v1"
 _TRUSTED_RUNNER_IMAGE = "ubuntu-24.04"
 _TRUSTED_PYTHON_IMPLEMENTATION = "CPython"
@@ -383,8 +385,197 @@ def _trusted_sources(planner_root: Path) -> dict[str, str]:
     return values
 
 
+def _trusted_source_product_environment(value: Any) -> tuple[dict[str, Any], str]:
+    """Validate the source environment only when its attempt and job were authenticated."""
+    fields = {"schema", "trusted_source_attempt", "required_gate_job", "environment_contract"}
+    if (not isinstance(value, dict) or set(value) != fields
+            or value.get("schema") != _TRUSTED_SOURCE_PRODUCT_ENVIRONMENT_SCHEMA):
+        raise InventoryError("trusted source product environment fields are incomplete or unsupported")
+    attempt = value["trusted_source_attempt"]
+    attempt_fields = {
+        "schema", "request_key", "workflow_run_id", "run_attempt", "check_app_id",
+        "check_run_id", "job_id", "job_name", "plan_artifact_id", "plan_artifact_name",
+        "result_artifacts",
+    }
+    if (not isinstance(attempt, dict) or set(attempt) != attempt_fields
+            or attempt.get("schema") != _TRUSTED_SOURCE_ATTEMPT_SCHEMA
+            or not isinstance(attempt.get("request_key"), str)
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", attempt["request_key"])):
+        raise InventoryError("trusted source product environment attempt binding is malformed")
+    integer_fields = (
+        "workflow_run_id", "run_attempt", "check_app_id", "check_run_id", "job_id", "plan_artifact_id",
+    )
+    if any(type(attempt.get(field)) is not int or attempt[field] < 1 for field in integer_fields):
+        raise InventoryError("trusted source product environment attempt IDs are invalid")
+    run_id, attempt_no = attempt["workflow_run_id"], attempt["run_attempt"]
+    if (attempt["job_name"] != "required-gate"
+            or attempt["plan_artifact_name"] != f"oasis7-required-plan-v2-{run_id}-a{attempt_no}"):
+        raise InventoryError("trusted source product environment attempt locator is invalid")
+    result_rows = attempt["result_artifacts"]
+    if not isinstance(result_rows, list) or not result_rows:
+        raise InventoryError("trusted source product environment has no source result artifacts")
+    seen_units: set[str] = set()
+    seen_artifact_ids: set[int] = {attempt["plan_artifact_id"]}
+    normalized_rows: list[dict[str, Any]] = []
+    for row in result_rows:
+        if (not isinstance(row, dict) or set(row) != {"unit_id", "artifact_id", "name"}
+                or not isinstance(row.get("unit_id"), str) or not row["unit_id"]
+                or type(row.get("artifact_id")) is not int or row["artifact_id"] < 1
+                or not isinstance(row.get("name"), str)):
+            raise InventoryError("trusted source product environment result locator is malformed")
+        expected_name = "oasis7-required-result-v2-{}-a{}-{}".format(
+            run_id, attempt_no, hashlib.sha256(row["unit_id"].encode("utf-8")).hexdigest(),
+        )
+        if (row["name"] != expected_name or row["unit_id"] in seen_units
+                or row["artifact_id"] in seen_artifact_ids):
+            raise InventoryError("trusted source product environment result locator is duplicate or mismatched")
+        seen_units.add(row["unit_id"])
+        seen_artifact_ids.add(row["artifact_id"])
+        normalized_rows.append(dict(row))
+    if normalized_rows != sorted(normalized_rows, key=lambda row: row["unit_id"]):
+        raise InventoryError("trusted source product environment result locators are not sorted")
+
+    job = value["required_gate_job"]
+    job_fields = {
+        "workflow_run_id", "run_attempt", "job_id", "job_name", "check_name",
+        "check_app_id", "check_run_id", "head_sha", "status", "conclusion", "labels",
+    }
+    if (not isinstance(job, dict) or set(job) != job_fields
+            or any(type(job.get(field)) is not int for field in (
+                "workflow_run_id", "run_attempt", "job_id", "check_app_id", "check_run_id",
+            ))
+            or any(job.get(field) != attempt.get(source) for field, source in (
+                ("workflow_run_id", "workflow_run_id"), ("run_attempt", "run_attempt"),
+                ("job_id", "job_id"), ("job_name", "job_name"),
+                ("check_app_id", "check_app_id"), ("check_run_id", "check_run_id"),
+            ))
+            or job.get("check_name") != "required-gate"
+            or not isinstance(job.get("head_sha"), str)
+            or not re.fullmatch(r"[0-9a-f]{40}", job["head_sha"])
+            or job.get("status") != "completed" or job.get("conclusion") != "success"
+            or job.get("labels") != ["ubuntu-24.04"]):
+        raise InventoryError("trusted source product environment required-gate job is not the pinned live job")
+
+    environment = value["environment_contract"]
+    env_fields = {
+        "schema", "runner_image", "runner_identity", "runner_image_matches_trusted_W",
+        "python_implementation", "python_version", "python_full_version", "python_cache_tag",
+        "python_runtime_matches_trusted_W", "runtime_packages", "markdown_runtime_matches_trusted_W",
+        "markdown_parser_matches_trusted_W", "markdown_requirements_match_trusted_W",
+        "external_inputs", "reuse_eligible",
+    }
+    if not isinstance(environment, dict) or set(environment) != env_fields:
+        raise InventoryError("trusted source product environment contract is incomplete or unsupported")
+    runner_fields = {
+        "runner_image", "runner_os", "image_os", "image_version", "os_id", "os_version_id",
+        "matches_trusted_W",
+    }
+    runner = environment.get("runner_identity")
+    packages = environment.get("runtime_packages")
+    if (environment.get("schema") != _ENV_SCHEMA
+            or not isinstance(environment.get("runner_image"), str) or not environment["runner_image"]
+            or not isinstance(runner, dict) or set(runner) != runner_fields
+            or runner.get("runner_image") != environment["runner_image"]
+            or not isinstance(packages, dict) or set(packages) != set(_TRUSTED_MARKDOWN_PACKAGES)
+            or any(not isinstance(packages.get(name), str) or not packages[name]
+                   for name in _TRUSTED_MARKDOWN_PACKAGES)
+            or any(type(environment.get(field)) is not bool for field in (
+                "runner_image_matches_trusted_W", "python_runtime_matches_trusted_W",
+                "markdown_runtime_matches_trusted_W", "markdown_parser_matches_trusted_W",
+                "markdown_requirements_match_trusted_W", "reuse_eligible",
+            ))
+            or type(runner.get("matches_trusted_W")) is not bool
+            or environment.get("runner_image_matches_trusted_W") != runner["matches_trusted_W"]):
+        raise InventoryError("trusted source product environment contract is malformed")
+    for field in ("runner_os", "image_os", "image_version", "os_id", "os_version_id"):
+        if not isinstance(runner.get(field), str) or not runner[field]:
+            raise InventoryError("trusted source product runner identity is incomplete")
+    python_fields = ("python_implementation", "python_version", "python_full_version", "python_cache_tag")
+    if any(not isinstance(environment.get(field), str) or not environment[field] for field in python_fields):
+        raise InventoryError("trusted source Python identity is incomplete")
+    python_matches = (
+        environment["python_implementation"] == _TRUSTED_PYTHON_IMPLEMENTATION
+        and environment["python_version"] == _TRUSTED_PYTHON_VERSION
+        and environment["python_full_version"].startswith(_TRUSTED_PYTHON_VERSION + " ")
+        and environment["python_cache_tag"] == "cpython-312"
+    )
+    package_matches = packages == _TRUSTED_MARKDOWN_PACKAGES
+    markdown_runtime_matches = environment["markdown_runtime_matches_trusted_W"]
+    if markdown_runtime_matches and not package_matches:
+        raise InventoryError("trusted source Markdown runtime flag conflicts with observed packages")
+    expected_eligible = (
+        environment["runner_image_matches_trusted_W"] and python_matches
+        and markdown_runtime_matches and environment["markdown_parser_matches_trusted_W"]
+        and environment["markdown_requirements_match_trusted_W"]
+    )
+    if (environment["python_runtime_matches_trusted_W"] != python_matches
+            or environment["reuse_eligible"] != expected_eligible
+            or not isinstance(environment.get("external_inputs"), str)
+            or not environment["external_inputs"]):
+        raise InventoryError("trusted source product environment flags disagree with observed identities")
+    canonical_attempt = json.dumps(
+        attempt, sort_keys=True, separators=(",", ":"), ensure_ascii=False, allow_nan=False,
+    ).encode("utf-8")
+    return environment, "sha256:" + hashlib.sha256(canonical_attempt).hexdigest()
+
+
+def trusted_product_environment_from_plan(
+    plan: dict[str, Any], execution_jobs: list[dict[str, Any]], trusted_source_attempt: dict[str, Any],
+) -> dict[str, Any]:
+    """Bind the product checker environment to authenticated source plan/job/artifacts."""
+    if not isinstance(plan, dict) or not isinstance(execution_jobs, list):
+        raise InventoryError("trusted source product plan or execution jobs are malformed")
+    gates = [job for job in execution_jobs if isinstance(job, dict) and job.get("job_name") == "required-gate"]
+    if len(gates) != 1:
+        raise InventoryError("trusted source product environment requires one exact required-gate job")
+    gate = gates[0]
+    if (gate.get("head_sha") != plan.get("workflow_sha")
+            or gate.get("workflow_run_id") != plan.get("workflow_run_id")
+            or gate.get("run_attempt") != plan.get("run_attempt")
+            or gate.get("check_app_id") != plan.get("check_app_id")
+            or gate.get("check_run_id") != plan.get("check_run_id")
+            or gate.get("job_id") != plan.get("job_id")):
+        raise InventoryError("trusted source product required-gate job differs from its plan")
+    raw_specs = plan.get("unit_specs")
+    product_corpus = plan.get("product_corpus")
+    if not isinstance(raw_specs, list) or not isinstance(product_corpus, dict):
+        raise InventoryError("trusted source product plan inventory is malformed")
+    product_specs = [
+        spec for spec in raw_specs
+        if isinstance(spec, dict) and isinstance(spec.get("unit_id"), str)
+        and spec["unit_id"].startswith("product-")
+    ]
+    if not product_specs or product_corpus.get("status") != "complete":
+        raise InventoryError("trusted source product environment is missing complete product units")
+    contracts = [spec.get("environment_contract") for spec in product_specs]
+    if (any(not isinstance(contract, dict) for contract in contracts)
+            or any(contract != contracts[0] for contract in contracts[1:])):
+        raise InventoryError("trusted source product units disagree on their environment contract")
+    envelope = {
+        "schema": _TRUSTED_SOURCE_PRODUCT_ENVIRONMENT_SCHEMA,
+        "trusted_source_attempt": trusted_source_attempt,
+        "required_gate_job": gate,
+        "environment_contract": contracts[0],
+    }
+    _trusted_source_product_environment(envelope)
+    source_result_units = [item["unit_id"] for item in trusted_source_attempt["result_artifacts"]]
+    if source_result_units != plan.get("required_test_units"):
+        raise InventoryError("trusted source product environment result set differs from its plan")
+    if (trusted_source_attempt.get("workflow_run_id") != plan.get("workflow_run_id")
+            or trusted_source_attempt.get("run_attempt") != plan.get("run_attempt")
+            or trusted_source_attempt.get("check_app_id") != plan.get("check_app_id")
+            or trusted_source_attempt.get("check_run_id") != plan.get("check_run_id")
+            or trusted_source_attempt.get("job_id") != plan.get("job_id")
+            or type(trusted_source_attempt.get("plan_artifact_id")) is not int
+            or trusted_source_attempt.get("job_name") != "required-gate"
+            or trusted_source_attempt.get("request_key") != plan.get("request_key")):
+        raise InventoryError("trusted source product environment differs from its validated plan")
+    return envelope
+
+
 def _product_environment_contract(
     planner_root: Path, target_repo_root: Path, target_oid: str, c2: Any,
+    trusted_source_product_environment: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Bind the pure Markdown checker runtime and enable only its exact closure."""
     target_entries = c2.git_tree_entries(str(target_repo_root), target_oid)[2]
@@ -417,48 +608,83 @@ def _product_environment_contract(
         line.strip() for line in trusted_requirements.decode("utf-8", errors="replace").splitlines()
         if line.strip() and not line.lstrip().startswith("#")
     ]
-    runtime_packages: dict[str, str] = {}
-    for distribution in _TRUSTED_MARKDOWN_PACKAGES:
-        try:
-            runtime_packages[distribution] = package_version(distribution)
-        except PackageNotFoundError:
-            runtime_packages[distribution] = "unavailable"
-    runner = _observe_runner_identity()
-    python = _observe_python_identity()
-    python_matches = (
-        python["implementation"] == _TRUSTED_PYTHON_IMPLEMENTATION
-        and python["version"] == _TRUSTED_PYTHON_VERSION
-        and python["full_version"].startswith(_TRUSTED_PYTHON_VERSION + " ")
-        and python["cache_tag"] == "cpython-312"
-    )
+    source_attempt_digest = None
+    source_gate_job_digest = None
+    source_environment_eligible = True
+    if trusted_source_product_environment is None:
+        runtime_packages: dict[str, str] = {}
+        for distribution in _TRUSTED_MARKDOWN_PACKAGES:
+            try:
+                runtime_packages[distribution] = package_version(distribution)
+            except PackageNotFoundError:
+                runtime_packages[distribution] = "unavailable"
+        runner = _observe_runner_identity()
+        python = _observe_python_identity()
+        python_implementation=python["implementation"]
+        python_version=python["version"]
+        python_full_version=python["full_version"]
+        python_cache_tag=python["cache_tag"]
+        python_matches = (
+            python_implementation == _TRUSTED_PYTHON_IMPLEMENTATION
+            and python_version == _TRUSTED_PYTHON_VERSION
+            and python_full_version.startswith(_TRUSTED_PYTHON_VERSION + " ")
+            and python_cache_tag == "cpython-312"
+        )
+        runner_matches=runner["matches_trusted_W"]
+        environment_source="observed-required-gate-runtime"
+    else:
+        observed, source_attempt_digest = _trusted_source_product_environment(
+            trusted_source_product_environment,
+        )
+        source_gate_job_digest = _canonical_digest(
+            trusted_source_product_environment["required_gate_job"],
+        )
+        runner=observed["runner_identity"]
+        runtime_packages=observed["runtime_packages"]
+        python_implementation=observed["python_implementation"]
+        python_version=observed["python_version"]
+        python_full_version=observed["python_full_version"]
+        python_cache_tag=observed["python_cache_tag"]
+        python_matches=observed["python_runtime_matches_trusted_W"]
+        runner_matches=observed["runner_image_matches_trusted_W"]
+        source_environment_eligible=(
+            observed["reuse_eligible"]
+            and observed["markdown_parser_matches_trusted_W"]
+            and observed["markdown_requirements_match_trusted_W"]
+        )
+        environment_source="authenticated-source-attempt"
     dependencies_match = (
         requirement_lines == ["markdown-it-py==3.0.0"]
         and runtime_packages == _TRUSTED_MARKDOWN_PACKAGES
     )
     reuse_eligible = (
         parser_matches and requirements_match and dependencies_match
-        and runner["matches_trusted_W"] and python_matches
+        and runner_matches and python_matches and source_environment_eligible
     )
-    return {
+    result={
         "schema": _ENV_SCHEMA,
         "runner_image": runner["runner_image"],
         "runner_identity": runner,
-        "runner_image_matches_trusted_W": runner["matches_trusted_W"],
-        "python_implementation": python["implementation"],
-        "python_version": python["version"],
-        "python_full_version": python["full_version"],
-        "python_cache_tag": python["cache_tag"],
+        "runner_image_matches_trusted_W": runner_matches,
+        "python_implementation": python_implementation,
+        "python_version": python_version,
+        "python_full_version": python_full_version,
+        "python_cache_tag": python_cache_tag,
         "python_runtime_matches_trusted_W": python_matches,
         "runtime_packages": runtime_packages,
         "markdown_runtime_matches_trusted_W": dependencies_match,
         "markdown_parser_matches_trusted_W": parser_matches,
         "markdown_requirements_match_trusted_W": requirements_match,
-        "external_inputs": (
-            "fully-bound-python-and-pinned-markdown-runtime"
-            if reuse_eligible else "unverified-runner-python-markdown-runtime-or-target-parser"
-        ),
+        "external_inputs": "fully-bound-python-and-pinned-markdown-runtime" if reuse_eligible
+            else "unverified-runner-python-markdown-runtime-or-target-parser",
         "reuse_eligible": reuse_eligible,
     }
+    if source_attempt_digest is not None:
+        result["source_attempt_digest"] = source_attempt_digest
+        result["source_gate_job_digest"] = source_gate_job_digest
+        result["source_environment_eligible"] = source_environment_eligible
+        result["environment_source"] = environment_source
+    return result
 
 
 def _observe_runner_identity() -> dict[str, Any]:
@@ -889,6 +1115,7 @@ def build_required_inventory(
     run_attempt: int,
     check_app_id: int,
     check_run_id: int,
+    trusted_source_product_environment: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build M/T unit specs and C2 snapshot from an authenticated W plan.
 
@@ -999,6 +1226,7 @@ def build_required_inventory(
     }
     product_environment = _product_environment_contract(
         trusted_root, target_root, target_commit, c2,
+        trusted_source_product_environment=trusted_source_product_environment,
     )
     product_policy["reuse_eligible"] = product_environment["reuse_eligible"]
     parser_path = str(trusted_root / "scripts")

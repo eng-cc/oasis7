@@ -923,8 +923,9 @@ def evaluate_keyed_q_applicability(
     plan = source_proof.get("required_plan_v2_payload")
     request_identity = source_proof.get("request_identity")
     source_inventory = source_proof.get("trusted_planner_inventory")
+    source_attempt = source_proof.get("trusted_source_attempt")
     if (not isinstance(plan, dict) or not isinstance(request_identity, dict)
-            or not isinstance(source_inventory, dict)):
+            or not isinstance(source_inventory, dict) or not isinstance(source_attempt, dict)):
         raise ValueError("keyed source plan or trusted inventory is missing")
     if target_inventory.get("schema") != LOCAL_TARGET_INVENTORY_SCHEMA:
         raise ValueError("fresh Q target inventory schema is unsupported")
@@ -1020,7 +1021,40 @@ def evaluate_keyed_q_applicability(
     if any(type(value) is not int or value <= 0
            for value in expected_attempt_identity.values()):
         raise ValueError("keyed source R/A/check identity is malformed")
+    expected_trusted_attempt = {
+        **expected_attempt_identity,
+        "request_key": source_proof.get("request_key"),
+        "job_id": source_proof.get("job_id"),
+        "job_name": source_proof.get("job_name"),
+        "plan_artifact_id": source_proof.get("required_plan_v2_artifact_id"),
+        "plan_artifact_name": source_proof.get("required_plan_v2_artifact_name"),
+    }
+    if (source_attempt.get("schema") != "oasis7-ci-trusted-source-attempt/v1"
+            or any(type(value) is not int or value <= 0
+                   for field, value in expected_trusted_attempt.items()
+                   if field != "job_name" and field != "request_key"
+                   and field != "plan_artifact_name")
+            or any(source_attempt.get(field) != value
+                   for field, value in expected_trusted_attempt.items())):
+        raise ValueError("trusted source attempt differs from the selected exact R/A/check/artifact")
+    if (not isinstance(expected_trusted_attempt["request_key"], str)
+            or not isinstance(expected_trusted_attempt["job_name"], str)
+            or not isinstance(expected_trusted_attempt["plan_artifact_name"], str)):
+        raise ValueError("trusted source attempt locator identity is malformed")
+    trusted_results = source_attempt.get("result_artifacts")
+    if not isinstance(trusted_results, list):
+        raise ValueError("trusted source attempt result artifact set is malformed")
+    trusted_by_unit = {}
+    for item in trusted_results:
+        if (not isinstance(item, dict) or set(item) != {"unit_id", "artifact_id", "name"}
+                or not isinstance(item.get("unit_id"), str) or not item["unit_id"]
+                or type(item.get("artifact_id")) is not int or item["artifact_id"] <= 0
+                or not isinstance(item.get("name"), str) or not item["name"]
+                or item["unit_id"] in trusted_by_unit):
+            raise ValueError("trusted source attempt result locator is malformed")
+        trusted_by_unit[item["unit_id"]] = item
     tests = []
+    result_units = []
     for artifact in raw_results:
         if (not isinstance(artifact, dict)
                 or set(artifact) != {"artifact_id", "name", "payload"}
@@ -1032,8 +1066,16 @@ def evaluate_keyed_q_applicability(
         if any(result.get(field) != expected
                for field, expected in expected_attempt_identity.items()):
             raise ValueError("keyed source result differs from the exact R/A/check attempt")
+        unit_id = result.get("unit_id")
+        trusted_result = trusted_by_unit.get(unit_id)
+        if (trusted_result is None
+                or artifact["artifact_id"] != trusted_result["artifact_id"]
+                or artifact["name"] != trusted_result["name"]
+                or unit_id in result_units):
+            raise ValueError("keyed source result locators differ from trusted source attempt")
+        result_units.append(unit_id)
         tests.append({
-            "unit_id": result.get("unit_id"),
+            "unit_id": unit_id,
             "obligation_ids": result.get("obligation_ids"),
             "status": result.get("status"),
             "input_digest": result.get("input_digest"),
@@ -1049,12 +1091,16 @@ def evaluate_keyed_q_applicability(
             "check_app_id": result.get("check_app_id"),
             "check_run_id": result.get("check_run_id"),
             "artifact_id": artifact["artifact_id"],
+            "artifact_name": artifact["name"],
         })
+    if result_units != sorted(trusted_by_unit):
+        raise ValueError("keyed source result artifact set is incomplete or out of order")
     try:
         decision = applicability_module.evaluate_evidence_applicability(
             c0_source_plan, {"reviews": [], "tests": tests}, c0_target,
             target_inventory.get("effective_policy"),
             trusted_source_inventory=source_inventory,
+            trusted_source_attempt=source_attempt,
             trusted_target_observation=observation,
         ).to_dict()
     except (AttributeError, KeyError, TypeError, ValueError) as exc:
@@ -1067,6 +1113,7 @@ def evaluate_keyed_q_applicability(
         "run_attempt": source_proof.get("run_attempt"),
         "check_app_id": source_proof.get("check_app_id"),
         "check_run_id": source_proof.get("check_run_id"),
+        "trusted_source_attempt": source_attempt,
         "integration_base_oid": base,
         "source_head_oid": identity_fields["source_head_oid"],
         "source_scope_oid": identity_fields["source_scope_oid"],
@@ -1097,6 +1144,7 @@ def _validate_keyed_q_applicability(
     fields = {
         "schema", "request_key", "workflow_run_id", "run_attempt", "check_app_id",
         "check_run_id", "integration_base_oid", "source_head_oid", "source_scope_oid",
+        "trusted_source_attempt",
         "assessed_target_oid", "input_scope_commit_oid", "input_scope_tree_oid",
         "planner_authority_oid", "planner_config_sha256", "effective_policy_identity",
         "inventory_digest", "required_test_units", "closure_status", "test_evidence",
@@ -1136,7 +1184,8 @@ def _validate_keyed_q_applicability(
             or assessment["workflow_run_id"] != plan.get("workflow_run_id")
             or assessment["run_attempt"] != plan.get("run_attempt")
             or assessment["check_app_id"] != plan.get("check_app_id")
-            or assessment["check_run_id"] != plan.get("check_run_id")):
+            or assessment["check_run_id"] != plan.get("check_run_id")
+            or assessment["trusted_source_attempt"] != proof.get("trusted_source_attempt")):
         raise ValueError("keyed target Q assessment differs from exact source attempt")
     for field in ("input_scope_commit_oid", "input_scope_tree_oid", "planner_authority_oid"):
         if not isinstance(assessment.get(field), str) or not re.fullmatch(r"[0-9a-f]{40,64}", assessment[field]):
@@ -1166,6 +1215,12 @@ def _validate_keyed_q_applicability(
             or decision.get("test_evidence") != assessment.get("test_evidence")
             or decision.get("effective_policy_identity") != assessment.get("effective_policy_identity")):
         raise ValueError("keyed target Q C0 decision digest or policy identity is invalid")
+    trusted_attempt = proof.get("trusted_source_attempt")
+    locators = decision.get("evidence_locators")
+    expected_attempt_locator = {"kind": "trusted-source-attempt", "id": trusted_attempt}
+    if (not isinstance(trusted_attempt, dict) or not isinstance(locators, list)
+            or locators.count(expected_attempt_locator) != 1):
+        raise ValueError("keyed target Q C0 decision omits the exact trusted source attempt locator")
     decision_identity = decision.get("identity")
     if (not isinstance(decision_identity, dict)
             or decision_identity.get("source_head_oid") != assessment["source_head_oid"]
@@ -1191,6 +1246,32 @@ def _validate_keyed_q_applicability(
                 or decision_identity.get("input_scope_tree_oid") != assessment["input_scope_tree_oid"]
                 or decision_identity.get("target_inventory_digest") != assessment["inventory_digest"]):
             raise ValueError("keyed target Q C0 test decision is incomplete or drifted")
+        result_locators = {
+            item["unit_id"]: item for item in trusted_attempt.get("result_artifacts", [])
+            if isinstance(item, dict) and isinstance(item.get("unit_id"), str)
+        }
+        item_decisions = decision.get("item_decisions")
+        if not isinstance(item_decisions, list):
+            raise ValueError("keyed target Q C0 per-item decisions are malformed")
+        for unit in assessment["required_test_units"]:
+            rows = [item for item in item_decisions
+                    if isinstance(item, dict) and item.get("kind") == "test"
+                    and item.get("id") == unit]
+            locator = result_locators.get(unit)
+            expected_locator = {
+                "kind": "github-check-artifact",
+                "id": {
+                    "unit_id": unit,
+                    "run_id": trusted_attempt.get("workflow_run_id"),
+                    "run_attempt": trusted_attempt.get("run_attempt"),
+                    "check_app_id": str(trusted_attempt.get("check_app_id")),
+                    "check_run_id": trusted_attempt.get("check_run_id"),
+                    "artifact_id": locator.get("artifact_id") if isinstance(locator, dict) else None,
+                },
+            }
+            if (len(rows) != 1 or rows[0].get("disposition") != "reusable"
+                    or rows[0].get("evidence_locator") != expected_locator):
+                raise ValueError("keyed target Q C0 per-unit locator differs from trusted source attempt")
     elif status in ("revalidate", "blocked"):
         raise ValueError("keyed target Q requires revalidation or is blocked: " + status)
     else:
@@ -1202,6 +1283,7 @@ def _validate_keyed_q_applicability(
         "run_attempt": proof["run_attempt"],
         "check_app_id": proof["check_app_id"],
         "check_run_id": proof["check_run_id"],
+        "trusted_source_attempt": assessment["trusted_source_attempt"],
         "integration_base_oid": assessment["integration_base_oid"],
         "source_head_oid": assessment["source_head_oid"],
         "source_scope_oid": assessment["source_scope_oid"],
@@ -1222,11 +1304,13 @@ def _latest_local_keyed_request_key(root: Path, effective: Path, *, repository: 
                                     head_oid: str, branch: str, task: dict[str, Any],
                                     projection_digest: str,
                                     allow_advanced_target: bool = False) -> str | None:
-    """Select the newest observed keyed request from the canonical journal.
+    """Select the latest durable intent before applying its state barrier.
 
-    A prepared request has not produced a remote side effect. An uncertain
-    dispatch for this exact Task/PR/H/projection blocks older green evidence;
-    its outcome must be read back before the gate can proceed.
+    Local intent order is persisted before dispatch and is the only authority
+    for comparing distinct request keys. The newest matching prepared,
+    uncertain, or observed intent controls; an older uncertain intent cannot
+    contaminate a later request, and a newer unresolved intent cannot fall
+    back to older green evidence.
 
     For a fresh-Q assessment, ``base_oid`` is the observed live target Q but
     the selected request is still read back using its journaled immutable B.
@@ -1253,40 +1337,56 @@ def _latest_local_keyed_request_key(root: Path, effective: Path, *, repository: 
         'source_head_oid': head_oid,
         'source_projection_digest': projection_digest,
     }
-    observed: list[tuple[int, str, int, str]] = []
-    for path in sorted(directory.glob('*.json')):
-        if not re.fullmatch(r'[0-9a-f]{64}', path.stem):
-            raise ValueError('validation request journal has a malformed key filename')
-        key = 'sha256:' + path.stem
-        record = contract._read_request_record(path, key)
-        identity = record['identity']
-        if any(identity.get(field) != value for field, value in expected.items()):
-            continue
-        if (not allow_advanced_target
-                and record.get('integration_base_oid') != base_oid):
-            continue
-        if record.get('status') == 'dispatch_uncertain' and record.get('dispatch_attempts') == 1:
-            raise ValueError('keyed validation request dispatch is unresolved for the current Task/PR/source')
-        if record.get('status') == 'observed':
+    intents: list[tuple[int | None, str, dict[str, Any]]] = []
+    with contract.validation_intent_order_lock(directory):
+        contract.validate_validation_intent_order_state(directory)
+        for path in sorted(directory.glob('*.json')):
+            if not re.fullmatch(r'[0-9a-f]{64}', path.stem):
+                raise ValueError('validation request journal has a malformed key filename')
+            key = 'sha256:' + path.stem
+            record = contract._read_request_record(path, key)
+            identity = record['identity']
+            if any(identity.get(field) != value for field, value in expected.items()):
+                continue
+            if (not allow_advanced_target
+                    and record.get('integration_base_oid') != base_oid):
+                continue
+            intent_order = record.get('intent_order')
+            if intent_order is not None and (type(intent_order) is not int or intent_order < 1):
+                raise ValueError('matching keyed request has an invalid immutable intent order')
             record_base = record.get('integration_base_oid')
             if not isinstance(record_base, str) or not re.fullmatch(r'[0-9a-f]{40,64}', record_base):
                 raise ValueError('validation request journal immutable integration base is invalid')
-            observed.append((record['run_id'], key, record['run_attempt'], record_base))
-    if not observed:
-        return None
-    observed.sort()
-    if len(observed) > 1 and observed[-1][0] == observed[-2][0]:
-        raise ValueError('multiple keyed validation requests share the newest workflow run identity')
-    selected_run_id, selected_key, selected_attempt, selected_base_oid = observed[-1]
-    selected = integration.current_request(
-        repository, uid, pr_number, selected_base_oid, head_oid, branch,
-        request_key=selected_key,
-    )
-    if (not isinstance(selected, dict) or selected.get('id') != selected_run_id
-            or type(selected.get('run_attempt')) is not int
-            or selected['run_attempt'] < selected_attempt):
-        raise ValueError('durable keyed validation request is absent from complete current-run readback')
-    return selected_key
+            intents.append((intent_order, key, record))
+        if not intents:
+            return None
+        legacy = [item for item in intents if item[0] is None]
+        if legacy:
+            if len(intents) != 1:
+                raise ValueError('matching legacy keyed request has ambiguous cross-key intent order')
+            _intent_order, selected_key, selected_record = legacy[0]
+        else:
+            intents.sort(key=lambda item: item[0])
+            if len({item[0] for item in intents}) != len(intents):
+                raise ValueError('multiple matching validation intents share one immutable order')
+            _intent_order, selected_key, selected_record = intents[-1]
+        selected_status = selected_record.get('status')
+        if selected_status != 'observed':
+            if selected_status == 'dispatch_uncertain':
+                raise ValueError('latest keyed validation request dispatch is unresolved for the current Task/PR/source')
+            raise ValueError('latest keyed validation request intent has not been observed')
+        selected_run_id = selected_record['run_id']
+        selected_attempt = selected_record['run_attempt']
+        selected_base_oid = selected_record['integration_base_oid']
+        selected = integration.current_request(
+            repository, uid, pr_number, selected_base_oid, head_oid, branch,
+            request_key=selected_key,
+        )
+        if (not isinstance(selected, dict) or selected.get('id') != selected_run_id
+                or type(selected.get('run_attempt')) is not int
+                or selected['run_attempt'] < selected_attempt):
+            raise ValueError('durable keyed validation request is absent from complete current-run readback')
+        return selected_key
 
 
 def live_integration_admission(data, root, uid, tool_root, admission, integration_run_id=None, *, require_strict=None):
@@ -1397,7 +1497,7 @@ planner=module.planner_for_run(request['repository'],run,base_oid=base,head_oid=
 proof={'integration_base_oid':base,'base_ref':pr.get('base',{}).get('ref'),'head_oid':head,'check_name':run.get('name'),'check_run_id':run['id'],'check_app_id':run['app']['id'],'planner_digest':module.hashlib.sha256(json.dumps(planner,sort_keys=True,separators=(',',':')).encode()).hexdigest(),'ci_validation_mode':'trusted_integration' if run.get('_integration') else 'ordinary_pr','assessed_target_oid':assessed_target}
 if run.get('_integration'):
  proof.update({key:run['_integration'][key] for key in ('workflow_run_id','workflow_sha','tested_tree_oid','tested_commit_oid')})
- for key in ('request_key','request_identity','source_scope_oid','trusted_policy_context','effective_policy_identity','planner_inventory_authority','required_plan_v2_artifact_id','required_plan_v2_artifact_name','required_plan_v2_payload','required_result_v2_artifacts','trusted_planner_inventory','execution_jobs','run_id','run_attempt','request_id','job_id','job_name'):
+ for key in ('request_key','request_identity','source_scope_oid','trusted_policy_context','effective_policy_identity','planner_inventory_authority','required_plan_v2_artifact_id','required_plan_v2_artifact_name','required_plan_v2_payload','required_result_v2_artifacts','trusted_planner_inventory','trusted_source_attempt','execution_jobs','run_id','run_attempt','request_id','job_id','job_name'):
   if key in (run.get('_integration') or {}): proof[key]=run['_integration'][key]
 if integration.default_branch_head(request['repository'],request['base_ref'])!=assessed_target:
  raise ValueError('default-branch target moved during live CI and Task verification')
