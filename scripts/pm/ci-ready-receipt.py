@@ -16,6 +16,7 @@ PROFILE_ARTIFACTS={
 }
 STAGE_ARTIFACT_PREFIX="cargo-checker-stage-admission-receipt-"
 STAGE_ARTIFACT_MEMBER="post-run-receipt.json"
+STAGE_PRODUCER_JOB="checker-stage-receipt"
 # Keep every planner gate selector in the receipt authority digest, including
 # non-Rust governance gates that do not appear in the Rust test matrix.
 RUN_FIELDS=(
@@ -712,6 +713,85 @@ def _checker_stage_time(value,field):
         raise SystemExit(f"ci-ready-receipt: checker-stage {field} timestamp lacks a timezone")
     return parsed
 
+def _checker_stage_producer_job(repository, check_run, proof):
+    workflow_run_id=_positive_int(proof.get("workflow_run_id"),"checker-stage workflow run id")
+    run_attempt=_positive_int(proof.get("run_attempt"),"checker-stage workflow attempt")
+    details_run_id,gate_job_id=_workflow_job_details(check_run,repository)
+    if details_run_id!=workflow_run_id:
+        raise SystemExit("ci-ready-receipt: checker-stage required-gate job belongs to another workflow run")
+    jobs=[]; total_count=None
+    for page in range(1,101):
+        response=gh("api",f"repos/{repository}/actions/runs/{workflow_run_id}/attempts/{run_attempt}/jobs?per_page=100&page={page}")
+        batch=response.get("jobs") if isinstance(response,dict) else None
+        reported_total=response.get("total_count") if isinstance(response,dict) else None
+        if (not isinstance(batch,list) or type(reported_total) is not int or reported_total<0
+                or (total_count is not None and reported_total!=total_count)):
+            raise SystemExit("ci-ready-receipt: checker-stage workflow attempt job readback is incomplete")
+        total_count=reported_total; jobs.extend(batch)
+        if len(batch)<100: break
+    else:
+        raise SystemExit("ci-ready-receipt: checker-stage workflow attempt job pagination overflow")
+    if len(jobs)!=total_count:
+        raise SystemExit("ci-ready-receipt: checker-stage workflow attempt job pagination is incomplete")
+    identities=[]; seen=set()
+    for raw in jobs:
+        identity=_job_identity(raw,repository,workflow_run_id,run_attempt,field="checker-stage workflow attempt")
+        if identity["job_id"] in seen: raise SystemExit("ci-ready-receipt: duplicate checker-stage workflow job id")
+        seen.add(identity["job_id"]); identities.append((identity,raw))
+    gate_matches=[(identity,raw) for identity,raw in identities if identity["name"]=="required-gate"]
+    producer_matches=[(identity,raw) for identity,raw in identities if identity["name"]==STAGE_PRODUCER_JOB]
+    if len(gate_matches)!=1 or len(producer_matches)!=1:
+        raise SystemExit("ci-ready-receipt: checker-stage producer or required-gate job is missing or ambiguous")
+    gate_identity,gate=gate_matches[0]
+    producer_identity,producer=producer_matches[0]
+    if (gate_identity["job_id"]!=gate_job_id
+            or gate_identity["check_run_id"]!=_positive_int(check_run.get("id"),"required-gate check id")
+            or gate_identity["status"]!="completed"
+            or str(gate_identity["conclusion"] or "").lower()!="success"
+            or gate_identity["head_sha"]!=proof.get("workflow_sha")):
+        raise SystemExit("ci-ready-receipt: checker-stage required-gate job did not succeed in this attempt")
+    if (producer_identity["status"]!="completed"
+            or str(producer_identity["conclusion"] or "").lower()!="success"
+            or "ubuntu-24.04" not in producer_identity["labels"]
+            or producer_identity["head_sha"]!=gate_identity["head_sha"]):
+        raise SystemExit("ci-ready-receipt: checker-stage producer job did not succeed on the required-gate head")
+    producer_check=gh("api",f"repos/{repository}/check-runs/{producer_identity['check_run_id']}")
+    if (not isinstance(producer_check,dict)
+            or _positive_int(producer_check.get("id"),"checker-stage producer check id")!=producer_identity["check_run_id"]
+            or producer_check.get("name")!=STAGE_PRODUCER_JOB
+            or (producer_check.get("app") or {}).get("id")!=15368
+            or producer_check.get("status")!="completed"
+            or str(producer_check.get("conclusion") or "").lower()!="success"
+            or producer_check.get("head_sha")!=producer_identity["head_sha"]):
+        raise SystemExit("ci-ready-receipt: checker-stage producer check is not successful and run-bound")
+    check_run_id,producer_job_id=_workflow_job_details(producer_check,repository)
+    if check_run_id!=workflow_run_id or producer_job_id!=producer_identity["job_id"]:
+        raise SystemExit("ci-ready-receipt: checker-stage producer check/job identity mismatch")
+    started=_checker_stage_time(producer.get("started_at"),"producer job start")
+    completed=_checker_stage_time(producer.get("completed_at"),"producer job completion")
+    gate_completed=_checker_stage_time(gate.get("completed_at"),"required-gate job completion")
+    if completed<started or started<gate_completed:
+        raise SystemExit("ci-ready-receipt: checker-stage producer did not run after successful required-gate")
+    return {
+        "job_name":STAGE_PRODUCER_JOB,"job_id":producer_identity["job_id"],
+        "check_run_id":producer_identity["check_run_id"],"workflow_run_id":workflow_run_id,
+        "run_attempt":run_attempt,"head_sha":producer_identity["head_sha"],
+        "started_at":started,"completed_at":completed,"required_gate_completed_at":gate_completed,
+    }
+
+def _checker_stage_required_by_live_task(repository, task_uid, pr_number, proof):
+    try:
+        from cargo_checker_stage_admission import (
+            REPOSITORY as STAGE_REPOSITORY, CHECKER_PR, classify_checker_stage, AdmissionError
+        )
+        if repository!=STAGE_REPOSITORY or pr_number!=CHECKER_PR:
+            return False
+        return classify_checker_stage(
+            repository, pr_number, task_uid, proof.get("base_oid"), proof.get("head_oid")
+        )
+    except AdmissionError as exc:
+        raise SystemExit(f"ci-ready-receipt: checker-stage task authority readback failed: {exc}")
+
 def _verify_live_checker_stage_scope(repository, task_uid, task_issue_number, pr_number, proof):
     try:
         from cargo_checker_stage_admission import CHECKER_ISSUE, CHECKER_SCOPE, CHECKER_TASK_UID
@@ -772,14 +852,77 @@ def _verify_live_checker_stage_scope(repository, task_uid, task_issue_number, pr
     if sorted(str(item.get("filename") or "") for item in files) != sorted(CHECKER_SCOPE):
         raise SystemExit("ci-ready-receipt: checker-stage PR changed paths are outside the trusted two-file set")
 
+def _verify_checker_stage_receipt_authority(receipt, repository):
+    try:
+        from cargo_checker_stage_admission import verify_postrun_receipt_authority, AdmissionError
+    except Exception as exc:
+        raise SystemExit(f"ci-ready-receipt: checker-stage live authority verifier is unavailable: {exc}")
+    try:
+        verify_postrun_receipt_authority(
+            receipt, repository, Path(__file__).resolve().parents[2]
+        )
+    except AdmissionError as exc:
+        raise SystemExit(f"ci-ready-receipt: checker-stage receipt authority is not live-bound: {exc}")
+
 def _checker_stage_disposition(repository, check_run, proof, artifacts, workflow_source, *, task_uid, task_issue_number, pr_number):
     try:
         from cargo_checker_stage_admission import verify_durable_postrun_receipt, AdmissionError
     except Exception as exc:
         raise SystemExit(f"ci-ready-receipt: checker-stage receipt verifier is unavailable: {exc}")
-    required_markers=(b"id: checker-stage",b"git diff --name-status --find-renames",b"cargo-checker-stage-admission-receipt-")
+    required_markers=(
+        b"id: checker-stage",
+        b"git diff --name-status --find-renames",
+        b"checker-stage-receipt:",
+        b"needs: required-gate",
+        b"needs.required-gate.result == 'success'",
+        b"needs.required-gate.outputs.checker_stage_pr_number != ''",
+        b"checker_stage_integration_base_oid",
+        b"refs/pull/${CHECKER_PR_NUMBER}/head",
+        b"git show \"${CHECKER_SOURCE_SCOPE}:scripts/pm/cargo_checker_stage_admission.py\"",
+        b"git show \"${CHECKER_SOURCE_SCOPE}:scripts/pm/check-cargo-package-scope\"",
+        b"git show \"${CHECKER_SOURCE_SCOPE}:.pm/cargo-package-scope-policy.json\"",
+        b"subprocess.run(preflight[\"checker_command\"], check=False)",
+        b"--producer-job-name \"${GITHUB_JOB}\"",
+        b"--result-status passed --exit-code 0",
+        b"cargo-checker-stage-admission-receipt-",
+        b"steps.checker-stage-producer.outputs.receipt",
+        b"steps.checker-stage-producer.outcome == 'success'",
+    )
     if any(marker not in workflow_source for marker in required_markers):
         raise SystemExit("ci-ready-receipt: trusted workflow lacks the checker-stage integration route")
+    try:
+        workflow_lines=workflow_source.decode("utf-8").splitlines()
+    except UnicodeDecodeError as exc:
+        raise SystemExit("ci-ready-receipt: trusted checker-stage workflow is not UTF-8") from exc
+    required_job=next((index for index,line in enumerate(workflow_lines) if line=="  required-gate:"),-1)
+    producer_job=next((index for index,line in enumerate(workflow_lines) if line=="  checker-stage-receipt:"),-1)
+    following_job=(next((index for index,line in enumerate(workflow_lines[producer_job+1:],producer_job+1)
+                         if line.startswith("  ") and not line.startswith("    ")),len(workflow_lines))
+                   if producer_job>=0 else -1)
+    if required_job<0 or producer_job<=required_job or producer_job<0 or following_job<=producer_job:
+        raise SystemExit("ci-ready-receipt: trusted checker-stage receipt producer is not a separate dependent job")
+    producer_block="\n".join(workflow_lines[producer_job:following_job])
+    required_block="\n".join(workflow_lines[required_job:producer_job])
+    if "id: required-gate-tests" not in required_block or "checker-stage-producer" in required_block:
+        raise SystemExit("ci-ready-receipt: candidate tests and checker-stage receipt producer share a job")
+    if ("needs: required-gate" not in producer_block
+            or "needs.required-gate.result == 'success'" not in producer_block
+            or "needs.required-gate.outputs.checker_stage_pr_number != ''" not in producer_block
+            or "runs-on: ubuntu-24.04" not in producer_block):
+        raise SystemExit("ci-ready-receipt: checker-stage producer is not gated on successful required-gate")
+    producer_steps=[line.strip() for line in producer_block.splitlines() if line.startswith("      - ")]
+    try:
+        finalizer_index=producer_steps.index("- id: checker-stage-producer")
+        upload_index=producer_steps.index("- name: Upload Cargo checker-stage admission receipt")
+    except ValueError:
+        raise SystemExit("ci-ready-receipt: trusted checker-stage producer/upload step is missing")
+    if (upload_index!=finalizer_index+1
+            or "ref: ${{ needs.required-gate.outputs.checker_stage_integration_base_oid }}" not in producer_block):
+        raise SystemExit("ci-ready-receipt: trusted checker-stage producer checkout or upload is missing")
+    if ("actions/download-artifact" in producer_block
+            or "./scripts/ci-tests.sh" in producer_block
+            or "CI_VERBOSE=" in producer_block):
+        raise SystemExit("ci-ready-receipt: checker-stage producer executes candidate-controlled test code")
     workflow_run_id=int(proof.get("workflow_run_id") or 0)
     run_attempt=int(proof.get("run_attempt") or 0)
     if workflow_run_id<1 or run_attempt<1:
@@ -794,6 +937,11 @@ def _checker_stage_disposition(repository, check_run, proof, artifacts, workflow
     artifact=matches[0]
     if int((artifact.get("workflow_run") or {}).get("id") or 0)!=workflow_run_id:
         raise SystemExit("ci-ready-receipt: checker-stage receipt artifact belongs to the wrong workflow run")
+    producer_job=_checker_stage_producer_job(repository,check_run,proof)
+    artifact_created=_checker_stage_time(artifact.get("created_at"),"receipt artifact creation")
+    if not (producer_job["required_gate_completed_at"]<=producer_job["started_at"]
+            <=artifact_created<=producer_job["completed_at"]):
+        raise SystemExit("ci-ready-receipt: checker-stage receipt artifact is outside the successful producer job")
     try:
         with zipfile.ZipFile(io.BytesIO(artifact_bytes(repository,artifact["id"]))) as archive:
             if archive.namelist()!=[STAGE_ARTIFACT_MEMBER]: raise ValueError("unexpected archive members")
@@ -805,20 +953,25 @@ def _checker_stage_disposition(repository, check_run, proof, artifacts, workflow
         verify_durable_postrun_receipt(receipt)
     except AdmissionError as exc:
         raise SystemExit(f"ci-ready-receipt: invalid checker-stage durable receipt: {exc}")
+    _verify_checker_stage_receipt_authority(receipt, repository)
     if not isinstance(receipt,dict) or receipt.get("repository")!=repository or receipt.get("task_uid")!=task_uid or receipt.get("pr_number")!=pr_number:
         raise SystemExit("ci-ready-receipt: checker-stage receipt task/PR identity mismatch")
+    producer_binding=receipt.get("producer_job") or {}
+    expected_producer={key:producer_job[key] for key in ("job_name","job_id","check_run_id","workflow_run_id","run_attempt","head_sha")}
+    if producer_binding!=expected_producer:
+        raise SystemExit("ci-ready-receipt: checker-stage receipt producer job identity mismatch")
     runner=receipt.get("runner") or {}
     expected_runner={"run_id":str(workflow_run_id),"run_attempt":str(run_attempt),"workflow_ref":proof.get("workflow_ref"),"workflow_sha":proof.get("workflow_sha")}
     if any(runner.get(field)!=value for field,value in expected_runner.items()):
         raise SystemExit("ci-ready-receipt: checker-stage receipt workflow identity mismatch")
-    if check_run.get("status")!="completed" or str(check_run.get("conclusion") or "").lower()!="success":
-        raise SystemExit("ci-ready-receipt: checker-stage required-gate check is not completed successfully")
+    if (check_run.get("status")!="completed"
+            or str(check_run.get("conclusion") or "").lower()!="success"
+            or check_run.get("head_sha")!=proof.get("workflow_sha")):
+        raise SystemExit("ci-ready-receipt: checker-stage required-gate check is not completed successfully on the verified workflow head")
     live_check=receipt.get("check") or {}
-    # The required-gate check in integration_revalidation executes on the
-    # trusted target checkout B; the receipt still binds the source PR head H
-    # independently below.  Do not confuse the check execution identity with
-    # the source head identity.
-    expected_check={"check_name":check_run.get("name"),"check_app_id":(check_run.get("app") or {}).get("id"),"check_run_id":check_run.get("id"),"check_head":proof.get("base_oid"),"workflow_run_id":str(workflow_run_id)}
+    # GitHub attaches the check to the workflow execution SHA (W), which may
+    # advance beyond frozen integration base B.  Keep W distinct from B/H/T.
+    expected_check={"check_name":check_run.get("name"),"check_app_id":(check_run.get("app") or {}).get("id"),"check_run_id":check_run.get("id"),"check_head":proof.get("workflow_sha"),"workflow_run_id":str(workflow_run_id)}
     if any(live_check.get(field)!=value for field,value in expected_check.items()):
         raise SystemExit("ci-ready-receipt: checker-stage receipt check identity mismatch")
     expected_scope_base=scope_base_for_run(repository,proof.get("base_oid"),proof.get("head_oid"))
@@ -832,12 +985,14 @@ def _checker_stage_disposition(repository, check_run, proof, artifacts, workflow
       "check_name":check_run.get("name"),"check_app_id":(check_run.get("app") or {}).get("id"),"check_run_id":check_run.get("id"),
       "integration_base":proof.get("base_oid"),"source_head":proof.get("head_oid"),"tested_tree":proof.get("tested_tree_oid"),
       "scope_base":expected_scope_base,"stage_receipt_artifact":expected_name,
+      "producer_job":expected_producer,
       "stage_receipt_digest":"sha256:"+hashlib.sha256(receipt_bytes).hexdigest()}
 
 def cargo_package_profile_for_run(repository, check_run, proof, planner, *, task_uid, task_issue_number, pr_number):
     workflow_run_id=int(proof.get("workflow_run_id") or 0)
     if workflow_run_id < 1:
         raise SystemExit("ci-ready-receipt: package profile workflow run identity missing")
+    stage_required=_checker_stage_required_by_live_task(repository,task_uid,pr_number,proof)
     artifacts=[]
     for page in range(1,101):
         response=gh("api",f"repos/{repository}/actions/runs/{workflow_run_id}/artifacts?per_page=100&page={page}")
@@ -847,12 +1002,19 @@ def cargo_package_profile_for_run(repository, check_run, proof, planner, *, task
     profile_names={value[0] for value in PROFILE_ARTIFACTS.values()}
     present={item.get("name") for item in artifacts} & profile_names
     stage_artifacts=[item for item in artifacts if isinstance(item,dict) and str(item.get("name") or "").startswith(STAGE_ARTIFACT_PREFIX)]
+    if stage_artifacts and not stage_required:
+        raise SystemExit("ci-ready-receipt: checker-stage receipt exists for a task outside the live checker-stage binding")
+    if stage_required:
+        if present:
+            raise SystemExit("ci-ready-receipt: checker-stage and package-profile artifacts cannot be mixed")
+        workflow_source=_trusted_workflow_source(repository,proof.get("workflow_sha"))
+        return _checker_stage_disposition(repository,check_run,proof,artifacts,workflow_source,task_uid=task_uid,task_issue_number=task_issue_number,pr_number=pr_number)
     if stage_artifacts and present:
         raise SystemExit("ci-ready-receipt: checker-stage and package-profile artifacts cannot be mixed")
     if not present:
         workflow_source=_trusted_workflow_source(repository,proof.get("workflow_sha"))
         if stage_artifacts:
-            return _checker_stage_disposition(repository,check_run,proof,artifacts,workflow_source,task_uid=task_uid,task_issue_number=task_issue_number,pr_number=pr_number)
+            raise SystemExit("ci-ready-receipt: unexpected checker-stage receipt for non-stage route")
         if b"cargo-package-profile-envelope" in workflow_source:
             raise SystemExit("ci-ready-receipt: package profile artifact missing from envelope-capable trusted workflow")
         planner_run_fields=RUN_FIELDS+VERSIONED_SELECTOR_FIELDS if planner.get("execution_contract")==EXECUTION_CONTRACT else RUN_FIELDS

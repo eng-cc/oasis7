@@ -97,6 +97,11 @@ jobs:
       run_doc_checker_contracts: ${{ steps.scope.outputs.run_doc_checker_contracts }}
       run_cargo_tooling_contracts: ${{ steps.scope.outputs.run_cargo_tooling_contracts }}
       run_site_contract_tests: ${{ steps.scope.outputs.run_site_contract_tests }}
+      checker_stage_pr_number: ${{ steps.checker-stage.outputs.pr_number }}
+      checker_stage_task_uid: ${{ steps.checker-stage.outputs.task_uid }}
+      checker_stage_integration_base_oid: ${{ steps.scope.outputs.integration_base_oid }}
+      checker_stage_head_oid: ${{ steps.scope.outputs.head_oid }}
+      checker_stage_source_scope_oid: ${{ steps.scope.outputs.source_scope_base }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -376,7 +381,6 @@ jobs:
           {
             echo "pr_number=${CHECKER_PR_NUMBER}"
             echo "task_uid=${resolved_task_uid}"
-            echo "receipt=${GITHUB_WORKSPACE}/output/cargo-checker-stage-admission/post-run-receipt.json"
           } >>"${GITHUB_OUTPUT}"
           echo "trusted checker-stage route selected for PR ${CHECKER_PR_NUMBER}"
 
@@ -440,13 +444,15 @@ jobs:
             "${impact_args[@]}" \
             --github-output "${GITHUB_OUTPUT}"
           source_scope_base="$(git merge-base "${base_ref}" "${head_ref}")"
-          echo "base_oid=${base_ref}" >>"${GITHUB_OUTPUT}"
-          echo "integration_base_oid=${base_ref}" >>"${GITHUB_OUTPUT}"
-          echo "head_oid=${head_ref}" >>"${GITHUB_OUTPUT}"
-          echo "source_scope_base=${source_scope_base}" >>"${GITHUB_OUTPUT}"
-          echo "integration_base=${base_ref}" >>"${GITHUB_OUTPUT}"
-          echo "source_head=${head_ref}" >>"${GITHUB_OUTPUT}"
-          echo "task_uid=${task_uid}" >>"${GITHUB_OUTPUT}"
+          {
+            echo "base_oid=${base_ref}"
+            echo "integration_base_oid=${base_ref}"
+            echo "head_oid=${head_ref}"
+            echo "source_scope_base=${source_scope_base}"
+            echo "integration_base=${base_ref}"
+            echo "source_head=${head_ref}"
+            echo "task_uid=${task_uid}"
+          } >>"${GITHUB_OUTPUT}"
       - name: Report planned scope
         run: |
           echo "execution_contract=${{ steps.scope.outputs.execution_contract }}"
@@ -814,7 +820,8 @@ jobs:
             libudev-dev
       - name: Install product-document Markdown parser
         run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
-      - name: Run required test tier
+      - id: required-gate-tests
+        name: Run required test tier
         env:
           GH_TOKEN: ${{ github.token }}
           INTEGRATION_MODE: ${{ inputs.run_mode }}
@@ -860,13 +867,11 @@ jobs:
           OASIS7_CARGO_STAGE_CHECK_HEAD: ${{ steps.scope.outputs.head_oid }}
           OASIS7_CARGO_STAGE_PR_NUMBER: ${{ steps.checker-stage.outputs.pr_number }}
           OASIS7_CARGO_STAGE_TASK_UID: ${{ steps.checker-stage.outputs.task_uid }}
-          OASIS7_CARGO_STAGE_RECEIPT: ${{ steps.checker-stage.outputs.receipt }}
         run: |
           trusted_checker="${RUNNER_TEMP}/trusted-check-cargo-package-scope"
           trusted_profile_authority="${RUNNER_TEMP}/trusted-cargo-profile-authority"
           trusted_profile_planner="${trusted_profile_authority}/cargo_package_profile_planner.py"
           trusted_profile_driver="${trusted_profile_authority}/cargo_package_profile_driver.py"
-          trusted_stage_adapter="${trusted_profile_authority}/cargo_checker_stage_admission.py"
           if [[ -n "${OASIS7_CARGO_SCOPE_BASE:-}" ]] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
             git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/check-cargo-package-scope" >"${trusted_checker}"
             chmod +x "${trusted_checker}"
@@ -877,13 +882,8 @@ jobs:
                git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/cargo_package_profile_driver.py" >"${trusted_profile_driver}" 2>/dev/null; then
               export OASIS7_CARGO_PROFILE_PLANNER="${trusted_profile_planner}"
               export OASIS7_CARGO_PROFILE_DRIVER="${trusted_profile_driver}"
-              export OASIS7_CARGO_STAGE_PLANNER="${trusted_profile_planner}"
               export OASIS7_CARGO_PROFILE_INTEGRATION_BASE="${{ steps.scope.outputs.integration_base_oid }}"
               export OASIS7_CARGO_PROFILE_SOURCE_HEAD="${OASIS7_CARGO_SCOPE_HEAD}"
-            fi
-            if git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/cargo_checker_stage_admission.py" >"${trusted_stage_adapter}" 2>/dev/null; then
-              chmod +x "${trusted_stage_adapter}"
-              export OASIS7_CARGO_STAGE_ADAPTER="${trusted_stage_adapter}"
             fi
           fi
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${INTEGRATION_MODE}" == "integration_revalidation" ]]; then
@@ -906,7 +906,8 @@ jobs:
               --policy .pm/cargo-package-scope-policy.json \
               --checker scripts/pm/check-cargo-package-scope \
               --profile native --output "${OASIS7_CARGO_PROFILE_PLAN}"
-            export OASIS7_CARGO_PROFILE_TESTED_TREE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tested_tree"])' "${OASIS7_CARGO_PROFILE_PLAN}")"
+            OASIS7_CARGO_PROFILE_TESTED_TREE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tested_tree"])' "${OASIS7_CARGO_PROFILE_PLAN}")"
+            export OASIS7_CARGO_PROFILE_TESTED_TREE
             # Receipt identity order: integration_base, source_head, tested_tree.
             python3 -I - "${OASIS7_CARGO_PROFILE_PLAN}" "${OASIS7_CARGO_PROFILE_RESULTS}" <<'PY'
           import json, os, pathlib, subprocess, sys
@@ -979,14 +980,6 @@ jobs:
           else
             CI_VERBOSE=1 ./scripts/ci-tests.sh required
           fi
-      - name: Upload Cargo checker-stage admission receipt
-        if: ${{ always() && hashFiles('output/cargo-checker-stage-admission/post-run-receipt.json') != '' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: cargo-checker-stage-admission-receipt-${{ github.run_id }}-${{ github.run_attempt }}
-          path: output/cargo-checker-stage-admission/post-run-receipt.json
-          if-no-files-found: error
-          retention-days: 7
       - name: Upload Cargo package profile plan
         if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation' && steps.checker-stage.outputs.pr_number == ''
         uses: actions/upload-artifact@v7
@@ -1033,6 +1026,105 @@ jobs:
           env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime \
             --features test_tier_required \
             execution_bridge_real_tests::real_execution_bridge::tests
+
+  checker-stage-receipt:
+    needs: required-gate
+    if: ${{ needs.required-gate.result == 'success' && needs.required-gate.outputs.checker_stage_pr_number != '' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.required-gate.outputs.checker_stage_integration_base_oid }}
+          fetch-depth: 0
+      - name: Fetch and verify the selected checker PR head
+        env:
+          CHECKER_PR_NUMBER: ${{ needs.required-gate.outputs.checker_stage_pr_number }}
+          CHECKER_INTEGRATION_BASE: ${{ needs.required-gate.outputs.checker_stage_integration_base_oid }}
+          CHECKER_SOURCE_HEAD: ${{ needs.required-gate.outputs.checker_stage_head_oid }}
+          CHECKER_SOURCE_SCOPE: ${{ needs.required-gate.outputs.checker_stage_source_scope_oid }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          checked_out_base="$(git rev-parse "HEAD^{commit}")"
+          [[ "${checked_out_base}" == "${CHECKER_INTEGRATION_BASE}" ]] || {
+            echo "fresh producer checkout differs from required-gate integration base" >&2
+            exit 1
+          }
+          source_ref="refs/remotes/origin/checker-stage-${CHECKER_PR_NUMBER}"
+          git fetch --no-tags origin "refs/pull/${CHECKER_PR_NUMBER}/head:${source_ref}"
+          fetched_head="$(git rev-parse "${source_ref}^{commit}")"
+          [[ "${fetched_head}" == "${CHECKER_SOURCE_HEAD}" ]] || {
+            echo "fetched checker PR head differs from required-gate readback" >&2
+            exit 1
+          }
+          git cat-file -e "${CHECKER_SOURCE_SCOPE}^{commit}"
+      - id: checker-stage-producer
+        name: Produce trusted checker-stage admission receipt
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_PROMPT_DISABLED: "1"
+          CHECKER_PR_NUMBER: ${{ needs.required-gate.outputs.checker_stage_pr_number }}
+          CHECKER_TASK_UID: ${{ needs.required-gate.outputs.checker_stage_task_uid }}
+          CHECKER_INTEGRATION_BASE: ${{ needs.required-gate.outputs.checker_stage_integration_base_oid }}
+          CHECKER_SOURCE_HEAD: ${{ needs.required-gate.outputs.checker_stage_head_oid }}
+          CHECKER_SOURCE_SCOPE: ${{ needs.required-gate.outputs.checker_stage_source_scope_oid }}
+          CHECKER_REPO_ROOT: ${{ github.workspace }}
+          OASIS7_CARGO_STAGE_CHECK_HEAD: ${{ needs.required-gate.outputs.checker_stage_head_oid }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          stage_dir="$(mktemp -d "${RUNNER_TEMP}/checker-stage-produce.XXXXXX")"
+          trusted_adapter="${stage_dir}/cargo_checker_stage_admission.py"
+          trusted_planner="${stage_dir}/cargo_package_profile_planner.py"
+          trusted_checker="${stage_dir}/trusted-check-cargo-package-scope"
+          trusted_policy="${stage_dir}/cargo-package-scope-policy.json"
+          preflight="${stage_dir}/preflight.json"
+          receipt="${stage_dir}/post-run-receipt.json"
+          git show "${CHECKER_SOURCE_SCOPE}:scripts/pm/cargo_checker_stage_admission.py" >"${trusted_adapter}"
+          git show "${CHECKER_SOURCE_SCOPE}:scripts/pm/cargo_package_profile_planner.py" >"${trusted_planner}"
+          git show "${CHECKER_SOURCE_SCOPE}:scripts/pm/check-cargo-package-scope" >"${trusted_checker}"
+          git show "${CHECKER_SOURCE_SCOPE}:.pm/cargo-package-scope-policy.json" >"${trusted_policy}"
+          chmod +x "${trusted_adapter}" "${trusted_checker}"
+          common=(--repository "${GITHUB_REPOSITORY}" --pr-number "${CHECKER_PR_NUMBER}"
+            --repo-root "${CHECKER_REPO_ROOT}" --base "${CHECKER_INTEGRATION_BASE}"
+            --head "${CHECKER_SOURCE_HEAD}" --scope-base "${CHECKER_SOURCE_SCOPE}"
+            --planner-path "${trusted_planner}" --checker-path "${trusted_checker}"
+            --policy-path "${trusted_policy}" --primary-package auto --task-uid "${CHECKER_TASK_UID}"
+            --run-id "${GITHUB_RUN_ID}" --run-attempt "${GITHUB_RUN_ATTEMPT}"
+            --check-head "${GITHUB_SHA}" --check-name required-gate
+            --workflow-ref "${GITHUB_WORKFLOW_REF}" --workflow-sha "${GITHUB_WORKFLOW_SHA}")
+          python3 -I "${trusted_adapter}" preflight "${common[@]}" --output "${preflight}"
+          python3 -I - "${preflight}" <<'PY'
+          import json, pathlib, subprocess, sys
+          preflight = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+          result = subprocess.run(preflight["checker_command"], check=False)
+          if result.returncode != 0:
+              raise SystemExit(result.returncode)
+          PY
+          preflight_digest="$(python3 -I - "${preflight}" <<'PY'
+          import json, pathlib, sys
+          print(json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))["preflight_digest"])
+          PY
+          )"
+          python3 -I "${trusted_adapter}" post-run "${common[@]}" \
+            --producer-job-name "${GITHUB_JOB}" \
+            --preflight "${preflight}" --preflight-digest "${preflight_digest}" \
+            --result-status passed --exit-code 0 --output "${receipt}"
+          echo "receipt=${receipt}" >>"${GITHUB_OUTPUT}"
+      - name: Upload Cargo checker-stage admission receipt
+        if: ${{ always() && steps.checker-stage-producer.outcome == 'success' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: cargo-checker-stage-admission-receipt-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ steps.checker-stage-producer.outputs.receipt }}
+          if-no-files-found: error
+          retention-days: 7
 
   windows-package-rollout-behavior:
     permissions:

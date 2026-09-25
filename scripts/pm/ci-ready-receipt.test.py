@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-import base64, copy, importlib.util, io, json, sys, tempfile, unittest, zipfile
+import base64, copy, hashlib, importlib.util, io, json, sys, tempfile, unittest, zipfile
 from contextlib import redirect_stdout, ExitStack
 from pathlib import Path
 from unittest.mock import patch
@@ -79,29 +79,126 @@ def artifact_zip(payload=None,filename="oasis7-required-plan-v1.json"):
   out=io.BytesIO()
   with zipfile.ZipFile(out,"w") as z: z.writestr(filename,json.dumps(payload if payload is not None else envelope()))
   return out.getvalue()
-def stage_receipt(task_uid=SUCCESSOR_UID,pr_number=SUCCESSOR_PR,base_oid="b"*40,head_oid="a"*40,scope_base_oid="b"*40,tested_tree="c"*40,run_id="12345",run_attempt="1",status="passed",check_head=None):
-  command=["python3","scripts/pm/check-cargo-package-scope","--base",scope_base_oid,"--head",head_oid,"--json"]
-  receipt={"schema":A.SCHEMA,"phase":"post_run","activation":"provisional","repository":"eng-cc/oasis7","default_branch":"main","task_uid":task_uid,"pr_number":pr_number,
+def stage_receipt(task_uid=SUCCESSOR_UID,pr_number=SUCCESSOR_PR,base_oid="b"*40,head_oid="a"*40,scope_base_oid="b"*40,tested_tree="c"*40,run_id="12345",run_attempt="1",status="passed",check_head=None,workflow_sha="e"*40):
+  checker_bytes=b"fixture trusted checker source"
+  policy_bytes=b"fixture trusted policy source"
+  blob_oid=lambda data: hashlib.sha1(b"blob "+str(len(data)).encode()+b"\0"+data).hexdigest()
+  execution={"source_oid":scope_base_oid,"checker_source_path":A.CHECKER_EXECUTION_PATH,
+    "checker_source_blob":blob_oid(checker_bytes),"checker_source_size":len(checker_bytes),
+    "checker_source_bytes_sha256":"sha256:"+hashlib.sha256(checker_bytes).hexdigest(),
+    "policy_source_path":A.CHECKER_POLICY_PATH,"policy_source_blob":blob_oid(policy_bytes),
+    "policy_source_size":len(policy_bytes),
+    "policy_source_bytes_sha256":"sha256:"+hashlib.sha256(policy_bytes).hexdigest(),
+    "python":sys.executable,"checker_executable":"/tmp/trusted-check-cargo-package-scope",
+    "policy_executable":"/tmp/cargo-package-scope-policy.json","repo_root":"/tmp/oasis7",
+    "primary_package":"auto"}
+  command=A._checker_command(execution,scope_base_oid=scope_base_oid,head_oid=head_oid)
+  receipt={"schema":A.SCHEMA,"phase":"post_run","activation":"provisional","repository":"eng-cc/oasis7","task_uid":task_uid,"pr_number":pr_number,
     "base_oid":base_oid,"head_oid":head_oid,"scope_base_oid":scope_base_oid,"tested_tree":tested_tree,
-    "runner":{"run_id":run_id,"run_attempt":run_attempt,"workflow_ref":"eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main","workflow_sha":"w"*40},
-    "normative_authority":{"merged_commit":"d"*40},"planner_authority":{"merged_commit":"e"*40},
-    "executing_planner":{"merged_commit":"e"*40,"source_head":"f"*40,"bytes_sha256":"sha256:"+"d"*64},
-    "check":{"check_name":"required-gate","check_app_id":42,"check_run_id":9,"check_head":head_oid if check_head is None else check_head,"workflow_run_id":run_id},
+    "runner":{"run_id":run_id,"run_attempt":run_attempt,"workflow_ref":"eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main","workflow_sha":workflow_sha},
+    "normative_authority":{**A.NORMATIVE_AUTHORITY_EXPECTED,"stage":"normative_source"},
+    "planner_authority":{**A.PLANNER_AUTHORITY_EXPECTED,"stage":"planner_authority",
+      "trusted_integration_run_id":A.PLANNER_INTEGRATION_RUN,"verification_evidence":"verified live planner fixture"},
+    "executing_planner":{"path":A.PLANNER_PATH,"authority_path":A.PLANNER_PATH,
+      "merged_commit":A.PLANNER_AUTHORITY_EXPECTED["merged_commit"],
+      "source_ref":f"refs/pull/{A.PLANNER_PR}/head",
+      "source_head":A.PLANNER_AUTHORITY_EXPECTED["source_head"],
+      "bytes_sha256":A.PLANNER_AUTHORITY_EXPECTED["authority_bytes_sha256"],
+      "size":A.PLANNER_AUTHORITY_EXPECTED["authority_size"]},
+    "checker_execution":execution,
+    "check":{"check_name":"required-gate","check_app_id":A.GITHUB_ACTIONS_APP_ID,"check_app_slug":"github-actions",
+      "check_run_id":9,"check_head":workflow_sha if check_head is None else check_head,"workflow_run_id":run_id},
+    "producer_job":{"job_name":"checker-stage-receipt","job_id":9010,"check_run_id":9011,
+      "workflow_run_id":int(run_id),"run_attempt":int(run_attempt),"head_sha":workflow_sha},
     "checker_command_digest":A.command_digest(command),
+    "preflight_digest":"sha256:"+"0"*64,"result_status":status,"exit_code":0 if status=="passed" else 1,
     "result":{"status":status,"exit_code":0 if status=="passed" else 1,"command":command,"command_digest":A.command_digest(command),"base_oid":base_oid,"head_oid":head_oid,"scope_base_oid":scope_base_oid,"tested_tree":tested_tree}}
   receipt["receipt_digest"]=A.durable_receipt_digest(receipt)
   return receipt
 def stage_artifact(run_id=12345,run_attempt=1,expired=False):
-  return {"id":88,"name":f"cargo-checker-stage-admission-receipt-{run_id}-{run_attempt}","expired":expired,"workflow_run":{"id":run_id}}
-def stage_artifact_zip(receipt=None):
+  return {"id":88,"name":f"cargo-checker-stage-admission-receipt-{run_id}-{run_attempt}","expired":expired,
+    "created_at":"2026-09-25T10:25:00Z","workflow_run":{"id":run_id}}
+def stage_artifact_zip(receipt=None,extra_member=False):
   out=io.BytesIO()
-  with zipfile.ZipFile(out,"w") as z: z.writestr("post-run-receipt.json",json.dumps(receipt if receipt is not None else stage_receipt()))
+  with zipfile.ZipFile(out,"w") as z:
+    z.writestr("post-run-receipt.json",json.dumps(receipt if receipt is not None else stage_receipt()))
+    if extra_member: z.writestr("candidate-extra.txt","unexpected")
   return out.getvalue()
+def trusted_stage_workflow_b64():
+  workflow=b'''jobs:
+  required-gate:
+    outputs:
+      checker_stage_pr_number: ${{ steps.checker-stage.outputs.pr_number }}
+      checker_stage_integration_base_oid: ${{ steps.scope.outputs.integration_base_oid }}
+    steps:
+      - id: checker-stage
+        run: git diff --name-status --find-renames
+      - id: required-gate-tests
+        name: Run required test tier
+        run: cargo-package-profile-envelope
+  checker-stage-receipt:
+    needs: required-gate
+    if: ${{ needs.required-gate.result == 'success' && needs.required-gate.outputs.checker_stage_pr_number != '' }}
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ needs.required-gate.outputs.checker_stage_integration_base_oid }}
+      - name: Fetch and verify the selected checker PR head
+        run: git fetch --no-tags origin "refs/pull/${CHECKER_PR_NUMBER}/head:refs/remotes/origin/checker-stage-${CHECKER_PR_NUMBER}"
+      - id: checker-stage-producer
+        name: Produce trusted checker-stage admission receipt
+        run: |
+          git show "${CHECKER_SOURCE_SCOPE}:scripts/pm/cargo_checker_stage_admission.py"
+          git show "${CHECKER_SOURCE_SCOPE}:scripts/pm/check-cargo-package-scope"
+          git show "${CHECKER_SOURCE_SCOPE}:.pm/cargo-package-scope-policy.json"
+          subprocess.run(preflight["checker_command"], check=False)
+          --producer-job-name "${GITHUB_JOB}"
+          --result-status passed --exit-code 0
+      - name: Upload Cargo checker-stage admission receipt
+        if: ${{ always() && steps.checker-stage-producer.outcome == 'success' }}
+        with:
+          name: cargo-checker-stage-admission-receipt-
+          path: ${{ steps.checker-stage-producer.outputs.receipt }}
+'''
+  return base64.b64encode(workflow).decode()
 def action_job(job_id,name,runner,*,run_id=12345,attempt=2,check_run_id=None,status="completed",conclusion="success",head_sha="f"*40):
   return {"id":job_id,"run_id":run_id,"run_attempt":attempt,"name":name,
     "status":status,"conclusion":conclusion,"head_sha":head_sha,
     "labels":[runner] if runner else [],
     "check_run_url":f"https://api.github.com/repos/eng-cc/oasis7/check-runs/{check_run_id if check_run_id is not None else job_id+100000}"}
+def checker_stage_job_readback(changed=None,run_id=12345,attempt=1):
+  gate=action_job(9009,"required-gate","ubuntu-24.04",run_id=run_id,attempt=attempt,check_run_id=9,head_sha="e"*40)
+  gate.update(started_at="2026-09-25T10:00:00Z",completed_at="2026-09-25T10:20:00Z")
+  producer=action_job(9010,"checker-stage-receipt","ubuntu-24.04",run_id=run_id,attempt=attempt,check_run_id=9011,head_sha="e"*40)
+  producer.update(started_at="2026-09-25T10:21:00Z",completed_at="2026-09-25T10:30:00Z")
+  if changed=="producer_failed": producer["conclusion"]="failure"
+  elif changed=="producer_cancelled": producer["conclusion"]="cancelled"
+  elif changed=="producer_skipped": producer["conclusion"]="skipped"
+  elif changed=="producer_in_progress": producer.update(status="in_progress",conclusion=None)
+  elif changed=="producer_wrong_attempt": producer["run_attempt"]=2
+  elif changed=="producer_wrong_head": producer["head_sha"]="d"*40
+  elif changed=="producer_wrong_runner": producer["labels"]=["self-hosted"]
+  elif changed=="producer_bad_check_url": producer["check_run_url"]="https://example.invalid/check/9011"
+  elif changed in ("required_gate_failed","required_gate_cancelled"):
+    gate["conclusion"]="failure" if changed=="required_gate_failed" else "cancelled"
+  elif changed=="required_gate_job_wrong_head": gate["head_sha"]="d"*40
+  jobs=[gate,producer]
+  if changed=="missing_producer_job": jobs=[gate]
+  elif changed=="duplicate_producer_job": jobs.append(dict(producer,id=9012))
+  elif changed=="cross_run_producer": producer["run_id"]=999
+  if changed=="job_pagination_incomplete": return {"total_count":len(jobs)+1,"jobs":jobs}
+  return {"total_count":len(jobs),"jobs":jobs}
+def checker_stage_producer_check(changed=None,run_id=12345):
+  check={"id":9011,"name":"checker-stage-receipt","app":{"id":A.GITHUB_ACTIONS_APP_ID,"slug":"github-actions"},
+    "status":"completed","conclusion":"success","head_sha":"e"*40,
+    "details_url":f"https://github.com/eng-cc/oasis7/actions/runs/{run_id}/job/9010"}
+  if changed=="wrong_producer_check_name": check["name"]="other"
+  elif changed=="wrong_producer_check_app": check["app"]["id"]=42
+  elif changed=="wrong_producer_check_status": check["conclusion"]="failure"
+  elif changed=="wrong_producer_check_head": check["head_sha"]="d"*40
+  elif changed=="wrong_producer_check_job": check["details_url"]=f"https://github.com/eng-cc/oasis7/actions/runs/{run_id}/job/9999"
+  return check
 def selected_action_context(children,*,run_id=12345,attempt=2,gate_job_id=9009,gate_check_id=9,artifact_created="2026-09-25T10:10:00Z"):
   gate=action_job(gate_job_id,"required-gate","ubuntu-24.04",run_id=run_id,attempt=attempt,check_run_id=gate_check_id)
   gate.update(started_at="2026-09-25T10:00:00Z",completed_at="2026-09-25T10:20:00Z")
@@ -1109,7 +1206,7 @@ class ReceiptTest(unittest.TestCase):
     proof={"workflow_run_id":12345,"workflow_sha":"b"*40,
       "workflow_ref":"eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main",
       "run_attempt":1,"base_oid":"b"*40,"head_oid":"a"*40,"tested_tree_oid":"t"*40}
-    check=run()
+    check=run(app=A.GITHUB_ACTIONS_APP_ID)
     full=M.canonical_planner({**plan(),"scope":"full",**{field:"true" for field in M.RUN_FIELDS}})
     workflow=base64.b64encode(b"name: cargo-package-profile-envelope\n").decode()
     def read(*args):
@@ -1120,16 +1217,27 @@ class ReceiptTest(unittest.TestCase):
         M.cargo_package_profile_for_run(
           "eng-cc/oasis7",check,proof,full,task_uid=UID,task_issue_number=1,pr_number=7)
 
+  def test_consumer_independently_classifies_stage_before_artifact_fallback(self):
+    proof={"base_oid":"b"*40,"head_oid":"a"*40}
+    with patch.dict(sys.modules,{"cargo_checker_stage_admission":A}),patch.object(A,"classify_checker_stage",return_value=True) as classify:
+      self.assertTrue(M._checker_stage_required_by_live_task("eng-cc/oasis7",SUCCESSOR_UID,SUCCESSOR_PR,proof))
+    classify.assert_called_once_with("eng-cc/oasis7",SUCCESSOR_PR,SUCCESSOR_UID,"b"*40,"a"*40)
+    with patch.dict(sys.modules,{"cargo_checker_stage_admission":A}),patch.object(A,"classify_checker_stage") as classify:
+      self.assertFalse(M._checker_stage_required_by_live_task("eng-cc/oasis7",UID,7,proof))
+    classify.assert_not_called()
+
   def test_checker_stage_receipt_disposition_accepts_exact_completed_run(self):
-    proof={"workflow_run_id":12345,"workflow_sha":"w"*40,
+    proof={"workflow_run_id":12345,"workflow_sha":"e"*40,"workflow_run_head_sha":"e"*40,
       "workflow_ref":"eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main",
       "run_attempt":1,"base_oid":"b"*40,"head_oid":"a"*40,"tested_tree_oid":"c"*40}
-    check=run()
+    check=run(app=A.GITHUB_ACTIONS_APP_ID); check["head_sha"]="e"*40; check["details_url"]="https://github.com/eng-cc/oasis7/actions/runs/12345/job/9009"
     full=M.canonical_planner({**plan(),"scope":"full",**{field:"true" for field in M.RUN_FIELDS}})
-    workflow=base64.b64encode(b"id: checker-stage\ngit diff --name-status --find-renames\ncargo-package-profile-envelope\ncargo-checker-stage-admission-receipt-\n").decode()
+    workflow=trusted_stage_workflow_b64()
     def read(*args):
       path=args[-1]
       if "artifacts?" in path:return {"artifacts":[stage_artifact()]}
+      if "/attempts/1/jobs?" in path:return checker_stage_job_readback()
+      if path.endswith("/check-runs/9011"):return checker_stage_producer_check()
       if "/contents/.github/workflows/rust.yml?ref=" in path:return {"encoding":"base64","content":workflow}
       if "/compare/" in path:return {"merge_base_commit":{"sha":"b"*40}}
       if path.endswith(f"/issues/{SUCCESSOR_ISSUE}"):
@@ -1143,23 +1251,27 @@ class ReceiptTest(unittest.TestCase):
           "body":f"Task: {SUCCESSOR_UID}\n\nRefs #{SUCCESSOR_ISSUE}",
           "head":{"sha":"a"*40,"repo":{"full_name":"eng-cc/oasis7"}},"base":{"sha":"b"*40,"ref":"main","repo":{"full_name":"eng-cc/oasis7"}}}
       raise AssertionError(path)
-    with patch.object(M,"gh",side_effect=read),patch.object(M,"artifact_bytes",return_value=stage_artifact_zip(stage_receipt(task_uid=SUCCESSOR_UID,check_head="b"*40))):
+    with patch.object(M,"gh",side_effect=read),patch.object(M,"artifact_bytes",return_value=stage_artifact_zip(stage_receipt(task_uid=SUCCESSOR_UID,check_head="e"*40))),patch.object(M,"_verify_checker_stage_receipt_authority") as verify_authority,patch.object(M,"_checker_stage_required_by_live_task",return_value=True) as classify_stage:
       disposition=M.cargo_package_profile_for_run("eng-cc/oasis7",check,proof,full,task_uid=SUCCESSOR_UID,task_issue_number=SUCCESSOR_ISSUE,pr_number=SUCCESSOR_PR)
+    verify_authority.assert_called_once()
+    classify_stage.assert_called_once_with("eng-cc/oasis7",SUCCESSOR_UID,SUCCESSOR_PR,proof)
     self.assertEqual("trusted_checker_stage_receipt",disposition["execution_disposition"])
     self.assertTrue(disposition["disposition_validated"])
     self.assertEqual(12345,disposition["run_id"])
     self.assertEqual("a"*40,disposition["source_head"])
 
   def test_checker_stage_receipt_rejects_source_head_as_check_identity(self):
-    proof={"workflow_run_id":12345,"workflow_sha":"w"*40,
+    proof={"workflow_run_id":12345,"workflow_sha":"e"*40,"workflow_run_head_sha":"e"*40,
       "workflow_ref":"eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main",
       "run_attempt":1,"base_oid":"b"*40,"head_oid":"a"*40,"tested_tree_oid":"c"*40}
-    check=run()
+    check=run(app=A.GITHUB_ACTIONS_APP_ID); check["head_sha"]="e"*40; check["details_url"]="https://github.com/eng-cc/oasis7/actions/runs/12345/job/9009"
     full=M.canonical_planner({**plan(),"scope":"full",**{field:"true" for field in M.RUN_FIELDS}})
-    workflow=base64.b64encode(b"id: checker-stage\ngit diff --name-status --find-renames\ncargo-package-profile-envelope\ncargo-checker-stage-admission-receipt-\n").decode()
+    workflow=trusted_stage_workflow_b64()
     def read(*args):
       path=args[-1]
       if "artifacts?" in path:return {"artifacts":[stage_artifact()]}
+      if "/attempts/1/jobs?" in path:return checker_stage_job_readback()
+      if path.endswith("/check-runs/9011"):return checker_stage_producer_check()
       if "/contents/.github/workflows/rust.yml?ref=" in path:return {"encoding":"base64","content":workflow}
       if "/compare/" in path:return {"merge_base_commit":{"sha":"b"*40}}
       if path.endswith(f"/issues/{SUCCESSOR_ISSUE}"):
@@ -1173,16 +1285,34 @@ class ReceiptTest(unittest.TestCase):
           "body":f"Task: {SUCCESSOR_UID}\n\nRefs #{SUCCESSOR_ISSUE}",
           "head":{"sha":"a"*40,"repo":{"full_name":"eng-cc/oasis7"}},"base":{"sha":"b"*40,"ref":"main","repo":{"full_name":"eng-cc/oasis7"}}}
       raise AssertionError(path)
-    with patch.object(M,"gh",side_effect=read),patch.object(M,"artifact_bytes",return_value=stage_artifact_zip(stage_receipt(task_uid=SUCCESSOR_UID,check_head="a"*40))):
+    with patch.object(M,"gh",side_effect=read),patch.object(M,"artifact_bytes",return_value=stage_artifact_zip(stage_receipt(task_uid=SUCCESSOR_UID,check_head="a"*40))),patch.object(M,"_verify_checker_stage_receipt_authority"),patch.object(M,"_checker_stage_required_by_live_task",return_value=True):
       with self.assertRaisesRegex(SystemExit,"receipt check identity mismatch"):
         M.cargo_package_profile_for_run("eng-cc/oasis7",check,proof,full,task_uid=SUCCESSOR_UID,task_issue_number=SUCCESSOR_ISSUE,pr_number=SUCCESSOR_PR)
 
-  def test_checker_stage_receipt_tamper_and_expiry_fail_closed(self):
-    proof={"workflow_run_id":12345,"workflow_sha":"w"*40,
+  def test_live_stage_route_cannot_fall_back_to_generic_artifacts_when_producer_is_missing(self):
+    proof={"workflow_run_id":12345,"workflow_sha":"e"*40,"workflow_run_head_sha":"e"*40,
       "workflow_ref":"eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main",
       "run_attempt":1,"base_oid":"b"*40,"head_oid":"a"*40,"tested_tree_oid":"c"*40}
-    check=run(); full=M.canonical_planner({**plan(),"scope":"full",**{field:"true" for field in M.RUN_FIELDS}})
-    workflow=base64.b64encode(b"id: checker-stage\ngit diff --name-status --find-renames\ncargo-package-profile-envelope\ncargo-checker-stage-admission-receipt-\n").decode()
+    check=run(app=A.GITHUB_ACTIONS_APP_ID)
+    planner_artifacts=[
+      {"id":100+index,"name":name,"expired":False,"workflow_run":{"id":12345}}
+      for index,name in enumerate(item[0] for item in M.PROFILE_ARTIFACTS.values())
+    ]
+    def read(*args):
+      if "artifacts?" in args[-1]: return {"artifacts":planner_artifacts}
+      raise AssertionError(args[-1])
+    full=M.canonical_planner({**plan(),"scope":"full",**{field:"true" for field in M.RUN_FIELDS}})
+    with patch.object(M,"gh",side_effect=read),patch.object(M,"_checker_stage_required_by_live_task",return_value=True):
+      with self.assertRaisesRegex(SystemExit,"cannot be mixed"):
+        M.cargo_package_profile_for_run("eng-cc/oasis7",check,proof,full,
+          task_uid=SUCCESSOR_UID,task_issue_number=SUCCESSOR_ISSUE,pr_number=SUCCESSOR_PR)
+
+  def test_checker_stage_receipt_tamper_and_expiry_fail_closed(self):
+    proof={"workflow_run_id":12345,"workflow_sha":"e"*40,"workflow_run_head_sha":"e"*40,
+      "workflow_ref":"eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main",
+      "run_attempt":1,"base_oid":"b"*40,"head_oid":"a"*40,"tested_tree_oid":"c"*40}
+    check=run(app=A.GITHUB_ACTIONS_APP_ID); check["head_sha"]="e"*40; check["details_url"]="https://github.com/eng-cc/oasis7/actions/runs/12345/job/9009"; full=M.canonical_planner({**plan(),"scope":"full",**{field:"true" for field in M.RUN_FIELDS}})
+    workflow=trusted_stage_workflow_b64()
     for changed in (
       "digest", "head", "status", "scope", "wrong_task", "wrong_check",
       "runner_run", "runner_attempt", "runner_ref", "runner_sha",
@@ -1190,10 +1320,20 @@ class ReceiptTest(unittest.TestCase):
       "wrong_pull_number", "wrong_pull_task", "wrong_pull_issue", "candidate_issue_ref",
       "issue_wrong_number", "issue_wrong_uid", "issue_ambiguous_pr", "issue_late", "issue_equal",
       "issue_bad_timestamp", "pr_bad_timestamp", "renamed_path", "copied_path",
-      "expired", "missing", "wrong_run", "duplicate", "extra_stage",
+      "expired", "missing", "wrong_run", "duplicate", "extra_stage", "forged_authority",
+      "missing_producer_job", "duplicate_producer_job", "producer_failed", "producer_cancelled",
+      "producer_skipped", "producer_in_progress", "producer_wrong_attempt", "producer_wrong_head", "producer_wrong_runner",
+      "producer_bad_check_url", "wrong_producer_check_name", "wrong_producer_check_app",
+      "wrong_producer_check_status", "wrong_producer_check_head", "wrong_producer_check_job",
+      "required_gate_failed", "required_gate_cancelled", "required_gate_wrong_head", "required_gate_job_wrong_head", "cross_run_producer", "job_pagination_incomplete",
+      "artifact_before_producer", "wrong_attempt_artifact", "extra_zip_member",
+      "forged_producer_job",
     ):
       receipt=stage_receipt(task_uid=SUCCESSOR_UID)
+      check=run(app=A.GITHUB_ACTIONS_APP_ID); check["head_sha"]="e"*40; check["details_url"]="https://github.com/eng-cc/oasis7/actions/runs/12345/job/9009"
+      if changed=="required_gate_wrong_head": check["head_sha"]="d"*40
       artifact_items=[] if changed=="missing" else ([stage_artifact(run_id=999)] if changed=="wrong_run" else ([stage_artifact(),stage_artifact()] if changed=="duplicate" else ([stage_artifact(),{"id":89,"name":"cargo-checker-stage-admission-receipt-extra","expired":False,"workflow_run":{"id":12345}}] if changed=="extra_stage" else [stage_artifact(expired=changed=="expired")])) )
+      if changed=="wrong_attempt_artifact": artifact_items=[stage_artifact(run_attempt=2)]
       if changed=="digest": receipt["receipt_digest"]="sha256:"+"e"*64
       elif changed=="head": receipt["head_oid"]="c"*40; receipt["result"]["head_oid"]="c"*40; receipt["receipt_digest"]=A.durable_receipt_digest(receipt)
       elif changed=="status": receipt["result"]["status"]="failed"; receipt["result"]["exit_code"]=1; receipt["receipt_digest"]=A.durable_receipt_digest(receipt)
@@ -1204,9 +1344,19 @@ class ReceiptTest(unittest.TestCase):
       elif changed=="runner_attempt": receipt["runner"]["run_attempt"]="2"; receipt["receipt_digest"]=A.durable_receipt_digest(receipt)
       elif changed=="runner_ref": receipt["runner"]["workflow_ref"]="eng-cc/oasis7/.github/workflows/other.yml@refs/heads/main"; receipt["receipt_digest"]=A.durable_receipt_digest(receipt)
       elif changed=="runner_sha": receipt["runner"]["workflow_sha"]="x"*40; receipt["receipt_digest"]=A.durable_receipt_digest(receipt)
+      elif changed=="forged_authority":
+        receipt["planner_authority"]={}
+        receipt["receipt_digest"]=A.durable_receipt_digest(receipt)
+      elif changed=="forged_producer_job":
+        receipt["producer_job"]["job_id"]=9999
+        receipt["receipt_digest"]=A.durable_receipt_digest(receipt)
+      if changed=="artifact_before_producer":
+        artifact_items[0]["created_at"]="2026-09-25T10:15:00Z"
       def read(*args):
         path=args[-1]
         if "artifacts?" in path:return {"artifacts":artifact_items}
+        if "/attempts/1/jobs?" in path:return checker_stage_job_readback(changed)
+        if path.endswith("/check-runs/9011"):return checker_stage_producer_check(changed)
         if "/contents/.github/workflows/rust.yml?ref=" in path:return {"encoding":"base64","content":workflow}
         if "/compare/" in path:return {"merge_base_commit":{"sha":"b"*40}}
         if path.endswith(f"/issues/{SUCCESSOR_ISSUE}"):
@@ -1242,7 +1392,7 @@ class ReceiptTest(unittest.TestCase):
           return {"number":SUCCESSOR_PR + 1 if changed=="wrong_pull_number" else SUCCESSOR_PR,
             "state":"open","merged":False,"created_at":created_at,"body":body,"head":head,"base":base}
         raise AssertionError(path)
-      with self.subTest(changed=changed),patch.object(M,"gh",side_effect=read),patch.object(M,"artifact_bytes",return_value=stage_artifact_zip(receipt)):
+      with self.subTest(changed=changed),patch.object(M,"gh",side_effect=read),patch.object(M,"artifact_bytes",return_value=stage_artifact_zip(receipt,extra_member=changed=="extra_zip_member")),patch.object(M,"_verify_checker_stage_receipt_authority"),patch.object(M,"_checker_stage_required_by_live_task",return_value=True):
         with self.assertRaisesRegex(SystemExit,"stage|receipt|expired|digest|identity|successful|mismatch|repository|base|canonical|timestamp|predate|reference|rename/copy|UID"):
           M.cargo_package_profile_for_run("eng-cc/oasis7",check,proof,full,task_uid=SUCCESSOR_UID,task_issue_number=SUCCESSOR_ISSUE,pr_number=SUCCESSOR_PR)
 if __name__=="__main__": unittest.main()

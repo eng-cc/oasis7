@@ -708,13 +708,8 @@ run_cargo_package_scope_check() {
   local checker="${OASIS7_CARGO_SCOPE_CHECKER:-./scripts/pm/check-cargo-package-scope}"
   local policy="./.pm/cargo-package-scope-policy.json"
   local primary_package="${OASIS7_CARGO_PRIMARY_PACKAGE:-auto}"
-  local stage_adapter="${OASIS7_CARGO_STAGE_ADAPTER:-}"
-  local stage_planner="${OASIS7_CARGO_STAGE_PLANNER:-${OASIS7_CARGO_PROFILE_PLANNER:-}}"
   local integration_base="${OASIS7_CARGO_SCOPE_INTEGRATION_BASE:-$base_oid}"
   local stage_pr_number="${OASIS7_CARGO_STAGE_PR_NUMBER:-}"
-  local stage_receipt="${OASIS7_CARGO_STAGE_RECEIPT:-}"
-  local stage_preflight=""
-  local stage_digest=""
   if [[ -z "$base_oid" || -z "$head_oid" ]]; then
     echo "skip: Cargo package scope audit reason=trusted_base_head_not_provided claim_boundary=contract_suite_only"
     return 0
@@ -727,49 +722,15 @@ run_cargo_package_scope_check() {
     echo "skip: Cargo package scope audit reason=trusted_base_policy_unavailable claim_boundary=contract_suite_only"
     return 0
   fi
-  if [[ -n "$stage_pr_number" && -z "$stage_adapter" ]]; then
-    echo "error: checker-stage PR requested without trusted stage adapter" >&2
-    return 1
-  fi
   if [[ -n "${OASIS7_CARGO_STAGE_TASK_UID:-}" && -z "$stage_pr_number" ]]; then
     echo "error: checker-stage task identity provided without checker-stage PR" >&2
     return 1
   fi
-  if [[ -n "$stage_adapter" && -n "$stage_pr_number" ]]; then
-    [[ -f "$stage_adapter" && -f "$stage_planner" && -n "$stage_pr_number" && \
-      -n "${OASIS7_CARGO_STAGE_TASK_UID:-}" && -n "$integration_base" && -n "$stage_receipt" ]] || {
-      echo "error: trusted checker-stage adapter inputs are incomplete" >&2
+  if [[ -n "$stage_pr_number" ]]; then
+    [[ -n "${OASIS7_CARGO_STAGE_TASK_UID:-}" && -n "$integration_base" ]] || {
+      echo "error: checker-stage test route identity is incomplete" >&2
       return 1
     }
-    mkdir -p "$(dirname "$stage_receipt")"
-    stage_preflight="$(mktemp)"
-    if ! run python3 "$stage_adapter" preflight \
-      --repository "${GITHUB_REPOSITORY:-}" \
-      --pr-number "$stage_pr_number" \
-      --repo-root "$repo_root" \
-      --base "$integration_base" \
-      --head "$head_oid" \
-      --scope-base "$base_oid" \
-      --task-uid "${OASIS7_CARGO_STAGE_TASK_UID}" \
-      --planner-path "$stage_planner" \
-      --checker-path "$checker" \
-      --policy-path "$repo_root/$policy" \
-      --primary-package "$primary_package" \
-      --run-id "${GITHUB_RUN_ID:-}" \
-      --run-attempt "${GITHUB_RUN_ATTEMPT:-}" \
-      --check-head "${GITHUB_SHA:-$head_oid}" \
-      --check-name required-gate \
-      --workflow-ref "${GITHUB_WORKFLOW_REF:-}" \
-      --workflow-sha "${GITHUB_WORKFLOW_SHA:-}" \
-      --output "$stage_preflight"; then
-      rm -f "$stage_preflight"
-      return 1
-    fi
-    stage_digest="$(python3 - "$stage_preflight" <<'PY'
-import json, sys
-print(json.load(open(sys.argv[1], encoding="utf-8"))["preflight_digest"])
-PY
-    )"
   fi
   local checker_result=0
   run python3 "$checker" \
@@ -780,35 +741,7 @@ PY
     --policy "$repo_root/$policy" \
     --json || checker_result=$?
   if (( checker_result != 0 )); then
-    [[ -z "$stage_preflight" ]] || rm -f "$stage_preflight"
     return "$checker_result"
-  fi
-  if [[ -n "$stage_preflight" ]]; then
-    run python3 "$stage_adapter" post-run \
-      --repository "${GITHUB_REPOSITORY:-}" \
-      --pr-number "$stage_pr_number" \
-      --repo-root "$repo_root" \
-      --base "$integration_base" \
-      --head "$head_oid" \
-      --scope-base "$base_oid" \
-      --planner-path "$stage_planner" \
-      --checker-path "$checker" \
-      --policy-path "$repo_root/$policy" \
-      --primary-package "$primary_package" \
-      --check-head "${GITHUB_SHA:-$head_oid}" \
-      --check-name required-gate \
-      --preflight "$stage_preflight" \
-      --preflight-digest "$stage_digest" \
-      --result-status passed \
-      --exit-code 0 \
-      --run-id "${GITHUB_RUN_ID:-}" \
-      --run-attempt "${GITHUB_RUN_ATTEMPT:-}" \
-      --workflow-ref "${GITHUB_WORKFLOW_REF:-}" \
-      --workflow-sha "${GITHUB_WORKFLOW_SHA:-}" \
-      --output "$stage_receipt"
-    rm -f "$stage_preflight"
-  elif [[ -n "$stage_adapter" ]]; then
-    echo "skip: checker-stage admission reason=no_live_checker_pr claim_boundary=conservative_scope_only"
   fi
 }
 

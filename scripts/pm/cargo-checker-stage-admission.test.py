@@ -5,6 +5,7 @@ import json
 import importlib.util
 import io
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -640,6 +641,51 @@ class CheckerStageAdmissionTest(unittest.TestCase):
         self.assertIn("OASIS7_CARGO_STAGE_TASK_UID", workflow)
         self.assertIn("cargo-checker-stage-admission-receipt-", workflow)
         self.assertIn("steps.checker-stage.outputs.pr_number == ''", workflow)
+
+    def test_workflow_produces_receipt_on_separate_success_dependent_runner(self):
+        workflow = (Path(__file__).parents[2] / ".github/workflows/rust.yml").read_text(
+            encoding="utf-8"
+        )
+        required_gate_start = workflow.index("  required-gate:")
+        producer_start = workflow.index("  checker-stage-receipt:")
+        following_job = workflow.index("\n  windows-package-rollout-behavior:", producer_start)
+        required_gate_block = workflow[required_gate_start:producer_start]
+        producer_block = workflow[producer_start:following_job]
+        tests = required_gate_block.index("      - id: required-gate-tests")
+        upload_in_tests_job = required_gate_block.find("Upload Cargo checker-stage admission receipt")
+        self.assertGreater(tests, 0)
+        self.assertEqual(-1, upload_in_tests_job)
+        self.assertIn("needs: required-gate", producer_block)
+        self.assertIn(
+            "if: ${{ needs.required-gate.result == 'success' && needs.required-gate.outputs.checker_stage_pr_number != '' }}",
+            producer_block,
+        )
+        self.assertIn("ref: ${{ needs.required-gate.outputs.checker_stage_integration_base_oid }}", producer_block)
+        self.assertIn("refs/pull/${CHECKER_PR_NUMBER}/head", producer_block)
+        self.assertIn('git show "${CHECKER_SOURCE_SCOPE}:scripts/pm/cargo_checker_stage_admission.py"', producer_block)
+        self.assertIn('subprocess.run(preflight["checker_command"], check=False)', producer_block)
+        self.assertIn("steps.checker-stage-producer.outcome == 'success'", producer_block)
+        self.assertIn("steps.checker-stage-producer.outputs.receipt", producer_block)
+        producer_steps = [line.strip() for line in producer_block.splitlines() if line.startswith("      - ")]
+        producer_index = producer_steps.index("- id: checker-stage-producer")
+        upload_index = producer_steps.index("- name: Upload Cargo checker-stage admission receipt")
+        self.assertEqual(producer_index + 1, upload_index)
+        self.assertIn('checked_out_base="$(git rev-parse "HEAD^{commit}")"', producer_block)
+        self.assertNotIn("CI_VERBOSE=", producer_block)
+        self.assertNotIn("./scripts/ci-tests.sh", producer_block)
+        source_truth = (Path(__file__).parents[2] / "doc/engineering/workflow/source-of-truth.md").read_text(
+            encoding="utf-8"
+        )
+        stage_contract = source_truth.split('<a id="cargo-checker-stage-integration-route">', 1)[1].split(
+            '<a id="', 1
+        )[0]
+        self.assertIn("separate GitHub-hosted producer job on a fresh runner", stage_contract)
+        self.assertIn("completed successfully after required-gate", stage_contract)
+
+        ci_tests = (Path(__file__).parents[2] / "scripts/ci-tests.sh").read_text(
+            encoding="utf-8"
+        )
+        self.assertNotIn('"$stage_adapter" post-run', ci_tests)
 
     def test_workflow_uses_source_head_for_checker_stage_check_lookup(self):
         workflow = (Path(__file__).parents[2] / ".github/workflows/rust.yml").read_text(
@@ -1512,11 +1558,13 @@ class CheckerStageAdmissionTest(unittest.TestCase):
         checker = {
             "task_uid": TASK_UID, "changed_paths": sorted(MODULE.CHECKER_SCOPE),
         }
+        execution = self._checker_execution_fixture(CHECKER_SCOPE)
         with patch.object(MODULE, "verify_authority_chain", return_value=chain), \
              patch.object(MODULE, "classify_checker_stage", return_value=True), \
              patch.object(MODULE, "verify_executing_planner", return_value={"bytes_sha256": planner_authority["authority_bytes_sha256"]}), \
              patch.object(MODULE, "verify_checker_pr", return_value=checker), \
-             patch.object(MODULE, "_git", return_value=TESTED_TREE):
+             patch.object(MODULE, "_git", return_value=TESTED_TREE), \
+             patch.object(MODULE, "_checker_execution_context", return_value=execution):
             receipt = MODULE.build_preflight(
                 repository=REPOSITORY, pr_number=CHECKER_PR, task_uid=TASK_UID,
                 base_oid=CHECKER_BASE, head_oid=CHECKER_HEAD, scope_base_oid=CHECKER_SCOPE,
@@ -1527,7 +1575,30 @@ class CheckerStageAdmissionTest(unittest.TestCase):
         self.assertEqual("preflight", receipt["phase"])
         self.assertEqual(TESTED_TREE, receipt["tested_tree"])
         self.assertEqual(TASK_UID, receipt["task_uid"])
+        self.assertEqual(execution, receipt["checker_execution"])
         self.assertEqual(receipt["preflight_digest"], MODULE.preflight_digest(receipt))
+
+    @staticmethod
+    def _checker_execution_fixture(scope_oid):
+        checker_bytes = b"fixture trusted checker source"
+        policy_bytes = b"fixture trusted policy source"
+        blob_oid = lambda data: hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
+        return {
+            "source_oid": scope_oid,
+            "checker_source_path": MODULE.CHECKER_EXECUTION_PATH,
+            "checker_source_blob": blob_oid(checker_bytes),
+            "checker_source_size": len(checker_bytes),
+            "checker_source_bytes_sha256": "sha256:" + hashlib.sha256(checker_bytes).hexdigest(),
+            "policy_source_path": MODULE.CHECKER_POLICY_PATH,
+            "policy_source_blob": blob_oid(policy_bytes),
+            "policy_source_size": len(policy_bytes),
+            "policy_source_bytes_sha256": "sha256:" + hashlib.sha256(policy_bytes).hexdigest(),
+            "python": sys.executable,
+            "checker_executable": "/tmp/trusted-check-cargo-package-scope",
+            "policy_executable": "/tmp/cargo-package-scope-policy.json",
+            "repo_root": "/tmp/oasis7",
+            "primary_package": "auto",
+        }
 
     def test_postrun_rejects_missing_failed_wrong_head_and_dirty_receipt(self):
         preflight = {
@@ -1559,7 +1630,7 @@ class CheckerStageAdmissionTest(unittest.TestCase):
             "base_oid": CHECKER_BASE, "head_oid": CHECKER_HEAD,
             "scope_base_oid": CHECKER_SCOPE, "tested_tree": TESTED_TREE,
             "checker_command_digest": "sha256:" + "a" * 64,
-            "runner": {"run_id": "99", "run_attempt": "1"},
+            "runner": {"run_id": "99", "run_attempt": "1", "workflow_ref": "workflow", "workflow_sha": "w" * 40},
         }
         with self.assertRaisesRegex(MODULE.AdmissionError, "runner"):
             MODULE.verify_postrun(preflight, MODULE.preflight_digest(preflight),
@@ -1611,32 +1682,93 @@ class CheckerStageAdmissionTest(unittest.TestCase):
             with self.assertRaisesRegex(MODULE.AdmissionError, "missing or ambiguous"):
                 MODULE.verify_live_check_identity(REPOSITORY, check_head, "99")
 
+    def test_postrun_records_only_unique_current_producer_job_identity(self):
+        job = {
+            "id": 55, "run_id": 99, "run_attempt": 1,
+            "name": MODULE.CHECKER_STAGE_PRODUCER_JOB,
+            "status": "in_progress", "conclusion": None,
+            "head_sha": "5" * 40, "labels": ["ubuntu-24.04"],
+            "check_run_url": f"https://api.github.com/repos/{REPOSITORY}/check-runs/56",
+        }
+        with patch.object(MODULE, "gh_api", return_value={"total_count": 1, "jobs": [job]}):
+            identity = MODULE.verify_live_producer_job_identity(
+                REPOSITORY, "99", "1", MODULE.CHECKER_STAGE_PRODUCER_JOB
+            )
+        self.assertEqual({
+            "job_name": MODULE.CHECKER_STAGE_PRODUCER_JOB,
+            "job_id": 55, "check_run_id": 56, "workflow_run_id": 99,
+            "run_attempt": 1, "head_sha": "5" * 40,
+        }, identity)
+        invalid = (
+            (dict(job, name="other"), 1, "missing or ambiguous"),
+            (dict(job, run_attempt=2), 1, "current workflow attempt"),
+            (dict(job, status="completed", conclusion="success"), 1, "current workflow attempt"),
+            (dict(job, head_sha="x" * 40), 1, "OID"),
+            (dict(job, labels=["self-hosted"]), 1, "runner identity"),
+            (dict(job, check_run_url="https://example.invalid/check/56"), 1, "check-run URL"),
+            (dict(job), 2, "pagination is incomplete"),
+        )
+        for bad_job, total_count, message in invalid:
+            with self.subTest(job=bad_job, total_count=total_count), patch.object(
+                MODULE, "gh_api", return_value={"total_count": total_count, "jobs": [bad_job]}
+            ):
+                with self.assertRaisesRegex(MODULE.AdmissionError, message):
+                    MODULE.verify_live_producer_job_identity(
+                        REPOSITORY, "99", "1", MODULE.CHECKER_STAGE_PRODUCER_JOB
+                    )
+        with patch.object(MODULE, "gh_api", return_value={"total_count": 2, "jobs": [job, dict(job, id=57)]}):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "missing or ambiguous"):
+                MODULE.verify_live_producer_job_identity(
+                    REPOSITORY, "99", "1", MODULE.CHECKER_STAGE_PRODUCER_JOB
+                )
+        with self.assertRaisesRegex(MODULE.AdmissionError, "name is not trusted"):
+            MODULE.verify_live_producer_job_identity(REPOSITORY, "99", "1", "candidate-job")
+
     def test_postrun_receipt_is_durable_and_complete(self):
-        normative_authority = dict(MODULE.NORMATIVE_AUTHORITY_EXPECTED)
-        planner_authority = dict(MODULE.PLANNER_AUTHORITY_EXPECTED)
+        normative_authority = {**MODULE.NORMATIVE_AUTHORITY_EXPECTED, "stage": "normative_source"}
+        planner_authority = {
+            **MODULE.PLANNER_AUTHORITY_EXPECTED,
+            "stage": "planner_authority",
+            "trusted_integration_run_id": MODULE.PLANNER_INTEGRATION_RUN,
+            "verification_evidence": "verified live planner publication fixture",
+        }
+        execution = self._checker_execution_fixture(CHECKER_SCOPE)
+        command = MODULE._checker_command(
+            execution, scope_base_oid=CHECKER_SCOPE, head_oid=CHECKER_HEAD
+        )
         preflight = {
             "schema": MODULE.SCHEMA, "phase": "preflight", "repository": REPOSITORY,
             "task_uid": TASK_UID, "pr_number": CHECKER_PR, "base_oid": CHECKER_BASE,
             "head_oid": CHECKER_HEAD, "scope_base_oid": CHECKER_SCOPE,
-            "tested_tree": TESTED_TREE, "checker_command": ["python3", "checker"],
-            "checker_command_digest": MODULE.command_digest(["python3", "checker"]),
+            "tested_tree": TESTED_TREE, "checker_command": command,
+            "checker_command_digest": MODULE.command_digest(command),
+            "checker_execution": execution,
             "normative_authority": normative_authority,
             "planner_authority": planner_authority,
-            "runner": {"run_id": "99", "run_attempt": "1"},
+            "runner": {"run_id": "99", "run_attempt": "1", "workflow_ref": "workflow", "workflow_sha": "w" * 40},
         }
         receipt = MODULE.build_postrun_receipt(
             preflight,
             {"normative": normative_authority, "planner": planner_authority},
-            {"path": MODULE.PLANNER_PATH, "source_head": "8" * 40,
-             "merged_commit": PLANNER_COMMIT, "bytes_sha256": "sha256:" + "b" * 64},
-            {"check_name": "required-gate", "check_app_id": 15368, "check_run_id": 123,
+            {"path": MODULE.PLANNER_PATH, "authority_path": MODULE.PLANNER_PATH,
+             "source_ref": f"refs/pull/{MODULE.PLANNER_PR}/head",
+             "source_head": MODULE.PLANNER_AUTHORITY_EXPECTED["source_head"],
+             "merged_commit": MODULE.PLANNER_AUTHORITY_EXPECTED["merged_commit"],
+             "bytes_sha256": MODULE.PLANNER_AUTHORITY_EXPECTED["authority_bytes_sha256"],
+             "size": MODULE.PLANNER_AUTHORITY_EXPECTED["authority_size"]},
+            {"check_name": "required-gate", "check_app_id": 15368,
+             "check_app_slug": "github-actions", "check_run_id": 123,
              "check_head": CHECKER_HEAD, "workflow_run_id": "99"},
+            {"job_name": MODULE.CHECKER_STAGE_PRODUCER_JOB, "job_id": 55,
+             "check_run_id": 56, "workflow_run_id": 99, "run_attempt": 1,
+             "head_sha": CHECKER_HEAD},
             status="passed", exit_code=0,
         )
         self.assertEqual("provisional", receipt["activation"])
-        for field in ("normative_authority", "planner_authority", "executing_planner", "check", "result"):
+        for field in ("normative_authority", "planner_authority", "executing_planner", "check", "producer_job", "result"):
             self.assertIn(field, receipt)
         self.assertEqual("passed", receipt["result"]["status"])
+        self.assertEqual(preflight["checker_execution"], receipt["checker_execution"])
         self.assertIs(MODULE.verify_durable_postrun_receipt(receipt), receipt)
         tampered = dict(receipt, head_oid="9" * 40)
         with self.assertRaisesRegex(MODULE.AdmissionError, "digest"):
@@ -1648,6 +1780,132 @@ class CheckerStageAdmissionTest(unittest.TestCase):
         }
         with self.assertRaisesRegex(MODULE.AdmissionError, "planner_authority identity changed"):
             MODULE._assert_preflight_authorities_unchanged(preflight, changed_authorities)
+
+    def test_durable_postrun_rejects_recomputed_public_digest_with_forged_authority(self):
+        normative_authority = {**MODULE.NORMATIVE_AUTHORITY_EXPECTED, "stage": "normative_source"}
+        planner_authority = {
+            **MODULE.PLANNER_AUTHORITY_EXPECTED,
+            "stage": "planner_authority",
+            "trusted_integration_run_id": MODULE.PLANNER_INTEGRATION_RUN,
+            "verification_evidence": "verified live planner publication fixture",
+        }
+        execution = self._checker_execution_fixture(CHECKER_SCOPE)
+        command = MODULE._checker_command(
+            execution, scope_base_oid=CHECKER_SCOPE, head_oid=CHECKER_HEAD
+        )
+        preflight = {
+            "schema": MODULE.SCHEMA, "phase": "preflight", "repository": REPOSITORY,
+            "task_uid": TASK_UID, "pr_number": CHECKER_PR, "base_oid": CHECKER_BASE,
+            "head_oid": CHECKER_HEAD, "scope_base_oid": CHECKER_SCOPE,
+            "tested_tree": TESTED_TREE, "checker_command": command,
+            "checker_command_digest": MODULE.command_digest(command),
+            "checker_execution": execution,
+            "normative_authority": normative_authority,
+            "planner_authority": planner_authority,
+            "runner": {"run_id": "99", "run_attempt": "1", "workflow_ref": "workflow", "workflow_sha": "w" * 40},
+        }
+        receipt = MODULE.build_postrun_receipt(
+            preflight,
+            {"normative": normative_authority, "planner": planner_authority},
+            {"path": MODULE.PLANNER_PATH, "authority_path": MODULE.PLANNER_PATH,
+             "source_ref": f"refs/pull/{MODULE.PLANNER_PR}/head",
+             "source_head": MODULE.PLANNER_AUTHORITY_EXPECTED["source_head"],
+             "merged_commit": MODULE.PLANNER_AUTHORITY_EXPECTED["merged_commit"],
+             "bytes_sha256": MODULE.PLANNER_AUTHORITY_EXPECTED["authority_bytes_sha256"],
+             "size": MODULE.PLANNER_AUTHORITY_EXPECTED["authority_size"]},
+            {"check_name": "required-gate", "check_app_id": 15368,
+             "check_app_slug": "github-actions", "check_run_id": 123,
+             "check_head": CHECKER_HEAD, "workflow_run_id": "99"},
+            {"job_name": MODULE.CHECKER_STAGE_PRODUCER_JOB, "job_id": 55,
+             "check_run_id": 56, "workflow_run_id": 99, "run_attempt": 1,
+             "head_sha": CHECKER_HEAD},
+            status="passed", exit_code=0,
+        )
+        for field, forged in (
+            ("normative_authority", {}),
+            ("planner_authority", {}),
+            ("planner_authority", {**planner_authority, "merged_commit": "9" * 40}),
+            ("planner_authority", {**planner_authority, "untrusted_extra": "candidate"}),
+        ):
+            with self.subTest(field=field, forged=forged):
+                tampered = json.loads(json.dumps(receipt))
+                tampered[field] = forged
+                tampered["receipt_digest"] = MODULE.durable_receipt_digest(tampered)
+                with self.assertRaisesRegex(MODULE.AdmissionError, "authority"):
+                    MODULE.verify_durable_postrun_receipt(tampered)
+
+        forged_planner = json.loads(json.dumps(receipt))
+        forged_planner["executing_planner"]["bytes_sha256"] = "sha256:" + "9" * 64
+        forged_planner["receipt_digest"] = MODULE.durable_receipt_digest(forged_planner)
+        with self.assertRaisesRegex(MODULE.AdmissionError, "planner.*authority|authority.*planner"):
+            MODULE.verify_durable_postrun_receipt(forged_planner)
+
+        forged_command = json.loads(json.dumps(receipt))
+        command_args = forged_command["result"]["command"]
+        command_args[command_args.index("--head") + 1] = "9" * 40
+        command_digest = MODULE.command_digest(command_args)
+        forged_command["checker_command_digest"] = command_digest
+        forged_command["result"]["command_digest"] = command_digest
+        forged_command["receipt_digest"] = MODULE.durable_receipt_digest(forged_command)
+        with self.assertRaisesRegex(MODULE.AdmissionError, "checker command"):
+            MODULE.verify_durable_postrun_receipt(forged_command)
+
+        forged_producer = json.loads(json.dumps(receipt))
+        forged_producer["producer_job"] = {}
+        forged_producer["receipt_digest"] = MODULE.durable_receipt_digest(forged_producer)
+        with self.assertRaisesRegex(MODULE.AdmissionError, "producer job"):
+            MODULE.verify_durable_postrun_receipt(forged_producer)
+
+    def test_postrun_receipt_authority_rechecks_live_receipts_and_command_sources(self):
+        checker_bytes = b"fixture trusted checker source"
+        policy_bytes = b"fixture trusted policy source"
+        normative = {**MODULE.NORMATIVE_AUTHORITY_EXPECTED, "stage": "normative_source"}
+        planner = {
+            **MODULE.PLANNER_AUTHORITY_EXPECTED,
+            "stage": "planner_authority",
+            "trusted_integration_run_id": MODULE.PLANNER_INTEGRATION_RUN,
+            "verification_evidence": "verified live planner publication fixture",
+        }
+        live_authorities = {
+            "normative": {**normative, "authority_bytes": b"normative live bytes"},
+            "planner": {**planner, "authority_bytes": _planner_bytes()},
+        }
+        receipt = {
+            "normative_authority": normative,
+            "planner_authority": planner,
+            "executing_planner": {
+                "authority_path": MODULE.PLANNER_PATH,
+                "merged_commit": MODULE.PLANNER_AUTHORITY_EXPECTED["merged_commit"],
+                "source_head": MODULE.PLANNER_AUTHORITY_EXPECTED["source_head"],
+                "source_ref": f"refs/pull/{MODULE.PLANNER_PR}/head",
+                "bytes_sha256": MODULE.PLANNER_AUTHORITY_EXPECTED["authority_bytes_sha256"],
+                "size": MODULE.PLANNER_AUTHORITY_EXPECTED["authority_size"],
+            },
+            "scope_base_oid": CHECKER_SCOPE,
+            "checker_execution": {
+                **self._checker_execution_fixture(CHECKER_SCOPE),
+                "checker_source_bytes_sha256": "sha256:" + hashlib.sha256(checker_bytes).hexdigest(),
+                "policy_source_bytes_sha256": "sha256:" + hashlib.sha256(policy_bytes).hexdigest(),
+            },
+        }
+        def live_source(path):
+            data = checker_bytes if MODULE.CHECKER_EXECUTION_PATH in path else policy_bytes
+            blob_oid = hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
+            return {"encoding": "base64", "content": base64.b64encode(data).decode("ascii"),
+                    "sha": blob_oid, "size": len(data)}
+
+        with patch.object(MODULE, "verify_authority_chain", return_value=live_authorities), \
+             patch.object(MODULE, "verify_executing_planner", return_value=receipt["executing_planner"]), \
+             patch.object(MODULE, "gh_api", side_effect=live_source):
+            MODULE.verify_postrun_receipt_authority(receipt, REPOSITORY, Path("."))
+
+        forged = json.loads(json.dumps(receipt))
+        forged["checker_execution"]["checker_source_bytes_sha256"] = "sha256:" + "f" * 64
+        with patch.object(MODULE, "verify_authority_chain", return_value=live_authorities), \
+             patch.object(MODULE, "verify_executing_planner", return_value=receipt["executing_planner"]), \
+             patch.object(MODULE, "gh_api", side_effect=live_source):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "command source digest"):
+                MODULE.verify_postrun_receipt_authority(forged, REPOSITORY, Path("."))
 
 
 if __name__ == "__main__":

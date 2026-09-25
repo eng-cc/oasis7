@@ -25,7 +25,7 @@ from typing import Any
 import zipfile
 
 
-SCHEMA = "oasis7-cargo-checker-stage-admission/v1"
+SCHEMA = "oasis7-cargo-checker-stage-admission/v2"
 REPOSITORY = "eng-cc/oasis7"
 DEFAULT_BRANCH = "main"
 NORMATIVE_COMMENT = 5822424913
@@ -68,6 +68,7 @@ CHECKER_ISSUE = 3971
 CHECKER_TASK_UID = "task_4a631678a50b4fcb952a3c2778b15677"
 CHECKER_PR = 3972
 GITHUB_ACTIONS_APP_ID = 15368
+CHECKER_STAGE_PRODUCER_JOB = "checker-stage-receipt"
 NORMATIVE_PATH = "doc/engineering/workflow/source-of-truth.md"
 PLANNER_PATH = "scripts/pm/cargo_package_profile_planner.py"
 NORMATIVE_FRAGMENT = "cargo-package-scope-and-impact-scoped-verification"
@@ -127,6 +128,8 @@ CHECKER_SCOPE = (
     "scripts/pm/check-cargo-package-scope",
     "scripts/pm/check-cargo-package-scope.test.py",
 )
+CHECKER_EXECUTION_PATH = CHECKER_SCOPE[0]
+CHECKER_POLICY_PATH = ".pm/cargo-package-scope-policy.json"
 OID_RE = re.compile(r"^[0-9a-f]{40}$")
 DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
 
@@ -1242,6 +1245,66 @@ def _serializable_authority(authority: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in authority.items() if not isinstance(value, bytes)}
 
 
+def _checker_execution_context(
+    *,
+    repo_root: Path,
+    scope_base_oid: str,
+    checker_path: Path,
+    policy_path: Path,
+    primary_package: str,
+) -> dict[str, Any]:
+    _require_oid(scope_base_oid, "checker execution source scope")
+    try:
+        checker_bytes = _git_bytes(
+            repo_root, "show", f"{scope_base_oid}:{CHECKER_EXECUTION_PATH}"
+        )
+        policy_bytes = _git_bytes(
+            repo_root, "show", f"{scope_base_oid}:{CHECKER_POLICY_PATH}"
+        )
+        checker_blob = _git(repo_root, "rev-parse", f"{scope_base_oid}:{CHECKER_EXECUTION_PATH}")
+        policy_blob = _git(repo_root, "rev-parse", f"{scope_base_oid}:{CHECKER_POLICY_PATH}")
+        local_checker_bytes = checker_path.read_bytes()
+        local_policy_bytes = policy_path.read_bytes()
+    except (AdmissionError, OSError) as exc:
+        raise AdmissionError("trusted checker execution inputs are unavailable") from exc
+    if local_checker_bytes != checker_bytes or local_policy_bytes != policy_bytes:
+        raise AdmissionError("checker command files differ from the trusted source scope")
+    return {
+        "source_oid": scope_base_oid,
+        "checker_source_path": CHECKER_EXECUTION_PATH,
+        "checker_source_blob": checker_blob,
+        "checker_source_size": len(checker_bytes),
+        "checker_source_bytes_sha256": _digest(checker_bytes),
+        "policy_source_path": CHECKER_POLICY_PATH,
+        "policy_source_blob": policy_blob,
+        "policy_source_size": len(policy_bytes),
+        "policy_source_bytes_sha256": _digest(policy_bytes),
+        "python": sys.executable,
+        "checker_executable": str(checker_path),
+        "policy_executable": str(policy_path),
+        "repo_root": str(repo_root.resolve()),
+        "primary_package": primary_package,
+    }
+
+
+def _checker_command(context: dict[str, Any], *, scope_base_oid: str, head_oid: str) -> list[str]:
+    return [
+        context["python"],
+        context["checker_executable"],
+        "--repo-root",
+        context["repo_root"],
+        "--base",
+        scope_base_oid,
+        "--head",
+        head_oid,
+        "--primary-package",
+        context["primary_package"],
+        "--policy",
+        context["policy_executable"],
+        "--json",
+    ]
+
+
 def build_preflight(
     *,
     repository: str,
@@ -1270,21 +1333,16 @@ def build_preflight(
     checker = verify_checker_pr(
         repository, pr_number, task_uid, base_oid, head_oid, scope_base_oid, tested_tree, repo_root
     )
-    checker_command = [
-        sys.executable,
-        str(checker_path),
-        "--repo-root",
-        str(repo_root),
-        "--base",
-        scope_base_oid,
-        "--head",
-        head_oid,
-        "--primary-package",
-        primary_package,
-        "--policy",
-        str(policy_path),
-        "--json",
-    ]
+    checker_execution = _checker_execution_context(
+        repo_root=repo_root,
+        scope_base_oid=scope_base_oid,
+        checker_path=checker_path,
+        policy_path=policy_path,
+        primary_package=primary_package,
+    )
+    checker_command = _checker_command(
+        checker_execution, scope_base_oid=scope_base_oid, head_oid=head_oid
+    )
     _require_oid(base_oid, "checker PR base")
     _require_oid(head_oid, "checker PR head")
     identity = {
@@ -1309,6 +1367,7 @@ def build_preflight(
         "changed_paths": checker["changed_paths"],
         "checker_command": checker_command,
         "checker_command_digest": command_digest(checker_command),
+        "checker_execution": checker_execution,
         "policy_path": str(policy_path),
         "planner": planner,
         "normative_authority": _serializable_authority(authorities["normative"]),
@@ -1350,6 +1409,7 @@ def verify_postrun(
         "scope_base_oid": preflight.get("scope_base_oid"),
         "tested_tree": preflight.get("tested_tree"),
         "checker_command_digest": preflight.get("checker_command_digest"),
+        "checker_execution": preflight.get("checker_execution"),
         "preflight_digest": expected_digest,
         "result_status": status,
         "exit_code": exit_code,
@@ -1362,6 +1422,7 @@ def build_postrun_receipt(
     authorities: dict[str, dict[str, Any]],
     executing_planner: dict[str, Any],
     check: dict[str, Any],
+    producer_job: dict[str, Any],
     *,
     status: str,
     exit_code: int,
@@ -1384,6 +1445,7 @@ def build_postrun_receipt(
             "planner_authority": _serializable_authority(authorities["planner"]),
             "executing_planner": executing_planner,
             "check": check,
+            "producer_job": producer_job,
             "result": {
                 "status": status,
                 "exit_code": exit_code,
@@ -1418,6 +1480,17 @@ def _assert_preflight_authorities_unchanged(
 
 def verify_durable_postrun_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
     """Validate the durable artifact before a workflow uploads it."""
+    if not isinstance(receipt, dict):
+        raise AdmissionError("durable post-run receipt is not an object")
+    exact_receipt_fields = {
+        "schema", "phase", "repository", "task_uid", "pr_number", "base_oid", "head_oid",
+        "scope_base_oid", "tested_tree", "checker_command_digest", "checker_execution",
+        "preflight_digest", "result_status", "exit_code", "runner", "activation",
+        "normative_authority", "planner_authority", "executing_planner", "check", "producer_job", "result",
+        "receipt_digest",
+    }
+    if set(receipt) != exact_receipt_fields:
+        raise AdmissionError("durable post-run receipt fields are incomplete or unexpected")
     if receipt.get("schema") != SCHEMA or receipt.get("phase") != "post_run":
         raise AdmissionError("durable post-run receipt schema/phase is invalid")
     if receipt.get("activation") != "provisional":
@@ -1427,15 +1500,64 @@ def verify_durable_postrun_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
     for field in ("normative_authority", "planner_authority", "executing_planner", "check", "result"):
         if not isinstance(receipt.get(field), dict):
             raise AdmissionError(f"durable post-run receipt is missing {field}")
+    for name, expected, stage in (
+        ("normative_authority", NORMATIVE_AUTHORITY_EXPECTED, "normative_source"),
+        ("planner_authority", PLANNER_AUTHORITY_EXPECTED, "planner_authority"),
+    ):
+        authority = receipt[name]
+        exact_authority_fields = set(expected) | {"stage"}
+        if name == "planner_authority":
+            exact_authority_fields |= {"trusted_integration_run_id", "verification_evidence"}
+        if set(authority) != exact_authority_fields:
+            raise AdmissionError(f"durable post-run {name} fields are incomplete or unexpected")
+        for key, value in {**expected, "stage": stage}.items():
+            if authority.get(key) != value:
+                raise AdmissionError(f"durable post-run {name} differs from trusted authority")
+        if name == "planner_authority":
+            if (authority.get("trusted_integration_run_id") != PLANNER_INTEGRATION_RUN
+                    or not isinstance(authority.get("verification_evidence"), str)
+                    or not authority["verification_evidence"]):
+                raise AdmissionError("durable post-run planner authority readback is incomplete")
     result = receipt["result"]
+    if set(result) != {
+        "status", "exit_code", "command", "command_digest", "base_oid", "head_oid",
+        "scope_base_oid", "tested_tree",
+    }:
+        raise AdmissionError("durable post-run result fields are incomplete or unexpected")
     if result.get("status") != "passed" or result.get("exit_code") != 0:
         raise AdmissionError("durable post-run result is not successful")
+    if receipt.get("result_status") != "passed" or receipt.get("exit_code") != 0:
+        raise AdmissionError("durable post-run result summary is not successful")
     check = receipt["check"]
-    if not isinstance(check.get("check_app_id"), int) or not isinstance(check.get("check_run_id"), int):
+    if set(check) != {
+        "check_name", "check_run_id", "check_app_id", "check_app_slug", "check_head",
+        "workflow_run_id",
+    }:
+        raise AdmissionError("durable post-run check fields are incomplete or unexpected")
+    if (check.get("check_name") != "required-gate"
+            or check.get("check_app_id") != GITHUB_ACTIONS_APP_ID
+            or check.get("check_app_slug") != "github-actions"
+            or not isinstance(check.get("check_run_id"), int)
+            or check["check_run_id"] <= 0):
         raise AdmissionError("durable post-run check identity is incomplete")
     _require_oid(check.get("check_head"), "durable check head")
     if str(check.get("workflow_run_id")) != str((receipt.get("runner") or {}).get("run_id")):
         raise AdmissionError("durable post-run workflow run identity mismatch")
+    producer_job = receipt.get("producer_job")
+    if not isinstance(producer_job, dict) or set(producer_job) != {
+        "job_name", "job_id", "check_run_id", "workflow_run_id", "run_attempt", "head_sha"
+    }:
+        raise AdmissionError("durable producer job identity is missing or unexpected")
+    runner = receipt.get("runner") or {}
+    if (
+        producer_job.get("job_name") != CHECKER_STAGE_PRODUCER_JOB
+        or type(producer_job.get("job_id")) is not int or producer_job["job_id"] <= 0
+        or type(producer_job.get("check_run_id")) is not int or producer_job["check_run_id"] <= 0
+        or str(producer_job.get("workflow_run_id")) != str(runner.get("run_id"))
+        or str(producer_job.get("run_attempt")) != str(runner.get("run_attempt"))
+    ):
+        raise AdmissionError("durable producer job identity does not match the runner")
+    _require_oid(producer_job.get("head_sha"), "durable producer job head")
     if not isinstance(result.get("command"), list) or command_digest(result["command"]) != result.get("command_digest"):
         raise AdmissionError("durable post-run command argv/digest is invalid")
     if result.get("command_digest") != receipt.get("checker_command_digest"):
@@ -1444,12 +1566,117 @@ def verify_durable_postrun_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
         if result.get(field) != receipt.get(field):
             raise AdmissionError(f"durable post-run result {field} mismatch")
     planner = receipt["executing_planner"]
-    _require_oid(planner.get("merged_commit"), "durable planner merged commit")
-    _require_oid(planner.get("source_head"), "durable planner source head")
-    _require_digest(planner.get("bytes_sha256"), "durable planner bytes")
+    if set(planner) != {
+        "path", "authority_path", "merged_commit", "source_head", "source_ref", "bytes_sha256", "size"
+    }:
+        raise AdmissionError("durable executing planner fields are incomplete or unexpected")
+    expected_planner = {
+        "authority_path": PLANNER_PATH,
+        "merged_commit": PLANNER_AUTHORITY_EXPECTED["merged_commit"],
+        "source_head": PLANNER_AUTHORITY_EXPECTED["source_head"],
+        "source_ref": f"refs/pull/{PLANNER_PR}/head",
+        "bytes_sha256": PLANNER_AUTHORITY_EXPECTED["authority_bytes_sha256"],
+        "size": PLANNER_AUTHORITY_EXPECTED["authority_size"],
+    }
+    if any(planner.get(field) != value for field, value in expected_planner.items()):
+        raise AdmissionError("durable executing planner differs from trusted planner authority")
+    execution = receipt.get("checker_execution")
+    if not isinstance(execution, dict):
+        raise AdmissionError("durable checker command source binding is missing")
+    if set(execution) != {
+        "source_oid", "checker_source_path", "checker_source_blob", "checker_source_size",
+        "checker_source_bytes_sha256", "policy_source_path", "policy_source_blob",
+        "policy_source_size", "policy_source_bytes_sha256", "python", "checker_executable",
+        "policy_executable", "repo_root", "primary_package",
+    }:
+        raise AdmissionError("durable checker command source fields are incomplete or unexpected")
+    if (
+        execution.get("source_oid") != receipt.get("scope_base_oid")
+        or execution.get("checker_source_path") != CHECKER_EXECUTION_PATH
+        or execution.get("policy_source_path") != CHECKER_POLICY_PATH
+        or execution.get("primary_package") != "auto"
+    ):
+        raise AdmissionError("durable checker command source identity is invalid")
+    for field in ("checker_source_bytes_sha256", "policy_source_bytes_sha256"):
+        _require_digest(execution.get(field), f"durable {field}")
+    for field in ("checker_source_blob", "policy_source_blob"):
+        _require_oid(execution.get(field), f"durable {field}")
+    for field in ("checker_source_size", "policy_source_size"):
+        if type(execution.get(field)) is not int or execution[field] < 1:
+            raise AdmissionError(f"durable {field} is invalid")
+    checker_executable = execution.get("checker_executable")
+    policy_executable = execution.get("policy_executable")
+    repo_root = execution.get("repo_root")
+    python = execution.get("python")
+    if (
+        not all(isinstance(value, str) and value for value in
+                (checker_executable, policy_executable, repo_root, python))
+        or Path(checker_executable).name != "trusted-check-cargo-package-scope"
+        or Path(policy_executable).name != "cargo-package-scope-policy.json"
+        or Path(checker_executable).parent != Path(policy_executable).parent
+        or not Path(repo_root).is_absolute()
+        or re.fullmatch(r"python(?:3(?:\.\d+)*)?", Path(python).name) is None
+    ):
+        raise AdmissionError("durable checker command execution paths are invalid")
+    expected_command = _checker_command(
+        execution,
+        scope_base_oid=receipt["scope_base_oid"],
+        head_oid=receipt["head_oid"],
+    )
+    if result.get("command") != expected_command:
+        raise AdmissionError("durable checker command differs from trusted invocation")
+    if set(receipt.get("runner") or {}) != {"run_id", "run_attempt", "workflow_ref", "workflow_sha"}:
+        raise AdmissionError("durable post-run runner fields are incomplete or unexpected")
+    _require_digest(receipt.get("preflight_digest"), "durable preflight")
     for field in ("base_oid", "head_oid", "scope_base_oid", "tested_tree"):
         _require_oid(receipt.get(field), f"durable {field}")
     return receipt
+
+
+def verify_postrun_receipt_authority(
+    receipt: dict[str, Any], repository: str, repo_root: Path
+) -> None:
+    """Independently bind downloaded receipt claims to live authority and source bytes."""
+    authorities = verify_authority_chain(repository, repo_root)
+    for name in ("normative", "planner"):
+        receipt_field = f"{name}_authority"
+        if receipt.get(receipt_field) != _serializable_authority(authorities[name]):
+            raise AdmissionError(f"post-run receipt {receipt_field} differs from live authority readback")
+
+    executing_planner = verify_executing_planner(
+        repo_root / PLANNER_PATH, authorities["planner"], repo_root
+    )
+    recorded_planner = receipt.get("executing_planner") or {}
+    planner_fields = (
+        "authority_path", "merged_commit", "source_head", "source_ref", "bytes_sha256", "size"
+    )
+    if any(recorded_planner.get(field) != executing_planner.get(field) for field in planner_fields):
+        raise AdmissionError("post-run executing planner differs from live authority readback")
+
+    execution = receipt.get("checker_execution") or {}
+    source_oid = _require_oid(receipt.get("scope_base_oid"), "receipt checker source scope")
+    if execution.get("source_oid") != source_oid:
+        raise AdmissionError("post-run checker command source OID differs from receipt scope")
+    for path_field, blob_field, size_field, digest_field, expected_path in (
+        ("checker_source_path", "checker_source_blob", "checker_source_size",
+         "checker_source_bytes_sha256", CHECKER_EXECUTION_PATH),
+        ("policy_source_path", "policy_source_blob", "policy_source_size",
+         "policy_source_bytes_sha256", CHECKER_POLICY_PATH),
+    ):
+        source_path = execution.get(path_field)
+        if source_path != expected_path:
+            raise AdmissionError("post-run checker command source path is not trusted")
+        response = gh_api(
+            f"repos/{repository}/contents/{source_path}?ref={source_oid}"
+        )
+        if not isinstance(response, dict):
+            raise AdmissionError("live checker command source readback is malformed")
+        source_bytes = _decode_contents(response, "checker command source")
+        if (response.get("sha") != execution.get(blob_field)
+                or response.get("size") != execution.get(size_field)
+                or execution.get(size_field) != len(source_bytes)
+                or execution.get(digest_field) != _digest(source_bytes)):
+            raise AdmissionError("post-run checker command source digest differs from live readback")
 
 
 def verify_live_check_identity(
@@ -1491,6 +1718,70 @@ def verify_live_check_identity(
     }
 
 
+def verify_live_producer_job_identity(
+    repository: str, run_id: str, run_attempt: str, job_name: str
+) -> dict[str, Any]:
+    """Read the in-progress isolated producer job by exact workflow attempt."""
+    if job_name != CHECKER_STAGE_PRODUCER_JOB:
+        raise AdmissionError("checker-stage receipt producer job name is not trusted")
+    if (not str(run_id).isdigit() or int(run_id) <= 0
+            or not str(run_attempt).isdigit() or int(run_attempt) <= 0):
+        raise AdmissionError("checker-stage receipt producer run identity is missing")
+    jobs: list[dict[str, Any]] = []
+    total_count: int | None = None
+    for page in range(1, 101):
+        response = gh_api(
+            f"repos/{repository}/actions/runs/{run_id}/attempts/{run_attempt}/jobs?per_page=100&page={page}"
+        )
+        batch = response.get("jobs") if isinstance(response, dict) else None
+        reported_total = response.get("total_count") if isinstance(response, dict) else None
+        if (not isinstance(batch, list) or type(reported_total) is not int
+                or reported_total < 0 or (total_count is not None and reported_total != total_count)):
+            raise AdmissionError("checker-stage producer job readback is malformed or incomplete")
+        total_count = reported_total
+        jobs.extend(item for item in batch if isinstance(item, dict))
+        if len(batch) < 100:
+            break
+    else:
+        raise AdmissionError("checker-stage producer job pagination limit exceeded")
+    if len(jobs) != total_count:
+        raise AdmissionError("checker-stage producer job pagination is incomplete")
+    matches = [item for item in jobs if item.get("name") == job_name]
+    if len(matches) != 1:
+        raise AdmissionError("checker-stage producer job is missing or ambiguous")
+    job = matches[0]
+    if (str(job.get("run_id")) != str(run_id)
+            or str(job.get("run_attempt")) != str(run_attempt)
+            or job.get("status") != "in_progress"
+            or job.get("conclusion") not in (None, "")):
+        raise AdmissionError("checker-stage producer job is not the current workflow attempt")
+    job_id = job.get("id")
+    if type(job_id) is not int or job_id <= 0:
+        raise AdmissionError("checker-stage producer job ID is invalid")
+    check_url = re.fullmatch(
+        rf"https://api\.github\.com/repos/{re.escape(repository)}/check-runs/([0-9]+)",
+        str(job.get("check_run_url") or ""),
+    )
+    if check_url is None:
+        raise AdmissionError("checker-stage producer job check-run URL is invalid")
+    check_run_id = int(check_url.group(1))
+    if check_run_id <= 0:
+        raise AdmissionError("checker-stage producer check-run ID is invalid")
+    head_sha = job.get("head_sha")
+    _require_oid(head_sha, "checker-stage producer job head")
+    labels = job.get("labels")
+    if not isinstance(labels, list) or "ubuntu-24.04" not in labels:
+        raise AdmissionError("checker-stage producer job runner identity is invalid")
+    return {
+        "job_name": job_name,
+        "job_id": job_id,
+        "check_run_id": check_run_id,
+        "workflow_run_id": int(run_id),
+        "run_attempt": int(run_attempt),
+        "head_sha": head_sha,
+    }
+
+
 def resolve_live_check_head(args: argparse.Namespace) -> str:
     """Select the check's actual head while keeping runner/workflow SHAs intact."""
     if os.environ.get("GITHUB_EVENT_NAME") != "pull_request":
@@ -1522,6 +1813,7 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--workflow-sha", default=os.environ.get("GITHUB_WORKFLOW_SHA", ""))
     parser.add_argument("--check-head", default=os.environ.get("GITHUB_SHA", ""))
     parser.add_argument("--check-name", default="required-gate")
+    parser.add_argument("--producer-job-name", default=os.environ.get("GITHUB_JOB", ""))
     parser.add_argument("--output", type=Path)
     parser.add_argument("--preflight")
     parser.add_argument("--preflight-digest")
@@ -1637,11 +1929,15 @@ def main(argv: list[str] | None = None) -> int:
             check = verify_live_check_identity(
                 args.repository, resolve_live_check_head(args), args.run_id, args.check_name
             )
+            producer_job = verify_live_producer_job_identity(
+                args.repository, args.run_id, args.run_attempt, args.producer_job_name
+            )
             receipt = build_postrun_receipt(
                 preflight,
                 authorities,
                 executing_planner,
                 check,
+                producer_job,
                 status=args.result_status,
                 exit_code=args.exit_code,
             )
