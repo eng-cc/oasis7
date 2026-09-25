@@ -31,6 +31,8 @@ issue_authoritative_keys = frozenset(
         "source_type", "severity", "pr_url", "pr_number", "merge_hold",
         "primary_package",
         "loop_binding", "bootstrap_base_oid", "completion_mode",
+        "aggregate_plan_comment_id", "aggregate_plan_sha256",
+        "aggregate_completion_receipt_sha256",
         "traceability_mode", "coordination_ref", "traceability_record",
         "coordination_record", "traceability_candidate", "aggregate_candidate",
         "non_pr_completion_evidence", "non_pr_completion_evidence_sha256",
@@ -533,7 +535,7 @@ def issue_task_fields(body: str) -> dict[str, Any]:
         except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             die(f"invalid traceability context: {exc}")
         fields.update(context)
-    for key in ("owner_role", "module", "status", "workflow_phase", "priority", "worktree_hint", "source_signal", "source_type", "severity", "completion_mode", "bootstrap_base_oid", "non_pr_completion_evidence_sha256", "last_closed_at"):
+    for key in ("owner_role", "module", "status", "workflow_phase", "priority", "worktree_hint", "source_signal", "source_type", "severity", "completion_mode", "aggregate_plan_comment_id", "aggregate_plan_sha256", "aggregate_completion_receipt_sha256", "bootstrap_base_oid", "non_pr_completion_evidence_sha256", "last_closed_at"):
         match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
         if match:
             fields[key] = match.group(1)
@@ -814,6 +816,9 @@ def task_from_record(uid: str, record: dict[str, Any]) -> OrderedDict[str, Any]:
             ("loop_binding", record.get("loop_binding")),
             ("bootstrap_base_oid", record.get("bootstrap_base_oid")),
             ("completion_mode", record.get("completion_mode") or ""),
+            ("aggregate_plan_comment_id", record.get("aggregate_plan_comment_id") or ""),
+            ("aggregate_plan_sha256", record.get("aggregate_plan_sha256") or ""),
+            ("aggregate_completion_receipt_sha256", record.get("aggregate_completion_receipt_sha256") or ""),
             ("traceability_mode", record.get("traceability_mode")),
             ("coordination_ref", record.get("coordination_ref")),
             ("traceability_record", record.get("traceability_record")),
@@ -889,6 +894,12 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
         lines.append(f"- pr_number: `{task.get('pr_number')}`")
     if task.get("completion_mode"):
         lines.append(f"- completion_mode: `{task.get('completion_mode')}`")
+        if task.get("aggregate_plan_comment_id"):
+            lines.append(f"- aggregate_plan_comment_id: `{task.get('aggregate_plan_comment_id')}`")
+        if task.get("aggregate_plan_sha256"):
+            lines.append(f"- aggregate_plan_sha256: `{task.get('aggregate_plan_sha256')}`")
+        if task.get("aggregate_completion_receipt_sha256"):
+            lines.append(f"- aggregate_completion_receipt_sha256: `{task.get('aggregate_completion_receipt_sha256')}`")
         evidence = str(task.get("non_pr_completion_evidence") or "").encode("utf-8")
         encoded = base64.urlsafe_b64encode(evidence).decode("ascii").rstrip("=")
         lines.append(f"- non_pr_completion_evidence_b64: `{encoded}`")
@@ -1971,9 +1982,28 @@ def command_closeout_task(args: argparse.Namespace) -> int:
     mapping_path, mapping, original = require_record(args)
     previous = str(original.get("status") or "")
     claim = json.loads(args.claim_json)
+    if args.to_status == "done" and original.get("completion_mode") == "ordered_delivery_aggregate" and not args.aggregate_receipt:
+        die("closeout-task: ordered aggregate completion requires an aggregate receipt")
+    if args.aggregate_receipt and original.get("completion_mode") != "ordered_delivery_aggregate":
+        die("closeout-task: aggregate receipt requires ordered aggregate task truth")
     if args.to_status != "deferred":
         if claim.get("status") != "verified" or not claim.get("allowed_to_claim"):
             die("closeout-task: verified immutable claim evidence is required")
+    if args.aggregate_receipt:
+        if args.to_status != "done" or args.pr_receipt:
+            die("closeout-task: aggregate receipt is done-only and excludes singular PR receipt")
+        if original.get("completion_mode") != "ordered_delivery_aggregate" or original.get("pr_number") or original.get("pr_url"):
+            die("closeout-task: coordinator mode/PR identity is invalid")
+        if not all((args.aggregate_plan, args.aggregate_candidate, args.aggregate_evidence)):
+            die("closeout-task: aggregate receipt requires plan, candidate and evidence")
+        validation = subprocess.run([
+            sys.executable, str(args.root.resolve() / "scripts/pm/aggregate-task-completion.py"), "validate",
+            "--repo-root", str(args.root.resolve()), "--task-uid", args.task_uid,
+            "--record", args.aggregate_plan, "--candidate", args.aggregate_candidate,
+            "--evidence", args.aggregate_evidence, "--receipt", args.aggregate_receipt, "--json",
+        ], text=True, capture_output=True)
+        if validation.returncode:
+            die("closeout-task: aggregate receipt live validation failed: " + (validation.stderr.strip() or validation.stdout.strip()))
     record = json.loads(json.dumps(original))
     closed_at = now()
     record.setdefault("claim_verifications", []).append(claim)
@@ -1985,6 +2015,11 @@ def command_closeout_task(args: argparse.Namespace) -> int:
         receipt = json.loads(pathlib.Path(args.pr_receipt).read_text(encoding="utf-8"))
         record["merge_receipt"] = receipt
         record["merge_receipt_sha256"] = hashlib.sha256(pathlib.Path(args.pr_receipt).read_bytes()).hexdigest()
+    if args.to_status == "done" and args.aggregate_receipt:
+        aggregate_path = pathlib.Path(args.aggregate_receipt)
+        receipt = json.loads(aggregate_path.read_text(encoding="utf-8"))
+        record["aggregate_completion_receipt"] = receipt
+        record["aggregate_completion_receipt_sha256"] = hashlib.sha256(aggregate_path.read_bytes()).hexdigest()
     if args.to_status == "done":
         recover_missing_project_item(args, record)
         if not record.get("project_item_id"):
@@ -2012,6 +2047,12 @@ def command_closeout_task(args: argparse.Namespace) -> int:
             "Merge Receipt PR": receipt.get("pr_url"),
             "Merge Receipt Head": receipt.get("head_oid"),
             "Merge Receipt Observed At": receipt.get("observed_at"),
+        })
+    if record.get("aggregate_completion_receipt"):
+        evidence_fields.update({
+            "Aggregate Receipt Type": "oasis7_aggregate_task_complete",
+            "Aggregate Receipt SHA256": record["aggregate_completion_receipt_sha256"],
+            "Aggregate Plan Comment ID": record["aggregate_completion_receipt"].get("plan_comment_id"),
         })
     comment_url = issue_comment(
         args.repo,
@@ -2048,6 +2089,9 @@ def command_closeout_task(args: argparse.Namespace) -> int:
         if record.get("merge_receipt"):
             cache_patch["merge_receipt"] = record["merge_receipt"]
             cache_patch["merge_receipt_sha256"] = record["merge_receipt_sha256"]
+        if record.get("aggregate_completion_receipt"):
+            cache_patch["aggregate_completion_receipt"] = record["aggregate_completion_receipt"]
+            cache_patch["aggregate_completion_receipt_sha256"] = record["aggregate_completion_receipt_sha256"]
         if record.get("project_item_id"):
             cache_patch["project_item_id"] = record["project_item_id"]
         for key in traceability_issue_keys:
@@ -2070,18 +2114,102 @@ def command_closeout_task(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_bind_aggregate_plan(args: argparse.Namespace) -> int:
+    """Bind an immutable linked-delivery plan before any declared PR merges."""
+    mapping_path, _mapping, original = require_record(args)
+    if original.get("pr_number") or original.get("pr_url"):
+        die("bind-aggregate-plan: coordinator cannot have a singular PR")
+    if original.get("status") in {"done", "deferred"} or original.get("workflow_phase") in TERMINAL_WORKFLOW_PHASES:
+        die("bind-aggregate-plan: terminal coordinator cannot be rebound")
+    plan_path = pathlib.Path(args.plan).resolve(strict=True)
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    aggregate_path = args.root.resolve() / "scripts/pm/aggregate-task-completion.py"
+    aggregate_spec = importlib.util.spec_from_file_location("aggregate_task_completion", aggregate_path)
+    if not aggregate_spec or not aggregate_spec.loader:
+        die("bind-aggregate-plan: aggregate plan validator is unavailable")
+    aggregate_module = importlib.util.module_from_spec(aggregate_spec)
+    aggregate_spec.loader.exec_module(aggregate_module)
+    try:
+        aggregate_module.validate_plan(plan, args.task_uid)
+    except aggregate_module.ReceiptError as exc:
+        die(f"bind-aggregate-plan: invalid versioned plan: {exc}")
+    if plan.get("task_uid") != args.task_uid or plan.get("repository") != args.repo or plan.get("issue_number") != original.get("issue_number"):
+        die("bind-aggregate-plan: plan/coordinator identity mismatch")
+    canonical = json.dumps(plan, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    body = "<!-- oasis7-aggregate-delivery-plan/v1 -->\n" + canonical
+    expected_sha = "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest()
+    comment = json.loads(run_text(["gh", "api", f"repos/{args.repo}/issues/comments/{args.comment_id}"]))
+    if (comment.get("id") != args.comment_id or comment.get("body") != body or
+            str(comment.get("issue_url") or "").rstrip("/").split("/")[-1] != str(original.get("issue_number"))):
+        die("bind-aggregate-plan: live plan comment body/Issue identity mismatch")
+    author = str((comment.get("user") or {}).get("login") or "")
+    if not author:
+        die("bind-aggregate-plan: live plan author is unavailable")
+    permission = json.loads(run_text(["gh", "api", f"repos/{args.repo}/collaborators/{author}/permission"]))
+    if permission.get("permission") != "admin":
+        die("bind-aggregate-plan: plan author lacks repository admin authority")
+    issue = json.loads(run_text(["gh", "api", f"repos/{args.repo}/issues/{original['issue_number']}"]))
+    issue_uid_lines = re.findall(r"(?m)^task_uid:\s*(task_[0-9a-f]{32})\s*$", str(issue.get("body") or ""))
+    if issue.get("state") != "open" or issue_uid_lines != [args.task_uid]:
+        die("bind-aggregate-plan: live coordinator Issue identity/state mismatch")
+    for child in plan.get("required_deliveries") or []:
+        number = child.get("pr_number") if isinstance(child, dict) else None
+        if not isinstance(number, int) or number <= 0:
+            die("bind-aggregate-plan: required delivery PR identity is invalid")
+        pr = json.loads(run_text(["gh", "pr", "view", str(number), "-R", args.repo, "--json", "state,isDraft,number,url"]))
+        if pr.get("state") != "OPEN" or pr.get("isDraft") is not True or pr.get("number") != number or pr.get("url") != child.get("pr_url"):
+            die("bind-aggregate-plan: all required PRs must be live drafts at binding")
+    old = (original.get("aggregate_plan_comment_id"), original.get("aggregate_plan_sha256"))
+    if any(old) and old != (str(args.comment_id), expected_sha):
+        die("bind-aggregate-plan: an immutable coordinator plan is already bound")
+    record = json.loads(json.dumps(original))
+    record.update(completion_mode="ordered_delivery_aggregate",
+                  aggregate_plan_comment_id=str(args.comment_id), aggregate_plan_sha256=expected_sha)
+    update_issue_body(args.repo, int(record["issue_number"]), task_from_record(args.task_uid, record))
+    reread = json.loads(run_text(["gh", "api", f"repos/{args.repo}/issues/{record['issue_number']}"]))
+    fields = issue_task_fields(str(reread.get("body") or ""))
+    if any(fields.get(key) != value for key, value in (("completion_mode", "ordered_delivery_aggregate"),
+                                                       ("aggregate_plan_comment_id", str(args.comment_id)),
+                                                       ("aggregate_plan_sha256", expected_sha))):
+        die("bind-aggregate-plan: live Issue pointer readback mismatch")
+    merge_task_mapping(mapping_path, args.task_uid, {
+        "completion_mode": "ordered_delivery_aggregate",
+        "aggregate_plan_comment_id": str(args.comment_id), "aggregate_plan_sha256": expected_sha,
+    })
+    print(json.dumps({"status": "bound", "task_uid": args.task_uid, "comment_id": args.comment_id,
+                      "plan_body_sha256": expected_sha}, sort_keys=True))
+    return 0
+
+
 def command_set_phase(args: argparse.Namespace) -> int:
     mapping_path, _mapping, original = require_record(args)
     receipt = json.loads(pathlib.Path(args.receipt_json).read_text(encoding="utf-8"))
     current = str(original.get("workflow_phase") or "")
-    allowed_transition = args.phase in ALLOWED_PHASE_TRANSITIONS.get(current, set())
+    aggregate_terminal = args.phase == "post_merge_done" and original.get("completion_mode") == "ordered_delivery_aggregate"
+    allowed_transition = args.phase in ALLOWED_PHASE_TRANSITIONS.get(current, set()) or (aggregate_terminal and current == "task_done")
     if not allowed_transition:
         die(f"set-phase: transition {current!r} -> {args.phase!r} is not allowed")
-    receipt_schema = RECEIPT_SCHEMAS.get(args.phase)
+    receipt_schema = ("oasis7_aggregate_terminal", "aggregate-task-finalizer") if aggregate_terminal else RECEIPT_SCHEMAS.get(args.phase)
     if not receipt_schema or (receipt.get("receipt_type"), receipt.get("issuer")) != receipt_schema:
         die("set-phase: receipt schema or issuer mismatch")
     if receipt.get("task_uid") != args.task_uid:
         die("set-phase: receipt task_uid mismatch")
+    if aggregate_terminal:
+        if original.get("pr_number") or original.get("pr_url") or original.get("status") != "done":
+            die("set-phase: aggregate terminal coordinator identity/status is invalid")
+        digest = str(original.get("aggregate_completion_receipt_sha256") or "")
+        if not digest or receipt.get("aggregate_completion_receipt_sha256") != digest:
+            die("set-phase: aggregate terminal receipt chain mismatch")
+        if not all((args.aggregate_plan, args.aggregate_candidate, args.aggregate_evidence, args.aggregate_receipt)):
+            die("set-phase: aggregate terminal requires the exact plan/candidate/evidence/completion receipt")
+        validation = subprocess.run([
+            sys.executable, str(args.root.resolve() / "scripts/pm/aggregate-task-completion.py"), "validate",
+            "--repo-root", str(args.root.resolve()), "--task-uid", args.task_uid,
+            "--record", args.aggregate_plan, "--candidate", args.aggregate_candidate,
+            "--evidence", args.aggregate_evidence, "--receipt", args.aggregate_receipt, "--json",
+        ], text=True, capture_output=True)
+        if validation.returncode or hashlib.sha256(pathlib.Path(args.aggregate_receipt).read_bytes()).hexdigest() != digest:
+            die("set-phase: aggregate completion receipt no longer verifies live")
     record = json.loads(json.dumps(original))
     record["workflow_phase"] = args.phase
     record.setdefault("phase_receipts", {})[args.phase] = receipt
@@ -3028,15 +3156,31 @@ def build_parser() -> argparse.ArgumentParser:
     closeout.add_argument("--to-status", required=True, choices=("ready", "done", "deferred"))
     closeout.add_argument("--claim-json", required=True)
     closeout.add_argument("--pr-receipt")
+    closeout.add_argument("--aggregate-plan")
+    closeout.add_argument("--aggregate-candidate")
+    closeout.add_argument("--aggregate-evidence")
+    closeout.add_argument("--aggregate-receipt")
     closeout.add_argument("--json", action="store_true")
     closeout.set_defaults(func=command_closeout_task)
+
+    bind_aggregate = subparsers.add_parser("bind-aggregate-plan")
+    add_common(bind_aggregate)
+    bind_aggregate.add_argument("--task-uid", required=True)
+    bind_aggregate.add_argument("--plan", required=True)
+    bind_aggregate.add_argument("--comment-id", type=int, required=True)
+    bind_aggregate.add_argument("--json", action="store_true")
+    bind_aggregate.set_defaults(func=command_bind_aggregate_plan)
 
     phase = subparsers.add_parser("set-phase")
     add_common(phase)
     phase.add_argument("--task-uid", required=True)
     phase.add_argument("--role", default="tpm")
-    phase.add_argument("--phase", required=True, choices=("main_sync",))
+    phase.add_argument("--phase", required=True, choices=("main_sync", "post_merge_done"))
     phase.add_argument("--receipt-json", required=True)
+    phase.add_argument("--aggregate-plan")
+    phase.add_argument("--aggregate-candidate")
+    phase.add_argument("--aggregate-evidence")
+    phase.add_argument("--aggregate-receipt")
     phase.add_argument("--json", action="store_true")
     phase.set_defaults(func=command_set_phase)
 
