@@ -29,6 +29,7 @@ The planner contract is:
 from __future__ import annotations
 
 import importlib.util
+import base64
 from copy import deepcopy
 import hashlib
 import json
@@ -41,6 +42,14 @@ from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[2]
 IMPLEMENTATION = ROOT / "scripts" / "pm" / "cargo_package_profile_planner.py"
+LIVE_CURRENT_PLANNER_TASK_COMMENT = """## Repository State Impact / Isolation Decision / Task Truth / Bootstrap Snapshot / Routed Next Phase
+P1 is a code-side planner-authority leaf under coordination #3994; no business Cargo package changes. New canonical worktree /Users/scc/ccwork/oasis7/.worktrees/oasis7-engineering-cargo-standalone-lock-planner, branch task/engineering-cargo-standalone-lock-planner, UID task_978dcc0005b9415cbc45e59b21b095e0, owner repository_health_engineer, Project-backed Issue #3999. Bootstrap complete, snapshot .pm/scratch/task_978dcc0005b9415cbc45e59b21b095e0/bootstrap-task-snapshot.json digest sha256:b21fa96a95b3cb92bea932a74ba2c83f30e35b0920284d3716a7d21556a42dcb; live mapping refreshed and workflow-next bound. Route: executing-project-tasks; bounded scope and merged normative authority are already specified, no brainstorming needed. Verification tier: focused planner authority tests, scope checks, required CI, role review, strict integration if selected by gate.
+
+Plan-Gap Evidence step_id=P1.1; acceptance_refs=#3999 acceptance 1-2, #3994 ordered contract, #3996 post-merge authority receipt https://github.com/eng-cc/oasis7/issues/3996#issuecomment-5822424913; dependencies=N1 PR #3997 merged at 4f97540c34aefca41d8bf790cbf09b3176f07de3 and live authority readback; verification_command=python3 scripts/pm/cargo-package-profile-planner.test.py plus python3 scripts/pm/check-cargo-package-scope.test.py, git diff --check; verification_evidence=expected exact command results and changed-path set in this Issue before freeze; write_scope=scripts/pm/cargo_package_profile_planner.py and scripts/pm/cargo-package-profile-planner.test.py only; out_of_scope=checker, stage-admission producer, scope policy, Cargo package, N1 normative source; required_role_slices=repository_health_engineer bounded implementation, followed by QA and repository-health full review before PR.
+
+Plan-Gap Evidence step_id=P1.2; acceptance_refs=#3999 acceptance 3 and canonical staged checker authority upgrade; dependencies=P1.1 complete and immutable verified head; verification_command=required-gate exact-head, fresh involved-role review, PR lifecycle gate, post-merge server readback; verification_evidence=CI receipt, role packet, PR gate, merged commit/tree/path/fragment digests and issue receipt; write_scope=PR/evidence only after code freeze; out_of_scope=C1 checker implementation and A2; required_role_slices=repository_health_engineer and qa_engineer reviews.
+
+Dispatch contract: owner repository_health_engineer; slice type implementation; integration owner TPM, order 1 implementation then 2 verification/review. Context checklist: identity/authority = UID/worktree/branch and N1 live receipt; governance = AGENTS.md, .agents/roles/repository_health_engineer.md, source-of-truth.md; task truth = this Project-backed Issue; user intent = unblock one-package A2 without gate bypass; scoped repo context = planner and focused tests only; collaboration boundary = specialist owns only declared files, others share worktree, no reverting others. Intended runtime is inherit current parent selection; adapter inactive on this surface, actual model/reasoning not attested. Formal sink: this Issue; return contract: implementation diff, focused verification, residual risk. TPM integrates and handles PR."""
 
 
 def git(repo: Path, *args: str) -> str:
@@ -246,7 +255,8 @@ resolver = "2"
         self._write(
             root,
             self.api.AUTHORITY_PATH,
-            '<a id="old-authority"></a>predecessor normative authority\n',
+            f'<a id="{self.api.AUTHORITY_FRAGMENT}"></a>predecessor package scope\n'
+            f'<a id="{self.api.AUTHORITY_CONTRACT_FRAGMENT}"></a>predecessor authority contract\n',
         )
         git(root, "init", "-q", "-b", "main")
         git(root, "config", "user.email", "qa@example.invalid")
@@ -262,7 +272,8 @@ resolver = "2"
         self._write(
             root,
             self.api.AUTHORITY_PATH,
-            '<a id="cargo-checker-authority-upgrade"></a>trusted normative authority\n',
+            f'<a id="{self.api.AUTHORITY_FRAGMENT}"></a>trusted standalone lock authority\n'
+            f'<a id="{self.api.AUTHORITY_CONTRACT_FRAGMENT}"></a>trusted staged authority contract\n',
         )
         predecessor_head = self._commit(root, "normative source candidate")
 
@@ -270,7 +281,8 @@ resolver = "2"
         self._write(
             root,
             self.api.AUTHORITY_PATH,
-            '<a id="cargo-checker-authority-upgrade"></a>trusted normative authority\n',
+            f'<a id="{self.api.AUTHORITY_FRAGMENT}"></a>trusted standalone lock authority\n'
+            f'<a id="{self.api.AUTHORITY_CONTRACT_FRAGMENT}"></a>trusted staged authority contract\n',
         )
         merged_commit = self._commit(root, "merged normative source")
         git(root, "update-ref", "refs/remotes/origin/main", merged_commit)
@@ -296,17 +308,14 @@ resolver = "2"
         predecessor_bytes = subprocess.check_output(
             ["git", "-C", str(root), "show", f"{predecessor_scope}:{path}"]
         )
-        fragment = next(
-            line
-            for line in merged_bytes.splitlines(keepends=True)
-            if line.startswith(b'<a id="cargo-checker-authority-upgrade"></a>')
-        )
+        fragment = self.api._fragment_bytes(merged_bytes, self.api.AUTHORITY_FRAGMENT)
+        contract_fragment = self.api._fragment_bytes(merged_bytes, self.api.AUTHORITY_CONTRACT_FRAGMENT)
         return {
             "repository": "eng-cc/oasis7",
             "default_branch": "main",
             "stage": "normative_source",
-            "task_uid": "task_predecessor_12345678901234567890123456789012",
-            "pr_number": 3815,
+            "task_uid": self.api.APPROVED_NORMATIVE_TASK_UID,
+            "pr_number": self.api.APPROVED_NORMATIVE_PR,
             "source_head": predecessor_head,
             "source_scope_base": predecessor_scope,
             "merged_commit": merged_commit,
@@ -315,8 +324,10 @@ resolver = "2"
             "authority_blob": git(root, "rev-parse", f"{merged_commit}:{path}"),
             "authority_bytes_sha256": "sha256:" + hashlib.sha256(merged_bytes).hexdigest(),
             "authority_size": len(merged_bytes),
-            "stable_fragment": "cargo-checker-authority-upgrade",
+            "stable_fragment": self.api.AUTHORITY_FRAGMENT,
             "stable_fragment_sha256": "sha256:" + hashlib.sha256(fragment).hexdigest(),
+            "authority_contract_fragment": self.api.AUTHORITY_CONTRACT_FRAGMENT,
+            "authority_contract_fragment_sha256": "sha256:" + hashlib.sha256(contract_fragment).hexdigest(),
             "predecessor_file_sha256": "sha256:" + hashlib.sha256(predecessor_bytes).hexdigest(),
             "candidate_source_head": source_head,
         }
@@ -328,7 +339,7 @@ resolver = "2"
             "repository": "eng-cc/oasis7",
             "default_branch": "main",
             "stage": "planner_authority",
-            "task_uid": "task_planner_12345678901234567890123456789012",
+            "task_uid": self.api.CURRENT_PLANNER_TASK_UID,
             "pr_number": 4921,
             "integration_base": merged_commit,
             "source_head": source_head,
@@ -338,7 +349,15 @@ resolver = "2"
             "predecessor_source_head": receipt["source_head"],
             "predecessor_source_scope_base": receipt["source_scope_base"],
             "predecessor_file_sha256": receipt["predecessor_file_sha256"],
-            "predecessor_authority_digest": receipt["predecessor_file_sha256"],
+            "predecessor_authority_commit": receipt["merged_commit"],
+            "predecessor_authority_tree": receipt["merged_tree"],
+            "predecessor_authority_path": receipt["authority_path"],
+            "predecessor_authority_blob": receipt["authority_blob"],
+            "predecessor_authority_digest": receipt["authority_bytes_sha256"],
+            "predecessor_authority_fragment": receipt["stable_fragment"],
+            "predecessor_authority_fragment_sha256": receipt["stable_fragment_sha256"],
+            "predecessor_authority_contract_fragment": receipt["authority_contract_fragment"],
+            "predecessor_authority_contract_fragment_sha256": receipt["authority_contract_fragment_sha256"],
             "write_scope": list(self.api.PLANNER_WRITE_SCOPE),
         }
 
@@ -356,7 +375,7 @@ resolver = "2"
         initial_base = initial_base or merged_commit
         return {
             "repository": "eng-cc/oasis7",
-            "issue_number": 3818,
+            "issue_number": 3999,
             "task_uid": binding["task_uid"],
             "initial_base": initial_base,
             "integration_base": integration_base,
@@ -407,6 +426,35 @@ resolver = "2"
             expected_pr_number=binding["pr_number"],
         )
         self.assertEqual(authority["merged_commit"], bound_only["trusted_authority"]["approved_normative_source"]["merged_commit"])
+
+    def test_planner_authority_does_not_require_local_squashed_predecessor_head(self) -> None:
+        temp, root, predecessor_scope, predecessor_head, merged_commit, source_head = self._authority_fixture()
+        self.addCleanup(temp.cleanup)
+        receipt = self._authority_receipt(root, predecessor_scope, predecessor_head, merged_commit, source_head)
+        binding = self._authority_binding(merged_commit, source_head, receipt)
+        live_task = self._current_task_identity(root, merged_commit, source_head, binding)
+
+        git(root, "update-ref", "-d", "refs/heads/normative")
+        git(root, "reflog", "expire", "--expire=now", "--all")
+        git(root, "gc", "--prune=now")
+        with self.assertRaises(subprocess.CalledProcessError):
+            git(root, "cat-file", "-e", f"{predecessor_head}^{{commit}}")
+        self.assertEqual(merged_commit, git(root, "rev-parse", f"{merged_commit}^{{commit}}"))
+
+        plan = self._plan_with_live_authority(
+            root,
+            merged_commit,
+            source_head,
+            receipt,
+            live_task,
+            profiles=("native",),
+            authority_binding=binding,
+            expected_task_uid=binding["task_uid"],
+            expected_pr_number=binding["pr_number"],
+        )
+        authority = plan["trusted_authority"]["approved_normative_source"]
+        self.assertEqual(predecessor_head, authority["source_head"])
+        self.assertEqual(merged_commit, authority["merged_commit"])
 
     def _advance_default_branch(self, root: Path, relative: str, content: str) -> str:
         git(root, "switch", "main")
@@ -578,7 +626,7 @@ resolver = "2"
     def test_live_predecessor_pr_binds_head_and_base_identity(self) -> None:
         temp, root, predecessor_scope, predecessor_head, merged_commit, source_head = self._authority_fixture()
         self.addCleanup(temp.cleanup)
-        receipt = self._authority_receipt(root, predecessor_scope, predecessor_head, merged_commit, source_head)
+        receipt = self.api.APPROVED_NORMATIVE_EXPECTED
         body = (
             "stage=normative_source; immutable, not candidate authority; "
             f"repository={receipt['repository']}; default_branch={receipt['default_branch']}; "
@@ -591,53 +639,99 @@ resolver = "2"
             f"live git/commits API tree={receipt['merged_tree']}; "
             f"live contents API path={receipt['authority_path']} blob={receipt['authority_blob']}, "
             f"size={receipt['authority_size']}, decoded bytes sha256={receipt['authority_bytes_sha256'][7:]}. "
-            f"Stable fragment anchor={receipt['stable_fragment']}; "
-            f"sha256 including final LF={receipt['stable_fragment_sha256'][7:]}"
+            f"Stable fragment anchor={receipt['stable_fragment']}, "
+            f"sha256 including final LF={receipt['stable_fragment_sha256'][7:]}. "
+            f"Adjacent staged-authority fragment anchor={receipt['authority_contract_fragment']}, "
+            f"sha256 including final LF={receipt['authority_contract_fragment_sha256'][7:]}"
         )
         comment = {
-            "issue_url": "https://api.github.com/repos/eng-cc/oasis7/issues/3814",
-            "html_url": "https://github.com/eng-cc/oasis7/issues/3814#issuecomment-5743059557",
+            "issue_url": "https://api.github.com/repos/eng-cc/oasis7/issues/3996",
+            "html_url": "https://github.com/eng-cc/oasis7/issues/3996#issuecomment-5822424913",
             "body": body,
         }
         pr = {
+            "number": 3997,
             "state": "closed",
             "merged": True,
             "merge_commit_sha": receipt["merged_commit"],
             "head": {"sha": receipt["source_head"], "repo": {"full_name": "eng-cc/oasis7"}},
-            "base": {"ref": "main", "repo": {"full_name": "eng-cc/oasis7"}},
+            "base": {
+                "sha": receipt["source_scope_base"],
+                "ref": "main",
+                "repo": {"full_name": "eng-cc/oasis7"},
+            },
+        }
+        source_bytes = subprocess.check_output(
+            ["git", "-C", str(ROOT), "show", f"{receipt['merged_commit']}:{receipt['authority_path']}"]
+        )
+        repository = {"full_name": "eng-cc/oasis7", "default_branch": "main"}
+        commit = {
+            "sha": receipt["merged_commit"],
+            "tree": {"sha": receipt["merged_tree"]},
+        }
+        content = {
+            "path": receipt["authority_path"],
+            "sha": receipt["authority_blob"],
+            "size": receipt["authority_size"],
+            "encoding": "base64",
+            "content": base64.b64encode(source_bytes).decode("ascii"),
+        }
+        payloads = {
+            f"repos/{self.api.APPROVED_NORMATIVE_REPOSITORY}": repository,
+            f"repos/{self.api.APPROVED_NORMATIVE_REPOSITORY}/issues/comments/{self.api.APPROVED_NORMATIVE_COMMENT}": comment,
+            f"repos/{self.api.APPROVED_NORMATIVE_REPOSITORY}/pulls/{self.api.APPROVED_NORMATIVE_PR}": pr,
+            f"repos/{self.api.APPROVED_NORMATIVE_REPOSITORY}/git/commits/{receipt['merged_commit']}": commit,
+            f"repos/{self.api.APPROVED_NORMATIVE_REPOSITORY}/contents/{receipt['authority_path']}?ref={receipt['merged_commit']}": content,
+            "repository": repository,
+            "comment": comment,
+            "pr": pr,
+            "commit": commit,
+            "content": content,
         }
         real_run = self.api.subprocess.run
 
         def fake_gh_run(command, **kwargs):
             if command[0] != "gh":
                 return real_run(command, **kwargs)
-            payload = comment if "/issues/comments/" in command[2] else pr
+            payload = payloads.get(command[2])
+            if payload is None:
+                return subprocess.CompletedProcess(command, 1, "", "unexpected GitHub endpoint")
             return subprocess.CompletedProcess(command, 0, json.dumps(payload), "")
 
-        for mutation in (
-            lambda value: value["head"].__setitem__("sha", "0" * 40),
-            lambda value: value["head"].__setitem__("repo", {"full_name": "other/repository"}),
-            lambda value: value["base"].__setitem__("ref", "develop"),
-            lambda value: value["base"].__setitem__("repo", {"full_name": "other/repository"}),
-            lambda value: value["head"].pop("sha"),
-            lambda value: value["head"].pop("repo"),
-            lambda value: value["base"].pop("ref"),
-            lambda value: value["base"].pop("repo"),
-        ):
-            with self.subTest(mutation=mutation):
-                bad_pr = deepcopy(pr)
-                mutation(bad_pr)
+        cases = (
+            ("wrong PR head", "pr", lambda value: value["head"].__setitem__("sha", "0" * 40), "head"),
+            ("wrong PR head repo", "pr", lambda value: value["head"].__setitem__("repo", {"full_name": "other/repository"}), "head"),
+            ("wrong PR base SHA", "pr", lambda value: value["base"].__setitem__("sha", "0" * 40), "base"),
+            ("wrong PR base branch", "pr", lambda value: value["base"].__setitem__("ref", "develop"), "base"),
+            ("wrong PR base repo", "pr", lambda value: value["base"].__setitem__("repo", {"full_name": "other/repository"}), "base"),
+            ("wrong merged commit", "pr", lambda value: value.__setitem__("merge_commit_sha", "0" * 40), "commit"),
+            ("wrong repository identity", "repository", lambda value: value.__setitem__("full_name", "other/repository"), "identity"),
+            ("wrong server default branch", "repository", lambda value: value.__setitem__("default_branch", "develop"), "branch"),
+            ("wrong comment issue", "comment", lambda value: value.__setitem__("issue_url", "https://api.github.com/repos/other/repository/issues/3996"), "identity"),
+            ("wrong commit identity", "commit", lambda value: value.__setitem__("sha", "0" * 40), "commit"),
+            ("wrong commit tree", "commit", lambda value: value["tree"].__setitem__("sha", "0" * 40), "tree"),
+            ("wrong contents path", "content", lambda value: value.__setitem__("path", "doc/other.md"), "path"),
+            ("wrong contents blob", "content", lambda value: value.__setitem__("sha", "0" * 40), "blob"),
+            ("wrong contents size", "content", lambda value: value.__setitem__("size", 0), "size"),
+            ("wrong contents bytes", "content", lambda value: value.__setitem__("content", base64.b64encode(b"x" * len(source_bytes)).decode("ascii")), "digest"),
+        )
+        for name, key, mutation, error in cases:
+            with self.subTest(case=name):
+                bad_payloads = deepcopy(payloads)
+                mutation(bad_payloads[key])
 
                 def bad_gh_run(command, **kwargs):
                     if command[0] != "gh":
                         return real_run(command, **kwargs)
-                    payload = comment if "/issues/comments/" in command[2] else bad_pr
+                    payload = bad_payloads.get(command[2])
+                    if payload is None:
+                        return subprocess.CompletedProcess(command, 1, "", "unexpected GitHub endpoint")
                     return subprocess.CompletedProcess(command, 0, json.dumps(payload), "")
 
                 with patch.object(self.api, "_canonical_repository", return_value="eng-cc/oasis7"), patch.object(
                     self.api.subprocess, "run", side_effect=bad_gh_run
                 ):
-                    with self.assertRaisesRegex(Exception, "head|base|mismatch"):
+                    with self.assertRaisesRegex(Exception, error):
                         self.api._read_approved_normative_source_from_github(root)
 
         with patch.object(self.api, "_canonical_repository", return_value="eng-cc/oasis7"), patch.object(
@@ -645,32 +739,44 @@ resolver = "2"
         ):
             parsed = self.api._read_approved_normative_source_from_github(root)
         self.assertEqual(receipt["source_head"], parsed["source_head"])
+        self.assertEqual(self.api.AUTHORITY_FRAGMENT, parsed["stable_fragment"])
+        self.assertEqual(self.api.AUTHORITY_CONTRACT_FRAGMENT, parsed["authority_contract_fragment"])
+
+        for old_or_wrong in (
+            body.replace("task_uid=task_a14e1a1d51a44519ab0aa94632d90df4", "task_uid=task_wrong"),
+            body.replace("PR=3997", "PR=3815"),
+            body.replace("MERGED into commit=4f97540c34aefca41d8bf790cbf09b3176f07de3", "MERGED into commit=" + "0" * 40),
+            body.replace("Stable fragment anchor=cargo-package-scope-and-impact-scoped-verification", "Stable fragment anchor=cargo-checker-authority-upgrade"),
+            body.replace("Adjacent staged-authority fragment anchor=cargo-checker-authority-upgrade", "Adjacent staged-authority fragment anchor=other"),
+            body.replace("stage=normative_source", "stage=approved_planner_authority"),
+            body + "; PR=3997",
+        ):
+            with self.subTest(receipt_body=old_or_wrong[-80:]):
+                with self.assertRaisesRegex(Exception, "mismatch|identity|immutable"):
+                    self.api._parse_approved_normative_comment(old_or_wrong)
 
     def test_live_current_task_reads_reciprocal_pr_and_exact_refs(self) -> None:
         temp, root, _predecessor_scope, _predecessor_head, merged_commit, source_head = self._authority_fixture()
         self.addCleanup(temp.cleanup)
-        task_uid = "task_e21604f5cdb3476c8e146332a68a05b4"
+        task_uid = self.api.CURRENT_PLANNER_TASK_UID
         issue = {
-            "number": 3818,
+            "number": 3999,
             "body": (
                 f"task_uid: {task_uid}\n"
                 "PR: https://github.com/eng-cc/oasis7/pull/4921\n"
             ),
         }
         evidence = {
-            "issue_url": "https://api.github.com/repos/eng-cc/oasis7/issues/3818",
-            "html_url": "https://github.com/eng-cc/oasis7/issues/3818#issuecomment-5743122124",
-            "body": (
-                f"identity authority=UID {task_uid}, canonical worktree {root}, "
-                f"branch source, trusted base {merged_commit};"
-            ),
+            "issue_url": "https://api.github.com/repos/eng-cc/oasis7/issues/3999",
+            "html_url": "https://github.com/eng-cc/oasis7/issues/3999#issuecomment-5822600447",
+            "body": LIVE_CURRENT_PLANNER_TASK_COMMENT,
         }
         pr = {
             "number": 4921,
             "state": "open",
             "head": {
                 "sha": source_head,
-                "ref": "source",
+                "ref": "task/engineering-cargo-standalone-lock-planner",
                 "repo": {"full_name": "eng-cc/oasis7"},
             },
             "base": {
@@ -680,6 +786,11 @@ resolver = "2"
             },
         }
         real_run = self.api.subprocess.run
+
+        # The exact live N1 base OID is outside this temporary Git fixture.
+        # Preserve ancestry coverage here by modeling only its expected PR base.
+        def expected_live_base(_repo, _trusted_base, live_base_sha):
+            return live_base_sha == merged_commit
 
         def fake_gh_run(command, **kwargs):
             if command[0] != "gh":
@@ -694,9 +805,12 @@ resolver = "2"
 
         with patch.object(self.api, "_canonical_repository", return_value="eng-cc/oasis7"), patch.object(
             self.api.subprocess, "run", side_effect=fake_gh_run
-        ):
+        ), patch.object(self.api, "_is_ancestor", side_effect=expected_live_base):
             parsed = self.api._read_current_planner_task_from_github(root)
         self.assertEqual(4921, parsed["pr_number"])
+        self.assertEqual(self.api.CURRENT_PLANNER_TASK_UID, parsed["task_uid"])
+        self.assertEqual("4f97540c34aefca41d8bf790cbf09b3176f07de3", parsed["initial_base"])
+        self.assertEqual("task/engineering-cargo-standalone-lock-planner", parsed["branch"])
         self.assertEqual(source_head, parsed["head_sha"])
         self.assertEqual(merged_commit, parsed["base_sha"])
 
@@ -723,7 +837,7 @@ resolver = "2"
 
                 with patch.object(self.api, "_canonical_repository", return_value="eng-cc/oasis7"), patch.object(
                     self.api.subprocess, "run", side_effect=bad_gh_run
-                ):
+                ), patch.object(self.api, "_is_ancestor", side_effect=expected_live_base):
                     with self.assertRaisesRegex(Exception, "head|base|mismatch"):
                         self.api._read_current_planner_task_from_github(root)
 
@@ -741,6 +855,71 @@ resolver = "2"
         ):
             with self.assertRaisesRegex(Exception, "reciprocal PR"):
                 self.api._read_current_planner_task_from_github(root)
+
+    def test_live_current_task_rejects_duplicate_or_conflicting_identity_fields(self) -> None:
+        temp, root, _predecessor_scope, _predecessor_head, merged_commit, source_head = self._authority_fixture()
+        self.addCleanup(temp.cleanup)
+        task_uid = self.api.CURRENT_PLANNER_TASK_UID
+        issue = {
+            "number": 3999,
+            "body": (
+                f"task_uid: {task_uid}\n"
+                "PR: https://github.com/eng-cc/oasis7/pull/4921\n"
+            ),
+        }
+        evidence = {
+            "issue_url": "https://api.github.com/repos/eng-cc/oasis7/issues/3999",
+            "html_url": "https://github.com/eng-cc/oasis7/issues/3999#issuecomment-5822600447",
+            "body": (
+                f"identity authority=UID {task_uid}, canonical worktree {root}, "
+                f"branch source, trusted base {merged_commit};"
+            ),
+        }
+        pr = {
+            "number": 4921,
+            "state": "open",
+            "head": {
+                "sha": source_head,
+                "ref": "source",
+                "repo": {"full_name": "eng-cc/oasis7"},
+            },
+            "base": {
+                "sha": merged_commit,
+                "ref": "main",
+                "repo": {"full_name": "eng-cc/oasis7"},
+            },
+        }
+        real_run = self.api.subprocess.run
+
+        def read_task(issue_payload):
+            def fake_gh_run(command, **kwargs):
+                if command[0] != "gh":
+                    return real_run(command, **kwargs)
+                if "/issues/comments/" in command[2]:
+                    payload = evidence
+                elif "/pulls/" in command[2]:
+                    payload = pr
+                else:
+                    payload = issue_payload
+                return subprocess.CompletedProcess(command, 0, json.dumps(payload), "")
+
+            with patch.object(self.api, "_canonical_repository", return_value="eng-cc/oasis7"), patch.object(
+                self.api.subprocess, "run", side_effect=fake_gh_run
+            ):
+                return self.api._read_current_planner_task_from_github(root)
+
+        self.assertEqual(4921, read_task(issue)["pr_number"])
+        invalid_issue_bodies = (
+            issue["body"] + f"task_uid: {task_uid}\n",
+            issue["body"] + "task_uid: task_00000000000000000000000000000000\n",
+            issue["body"] + "PR: https://github.com/eng-cc/oasis7/pull/4921\n",
+            issue["body"] + "PR: https://github.com/eng-cc/oasis7/pull/4922\n",
+            issue["body"] + "PR: https://github.com/other/repository/pull/4921\n",
+        )
+        for body in invalid_issue_bodies:
+            with self.subTest(issue_body=body):
+                with self.assertRaisesRegex(self.api.PlanError, "duplicate|ambiguous|mismatch"):
+                    read_task({**issue, "body": body})
 
     def test_current_task_identity_rejects_fabricated_match_and_wrong_head_base(self) -> None:
         temp, root, predecessor_scope, predecessor_head, merged_commit, source_head = self._authority_fixture()
@@ -819,6 +998,8 @@ resolver = "2"
             "authority_bytes_sha256": digest,
             "authority_size": 0,
             "stable_fragment_sha256": digest,
+            "authority_contract_fragment": "wrong-authority-contract",
+            "authority_contract_fragment_sha256": digest,
             "predecessor_file_sha256": digest,
             "stage": "checker",
         }
@@ -834,6 +1015,14 @@ resolver = "2"
             "predecessor_pr_number": 3816,
             "predecessor_file_sha256": digest,
             "predecessor_authority_digest": digest,
+            "predecessor_authority_commit": oid,
+            "predecessor_authority_tree": oid,
+            "predecessor_authority_path": "doc/other.md",
+            "predecessor_authority_blob": oid,
+            "predecessor_authority_fragment": "wrong-fragment",
+            "predecessor_authority_fragment_sha256": digest,
+            "predecessor_authority_contract_fragment": "wrong-contract-fragment",
+            "predecessor_authority_contract_fragment_sha256": digest,
             "stage": "checker",
             "write_scope": list(self.api.PLANNER_WRITE_SCOPE) + ["scripts/pm/check-cargo-package-scope"],
         }
