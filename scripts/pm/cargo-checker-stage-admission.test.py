@@ -651,9 +651,16 @@ class CheckerStageAdmissionTest(unittest.TestCase):
         following_job = workflow.index("\n  windows-package-rollout-behavior:", producer_start)
         required_gate_block = workflow[required_gate_start:producer_start]
         producer_block = workflow[producer_start:following_job]
-        tests = required_gate_block.index("      - id: required-gate-tests")
+        tests = required_gate_block.index("      - name: Run required test tier")
+        required_test_lines = required_gate_block[tests:].splitlines()
+        required_test_block = [required_test_lines[0]]
+        for line in required_test_lines[1:]:
+            if line.startswith("      - "):
+                break
+            required_test_block.append(line)
         upload_in_tests_job = required_gate_block.find("Upload Cargo checker-stage admission receipt")
         self.assertGreater(tests, 0)
+        self.assertIn("        id: required-gate-tests", "\n".join(required_test_block))
         self.assertEqual(-1, upload_in_tests_job)
         self.assertIn("needs: required-gate", producer_block)
         self.assertIn(
