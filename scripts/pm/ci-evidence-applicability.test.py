@@ -13,6 +13,7 @@ UID = "task_12345678901234567890123456789012"
 REPOSITORY = "eng-cc/oasis7"
 HEAD = "a" * 40
 TARGET = "b" * 40
+TARGET_TREE = "5" * 40
 SOURCE_SCOPE = "9" * 40
 DIGEST = f"sha256:{'c' * 64}"
 INPUT_DIGEST = f"sha256:{'d' * 64}"
@@ -107,16 +108,29 @@ def source_plan(*, reuse_policies=None):
 
 
 def target_snapshot(*, input_digest=INPUT_DIGEST, review_digest=DIGEST,
-                    closure="complete", reuse_policies=None):
+                    closure="complete", reuse_policies=None,
+                    assessed_target_oid=TARGET):
     specs = planner_unit_specs(reuse_policies)
     corpus = product_corpus()
-    issuer = planner_inventory_issuer(TARGET, TARGET, specs, corpus)
+    target_context = {
+        "repository": REPOSITORY,
+        "task_uid": UID,
+        "pr_number": 7,
+        "source_head_oid": HEAD,
+        "source_scope_oid": SOURCE_SCOPE,
+        "target_oid": assessed_target_oid,
+        "input_scope_commit_oid": TARGET,
+        "input_scope_tree_oid": TARGET_TREE,
+        "unit_specs": specs,
+        "product_corpus": corpus,
+    }
+    observation = trusted_target_observation(target_context)
     if closure == "complete":
         scope = {
-            "schema": input_scope.INPUT_SCOPE_SCHEMA,
+            "schema": input_scope.TARGET_INPUT_SCOPE_SCHEMA,
             "target_oid": TARGET,
-            "target_tree_oid": TARGET,
-            "planner_inventory_issuer": issuer,
+            "target_tree_oid": TARGET_TREE,
+            "target_observation": observation,
             "closure_status": {"status": "complete", "reason": None},
             "required_test_units": [CORPUS_UNIT, "unit-a"],
             "input_fingerprints": {"unit-a": input_digest, CORPUS_UNIT: INPUT_DIGEST},
@@ -127,17 +141,17 @@ def target_snapshot(*, input_digest=INPUT_DIGEST, review_digest=DIGEST,
         }
     else:
         scope = {
-            "schema": input_scope.INPUT_SCOPE_SCHEMA,
+            "schema": input_scope.TARGET_INPUT_SCOPE_SCHEMA,
             "target_oid": TARGET,
-            "target_tree_oid": TARGET,
-            "planner_inventory_issuer": issuer,
+            "target_tree_oid": TARGET_TREE,
+            "target_observation": observation,
             "closure_status": {"status": "unknown", "reason": "fixture closure unavailable"},
             "required_test_units": [CORPUS_UNIT, "unit-a"],
             "input_fingerprints": {},
             "dependency_edges": [],
             "fallback_complete": True,
             "fallback_contract": input_scope.planner_fallback_contract(
-                [CORPUS_UNIT, "unit-a"], TARGET, TARGET,
+                [CORPUS_UNIT, "unit-a"], TARGET, TARGET_TREE,
             ),
             "product_corpus": corpus,
         }
@@ -147,10 +161,10 @@ def target_snapshot(*, input_digest=INPUT_DIGEST, review_digest=DIGEST,
         "pr_number": 7,
         "source_head_oid": HEAD,
         "source_scope_oid": SOURCE_SCOPE,
-        "target_oid": TARGET,
+        "target_oid": assessed_target_oid,
         "prior_assessed_target_oid": None,
         "input_scope_commit_oid": TARGET,
-        "input_scope_tree_oid": TARGET,
+        "input_scope_tree_oid": TARGET_TREE,
         "review_applicability_digest": review_digest,
         "required_test_units": [CORPUS_UNIT, "unit-a"],
         "required_review_roles": ["runtime_engineer"],
@@ -230,6 +244,48 @@ def effective_policy_identity(policy=None):
         "schema": EFFECTIVE_POLICY_IDENTITY_SCHEMA,
         "digest": effective_policy_digest(enabled_policy() if policy is None else policy),
     }
+
+
+def trusted_target_observation(target, policy=None):
+    """Fixture for an independently supplied local planner observation."""
+    context = {**target, "effective_policy_identity": effective_policy_identity(policy)}
+    authority = {
+        "schema": input_scope.PLANNER_INVENTORY_AUTHORITY_SCHEMA,
+        "repository": REPOSITORY,
+        "workflow_ref": f"{REPOSITORY}/.github/workflows/rust.yml@refs/heads/main",
+        "planner_authority_oid": "e" * 40,
+        "planner_config_sha256": f"sha256:{'f' * 64}",
+    }
+    invocation = {
+        "schema": input_scope.LOCAL_PLANNER_INVOCATION_SCHEMA,
+        "planner_authority_oid": authority["planner_authority_oid"],
+        "planner_config_sha256": authority["planner_config_sha256"],
+        "event_name": "workflow_dispatch",
+        "run_mode": "integration_revalidation",
+        "base_ref": "1" * 40,
+        "head_ref": context["source_head_oid"],
+        "task_uid": context["task_uid"],
+        "scope_base_oid": context["source_scope_oid"],
+        "impact_projection_sha256": DIGEST,
+        "changed_paths": ["src/unit-a.rs"],
+        "planner_output_sha256": f"sha256:{'7' * 64}",
+    }
+    invocation["digest"] = input_scope.local_planner_invocation_digest(invocation)
+    return input_scope.build_target_observation(
+        authority=authority,
+        planner_invocation=invocation,
+        repository=context["repository"],
+        task_uid=context["task_uid"],
+        pr_number=context["pr_number"],
+        source_head_oid=context["source_head_oid"],
+        source_scope_oid=context["source_scope_oid"],
+        assessed_target_oid=context["target_oid"],
+        input_scope_commit_oid=context["input_scope_commit_oid"],
+        input_scope_tree_oid=context["input_scope_tree_oid"],
+        effective_policy_identity=context["effective_policy_identity"],
+        unit_specs=context["unit_specs"],
+        product_corpus=context["product_corpus"],
+    )
 
 
 def publication_v1():
@@ -323,23 +379,30 @@ class PublicationCompatibilityTests(unittest.TestCase):
 
 
 class ApplicabilityDecisionTests(unittest.TestCase):
-    def evaluate(self, *, plan=None, evidence=None, target=None, policy=None):
+    def evaluate(self, *, plan=None, evidence=None, target=None, policy=None,
+                 trusted_observation=None):
         plan = source_plan() if plan is None else plan
         target = target_snapshot() if target is None else target
+        policy = enabled_policy() if policy is None else policy
+        if trusted_observation is None:
+            try:
+                trusted_observation = trusted_target_observation(target, policy)
+            except ValueError:
+                # Invalid policy cases must be rejected before target evidence
+                # is consulted, so the fixture supplies the ordinary policy's
+                # separate reader binding in those cases.
+                trusted_observation = trusted_target_observation(target, enabled_policy())
         return applicability.evaluate_evidence_applicability(
             plan,
             evidence_set(
                 inventory_digest=plan["planner_inventory_issuer"]["inventory_digest"],
             ) if evidence is None else evidence,
             target,
-            enabled_policy() if policy is None else policy,
+            policy,
             trusted_source_inventory=trusted_inventory_readback(
                 plan["planner_inventory_issuer"], artifact_id=30,
             ),
-            trusted_target_inventory=trusted_inventory_readback(
-                target.get("input_scope", target_snapshot()["input_scope"])["planner_inventory_issuer"],
-                artifact_id=31,
-            ),
+            trusted_target_observation=trusted_observation,
         )
 
     def test_reuse_is_disabled_when_policy_omits_capability(self):
@@ -370,11 +433,34 @@ class ApplicabilityDecisionTests(unittest.TestCase):
             "source_scope_oid": SOURCE_SCOPE,
             "assessed_target_oid": TARGET,
             "prior_assessed_target_oid": None,
-        }, decision.identity)
-        self.assertEqual("sha256:", decision.effective_policy_identity["digest"][:7])
+            "input_scope_commit_oid": TARGET,
+            "input_scope_tree_oid": TARGET_TREE,
+            "planner_authority_oid": "e" * 40,
+            "planner_config_sha256": f"sha256:{'f' * 64}",
+        }, {key: decision.identity[key] for key in (
+            "source_head_oid", "source_scope_oid", "assessed_target_oid",
+            "prior_assessed_target_oid", "input_scope_commit_oid", "input_scope_tree_oid",
+            "planner_authority_oid", "planner_config_sha256",
+        )})
+        self.assertEqual(
+            trusted_target_observation(target_snapshot())["planner_invocation"]["digest"],
+            decision.identity["planner_invocation_digest"],
+        )
+        self.assertEqual(
+            trusted_target_observation(target_snapshot())["inventory_digest"],
+            decision.identity["target_inventory_digest"],
+        )
+        self.assertEqual(effective_policy_identity(), decision.effective_policy_identity)
         self.assertEqual({"review", "test"}, {row["kind"] for row in decision.item_decisions})
         self.assertTrue(all(row["reason"] for row in decision.item_decisions))
         self.assertTrue(decision.evidence_locators)
+        target_locator = next(
+            item for item in decision.evidence_locators
+            if item["kind"] == "trusted-local-target-observation"
+        )
+        self.assertEqual(TARGET, target_locator["id"]["assessed_target_oid"])
+        self.assertEqual(TARGET_TREE, target_locator["id"]["input_scope_tree_oid"])
+        self.assertNotIn("artifact_id", target_locator["id"])
 
     def test_disabled_or_ineligible_unit_policy_revalidates_only_that_test_unit(self):
         cases = (
@@ -489,14 +575,62 @@ class ApplicabilityDecisionTests(unittest.TestCase):
         self.assertIn("APPLICABILITY_INPUT_INVALID", decision.blockers)
 
     def test_assessed_target_is_distinct_from_input_scope_commit(self):
-        target = target_snapshot()
-        target["target_oid"] = "e" * 40
+        target = target_snapshot(assessed_target_oid="e" * 40)
         decision = self.evaluate(target=target)
 
         self.assertEqual("reusable", result_status(decision, "source_review"))
         self.assertEqual("reusable", result_status(decision, "test_evidence"))
         self.assertEqual("reusable", result_status(decision, "merge_readiness"))
         self.assertEqual("e" * 40, decision.identity["assessed_target_oid"])
+        self.assertEqual(TARGET, decision.identity["input_scope_commit_oid"])
+
+    def test_local_target_observation_cannot_claim_test_success_or_replace_results(self):
+        target = target_snapshot()
+        target["input_scope"]["target_observation"]["test_status"] = "passed"
+        decision = self.evaluate(target=target)
+
+        self.assertEqual("blocked", result_status(decision, "test_evidence"))
+        self.assertIn("APPLICABILITY_INPUT_INVALID", decision.blockers)
+
+        target = target_snapshot()
+        evidence = evidence_set()
+        evidence["tests"] = []
+        decision = self.evaluate(target=target, evidence=evidence)
+        self.assertEqual("revalidate", result_status(decision, "test_evidence"))
+        self.assertEqual((CORPUS_UNIT, "unit-a"), tuple(decision.required_test_units))
+        self.assertEqual((), tuple(decision.reused_units))
+
+    def test_wrong_q_or_w_in_embedded_target_observation_blocks(self):
+        wrong_authority = {
+            "schema": input_scope.PLANNER_INVENTORY_AUTHORITY_SCHEMA,
+            "repository": REPOSITORY,
+            "workflow_ref": f"{REPOSITORY}/.github/workflows/rust.yml@refs/heads/main",
+            "planner_authority_oid": "c" * 40,
+            "planner_config_sha256": f"sha256:{'f' * 64}",
+        }
+        for field, replacement in (
+            ("assessed_target_oid", "d" * 40),
+            ("input_scope_tree_oid", "d" * 40),
+            ("authority", wrong_authority),
+            ("effective_policy_identity", {
+                "schema": "oasis7-ci-effective-policy-identity/v1",
+                "digest": "sha256:" + "0" * 64,
+            }),
+        ):
+            with self.subTest(field=field):
+                target = target_snapshot()
+                target["input_scope"]["target_observation"][field] = replacement
+                decision = self.evaluate(target=target)
+                self.assertEqual("blocked", result_status(decision, "test_evidence"))
+                self.assertIn("APPLICABILITY_INPUT_INVALID", decision.blockers)
+
+    def test_wrong_target_inventory_digest_blocks(self):
+        target = target_snapshot()
+        target["input_scope"]["target_observation"]["inventory_digest"] = "sha256:" + "0" * 64
+        decision = self.evaluate(target=target)
+
+        self.assertEqual("blocked", result_status(decision, "test_evidence"))
+        self.assertIn("APPLICABILITY_INPUT_INVALID", decision.blockers)
 
     def test_product_result_must_cover_the_full_obligation_set(self):
         evidence = evidence_set()

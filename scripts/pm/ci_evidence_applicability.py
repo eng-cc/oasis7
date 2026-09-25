@@ -22,6 +22,7 @@ from ci_input_scope import (
     planner_inventory_digest,
     validate_input_scope_snapshot,
     validate_planner_inventory_binding,
+    validate_target_observation_binding,
 )
 from integration_executor_contract import (
     EFFECTIVE_POLICY_IDENTITY_SCHEMA,
@@ -239,6 +240,32 @@ def _inventory_locator(binding: dict[str, Any], label: str) -> dict[str, Any]:
     }
 
 
+def _target_observation_locator(binding: dict[str, Any]) -> dict[str, Any]:
+    """Locate local fresh-Q planner evidence without inventing a CI artifact."""
+    authority = binding["authority"]
+    invocation = binding["planner_invocation"]
+    return {
+        "kind": "trusted-local-target-observation",
+        "id": {
+            "repository": binding["repository"],
+            "workflow_ref": authority["workflow_ref"],
+            "planner_authority_oid": authority["planner_authority_oid"],
+            "planner_config_sha256": authority["planner_config_sha256"],
+            "planner_invocation_digest": invocation["digest"],
+            "task_uid": binding["task_uid"],
+            "pr_number": binding["pr_number"],
+            "source_head_oid": binding["source_head_oid"],
+            "source_scope_oid": binding["source_scope_oid"],
+            "assessed_target_oid": binding["assessed_target_oid"],
+            "input_scope_commit_oid": binding["input_scope_commit_oid"],
+            "input_scope_tree_oid": binding["input_scope_tree_oid"],
+            "effective_policy_identity": binding["effective_policy_identity"],
+            "unit_ids": binding["unit_ids"],
+            "inventory_digest": binding["inventory_digest"],
+        },
+    }
+
+
 def _bound_unit_policies(
     inventory_record: Any,
     trusted_inventory: dict[str, Any],
@@ -253,8 +280,8 @@ def _bound_unit_policies(
     digest = planner_inventory_digest(
         unit_specs,
         product_corpus,
-        trusted_inventory["target_oid"],
-        trusted_inventory["target_tree_oid"],
+        trusted_inventory.get("target_oid", trusted_inventory.get("input_scope_commit_oid")),
+        trusted_inventory.get("target_tree_oid", trusted_inventory.get("input_scope_tree_oid")),
     )
     if digest != trusted_inventory["inventory_digest"]:
         raise ValueError(f"{label} unit policies are not bound to the trusted inventory")
@@ -325,13 +352,16 @@ def evaluate_evidence_applicability(
     effective_policy: Any,
     *,
     trusted_source_inventory: Any = None,
-    trusted_target_inventory: Any = None,
+    trusted_target_observation: Any = None,
 ) -> ApplicabilityDecision:
     """Decide whether prior review/test evidence applies to a target snapshot.
 
-    The live reader supplies both planner inventory bindings out of band. The
-    target's assessed Q is separate from the commit/tree used to build its
-    input inventory (M/T). Reuse remains disabled unless the v2 envelope and
+    The reader supplies the source execution inventory and local target
+    observation out of band. Source execution still requires live R/A/check/
+    artifact readback. Fresh-Q observation is a distinct W-replayed local
+    binding without artifact IDs. The target's assessed Q is separate from
+    the commit/tree used to build its input inventory (M/T). Reuse remains
+    disabled unless the v2 envelope and
     trusted effective policy both select the capability. Both plan records
     carry full `unit_specs` and `product_corpus` data; their canonical digest
     must match the respective live binding, and a test unit is reusable only
@@ -455,7 +485,10 @@ def evaluate_evidence_applicability(
         ))
         input_scope = validate_input_scope_snapshot(
             target_snapshot.get("input_scope"),
-            trusted_planner_inventory=trusted_target_inventory,
+            trusted_target_observation=trusted_target_observation,
+        )
+        target_observation = validate_target_observation_binding(
+            input_scope.get("target_observation"), trusted_target_observation,
         )
         if target_snapshot.get("product_corpus") != input_scope["product_corpus"]:
             raise ValueError("target product corpus disagrees with its input-scope snapshot")
@@ -470,10 +503,29 @@ def evaluate_evidence_applicability(
         if (input_scope["target_oid"] != input_scope_commit_oid
                 or input_scope["target_tree_oid"] != input_scope_tree_oid):
             raise ValueError("target input scope commit/tree disagree with the explicit M/T identity")
+        target_pr_number = target_snapshot.get("pr_number")
+        if (target_observation["repository"] != target_identity["repository"]
+                or target_observation["task_uid"] != target_identity["task_uid"]
+                or target_observation["pr_number"] != target_pr_number
+                or target_observation["source_head_oid"] != target_identity["source_head_oid"]
+                or target_observation["source_scope_oid"] != target_identity["source_scope_oid"]
+                or target_observation["assessed_target_oid"] != assessed_target_oid
+                or target_observation["input_scope_commit_oid"] != input_scope_commit_oid
+                or target_observation["input_scope_tree_oid"] != input_scope_tree_oid
+                or target_observation["effective_policy_identity"] != policy_identity):
+            raise ValueError("trusted local target observation differs from Q, H/S, M/T, task or policy")
+        decision_identity.update({
+            "input_scope_commit_oid": input_scope_commit_oid,
+            "input_scope_tree_oid": input_scope_tree_oid,
+            "planner_authority_oid": target_observation["authority"]["planner_authority_oid"],
+            "planner_config_sha256": target_observation["authority"]["planner_config_sha256"],
+            "planner_invocation_digest": target_observation["planner_invocation"]["digest"],
+            "target_inventory_digest": target_observation["inventory_digest"],
+        })
         target_units = tuple(input_scope["required_test_units"])
         target_unit_policies = _bound_unit_policies(
             target_snapshot,
-            trusted_target_inventory,
+            target_observation,
             set(target_units),
             "target",
         )
@@ -507,7 +559,7 @@ def evaluate_evidence_applicability(
         )
 
     corpus_result = aggregate_product_corpus_results(
-        input_scope, tests, trusted_planner_inventory=trusted_target_inventory,
+        input_scope, tests, trusted_target_observation=trusted_target_observation,
     )
     if corpus_result["status"] == "blocked":
         corpus_blockers = tuple(
@@ -523,7 +575,7 @@ def evaluate_evidence_applicability(
     item_decisions: list[dict[str, Any]] = []
     evidence_locators: list[dict[str, Any]] = [
         _inventory_locator(source_inventory, "source"),
-        _inventory_locator(trusted_target_inventory, "target"),
+        _target_observation_locator(target_observation),
     ]
 
     # A changed review applicability digest starts a new review epoch.  C0
