@@ -5,8 +5,10 @@ import importlib.util
 import os
 import subprocess
 import tempfile
+import textwrap
 import unittest
 from pathlib import Path
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -24,6 +26,7 @@ class RequiredScopePreviewTests(unittest.TestCase):
             "PREVIEW_REF": "refs/heads/main",
             "PREVIEW_WORKFLOW_SHA": "a" * 40,
             "PREVIEW_RUN_ATTEMPT": "1",
+            "PREVIEW_RUN_ID": "20260925001",
             "PREVIEW_PR_NUMBER": "3992",
             "PREVIEW_TASK_UID": "task_" + "b" * 32,
             "PREVIEW_BASE_SHA": "a" * 40,
@@ -44,6 +47,7 @@ class RequiredScopePreviewTests(unittest.TestCase):
             ("PREVIEW_REF", "refs/heads/feature"),
             ("PREVIEW_EVENT_NAME", "pull_request"),
             ("PREVIEW_RUN_ATTEMPT", "2"),
+            ("PREVIEW_RUN_ID", "0"),
             ("PREVIEW_TASK_UID", "task_invalid"),
             ("PREVIEW_SCENARIO", "full"),
             ("PREVIEW_TESTED_TREE_SHA", "e" * 39),
@@ -175,6 +179,58 @@ class RequiredScopePreviewTests(unittest.TestCase):
                         selector += "_contracts"
                     self.assertEqual(fields[selector], "true" if capability == scenario else "false")
 
+    def test_ordinary_document_pair_uses_trusted_legacy_and_versioned_configs(self):
+        legacy = PREVIEW.plan_scenario(ROOT, "ordinary_document", mode="legacy")
+        versioned = PREVIEW.plan_scenario(ROOT, "ordinary_document", mode="versioned")
+        self.assertNotIn("execution_contract", legacy)
+        self.assertEqual(legacy["planner_config_sha256"], "sha256:" + PREVIEW.EXPECTED_LEGACY_CONFIG_SHA256)
+        self.assertEqual(versioned["execution_contract"], "required-domain-split/v1")
+        self.assertEqual(versioned["planner_config_sha256"], "sha256:" + PREVIEW.EXPECTED_FIXTURE_SHA256)
+        self.assertEqual(legacy["selected_capabilities"], "required_gate_baseline")
+        self.assertEqual(versioned["selected_capabilities"], "required_gate_baseline")
+        self.assertEqual(legacy["scope"], "minimal")
+        self.assertEqual(versioned["scope"], "minimal")
+
+    def test_disposable_overlay_proves_one_changed_document_without_changing_candidate(self):
+        candidate = subprocess.check_output(
+            ["git", "-C", str(ROOT), "rev-parse", "HEAD^{commit}"], text=True
+        ).strip()
+        candidate_tree = subprocess.check_output(
+            ["git", "-C", str(ROOT), "rev-parse", "HEAD^{tree}"], text=True
+        ).strip()
+        original_status = subprocess.check_output(
+            ["git", "-C", str(ROOT), "status", "--porcelain"], text=True
+        )
+        overlay = None
+        try:
+            overlay, overlay_commit, overlay_tree = PREVIEW.create_document_overlay(ROOT, candidate)
+            self.assertNotEqual(overlay_tree, candidate_tree)
+            self.assertEqual(
+                subprocess.check_output(
+                    ["git", "-C", str(overlay), "rev-parse", "HEAD^1"], text=True
+                ).strip(),
+                candidate,
+            )
+            self.assertEqual(
+                subprocess.check_output(
+                    ["git", "-C", str(overlay), "diff", "--name-only", candidate, overlay_commit, "--", "doc/product"],
+                    text=True,
+                ).splitlines(),
+                [PREVIEW.SCENARIOS["ordinary_document"]["path"]],
+            )
+            count, _elapsed = PREVIEW.verify_changed_range_document(
+                ROOT, overlay, candidate, overlay_commit
+            )
+            self.assertEqual(count, 1)
+        finally:
+            if overlay is not None:
+                PREVIEW.remove_document_overlay(ROOT, overlay)
+        self.assertEqual(
+            subprocess.check_output(["git", "-C", str(ROOT), "rev-parse", "HEAD^{tree}"], text=True).strip(),
+            candidate_tree,
+        )
+        self.assertEqual(subprocess.check_output(["git", "-C", str(ROOT), "status", "--porcelain"], text=True), original_status)
+
     def test_dispatch_environment_never_enables_manual_only_selectors(self):
         fields = PREVIEW.plan_scenario(ROOT, "operational_contracts")
         context = self.context()
@@ -183,10 +239,15 @@ class RequiredScopePreviewTests(unittest.TestCase):
             "ACTIONS_ID_TOKEN_REQUEST_TOKEN", "GITHUB_OUTPUT", "GITHUB_ENV", "GITHUB_PATH",
             "GITHUB_STATE", "GITHUB_STEP_SUMMARY",
         )
-        old_values = {name: os.environ.get(name) for name in (*sentinel_names, "PREVIEW_PYTHON")}
+        old_values = {
+            name: os.environ.get(name)
+            for name in (*sentinel_names, "PREVIEW_PYTHON", "OASIS7_CI_EXECUTION_CONTRACT", "OASIS7_CI_RUN_PACKAGING_CONTRACTS")
+        }
         try:
             for name in sentinel_names:
                 os.environ[name] = "must-not-reach-child"
+            os.environ["OASIS7_CI_EXECUTION_CONTRACT"] = "stale-parent-value"
+            os.environ["OASIS7_CI_RUN_PACKAGING_CONTRACTS"] = "true"
             os.environ["PREVIEW_PYTHON"] = "/tmp/preview-venv/bin/python"
             env = PREVIEW.dispatcher_environment(fields, context, "f" * 40)
         finally:
@@ -204,6 +265,60 @@ class RequiredScopePreviewTests(unittest.TestCase):
         preview_bin = str(Path("/tmp/preview-venv/bin/python").resolve().parent)
         self.assertTrue(env["PATH"].startswith(preview_bin + os.pathsep))
 
+    def test_legacy_dispatch_clears_inherited_versioned_environment_and_uses_overlay_head(self):
+        fields = PREVIEW.plan_scenario(ROOT, "ordinary_document", mode="legacy")
+        context = self.context()
+        old_values = {
+            name: os.environ.get(name)
+            for name in (
+                "PREVIEW_PYTHON", "OASIS7_CI_EXECUTION_CONTRACT",
+                "OASIS7_CI_RUN_PACKAGING_CONTRACTS", "OASIS7_CI_NEEDS_MARKDOWN",
+            )
+        }
+        try:
+            os.environ["PREVIEW_PYTHON"] = "/tmp/preview-venv/bin/python"
+            os.environ["OASIS7_CI_EXECUTION_CONTRACT"] = "stale-parent-value"
+            os.environ["OASIS7_CI_RUN_PACKAGING_CONTRACTS"] = "true"
+            os.environ["OASIS7_CI_NEEDS_MARKDOWN"] = "false"
+            env = PREVIEW.dispatcher_environment(fields, context, "f" * 40, "c" * 40)
+        finally:
+            for name, value in old_values.items():
+                if value is None:
+                    os.environ.pop(name, None)
+                else:
+                    os.environ[name] = value
+        self.assertNotIn("OASIS7_CI_EXECUTION_CONTRACT", env)
+        self.assertNotIn("OASIS7_CI_RUN_PACKAGING_CONTRACTS", env)
+        self.assertNotIn("OASIS7_CI_NEEDS_MARKDOWN", env)
+        self.assertEqual(env["OASIS7_PRODUCT_DOC_BASE"], context["PREVIEW_BASE_SHA"])
+        self.assertEqual(env["OASIS7_PRODUCT_DOC_HEAD"], "c" * 40)
+
+    def test_timing_pair_runs_both_modes_against_the_same_overlay_even_if_first_fails(self):
+        context = self.context()
+        fields = {
+            "legacy": {"planner_config_sha256": "legacy"},
+            "versioned": {"planner_config_sha256": "versioned"},
+        }
+        order = ("legacy", "versioned")
+        with mock.patch.object(PREVIEW, "run_child", side_effect=[(1, 2.5), (0, 3.5)]) as run_child:
+            results = PREVIEW.run_document_timing_pair(
+                ROOT, Path("/tmp/validated-overlay"), fields, context, "f" * 40, "c" * 40, order
+            )
+        self.assertEqual(results, {"legacy": (1, 2.5), "versioned": (0, 3.5)})
+        self.assertEqual(run_child.call_count, 2)
+        for call, mode in zip(run_child.call_args_list, order):
+            args, kwargs = call
+            self.assertEqual(args[0], ROOT)
+            self.assertEqual(args[1], Path("/tmp/validated-overlay"))
+            self.assertIs(args[2], fields[mode])
+            self.assertEqual(args[4], "f" * 40)
+            self.assertEqual(kwargs["product_head"], "c" * 40)
+            self.assertEqual(kwargs["pair_leg"], mode)
+        with self.assertRaises(SystemExit):
+            PREVIEW.run_document_timing_pair(
+                ROOT, Path("/tmp/validated-overlay"), fields, context, "f" * 40, "c" * 40, ("legacy", "legacy")
+            )
+
     def test_validated_child_outputs_bind_tree_and_selected_capabilities(self):
         context = self.context()
         context["PREVIEW_SCENARIO"] = "packaging_contracts"
@@ -218,6 +333,33 @@ class RequiredScopePreviewTests(unittest.TestCase):
         self.assertEqual(values["run_packaging_contracts"], "true")
         self.assertEqual(values["run_operational_contracts"], "false")
 
+    def test_timing_pair_workflow_outputs_bind_overlay_and_both_results(self):
+        context = self.context()
+        context["PREVIEW_SCENARIO"] = "ordinary_document"
+        fields = PREVIEW.plan_scenario(ROOT, "ordinary_document")
+        extra = {
+            "pair_order": "legacy;versioned",
+            "legacy_run_result": "success",
+            "legacy_elapsed_seconds": "12.345",
+            "versioned_run_result": "success",
+            "versioned_elapsed_seconds": "6.789",
+            "document_overlay_parent_commit": "f" * 40,
+            "document_overlay_commit": "c" * 40,
+            "document_overlay_tree_sha": "d" * 40,
+            "document_changed_path": PREVIEW.SCENARIOS["ordinary_document"]["path"],
+            "document_changed_count": "1",
+            "document_range_check_result": "success",
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            output = Path(temporary) / "outputs.txt"
+            PREVIEW.write_workflow_outputs(output, context, "f" * 40, fields, extra)
+            values = dict(line.split("=", 1) for line in output.read_text().splitlines())
+        self.assertEqual(values["preview_run_id"], context["PREVIEW_RUN_ID"])
+        self.assertEqual(values["pair_order"], extra["pair_order"])
+        self.assertEqual(values["document_overlay_parent_commit"], "f" * 40)
+        self.assertEqual(values["legacy_run_result"], "success")
+        self.assertEqual(values["versioned_run_result"], "success")
+
     def test_workflow_is_manual_unprivileged_and_non_required(self):
         workflow = (ROOT / ".github/workflows/required-gate-versioned-preview.yml").read_text()
         self.assertIn("workflow_dispatch:", workflow)
@@ -228,6 +370,7 @@ class RequiredScopePreviewTests(unittest.TestCase):
         self.assertNotIn("upload-artifact", workflow)
         self.assertIn("refs/heads/main", workflow)
         self.assertIn("github.run_attempt == 1", workflow)
+        self.assertIn("PREVIEW_RUN_ID: ${{ github.run_id }}", workflow)
         self.assertIn("tested_tree_sha", workflow)
         self.assertNotIn("required-gate:", workflow)
 
@@ -258,9 +401,81 @@ class RequiredScopePreviewTests(unittest.TestCase):
         self.assertIn("Actual B-to-T diff: scripts/ci-required-scope.v2.json only", workflow)
         self.assertIn('[[ "$PREVIEW_RESULT" == success ]]', workflow)
         self.assertIn('[[ "$RUN_ATTEMPT" == 1 ]]', workflow)
-        driver = DRIVER_PATH.read_text()
-        self.assertIn("synthetic_changed_path=", driver)
-        self.assertIn("changed_range_document_validation=not_exercised_by_config_only_tree", driver)
+        self.assertIn('[[ "$DOCUMENT_PATH" == doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md', workflow)
+        self.assertIn('[[ "$LEGACY_RESULT" == success && "$VERSIONED_RESULT" == success ]]', workflow)
+        self.assertIn('"pair_result={\'success\' if code == 0 else \'failure\'}"', DRIVER_PATH.read_text())
+        self.assertIn("synthetic_changed_path=", DRIVER_PATH.read_text())
+        self.assertIn("document_overlay_scope=temporary child commit of candidate T", DRIVER_PATH.read_text())
+        self.assertNotIn("changed_range_document_validation=not_exercised_by_config_only_tree", DRIVER_PATH.read_text())
+
+    def test_workflow_summary_accepts_complete_pair_and_rejects_missing_document_proof(self):
+        workflow = (ROOT / ".github/workflows/required-gate-versioned-preview.yml").read_text()
+        marker = "      - name: Record selected child outcomes and ordinary-document timing pair\n"
+        section = workflow.split(marker, 1)[1]
+        lines = section.splitlines()
+        run_index = lines.index("        run: |\n".rstrip())
+        body_lines = []
+        for line in lines[run_index + 1 :]:
+            if line.startswith("          "):
+                body_lines.append(line[10:])
+            elif not line.strip():
+                body_lines.append("")
+            else:
+                break
+        summary_script = textwrap.dedent("\n".join(body_lines))
+        env = {
+            "RUN_ID": "20260925001",
+            "RUN_ATTEMPT": "1",
+            "PREVIEW_RESULT": "success",
+            "SCENARIO": "ordinary_document",
+            "VALIDATED_RUN_ID": "20260925001",
+            "BASE_SHA": "a" * 40,
+            "HEAD_SHA": "b" * 40,
+            "MERGE_COMMIT": "c" * 40,
+            "TREE_SHA": "d" * 40,
+            "PACKAGING_SELECTED": "false",
+            "OPERATIONAL_SELECTED": "false",
+            "PACKAGE_RESULT": "skipped",
+            "WINDOWS_RESULT": "skipped",
+            "FLEET_UBUNTU_RESULT": "skipped",
+            "FLEET_WINDOWS_RESULT": "skipped",
+            "FLEET_MACOS_RESULT": "skipped",
+            "PAIR_ORDER": "legacy;versioned",
+            "LEGACY_CONTRACT": "legacy",
+            "VERSIONED_CONTRACT": "required-domain-split/v1",
+            "LEGACY_CONFIG_SHA256": "sha256:" + PREVIEW.EXPECTED_LEGACY_CONFIG_SHA256,
+            "VERSIONED_CONFIG_SHA256": "sha256:" + PREVIEW.EXPECTED_FIXTURE_SHA256,
+            "LEGACY_CAPABILITIES": "required_gate_baseline",
+            "VERSIONED_CAPABILITIES": "required_gate_baseline",
+            "OVERLAY_PARENT": "c" * 40,
+            "OVERLAY_COMMIT": "e" * 40,
+            "OVERLAY_TREE": "f" * 40,
+            "DOCUMENT_PATH": PREVIEW.SCENARIOS["ordinary_document"]["path"],
+            "DOCUMENT_COUNT": "1",
+            "DOCUMENT_CHECK_RESULT": "success",
+            "DOCUMENT_CHECK_SECONDS": "1.234",
+            "LEGACY_RESULT": "success",
+            "LEGACY_SECONDS": "10.500",
+            "VERSIONED_RESULT": "success",
+            "VERSIONED_SECONDS": "6.250",
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            summary_path = Path(temporary) / "summary.md"
+            good_env = {**os.environ, **env, "GITHUB_STEP_SUMMARY": str(summary_path)}
+            good = subprocess.run(
+                ["bash", "-e", "-u", "-o", "pipefail", "-c", summary_script],
+                env=good_env, text=True, capture_output=True,
+            )
+            self.assertEqual(good.returncode, 0, good.stderr)
+            self.assertIn("Legacy timed child: success; 10.500s", summary_path.read_text())
+
+            bad_env = {**good_env, "DOCUMENT_COUNT": "0"}
+            bad = subprocess.run(
+                ["bash", "-e", "-u", "-o", "pipefail", "-c", summary_script],
+                env=bad_env, text=True, capture_output=True,
+            )
+            self.assertNotEqual(bad.returncode, 0)
+            self.assertIn("changed-range proof is missing", bad.stderr)
 
     def test_driver_binds_pr_tree_to_base_head_and_trusted_policy(self):
         source = DRIVER_PATH.read_text()

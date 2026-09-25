@@ -4,6 +4,7 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 planner="$repo_root/scripts/plan-rust-required-scope.sh"
 ci_tests="$repo_root/scripts/ci-tests.sh"
+versioned_config="$repo_root/scripts/fixtures/ci-required-scope.versioned-test.json"
 
 value_for_key() {
   local output="$1"
@@ -113,6 +114,30 @@ for packaging_path in \
   require_reason_contains "$packaging_plan" "packaging_contracts:$packaging_path"
 done
 require_reason_contains "$packaging_plan" "required_gate_baseline:always_on"
+
+# The effective policy remains legacy until the separately authorized
+# activation stage. Audit the versioned interpretation through its pinned
+# trusted fixture so old aliased fields cannot accidentally stand in for the
+# new capability selector.
+versioned_packaging_plan="$("$planner" --event-name pull_request --config "$versioned_config" \
+  --changed-path scripts/package-native-installer.sh \
+  --changed-path scripts/validate-release-platform-entrypoints.sh \
+  --changed-path scripts/package-viewer-web-delivery.sh \
+  --changed-path scripts/packaging-artifact-size-contract.test.sh \
+  --changed-path scripts/copy-viewer-web-dist.test.sh \
+  --changed-path scripts/native-packaging-contract.test.sh \
+  --changed-path scripts/package-workflow-cache-reuse-contract.test.sh)"
+require_key "$versioned_packaging_plan" execution_contract required-domain-split/v1
+require_key "$versioned_packaging_plan" planner_config_sha256 sha256:2d4228e5d7446c393ea3811084183860b5f8b4bb0e3b673957a3a020ab172dec
+require_key "$versioned_packaging_plan" scope targeted
+require_key "$versioned_packaging_plan" selected_capabilities packaging_contracts
+require_key "$versioned_packaging_plan" run_packaging_contracts true
+require_key "$versioned_packaging_plan" run_operational_contracts false
+require_key "$versioned_packaging_plan" run_rust_baseline false
+require_key "$versioned_packaging_plan" needs_rust_toolchain false
+require_key "$versioned_packaging_plan" needs_python true
+require_key "$versioned_packaging_plan" needs_markdown true
+require_reason_contains "$versioned_packaging_plan" "packaging_contracts:scripts/package-native-installer.sh"
 
 release_packaging_plan="$($planner --event-name pull_request \
   --changed-path .github/workflows/release-packages.yml \
