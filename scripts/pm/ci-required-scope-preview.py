@@ -20,9 +20,11 @@ import time
 import urllib.request
 from pathlib import Path
 
+from projection_publication_contract import ContractError, decode_marker
+
 
 REPOSITORY = "eng-cc/oasis7"
-TASK_UID_RE = re.compile(r"(?<![A-Za-z0-9_])task_[0-9a-f]{32}(?![A-Za-z0-9_])")
+TASK_LINE_RE = re.compile(r"Task: (task_[0-9a-f]{32})\Z")
 SHA_RE = re.compile(r"[0-9a-f]{40}\Z")
 FIXTURE = "scripts/fixtures/ci-required-scope.versioned-test.json"
 LEGACY_FIXTURE = "scripts/fixtures/ci-required-scope.legacy-test.json"
@@ -117,8 +119,7 @@ def git(root: Path, *args: str, capture: bool = True) -> str:
 def validate_pr_payload(payload: dict, context: dict[str, str]) -> dict:
     base = payload.get("base") or {}
     head = payload.get("head") or {}
-    body = payload.get("body") or ""
-    exact_uids = TASK_UID_RE.findall(body)
+    body = payload.get("body")
     if payload.get("state") != "open":
         fail("candidate PR is not open")
     if (base.get("repo") or {}).get("full_name") != REPOSITORY or base.get("ref") != "main":
@@ -127,8 +128,21 @@ def validate_pr_payload(payload: dict, context: dict[str, str]) -> dict:
         fail("candidate PR head must be in the canonical repository")
     if base.get("sha") != context["PREVIEW_BASE_SHA"] or head.get("sha") != context["PREVIEW_HEAD_SHA"]:
         fail("live PR base/head do not match the supplied frozen identity")
-    if exact_uids != [context["PREVIEW_TASK_UID"]]:
-        fail("PR body must contain exactly the supplied Task UID once")
+    if not isinstance(body, str):
+        fail("PR body must be text")
+    task_lines = [line for line in body.splitlines() if line.startswith("Task:")]
+    if len(task_lines) != 1:
+        fail("PR body must contain exactly one canonical Task line")
+    task_match = TASK_LINE_RE.fullmatch(task_lines[0])
+    if task_match is None:
+        fail("PR body must contain exactly one canonical Task line")
+    try:
+        publication = decode_marker(body)
+    except ContractError:
+        fail("PR body must contain one valid v2 impact publication")
+    if (task_match.group(1) != publication["task_uid"]
+            or task_match.group(1) != context["PREVIEW_TASK_UID"]):
+        fail("PR Task line and v2 publication must bind the supplied Task UID")
     return payload
 
 
