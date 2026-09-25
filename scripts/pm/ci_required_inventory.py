@@ -64,6 +64,7 @@ PLANNER_SOURCE_PATHS = (
     ".github/workflows/rust.yml",
     "scripts/product_doc_markdown.py",
     "scripts/doc-governance-requirements.txt",
+    "scripts/pm/ci_required_artifact_v2.py",
 )
 ROOT_CARGO_INPUTS = (
     "Cargo.toml",
@@ -155,6 +156,7 @@ RUST_COMMANDS: dict[str, tuple[str, ...]] = {
     "oasis7_required": (
         "cargo test -p oasis7 --tests --features test_tier_required",
         "cargo clippy -p oasis7 --tests --features test_tier_required -- -D warnings -D clippy::correctness -D clippy::suspicious",
+        "cargo test -p oasis7 --bin oasis7_chain_runtime --features test_tier_required execution_bridge_real_tests::real_execution_bridge::tests",
     ),
     "consensus": (
         "cargo test -p oasis7_consensus --lib",
@@ -1046,6 +1048,7 @@ def build_required_inventory(
         "planner_authority_oid": planner_authority_oid,
         "planner_config_sha256": planner_facts["config_digest"],
         "planner_invocation": planner_facts["planner_invocation"],
+        "planner_output": plan,
         "selected_test_units": selected_ids,
         "unit_specs": specs,
         "product_corpus": product_corpus,

@@ -11,10 +11,13 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+from urllib.parse import urlparse
 import zipfile
 
 WORKFLOW='.github/workflows/rust.yml'
 ARTIFACT='oasis7-required-plan-v1'
+PLAN_V2_MEMBER='oasis7-required-plan-v2.json'
+RESULT_V2_MEMBER='oasis7-required-result-v2.json'
 OID=re.compile(r'[0-9a-f]{40}')
 DISCOVERY_PAGE_SIZE=100
 DISCOVERY_MAX_PAGES=10
@@ -165,6 +168,203 @@ def _github_file_bytes(repository,path,revision):
     if base64.b64encode(raw).decode('ascii')!=encoded:
         raise ValueError(f'trusted workflow content is noncanonical: {path}')
     return raw
+
+def attempt_execution_jobs(repository,run_id,attempt,workflow_sha,app_id,*,require_completed=False,job_names=None):
+    """Return exact check-backed job records from one live Actions attempt."""
+    for value,label in ((run_id,'workflow run ID'),(attempt,'workflow attempt'),(app_id,'check app ID')):
+        if type(value) is not int or value<1: raise ValueError(f'{label} must be a positive integer')
+    if not OID.fullmatch(str(workflow_sha or '')): raise ValueError('workflow head SHA is invalid')
+    run=gh('api',f'repos/{repository}/actions/runs/{run_id}')
+    if (run.get('id')!=run_id or run.get('run_attempt')!=attempt
+            or run.get('path')!=WORKFLOW or run.get('event')!='workflow_dispatch'
+            or run.get('repository',{}).get('full_name')!=repository
+            or run.get('head_sha')!=workflow_sha):
+        raise ValueError('workflow job attempt provenance mismatch')
+    raw_jobs=pages(repository,f'actions/runs/{run_id}/attempts/{attempt}/jobs','jobs')
+    if not raw_jobs: raise ValueError('workflow attempt job list is empty')
+    if job_names is not None and (not isinstance(job_names,(set,list,tuple))
+                                  or any(not isinstance(name,str) or not name for name in job_names)):
+        raise ValueError('workflow attempt job-name filter is malformed')
+    selected_names=set(job_names) if job_names is not None else None
+    records=[];job_ids=set();seen_job_names=set();check_ids=set()
+    for job in raw_jobs:
+        job_id=job.get('id');name=job.get('name');check_url=job.get('check_run_url')
+        if (type(job_id) is not int or job_id<1 or job_id in job_ids
+                or not isinstance(name,str) or not name or name in seen_job_names
+                or job.get('run_id')!=run_id or job.get('run_attempt')!=attempt
+                or job.get('head_sha')!=workflow_sha):
+            raise ValueError('workflow attempt job identity is incomplete or ambiguous')
+        job_ids.add(job_id);seen_job_names.add(name)
+        if selected_names is not None and name not in selected_names:
+            continue
+        parsed=urlparse(str(check_url or ''))
+        match=re.fullmatch(rf'/repos/{re.escape(repository)}/check-runs/([0-9]+)',parsed.path)
+        if parsed.scheme!='https' or parsed.netloc!='api.github.com' or match is None or parsed.query or parsed.fragment:
+            raise ValueError('workflow job check-run locator is malformed')
+        check_id=int(match.group(1))
+        if check_id in check_ids: raise ValueError('workflow attempt jobs share a check-run identity')
+        check=gh('api',f'repos/{repository}/check-runs/{check_id}')
+        check_app=check.get('app',{}).get('id')
+        if (check.get('id')!=check_id or check.get('name')!=name
+                or type(check_app) is not int or check_app!=app_id
+                or check.get('head_sha')!=workflow_sha
+                or check.get('status')!=job.get('status')
+                or check.get('conclusion')!=job.get('conclusion')):
+            raise ValueError('workflow attempt job check-run identity mismatch')
+        labels=job.get('labels')
+        if (not isinstance(labels,list) or any(not isinstance(label,str) or not label for label in labels)
+                or len(labels)!=len(set(labels))):
+            raise ValueError('workflow attempt job labels are malformed')
+        status=job.get('status');conclusion=job.get('conclusion')
+        if status not in ('queued','in_progress','completed'):
+            raise ValueError('workflow attempt job status is unsupported')
+        if status=='completed' and conclusion not in ('success','failure','cancelled','skipped','timed_out','action_required','neutral','stale'):
+            raise ValueError('completed workflow attempt job conclusion is unsupported')
+        if status!='completed' and conclusion is not None:
+            raise ValueError('incomplete workflow attempt job has a conclusion')
+        if require_completed and status!='completed':
+            raise ValueError(f'workflow attempt job is not completed: {name}')
+        records.append({
+            'workflow_run_id':run_id,'run_attempt':attempt,'job_id':job_id,
+            'job_name':name,'check_name':check.get('name'),'check_app_id':check_app,
+            'check_run_id':check_id,'head_sha':workflow_sha,'status':status,
+            'conclusion':conclusion,'labels':sorted(labels),
+        })
+        check_ids.add(check_id)
+    if selected_names is not None and {item['job_name'] for item in records}!=selected_names:
+        raise ValueError('workflow attempt is missing an exact requested job')
+    return sorted(records,key=lambda item:item['job_name'])
+
+def _read_artifact_member(repository,artifact,run_id,name,member):
+    if (artifact.get('name')!=name or artifact.get('expired') is not False
+            or type(artifact.get('id')) is not int or artifact['id']<1
+            or artifact.get('workflow_run',{}).get('id')!=run_id):
+        raise ValueError('keyed required artifact is expired or belongs to another run')
+    raw=subprocess.check_output(['gh','api',f"repos/{repository}/actions/artifacts/{artifact['id']}/zip"])
+    try:
+        with zipfile.ZipFile(io.BytesIO(raw)) as archive:
+            if archive.namelist()!=[member]: raise ValueError('keyed required artifact members mismatch')
+            return archive.read(member)
+    except (zipfile.BadZipFile,KeyError) as exc:
+        raise ValueError('keyed required artifact archive is malformed') from exc
+
+def _adjacent_source_matches_w(repository,revision,relative):
+    try:
+        local=Path(__file__).resolve().parents[2]/relative
+        trusted=_github_file_bytes(repository,relative,revision)
+    except (OSError,ValueError) as exc:
+        raise ValueError(f'trusted keyed producer source is unavailable: {relative}') from exc
+    if not local.is_file() or local.read_bytes()!=trusted:
+        raise ValueError(f'local keyed consumer source differs from trusted W: {relative}')
+
+def read_keyed_v2_evidence(repository,run,run_id,attempt,app_id,check,*,
+                           request_key,request_identity,base,head,policy_context,
+                           approved_executor_contract_digests,execution_jobs):
+    """Resolve and validate attempt-scoped v2 artifacts against live W/R/A/checks."""
+    artifacts=pages(repository,f'actions/runs/{run_id}/artifacts','artifacts')
+    try:
+        artifact_helper=_adjacent_module('ci_required_artifact_v2')
+    except ImportError as exc:
+        raise ValueError('trusted required-artifact v2 helper is unavailable') from exc
+    workflow_sha=run['head_sha']
+    for relative in ('scripts/pm/ci_required_artifact_v2.py',
+                     'scripts/pm/ci_required_inventory.py',
+                     'scripts/pm/ci_input_scope.py'):
+        _adjacent_source_matches_w(repository,workflow_sha,relative)
+    plan_name=artifact_helper.plan_artifact_name(run_id,attempt)
+    plans=[item for item in artifacts if item.get('name')==plan_name]
+    if len(plans)!=1: raise ValueError('keyed required-plan v2 artifact missing or ambiguous')
+    plan_artifact=plans[0]
+    plan_raw=_read_artifact_member(repository,plan_artifact,run_id,plan_name,PLAN_V2_MEMBER)
+    plan=artifact_helper.parse_payload(plan_raw,label='required-plan v2')
+    try: artifact_helper.validate_plan_payload(plan,require_complete=True)
+    except ValueError as exc: raise ValueError('keyed required-plan v2 payload is invalid: '+str(exc)) from exc
+    expected_plan={
+        'request_key':request_key,'request_identity':request_identity,
+        'repository':repository,'task_uid':request_identity['task_uid'],
+        'pr_number':int(request_identity['pr_number']),
+        'bootstrap_epoch':request_identity['bootstrap_epoch'],
+        'source_head_oid':head,'integration_base_oid':base,
+        'workflow_ref':f'{repository}/{WORKFLOW}@refs/heads/{run["head_branch"]}',
+        'workflow_sha':workflow_sha,'workflow_run_id':run_id,'run_attempt':attempt,
+        'check_name':'required-gate','check_app_id':int(app_id),'check_run_id':int(check['id']),
+        'effective_policy_identity':policy_context['effective_policy_identity'],
+    }
+    if any(plan.get(field)!=value for field,value in expected_plan.items()):
+        raise ValueError('keyed required-plan v2 identity differs from request and live run')
+    if plan.get('planner_inventory_authority')!=policy_context.get('planner_inventory_authority'):
+        raise ValueError('keyed planner inventory authority differs from trusted W policy')
+    if plan.get('executor_contract_digest') not in approved_executor_contract_digests:
+        raise ValueError('keyed required-plan executor contract is not approved')
+    source_compare=gh('api',f'repos/{repository}/compare/{base}...{head}')
+    source_scope=source_compare.get('merge_base_commit',{}).get('sha')
+    if (not OID.fullmatch(str(source_scope or '')) or source_scope!=plan.get('source_scope_oid')
+            or plan.get('planner_output',{}).get('source_scope_base')!=source_scope):
+        raise ValueError('keyed required-plan source scope differs from the verified W projection')
+    request_projection=request_identity.get('source_projection_digest')
+    if plan.get('planner_output',{}).get('impact_projection_digest')!=request_projection:
+        raise ValueError('keyed required-plan projection differs from the request identity')
+    invocation=plan.get('planner_invocation')
+    if (not isinstance(invocation,dict) or invocation.get('scope_base_oid')!=source_scope
+            or invocation.get('planner_authority_oid')!=workflow_sha
+            or invocation.get('producer')!={
+                'run_id':run_id,'run_attempt':attempt,'check_app_id':int(app_id),
+                'check_run_id':int(check['id']),
+            }):
+        raise ValueError('keyed required-plan W invocation does not bind source scope and producer')
+    live_jobs={job['job_name']:job for job in execution_jobs}
+    gate=live_jobs.get('required-gate')
+    if (gate is None or gate['job_id']!=plan.get('job_id')
+            or gate['check_run_id']!=check['id'] or gate['status']!='completed'
+            or gate['conclusion']!='success'):
+        raise ValueError('keyed plan is not backed by its exact successful required-gate job')
+
+    c2=_adjacent_module('ci_input_scope')
+    issuer=plan['planner_inventory_issuer']
+    trusted_inventory={**issuer,'producer':{**issuer['producer'],'artifact_id':plan_artifact['id']}}
+    try:
+        c2.validate_input_scope_snapshot(plan['input_scope'],trusted_planner_inventory=trusted_inventory)
+        digest=c2.planner_inventory_digest(
+            plan['unit_specs'],plan['product_corpus'],plan['tested_commit_oid'],plan['tested_tree_oid'],
+        )
+    except (ValueError,KeyError,TypeError) as exc:
+        raise ValueError('keyed required-plan C2 inventory validation failed') from exc
+    if digest!=issuer['inventory_digest'] or plan.get('planner_inventory_digest')!=digest:
+        raise ValueError('keyed required-plan C2 inventory digest mismatch')
+
+    expected_unit_ids=plan['required_test_units']
+    result_artifacts=[];used_ids={plan_artifact['id']}
+    for unit_id in expected_unit_ids:
+        name=artifact_helper.result_artifact_name(run_id,attempt,unit_id)
+        matches=[item for item in artifacts if item.get('name')==name]
+        if len(matches)!=1: raise ValueError(f'keyed result artifact missing or ambiguous: {unit_id}')
+        artifact=matches[0]
+        if artifact['id'] in used_ids: raise ValueError('keyed v2 artifacts share an artifact ID')
+        raw=_read_artifact_member(repository,artifact,run_id,name,RESULT_V2_MEMBER)
+        payload=artifact_helper.parse_payload(raw,label='required-result v2')
+        try:
+            artifact_helper.validate_result_payload(
+                payload,plan=plan,plan_artifact_id=plan_artifact['id'],expected_unit_id=unit_id,
+            )
+        except ValueError as exc:
+            raise ValueError(f'keyed required-result v2 payload is invalid: {unit_id}: {exc}') from exc
+        for job in payload['execution_jobs']:
+            if live_jobs.get(job['job_name'])!=job:
+                raise ValueError(f'keyed result job proof differs from live attempt: {job["job_name"]}')
+        result_artifacts.append({'artifact_id':artifact['id'],'name':name,'payload':payload})
+        used_ids.add(artifact['id'])
+    return {
+        'required_plan_v2_artifact_id':plan_artifact['id'],
+        'required_plan_v2_artifact_name':plan_name,
+        'required_plan_v2_payload':plan,
+        'required_result_v2_artifacts':result_artifacts,
+        'source_scope_oid':source_scope,
+        'workflow_run_id':run_id,'run_attempt':attempt,
+        'check_app_id':int(app_id),'check_run_id':int(check['id']),
+        'job_id':gate['job_id'],'job_name':gate['job_name'],
+        'execution_jobs':execution_jobs,
+        'trusted_planner_inventory':trusted_inventory,
+    }
 
 def trusted_policy_context(repository,branch,workflow_sha,default_branch_sha):
     """Resolve policy from authenticated bytes at W; no caller object grants authority."""
@@ -664,11 +864,26 @@ def verified_run(repository,uid,number,base,head,run_id,app_id,*,request_key=Non
             'check_run_id':int(check['id']),
             'plan_artifact_id':int(found[0]['id']),
         })
+        execution_jobs=attempt_execution_jobs(
+            repository,int(run_id),expected_attempt,run.get('head_sha'),int(app_id),
+            require_completed=True,
+        )
+        gate_jobs=[job for job in execution_jobs if job['job_name']=='required-gate']
+        if (len(gate_jobs)!=1 or gate_jobs[0]['check_run_id']!=check.get('id')
+                or gate_jobs[0]['conclusion']!='success'):
+            raise ValueError('manual required-gate check is not the exact successful attempt job')
+        payload.update(read_keyed_v2_evidence(
+            repository,run,int(run_id),expected_attempt,int(app_id),check,
+            request_key=request_key,request_identity=identity_value,
+            base=base,head=head,policy_context=policy_context,
+            approved_executor_contract_digests=approved_executor_contract_digests,
+            execution_jobs=execution_jobs,
+        ))
     return selected[0],payload
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('command',choices=['dispatch','prepare'])
+    parser.add_argument('command',choices=['dispatch','prepare','attempt-jobs'])
     parser.add_argument('--repository',required=True);parser.add_argument('--task-uid',required=True);parser.add_argument('--pr-number',required=True,type=int)
     parser.add_argument('--base');parser.add_argument('--head');parser.add_argument('--root',default='.');parser.add_argument('--output')
     parser.add_argument('--impact-projection')
@@ -678,10 +893,23 @@ def main():
     parser.add_argument('--validation-request-b64')
     parser.add_argument('--effective-policy-b64')
     parser.add_argument('--trusted-policy-json')
+    parser.add_argument('--run-id',type=int)
+    parser.add_argument('--run-attempt',type=int)
+    parser.add_argument('--workflow-sha')
+    parser.add_argument('--check-app-id',type=int)
+    parser.add_argument('--require-completed',action='store_true')
+    parser.add_argument('--job-name',action='append')
     a=parser.parse_args()
     try:
         if a.command=='dispatch':
             result=dispatch(a.repository,a.task_uid,a.pr_number,a.impact_projection)
+        elif a.command=='attempt-jobs':
+            if a.run_id is None or a.run_attempt is None or a.workflow_sha is None or a.check_app_id is None:
+                raise ValueError('attempt-jobs requires exact run, attempt, workflow SHA, and check app')
+            result={'execution_jobs':attempt_execution_jobs(
+                a.repository,a.run_id,a.run_attempt,a.workflow_sha,a.check_app_id,
+                require_completed=a.require_completed,job_names=a.job_name,
+            )}
         else:
             trusted_policy=(json.loads(Path(a.trusted_policy_json).read_text(encoding='utf-8'))
                             if a.trusted_policy_json else None)

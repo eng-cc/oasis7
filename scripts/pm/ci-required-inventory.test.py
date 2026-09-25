@@ -89,6 +89,7 @@ class RequiredInventoryTests(unittest.TestCase):
             "scripts/ci-required-capability-test-inventory.tsv",
             "scripts/pm/ci_input_scope.py",
             "scripts/pm/ci_required_inventory.py",
+            "scripts/pm/ci_required_artifact_v2.py",
             "scripts/product_doc_markdown.py",
             "scripts/doc-governance-requirements.txt",
             ".github/workflows/rust.yml",
@@ -331,6 +332,9 @@ class RequiredInventoryTests(unittest.TestCase):
             result = json.loads(output.read_text(encoding="utf-8"))
             self.assertEqual(result["schema"], "oasis7-required-test-inventory/v1")
             self.assertEqual(result["input_scope"]["target_oid"], target_oid)
+            expected_plan = dict(line.split("=", 1) for line in plan.splitlines())
+            self.assertEqual(result["planner_output"]["source_scope_base"], expected_plan["source_scope_base"])
+            self.assertEqual(result["planner_output"]["planner_config_sha256"], result["planner_config_sha256"])
             self.assertEqual(result["planner_invocation"]["event_name"], PLANNER_EVENT_NAME)
             self.assertEqual(result["planner_invocation"]["changed_paths"], PLANNER_CHANGED_PATHS)
             self.assertEqual(

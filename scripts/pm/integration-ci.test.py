@@ -548,6 +548,78 @@ class ProvenanceTests(unittest.TestCase):
   with zipfile.ZipFile(raw,'w') as archive:archive.writestr(self.api.ARTIFACT+'.json',json.dumps(self.payload))
   with patch.object(self.api,'gh',side_effect=self.read),patch.object(self.api.subprocess,'check_output',return_value=raw.getvalue()):
    return self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42)
+ def test_attempt_execution_jobs_bind_run_attempt_and_exact_checks(self):
+  jobs=[{
+   'id':101,'run_id':9,'run_attempt':2,'name':'required-gate','status':'in_progress',
+   'conclusion':None,'head_sha':self.base,'labels':['ubuntu-24.04'],
+   'check_run_url':'https://api.github.com/repos/owner/repo/check-runs/201',
+  }]
+  def reader(*args):
+   path=args[-1]
+   if path=='repos/owner/repo/actions/runs/9':return {**self.run,'id':9,'run_attempt':2}
+   if path=='repos/owner/repo/actions/runs/9/attempts/2/jobs?per_page=100&page=1':return {'jobs':jobs}
+   if path=='repos/owner/repo/check-runs/201':return {
+    'id':201,'name':'required-gate','app':{'id':42},'head_sha':self.base,
+    'status':'in_progress','conclusion':None,
+   }
+   self.fail(path)
+  with patch.object(self.api,'gh',side_effect=reader):
+   proof=self.api.attempt_execution_jobs('owner/repo',9,2,self.base,42)
+  self.assertEqual([{
+   'workflow_run_id':9,'run_attempt':2,'job_id':101,'job_name':'required-gate',
+   'check_name':'required-gate','check_app_id':42,'check_run_id':201,
+   'head_sha':self.base,'status':'in_progress','conclusion':None,'labels':['ubuntu-24.04'],
+  }],proof)
+  with patch.object(self.api,'gh',side_effect=reader):
+   with self.assertRaisesRegex(ValueError,'positive integer'):
+    self.api.attempt_execution_jobs('owner/repo',9,True,self.base,42)
+ def test_attempt_execution_jobs_reject_wrong_check_app_and_attempt(self):
+  job={
+   'id':101,'run_id':9,'run_attempt':2,'name':'required-gate','status':'in_progress',
+   'conclusion':None,'head_sha':self.base,'labels':['ubuntu-24.04'],
+   'check_run_url':'https://api.github.com/repos/owner/repo/check-runs/201',
+  }
+  def reader(*args):
+   path=args[-1]
+   if path=='repos/owner/repo/actions/runs/9':return {**self.run,'id':9,'run_attempt':2}
+   if path.endswith('/attempts/2/jobs?per_page=100&page=1'):return {'jobs':[job]}
+   if path=='repos/owner/repo/check-runs/201':return {
+    'id':201,'name':'required-gate','app':{'id':43},'head_sha':self.base,
+    'status':'in_progress','conclusion':None,
+   }
+   self.fail(path)
+  with patch.object(self.api,'gh',side_effect=reader):
+   with self.assertRaisesRegex(ValueError,'check-run identity mismatch'):
+    self.api.attempt_execution_jobs('owner/repo',9,2,self.base,42)
+  with patch.object(self.api,'gh',side_effect=reader):
+   with self.assertRaisesRegex(ValueError,'attempt provenance mismatch'):
+    self.api.attempt_execution_jobs('owner/repo',9,1,self.base,42)
+ def test_attempt_execution_jobs_can_ignore_its_own_in_progress_result_job(self):
+  gate={
+   'id':101,'run_id':9,'run_attempt':2,'name':'required-gate','status':'completed',
+   'conclusion':'success','head_sha':self.base,'labels':['ubuntu-24.04'],
+   'check_run_url':'https://api.github.com/repos/owner/repo/check-runs/201',
+  }
+  current_result={
+   'id':102,'run_id':9,'run_attempt':2,'name':'required-result-v2 (unit-x)',
+   'status':'in_progress','conclusion':None,'head_sha':self.base,'labels':['ubuntu-24.04'],
+   'check_run_url':None,
+  }
+  def reader(*args):
+   path=args[-1]
+   if path=='repos/owner/repo/actions/runs/9':return {**self.run,'id':9,'run_attempt':2}
+   if path=='repos/owner/repo/actions/runs/9/attempts/2/jobs?per_page=100&page=1':
+    return {'jobs':[gate,current_result]}
+   if path=='repos/owner/repo/check-runs/201':return {
+    'id':201,'name':'required-gate','app':{'id':42},'head_sha':self.base,
+    'status':'completed','conclusion':'success',
+   }
+   self.fail(path)
+  with patch.object(self.api,'gh',side_effect=reader):
+   proof=self.api.attempt_execution_jobs(
+    'owner/repo',9,2,self.base,42,require_completed=True,job_names={'required-gate'},
+   )
+  self.assertEqual(['required-gate'],[job['job_name'] for job in proof])
  def test_keyed_request_preflight_requires_key_in_authoritative_run_name(self):
   required=('run-name: '+self.api.KEYED_RUN_NAME+'\non:\n  workflow_dispatch:\n    inputs:\n'
             '      run_mode:\n        required: true\n        type: choice\n'
@@ -683,7 +755,7 @@ class ProvenanceTests(unittest.TestCase):
 
  def test_new_default_workflow_run_authority_passes(self):
   check,proof=self.verify();self.assertEqual(check['id'],10);self.assertEqual(proof['head_oid'],self.head)
- def test_keyed_workflow_base_divergence_requires_approved_w_contract(self):
+ def test_keyed_workflow_base_divergence_uses_v2_reader_after_approved_w_contract(self):
   from integration_executor_contract import executor_contract_from_contents
   workflow_sha='6'*40;run_head='6'*40
   executor_digest=executor_contract_from_contents(self.executor_contents)['digest']
@@ -692,12 +764,29 @@ class ProvenanceTests(unittest.TestCase):
   )
   raw=io.BytesIO()
   with zipfile.ZipFile(raw,'w') as archive:archive.writestr(self.api.ARTIFACT+'.json',json.dumps(self.payload))
-  with patch.object(self.api,'gh',side_effect=self.read),patch.object(self.api.subprocess,'check_output',return_value=raw.getvalue()):
+  gate_job={
+   'workflow_run_id':9,'run_attempt':1,'job_id':10,'job_name':'required-gate',
+   'check_name':'required-gate','check_app_id':42,'check_run_id':10,
+   'head_sha':run_head,'status':'completed','conclusion':'success','labels':['ubuntu-24.04'],
+  }
+  v2_proof={
+   'required_plan_v2_artifact_id':31,'required_plan_v2_artifact_name':'oasis7-required-plan-v2-9-a1',
+   'required_plan_v2_payload':{'schema':'oasis7-required-plan-v2'},
+   'required_result_v2_artifacts':[], 'source_scope_oid':'d'*40,
+   'workflow_run_id':9,'run_attempt':1,'check_app_id':42,'check_run_id':10,
+   'job_id':10,'job_name':'required-gate','execution_jobs':[gate_job],
+   'trusted_planner_inventory':{'producer':{'artifact_id':31}},
+  }
+  with patch.object(self.api,'gh',side_effect=self.read),patch.object(self.api.subprocess,'check_output',return_value=raw.getvalue()), \
+       patch.object(self.api,'attempt_execution_jobs',return_value=[gate_job]), \
+       patch.object(self.api,'read_keyed_v2_evidence',return_value=v2_proof):
    check,proof=self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42,request_key=request_key,expected_attempt=1,request_identity=request_identity,effective_policy=effective_policy,approved_executor_contract_digests=[executor_digest])
   self.assertEqual(workflow_sha,proof['workflow_sha'])
   self.assertEqual(self.base,proof['base_oid'])
   self.assertEqual(run_head,proof['workflow_run_head_sha'])
   self.assertEqual(run_head,check['head_sha'])
+  self.assertEqual(11,proof['plan_artifact_id'])
+  self.assertEqual(31,proof['required_plan_v2_artifact_id'])
  def test_keyed_consumer_rejects_changed_request_payload(self):
   from integration_executor_contract import executor_contract_from_contents
   run_head='6'*40
