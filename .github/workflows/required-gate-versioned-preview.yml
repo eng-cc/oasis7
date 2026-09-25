@@ -1,0 +1,294 @@
+name: Required-gate versioned preview
+run-name: oasis7-required-preview|${{ inputs.pr_number }}|${{ inputs.scenario }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Open same-repository PR number
+        required: true
+        type: string
+      task_uid:
+        description: Exact GitHub Project task UID in the PR body
+        required: true
+        type: string
+      base_sha:
+        description: Exact PR base commit SHA
+        required: true
+        type: string
+      head_sha:
+        description: Exact PR head commit SHA
+        required: true
+        type: string
+      tested_tree_sha:
+        description: Exact PR merge tree SHA
+        required: true
+        type: string
+      scenario:
+        description: One versioned required-gate capability scenario
+        required: true
+        type: choice
+        options:
+          - ordinary_document
+          - doc_checker_contracts
+          - workflow_governance
+          - packaging_contracts
+          - operational_contracts
+
+permissions: {}
+
+jobs:
+  preview:
+    if: github.repository == 'eng-cc/oasis7' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions: {}
+    outputs:
+      scenario: ${{ steps.validate.outputs.scenario }}
+      base_sha: ${{ steps.validate.outputs.base_sha }}
+      head_sha: ${{ steps.validate.outputs.head_sha }}
+      merge_commit: ${{ steps.validate.outputs.merge_commit }}
+      tested_tree_sha: ${{ steps.validate.outputs.tested_tree_sha }}
+      run_packaging_contracts: ${{ steps.validate.outputs.run_packaging_contracts }}
+      run_operational_contracts: ${{ steps.validate.outputs.run_operational_contracts }}
+    steps:
+      - name: Fetch trusted default-branch runner
+        env:
+          TRUSTED_SHA: ${{ github.sha }}
+        run: |
+          git clone --filter=blob:none --no-checkout https://github.com/eng-cc/oasis7.git "$RUNNER_TEMP/oasis7-preview-trusted"
+          git -C "$RUNNER_TEMP/oasis7-preview-trusted" checkout --detach "$TRUSTED_SHA"
+          test "$(git -C "$RUNNER_TEMP/oasis7-preview-trusted" rev-parse HEAD)" = "$TRUSTED_SHA"
+      - name: Install trusted baseline document dependencies
+        run: |
+          python3 -m venv "$RUNNER_TEMP/oasis7-preview-venv"
+          "$RUNNER_TEMP/oasis7-preview-venv/bin/python" -m pip install -r "$RUNNER_TEMP/oasis7-preview-trusted/scripts/doc-governance-requirements.txt"
+      - name: Validate exact PR tree and run one selected preview
+        id: validate
+        env:
+          PREVIEW_REPOSITORY: ${{ github.repository }}
+          PREVIEW_EVENT_NAME: ${{ github.event_name }}
+          PREVIEW_REF: ${{ github.ref }}
+          PREVIEW_WORKFLOW_SHA: ${{ github.sha }}
+          PREVIEW_RUN_ATTEMPT: ${{ github.run_attempt }}
+          PREVIEW_PR_NUMBER: ${{ inputs.pr_number }}
+          PREVIEW_TASK_UID: ${{ inputs.task_uid }}
+          PREVIEW_BASE_SHA: ${{ inputs.base_sha }}
+          PREVIEW_HEAD_SHA: ${{ inputs.head_sha }}
+          PREVIEW_TESTED_TREE_SHA: ${{ inputs.tested_tree_sha }}
+          PREVIEW_SCENARIO: ${{ inputs.scenario }}
+          PREVIEW_PYTHON: ${{ runner.temp }}/oasis7-preview-venv/bin/python
+        run: |
+          test -x "$PREVIEW_PYTHON"
+          "$PREVIEW_PYTHON" "$RUNNER_TEMP/oasis7-preview-trusted/scripts/pm/ci-required-scope-preview.py" \
+            --trusted-root "$RUNNER_TEMP/oasis7-preview-trusted"
+
+  preview-testnet-packages-macos-arm64-contract:
+    needs: [preview]
+    if: ${{ always() && needs.preview.outputs.merge_commit != '' && needs.preview.outputs.run_packaging_contracts == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions: {}
+    env:
+      PREVIEW_PR_NUMBER: ${{ inputs.pr_number }}
+      VALIDATED_MERGE_COMMIT: ${{ needs.preview.outputs.merge_commit }}
+      VALIDATED_TREE_SHA: ${{ needs.preview.outputs.tested_tree_sha }}
+    steps:
+      - name: Fetch and verify exact preview tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$PREVIEW_PR_NUMBER" =~ ^[1-9][0-9]{0,8}$ ]]
+          candidate="$PWD/.preview-candidate"
+          git clone --filter=blob:none --no-checkout https://github.com/eng-cc/oasis7.git "$candidate"
+          git -C "$candidate" fetch --no-tags origin "+refs/pull/${PREVIEW_PR_NUMBER}/merge:refs/remotes/preview/merge"
+          merge="$(git -C "$candidate" rev-parse 'refs/remotes/preview/merge^{commit}')"
+          tree="$(git -C "$candidate" rev-parse "${merge}^{tree}")"
+          test "$merge" = "$VALIDATED_MERGE_COMMIT"
+          test "$tree" = "$VALIDATED_TREE_SHA"
+          git -C "$candidate" checkout --detach "$merge"
+      - name: Verify additive macOS arm64 package contract
+        shell: bash
+        run: bash ./.preview-candidate/scripts/testnet-packages-macos-arm64-contract.test.sh
+
+  preview-windows-package-rollout-behavior:
+    needs: [preview]
+    if: ${{ always() && needs.preview.outputs.merge_commit != '' && needs.preview.outputs.run_operational_contracts == 'true' }}
+    runs-on: windows-2022
+    timeout-minutes: 15
+    permissions: {}
+    env:
+      PREVIEW_PR_NUMBER: ${{ inputs.pr_number }}
+      VALIDATED_MERGE_COMMIT: ${{ needs.preview.outputs.merge_commit }}
+      VALIDATED_TREE_SHA: ${{ needs.preview.outputs.tested_tree_sha }}
+    steps:
+      - name: Fetch and verify exact preview tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$PREVIEW_PR_NUMBER" =~ ^[1-9][0-9]{0,8}$ ]]
+          candidate="$PWD/.preview-candidate"
+          git clone --filter=blob:none --no-checkout https://github.com/eng-cc/oasis7.git "$candidate"
+          git -C "$candidate" fetch --no-tags origin "+refs/pull/${PREVIEW_PR_NUMBER}/merge:refs/remotes/preview/merge"
+          merge="$(git -C "$candidate" rev-parse 'refs/remotes/preview/merge^{commit}')"
+          tree="$(git -C "$candidate" rev-parse "${merge}^{tree}")"
+          test "$merge" = "$VALIDATED_MERGE_COMMIT"
+          test "$tree" = "$VALIDATED_TREE_SHA"
+          git -C "$candidate" checkout --detach "$merge"
+      - name: Run disposable Windows PowerShell rollout behavior fixture
+        shell: bash
+        env:
+          OASIS7_WINDOWS_POWERSHELL_BEHAVIOR_TEST: "1"
+        run: bash ./.preview-candidate/scripts/p2p-public-testnet-package-rollout.test.sh
+
+  preview-fleet-health-ubuntu:
+    needs: [preview]
+    if: ${{ always() && needs.preview.outputs.merge_commit != '' && needs.preview.outputs.run_operational_contracts == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions: {}
+    env:
+      PREVIEW_PR_NUMBER: ${{ inputs.pr_number }}
+      VALIDATED_MERGE_COMMIT: ${{ needs.preview.outputs.merge_commit }}
+      VALIDATED_TREE_SHA: ${{ needs.preview.outputs.tested_tree_sha }}
+    steps:
+      - name: Fetch and verify exact preview tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$PREVIEW_PR_NUMBER" =~ ^[1-9][0-9]{0,8}$ ]]
+          candidate="$PWD/.preview-candidate"
+          git clone --filter=blob:none --no-checkout https://github.com/eng-cc/oasis7.git "$candidate"
+          git -C "$candidate" fetch --no-tags origin "+refs/pull/${PREVIEW_PR_NUMBER}/merge:refs/remotes/preview/merge"
+          merge="$(git -C "$candidate" rev-parse 'refs/remotes/preview/merge^{commit}')"
+          tree="$(git -C "$candidate" rev-parse "${merge}^{tree}")"
+          test "$merge" = "$VALIDATED_MERGE_COMMIT"
+          test "$tree" = "$VALIDATED_TREE_SHA"
+          git -C "$candidate" checkout --detach "$merge"
+      - name: Verify fleet-health collection contract
+        run: python ./.preview-candidate/scripts/p2p-public-testnet-fleet-health.test.py
+
+  preview-fleet-health-windows:
+    needs: [preview]
+    if: ${{ always() && needs.preview.outputs.merge_commit != '' && needs.preview.outputs.run_operational_contracts == 'true' }}
+    runs-on: windows-2022
+    timeout-minutes: 15
+    permissions: {}
+    env:
+      PREVIEW_PR_NUMBER: ${{ inputs.pr_number }}
+      VALIDATED_MERGE_COMMIT: ${{ needs.preview.outputs.merge_commit }}
+      VALIDATED_TREE_SHA: ${{ needs.preview.outputs.tested_tree_sha }}
+    steps:
+      - name: Fetch and verify exact preview tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$PREVIEW_PR_NUMBER" =~ ^[1-9][0-9]{0,8}$ ]]
+          candidate="$PWD/.preview-candidate"
+          git clone --filter=blob:none --no-checkout https://github.com/eng-cc/oasis7.git "$candidate"
+          git -C "$candidate" fetch --no-tags origin "+refs/pull/${PREVIEW_PR_NUMBER}/merge:refs/remotes/preview/merge"
+          merge="$(git -C "$candidate" rev-parse 'refs/remotes/preview/merge^{commit}')"
+          tree="$(git -C "$candidate" rev-parse "${merge}^{tree}")"
+          test "$merge" = "$VALIDATED_MERGE_COMMIT"
+          test "$tree" = "$VALIDATED_TREE_SHA"
+          git -C "$candidate" checkout --detach "$merge"
+      - name: Verify fleet-health collection contract
+        run: python ./.preview-candidate/scripts/p2p-public-testnet-fleet-health.test.py
+
+  preview-fleet-health-macos:
+    needs: [preview]
+    if: ${{ always() && needs.preview.outputs.merge_commit != '' && needs.preview.outputs.run_operational_contracts == 'true' }}
+    runs-on: macos-14
+    timeout-minutes: 15
+    permissions: {}
+    env:
+      PREVIEW_PR_NUMBER: ${{ inputs.pr_number }}
+      VALIDATED_MERGE_COMMIT: ${{ needs.preview.outputs.merge_commit }}
+      VALIDATED_TREE_SHA: ${{ needs.preview.outputs.tested_tree_sha }}
+    steps:
+      - name: Fetch and verify exact preview tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$PREVIEW_PR_NUMBER" =~ ^[1-9][0-9]{0,8}$ ]]
+          candidate="$PWD/.preview-candidate"
+          git clone --filter=blob:none --no-checkout https://github.com/eng-cc/oasis7.git "$candidate"
+          git -C "$candidate" fetch --no-tags origin "+refs/pull/${PREVIEW_PR_NUMBER}/merge:refs/remotes/preview/merge"
+          merge="$(git -C "$candidate" rev-parse 'refs/remotes/preview/merge^{commit}')"
+          tree="$(git -C "$candidate" rev-parse "${merge}^{tree}")"
+          test "$merge" = "$VALIDATED_MERGE_COMMIT"
+          test "$tree" = "$VALIDATED_TREE_SHA"
+          git -C "$candidate" checkout --detach "$merge"
+      - name: Verify fleet-health collection contract
+        run: python ./.preview-candidate/scripts/p2p-public-testnet-fleet-health.test.py
+
+  preview-outcome-summary:
+    if: ${{ always() }}
+    needs:
+      - preview
+      - preview-testnet-packages-macos-arm64-contract
+      - preview-windows-package-rollout-behavior
+      - preview-fleet-health-ubuntu
+      - preview-fleet-health-windows
+      - preview-fleet-health-macos
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Record selected child outcomes for this dispatch attempt
+        env:
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          PREVIEW_RESULT: ${{ needs.preview.result }}
+          SCENARIO: ${{ needs.preview.outputs.scenario }}
+          BASE_SHA: ${{ needs.preview.outputs.base_sha }}
+          HEAD_SHA: ${{ needs.preview.outputs.head_sha }}
+          TREE_SHA: ${{ needs.preview.outputs.tested_tree_sha }}
+          PACKAGING_SELECTED: ${{ needs.preview.outputs.run_packaging_contracts }}
+          OPERATIONAL_SELECTED: ${{ needs.preview.outputs.run_operational_contracts }}
+          PACKAGE_RESULT: ${{ needs.preview-testnet-packages-macos-arm64-contract.result }}
+          WINDOWS_RESULT: ${{ needs.preview-windows-package-rollout-behavior.result }}
+          FLEET_UBUNTU_RESULT: ${{ needs.preview-fleet-health-ubuntu.result }}
+          FLEET_WINDOWS_RESULT: ${{ needs.preview-fleet-health-windows.result }}
+          FLEET_MACOS_RESULT: ${{ needs.preview-fleet-health-macos.result }}
+        run: |
+          {
+            echo "### Required-gate preview child outcomes"
+            echo "- Run/attempt: ${RUN_ID}/${RUN_ATTEMPT}"
+            echo "- Scenario: ${SCENARIO:-unvalidated}"
+            echo "- B/H/T: ${BASE_SHA:-unvalidated} / ${HEAD_SHA:-unvalidated} / ${TREE_SHA:-unvalidated}"
+            echo "- Actual B-to-T diff: scripts/ci-required-scope.v2.json only"
+            echo "- Selected packaging/operational groups: ${PACKAGING_SELECTED:-unvalidated} / ${OPERATIONAL_SELECTED:-unvalidated}"
+            echo "- In-process required preview: ${PREVIEW_RESULT}"
+            echo "- job_id preview-testnet-packages-macos-arm64-contract: ${PACKAGE_RESULT}"
+            echo "- job_id preview-windows-package-rollout-behavior: ${WINDOWS_RESULT}"
+            echo "- job_id preview-fleet-health-ubuntu (ubuntu-24.04): ${FLEET_UBUNTU_RESULT}"
+            echo "- job_id preview-fleet-health-windows (windows-2022): ${FLEET_WINDOWS_RESULT}"
+            echo "- job_id preview-fleet-health-macos (macos-14): ${FLEET_MACOS_RESULT}"
+            echo "- CI readiness receipt: not created"
+            echo "- Required-gate authority: unchanged"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          [[ -n "$SCENARIO" && -n "$BASE_SHA" && -n "$HEAD_SHA" && -n "$TREE_SHA" ]] || {
+            echo "error: preview identity outputs are missing; child outcomes are not validated" >&2
+            exit 1
+          }
+          [[ "$RUN_ATTEMPT" == 1 ]] || {
+            echo "error: rerun attempts cannot inherit previous child outcomes; dispatch a new preview run" >&2
+            exit 1
+          }
+          [[ "$PREVIEW_RESULT" == success ]] || {
+            echo "error: preview validation/in-process required run concluded $PREVIEW_RESULT" >&2
+            exit 1
+          }
+          expect_child_result() {
+            local selected="$1" actual="$2" label="$3"
+            if [[ "$selected" == true ]]; then
+              [[ "$actual" == success ]] || { echo "error: selected child $label concluded $actual" >&2; return 1; }
+            else
+              [[ "$actual" == skipped ]] || { echo "error: unselected child $label unexpectedly concluded $actual" >&2; return 1; }
+            fi
+          }
+          expect_child_result "$PACKAGING_SELECTED" "$PACKAGE_RESULT" preview-testnet-packages-macos-arm64-contract
+          expect_child_result "$OPERATIONAL_SELECTED" "$WINDOWS_RESULT" preview-windows-package-rollout-behavior
+          expect_child_result "$OPERATIONAL_SELECTED" "$FLEET_UBUNTU_RESULT" preview-fleet-health-ubuntu
+          expect_child_result "$OPERATIONAL_SELECTED" "$FLEET_WINDOWS_RESULT" preview-fleet-health-windows
+          expect_child_result "$OPERATIONAL_SELECTED" "$FLEET_MACOS_RESULT" preview-fleet-health-macos
