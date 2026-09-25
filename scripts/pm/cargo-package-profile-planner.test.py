@@ -427,6 +427,35 @@ resolver = "2"
         )
         self.assertEqual(authority["merged_commit"], bound_only["trusted_authority"]["approved_normative_source"]["merged_commit"])
 
+    def test_planner_authority_does_not_require_local_squashed_predecessor_head(self) -> None:
+        temp, root, predecessor_scope, predecessor_head, merged_commit, source_head = self._authority_fixture()
+        self.addCleanup(temp.cleanup)
+        receipt = self._authority_receipt(root, predecessor_scope, predecessor_head, merged_commit, source_head)
+        binding = self._authority_binding(merged_commit, source_head, receipt)
+        live_task = self._current_task_identity(root, merged_commit, source_head, binding)
+
+        git(root, "update-ref", "-d", "refs/heads/normative")
+        git(root, "reflog", "expire", "--expire=now", "--all")
+        git(root, "gc", "--prune=now")
+        with self.assertRaises(subprocess.CalledProcessError):
+            git(root, "cat-file", "-e", f"{predecessor_head}^{{commit}}")
+        self.assertEqual(merged_commit, git(root, "rev-parse", f"{merged_commit}^{{commit}}"))
+
+        plan = self._plan_with_live_authority(
+            root,
+            merged_commit,
+            source_head,
+            receipt,
+            live_task,
+            profiles=("native",),
+            authority_binding=binding,
+            expected_task_uid=binding["task_uid"],
+            expected_pr_number=binding["pr_number"],
+        )
+        authority = plan["trusted_authority"]["approved_normative_source"]
+        self.assertEqual(predecessor_head, authority["source_head"])
+        self.assertEqual(merged_commit, authority["merged_commit"])
+
     def _advance_default_branch(self, root: Path, relative: str, content: str) -> str:
         git(root, "switch", "main")
         self._write(root, relative, content)

@@ -722,8 +722,9 @@ def _validate_approved_normative_source(
     predecessor_digest = _require_digest(receipt.get("predecessor_file_sha256"), "predecessor file")
     if predecessor_digest != _digest_bytes(predecessor_bytes):
         raise PlanError("trusted predecessor file digest mismatch")
-    if _digest_bytes(_blob(repo, predecessor_head, AUTHORITY_PATH)) != merged_digest:
-        raise PlanError("trusted predecessor source head does not match merged authority")
+    # Keep predecessor source head as PR provenance only: live PR readback binds
+    # its SHA, while the immutable merged commit above supplies approved bytes.
+    # A squash consumer need not have the predecessor head object locally.
 
     if _digest_bytes(_blob(repo, source_head, AUTHORITY_PATH)) != merged_digest:
         raise PlanError("candidate source head does not match approved normative source")
