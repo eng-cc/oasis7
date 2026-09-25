@@ -4347,7 +4347,7 @@
     },
     {
       "path": "doc/testing/performance/compile-metrics-v2-warm-check.design.md",
-      "content_sha256": "84f9bcdeef5c1dcd5161adc8af037ad3f9ceb7ba59f2a4042561923d4e57ed54",
+      "content_sha256": "1bb48c0c77a350f1bfd55ab86415acb33b1755fb2b43f0e4525228ad210a6dd1",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -4361,7 +4361,7 @@
     },
     {
       "path": "doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md",
-      "content_sha256": "fd61b0ae091bf91aef5eb0b3464332e31880bc6eb5fbc3fc7a5596fd529d85c2",
+      "content_sha256": "dfbb9d8a9eb5dbaa030926f9f06d549e84ec46d426e421f954e0f71200c5ce54",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",

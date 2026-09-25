@@ -16,7 +16,7 @@
 ## 补测矩阵
 | Surface | 当前已有覆盖 | 当前缺口 | 建议补充 | 建议 tier | 优先级 |
 | --- | --- | --- | --- | --- | --- |
-| Viewer Web 帧率 / frame time | `./scripts/viewer-performance-probe.sh --profile smoke|release`；`test:perf-harness` 覆盖当前浏览器指标 contract；`testing-manual.md` / `scripts/ci-tests.sh` 已将 `smoke` profile 接入 `crates/oasis7_viewer/**` 命中时的 required-gate report-only scoped smoke。当前 Web probe 拥有浏览器 `summary.json/summary.md`、renderer ready/fallback、FPS/frame p95/long-task 等用户面观测，不替代已退役 native `RenderPerfSummary` / `PerfHotspot` / runtime-stage / old stress CSV 诊断。 | 当前缺口不再是“没有 scoped gate 入口”，而是阈值、环境噪音和 blocking rollout 尚未稳定；report-only failure 会被记录为 warning，不阻断 required-gate | 继续收集 `summary.json` / `summary.md`，稳定 `readyMs`、FPS、frame p95、long task count 的基线与噪音边界，再决定是否从 report-only 升级为 blocking；新增 runtime hotspot 语义需由 runtime authority 单独定义 | `required-scoped` report-only | P1 |
+| Viewer Web 帧率 / frame time | `./scripts/viewer-performance-probe.sh --profile smoke|release`；`test:perf-harness` 覆盖当前浏览器指标 contract。Planner 对 `crates/oasis7_viewer/**` 一般改动选择 `viewer_js_required`，但性能 report-only smoke 由更窄的性能输入（如 probe、`performance_metrics.js` 与其 contract test）触发；普通 `crates/oasis7_viewer/src/lib.rs` 不触发该 smoke。命中时 summary 提供 `summary.json/summary.md`、renderer ready/fallback、FPS/frame p95、long-task 等观测，不替代已退役 native `RenderPerfSummary` / `PerfHotspot` / runtime-stage / old stress CSV 诊断。Probe 计算原始 `readyMs`，但聚合 summary 未发布该字段；`interactionLatencies` 当前为空，因此 interaction p95 没有采样证据。 | 性能阈值和环境噪音尚未稳定。有效 summary 的阈值 miss 是 report-only warning，不阻断 required-gate；缺失/无效 summary、缺少产物或采集失败仍会阻断。`readyMs` 与 interaction p95 也还不能用于稳定基线。 | 继续收集已发布指标的 `summary.json` / `summary.md` 基线与噪音边界；在将 `readyMs` 或 interaction p95 纳入基线前，先把 ready 值发布到 summary 并用真实交互样本填充 latency。达到稳定条件后再讨论升级 blocking；新增 runtime hotspot 语义需由 runtime authority 单独定义。 | `required-scoped` report-only（仅命中性能输入时） | P1 |
 | Viewer headed Web 真环境渲染 | 有 `agent-browser` 闭环、software-safe contract、build/UI tests | 当前缺少“真实 headed + GPU 路径”的轻量性能回归，容易只测 DOM/contract 不测渲染体感 | 补一条 headed smoke profile，记录 `readyMs`、FPS、frame p95、long task count，并把 SwiftShader/软件渲染继续当环境阻断处理 | `full-scoped` | P2 |
 | Viewer 移动端 / 窄屏性能 | 现有手册强调 desktop/mobile 截图与 visual review，但性能 probe 主要围绕当前默认 Viewer Web 入口 | 缺少移动布局下 DOM 规模、ready time、交互响应的独立预算 | 给 `viewer-performance-probe.mjs` 增加 mobile viewport profile，至少落 `readyMs + frame p95 + DOM size` | `on-demand`，稳定后可升 `required-scoped` | P2 |
 | Runtime tick / step 热路径 | `RuntimePerfSnapshot` 保留 `tick/decision/action_execution/callback` 四个本地阶段及 512-sample window，输出 samples、budget、last/avg/min/max/p50/p95/p99 与累计 over-budget；默认预算分别为 33/20/20/10 ms。`test_tier_required/full` 覆盖正确性；`llm-longrun-stress.sh` 聚合 tick p95/over-budget；`runtime-module-routing-perf-harness.sh` 覆盖稳定内环。serde default 保持旧 snapshot/report 兼容。 | 现阶段轻量 harness 只覆盖 runtime module routing 内环，尚未扩到更完整 tick/step 预算；冷 `release` 编译耗时仍偏高 | 下一步把更多稳定热路径收进同一 summary/checklist，并评估哪些指标适合变成 scoped gate；schema/consumer 改动须由 runtime owner 做定向 S3 | `required-scoped`（仅限稳定 harness 命中路径）候选 | P1 |
@@ -37,7 +37,7 @@
 ## 先做哪三项
 | Rank | Item | Why now | Minimum deliverable | Gate recommendation | Rollout caution |
 | --- | --- | --- | --- | --- | --- |
-| 1 | Viewer changed-path scoped 性能 gate | Viewer 是最直接的用户面，掉帧/卡顿最容易被感知；现有 `viewer-performance-probe.sh` 已经进入 required-gate report-only scoped smoke | 已在 `crates/oasis7_viewer/**` 命中时运行 `./scripts/viewer-performance-probe.sh --profile smoke`，并稳定产出 `summary.json`/`summary.md`；下一步是积累基线与阈值噪音样本 | `required-scoped` report-only，blocking 仍待决策 | 不要在阈值和环境噪音稳定前转 blocking；report-only warning 不是 release/PR 阻断结论 |
+| 1 | Viewer changed-path scoped 性能 gate | Viewer 是最直接的用户面，掉帧/卡顿最容易被感知；性能专用输入已有 required-gate report-only smoke | Planner 对一般 Viewer 改动选择 JS required；仅命中性能专用路径时运行 `./scripts/viewer-performance-probe.sh --profile smoke` 并产出 `summary.json` / `summary.md`。阈值 miss 是 warning；summary、产物或采集无效仍阻断。当前 summary 不发布原始 `readyMs`，也没有 interaction latency 样本 | `required-scoped` report-only，blocking 仍待决策 | 先为已发布指标积累基线和噪音样本；补齐 ready 与真实交互采样后再纳入这些指标；未稳定前不要升级 blocking |
 | 2 | Runtime tick/step 轻量 deterministic perf harness | 当前 runtime 性能更多靠 longrun/stress 暴露，反馈太晚；需要一条能日常回归的热路径预算 | 第一阶段已落 `./scripts/runtime-module-routing-perf-harness.sh`，固定输入输出 `event/action avg ms`；首个 `release` baseline 为 `event_avg_ms=5.591`、`action_avg_ms=6.992`；后续再扩到更接近 tick/step 的稳定指标 | 先保持本地/reporting 入口，再评估 `required-scoped` 候选 | 不要一开始就拿整场景总耗时做 gate，优先选最稳定的内环指标，避免 flaky；冷 `release` 编译成本也要一起纳入 gate 设计 |
 | 3 | P2P/存储/共识短窗 scoped soak | 这类退化现在太容易拖到 release soak 才暴露，修复成本高；需要前移一条便宜但有代表性的短窗检查 | 为 `oasis7_node/**`、`oasis7_net/**`、复制/存储高风险改动准备一个 reduced-duration soak 命令和统一 summary 判读 | 开发期先 `on-demand`，高风险合流或 release 前强制 | 必须按 changed paths 和风险等级触发，不能把 release 级长跑成本扩散到普通 PR |
 
@@ -48,7 +48,7 @@
 
 ## 每项完成定义
 - Viewer changed-path scoped 性能 gate:
-  - changed-path planner 能识别 `crates/oasis7_viewer/**`
+- changed-path planner 对一般 Viewer 改动选择 JS required，并对性能专用输入单独选择 report-only smoke
   - smoke profile 能稳定落 summary 产物
   - 当前状态为 required-gate report-only scoped smoke；后续完成定义是积累足够基线，明确哪些阈值可升级为 blocking
 - Runtime tick/step harness:
