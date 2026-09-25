@@ -411,12 +411,43 @@ class IntegrationTests(unittest.TestCase):
 class ProvenanceTests(unittest.TestCase):
  def setUp(self):
   spec=importlib.util.spec_from_file_location('integration_ci',HERE/'integration_ci.py');self.api=importlib.util.module_from_spec(spec);spec.loader.exec_module(self.api)
+  self.policy_module=self.api._adjacent_module('ci_reuse_policy')
+  self.policy_module.TRUSTED_EFFECTIVE_POLICY={'enabled_capabilities':[],'approved_executor_contract_digests':[],'check_app_id':15368}
+  # The focused provenance tests below exercise C3 artifact validation with a
+  # synthetic enabled policy.  The real W resolver is covered independently
+  # by ci_reuse_policy.test.py; keep these fixtures explicit and test-local.
+  self.api.trusted_policy_context_for_run=self.trusted_policy_context_for_run
+  self.api.trusted_policy_context=self.trusted_policy_context
   self.base='a'*40;self.head='b'*40;self.uid='task_'+'c'*32
   self.pr={'state':'open','merged':False,'draft':True,'body':'Task: '+self.uid+'\nRefs #1','base':{'sha':self.base,'ref':'main','repo':{'full_name':'owner/repo'}},'head':{'sha':self.head,'repo':{'full_name':'owner/repo'}}}
   self.run={'run_attempt':1,'created_at':'2026-09-09T00:00:00Z','run_started_at':'2026-09-09T00:00:00Z','event':'workflow_dispatch','head_branch':'main','head_sha':self.base,'path':self.api.WORKFLOW,'status':'completed','conclusion':'success','repository':{'full_name':'owner/repo'},'check_suite_id':8}
   self.payload=dict(schema=self.api.ARTIFACT,repository='owner/repo',workflow_run_id=9,base_oid=self.base,head_oid=self.head,task_uid=self.uid,pr_number=12,workflow_sha=self.base,workflow_ref='owner/repo/.github/workflows/rust.yml@refs/heads/main',integration_mode='integration_revalidation',check_name='required-gate',scope_base_oid='d'*40,tested_tree_oid='e'*40,tested_commit_oid='f'*40)
   from integration_executor_contract import EXECUTOR_CONTRACT_PATHS
   self.executor_contents={path:('trusted fixture '+path).encode() for path in EXECUTOR_CONTRACT_PATHS}
+ def trusted_policy_context(self,repository,branch,workflow_sha,default_branch_sha):
+  import integration_executor_contract as request_contract
+  policy=dict(self.policy_module.TRUSTED_EFFECTIVE_POLICY)
+  return {
+   'schema':'oasis7-trusted-ci-reuse-policy-context/v1',
+   'repository':repository,
+   'workflow_ref':f'{repository}/.github/workflows/rust.yml@refs/heads/{branch}',
+   'workflow_sha':workflow_sha,
+   'effective_policy':policy,
+   'effective_policy_identity':{
+    'schema':request_contract.EFFECTIVE_POLICY_IDENTITY_SCHEMA,
+    'digest':request_contract.effective_policy_digest(policy),
+   },
+   'planner_inventory_authority':{
+    'schema':'oasis7-planner-inventory-authority/v1',
+    'repository':repository,
+    'workflow_ref':f'{repository}/.github/workflows/rust.yml@refs/heads/{branch}',
+    'planner_authority_oid':workflow_sha,
+    'planner_config_sha256':'sha256:'+'a'*64,
+   },
+  }
+ def trusted_policy_context_for_run(self,repository,branch,run):
+  workflow_sha=run.get('head_sha')
+  return self.trusted_policy_context(repository,branch,workflow_sha,workflow_sha)
  def policy(self,approved):
   return {
    'enabled_capabilities':['input-scope-reuse/v1'],
@@ -439,6 +470,7 @@ class ProvenanceTests(unittest.TestCase):
  def bind_keyed_payload(self,executor_digest,run_head,*,policy=None,workflow_sha=None,attempt=1):
   import integration_executor_contract as request_contract
   policy=policy or self.policy(executor_digest)
+  self.policy_module.TRUSTED_EFFECTIVE_POLICY=dict(policy)
   request_identity=self.keyed_request_identity(executor_digest,policy)
   request_key=request_contract.validation_request_key(request_identity)
   request=request_contract.validation_request_envelope({
@@ -476,11 +508,14 @@ class ProvenanceTests(unittest.TestCase):
   if '/workflows/rust.yml/runs?' in path:return {'workflow_runs':[{**self.run,'id':9,'display_title':f'oasis7-ci|workflow_dispatch|integration_revalidation|{self.uid}|12|{self.base}|{self.head}'}]}
   if '/contents/' in path:
    relative=path.split('/contents/',1)[1].split('?ref=',1)[0]
+   if relative=='scripts/pm/ci_reuse_policy.py':
+    trusted=(HERE/'ci_reuse_policy.py').read_bytes()
+    return {'type':'file','path':relative,'encoding':'base64','content':base64.b64encode(trusted).decode()}
    if relative not in self.executor_contents:self.fail(path)
    return {'type':'file','path':relative,'encoding':'base64','content':base64.b64encode(self.executor_contents[relative]).decode()}
   if '/compare/' in path:return {'merge_base_commit':{'sha':self.base}}
   if path.endswith('/pulls/12'):return self.pr
-  if path=='repos/owner/repo':return {'default_branch':'main'}
+  if path=='repos/owner/repo':return {'full_name':'owner/repo','default_branch':'main'}
   if path.endswith('/runs/9'):return self.run
   if 'check-runs' in path:return {'check_runs':[{'id':10,'name':'required-gate','app':{'id':42},'conclusion':'success','status':'completed','head_sha':self.run['head_sha'],'details_url':'https://github.com/owner/repo/actions/runs/9/job/10'}]}
   if 'artifacts?' in path:return {'artifacts':[{'id':11,'name':self.api.ARTIFACT,'expired':False,'workflow_run':{'id':9}}]}
@@ -515,17 +550,28 @@ class ProvenanceTests(unittest.TestCase):
    return self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42)
  def test_keyed_request_preflight_requires_key_in_authoritative_run_name(self):
   required=('run-name: '+self.api.KEYED_RUN_NAME+'\non:\n  workflow_dispatch:\n    inputs:\n'
-            '      run_mode:\n      task_uid:\n      pr_number:\n      integration_base:\n'
-            '      expected_head:\n      request_key:\n      validation_request_b64:')
-  missing_title=required.replace('|${{ inputs.request_key }}','|${{ inputs.expected_head }}')
+            '      run_mode:\n        required: true\n        type: choice\n'
+            '      task_uid:\n        required: false\n        type: string\n'
+            '      pr_number:\n        required: false\n        type: string\n'
+            '      integration_base:\n        required: false\n        type: string\n'
+            '      expected_head:\n        required: false\n        type: string\n'
+            '      request_key:\n        required: false\n        type: string\n'
+            '      validation_request_b64:\n        required: false\n        type: string\n')
+  missing_title=required.replace(self.api.KEYED_RUN_NAME,'oasis7-ci|${{ inputs.expected_head }}')
   key_only_title=required.replace(self.api.KEYED_RUN_NAME,'oasis7-ci|${{ inputs.request_key }}')
   self.assertTrue(self.api.keyed_request_workflow_ready(required))
   self.assertFalse(self.api.keyed_request_workflow_ready(missing_title))
   self.assertFalse(self.api.keyed_request_workflow_ready(key_only_title))
   self.assertFalse(self.api.keyed_request_workflow_ready(required+'\nrun-name: duplicate'))
+  actual=(HERE.parents[1]/'.github/workflows/rust.yml').read_text(encoding='utf-8')
+  self.assertTrue(self.api.keyed_request_workflow_ready(actual))
  def test_keyed_request_preflight_ignores_comment_only_input_declarations(self):
   workflow=('run-name: '+self.api.KEYED_RUN_NAME+'\non:\n  workflow_dispatch:\n    inputs:\n'
-            '      run_mode:\n        required: true\n# request_key:\n'
+            '      run_mode:\n        required: true\n        type: choice\n'
+            '      task_uid:\n        required: false\n        type: string\n'
+            '      pr_number:\n        required: false\n        type: string\n'
+            '      integration_base:\n        required: false\n        type: string\n'
+            '      expected_head:\n        required: false\n        type: string\n# request_key:\n'
             '# validation_request_b64:\n# inputs.request_key\n')
   self.assertFalse(self.api.keyed_request_workflow_ready(workflow))
  def test_prepared_request_retry_keeps_journaled_base_after_main_advances(self):
@@ -542,6 +588,7 @@ class ProvenanceTests(unittest.TestCase):
    'approved_executor_contract_digests':[contract['digest']],
    'check_app_id':42,
   }
+  self.policy_module.TRUSTED_EFFECTIVE_POLICY=dict(effective_policy)
   projection_digest='sha256:'+'1'*64
   request_identity={
    'repository':'owner/repo',
@@ -564,8 +611,13 @@ class ProvenanceTests(unittest.TestCase):
   advanced_base='4'*40
   workflow=(
    'run-name: '+self.api.KEYED_RUN_NAME+'\non:\n  workflow_dispatch:\n    inputs:\n'
-   '      run_mode:\n      task_uid:\n      pr_number:\n      integration_base:\n'
-   '      expected_head:\n      request_key:\n      validation_request_b64:\n'
+   '      run_mode:\n        type: choice\n        required: true\n'
+   '      task_uid:\n        type: string\n        required: false\n'
+   '      pr_number:\n        type: string\n        required: false\n'
+   '      integration_base:\n        type: string\n        required: false\n'
+   '      expected_head:\n        type: string\n        required: false\n'
+   '      request_key:\n        type: string\n        required: false\n'
+   '      validation_request_b64:\n        type: string\n        required: false\n'
   )
   with tempfile.TemporaryDirectory() as directory:
    reserve_validation_request(directory,request_key,request_identity,original_base)
@@ -580,7 +632,7 @@ class ProvenanceTests(unittest.TestCase):
     if path.endswith('/pulls/12'):
      return self.pr
     if path=='repos/owner/repo':
-     return {'default_branch':'main'}
+     return {'full_name':'owner/repo','default_branch':'main'}
     if '/actions/workflows/rust.yml/runs?' in path:
      return {'workflow_runs':[]}
     if path.startswith(f'repos/owner/repo/contents/{self.api.WORKFLOW}?'):
@@ -621,10 +673,12 @@ class ProvenanceTests(unittest.TestCase):
   policy={
    'enabled_capabilities':[],
    'approved_executor_contract_digests':[],
-   'check_app_id':42,
+   'check_app_id':15368,
   }
   self.assertTrue(effective_policy_digest(policy).startswith('sha256:'))
-  with self.assertRaisesRegex(ValueError,'is disabled'):
+  with patch.object(self.api,'gh',side_effect=self.read), \
+       patch.object(self.api,'default_branch_head',return_value=self.base), \
+       self.assertRaisesRegex(ValueError,'is disabled'):
    self.api.dispatch_request('owner/repo',self.uid,12,'missing',{},policy)
 
  def test_new_default_workflow_run_authority_passes(self):
@@ -661,7 +715,7 @@ class ProvenanceTests(unittest.TestCase):
   executor_digest=executor_contract_from_contents(self.executor_contents)['digest']
   request_key,request_identity,effective_policy=self.bind_keyed_payload(executor_digest,run_head)
   changed_policy={**effective_policy,'check_app_id':43}
-  with self.assertRaisesRegex(ValueError,'request identity mismatch'):
+  with self.assertRaisesRegex(ValueError,'manual integration request identity mismatch'):
    self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42,request_key=request_key,expected_attempt=1,request_identity=request_identity,effective_policy=changed_policy,approved_executor_contract_digests=[executor_digest])
  def test_keyed_workflow_base_divergence_rejects_revoked_w_contract(self):
   from integration_executor_contract import executor_contract_from_contents
@@ -792,7 +846,7 @@ class ProvenanceTests(unittest.TestCase):
   self.assertIn('python3 -I "${RUNNER_TEMP}/integration-planner/plan-rust-required-scope.py"',required)
   self.assertIn("python3 -I - <<'PY'",required)
   self.assertLess(required.index('Upload required planner artifact'),required.index('Install pinned Rust toolchains'))
-  self.assertLess(required.index('cp scripts/plan-rust-required-scope.py'),required.index('integration_ci.py" prepare'))
+  self.assertLess(required.index('cp scripts/plan-rust-required-scope.py'),required.index('python3 -I "${RUNNER_TEMP}/integration_ci.py" "${prepare_args[@]}"'))
 
  def test_pull_request_base_planner_bundle_includes_impact_helper(self):
   workflow=(HERE.parents[1]/'.github/workflows/rust.yml').read_text()

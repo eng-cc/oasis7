@@ -18,7 +18,7 @@ ARTIFACT='oasis7-required-plan-v1'
 OID=re.compile(r'[0-9a-f]{40}')
 DISCOVERY_PAGE_SIZE=100
 DISCOVERY_MAX_PAGES=10
-KEYED_RUN_NAME='oasis7-ci|${{ github.event_name }}|${{ inputs.run_mode }}|${{ inputs.task_uid }}|${{ inputs.pr_number }}|${{ inputs.integration_base }}|${{ inputs.expected_head }}|${{ inputs.request_key }}'
+KEYED_RUN_NAME='oasis7-ci|${{ github.event_name }}|${{ inputs.run_mode }}|${{ inputs.task_uid }}|${{ inputs.pr_number }}|${{ inputs.integration_base }}|${{ inputs.expected_head }}${{ inputs.request_key != \'\' && format(\'|{0}\', inputs.request_key) || \'\' }}'
 
 def gh(*args):
     return json.loads(subprocess.check_output(['gh',*args],text=True))
@@ -152,6 +152,49 @@ def github_executor_contract(repository,revision):
         except (TypeError,ValueError) as exc: raise ValueError('trusted executor contract source is malformed') from exc
     return helper.executor_contract_from_contents(contents)
 
+def _github_file_bytes(repository,path,revision):
+    source=gh('api',f'repos/{repository}/contents/{path}?ref={revision}')
+    if (source.get('type')!='file' or source.get('path')!=path
+            or source.get('encoding')!='base64'):
+        raise ValueError(f'trusted workflow content is unavailable: {path}')
+    try:
+        encoded=''.join(str(source.get('content','')).split())
+        raw=base64.b64decode(encoded,validate=True)
+    except (TypeError,ValueError) as exc:
+        raise ValueError(f'trusted workflow content is malformed: {path}') from exc
+    if base64.b64encode(raw).decode('ascii')!=encoded:
+        raise ValueError(f'trusted workflow content is noncanonical: {path}')
+    return raw
+
+def trusted_policy_context(repository,branch,workflow_sha,default_branch_sha):
+    """Resolve policy from authenticated bytes at W; no caller object grants authority."""
+    policy_path='scripts/pm/ci_reuse_policy.py'
+    config_path='scripts/ci-required-scope.v2.json'
+    repo=gh('api',f'repos/{repository}')
+    if repo.get('full_name')!=repository or repo.get('default_branch')!=branch:
+        raise ValueError('trusted policy source is not the repository default branch')
+    policy_source=_github_file_bytes(repository,policy_path,workflow_sha)
+    planner_config=_github_file_bytes(repository,config_path,workflow_sha)
+    helper=_adjacent_module('ci_reuse_policy')
+    local_source=Path(helper.__file__).read_bytes()
+    return helper.resolve_trusted_policy_context(
+        repository=repository,default_branch=branch,
+        workflow_ref=f'{repository}/{WORKFLOW}@refs/heads/{branch}',
+        workflow_sha=workflow_sha,default_branch_sha=default_branch_sha,
+        policy_source=policy_source,local_policy_source=local_source,
+        planner_config=planner_config,
+    )
+
+def trusted_policy_context_for_run(repository,branch,run):
+    if (not isinstance(run,dict) or run.get('path')!=WORKFLOW
+            or run.get('repository',{}).get('full_name')!=repository
+            or run.get('head_branch')!=branch):
+        raise ValueError('trusted policy workflow run identity is unavailable')
+    workflow_sha=run.get('head_sha')
+    if not OID.fullmatch(str(workflow_sha or '')):
+        raise ValueError('trusted policy workflow SHA is invalid')
+    return trusted_policy_context(repository,branch,workflow_sha,workflow_sha)
+
 def _yaml_mapping_entries(source):
     """Read mapping entries from the small YAML surface used by workflow metadata.
 
@@ -215,15 +258,29 @@ def keyed_request_workflow_ready(workflow):
     inputs=one_mapping_child(workflow_dispatch,'inputs')
     if inputs is None: return False
     input_fields=direct_children(inputs)
-    required_inputs={key for key in (
+    input_names=(
         'run_mode','task_uid','pr_number','integration_base','expected_head',
         'request_key','validation_request_b64',
     )
-                     if len([item for item in input_fields if item['key']==key])==1
-                     and next(item for item in input_fields if item['key']==key)['value']==''}
+    if any(len([item for item in input_fields if item['key']==key])!=1
+           or next(item for item in input_fields if item['key']==key)['value']!=''
+           for key in input_names):
+        return False
+
+    def has_input_contract(name, expected_type):
+        declaration=next(item for item in input_fields if item['key']==name)
+        children=direct_children(declaration)
+        values={}
+        for child in children:
+            if child['key'] in values:
+                return False
+            values[child['key']]=child['value']
+        return (values.get('type')==expected_type and values.get('required')=='false'
+                and 'default' not in values)
+
     run_name=run_names[0]['value']
-    return (set(('run_mode','task_uid','pr_number','integration_base','expected_head',
-                 'request_key','validation_request_b64'))<=required_inputs
+    return (has_input_contract('request_key','string')
+            and has_input_contract('validation_request_b64','string')
             and run_name==KEYED_RUN_NAME)
 
 def git_common_dir(root):
@@ -272,6 +329,8 @@ def decode_validation_request(encoded,request_key):
         raise ValueError('validation request payload is malformed') from exc
     if helper.canonical_bytes(value)!=raw:
         raise ValueError('validation request payload is not canonical JSON')
+    if base64.b64encode(raw).decode('ascii')!=encoded:
+        raise ValueError('validation request payload is not canonical base64')
     envelope=helper.validation_request_envelope(value)
     if envelope['request_key']!=request_key:
         raise ValueError('validation request key does not match payload')
@@ -292,20 +351,34 @@ def decode_effective_policy(encoded):
     helper.effective_policy_digest(value)
     return value
 
-def prepare(root,repository,uid,number,base,head,*,approved_executor_contract_digests=None,integration_worktree=None,request_key=None,validation_request_b64=None,effective_policy=None):
+def prepare(root,repository,uid,number,base,head,*,approved_executor_contract_digests=None,integration_worktree=None,request_key=None,validation_request_b64=None,effective_policy=None,trusted_policy=None):
     if type(number) is not int or number<1:
         raise ValueError('positive integer pull request number required')
     workflow_sha=os.environ.get('GITHUB_WORKFLOW_SHA','')
     execution_sha=os.environ.get('GITHUB_SHA','')
     if not OID.fullmatch(workflow_sha) or not OID.fullmatch(execution_sha):
         raise ValueError('integration workflow/run identity is invalid')
+    keyed_inputs=request_key is not None or validation_request_b64 is not None
+    _,branch=identity(repository,uid,number,base,head,allow_base_advance=keyed_inputs)
     validation_request=None
-    if request_key is not None or validation_request_b64 is not None or effective_policy is not None:
-        if request_key is None or validation_request_b64 is None or effective_policy is None:
+    if keyed_inputs or effective_policy is not None or trusted_policy is not None:
+        if request_key is None or validation_request_b64 is None or trusted_policy is None:
             raise ValueError('validation request identity is incomplete')
         helper=_adjacent_module('integration_executor_contract')
         identity_helper=_adjacent_module('ci_ready_receipt_identity')
+        if (not isinstance(trusted_policy,dict)
+                or trusted_policy.get('schema')!='oasis7-trusted-ci-reuse-policy-context/v1'
+                or trusted_policy.get('repository')!=repository
+                or trusted_policy.get('workflow_ref')!=f'{repository}/{WORKFLOW}@refs/heads/{branch}'
+                or trusted_policy.get('workflow_sha')!=workflow_sha
+                or trusted_policy.get('effective_policy')!=effective_policy):
+            raise ValueError('effective policy is not bound to trusted workflow W')
         policy_digest=helper.effective_policy_digest(effective_policy)
+        policy_identity=trusted_policy.get('effective_policy_identity')
+        if (not isinstance(policy_identity,dict)
+                or policy_identity.get('schema')!=helper.EFFECTIVE_POLICY_IDENTITY_SCHEMA
+                or policy_identity.get('digest')!=policy_digest):
+            raise ValueError('trusted effective policy identity mismatch')
         if identity_helper.INPUT_SCOPE_REUSE_CAPABILITY not in effective_policy['enabled_capabilities']:
             raise ValueError(f'{identity_helper.INPUT_SCOPE_REUSE_CAPABILITY} is disabled')
         policy_approved=effective_policy['approved_executor_contract_digests']
@@ -325,7 +398,6 @@ def prepare(root,repository,uid,number,base,head,*,approved_executor_contract_di
                 or request_identity['effective_policy_digest']!=policy_digest):
             raise ValueError('validation request does not match trusted execution identity')
     keyed_mode=workflow_sha!=base or approved_executor_contract_digests is not None
-    _,branch=identity(repository,uid,number,base,head,allow_base_advance=keyed_mode)
     if os.environ.get('GITHUB_EVENT_NAME')!='workflow_dispatch' or os.environ.get('GITHUB_REF')!=f'refs/heads/{branch}':
         raise ValueError('integration workflow must execute canonical default-branch authority')
     # GitHub executes the workflow version present at the workflow_dispatch
@@ -389,12 +461,21 @@ def dispatch_request(repository,uid,number,impact_projection,request_identity,ef
         raise ValueError('positive integer pull request number required')
     helper=_adjacent_module('integration_executor_contract')
     identity_helper=_adjacent_module('ci_ready_receipt_identity')
-
-    policy_digest=helper.effective_policy_digest(effective_policy)
-    enabled=effective_policy['enabled_capabilities']
+    pr=gh('api',f'repos/{repository}/pulls/{number}')
+    head=pr.get('head',{}).get('sha','')
+    repo=gh('api',f'repos/{repository}')
+    branch=repo.get('default_branch')
+    if not isinstance(branch,str) or not branch: raise ValueError('default branch identity unavailable')
+    base=default_branch_head(repository,branch)
+    trusted_policy=trusted_policy_context(repository,branch,base,base)
+    if trusted_policy.get('effective_policy')!=effective_policy:
+        raise ValueError('caller effective policy differs from trusted workflow W')
+    policy=trusted_policy['effective_policy']
+    policy_digest=helper.effective_policy_digest(policy)
+    enabled=policy['enabled_capabilities']
     if identity_helper.INPUT_SCOPE_REUSE_CAPABILITY not in enabled:
         raise ValueError(f'{identity_helper.INPUT_SCOPE_REUSE_CAPABILITY} is disabled')
-    approved=effective_policy['approved_executor_contract_digests']
+    approved=policy['approved_executor_contract_digests']
     if not approved:
         raise ValueError('effective executor contract policy has no approved contract')
     identity_value=helper.validation_request_identity(request_identity)
@@ -403,6 +484,8 @@ def dispatch_request(repository,uid,number,impact_projection,request_identity,ef
         raise ValueError('validation request task/PR identity mismatch')
     if identity_value['effective_policy_digest']!=policy_digest:
         raise ValueError('validation request effective policy identity mismatch')
+    if head!=identity_value['source_head_oid']:
+        raise ValueError('validation request source head is stale')
     projection_path=Path(impact_projection or '')
     if not projection_path.is_file(): raise ValueError('integration dispatch requires a readable impact projection')
     projection_raw=projection_path.read_bytes()
@@ -410,15 +493,6 @@ def dispatch_request(repository,uid,number,impact_projection,request_identity,ef
     except (UnicodeDecodeError,json.JSONDecodeError) as exc: raise ValueError('impact projection is malformed') from exc
     if identity_value['source_projection_digest']!=projection.get('projection_digest'):
         raise ValueError('validation request projection identity mismatch')
-
-    pr=gh('api',f'repos/{repository}/pulls/{number}')
-    head=pr.get('head',{}).get('sha','')
-    if head!=identity_value['source_head_oid']:
-        raise ValueError('validation request source head is stale')
-    repo=gh('api',f'repos/{repository}')
-    branch=repo.get('default_branch')
-    if not isinstance(branch,str) or not branch: raise ValueError('default branch identity unavailable')
-    base=default_branch_head(repository,branch)
     _,branch=identity(repository,uid,number,base,head,allow_base_advance=True)
     executor_contract=github_executor_contract(repository,base)
     executor_digest=helper.require_approved_executor_contract(executor_contract,approved)
@@ -476,6 +550,8 @@ def verified_run(repository,uid,number,base,head,run_id,app_id,*,request_key=Non
         raise ValueError('positive integer pull request number required')
     if not str(app_id or '').isdigit() or not str(run_id or '').isdigit():
         raise ValueError('numeric non-null app and workflow run identity required')
+    if expected_attempt is not None and (type(expected_attempt) is not int or expected_attempt<1):
+        raise ValueError('manual integration expected attempt is invalid')
     helper=None
     expected_request=None
     if request_key is not None:
@@ -521,9 +597,16 @@ def verified_run(repository,uid,number,base,head,run_id,app_id,*,request_key=Non
     if request_key is None: expected['head_sha']=base
     if any(run.get(k)!=v for k,v in expected.items()) or run.get('repository',{}).get('full_name')!=repository:
         raise ValueError('manual integration run provenance/status mismatch')
-    if request_key is not None and (type(run.get('run_attempt')) is not int
-                                    or run['run_attempt']!=expected_attempt):
+    if expected_attempt is not None and (type(run.get('run_attempt')) is not int
+                                         or run['run_attempt']!=expected_attempt):
         raise ValueError('manual integration workflow attempt mismatch')
+    policy_context=None
+    if request_key is not None:
+        policy_context=trusted_policy_context_for_run(repository,branch,run)
+        if policy_context.get('effective_policy')!=effective_policy:
+            raise ValueError('caller effective policy differs from trusted workflow W')
+        if policy_context.get('effective_policy_identity',{}).get('digest')!=helper.effective_policy_digest(effective_policy):
+            raise ValueError('trusted effective policy identity mismatch')
     expected_title=f'oasis7-ci|workflow_dispatch|integration_revalidation|{uid}|{number}|{base}|{head}|{request_key}'
     if request_key is not None and run.get('display_title')!=expected_title:
         raise ValueError('manual integration workflow request title mismatch')
@@ -569,6 +652,18 @@ def verified_run(repository,uid,number,base,head,run_id,app_id,*,request_key=Non
         expected['executor_contract_digest']=executor_digest
     if any(payload.get(k)!=v for k,v in expected.items()) or not all(OID.fullmatch(str(payload.get(k,''))) for k in ('scope_base_oid','tested_tree_oid','tested_commit_oid')):
         raise ValueError('manual integration artifact authority mismatch')
+    if policy_context is not None:
+        payload=dict(payload)
+        payload.update({
+            'trusted_policy_context':policy_context,
+            'effective_policy_identity':policy_context['effective_policy_identity'],
+            'planner_inventory_authority':policy_context['planner_inventory_authority'],
+            'workflow_run_id':int(run_id),
+            'run_attempt':run['run_attempt'],
+            'check_app_id':int(check['app']['id']),
+            'check_run_id':int(check['id']),
+            'plan_artifact_id':int(found[0]['id']),
+        })
     return selected[0],payload
 
 def main():
@@ -582,12 +677,16 @@ def main():
     parser.add_argument('--request-key')
     parser.add_argument('--validation-request-b64')
     parser.add_argument('--effective-policy-b64')
+    parser.add_argument('--trusted-policy-json')
     a=parser.parse_args()
     try:
         if a.command=='dispatch':
             result=dispatch(a.repository,a.task_uid,a.pr_number,a.impact_projection)
         else:
-            policy=decode_effective_policy(a.effective_policy_b64) if a.effective_policy_b64 else None
+            trusted_policy=(json.loads(Path(a.trusted_policy_json).read_text(encoding='utf-8'))
+                            if a.trusted_policy_json else None)
+            policy=(trusted_policy.get('effective_policy') if trusted_policy else
+                    decode_effective_policy(a.effective_policy_b64) if a.effective_policy_b64 else None)
             result=prepare(
                 Path(a.root),a.repository,a.task_uid,a.pr_number,a.base,a.head,
                 approved_executor_contract_digests=a.approved_executor_contract_digest,
@@ -595,6 +694,7 @@ def main():
                 request_key=a.request_key,
                 validation_request_b64=a.validation_request_b64,
                 effective_policy=policy,
+                trusted_policy=trusted_policy,
             )
         if a.output: Path(a.output).write_text(json.dumps(result))
         print(json.dumps(result))

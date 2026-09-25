@@ -1,5 +1,5 @@
 name: Rust
-run-name: oasis7-ci|${{ github.event_name }}|${{ inputs.run_mode }}|${{ inputs.task_uid }}|${{ inputs.pr_number }}|${{ inputs.integration_base }}|${{ inputs.expected_head }}
+run-name: oasis7-ci|${{ github.event_name }}|${{ inputs.run_mode }}|${{ inputs.task_uid }}|${{ inputs.pr_number }}|${{ inputs.integration_base }}|${{ inputs.expected_head }}${{ inputs.request_key != '' && format('|{0}', inputs.request_key) || '' }}
 
 on:
   push:
@@ -53,6 +53,14 @@ on:
         type: string
       impact_projection_b64:
         description: "Required for integration_revalidation: base64 encoded verified workflow impact projection"
+        required: false
+        type: string
+      request_key:
+        description: "Optional keyed C4 request identity for integration_revalidation"
+        required: false
+        type: string
+      validation_request_b64:
+        description: "Optional canonical C3 validation request envelope; requires request_key"
         required: false
         type: string
 
@@ -116,21 +124,43 @@ jobs:
           INTEGRATION_HEAD: ${{ inputs.expected_head }}
           INTEGRATION_UID: ${{ inputs.task_uid }}
           INTEGRATION_PR: ${{ inputs.pr_number }}
+          INTEGRATION_REQUEST_KEY: ${{ inputs.request_key }}
+          INTEGRATION_REQUEST_B64: ${{ inputs.validation_request_b64 }}
           GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         shell: bash
         run: |
           mkdir -p "${RUNNER_TEMP}/integration-planner/pm"
           cp scripts/plan-rust-required-scope.py scripts/ci-required-scope.v2.json scripts/ci-tests.sh scripts/viewer-dependency-preflight.sh "${RUNNER_TEMP}/integration-planner/"
           cp scripts/pm/workflow-impact-projection.py "${RUNNER_TEMP}/integration-planner/pm/"
+          cp scripts/pm/integration_ci.py scripts/pm/integration_executor_contract.py scripts/pm/ci_ready_receipt_identity.py "${RUNNER_TEMP}/"
           [[ -n '${{ inputs.impact_projection_b64 }}' ]] || {
             echo "integration_revalidation requires impact_projection_b64" >&2
             exit 1
           }
           printf '%s' '${{ inputs.impact_projection_b64 }}' | base64 --decode >"${RUNNER_TEMP}/impact-projection.json"
-          cp scripts/pm/integration_ci.py "${RUNNER_TEMP}/integration_ci.py"
-          python3 -I "${RUNNER_TEMP}/integration_ci.py" prepare --repository "${{ github.repository }}" \
-            --task-uid "${INTEGRATION_UID}" --pr-number "${INTEGRATION_PR}" \
-            --base "${INTEGRATION_BASE}" --head "${INTEGRATION_HEAD}" --output "${RUNNER_TEMP}/integration.json"
+          prepare_args=(prepare --repository "${GITHUB_REPOSITORY}" --task-uid "${INTEGRATION_UID}" \
+            --pr-number "${INTEGRATION_PR}" --base "${INTEGRATION_BASE}" --head "${INTEGRATION_HEAD}" \
+            --output "${RUNNER_TEMP}/integration.json")
+          if [[ -n "${INTEGRATION_REQUEST_KEY}" || -n "${INTEGRATION_REQUEST_B64}" ]]; then
+            [[ -n "${INTEGRATION_REQUEST_KEY}" && -n "${INTEGRATION_REQUEST_B64}" ]] || {
+              echo "keyed integration requires both request_key and validation_request_b64" >&2
+              exit 1
+            }
+            [[ "${INTEGRATION_REQUEST_KEY}" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+              echo "request_key must be a canonical SHA-256 identity" >&2
+              exit 1
+            }
+            python3 -I scripts/pm/ci_reuse_policy.py trusted-context --root "${GITHUB_WORKSPACE}" \
+              --repository "${GITHUB_REPOSITORY}" --default-branch "${GITHUB_DEFAULT_BRANCH}" \
+              --workflow-ref "${GITHUB_WORKFLOW_REF}" --workflow-sha "${GITHUB_WORKFLOW_SHA}" \
+              --default-branch-sha "${GITHUB_SHA}" --output "${RUNNER_TEMP}/trusted-ci-policy.json"
+            prepare_args+=(--request-key "${INTEGRATION_REQUEST_KEY}" \
+              --validation-request-b64 "${INTEGRATION_REQUEST_B64}" \
+              --trusted-policy-json "${RUNNER_TEMP}/trusted-ci-policy.json")
+          fi
+          python3 -I "${RUNNER_TEMP}/integration_ci.py" "${prepare_args[@]}"
           echo "identity=$(cat "${RUNNER_TEMP}/integration.json")" >>"${GITHUB_OUTPUT}"
       - name: Validate trusted loop repository scope and content
         if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')
