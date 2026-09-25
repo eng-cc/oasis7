@@ -2653,7 +2653,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/prd.md",
-      "content_sha256": "6a2ad6afb2721512a6b7d90cf8d1185333da2d2d08a96b09893477c562c821b8",
+      "content_sha256": "2fab798c7b7de1be6ea7948822d3fc5c69c9d4b6f8e8f8889d93f715885a48b4",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2877,7 +2877,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/prd.md",
-      "content_sha256": "86c0b03866707f3ec5608f8e58e3544f3534ceb0944d7f8081392ed71d8dcd4d",
+      "content_sha256": "ec68ea985dd86674051dc7c585f6c122c6aa09a0faffb56aaeb93904dba60eb2",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
