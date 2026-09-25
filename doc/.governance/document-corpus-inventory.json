@@ -3899,7 +3899,7 @@
     },
     {
       "path": "doc/testing/ci/ci-builtin-wasm-docker-canonical-gate.prd.md",
-      "content_sha256": "0bfec5ba14b04b33743d98c91a86a1fd89355083326224cfc29f43e58016aa96",
+      "content_sha256": "9abb208f69f74dfc391be5974f2ad300edeeb61daea853dc5132c3cd76c30f64",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -3927,7 +3927,7 @@
     },
     {
       "path": "doc/testing/ci/ci-test-coverage.prd.md",
-      "content_sha256": "8917af4bc89c27c760480288788d5a12fcb4aa30832d741b3765b9ff76722064",
+      "content_sha256": "b6e1e5543481a80e8b78de051280e4aeb2c8308411bcd5bbc79eacd6a8fefed9",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
