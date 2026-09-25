@@ -28,13 +28,37 @@ import zipfile
 SCHEMA = "oasis7-cargo-checker-stage-admission/v1"
 REPOSITORY = "eng-cc/oasis7"
 DEFAULT_BRANCH = "main"
-NORMATIVE_COMMENT = 5743059557
-NORMATIVE_PR = 3815
-NORMATIVE_TASK_UID = "task_7bbce5924333467f9edfae48e1c73889"
-PLANNER_COMMENT = 5744986195
-PLANNER_PR = 3821
-PLANNER_ISSUE = 3818
-PLANNER_TASK_UID = "task_e21604f5cdb3476c8e146332a68a05b4"
+NORMATIVE_COMMENT = 5822424913
+NORMATIVE_PR = 3997
+NORMATIVE_ISSUE = 3996
+NORMATIVE_TASK_UID = "task_a14e1a1d51a44519ab0aa94632d90df4"
+PLANNER_COMMENT = 5836594318
+PLANNER_PR = 4000
+PLANNER_ISSUE = 3999
+PLANNER_TASK_UID = "task_978dcc0005b9415cbc45e59b21b095e0"
+PLANNER_REVIEW_COMMENT = 5836285037
+PLANNER_INTEGRATION_COMMENT = 5836026051
+PLANNER_CLEANUP_COMMENT = 5836399698
+PLANNER_INTEGRATION_RUN = 36162478921
+PLANNER_SOURCE_HEAD = "930217dbc32a033359b41aa0aeff1bfe07ccb6dd"
+PLANNER_SOURCE_SCOPE_BASE = "b5dbf139f1f608cde4797eea3218d1f7bb1eaf9e"
+PLANNER_INTEGRATION_BASE = "a5b8da54d40f5626106b78efb19eaec4976a9452"
+PLANNER_MERGED_COMMIT = "9a27e39fcc714435af65777ddfd9e83e4860158d"
+PLANNER_MERGED_TREE = "8a99ec25e5cdaa62de0008ec08247faca9a84b46"
+PLANNER_BYTES_SHA256 = "sha256:7c8a2de3e4b9b5e4c752e5147438bfe0eb80edb7a4406bc8d2b59aff498774fc"
+PLANNER_FRAGMENT_SHA256 = "sha256:63a0a1735d83d5b9431c1ecd07aa54b4437e84128dcf5cf821591489dfa4f8bb"
+PLANNER_TEST_PATH = "scripts/pm/cargo-package-profile-planner.test.py"
+PLANNER_TEST_BLOB = "d800de58b8b043887a3ae3290e95355b79b12a97"
+PLANNER_TEST_SIZE = 67265
+PLANNER_TEST_BYTES_SHA256 = "sha256:d3d38d31f9b339061ab5807ed2ed1e0a10c76ab877c8a34bbfb91814dd8e6725"
+PLANNER_FRAGMENT_DESCRIPTION = (
+    "APPROVED_NORMATIVE_EXPECTED from its assignment through closing brace plus final LF"
+)
+PLANNER_PREDECESSOR_FRAGMENT = "cargo-checker-authority-upgrade"
+PLANNER_PREDECESSOR_FRAGMENT_SHA256 = (
+    "sha256:16c3593deb204c7e38ae551ac553075abd24fd81e5f09d6ac9af3b0a38a9f45a"
+)
+PLANNER_TESTED_TREE = "03aa54afe762ae6b875339a60912349280a6a71e"
 # Frozen from the unique canonical Project task mapping during this ordered
 # Stage2 authority delivery. Issue #3827 remains historical predecessor truth;
 # it is never a runtime fallback for the successor binding below.
@@ -42,9 +66,63 @@ LEGACY_CHECKER_ISSUE = 3827
 LEGACY_CHECKER_TASK_UID = "task_be264ac2833044969d3c2c50b2b83cea"
 CHECKER_ISSUE = 3971
 CHECKER_TASK_UID = "task_4a631678a50b4fcb952a3c2778b15677"
+CHECKER_PR = 3972
 GITHUB_ACTIONS_APP_ID = 15368
 NORMATIVE_PATH = "doc/engineering/workflow/source-of-truth.md"
 PLANNER_PATH = "scripts/pm/cargo_package_profile_planner.py"
+NORMATIVE_FRAGMENT = "cargo-package-scope-and-impact-scoped-verification"
+NORMATIVE_CONTRACT_FRAGMENT = "cargo-checker-authority-upgrade"
+NORMATIVE_AUTHORITY_EXPECTED = {
+    "repository": REPOSITORY,
+    "default_branch": DEFAULT_BRANCH,
+    "task_uid": NORMATIVE_TASK_UID,
+    "pr_number": NORMATIVE_PR,
+    "source_head": "6dcc49fc1a3a726bc09ab88a96ac3065a7535bf0",
+    "source_scope_base": "747750afc6788d8a16421f84099edae8ab3e8520",
+    "authority_path": NORMATIVE_PATH,
+    "predecessor_file_sha256": "sha256:6af4fbc942407cb8c44bdc383793062d1463b62ffc3fbeedbc81f79f36324ed5",
+    "merged_commit": "4f97540c34aefca41d8bf790cbf09b3176f07de3",
+    "merged_tree": "82b8e5ad75d44c48739165b8bd26b5896eaa783a",
+    "authority_blob": "b6d1c5fa854bde6f63d14db1cfd31eb5f8a23705",
+    "authority_size": 159647,
+    "authority_bytes_sha256": "sha256:7ffc099266de2affb9b9726468edc45b91af55cb531537749ef8361407f4902e",
+    "stable_fragment": NORMATIVE_FRAGMENT,
+    "stable_fragment_sha256": "sha256:03bb8e833ed707662267633eec3747b46eaa698765a89e6a44d3c3fa679bbae0",
+    "authority_contract_fragment": NORMATIVE_CONTRACT_FRAGMENT,
+    "authority_contract_fragment_sha256": PLANNER_PREDECESSOR_FRAGMENT_SHA256,
+}
+PLANNER_AUTHORITY_EXPECTED = {
+    "repository": REPOSITORY,
+    "default_branch": DEFAULT_BRANCH,
+    "task_uid": PLANNER_TASK_UID,
+    "issue_number": PLANNER_ISSUE,
+    "pr_number": PLANNER_PR,
+    "source_head": PLANNER_SOURCE_HEAD,
+    "source_scope_base": PLANNER_SOURCE_SCOPE_BASE,
+    "trusted_integration_base": PLANNER_INTEGRATION_BASE,
+    "trusted_integration_tested_tree": PLANNER_TESTED_TREE,
+    "merged_commit": PLANNER_MERGED_COMMIT,
+    "merged_tree": PLANNER_MERGED_TREE,
+    "authority_path": PLANNER_PATH,
+    "authority_blob": "7f594b7fe8495689dae011dd993803e4c743d8dc",
+    "authority_size": 55453,
+    "authority_bytes_sha256": PLANNER_BYTES_SHA256,
+    "focused_test_path": PLANNER_TEST_PATH,
+    "focused_test_blob": PLANNER_TEST_BLOB,
+    "focused_test_size": PLANNER_TEST_SIZE,
+    "focused_test_bytes_sha256": PLANNER_TEST_BYTES_SHA256,
+    "stable_fragment": "APPROVED_NORMATIVE_EXPECTED",
+    "stable_fragment_size": 1222,
+    "stable_fragment_sha256": PLANNER_FRAGMENT_SHA256,
+    "predecessor_issue_number": NORMATIVE_ISSUE,
+    "predecessor_pr_number": NORMATIVE_PR,
+    "predecessor_comment": NORMATIVE_COMMENT,
+    "predecessor_merged_commit": NORMATIVE_AUTHORITY_EXPECTED["merged_commit"],
+    "predecessor_merged_tree": NORMATIVE_AUTHORITY_EXPECTED["merged_tree"],
+    "predecessor_fragment": NORMATIVE_CONTRACT_FRAGMENT,
+    "predecessor_fragment_sha256": PLANNER_PREDECESSOR_FRAGMENT_SHA256,
+    "cleanup_comment": PLANNER_CLEANUP_COMMENT,
+}
 CHECKER_SCOPE = (
     "scripts/pm/check-cargo-package-scope",
     "scripts/pm/check-cargo-package-scope.test.py",
@@ -108,14 +186,14 @@ def gh_api(path: str) -> dict[str, Any] | list[Any]:
 
 
 def _field(body: str, pattern: str, name: str) -> str:
-    match = re.search(pattern, body)
-    if match is None:
-        raise AdmissionError(f"live authority receipt is missing {name}")
-    return match.group(1)
+    matches = re.findall(pattern, body)
+    if len(matches) != 1:
+        raise AdmissionError(f"live authority receipt {name} is missing or ambiguous")
+    return matches[0]
 
 
 def _parse_normative_receipt(body: str) -> dict[str, Any]:
-    if "stage=normative_source" not in body or "immutable, not candidate authority" not in body:
+    if re.findall(r"\bstage=([^;]+)", body) != ["normative_source"] or "immutable, not candidate authority" not in body:
         raise AdmissionError("normative receipt is not an immutable server readback")
     pr = int(_field(body, r"\bPR=(\d+)\b", "PR identity"))
     if pr != NORMATIVE_PR:
@@ -130,6 +208,8 @@ def _parse_normative_receipt(body: str) -> dict[str, Any]:
         "source_scope_base": _field(
             body, r"\btrusted_predecessor/source_scope_base=([0-9a-f]{40})\b", "scope base"
         ),
+        "predecessor_file_sha256": "sha256:"
+        + _field(body, r"\bpredecessor file sha256=([0-9a-f]{64})\b", "predecessor file digest"),
         "authority_path": _field(body, r"\bpredecessor authority path=([^;]+)", "path"),
         "merged_commit": _field(body, r"(?i)\bmerged into commit=([0-9a-f]{40})\b", "commit"),
         "merged_tree": _field(body, r"\blive git/commits API tree=([0-9a-f]{40})\b", "tree"),
@@ -139,85 +219,118 @@ def _parse_normative_receipt(body: str) -> dict[str, Any]:
         + _field(body, r"\bdecoded bytes sha256=([0-9a-f]{64})\b", "bytes digest"),
         "stable_fragment": _field(body, r"\bStable fragment anchor=([^, ]+)", "fragment"),
         "stable_fragment_sha256": "sha256:"
-        + _field(body, r"\bsha256 including final LF=([0-9a-f]{64})\b", "fragment digest"),
+        + _field(
+            body,
+            r"Stable fragment anchor=[^,;]+[,;] sha256 including final LF=([0-9a-f]{64})\b",
+            "fragment digest",
+        ),
+        "authority_contract_fragment": _field(
+            body, r"\bAdjacent staged-authority fragment anchor=([^,;.]+)", "staged-authority fragment"
+        ),
+        "authority_contract_fragment_sha256": "sha256:"
+        + _field(
+            body,
+            r"\bAdjacent staged-authority fragment anchor=[^,;.]+[,;.] sha256 including final LF=([0-9a-f]{64})\b",
+            "staged-authority fragment digest",
+        ),
     }
 
 
 def _parse_planner_receipt(body: str) -> dict[str, Any]:
-    if "stage=approved_planner_authority" not in body:
-        raise AdmissionError("planner receipt is not an approved server readback")
-    pr = int(_field(body, r"\bpr=(\d+)\b", "PR identity"))
+    if (
+        re.findall(r"\bstage=([^;]+)", body) != ["planner_authority"]
+        or "immutable merged authority, not candidate self-approval" not in body
+    ):
+        raise AdmissionError("planner receipt is not an immutable planner-authority readback")
+    pr = int(_field(body, r"\bPR=(\d+)\b", "PR identity"))
     if pr != PLANNER_PR:
         raise AdmissionError("planner receipt PR identity mismatch")
-    verification = _field(
-        body,
-        r"Verification commands/results bound to this exact source head: (.*?)(?: Consumption restriction:|$)",
-        "verification commands/results",
+    cleanup_comment = int(
+        _field(
+            body,
+            r"terminal cleanup receipt https://github\.com/eng-cc/oasis7/issues/3999#issuecomment-(\d+)",
+            "terminal cleanup receipt",
+        )
     )
+    predecessor_url = _field(
+        body,
+        r"Predecessor approved normative source: (#[0-9]+/PR #[0-9]+ receipt "
+        r"https://github\.com/eng-cc/oasis7/issues/[0-9]+#issuecomment-[0-9]+)",
+        "normative predecessor identity",
+    )
+    predecessor_match = re.fullmatch(
+        r"#(\d+)/PR #(\d+) receipt https://github\.com/eng-cc/oasis7/issues/(\d+)#issuecomment-(\d+)",
+        predecessor_url,
+    )
+    if predecessor_match is None:
+        raise AdmissionError("planner normative predecessor reference is malformed")
+    predecessor_issue, predecessor_pr, predecessor_url_issue, predecessor_comment = map(
+        int, predecessor_match.groups()
+    )
+    if predecessor_issue != predecessor_url_issue:
+        raise AdmissionError("planner normative predecessor issue URL mismatch")
     return {
         "repository": _field(body, r"\brepository=([^;]+)", "repository"),
         "default_branch": _field(body, r"\bdefault_branch=([^;]+)", "default branch"),
-        "stage": "approved_planner_authority",
+        "stage": "planner_authority",
         "task_uid": _field(body, r"\btask_uid=([^;]+)", "task identity"),
-        "issue_number": int(_field(body, r"\bissue=(\d+)\b", "issue")),
+        "issue_number": PLANNER_ISSUE,
         "pr_number": pr,
         "source_head": _field(body, r"\bsource_head=([0-9a-f]{40})\b", "source head"),
         "source_scope_base": _field(body, r"\bsource_scope_base=([0-9a-f]{40})\b", "scope base"),
         "trusted_integration_base": _field(
-            body, r"\btrusted_integration_base=([0-9a-f]{40})\b", "integration base"
+            body, r"\btrusted integration base=([0-9a-f]{40})\b", "integration base"
         ),
-        "predecessor_normative_commit": _field(
-            body, r"\bpredecessor_normative_commit=([0-9a-f]{40})\b", "normative commit"
+        "merged_commit": _field(body, r"\bmerge commit=([0-9a-f]{40})\b", "commit"),
+        "merged_tree": _field(body, r"\blive git/commits API tree=([0-9a-f]{40})\b", "tree"),
+        "authority_path": _field(body, r"\bauthority path=([^,]+), blob=", "path"),
+        "authority_blob": _field(body, r"\bauthority path=[^,]+, blob=([0-9a-f]{40})\b", "blob"),
+        "authority_size": int(
+            _field(body, r"authority path=[^,]+, blob=[0-9a-f]{40}, size=(\d+)\b", "size")
         ),
-        "merged_commit": _field(body, r"\bmerged_commit=([0-9a-f]{40})\b", "commit"),
-        "merged_tree": _field(body, r"\bmerged_tree=([0-9a-f]{40})\b", "tree"),
-        "authority_path": _field(body, r"\bauthority_path=([^;]+)", "path"),
-        "authority_blob": _field(body, r"\bauthority_blob=([0-9a-f]{40})\b", "blob"),
-        "authority_size": int(_field(body, r"\bauthority_size=(\d+)\b", "size")),
         "authority_bytes_sha256": "sha256:"
-        + _field(body, r"\bauthority_bytes_sha256=([0-9a-f]{64})\b", "bytes digest"),
-        "stable_fragment": _field(body, r"\bstable_fragment=(.*?); stable_fragment_sha256=", "fragment"),
+        + _field(
+            body,
+            r"authority path=[^,]+, blob=[0-9a-f]{40}, size=\d+, decoded bytes sha256=([0-9a-f]{64})\b",
+            "bytes digest",
+        ),
+        "focused_test_path": _field(body, r"\bfocused test path=([^,]+), blob=", "focused test path"),
+        "focused_test_blob": _field(body, r"\bfocused test path=[^,]+, blob=([0-9a-f]{40})\b", "focused test blob"),
+        "focused_test_size": int(_field(body, r"\bfocused test path=[^,]+, blob=[0-9a-f]{40}, size=(\d+)\b", "focused test size")),
+        "focused_test_bytes_sha256": "sha256:"
+        + _field(body, r"focused test path=[^,]+, blob=[0-9a-f]{40}, size=\d+, decoded bytes sha256=([0-9a-f]{64})\b", "focused test bytes digest"),
+        "stable_fragment": _field(body, r"\bStable planner fragment (.*?) from its assignment", "fragment"),
+        "stable_fragment_size": int(_field(body, r"from its assignment through closing brace plus final LF: (\d+) bytes", "fragment size")),
         "stable_fragment_sha256": "sha256:"
-        + _field(body, r"\bstable_fragment_sha256=([0-9a-f]{64})\b", "fragment digest"),
-        "verification_evidence": verification,
+        + _field(body, r"plus final LF: \d+ bytes, sha256=([0-9a-f]{64})\b", "fragment digest"),
+        "predecessor_issue_number": predecessor_issue,
+        "predecessor_pr_number": predecessor_pr,
+        "predecessor_comment": predecessor_comment,
+        "predecessor_merged_commit": _field(body, r"\bmerged commit=([0-9a-f]{40})\b", "normative predecessor commit"),
+        "predecessor_merged_tree": _field(body, r"\btree=([0-9a-f]{40}), normative fragment", "normative predecessor tree"),
+        "predecessor_fragment": _field(body, r"\bnormative fragment ([^ ]+) sha256=", "normative predecessor fragment"),
+        "predecessor_fragment_sha256": "sha256:"
+        + _field(body, r"normative fragment [^ ]+ sha256=([0-9a-f]{64})\b", "normative predecessor fragment digest"),
+        "cleanup_comment": cleanup_comment,
+        "verification_evidence": body,
     }
 
 
 def _validate_planner_verification(parsed: dict[str, Any]) -> None:
     evidence = str(parsed.get("verification_evidence") or "")
-    required = (
-        "python3 scripts/pm/cargo-package-profile-planner.test.py 23/23 PASS",
-        "python3 scripts/pm/check-cargo-package-scope.test.py 13/13 PASS",
-        "./scripts/pm/lint.sh PASS",
-        "./scripts/doc-governance-check.sh PASS",
-        f"./scripts/pm/workflow-lint.sh --task-uid {PLANNER_TASK_UID} --phase current PASS",
-        "git diff --check PASS",
-        "terminal finalizer PASS",
+    required_claims = (
+        "Exact-head required-gate and strict integration passed",
+        "formal RH/QA r8 review closed no findings",
+        "PR live gate ready",
+        f"https://github.com/{REPOSITORY}/issues/{PLANNER_ISSUE}#issuecomment-{PLANNER_CLEANUP_COMMENT}",
     )
-    missing = [item for item in required if item not in evidence]
-    if missing:
-        raise AdmissionError("planner verification commands/results are incomplete")
-    match = re.search(
-        r"trusted exact integration run \d+ at base ([0-9a-f]{8,40}) PASS, tested_tree=([0-9a-f]{40})",
-        evidence,
-    )
-    if match is None:
-        raise AdmissionError("planner exact integration verification is missing")
-    trusted_base = str(parsed.get("trusted_integration_base") or "")
-    if not trusted_base.startswith(match.group(1)):
-        raise AdmissionError("planner integration verification base mismatch")
-    if match.group(2) != parsed.get("merged_tree"):
-        raise AdmissionError("planner integration verification tested-tree mismatch")
-    run_match = re.search(
-        r"trusted exact integration run (\d+) at base [0-9a-f]{8,40} PASS",
-        evidence,
-    )
-    if run_match is None:
-        raise AdmissionError("planner integration verification run identity is missing")
-    parsed["trusted_integration_run_id"] = int(run_match.group(1))
+    if any(claim not in evidence for claim in required_claims):
+        raise AdmissionError("planner verification or terminal cleanup claim is incomplete")
 
 
-def _verify_live_integration_run(repository: str, parsed: dict[str, Any]) -> None:
+def _verify_live_integration_run(
+    repository: str, parsed: dict[str, Any], repo_root: Path | None = None
+) -> None:
     run_id = parsed.get("trusted_integration_run_id")
     if not isinstance(run_id, int) or run_id <= 0:
         raise AdmissionError("planner integration run identity is invalid")
@@ -230,6 +343,12 @@ def _verify_live_integration_run(repository: str, parsed: dict[str, Any]) -> Non
         raise AdmissionError("planner integration run provenance is not trusted")
     if run.get("head_sha") != parsed.get("trusted_integration_base"):
         raise AdmissionError("planner integration run base identity mismatch")
+    expected_title = (
+        f"oasis7-ci|workflow_dispatch|integration_revalidation|{PLANNER_TASK_UID}|"
+        f"{PLANNER_PR}|{parsed['trusted_integration_base']}|{parsed['source_head']}"
+    )
+    if run.get("path") != ".github/workflows/rust.yml" or run.get("display_title") != expected_title:
+        raise AdmissionError("planner integration workflow identity mismatch")
     checks = gh_api(
         f"repos/{repository}/commits/{run['head_sha']}/check-runs?per_page=100"
     )
@@ -239,7 +358,12 @@ def _verify_live_integration_run(repository: str, parsed: dict[str, Any]) -> Non
         for item in (checks.get("check_runs", []) if isinstance(checks, dict) else [])
         if item.get("name") == "required-gate" and marker in str(item.get("details_url") or "")
     ]
-    if len(matches) != 1:
+    if (
+        not isinstance(checks, dict)
+        or not isinstance(checks.get("check_runs"), list)
+        or checks.get("total_count") != len(checks["check_runs"])
+        or len(matches) != 1
+    ):
         raise AdmissionError("planner integration required-gate identity is missing or ambiguous")
     check = matches[0]
     app_id = ((check.get("app") or {}).get("id"))
@@ -247,7 +371,7 @@ def _verify_live_integration_run(repository: str, parsed: dict[str, Any]) -> Non
         raise AdmissionError(
             "planner integration required-gate is not completed successfully"
         )
-    if not isinstance(app_id, int) or app_id <= 0 or check.get("head_sha") != run.get("head_sha"):
+    if app_id != GITHUB_ACTIONS_APP_ID or check.get("head_sha") != run.get("head_sha"):
         raise AdmissionError("planner integration required-gate identity is invalid")
     artifacts = _read_profile_artifacts(repository, run_id)
     envelope = artifacts["envelope"]["value"]
@@ -263,8 +387,13 @@ def _verify_live_integration_run(repository: str, parsed: dict[str, Any]) -> Non
         "check_run_id": check.get("id"),
         "integration_base": parsed.get("trusted_integration_base"),
         "source_head": parsed.get("source_head"),
-        "tested_tree": parsed.get("merged_tree"),
+        "workflow_ref": f"{repository}/.github/workflows/rust.yml@refs/heads/{DEFAULT_BRANCH}",
+        "workflow_sha": run.get("head_sha"),
     }
+    tested_tree = _require_oid(envelope.get("tested_tree"), "planner integration tested tree")
+    expected["tested_tree"] = tested_tree
+    if tested_tree != PLANNER_AUTHORITY_EXPECTED["trusted_integration_tested_tree"]:
+        raise AdmissionError("planner integration tested tree differs from the approved readback")
     if any(envelope.get(field) != value for field, value in expected.items()):
         raise AdmissionError("planner integration envelope identity mismatch")
     for field in ("plan", "results", "receipt"):
@@ -275,7 +404,9 @@ def _verify_live_integration_run(repository: str, parsed: dict[str, Any]) -> Non
     if any(plan.get(field) != expected[field] for field in ("integration_base", "source_head", "tested_tree")):
         raise AdmissionError("planner integration plan identity mismatch")
     results = artifacts["results"]["value"]
-    if not isinstance(results, list) or any(
+    if not isinstance(results, list):
+        raise AdmissionError("planner integration results identity or status mismatch")
+    if results and any(
         not isinstance(item, dict)
         or item.get("status") != "passed"
         or item.get("exit_code") != 0
@@ -283,6 +414,12 @@ def _verify_live_integration_run(repository: str, parsed: dict[str, Any]) -> Non
         for item in results
     ):
         raise AdmissionError("planner integration results identity or status mismatch")
+    if not results and (
+        plan.get("selected_items") != []
+        or plan.get("items") != []
+        or plan.get("disposition_validated") is not True
+    ):
+        raise AdmissionError("planner integration has empty results for a nonempty or unvalidated plan")
     receipt = artifacts["receipt"]["value"]
     if (
         not isinstance(receipt, dict)
@@ -292,6 +429,63 @@ def _verify_live_integration_run(repository: str, parsed: dict[str, Any]) -> Non
     ):
         raise AdmissionError("planner integration receipt identity or status mismatch")
     parsed["trusted_integration_envelope"] = envelope
+    parsed["trusted_integration_tested_tree"] = tested_tree
+    if repo_root is not None:
+        actual_tree = _recompute_planner_integration_tree(
+            repo_root,
+            parsed["trusted_integration_base"],
+            parsed["source_head"],
+        )
+        if actual_tree != tested_tree:
+            raise AdmissionError("planner integration tested tree differs from merge-tree B/H")
+
+
+def _recompute_planner_integration_tree(repo_root: Path, integration_base: str, source_head: str) -> str:
+    """Compute the exact B/H integration tree independently of squash-merge tree identity."""
+    _require_oid(integration_base, "planner integration base")
+    _require_oid(source_head, "planner source head")
+    repo = repo_root.resolve()
+
+    def has_commit(oid: str) -> bool:
+        result = subprocess.run(
+            ["git", "-C", str(repo), "cat-file", "-e", f"{oid}^{{commit}}"],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        return result.returncode == 0
+
+    if not has_commit(integration_base):
+        subprocess.run(
+            ["git", "-C", str(repo), "fetch", "--no-tags", "origin", DEFAULT_BRANCH],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+    if not has_commit(source_head):
+        subprocess.run(
+            [
+                "git", "-C", str(repo), "fetch", "--no-tags", "origin",
+                f"refs/pull/{PLANNER_PR}/head:refs/remotes/origin/trusted-planner-pr-{PLANNER_PR}",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        try:
+            fetched_head = _git(
+                repo, "rev-parse", f"refs/remotes/origin/trusted-planner-pr-{PLANNER_PR}"
+            )
+        except AdmissionError as exc:
+            raise AdmissionError("planner source-head PR ref is unavailable") from exc
+        if fetched_head != source_head:
+            raise AdmissionError("planner source-head PR ref differs from approved source head")
+    if not has_commit(integration_base) or not has_commit(source_head):
+        raise AdmissionError("planner integration base/source objects are unavailable")
+    return _require_oid(
+        _git(repo, "merge-tree", "--write-tree", integration_base, source_head),
+        "planner integration merge-tree",
+    )
 
 
 def _gh_download(path: str) -> bytes:
@@ -354,22 +548,202 @@ def _decode_contents(response: dict[str, Any], field: str) -> bytes:
         raise AdmissionError(f"live {field} contents are malformed") from exc
 
 
-def _authority_fragment(data: bytes, stage: str) -> bytes:
+def _authority_fragment(data: bytes, stage: str, anchor: str | None = None) -> bytes:
     if stage == "normative_source":
-        marker = b'<a id="cargo-checker-authority-upgrade"></a>'
+        if not anchor:
+            raise AdmissionError("normative authority fragment anchor is missing")
+        marker = f'<a id="{anchor}"></a>'.encode("utf-8")
         lines = [line for line in data.splitlines(keepends=True) if line.startswith(marker)]
-        if len(lines) != 1:
+        if len(lines) != 1 or not lines[0].endswith(b"\n"):
             raise AdmissionError("normative authority fragment is missing or ambiguous")
         return lines[0]
-    start = data.find(b"def _validate_approved_normative_source(")
-    end = data.find(b"\ndef _extract(", start)
-    if start < 0 or end < 0:
-        raise AdmissionError("planner authority fragment is missing")
-    return data[start : end + 1]
+    if stage == "planner_authority":
+        if anchor != "APPROVED_NORMATIVE_EXPECTED":
+            raise AdmissionError("planner authority fragment description mismatch")
+        matches = re.findall(
+            rb"(?ms)^APPROVED_NORMATIVE_EXPECTED = \{\n.*?^\}\n",
+            data,
+        )
+        if len(matches) != 1:
+            raise AdmissionError("planner authority stable fragment is missing or ambiguous")
+        return matches[0]
+    raise AdmissionError("authority readback stage is unsupported")
+
+
+def _assert_expected_fields(
+    parsed: dict[str, Any], expected: dict[str, Any], label: str
+) -> None:
+    mismatches = [field for field, value in expected.items() if parsed.get(field) != value]
+    if mismatches:
+        raise AdmissionError(f"{label} readback identity/content mismatch: {', '.join(mismatches)}")
+
+
+def _exact_task_uid(body: str, expected_uid: str, label: str) -> None:
+    normalized = body.replace("\r\n", "\n").replace("\r", "\n")
+    uid_fields = [
+        line
+        for line in normalized.split("\n")
+        if re.match(r"^[ \t]*(?:[-*][ \t]*)?task_uid(?:\b|[ \t]*[:=])", line)
+    ]
+    if uid_fields != [f"task_uid: {expected_uid}"]:
+        raise AdmissionError(f"live {label} task UID field is missing, malformed, or ambiguous")
+
+
+def _verify_task_issue_binding(
+    repository: str, issue_number: int, pr_number: int, task_uid: str, pull: dict[str, Any]
+) -> dict[str, Any]:
+    issue = gh_api(f"repos/{repository}/issues/{issue_number}")
+    if not isinstance(issue, dict) or issue.get("number") != issue_number:
+        raise AdmissionError("live authority task Issue readback is malformed")
+    if issue.get("repository_url") != f"https://api.github.com/repos/{repository}":
+        raise AdmissionError("live authority task Issue repository mismatch")
+    if issue.get("state") != "closed":
+        raise AdmissionError("live authority task Issue is not terminal")
+    body = issue.get("body")
+    if not isinstance(body, str):
+        raise AdmissionError("live authority task Issue body is unavailable")
+    _exact_task_uid(body, task_uid, "authority")
+    expected_url = f"https://github.com/{repository}/pull/{pr_number}"
+    pr_urls = re.findall(r"https://github\.com/[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/pull/\d+", body)
+    pr_numbers = re.findall(r"(?m)^[ \t]*-[ \t]*pr_number:[ \t]*`?(\d+)`?[ \t]*$", body)
+    if pr_urls != [expected_url] or pr_numbers != [str(pr_number)]:
+        raise AdmissionError("live authority task Issue does not reciprocally bind its PR")
+
+    created_at = issue.get("created_at")
+    pr_created_at = pull.get("created_at")
+    try:
+        issue_created = dt.datetime.fromisoformat(str(created_at).replace("Z", "+00:00"))
+        pr_created = dt.datetime.fromisoformat(str(pr_created_at).replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise AdmissionError("live authority task Issue/PR creation chronology is malformed") from exc
+    if issue_created.tzinfo is None or pr_created.tzinfo is None or not issue_created < pr_created:
+        raise AdmissionError("live authority task Issue must predate its reciprocal PR")
+
+    pr_body = pull.get("body")
+    if not isinstance(pr_body, str):
+        raise AdmissionError("live authority PR task references are unavailable")
+    task_lines = re.findall(r"(?m)^Task: (task_[0-9a-f]+)[ \t]*$", pr_body)
+    issue_refs = re.findall(r"(?m)^Refs #(\d+)[ \t]*$", pr_body)
+    if task_lines != [task_uid] or issue_refs != [str(issue_number)]:
+        raise AdmissionError("live authority PR does not reciprocally bind its task Issue/UID")
+    return issue
+
+
+def _verify_fixed_comment(comment: dict[str, Any], issue_number: int, comment_id: int) -> str:
+    expected_issue_url = f"https://api.github.com/repos/{REPOSITORY}/issues/{issue_number}"
+    expected_html_url = (
+        f"https://github.com/{REPOSITORY}/issues/{issue_number}#issuecomment-{comment_id}"
+    )
+    user = comment.get("user") or {}
+    if (
+        comment.get("id") != comment_id
+        or comment.get("issue_url") != expected_issue_url
+        or comment.get("html_url") != expected_html_url
+        or user.get("login") != "eng-cc"
+        or comment.get("created_at") != comment.get("updated_at")
+    ):
+        raise AdmissionError("live authority evidence comment identity or immutability mismatch")
+    body = comment.get("body")
+    if not isinstance(body, str) or not body.strip():
+        raise AdmissionError("live authority evidence comment body is unavailable")
+    return body
+
+
+def _verify_planner_review(repository: str, parsed: dict[str, Any]) -> None:
+    comment = gh_api(f"repos/{repository}/issues/comments/{PLANNER_REVIEW_COMMENT}")
+    if not isinstance(comment, dict):
+        raise AdmissionError("planner source review readback is malformed")
+    body = _verify_fixed_comment(comment, PLANNER_ISSUE, PLANNER_REVIEW_COMMENT)
+    expected_lines = (
+        f"Task UID: {PLANNER_TASK_UID}",
+        f"Source Head: {parsed['source_head']}",
+        "Review Roles: repository_health_engineer,qa_engineer",
+        "Review Evidence: repository_health_engineer: no_findings; qa_engineer: no_findings",
+        "Review Findings Disposition: no_findings",
+    )
+    normalized_lines = [line[2:] if line.startswith("- ") else line for line in body.splitlines()]
+    if any(
+        [line for line in normalized_lines if line.partition(":")[0] == expected.partition(":")[0]]
+        != [expected]
+        for expected in expected_lines
+    ):
+        raise AdmissionError("planner source review is missing exact-head RH/QA no-findings evidence")
+
+
+def _read_planner_integration_run_id(repository: str, parsed: dict[str, Any]) -> int:
+    comment = gh_api(f"repos/{repository}/issues/comments/{PLANNER_INTEGRATION_COMMENT}")
+    if not isinstance(comment, dict):
+        raise AdmissionError("planner strict-integration request evidence is malformed")
+    body = _verify_fixed_comment(comment, PLANNER_ISSUE, PLANNER_INTEGRATION_COMMENT)
+    identities = re.findall(
+        r"Identity: UID (task_[0-9a-f]+),.*?sole PR #(\d+), frozen H=([0-9a-f]{40}), S/B=([0-9a-f]{40})",
+        body,
+    )
+    run_ids = re.findall(r"\bStrict integration run (\d+) dispatched\b", body)
+    if identities != [
+        (
+            PLANNER_TASK_UID,
+            str(PLANNER_PR),
+            parsed["source_head"],
+            parsed["trusted_integration_base"],
+        )
+    ] or run_ids != [str(PLANNER_INTEGRATION_RUN)]:
+        raise AdmissionError("planner strict-integration request identity is missing or ambiguous")
+    return int(run_ids[0])
+
+
+def _verify_live_required_gate(
+    repository: str, parsed: dict[str, Any], pull: dict[str, Any]
+) -> None:
+    head_sha = parsed["source_head"]
+    response = gh_api(f"repos/{repository}/commits/{head_sha}/check-runs?per_page=100")
+    check_runs = response.get("check_runs") if isinstance(response, dict) else None
+    total_count = response.get("total_count") if isinstance(response, dict) else None
+    if not isinstance(check_runs, list) or total_count != len(check_runs):
+        raise AdmissionError("planner required-gate check-run listing is incomplete")
+    matches = [item for item in check_runs if isinstance(item, dict) and item.get("name") == "required-gate"]
+    if len(matches) != 1:
+        raise AdmissionError("planner exact-head required-gate is missing or ambiguous")
+    check = matches[0]
+    app_id = ((check.get("app") or {}).get("id"))
+    if (
+        check.get("head_sha") != head_sha
+        or check.get("status") != "completed"
+        or check.get("conclusion") != "success"
+        or app_id != GITHUB_ACTIONS_APP_ID
+    ):
+        raise AdmissionError("planner exact-head required-gate is not completed successfully")
+    details_url = check.get("details_url")
+    run_match = re.fullmatch(
+        rf"https://github\.com/{re.escape(repository)}/actions/runs/(\d+)/job/\d+",
+        str(details_url or ""),
+    )
+    if run_match is None:
+        raise AdmissionError("planner required-gate workflow run identity is malformed")
+    run_id = int(run_match.group(1))
+    run = gh_api(f"repos/{repository}/actions/runs/{run_id}")
+    head = pull.get("head") or {}
+    if (
+        not isinstance(run, dict)
+        or run.get("id") != run_id
+        or run.get("status") != "completed"
+        or run.get("conclusion") != "success"
+        or run.get("event") != "pull_request"
+        or run.get("path") != ".github/workflows/rust.yml"
+        or run.get("head_sha") != head_sha
+        or run.get("head_branch") != head.get("ref")
+        or (run.get("head_repository") or {}).get("full_name") != repository
+    ):
+        raise AdmissionError("planner required-gate workflow run provenance mismatch")
 
 
 def _verify_server_readback(
-    repository: str, *, comment: int, pr_number: int, stage: str
+    repository: str,
+    *,
+    comment: int,
+    pr_number: int,
+    stage: str,
+    repo_root: Path | None = None,
 ) -> dict[str, Any]:
     if repository != REPOSITORY:
         raise AdmissionError("authority repository is not canonical")
@@ -381,25 +755,33 @@ def _verify_server_readback(
     comment_object = gh_api(f"repos/{repository}/issues/comments/{comment}")
     if not isinstance(comment_object, dict):
         raise AdmissionError("authority readback comment is malformed")
-    body = comment_object.get("body")
-    if not isinstance(body, str):
-        raise AdmissionError("authority readback comment body is missing")
+    expected_issue = NORMATIVE_ISSUE if stage == "normative_source" else PLANNER_ISSUE
+    body = _verify_fixed_comment(comment_object, expected_issue, comment)
     parsed = _parse_normative_receipt(body) if stage == "normative_source" else _parse_planner_receipt(body)
     if stage == "normative_source":
-        if parsed.get("task_uid") != NORMATIVE_TASK_UID:
-            raise AdmissionError("normative authority task identity mismatch")
+        _assert_expected_fields(parsed, NORMATIVE_AUTHORITY_EXPECTED, "normative authority")
     else:
-        if parsed.get("task_uid") != PLANNER_TASK_UID or parsed.get("issue_number") != PLANNER_ISSUE:
-            raise AdmissionError("planner authority task/issue identity mismatch")
+        _assert_expected_fields(
+            parsed,
+            {
+                key: value
+                for key, value in PLANNER_AUTHORITY_EXPECTED.items()
+                if key != "trusted_integration_tested_tree"
+            },
+            "planner authority",
+        )
         _validate_planner_verification(parsed)
-        _verify_live_integration_run(repository, parsed)
+        _verify_planner_review(repository, parsed)
+        parsed["trusted_integration_run_id"] = _read_planner_integration_run_id(
+            repository, parsed
+        )
     if parsed["repository"] != repository or parsed["default_branch"] != DEFAULT_BRANCH:
         raise AdmissionError("authority repository/default branch mismatch")
-    expected_stage = "normative_source" if stage == "normative_source" else "approved_planner_authority"
+    expected_stage = "normative_source" if stage == "normative_source" else "planner_authority"
     if parsed["pr_number"] != pr_number or parsed["stage"] != expected_stage:
         raise AdmissionError("authority stage or PR identity mismatch")
     pull = gh_api(f"repos/{repository}/pulls/{pr_number}")
-    if not isinstance(pull, dict):
+    if not isinstance(pull, dict) or pull.get("number") != pr_number:
         raise AdmissionError("authority PR readback is malformed")
     if pull.get("state") != "closed" or pull.get("merged") is not True:
         raise AdmissionError("authority PR is not merged")
@@ -413,6 +795,10 @@ def _verify_server_readback(
         raise AdmissionError("authority PR head repository mismatch")
     if head.get("sha") != parsed.get("source_head"):
         raise AdmissionError("authority PR head/source head identity mismatch")
+    issue_number = NORMATIVE_ISSUE if stage == "normative_source" else PLANNER_ISSUE
+    issue = _verify_task_issue_binding(
+        repository, issue_number, pr_number, parsed["task_uid"], pull
+    )
     live_base = base.get("sha")
     if not isinstance(live_base, str) or OID_RE.fullmatch(live_base) is None:
         raise AdmissionError("authority PR base SHA is unavailable")
@@ -424,12 +810,21 @@ def _verify_server_readback(
     if expected_base != live_base:
         raise AdmissionError("authority receipt base identity mismatch")
     if stage == "planner_authority":
-        comparison = gh_api(
-            f"repos/{repository}/compare/{live_base}...{parsed['source_head']}"
-        )
-        merge_base = ((comparison.get("merge_base_commit") or {}).get("sha")) if isinstance(comparison, dict) else None
-        if merge_base != parsed.get("source_scope_base"):
-            raise AdmissionError("planner source scope is not the live PR merge-base")
+        source_scope_base = parsed.get("source_scope_base")
+        for descendant in (live_base, parsed["source_head"]):
+            comparison = gh_api(
+                f"repos/{repository}/compare/{source_scope_base}...{descendant}"
+            )
+            merge_base = (
+                ((comparison.get("merge_base_commit") or {}).get("sha"))
+                if isinstance(comparison, dict)
+                else None
+            )
+            if merge_base != source_scope_base:
+                raise AdmissionError("planner source-scope base is not an ancestor of the live PR identity")
+        _verify_live_required_gate(repository, parsed, pull)
+        _verify_live_integration_run(repository, parsed, repo_root)
+        _assert_expected_fields(parsed, PLANNER_AUTHORITY_EXPECTED, "planner authority")
     commit = gh_api(f"repos/{repository}/commits/{parsed['merged_commit']}")
     if not isinstance(commit, dict):
         raise AdmissionError("authority commit readback is malformed")
@@ -443,6 +838,8 @@ def _verify_server_readback(
     )
     if not isinstance(content, dict):
         raise AdmissionError("authority contents readback is malformed")
+    if content.get("path") != parsed["authority_path"]:
+        raise AdmissionError("authority contents path identity mismatch")
     data = _decode_contents(content, stage)
     if content.get("sha") != parsed["authority_blob"]:
         raise AdmissionError("authority path blob mismatch")
@@ -450,29 +847,74 @@ def _verify_server_readback(
         raise AdmissionError("authority path size mismatch")
     if _digest(data) != _require_digest(parsed["authority_bytes_sha256"], "authority bytes"):
         raise AdmissionError("authority bytes digest mismatch")
-    fragment = _authority_fragment(data, stage)
+    fragment = _authority_fragment(
+        data,
+        stage,
+        parsed.get("stable_fragment"),
+    )
+    if stage == "planner_authority" and len(fragment) != parsed["stable_fragment_size"]:
+        raise AdmissionError("planner authority stable fragment size mismatch")
     if _digest(fragment) != _require_digest(parsed["stable_fragment_sha256"], "stable fragment"):
         raise AdmissionError("authority stable fragment digest mismatch")
-    if stage == "normative_source" and parsed.get("stable_fragment") != "cargo-checker-authority-upgrade":
-        raise AdmissionError("normative authority fragment anchor mismatch")
-    if stage == "planner_authority" and not str(parsed.get("stable_fragment", "")).startswith(
-        "def _validate_approved_normative_source("
-    ):
-        raise AdmissionError("planner authority fragment description mismatch")
+    if stage == "normative_source":
+        contract_fragment = _authority_fragment(
+            data,
+            stage,
+            parsed.get("authority_contract_fragment"),
+        )
+        if _digest(contract_fragment) != _require_digest(
+            parsed["authority_contract_fragment_sha256"], "staged-authority fragment"
+        ):
+            raise AdmissionError("normative staged-authority fragment digest mismatch")
+    else:
+        test_content = gh_api(
+            f"repos/{repository}/contents/{parsed['focused_test_path']}?ref={parsed['merged_commit']}"
+        )
+        if not isinstance(test_content, dict) or test_content.get("path") != parsed["focused_test_path"]:
+            raise AdmissionError("planner focused-test contents readback is malformed")
+        test_bytes = _decode_contents(test_content, "planner focused test")
+        if (
+            test_content.get("sha") != parsed["focused_test_blob"]
+            or int(test_content.get("size") or -1) != len(test_bytes)
+            or len(test_bytes) != parsed["focused_test_size"]
+            or _digest(test_bytes)
+            != _require_digest(parsed["focused_test_bytes_sha256"], "planner focused-test bytes")
+        ):
+            raise AdmissionError("planner focused-test path/blob/size/digest mismatch")
+        parsed["focused_test_bytes"] = test_bytes
     parsed["authority_bytes"] = data
     parsed["authority_fragment_bytes"] = fragment
+    parsed["task_created_at"] = issue.get("created_at")
     return parsed
 
 
-def verify_authority_chain(repository: str = REPOSITORY) -> dict[str, dict[str, Any]]:
+def verify_authority_chain(
+    repository: str = REPOSITORY, repo_root: Path | None = None
+) -> dict[str, dict[str, Any]]:
     normative = _verify_server_readback(
-        repository, comment=NORMATIVE_COMMENT, pr_number=NORMATIVE_PR, stage="normative_source"
+        repository,
+        comment=NORMATIVE_COMMENT,
+        pr_number=NORMATIVE_PR,
+        stage="normative_source",
+        repo_root=repo_root,
     )
     planner = _verify_server_readback(
-        repository, comment=PLANNER_COMMENT, pr_number=PLANNER_PR, stage="planner_authority"
+        repository,
+        comment=PLANNER_COMMENT,
+        pr_number=PLANNER_PR,
+        stage="planner_authority",
+        repo_root=repo_root,
     )
-    if planner.get("predecessor_normative_commit") != normative.get("merged_commit"):
+    if planner.get("predecessor_merged_commit") != normative.get("merged_commit"):
         raise AdmissionError("planner predecessor does not bind approved normative commit")
+    if planner.get("predecessor_merged_tree") != normative.get("merged_tree"):
+        raise AdmissionError("planner predecessor does not bind approved normative tree")
+    if planner.get("predecessor_fragment") != normative.get("authority_contract_fragment"):
+        raise AdmissionError("planner predecessor does not bind approved normative fragment")
+    if planner.get("predecessor_fragment_sha256") != normative.get("authority_contract_fragment_sha256"):
+        raise AdmissionError("planner predecessor does not bind approved normative fragment digest")
+    if planner.get("predecessor_comment") != NORMATIVE_COMMENT:
+        raise AdmissionError("planner predecessor normative receipt comment mismatch")
     if normative.get("authority_path") != NORMATIVE_PATH:
         raise AdmissionError("normative authority path mismatch")
     if planner.get("authority_path") != PLANNER_PATH:
@@ -622,6 +1064,8 @@ def verify_checker_pr(
 ) -> dict[str, Any]:
     if repository != REPOSITORY:
         raise AdmissionError("checker PR repository is not canonical")
+    if pr_number != CHECKER_PR:
+        raise AdmissionError("checker PR number differs from frozen successor authority")
     _require_oid(base_oid, "checker PR base")
     _require_oid(head_oid, "checker PR head")
     _require_oid(scope_base_oid, "checker scope base")
@@ -759,14 +1203,19 @@ def classify_checker_stage(
     """Return whether the exact trusted checker-stage route is selected.
 
     Ordinary PRs must retain the conservative path.  The checker PR number is
-    discovered from the live task Issue; any missing or foreign identity on that
-    exact PR is suspicious and blocks rather than downgrading silently.
+    frozen by the merged planner authority.  Only that suspected PR causes a
+    live successor-Issue read; an unavailable task Issue must not fail ordinary
+    PRs that cannot select the exception.
     """
     _require_oid(base_oid, "checker PR base")
     _require_oid(head_oid, "checker PR head")
+    if repository != REPOSITORY:
+        raise AdmissionError("checker task repository is not canonical")
+    if pr_number != CHECKER_PR:
+        return False
     binding = _read_checker_task_binding(repository)
     if pr_number != binding["pr_number"]:
-        return False
+        raise AdmissionError("checker task reciprocal PR identity differs from frozen authority")
     if task_uid != CHECKER_TASK_UID:
         raise AdmissionError("checker stage task identity is not the trusted task")
     pull = gh_api(f"repos/{repository}/pulls/{pr_number}")
@@ -815,7 +1264,7 @@ def build_preflight(
         raise AdmissionError("current checker task UID is required")
     if not classify_checker_stage(repository, pr_number, task_uid, base_oid, head_oid):
         raise AdmissionError("checker stage route is not the trusted exact-stage PR")
-    authorities = verify_authority_chain(repository)
+    authorities = verify_authority_chain(repository, repo_root)
     planner = verify_executing_planner(planner_path, authorities["planner"], repo_root)
     tested_tree = _git(repo_root, "merge-tree", "--write-tree", base_oid, head_oid)
     checker = verify_checker_pr(
@@ -918,6 +1367,7 @@ def build_postrun_receipt(
     exit_code: int,
 ) -> dict[str, Any]:
     """Create the durable, complete post-run evidence artifact."""
+    _assert_preflight_authorities_unchanged(preflight, authorities)
     runner = preflight.get("runner") or {}
     receipt = verify_postrun(
         preflight,
@@ -949,6 +1399,21 @@ def build_postrun_receipt(
     receipt["receipt_digest"] = durable_receipt_digest(receipt)
     verify_durable_postrun_receipt(receipt)
     return receipt
+
+
+def _assert_preflight_authorities_unchanged(
+    preflight: dict[str, Any], authorities: dict[str, dict[str, Any]]
+) -> None:
+    for field, expected in (
+        ("normative_authority", NORMATIVE_AUTHORITY_EXPECTED),
+        ("planner_authority", PLANNER_AUTHORITY_EXPECTED),
+    ):
+        before = preflight.get(field)
+        after = authorities.get("normative" if field == "normative_authority" else "planner")
+        if not isinstance(before, dict) or not isinstance(after, dict):
+            raise AdmissionError(f"post-run {field} readback is missing")
+        if any(before.get(name) != after.get(name) for name in expected):
+            raise AdmissionError(f"post-run {field} identity changed after preflight")
 
 
 def verify_durable_postrun_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
@@ -1130,7 +1595,7 @@ def main(argv: list[str] | None = None) -> int:
                 run_attempt=args.run_attempt,
             )
             # Re-read all mutable live identities after the command completed.
-            authorities = verify_authority_chain(args.repository)
+            authorities = verify_authority_chain(args.repository, args.repo_root)
             planner_path = args.planner_path
             checker_path = args.checker_path
             policy_path = args.policy_path

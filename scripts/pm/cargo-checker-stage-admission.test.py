@@ -17,6 +17,8 @@ SPEC = importlib.util.spec_from_file_location("cargo_checker_stage_admission", M
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(MODULE)
+PINNED_NORMATIVE_AUTHORITY_EXPECTED = dict(MODULE.NORMATIVE_AUTHORITY_EXPECTED)
+PINNED_PLANNER_AUTHORITY_EXPECTED = dict(MODULE.PLANNER_AUTHORITY_EXPECTED)
 
 
 REPOSITORY = "eng-cc/oasis7"
@@ -27,7 +29,7 @@ PLANNER_COMMIT = "d" * 40
 PLANNER_TREE = "e" * 40
 PLANNER_BLOB = "f" * 40
 PLANNER_SOURCE_HEAD = "88988102318fa2e3c9e84f483d01cb99575e5387"
-PLANNER_SOURCE_REF = "refs/pull/3821/head"
+PLANNER_SOURCE_REF = f"refs/pull/{MODULE.PLANNER_PR}/head"
 CHECKER_BASE = "1" * 40
 CHECKER_HEAD = "2" * 40
 CHECKER_SCOPE = "3" * 40
@@ -35,107 +37,59 @@ TESTED_TREE = "4" * 40
 TASK_UID = "task_4a631678a50b4fcb952a3c2778b15677"
 SUCCESSOR_ISSUE = 3971
 CHECKER_PR = 3972
-INTEGRATION_RUN = 35463292968
+INTEGRATION_RUN = MODULE.PLANNER_INTEGRATION_RUN
+PLANNER_REQUIRED_RUN = 36162285257
 CHECK_RUN_ID = 123
 
+CURRENT_PLANNER_RECEIPT = (
+    "Post-merge approved_planner_authority live server readback for ordered C1 admission "
+    "(stage=planner_authority; immutable merged authority, not candidate self-approval): "
+    "repository=eng-cc/oasis7; default_branch=main; "
+    "task_uid=task_978dcc0005b9415cbc45e59b21b095e0; PR=4000; "
+    "source_scope_base=b5dbf139f1f608cde4797eea3218d1f7bb1eaf9e; "
+    "source_head=930217dbc32a033359b41aa0aeff1bfe07ccb6dd; "
+    "trusted integration base=a5b8da54d40f5626106b78efb19eaec4976a9452. "
+    "GitHub live PR readback: MERGED, merge commit=9a27e39fcc714435af65777ddfd9e83e4860158d; "
+    "live git/commits API tree=8a99ec25e5cdaa62de0008ec08247faca9a84b46. "
+    "Live contents API at that exact commit: authority path=scripts/pm/cargo_package_profile_planner.py, "
+    "blob=7f594b7fe8495689dae011dd993803e4c743d8dc, size=55453, decoded bytes "
+    "sha256=7c8a2de3e4b9b5e4c752e5147438bfe0eb80edb7a4406bc8d2b59aff498774fc; "
+    "focused test path=scripts/pm/cargo-package-profile-planner.test.py, "
+    "blob=d800de58b8b043887a3ae3290e95355b79b12a97, size=67265, decoded bytes "
+    "sha256=d3d38d31f9b339061ab5807ed2ed1e0a10c76ab877c8a34bbfb91814dd8e6725. "
+    "Stable planner fragment APPROVED_NORMATIVE_EXPECTED from its assignment through closing brace "
+    "plus final LF: 1222 bytes, sha256=63a0a1735d83d5b9431c1ecd07aa54b4437e84128dcf5cf821591489dfa4f8bb. "
+    "Predecessor approved normative source: #3996/PR #3997 receipt "
+    "https://github.com/eng-cc/oasis7/issues/3996#issuecomment-5822424913, "
+    "merged commit=4f97540c34aefca41d8bf790cbf09b3176f07de3, "
+    "tree=82b8e5ad75d44c48739165b8bd26b5896eaa783a, normative fragment "
+    "cargo-checker-authority-upgrade sha256=16c3593deb204c7e38ae551ac553075abd24fd81e5f09d6ac9af3b0a38a9f45a. "
+    "Exact-head required-gate and strict integration passed, formal RH/QA r8 review closed no findings, "
+    "PR live gate ready, and terminal cleanup receipt "
+    "https://github.com/eng-cc/oasis7/issues/3999#issuecomment-5836399698. "
+    "C1 must independently re-read and verify repository, branch, identity, commit, tree, paths, fragment, "
+    "digests, stage and predecessor before admission; this receipt does not authorize bypassing its own review or checks."
+)
 
-def _normative_bytes():
-    return b'<a id="cargo-checker-authority-upgrade"></a> trusted\n'
-
-
-def _planner_bytes():
-    return (
-        b"def _validate_approved_normative_source(\n"
-        b"    value\n"
-        b"\n"
-        b"def _extract(\n"
-    )
-
-
-def _content(data, oid):
-    return {
-        "encoding": "base64",
-        "content": base64.b64encode(data).decode() + "\n",
-        "sha": oid,
-        "size": len(data),
-    }
-
-
-def _profile_artifacts():
-    plan = {
-        "schema": "oasis7-cargo-package-profile-plan/v1",
-        "plan_id": "sha256:" + "1" * 64,
-        "integration_base": CHECKER_BASE,
-        "source_head": "8" * 40,
-        "tested_tree": PLANNER_TREE,
-    }
-    results = [{
-        "status": "passed", "exit_code": 0,
-        "integration_base": CHECKER_BASE, "source_head": "8" * 40,
-        "tested_tree": PLANNER_TREE,
-    }]
-    receipt = {
-        "status": "passed", "plan_id": plan["plan_id"],
-        "integration_base": CHECKER_BASE, "source_head": "8" * 40,
-        "tested_tree": PLANNER_TREE,
-    }
-    payloads = {}
-    for key, value in (("plan", plan), ("results", results), ("receipt", receipt)):
-        payload = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
-        payloads[key] = {"value": value, "bytes": payload}
-    envelope = {
-        "schema": "oasis7-cargo-package-profile-envelope/v1",
-        "repository": REPOSITORY, "task_uid": "task_e21604f5cdb3476c8e146332a68a05b4",
-        "pr_number": 3821, "run_id": INTEGRATION_RUN, "run_attempt": 1,
-        "check_name": "required-gate", "check_app_id": 15368,
-        "check_run_id": CHECK_RUN_ID, "integration_base": CHECKER_BASE,
-        "source_head": "8" * 40, "tested_tree": PLANNER_TREE,
-        "plan_digest": "sha256:" + hashlib.sha256(payloads["plan"]["bytes"]).hexdigest(),
-        "results_digest": "sha256:" + hashlib.sha256(payloads["results"]["bytes"]).hexdigest(),
-        "receipt_digest": "sha256:" + hashlib.sha256(payloads["receipt"]["bytes"]).hexdigest(),
-    }
-    payloads["envelope"] = {"value": envelope, "bytes": json.dumps(envelope, sort_keys=True, separators=(",", ":")).encode()}
-    return payloads
-
-
-def _comment(stage, commit, tree, blob, data, task_uid, pr, comment, fragment):
-    digest = hashlib.sha256(data).hexdigest()
-    fragment_digest = hashlib.sha256(fragment).hexdigest()
-    if stage == "normative_source":
-        return (
-            "Post-merge approved_normative_source readback "
-            "(stage=normative_source; immutable, not candidate authority): "
-            f"repository={REPOSITORY}; default_branch=main; task_uid={task_uid}; "
-            f"PR={pr}; trusted_predecessor/source_scope_base={CHECKER_BASE}; "
-            f"source_head={'7' * 40}; "
-            "predecessor authority path=doc/engineering/workflow/source-of-truth.md; "
-            f"predecessor file sha256={'9' * 64}. GitHub live PR readback reports "
-            f"MERGED into commit={commit}; live git/commits API tree={tree}; "
-            f"live contents API path=doc/engineering/workflow/source-of-truth.md "
-            f"blob={blob}, size={len(data)}, decoded bytes sha256={digest}. "
-            "Stable fragment anchor=cargo-checker-authority-upgrade, "
-            f"sha256 including final LF={fragment_digest}."
-        )
-    return (
-        "Post-merge server readback for planner authority stage "
-        f"(stage=approved_planner_authority): repository={REPOSITORY}; "
-        "default_branch=main; task_uid=task_e21604f5cdb3476c8e146332a68a05b4; "
-        "issue=3818; pr=3821; source_head=" + "8" * 40 + "; "
-        f"source_scope_base={CHECKER_SCOPE}; trusted_integration_base={CHECKER_BASE}; "
-        f"predecessor_normative_commit={NORMATIVE_COMMIT}; merged_commit={commit}; "
-        f"merged_tree={tree}; authority_path=scripts/pm/cargo_package_profile_planner.py; "
-        f"authority_blob={blob}; authority_size={len(data)}; "
-        f"authority_bytes_sha256={digest}; stable_fragment=def _validate_approved_normative_source( "
-        f"through before next top-level def _extract( ; stable_fragment_sha256={fragment_digest}. "
-        "Verification commands/results bound to this exact source head: "
-        "python3 scripts/pm/cargo-package-profile-planner.test.py 23/23 PASS; "
-        "python3 scripts/pm/check-cargo-package-scope.test.py 13/13 PASS; "
-        "./scripts/pm/lint.sh PASS; ./scripts/doc-governance-check.sh PASS; "
-        "./scripts/pm/workflow-lint.sh --task-uid task_e21604f5cdb3476c8e146332a68a05b4 --phase current PASS; "
-        "git diff --check PASS; "
-        "trusted exact integration run 35463292968 at base " + CHECKER_BASE +
-        " PASS, tested_tree=" + PLANNER_TREE + "; terminal finalizer PASS."
-    )
+CURRENT_NORMATIVE_RECEIPT = (
+    "Post-merge approved_normative_source readback (stage=normative_source; immutable, not candidate authority): "
+    "repository=eng-cc/oasis7; default_branch=main; task_uid=task_a14e1a1d51a44519ab0aa94632d90df4; "
+    "PR=3997; trusted_predecessor/source_scope_base=747750afc6788d8a16421f84099edae8ab3e8520; "
+    "source_head=6dcc49fc1a3a726bc09ab88a96ac3065a7535bf0; "
+    "predecessor authority path=doc/engineering/workflow/source-of-truth.md; "
+    "predecessor file sha256=6af4fbc942407cb8c44bdc383793062d1463b62ffc3fbeedbc81f79f36324ed5. "
+    "GitHub live PR readback reports MERGED into commit=4f97540c34aefca41d8bf790cbf09b3176f07de3; "
+    "live git/commits API tree=82b8e5ad75d44c48739165b8bd26b5896eaa783a; "
+    "live contents API path=doc/engineering/workflow/source-of-truth.md "
+    "blob=b6d1c5fa854bde6f63d14db1cfd31eb5f8a23705, size=159647, decoded bytes "
+    "sha256=7ffc099266de2affb9b9726468edc45b91af55cb531537749ef8361407f4902e. "
+    "Stable fragment anchor=cargo-package-scope-and-impact-scoped-verification, "
+    "sha256 including final LF=03bb8e833ed707662267633eec3747b46eaa698765a89e6a44d3c3fa679bbae0. "
+    "Adjacent staged-authority fragment anchor=cargo-checker-authority-upgrade, "
+    "sha256 including final LF=16c3593deb204c7e38ae551ac553075abd24fd81e5f09d6ac9af3b0a38a9f45a. "
+    "Live readbacks were from merged commit APIs, not the candidate worktree; N1 role review and exact-target required-gate passed. "
+    "This receipt may be consumed only by the ordered P1 planner stage, not as checker self-approval."
+)
 
 
 def _authority_api():
@@ -233,8 +187,358 @@ def _authority_api():
     return api
 
 
+# These fixtures model the current immutable #3996/#3999 authority chain. Keep
+# receipt bytes in the current production grammar; legacy #3821 bodies above
+# are intentionally replaced at module load by the helpers below.
+def _sha256(data):
+    return "sha256:" + hashlib.sha256(data).hexdigest()
+
+
+def _normative_bytes():
+    return (
+        b'<a id="cargo-package-scope-and-impact-scoped-verification"></a> scope contract\n'
+        b'<a id="cargo-checker-authority-upgrade"></a> staged authority contract\n'
+    )
+
+
+def _planner_bytes():
+    return (
+        b"APPROVED_NORMATIVE_EXPECTED = {\n"
+        b"    'stage': 'approved_normative_source',\n"
+        b"}\n\n"
+        b"def _next():\n"
+        b"    return None\n"
+    )
+
+
+def _planner_test_bytes():
+    return b"# focused planner authority test fixture\n"
+
+
+def _fixture_authority_expectations():
+    normative = _normative_bytes()
+    normative_lines = normative.splitlines(keepends=True)
+    planner = _planner_bytes()
+    planner_test = _planner_test_bytes()
+    planner_fragment = planner[:planner.index(b"}\n") + 2]
+    normative_expected = {
+        **MODULE.NORMATIVE_AUTHORITY_EXPECTED,
+        "source_head": "7" * 40,
+        "source_scope_base": "9" * 40,
+        "predecessor_file_sha256": "sha256:" + "8" * 64,
+        "merged_commit": NORMATIVE_COMMIT,
+        "merged_tree": NORMATIVE_TREE,
+        "authority_blob": NORMATIVE_BLOB,
+        "authority_size": len(normative),
+        "authority_bytes_sha256": _sha256(normative),
+        "stable_fragment_sha256": _sha256(normative_lines[0]),
+        "authority_contract_fragment_sha256": _sha256(normative_lines[1]),
+    }
+    planner_expected = {
+        **MODULE.PLANNER_AUTHORITY_EXPECTED,
+        "source_head": PLANNER_SOURCE_HEAD,
+        "source_scope_base": CHECKER_SCOPE,
+        "trusted_integration_base": CHECKER_BASE,
+        "trusted_integration_tested_tree": TESTED_TREE,
+        "merged_commit": PLANNER_COMMIT,
+        "merged_tree": PLANNER_TREE,
+        "authority_blob": PLANNER_BLOB,
+        "authority_size": len(planner),
+        "authority_bytes_sha256": _sha256(planner),
+        "focused_test_blob": "5" * 40,
+        "focused_test_size": len(planner_test),
+        "focused_test_bytes_sha256": _sha256(planner_test),
+        "stable_fragment_size": len(planner_fragment),
+        "stable_fragment_sha256": _sha256(planner_fragment),
+        "predecessor_merged_commit": NORMATIVE_COMMIT,
+        "predecessor_merged_tree": NORMATIVE_TREE,
+        "predecessor_fragment_sha256": _sha256(normative_lines[1]),
+    }
+    return normative_expected, planner_expected
+
+
+def _content(data, oid, path):
+    return {
+        "path": path,
+        "encoding": "base64",
+        "content": base64.b64encode(data).decode() + "\n",
+        "sha": oid,
+        "size": len(data),
+    }
+
+
+def _profile_artifacts():
+    plan = {
+        "schema": "oasis7-cargo-package-profile-plan/v1",
+        "plan_id": "sha256:" + "1" * 64,
+        "integration_base": CHECKER_BASE,
+        "source_head": PLANNER_SOURCE_HEAD,
+        "tested_tree": TESTED_TREE,
+    }
+    results = [{
+        "status": "passed", "exit_code": 0,
+        "integration_base": CHECKER_BASE,
+        "source_head": PLANNER_SOURCE_HEAD,
+        "tested_tree": TESTED_TREE,
+    }]
+    receipt = {
+        "status": "passed", "plan_id": plan["plan_id"],
+        "integration_base": CHECKER_BASE,
+        "source_head": PLANNER_SOURCE_HEAD,
+        "tested_tree": TESTED_TREE,
+    }
+    payloads = {}
+    for key, value in (("plan", plan), ("results", results), ("receipt", receipt)):
+        payload = json.dumps(value, sort_keys=True, separators=(",", ":")).encode()
+        payloads[key] = {"value": value, "bytes": payload}
+    envelope = {
+        "schema": "oasis7-cargo-package-profile-envelope/v1",
+        "repository": REPOSITORY,
+        "task_uid": MODULE.PLANNER_TASK_UID,
+        "pr_number": MODULE.PLANNER_PR,
+        "run_id": INTEGRATION_RUN,
+        "run_attempt": 1,
+        "check_name": "required-gate",
+        "check_app_id": 15368,
+        "check_run_id": CHECK_RUN_ID,
+        "integration_base": CHECKER_BASE,
+        "source_head": PLANNER_SOURCE_HEAD,
+        "tested_tree": TESTED_TREE,
+        "workflow_ref": f"{REPOSITORY}/.github/workflows/rust.yml@refs/heads/main",
+        "workflow_sha": CHECKER_BASE,
+        "plan_digest": _sha256(payloads["plan"]["bytes"]),
+        "results_digest": _sha256(payloads["results"]["bytes"]),
+        "receipt_digest": _sha256(payloads["receipt"]["bytes"]),
+    }
+    payloads["envelope"] = {
+        "value": envelope,
+        "bytes": json.dumps(envelope, sort_keys=True, separators=(",", ":")).encode(),
+    }
+    return payloads
+
+
+def _comment_object(comment_id, issue_number, body):
+    timestamp = "2026-09-25T00:00:00Z"
+    return {
+        "id": comment_id,
+        "issue_url": f"https://api.github.com/repos/{REPOSITORY}/issues/{issue_number}",
+        "html_url": f"https://github.com/{REPOSITORY}/issues/{issue_number}#issuecomment-{comment_id}",
+        "user": {"login": "eng-cc"},
+        "created_at": timestamp,
+        "updated_at": timestamp,
+        "body": body,
+    }
+
+
+def _normative_receipt(expected, data):
+    lines = data.splitlines(keepends=True)
+    return (
+        "Post-merge approved_normative_source live server readback "
+        "(stage=normative_source; immutable, not candidate authority): "
+        f"repository={REPOSITORY}; default_branch=main; task_uid={MODULE.NORMATIVE_TASK_UID}; "
+        f"PR={MODULE.NORMATIVE_PR}; trusted_predecessor/source_scope_base={expected['source_scope_base']}; "
+        f"source_head={expected['source_head']}; predecessor authority path={MODULE.NORMATIVE_PATH}; "
+        f"predecessor file sha256={expected['predecessor_file_sha256'].removeprefix('sha256:')}. "
+        f"GitHub live PR readback: MERGED into commit={expected['merged_commit']}; "
+        f"live git/commits API tree={expected['merged_tree']}. Live contents API at that exact commit: "
+        f"authority path={MODULE.NORMATIVE_PATH}; blob={expected['authority_blob']}, size={len(data)}, "
+        f"decoded bytes sha256={hashlib.sha256(data).hexdigest()}. "
+        f"Stable fragment anchor={MODULE.NORMATIVE_FRAGMENT}, sha256 including final LF="
+        f"{hashlib.sha256(lines[0]).hexdigest()}. Adjacent staged-authority fragment anchor="
+        f"{MODULE.NORMATIVE_CONTRACT_FRAGMENT}, sha256 including final LF="
+        f"{hashlib.sha256(lines[1]).hexdigest()}."
+    )
+
+
+def _planner_receipt(expected):
+    data = _planner_bytes()
+    test_data = _planner_test_bytes()
+    fragment = data[:data.index(b"}\n") + 2]
+    predecessor = MODULE.NORMATIVE_AUTHORITY_EXPECTED
+    return (
+        "Post-merge approved_planner_authority live server readback for ordered C1 admission "
+        "(stage=planner_authority; immutable merged authority, not candidate self-approval): "
+        f"repository={REPOSITORY}; default_branch=main; task_uid={MODULE.PLANNER_TASK_UID}; PR={MODULE.PLANNER_PR}; "
+        f"source_scope_base={expected['source_scope_base']}; source_head={expected['source_head']}; "
+        f"trusted integration base={expected['trusted_integration_base']}. GitHub live PR readback: MERGED, "
+        f"merge commit={expected['merged_commit']}; live git/commits API tree={expected['merged_tree']}. "
+        f"Live contents API at that exact commit: authority path={MODULE.PLANNER_PATH}, "
+        f"blob={expected['authority_blob']}, size={len(data)}, decoded bytes sha256={hashlib.sha256(data).hexdigest()}; "
+        f"focused test path={MODULE.PLANNER_TEST_PATH}, blob={expected['focused_test_blob']}, "
+        f"size={len(test_data)}, decoded bytes sha256={hashlib.sha256(test_data).hexdigest()}. "
+        "Stable planner fragment APPROVED_NORMATIVE_EXPECTED from its assignment through closing brace "
+        f"plus final LF: {len(fragment)} bytes, sha256={hashlib.sha256(fragment).hexdigest()}. "
+        f"Predecessor approved normative source: #{MODULE.NORMATIVE_ISSUE}/PR #{MODULE.NORMATIVE_PR} receipt "
+        f"https://github.com/{REPOSITORY}/issues/{MODULE.NORMATIVE_ISSUE}#issuecomment-{MODULE.NORMATIVE_COMMENT}, "
+        f"merged commit={predecessor['merged_commit']}, tree={predecessor['merged_tree']}, normative fragment "
+        f"{MODULE.NORMATIVE_CONTRACT_FRAGMENT} sha256="
+        f"{_sha256(_normative_bytes().splitlines(keepends=True)[1]).removeprefix('sha256:')}. "
+        "Exact-head required-gate and strict integration passed, formal RH/QA r8 review closed no findings, "
+        "PR live gate ready, and terminal cleanup receipt "
+        f"https://github.com/{REPOSITORY}/issues/{MODULE.PLANNER_ISSUE}#issuecomment-{MODULE.PLANNER_CLEANUP_COMMENT}. "
+        "C1 must independently re-read and verify repository, branch, identity, commit, tree, paths, fragment, "
+        "digests, stage and predecessor before admission; this receipt does not authorize bypassing its own review or checks."
+    )
+
+
+def _authority_api():
+    normative = _normative_bytes()
+    planner = _planner_bytes()
+    planner_test = _planner_test_bytes()
+    normative_expected, planner_expected = _fixture_authority_expectations()
+    bodies = {
+        MODULE.NORMATIVE_COMMENT: _normative_receipt(normative_expected, normative),
+        MODULE.PLANNER_COMMENT: _planner_receipt(planner_expected),
+    }
+    commits = {
+        NORMATIVE_COMMIT: {"sha": NORMATIVE_COMMIT, "commit": {"tree": {"sha": NORMATIVE_TREE}}},
+        PLANNER_COMMIT: {"sha": PLANNER_COMMIT, "commit": {"tree": {"sha": PLANNER_TREE}}},
+    }
+    contents = {
+        (NORMATIVE_COMMIT, MODULE.NORMATIVE_PATH): _content(normative, NORMATIVE_BLOB, MODULE.NORMATIVE_PATH),
+        (PLANNER_COMMIT, MODULE.PLANNER_PATH): _content(planner, PLANNER_BLOB, MODULE.PLANNER_PATH),
+        (PLANNER_COMMIT, MODULE.PLANNER_TEST_PATH): _content(
+            planner_test, planner_expected["focused_test_blob"], MODULE.PLANNER_TEST_PATH
+        ),
+    }
+    issues = {
+        MODULE.NORMATIVE_ISSUE: {
+            "number": MODULE.NORMATIVE_ISSUE, "state": "closed",
+            "repository_url": f"https://api.github.com/repos/{REPOSITORY}",
+            "created_at": "2026-09-23T10:00:00Z",
+            "body": (f"task_uid: {MODULE.NORMATIVE_TASK_UID}\n"
+                     f"- pr_url: `https://github.com/{REPOSITORY}/pull/{MODULE.NORMATIVE_PR}`\n"
+                     f"- pr_number: `{MODULE.NORMATIVE_PR}`\n"),
+        },
+        MODULE.PLANNER_ISSUE: {
+            "number": MODULE.PLANNER_ISSUE, "state": "closed",
+            "repository_url": f"https://api.github.com/repos/{REPOSITORY}",
+            "created_at": "2026-09-24T21:31:40Z",
+            "body": (f"task_uid: {MODULE.PLANNER_TASK_UID}\n"
+                     f"- pr_url: `https://github.com/{REPOSITORY}/pull/{MODULE.PLANNER_PR}`\n"
+                     f"- pr_number: `{MODULE.PLANNER_PR}`\n"),
+        },
+        SUCCESSOR_ISSUE: {
+            "number": SUCCESSOR_ISSUE, "state": "open",
+            "repository_url": f"https://api.github.com/repos/{REPOSITORY}",
+            "created_at": "2026-09-24T11:42:55Z",
+            "body": ("<!-- oasis7-pm-task -->\n" f"task_uid: {TASK_UID}\n"
+                     f"- pr_url: `https://github.com/{REPOSITORY}/pull/{CHECKER_PR}`\n"
+                     f"- pr_number: `{CHECKER_PR}`\n"),
+        },
+    }
+    pulls = {
+        MODULE.NORMATIVE_PR: {
+            "number": MODULE.NORMATIVE_PR, "state": "closed", "merged": True,
+            "merge_commit_sha": NORMATIVE_COMMIT, "created_at": "2026-09-23T11:00:00Z",
+            "body": f"Task: {MODULE.NORMATIVE_TASK_UID}\n\nRefs #{MODULE.NORMATIVE_ISSUE}\n",
+            "base": {"ref": "main", "sha": normative_expected["source_scope_base"], "repo": {"full_name": REPOSITORY}},
+            "head": {"sha": normative_expected["source_head"], "repo": {"full_name": REPOSITORY}},
+        },
+        MODULE.PLANNER_PR: {
+            "number": MODULE.PLANNER_PR, "state": "closed", "merged": True,
+            "merge_commit_sha": PLANNER_COMMIT, "created_at": "2026-09-24T22:12:15Z",
+            "body": f"Task: {MODULE.PLANNER_TASK_UID}\n\nRefs #{MODULE.PLANNER_ISSUE}\n",
+            "base": {"ref": "main", "sha": CHECKER_BASE, "repo": {"full_name": REPOSITORY}},
+            "head": {"sha": PLANNER_SOURCE_HEAD, "repo": {"full_name": REPOSITORY}},
+        },
+        CHECKER_PR: {
+            "number": CHECKER_PR, "state": "open", "merged": False, "draft": True,
+            "created_at": "2026-09-24T11:53:53Z",
+            "body": f"Task: {TASK_UID}\n\nRefs #{SUCCESSOR_ISSUE}\n",
+            "base": {"ref": "main", "sha": CHECKER_BASE, "repo": {"full_name": REPOSITORY}},
+            "head": {"sha": CHECKER_HEAD, "ref": "task/engineering-checker-successor-admission",
+                     "repo": {"full_name": REPOSITORY}},
+        },
+    }
+    comments = {
+        MODULE.NORMATIVE_COMMENT: _comment_object(
+            MODULE.NORMATIVE_COMMENT, MODULE.NORMATIVE_ISSUE, bodies[MODULE.NORMATIVE_COMMENT]
+        ),
+        MODULE.PLANNER_COMMENT: _comment_object(
+            MODULE.PLANNER_COMMENT, MODULE.PLANNER_ISSUE, bodies[MODULE.PLANNER_COMMENT]
+        ),
+        MODULE.PLANNER_REVIEW_COMMENT: _comment_object(
+            MODULE.PLANNER_REVIEW_COMMENT, MODULE.PLANNER_ISSUE,
+            f"- Task UID: {MODULE.PLANNER_TASK_UID}\n- Source Head: {PLANNER_SOURCE_HEAD}\n"
+            "- Review Roles: repository_health_engineer,qa_engineer\n"
+            "- Review Evidence: repository_health_engineer: no_findings; qa_engineer: no_findings\n"
+            "- Review Findings Disposition: no_findings\n",
+        ),
+        MODULE.PLANNER_INTEGRATION_COMMENT: _comment_object(
+            MODULE.PLANNER_INTEGRATION_COMMENT, MODULE.PLANNER_ISSUE,
+            f"Identity: UID {MODULE.PLANNER_TASK_UID}, task Issue #{MODULE.PLANNER_ISSUE}, "
+            f"sole PR #{MODULE.PLANNER_PR}, frozen H={PLANNER_SOURCE_HEAD}, S/B={CHECKER_BASE}\n"
+            f"Strict integration run {INTEGRATION_RUN} dispatched; PR required-gate runs independently.\n",
+        ),
+    }
+
+    def api(path):
+        if path == f"repos/{REPOSITORY}":
+            return {"default_branch": "main"}
+        if "/issues/comments/" in path:
+            return comments[int(path.rsplit("/", 1)[1])]
+        if "/issues/" in path and "/comments/" not in path:
+            return issues[int(path.rsplit("/", 1)[1])]
+        if "/compare/" in path:
+            return {"merge_base_commit": {"sha": CHECKER_SCOPE}}
+        if path.endswith(f"/commits/{PLANNER_SOURCE_HEAD}/check-runs?per_page=100"):
+            return {"total_count": 1, "check_runs": [{
+                "id": 456, "name": "required-gate", "head_sha": PLANNER_SOURCE_HEAD,
+                "details_url": f"https://github.com/{REPOSITORY}/actions/runs/{PLANNER_REQUIRED_RUN}/job/1",
+                "status": "completed", "conclusion": "success", "app": {"id": 15368},
+            }]}
+        if path.endswith(f"/commits/{CHECKER_BASE}/check-runs?per_page=100"):
+            return {"total_count": 1, "check_runs": [{
+                "id": CHECK_RUN_ID, "name": "required-gate", "head_sha": CHECKER_BASE,
+                "details_url": f"https://github.com/{REPOSITORY}/actions/runs/{INTEGRATION_RUN}/job/1",
+                "status": "completed", "conclusion": "success", "app": {"id": 15368},
+            }]}
+        if "/actions/runs/" in path:
+            run_id = int(path.rsplit("/", 1)[1])
+            if run_id == PLANNER_REQUIRED_RUN:
+                return {
+                    "id": run_id, "run_attempt": 1, "status": "completed", "conclusion": "success",
+                    "event": "pull_request", "path": ".github/workflows/rust.yml",
+                    "head_branch": pulls[MODULE.PLANNER_PR]["head"].get("ref"),
+                    "head_sha": PLANNER_SOURCE_HEAD, "head_repository": {"full_name": REPOSITORY},
+                }
+            return {
+                "id": INTEGRATION_RUN, "run_attempt": 1, "status": "completed", "conclusion": "success",
+                "event": "workflow_dispatch", "path": ".github/workflows/rust.yml",
+                "head_branch": "main", "head_sha": CHECKER_BASE,
+                "display_title": (
+                    f"oasis7-ci|workflow_dispatch|integration_revalidation|{MODULE.PLANNER_TASK_UID}|"
+                    f"{MODULE.PLANNER_PR}|{CHECKER_BASE}|{PLANNER_SOURCE_HEAD}"
+                ),
+            }
+        if "/commits/" in path:
+            return commits[path.rsplit("/", 1)[1]]
+        if "/contents/" in path:
+            path_and_ref = path.split("/contents/", 1)[1]
+            file_path, commit = path_and_ref.split("?ref=", 1)
+            return contents[(commit, file_path)]
+        if path.endswith(f"/pulls/{CHECKER_PR}/files?per_page=100&page=1"):
+            return [{"filename": value, "status": "modified"} for value in MODULE.CHECKER_SCOPE]
+        if "/pulls/" in path:
+            return pulls[int(path.rsplit("/", 1)[1])]
+        raise AssertionError(path)
+    return api
+
+
 class CheckerStageAdmissionTest(unittest.TestCase):
     def setUp(self):
+        normative_expected, planner_expected = _fixture_authority_expectations()
+        self.normative_expected_patch = patch.object(
+            MODULE, "NORMATIVE_AUTHORITY_EXPECTED", normative_expected
+        )
+        self.normative_expected_patch.start()
+        self.addCleanup(self.normative_expected_patch.stop)
+        self.planner_expected_patch = patch.object(
+            MODULE, "PLANNER_AUTHORITY_EXPECTED", planner_expected
+        )
+        self.planner_expected_patch.start()
+        self.addCleanup(self.planner_expected_patch.stop)
         self.profile_patch = patch.object(MODULE, "_read_profile_artifacts", return_value=_profile_artifacts())
         self.profile_patch.start()
         self.addCleanup(self.profile_patch.stop)
@@ -349,22 +653,41 @@ class CheckerStageAdmissionTest(unittest.TestCase):
     def test_authority_freezes_the_project_verified_successor_without_legacy_fallback(self):
         self.assertEqual(SUCCESSOR_ISSUE, MODULE.CHECKER_ISSUE)
         self.assertEqual(TASK_UID, MODULE.CHECKER_TASK_UID)
+        self.assertEqual(CHECKER_PR, MODULE.CHECKER_PR)
         self.assertNotEqual(3827, MODULE.CHECKER_ISSUE)
 
-    def test_stale_legacy_checker_issue_is_never_used_as_a_fallback(self):
+    def test_stale_legacy_binding_is_never_used_for_the_frozen_successor_pr(self):
         calls = []
         api = _authority_api()
 
         def recording_api(path):
             calls.append(path)
-            return api(path)
+            response = api(path)
+            if path.endswith(f"/issues/{SUCCESSOR_ISSUE}"):
+                response = dict(response)
+                response["body"] = response["body"].replace(TASK_UID, MODULE.LEGACY_CHECKER_TASK_UID)
+            return response
 
         with patch.object(MODULE, "gh_api", side_effect=recording_api):
-            self.assertFalse(MODULE.classify_checker_stage(
-                REPOSITORY, 3864, MODULE.LEGACY_CHECKER_TASK_UID, CHECKER_BASE, CHECKER_HEAD
-            ))
+            with self.assertRaisesRegex(MODULE.AdmissionError, "Issue UID"):
+                MODULE.classify_checker_stage(
+                    REPOSITORY, CHECKER_PR, TASK_UID, CHECKER_BASE, CHECKER_HEAD
+                )
         self.assertTrue(any(path.endswith(f"/issues/{SUCCESSOR_ISSUE}") for path in calls))
         self.assertFalse(any(path.endswith("/issues/3827") for path in calls))
+
+    def test_ordinary_pr_route_does_not_depend_on_successor_issue_availability(self):
+        def unavailable_successor(path):
+            if path.endswith(f"/issues/{SUCCESSOR_ISSUE}"):
+                raise AssertionError("ordinary PR must not read the successor Issue")
+            raise AssertionError(f"unexpected API read: {path}")
+
+        with patch.object(MODULE, "gh_api", side_effect=unavailable_successor):
+            self.assertFalse(
+                MODULE.classify_checker_stage(
+                    REPOSITORY, 5000, TASK_UID, CHECKER_BASE, CHECKER_HEAD
+                )
+            )
 
     def test_stage_classifier_rechecks_live_successor_pr_and_strict_creation_order(self):
         mutations = {
@@ -513,11 +836,113 @@ class CheckerStageAdmissionTest(unittest.TestCase):
                 MODULE.resolve_live_check_head(args)
 
     def test_authority_chain_reads_both_fixed_live_server_readbacks(self):
-        with patch.object(MODULE, "gh_api", side_effect=_authority_api()):
-            chain = MODULE.verify_authority_chain(REPOSITORY)
+        with patch.object(MODULE, "gh_api", side_effect=_authority_api()), \
+             patch.object(MODULE, "_recompute_planner_integration_tree", return_value=TESTED_TREE) as tree_read:
+            chain = MODULE.verify_authority_chain(REPOSITORY, Path("."))
         self.assertEqual(NORMATIVE_COMMIT, chain["normative"]["merged_commit"])
         self.assertEqual(PLANNER_COMMIT, chain["planner"]["merged_commit"])
         self.assertEqual(REPOSITORY, chain["planner"]["repository"])
+        tree_read.assert_called_once_with(Path("."), CHECKER_BASE, PLANNER_SOURCE_HEAD)
+
+    def test_current_main_planner_receipt_schema_is_readable_without_legacy_fallback(self):
+        parsed = MODULE._parse_planner_receipt(CURRENT_PLANNER_RECEIPT)
+        self.assertEqual("planner_authority", parsed["stage"])
+        self.assertEqual(4000, parsed["pr_number"])
+        self.assertEqual(3999, parsed["issue_number"])
+        self.assertEqual("task_978dcc0005b9415cbc45e59b21b095e0", parsed["task_uid"])
+        self.assertEqual(
+            "sha256:7c8a2de3e4b9b5e4c752e5147438bfe0eb80edb7a4406bc8d2b59aff498774fc",
+            parsed["authority_bytes_sha256"],
+        )
+        self.assertEqual(
+            "sha256:63a0a1735d83d5b9431c1ecd07aa54b4437e84128dcf5cf821591489dfa4f8bb",
+            parsed["stable_fragment_sha256"],
+        )
+
+    def test_live_normative_and_planner_receipts_match_frozen_authority_identity(self):
+        normative = MODULE._parse_normative_receipt(CURRENT_NORMATIVE_RECEIPT)
+        planner = MODULE._parse_planner_receipt(CURRENT_PLANNER_RECEIPT)
+        MODULE._assert_expected_fields(
+            normative, PINNED_NORMATIVE_AUTHORITY_EXPECTED, "normative authority"
+        )
+        MODULE._assert_expected_fields(
+            {
+                **planner,
+                "trusted_integration_tested_tree": PINNED_PLANNER_AUTHORITY_EXPECTED[
+                    "trusted_integration_tested_tree"
+                ],
+            },
+            PINNED_PLANNER_AUTHORITY_EXPECTED,
+            "planner authority",
+        )
+        self.assertEqual(3999, planner["issue_number"])
+        self.assertEqual(4000, planner["pr_number"])
+        self.assertNotEqual(
+            MODULE.PLANNER_TESTED_TREE,
+            MODULE.PLANNER_MERGED_TREE,
+            "integration tested tree T is distinct from the squash merge commit tree",
+        )
+
+    def test_legacy_planner_receipt_schema_is_not_a_fallback(self):
+        legacy_receipt = CURRENT_PLANNER_RECEIPT.replace(
+            "stage=planner_authority; immutable merged authority, not candidate self-approval",
+            "stage=approved_planner_authority; post-merge server readback",
+        )
+        with self.assertRaisesRegex(MODULE.AdmissionError, "immutable planner-authority readback"):
+            MODULE._parse_planner_receipt(legacy_receipt)
+
+    def test_planner_authority_rejects_wrong_live_pr_repository_or_base(self):
+        changes = (
+            ("base_repository", lambda pull: pull["base"].update(repo={"full_name": "other/repo"}), "base repository"),
+            ("base_branch", lambda pull: pull["base"].update(ref="release"), "base repository/branch"),
+            ("base_sha", lambda pull: pull["base"].update(sha="9" * 40), "base identity"),
+            ("head_repository", lambda pull: pull["head"].update(repo={"full_name": "fork/oasis7"}), "head repository"),
+        )
+        for label, mutate, expected in changes:
+            api = _authority_api()
+
+            def wrong_pull(path, *, api=api, mutate=mutate):
+                response = api(path)
+                if path.endswith(f"/pulls/{MODULE.PLANNER_PR}"):
+                    response = json.loads(json.dumps(response))
+                    mutate(response)
+                return response
+
+            with self.subTest(label=label), patch.object(MODULE, "gh_api", side_effect=wrong_pull):
+                with self.assertRaisesRegex(MODULE.AdmissionError, expected):
+                    MODULE.verify_authority_chain(REPOSITORY)
+
+    def test_planner_integration_tree_is_recomputed_from_base_and_source_head(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+
+            def git(*args):
+                return subprocess.check_output(
+                    ["git", "-C", str(root), *args], text=True, stderr=subprocess.PIPE
+                ).strip()
+
+            git("init", "-q")
+            git("config", "user.name", "test")
+            git("config", "user.email", "test@example.invalid")
+            (root / "shared.txt").write_text("base\n", encoding="utf-8")
+            git("add", "shared.txt")
+            git("commit", "-qm", "base")
+            common = git("rev-parse", "HEAD")
+            git("checkout", "-qb", "integration")
+            (root / "base-only.txt").write_text("base\n", encoding="utf-8")
+            git("add", "base-only.txt")
+            git("commit", "-qm", "integration base")
+            base = git("rev-parse", "HEAD")
+            git("checkout", "-qb", "source", common)
+            (root / "head-only.txt").write_text("head\n", encoding="utf-8")
+            git("add", "head-only.txt")
+            git("commit", "-qm", "source head")
+            head = git("rev-parse", "HEAD")
+            expected_tree = git("merge-tree", "--write-tree", base, head)
+
+            actual_tree = MODULE._recompute_planner_integration_tree(root, base, head)
+
+        self.assertEqual(expected_tree, actual_tree)
 
     def test_authority_chain_rejects_tampered_server_tree(self):
         api = _authority_api()
@@ -803,8 +1228,8 @@ class CheckerStageAdmissionTest(unittest.TestCase):
 
     def test_authority_chain_rejects_wrong_predecessor_task_issue_or_pr_head(self):
         for replacement, message in (
-            ("task_e21604f5cdb3476c8e146332a68a05b4", "task"),
-            ("issue=3818", "issue"),
+            (MODULE.PLANNER_TASK_UID, "task"),
+            (f"PR={MODULE.PLANNER_PR}", "PR identity"),
         ):
             api = _authority_api()
             original = api
@@ -816,7 +1241,7 @@ class CheckerStageAdmissionTest(unittest.TestCase):
                     if replacement.startswith("task_"):
                         body = body.replace(replacement, "task_00000000000000000000000000000000")
                     else:
-                        body = body.replace(replacement, "issue=9999")
+                        body = body.replace(replacement, "PR=9999")
                     response["body"] = body
                 return response
             with self.subTest(message=message), patch.object(MODULE, "gh_api", side_effect=wrong_receipt):
@@ -826,7 +1251,7 @@ class CheckerStageAdmissionTest(unittest.TestCase):
         original = api
         def wrong_head(path):
             response = original(path)
-            if "/pulls/3821" in path:
+            if f"/pulls/{MODULE.PLANNER_PR}" in path:
                 response = dict(response)
                 response["head"] = {"sha": "6" * 40, "repo": {"full_name": REPOSITORY}}
             return response
@@ -845,10 +1270,16 @@ class CheckerStageAdmissionTest(unittest.TestCase):
                 response = original(path)
                 if path.endswith(f"issues/comments/{MODULE.PLANNER_COMMENT}"):
                     response = dict(response)
-                    response["body"] = response["body"].replace(
-                        f"{field}={CHECKER_BASE if field == 'trusted_integration_base' else CHECKER_SCOPE}",
-                        f"{field}={replacement}",
-                    )
+                    if field == "trusted_integration_base":
+                        response["body"] = response["body"].replace(
+                            f"trusted integration base={CHECKER_BASE}",
+                            f"trusted integration base={replacement}",
+                        )
+                    else:
+                        response["body"] = response["body"].replace(
+                            f"source_scope_base={CHECKER_SCOPE}",
+                            f"source_scope_base={replacement}",
+                        )
                 return response
 
             with self.subTest(field=field), patch.object(MODULE, "gh_api", side_effect=wrong_base):
@@ -863,7 +1294,7 @@ class CheckerStageAdmissionTest(unittest.TestCase):
             if path.endswith(f"issues/comments/{MODULE.NORMATIVE_COMMENT}"):
                 response = dict(response)
                 response["body"] = response["body"].replace(
-                    f"trusted_predecessor/source_scope_base={CHECKER_BASE}",
+                    f"trusted_predecessor/source_scope_base={'9' * 40}",
                     "trusted_predecessor/source_scope_base=" + "6" * 40,
                 )
             return response
@@ -877,7 +1308,7 @@ class CheckerStageAdmissionTest(unittest.TestCase):
 
         def wrong_integration_run(path):
             response = original(path)
-            if "/actions/runs/" in path:
+            if path.endswith(f"/actions/runs/{INTEGRATION_RUN}"):
                 response = dict(response)
                 response["head_sha"] = "8" * 40
             return response
@@ -886,15 +1317,92 @@ class CheckerStageAdmissionTest(unittest.TestCase):
             with self.assertRaisesRegex(MODULE.AdmissionError, "integration run base"):
                 MODULE.verify_authority_chain(REPOSITORY)
 
+    def test_authority_issue_readback_rejects_duplicate_or_malformed_uid_lines(self):
+        cases = (
+            ("duplicate", lambda body: body + f"task_uid: {MODULE.PLANNER_TASK_UID}\n"),
+            ("malformed", lambda body: body.replace(
+                f"task_uid: {MODULE.PLANNER_TASK_UID}", "task_uid:\t" + MODULE.PLANNER_TASK_UID
+            )),
+            ("extra whitespace", lambda body: body.replace(
+                f"task_uid: {MODULE.PLANNER_TASK_UID}", "task_uid:  " + MODULE.PLANNER_TASK_UID
+            )),
+        )
+        for label, mutate in cases:
+            api = _authority_api()
+
+            def tampered_issue(path, *, api=api, mutate=mutate):
+                response = api(path)
+                if path.endswith(f"/issues/{MODULE.PLANNER_ISSUE}"):
+                    response = dict(response)
+                    response["body"] = mutate(response["body"])
+                return response
+
+            with self.subTest(label=label), patch.object(MODULE, "gh_api", side_effect=tampered_issue):
+                with self.assertRaisesRegex(MODULE.AdmissionError, "UID field"):
+                    MODULE.verify_authority_chain(REPOSITORY)
+
     def test_integration_artifact_tested_tree_divergence_is_rejected(self):
+        for field, value, message in (
+            ("tested_tree", "0" * 40, "tested tree"),
+            ("run_attempt", 2, "envelope identity"),
+            ("workflow_ref", "eng-cc/oasis7/.github/workflows/other.yml@refs/heads/main", "envelope identity"),
+            ("workflow_sha", "9" * 40, "envelope identity"),
+        ):
+            artifacts = _profile_artifacts()
+            artifacts["envelope"]["value"] = dict(artifacts["envelope"]["value"], **{field: value})
+            with self.subTest(field=field), \
+                 patch.object(MODULE, "gh_api", side_effect=_authority_api()), \
+                 patch.object(MODULE, "_read_profile_artifacts", return_value=artifacts):
+                with self.assertRaisesRegex(MODULE.AdmissionError, message):
+                    MODULE.verify_authority_chain(REPOSITORY)
+
+    def test_empty_integration_results_require_an_explicit_empty_validated_plan(self):
         artifacts = _profile_artifacts()
-        artifacts["envelope"]["value"] = dict(artifacts["envelope"]["value"], tested_tree="0" * 40)
+        plan = dict(
+            artifacts["plan"]["value"],
+            items=[],
+            selected_items=[],
+            disposition_validated=True,
+        )
+        results = []
+        artifacts["plan"] = {
+            "value": plan,
+            "bytes": json.dumps(plan, sort_keys=True, separators=(",", ":")).encode(),
+        }
+        artifacts["results"] = {
+            "value": results,
+            "bytes": json.dumps(results, sort_keys=True, separators=(",", ":")).encode(),
+        }
+        artifacts["envelope"]["value"]["plan_digest"] = _sha256(artifacts["plan"]["bytes"])
+        artifacts["envelope"]["value"]["results_digest"] = _sha256(artifacts["results"]["bytes"])
+
         with patch.object(MODULE, "gh_api", side_effect=_authority_api()), \
              patch.object(MODULE, "_read_profile_artifacts", return_value=artifacts):
-            with self.assertRaisesRegex(MODULE.AdmissionError, "envelope identity"):
+            MODULE.verify_authority_chain(REPOSITORY)
+
+        plan["selected_items"] = ["profile"]
+        artifacts["plan"] = {
+            "value": plan,
+            "bytes": json.dumps(plan, sort_keys=True, separators=(",", ":")).encode(),
+        }
+        artifacts["envelope"]["value"]["plan_digest"] = _sha256(artifacts["plan"]["bytes"])
+        with patch.object(MODULE, "gh_api", side_effect=_authority_api()), \
+             patch.object(MODULE, "_read_profile_artifacts", return_value=artifacts):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "empty results"):
+                MODULE.verify_authority_chain(REPOSITORY)
+
+    def test_integration_artifact_byte_tamper_is_rejected_against_envelope_digest(self):
+        artifacts = _profile_artifacts()
+        artifacts["plan"]["bytes"] += b" "
+        with patch.object(MODULE, "gh_api", side_effect=_authority_api()), \
+             patch.object(MODULE, "_read_profile_artifacts", return_value=artifacts):
+            with self.assertRaisesRegex(MODULE.AdmissionError, "plan artifact digest mismatch"):
                 MODULE.verify_authority_chain(REPOSITORY)
 
     def test_profile_artifact_reader_binds_exact_run_artifacts(self):
+        # This case validates the reader itself; other tests replace it with
+        # pre-decoded artifacts to avoid network and archive I/O.
+        self.profile_patch.stop()
         payloads = _profile_artifacts()
         members = {
             "envelope": ("cargo-package-profile-envelope", "cargo-package-profile-envelope.json"),
@@ -922,7 +1430,26 @@ class CheckerStageAdmissionTest(unittest.TestCase):
 
         with patch.object(MODULE, "gh_api", side_effect=api), patch.object(MODULE, "_gh_download", side_effect=download):
             loaded = MODULE._read_profile_artifacts(REPOSITORY, INTEGRATION_RUN)
-        self.assertEqual(PLANNER_TREE, loaded["envelope"]["value"]["tested_tree"])
+        self.assertEqual(TESTED_TREE, loaded["envelope"]["value"]["tested_tree"])
+
+        for label, mutate, message in (
+            ("duplicate", lambda items: items.append(dict(items[0])), "missing or ambiguous"),
+            ("wrong run", lambda items: items[0].update(workflow_run={"id": INTEGRATION_RUN + 1}), "another run"),
+            ("expired", lambda items: items[0].update(expired=True), "expired"),
+        ):
+            changed_items = json.loads(json.dumps(artifacts))
+            mutate(changed_items)
+
+            def changed_api(path, *, changed_items=changed_items):
+                if path.endswith("artifacts?per_page=100"):
+                    return {"artifacts": changed_items}
+                raise AssertionError(path)
+
+            with self.subTest(label=label), \
+                 patch.object(MODULE, "gh_api", side_effect=changed_api), \
+                 patch.object(MODULE, "_gh_download", side_effect=download):
+                with self.assertRaisesRegex(MODULE.AdmissionError, message):
+                    MODULE._read_profile_artifacts(REPOSITORY, INTEGRATION_RUN)
 
     def test_authority_chain_rejects_missing_planner_verification_evidence(self):
         api = _authority_api()
@@ -931,7 +1458,10 @@ class CheckerStageAdmissionTest(unittest.TestCase):
             response = original(path)
             if path.endswith(f"issues/comments/{MODULE.PLANNER_COMMENT}"):
                 response = dict(response)
-                response["body"] = response["body"].split("Verification commands/results", 1)[0]
+                response["body"] = response["body"].replace(
+                    "Exact-head required-gate and strict integration passed",
+                    "Exact-head required-gate status unknown",
+                )
             return response
         with patch.object(MODULE, "gh_api", side_effect=missing_verification):
             with self.assertRaisesRegex(MODULE.AdmissionError, "verification"):
@@ -1082,18 +1612,21 @@ class CheckerStageAdmissionTest(unittest.TestCase):
                 MODULE.verify_live_check_identity(REPOSITORY, check_head, "99")
 
     def test_postrun_receipt_is_durable_and_complete(self):
+        normative_authority = dict(MODULE.NORMATIVE_AUTHORITY_EXPECTED)
+        planner_authority = dict(MODULE.PLANNER_AUTHORITY_EXPECTED)
         preflight = {
             "schema": MODULE.SCHEMA, "phase": "preflight", "repository": REPOSITORY,
             "task_uid": TASK_UID, "pr_number": CHECKER_PR, "base_oid": CHECKER_BASE,
             "head_oid": CHECKER_HEAD, "scope_base_oid": CHECKER_SCOPE,
             "tested_tree": TESTED_TREE, "checker_command": ["python3", "checker"],
             "checker_command_digest": MODULE.command_digest(["python3", "checker"]),
+            "normative_authority": normative_authority,
+            "planner_authority": planner_authority,
             "runner": {"run_id": "99", "run_attempt": "1"},
         }
         receipt = MODULE.build_postrun_receipt(
             preflight,
-            {"normative": {"merged_commit": NORMATIVE_COMMIT},
-             "planner": {"merged_commit": PLANNER_COMMIT}},
+            {"normative": normative_authority, "planner": planner_authority},
             {"path": MODULE.PLANNER_PATH, "source_head": "8" * 40,
              "merged_commit": PLANNER_COMMIT, "bytes_sha256": "sha256:" + "b" * 64},
             {"check_name": "required-gate", "check_app_id": 15368, "check_run_id": 123,
@@ -1108,6 +1641,13 @@ class CheckerStageAdmissionTest(unittest.TestCase):
         tampered = dict(receipt, head_oid="9" * 40)
         with self.assertRaisesRegex(MODULE.AdmissionError, "digest"):
             MODULE.verify_durable_postrun_receipt(tampered)
+
+        changed_authorities = {
+            "normative": normative_authority,
+            "planner": {**planner_authority, "merged_commit": "9" * 40},
+        }
+        with self.assertRaisesRegex(MODULE.AdmissionError, "planner_authority identity changed"):
+            MODULE._assert_preflight_authorities_unchanged(preflight, changed_authorities)
 
 
 if __name__ == "__main__":
