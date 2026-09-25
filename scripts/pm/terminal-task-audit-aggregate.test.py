@@ -266,16 +266,40 @@ class AggregateTerminalAudit(unittest.TestCase):
             )
 
     def test_reconciles_aggregate_terminal_without_single_pr_or_cleanup_proof(self):
-        report = self._run_audit()
+        # Child revalidation performs its own live GitHub reads; this fixture
+        # isolates the terminal-audit contract, while the adjacent tests cover
+        # the revalidator invocation and fail-closed behavior.
+        with patch.object(AGGREGATE, "validate_terminal_receipt", return_value=self.receipt):
+            report = self._run_audit()
         self.assertEqual(report["status"], "reconciled", report)
         for check in (
             "aggregate_completion_receipt_valid", "aggregate_terminal_receipt_valid",
-            "aggregate_effect_journal_valid", "issue_closed", "project_item_identity",
+            "aggregate_child_proofs_live", "aggregate_effect_journal_valid", "issue_closed", "project_item_identity",
             "project_field_values_complete", "project_terminal",
         ):
             self.assertTrue(report["checks"][check], report)
         self.assertNotIn("pr_merged", report["checks"])
         self.assertNotIn("terminal_tombstone_valid", report["checks"])
+
+    def test_closed_aggregate_audit_revalidates_every_child_proof(self):
+        with patch.object(AGGREGATE, "validate_terminal_receipt", return_value=None) as validate:
+            report = self._run_audit()
+
+        self.assertTrue(report["checks"].get("aggregate_child_proofs_live"), report)
+        validate.assert_called_once_with(
+            self.root, UID, self.plan, self.candidate, self.evidence, self.receipt,
+        )
+
+    def test_closed_aggregate_audit_fails_closed_when_child_proof_drifted(self):
+        with patch.object(
+            AGGREGATE, "validate_terminal_receipt",
+            side_effect=AGGREGATE.ReceiptError("child PR terminal proof no longer reconciles"),
+        ):
+            report = self._run_audit()
+
+        self.assertEqual("drifted", report["status"], report)
+        self.assertFalse(report["checks"].get("aggregate_child_proofs_live"), report)
+        self.assertIn("aggregate_child_proofs_live", report["drift"])
 
     def test_rejects_typed_receipt_journal_and_live_identity_drift(self):
         terminal = json.loads(self.terminal_path.read_text(encoding="utf-8"))

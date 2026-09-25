@@ -339,6 +339,25 @@ def _audit_aggregate(
         "project_field_values_complete": project_fields_complete,
         "project_terminal": project_terminal,
     })
+    checks["aggregate_child_proofs_live"] = False
+    if terminal_phase and issue_closed and checks.get("aggregate_completion_receipt_valid"):
+        try:
+            aggregate = _load_aggregate_module(root)
+            aggregate.validate_terminal_receipt(
+                root,
+                task_uid,
+                details["plan"],
+                details["candidate"],
+                details["evidence"],
+                details["receipt"],
+            )
+            checks["aggregate_child_proofs_live"] = True
+        except (Exception, SystemExit) as exc:
+            errors = details.get("errors")
+            if not isinstance(errors, list):
+                errors = []
+                details["errors"] = errors
+            errors.append(f"closed aggregate child proof revalidation failed: {exc}")
     if issue.get("state") == "OPEN" and record.get("workflow_phase") == "task_done" and checks.get("aggregate_completion_receipt_valid"):
         validator = subprocess.run(
             [sys.executable, str(root / "scripts/pm/aggregate-task-completion.py"), "validate",

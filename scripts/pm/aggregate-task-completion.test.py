@@ -8,6 +8,7 @@ import importlib.util
 import json
 import pathlib
 import unittest
+from unittest import mock
 
 
 ROOT = pathlib.Path(__file__).resolve().parents[2]
@@ -246,6 +247,64 @@ class AggregateTaskCompletionTests(unittest.TestCase):
         receipt["deliveries"][0]["merge_commit_oid"] = "e" * 40
         with self.assertRaisesRegex(ValueError, "receipt digest"):
             self.helper.validate_receipt(receipt)
+
+    def test_rejects_malformed_child_proof_fields_with_recomputed_receipt_digest(self):
+        invalid_fields = (
+            ("merge_commit_oid", "not-an-oid"),
+            ("head_oid", "not-an-oid"),
+            ("merged_at", "yesterday"),
+            ("task_complete_claim_sha256", "not-a-sha256"),
+            ("merge_receipt_sha256", "not-a-sha256"),
+            ("main_sync_receipt_sha256", "not-a-sha256"),
+            ("terminal_receipt_sha256", "not-a-sha256"),
+            ("terminal_tombstone_sha256", "not-a-sha256"),
+        )
+        for key, value in invalid_fields:
+            with self.subTest(key=key):
+                receipt = copy.deepcopy(self.build())
+                receipt["deliveries"][0][key] = value
+                unsigned = {name: item for name, item in receipt.items() if name != "receipt_sha256"}
+                receipt["receipt_sha256"] = self.helper.canonical_digest(unsigned, prefix=True)
+                observed = self.helper._timestamp(receipt["observed_at"], "receipt observed_at")
+                with self.assertRaisesRegex(ValueError, "delivery|commit|timestamp|digest|SHA-256"):
+                    self.helper.validate_receipt(receipt, now=observed)
+
+    def test_terminal_receipt_revalidation_reads_every_child_against_closed_coordinator(self):
+        plan, candidate, evidence, coordinator, comment, child_reports = self.context()
+        receipt = self.build((plan, candidate, evidence, coordinator, comment, child_reports))
+        closed_coordinator = {**coordinator, "state": "CLOSED"}
+        with mock.patch.object(self.helper, "read_coordinator", return_value=(closed_coordinator, comment)), \
+                mock.patch.object(
+                    self.helper, "read_child_report",
+                    side_effect=lambda _root, delivery, _branch: child_reports[delivery["task_uid"]],
+                ) as read_child:
+            result = self.helper.validate_terminal_receipt(
+                ROOT, plan["task_uid"], plan, candidate, evidence, receipt,
+            )
+
+        self.assertEqual(result, receipt)
+        self.assertEqual(read_child.call_count, len(plan["required_deliveries"]))
+        self.assertEqual(
+            [call.args[1]["task_uid"] for call in read_child.call_args_list],
+            [delivery["task_uid"] for delivery in plan["required_deliveries"]],
+        )
+
+    def test_terminal_receipt_revalidation_rejects_drifted_child_terminal_chain(self):
+        plan, candidate, evidence, coordinator, comment, child_reports = self.context()
+        receipt = self.build((plan, candidate, evidence, coordinator, comment, child_reports))
+        closed_coordinator = {**coordinator, "state": "CLOSED"}
+        reports = copy.deepcopy(child_reports)
+        second_uid = plan["required_deliveries"][1]["task_uid"]
+        reports[second_uid]["checks"]["terminal_receipt_chain_valid"] = False
+        with mock.patch.object(self.helper, "read_coordinator", return_value=(closed_coordinator, comment)), \
+                mock.patch.object(
+                    self.helper, "read_child_report",
+                    side_effect=lambda _root, delivery, _branch: reports[delivery["task_uid"]],
+                ):
+            with self.assertRaisesRegex(ValueError, "terminal receipt chain is incomplete"):
+                self.helper.validate_terminal_receipt(
+                    ROOT, plan["task_uid"], plan, candidate, evidence, receipt,
+                )
 
 
 if __name__ == "__main__":

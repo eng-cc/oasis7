@@ -194,11 +194,15 @@ def _validate_coordinator(
     plan: dict[str, Any],
     issue: dict[str, Any],
     comment: dict[str, Any],
+    *,
+    expected_state: str = "OPEN",
 ) -> tuple[int, str]:
     if issue.get("number") != plan["issue_number"] or issue.get("repository") != plan["repository"]:
         raise ReceiptError("live coordinator Issue identity does not match plan")
-    if str(issue.get("state") or "").upper() != "OPEN":
-        raise ReceiptError("coordinator Issue must remain open until aggregate terminal finalization")
+    if str(issue.get("state") or "").upper() != expected_state:
+        if expected_state == "OPEN":
+            raise ReceiptError("coordinator Issue must remain open until aggregate terminal finalization")
+        raise ReceiptError(f"coordinator Issue must be {expected_state.lower()} for terminal proof validation")
     body = issue.get("body")
     if not isinstance(body, str):
         raise ReceiptError("live coordinator Issue body is unavailable")
@@ -317,17 +321,20 @@ def _validate_child_report(delivery: dict[str, Any], report: dict[str, Any], def
     }
 
 
-def build_receipt(
+def _build_receipt(
     *, task_uid: str, plan: Any, candidate: Any, evidence: Any,
     coordinator_issue: dict[str, Any], plan_comment: dict[str, Any],
     child_reports: dict[str, dict[str, Any]], effective_validator_commit: str,
-    observed_at: str,
+    observed_at: str, expected_coordinator_state: str,
 ) -> dict[str, Any]:
     plan = validate_plan(plan, task_uid)
     if not OID_RE.fullmatch(effective_validator_commit):
         raise ReceiptError("effective validator commit is invalid")
     observed = _timestamp(observed_at, "observed_at")
-    plan_comment_id, plan_body_sha = _validate_coordinator(task_uid, plan, coordinator_issue, plan_comment)
+    plan_comment_id, plan_body_sha = _validate_coordinator(
+        task_uid, plan, coordinator_issue, plan_comment,
+        expected_state=expected_coordinator_state,
+    )
     candidate_sha, evidence_sha = _validate_candidate(plan, candidate, evidence)
     if set(child_reports) != {row["task_uid"] for row in plan["required_deliveries"]}:
         raise ReceiptError("live child report set does not exactly match required deliveries")
@@ -362,6 +369,21 @@ def build_receipt(
     return receipt
 
 
+def build_receipt(
+    *, task_uid: str, plan: Any, candidate: Any, evidence: Any,
+    coordinator_issue: dict[str, Any], plan_comment: dict[str, Any],
+    child_reports: dict[str, dict[str, Any]], effective_validator_commit: str,
+    observed_at: str,
+) -> dict[str, Any]:
+    """Build a new receipt only while the coordinator Issue is open."""
+    return _build_receipt(
+        task_uid=task_uid, plan=plan, candidate=candidate, evidence=evidence,
+        coordinator_issue=coordinator_issue, plan_comment=plan_comment,
+        child_reports=child_reports, effective_validator_commit=effective_validator_commit,
+        observed_at=observed_at, expected_coordinator_state="OPEN",
+    )
+
+
 def validate_receipt(receipt: Any, *, now: dt.datetime | None = None) -> dict[str, Any]:
     receipt = _exact_keys(receipt, RECEIPT_KEYS, "aggregate task-complete receipt")
     if receipt["schema"] != RECEIPT_SCHEMA or receipt["receipt_type"] != RECEIPT_TYPE:
@@ -377,18 +399,79 @@ def validate_receipt(receipt: Any, *, now: dt.datetime | None = None) -> dict[st
         raise ReceiptError("aggregate task-complete receipt digest mismatch")
     if not TASK_UID_RE.fullmatch(str(receipt.get("task_uid") or "")):
         raise ReceiptError("aggregate task-complete receipt Task UID is invalid")
+    if receipt.get("repository") != REPOSITORY:
+        raise ReceiptError("aggregate task-complete receipt repository is not canonical")
+    _positive_int(receipt.get("issue_number"), "receipt issue_number")
+    _positive_int(receipt.get("plan_comment_id"), "receipt plan_comment_id")
     for key in ("plan_body_sha256", "plan_sha256", "receipt_sha256"):
         if not isinstance(receipt.get(key), str) or not SHA256_RE.fullmatch(receipt[key]):
             raise ReceiptError(f"aggregate task-complete receipt digest is invalid: {key}")
+    for key in ("candidate_sha256", "evidence_sha256"):
+        if not isinstance(receipt.get(key), str) or not re.fullmatch(r"[0-9a-f]{64}", receipt[key]):
+            raise ReceiptError(f"aggregate task-complete receipt digest is invalid: {key}")
+    if not isinstance(receipt.get("effective_validator_commit"), str) or not OID_RE.fullmatch(receipt["effective_validator_commit"]):
+        raise ReceiptError("aggregate task-complete receipt validator commit is invalid")
+    selection = _exact_keys(receipt.get("candidate_selection"), SELECTION_KEYS, "receipt candidate_selection")
+    for key in ("candidate_sha256", "evidence_sha256"):
+        if not isinstance(selection[key], str) or not re.fullmatch(r"[0-9a-f]{64}", selection[key]):
+            raise ReceiptError(f"receipt candidate_selection {key} is invalid")
+    for key in ("integration_base_oid", "tested_tree_oid"):
+        if not isinstance(selection[key], str) or not OID_RE.fullmatch(selection[key]):
+            raise ReceiptError(f"receipt candidate_selection {key} is invalid")
+    if not isinstance(selection["configuration_digest"], str) or not SHA256_RE.fullmatch(selection["configuration_digest"]):
+        raise ReceiptError("receipt candidate_selection configuration_digest is invalid")
+    _nonempty(selection["entry"], "receipt candidate_selection entry")
+    _nonempty(selection["environment"], "receipt candidate_selection environment")
+    window = _exact_keys(selection["evidence_window"], {"started_at", "ended_at"}, "receipt evidence_window")
+    if _timestamp(window["ended_at"], "receipt evidence_window.ended_at") < _timestamp(
+        window["started_at"], "receipt evidence_window.started_at",
+    ):
+        raise ReceiptError("receipt candidate_selection evidence_window is not ordered")
     _timestamp(receipt.get("observed_at"), "receipt observed_at")
     deliveries = receipt.get("deliveries")
     if not isinstance(deliveries, list) or len(deliveries) < 2:
         raise ReceiptError("aggregate task-complete receipt requires multiple deliveries")
     expected_delivery_keys = DELIVERY_KEYS | RECEIPT_DELIVERY_EXTRA
+    seen_tasks: set[str] = set()
+    seen_issues: set[int] = set()
+    seen_prs: set[int] = set()
+    seen_obligations: set[str] = set()
     for index, delivery in enumerate(deliveries, start=1):
-        _exact_keys(delivery, expected_delivery_keys, f"receipt delivery {index}")
+        delivery = _exact_keys(delivery, expected_delivery_keys, f"receipt delivery {index}")
         if delivery.get("ordinal") != index:
             raise ReceiptError("receipt delivery ordinals are not canonical")
+        obligation_id = _nonempty(delivery.get("obligation_id"), f"receipt delivery {index} obligation_id")
+        child_uid = delivery.get("task_uid")
+        if not isinstance(child_uid, str) or not TASK_UID_RE.fullmatch(child_uid):
+            raise ReceiptError(f"receipt delivery {index} Task UID is invalid")
+        issue_number = _positive_int(delivery.get("issue_number"), f"receipt delivery {index} issue_number")
+        pr_number = _positive_int(delivery.get("pr_number"), f"receipt delivery {index} pr_number")
+        if delivery.get("pr_url") != f"https://github.com/{REPOSITORY}/pull/{pr_number}":
+            raise ReceiptError(f"receipt delivery {index} PR URL is not canonical")
+        dependencies = delivery.get("depends_on")
+        if (not isinstance(dependencies, list) or any(not isinstance(item, str) for item in dependencies)
+                or len(dependencies) != len(set(dependencies))
+                or set(dependencies) - seen_obligations):
+            raise ReceiptError(f"receipt delivery {index} dependencies are invalid or out of order")
+        if (child_uid in seen_tasks or issue_number in seen_issues or pr_number in seen_prs
+                or obligation_id in seen_obligations):
+            raise ReceiptError("aggregate receipt contains duplicate delivery identity")
+        seen_tasks.add(child_uid)
+        seen_issues.add(issue_number)
+        seen_prs.add(pr_number)
+        seen_obligations.add(obligation_id)
+        for key in ("merge_commit_oid", "head_oid"):
+            if not isinstance(delivery.get(key), str) or not OID_RE.fullmatch(delivery[key]):
+                raise ReceiptError(f"receipt delivery {index} {key} is invalid")
+        _nonempty(delivery.get("base_ref"), f"receipt delivery {index} base_ref")
+        _timestamp(delivery.get("merged_at"), f"receipt delivery {index} merged_at")
+        for key in (
+            "task_complete_claim_sha256", "merge_receipt_sha256", "main_sync_receipt_sha256",
+            "terminal_receipt_sha256", "terminal_tombstone_sha256",
+        ):
+            value = delivery.get(key)
+            if not isinstance(value, str) or not SHA256_RE.fullmatch(value):
+                raise ReceiptError(f"receipt delivery {index} digest is invalid: {key}")
     current = now or dt.datetime.now(dt.timezone.utc)
     age = (current - _timestamp(receipt["observed_at"], "receipt observed_at")).total_seconds()
     if age < -30 or age > 600:
@@ -480,6 +563,24 @@ def _import_terminal_audit(repo_root: pathlib.Path):
     return module
 
 
+def _issue_task_fields(repo_root: pathlib.Path, body: str) -> dict[str, Any]:
+    helper = repo_root / "scripts/pm/github-project-task.py"
+    spec = importlib.util.spec_from_file_location("aggregate_issue_task_fields", helper)
+    if spec is None or spec.loader is None:
+        raise ReceiptError("GitHub task Issue parser is unavailable")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    try:
+        fields = module.issue_task_fields(body)
+    except SystemExit as exc:
+        raise ReceiptError(f"live child Issue task projection is malformed: {exc}") from exc
+    if not isinstance(fields, dict):
+        raise ReceiptError("live child Issue task projection is not an object")
+    if fields.get("trace_projection_error"):
+        raise ReceiptError(f"live child Issue task projection is malformed: {fields['trace_projection_error']}")
+    return fields
+
+
 def read_child_report(repo_root: pathlib.Path, delivery: dict[str, Any], default_branch: str) -> dict[str, Any]:
     mapping = _load_mapping(repo_root)
     task = (mapping.get("tasks") or {}).get(delivery["task_uid"])
@@ -505,6 +606,7 @@ def read_child_report(repo_root: pathlib.Path, delivery: dict[str, Any], default
     issue_uids = re.findall(r"(?m)^task_uid:\s*(task_[0-9a-f]{32})\s*$", str(live_issue.get("body") or ""))
     if issue_uids != [delivery["task_uid"]]:
         raise ReceiptError(f"child Issue #{delivery['issue_number']} Task UID mismatch")
+    live_fields = _issue_task_fields(repo_root, str(live_issue.get("body") or ""))
     if task.get("task_uid") != delivery["task_uid"] or task.get("repository") != REPOSITORY:
         raise ReceiptError(f"child task mapping identity mismatch: {delivery['task_uid']}")
     for key in ("issue_number", "pr_number", "pr_url"):
@@ -512,6 +614,10 @@ def read_child_report(repo_root: pathlib.Path, delivery: dict[str, Any], default
             raise ReceiptError(f"child task mapping {key} mismatch: {delivery['task_uid']}")
     if task.get("status") != "done" or task.get("workflow_phase") != "post_merge_done":
         raise ReceiptError(f"child task {delivery['task_uid']} is not terminal")
+    if live_fields.get("status") != task.get("status") or live_fields.get("workflow_phase") != task.get("workflow_phase"):
+        raise ReceiptError(f"child Issue terminal state disagrees with task mapping: {delivery['task_uid']}")
+    if live_fields.get("claim_verifications") != task.get("claim_verifications"):
+        raise ReceiptError(f"child Issue task_complete claim history disagrees with task mapping: {delivery['task_uid']}")
     if task.get("completion_mode") == "ordered_delivery_aggregate":
         raise ReceiptError("aggregate coordinator cannot be used as a child delivery")
     if live_issue.get("number") != delivery["issue_number"] or live_issue.get("url") != f"https://github.com/{REPOSITORY}/issues/{delivery['issue_number']}":
@@ -578,6 +684,58 @@ def read_child_report(repo_root: pathlib.Path, delivery: dict[str, Any], default
         "live": normalized_live,
         "proof": proof,
     }
+
+
+def validate_terminal_receipt(
+    repo_root: pathlib.Path,
+    task_uid: str,
+    plan: Any,
+    candidate: Any,
+    evidence: Any,
+    receipt: Any,
+) -> dict[str, Any]:
+    """Re-read every aggregate child proof after the coordinator has closed.
+
+    The ordinary create/validate route intentionally stays OPEN-only. This
+    terminal verifier accepts an already-issued receipt only when its exact
+    contents can be rebuilt from current coordinator and child readbacks.
+    """
+    root = repo_root.resolve()
+    plan = validate_plan(plan, task_uid)
+    if not isinstance(receipt, dict):
+        raise ReceiptError("aggregate terminal proof requires a receipt object")
+    observed = _timestamp(receipt.get("observed_at"), "receipt observed_at")
+    validate_receipt(receipt, now=observed)
+    if (observed - dt.datetime.now(dt.timezone.utc)).total_seconds() > 30:
+        raise ReceiptError("aggregate task-complete receipt observed_at is in the future")
+    if receipt.get("task_uid") != task_uid:
+        raise ReceiptError("aggregate task-complete receipt Task UID does not match coordinator")
+
+    coordinator, comment = read_coordinator(root, plan)
+    if str(coordinator.get("state") or "").upper() != "CLOSED":
+        raise ReceiptError("coordinator Issue must be closed for terminal proof validation")
+    default_branch = coordinator.get("default_branch")
+    if not isinstance(default_branch, str) or not default_branch:
+        raise ReceiptError("live repository default branch is unavailable")
+    child_reports = {
+        delivery["task_uid"]: read_child_report(root, delivery, default_branch)
+        for delivery in plan["required_deliveries"]
+    }
+    expected = _build_receipt(
+        task_uid=task_uid,
+        plan=plan,
+        candidate=candidate,
+        evidence=evidence,
+        coordinator_issue=coordinator,
+        plan_comment=comment,
+        child_reports=child_reports,
+        effective_validator_commit=receipt.get("effective_validator_commit"),
+        observed_at=receipt.get("observed_at"),
+        expected_coordinator_state="CLOSED",
+    )
+    if receipt != expected:
+        raise ReceiptError("aggregate receipt disagrees with fresh closed-coordinator/child proof readback")
+    return receipt
 
 
 def _load_json(path: pathlib.Path, label: str) -> Any:
