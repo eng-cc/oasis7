@@ -9,7 +9,16 @@ import tempfile
 import subprocess
 import os
 import shutil
+import sys
 from unittest.mock import patch
+
+
+_APPLICABILITY_FIXTURE_SPEC = importlib.util.spec_from_file_location(
+    'ci_evidence_applicability_fixtures',
+    Path(__file__).with_name('ci-evidence-applicability.test.py'),
+)
+_APPLICABILITY_FIXTURES = importlib.util.module_from_spec(_APPLICABILITY_FIXTURE_SPEC)
+_APPLICABILITY_FIXTURE_SPEC.loader.exec_module(_APPLICABILITY_FIXTURES)
 
 spec = importlib.util.spec_from_file_location('pr_gate', Path(__file__).with_name('pr-lifecycle-gate.py'))
 gate = importlib.util.module_from_spec(spec)
@@ -326,6 +335,208 @@ print(json.dumps(result))
                 with self.assertRaisesRegex(ValueError, 'worktree HEAD'):
                     gate.local_loop_admission(root, 'uid', 'a' * 40, 'b' * 40, root)
                 self.assertTrue(all(call.args[0][0] == 'git' for call in execute.call_args_list))
+
+
+class KeyedQApplicabilityTests(unittest.TestCase):
+    """Adversarial lifecycle-boundary checks for Q1 keyed-evidence consumption."""
+
+    def evaluator_inputs(self):
+        fixtures = _APPLICABILITY_FIXTURES
+        plan = fixtures.source_plan()
+        plan.update({
+            'workflow_run_id': 10,
+            'run_attempt': 1,
+            'check_app_id': 42,
+            'check_run_id': 20,
+        })
+        target = fixtures.target_snapshot()
+        results = []
+        for item in fixtures.evidence_set()['tests']:
+            results.append({
+                'artifact_id': item['artifact_id'],
+                'name': f"oasis7-required-result-v2-{item['unit_id']}",
+                'payload': {
+                    'unit_id': item['unit_id'],
+                    'obligation_ids': item.get('obligation_ids'),
+                    'status': item['status'],
+                    'input_digest': item['input_digest'],
+                    'planner_inventory_digest': item['inventory_digest'],
+                    'effective_policy_identity': item['effective_policy_identity'],
+                    'repository': item['repository'],
+                    'task_uid': item['task_uid'],
+                    'pr_number': item['pr_number'],
+                    'source_head_oid': item['source_head_oid'],
+                    'source_scope_oid': item['source_scope_oid'],
+                    'workflow_run_id': item['run_id'],
+                    'run_attempt': item['run_attempt'],
+                    'check_app_id': item['check_app_id'],
+                    'check_run_id': item['check_run_id'],
+                },
+            })
+        source_proof = {
+            'request_key': 'sha256:' + '8' * 64,
+            'request_identity': {
+                'repository': fixtures.REPOSITORY,
+                'task_uid': fixtures.UID,
+                'pr_number': 7,
+                'source_head_oid': fixtures.HEAD,
+                'source_scope_oid': fixtures.SOURCE_SCOPE,
+            },
+            'required_plan_v2_payload': plan,
+            'trusted_planner_inventory': fixtures.trusted_inventory_readback(
+                plan['planner_inventory_issuer'], artifact_id=30,
+            ),
+            'integration_base_oid': plan['integration_base_oid'],
+            'source_scope_oid': plan['source_scope_oid'],
+            'assessed_target_oid': target['target_oid'],
+            'workflow_run_id': 10,
+            'run_attempt': 1,
+            'check_app_id': 42,
+            'check_run_id': 20,
+            'required_result_v2_artifacts': results,
+        }
+        target_inventory = {
+            'schema': gate.LOCAL_TARGET_INVENTORY_SCHEMA,
+            'repository': target['repository'],
+            'task_uid': target['task_uid'],
+            'pr_number': target['pr_number'],
+            'source_head_oid': target['source_head_oid'],
+            'source_scope_oid': target['source_scope_oid'],
+            'assessed_target_oid': target['target_oid'],
+            'input_scope_commit_oid': target['input_scope_commit_oid'],
+            'input_scope_tree_oid': target['input_scope_tree_oid'],
+            'planner_authority_oid': target['target_oid'],
+            'planner_config_sha256': 'sha256:' + 'f' * 64,
+            'effective_policy_identity': target['input_scope']['target_observation']['effective_policy_identity'],
+            'inventory_digest': target['input_scope']['target_observation']['inventory_digest'],
+            'required_test_units': target['required_test_units'],
+            'unit_specs': target['unit_specs'],
+            'product_corpus': target['product_corpus'],
+            'closure_status': 'complete',
+            'target_observation': target['input_scope']['target_observation'],
+            'input_scope': target['input_scope'],
+            'effective_policy': fixtures.enabled_policy(),
+        }
+        live_pr = {
+            'repository': fixtures.REPOSITORY,
+            'number': 7,
+            'headRefOid': fixtures.HEAD,
+            'baseRefOid': target['target_oid'],
+        }
+        module_name = 'ci_evidence_applicability_under_test'
+        applicability = sys.modules.get(module_name)
+        if applicability is None:
+            spec = importlib.util.spec_from_file_location(
+                module_name, Path(__file__).with_name('ci_evidence_applicability.py'),
+            )
+            applicability = importlib.util.module_from_spec(spec)
+            sys.modules[module_name] = applicability
+            try:
+                spec.loader.exec_module(applicability)
+            except Exception:
+                sys.modules.pop(module_name, None)
+                raise
+        return source_proof, target_inventory, applicability, live_pr
+
+    def test_keyed_q_rejects_wrong_source_B_current_Q_and_W_authority(self):
+        cases = (
+            ('B', lambda proof, inventory, live: proof.update(integration_base_oid='d' * 40), 'immutable B'),
+            ('Q', lambda proof, inventory, live: inventory.update(assessed_target_oid='d' * 40), 'immutable B or live PR Q'),
+            ('W', lambda proof, inventory, live: inventory.update(planner_authority_oid='d' * 40), 'W authority'),
+        )
+        for label, mutate, message in cases:
+            with self.subTest(label=label):
+                proof, inventory, applicability, live = self.evaluator_inputs()
+                mutate(proof, inventory, live)
+                with self.assertRaisesRegex(ValueError, message):
+                    gate.evaluate_keyed_q_applicability(proof, inventory, applicability, live)
+
+    def test_keyed_q_requires_result_artifacts_and_cannot_promote_plan_to_success(self):
+        proof, inventory, applicability, live = self.evaluator_inputs()
+        proof.pop('required_result_v2_artifacts')
+        with self.assertRaisesRegex(ValueError, 'source result artifact set is missing'):
+            gate.evaluate_keyed_q_applicability(proof, inventory, applicability, live)
+
+        proof, inventory, applicability, live = self.evaluator_inputs()
+        proof['required_result_v2_artifacts'] = []
+        with self.assertRaisesRegex(ValueError, 'requires revalidation or is blocked'):
+            gate.evaluate_keyed_q_applicability(proof, inventory, applicability, live)
+
+    def test_keyed_q_rejects_result_artifacts_from_wrong_R_A_or_check(self):
+        for field, value in (
+            ('workflow_run_id', 9),
+            ('run_attempt', 0),
+            ('check_app_id', 43),
+            ('check_run_id', 19),
+        ):
+            with self.subTest(field=field):
+                proof, inventory, applicability, live = self.evaluator_inputs()
+                proof['required_result_v2_artifacts'][0]['payload'][field] = value
+                with self.assertRaisesRegex(ValueError, 'differs from the exact R/A/check'):
+                    gate.evaluate_keyed_q_applicability(
+                        proof, inventory, applicability, live,
+                    )
+
+    def test_keyed_q_unknown_closure_and_post_assessment_target_drift_block(self):
+        proof, inventory, applicability, live = self.evaluator_inputs()
+        inventory['closure_status'] = 'unknown'
+        with self.assertRaisesRegex(ValueError, 'closure is unknown or partial'):
+            gate.evaluate_keyed_q_applicability(proof, inventory, applicability, live)
+
+        proof, inventory, applicability, live = self.evaluator_inputs()
+        assessment = gate.evaluate_keyed_q_applicability(
+            proof, inventory, applicability, live,
+        )
+        self.assertEqual(assessment['test_evidence'], 'reusable')
+        self.assertNotEqual(assessment['integration_base_oid'], assessment['assessed_target_oid'])
+        proof['keyed_q_applicability'] = assessment
+        for field, value in (
+            ('workflow_run_id', 11),
+            ('run_attempt', 2),
+            ('check_run_id', 21),
+        ):
+            with self.subTest(field=field):
+                stale = {**proof, field: value}
+                with self.assertRaisesRegex(ValueError, 'latest run/check identity mismatch'):
+                    gate._validate_keyed_q_applicability(stale, live)
+        drifted_live = {**live, 'baseRefOid': 'd' * 40}
+        with self.assertRaisesRegex(ValueError, 'target Q identity drift'):
+            gate._validate_keyed_q_applicability(proof, drifted_live)
+
+    def test_unkeyed_v1_proof_keeps_legacy_readiness_path(self):
+        uid = 'task_' + '1' * 32
+        data = {
+            'number': 12, 'repository': 'owner/repo', 'state': 'OPEN', 'isDraft': False,
+            'body': f'Task: {uid}\nRefs #1', 'baseRefName': 'main', 'headRefName': 'codex/task',
+            'baseRefOid': 'a' * 40, 'headRefOid': 'b' * 40,
+            'mergeable': 'MERGEABLE', 'mergeStateStatus': 'CLEAN', 'reviewDecision': 'APPROVED',
+            'merge_hold': {'kind': 'normal_pr_ci_watch', 'active': False},
+            'policy_discovery': {'status': 'resolved', 'required_status_checks': [
+                {'context': 'required-gate', 'app_id': 42},
+            ]},
+            'statusCheckRollup': [{'name': 'required-gate', 'app_id': 42,
+                                   'status': 'COMPLETED', 'conclusion': 'SUCCESS'}],
+            'comments': [], 'reviews': [], 'threads': [],
+        }
+        v1_proof = {'ci_validation_mode': 'trusted_integration', 'head_oid': 'b' * 40,
+                    'integration_base_oid': 'a' * 40, 'check_name': 'required-gate'}
+        admission = {'status': 'passed', 'task': {'repository': 'owner/repo', 'issue_number': 1},
+                     'tool_root': '/trusted', 'policy_commit': 'c' * 40}
+        with patch.object(gate, 'local_loop_admission', return_value=admission), \
+             patch.object(gate, 'live_integration_admission', return_value=v1_proof) as live_check, \
+             patch.object(gate, 'read_pr_identity', return_value={
+                 key: data[key] for key in (
+                     'number', 'state', 'isDraft', 'body', 'baseRefName', 'headRefName',
+                     'baseRefOid', 'headRefOid',
+                 )
+             }), patch.object(gate, '_validate_keyed_q_applicability') as keyed_validator:
+            result = gate.production_decision(data, False, Path('/canonical'), uid, None)
+
+        self.assertTrue(result['ready_for_merge'], result)
+        self.assertEqual(result['readiness_receipt']['integration_ci'], v1_proof)
+        self.assertNotIn('keyed_target_applicability_epoch', result['readiness_receipt']['integration_ci'])
+        live_check.assert_called_once()
+        keyed_validator.assert_not_called()
 
 
 if __name__ == '__main__': unittest.main()

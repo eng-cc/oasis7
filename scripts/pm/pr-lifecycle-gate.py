@@ -8,6 +8,7 @@ import os
 import datetime as dt
 import hashlib
 import importlib.util
+from contextlib import contextmanager
 import json
 import subprocess
 import sys
@@ -19,6 +20,8 @@ from typing import Any
 
 SUCCESS = {"SUCCESS", "NEUTRAL", "SKIPPED"}
 HOLDS = {"manual_packaging_ci_hold", "user_requested_merge_hold"}
+KEYED_Q_APPLICABILITY_SCHEMA = "oasis7-ci-keyed-q-applicability/v1"
+LOCAL_TARGET_INVENTORY_SCHEMA = "oasis7-ci-local-target-inventory/v1"
 # Canonical recovery surface: oasis7-pr-disposition records are rebuilt from
 # paginated GitHub task issueComments; the optional local cache is never truth.
 issueComments = "GitHub task issueComments"
@@ -396,6 +399,9 @@ def decision(data: dict[str, Any], admin_authorized: bool, *, evidence_mode: str
     epoch_input = {"repository": data.get("repository") or "fixture", "pr_number": data.get("number"), "head_oid": head_oid or "fixture-head", "blockers": blockers, "policy":policy, "hold":hold}
     if data.get('integration_ci') is not None:
         epoch_input['integration_ci'] = data['integration_ci']
+        integration = data['integration_ci']
+        if isinstance(integration, dict) and integration.get('keyed_target_applicability_epoch') is not None:
+            epoch_input['keyed_target_applicability_epoch'] = integration['keyed_target_applicability_epoch']
     gate_epoch = hashlib.sha256(json.dumps(epoch_input, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
     result = {
         "ready_for_merge": not blockers,
@@ -727,7 +733,7 @@ def _validate_live_integration_proof(
         if len(pins) != 1 or str(proof.get('check_app_id')) != next(iter(pins), None):
             raise ValueError('selected integration check app differs from live required-check policy')
     if strict and proof.get('integration_base_oid') != data['baseRefOid']:
-        raise ValueError('stale integration CI base/head; rerun required CI against current target without rebasing source')
+        _validate_keyed_q_applicability(proof, data)
 
 
 def _positive_bootstrap_epoch(value: Any, label: str = 'bootstrap_epoch') -> int:
@@ -865,15 +871,366 @@ def _load_effective_helper(effective: Path, name: str):
     return module
 
 
+@contextmanager
+def _effective_ci_modules(effective: Path):
+    """Load the C4/C0 reader stack only from byte-verified effective helpers."""
+    names = (
+        "integration_executor_contract", "ci_ready_receipt_identity",
+        "ci_input_scope", "ci_required_artifact_v2",
+        "ci_evidence_applicability", "integration_ci",
+    )
+    previous = {name: sys.modules.get(name) for name in names}
+    loaded = {}
+    try:
+        for name in names:
+            path = effective / "scripts/pm" / (name + ".py")
+            if path.is_symlink() or not path.is_file():
+                raise ValueError("effective CI helper is unavailable: " + name)
+            spec = importlib.util.spec_from_file_location(name, path)
+            if spec is None or spec.loader is None:
+                raise ValueError("effective CI helper cannot be loaded: " + name)
+            module = importlib.util.module_from_spec(spec)
+            sys.modules[name] = module
+            spec.loader.exec_module(module)
+            loaded[name] = module
+        yield loaded
+    finally:
+        for name, module in previous.items():
+            if module is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = module
+
+
+def _canonical_digest(value: Any) -> str:
+    raw = json.dumps(
+        value, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False,
+    ).encode("utf-8")
+    return "sha256:" + hashlib.sha256(raw).hexdigest()
+
+
+def evaluate_keyed_q_applicability(
+    source_proof: dict[str, Any], target_inventory: dict[str, Any],
+    applicability_module: Any, live_pr_data: dict[str, Any],
+) -> dict[str, Any]:
+    """Apply C0's test-evidence dimension to a separate fresh-Q observation.
+
+    Role-review applicability is intentionally outside this CI-only projection;
+    the existing live PR review and conversation checks remain authoritative.
+    """
+    if not isinstance(source_proof, dict) or not isinstance(target_inventory, dict):
+        raise ValueError("keyed target applicability inputs are malformed")
+    plan = source_proof.get("required_plan_v2_payload")
+    request_identity = source_proof.get("request_identity")
+    source_inventory = source_proof.get("trusted_planner_inventory")
+    if (not isinstance(plan, dict) or not isinstance(request_identity, dict)
+            or not isinstance(source_inventory, dict)):
+        raise ValueError("keyed source plan or trusted inventory is missing")
+    if target_inventory.get("schema") != LOCAL_TARGET_INVENTORY_SCHEMA:
+        raise ValueError("fresh Q target inventory schema is unsupported")
+    if target_inventory.get("closure_status") != "complete":
+        raise ValueError("fresh Q target input closure is unknown or partial")
+    observation = target_inventory.get("target_observation")
+    input_scope = target_inventory.get("input_scope")
+    input_closure = input_scope.get("closure_status") if isinstance(input_scope, dict) else None
+    if (not isinstance(observation, dict) or not isinstance(input_scope, dict)
+            or input_scope.get("target_observation") != observation
+            or not isinstance(input_closure, dict)
+            or input_closure.get("status") != "complete"):
+        raise ValueError("fresh Q target observation or complete input scope is missing")
+
+    identity_fields = {
+        "repository": live_pr_data.get("repository"),
+        "task_uid": request_identity.get("task_uid"),
+        "pr_number": live_pr_data.get("number"),
+        "source_head_oid": live_pr_data.get("headRefOid"),
+        "source_scope_oid": source_proof.get("source_scope_oid"),
+    }
+    for field, expected in identity_fields.items():
+        if target_inventory.get(field) != expected or plan.get(field) != expected:
+            raise ValueError("fresh Q target observation source identity mismatch: " + field)
+        if field != "source_scope_oid" and request_identity.get(field) != expected:
+            raise ValueError("fresh Q target observation request identity mismatch: " + field)
+    base = source_proof.get("integration_base_oid")
+    target_oid = target_inventory.get("assessed_target_oid")
+    if (not isinstance(base, str) or not re.fullmatch(r"[0-9a-f]{40,64}", base)
+            or plan.get("integration_base_oid") != base
+            or target_oid != live_pr_data.get("baseRefOid")
+            or source_proof.get("assessed_target_oid") != target_oid
+            or target_inventory.get("source_scope_oid") != source_proof.get("source_scope_oid")):
+        raise ValueError("fresh Q target observation differs from immutable B or live PR Q")
+    commit_oid = target_inventory.get("input_scope_commit_oid")
+    tree_oid = target_inventory.get("input_scope_tree_oid")
+    authority_oid = target_inventory.get("planner_authority_oid")
+    config_digest = target_inventory.get("planner_config_sha256")
+    policy_identity = target_inventory.get("effective_policy_identity")
+    if (not isinstance(commit_oid, str) or not re.fullmatch(r"[0-9a-f]{40,64}", commit_oid)
+            or not isinstance(tree_oid, str) or not re.fullmatch(r"[0-9a-f]{40,64}", tree_oid)
+            or authority_oid != target_oid
+            or not isinstance(config_digest, str)
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", config_digest)
+            or not isinstance(policy_identity, dict)
+            or observation.get("effective_policy_identity") != policy_identity
+            or observation.get("input_scope_commit_oid") != commit_oid
+            or observation.get("input_scope_tree_oid") != tree_oid):
+        raise ValueError("fresh Q W authority, M/T, or effective policy identity is invalid")
+    unit_ids = target_inventory.get("required_test_units")
+    if (not isinstance(unit_ids, list) or not unit_ids
+            or any(not isinstance(unit, str) or not unit for unit in unit_ids)
+            or unit_ids != sorted(set(unit_ids))
+            or input_scope.get("required_test_units") != unit_ids):
+        raise ValueError("fresh Q complete test-unit inventory is malformed")
+
+    # C0 owns the execution test dimension here. Professional-role evidence is
+    # not synthesized from GitHub approval state; the existing lifecycle review
+    # gates remain independently required.
+    review_digest = _canonical_digest({
+        "schema": "oasis7-ci-lifecycle-test-only-review-dimension/v1",
+        "required_review_roles": [],
+    })
+    c0_source_plan = dict(plan)
+    c0_source_plan["required_review_roles"] = []
+    c0_source_plan["review_applicability_digest"] = review_digest
+    c0_target = {
+        "repository": identity_fields["repository"],
+        "task_uid": identity_fields["task_uid"],
+        "pr_number": identity_fields["pr_number"],
+        "source_head_oid": identity_fields["source_head_oid"],
+        "source_scope_oid": identity_fields["source_scope_oid"],
+        "target_oid": target_oid,
+        "prior_assessed_target_oid": None,
+        "input_scope_commit_oid": commit_oid,
+        "input_scope_tree_oid": tree_oid,
+        "review_applicability_digest": review_digest,
+        "required_test_units": unit_ids,
+        "required_review_roles": [],
+        "input_scope": input_scope,
+        "unit_specs": target_inventory.get("unit_specs"),
+        "product_corpus": target_inventory.get("product_corpus"),
+    }
+    raw_results = source_proof.get("required_result_v2_artifacts")
+    if not isinstance(raw_results, list):
+        raise ValueError("keyed source result artifact set is missing")
+    expected_attempt_identity = {
+        "workflow_run_id": source_proof.get("workflow_run_id"),
+        "run_attempt": source_proof.get("run_attempt"),
+        "check_app_id": source_proof.get("check_app_id"),
+        "check_run_id": source_proof.get("check_run_id"),
+    }
+    if any(type(value) is not int or value <= 0
+           for value in expected_attempt_identity.values()):
+        raise ValueError("keyed source R/A/check identity is malformed")
+    tests = []
+    for artifact in raw_results:
+        if (not isinstance(artifact, dict)
+                or set(artifact) != {"artifact_id", "name", "payload"}
+                or type(artifact.get("artifact_id")) is not int
+                or artifact["artifact_id"] <= 0
+                or not isinstance(artifact.get("payload"), dict)):
+            raise ValueError("keyed source result artifact locator is malformed")
+        result = artifact["payload"]
+        if any(result.get(field) != expected
+               for field, expected in expected_attempt_identity.items()):
+            raise ValueError("keyed source result differs from the exact R/A/check attempt")
+        tests.append({
+            "unit_id": result.get("unit_id"),
+            "obligation_ids": result.get("obligation_ids"),
+            "status": result.get("status"),
+            "input_digest": result.get("input_digest"),
+            "inventory_digest": result.get("planner_inventory_digest"),
+            "effective_policy_identity": result.get("effective_policy_identity"),
+            "repository": result.get("repository"),
+            "task_uid": result.get("task_uid"),
+            "pr_number": result.get("pr_number"),
+            "source_head_oid": result.get("source_head_oid"),
+            "source_scope_oid": result.get("source_scope_oid"),
+            "run_id": result.get("workflow_run_id"),
+            "run_attempt": result.get("run_attempt"),
+            "check_app_id": result.get("check_app_id"),
+            "check_run_id": result.get("check_run_id"),
+            "artifact_id": artifact["artifact_id"],
+        })
+    try:
+        decision = applicability_module.evaluate_evidence_applicability(
+            c0_source_plan, {"reviews": [], "tests": tests}, c0_target,
+            target_inventory.get("effective_policy"),
+            trusted_source_inventory=source_inventory,
+            trusted_target_observation=observation,
+        ).to_dict()
+    except (AttributeError, KeyError, TypeError, ValueError) as exc:
+        raise ValueError("C0 could not evaluate keyed source evidence against fresh Q") from exc
+
+    assessment = {
+        "schema": KEYED_Q_APPLICABILITY_SCHEMA,
+        "request_key": source_proof.get("request_key"),
+        "workflow_run_id": source_proof.get("workflow_run_id"),
+        "run_attempt": source_proof.get("run_attempt"),
+        "check_app_id": source_proof.get("check_app_id"),
+        "check_run_id": source_proof.get("check_run_id"),
+        "integration_base_oid": base,
+        "source_head_oid": identity_fields["source_head_oid"],
+        "source_scope_oid": identity_fields["source_scope_oid"],
+        "assessed_target_oid": target_oid,
+        "input_scope_commit_oid": commit_oid,
+        "input_scope_tree_oid": tree_oid,
+        "planner_authority_oid": authority_oid,
+        "planner_config_sha256": config_digest,
+        "effective_policy_identity": policy_identity,
+        "inventory_digest": observation.get("inventory_digest"),
+        "required_test_units": unit_ids,
+        "closure_status": "complete",
+        "test_evidence": decision.get("test_evidence"),
+        "decision": decision,
+    }
+    assessment["decision_digest"] = _canonical_digest(decision)
+    _validate_keyed_q_applicability(
+        {**source_proof, "keyed_q_applicability": assessment}, live_pr_data,
+    )
+    return assessment
+
+
+def _validate_keyed_q_applicability(
+    proof: dict[str, Any], data: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate the C0 decision and produce the exact gate-epoch identity."""
+    assessment = proof.get("keyed_q_applicability")
+    fields = {
+        "schema", "request_key", "workflow_run_id", "run_attempt", "check_app_id",
+        "check_run_id", "integration_base_oid", "source_head_oid", "source_scope_oid",
+        "assessed_target_oid", "input_scope_commit_oid", "input_scope_tree_oid",
+        "planner_authority_oid", "planner_config_sha256", "effective_policy_identity",
+        "inventory_digest", "required_test_units", "closure_status", "test_evidence",
+        "decision", "decision_digest",
+    }
+    if not isinstance(assessment, dict) or set(assessment) != fields:
+        raise ValueError("keyed target Q applicability assessment is missing or malformed")
+    if assessment.get("schema") != KEYED_Q_APPLICABILITY_SCHEMA:
+        raise ValueError("keyed target Q applicability schema is unsupported")
+    request_key = proof.get("request_key")
+    if (not isinstance(request_key, str)
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", request_key)
+            or assessment.get("request_key") != request_key):
+        raise ValueError("keyed target Q request identity is invalid")
+    for field in ("workflow_run_id", "run_attempt", "check_app_id", "check_run_id"):
+        value = proof.get(field)
+        if type(value) is not int or value <= 0 or assessment.get(field) != value:
+            raise ValueError("keyed target Q latest run/check identity mismatch: " + field)
+    plan = proof.get("required_plan_v2_payload")
+    if not isinstance(plan, dict):
+        raise ValueError("keyed target Q source plan is missing")
+    identity_pairs = {
+        "integration_base_oid": proof.get("integration_base_oid"),
+        "source_head_oid": data.get("headRefOid"),
+        "source_scope_oid": proof.get("source_scope_oid"),
+        "assessed_target_oid": data.get("baseRefOid"),
+    }
+    for field, expected in identity_pairs.items():
+        value = assessment.get(field)
+        if (not isinstance(expected, str) or not re.fullmatch(r"[0-9a-f]{40,64}", expected)
+                or value != expected):
+            raise ValueError("keyed target Q identity drift: " + field)
+    if (assessment["assessed_target_oid"] != proof.get("assessed_target_oid")
+            or assessment["integration_base_oid"] != plan.get("integration_base_oid")
+            or assessment["source_head_oid"] != plan.get("source_head_oid")
+            or assessment["source_scope_oid"] != plan.get("source_scope_oid")
+            or assessment["workflow_run_id"] != plan.get("workflow_run_id")
+            or assessment["run_attempt"] != plan.get("run_attempt")
+            or assessment["check_app_id"] != plan.get("check_app_id")
+            or assessment["check_run_id"] != plan.get("check_run_id")):
+        raise ValueError("keyed target Q assessment differs from exact source attempt")
+    for field in ("input_scope_commit_oid", "input_scope_tree_oid", "planner_authority_oid"):
+        if not isinstance(assessment.get(field), str) or not re.fullmatch(r"[0-9a-f]{40,64}", assessment[field]):
+            raise ValueError("keyed target Q identity is invalid: " + field)
+    if (assessment["planner_authority_oid"] != assessment["assessed_target_oid"]
+            or not isinstance(assessment.get("planner_config_sha256"), str)
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", assessment["planner_config_sha256"])
+            or not isinstance(assessment.get("inventory_digest"), str)
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", assessment["inventory_digest"])
+            or not isinstance(assessment.get("effective_policy_identity"), dict)
+            or assessment["effective_policy_identity"].get("schema")
+               != "oasis7-ci-effective-policy-identity/v1"
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(
+                assessment["effective_policy_identity"].get("digest") or ""))):
+        raise ValueError("keyed target Q W, inventory, or policy identity is malformed")
+    required_units = assessment.get("required_test_units")
+    if (assessment.get("closure_status") != "complete"
+            or not isinstance(required_units, list)
+            or not required_units
+            or any(not isinstance(unit, str) or not unit for unit in required_units)
+            or required_units != sorted(set(required_units))):
+        raise ValueError("keyed target Q input closure is unknown, partial, or malformed")
+
+    decision = assessment.get("decision")
+    if (not isinstance(decision, dict)
+            or assessment.get("decision_digest") != _canonical_digest(decision)
+            or decision.get("test_evidence") != assessment.get("test_evidence")
+            or decision.get("effective_policy_identity") != assessment.get("effective_policy_identity")):
+        raise ValueError("keyed target Q C0 decision digest or policy identity is invalid")
+    decision_identity = decision.get("identity")
+    if (not isinstance(decision_identity, dict)
+            or decision_identity.get("source_head_oid") != assessment["source_head_oid"]
+            or decision_identity.get("source_scope_oid") != assessment["source_scope_oid"]
+            or decision_identity.get("assessed_target_oid") != assessment["assessed_target_oid"]):
+        raise ValueError("keyed target Q C0 decision identity mismatch")
+    status = assessment.get("test_evidence")
+    decision_blockers = decision.get("blockers")
+    reused = decision.get("reused_units")
+    required = decision.get("required_test_units")
+    if (not isinstance(decision_blockers, list) or not isinstance(reused, list)
+            or not isinstance(required, list)):
+        raise ValueError("keyed target Q C0 decision lists are malformed")
+    if status == "disabled":
+        if assessment["integration_base_oid"] != assessment["assessed_target_oid"]:
+            raise ValueError("input-scope reuse is disabled and source B is stale for current Q")
+        if decision_blockers or reused or required:
+            raise ValueError("disabled keyed target Q decision contains reuse or blockers")
+    elif status == "reusable":
+        if (decision_blockers or required
+                or reused != assessment["required_test_units"]
+                or decision_identity.get("input_scope_commit_oid") != assessment["input_scope_commit_oid"]
+                or decision_identity.get("input_scope_tree_oid") != assessment["input_scope_tree_oid"]
+                or decision_identity.get("target_inventory_digest") != assessment["inventory_digest"]):
+            raise ValueError("keyed target Q C0 test decision is incomplete or drifted")
+    elif status in ("revalidate", "blocked"):
+        raise ValueError("keyed target Q requires revalidation or is blocked: " + status)
+    else:
+        raise ValueError("keyed target Q C0 test decision status is unsupported")
+    return {
+        "schema": KEYED_Q_APPLICABILITY_SCHEMA,
+        "request_key": request_key,
+        "workflow_run_id": proof["workflow_run_id"],
+        "run_attempt": proof["run_attempt"],
+        "check_app_id": proof["check_app_id"],
+        "check_run_id": proof["check_run_id"],
+        "integration_base_oid": assessment["integration_base_oid"],
+        "source_head_oid": assessment["source_head_oid"],
+        "source_scope_oid": assessment["source_scope_oid"],
+        "assessed_target_oid": assessment["assessed_target_oid"],
+        "input_scope_commit_oid": assessment["input_scope_commit_oid"],
+        "input_scope_tree_oid": assessment["input_scope_tree_oid"],
+        "planner_authority_oid": assessment["planner_authority_oid"],
+        "planner_config_sha256": assessment["planner_config_sha256"],
+        "inventory_digest": assessment["inventory_digest"],
+        "effective_policy_identity": assessment["effective_policy_identity"],
+        "test_evidence": status,
+        "decision_digest": assessment["decision_digest"],
+    }
+
+
 def _latest_local_keyed_request_key(root: Path, effective: Path, *, repository: str,
                                     uid: str, pr_number: int, base_oid: str,
                                     head_oid: str, branch: str, task: dict[str, Any],
-                                    projection_digest: str) -> str | None:
+                                    projection_digest: str,
+                                    allow_advanced_target: bool = False) -> str | None:
     """Select the newest observed keyed request from the canonical journal.
 
     A prepared request has not produced a remote side effect. An uncertain
     dispatch for this exact Task/PR/H/projection blocks older green evidence;
     its outcome must be read back before the gate can proceed.
+
+    For a fresh-Q assessment, ``base_oid`` is the observed live target Q but
+    the selected request is still read back using its journaled immutable B.
+    The caller's trusted target replay proves B is an ancestor of Q.
     """
     binding = task.get('loop_binding')
     if not isinstance(binding, dict):
@@ -896,7 +1253,7 @@ def _latest_local_keyed_request_key(root: Path, effective: Path, *, repository: 
         'source_head_oid': head_oid,
         'source_projection_digest': projection_digest,
     }
-    observed: list[tuple[int, str, int]] = []
+    observed: list[tuple[int, str, int, str]] = []
     for path in sorted(directory.glob('*.json')):
         if not re.fullmatch(r'[0-9a-f]{64}', path.stem):
             raise ValueError('validation request journal has a malformed key filename')
@@ -905,20 +1262,24 @@ def _latest_local_keyed_request_key(root: Path, effective: Path, *, repository: 
         identity = record['identity']
         if any(identity.get(field) != value for field, value in expected.items()):
             continue
-        if record.get('integration_base_oid') != base_oid:
+        if (not allow_advanced_target
+                and record.get('integration_base_oid') != base_oid):
             continue
         if record.get('status') == 'dispatch_uncertain' and record.get('dispatch_attempts') == 1:
             raise ValueError('keyed validation request dispatch is unresolved for the current Task/PR/source')
         if record.get('status') == 'observed':
-            observed.append((record['run_id'], key, record['run_attempt']))
+            record_base = record.get('integration_base_oid')
+            if not isinstance(record_base, str) or not re.fullmatch(r'[0-9a-f]{40,64}', record_base):
+                raise ValueError('validation request journal immutable integration base is invalid')
+            observed.append((record['run_id'], key, record['run_attempt'], record_base))
     if not observed:
         return None
     observed.sort()
     if len(observed) > 1 and observed[-1][0] == observed[-2][0]:
         raise ValueError('multiple keyed validation requests share the newest workflow run identity')
-    selected_run_id, selected_key, selected_attempt = observed[-1]
+    selected_run_id, selected_key, selected_attempt, selected_base_oid = observed[-1]
     selected = integration.current_request(
-        repository, uid, pr_number, base_oid, head_oid, branch,
+        repository, uid, pr_number, selected_base_oid, head_oid, branch,
         request_key=selected_key,
     )
     if (not isinstance(selected, dict) or selected.get('id') != selected_run_id
@@ -948,8 +1309,17 @@ def live_integration_admission(data, root, uid, tool_root, admission, integratio
         # helpers or a caller-authored receipt as CI authority.
         subprocess.run(['git','-C',str(root),'fetch','--no-tags','origin','main:refs/remotes/origin/main'],check=True,capture_output=True)
         commit = subprocess.check_output(['git','-C',str(root),'rev-parse','refs/remotes/origin/main'],text=True).strip()
-    for name in ('ci-ready-receipt.py', 'ci_ready_receipt_identity.py', 'integration_ci.py',
-                 'integration_executor_contract.py'):
+    task = admission['task']
+    authority_helpers = (
+        'ci-ready-receipt.py', 'ci_ready_receipt_identity.py', 'integration_ci.py',
+        'integration_executor_contract.py',
+    )
+    keyed_helpers = (
+        'ci_input_scope.py', 'ci_required_artifact_v2.py',
+        'ci_evidence_applicability.py', 'ci_required_inventory.py',
+        'ci_reuse_policy.py',
+    )
+    for name in authority_helpers:
         relative = 'scripts/pm/' + name
         expected = subprocess.check_output(['git','-C',str(root),'show',commit + ':' + relative])
         path = effective / relative
@@ -961,7 +1331,6 @@ def live_integration_admission(data, root, uid, tool_root, admission, integratio
         projection_path = effective / projection_relative
         if projection_path.is_symlink() or projection_path.read_bytes() != projection_expected:
             raise ValueError('effective CI authority helper bytes differ: workflow-impact-projection.py')
-    task = admission['task']
     if task.get('repository') != data['repository']:
         raise ValueError('CI task repository identity mismatch')
     strict = (trusted_requires_strict_integration(data, root, effective, uid, commit)
@@ -980,7 +1349,17 @@ def live_integration_admission(data, root, uid, tool_root, admission, integratio
             pr_number=int(data['number']), base_oid=data['baseRefOid'],
             head_oid=data['headRefOid'], branch=data['baseRefName'], task=task,
             projection_digest=projection['projection_digest'],
+            # The source attempt's B is immutable while the default branch may
+            # advance.  The local W replay below separately proves B -> fresh Q.
+            allow_advanced_target=True,
         )
+        if request_key is not None:
+            for name in keyed_helpers:
+                relative = 'scripts/pm/' + name
+                expected = subprocess.check_output(['git', '-C', str(root), 'show', commit + ':' + relative])
+                path = effective / relative
+                if path.is_symlink() or path.read_bytes() != expected:
+                    raise ValueError('effective keyed CI authority helper bytes differ: ' + name)
     request = {'root': str(effective), 'repository': data['repository'], 'uid': uid,
                'canonical_root': str(root), 'issue': task['issue_number'], 'pr': data['number'],
                'app': next(iter(pins)), 'request_key': request_key,
@@ -1030,6 +1409,17 @@ print(json.dumps(proof))
     proof = json.loads(completed.stdout)
     if proof.get('request_key') is not None:
         validate_keyed_integration_identity(proof, data, uid, task)
+        # A keyed source result is only a candidate.  Recompute the current-Q
+        # inventory from trusted W and ask the shared C0 evaluator to bind it
+        # to the exact source attempt before the lifecycle can consume it.
+        with _effective_ci_modules(effective) as modules:
+            target_inventory = modules['integration_ci'].trusted_local_target_inventory(
+                data['repository'], uid, int(data['number']), proof,
+            )
+            proof['keyed_q_applicability'] = evaluate_keyed_q_applicability(
+                proof, target_inventory,
+                modules['ci_evidence_applicability'], data,
+            )
     _validate_live_integration_proof(
         proof, data, strict=strict, allow_legacy_strict_fallback=require_strict is None,
     )
@@ -1057,6 +1447,14 @@ def production_decision(data, admin_authorized, root, uid, tool_root, integratio
         if (not isinstance(fresh, dict) or any(key not in fresh or key not in data or fresh[key] != data[key] for key in fields)
                 or fresh['state'] != 'OPEN' or fresh['isDraft'] is not False):
             raise ValueError('PR admission identity or state changed during live loop admission; rerun gate')
+        if integration is not None and integration.get('request_key') is not None:
+            # Bind the lifecycle readiness epoch to the exact source attempt
+            # and the fresh-Q C0 decision.  This prevents a receipt from being
+            # replayed after Q, M/T, policy, or the selected run changes.
+            integration = dict(integration)
+            integration['keyed_target_applicability_epoch'] = _validate_keyed_q_applicability(
+                integration, data,
+            )
     except (ValueError, KeyError, OSError, subprocess.SubprocessError) as exc:
         result.update(ready_for_merge=False, status='blocked', use_admin_merge=False)
         result['blockers'].append('live loop admission: ' + str(exc))
