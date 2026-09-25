@@ -2,7 +2,9 @@
 """Focused authority and planning contract for the hosted preview."""
 
 import importlib.util
+import hashlib
 import os
+import shutil
 import subprocess
 import tempfile
 import textwrap
@@ -190,6 +192,31 @@ class RequiredScopePreviewTests(unittest.TestCase):
         self.assertEqual(versioned["selected_capabilities"], "required_gate_baseline")
         self.assertEqual(legacy["scope"], "minimal")
         self.assertEqual(versioned["scope"], "minimal")
+
+    def test_legacy_plan_uses_pinned_fixture_when_effective_config_is_versioned(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            scripts = root / "scripts"
+            scripts.mkdir()
+            (scripts / "fixtures").mkdir()
+            shutil.copy2(ROOT / "scripts/plan-rust-required-scope.py", scripts)
+            shutil.copy2(ROOT / "scripts/ci-tests.sh", scripts)
+            shutil.copy2(ROOT / PREVIEW.FIXTURE, scripts / "fixtures" / Path(PREVIEW.FIXTURE).name)
+            shutil.copy2(ROOT / PREVIEW.LEGACY_FIXTURE, scripts / "fixtures" / Path(PREVIEW.LEGACY_FIXTURE).name)
+            effective = scripts / Path(PREVIEW.EFFECTIVE_CONFIG).name
+            shutil.copy2(ROOT / PREVIEW.FIXTURE, effective)
+
+            legacy = PREVIEW.plan_scenario(root, "ordinary_document", mode="legacy")
+            versioned = PREVIEW.plan_scenario(root, "ordinary_document", mode="versioned")
+
+        self.assertEqual(
+            hashlib.sha256((ROOT / PREVIEW.LEGACY_FIXTURE).read_bytes()).hexdigest(),
+            PREVIEW.EXPECTED_LEGACY_CONFIG_SHA256,
+        )
+        self.assertNotIn("execution_contract", legacy)
+        self.assertEqual(legacy["planner_config_sha256"], "sha256:" + PREVIEW.EXPECTED_LEGACY_CONFIG_SHA256)
+        self.assertEqual(versioned["execution_contract"], "required-domain-split/v1")
+        self.assertEqual(versioned["planner_config_sha256"], "sha256:" + PREVIEW.EXPECTED_FIXTURE_SHA256)
 
     def test_disposable_overlay_proves_one_changed_document_without_changing_candidate(self):
         candidate = subprocess.check_output(
