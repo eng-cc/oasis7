@@ -490,6 +490,13 @@ def evaluate_evidence_applicability(
         target_observation = validate_target_observation_binding(
             input_scope.get("target_observation"), trusted_target_observation,
         )
+        source_base_oid = _identity(
+            source_plan.get("integration_base_oid"), "source_plan.integration_base_oid",
+        )
+        if (target_observation["planner_invocation"]["base_ref"] != source_base_oid
+                or target_observation["planner_invocation"]["impact_projection_sha256"]
+                   != source_plan.get("source_projection_digest")):
+            raise ValueError("target planner invocation differs from immutable source B/projection")
         if target_snapshot.get("product_corpus") != input_scope["product_corpus"]:
             raise ValueError("target product corpus disagrees with its input-scope snapshot")
         input_scope_commit_oid = _identity(

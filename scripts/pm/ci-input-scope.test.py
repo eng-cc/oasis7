@@ -665,6 +665,22 @@ class InputScopeContractTests(unittest.TestCase):
         with self.assertRaisesRegex(inputs.InputScopeError, "invocation digest"):
             inputs.validate_target_observation_binding(bad_invocation, observation)
 
+    def test_local_target_invocation_changed_paths_are_canonical(self):
+        specs = [self.unit("unit-a", "pkg/a/a.rs", "pkg/a")]
+        corpus_specs, corpus = inputs.build_product_corpus_unit_specs(
+            str(self.root), self.base,
+            command_checker_paths=[COMMAND_PATH],
+            applicable_policy={"policy": "product-v1"},
+            environment_contract={"python": "fixture-v1"},
+        )
+        specs.extend(corpus_specs)
+        observation = self.local_target_observation(self.base, specs, corpus)
+        invocation = {**observation["planner_invocation"], "changed_paths": ["z.rs", "a.rs"]}
+        invocation["digest"] = inputs.local_planner_invocation_digest(invocation)
+        malformed = {**observation, "planner_invocation": invocation}
+        with self.assertRaisesRegex(inputs.InputScopeError, "changed paths must be sorted and unique"):
+            inputs.validate_target_observation_binding(malformed, malformed)
+
     def test_source_execution_inventory_still_requires_artifact_readback(self):
         scope = self.scope(self.base)
         binding = self.trusted_inventory_readback(scope["planner_inventory_issuer"])

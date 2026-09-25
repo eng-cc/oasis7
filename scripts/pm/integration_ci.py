@@ -11,6 +11,8 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
+from contextlib import contextmanager
 from urllib.parse import urlparse
 import zipfile
 
@@ -22,6 +24,8 @@ OID=re.compile(r'[0-9a-f]{40}')
 DISCOVERY_PAGE_SIZE=100
 DISCOVERY_MAX_PAGES=10
 KEYED_RUN_NAME='oasis7-ci|${{ github.event_name }}|${{ inputs.run_mode }}|${{ inputs.task_uid }}|${{ inputs.pr_number }}|${{ inputs.integration_base }}|${{ inputs.expected_head }}${{ inputs.request_key != \'\' && format(\'|{0}\', inputs.request_key) || \'\' }}'
+LOCAL_TARGET_INVENTORY_SCHEMA='oasis7-ci-local-target-inventory/v1'
+IMPACT_PROJECTION_MARKER='<!-- oasis7-impact-projection-b64:'
 
 def gh(*args):
     return json.loads(subprocess.check_output(['gh',*args],text=True))
@@ -505,6 +509,405 @@ def compose(root,base,head,worktree_path=None):
     result={'base_oid':base,'head_oid':head,'scope_base_oid':scope[0],'tested_tree_oid':tree,'tested_commit_oid':commit}
     if worktree_path is not None: result['integration_worktree']=str(destination)
     return result
+
+def _exact_merge_base(root,left,right):
+    try:
+        values=git(root,'merge-base','--all',left,right).splitlines()
+    except subprocess.CalledProcessError as exc:
+        raise ValueError('target ancestry cannot be resolved') from exc
+    if len(values)!=1 or not OID.fullmatch(values[0]):
+        raise ValueError('target ancestry is detached or ambiguous')
+    return values[0]
+
+@contextmanager
+def _local_target_worktrees(repository_root,branch,pr_number,target_oid,head_oid,source_scope_oid):
+    """Fetch authenticated Q/H into a scratch object store and compose exact M/T."""
+    for oid,label in ((target_oid,'current PR target'),(head_oid,'source head'),
+                      (source_scope_oid,'source scope')):
+        if not isinstance(oid,str) or not OID.fullmatch(oid):
+            raise ValueError(f'{label} must be a full commit OID')
+    if type(pr_number) is not int or pr_number<1:
+        raise ValueError('positive pull request number required')
+    try:
+        subprocess.run(['git','-C',str(repository_root),'check-ref-format','--branch',branch],
+                       check=True,capture_output=True,text=True)
+        remote_url=git(repository_root,'remote','get-url','origin')
+    except (subprocess.CalledProcessError,OSError) as exc:
+        raise ValueError('trusted GitHub remote or default branch is unavailable') from exc
+    with tempfile.TemporaryDirectory(prefix='oasis7-ci-local-target-') as temp:
+        scratch=Path(temp)/'repo'
+        try:
+            subprocess.run(['git','init','--quiet',str(scratch)],check=True,capture_output=True,text=True)
+            git(scratch,'remote','add','origin',remote_url)
+            git(scratch,'fetch','--no-tags','origin',
+                f'+refs/heads/{branch}:refs/remotes/oasis7/target',
+                f'+refs/pull/{pr_number}/head:refs/remotes/oasis7/source')
+            fetched_target=git(scratch,'rev-parse','--verify','refs/remotes/oasis7/target^{commit}')
+            fetched_head=git(scratch,'rev-parse','--verify','refs/remotes/oasis7/source^{commit}')
+        except (subprocess.CalledProcessError,OSError) as exc:
+            raise ValueError('exact Q/H refs cannot be fetched into the isolated target store') from exc
+        if fetched_target!=target_oid or fetched_head!=head_oid:
+            raise ValueError('fetched default-branch or PR head differs from authenticated Q/H')
+
+        target_scope=_exact_merge_base(scratch,target_oid,head_oid)
+        if target_scope!=source_scope_oid:
+            raise ValueError('current Q/H merge base differs from the frozen source scope')
+        try:
+            merge=subprocess.run(
+                ['git','-C',str(scratch),'merge-tree','--write-tree',target_oid,head_oid],
+                check=True,capture_output=True,text=True,
+            )
+        except (subprocess.CalledProcessError,OSError) as exc:
+            raise ValueError('exact Q/H merge has conflicts or cannot be composed') from exc
+        merge_lines=merge.stdout.splitlines()
+        if not merge_lines or not OID.fullmatch(merge_lines[0]):
+            raise ValueError('exact Q/H merge tree identity is unavailable')
+        tree_oid=merge_lines[0]
+        env={**os.environ,'GIT_AUTHOR_NAME':'Integration CI','GIT_AUTHOR_EMAIL':'ci@example.invalid',
+             'GIT_COMMITTER_NAME':'Integration CI','GIT_COMMITTER_EMAIL':'ci@example.invalid',
+             'GIT_AUTHOR_DATE':'2000-01-01T00:00:00Z','GIT_COMMITTER_DATE':'2000-01-01T00:00:00Z'}
+        try:
+            commit_oid=subprocess.check_output(
+                ['git','-C',str(scratch),'commit-tree',tree_oid,'-p',target_oid,'-p',head_oid,
+                 '-m','Exact integration revalidation'],env=env,text=True,
+            ).strip()
+            if not OID.fullmatch(commit_oid):
+                raise ValueError('exact Q/H merge commit identity is invalid')
+            planner_root=Path(temp)/'planner-w'
+            target_root=Path(temp)/'target-m'
+            git(scratch,'worktree','add','--detach',str(planner_root),target_oid)
+            git(scratch,'worktree','add','--detach',str(target_root),commit_oid)
+            planner_head=git(planner_root,'rev-parse','--verify','HEAD^{commit}')
+            target_head=git(target_root,'rev-parse','--verify','HEAD^{commit}')
+            target_tree=git(target_root,'show','-s','--format=%T','HEAD')
+            parents=git(target_root,'rev-list','--parents','-n','1','HEAD').split()
+            if (planner_head!=target_oid or target_head!=commit_oid or target_tree!=tree_oid
+                    or parents!=[commit_oid,target_oid,head_oid]):
+                raise ValueError('isolated target checkout differs from exact Q/H merge M/T')
+            for path,label in ((planner_root,'trusted W checkout at Q'),(target_root,'target checkout at M')):
+                if git(path,'status','--porcelain','--untracked-files=all'):
+                    raise ValueError(f'{label} is not clean')
+        except (subprocess.CalledProcessError,OSError) as exc:
+            raise ValueError('isolated W/Q or M/T checkout could not be verified') from exc
+        yield {
+            'repository_root':scratch,'planner_root':planner_root,'target_root':target_root,
+            'target_oid':target_oid,'head_oid':head_oid,'source_scope_oid':source_scope_oid,
+            'input_scope_commit_oid':commit_oid,'input_scope_tree_oid':tree_oid,
+        }
+
+def _json_object_without_duplicate_keys(pairs):
+    result={}
+    for key,value in pairs:
+        if key in result: raise ValueError('impact projection has a duplicate JSON key')
+        result[key]=value
+    return result
+
+def _projection_from_pr_body(body):
+    if not isinstance(body,str) or len(body.encode('utf-8'))>60*1024:
+        raise ValueError('PR impact projection body is missing or oversized')
+    if body.count(IMPACT_PROJECTION_MARKER)!=1:
+        raise ValueError('PR impact projection marker is missing or ambiguous')
+    matches=re.findall(
+        r'(?m)^<!-- oasis7-impact-projection-b64:\s*([A-Za-z0-9+/=]+)\s*-->[ \t]*$',body,
+    )
+    if len(matches)!=1:
+        raise ValueError('PR impact projection marker is malformed')
+    encoded=matches[0]
+    try:
+        raw=base64.b64decode(encoded,validate=True)
+        if base64.b64encode(raw).decode('ascii')!=encoded:
+            raise ValueError('PR impact projection base64 is noncanonical')
+        projection=json.loads(raw.decode('utf-8'),object_pairs_hook=_json_object_without_duplicate_keys)
+    except (ValueError,UnicodeDecodeError,json.JSONDecodeError) as exc:
+        raise ValueError('PR impact projection payload is malformed') from exc
+    if not isinstance(projection,dict):
+        raise ValueError('PR impact projection payload must be an object')
+    return raw,projection
+
+def _load_checkout_module(path,module_name):
+    if not path.is_file() or path.is_symlink():
+        raise ValueError(f'trusted W module is unavailable: {path.name}')
+    spec=importlib.util.spec_from_file_location(module_name,path)
+    if spec is None or spec.loader is None:
+        raise ValueError(f'trusted W module cannot be loaded: {path.name}')
+    module=importlib.util.module_from_spec(spec)
+    sys.modules[module_name]=module
+    try: spec.loader.exec_module(module)
+    except Exception as exc: raise ValueError(f'trusted W module failed to load: {path.name}') from exc
+    return module
+
+def _validate_keyed_source_plan(repository,task_uid,pr_number,proof):
+    required=(
+        'request_key','request_identity','integration_base_oid','source_scope_oid',
+        'workflow_run_id','run_attempt','check_app_id','check_run_id','trusted_policy_context',
+        'effective_policy_identity','planner_inventory_authority','required_plan_v2_artifact_id',
+        'required_plan_v2_payload','required_result_v2_artifacts','execution_jobs',
+        'trusted_planner_inventory',
+    )
+    if not isinstance(proof,dict) or any(field not in proof for field in required):
+        raise ValueError('source required-plan v2 proof is incomplete')
+    helper=_adjacent_module('ci_required_artifact_v2')
+    try:
+        request_identity=helper.validate_request_identity(proof['request_identity'])
+        plan=helper.validate_plan_payload(proof['required_plan_v2_payload'],require_complete=True)
+    except (KeyError,TypeError,ValueError) as exc:
+        raise ValueError('source required-plan v2 proof is invalid') from exc
+    request_key=helper.request_key_for_identity(request_identity)
+    if proof['request_key']!=request_key or plan['request_key']!=request_key:
+        raise ValueError('source request key differs from the exact request identity')
+    if plan.get('request_identity')!=request_identity:
+        raise ValueError('source required-plan request identity differs from verified proof')
+    if (request_identity['repository']!=repository or request_identity['task_uid']!=task_uid
+            or request_identity['pr_number']!=pr_number
+            or plan['repository']!=repository or plan['task_uid']!=task_uid
+            or plan['pr_number']!=pr_number):
+        raise ValueError('source required-plan task or PR identity mismatch')
+    base=proof['integration_base_oid'];head=plan['source_head_oid'];scope=proof['source_scope_oid']
+    for oid,label in ((base,'immutable source integration base'),(head,'source head'),
+                      (scope,'source scope')):
+        if not isinstance(oid,str) or not OID.fullmatch(oid):
+            raise ValueError(f'{label} is invalid')
+    if (plan['integration_base_oid']!=base or plan['source_scope_oid']!=scope
+            or plan['source_head_oid']!=request_identity['source_head_oid']
+            or proof.get('workflow_run_id')!=plan['workflow_run_id']
+            or proof.get('run_attempt')!=plan['run_attempt']
+            or proof.get('check_app_id')!=plan['check_app_id']
+            or proof.get('check_run_id')!=plan['check_run_id']
+            or proof.get('effective_policy_identity')!=plan['effective_policy_identity']
+            or proof.get('planner_inventory_authority')!=plan['planner_inventory_authority']):
+        raise ValueError('source required-plan run, policy, B/H/S identity mismatch')
+    policy_context=proof['trusted_policy_context']
+    if (not isinstance(policy_context,dict)
+            or policy_context.get('repository')!=repository
+            or policy_context.get('workflow_ref')!=plan['workflow_ref']
+            or policy_context.get('effective_policy_identity')!=plan['effective_policy_identity']
+            or policy_context.get('planner_inventory_authority')!=plan['planner_inventory_authority']
+            or policy_context.get('workflow_sha')!=plan['workflow_sha']):
+        raise ValueError('source effective policy or W authority is not bound to the plan')
+    artifact_id=proof['required_plan_v2_artifact_id']
+    if type(artifact_id) is not int or artifact_id<1:
+        raise ValueError('source required-plan artifact identity is invalid')
+    issuer=plan['planner_inventory_issuer']
+    expected_inventory={**issuer,'producer':{**issuer['producer'],'artifact_id':artifact_id}}
+    if proof['trusted_planner_inventory']!=expected_inventory:
+        raise ValueError('source planner inventory is not bound to the live artifact')
+    invocation=plan['planner_invocation']
+    if (invocation.get('base_ref')!=base or invocation.get('head_ref')!=head
+            or invocation.get('scope_base_oid')!=scope or invocation.get('task_uid')!=task_uid
+            or invocation.get('impact_projection_sha256')!=request_identity['source_projection_digest']):
+        raise ValueError('source planner invocation differs from immutable B/H/S and projection')
+    return plan,request_identity,policy_context
+
+def _validate_source_request_journal(repository,proof,plan,request_identity):
+    """Rebind the source v2 run to this checkout's observed request journal."""
+    try:
+        request_helper=_adjacent_module('integration_executor_contract')
+        root=Path(__file__).resolve().parents[2]
+        path=request_helper._request_path(git_common_dir(root),proof['request_key'])
+        record=request_helper._read_request_record(path,proof['request_key'])
+    except (ImportError,OSError,ValueError,KeyError) as exc:
+        raise ValueError('source validation request journal is unavailable or invalid') from exc
+    if (record.get('status')!='observed' or record.get('identity')!=request_identity
+            or record.get('integration_base_oid')!=proof.get('integration_base_oid')
+            or record.get('run_id')!=plan['workflow_run_id']
+            or record.get('run_attempt')>plan['run_attempt']
+            or request_identity.get('repository')!=repository):
+        raise ValueError('source validation request journal does not bind B and the observed run')
+
+def trusted_local_target_inventory(repository,task_uid,pr_number,source_proof):
+    """Recompute a local Q observation from trusted W over exact M=merge(Q,H).
+
+    This reports target applicability inputs only. It does not attest tests,
+    produce execution IDs or turn local state into CI success evidence.
+    """
+    plan,request_identity,_source_policy=_validate_keyed_source_plan(
+        repository,task_uid,pr_number,source_proof,
+    )
+    _validate_source_request_journal(repository,source_proof,plan,request_identity)
+    base=source_proof['integration_base_oid'];head=plan['source_head_oid']
+    source_scope=source_proof['source_scope_oid']
+    live_pr,branch=identity(repository,task_uid,pr_number,base,head,allow_base_advance=True)
+    target_oid=live_pr.get('base',{}).get('sha')
+    if not isinstance(target_oid,str) or not OID.fullmatch(target_oid):
+        raise ValueError('current PR target Q is invalid')
+    if default_branch_head(repository,branch)!=target_oid:
+        raise ValueError('current PR target differs from the live default-branch head')
+    selected=current_request(
+        repository,task_uid,pr_number,base,head,branch,request_key=source_proof['request_key'],
+    )
+    if (selected is None or selected.get('id')!=plan['workflow_run_id']
+            or selected.get('run_attempt')!=plan['run_attempt']):
+        raise ValueError('source required-plan is not the latest keyed workflow attempt')
+    _source_check,verified_source_proof=verified_run(
+        repository,task_uid,pr_number,base,head,plan['workflow_run_id'],plan['check_app_id'],
+        request_key=source_proof['request_key'],expected_attempt=plan['run_attempt'],
+        request_identity=request_identity,
+        effective_policy=source_proof['trusted_policy_context']['effective_policy'],
+    )
+    verified_plan,verified_identity,_verified_policy=_validate_keyed_source_plan(
+        repository,task_uid,pr_number,verified_source_proof,
+    )
+    if verified_plan!=plan or verified_identity!=request_identity:
+        raise ValueError('live source required-plan evidence changed during target assessment')
+    plan=verified_plan
+    source_proof=verified_source_proof
+    if base!=target_oid:
+        comparison=gh('api',f'repos/{repository}/compare/{base}...{target_oid}')
+        if (not isinstance(comparison,dict)
+                or comparison.get('base_commit',{}).get('sha')!=base
+                or comparison.get('head_commit',{}).get('sha')!=target_oid
+                or comparison.get('merge_base_commit',{}).get('sha')!=base):
+            raise ValueError('immutable source integration base is not an ancestor of current Q')
+
+    target_policy=trusted_policy_context(repository,branch,target_oid,target_oid)
+    if (target_policy.get('repository')!=repository
+            or target_policy.get('workflow_ref')!=f'{repository}/{WORKFLOW}@refs/heads/{branch}'
+            or target_policy.get('workflow_sha')!=target_oid):
+        raise ValueError('current Q trusted policy context is malformed')
+
+    with _local_target_worktrees(
+        Path(__file__).resolve().parents[2],branch,pr_number,target_oid,head,source_scope,
+    ) as worktrees:
+        planner_root=worktrees['planner_root'];target_root=worktrees['target_root']
+        workflow_ref=target_policy['workflow_ref']
+        authority=target_policy.get('planner_inventory_authority')
+        if (not isinstance(authority,dict) or authority.get('planner_authority_oid')!=target_oid
+                or authority.get('repository')!=repository or authority.get('workflow_ref')!=workflow_ref):
+            raise ValueError('current Q planner authority is malformed')
+        projection_raw,projection_value=_projection_from_pr_body(live_pr.get('body'))
+        source_invocation=plan['planner_invocation']
+        changed_paths=source_invocation['changed_paths']
+        if changed_paths!=sorted(set(changed_paths)):
+            raise ValueError('source planner invocation changed paths are noncanonical')
+        if projection_value.get('projection_digest')!=request_identity['source_projection_digest']:
+            raise ValueError('PR projection differs from the immutable request digest')
+        source_diff=git(worktrees['repository_root'],'diff','--name-only',f'{source_scope}..{head}').splitlines()
+        if source_diff!=changed_paths:
+            raise ValueError('source planner changed paths differ from the exact S..H source diff')
+
+        projection_path=Path(worktrees['repository_root'])/'oasis7-source-projection.json'
+        projection_path.write_bytes(projection_raw)
+        impact_helper=_load_checkout_module(
+            planner_root/'scripts/pm/workflow-impact-projection.py',
+            'trusted_local_target_workflow_impact_projection',
+        )
+        try:
+            projection=impact_helper.load_verified_projection(
+                projection_path,
+                expected={'task_uid':task_uid,'source_head_oid':head,
+                          'scope_base_oid':source_scope,'changed_paths':changed_paths},
+                repo_root=worktrees['repository_root'],
+            )
+        except (OSError,TypeError,ValueError) as exc:
+            raise ValueError('source projection cannot be replayed under current trusted W') from exc
+        if projection.get('projection_digest')!=request_identity['source_projection_digest']:
+            raise ValueError('trusted W projection digest differs from the immutable request')
+
+        planner_script=planner_root/'scripts/plan-rust-required-scope.py'
+        config_path=planner_root/'scripts/ci-required-scope.v2.json'
+        command=[
+            sys.executable,str(planner_script),'--event-name','workflow_dispatch',
+            '--run-mode','integration_revalidation','--config',str(config_path),
+            '--base-ref',base,'--head-ref',head,'--task-uid',task_uid,
+            '--scope-base-oid',source_scope,'--impact-projection',str(projection_path),
+        ]
+        for path in changed_paths:
+            command.extend(('--changed-path',path))
+        try:
+            replay=subprocess.run(command,cwd=planner_root,check=True,capture_output=True,text=True)
+        except (OSError,subprocess.CalledProcessError) as exc:
+            raise ValueError('current Q trusted planner replay failed') from exc
+        planner_output=replay.stdout
+        inventory_module=_load_checkout_module(
+            planner_root/'scripts/pm/ci_required_inventory.py',
+            'trusted_local_target_required_inventory',
+        )
+        try:
+            target_inventory=inventory_module.build_required_inventory(
+                planner_root,target_root,worktrees['input_scope_commit_oid'],planner_output,
+                repository=repository,workflow_ref=workflow_ref,
+                planner_authority_oid=target_oid,event_name='workflow_dispatch',
+                run_mode='integration_revalidation',changed_paths=changed_paths,
+                base_ref=base,head_ref=head,task_uid=task_uid,
+                scope_base_oid=source_scope,impact_projection=str(projection_path),
+                run_id=plan['workflow_run_id'],run_attempt=plan['run_attempt'],
+                check_app_id=plan['check_app_id'],check_run_id=plan['check_run_id'],
+            )
+        except (OSError,ValueError,KeyError,TypeError) as exc:
+            raise ValueError('current Q complete required-unit inventory could not be built') from exc
+        if (target_inventory.get('planner_authority_oid')!=target_oid
+                or target_inventory.get('planner_config_sha256')!=authority.get('planner_config_sha256')
+                or target_inventory.get('planner_output') is None
+                or target_inventory.get('closure_status') not in ('complete','unknown')):
+            raise ValueError('current Q inventory is not bound to the live W authority')
+        local_invocation=target_inventory.get('planner_invocation')
+        if not isinstance(local_invocation,dict) or 'producer' not in local_invocation:
+            raise ValueError('current Q planner replay lacks its internally validated invocation')
+        local_invocation={key:value for key,value in local_invocation.items() if key!='producer'}
+        scope_module=_load_checkout_module(
+            planner_root/'scripts/pm/ci_input_scope.py','trusted_local_target_input_scope',
+        )
+        issuer=target_inventory.get('planner_inventory_issuer')
+        if not isinstance(issuer,dict):
+            raise ValueError('current Q inventory digest is unavailable')
+        if (issuer.get('target_oid')!=worktrees['input_scope_commit_oid']
+                or issuer.get('target_tree_oid')!=worktrees['input_scope_tree_oid']):
+            raise ValueError('current Q inventory target differs from exact M/T')
+        try:
+            observation=scope_module.build_target_observation(
+                authority=authority,planner_invocation=local_invocation,
+                repository=repository,task_uid=task_uid,pr_number=pr_number,
+                source_head_oid=head,source_scope_oid=source_scope,
+                assessed_target_oid=target_oid,
+                input_scope_commit_oid=worktrees['input_scope_commit_oid'],
+                input_scope_tree_oid=worktrees['input_scope_tree_oid'],
+                effective_policy_identity=target_policy['effective_policy_identity'],
+                unit_specs=target_inventory['unit_specs'],
+                product_corpus=target_inventory['product_corpus'],
+            )
+            unknown=target_inventory['closure_status']=='unknown'
+            target_scope=scope_module.build_input_scope_snapshot(
+                str(target_root),worktrees['input_scope_commit_oid'],
+                target_inventory['unit_specs'],target_inventory['product_corpus'],
+                target_observation=observation,
+                closure_status='unknown' if unknown else 'complete',
+                closure_reason=target_inventory['closure_reason'] if unknown else None,
+                fallback_unit_ids=[item['unit_id'] for item in target_inventory['unit_specs']] if unknown else None,
+                fallback_scope_complete=unknown,
+            )
+        except (OSError,ValueError,KeyError,TypeError) as exc:
+            raise ValueError('current Q local target observation or input scope is invalid') from exc
+
+        # Freshly bind the assessment window after the relatively expensive W
+        # replay. A changed ref, PR head, or target invalidates this result.
+        fresh_pr,fresh_branch=identity(repository,task_uid,pr_number,base,head,allow_base_advance=True)
+        selected_after=current_request(
+            repository,task_uid,pr_number,base,head,branch,request_key=source_proof['request_key'],
+        )
+        if (fresh_branch!=branch or fresh_pr.get('base',{}).get('sha')!=target_oid
+                or default_branch_head(repository,branch)!=target_oid
+                or selected_after!=selected):
+            raise ValueError('PR or default branch moved during local target observation')
+        _fresh_projection_raw,fresh_projection=_projection_from_pr_body(fresh_pr.get('body'))
+        if fresh_projection!=projection_value:
+            raise ValueError('PR impact projection changed during local target observation')
+        return {
+            'schema':LOCAL_TARGET_INVENTORY_SCHEMA,
+            'repository':repository,'task_uid':task_uid,'pr_number':pr_number,
+            'integration_base_oid':base,'source_head_oid':head,'source_scope_oid':source_scope,
+            'assessed_target_oid':target_oid,
+            'input_scope_commit_oid':worktrees['input_scope_commit_oid'],
+            'input_scope_tree_oid':worktrees['input_scope_tree_oid'],
+            'planner_authority_oid':target_oid,
+            'planner_config_sha256':authority['planner_config_sha256'],
+            'effective_policy':target_policy['effective_policy'],
+            'effective_policy_identity':target_policy['effective_policy_identity'],
+            'target_observation':observation,'input_scope':target_scope,
+            'required_test_units':target_scope['required_test_units'],
+            'unit_specs':target_inventory['unit_specs'],
+            'product_corpus':target_inventory['product_corpus'],
+            'closure_status':target_inventory['closure_status'],
+        }
 
 def _executor_contract(root,approved_digests):
     # Imported lazily so old isolated workflow bundles remain compatible. The

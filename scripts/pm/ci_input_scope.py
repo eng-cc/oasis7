@@ -342,6 +342,8 @@ def _validate_local_planner_invocation(
     output_digest = _digest(value["planner_output_sha256"], "planner_invocation.planner_output_sha256")
     paths = [_repo_path(path, "planner_invocation.changed_paths[]")
              for path in _strings(value["changed_paths"], "planner_invocation.changed_paths")]
+    if paths != sorted(set(paths)):
+        raise InputScopeError("local planner invocation changed paths must be sorted and unique")
     digest = _digest(value["digest"], "planner_invocation.digest")
     normalized = {
         "schema": LOCAL_PLANNER_INVOCATION_SCHEMA,

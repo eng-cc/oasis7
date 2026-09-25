@@ -98,6 +98,8 @@ def source_plan(*, reuse_policies=None):
         "pr_number": 7,
         "source_head_oid": HEAD,
         "source_scope_oid": SOURCE_SCOPE,
+        "integration_base_oid": "1" * 40,
+        "source_projection_digest": DIGEST,
         "review_applicability_digest": DIGEST,
         "required_test_units": [CORPUS_UNIT, "unit-a"],
         "required_review_roles": ["runtime_engineer"],
@@ -620,6 +622,31 @@ class ApplicabilityDecisionTests(unittest.TestCase):
             with self.subTest(field=field):
                 target = target_snapshot()
                 target["input_scope"]["target_observation"][field] = replacement
+                decision = self.evaluate(target=target)
+                self.assertEqual("blocked", result_status(decision, "test_evidence"))
+                self.assertIn("APPLICABILITY_INPUT_INVALID", decision.blockers)
+
+    def test_target_planner_replay_must_preserve_source_b_and_projection(self):
+        for field, replacement in (
+            ("base_ref", "2" * 40),
+            ("impact_projection_sha256", "sha256:" + "0" * 64),
+        ):
+            with self.subTest(field=field):
+                target = target_snapshot()
+                observation = target["input_scope"]["target_observation"]
+                invocation = {**observation["planner_invocation"], field: replacement}
+                invocation["digest"] = input_scope.local_planner_invocation_digest(invocation)
+                observation = {**observation, "planner_invocation": invocation}
+                target["input_scope"]["target_observation"] = observation
+                target["input_scope"]["target_observation"] = input_scope.build_target_observation(
+                    authority=observation["authority"], planner_invocation=invocation,
+                    repository=REPOSITORY, task_uid=UID, pr_number=7,
+                    source_head_oid=HEAD, source_scope_oid=SOURCE_SCOPE,
+                    assessed_target_oid=TARGET, input_scope_commit_oid=TARGET,
+                    input_scope_tree_oid=TARGET_TREE,
+                    effective_policy_identity=effective_policy_identity(),
+                    unit_specs=target["unit_specs"], product_corpus=target["product_corpus"],
+                )
                 decision = self.evaluate(target=target)
                 self.assertEqual("blocked", result_status(decision, "test_evidence"))
                 self.assertIn("APPLICABILITY_INPUT_INVALID", decision.blockers)

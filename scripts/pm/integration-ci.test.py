@@ -408,6 +408,181 @@ class IntegrationTests(unittest.TestCase):
    self.assertEqual([base,head],git(destination,'rev-list','--parents','-n','1','HEAD').split()[1:])
    self.assertEqual(destination.resolve(),Path(result['integration_worktree']))
 
+class LocalTargetObservationTests(unittest.TestCase):
+ def setUp(self):
+  spec=importlib.util.spec_from_file_location('integration_ci_p1_test',HERE/'integration_ci.py')
+  self.api=importlib.util.module_from_spec(spec);spec.loader.exec_module(self.api)
+
+ def git(self,root,*args):
+  return subprocess.check_output(['git','-C',str(root),*args],text=True).strip()
+
+ def source_proof_fixture(self):
+  spec=importlib.util.spec_from_file_location(
+   'ci_required_artifact_v2_test_for_local_target',HERE/'ci-required-artifact-v2.test.py',
+  )
+  module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+  plan=module.valid_plan()
+  artifact_id=1234
+  policy_context={
+   'schema':'oasis7-trusted-ci-reuse-policy-context/v1',
+   'repository':plan['repository'],'workflow_ref':plan['workflow_ref'],
+   'workflow_sha':plan['workflow_sha'],
+   'effective_policy_identity':plan['effective_policy_identity'],
+   'planner_inventory_authority':plan['planner_inventory_authority'],
+  }
+  proof={
+   'request_key':plan['request_key'],'request_identity':plan['request_identity'],
+   'integration_base_oid':plan['integration_base_oid'],
+   'source_scope_oid':plan['source_scope_oid'],
+   'workflow_run_id':plan['workflow_run_id'],'run_attempt':plan['run_attempt'],
+   'check_app_id':plan['check_app_id'],'check_run_id':plan['check_run_id'],
+   'trusted_policy_context':policy_context,
+   'effective_policy_identity':plan['effective_policy_identity'],
+   'planner_inventory_authority':plan['planner_inventory_authority'],
+   'required_plan_v2_artifact_id':artifact_id,
+   'required_plan_v2_payload':plan,
+   'required_result_v2_artifacts':[{'artifact_id':1235,'name':'result','payload':{}}],
+   'execution_jobs':[module.gate_job(plan)],
+   'trusted_planner_inventory':{
+    **plan['planner_inventory_issuer'],
+    'producer':{**plan['planner_inventory_issuer']['producer'],'artifact_id':artifact_id},
+   },
+  }
+  return proof,plan
+
+ def test_source_plan_context_and_journal_keep_immutable_b_h_s_and_request(self):
+  proof,expected_plan=self.source_proof_fixture()
+  plan,identity,context=self.api._validate_keyed_source_plan(
+   'eng-cc/oasis7',expected_plan['task_uid'],expected_plan['pr_number'],proof,
+  )
+  self.assertEqual(expected_plan,plan)
+  self.assertEqual(expected_plan['request_identity'],identity)
+  self.assertEqual(expected_plan['planner_inventory_authority'],context['planner_inventory_authority'])
+  request_helper=self.api._adjacent_module('integration_executor_contract')
+  with tempfile.TemporaryDirectory() as temp:
+   journal=Path(temp)
+   record={
+    'schema':request_helper.VALIDATION_REQUEST_SCHEMA,
+    'request_key':proof['request_key'],'identity':identity,
+    'integration_base_oid':proof['integration_base_oid'],
+    'dispatch_attempts':1,'status':'observed',
+    'run_id':expected_plan['workflow_run_id'],'run_attempt':1,
+   }
+   path=request_helper._request_path(journal,proof['request_key'])
+   path.parent.mkdir(parents=True,exist_ok=True)
+   path.write_bytes(request_helper.canonical_bytes(record)+b'\n')
+   with patch.object(self.api,'git_common_dir',return_value=journal):
+    self.api._validate_source_request_journal('eng-cc/oasis7',proof,plan,identity)
+    for field,replacement in (
+     ('integration_base_oid','9'*40),('run_id',999),('run_attempt',3),
+    ):
+     changed={**record,field:replacement}
+     path.write_bytes(request_helper.canonical_bytes(changed)+b'\n')
+     with self.subTest(field=field),patch.object(self.api,'git_common_dir',return_value=journal):
+      with self.assertRaisesRegex(ValueError,'journal'):
+       self.api._validate_source_request_journal('eng-cc/oasis7',proof,plan,identity)
+
+ def test_local_target_reader_rejects_unbound_proof_before_live_reads(self):
+  with patch.object(self.api,'identity') as read_pr, \
+       patch.object(self.api,'current_request') as read_request, \
+       patch.object(self.api,'verified_run') as read_run:
+   with self.assertRaisesRegex(ValueError,'source required-plan v2 proof is incomplete'):
+    self.api.trusted_local_target_inventory(
+     'eng-cc/oasis7','task_'+'1'*32,7,{},
+    )
+   read_pr.assert_not_called()
+   read_request.assert_not_called()
+   read_run.assert_not_called()
+
+ def remote_fixture(self,*,conflict=False):
+  temp=tempfile.TemporaryDirectory()
+  root=Path(temp.name)/'checkout';root.mkdir()
+  remote=Path(temp.name)/'origin.git'
+  subprocess.run(['git','init','--bare','--quiet',str(remote)],check=True)
+  subprocess.run(['git','init','--quiet','-b','main',str(root)],check=True)
+  self.git(root,'config','user.name','Local target test')
+  self.git(root,'config','user.email','local-target@example.invalid')
+  (root/'shared.txt').write_text('base\n',encoding='utf-8')
+  self.git(root,'add','.');self.git(root,'commit','-qm','base')
+  source_scope=self.git(root,'rev-parse','HEAD')
+  self.git(root,'switch','-q','-c','source')
+  if conflict:
+   (root/'shared.txt').write_text('source\n',encoding='utf-8')
+  else:
+   (root/'source.txt').write_text('source\n',encoding='utf-8')
+  self.git(root,'add','.');self.git(root,'commit','-qm','source')
+  head=self.git(root,'rev-parse','HEAD')
+  self.git(root,'remote','add','origin',str(remote))
+  self.git(root,'push','-q','origin',f'{head}:refs/pull/7/head')
+  self.git(root,'switch','-q','main')
+  if conflict:
+   (root/'shared.txt').write_text('target\n',encoding='utf-8')
+  else:
+   (root/'target.txt').write_text('target\n',encoding='utf-8')
+  self.git(root,'add','.');self.git(root,'commit','-qm','target advance')
+  target=self.git(root,'rev-parse','HEAD')
+  self.git(root,'push','-q','origin','main')
+  return temp,root,source_scope,head,target
+
+ def test_exact_q_h_merge_uses_isolated_clean_worktrees_and_parent_order(self):
+  temp,root,source_scope,head,target=self.remote_fixture()
+  try:
+   before=self.git(root,'rev-parse','HEAD')
+   with self.api._local_target_worktrees(
+       root,'main',7,target,head,source_scope,
+   ) as value:
+    repository=value['repository_root'];planner=value['planner_root'];checkout=value['target_root']
+    merge_tree=self.git(repository,'merge-tree','--write-tree',target,head).splitlines()[0]
+    parents=self.git(checkout,'rev-list','--parents','-n','1','HEAD').split()
+    self.assertEqual([value['input_scope_commit_oid'],target,head],parents)
+    self.assertEqual(merge_tree,value['input_scope_tree_oid'])
+    self.assertEqual(target,self.git(planner,'rev-parse','HEAD'))
+    self.assertEqual(value['input_scope_commit_oid'],self.git(checkout,'rev-parse','HEAD'))
+    self.assertTrue((checkout/'source.txt').is_file())
+    self.assertTrue((checkout/'target.txt').is_file())
+    self.assertEqual('',self.git(planner,'status','--porcelain','--untracked-files=all'))
+    self.assertEqual('',self.git(checkout,'status','--porcelain','--untracked-files=all'))
+   self.assertEqual(before,self.git(root,'rev-parse','HEAD'))
+   self.assertEqual('',self.git(root,'status','--porcelain','--untracked-files=all'))
+  finally:
+   temp.cleanup()
+
+ def test_exact_q_h_merge_rejects_ref_drift_wrong_scope_and_conflicts(self):
+  temp,root,source_scope,head,target=self.remote_fixture()
+  try:
+   with self.assertRaisesRegex(ValueError,'fetched default-branch or PR head differs'):
+    with self.api._local_target_worktrees(root,'main',7,'f'*40,head,source_scope):
+     self.fail('wrong Q unexpectedly accepted')
+   with self.assertRaisesRegex(ValueError,'merge base differs'):
+    with self.api._local_target_worktrees(root,'main',7,target,head,'e'*40):
+     self.fail('wrong source scope unexpectedly accepted')
+  finally:
+   temp.cleanup()
+  conflict_temp,conflict_root,conflict_scope,conflict_head,conflict_target=self.remote_fixture(conflict=True)
+  try:
+   with self.assertRaisesRegex(ValueError,'merge has conflicts'):
+    with self.api._local_target_worktrees(
+        conflict_root,'main',7,conflict_target,conflict_head,conflict_scope,
+    ):
+     self.fail('conflicting Q/H merge unexpectedly accepted')
+  finally:
+   conflict_temp.cleanup()
+
+ def test_projection_marker_is_unique_canonical_and_duplicate_keys_are_rejected(self):
+  value={'task_uid':'task_'+'1'*32}
+  raw=json.dumps(value,separators=(',',':')).encode()
+  encoded=base64.b64encode(raw).decode()
+  body='PR context\n<!-- oasis7-impact-projection-b64: '+encoded+' -->\n'
+  parsed_raw,parsed=self.api._projection_from_pr_body(body)
+  self.assertEqual(raw,parsed_raw)
+  self.assertEqual(value,parsed)
+  with self.assertRaisesRegex(ValueError,'missing or ambiguous'):
+   self.api._projection_from_pr_body(body+body)
+  duplicate=base64.b64encode(b'{"task_uid":"one","task_uid":"two"}').decode()
+  with self.assertRaisesRegex(ValueError,'malformed'):
+   self.api._projection_from_pr_body('<!-- oasis7-impact-projection-b64: '+duplicate+' -->')
+
+
 class ProvenanceTests(unittest.TestCase):
  def setUp(self):
   spec=importlib.util.spec_from_file_location('integration_ci',HERE/'integration_ci.py');self.api=importlib.util.module_from_spec(spec);spec.loader.exec_module(self.api)
