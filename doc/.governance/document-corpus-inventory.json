@@ -1981,7 +1981,7 @@
     },
     {
       "path": "doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md",
-      "content_sha256": "66dd00d30b687bd09531c89b2734891719c0a176e074f24a96215549fcfb723b",
+      "content_sha256": "92000bbde5f734191f6fbeed9ec49b0bb1448eeba2151e46a0740776c378d356",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
