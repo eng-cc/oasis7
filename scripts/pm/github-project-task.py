@@ -48,6 +48,11 @@ traceability_context_keys = frozenset(
 )
 traceability_issue_keys = frozenset({"loop_binding", *traceability_context_keys})
 project_lifecycle_keys = frozenset({"status", "workflow_phase"})
+ISSUE_ROUTE_FIELDS = (
+    "status", "workflow_phase", "completion_mode", "aggregate_plan_comment_id",
+    "aggregate_plan_sha256", "aggregate_completion_receipt_sha256", "pr_number", "pr_url",
+)
+LIVE_ROUTE_CACHE_FIELDS = ISSUE_ROUTE_FIELDS
 identity_bound_cache_keys = frozenset(
     {
         "repository", "canonical_worktree", "task_branch", "default_branch",
@@ -491,6 +496,26 @@ def issue_section_rows(body: str, header: str, *, references: bool) -> list[str]
     return values
 
 
+def strict_issue_scalar_fields(body: str, keys: tuple[str, ...]) -> dict[str, str]:
+    """Read safety-sensitive Issue scalars without accepting first-match ambiguity."""
+    fields: dict[str, str] = {}
+    for key in keys:
+        lines = re.findall(
+            rf"^[ \t]*(?:-[ \t]+)?{re.escape(key)}\b[^\n]*$",
+            body,
+            re.MULTILINE,
+        )
+        if not lines:
+            continue
+        if len(lines) != 1:
+            die(f"task Issue {key} field is duplicated")
+        match = re.fullmatch(rf"[ \t]*-[ \t]+{re.escape(key)}: `([^`\n]*)`[ \t]*", lines[0])
+        if not match:
+            die(f"task Issue {key} field is malformed")
+        fields[key] = match.group(1)
+    return fields
+
+
 def issue_task_fields(body: str) -> dict[str, Any]:
     body = body.replace("\r\n", "\n")
     fields: dict[str, Any] = {}
@@ -535,7 +560,8 @@ def issue_task_fields(body: str) -> dict[str, Any]:
         except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             die(f"invalid traceability context: {exc}")
         fields.update(context)
-    for key in ("owner_role", "module", "status", "workflow_phase", "priority", "worktree_hint", "source_signal", "source_type", "severity", "completion_mode", "aggregate_plan_comment_id", "aggregate_plan_sha256", "aggregate_completion_receipt_sha256", "bootstrap_base_oid", "non_pr_completion_evidence_sha256", "last_closed_at"):
+    fields.update(strict_issue_scalar_fields(body, ISSUE_ROUTE_FIELDS))
+    for key in ("owner_role", "module", "priority", "worktree_hint", "source_signal", "source_type", "severity", "bootstrap_base_oid", "non_pr_completion_evidence_sha256", "last_closed_at"):
         match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
         if match:
             fields[key] = match.group(1)
@@ -572,10 +598,6 @@ def issue_task_fields(body: str) -> dict[str, Any]:
     if hold_values:
         hold_values["active"] = str(hold_values.get("active", "false")).lower() == "true"
         fields["merge_hold"] = hold_values
-    for key in ("pr_url", "pr_number"):
-        match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
-        if match:
-            fields[key] = match.group(1)
     for key, header in (("source_refs", "Source refs:"), ("doc_refs", "Doc refs:"), ("related_prd", "Related PRD:")):
         values = issue_section_rows(body, header, references=True)
         if values is not None:
@@ -1623,6 +1645,42 @@ def require_record(args: argparse.Namespace) -> tuple[pathlib.Path, dict[str, An
     return mapping_path, mapping, record
 
 
+def require_live_issue_route_matches_cache(repo: str, task_uid: str, record: dict[str, Any]) -> dict[str, Any]:
+    """Require the canonical Issue route and lifecycle to match the local projection."""
+    try:
+        live = github_issue_record(repo, task_uid)
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError, RuntimeError) as exc:
+        die(f"done transition: canonical live Issue route lookup failed closed: {exc}")
+    if not isinstance(live, dict):
+        die("done transition: canonical live Issue route is unavailable")
+    if (live.get("task_uid") != task_uid or type(live.get("issue_number")) is not int
+            or type(record.get("issue_number")) is not int
+            or live.get("issue_number") != record.get("issue_number")):
+        die("done transition: canonical live Issue identity differs from task mapping")
+
+    mismatched = []
+    for key in LIVE_ROUTE_CACHE_FIELDS:
+        cached_value = record.get(key)
+        live_value = live.get(key)
+        if key == "pr_number":
+            cached_value = None if cached_value in (None, "") else str(cached_value)
+            live_value = None if live_value in (None, "") else str(live_value)
+        else:
+            cached_value = None if cached_value in (None, "") else cached_value
+            live_value = None if live_value in (None, "") else live_value
+        if cached_value != live_value:
+            mismatched.append(key)
+    if mismatched:
+        aggregate_route = (
+            record.get("completion_mode") == "ordered_delivery_aggregate"
+            or live.get("completion_mode") == "ordered_delivery_aggregate"
+            or any(key.startswith("aggregate_") for key in mismatched)
+        )
+        route_name = "aggregate route/pointers" if aggregate_route else "Issue route/lifecycle"
+        die(f"done transition: canonical live {route_name} differ from task mapping ({', '.join(mismatched)})")
+    return live
+
+
 def recover_missing_project_item(args: argparse.Namespace, record: dict[str, Any]) -> None:
     if record.get("project_item_id"):
         return
@@ -1914,6 +1972,8 @@ def command_move_task(args: argparse.Namespace) -> int:
             "move-task: ordered aggregate completion requires the exact aggregate receipt, plan, candidate, "
             "and evidence through task-closeout.sh; generic move-task cannot publish aggregate task_done"
         )
+    if args.to_status == "done":
+        require_live_issue_route_matches_cache(args.repo, args.task_uid, record)
     if args.to_status in GATE_OWNED_STATUSES:
         canonical_writer = (
             "task-closeout.sh with canonical review/CI evidence"
@@ -1991,6 +2051,8 @@ def command_closeout_task(args: argparse.Namespace) -> int:
         die("closeout-task: ordered aggregate completion requires an aggregate receipt")
     if args.aggregate_receipt and original.get("completion_mode") != "ordered_delivery_aggregate":
         die("closeout-task: aggregate receipt requires ordered aggregate task truth")
+    if args.to_status == "done":
+        require_live_issue_route_matches_cache(getattr(args, "repo", DEFAULT_REPO), args.task_uid, original)
     if args.to_status != "deferred":
         if claim.get("status") != "verified" or not claim.get("allowed_to_claim"):
             die("closeout-task: verified immutable claim evidence is required")
@@ -2195,9 +2257,82 @@ def command_bind_aggregate_plan(args: argparse.Namespace) -> int:
     return 0
 
 
+def validate_canonical_aggregate_terminal_receipt(
+    args: argparse.Namespace,
+    record: dict[str, Any],
+    receipt: Any,
+    receipt_bytes: bytes,
+) -> None:
+    """Accept only the finalizer's exact, canonical durable aggregate receipt."""
+    root = args.root.resolve()
+    common = pathlib.Path(run_text(["git", "-C", str(root), "rev-parse", "--git-common-dir"]).strip())
+    if not common.is_absolute():
+        common = (root / common).resolve()
+    durable_root = common / "oasis7-workflow-receipts"
+    task_root = durable_root / args.task_uid
+    terminal_path = task_root / "aggregate-terminal-receipt.json"
+    supplied_path = pathlib.Path(args.receipt_json)
+    try:
+        supplied_resolved = supplied_path.resolve(strict=True)
+        terminal_resolved = terminal_path.resolve(strict=True)
+        canonical_bytes = terminal_path.read_bytes()
+    except OSError:
+        die("set-phase: canonical aggregate terminal receipt is not durably present")
+    if (durable_root.is_symlink() or task_root.is_symlink() or terminal_path.is_symlink()
+            or supplied_resolved != terminal_resolved or canonical_bytes != receipt_bytes):
+        die("set-phase: aggregate terminal receipt is not at its canonical durable identity")
+
+    expected_keys = {
+        "schema", "receipt_type", "issuer", "task_uid", "repository", "issue_number",
+        "aggregate_completion_receipt_sha256", "plan_comment_id", "observed_at", "receipt_sha256",
+    }
+    if not isinstance(receipt, dict) or set(receipt) != expected_keys:
+        die("set-phase: canonical aggregate terminal receipt schema is incomplete or ambiguous")
+    expected_storage = (json.dumps(receipt, sort_keys=True, indent=2) + "\n").encode("utf-8")
+    if receipt_bytes != expected_storage:
+        die("set-phase: aggregate terminal receipt bytes are not canonical finalizer output")
+    payload = {key: value for key, value in receipt.items() if key != "receipt_sha256"}
+    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    completion_sha = str(record.get("aggregate_completion_receipt_sha256") or "")
+    plan_comment_id = str(record.get("aggregate_plan_comment_id") or "")
+    plan_sha = str(record.get("aggregate_plan_sha256") or "")
+    expected_repository = str(args.repo or "")
+    cached_repository = str(record.get("repository") or expected_repository)
+    issue_number = record.get("issue_number")
+    try:
+        observed = datetime.fromisoformat(str(receipt.get("observed_at") or "").replace("Z", "+00:00"))
+        observed_valid = observed.tzinfo is not None
+    except ValueError:
+        observed_valid = False
+    if (
+        receipt.get("schema") != "oasis7.aggregate-terminal/v1"
+        or receipt.get("receipt_type") != "oasis7_aggregate_terminal"
+        or receipt.get("issuer") != "aggregate-task-finalizer"
+        or receipt.get("task_uid") != args.task_uid
+        or cached_repository != expected_repository
+        or receipt.get("repository") != expected_repository
+        or type(issue_number) is not int
+        or type(receipt.get("issue_number")) is not int
+        or receipt.get("issue_number") != issue_number
+        or not re.fullmatch(r"[0-9a-f]{64}", completion_sha)
+        or receipt.get("aggregate_completion_receipt_sha256") != completion_sha
+        or not plan_comment_id
+        or not plan_comment_id.isdecimal()
+        or int(plan_comment_id) <= 0
+        or type(receipt.get("plan_comment_id")) is not int
+        or receipt.get("plan_comment_id") <= 0
+        or not re.fullmatch(r"sha256:[0-9a-f]{64}", plan_sha)
+        or str(receipt.get("plan_comment_id")) != plan_comment_id
+        or not observed_valid
+        or receipt.get("receipt_sha256") != hashlib.sha256(canonical).hexdigest()
+    ):
+        die("set-phase: canonical aggregate terminal receipt identity or digest mismatch")
+
+
 def command_set_phase(args: argparse.Namespace) -> int:
     mapping_path, _mapping, original = require_record(args)
-    receipt = json.loads(pathlib.Path(args.receipt_json).read_text(encoding="utf-8"))
+    receipt_bytes = pathlib.Path(args.receipt_json).read_bytes()
+    receipt = json.loads(receipt_bytes.decode("utf-8"))
     current = str(original.get("workflow_phase") or "")
     aggregate_terminal = args.phase == "post_merge_done" and original.get("completion_mode") == "ordered_delivery_aggregate"
     allowed_transition = args.phase in ALLOWED_PHASE_TRANSITIONS.get(current, set()) or (aggregate_terminal and current == "task_done")
@@ -2224,10 +2359,11 @@ def command_set_phase(args: argparse.Namespace) -> int:
         ], text=True, capture_output=True)
         if validation.returncode or hashlib.sha256(pathlib.Path(args.aggregate_receipt).read_bytes()).hexdigest() != digest:
             die("set-phase: aggregate completion receipt no longer verifies live")
+        validate_canonical_aggregate_terminal_receipt(args, original, receipt, receipt_bytes)
     record = json.loads(json.dumps(original))
     record["workflow_phase"] = args.phase
     record.setdefault("phase_receipts", {})[args.phase] = receipt
-    record.setdefault("phase_receipt_sha256", {})[args.phase] = hashlib.sha256(pathlib.Path(args.receipt_json).read_bytes()).hexdigest()
+    record.setdefault("phase_receipt_sha256", {})[args.phase] = hashlib.sha256(receipt_bytes).hexdigest()
     comment_url = issue_comment(args.repo, int(record["issue_number"]), evidence_body(
         args.task_uid, args.role, args.phase,
         {"Workflow Phase": args.phase, "Receipt Type": receipt.get("receipt_type"),

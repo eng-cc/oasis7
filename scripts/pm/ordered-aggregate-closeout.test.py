@@ -206,6 +206,35 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
         self.assertFalse(any(event[0] == "issue_write" for event in events))
         self.assertFalse(any(event[0] == "mapping_write" for event in events))
 
+    def test_binder_rejects_duplicate_route_and_plan_pointer_before_writes(self):
+        plan = plan_for()
+        plan_body = "<!-- oasis7-aggregate-delivery-plan/v1 -->\n" + canonical_bytes(plan).decode()
+        plan_sha = "sha256:" + hashlib.sha256(plan_body.encode("utf-8")).hexdigest()
+        cases = (
+            (
+                "conflicting completion mode",
+                f"<!-- oasis7-pm-task -->\ntask_uid: {UID}\n"
+                "- completion_mode: `ordered_delivery_aggregate`\n"
+                "- completion_mode: `non_pr_task`\n",
+            ),
+            (
+                "conflicting immutable plan pointer",
+                f"<!-- oasis7-pm-task -->\ntask_uid: {UID}\n"
+                "- completion_mode: `ordered_delivery_aggregate`\n"
+                f"- aggregate_plan_comment_id: `6001`\n- aggregate_plan_sha256: `{plan_sha}`\n"
+                "- aggregate_plan_comment_id: `6002`\n"
+                f"- aggregate_plan_sha256: `sha256:{'9' * 64}`\n",
+            ),
+        )
+        for name, body in cases:
+            with self.subTest(name=name):
+                outcome, events, writes = self.invoke_binder(live_issue_body=body)
+                self.assertEqual(writes, [], f"binder mutated task truth for {name}")
+                self.assertFalse(any(event[0] == "pr_read" for event in events),
+                                 f"binder read delivery PRs for {name}")
+                self.assertFalse(any(event[0] in {"issue_write", "mapping_write"} for event in events))
+                self.assertIsNotNone(outcome, f"binder accepted {name}")
+
     def test_move_task_rejects_cached_aggregate_closeout_without_exact_receipt(self):
         record = {
             "task_uid": UID, "issue_number": 4035, "issue_url": f"https://github.com/{REPO}/issues/4035",
@@ -230,9 +259,88 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
                 mock.patch.object(self.task, "load_sync_module",
                                   return_value=SimpleNamespace(workflow_phase_for=lambda _status: "task_done")), \
                 contextlib.redirect_stdout(io.StringIO()):
-            with self.assertRaisesRegex(SystemExit, "aggregate"):
+            failure = None
+            try:
                 self.task.command_move_task(args)
-        self.assertEqual(effects, [])
+            except SystemExit as exc:
+                failure = str(exc)
+        self.assertEqual(effects, [], "generic move-task wrote task truth despite live aggregate route")
+        self.assertIsNotNone(failure, "generic move-task accepted live aggregate route")
+        self.assertIn("aggregate", failure or "")
+        self.assertEqual(record, original)
+
+    def test_move_task_rejects_live_aggregate_when_cached_route_is_nonaggregate_before_effects(self):
+        record = {
+            "task_uid": UID, "issue_number": 4035, "issue_url": f"https://github.com/{REPO}/issues/4035",
+            "status": "committed", "workflow_phase": "execution", "completion_mode": "non_pr_task",
+            "project_item_id": "ITEM1",
+            "last_closed_at": "2026-09-25T10:00:00Z",
+            "claim_verifications": [{
+                "claim_type": "task_complete", "status": "verified", "verification_exit_code": 0,
+            }],
+        }
+        original = json.loads(json.dumps(record))
+        live = {"task_uid": UID, "issue_number": 4035, "completion_mode": "ordered_delivery_aggregate",
+                "status": "committed", "workflow_phase": "execution"}
+        args = Namespace(task_uid=UID, to_status="done", repo=REPO, json=False)
+        effects = []
+        with mock.patch.object(self.task, "require_record",
+                               return_value=(pathlib.Path("tasks.json"), {}, record)), \
+                mock.patch.object(self.task, "github_issue_record", return_value=live), \
+                mock.patch.object(self.task, "update_issue_body",
+                                  side_effect=lambda *a, **k: effects.append("issue")), \
+                mock.patch.object(self.task, "merge_task_mapping",
+                                  side_effect=lambda *a, **k: effects.append("mapping")), \
+                mock.patch.object(self.task, "load_sync_module",
+                                  return_value=SimpleNamespace(workflow_phase_for=lambda _status: "task_done")), \
+                contextlib.redirect_stdout(io.StringIO()):
+            failure = None
+            try:
+                self.task.command_move_task(args)
+            except SystemExit as exc:
+                failure = str(exc)
+        self.assertEqual(effects, [], "generic move-task wrote task truth despite live aggregate route")
+        self.assertIsNotNone(failure, "generic move-task accepted live aggregate route")
+        self.assertIn("aggregate", failure or "")
+        self.assertEqual(record, original)
+
+    def test_closeout_task_rejects_live_aggregate_when_cached_route_is_nonaggregate_before_effects(self):
+        record = {
+            "task_uid": UID, "issue_number": 4035, "issue_url": f"https://github.com/{REPO}/issues/4035",
+            "status": "committed", "workflow_phase": "execution", "completion_mode": "non_pr_task",
+            "project_item_id": "ITEM1",
+        }
+        original = json.loads(json.dumps(record))
+        live = {"task_uid": UID, "issue_number": 4035, "completion_mode": "ordered_delivery_aggregate",
+                "status": "committed", "workflow_phase": "execution"}
+        args = Namespace(
+            task_uid=UID, to_status="done", repo=REPO, role="tpm", json=False,
+            claim_json=json.dumps({"claim_type": "task_complete", "status": "verified",
+                                   "allowed_to_claim": True, "verification_exit_code": 0}),
+            pr_receipt=None, aggregate_receipt=None, aggregate_plan=None,
+            aggregate_candidate=None, aggregate_evidence=None,
+        )
+        effects = []
+        with mock.patch.object(self.task, "require_record",
+                               return_value=(pathlib.Path("tasks.json"), {}, record)), \
+                mock.patch.object(self.task, "github_issue_record", return_value=live), \
+                mock.patch.object(self.task, "issue_comment",
+                                  side_effect=lambda *a, **k: effects.append("comment")), \
+                mock.patch.object(self.task, "update_done_project_fields",
+                                  side_effect=lambda *a, **k: effects.append("project")), \
+                mock.patch.object(self.task, "update_issue_body",
+                                  side_effect=lambda *a, **k: effects.append("issue")), \
+                mock.patch.object(self.task, "merge_task_mapping",
+                                  side_effect=lambda *a, **k: effects.append("mapping")), \
+                contextlib.redirect_stdout(io.StringIO()):
+            failure = None
+            try:
+                self.task.command_closeout_task(args)
+            except SystemExit as exc:
+                failure = str(exc)
+        self.assertEqual(effects, [], "closeout-task wrote completion truth despite live aggregate route")
+        self.assertIsNotNone(failure, "closeout-task accepted live aggregate route")
+        self.assertIn("aggregate", failure or "")
         self.assertEqual(record, original)
 
     def test_non_pr_task_rejects_aggregate_done_receipt_before_effects(self):
@@ -289,6 +397,63 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
                 with self.assertRaisesRegex(SystemExit, "aggregate terminal requires the exact plan/candidate/evidence/completion receipt"):
                     self.task.command_set_phase(args)
             self.assertEqual(effects, [])
+
+    def test_aggregate_terminal_phase_rejects_forged_incomplete_terminal_receipt_before_effects(self):
+        record = {"task_uid": UID, "issue_number": 4035, "status": "done",
+                  "workflow_phase": "task_done", "completion_mode": "ordered_delivery_aggregate",
+                  "aggregate_completion_receipt_sha256": "", "aggregate_plan_comment_id": "6001",
+                  "aggregate_plan_sha256": "sha256:" + "d" * 64, "project_item_id": "ITEM1",
+                  "repository": REPO}
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
+            common = root / ".git"
+            common.mkdir()
+            inputs = {}
+            for name, value in (("plan.json", {"plan": True}),
+                                ("candidate.json", {"candidate": True}),
+                                ("evidence.json", [{"evidence": True}]),
+                                ("completion.json", {"receipt": "completion"})):
+                path = root / name
+                path.write_text(json.dumps(value), encoding="utf-8")
+                inputs[name] = path
+            completion_sha = hashlib.sha256(inputs["completion.json"].read_bytes()).hexdigest()
+            record["aggregate_completion_receipt_sha256"] = completion_sha
+            terminal = common / "oasis7-workflow-receipts" / UID / "aggregate-terminal-receipt.json"
+            terminal.parent.mkdir(parents=True)
+            terminal.write_text(json.dumps({
+                "receipt_type": "oasis7_aggregate_terminal",
+                "issuer": "aggregate-task-finalizer",
+                "task_uid": UID,
+                "aggregate_completion_receipt_sha256": completion_sha,
+            }, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+            args = Namespace(
+                task_uid=UID, phase="post_merge_done", receipt_json=str(terminal),
+                root=root, role="tpm", repo=REPO,
+                aggregate_plan=str(inputs["plan.json"]),
+                aggregate_candidate=str(inputs["candidate.json"]),
+                aggregate_evidence=str(inputs["evidence.json"]),
+                aggregate_receipt=str(inputs["completion.json"]),
+            )
+            effects = []
+            with mock.patch.object(self.task, "require_record",
+                                   return_value=(root / "tasks.json", {}, record)), \
+                    mock.patch.object(self.task, "run_text", return_value=str(common)), \
+                    mock.patch.object(self.task.subprocess, "run",
+                                      return_value=SimpleNamespace(returncode=0, stdout="{}", stderr="")), \
+                    mock.patch.object(self.task, "issue_comment",
+                                      side_effect=lambda *a, **k: effects.append("comment")), \
+                    mock.patch.object(self.task, "update_project_fields",
+                                      side_effect=lambda *a, **k: effects.append("project")), \
+                    mock.patch.object(self.task, "merge_task_mapping",
+                                      side_effect=lambda *a, **k: effects.append("mapping")):
+                failure = None
+                try:
+                    self.task.command_set_phase(args)
+                except SystemExit as exc:
+                    failure = str(exc)
+            self.assertEqual(effects, [], "set-phase persisted an incomplete aggregate terminal receipt")
+            self.assertIsNotNone(failure, "set-phase accepted an incomplete aggregate terminal receipt")
+            self.assertIn("terminal", failure or "")
 
     def run_finalizer_retry(
         self, phase: str, issue_state: str, *, preflight=False, registered_default=True,
@@ -554,6 +719,10 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
                          aggregate_candidate=None, aggregate_evidence=None, json=False)
         effects = []
         with mock.patch.object(self.task, "require_record", return_value=(pathlib.Path("tasks.json"), {}, record)), \
+                mock.patch.object(self.task, "github_issue_record", return_value={
+                    "task_uid": UID, "issue_number": 4035, "status": "committed",
+                    "pr_number": 5101, "pr_url": f"https://github.com/{REPO}/pull/5101",
+                }), \
                 mock.patch.object(self.task, "synchronize_live_issue_traceability", return_value=frozenset()), \
                 mock.patch.object(self.task, "issue_comment", side_effect=lambda *a, **k: "comment-url"), \
                 mock.patch.object(self.task, "update_done_project_fields", side_effect=lambda *a, **k: effects.append("project") or 1), \

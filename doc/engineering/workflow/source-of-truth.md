@@ -89,10 +89,7 @@ Merge readiness continues to require current live task/PR/hold/permission checks
 For tasks admitted to the enabled capability, this contract supersedes only the existing strict-mode rule that requires a new latest-target integration run solely because Q advanced. All high-risk classification, required-check, source identity, related-input, policy, completeness, provenance, and latest-attempt failure requirements remain in force. The risk-triggered policy below remains controlling for disabled or non-admitted tasks.
 
 ## Lifecycle ownership
-TPM is the accountable workflow coordinator / integrator and continuation owner.
-A professional **phase owner** owns only its bounded slice; the **task owner role** remains
-accountable for task outcome and evidence. Bootstrap establishes truth and the
-router selects a phase; neither owns continuation.
+TPM is the accountable workflow coordinator / integrator and continuation owner. A professional **phase owner** owns only its bounded slice; the **task owner role** remains accountable for task outcome and evidence. Bootstrap establishes truth and the router selects a phase; neither owns continuation.
 
 The **target production supervisor** is the durable runtime executor, not an
 accountability owner. It is `blocked`, so TPM coordinates each action explicitly.
@@ -133,11 +130,7 @@ The final implementation head freezes one immutable tree; later code
 <a id="pre-pr-ready-gate"></a>
 **Pre-PR Ready.**
 
-The draft PR's trusted CI receipt and required involved-role review bind the same frozen reviewed PR head and have passed. Draft PR creation is an identity/readback step before CI and review; Ready is a pre-PR gate, not promotion or Done. The human-operated path requires a
-GitHub task packet, all-required-role ledger, head binding, artifact digests,
-findings dispositions, and residual risk. Runtime-issued provenance applies
-only to unattended supervision, which remains `capability_blocked`. Fixtures
-never satisfy a live task.
+The draft PR's trusted CI receipt and required involved-role review bind the same frozen reviewed PR head and have passed. Draft PR creation is an identity/readback step before CI and review; Ready is a pre-PR gate, not promotion or Done. The human-operated path requires a GitHub task packet, all-required-role ledger, head binding, artifact digests, findings dispositions, and residual risk. Runtime-issued provenance applies only to unattended supervision, which remains `capability_blocked`. Fixtures never satisfy a live task.
 
 <a id="pr-creation-gate"></a>
 **Draft candidate and promotion gate.**
@@ -146,47 +139,17 @@ A draft candidate opens or resumes its frozen-head draft PR before exact-head CI
 <a id="split-source-review-integration-contract"></a>**Source professional review and CI (v2).** `oasis7-review-plan/v2` records `source_review_identity={task_uid,bootstrap_epoch,repository,pr_number,source_head_oid,source_scope_oid,changed_paths_digest,ordered_role_ids,role_contract_digest,review_policy_digest,input_contract_digest}` and `source_review_digest` as the SHA-256 of its canonical JSON; `source_scope_oid` is the fixed immutable source-review range base and is never redefined by a later target advance. Every accepted CI receipt binds the repository, task, PR, source head, required check name/app/run, planner identity, terminal successful conclusion, and the check's target ref. An ordinary PR receipt may retain the base OID used by its PR check when that base is older than the current target; that base is audit provenance and does not claim to validate the later target combination. An escalated integration snapshot additionally records `integration_ci_identity={repository,task_uid,pr_number,source_head_oid,integration_base_oid,workflow_ref,workflow_sha,request_id,request_created_at,run_id,run_attempt,check_app_id,check_run_id,planner_digest,tested_tree_oid,conclusion}` and `integration_ci_digest` over that canonical JSON. Source-review reuse requires the verified applicability identity—changed paths, ordered roles, role contract, review policy and input contract—to remain equal; `tested_tree_oid` is integration evidence, not review applicability. Ordinary promotion and merge use a fresh live read of the source-bound PR CI receipt and source review; they do not require a latest exact integration dispatch merely because the target branch advanced. A fresh exact integration dispatch/attempt and live current-PR readback remain mandatory for an explicit high-risk escalation or a verified related target change. Changed source/role/policy/input applicability, new findings, unknown dependency or authority closure, or legacy v1 requires a full new review epoch; verified target-only drift may reuse source review when the applicable ordinary policy permits it.
 `record-pr` has a separate live write barrier: before any Project, Issue, comment, or mapping write, it requires the authoritative task Issue exactly `OPEN` with matching UID, number/URL, lifecycle fields, and worktree, plus the live requested PR exactly `OPEN`, unmerged, same repository/number/URL, task branch, default base, requested draft state, and head commit equal to canonical task `HEAD`; missing, non-OPEN, malformed, or mismatched live identity fails before every writer, and cached Issue state is not authority.
 
-Promotion-side review revalidation binds the packet's immutable `Comparison OID`
-to the fresh receipt/plan base OID; `Comparison Ref` is audit context and may
-move, but receipt base/head or PR base identity mismatch is rejected.
-Promotion also requires a fresh live repository default-branch read to match
-the task mapping's recorded `default_branch` and the caller-selected base;
-missing or drifted authority is rejected safely and never redefines the task base.
-The draft candidate remains PM status `committed` while its workflow phase is
-`verification`; selected-task audit projects that explicit pair as Project
-workflow phase `verification`. Other `committed` task states project as
-`execution`.
+Promotion-side review revalidation binds the packet's immutable `Comparison OID` to the fresh receipt/plan base OID; `Comparison Ref` is audit context and may move, but receipt base/head or PR base identity mismatch is rejected. Promotion also requires a fresh live repository default-branch read to match the task mapping's recorded `default_branch` and the caller-selected base; missing or drifted authority is rejected safely and never redefines the task base. The draft candidate remains PM status `committed` while its workflow phase is `verification`; selected-task audit projects that explicit pair as Project workflow phase `verification`. Other `committed` task states project as `execution`.
 
 **Risk-triggered integration policy.** The trusted impact projection and its published planner identity select one of two evidence modes. The ordinary mode is valid when the source head, required PR CI check, source review applicability, target ref, and mergeability remain valid and the projection contains no high-risk or unknown trigger. It may reuse successful PR CI whose recorded target base is older than current main; main advancement alone is not a failure. The strict mode is required for workflow/check/permission policy changes, public API or WASM ABI changes, persistence/serialization/state-root/consensus changes, security or critical dependency changes, verified related consumer/contract drift, merge conflicts, or unknown impact closure. When the target advances, a consumed contract or affected-consumer declaration counts as related only through a trusted repository-relative path and stable fragment mapping; an absent or unverifiable mapping, including incomplete closure evidence, escalates strictly because unrelatedness cannot be proven. Strict mode requires the latest matching trusted integration request and successful attempt against the current target. Both modes reject missing, pending, cancelled, failed, wrong-head, wrong-app, wrong-ref, malformed, or unreadable evidence and never fall back to an older green result.
 Before freeze, affected changes run the smallest production-entry loop—configuration generation through runtime admission, Viewer through the runtime protocol, persistence write through recovery, or the skill command through its helper. These loops find boundary breaks early but never replace final CI, environment/browser, recovery or professional-review evidence.
 <a id="post-pr-merge-ready-gate"></a>
 **Post-PR merge-ready.**
 
-The canonical live PR gate permits merge for its current head and epoch. It is
-not terminal completion. It inspects all applicable required-check identities,
-mergeability, requested changes, conversation comments, each reviewer's latest
-effective review, and every paginated review thread. Permission, transport,
-pagination, policy-discovery, or evidence-readback uncertainty fails closed.
-Actionable comments require a current-head disposition; acknowledgements and
-status chatter do not block. `REVIEW_REQUIRED` and `BEHIND` alone are
-informational.
-The gate does not wait for a GitHub Codex review absent from that fresh read. For post-publication GitHub feedback, only a credible `P0` finding caused or exposed by the current PR diff requires repair in this PR. `P0` is review-finding severity (an immediate merge-safety risk such as a critical correctness, security, data-loss, or unrecoverable-regression defect), not GitHub Project scheduling `Priority`. Lower-severity or out-of-scope findings require no code/doc change; record `non_actionable` or `rejected_with_evidence`, and create no follow-up without separate authorization. Requested-change state or required thread resolution may still require reviewer/admin disposition or thread-resolution action under live repository policy, but that administrative clearance does not make repair mandatory. Required checks, mergeability, holds, readback certainty, and pre-PR repo-owned role review remain unchanged.
-A successful gate emits a trusted receipt bound to issuer, repository, PR,
-head, observation time, and gate epoch. Holds and dispositions are accepted
-only from verified GitHub-backed evidence. When GitHub reports the current head
-as `MERGEABLE`, `REVIEW_REQUIRED`, and either `BLOCKED` solely by approval or
-`BEHIND`, repository standing policy selects the admin merge path by default
-after a fresh recheck of required
-checks, mergeability, requested changes, conversation comments, review threads,
-and merge holds. This exact approval-only state does not require a per-task
-authority comment, a caller flag, or another user prompt. The successful live
-gate still emits a head-bound readiness receipt and `use_admin_merge: true`;
-that receipt, not a local assertion, is the execution prerequisite.
-`record-admin-merge-authority.sh` may preserve an optional head-bound audit note for exceptional requester context, but it is not an additional gate.
-Admin merge remains forbidden for active holds, failed or missing
-checks, requested changes, actionable comments, unresolved threads,
-non-mergeable heads, or any blocking state not attributable to missing review
-approval or the up-to-date protection represented by `BEHIND`. No separate collaboration/runtime producer is required for this repository-policy path.
+The canonical live PR gate permits merge for its current head and epoch. It is not terminal completion. It inspects all applicable required-check identities, mergeability, requested changes, conversation comments, each reviewer's latest effective review, and every paginated review thread. Permission, transport, pagination, policy-discovery, or evidence-readback uncertainty fails closed. Actionable comments require a current-head disposition; acknowledgements and status chatter do not block. `REVIEW_REQUIRED` and `BEHIND` alone are informational.
+The gate does not wait for a GitHub Codex review absent from that fresh read. For post-publication GitHub feedback, only a credible `P0` finding caused or exposed by the current PR diff requires repair in this PR. `P0` is review-finding severity (an immediate merge-safety risk such as a critical correctness, security, data-loss, or unrecoverable-regression defect), not GitHub Project scheduling `Priority`. Lower-severity or out-of-scope findings require no code/doc change; record `non_actionable` or `rejected_with_evidence`, and create no follow-up without separate authorization. Requested-change state or required thread resolution may still require reviewer/admin disposition or thread-resolution action under live repository policy, but that administrative clearance does not make repair mandatory. Required checks, mergeability, holds, readback certainty, and pre-PR repo-owned role review remain unchanged. A successful gate emits a trusted receipt bound to issuer, repository, PR, head, observation time, and gate epoch. Holds and dispositions are accepted only from verified GitHub-backed evidence. When GitHub reports the current head as `MERGEABLE`, `REVIEW_REQUIRED`, and either `BLOCKED` solely by approval or `BEHIND`, repository standing policy selects the admin merge path by default after a fresh recheck of required
+checks, mergeability, requested changes, conversation comments, review threads, and merge holds. This exact approval-only state does not require a per-task authority comment, a caller flag, or another user prompt. The successful live gate still emits a head-bound readiness receipt and `use_admin_merge: true`; that receipt, not a local assertion, is the execution prerequisite.
+`record-admin-merge-authority.sh` may preserve an optional head-bound audit note for exceptional requester context, but it is not an additional gate. Admin merge remains forbidden for active holds, failed or missing checks, requested changes, actionable comments, unresolved threads, non-mergeable heads, or any blocking state not attributable to missing review approval or the up-to-date protection represented by `BEHIND`. No separate collaboration/runtime producer is required for this repository-policy path.
 
 <a id="post-merge-done-gate"></a>
 **Terminal Done.**
@@ -205,12 +168,7 @@ A fresh merge receipt, task done truth, main sync, safe-cleanup receipt, and pos
 | `failed` | non-retryable contract failure | blocked | escalation authority may authorize a new epoch or rebootstrap |
 
 ## Documentation policy
-`AGENTS.md`, `finishing-a-development-branch`, `tpm.md`, and `.pm/README.md`
-are thin operational entrypoints. They may contain local triggers, commands,
-I/O, and minimal safety invariants, but must not restate
-[ownership](#lifecycle-ownership), [state machine](#canonical-state-machine),
-[states](#workflow-states), [gates](#ready-and-done), or the
-[review packet](#pre-pr-review-packet).
+`AGENTS.md`, `finishing-a-development-branch`, `tpm.md`, and `.pm/README.md` are thin operational entrypoints. They may contain local triggers, commands, I/O, and minimal safety invariants, but must not restate [ownership](#lifecycle-ownership), [state machine](#canonical-state-machine), [states](#workflow-states), [gates](#ready-and-done), or the [review packet](#pre-pr-review-packet).
 
 ## 1. Phase Diagram
 ```mermaid
