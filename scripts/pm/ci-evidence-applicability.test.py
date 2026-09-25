@@ -13,6 +13,7 @@ UID = "task_12345678901234567890123456789012"
 REPOSITORY = "eng-cc/oasis7"
 HEAD = "a" * 40
 TARGET = "b" * 40
+SOURCE_SCOPE = "9" * 40
 DIGEST = f"sha256:{'c' * 64}"
 INPUT_DIGEST = f"sha256:{'d' * 64}"
 CORPUS_UNIT = "product-corpus:membership"
@@ -27,6 +28,56 @@ def product_corpus():
     )
 
 
+def planner_unit_specs():
+    def unit(unit_id, obligation):
+        return {
+            "unit_id": unit_id,
+            "unit_contract": {"kind": "fixture-unit/v1", "id": unit_id},
+            "obligation_set": [obligation],
+            "command_checker_paths": ["scripts/check-ci.py"],
+            "input_paths": ["src/" + unit_id + ".rs"],
+            "member_roots": [],
+            "dependency_edges": [],
+            "applicable_policy": {"fixture": "policy/v1"},
+            "environment_contract": {"fixture": "python/v1"},
+        }
+    return [
+        unit(CORPUS_UNIT, CORPUS_UNIT),
+        unit("unit-a", "obligation:unit-a"),
+    ]
+
+
+def planner_inventory_issuer(target_oid, target_tree_oid):
+    specs = planner_unit_specs()
+    corpus = product_corpus()
+    return {
+        "schema": input_scope.TRUSTED_PLANNER_INVENTORY_SCHEMA,
+        "authority": {
+            "schema": input_scope.PLANNER_INVENTORY_AUTHORITY_SCHEMA,
+            "repository": REPOSITORY,
+            "workflow_ref": f"{REPOSITORY}/.github/workflows/rust.yml@refs/heads/main",
+            "planner_authority_oid": "e" * 40,
+            "planner_config_sha256": f"sha256:{'f' * 64}",
+        },
+        "producer": {
+            "run_id": 10,
+            "run_attempt": 1,
+            "check_app_id": 42,
+            "check_run_id": 20,
+        },
+        "target_oid": target_oid,
+        "target_tree_oid": target_tree_oid,
+        "unit_ids": sorted(spec["unit_id"] for spec in specs),
+        "inventory_digest": input_scope.planner_inventory_digest(
+            specs, corpus, target_oid, target_tree_oid,
+        ),
+    }
+
+
+def trusted_inventory_readback(issuer, *, artifact_id=30):
+    return {**issuer, "producer": {**issuer["producer"], "artifact_id": artifact_id}}
+
+
 def source_plan():
     return {
         "schema": PLAN_SCHEMA,
@@ -35,9 +86,11 @@ def source_plan():
         "task_uid": UID,
         "pr_number": 7,
         "source_head_oid": HEAD,
+        "source_scope_oid": SOURCE_SCOPE,
         "review_applicability_digest": DIGEST,
         "required_test_units": [CORPUS_UNIT, "unit-a"],
         "required_review_roles": ["runtime_engineer"],
+        "planner_inventory_issuer": planner_inventory_issuer(HEAD, HEAD),
     }
 
 
@@ -47,6 +100,7 @@ def target_snapshot(*, input_digest=INPUT_DIGEST, review_digest=DIGEST, closure=
             "schema": input_scope.INPUT_SCOPE_SCHEMA,
             "target_oid": TARGET,
             "target_tree_oid": TARGET,
+            "planner_inventory_issuer": planner_inventory_issuer(TARGET, TARGET),
             "closure_status": {"status": "complete", "reason": None},
             "required_test_units": [CORPUS_UNIT, "unit-a"],
             "input_fingerprints": {"unit-a": input_digest, CORPUS_UNIT: INPUT_DIGEST},
@@ -60,6 +114,7 @@ def target_snapshot(*, input_digest=INPUT_DIGEST, review_digest=DIGEST, closure=
             "schema": input_scope.INPUT_SCOPE_SCHEMA,
             "target_oid": TARGET,
             "target_tree_oid": TARGET,
+            "planner_inventory_issuer": planner_inventory_issuer(TARGET, TARGET),
             "closure_status": {"status": "unknown", "reason": "fixture closure unavailable"},
             "required_test_units": [CORPUS_UNIT, "unit-a"],
             "input_fingerprints": {},
@@ -75,7 +130,11 @@ def target_snapshot(*, input_digest=INPUT_DIGEST, review_digest=DIGEST, closure=
         "task_uid": UID,
         "pr_number": 7,
         "source_head_oid": HEAD,
+        "source_scope_oid": SOURCE_SCOPE,
         "target_oid": TARGET,
+        "prior_assessed_target_oid": None,
+        "input_scope_commit_oid": TARGET,
+        "input_scope_tree_oid": TARGET,
         "review_applicability_digest": review_digest,
         "required_test_units": [CORPUS_UNIT, "unit-a"],
         "required_review_roles": ["runtime_engineer"],
@@ -88,10 +147,12 @@ def evidence_set(*, test_input_digest=INPUT_DIGEST, review_digest=DIGEST):
         "reviews": [{
             "role_id": "runtime_engineer",
             "status": "passed",
+            "evidence_locator": {"kind": "task-issue-comment", "id": "5825000000"},
             "repository": REPOSITORY,
             "task_uid": UID,
             "pr_number": 7,
             "source_head_oid": HEAD,
+            "source_scope_oid": SOURCE_SCOPE,
             "applicability_digest": review_digest,
         }],
         "tests": [{
@@ -102,11 +163,14 @@ def evidence_set(*, test_input_digest=INPUT_DIGEST, review_digest=DIGEST):
             "task_uid": UID,
             "pr_number": 7,
             "source_head_oid": HEAD,
+            "source_scope_oid": SOURCE_SCOPE,
             "run_id": 10,
             "run_attempt": 1,
             "check_app_id": 42,
             "check_run_id": 20,
             "artifact_id": 30,
+            "inventory_digest": planner_inventory_issuer(HEAD, HEAD)["inventory_digest"],
+            "effective_policy_identity": effective_policy_identity(),
         }, {
             "unit_id": CORPUS_UNIT,
             "obligation_ids": [CORPUS_UNIT],
@@ -116,17 +180,35 @@ def evidence_set(*, test_input_digest=INPUT_DIGEST, review_digest=DIGEST):
             "task_uid": UID,
             "pr_number": 7,
             "source_head_oid": HEAD,
+            "source_scope_oid": SOURCE_SCOPE,
             "run_id": 10,
             "run_attempt": 1,
             "check_app_id": 42,
             "check_run_id": 20,
             "artifact_id": 31,
+            "inventory_digest": planner_inventory_issuer(HEAD, HEAD)["inventory_digest"],
+            "effective_policy_identity": effective_policy_identity(),
         }],
     }
 
 
 def enabled_policy():
-    return {"enabled_capabilities": [CAPABILITY], "check_app_id": 42}
+    return {
+        "enabled_capabilities": [CAPABILITY],
+        "approved_executor_contract_digests": [],
+        "check_app_id": 42,
+    }
+
+
+def effective_policy_identity(policy=None):
+    from integration_executor_contract import (
+        EFFECTIVE_POLICY_IDENTITY_SCHEMA,
+        effective_policy_digest,
+    )
+    return {
+        "schema": EFFECTIVE_POLICY_IDENTITY_SCHEMA,
+        "digest": effective_policy_digest(enabled_policy() if policy is None else policy),
+    }
 
 
 def publication_v1():
@@ -221,19 +303,31 @@ class PublicationCompatibilityTests(unittest.TestCase):
 
 class ApplicabilityDecisionTests(unittest.TestCase):
     def evaluate(self, *, plan=None, evidence=None, target=None, policy=None):
+        plan = source_plan() if plan is None else plan
+        target = target_snapshot() if target is None else target
         return applicability.evaluate_evidence_applicability(
-            source_plan() if plan is None else plan,
+            plan,
             evidence_set() if evidence is None else evidence,
-            target_snapshot() if target is None else target,
+            target,
             enabled_policy() if policy is None else policy,
+            trusted_source_inventory=trusted_inventory_readback(
+                plan["planner_inventory_issuer"], artifact_id=30,
+            ),
+            trusted_target_inventory=trusted_inventory_readback(
+                target.get("input_scope", target_snapshot()["input_scope"])["planner_inventory_issuer"],
+                artifact_id=31,
+            ),
         )
 
     def test_reuse_is_disabled_when_policy_omits_capability(self):
-        decision = self.evaluate(policy={})
+        policy = enabled_policy()
+        policy["enabled_capabilities"] = []
+        decision = self.evaluate(policy=policy)
 
         self.assertEqual("disabled", result_status(decision, "source_review"))
         self.assertEqual("disabled", result_status(decision, "test_evidence"))
         self.assertEqual("disabled", result_status(decision, "merge_readiness"))
+        self.assertEqual(effective_policy_identity(policy), decision.effective_policy_identity)
 
     def test_unknown_policy_capability_blocks(self):
         decision = self.evaluate(policy={"enabled_capabilities": ["future-capability/v1"]})
@@ -248,6 +342,16 @@ class ApplicabilityDecisionTests(unittest.TestCase):
         self.assertEqual("reusable", result_status(decision, "test_evidence"))
         self.assertEqual("reusable", result_status(decision, "merge_readiness"))
         self.assertEqual((CORPUS_UNIT, "unit-a"), tuple(decision.reused_units))
+        self.assertEqual({
+            "source_head_oid": HEAD,
+            "source_scope_oid": SOURCE_SCOPE,
+            "assessed_target_oid": TARGET,
+            "prior_assessed_target_oid": None,
+        }, decision.identity)
+        self.assertEqual("sha256:", decision.effective_policy_identity["digest"][:7])
+        self.assertEqual({"review", "test"}, {row["kind"] for row in decision.item_decisions})
+        self.assertTrue(all(row["reason"] for row in decision.item_decisions))
+        self.assertTrue(decision.evidence_locators)
 
     def test_changed_test_input_revalidates_tests_without_invalidating_review(self):
         decision = self.evaluate(
@@ -258,6 +362,9 @@ class ApplicabilityDecisionTests(unittest.TestCase):
         self.assertEqual("revalidate", result_status(decision, "test_evidence"))
         self.assertEqual("revalidate", result_status(decision, "merge_readiness"))
         self.assertEqual(("unit-a",), tuple(decision.required_test_units))
+        row = next(item for item in decision.item_decisions if item["id"] == "unit-a")
+        self.assertEqual("TEST_INPUT_FINGERPRINT_CHANGED", row["reason"])
+        self.assertEqual(10, row["evidence_locator"]["id"]["run_id"])
 
     def test_unknown_input_closure_widens_all_units_and_prevents_reuse(self):
         decision = self.evaluate(target=target_snapshot(closure="unknown"))
@@ -276,15 +383,15 @@ class ApplicabilityDecisionTests(unittest.TestCase):
         self.assertEqual("blocked", result_status(decision, "test_evidence"))
         self.assertIn("APPLICABILITY_INPUT_INVALID", decision.blockers)
 
-    def test_mismatched_outer_target_oid_blocks_valid_stale_input_scope(self):
+    def test_assessed_target_is_distinct_from_input_scope_commit(self):
         target = target_snapshot()
         target["target_oid"] = "e" * 40
         decision = self.evaluate(target=target)
 
-        self.assertEqual("blocked", result_status(decision, "source_review"))
-        self.assertEqual("blocked", result_status(decision, "test_evidence"))
-        self.assertEqual("blocked", result_status(decision, "merge_readiness"))
-        self.assertIn("APPLICABILITY_INPUT_INVALID", decision.blockers)
+        self.assertEqual("reusable", result_status(decision, "source_review"))
+        self.assertEqual("reusable", result_status(decision, "test_evidence"))
+        self.assertEqual("reusable", result_status(decision, "merge_readiness"))
+        self.assertEqual("e" * 40, decision.identity["assessed_target_oid"])
 
     def test_product_result_must_cover_the_full_obligation_set(self):
         evidence = evidence_set()
@@ -321,6 +428,22 @@ class ApplicabilityDecisionTests(unittest.TestCase):
 
         self.assertEqual("blocked", result_status(decision, "source_review"))
         self.assertEqual("blocked", result_status(decision, "merge_readiness"))
+
+    def test_same_head_with_different_source_scope_is_blocked(self):
+        evidence = evidence_set()
+        evidence["reviews"][0]["source_scope_oid"] = "8" * 40
+        decision = self.evaluate(evidence=evidence)
+
+        self.assertEqual("blocked", result_status(decision, "source_review"))
+        self.assertIn("REVIEW_IDENTITY_MISMATCH", decision.blockers)
+
+    def test_missing_trusted_planner_inventory_binding_blocks(self):
+        decision = applicability.evaluate_evidence_applicability(
+            source_plan(), evidence_set(), target_snapshot(), enabled_policy(),
+        )
+
+        self.assertEqual("blocked", result_status(decision, "merge_readiness"))
+        self.assertIn("APPLICABILITY_INPUT_INVALID", decision.blockers)
 
     def test_wrong_pr_identity_and_duplicate_unit_evidence_block(self):
         target = target_snapshot()

@@ -17,13 +17,16 @@ from pathlib import Path
 from typing import Any
 
 
-INPUT_SCOPE_SCHEMA = "oasis7-ci-input-scope/v1"
+INPUT_SCOPE_SCHEMA = "oasis7-ci-input-scope/v2"
+PLANNER_INVENTORY_AUTHORITY_SCHEMA = "oasis7-planner-inventory-authority/v1"
+TRUSTED_PLANNER_INVENTORY_SCHEMA = "oasis7-trusted-planner-inventory/v1"
+PLANNER_UNIT_INVENTORY_SCHEMA = "oasis7-planner-unit-inventory/v1"
 _OID_RE = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 _DIGEST_RE = re.compile(r"sha256:[0-9a-f]{64}\Z")
 _PRODUCT_DOC_RE = re.compile(r"doc/product/.+\.(?:prd|design)\.md\Z")
 _MARKDOWN_LINK_PARSER_PATH = "scripts/product_doc_markdown.py"
 _MARKDOWN_LINK_REQUIREMENTS_PATH = "scripts/doc-governance-requirements.txt"
-FALLBACK_AUTHORITY_ID = "trusted-planner-unit-inventory/v1"
+FALLBACK_MANIFEST_SCHEMA = "oasis7-ci-fallback-unit-manifest/v1"
 _UNIT_SPEC_FIELDS = {
     "unit_id", "unit_contract", "obligation_set", "command_checker_paths",
     "input_paths", "member_roots", "dependency_edges", "applicable_policy",
@@ -73,6 +76,12 @@ def _strings(value: Any, field: str) -> list[str]:
 def _oid(value: Any, field: str) -> str:
     if not isinstance(value, str) or not _OID_RE.fullmatch(value):
         raise InputScopeError(f"{field} must be a lowercase Git object ID")
+    return value
+
+
+def _positive_int(value: Any, field: str) -> int:
+    if type(value) is not int or value <= 0:
+        raise InputScopeError(f"{field} must be a positive integer")
     return value
 
 
@@ -250,6 +259,152 @@ def _validate_unit_spec(value: Any) -> dict[str, Any]:
     }
 
 
+def _validate_planner_authority(value: Any) -> dict[str, str]:
+    fields = {
+        "schema", "repository", "workflow_ref", "planner_authority_oid",
+        "planner_config_sha256",
+    }
+    if not isinstance(value, dict) or set(value) != fields:
+        raise InputScopeError("trusted planner authority fields are incomplete or unsupported")
+    if value["schema"] != PLANNER_INVENTORY_AUTHORITY_SCHEMA:
+        raise InputScopeError("trusted planner authority schema is unsupported")
+    repository = _string(value["repository"], "planner_authority.repository")
+    if not re.fullmatch(r"[^/\s]+/[^/\s]+", repository):
+        raise InputScopeError("planner authority repository is invalid")
+    workflow_ref = _string(value["workflow_ref"], "planner_authority.workflow_ref")
+    workflow_prefix = repository + "/.github/workflows/"
+    if (not workflow_ref.startswith(workflow_prefix)
+            or "@refs/heads/" not in workflow_ref[len(workflow_prefix):]):
+        raise InputScopeError("planner authority workflow_ref must identify a default-branch workflow")
+    return {
+        "schema": PLANNER_INVENTORY_AUTHORITY_SCHEMA,
+        "repository": repository,
+        "workflow_ref": workflow_ref,
+        "planner_authority_oid": _oid(
+            value["planner_authority_oid"], "planner_authority.planner_authority_oid",
+        ),
+        "planner_config_sha256": _digest(
+            value["planner_config_sha256"], "planner_authority.planner_config_sha256",
+        ),
+    }
+
+
+def _validate_planner_inventory_core(value: Any, *, embedded: bool) -> dict[str, Any]:
+    """Validate the inventory identity shared by an artifact and live readback."""
+    fields = {
+        "schema", "authority", "producer", "target_oid", "target_tree_oid",
+        "unit_ids", "inventory_digest",
+    }
+    if not isinstance(value, dict) or set(value) != fields:
+        raise InputScopeError("trusted planner inventory fields are incomplete or unsupported")
+    if value["schema"] != TRUSTED_PLANNER_INVENTORY_SCHEMA:
+        raise InputScopeError("trusted planner inventory schema is unsupported")
+    authority = _validate_planner_authority(value["authority"])
+    producer = value["producer"]
+    producer_fields = {"run_id", "run_attempt", "check_app_id", "check_run_id"}
+    if not embedded:
+        producer_fields.add("artifact_id")
+    if not isinstance(producer, dict) or set(producer) != producer_fields:
+        label = "embedded" if embedded else "trusted"
+        raise InputScopeError(f"{label} planner inventory producer locator is incomplete")
+    normalized_producer = {
+        field: _positive_int(producer[field], f"planner_inventory.producer.{field}")
+        for field in sorted(producer_fields)
+    }
+    unit_ids = sorted(_strings(value["unit_ids"], "planner_inventory.unit_ids"))
+    if not unit_ids:
+        raise InputScopeError("trusted planner inventory must contain at least one unit")
+    return {
+        "schema": TRUSTED_PLANNER_INVENTORY_SCHEMA,
+        "authority": authority,
+        "producer": normalized_producer,
+        "target_oid": _oid(value["target_oid"], "planner_inventory.target_oid"),
+        "target_tree_oid": _oid(value["target_tree_oid"], "planner_inventory.target_tree_oid"),
+        "unit_ids": unit_ids,
+        "inventory_digest": _digest(value["inventory_digest"], "planner_inventory.inventory_digest"),
+    }
+
+
+def _validate_planner_inventory_issuer(value: Any) -> dict[str, Any]:
+    """Validate the embedded issuer; artifact_id is added only after upload."""
+    return _validate_planner_inventory_core(value, embedded=True)
+
+
+def _validate_trusted_planner_inventory(value: Any) -> dict[str, Any]:
+    """Validate the out-of-band binding resolved from live workflow readback.
+
+    The caller must authenticate the planner/workflow, run, attempt, check, and
+    artifact before passing this value. Its artifact_id is intentionally absent
+    from the embedded issuer to avoid an artifact self-reference.
+    """
+    return _validate_planner_inventory_core(value, embedded=False)
+
+
+def validate_planner_inventory_binding(
+    embedded_issuer: Any, trusted_planner_inventory: Any,
+) -> dict[str, Any]:
+    """Match an embedded planner issuer to an independently read-back binding."""
+    expected = _validate_trusted_planner_inventory(trusted_planner_inventory)
+    embedded = _validate_planner_inventory_issuer(embedded_issuer)
+    expected_embedded = {
+        **expected,
+        "producer": {
+            field: expected["producer"][field]
+            for field in ("run_id", "run_attempt", "check_app_id", "check_run_id")
+        },
+    }
+    if embedded != expected_embedded:
+        raise InputScopeError("planner inventory is not bound to the trusted readback")
+    return expected
+
+
+def planner_inventory_digest(
+    unit_specs: list[dict[str, Any]], product_corpus: dict[str, Any],
+    target_oid: str, target_tree_oid: str,
+) -> str:
+    """Return the canonical digest a trusted planner must bind to its inventory.
+
+    This is a digest contract, not an issuer verifier. The workflow reader must
+    independently establish the planner authority and producer locator before
+    passing a matching binding to consumers.
+    """
+    if not isinstance(unit_specs, list):
+        raise InputScopeError("planner inventory unit specs must be a list")
+    specs = [_validate_unit_spec(item) for item in unit_specs]
+    unit_ids = [item["unit_id"] for item in specs]
+    if len(unit_ids) != len(set(unit_ids)):
+        raise InputScopeError("planner inventory unit IDs must be unique")
+    corpus = _normalize_product_corpus(product_corpus)
+    if corpus["status"] != "complete" or corpus["errors"]:
+        raise InputScopeError("product-corpus membership or relationship closure is incomplete")
+    if not set(corpus["unit_ids"]).issubset(unit_ids):
+        raise InputScopeError("planner inventory omits product-corpus units")
+    inventory_rows = []
+    edges: set[tuple[str, str]] = set()
+    for spec in specs:
+        edges.update(tuple(edge) for edge in spec["dependency_edges"])
+        inventory_rows.append({
+            "unit_id": spec["unit_id"],
+            "obligation_set": spec["obligation_set"],
+            "unit_contract": spec["unit_contract"],
+            "command_checker_paths": spec["command_checker_paths"],
+            "input_paths": spec["input_paths"],
+            "member_roots": spec["member_roots"],
+            "dependency_edges": spec["dependency_edges"],
+            "applicable_policy": spec["applicable_policy"],
+            "environment_contract": spec["environment_contract"],
+        })
+    body = {
+        "schema": PLANNER_UNIT_INVENTORY_SCHEMA,
+        "target_oid": _oid(target_oid, "planner inventory target_oid"),
+        "target_tree_oid": _oid(target_tree_oid, "planner inventory target_tree_oid"),
+        "units": sorted(inventory_rows, key=lambda item: item["unit_id"]),
+        "dependency_edges": [list(edge) for edge in sorted(edges)],
+        "product_corpus_digest": corpus["digest"],
+    }
+    return _digest_json(body)
+
+
 def _unit_input_fingerprint(
     entries: dict[str, dict[str, str]], spec: dict[str, Any],
     blob_hashes: dict[str, str], blob_contents: dict[str, bytes],
@@ -367,6 +522,7 @@ def build_input_scope_snapshot(
     unit_specs: list[dict[str, Any]],
     product_corpus: dict[str, Any],
     *,
+    planner_inventory_issuer: dict[str, Any] | None = None,
     closure_status: str = "complete",
     closure_reason: str | None = None,
     fallback_unit_ids: list[str] | None = None,
@@ -391,6 +547,17 @@ def build_input_scope_snapshot(
     corpus = _normalize_product_corpus(product_corpus)
     if not set(corpus["unit_ids"]).issubset(unit_ids):
         raise InputScopeError("product-corpus obligation refers to an unknown unit")
+    try:
+        inventory_issuer = _validate_planner_inventory_issuer(planner_inventory_issuer)
+    except InputScopeError as exc:
+        raise InputScopeError("planner inventory issuer is required") from exc
+    if (inventory_issuer["target_oid"] != commit
+            or inventory_issuer["target_tree_oid"] != tree_oid
+            or inventory_issuer["unit_ids"] != sorted(unit_ids)):
+        raise InputScopeError("planner inventory issuer identity or unit set does not match")
+    expected_inventory_digest = planner_inventory_digest(specs, corpus, commit, tree_oid)
+    if inventory_issuer["inventory_digest"] != expected_inventory_digest:
+        raise InputScopeError("planner inventory issuer digest does not match the planner output")
 
     needed_blob_ids: set[str] = set()
     for spec in specs:
@@ -455,6 +622,7 @@ def build_input_scope_snapshot(
         "schema": INPUT_SCOPE_SCHEMA,
         "target_oid": commit,
         "target_tree_oid": tree_oid,
+        "planner_inventory_issuer": inventory_issuer,
         "closure_status": {"status": closure_status, "reason": normalized_reason},
         "required_test_units": required_units,
         "input_fingerprints": fingerprints,
@@ -463,7 +631,6 @@ def build_input_scope_snapshot(
         "fallback_contract": fallback_contract,
         "product_corpus": corpus,
     }
-    validate_input_scope_snapshot(snapshot)
     return snapshot
 
 
@@ -535,10 +702,10 @@ def product_corpus_descriptor(
 def planner_fallback_contract(
     unit_ids: list[str], target_oid: str, target_tree_oid: str,
 ) -> dict[str, Any]:
-    """Bind fallback coverage to the trusted planner's complete unit inventory."""
+    """Describe conservative fallback coverage without asserting authority."""
     normalized_ids = sorted(_strings(unit_ids, "fallback_contract.unit_ids"))
     preimage = {
-        "authority": FALLBACK_AUTHORITY_ID,
+        "schema": FALLBACK_MANIFEST_SCHEMA,
         "target_oid": _oid(target_oid, "fallback_contract.target_oid"),
         "target_tree_oid": _oid(target_tree_oid, "fallback_contract.target_tree_oid"),
         "unit_ids": normalized_ids,
@@ -680,10 +847,17 @@ def build_product_corpus_unit_specs(
     return specs, product_corpus_descriptor(unit_ids, obligations, errors)
 
 
-def validate_input_scope_snapshot(value: Any) -> dict[str, Any]:
-    """Validate the closed schema consumed by the disabled applicability evaluator."""
+def validate_input_scope_snapshot(
+    value: Any, *, trusted_planner_inventory: Any = None,
+) -> dict[str, Any]:
+    """Validate scope data against a separately authenticated planner inventory.
+
+    `trusted_planner_inventory` must come from the workflow reader's live,
+    exact R/A/check/artifact readback. Missing context fails closed even when
+    the snapshot carries a self-consistent issuer and inventory digest.
+    """
     fields = {
-        "schema", "target_oid", "target_tree_oid", "closure_status",
+        "schema", "target_oid", "target_tree_oid", "planner_inventory_issuer", "closure_status",
         "required_test_units", "input_fingerprints", "dependency_edges", "fallback_complete",
         "fallback_contract", "product_corpus",
     }
@@ -693,6 +867,13 @@ def validate_input_scope_snapshot(value: Any) -> dict[str, Any]:
         raise InputScopeError("input-scope schema is unsupported")
     _oid(value["target_oid"], "input_scope.target_oid")
     _oid(value["target_tree_oid"], "input_scope.target_tree_oid")
+    expected_inventory = validate_planner_inventory_binding(
+        value["planner_inventory_issuer"], trusted_planner_inventory,
+    )
+    embedded_inventory = _validate_planner_inventory_issuer(value["planner_inventory_issuer"])
+    if (embedded_inventory["target_oid"] != value["target_oid"]
+            or embedded_inventory["target_tree_oid"] != value["target_tree_oid"]):
+        raise InputScopeError("input-scope target does not match its trusted planner inventory")
     closure = value["closure_status"]
     if not isinstance(closure, dict) or set(closure) != {"status", "reason"}:
         raise InputScopeError("input-scope closure status is malformed")
@@ -705,6 +886,8 @@ def validate_input_scope_snapshot(value: Any) -> dict[str, Any]:
     else:
         raise InputScopeError("input-scope closure status is unsupported")
     units = sorted(_strings(value["required_test_units"], "input_scope.required_test_units"))
+    if units != embedded_inventory["unit_ids"]:
+        raise InputScopeError("input-scope units disagree with the trusted planner inventory")
     raw_edges = value["dependency_edges"]
     if not isinstance(raw_edges, list):
         raise InputScopeError("input-scope dependency edges must be a list")
@@ -747,21 +930,22 @@ def validate_input_scope_snapshot(value: Any) -> dict[str, Any]:
     else:
         contract = value["fallback_contract"]
         if not isinstance(contract, dict) or set(contract) != {
-            "authority", "target_oid", "target_tree_oid", "unit_ids", "digest",
+            "schema", "target_oid", "target_tree_oid", "unit_ids", "digest",
         }:
-            raise InputScopeError("unknown closure lacks the planner fallback authority contract")
+            raise InputScopeError("unknown closure lacks the fallback unit manifest")
         try:
             expected_contract = planner_fallback_contract(
                 contract["unit_ids"], value["target_oid"], value["target_tree_oid"],
             )
         except InputScopeError as exc:
-            raise InputScopeError("planner fallback authority contract is malformed") from exc
+            raise InputScopeError("fallback unit manifest is malformed") from exc
         if contract != expected_contract:
-            raise InputScopeError("planner fallback authority contract digest or authority is invalid")
+            raise InputScopeError("fallback unit manifest schema or digest is invalid")
         if set(units) != set(expected_contract["unit_ids"]) | set(corpus["unit_ids"]):
             raise InputScopeError("unknown closure fallback units disagree with the complete planner inventory")
     return {
         **value,
+        "planner_inventory_issuer": embedded_inventory,
         "required_test_units": units,
         "input_fingerprints": dict(fingerprints),
         "dependency_edges": [list(edge) for edge in edges],
@@ -770,11 +954,18 @@ def validate_input_scope_snapshot(value: Any) -> dict[str, Any]:
     }
 
 
-def select_affected_units(prior: Any, target: Any) -> dict[str, Any]:
+def select_affected_units(
+    prior: Any, target: Any, *, trusted_prior_inventory: Any = None,
+    trusted_target_inventory: Any = None,
+) -> dict[str, Any]:
     """Compare two complete closures or widen every obligation on uncertainty."""
     try:
-        old = validate_input_scope_snapshot(prior)
-        new = validate_input_scope_snapshot(target)
+        old = validate_input_scope_snapshot(
+            prior, trusted_planner_inventory=trusted_prior_inventory,
+        )
+        new = validate_input_scope_snapshot(
+            target, trusted_planner_inventory=trusted_target_inventory,
+        )
     except InputScopeError as exc:
         return {"status": "blocked", "required_test_units": [], "reused_units": [],
                 "retired_units": [], "blockers": ["INPUT_SCOPE_INVALID:" + str(exc)]}
@@ -811,10 +1002,14 @@ def select_affected_units(prior: Any, target: Any) -> dict[str, Any]:
             "retired_units": sorted(old_units - new_units), "blockers": []}
 
 
-def aggregate_product_corpus_results(scope: Any, results: Any) -> dict[str, Any]:
+def aggregate_product_corpus_results(
+    scope: Any, results: Any, *, trusted_planner_inventory: Any = None,
+) -> dict[str, Any]:
     """Require one current input-bound result for every product-corpus obligation unit."""
     try:
-        snapshot = validate_input_scope_snapshot(scope)
+        snapshot = validate_input_scope_snapshot(
+            scope, trusted_planner_inventory=trusted_planner_inventory,
+        )
     except InputScopeError as exc:
         return {"status": "blocked", "required_units": [],
                 "blockers": ["PRODUCT_CORPUS_SCOPE_INVALID:" + str(exc)]}
