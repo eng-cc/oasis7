@@ -9,7 +9,7 @@
 - Product PRD-ID：`PRD-PRODUCT-002`
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：`2026-09-23`
+- Last reviewed：`2026-09-25`
 - 后继文档：`无`
 - 下层专业域：[`doc/game/prd.md`](../../game/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
@@ -58,6 +58,7 @@
 ### 基础不变量
 
 - 单一世界：global canonical order 与 `world_id` 不因区域、环境、节点或缓存而分叉；local development 世界使用独立身份且永不并入。
+- 消费者在提交动作前必须能确认目标 `world_id` 及其属于 global-authoritative 世界还是隔离的 local/development 世界；intent 与 receipt 只对该身份下的历史有效。local/development 结果不能作为 global 世界结果的证明，身份缺失或不匹配时不得产生或宣称 global effect。具体 surface 如何表达 scope 仍由其专业 authority 定义。
 - 最终性先于效果：未获得可验证 finality certificate 的 intent 不产生权威世界结果；基础设施不可用时 progression fail closed。
 - 可重建性：恢复仅接受 manifest、certificate、hash-bound snapshot、canonical replay 和 verified state root 组成的信任链。
 - 可替换实现：oasis7 保有协议语义；可选择性采用成熟库，但依赖被版本化合同隔离。
@@ -139,6 +140,8 @@
   - **确定性成对注入矩阵：** 以上两类 outage 必须在同一 baseline 下分别注入 `stage_finish`、`transit`、`buffer_admission`、`terminal_settlement` 四个边界；baseline 至少固定同一 `world_id`、root、revision、child、stage、edge、batch、requested/committed/executed/held/consumed/unmet/residual quantities、canonical state bucket、window identity/lease lineage、receipts、`W`、`progression_effect`、`next_action` 与 `next_recheck`。同一有序输入只允许一次 fresh-snapshot revalidation、一次 canonical disposition 和一次效果，并由 receipt identity/idempotency 约束：authority outage 服从 no-new-child-effect/一次性 `W` disposition/continuation-or-termination，read-surface outage 服从 stale/unknown/reconcile 且不改 world/W；retry、reconnect、restore、replay、重复 arrival/submit 不得复制 sink、credit、receipt、hold release、`W`、progression 或奖励。
   - **验证层级（目标态验收，不宣称测试已存在或已通过）：** `test_tier_required` 覆盖上述四边界的 deterministic protocol matrix，并在 active-LLM/provider-backed lane 验证 pure API 与同一权威结果的 parity；`test_tier_full` 在此基础上增加真实本地栈/真实 provider 上的 external headed browser S6/Playwright desktop+narrow 截图与 console 证据，以及 provider-backed Agent parity，记录 `agent_decision_source`、`agent_provider_backend`、`agent_provider_contract`、`agent_provider_transport`。`provider_local_mock` 只用于 deterministic plumbing/fixture 预检，不能替代 active LLM、真实 provider、headed S6/Playwright 或 provider-backed Agent parity；本条不扩展 UI 布局、算法、数值平衡或当前 readiness claim。
 
+- SC-10：玩家、Agent 与入口在提交动作前能区分目标 `world_id` 属于 global-authoritative 世界还是隔离的 local/development 世界；intent、committed receipt 与其世界结果始终绑定同一身份。来自 local/development 世界的 receipt 不能证明 global 世界发生了效果；身份缺失或跨世界不匹配时，不接受也不呈现为 global effect。surface-specific scope 表达由对应专业 authority 定义。测试层级：`test_tier_required`。
+
 ### 5.1 验收追踪
 
 | 成功标准 | 专业 owner | 权威文档 | 验证证据 | 测试层级 |
@@ -152,6 +155,7 @@
 | SC-7 | producer_system_designer / blockchain_ops_engineer / runtime_engineer / viewer_engineer / qa_engineer | PRD-P2P-001 / PRD-P2P-002 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-003 / PRD-TESTING-003 | `doc/p2p/prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 同一候选至少覆盖恢复只读、恢复可服务、恢复受阻/隔离各一例及一次闸门回退；未满足闸门时新 intent 的原子拒绝/无效果待决（committed receipt 为 0）；满足闸门后的 pending 当前条件重裁决与 canonical 顺序；停机排队不继承期限/优先级；每个新 intent 至多一个 committed receipt、无第二次效果；回退后的 fail-closed 与已确认 receipt 连续性；正式 surface 可读服务语义、blocker 与下一步 | test_tier_full |
 | SC-8 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-WORLD_RUNTIME-043 / PRD-WORLD_SIMULATOR-047 / PRD-TESTING-003 | `doc/world-runtime/prd.md`; `doc/product/world-rules-core-gameplay/prd.md`; `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`; `doc/testing/prd.md` | 代表性工厂→配方/input join→原料 handoff→物流/transit→产物/终端路径的 root/revision/parent lineage、缺失/冲突 identity fail-closed、已接受与容量/预留的区分、有界 hold 与 buffer 满载背压、释放后单次重评、因果 cutover、blocked/terminal 读面、单次 sink/credit 与 retry/restore/replay 证据；包含 Agent/Viewer/pure API 对 blocker、投入、未满足/剩余量、复查边界与 terminal disposition 的读取一致，且不把局部完成、在途或缓存伪装为交付/生产完成 | test_tier_full |
 | SC-9 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-043 / PRD-WORLD_SIMULATOR-047 / PRD-TESTING-003 | `doc/world-runtime/prd.md`; `doc/product/world-rules-core-gameplay/prd.md`; `doc/game/gameplay/gameplay-top-level-design.prd.md`; `doc/product/player-entry-distribution/free-entry-world-progression-and-recognition.prd.md`; `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`; `doc/testing/prd.md` | 同一 baseline（world/root/revision/child/stage/edge/batch、quantities、states、window/lease、receipts、W、progression、next action/recheck）在 `stage_finish`/`transit`/`buffer_admission`/`terminal_settlement` 四边界成对注入权威与非权威 outage；required 覆盖 deterministic protocol matrix + active-LLM/provider-backed pure API parity；full 追加真实本地栈/provider 的 external headed S6/Playwright desktop+narrow screenshots/console 与 provider-backed Agent parity，并记录 decision source/backend/contract/transport；各边界 fresh snapshot、canonical disposition、exactly-once/idempotency、root/quantity/state/receipt/W/progression 保持一致，`provider_local_mock` 非替代证据 | test_tier_full |
+| SC-10 | producer_system_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 在 distinct global/local `world_id` 样例中验证 consumer target scope、intent 与 committed receipt identity continuity；跨世界提交、replay 或 receipt reuse 不产生或声称 global effect，scope 缺失/不匹配 fail closed | test_tier_required |
 
 ## 6. Non-Goals
 

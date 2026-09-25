@@ -1,15 +1,57 @@
 #!/usr/bin/env python3
-import base64, importlib.util, io, json, sys, tempfile, unittest, zipfile
+import base64, copy, importlib.util, io, json, sys, tempfile, unittest, zipfile
 from contextlib import redirect_stdout, ExitStack
 from pathlib import Path
 from unittest.mock import patch
 import integration_ci
+import integration_executor_contract as request_contract
+import ci_input_scope
+import ci_required_artifact_v2
 
 P=Path(__file__).with_name("ci-ready-receipt.py")
 S=importlib.util.spec_from_file_location("ci_ready_receipt",P); M=importlib.util.module_from_spec(S); S.loader.exec_module(M)
 AP=Path(__file__).with_name("cargo_checker_stage_admission.py")
 AS=importlib.util.spec_from_file_location("cargo_checker_stage_admission",AP); A=importlib.util.module_from_spec(AS); AS.loader.exec_module(A)
 UID="task_12345678901234567890123456789012"
+
+KEYED_POLICY={"enabled_capabilities":["input-scope-reuse/v1"],
+  "approved_executor_contract_digests":["sha256:"+"9"*64],"check_app_id":42}
+
+def keyed_request_identity(repository="eng-cc/oasis7",task_uid=UID,pr_number=7,source_head_oid="a"*40):
+  return {"repository":repository,"task_uid":task_uid,"pr_number":pr_number,
+    "bootstrap_epoch":1,"source_head_oid":source_head_oid,"publication_id":"publication-1",
+    "source_projection_digest":"sha256:"+"1"*64,"unit_ids":["required-gate"],
+    "input_fingerprints":{"required-gate":"sha256:"+"2"*64},
+    "executor_contract_digest":"sha256:"+"8"*64,
+    "effective_policy_digest":request_contract.effective_policy_digest(KEYED_POLICY),
+    "purpose":"integration_revalidation","applicability_mode":"input_scoped",
+    "snapshot_target_oid":None}
+
+def write_request_journal(directory,*,identity=None,run_id=12345,run_attempt=1,status="observed"):
+  value=identity or keyed_request_identity()
+  key=request_contract.validation_request_key(value)
+  request_contract.reserve_validation_request(directory,key,value,"b"*40)
+  if status in ("dispatch_uncertain","observed"):
+    request_contract.mark_validation_dispatch_started(directory,key)
+  if status=="observed":
+    request_contract.mark_validation_request_observed(directory,key,run_id,run_attempt)
+  return key,value
+
+def trusted_policy_context(policy=KEYED_POLICY,workflow_sha="f"*40):
+  identity={"schema":request_contract.EFFECTIVE_POLICY_IDENTITY_SCHEMA,
+    "digest":request_contract.effective_policy_digest(policy)}
+  workflow_ref="eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main"
+  return {"schema":"oasis7-trusted-ci-reuse-policy-context/v1",
+    "repository":"eng-cc/oasis7","workflow_ref":workflow_ref,
+    "workflow_sha":workflow_sha,"policy_source_sha256":"sha256:"+"3"*64,
+    "effective_policy":policy,"effective_policy_identity":identity,
+    "planner_inventory_authority":{"schema":"oasis7-planner-inventory-authority/v1",
+      "repository":"eng-cc/oasis7","workflow_ref":workflow_ref,
+      "planner_authority_oid":workflow_sha,"planner_config_sha256":"sha256:"+"4"*64}}
+
+def keyed_request_entry(run_id=12345,attempt=2,workflow_sha="f"*40):
+  return {"id":run_id,"run_attempt":attempt,"requested_at":1780000001.0,
+    "workflow_run_head_sha":workflow_sha}
 
 def pr(): return {"draft":True,"state":"open","merged":False,"body":f"Task: {UID}\n\nRefs #1","head":{"sha":"a"*40},"base":{"sha":"b"*40,"ref":"main"}}
 def plan():
@@ -68,6 +110,99 @@ def selected_action_context(children,*,run_id=12345,attempt=2,gate_job_id=9009,g
     if path==f"repos/eng-cc/oasis7/actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100&page=1":return {"jobs":[gate,*children]}
     raise AssertionError(path)
   return read
+
+def v2_reader_fixture(*,attempt=2):
+  identity=keyed_request_identity()
+  identity["input_fingerprints"]={"required-gate":"sha256:"+"a"*64}
+  key=request_contract.validation_request_key(identity)
+  context=trusted_policy_context(workflow_sha="f"*40)
+  authority=context["planner_inventory_authority"]
+  plan_artifact_id=7001
+  unit_id="required-gate"
+  inventory_digest="sha256:"+"f"*64
+  source_scope_oid="e"*40
+  issuer={"schema":"oasis7-trusted-planner-inventory/v1",
+    "authority":authority,
+    "producer":{"run_id":12345,"run_attempt":attempt,"check_app_id":42,"check_run_id":902},
+    "target_oid":"d"*40,"target_tree_oid":"c"*40,
+    "unit_ids":[unit_id],"inventory_digest":inventory_digest}
+  trusted_inventory={**issuer,"producer":{**issuer["producer"],"artifact_id":plan_artifact_id}}
+  planner_output=plan()
+  planner_output.update({"source_scope_base":source_scope_oid,"integration_base":"b"*40,
+    "source_head":"a"*40,"impact_projection_schema":"oasis7-workflow-impact-projection/v2",
+    "impact_projection_digest":identity["source_projection_digest"],
+    "impact_projection_status":"verified","test_profile":"required",
+    "declared_tests":"required-gate","planner_digest":"sha256:"+"5"*64,
+    "required_test_units":"required-gate"})
+  authority={**authority,"planner_config_sha256":planner_output["planner_config_sha256"]}
+  context={**context,"planner_inventory_authority":authority}
+  issuer={**issuer,"authority":authority}
+  trusted_inventory={**issuer,"producer":{**issuer["producer"],"artifact_id":plan_artifact_id}}
+  execution_job={"workflow_run_id":12345,"run_attempt":attempt,"job_id":9009,
+    "job_name":"required-gate","check_name":"required-gate","check_app_id":42,
+    "check_run_id":902,"head_sha":"f"*40,"status":"completed",
+    "conclusion":"success","labels":["ubuntu-24.04"]}
+  product_corpus={"status":"complete","errors":[],"unit_ids":[]}
+  input_scope_snapshot={"schema":"oasis7-ci-input-scope/v2","target_oid":"d"*40,
+    "target_tree_oid":"c"*40,"planner_inventory_issuer":issuer,
+    "closure_status":{"status":"complete"},"required_test_units":[unit_id],
+    "input_fingerprints":identity["input_fingerprints"],"dependency_edges":[],
+    "fallback_complete":False,"fallback_contract":None,"product_corpus":product_corpus}
+  planner_invocation={"schema":"oasis7-required-scope-invocation/v1",
+    "planner_authority_oid":"f"*40,"planner_config_sha256":planner_output["planner_config_sha256"],
+    "event_name":"workflow_dispatch","run_mode":"integration_revalidation",
+    "base_ref":"b"*40,"head_ref":"a"*40,"task_uid":UID,"scope_base_oid":source_scope_oid,
+    "impact_projection_sha256":identity["source_projection_digest"],
+    "changed_paths":["scripts/ci-tests.sh"],
+    "planner_output_sha256":ci_required_artifact_v2.canonical_digest(planner_output),
+    "producer":{"run_id":12345,"run_attempt":attempt,"check_app_id":42,"check_run_id":902}}
+  planner_invocation["digest"]=ci_required_artifact_v2.planner_invocation_digest(planner_invocation)
+  plan_payload={"schema":"oasis7-required-plan-v2",
+    "required_capabilities":["input-scope-reuse/v1"],
+    "request_key":key,"request_identity":identity,"repository":"eng-cc/oasis7",
+    "task_uid":UID,"pr_number":7,"bootstrap_epoch":1,"source_head_oid":"a"*40,
+    "source_scope_oid":source_scope_oid,"source_projection_digest":identity["source_projection_digest"],
+    "integration_base_oid":"b"*40,"tested_commit_oid":"d"*40,"tested_tree_oid":"c"*40,
+    "workflow_ref":context["workflow_ref"],"workflow_sha":"f"*40,
+    "workflow_run_id":12345,"run_attempt":attempt,"check_name":"required-gate",
+    "check_app_id":42,"check_run_id":902,"job_id":9009,"job_name":"required-gate",
+    "executor_contract_digest":identity["executor_contract_digest"],
+    "effective_policy_identity":context["effective_policy_identity"],
+    "planner_inventory_authority":authority,"planner_inventory_issuer":issuer,
+    "planner_inventory_digest":inventory_digest,"planner_config_sha256":planner_output["planner_config_sha256"],
+    "planner_invocation":planner_invocation,"planner_output":planner_output,"unit_ids":[unit_id],
+    "required_test_units":[unit_id],"input_fingerprints":identity["input_fingerprints"],
+    "unit_specs":[{"unit_id":unit_id,"obligation_set":["required-gate:000:run"]}],
+    "product_corpus":product_corpus,"input_scope":input_scope_snapshot,"closure_status":"complete",
+    "execution_job_requirements":{unit_id:[]}}
+  result={key_name:plan_payload[key_name] for key_name in (
+    "request_key","request_identity","repository","task_uid","pr_number","bootstrap_epoch",
+    "source_head_oid","source_scope_oid","source_projection_digest","integration_base_oid",
+    "tested_commit_oid","tested_tree_oid","workflow_ref","workflow_sha","workflow_run_id",
+    "run_attempt","check_name","check_app_id","check_run_id","job_id","job_name",
+    "executor_contract_digest","effective_policy_identity","planner_inventory_digest",
+    "planner_inventory_issuer")}
+  result.update(schema="oasis7-required-result-v2",plan_artifact_id=plan_artifact_id,
+    unit_id=unit_id,obligation_ids=["required-gate:000:run"],
+    input_digest=identity["input_fingerprints"][unit_id],status="passed",
+    disposition="executed",exit_code=0,execution_jobs=[execution_job])
+  proof={"request_id":12345,"run_id":12345,"workflow_run_id":12345,"run_attempt":attempt,
+    "check_app_id":42,"check_run_id":902,"job_id":9009,"job_name":"required-gate",
+    "workflow_ref":context["workflow_ref"],"workflow_sha":"f"*40,
+    "tested_commit_oid":"d"*40,"tested_tree_oid":"c"*40,"source_scope_oid":source_scope_oid,
+    "request_key":key,"request_identity":identity,"trusted_policy_context":context,
+    "effective_policy_identity":context["effective_policy_identity"],
+    "planner_inventory_authority":authority,"trusted_planner_inventory":trusted_inventory,
+    "required_plan_v2_artifact_id":plan_artifact_id,
+    "required_plan_v2_artifact_name":ci_required_artifact_v2.plan_artifact_name(12345,attempt),
+    "required_plan_v2_payload":plan_payload,
+    "required_result_v2_artifacts":[{"artifact_id":7002,
+      "name":ci_required_artifact_v2.result_artifact_name(12345,attempt,unit_id),"payload":result}],
+    "execution_jobs":[execution_job]}
+  snapshot={"closure_status":{"status":"complete"},"target_oid":"d"*40,
+    "target_tree_oid":"c"*40,"required_test_units":[unit_id],
+    "input_fingerprints":identity["input_fingerprints"]}
+  return key,identity,context,plan_payload,result,proof,snapshot
 
 class ReceiptTest(unittest.TestCase):
   def api(self, r=None, runs=None, actions=None):
@@ -193,6 +328,432 @@ class ReceiptTest(unittest.TestCase):
     with self.api(runs=[older_green, newer_pending]):
       with self.assertRaisesRegex(SystemExit, "check incomplete"):
         M.live("eng-cc/oasis7", UID, 1, 7, "required-gate", "42", ordinary_pr=True)
+  def test_selected_integration_request_is_verified_at_its_exact_attempt(self):
+    request={"id":12345,"run_attempt":1,"requested_at":1780000000.0}
+    check={"id":902,"name":"required-gate","app":{"id":42},
+      "status":"completed","conclusion":"success"}
+    proof={"workflow_run_id":12345,"run_attempt":1,"tested_tree_oid":"c"*40,
+      "tested_commit_oid":"d"*40,"workflow_sha":"e"*40,
+      "workflow_ref":"eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main"}
+    with patch.object(M,"gh",side_effect=[pr(),pr()]), \
+         patch.object(integration_ci,"current_request",side_effect=[request,request]), \
+         patch.object(integration_ci,"verified_run",return_value=(check,proof)) as verified:
+      _, observed, _, _=M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42")
+    verified.assert_called_once_with(
+      "eng-cc/oasis7",UID,7,"b"*40,"a"*40,12345,"42",expected_attempt=1
+    )
+    self.assertEqual(1,observed["_integration"]["run_attempt"])
+  def test_latest_integration_attempt_blocks_older_green_on_pending_failure_or_missing_artifact(self):
+    # A1 is known-good, but the selected request now points at A2. The reader
+    # must ask for A2 explicitly and fail closed for each incomplete outcome.
+    request={"id":12345,"run_attempt":2,"requested_at":1780000001.0}
+    for reason in ("check incomplete","check failure","artifact missing"):
+      def verify(*args,expected_attempt=None):
+        if expected_attempt==1:
+          return ({"id":901,"name":"required-gate","app":{"id":42},
+            "status":"completed","conclusion":"success"},
+            {"workflow_run_id":12345,"run_attempt":1})
+        if expected_attempt==2:
+          raise ValueError(reason)
+        raise ValueError("expected attempt is missing")
+      with self.subTest(reason=reason), \
+           patch.object(M,"gh",side_effect=[pr(),pr()]), \
+           patch.object(integration_ci,"current_request",return_value=request), \
+           patch.object(integration_ci,"verified_run",side_effect=verify) as verified, \
+           patch.object(M,"live") as ordinary:
+        with self.assertRaisesRegex(SystemExit,"current request blocked: "+reason):
+          M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42")
+        verified.assert_called_once_with(
+          "eng-cc/oasis7",UID,7,"b"*40,"a"*40,12345,"42",expected_attempt=2
+        )
+        ordinary.assert_not_called()
+  def test_explicit_request_key_requires_matching_observed_common_dir_journal(self):
+    with tempfile.TemporaryDirectory() as temp:
+      journal=Path(temp)
+      key,identity=write_request_journal(journal)
+      with patch.object(integration_ci,"git_common_dir",return_value=journal):
+        record,observed=M._trusted_validation_request(key,"eng-cc/oasis7",UID,7,"a"*40,"b"*40)
+        self.assertEqual(identity,observed)
+        self.assertEqual(12345,record["run_id"])
+        for expected,pattern in (
+          (("owner/repo",UID,7,"a"*40,"b"*40),"repository"),
+          (("eng-cc/oasis7","task_ffffffffffffffffffffffffffffffff",7,"a"*40,"b"*40),"task_uid"),
+          (("eng-cc/oasis7",UID,8,"a"*40,"b"*40),"pr_number"),
+          (("eng-cc/oasis7",UID,7,"c"*40,"b"*40),"source_head_oid"),
+          (("eng-cc/oasis7",UID,7,"a"*40,"c"*40),"immutable integration base"),
+        ):
+          with self.subTest(expected=expected),self.assertRaisesRegex(ValueError,pattern):
+            M._trusted_validation_request(key,*expected)
+        with self.assertRaisesRegex(ValueError,"journal is missing"):
+          M._trusted_validation_request("sha256:"+"0"*64,"eng-cc/oasis7",UID,7,"a"*40,"b"*40)
+
+  def test_unobserved_request_journal_cannot_authorize_keyed_selection(self):
+    with tempfile.TemporaryDirectory() as temp:
+      journal=Path(temp)
+      key,_=write_request_journal(journal,status="dispatch_uncertain")
+      with patch.object(integration_ci,"git_common_dir",return_value=journal), \
+           patch.object(M,"gh",side_effect=[pr()]), \
+           patch.object(integration_ci,"current_request") as current:
+        with self.assertRaisesRegex(SystemExit,"journal has no observed workflow run"):
+          M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42",request_key=key)
+        current.assert_not_called()
+
+  def test_keyed_selection_passes_journal_identity_and_trusted_policy_to_verifier(self):
+    with tempfile.TemporaryDirectory() as temp:
+      journal=Path(temp)
+      key,identity=write_request_journal(journal,run_attempt=1)
+      request=keyed_request_entry(attempt=2)
+      context=trusted_policy_context(workflow_sha="f"*40)
+      check={"id":902,"name":"required-gate","app":{"id":42},
+        "status":"completed","conclusion":"success"}
+      proof={"workflow_run_id":12345,"run_attempt":2,"check_app_id":42,
+        "check_run_id":902,"plan_artifact_id":777,
+        "trusted_policy_context":context,
+        "effective_policy_identity":context["effective_policy_identity"],
+        "planner_inventory_authority":context["planner_inventory_authority"]}
+      with patch.object(integration_ci,"git_common_dir",return_value=journal), \
+           patch.object(M,"gh",side_effect=[pr(),pr()]), \
+           patch.object(integration_ci,"default_branch_head",return_value="b"*40), \
+           patch.object(integration_ci,"current_request",side_effect=[request,request]) as current, \
+           patch.object(integration_ci,"trusted_policy_context",return_value=context) as policy, \
+           patch.object(integration_ci,"verified_run",return_value=(check,proof)) as verified:
+        _,observed,_,_=M.selected_live(
+          "eng-cc/oasis7",UID,1,7,"required-gate","42",request_key=key)
+      self.assertEqual(2,observed["_integration"]["run_attempt"])
+      self.assertEqual(key,observed["_integration"]["request_key"])
+      self.assertEqual(identity,observed["_integration"]["request_identity"])
+      self.assertEqual(2,current.call_count)
+      self.assertEqual(key,current.call_args.kwargs["request_key"])
+      policy.assert_called_once_with("eng-cc/oasis7","main","f"*40,"f"*40)
+      verified.assert_called_once_with(
+        "eng-cc/oasis7",UID,7,"b"*40,"a"*40,12345,"42",
+        request_key=key,expected_attempt=2,request_identity=identity,
+        effective_policy=KEYED_POLICY)
+
+  def test_keyed_selection_keeps_historical_base_separate_from_current_pr_target(self):
+    with tempfile.TemporaryDirectory() as temp:
+      journal=Path(temp)
+      key,identity=write_request_journal(journal,run_attempt=1)
+      historical_base="b"*40
+      live_target="c"*40
+      current_pr=pr();current_pr["base"]["sha"]=live_target
+      context=trusted_policy_context(workflow_sha="f"*40)
+      request=keyed_request_entry(attempt=2)
+      check={"id":902,"name":"required-gate","app":{"id":42},
+        "status":"completed","conclusion":"success"}
+      proof={"workflow_run_id":12345,"run_attempt":2,"check_app_id":42,
+        "check_run_id":902,"source_scope_oid":"e"*40,
+        "trusted_policy_context":context,
+        "effective_policy_identity":context["effective_policy_identity"],
+        "planner_inventory_authority":context["planner_inventory_authority"]}
+      def read(*args):
+        path=args[-1]
+        if path=="repos/eng-cc/oasis7/pulls/7":
+          return copy.deepcopy(current_pr)
+        if path==f"repos/eng-cc/oasis7/compare/{historical_base}...{live_target}":
+          return {"base_commit":{"sha":historical_base},"head_commit":{"sha":live_target},
+            "merge_base_commit":{"sha":historical_base}}
+        raise AssertionError(path)
+      with patch.object(integration_ci,"git_common_dir",return_value=journal), \
+           patch.object(M,"gh",side_effect=read), \
+           patch.object(integration_ci,"default_branch_head",return_value=live_target), \
+           patch.object(integration_ci,"current_request",side_effect=[request,request]) as current, \
+           patch.object(integration_ci,"trusted_policy_context",return_value=context), \
+           patch.object(integration_ci,"verified_run",return_value=(check,proof)) as verified:
+        fresh,observed,base,head=M.selected_live(
+          "eng-cc/oasis7",UID,1,7,"required-gate","42",request_key=key)
+      self.assertEqual(historical_base,base)
+      self.assertEqual(live_target,fresh["base"]["sha"])
+      self.assertEqual("a"*40,head)
+      self.assertEqual(historical_base,observed["_integration"]["integration_base_oid"])
+      self.assertEqual(live_target,observed["_integration"]["current_target_oid"])
+      self.assertEqual("e"*40,observed["_integration"]["source_scope_oid"])
+      self.assertEqual(2,current.call_count)
+      for call in current.call_args_list:
+        self.assertEqual(historical_base,call.args[3])
+      verified.assert_called_once_with(
+        "eng-cc/oasis7",UID,7,historical_base,"a"*40,12345,"42",
+        request_key=key,expected_attempt=2,request_identity=identity,
+        effective_policy=KEYED_POLICY)
+
+  def test_keyed_selection_rejects_historical_base_outside_current_target_ancestry(self):
+    with tempfile.TemporaryDirectory() as temp:
+      journal=Path(temp)
+      key,_=write_request_journal(journal,run_attempt=1)
+      historical_base="b"*40
+      live_target="c"*40
+      current_pr=pr();current_pr["base"]["sha"]=live_target
+      def read(*args):
+        path=args[-1]
+        if path=="repos/eng-cc/oasis7/pulls/7":return copy.deepcopy(current_pr)
+        if path==f"repos/eng-cc/oasis7/compare/{historical_base}...{live_target}":
+          return {"base_commit":{"sha":historical_base},"head_commit":{"sha":live_target},
+            "merge_base_commit":{"sha":"d"*40}}
+        raise AssertionError(path)
+      with patch.object(integration_ci,"git_common_dir",return_value=journal), \
+           patch.object(M,"gh",side_effect=read), \
+           patch.object(integration_ci,"default_branch_head",return_value=live_target), \
+           patch.object(integration_ci,"current_request") as current, \
+           patch.object(integration_ci,"verified_run") as verified:
+        with self.assertRaisesRegex(SystemExit,"historical integration base is not an ancestor of current PR target"):
+          M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42",request_key=key)
+        current.assert_not_called()
+        verified.assert_not_called()
+
+  def test_keyed_selection_allows_ancestral_target_advance_but_rejects_source_head_change(self):
+    for changed in ("target", "head"):
+      with self.subTest(changed=changed),tempfile.TemporaryDirectory() as temp:
+        journal=Path(temp)
+        key,_=write_request_journal(journal,run_attempt=1)
+        historical_base="b"*40
+        initial_target="c"*40
+        final_target="d"*40
+        initial_pr=pr();initial_pr["base"]["sha"]=initial_target
+        final_pr=copy.deepcopy(initial_pr)
+        if changed=="target":
+          final_pr["base"]["sha"]=final_target
+        else:
+          final_pr["head"]["sha"]="e"*40
+        context=trusted_policy_context(workflow_sha="f"*40)
+        request=keyed_request_entry(attempt=2)
+        check={"id":902,"name":"required-gate","app":{"id":42},
+          "status":"completed","conclusion":"success"}
+        proof={"workflow_run_id":12345,"run_attempt":2,"check_app_id":42,
+          "check_run_id":902,"source_scope_oid":"e"*40,
+          "trusted_policy_context":context,
+          "effective_policy_identity":context["effective_policy_identity"],
+          "planner_inventory_authority":context["planner_inventory_authority"]}
+        pr_reads=0
+        def read(*args):
+          nonlocal pr_reads
+          path=args[-1]
+          if path=="repos/eng-cc/oasis7/pulls/7":
+            pr_reads+=1
+            return copy.deepcopy(initial_pr if pr_reads==1 else final_pr)
+          if path.startswith(f"repos/eng-cc/oasis7/compare/{historical_base}..."):
+            target=path.split("...",1)[1]
+            return {"base_commit":{"sha":historical_base},"head_commit":{"sha":target},
+              "merge_base_commit":{"sha":historical_base}}
+          raise AssertionError(path)
+        with patch.object(integration_ci,"git_common_dir",return_value=journal), \
+             patch.object(M,"gh",side_effect=read), \
+             patch.object(integration_ci,"default_branch_head",
+               side_effect=[initial_target,final_target] if changed=="target" else [initial_target]), \
+             patch.object(integration_ci,"current_request",side_effect=[request,request]), \
+             patch.object(integration_ci,"trusted_policy_context",return_value=context), \
+             patch.object(integration_ci,"verified_run",return_value=(check,proof)), \
+             patch.object(M,"live") as ordinary:
+          if changed=="target":
+            _,observed,base,_=M.selected_live(
+              "eng-cc/oasis7",UID,1,7,"required-gate","42",request_key=key)
+            self.assertEqual(historical_base,base)
+            self.assertEqual(final_target,observed["_integration"]["current_target_oid"])
+          else:
+            with self.assertRaisesRegex(SystemExit,"PR identity or admission changed during integration verification"):
+              M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42",request_key=key)
+          ordinary.assert_not_called()
+
+  def test_keyed_readback_rejects_run_attempt_app_check_and_policy_context_mismatch(self):
+    for changed in ("run", "attempt", "app", "check", "policy", "authority"):
+      with self.subTest(changed=changed),tempfile.TemporaryDirectory() as temp:
+        journal=Path(temp)
+        key,_=write_request_journal(journal,run_attempt=1)
+        request=keyed_request_entry(attempt=2)
+        context=trusted_policy_context(workflow_sha="f"*40)
+        proof={"workflow_run_id":12345,"run_attempt":2,"check_app_id":42,
+          "check_run_id":902,"plan_artifact_id":777,
+          "trusted_policy_context":context,
+          "effective_policy_identity":context["effective_policy_identity"],
+          "planner_inventory_authority":context["planner_inventory_authority"]}
+        if changed=="run": proof["workflow_run_id"]=12346
+        elif changed=="attempt": proof["run_attempt"]=1
+        elif changed=="app": proof["check_app_id"]=99
+        elif changed=="check": proof["check_run_id"]=903
+        elif changed=="policy": proof["effective_policy_identity"]={"schema":"oasis7-ci-effective-policy-identity/v1","digest":"sha256:"+"0"*64}
+        elif changed=="authority": proof["planner_inventory_authority"]={**context["planner_inventory_authority"],"planner_authority_oid":"e"*40}
+        check={"id":902,"name":"required-gate","app":{"id":42},
+          "status":"completed","conclusion":"success"}
+        with patch.object(integration_ci,"git_common_dir",return_value=journal), \
+             patch.object(M,"gh",side_effect=[pr()]), \
+             patch.object(integration_ci,"default_branch_head",return_value="b"*40), \
+             patch.object(integration_ci,"current_request",return_value=request), \
+             patch.object(integration_ci,"trusted_policy_context",return_value=context), \
+             patch.object(integration_ci,"verified_run",return_value=(check,proof)), \
+             patch.object(M,"live") as ordinary:
+          with self.assertRaisesRegex(SystemExit,"verified workflow attempt or trusted policy context mismatch"):
+            M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42",request_key=key)
+          ordinary.assert_not_called()
+
+  def test_keyed_request_change_during_verification_blocks_receipt(self):
+    with tempfile.TemporaryDirectory() as temp:
+      journal=Path(temp)
+      key,_=write_request_journal(journal,run_attempt=1)
+      first=keyed_request_entry(attempt=2)
+      second=keyed_request_entry(attempt=3)
+      context=trusted_policy_context(workflow_sha="f"*40)
+      check={"id":902,"name":"required-gate","app":{"id":42},
+        "status":"completed","conclusion":"success"}
+      proof={"workflow_run_id":12345,"run_attempt":2,"check_app_id":42,
+        "check_run_id":902,"plan_artifact_id":777,
+        "trusted_policy_context":context,
+        "effective_policy_identity":context["effective_policy_identity"],
+        "planner_inventory_authority":context["planner_inventory_authority"]}
+      with patch.object(integration_ci,"git_common_dir",return_value=journal), \
+           patch.object(M,"gh",side_effect=[pr()]), \
+           patch.object(integration_ci,"default_branch_head",return_value="b"*40), \
+           patch.object(integration_ci,"current_request",side_effect=[first,second]), \
+           patch.object(integration_ci,"trusted_policy_context",return_value=context), \
+           patch.object(integration_ci,"verified_run",return_value=(check,proof)), \
+           patch.object(M,"live") as ordinary:
+        with self.assertRaisesRegex(SystemExit,"current request changed during integration verification"):
+          M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42",request_key=key)
+        ordinary.assert_not_called()
+
+  def test_keyed_latest_attempt_failures_never_fall_back_to_older_or_ordinary_evidence(self):
+    for reason in ("check incomplete","check failure","artifact missing"):
+      with self.subTest(reason=reason),tempfile.TemporaryDirectory() as temp:
+        journal=Path(temp)
+        key,_=write_request_journal(journal,run_attempt=1)
+        request=keyed_request_entry(attempt=2)
+        context=trusted_policy_context(workflow_sha="f"*40)
+        historical_base="b"*40
+        live_target="c"*40
+        current_pr=pr();current_pr["base"]["sha"]=live_target
+        def read(*args):
+          path=args[-1]
+          if path=="repos/eng-cc/oasis7/pulls/7":return copy.deepcopy(current_pr)
+          if path==f"repos/eng-cc/oasis7/compare/{historical_base}...{live_target}":
+            return {"base_commit":{"sha":historical_base},"head_commit":{"sha":live_target},
+              "merge_base_commit":{"sha":historical_base}}
+          raise AssertionError(path)
+        def verify(*args,request_key=None,expected_attempt=None,request_identity=None,effective_policy=None):
+          if expected_attempt==1:
+            return ({"id":901,"name":"required-gate","app":{"id":42},
+              "status":"completed","conclusion":"success"},
+              {"workflow_run_id":12345,"run_attempt":1})
+          raise ValueError(reason)
+        with patch.object(integration_ci,"git_common_dir",return_value=journal), \
+             patch.object(M,"gh",side_effect=read), \
+             patch.object(integration_ci,"default_branch_head",return_value=live_target), \
+             patch.object(integration_ci,"current_request",return_value=request) as current, \
+             patch.object(integration_ci,"trusted_policy_context",return_value=context), \
+             patch.object(integration_ci,"verified_run",side_effect=verify) as verified, \
+             patch.object(M,"live") as ordinary:
+          with self.assertRaisesRegex(SystemExit,"current request blocked: "+reason):
+            M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42",request_key=key)
+          current.assert_called_once_with(
+            "eng-cc/oasis7",UID,7,historical_base,"a"*40,"main",request_key=key)
+          verified.assert_called_once()
+          self.assertEqual(2,verified.call_args.kwargs["expected_attempt"])
+          ordinary.assert_not_called()
+
+  def test_keyed_request_absence_and_missing_v2_inventory_do_not_use_v1_fallback(self):
+    with tempfile.TemporaryDirectory() as temp:
+      journal=Path(temp)
+      key,_=write_request_journal(journal)
+      with patch.object(integration_ci,"git_common_dir",return_value=journal), \
+           patch.object(M,"gh",side_effect=[pr()]), \
+           patch.object(integration_ci,"default_branch_head",return_value="b"*40), \
+           patch.object(integration_ci,"current_request",return_value=None), \
+           patch.object(M,"live") as ordinary:
+        with self.assertRaisesRegex(SystemExit,"explicit keyed current request is absent"):
+          M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42",request_key=key)
+        ordinary.assert_not_called()
+
+    keyed_run=run();key="sha256:"+"7"*64
+    keyed_run["_integration"]={"request_key":key}
+    argv=[str(P),"--repository","eng-cc/oasis7","--task-uid",UID,"--task-issue-number","1",
+      "--pr-number","7","--check-app-id","42","--planner-digest","auto","--request-key",key]
+    with patch.object(M,"selected_live",return_value=(pr(),keyed_run,"b"*40,"a"*40)), \
+         patch.object(M,"planner_for_run") as legacy_reader, \
+         patch.object(sys,"argv",argv):
+      with self.assertRaisesRegex(SystemExit,"trusted v2 required evidence blocked"):
+        M.main()
+      legacy_reader.assert_not_called()
+
+  def test_v2_reader_binds_complete_exact_attempt_inventory_and_results(self):
+    key,identity,context,plan_payload,result,proof,snapshot=v2_reader_fixture()
+    proof["execution_jobs"].append({"workflow_run_id":12345,"run_attempt":2,
+      "job_id":9010,"job_name":"unselected-job","check_name":"unselected-job",
+      "check_app_id":42,"check_run_id":903,"head_sha":"f"*40,
+      "status":"completed","conclusion":"skipped","labels":["ubuntu-24.04"]})
+    check={"id":902,"name":"required-gate","app":{"id":42},
+      "status":"completed","conclusion":"success"}
+    with patch.object(ci_input_scope,"validate_input_scope_snapshot",return_value=snapshot), \
+         patch.object(ci_input_scope,"planner_inventory_digest",return_value="sha256:"+"f"*64):
+      evidence=M._verified_v2_required_evidence("eng-cc/oasis7",check,proof,
+        request_key=key,request_identity=identity,task_uid=UID,pr_number=7,
+        integration_base_oid="b"*40,head_oid="a"*40)
+    self.assertEqual(7001,evidence["required_plan_v2_artifact_id"])
+    self.assertEqual(["required-gate"],evidence["required_plan_v2_payload"]["unit_ids"])
+    self.assertEqual("passed",evidence["required_result_v2_artifacts"][0]["payload"]["status"])
+    self.assertEqual(7001,evidence["trusted_planner_inventory"]["producer"]["artifact_id"])
+
+  def test_v2_reader_rejects_missing_duplicate_wrong_attempt_and_unknown_closure(self):
+    key,identity,context,plan_payload,result,proof,snapshot=v2_reader_fixture()
+    check={"id":902,"name":"required-gate","app":{"id":42},
+      "status":"completed","conclusion":"success"}
+    cases=[]
+    missing=copy.deepcopy(proof);missing["required_result_v2_artifacts"]=[]
+    cases.append(("result artifact set is missing",missing,snapshot))
+    duplicate=copy.deepcopy(proof)
+    duplicate["required_result_v2_artifacts"].append(copy.deepcopy(duplicate["required_result_v2_artifacts"][0]))
+    cases.append(("result artifact set is missing",duplicate,snapshot))
+    wrong_attempt=copy.deepcopy(proof)
+    wrong_attempt["required_result_v2_artifacts"][0]["payload"]["run_attempt"]=1
+    cases.append(("result identity differs from its exact required plan",wrong_attempt,snapshot))
+    unknown=copy.deepcopy(snapshot);unknown["closure_status"]={"status":"unknown"}
+    cases.append(("inventory closure is incomplete",proof,unknown))
+    for message,candidate,candidate_snapshot in cases:
+      with self.subTest(message=message), \
+           patch.object(ci_input_scope,"validate_input_scope_snapshot",return_value=candidate_snapshot), \
+           patch.object(ci_input_scope,"planner_inventory_digest",return_value="sha256:"+"f"*64):
+        with self.assertRaisesRegex(SystemExit,message):
+          M._verified_v2_required_evidence("eng-cc/oasis7",check,candidate,
+            request_key=key,request_identity=identity,task_uid=UID,pr_number=7,
+            integration_base_oid="b"*40,head_oid="a"*40)
+
+  def test_keyed_v2_receipt_uses_verified_payload_and_digest_binds_its_locators(self):
+    key,identity,context,plan_payload,result,proof,snapshot=v2_reader_fixture()
+    check={"id":902,"name":"required-gate","app":{"id":42},
+      "status":"completed","conclusion":"success"}
+    with patch.object(ci_input_scope,"validate_input_scope_snapshot",return_value=snapshot), \
+         patch.object(ci_input_scope,"planner_inventory_digest",return_value="sha256:"+"f"*64):
+      evidence=M._verified_v2_required_evidence("eng-cc/oasis7",check,proof,
+        request_key=key,request_identity=identity,task_uid=UID,pr_number=7,
+        integration_base_oid="b"*40,head_oid="a"*40)
+    observed={**run(),"id":902,"_integration":{**proof,"request_created_at":"2026-09-25T10:00:00Z"}}
+    argv=[str(P),"--repository","eng-cc/oasis7","--task-uid",UID,
+      "--task-issue-number","1","--pr-number","7","--check-app-id","42",
+      "--planner-digest","auto","--request-key",key]
+    output=io.StringIO()
+    with patch.object(M,"selected_live",return_value=(pr(),observed,"b"*40,"a"*40)), \
+         patch.object(ci_input_scope,"validate_input_scope_snapshot",return_value=snapshot), \
+         patch.object(ci_input_scope,"planner_inventory_digest",return_value="sha256:"+"f"*64), \
+         patch.object(M,"cargo_package_profile_for_run",return_value={}), \
+         patch.object(sys,"argv",argv),redirect_stdout(output):
+      M.main()
+    issued=json.loads(output.getvalue())
+    self.assertEqual(7001,issued["required_plan_v2_artifact_id"])
+    self.assertEqual(key,issued["request_key"])
+    self.assertEqual("e"*40,issued["source_scope_oid"])
+    digest=issued["review_evidence_digest"]
+    tampered=json.loads(json.dumps(issued))
+    tampered["required_result_v2_artifacts"][0]["artifact_id"]+=1
+    self.assertNotEqual(digest,M.review_evidence_digest(tampered))
+    self.assertEqual(digest,M.review_evidence_digest(issued))
+
+  def test_refresh_of_keyed_receipt_requires_explicit_request_key(self):
+    key="sha256:"+"6"*64
+    with tempfile.TemporaryDirectory() as temp:
+      receipt=Path(temp)/"receipt.json"
+      receipt.write_text(json.dumps({"request_key":key}),encoding="utf-8")
+      argv=[str(P),"--repository","eng-cc/oasis7","--task-uid",UID,"--task-issue-number","1",
+        "--pr-number","7","--check-app-id","42","--planner-digest","auto","--receipt",str(receipt)]
+      with patch.object(M,"selected_live") as selected,patch.object(sys,"argv",argv):
+        with self.assertRaisesRegex(SystemExit,"explicit --request-key is required"):
+          M.main()
+        selected.assert_not_called()
   def test_expected_base_ref_rejects_same_oid_pr_retarget(self):
     moved=pr(); moved["base"]["ref"]="release"
     moved_run=run(); moved_run["pull_requests"][0]["base"]["ref"]="release"

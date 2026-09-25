@@ -1,0 +1,384 @@
+name: Required-gate versioned preview
+run-name: oasis7-required-preview|${{ inputs.pr_number }}|${{ inputs.scenario }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: Open same-repository PR number
+        required: true
+        type: string
+      task_uid:
+        description: Exact GitHub Project task UID in the PR body
+        required: true
+        type: string
+      base_sha:
+        description: Exact PR base commit SHA
+        required: true
+        type: string
+      head_sha:
+        description: Exact PR head commit SHA
+        required: true
+        type: string
+      tested_tree_sha:
+        description: Exact PR merge tree SHA
+        required: true
+        type: string
+      scenario:
+        description: One versioned required-gate capability scenario
+        required: true
+        type: choice
+        options:
+          - ordinary_document
+          - doc_checker_contracts
+          - workflow_governance
+          - packaging_contracts
+          - operational_contracts
+
+permissions: {}
+
+jobs:
+  preview:
+    if: github.repository == 'eng-cc/oasis7' && github.ref == 'refs/heads/main' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    permissions: {}
+    outputs:
+      scenario: ${{ steps.validate.outputs.scenario }}
+      preview_run_id: ${{ steps.validate.outputs.preview_run_id }}
+      base_sha: ${{ steps.validate.outputs.base_sha }}
+      head_sha: ${{ steps.validate.outputs.head_sha }}
+      merge_commit: ${{ steps.validate.outputs.merge_commit }}
+      tested_tree_sha: ${{ steps.validate.outputs.tested_tree_sha }}
+      run_packaging_contracts: ${{ steps.validate.outputs.run_packaging_contracts }}
+      run_operational_contracts: ${{ steps.validate.outputs.run_operational_contracts }}
+      pair_order: ${{ steps.validate.outputs.pair_order }}
+      legacy_execution_contract: ${{ steps.validate.outputs.legacy_execution_contract }}
+      versioned_execution_contract: ${{ steps.validate.outputs.versioned_execution_contract }}
+      legacy_config_sha256: ${{ steps.validate.outputs.legacy_config_sha256 }}
+      versioned_config_sha256: ${{ steps.validate.outputs.versioned_config_sha256 }}
+      legacy_selected_capabilities: ${{ steps.validate.outputs.legacy_selected_capabilities }}
+      versioned_selected_capabilities: ${{ steps.validate.outputs.versioned_selected_capabilities }}
+      document_overlay_parent_commit: ${{ steps.validate.outputs.document_overlay_parent_commit }}
+      document_overlay_commit: ${{ steps.validate.outputs.document_overlay_commit }}
+      document_overlay_tree_sha: ${{ steps.validate.outputs.document_overlay_tree_sha }}
+      document_changed_path: ${{ steps.validate.outputs.document_changed_path }}
+      document_changed_count: ${{ steps.validate.outputs.document_changed_count }}
+      document_range_check_result: ${{ steps.validate.outputs.document_range_check_result }}
+      document_range_check_elapsed_seconds: ${{ steps.validate.outputs.document_range_check_elapsed_seconds }}
+      legacy_run_result: ${{ steps.validate.outputs.legacy_run_result }}
+      legacy_elapsed_seconds: ${{ steps.validate.outputs.legacy_elapsed_seconds }}
+      versioned_run_result: ${{ steps.validate.outputs.versioned_run_result }}
+      versioned_elapsed_seconds: ${{ steps.validate.outputs.versioned_elapsed_seconds }}
+    steps:
+      - name: Fetch trusted default-branch runner
+        env:
+          TRUSTED_SHA: ${{ github.sha }}
+        run: |
+          git clone --filter=blob:none --no-checkout https://github.com/eng-cc/oasis7.git "$RUNNER_TEMP/oasis7-preview-trusted"
+          git -C "$RUNNER_TEMP/oasis7-preview-trusted" checkout --detach "$TRUSTED_SHA"
+          test "$(git -C "$RUNNER_TEMP/oasis7-preview-trusted" rev-parse HEAD)" = "$TRUSTED_SHA"
+      - name: Install trusted baseline document dependencies
+        run: |
+          python3 -m venv "$RUNNER_TEMP/oasis7-preview-venv"
+          "$RUNNER_TEMP/oasis7-preview-venv/bin/python" -m pip install -r "$RUNNER_TEMP/oasis7-preview-trusted/scripts/doc-governance-requirements.txt"
+      - name: Validate exact PR tree and run one selected preview
+        id: validate
+        env:
+          PREVIEW_REPOSITORY: ${{ github.repository }}
+          PREVIEW_EVENT_NAME: ${{ github.event_name }}
+          PREVIEW_REF: ${{ github.ref }}
+          PREVIEW_WORKFLOW_SHA: ${{ github.sha }}
+          PREVIEW_RUN_ATTEMPT: ${{ github.run_attempt }}
+          PREVIEW_RUN_ID: ${{ github.run_id }}
+          PREVIEW_PR_NUMBER: ${{ inputs.pr_number }}
+          PREVIEW_TASK_UID: ${{ inputs.task_uid }}
+          PREVIEW_BASE_SHA: ${{ inputs.base_sha }}
+          PREVIEW_HEAD_SHA: ${{ inputs.head_sha }}
+          PREVIEW_TESTED_TREE_SHA: ${{ inputs.tested_tree_sha }}
+          PREVIEW_SCENARIO: ${{ inputs.scenario }}
+          PREVIEW_PYTHON: ${{ runner.temp }}/oasis7-preview-venv/bin/python
+        run: |
+          test -x "$PREVIEW_PYTHON"
+          "$PREVIEW_PYTHON" "$RUNNER_TEMP/oasis7-preview-trusted/scripts/pm/ci-required-scope-preview.py" \
+            --trusted-root "$RUNNER_TEMP/oasis7-preview-trusted"
+
+  preview-testnet-packages-macos-arm64-contract:
+    needs: [preview]
+    if: ${{ always() && needs.preview.outputs.merge_commit != '' && needs.preview.outputs.run_packaging_contracts == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions: {}
+    env:
+      PREVIEW_PR_NUMBER: ${{ inputs.pr_number }}
+      VALIDATED_MERGE_COMMIT: ${{ needs.preview.outputs.merge_commit }}
+      VALIDATED_TREE_SHA: ${{ needs.preview.outputs.tested_tree_sha }}
+    steps:
+      - name: Fetch and verify exact preview tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$PREVIEW_PR_NUMBER" =~ ^[1-9][0-9]{0,8}$ ]]
+          candidate="$PWD/.preview-candidate"
+          git clone --filter=blob:none --no-checkout https://github.com/eng-cc/oasis7.git "$candidate"
+          git -C "$candidate" fetch --no-tags origin "+refs/pull/${PREVIEW_PR_NUMBER}/merge:refs/remotes/preview/merge"
+          merge="$(git -C "$candidate" rev-parse 'refs/remotes/preview/merge^{commit}')"
+          tree="$(git -C "$candidate" rev-parse "${merge}^{tree}")"
+          test "$merge" = "$VALIDATED_MERGE_COMMIT"
+          test "$tree" = "$VALIDATED_TREE_SHA"
+          git -C "$candidate" checkout --detach "$merge"
+      - name: Verify additive macOS arm64 package contract
+        shell: bash
+        run: bash ./.preview-candidate/scripts/testnet-packages-macos-arm64-contract.test.sh
+
+  preview-windows-package-rollout-behavior:
+    needs: [preview]
+    if: ${{ always() && needs.preview.outputs.merge_commit != '' && needs.preview.outputs.run_operational_contracts == 'true' }}
+    runs-on: windows-2022
+    timeout-minutes: 15
+    permissions: {}
+    env:
+      PREVIEW_PR_NUMBER: ${{ inputs.pr_number }}
+      VALIDATED_MERGE_COMMIT: ${{ needs.preview.outputs.merge_commit }}
+      VALIDATED_TREE_SHA: ${{ needs.preview.outputs.tested_tree_sha }}
+    steps:
+      - name: Fetch and verify exact preview tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$PREVIEW_PR_NUMBER" =~ ^[1-9][0-9]{0,8}$ ]]
+          candidate="$PWD/.preview-candidate"
+          git clone --filter=blob:none --no-checkout https://github.com/eng-cc/oasis7.git "$candidate"
+          git -C "$candidate" fetch --no-tags origin "+refs/pull/${PREVIEW_PR_NUMBER}/merge:refs/remotes/preview/merge"
+          merge="$(git -C "$candidate" rev-parse 'refs/remotes/preview/merge^{commit}')"
+          tree="$(git -C "$candidate" rev-parse "${merge}^{tree}")"
+          test "$merge" = "$VALIDATED_MERGE_COMMIT"
+          test "$tree" = "$VALIDATED_TREE_SHA"
+          git -C "$candidate" checkout --detach "$merge"
+      - name: Run disposable Windows PowerShell rollout behavior fixture
+        shell: bash
+        env:
+          OASIS7_WINDOWS_POWERSHELL_BEHAVIOR_TEST: "1"
+        run: bash ./.preview-candidate/scripts/p2p-public-testnet-package-rollout.test.sh
+
+  preview-fleet-health-ubuntu:
+    needs: [preview]
+    if: ${{ always() && needs.preview.outputs.merge_commit != '' && needs.preview.outputs.run_operational_contracts == 'true' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions: {}
+    env:
+      PREVIEW_PR_NUMBER: ${{ inputs.pr_number }}
+      VALIDATED_MERGE_COMMIT: ${{ needs.preview.outputs.merge_commit }}
+      VALIDATED_TREE_SHA: ${{ needs.preview.outputs.tested_tree_sha }}
+    steps:
+      - name: Fetch and verify exact preview tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$PREVIEW_PR_NUMBER" =~ ^[1-9][0-9]{0,8}$ ]]
+          candidate="$PWD/.preview-candidate"
+          git clone --filter=blob:none --no-checkout https://github.com/eng-cc/oasis7.git "$candidate"
+          git -C "$candidate" fetch --no-tags origin "+refs/pull/${PREVIEW_PR_NUMBER}/merge:refs/remotes/preview/merge"
+          merge="$(git -C "$candidate" rev-parse 'refs/remotes/preview/merge^{commit}')"
+          tree="$(git -C "$candidate" rev-parse "${merge}^{tree}")"
+          test "$merge" = "$VALIDATED_MERGE_COMMIT"
+          test "$tree" = "$VALIDATED_TREE_SHA"
+          git -C "$candidate" checkout --detach "$merge"
+      - name: Verify fleet-health collection contract
+        run: python ./.preview-candidate/scripts/p2p-public-testnet-fleet-health.test.py
+
+  preview-fleet-health-windows:
+    needs: [preview]
+    if: ${{ always() && needs.preview.outputs.merge_commit != '' && needs.preview.outputs.run_operational_contracts == 'true' }}
+    runs-on: windows-2022
+    timeout-minutes: 15
+    permissions: {}
+    env:
+      PREVIEW_PR_NUMBER: ${{ inputs.pr_number }}
+      VALIDATED_MERGE_COMMIT: ${{ needs.preview.outputs.merge_commit }}
+      VALIDATED_TREE_SHA: ${{ needs.preview.outputs.tested_tree_sha }}
+    steps:
+      - name: Fetch and verify exact preview tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$PREVIEW_PR_NUMBER" =~ ^[1-9][0-9]{0,8}$ ]]
+          candidate="$PWD/.preview-candidate"
+          git clone --filter=blob:none --no-checkout https://github.com/eng-cc/oasis7.git "$candidate"
+          git -C "$candidate" fetch --no-tags origin "+refs/pull/${PREVIEW_PR_NUMBER}/merge:refs/remotes/preview/merge"
+          merge="$(git -C "$candidate" rev-parse 'refs/remotes/preview/merge^{commit}')"
+          tree="$(git -C "$candidate" rev-parse "${merge}^{tree}")"
+          test "$merge" = "$VALIDATED_MERGE_COMMIT"
+          test "$tree" = "$VALIDATED_TREE_SHA"
+          git -C "$candidate" checkout --detach "$merge"
+      - name: Verify fleet-health collection contract
+        run: python ./.preview-candidate/scripts/p2p-public-testnet-fleet-health.test.py
+
+  preview-fleet-health-macos:
+    needs: [preview]
+    if: ${{ always() && needs.preview.outputs.merge_commit != '' && needs.preview.outputs.run_operational_contracts == 'true' }}
+    runs-on: macos-14
+    timeout-minutes: 15
+    permissions: {}
+    env:
+      PREVIEW_PR_NUMBER: ${{ inputs.pr_number }}
+      VALIDATED_MERGE_COMMIT: ${{ needs.preview.outputs.merge_commit }}
+      VALIDATED_TREE_SHA: ${{ needs.preview.outputs.tested_tree_sha }}
+    steps:
+      - name: Fetch and verify exact preview tree
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$PREVIEW_PR_NUMBER" =~ ^[1-9][0-9]{0,8}$ ]]
+          candidate="$PWD/.preview-candidate"
+          git clone --filter=blob:none --no-checkout https://github.com/eng-cc/oasis7.git "$candidate"
+          git -C "$candidate" fetch --no-tags origin "+refs/pull/${PREVIEW_PR_NUMBER}/merge:refs/remotes/preview/merge"
+          merge="$(git -C "$candidate" rev-parse 'refs/remotes/preview/merge^{commit}')"
+          tree="$(git -C "$candidate" rev-parse "${merge}^{tree}")"
+          test "$merge" = "$VALIDATED_MERGE_COMMIT"
+          test "$tree" = "$VALIDATED_TREE_SHA"
+          git -C "$candidate" checkout --detach "$merge"
+      - name: Verify fleet-health collection contract
+        run: python ./.preview-candidate/scripts/p2p-public-testnet-fleet-health.test.py
+
+  preview-outcome-summary:
+    if: ${{ always() }}
+    needs:
+      - preview
+      - preview-testnet-packages-macos-arm64-contract
+      - preview-windows-package-rollout-behavior
+      - preview-fleet-health-ubuntu
+      - preview-fleet-health-windows
+      - preview-fleet-health-macos
+    runs-on: ubuntu-24.04
+    permissions: {}
+    steps:
+      - name: Record selected child outcomes and ordinary-document timing pair
+        env:
+          RUN_ID: ${{ github.run_id }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          PREVIEW_RESULT: ${{ needs.preview.result }}
+          SCENARIO: ${{ needs.preview.outputs.scenario }}
+          VALIDATED_RUN_ID: ${{ needs.preview.outputs.preview_run_id }}
+          BASE_SHA: ${{ needs.preview.outputs.base_sha }}
+          HEAD_SHA: ${{ needs.preview.outputs.head_sha }}
+          MERGE_COMMIT: ${{ needs.preview.outputs.merge_commit }}
+          TREE_SHA: ${{ needs.preview.outputs.tested_tree_sha }}
+          PACKAGING_SELECTED: ${{ needs.preview.outputs.run_packaging_contracts }}
+          OPERATIONAL_SELECTED: ${{ needs.preview.outputs.run_operational_contracts }}
+          PACKAGE_RESULT: ${{ needs.preview-testnet-packages-macos-arm64-contract.result }}
+          WINDOWS_RESULT: ${{ needs.preview-windows-package-rollout-behavior.result }}
+          FLEET_UBUNTU_RESULT: ${{ needs.preview-fleet-health-ubuntu.result }}
+          FLEET_WINDOWS_RESULT: ${{ needs.preview-fleet-health-windows.result }}
+          FLEET_MACOS_RESULT: ${{ needs.preview-fleet-health-macos.result }}
+          PAIR_ORDER: ${{ needs.preview.outputs.pair_order }}
+          LEGACY_CONTRACT: ${{ needs.preview.outputs.legacy_execution_contract }}
+          VERSIONED_CONTRACT: ${{ needs.preview.outputs.versioned_execution_contract }}
+          LEGACY_CONFIG_SHA256: ${{ needs.preview.outputs.legacy_config_sha256 }}
+          VERSIONED_CONFIG_SHA256: ${{ needs.preview.outputs.versioned_config_sha256 }}
+          LEGACY_CAPABILITIES: ${{ needs.preview.outputs.legacy_selected_capabilities }}
+          VERSIONED_CAPABILITIES: ${{ needs.preview.outputs.versioned_selected_capabilities }}
+          OVERLAY_PARENT: ${{ needs.preview.outputs.document_overlay_parent_commit }}
+          OVERLAY_COMMIT: ${{ needs.preview.outputs.document_overlay_commit }}
+          OVERLAY_TREE: ${{ needs.preview.outputs.document_overlay_tree_sha }}
+          DOCUMENT_PATH: ${{ needs.preview.outputs.document_changed_path }}
+          DOCUMENT_COUNT: ${{ needs.preview.outputs.document_changed_count }}
+          DOCUMENT_CHECK_RESULT: ${{ needs.preview.outputs.document_range_check_result }}
+          DOCUMENT_CHECK_SECONDS: ${{ needs.preview.outputs.document_range_check_elapsed_seconds }}
+          LEGACY_RESULT: ${{ needs.preview.outputs.legacy_run_result }}
+          LEGACY_SECONDS: ${{ needs.preview.outputs.legacy_elapsed_seconds }}
+          VERSIONED_RESULT: ${{ needs.preview.outputs.versioned_run_result }}
+          VERSIONED_SECONDS: ${{ needs.preview.outputs.versioned_elapsed_seconds }}
+        run: |
+          {
+            echo "### Required-gate preview child outcomes"
+            echo "- Run/attempt: ${RUN_ID}/${RUN_ATTEMPT}"
+            echo "- Scenario: ${SCENARIO:-unvalidated}"
+            echo "- Validated run ID: ${VALIDATED_RUN_ID:-unvalidated}"
+            echo "- B/H/T: ${BASE_SHA:-unvalidated} / ${HEAD_SHA:-unvalidated} / ${MERGE_COMMIT:-unvalidated} (tree ${TREE_SHA:-unvalidated})"
+            echo "- Actual B-to-T diff: scripts/ci-required-scope.v2.json only"
+            echo "- Selected packaging/operational groups: ${PACKAGING_SELECTED:-unvalidated} / ${OPERATIONAL_SELECTED:-unvalidated}"
+            echo "- In-process required preview: ${PREVIEW_RESULT}"
+            echo "- job_id preview-testnet-packages-macos-arm64-contract: ${PACKAGE_RESULT}"
+            echo "- job_id preview-windows-package-rollout-behavior: ${WINDOWS_RESULT}"
+            echo "- job_id preview-fleet-health-ubuntu (ubuntu-24.04): ${FLEET_UBUNTU_RESULT}"
+            echo "- job_id preview-fleet-health-windows (windows-2022): ${FLEET_WINDOWS_RESULT}"
+            echo "- job_id preview-fleet-health-macos (macos-14): ${FLEET_MACOS_RESULT}"
+            if [[ "$SCENARIO" == ordinary_document ]]; then
+              echo "- Paired planner modes/order: ${LEGACY_CONTRACT:-unvalidated} / ${VERSIONED_CONTRACT:-unvalidated}; ${PAIR_ORDER:-unvalidated}"
+              echo "- Paired config digests: ${LEGACY_CONFIG_SHA256:-unvalidated} / ${VERSIONED_CONFIG_SHA256:-unvalidated}"
+              echo "- Paired selected capabilities: ${LEGACY_CAPABILITIES:-unvalidated} / ${VERSIONED_CAPABILITIES:-unvalidated}"
+              echo "- Disposable document overlay parent/commit/tree: ${OVERLAY_PARENT:-unvalidated} / ${OVERLAY_COMMIT:-unvalidated} / ${OVERLAY_TREE:-unvalidated}"
+              echo "- Changed-range document proof: ${DOCUMENT_CHECK_RESULT:-unvalidated}; ${DOCUMENT_COUNT:-unvalidated} document(s); ${DOCUMENT_PATH:-unvalidated}; ${DOCUMENT_CHECK_SECONDS:-unvalidated}s"
+              echo "- Legacy timed child: ${LEGACY_RESULT:-unvalidated}; ${LEGACY_SECONDS:-unvalidated}s"
+              echo "- Versioned timed child: ${VERSIONED_RESULT:-unvalidated}; ${VERSIONED_SECONDS:-unvalidated}s"
+            fi
+            echo "- CI readiness receipt: not created"
+            echo "- Required-gate authority: unchanged"
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          [[ -n "$SCENARIO" && -n "$BASE_SHA" && -n "$HEAD_SHA" && -n "$TREE_SHA" && "$VALIDATED_RUN_ID" == "$RUN_ID" ]] || {
+            echo "error: preview identity outputs are missing; child outcomes are not validated" >&2
+            exit 1
+          }
+          [[ "$RUN_ATTEMPT" == 1 ]] || {
+            echo "error: rerun attempts cannot inherit previous child outcomes; dispatch a new preview run" >&2
+            exit 1
+          }
+          [[ "$PREVIEW_RESULT" == success ]] || {
+            echo "error: preview validation/in-process required run concluded $PREVIEW_RESULT" >&2
+            exit 1
+          }
+          expect_child_result() {
+            local selected="$1" actual="$2" label="$3"
+            if [[ "$selected" == true ]]; then
+              [[ "$actual" == success ]] || { echo "error: selected child $label concluded $actual" >&2; return 1; }
+            else
+              [[ "$actual" == skipped ]] || { echo "error: unselected child $label unexpectedly concluded $actual" >&2; return 1; }
+            fi
+          }
+          expect_child_result "$PACKAGING_SELECTED" "$PACKAGE_RESULT" preview-testnet-packages-macos-arm64-contract
+          expect_child_result "$OPERATIONAL_SELECTED" "$WINDOWS_RESULT" preview-windows-package-rollout-behavior
+          expect_child_result "$OPERATIONAL_SELECTED" "$FLEET_UBUNTU_RESULT" preview-fleet-health-ubuntu
+          expect_child_result "$OPERATIONAL_SELECTED" "$FLEET_WINDOWS_RESULT" preview-fleet-health-windows
+          expect_child_result "$OPERATIONAL_SELECTED" "$FLEET_MACOS_RESULT" preview-fleet-health-macos
+          if [[ "$SCENARIO" == ordinary_document ]]; then
+            [[ "$PAIR_ORDER" == "legacy;versioned" || "$PAIR_ORDER" == "versioned;legacy" ]] || {
+              echo "error: ordinary-document timing pair order is missing or invalid" >&2
+              exit 1
+            }
+            [[ "$LEGACY_CONTRACT" == legacy && "$VERSIONED_CONTRACT" == required-domain-split/v1 ]] || {
+              echo "error: timing pair does not compare the trusted legacy and versioned contracts" >&2
+              exit 1
+            }
+            [[ "$LEGACY_CONFIG_SHA256" == sha256:d656841b3c9fcf66fcd5ea1c37b43d9628e61d13ea48be8bda54e71511d505b4 ]] || {
+              echo "error: legacy timing leg used an unexpected trusted config digest" >&2
+              exit 1
+            }
+            [[ "$VERSIONED_CONFIG_SHA256" == sha256:2d4228e5d7446c393ea3811084183860b5f8b4bb0e3b673957a3a020ab172dec ]] || {
+              echo "error: versioned timing leg used an unexpected trusted fixture digest" >&2
+              exit 1
+            }
+            [[ "$LEGACY_CAPABILITIES" == required_gate_baseline && "$VERSIONED_CAPABILITIES" == required_gate_baseline ]] || {
+              echo "error: ordinary-document pair did not select the same required-gate baseline capability" >&2
+              exit 1
+            }
+            [[ "$OVERLAY_PARENT" == "$MERGE_COMMIT" && -n "$OVERLAY_COMMIT" && -n "$OVERLAY_TREE" ]] || {
+              echo "error: changed-range overlay is not a child of the validated candidate merge" >&2
+              exit 1
+            }
+            [[ "$DOCUMENT_PATH" == doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md && "$DOCUMENT_COUNT" == 1 && "$DOCUMENT_CHECK_RESULT" == success ]] || {
+              echo "error: ordinary-document changed-range proof is missing or selected the wrong scope" >&2
+              exit 1
+            }
+            [[ "$LEGACY_RESULT" == success && "$VERSIONED_RESULT" == success ]] || {
+              echo "error: one or both required-gate timing pair legs failed" >&2
+              exit 1
+            }
+            for duration in "$DOCUMENT_CHECK_SECONDS" "$LEGACY_SECONDS" "$VERSIONED_SECONDS"; do
+              [[ "$duration" =~ ^[0-9]+([.][0-9]+)?$ ]] || {
+                echo "error: timing pair duration is missing or malformed: $duration" >&2
+                exit 1
+              }
+            done
+          fi

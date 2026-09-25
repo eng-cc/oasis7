@@ -77,6 +77,21 @@ PROJECTION_BINDING_FIELDS = (
     "impact_projection_planner_digest",
 )
 PROJECTION_SCHEMA = "oasis7-workflow-impact-projection/v2"
+REQUIRED_V2_RECEIPT_FIELDS = (
+    "request_key", "request_identity", "bootstrap_epoch", "request_id",
+    "request_created_at", "live_validation", "trusted_integration_artifact",
+    "source_scope_oid",
+    "trusted_policy_context", "effective_policy_identity",
+    "required_plan_v2_artifact_id", "required_plan_v2_artifact_name",
+    "required_plan_v2_payload", "required_result_v2_artifacts",
+    "trusted_planner_inventory", "execution_jobs",
+)
+REQUIRED_V2_RECEIPT_DISCRIMINATORS = frozenset({
+    "request_key", "request_identity", "source_scope_oid",
+    "effective_policy_identity", "required_plan_v2_artifact_id",
+    "required_plan_v2_artifact_name", "required_plan_v2_payload",
+    "required_result_v2_artifacts", "trusted_planner_inventory",
+})
 
 
 def read_required_plan_capabilities(plan: Any) -> tuple[str, ...] | None:
@@ -121,6 +136,148 @@ def _require_digest(value: Any, field: str) -> str:
     if not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{64}", value):
         raise ValueError(f"{field} must be a lowercase SHA-256 digest")
     return value
+
+
+def _required_v2_evidence_identity(receipt: dict[str, Any]) -> dict[str, Any] | None:
+    if not REQUIRED_V2_RECEIPT_DISCRIMINATORS.intersection(receipt):
+        return None
+    missing = [field for field in REQUIRED_V2_RECEIPT_FIELDS if field not in receipt]
+    if missing:
+        raise ValueError("v2 required evidence authority is incomplete: " + ",".join(missing))
+
+    plan = receipt["required_plan_v2_payload"]
+    if not isinstance(plan, dict) or plan.get("schema") != REQUIRED_PLAN_V2_SCHEMA:
+        raise ValueError("v2 required evidence plan payload is malformed")
+    if read_required_plan_capabilities(plan) != (INPUT_SCOPE_REUSE_CAPABILITY,):
+        raise ValueError("v2 required evidence plan capability is unsupported")
+    result = {field: receipt[field] for field in REQUIRED_V2_RECEIPT_FIELDS}
+
+    artifact_id = receipt["required_plan_v2_artifact_id"]
+    if type(artifact_id) is not int or artifact_id <= 0:
+        raise ValueError("v2 required evidence plan artifact ID is invalid")
+    try:
+        workflow_run_id = int(receipt["run_id"])
+        run_attempt = int(receipt["run_attempt"])
+    except (KeyError, TypeError, ValueError):
+        raise ValueError("v2 required evidence run attempt is missing")
+    if (type(receipt.get("run_id")) is bool or type(receipt.get("run_attempt")) is bool
+            or workflow_run_id <= 0 or run_attempt <= 0):
+        raise ValueError("v2 required evidence run attempt is invalid")
+    expected_plan_name = f"oasis7-required-plan-v2-{workflow_run_id}-a{run_attempt}"
+    if receipt["required_plan_v2_artifact_name"] != expected_plan_name:
+        raise ValueError("v2 required evidence plan artifact name is invalid")
+
+    identity_pairs = (
+        ("repository", "repository"), ("task_uid", "task_uid"),
+        ("pr_number", "pr_number"), ("source_head_oid", "head_oid"),
+        ("bootstrap_epoch", "bootstrap_epoch"),
+        ("source_scope_oid", "source_scope_oid"),
+        ("integration_base_oid", "integration_base_oid"),
+        ("tested_commit_oid", "tested_commit_oid"),
+        ("tested_tree_oid", "tested_tree_oid"),
+        ("workflow_ref", "workflow_ref"), ("workflow_sha", "workflow_sha"),
+        ("workflow_run_id", "run_id"), ("run_attempt", "run_attempt"),
+        ("check_name", "check_name"), ("check_app_id", "check_app_id"),
+        ("check_run_id", "check_run_id"),
+    )
+    for plan_field, receipt_field in identity_pairs:
+        if plan.get(plan_field) != receipt.get(receipt_field):
+            raise ValueError("v2 required evidence plan identity mismatch: " + plan_field)
+    if receipt.get("integration_run_id") != workflow_run_id:
+        raise ValueError("v2 required evidence workflow run differs from the receipt")
+    if (type(receipt["request_id"]) is not int or receipt["request_id"] != workflow_run_id
+            or not isinstance(receipt["request_created_at"], str)
+            or not receipt["request_created_at"].strip()
+            or receipt["live_validation"] != "ci-ready-receipt-live"
+            or receipt["trusted_integration_artifact"] is not True):
+        raise ValueError("v2 required evidence request or live-attestation identity is invalid")
+    if receipt.get("scope_base_oid") != receipt.get("source_scope_oid"):
+        raise ValueError("v2 required evidence source scope differs from receipt scope")
+    if receipt.get("effective_policy_identity") != plan.get("effective_policy_identity"):
+        raise ValueError("v2 required evidence policy identity mismatch")
+    policy_context = receipt["trusted_policy_context"]
+    if (not isinstance(policy_context, dict)
+            or policy_context.get("effective_policy_identity") != receipt["effective_policy_identity"]
+            or policy_context.get("workflow_sha") != plan.get("workflow_sha")
+            or policy_context.get("workflow_ref") != plan.get("workflow_ref")):
+        raise ValueError("v2 required evidence trusted policy context mismatch")
+
+    request_identity = receipt["request_identity"]
+    if (not isinstance(request_identity, dict)
+            or request_identity != plan.get("request_identity")
+            or receipt["request_key"] != plan.get("request_key")
+            or request_identity.get("source_head_oid") != plan.get("source_head_oid")
+            or request_identity.get("source_projection_digest") != plan.get("source_projection_digest")
+            or request_identity.get("executor_contract_digest") != plan.get("executor_contract_digest")
+            or receipt.get("bootstrap_epoch") != request_identity.get("bootstrap_epoch")):
+        raise ValueError("v2 required evidence request identity mismatch")
+
+    binding = receipt["trusted_planner_inventory"]
+    issuer = plan.get("planner_inventory_issuer")
+    if not isinstance(binding, dict) or not isinstance(issuer, dict):
+        raise ValueError("v2 required evidence planner inventory binding is malformed")
+    producer = binding.get("producer")
+    embedded_producer = issuer.get("producer")
+    if (binding.get("schema") != issuer.get("schema")
+            or binding.get("authority") != plan.get("planner_inventory_authority")
+            or binding.get("authority") != issuer.get("authority")
+            or not isinstance(producer, dict) or not isinstance(embedded_producer, dict)
+            or producer.get("artifact_id") != artifact_id
+            or {key: producer.get(key) for key in ("run_id", "run_attempt", "check_app_id", "check_run_id")}
+               != embedded_producer
+            or any(binding.get(key) != issuer.get(key)
+                   for key in ("target_oid", "target_tree_oid", "unit_ids", "inventory_digest"))
+            or plan.get("planner_inventory_digest") != binding.get("inventory_digest")):
+        raise ValueError("v2 required evidence planner inventory binding mismatch")
+
+    unit_ids = plan.get("unit_ids")
+    artifacts = receipt["required_result_v2_artifacts"]
+    if (not isinstance(unit_ids, list) or not unit_ids
+            or any(not isinstance(unit, str) or not unit for unit in unit_ids)
+            or unit_ids != sorted(set(unit_ids)) or binding.get("unit_ids") != unit_ids
+            or not isinstance(artifacts, list) or len(artifacts) != len(unit_ids)):
+        raise ValueError("v2 required evidence result inventory is incomplete")
+    seen_ids: set[int] = set()
+    seen_names: set[str] = set()
+    results_by_unit: dict[str, dict[str, Any]] = {}
+    for item in artifacts:
+        if (not isinstance(item, dict) or set(item) != {"artifact_id", "name", "payload"}
+                or type(item.get("artifact_id")) is not int or item["artifact_id"] <= 0
+                or not isinstance(item.get("name"), str) or not isinstance(item.get("payload"), dict)):
+            raise ValueError("v2 required evidence result artifact is malformed")
+        payload = item["payload"]
+        unit = payload.get("unit_id")
+        if (not isinstance(unit, str) or not unit
+                or item["artifact_id"] in seen_ids or item["name"] in seen_names
+                or unit not in unit_ids or unit in results_by_unit):
+            raise ValueError("v2 required evidence result artifact is duplicate or unexpected")
+        expected_name = "oasis7-required-result-v2-{}-a{}-{}".format(
+            workflow_run_id, run_attempt,
+            hashlib.sha256(unit.encode("utf-8")).hexdigest(),
+        )
+        if item["name"] != expected_name:
+            raise ValueError("v2 required evidence result artifact name is invalid")
+        if (payload.get("schema") != "oasis7-required-result-v2"
+                or payload.get("workflow_run_id") != workflow_run_id
+                or payload.get("run_attempt") != run_attempt
+                or payload.get("plan_artifact_id") != artifact_id):
+            raise ValueError("v2 required evidence result identity mismatch")
+        seen_ids.add(item["artifact_id"])
+        seen_names.add(item["name"])
+        results_by_unit[unit] = item
+    if set(results_by_unit) != set(unit_ids):
+        raise ValueError("v2 required evidence result inventory is incomplete")
+
+    jobs = receipt["execution_jobs"]
+    if not isinstance(jobs, list) or not jobs:
+        raise ValueError("v2 required evidence execution jobs are missing")
+    # Copy nested structures through canonical JSON so callers cannot smuggle
+    # unserializable values into the digest authority.
+    try:
+        json.dumps(result, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("v2 required evidence authority is not canonical JSON") from exc
+    return result
 
 
 def source_review_identity(
@@ -295,9 +452,18 @@ def integration_ci_identity(receipt: dict[str, Any]) -> dict[str, Any]:
     """Normalize a v2 trusted integration receipt into its identity object."""
     if not isinstance(receipt, dict):
         raise ValueError("integration CI receipt must be an object")
-    source_head_oid = receipt.get("source_head_oid", receipt.get("head_oid"))
-    integration_base_oid = receipt.get("integration_base_oid", receipt.get("base_oid"))
-    run_id = receipt.get("run_id", receipt.get("integration_run_id"))
+
+    def aliased_value(primary: str, alias: str, *, numeric: bool = False) -> Any:
+        value, alternate = receipt.get(primary), receipt.get(alias)
+        if value is not None and alternate is not None:
+            matches = str(value) == str(alternate) if numeric else value == alternate
+            if not matches:
+                raise ValueError(f"integration CI identity has conflicting aliases: {primary}/{alias}")
+        return value if value is not None else alternate
+
+    source_head_oid = aliased_value("source_head_oid", "head_oid")
+    integration_base_oid = aliased_value("integration_base_oid", "base_oid")
+    run_id = aliased_value("run_id", "integration_run_id", numeric=True)
     values = {
         "repository": receipt.get("repository"),
         "task_uid": receipt.get("task_uid"),
@@ -331,7 +497,9 @@ def integration_ci_identity(receipt: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("workflow_ref is invalid")
     _require_oid(values["workflow_sha"], "workflow_sha")
     for field in ("request_id", "run_id", "check_app_id", "check_run_id"):
-        if isinstance(values[field], bool) or not isinstance(values[field], (int, str)) or not str(values[field]).strip():
+        if (isinstance(values[field], bool)
+                or not isinstance(values[field], (int, str))
+                or not re.fullmatch(r"[1-9][0-9]*", str(values[field]))):
             raise ValueError(f"{field} is invalid")
     if not isinstance(values["request_created_at"], str) or not values["request_created_at"].strip():
         raise ValueError("request_created_at is invalid")
@@ -926,6 +1094,9 @@ def review_evidence_identity(receipt: dict[str, Any]) -> dict[str, Any]:
     if missing:
         raise ValueError("CI receipt is missing review authority fields: " + ",".join(missing))
     result = {field: receipt[field] for field in AUTHORITY_FIELDS}
+    v2_evidence = _required_v2_evidence_identity(receipt)
+    if v2_evidence is not None:
+        result.update(v2_evidence)
     execution_contract = receipt.get("execution_contract")
     if execution_contract is None:
         planner = receipt.get("planner")
