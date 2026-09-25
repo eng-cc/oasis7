@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import hashlib
+import importlib.util
 import json
 import pathlib
 import subprocess
@@ -36,6 +37,11 @@ def read_json(path: pathlib.Path) -> dict:
     return value
 
 
+def read_json_value(path: pathlib.Path):
+    """Read any JSON value; aggregate evidence is an array by contract."""
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
 def command(*args: str) -> str:
     result = subprocess.run(args, text=True, capture_output=True)
     if result.returncode:
@@ -47,6 +53,34 @@ def write_json_atomic(path: pathlib.Path, value: dict) -> None:
     staged = path.with_suffix(path.suffix + ".tmp")
     staged.write_text(json.dumps(value, sort_keys=True, indent=2) + "\n", encoding="utf-8")
     staged.replace(path)
+
+
+def validate_terminal_receipt(
+    root: pathlib.Path,
+    task_uid: str,
+    plan_path: pathlib.Path,
+    candidate_path: pathlib.Path,
+    evidence_path: pathlib.Path,
+    receipt_path: pathlib.Path,
+) -> None:
+    """Re-read current child proofs before accepting a closed aggregate retry."""
+    helper = root / "scripts/pm/aggregate-task-completion.py"
+    spec = importlib.util.spec_from_file_location("finalize_aggregate_task_completion", helper)
+    if spec is None or spec.loader is None:
+        fail("aggregate terminal proof validator is unavailable")
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+        module.validate_terminal_receipt(
+            root,
+            task_uid,
+            read_json(plan_path),
+            read_json(candidate_path),
+            read_json_value(evidence_path),
+            read_json(receipt_path),
+        )
+    except Exception as exc:
+        fail(f"closed aggregate child proof revalidation failed: {exc}")
 
 
 def main() -> int:
@@ -88,10 +122,11 @@ def main() -> int:
         fail("live coordinator Issue Task UID mismatch")
     if task.get("workflow_phase") == "task_done" and issue.get("state") != "OPEN":
         fail("coordinator Issue closed before terminal proof")
-    if task.get("workflow_phase") == "post_merge_done" and issue.get("state") == "CLOSED":
-        # The aggregate validator deliberately requires an open coordinator.
-        # A completed retry instead checks the durable terminal receipt below.
-        pass
+    closed_retry = task.get("workflow_phase") == "post_merge_done" and issue.get("state") == "CLOSED"
+    if closed_retry:
+        # The OPEN-only validator cannot accept a completed coordinator. Replay
+        # the terminal aggregate receipt against current child readbacks instead.
+        validate_terminal_receipt(root, args.task_uid, *inputs)
     else:
         if issue.get("state") != "OPEN":
             fail("coordinator Issue state is unsupported")

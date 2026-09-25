@@ -253,6 +253,7 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
 
     def run_finalizer_retry(
         self, phase: str, issue_state: str, *, preflight=False, registered_default=True,
+        child_proof_drift=False,
     ):
         with tempfile.TemporaryDirectory() as temp:
             root = pathlib.Path(temp).resolve()
@@ -301,6 +302,13 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
             mapping_path.write_text(json.dumps({"version": 1, "tasks": {UID: task}}), encoding="utf-8")
             issue = {"state": issue_state, "body": f"task_uid: {UID}\n"}
             events: list[str] = []
+            terminal_validation_calls: list[tuple] = []
+
+            def validate_terminal_receipt(*args):
+                terminal_validation_calls.append(args)
+                events.append("terminal_validate")
+                if child_proof_drift:
+                    raise ValueError("child terminal proof drift")
 
             def snapshot(directory: pathlib.Path):
                 if not directory.is_dir():
@@ -354,18 +362,28 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
             if preflight:
                 argv.append("--preflight")
             with mock.patch.object(self.finalizer, "command", side_effect=fake_command), \
+                    mock.patch.object(
+                        self.finalizer, "validate_terminal_receipt",
+                        side_effect=validate_terminal_receipt, create=True,
+                    ), \
                     mock.patch.object(sys, "argv", argv), contextlib.redirect_stdout(io.StringIO()):
                 try:
                     result = self.finalizer.main()
                 except SystemExit as exc:
                     result = str(exc)
+                except Exception as exc:
+                    result = f"{type(exc).__name__}: {exc}"
             saved_task = json.loads(mapping_path.read_text())["tasks"][UID]
             durable_after = snapshot(durable)
             mapping_unchanged = mapping_before == mapping_path.read_bytes()
-            return result, events, saved_task, issue, terminal_path.is_file(), durable_before, durable_after, mapping_unchanged
+            return (
+                result, events, saved_task, issue, terminal_path.is_file(),
+                durable_before, durable_after, mapping_unchanged, terminal_validation_calls,
+                root, plan_path, candidate_path, evidence_path, receipt_path,
+            )
 
     def test_finalizer_resumes_task_done_and_post_merge_open_retries(self):
-        result, events, task, issue, terminal_exists, _before, _after, _mapping_same = self.run_finalizer_retry("task_done", "OPEN")
+        result, events, task, issue, terminal_exists, _before, _after, _mapping_same, _calls, *_inputs = self.run_finalizer_retry("task_done", "OPEN")
         self.assertEqual(result, 0)
         self.assertEqual(task["workflow_phase"], "post_merge_done")
         self.assertEqual(issue["state"], "CLOSED")
@@ -373,26 +391,46 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
         self.assertLess(events.index("project_audit"), events.index("issue_close"))
         self.assertTrue(terminal_exists)
 
-        result, events, task, issue, _terminal, _before, _after, _mapping_same = self.run_finalizer_retry("post_merge_done", "OPEN")
+        result, events, task, issue, _terminal, _before, _after, _mapping_same, calls, *_inputs = self.run_finalizer_retry("post_merge_done", "OPEN")
         self.assertEqual(result, 0)
         self.assertEqual(task["workflow_phase"], "post_merge_done")
         self.assertEqual(issue["state"], "CLOSED")
         self.assertNotIn("set_phase", events)
         self.assertIn("aggregate_validate", events)
+        self.assertNotIn("terminal_validate", events)
         self.assertIn("issue_close", events)
 
     def test_finalizer_closed_retry_is_idempotent_without_open_only_validator(self):
-        result, events, task, issue, _terminal, _before, _after, _mapping_same = self.run_finalizer_retry("post_merge_done", "CLOSED")
+        result, events, task, issue, _terminal, _before, _after, _mapping_same, calls, root, plan, candidate, evidence, receipt = self.run_finalizer_retry("post_merge_done", "CLOSED")
         self.assertEqual(result, 0)
         self.assertEqual(task["workflow_phase"], "post_merge_done")
         self.assertEqual(issue["state"], "CLOSED")
         self.assertNotIn("aggregate_validate", events)
+        self.assertEqual(events.count("terminal_validate"), 1)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(
+            tuple(str(value) for value in calls[0]),
+            (str(root), UID, str(plan), str(candidate), str(evidence), str(receipt)),
+        )
         self.assertNotIn("set_phase", events)
         self.assertNotIn("issue_close", events)
         self.assertEqual(events.count("project_audit"), 1)
 
+    def test_closed_finalizer_retry_rejects_child_proof_drift_before_effects(self):
+        result, events, _task, issue, _terminal, before, after, mapping_unchanged, calls, *_inputs = self.run_finalizer_retry(
+            "post_merge_done", "CLOSED", child_proof_drift=True,
+        )
+        self.assertIn("child terminal proof drift", str(result))
+        self.assertEqual(events.count("terminal_validate"), 1)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(issue["state"], "CLOSED")
+        self.assertEqual(before, after)
+        self.assertTrue(mapping_unchanged)
+        self.assertNotIn("project_audit", events)
+        self.assertNotIn("issue_close", events)
+
     def test_finalizer_rejects_linked_task_worktree_before_receipt_or_remote_effects(self):
-        result, events, _task, issue, terminal_exists, before, after, mapping_unchanged = self.run_finalizer_retry(
+        result, events, _task, issue, terminal_exists, before, after, mapping_unchanged, _calls, *_inputs = self.run_finalizer_retry(
             "task_done", "OPEN", registered_default=False,
         )
         self.assertIn("registered default worktree", result)
@@ -403,7 +441,7 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
         self.assertTrue(mapping_unchanged)
 
     def test_closed_finalizer_preflight_validates_without_writing(self):
-        result, events, task, issue, terminal_exists, before, after, mapping_unchanged = self.run_finalizer_retry(
+        result, events, task, issue, terminal_exists, before, after, mapping_unchanged, calls, root, plan, candidate, evidence, receipt = self.run_finalizer_retry(
             "post_merge_done", "CLOSED", preflight=True,
         )
         self.assertEqual(result, 0)
@@ -416,6 +454,53 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
         self.assertEqual(events.count("project_audit"), 1)
         self.assertNotIn("set_phase", events)
         self.assertNotIn("issue_close", events)
+        self.assertEqual(events.count("terminal_validate"), 1)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(
+            tuple(str(value) for value in calls[0]),
+            (str(root), UID, str(plan), str(candidate), str(evidence), str(receipt)),
+        )
+
+    def test_closed_finalizer_preflight_rejects_child_proof_drift_without_writes(self):
+        result, events, _task, issue, terminal_exists, before, after, mapping_unchanged, calls, *_inputs = self.run_finalizer_retry(
+            "post_merge_done", "CLOSED", preflight=True, child_proof_drift=True,
+        )
+        self.assertIn("child terminal proof drift", str(result))
+        self.assertEqual(events.count("terminal_validate"), 1)
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(issue["state"], "CLOSED")
+        self.assertTrue(terminal_exists)
+        self.assertEqual(before, after)
+        self.assertTrue(mapping_unchanged)
+        self.assertNotIn("project_audit", events)
+        self.assertNotIn("issue_close", events)
+        self.assertNotIn("set_phase", events)
+
+    def test_closed_finalizer_validator_passes_array_evidence_to_aggregate_helper(self):
+        payloads = {
+            "plan": {"plan": True}, "candidate": {"candidate": True},
+            "evidence": [{"evidence": True}], "receipt": {"receipt": True},
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            paths = {}
+            for name, value in payloads.items():
+                path = pathlib.Path(temp) / f"{name}.json"
+                path.write_text(json.dumps(value), encoding="utf-8")
+                paths[name] = path
+
+            validator = mock.Mock()
+            module = SimpleNamespace()
+            loader = SimpleNamespace(exec_module=lambda loaded: setattr(loaded, "validate_terminal_receipt", validator))
+            spec = SimpleNamespace(loader=loader)
+            with mock.patch.object(self.finalizer.importlib.util, "spec_from_file_location", return_value=spec), \
+                    mock.patch.object(self.finalizer.importlib.util, "module_from_spec", return_value=module):
+                self.finalizer.validate_terminal_receipt(
+                    ROOT, UID, paths["plan"], paths["candidate"], paths["evidence"], paths["receipt"],
+                )
+
+        validator.assert_called_once_with(
+            ROOT, UID, payloads["plan"], payloads["candidate"], payloads["evidence"], payloads["receipt"],
+        )
 
     def test_single_pr_done_closeout_remains_receipt_optional(self):
         record = {"task_uid": UID, "status": "committed", "issue_number": 4035,
