@@ -180,6 +180,28 @@ def _timestamp(value: Any, label: str) -> dt.datetime:
     return parsed.astimezone(dt.timezone.utc)
 
 
+def _validate_dependency_merge_chronology(deliveries: list[dict[str, Any]]) -> None:
+    """Require each declared prerequisite to merge strictly before its dependent."""
+    merged_at_by_obligation: dict[str, dt.datetime] = {}
+    for index, delivery in enumerate(deliveries, start=1):
+        obligation_id = _nonempty(delivery.get("obligation_id"), f"delivery {index} obligation_id")
+        merged_at = _timestamp(delivery.get("merged_at"), f"delivery {index} merged_at")
+        dependencies = delivery.get("depends_on")
+        if not isinstance(dependencies, list) or any(not isinstance(item, str) for item in dependencies):
+            raise ReceiptError(f"delivery {index} dependencies are invalid for merge chronology")
+        for dependency in dependencies:
+            prerequisite_merged_at = merged_at_by_obligation.get(dependency)
+            if prerequisite_merged_at is None:
+                raise ReceiptError(f"delivery {index} dependency is absent or out of order: {dependency}")
+            if merged_at <= prerequisite_merged_at:
+                raise ReceiptError(
+                    f"delivery {obligation_id} merged_at must be later than prerequisite {dependency}"
+                )
+        if obligation_id in merged_at_by_obligation:
+            raise ReceiptError(f"duplicate delivery obligation in merge chronology: {obligation_id}")
+        merged_at_by_obligation[obligation_id] = merged_at
+
+
 def _parse_body_field(body: str, key: str) -> str | None:
     values = re.findall(rf"(?m)^\s*(?:-\s*)?{re.escape(key)}:\s*([^\n]*)$", body)
     if len(values) > 1:
@@ -206,8 +228,11 @@ def _validate_coordinator(
     body = issue.get("body")
     if not isinstance(body, str):
         raise ReceiptError("live coordinator Issue body is unavailable")
-    task_values = re.findall(r"(?m)^task_uid:\s*(task_[0-9a-f]{32})\s*$", body)
-    if task_values != [task_uid]:
+    task_uid_lines = re.findall(
+        r"(?m)^[ \t]*(?:-[ \t]+)?task_uid[ \t]*:[^\n]*$",
+        body.replace("\r\n", "\n"),
+    )
+    if task_uid_lines != [f"task_uid: {task_uid}"]:
         raise ReceiptError("coordinator Issue must declare exactly the requested Task UID")
     if _parse_body_field(body, "completion_mode") != "ordered_delivery_aggregate":
         raise ReceiptError("coordinator Issue does not select ordered_delivery_aggregate")
@@ -345,6 +370,7 @@ def _build_receipt(
         _validate_child_report(delivery, child_reports[delivery["task_uid"]], default_branch)
         for delivery in plan["required_deliveries"]
     ]
+    _validate_dependency_merge_chronology(deliveries)
     receipt = {
         "schema": RECEIPT_SCHEMA,
         "receipt_type": RECEIPT_TYPE,
@@ -472,6 +498,7 @@ def validate_receipt(receipt: Any, *, now: dt.datetime | None = None) -> dict[st
             value = delivery.get(key)
             if not isinstance(value, str) or not SHA256_RE.fullmatch(value):
                 raise ReceiptError(f"receipt delivery {index} digest is invalid: {key}")
+    _validate_dependency_merge_chronology(deliveries)
     current = now or dt.datetime.now(dt.timezone.utc)
     age = (current - _timestamp(receipt["observed_at"], "receipt observed_at")).total_seconds()
     if age < -30 or age > 600:

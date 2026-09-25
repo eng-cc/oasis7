@@ -117,7 +117,11 @@ class AggregateTaskCompletionTests(unittest.TestCase):
             "claim_type": "task_complete", "status": "verified",
             "verification_exit_code": 0,
         }
-        for delivery, uid in zip(plan["required_deliveries"], (uid_a, uid_b)):
+        for delivery, uid, merged_at in zip(
+            plan["required_deliveries"],
+            (uid_a, uid_b),
+            ("2026-09-25T09:00:00Z", "2026-09-25T09:01:00Z"),
+        ):
             child_reports[uid] = {
                 "status": "reconciled",
                 "task": {
@@ -155,7 +159,7 @@ class AggregateTaskCompletionTests(unittest.TestCase):
                         "base_ref": "main",
                         "head_oid": "4" * 40,
                         "merge_commit_oid": "5" * 40,
-                        "merged_at": "2026-09-25T09:00:00Z",
+                        "merged_at": merged_at,
                     },
                 },
                 "proof": {
@@ -203,6 +207,27 @@ class AggregateTaskCompletionTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "plan comment|plan digest"):
             self.build(tuple(values))
 
+    def test_rejects_malformed_or_duplicate_coordinator_task_uid_fields(self):
+        plan, _candidate, _evidence, coordinator, _comment, _children = self.context()
+        expected_uid = plan["task_uid"]
+        malformed_duplicate = coordinator["body"] + "task_uid: malformed\n"
+        duplicate_same = coordinator["body"] + f"task_uid: {expected_uid}\n"
+        duplicate_conflict = coordinator["body"] + f"task_uid: {task_uid('c')}\n"
+        malformed_only = coordinator["body"].replace(
+            f"task_uid: {expected_uid}\n", "task_uid: malformed\n",
+        )
+        for label, body in (
+            ("valid plus malformed duplicate", malformed_duplicate),
+            ("duplicate same UID", duplicate_same),
+            ("duplicate conflicting UID", duplicate_conflict),
+            ("malformed only", malformed_only),
+        ):
+            with self.subTest(coordinator_task_uid=label):
+                values = list(self.context())
+                values[3] = {**values[3], "body": body}
+                with self.assertRaises(self.helper.ReceiptError):
+                    self.build(tuple(values))
+
     def test_rejects_duplicate_or_noncontiguous_delivery_ordinals(self):
         for mutate in (
             lambda plan: plan["required_deliveries"][1].update(ordinal=1),
@@ -243,6 +268,50 @@ class AggregateTaskCompletionTests(unittest.TestCase):
         values[5][uid]["task"]["pr_number"] = 9999
         with self.assertRaisesRegex(ValueError, "child|PR|identity"):
             self.build(tuple(values))
+
+    def test_dependency_merge_chronology_is_enforced_during_receipt_build(self):
+        cases = (
+            ("prerequisite strictly earlier", "2026-09-25T09:02:00Z", "2026-09-25T09:03:00Z", True),
+            ("equal merge timestamps", "2026-09-25T09:03:00Z", "2026-09-25T09:03:00Z", False),
+            ("dependent merged earlier", "2026-09-25T09:04:00Z", "2026-09-25T09:03:00Z", False),
+        )
+        for label, prerequisite_at, dependent_at, accepted in cases:
+            with self.subTest(chronology=label):
+                values = list(self.context())
+                children = copy.deepcopy(values[5])
+                deliveries = values[0]["required_deliveries"]
+                children[deliveries[0]["task_uid"]]["live"]["pr"]["merged_at"] = prerequisite_at
+                children[deliveries[1]["task_uid"]]["live"]["pr"]["merged_at"] = dependent_at
+                values[5] = children
+                if accepted:
+                    receipt = self.build(tuple(values))
+                    self.assertEqual(
+                        [item["merged_at"] for item in receipt["deliveries"]],
+                        [prerequisite_at, dependent_at],
+                    )
+                else:
+                    with self.assertRaises(self.helper.ReceiptError):
+                        self.build(tuple(values))
+
+    def test_dependency_merge_chronology_is_enforced_by_receipt_validation(self):
+        cases = (
+            ("prerequisite strictly earlier", "2026-09-25T09:02:00Z", "2026-09-25T09:03:00Z", True),
+            ("equal merge timestamps", "2026-09-25T09:03:00Z", "2026-09-25T09:03:00Z", False),
+            ("dependent merged earlier", "2026-09-25T09:04:00Z", "2026-09-25T09:03:00Z", False),
+        )
+        for label, prerequisite_at, dependent_at, accepted in cases:
+            with self.subTest(chronology=label):
+                receipt = copy.deepcopy(self.build())
+                receipt["deliveries"][0]["merged_at"] = prerequisite_at
+                receipt["deliveries"][1]["merged_at"] = dependent_at
+                unsigned = {key: value for key, value in receipt.items() if key != "receipt_sha256"}
+                receipt["receipt_sha256"] = self.helper.canonical_digest(unsigned, prefix=True)
+                observed = self.helper._timestamp(receipt["observed_at"], "receipt observed_at")
+                if accepted:
+                    self.assertIs(self.helper.validate_receipt(receipt, now=observed), receipt)
+                else:
+                    with self.assertRaises(self.helper.ReceiptError):
+                        self.helper.validate_receipt(receipt, now=observed)
 
     def test_live_child_issue_rejects_ambiguous_fields_and_requires_exact_project_item(self):
         plan, _candidate, _evidence, _coordinator, _comment, _reports = self.context()
@@ -470,6 +539,15 @@ class AggregateTaskCompletionTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "delivery|commit|timestamp|digest|SHA-256"):
                     self.helper.validate_receipt(receipt, now=observed)
 
+    def test_build_rejects_malformed_live_child_merge_timestamp(self):
+        values = list(self.context())
+        children = copy.deepcopy(values[5])
+        first_uid = values[0]["required_deliveries"][0]["task_uid"]
+        children[first_uid]["live"]["pr"]["merged_at"] = "yesterday"
+        values[5] = children
+        with self.assertRaises(self.helper.ReceiptError):
+            self.build(tuple(values))
+
     def test_terminal_receipt_revalidation_reads_every_child_against_closed_coordinator(self):
         plan, candidate, evidence, coordinator, comment, child_reports = self.context()
         receipt = self.build((plan, candidate, evidence, coordinator, comment, child_reports))
@@ -506,6 +584,44 @@ class AggregateTaskCompletionTests(unittest.TestCase):
                 self.helper.validate_terminal_receipt(
                     ROOT, plan["task_uid"], plan, candidate, evidence, receipt,
                 )
+
+    def test_terminal_replay_enforces_dependency_merge_chronology(self):
+        cases = (
+            ("prerequisite strictly earlier", "2026-09-25T09:02:00Z", "2026-09-25T09:03:00Z", True),
+            ("equal merge timestamps", "2026-09-25T09:03:00Z", "2026-09-25T09:03:00Z", False),
+            ("dependent merged earlier", "2026-09-25T09:04:00Z", "2026-09-25T09:03:00Z", False),
+        )
+        for label, prerequisite_at, dependent_at, accepted in cases:
+            with self.subTest(chronology=label):
+                plan, candidate, evidence, coordinator, comment, child_reports = self.context()
+                receipt = copy.deepcopy(self.build())
+                receipts = receipt["deliveries"]
+                receipts[0]["merged_at"] = prerequisite_at
+                receipts[1]["merged_at"] = dependent_at
+                unsigned = {key: value for key, value in receipt.items() if key != "receipt_sha256"}
+                receipt["receipt_sha256"] = self.helper.canonical_digest(unsigned, prefix=True)
+
+                reports = copy.deepcopy(child_reports)
+                reports[plan["required_deliveries"][0]["task_uid"]]["live"]["pr"]["merged_at"] = prerequisite_at
+                reports[plan["required_deliveries"][1]["task_uid"]]["live"]["pr"]["merged_at"] = dependent_at
+                closed_coordinator = {**coordinator, "state": "CLOSED"}
+                with mock.patch.object(self.helper, "read_coordinator", return_value=(closed_coordinator, comment)), \
+                        mock.patch.object(
+                            self.helper, "read_child_report",
+                            side_effect=lambda _root, delivery, _branch: reports[delivery["task_uid"]],
+                        ):
+                    if accepted:
+                        self.assertEqual(
+                            self.helper.validate_terminal_receipt(
+                                ROOT, plan["task_uid"], plan, candidate, evidence, receipt,
+                            ),
+                            receipt,
+                        )
+                    else:
+                        with self.assertRaises(self.helper.ReceiptError):
+                            self.helper.validate_terminal_receipt(
+                                ROOT, plan["task_uid"], plan, candidate, evidence, receipt,
+                            )
 
 
 if __name__ == "__main__":

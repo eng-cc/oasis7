@@ -109,13 +109,15 @@ class AggregateTerminalAudit(unittest.TestCase):
         plan_body = PLAN_MARKER + "\n" + json_bytes(plan).decode("utf-8")
         comment_sha = "sha256:" + raw_digest(plan_body.encode("utf-8"))
         rows = []
-        for delivery in plan["required_deliveries"]:
+        for index, delivery in enumerate(plan["required_deliveries"]):
             rows.append({
                 **delivery,
                 "merge_commit_oid": "d" * 40,
                 "head_oid": "e" * 40,
                 "base_ref": "main",
-                "merged_at": "2026-09-25T12:30:00Z",
+                "merged_at": (
+                    "2026-09-25T12:30:00Z" if index == 0 else "2026-09-25T12:31:00Z"
+                ),
                 "task_complete_claim_sha256": "sha256:" + "1" * 64,
                 "merge_receipt_sha256": "sha256:" + "2" * 64,
                 "main_sync_receipt_sha256": "sha256:" + "3" * 64,
