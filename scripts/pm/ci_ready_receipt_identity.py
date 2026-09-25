@@ -295,9 +295,18 @@ def integration_ci_identity(receipt: dict[str, Any]) -> dict[str, Any]:
     """Normalize a v2 trusted integration receipt into its identity object."""
     if not isinstance(receipt, dict):
         raise ValueError("integration CI receipt must be an object")
-    source_head_oid = receipt.get("source_head_oid", receipt.get("head_oid"))
-    integration_base_oid = receipt.get("integration_base_oid", receipt.get("base_oid"))
-    run_id = receipt.get("run_id", receipt.get("integration_run_id"))
+
+    def aliased_value(primary: str, alias: str, *, numeric: bool = False) -> Any:
+        value, alternate = receipt.get(primary), receipt.get(alias)
+        if value is not None and alternate is not None:
+            matches = str(value) == str(alternate) if numeric else value == alternate
+            if not matches:
+                raise ValueError(f"integration CI identity has conflicting aliases: {primary}/{alias}")
+        return value if value is not None else alternate
+
+    source_head_oid = aliased_value("source_head_oid", "head_oid")
+    integration_base_oid = aliased_value("integration_base_oid", "base_oid")
+    run_id = aliased_value("run_id", "integration_run_id", numeric=True)
     values = {
         "repository": receipt.get("repository"),
         "task_uid": receipt.get("task_uid"),
@@ -331,7 +340,9 @@ def integration_ci_identity(receipt: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("workflow_ref is invalid")
     _require_oid(values["workflow_sha"], "workflow_sha")
     for field in ("request_id", "run_id", "check_app_id", "check_run_id"):
-        if isinstance(values[field], bool) or not isinstance(values[field], (int, str)) or not str(values[field]).strip():
+        if (isinstance(values[field], bool)
+                or not isinstance(values[field], (int, str))
+                or not re.fullmatch(r"[1-9][0-9]*", str(values[field]))):
             raise ValueError(f"{field} is invalid")
     if not isinstance(values["request_created_at"], str) or not values["request_created_at"].strip():
         raise ValueError("request_created_at is invalid")

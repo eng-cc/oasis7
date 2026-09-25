@@ -701,7 +701,8 @@ def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=Fals
             if integration_run_id is not None and int(integration_run_id)!=selected["id"]:
                 raise ValueError('explicit integration locator superseded by current request')
             if check_name!='required-gate': raise ValueError('unsupported manual check')
-            check,proof=verified_run(repository,uid,number,base,head,selected["id"],app)
+            check,proof=verified_run(repository,uid,number,base,head,selected["id"],app,
+              expected_attempt=selected["run_attempt"])
             proof={**proof,
               "request_id": selected["id"],
               "request_created_at": dt.datetime.fromtimestamp(selected["requested_at"], dt.timezone.utc).isoformat(),

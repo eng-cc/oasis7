@@ -193,6 +193,45 @@ class ReceiptTest(unittest.TestCase):
     with self.api(runs=[older_green, newer_pending]):
       with self.assertRaisesRegex(SystemExit, "check incomplete"):
         M.live("eng-cc/oasis7", UID, 1, 7, "required-gate", "42", ordinary_pr=True)
+  def test_selected_integration_request_is_verified_at_its_exact_attempt(self):
+    request={"id":12345,"run_attempt":1,"requested_at":1780000000.0}
+    check={"id":902,"name":"required-gate","app":{"id":42},
+      "status":"completed","conclusion":"success"}
+    proof={"workflow_run_id":12345,"run_attempt":1,"tested_tree_oid":"c"*40,
+      "tested_commit_oid":"d"*40,"workflow_sha":"e"*40,
+      "workflow_ref":"eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main"}
+    with patch.object(M,"gh",side_effect=[pr(),pr()]), \
+         patch.object(integration_ci,"current_request",side_effect=[request,request]), \
+         patch.object(integration_ci,"verified_run",return_value=(check,proof)) as verified:
+      _, observed, _, _=M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42")
+    verified.assert_called_once_with(
+      "eng-cc/oasis7",UID,7,"b"*40,"a"*40,12345,"42",expected_attempt=1
+    )
+    self.assertEqual(1,observed["_integration"]["run_attempt"])
+  def test_latest_integration_attempt_blocks_older_green_on_pending_failure_or_missing_artifact(self):
+    # A1 is known-good, but the selected request now points at A2. The reader
+    # must ask for A2 explicitly and fail closed for each incomplete outcome.
+    request={"id":12345,"run_attempt":2,"requested_at":1780000001.0}
+    for reason in ("check incomplete","check failure","artifact missing"):
+      def verify(*args,expected_attempt=None):
+        if expected_attempt==1:
+          return ({"id":901,"name":"required-gate","app":{"id":42},
+            "status":"completed","conclusion":"success"},
+            {"workflow_run_id":12345,"run_attempt":1})
+        if expected_attempt==2:
+          raise ValueError(reason)
+        raise ValueError("expected attempt is missing")
+      with self.subTest(reason=reason), \
+           patch.object(M,"gh",side_effect=[pr(),pr()]), \
+           patch.object(integration_ci,"current_request",return_value=request), \
+           patch.object(integration_ci,"verified_run",side_effect=verify) as verified, \
+           patch.object(M,"live") as ordinary:
+        with self.assertRaisesRegex(SystemExit,"current request blocked: "+reason):
+          M.selected_live("eng-cc/oasis7",UID,1,7,"required-gate","42")
+        verified.assert_called_once_with(
+          "eng-cc/oasis7",UID,7,"b"*40,"a"*40,12345,"42",expected_attempt=2
+        )
+        ordinary.assert_not_called()
   def test_expected_base_ref_rejects_same_oid_pr_retarget(self):
     moved=pr(); moved["base"]["ref"]="release"
     moved_run=run(); moved_run["pull_requests"][0]["base"]["ref"]="release"
