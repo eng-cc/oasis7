@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
-import base64, importlib.util, io, json, sys, tempfile, unittest, zipfile
+import base64, copy, importlib.util, io, json, sys, tempfile, unittest, zipfile
 from contextlib import redirect_stdout, ExitStack
 from pathlib import Path
 from unittest.mock import patch
 import integration_ci
 import integration_executor_contract as request_contract
+import ci_input_scope
+import ci_required_artifact_v2
 
 P=Path(__file__).with_name("ci-ready-receipt.py")
 S=importlib.util.spec_from_file_location("ci_ready_receipt",P); M=importlib.util.module_from_spec(S); S.loader.exec_module(M)
@@ -108,6 +110,99 @@ def selected_action_context(children,*,run_id=12345,attempt=2,gate_job_id=9009,g
     if path==f"repos/eng-cc/oasis7/actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100&page=1":return {"jobs":[gate,*children]}
     raise AssertionError(path)
   return read
+
+def v2_reader_fixture(*,attempt=2):
+  identity=keyed_request_identity()
+  identity["input_fingerprints"]={"required-gate":"sha256:"+"a"*64}
+  key=request_contract.validation_request_key(identity)
+  context=trusted_policy_context(workflow_sha="f"*40)
+  authority=context["planner_inventory_authority"]
+  plan_artifact_id=7001
+  unit_id="required-gate"
+  inventory_digest="sha256:"+"f"*64
+  source_scope_oid="e"*40
+  issuer={"schema":"oasis7-trusted-planner-inventory/v1",
+    "authority":authority,
+    "producer":{"run_id":12345,"run_attempt":attempt,"check_app_id":42,"check_run_id":902},
+    "target_oid":"d"*40,"target_tree_oid":"c"*40,
+    "unit_ids":[unit_id],"inventory_digest":inventory_digest}
+  trusted_inventory={**issuer,"producer":{**issuer["producer"],"artifact_id":plan_artifact_id}}
+  planner_output=plan()
+  planner_output.update({"source_scope_base":source_scope_oid,"integration_base":"b"*40,
+    "source_head":"a"*40,"impact_projection_schema":"oasis7-workflow-impact-projection/v2",
+    "impact_projection_digest":identity["source_projection_digest"],
+    "impact_projection_status":"verified","test_profile":"required",
+    "declared_tests":"required-gate","planner_digest":"sha256:"+"5"*64,
+    "required_test_units":"required-gate"})
+  authority={**authority,"planner_config_sha256":planner_output["planner_config_sha256"]}
+  context={**context,"planner_inventory_authority":authority}
+  issuer={**issuer,"authority":authority}
+  trusted_inventory={**issuer,"producer":{**issuer["producer"],"artifact_id":plan_artifact_id}}
+  execution_job={"workflow_run_id":12345,"run_attempt":attempt,"job_id":9009,
+    "job_name":"required-gate","check_name":"required-gate","check_app_id":42,
+    "check_run_id":902,"head_sha":"f"*40,"status":"completed",
+    "conclusion":"success","labels":["ubuntu-24.04"]}
+  product_corpus={"status":"complete","errors":[],"unit_ids":[]}
+  input_scope_snapshot={"schema":"oasis7-ci-input-scope/v2","target_oid":"d"*40,
+    "target_tree_oid":"c"*40,"planner_inventory_issuer":issuer,
+    "closure_status":{"status":"complete"},"required_test_units":[unit_id],
+    "input_fingerprints":identity["input_fingerprints"],"dependency_edges":[],
+    "fallback_complete":False,"fallback_contract":None,"product_corpus":product_corpus}
+  planner_invocation={"schema":"oasis7-required-scope-invocation/v1",
+    "planner_authority_oid":"f"*40,"planner_config_sha256":planner_output["planner_config_sha256"],
+    "event_name":"workflow_dispatch","run_mode":"integration_revalidation",
+    "base_ref":"b"*40,"head_ref":"a"*40,"task_uid":UID,"scope_base_oid":source_scope_oid,
+    "impact_projection_sha256":identity["source_projection_digest"],
+    "changed_paths":["scripts/ci-tests.sh"],
+    "planner_output_sha256":ci_required_artifact_v2.canonical_digest(planner_output),
+    "producer":{"run_id":12345,"run_attempt":attempt,"check_app_id":42,"check_run_id":902}}
+  planner_invocation["digest"]=ci_required_artifact_v2.planner_invocation_digest(planner_invocation)
+  plan_payload={"schema":"oasis7-required-plan-v2",
+    "required_capabilities":["input-scope-reuse/v1"],
+    "request_key":key,"request_identity":identity,"repository":"eng-cc/oasis7",
+    "task_uid":UID,"pr_number":7,"bootstrap_epoch":1,"source_head_oid":"a"*40,
+    "source_scope_oid":source_scope_oid,"source_projection_digest":identity["source_projection_digest"],
+    "integration_base_oid":"b"*40,"tested_commit_oid":"d"*40,"tested_tree_oid":"c"*40,
+    "workflow_ref":context["workflow_ref"],"workflow_sha":"f"*40,
+    "workflow_run_id":12345,"run_attempt":attempt,"check_name":"required-gate",
+    "check_app_id":42,"check_run_id":902,"job_id":9009,"job_name":"required-gate",
+    "executor_contract_digest":identity["executor_contract_digest"],
+    "effective_policy_identity":context["effective_policy_identity"],
+    "planner_inventory_authority":authority,"planner_inventory_issuer":issuer,
+    "planner_inventory_digest":inventory_digest,"planner_config_sha256":planner_output["planner_config_sha256"],
+    "planner_invocation":planner_invocation,"planner_output":planner_output,"unit_ids":[unit_id],
+    "required_test_units":[unit_id],"input_fingerprints":identity["input_fingerprints"],
+    "unit_specs":[{"unit_id":unit_id,"obligation_set":["required-gate:000:run"]}],
+    "product_corpus":product_corpus,"input_scope":input_scope_snapshot,"closure_status":"complete",
+    "execution_job_requirements":{unit_id:[]}}
+  result={key_name:plan_payload[key_name] for key_name in (
+    "request_key","request_identity","repository","task_uid","pr_number","bootstrap_epoch",
+    "source_head_oid","source_scope_oid","source_projection_digest","integration_base_oid",
+    "tested_commit_oid","tested_tree_oid","workflow_ref","workflow_sha","workflow_run_id",
+    "run_attempt","check_name","check_app_id","check_run_id","job_id","job_name",
+    "executor_contract_digest","effective_policy_identity","planner_inventory_digest",
+    "planner_inventory_issuer")}
+  result.update(schema="oasis7-required-result-v2",plan_artifact_id=plan_artifact_id,
+    unit_id=unit_id,obligation_ids=["required-gate:000:run"],
+    input_digest=identity["input_fingerprints"][unit_id],status="passed",
+    disposition="executed",exit_code=0,execution_jobs=[execution_job])
+  proof={"request_id":12345,"run_id":12345,"workflow_run_id":12345,"run_attempt":attempt,
+    "check_app_id":42,"check_run_id":902,"job_id":9009,"job_name":"required-gate",
+    "workflow_ref":context["workflow_ref"],"workflow_sha":"f"*40,
+    "tested_commit_oid":"d"*40,"tested_tree_oid":"c"*40,"source_scope_oid":source_scope_oid,
+    "request_key":key,"request_identity":identity,"trusted_policy_context":context,
+    "effective_policy_identity":context["effective_policy_identity"],
+    "planner_inventory_authority":authority,"trusted_planner_inventory":trusted_inventory,
+    "required_plan_v2_artifact_id":plan_artifact_id,
+    "required_plan_v2_artifact_name":ci_required_artifact_v2.plan_artifact_name(12345,attempt),
+    "required_plan_v2_payload":plan_payload,
+    "required_result_v2_artifacts":[{"artifact_id":7002,
+      "name":ci_required_artifact_v2.result_artifact_name(12345,attempt,unit_id),"payload":result}],
+    "execution_jobs":[execution_job]}
+  snapshot={"closure_status":{"status":"complete"},"target_oid":"d"*40,
+    "target_tree_oid":"c"*40,"required_test_units":[unit_id],
+    "input_fingerprints":identity["input_fingerprints"]}
+  return key,identity,context,plan_payload,result,proof,snapshot
 
 class ReceiptTest(unittest.TestCase):
   def api(self, r=None, runs=None, actions=None):
@@ -434,9 +529,81 @@ class ReceiptTest(unittest.TestCase):
     with patch.object(M,"selected_live",return_value=(pr(),keyed_run,"b"*40,"a"*40)), \
          patch.object(M,"planner_for_run") as legacy_reader, \
          patch.object(sys,"argv",argv):
-      with self.assertRaisesRegex(SystemExit,"full trusted v2 planner inventory/results are unavailable"):
+      with self.assertRaisesRegex(SystemExit,"trusted v2 required evidence blocked"):
         M.main()
       legacy_reader.assert_not_called()
+
+  def test_v2_reader_binds_complete_exact_attempt_inventory_and_results(self):
+    key,identity,context,plan_payload,result,proof,snapshot=v2_reader_fixture()
+    proof["execution_jobs"].append({"workflow_run_id":12345,"run_attempt":2,
+      "job_id":9010,"job_name":"unselected-job","check_name":"unselected-job",
+      "check_app_id":42,"check_run_id":903,"head_sha":"f"*40,
+      "status":"completed","conclusion":"skipped","labels":["ubuntu-24.04"]})
+    check={"id":902,"name":"required-gate","app":{"id":42},
+      "status":"completed","conclusion":"success"}
+    with patch.object(ci_input_scope,"validate_input_scope_snapshot",return_value=snapshot), \
+         patch.object(ci_input_scope,"planner_inventory_digest",return_value="sha256:"+"f"*64):
+      evidence=M._verified_v2_required_evidence("eng-cc/oasis7",check,proof,
+        request_key=key,request_identity=identity,task_uid=UID,pr_number=7,
+        integration_base_oid="b"*40,head_oid="a"*40)
+    self.assertEqual(7001,evidence["required_plan_v2_artifact_id"])
+    self.assertEqual(["required-gate"],evidence["required_plan_v2_payload"]["unit_ids"])
+    self.assertEqual("passed",evidence["required_result_v2_artifacts"][0]["payload"]["status"])
+    self.assertEqual(7001,evidence["trusted_planner_inventory"]["producer"]["artifact_id"])
+
+  def test_v2_reader_rejects_missing_duplicate_wrong_attempt_and_unknown_closure(self):
+    key,identity,context,plan_payload,result,proof,snapshot=v2_reader_fixture()
+    check={"id":902,"name":"required-gate","app":{"id":42},
+      "status":"completed","conclusion":"success"}
+    cases=[]
+    missing=copy.deepcopy(proof);missing["required_result_v2_artifacts"]=[]
+    cases.append(("result artifact set is missing",missing,snapshot))
+    duplicate=copy.deepcopy(proof)
+    duplicate["required_result_v2_artifacts"].append(copy.deepcopy(duplicate["required_result_v2_artifacts"][0]))
+    cases.append(("result artifact set is missing",duplicate,snapshot))
+    wrong_attempt=copy.deepcopy(proof)
+    wrong_attempt["required_result_v2_artifacts"][0]["payload"]["run_attempt"]=1
+    cases.append(("result identity differs from its exact required plan",wrong_attempt,snapshot))
+    unknown=copy.deepcopy(snapshot);unknown["closure_status"]={"status":"unknown"}
+    cases.append(("inventory closure is incomplete",proof,unknown))
+    for message,candidate,candidate_snapshot in cases:
+      with self.subTest(message=message), \
+           patch.object(ci_input_scope,"validate_input_scope_snapshot",return_value=candidate_snapshot), \
+           patch.object(ci_input_scope,"planner_inventory_digest",return_value="sha256:"+"f"*64):
+        with self.assertRaisesRegex(SystemExit,message):
+          M._verified_v2_required_evidence("eng-cc/oasis7",check,candidate,
+            request_key=key,request_identity=identity,task_uid=UID,pr_number=7,
+            integration_base_oid="b"*40,head_oid="a"*40)
+
+  def test_keyed_v2_receipt_uses_verified_payload_and_digest_binds_its_locators(self):
+    key,identity,context,plan_payload,result,proof,snapshot=v2_reader_fixture()
+    check={"id":902,"name":"required-gate","app":{"id":42},
+      "status":"completed","conclusion":"success"}
+    with patch.object(ci_input_scope,"validate_input_scope_snapshot",return_value=snapshot), \
+         patch.object(ci_input_scope,"planner_inventory_digest",return_value="sha256:"+"f"*64):
+      evidence=M._verified_v2_required_evidence("eng-cc/oasis7",check,proof,
+        request_key=key,request_identity=identity,task_uid=UID,pr_number=7,
+        integration_base_oid="b"*40,head_oid="a"*40)
+    observed={**run(),"id":902,"_integration":{**proof,"request_created_at":"2026-09-25T10:00:00Z"}}
+    argv=[str(P),"--repository","eng-cc/oasis7","--task-uid",UID,
+      "--task-issue-number","1","--pr-number","7","--check-app-id","42",
+      "--planner-digest","auto","--request-key",key]
+    output=io.StringIO()
+    with patch.object(M,"selected_live",return_value=(pr(),observed,"b"*40,"a"*40)), \
+         patch.object(ci_input_scope,"validate_input_scope_snapshot",return_value=snapshot), \
+         patch.object(ci_input_scope,"planner_inventory_digest",return_value="sha256:"+"f"*64), \
+         patch.object(M,"cargo_package_profile_for_run",return_value={}), \
+         patch.object(sys,"argv",argv),redirect_stdout(output):
+      M.main()
+    issued=json.loads(output.getvalue())
+    self.assertEqual(7001,issued["required_plan_v2_artifact_id"])
+    self.assertEqual(key,issued["request_key"])
+    self.assertEqual("e"*40,issued["source_scope_oid"])
+    digest=issued["review_evidence_digest"]
+    tampered=json.loads(json.dumps(issued))
+    tampered["required_result_v2_artifacts"][0]["artifact_id"]+=1
+    self.assertNotEqual(digest,M.review_evidence_digest(tampered))
+    self.assertEqual(digest,M.review_evidence_digest(issued))
 
   def test_refresh_of_keyed_receipt_requires_explicit_request_key(self):
     key="sha256:"+"6"*64
