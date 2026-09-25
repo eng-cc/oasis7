@@ -84,6 +84,7 @@ class RequiredInventoryTests(unittest.TestCase):
         trusted.mkdir()
         target.mkdir()
         source_paths = [
+            ".gitignore",
             "scripts/plan-rust-required-scope.py",
             "scripts/ci-tests.sh",
             "scripts/ci-required-capability-test-inventory.tsv",
@@ -107,6 +108,7 @@ class RequiredInventoryTests(unittest.TestCase):
         subprocess.run(["git", "commit", "-qm", "trusted W fixture"], cwd=trusted, check=True)
 
         target_paths = set(self.inventory.BASELINE_CHECKER_PATHS) | {
+            ".gitignore",
             "scripts/ci-tests.sh",
             "scripts/pm/ci-required-inventory.test.py",
             "scripts/plan-rust-required-scope.py",
@@ -206,30 +208,52 @@ class RequiredInventoryTests(unittest.TestCase):
         return self._build_with_github_context(build, arguments)
 
     @staticmethod
-    def _build_with_github_context(build, arguments):
+    @contextmanager
+    def fixture_github_context(arguments):
+        """Use explicit fixture producer identity even inside a GitHub runner."""
         with patch.dict(os.environ, {
             "GITHUB_REPOSITORY": "eng-cc/oasis7",
             "GITHUB_EVENT_NAME": arguments["event_name"],
             "GITHUB_RUN_ID": str(arguments["run_id"]),
             "GITHUB_RUN_ATTEMPT": str(arguments["run_attempt"]),
         }):
+            yield
+
+    @staticmethod
+    def _build_with_github_context(build, arguments):
+        with RequiredInventoryTests.fixture_github_context(arguments):
             return build()
 
     def test_inventory_authority_must_match_the_trusted_w_checkout(self):
         with tempfile.TemporaryDirectory(prefix="ci-required-inventory-w-identity-") as temp:
             trusted, target, plan = self.make_fixture(Path(temp))
             target_oid = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=target, text=True).strip()
-            with self.assertRaisesRegex(self.inventory.InventoryError, "does not match planner authority"):
-                self.inventory.build_required_inventory(
-                    trusted, target, target_oid, plan,
-                    repository="eng-cc/oasis7",
-                    workflow_ref="eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main",
-                    planner_authority_oid="1" * 40,
-                    event_name=PLANNER_EVENT_NAME,
-                    run_mode=PLANNER_RUN_MODE,
-                    changed_paths=PLANNER_CHANGED_PATHS,
-                    run_id=17, run_attempt=1, check_app_id=2, check_run_id=19,
-                )
+            with self.fixture_github_context({
+                "event_name": PLANNER_EVENT_NAME, "run_id": 17, "run_attempt": 1,
+            }):
+                with self.assertRaisesRegex(self.inventory.InventoryError, "does not match planner authority"):
+                    self.inventory.build_required_inventory(
+                        trusted, target, target_oid, plan,
+                        repository="eng-cc/oasis7",
+                        workflow_ref="eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main",
+                        planner_authority_oid="1" * 40,
+                        event_name=PLANNER_EVENT_NAME,
+                        run_mode=PLANNER_RUN_MODE,
+                        changed_paths=PLANNER_CHANGED_PATHS,
+                        run_id=17, run_attempt=1, check_app_id=2, check_run_id=19,
+                    )
+
+    def test_dirty_trusted_w_source_checkout_is_still_rejected(self):
+        with tempfile.TemporaryDirectory(prefix="ci-required-inventory-w-dirty-") as temp:
+            trusted, target, plan = self.make_fixture(Path(temp))
+            runner = trusted / "scripts/ci-tests.sh"
+            runner.write_text(runner.read_text(encoding="utf-8") + "\n# uncommitted fixture mutation\n",
+                              encoding="utf-8")
+            with self.assertRaisesRegex(
+                self.inventory.InventoryError,
+                "trusted W planner checkout contains local changes",
+            ):
+                self.build_fixture_inventory(trusted, target, plan)
 
     def test_mutated_self_consistent_plan_selection_is_rejected(self):
         with tempfile.TemporaryDirectory(prefix="ci-required-inventory-plan-mutation-") as temp:
@@ -279,7 +303,7 @@ class RequiredInventoryTests(unittest.TestCase):
                 retry["input_scope"]["input_fingerprints"],
             )
 
-    def test_producer_run_attempt_must_match_ambient_actions_identity(self):
+    def test_producer_run_identity_must_match_ambient_actions_identity(self):
         with tempfile.TemporaryDirectory(prefix="ci-required-inventory-ambient-run-") as temp:
             trusted, target, plan = self.make_fixture(Path(temp))
             with patch.dict(os.environ, {
@@ -289,6 +313,14 @@ class RequiredInventoryTests(unittest.TestCase):
                 "GITHUB_RUN_ID": "17",
                 "GITHUB_RUN_ATTEMPT": "1",
             }, clear=True):
+                with self.assertRaisesRegex(
+                    self.inventory.InventoryError,
+                    "GITHUB_RUN_ID",
+                ):
+                    self.build_fixture_inventory(
+                        trusted, target, plan, run_id=18,
+                        _inherit_github_context=True,
+                    )
                 with self.assertRaisesRegex(
                     self.inventory.InventoryError,
                     "GITHUB_RUN_ATTEMPT",
