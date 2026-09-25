@@ -13,6 +13,9 @@ S=importlib.util.spec_from_file_location("ci_ready_receipt",P); M=importlib.util
 AP=Path(__file__).with_name("cargo_checker_stage_admission.py")
 AS=importlib.util.spec_from_file_location("cargo_checker_stage_admission",AP); A=importlib.util.module_from_spec(AS); AS.loader.exec_module(A)
 UID="task_12345678901234567890123456789012"
+SUCCESSOR_ISSUE=3971
+SUCCESSOR_UID="task_4a631678a50b4fcb952a3c2778b15677"
+SUCCESSOR_PR=3972
 
 KEYED_POLICY={"enabled_capabilities":["input-scope-reuse/v1"],
   "approved_executor_contract_digests":["sha256:"+"9"*64],"check_app_id":42}
@@ -76,7 +79,7 @@ def artifact_zip(payload=None,filename="oasis7-required-plan-v1.json"):
   out=io.BytesIO()
   with zipfile.ZipFile(out,"w") as z: z.writestr(filename,json.dumps(payload if payload is not None else envelope()))
   return out.getvalue()
-def stage_receipt(task_uid=UID,pr_number=7,base_oid="b"*40,head_oid="a"*40,scope_base_oid="b"*40,tested_tree="c"*40,run_id="12345",run_attempt="1",status="passed",check_head=None):
+def stage_receipt(task_uid=SUCCESSOR_UID,pr_number=SUCCESSOR_PR,base_oid="b"*40,head_oid="a"*40,scope_base_oid="b"*40,tested_tree="c"*40,run_id="12345",run_attempt="1",status="passed",check_head=None):
   command=["python3","scripts/pm/check-cargo-package-scope","--base",scope_base_oid,"--head",head_oid,"--json"]
   receipt={"schema":A.SCHEMA,"phase":"post_run","activation":"provisional","repository":"eng-cc/oasis7","default_branch":"main","task_uid":task_uid,"pr_number":pr_number,
     "base_oid":base_oid,"head_oid":head_oid,"scope_base_oid":scope_base_oid,"tested_tree":tested_tree,
@@ -1091,17 +1094,19 @@ class ReceiptTest(unittest.TestCase):
       if "artifacts?" in path:return {"artifacts":[stage_artifact()]}
       if "/contents/.github/workflows/rust.yml?ref=" in path:return {"encoding":"base64","content":workflow}
       if "/compare/" in path:return {"merge_base_commit":{"sha":"b"*40}}
-      if path.endswith("/issues/3827"):
-        return {"number":3827,"state":"open","repository_url":"https://api.github.com/repos/eng-cc/oasis7",
-          "body":f"task_uid: {A.CHECKER_TASK_UID}\n- pr_url: https://github.com/eng-cc/oasis7/pull/7\n"}
-      if path.endswith("/pulls/7/files?per_page=100&page=1"):
+      if path.endswith(f"/issues/{SUCCESSOR_ISSUE}"):
+        return {"number":SUCCESSOR_ISSUE,"state":"open","repository_url":"https://api.github.com/repos/eng-cc/oasis7",
+          "created_at":"2026-09-24T11:42:55Z",
+          "body":f"task_uid: {SUCCESSOR_UID}\n- pr_url: https://github.com/eng-cc/oasis7/pull/{SUCCESSOR_PR}\n"}
+      if path.endswith(f"/pulls/{SUCCESSOR_PR}/files?per_page=100&page=1"):
         return [{"filename":value,"status":"modified"} for value in A.CHECKER_SCOPE]
-      if "/pulls/7" in path:
-        return {"number":7,"state":"open","merged":False,"body":f"Task: {A.CHECKER_TASK_UID}\n\nRefs #3827",
+      if f"/pulls/{SUCCESSOR_PR}" in path:
+        return {"number":SUCCESSOR_PR,"state":"open","merged":False,"created_at":"2026-09-24T11:53:53Z",
+          "body":f"Task: {SUCCESSOR_UID}\n\nRefs #{SUCCESSOR_ISSUE}",
           "head":{"sha":"a"*40,"repo":{"full_name":"eng-cc/oasis7"}},"base":{"sha":"b"*40,"ref":"main","repo":{"full_name":"eng-cc/oasis7"}}}
       raise AssertionError(path)
-    with patch.object(M,"gh",side_effect=read),patch.object(M,"artifact_bytes",return_value=stage_artifact_zip(stage_receipt(task_uid=A.CHECKER_TASK_UID,check_head="b"*40))):
-      disposition=M.cargo_package_profile_for_run("eng-cc/oasis7",check,proof,full,task_uid=A.CHECKER_TASK_UID,task_issue_number=3827,pr_number=7)
+    with patch.object(M,"gh",side_effect=read),patch.object(M,"artifact_bytes",return_value=stage_artifact_zip(stage_receipt(task_uid=SUCCESSOR_UID,check_head="b"*40))):
+      disposition=M.cargo_package_profile_for_run("eng-cc/oasis7",check,proof,full,task_uid=SUCCESSOR_UID,task_issue_number=SUCCESSOR_ISSUE,pr_number=SUCCESSOR_PR)
     self.assertEqual("trusted_checker_stage_receipt",disposition["execution_disposition"])
     self.assertTrue(disposition["disposition_validated"])
     self.assertEqual(12345,disposition["run_id"])
@@ -1119,18 +1124,20 @@ class ReceiptTest(unittest.TestCase):
       if "artifacts?" in path:return {"artifacts":[stage_artifact()]}
       if "/contents/.github/workflows/rust.yml?ref=" in path:return {"encoding":"base64","content":workflow}
       if "/compare/" in path:return {"merge_base_commit":{"sha":"b"*40}}
-      if path.endswith("/issues/3827"):
-        return {"number":3827,"state":"open","repository_url":"https://api.github.com/repos/eng-cc/oasis7",
-          "body":f"task_uid: {A.CHECKER_TASK_UID}\n- pr_url: https://github.com/eng-cc/oasis7/pull/7\n"}
-      if path.endswith("/pulls/7/files?per_page=100&page=1"):
+      if path.endswith(f"/issues/{SUCCESSOR_ISSUE}"):
+        return {"number":SUCCESSOR_ISSUE,"state":"open","repository_url":"https://api.github.com/repos/eng-cc/oasis7",
+          "created_at":"2026-09-24T11:42:55Z",
+          "body":f"task_uid: {SUCCESSOR_UID}\n- pr_url: https://github.com/eng-cc/oasis7/pull/{SUCCESSOR_PR}\n"}
+      if path.endswith(f"/pulls/{SUCCESSOR_PR}/files?per_page=100&page=1"):
         return [{"filename":value,"status":"modified"} for value in A.CHECKER_SCOPE]
-      if "/pulls/7" in path:
-        return {"number":7,"state":"open","merged":False,"body":f"Task: {A.CHECKER_TASK_UID}\n\nRefs #3827",
+      if f"/pulls/{SUCCESSOR_PR}" in path:
+        return {"number":SUCCESSOR_PR,"state":"open","merged":False,"created_at":"2026-09-24T11:53:53Z",
+          "body":f"Task: {SUCCESSOR_UID}\n\nRefs #{SUCCESSOR_ISSUE}",
           "head":{"sha":"a"*40,"repo":{"full_name":"eng-cc/oasis7"}},"base":{"sha":"b"*40,"ref":"main","repo":{"full_name":"eng-cc/oasis7"}}}
       raise AssertionError(path)
-    with patch.object(M,"gh",side_effect=read),patch.object(M,"artifact_bytes",return_value=stage_artifact_zip(stage_receipt(task_uid=A.CHECKER_TASK_UID,check_head="a"*40))):
+    with patch.object(M,"gh",side_effect=read),patch.object(M,"artifact_bytes",return_value=stage_artifact_zip(stage_receipt(task_uid=SUCCESSOR_UID,check_head="a"*40))):
       with self.assertRaisesRegex(SystemExit,"receipt check identity mismatch"):
-        M.cargo_package_profile_for_run("eng-cc/oasis7",check,proof,full,task_uid=A.CHECKER_TASK_UID,task_issue_number=3827,pr_number=7)
+        M.cargo_package_profile_for_run("eng-cc/oasis7",check,proof,full,task_uid=SUCCESSOR_UID,task_issue_number=SUCCESSOR_ISSUE,pr_number=SUCCESSOR_PR)
 
   def test_checker_stage_receipt_tamper_and_expiry_fail_closed(self):
     proof={"workflow_run_id":12345,"workflow_sha":"w"*40,
@@ -1138,8 +1145,16 @@ class ReceiptTest(unittest.TestCase):
       "run_attempt":1,"base_oid":"b"*40,"head_oid":"a"*40,"tested_tree_oid":"c"*40}
     check=run(); full=M.canonical_planner({**plan(),"scope":"full",**{field:"true" for field in M.RUN_FIELDS}})
     workflow=base64.b64encode(b"id: checker-stage\ngit diff --name-status --find-renames\ncargo-package-profile-envelope\ncargo-checker-stage-admission-receipt-\n").decode()
-    for changed in ("digest", "head", "status", "scope", "wrong_task", "wrong_check", "wrong_base_ref", "wrong_base_repo", "wrong_head_repo", "expired", "missing", "wrong_run", "duplicate", "extra_stage"):
-      receipt=stage_receipt(task_uid=A.CHECKER_TASK_UID)
+    for changed in (
+      "digest", "head", "status", "scope", "wrong_task", "wrong_check",
+      "runner_run", "runner_attempt", "runner_ref", "runner_sha",
+      "wrong_base_ref", "wrong_base_sha", "wrong_base_repo", "wrong_head_sha", "wrong_head_repo",
+      "wrong_pull_number", "wrong_pull_task", "wrong_pull_issue", "candidate_issue_ref",
+      "issue_wrong_number", "issue_wrong_uid", "issue_ambiguous_pr", "issue_late", "issue_equal",
+      "issue_bad_timestamp", "pr_bad_timestamp", "renamed_path", "copied_path",
+      "expired", "missing", "wrong_run", "duplicate", "extra_stage",
+    ):
+      receipt=stage_receipt(task_uid=SUCCESSOR_UID)
       artifact_items=[] if changed=="missing" else ([stage_artifact(run_id=999)] if changed=="wrong_run" else ([stage_artifact(),stage_artifact()] if changed=="duplicate" else ([stage_artifact(),{"id":89,"name":"cargo-checker-stage-admission-receipt-extra","expired":False,"workflow_run":{"id":12345}}] if changed=="extra_stage" else [stage_artifact(expired=changed=="expired")])) )
       if changed=="digest": receipt["receipt_digest"]="sha256:"+"e"*64
       elif changed=="head": receipt["head_oid"]="c"*40; receipt["result"]["head_oid"]="c"*40; receipt["receipt_digest"]=A.durable_receipt_digest(receipt)
@@ -1147,25 +1162,49 @@ class ReceiptTest(unittest.TestCase):
       elif changed=="scope": receipt["scope_base_oid"]="c"*40; receipt["result"]["scope_base_oid"]="c"*40; receipt["receipt_digest"]=A.durable_receipt_digest(receipt)
       elif changed=="wrong_task": receipt["task_uid"]="task_ffffffffffffffffffffffffffffffff"; receipt["receipt_digest"]=A.durable_receipt_digest(receipt)
       elif changed=="wrong_check": receipt["check"]["check_run_id"]=99; receipt["receipt_digest"]=A.durable_receipt_digest(receipt)
+      elif changed=="runner_run": receipt["runner"]["run_id"]="99999"; receipt["receipt_digest"]=A.durable_receipt_digest(receipt)
+      elif changed=="runner_attempt": receipt["runner"]["run_attempt"]="2"; receipt["receipt_digest"]=A.durable_receipt_digest(receipt)
+      elif changed=="runner_ref": receipt["runner"]["workflow_ref"]="eng-cc/oasis7/.github/workflows/other.yml@refs/heads/main"; receipt["receipt_digest"]=A.durable_receipt_digest(receipt)
+      elif changed=="runner_sha": receipt["runner"]["workflow_sha"]="x"*40; receipt["receipt_digest"]=A.durable_receipt_digest(receipt)
       def read(*args):
         path=args[-1]
         if "artifacts?" in path:return {"artifacts":artifact_items}
         if "/contents/.github/workflows/rust.yml?ref=" in path:return {"encoding":"base64","content":workflow}
         if "/compare/" in path:return {"merge_base_commit":{"sha":"b"*40}}
-        if path.endswith("/issues/3827"):
-          return {"number":3827,"state":"open","repository_url":"https://api.github.com/repos/eng-cc/oasis7",
-            "body":f"task_uid: {A.CHECKER_TASK_UID}\n- pr_url: https://github.com/eng-cc/oasis7/pull/7\n"}
-        if path.endswith("/pulls/7/files?per_page=100&page=1"):
-          return [{"filename":value,"status":"modified"} for value in A.CHECKER_SCOPE]
-        if "/pulls/7" in path:
+        if path.endswith(f"/issues/{SUCCESSOR_ISSUE}"):
+          issue={"number":SUCCESSOR_ISSUE,"state":"open","repository_url":"https://api.github.com/repos/eng-cc/oasis7",
+            "created_at":"2026-09-24T11:42:55Z",
+            "body":f"task_uid: {SUCCESSOR_UID}\n- pr_url: https://github.com/eng-cc/oasis7/pull/{SUCCESSOR_PR}\n"}
+          if changed=="issue_wrong_number": issue["number"]=3999
+          elif changed=="issue_wrong_uid": issue["body"]=issue["body"].replace(SUCCESSOR_UID,"task_"+"f"*32)
+          elif changed=="issue_ambiguous_pr": issue["body"] += "- pr_number: `3999`\n"
+          elif changed=="issue_late": issue["created_at"]="2026-09-24T12:00:00Z"
+          elif changed=="issue_equal": issue["created_at"]="2026-09-24T11:53:53Z"
+          elif changed=="issue_bad_timestamp": issue["created_at"]="yesterday"
+          return issue
+        if path.endswith(f"/pulls/{SUCCESSOR_PR}/files?per_page=100&page=1"):
+          files=[{"filename":value,"status":"modified"} for value in A.CHECKER_SCOPE]
+          if changed=="renamed_path": files[0].update(status="renamed",previous_filename="old-path")
+          elif changed=="copied_path": files[0].update(previous_filename="copied-from-path")
+          return files
+        if f"/pulls/{SUCCESSOR_PR}" in path:
           base={"sha":"b"*40,"ref":"main","repo":{"full_name":"eng-cc/oasis7"}}
           head={"sha":"a"*40,"repo":{"full_name":"eng-cc/oasis7"}}
           if changed=="wrong_base_ref": base["ref"]="release"
+          elif changed=="wrong_base_sha": base["sha"]="d"*40
           elif changed=="wrong_base_repo": base["repo"]={"full_name":"other/repo"}
+          elif changed=="wrong_head_sha": head["sha"]="d"*40
           elif changed=="wrong_head_repo": head["repo"]={"full_name":"fork/oasis7"}
-          return {"number":7,"state":"open","merged":False,"body":f"Task: {A.CHECKER_TASK_UID}\n\nRefs #3827","head":head,"base":base}
+          body=f"Task: {SUCCESSOR_UID}\n\nRefs #{SUCCESSOR_ISSUE}"
+          if changed=="wrong_pull_task": body=f"Task: task_{'f'*32}\n\nRefs #{SUCCESSOR_ISSUE}"
+          elif changed=="wrong_pull_issue": body=f"Task: {SUCCESSOR_UID}\n\nRefs #4021"
+          elif changed=="candidate_issue_ref": body=f"Task: {SUCCESSOR_UID}\n\nRefs #{SUCCESSOR_ISSUE}\nRefs #4021"
+          created_at="2026-09-24T11:53:53Z"
+          if changed=="pr_bad_timestamp": created_at="yesterday"
+          return {"number":SUCCESSOR_PR + 1 if changed=="wrong_pull_number" else SUCCESSOR_PR,
+            "state":"open","merged":False,"created_at":created_at,"body":body,"head":head,"base":base}
         raise AssertionError(path)
       with self.subTest(changed=changed),patch.object(M,"gh",side_effect=read),patch.object(M,"artifact_bytes",return_value=stage_artifact_zip(receipt)):
-        with self.assertRaisesRegex(SystemExit,"stage|receipt|expired|digest|identity|successful|mismatch|repository|base|canonical"):
-          M.cargo_package_profile_for_run("eng-cc/oasis7",check,proof,full,task_uid=A.CHECKER_TASK_UID,task_issue_number=3827,pr_number=7)
+        with self.assertRaisesRegex(SystemExit,"stage|receipt|expired|digest|identity|successful|mismatch|repository|base|canonical|timestamp|predate|reference|rename/copy|UID"):
+          M.cargo_package_profile_for_run("eng-cc/oasis7",check,proof,full,task_uid=SUCCESSOR_UID,task_issue_number=SUCCESSOR_ISSUE,pr_number=SUCCESSOR_PR)
 if __name__=="__main__": unittest.main()

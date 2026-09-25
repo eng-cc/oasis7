@@ -32,8 +32,9 @@ CHECKER_BASE = "1" * 40
 CHECKER_HEAD = "2" * 40
 CHECKER_SCOPE = "3" * 40
 TESTED_TREE = "4" * 40
-TASK_UID = "task_be264ac2833044969d3c2c50b2b83cea"
-CHECKER_PR = 4927
+TASK_UID = "task_4a631678a50b4fcb952a3c2778b15677"
+SUCCESSOR_ISSUE = 3971
+CHECKER_PR = 3972
 INTEGRATION_RUN = 35463292968
 CHECK_RUN_ID = 123
 
@@ -170,16 +171,18 @@ def _authority_api():
                "base": {"ref": "main", "sha": CHECKER_BASE, "repo": {"full_name": REPOSITORY}},
                "head": {"sha": "8" * 40, "repo": {"full_name": REPOSITORY}}},
         CHECKER_PR: {"number": CHECKER_PR, "state": "open", "merged": False, "draft": True,
-               "body": f"Task: {TASK_UID}\n", "base": {"ref": "main", "sha": CHECKER_BASE,
+               "created_at": "2026-09-24T11:53:53Z",
+               "body": f"Task: {TASK_UID}\n\nRefs #{SUCCESSOR_ISSUE}\n", "base": {"ref": "main", "sha": CHECKER_BASE,
                "repo": {"full_name": REPOSITORY}}, "head": {"sha": CHECKER_HEAD,
                "repo": {"full_name": REPOSITORY}},},
     }
     def api(path):
-        if path.endswith(f"issues/{MODULE.CHECKER_ISSUE}"):
+        if path.endswith(f"issues/{SUCCESSOR_ISSUE}"):
             return {
-                "number": MODULE.CHECKER_ISSUE,
+                "number": SUCCESSOR_ISSUE,
                 "state": "open",
                 "repository_url": f"https://api.github.com/repos/{REPOSITORY}",
+                "created_at": "2026-09-24T11:42:55Z",
                 "body": (
                     "<!-- oasis7-pm-task -->\n"
                     f"task_uid: {TASK_UID}\n"
@@ -221,7 +224,7 @@ def _authority_api():
             commit = path.split("?ref=", 1)[1]
             return contents[commit]
         if path.endswith(f"/pulls/{CHECKER_PR}/files?per_page=100&page=1"):
-            return [{"filename": value} for value in MODULE.CHECKER_SCOPE]
+            return [{"filename": value, "status": "modified"} for value in MODULE.CHECKER_SCOPE]
         if "/pulls/" in path:
             return prs[int(path.rsplit("/", 1)[1])]
         if path == f"repos/{REPOSITORY}":
@@ -245,7 +248,11 @@ class CheckerStageAdmissionTest(unittest.TestCase):
             'git diff --name-status --find-renames --find-copies --find-copies-harder "${CHECKER_BASE_SHA}" "${CHECKER_HEAD_SHA}"',
             workflow,
         )
-        self.assertIn("issues/3827", workflow)
+        self.assertIn("cargo_checker_stage_admission.py", workflow)
+        self.assertIn("${CHECKER_BASE_SHA}:scripts/pm/cargo_checker_stage_admission.py", workflow)
+        self.assertNotIn("issues/3827", workflow)
+        self.assertIn("checker-stage rename/copy or non-modification changes are not admissible", workflow)
+        self.assertIn('"${CHECKER_BASE_SHA}:scripts/pm/cargo_checker_stage_admission.py"', workflow)
         self.assertIn(
             "OASIS7_CARGO_STAGE_PR_NUMBER: ${{ steps.checker-stage.outputs.pr_number }}",
             workflow,
@@ -254,6 +261,70 @@ class CheckerStageAdmissionTest(unittest.TestCase):
             "steps.scope.outputs.task_uid == 'task_be264ac2833044969d3c2c50b2b83cea'",
             workflow,
         )
+
+    def test_workflow_defers_non_modification_rejection_until_checker_scope_is_known(self):
+        workflow = (Path(__file__).parents[2] / ".github/workflows/rust.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("checker_non_modification=true", workflow)
+        ordinary_route = workflow.index('if [[ "${checker_path_touched}" != true ]]')
+        checker_rejection = workflow.index('if [[ "${checker_non_modification}" == true ]]')
+        self.assertLess(ordinary_route, checker_rejection)
+        self.assertIn('changed_paths+=("${first_path}" "${second_path}")', workflow)
+
+    def test_workflow_changed_path_classifier_fixtures(self):
+        workflow = (Path(__file__).parents[2] / ".github/workflows/rust.yml").read_text(
+            encoding="utf-8"
+        )
+        start = workflow.index("          checker_stage_path_route() {")
+        end = workflow.index('          changed_path_route="$(checker_stage_path_route ', start)
+        classifier = workflow[start:end]
+        cases = {
+            "ordinary add": ("A\\tordinary-added.txt\\n", "ordinary"),
+            "ordinary delete": ("D\\tordinary-deleted.txt\\n", "ordinary"),
+            "unrelated rename": ("R100\\told-name.txt\\tnew-name.txt\\n", "ordinary"),
+            "unrelated copy": ("C100\\tcopy-source.txt\\tcopy-target.txt\\n", "ordinary"),
+            "exact checker modification": (
+                "M\\tscripts/pm/check-cargo-package-scope\\n"
+                "M\\tscripts/pm/check-cargo-package-scope.test.py\\n",
+                "checker",
+            ),
+            "checker rename": (
+                "R100\\tscripts/pm/check-cargo-package-scope\\tother-checker.txt\\n",
+                "reject",
+            ),
+            "checker copy": (
+                "C100\\tscripts/pm/check-cargo-package-scope\\tother-checker.txt\\n",
+                "reject",
+            ),
+            "checker add": ("A\\tscripts/pm/check-cargo-package-scope\\n", "reject"),
+            "checker delete": ("D\\tscripts/pm/check-cargo-package-scope\\n", "reject"),
+            "checker and unrelated mixed scope": (
+                "M\\tscripts/pm/check-cargo-package-scope\\n"
+                "M\\tscripts/pm/check-cargo-package-scope.test.py\\n"
+                "A\\tordinary-added.txt\\n",
+                "reject",
+            ),
+        }
+        script = (
+            'checker_paths=("scripts/pm/check-cargo-package-scope" '
+            '"scripts/pm/check-cargo-package-scope.test.py")\n'
+            + classifier
+            + 'checker_stage_path_route "$1"\n'
+        )
+        with tempfile.TemporaryDirectory() as temp_dir:
+            status_path = Path(temp_dir) / "changed-paths.txt"
+            for name, (status_records, expected) in cases.items():
+                with self.subTest(name=name):
+                    status_path.write_text(status_records.replace("\\t", "\t").replace("\\n", "\n"))
+                    result = subprocess.run(
+                        ["bash", "-c", script, "checker-stage-fixture", str(status_path)],
+                        text=True,
+                        capture_output=True,
+                        check=False,
+                    )
+                    actual = result.stdout.strip() if result.returncode == 0 else "reject"
+                    self.assertEqual(expected, actual, result.stderr)
 
     def test_workflow_bypasses_generic_profile_planner_only_for_exact_stage_route(self):
         workflow = (Path(__file__).parents[2] / ".github/workflows/rust.yml").read_text(
@@ -274,6 +345,120 @@ class CheckerStageAdmissionTest(unittest.TestCase):
         self.assertIn(
             "OASIS7_CARGO_STAGE_CHECK_HEAD: ${{ steps.scope.outputs.head_oid }}", workflow
         )
+
+    def test_authority_freezes_the_project_verified_successor_without_legacy_fallback(self):
+        self.assertEqual(SUCCESSOR_ISSUE, MODULE.CHECKER_ISSUE)
+        self.assertEqual(TASK_UID, MODULE.CHECKER_TASK_UID)
+        self.assertNotEqual(3827, MODULE.CHECKER_ISSUE)
+
+    def test_stale_legacy_checker_issue_is_never_used_as_a_fallback(self):
+        calls = []
+        api = _authority_api()
+
+        def recording_api(path):
+            calls.append(path)
+            return api(path)
+
+        with patch.object(MODULE, "gh_api", side_effect=recording_api):
+            self.assertFalse(MODULE.classify_checker_stage(
+                REPOSITORY, 3864, MODULE.LEGACY_CHECKER_TASK_UID, CHECKER_BASE, CHECKER_HEAD
+            ))
+        self.assertTrue(any(path.endswith(f"/issues/{SUCCESSOR_ISSUE}") for path in calls))
+        self.assertFalse(any(path.endswith("/issues/3827") for path in calls))
+
+    def test_stage_classifier_rechecks_live_successor_pr_and_strict_creation_order(self):
+        mutations = {
+            "base_repository": lambda pull: pull["base"].update(repo={"full_name": "other/repo"}),
+            "base_branch": lambda pull: pull["base"].update(ref="release"),
+            "base_head": lambda pull: pull["base"].update(sha="9" * 40),
+            "head_repository": lambda pull: pull["head"].update(repo={"full_name": "fork/oasis7"}),
+            "head_sha": lambda pull: pull["head"].update(sha="9" * 40),
+            "pr_number": lambda pull: pull.update(number=CHECKER_PR + 1),
+            "pr_task_uid": lambda pull: pull.update(body=f"Task: task_{'0' * 32}\n\nRefs #{SUCCESSOR_ISSUE}"),
+            "pr_issue_ref": lambda pull: pull.update(body=f"Task: {TASK_UID}\n\nRefs #4021"),
+            "issue_before_equal": lambda pull: pull.update(created_at="2026-09-24T11:42:55Z"),
+            "issue_after_pr": lambda pull: pull.update(created_at="2026-09-24T12:00:00Z"),
+            "issue_bad_timestamp": lambda pull: pull.update(created_at="yesterday"),
+            "issue_timezone_missing": lambda pull: pull.update(created_at="2026-09-24T11:42:55"),
+            "pr_bad_timestamp": lambda pull: pull.update(created_at="yesterday"),
+        }
+        for changed, mutate in mutations.items():
+            api = _authority_api()
+
+            def changed_api(path, *, api=api, mutate=mutate):
+                response = api(path)
+                if path.endswith(f"/pulls/{CHECKER_PR}"):
+                    response = dict(response)
+                    response["base"] = dict(response["base"])
+                    response["head"] = dict(response["head"])
+                    mutate(response)
+                elif path.endswith(f"/issues/{SUCCESSOR_ISSUE}") and changed in {
+                    "issue_before_equal", "issue_after_pr", "issue_bad_timestamp", "issue_timezone_missing"
+                }:
+                    response = dict(response)
+                    issue_times = {
+                        "issue_before_equal": "2026-09-24T11:53:53Z",
+                        "issue_after_pr": "2026-09-24T12:00:00Z",
+                        "issue_bad_timestamp": "yesterday",
+                        "issue_timezone_missing": "2026-09-24T11:42:55",
+                    }
+                    response["created_at"] = issue_times[changed]
+                return response
+
+            with self.subTest(changed=changed), patch.object(MODULE, "gh_api", side_effect=changed_api):
+                with self.assertRaisesRegex(
+                    MODULE.AdmissionError,
+                    "checker PR|checker task Issue|timestamp|timezone|predate|reciprocal PR|reciprocal Issue",
+                ):
+                    MODULE.classify_checker_stage(
+                        REPOSITORY, CHECKER_PR, TASK_UID, CHECKER_BASE, CHECKER_HEAD
+                    )
+
+    def test_checker_pr_changed_file_api_rejects_rename_copy_metadata(self):
+        for changed in ("renamed", "copied"):
+            api = _authority_api()
+
+            def changed_api(path, *, api=api, changed=changed):
+                response = api(path)
+                if path.endswith(f"/pulls/{CHECKER_PR}/files?per_page=100&page=1"):
+                    response = [dict(item) for item in response]
+                    response[0]["previous_filename"] = "scripts/pm/renamed-from-checker.py"
+                    if changed == "renamed":
+                        response[0]["status"] = "renamed"
+                return response
+
+            with self.subTest(changed=changed), patch.object(MODULE, "gh_api", side_effect=changed_api):
+                with self.assertRaisesRegex(MODULE.AdmissionError, "rename/copy"):
+                    MODULE.verify_checker_pr(
+                        REPOSITORY, CHECKER_PR, TASK_UID, CHECKER_BASE, CHECKER_HEAD,
+                        CHECKER_SCOPE, TESTED_TREE, Path("."),
+                    )
+
+    def test_stage_classifier_rejects_non_modification_or_mixed_live_file_scope(self):
+        for changed in ("renamed", "copied", "added", "removed", "mixed"):
+            api = _authority_api()
+
+            def changed_api(path, *, api=api, changed=changed):
+                response = api(path)
+                if path.endswith(f"/pulls/{CHECKER_PR}/files?per_page=100&page=1"):
+                    response = [dict(item) for item in response]
+                    if changed == "renamed":
+                        response[0].update(status="renamed", previous_filename="old-path")
+                    elif changed == "copied":
+                        response[0]["previous_filename"] = "copied-from-path"
+                    elif changed == "added":
+                        response[0]["status"] = "added"
+                    elif changed == "removed":
+                        response[0]["status"] = "removed"
+                    elif changed == "mixed":
+                        response.append({"filename": "crates/unrelated/src/lib.rs", "status": "modified"})
+                return response
+
+            with self.subTest(changed=changed), patch.object(MODULE, "gh_api", side_effect=changed_api):
+                with self.assertRaisesRegex(MODULE.AdmissionError, "rename/copy|non-modification|exact checker-only"):
+                    MODULE.classify_checker_stage(
+                        REPOSITORY, CHECKER_PR, TASK_UID, CHECKER_BASE, CHECKER_HEAD
+                    )
 
     def test_pr_check_head_uses_source_head_without_overwriting_workflow_shas(self):
         source_head = "5" * 40
@@ -505,10 +690,17 @@ class CheckerStageAdmissionTest(unittest.TestCase):
 
     def test_stage_classifier_keeps_ordinary_prs_conservative_and_blocks_suspicious_checker(self):
         with patch.object(MODULE, "gh_api", side_effect=_authority_api()):
-            self.assertFalse(MODULE.classify_checker_stage(REPOSITORY, 9999, None))
-            self.assertTrue(MODULE.classify_checker_stage(REPOSITORY, CHECKER_PR, TASK_UID))
+            self.assertFalse(MODULE.classify_checker_stage(
+                REPOSITORY, 9999, None, CHECKER_BASE, CHECKER_HEAD
+            ))
+            self.assertTrue(MODULE.classify_checker_stage(
+                REPOSITORY, CHECKER_PR, TASK_UID, CHECKER_BASE, CHECKER_HEAD
+            ))
             with self.assertRaisesRegex(MODULE.AdmissionError, "trusted task"):
-                MODULE.classify_checker_stage(REPOSITORY, CHECKER_PR, "task_00000000000000000000000000000000")
+                MODULE.classify_checker_stage(
+                    REPOSITORY, CHECKER_PR, "task_00000000000000000000000000000000",
+                    CHECKER_BASE, CHECKER_HEAD,
+                )
 
     def test_checker_task_binding_rejects_issue_uid_or_reciprocal_pr_drift(self):
         api = _authority_api()
@@ -516,9 +708,11 @@ class CheckerStageAdmissionTest(unittest.TestCase):
 
         def wrong_issue(path):
             response = original(path)
-            if path.endswith(f"issues/{MODULE.CHECKER_ISSUE}"):
+            if path.endswith(f"issues/{SUCCESSOR_ISSUE}"):
                 response = dict(response)
-                response["body"] = response["body"].replace(TASK_UID, "task_00000000000000000000000000000000")
+                response["body"] = response["body"].replace(
+                    TASK_UID, "task_00000000000000000000000000000000"
+                )
             return response
 
         with patch.object(MODULE, "gh_api", side_effect=wrong_issue):
@@ -533,7 +727,7 @@ class CheckerStageAdmissionTest(unittest.TestCase):
 
         def missing_reciprocal(path):
             response = original(path)
-            if path.endswith(f"issues/{MODULE.CHECKER_ISSUE}"):
+            if path.endswith(f"issues/{SUCCESSOR_ISSUE}"):
                 response = dict(response)
                 response["body"] = f"task_uid: {TASK_UID}\n"
             return response
@@ -550,7 +744,7 @@ class CheckerStageAdmissionTest(unittest.TestCase):
 
         def ambiguous_reciprocal(path):
             response = original(path)
-            if path.endswith(f"issues/{MODULE.CHECKER_ISSUE}"):
+            if path.endswith(f"issues/{SUCCESSOR_ISSUE}"):
                 response = dict(response)
                 response["body"] = response["body"].replace(
                     f"- pr_number: `{CHECKER_PR}`", f"- pr_number: `{CHECKER_PR + 1}`"

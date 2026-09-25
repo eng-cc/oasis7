@@ -703,6 +703,15 @@ def _trusted_workflow_source(repository, workflow_sha):
     try: return base64.b64decode(normalized,validate=True)
     except Exception as exc: raise SystemExit(f"ci-ready-receipt: trusted workflow source is malformed: {exc}")
 
+def _checker_stage_time(value,field):
+    if not isinstance(value,str) or not value:
+        raise SystemExit(f"ci-ready-receipt: checker-stage {field} timestamp is unavailable")
+    try: parsed=dt.datetime.fromisoformat(value.replace("Z","+00:00"))
+    except ValueError as exc: raise SystemExit(f"ci-ready-receipt: checker-stage {field} timestamp is malformed") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise SystemExit(f"ci-ready-receipt: checker-stage {field} timestamp lacks a timezone")
+    return parsed
+
 def _verify_live_checker_stage_scope(repository, task_uid, task_issue_number, pr_number, proof):
     try:
         from cargo_checker_stage_admission import CHECKER_ISSUE, CHECKER_SCOPE, CHECKER_TASK_UID
@@ -735,6 +744,17 @@ def _verify_live_checker_stage_scope(repository, task_uid, task_issue_number, pr
         raise SystemExit("ci-ready-receipt: checker-stage PR head does not match integration source head")
     if str(base.get("sha") or "") != str(proof.get("base_oid") or ""):
         raise SystemExit("ci-ready-receipt: checker-stage PR base does not match integration base")
+    if pull.get("body") is None:
+        raise SystemExit("ci-ready-receipt: checker-stage PR reciprocal task references are unavailable")
+    pull_body=str(pull.get("body") or "").replace("\r\n","\n")
+    task_lines=re.findall(r"(?m)^Task:[^\n]*$",pull_body)
+    issue_refs=re.findall(r"(?m)^Refs #(\d+)\s*$",pull_body)
+    if task_lines != [f"Task: {CHECKER_TASK_UID}"] or issue_refs != [str(CHECKER_ISSUE)]:
+        raise SystemExit("ci-ready-receipt: checker-stage PR task/Issue reference is missing or ambiguous")
+    issue_created=_checker_stage_time(issue.get("created_at"),"task Issue")
+    pr_created=_checker_stage_time(pull.get("created_at"),"PR")
+    if issue_created >= pr_created:
+        raise SystemExit("ci-ready-receipt: checker-stage task Issue must predate its reciprocal PR")
     files=[]
     for page in range(1,101):
         batch=gh("api",f"repos/{repository}/pulls/{pr_number}/files?per_page=100&page={page}")
@@ -745,10 +765,12 @@ def _verify_live_checker_stage_scope(repository, task_uid, task_issue_number, pr
     else: raise SystemExit("ci-ready-receipt: checker-stage changed-path pagination overflow")
     if len(files)!=len(CHECKER_SCOPE):
         raise SystemExit("ci-ready-receipt: checker-stage PR scope is not exactly the trusted two-file set")
-    if sorted(item.get("filename") for item in files if isinstance(item,dict)) != sorted(CHECKER_SCOPE):
+    if any(not isinstance(item,dict) for item in files):
+        raise SystemExit("ci-ready-receipt: checker-stage changed-file record is malformed")
+    if any(item.get("status")!="modified" or item.get("previous_filename") for item in files):
+        raise SystemExit("ci-ready-receipt: checker-stage PR contains rename/copy or non-modification paths")
+    if sorted(str(item.get("filename") or "") for item in files) != sorted(CHECKER_SCOPE):
         raise SystemExit("ci-ready-receipt: checker-stage PR changed paths are outside the trusted two-file set")
-    if any(not isinstance(item,dict) or item.get("status")!="modified" or item.get("previous_filename") for item in files):
-        raise SystemExit("ci-ready-receipt: checker-stage PR contains rename/copy or non-modification scope")
 
 def _checker_stage_disposition(repository, check_run, proof, artifacts, workflow_source, *, task_uid, task_issue_number, pr_number):
     try:

@@ -822,16 +822,19 @@ run_checker_stage_changed_path_contract_tests() {
     git config user.email checker-stage-contract@example.invalid
     git config user.name checker-stage-contract
     printf 'baseline\n' >README
-    git add README
+    printf 'ordinary source\n' >ordinary-source.txt
+    printf 'ordinary delete\n' >ordinary-delete.txt
+    git add README ordinary-source.txt ordinary-delete.txt
     git commit -qm baseline
-    local base ordinary_head partial_head mixed_head checker_base exact_head rename_head copy_head
+    local base ordinary_head ordinary_delete_head ordinary_rename_head ordinary_copy_head
+    local partial_head mixed_head checker_base exact_head rename_head copy_head checker_copy_head checker_delete_head
     base="$(git rev-parse HEAD)"
 
     checker_stage_route() {
       local base_oid="${1:-}"
       local head_oid="${2:-}"
       [[ -n "$base_oid" && -n "$head_oid" ]] || return 1
-      local status_file status first_path second_path
+      local status_file status first_path second_path checker_non_modification=false
       status_file="$(mktemp)"
       if ! git diff --name-status --find-renames --find-copies --find-copies-harder "$base_oid" "$head_oid" >"$status_file"; then
         rm -f "$status_file"
@@ -848,6 +851,14 @@ run_checker_stage_changed_path_contract_tests() {
               break
             fi
             changed_paths+=("$first_path" "$second_path")
+            checker_non_modification=true
+            ;;
+          M)
+            if [[ -z "$first_path" || -n "$second_path" ]]; then
+              parse_error=true
+              break
+            fi
+            changed_paths+=("$first_path")
             ;;
           *)
             if [[ -z "$first_path" || -n "$second_path" ]]; then
@@ -855,6 +866,7 @@ run_checker_stage_changed_path_contract_tests() {
               break
             fi
             changed_paths+=("$first_path")
+            checker_non_modification=true
             ;;
         esac
       done <"$status_file"
@@ -871,6 +883,7 @@ run_checker_stage_changed_path_contract_tests() {
         printf 'ordinary\n'
         return 0
       fi
+      [[ "$checker_non_modification" != true ]] || return 1
       (( ${#changed_paths[@]} == 2 )) || return 1
       for path in "${changed_paths[@]}"; do
         [[ "$path" == scripts/pm/check-cargo-package-scope ||
@@ -895,6 +908,25 @@ run_checker_stage_changed_path_contract_tests() {
     git commit -qm ordinary
     ordinary_head="$(git rev-parse HEAD)"
     expect_route ordinary "$base" "$ordinary_head"
+
+    git checkout -q "$base"
+    git rm -q ordinary-delete.txt
+    git commit -qm ordinary-delete
+    ordinary_delete_head="$(git rev-parse HEAD)"
+    expect_route ordinary "$base" "$ordinary_delete_head"
+
+    git checkout -q "$base"
+    git mv ordinary-source.txt ordinary-renamed.txt
+    git commit -qm ordinary-rename
+    ordinary_rename_head="$(git rev-parse HEAD)"
+    expect_route ordinary "$base" "$ordinary_rename_head"
+
+    git checkout -q "$base"
+    cp ordinary-source.txt ordinary-copy.txt
+    git add ordinary-copy.txt
+    git commit -qm ordinary-copy
+    ordinary_copy_head="$(git rev-parse HEAD)"
+    expect_route ordinary "$base" "$ordinary_copy_head"
 
     git checkout -q "$base"
     mkdir -p scripts/pm
@@ -934,6 +966,19 @@ run_checker_stage_changed_path_contract_tests() {
     git commit -qm rename
     rename_head="$(git rev-parse HEAD)"
     expect_route reject "$checker_base" "$rename_head"
+
+    git checkout -q "$checker_base"
+    cp scripts/pm/check-cargo-package-scope scripts/pm/checker-copy
+    git add scripts/pm/checker-copy
+    git commit -qm checker-copy
+    checker_copy_head="$(git rev-parse HEAD)"
+    expect_route reject "$checker_base" "$checker_copy_head"
+
+    git checkout -q "$checker_base"
+    git rm -q scripts/pm/check-cargo-package-scope
+    git commit -qm checker-delete
+    checker_delete_head="$(git rev-parse HEAD)"
+    expect_route reject "$checker_base" "$checker_delete_head"
 
     git checkout -q "$checker_base"
     cp scripts/pm/check-cargo-package-scope scripts/pm/copied-checker

@@ -248,6 +248,8 @@ jobs:
           CHECKER_BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.integration_base }}
           CHECKER_HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.expected_head }}
           CHECKER_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
+          CHECKER_TASK_UID_INPUT: ${{ inputs.task_uid }}
+          PR_BODY: ${{ github.event.pull_request.body }}
         shell: bash
         run: |
           set -euo pipefail
@@ -265,33 +267,66 @@ jobs:
             echo "checker-stage changed-path readback failed for the supplied range" >&2
             exit 1
           fi
-          changed_paths=()
-          while IFS=$'\t' read -r status first_path second_path; do
-            [[ -n "${status}" ]] || continue
-            case "${status}" in
-              R*|C*)
-                [[ -n "${first_path}" && -n "${second_path}" ]] || {
-                  echo "checker-stage rename/copy record is malformed" >&2
-                  exit 1
-                }
-                changed_paths+=("${first_path}" "${second_path}")
-                ;;
-              *)
-                [[ -n "${first_path}" && -z "${second_path}" ]] || {
-                  echo "checker-stage changed-path record is malformed" >&2
-                  exit 1
-                }
-                changed_paths+=("${first_path}")
-                ;;
-            esac
-          done <"${changed_status_file}"
-          checker_path_touched=false
-          for path in "${changed_paths[@]}"; do
-            if [[ "${path}" == "${checker_paths[0]}" || "${path}" == "${checker_paths[1]}" ]]; then
-              checker_path_touched=true
+          checker_stage_path_route() {
+            local status_file="$1"
+            local status first_path second_path path
+            local checker_path_touched=false
+            local checker_non_modification=false
+            local -a changed_paths=()
+            while IFS=$'\t' read -r status first_path second_path; do
+              [[ -n "${status}" ]] || continue
+              case "${status}" in
+                R*|C*)
+                  [[ -n "${first_path}" && -n "${second_path}" ]] || {
+                    echo "checker-stage changed-path record is malformed" >&2
+                    return 1
+                  }
+                  changed_paths+=("${first_path}" "${second_path}")
+                  checker_non_modification=true
+                  ;;
+                M)
+                  [[ -n "${first_path}" && -z "${second_path}" ]] || {
+                    echo "checker-stage changed-path record is malformed" >&2
+                    return 1
+                  }
+                  changed_paths+=("${first_path}")
+                  ;;
+                *)
+                  [[ -n "${first_path}" && -z "${second_path}" ]] || {
+                    echo "checker-stage changed-path record is malformed" >&2
+                    return 1
+                  }
+                  changed_paths+=("${first_path}")
+                  checker_non_modification=true
+                  ;;
+              esac
+            done <"${status_file}"
+            for path in "${changed_paths[@]}"; do
+              if [[ "${path}" == "${checker_paths[0]}" || "${path}" == "${checker_paths[1]}" ]]; then
+                checker_path_touched=true
+              fi
+            done
+            if [[ "${checker_path_touched}" != true ]]; then
+              echo ordinary
+              return 0
             fi
-          done
-          if [[ "${checker_path_touched}" != true ]]; then
+            if [[ "${checker_non_modification}" == true ]]; then
+              echo "checker-stage rename/copy or non-modification changes are not admissible" >&2
+              return 1
+            fi
+            if (( ${#changed_paths[@]} != 2 )); then
+              echo "checker-stage path touched without the exact two-file checker scope" >&2
+              return 1
+            fi
+            if [[ ( "${changed_paths[0]}" != "${checker_paths[0]}" && "${changed_paths[0]}" != "${checker_paths[1]}" ) ||
+                  ( "${changed_paths[1]}" != "${checker_paths[0]}" && "${changed_paths[1]}" != "${checker_paths[1]}" ) ]]; then
+              echo "checker-stage path touched without the exact two-file checker scope" >&2
+              return 1
+            fi
+            echo checker
+          }
+          changed_path_route="$(checker_stage_path_route "${changed_status_file}")" || exit 1
+          if [[ "${changed_path_route}" == ordinary ]]; then
             {
               echo "pr_number="
               echo "task_uid="
@@ -300,45 +335,47 @@ jobs:
             echo "ordinary changed-path route: checker stage is not selected"
             exit 0
           fi
-          if (( ${#changed_paths[@]} != 2 )); then
-            echo "checker-stage path touched without the exact two-file checker scope" >&2
-            exit 1
-          fi
-          if [[ ( "${changed_paths[0]}" != "${checker_paths[0]}" && "${changed_paths[0]}" != "${checker_paths[1]}" ) ||
-                ( "${changed_paths[1]}" != "${checker_paths[0]}" && "${changed_paths[1]}" != "${checker_paths[1]}" ) ]]; then
-            echo "checker-stage path touched without the exact two-file checker scope" >&2
+          if [[ "${changed_path_route}" != checker ]]; then
+            echo "checker-stage path route could not be classified" >&2
             exit 1
           fi
           if [[ "${GITHUB_REPOSITORY}" != "eng-cc/oasis7" ]]; then
             echo "checker-stage authority is unavailable outside the canonical repository" >&2
             exit 1
           fi
-          issue_body="$(gh api "repos/${GITHUB_REPOSITORY}/issues/3827" --jq .body)"
-          resolved_pr="$(ISSUE_BODY="${issue_body}" python3 -I - <<'PY'
+          candidate_task_uid="${CHECKER_TASK_UID_INPUT:-}"
+          if [[ "${GITHUB_EVENT_NAME}" == "pull_request" ]]; then
+            candidate_task_uid="$(PR_BODY="${PR_BODY:-}" python3 -I - <<'PY'
           import os
           import re
 
-          task_uid = "task_be264ac2833044969d3c2c50b2b83cea"
-          body = os.environ.get("ISSUE_BODY", "").replace("\r\n", "\n")
-          if re.findall(r"^task_uid:[^\n]*$", body, re.M) != [f"task_uid: {task_uid}"]:
-              raise SystemExit("trusted checker Issue UID is missing or ambiguous")
-          issue_uids = re.findall(r"^task_uid: (task_[0-9a-f]{32})$", body, re.M)
-          if issue_uids != [task_uid]:
-              raise SystemExit("trusted checker Issue UID mismatch")
-          references = set(re.findall(r"/pull/(\d+)\b", body))
-          references.update(re.findall(r"^- pr_number: `?(\d+)`?$", body, re.M))
-          if len(references) != 1:
-              raise SystemExit("trusted checker Issue reciprocal PR is missing or ambiguous")
-          print(next(iter(references)))
+          body = os.environ.get("PR_BODY", "").replace("\r\n", "\n")
+          task_lines = re.findall(r"^Task:[^\n]*$", body, re.M)
+          task_uids = re.findall(r"^Task: (task_[0-9a-f]{32})$", body, re.M)
+          if len(task_lines) != 1 or len(task_uids) != 1:
+              raise SystemExit("candidate checker PR task UID is missing or ambiguous")
+          print(task_uids[0])
           PY
           )"
-          if [[ "${resolved_pr}" != "${CHECKER_PR_NUMBER}" ]]; then
-            echo "trusted checker Issue reciprocal PR does not match the current PR" >&2
+          fi
+          trusted_classifier="${RUNNER_TEMP}/trusted-cargo-checker-stage-admission.py"
+          if ! git show "${CHECKER_BASE_SHA}:scripts/pm/cargo_checker_stage_admission.py" >"${trusted_classifier}"; then
+            echo "trusted checker-stage classifier is unavailable from the integration base" >&2
             exit 1
           fi
+          chmod +x "${trusted_classifier}"
+          resolved_identity="$(python3 -I "${trusted_classifier}" classify \
+            --repository "${GITHUB_REPOSITORY}" --pr-number "${CHECKER_PR_NUMBER}" \
+            --task-uid "${candidate_task_uid}" --repo-root "${GITHUB_WORKSPACE}" \
+            --base "${CHECKER_BASE_SHA}" --head "${CHECKER_HEAD_SHA}")"
+          read -r resolved_pr resolved_task_uid <<<"${resolved_identity}"
+          [[ "${resolved_pr}" == "${CHECKER_PR_NUMBER}" && "${resolved_task_uid}" == "${candidate_task_uid}" ]] || {
+            echo "trusted checker-stage identity does not match the current PR event" >&2
+            exit 1
+          }
           {
             echo "pr_number=${CHECKER_PR_NUMBER}"
-            echo "task_uid=task_be264ac2833044969d3c2c50b2b83cea"
+            echo "task_uid=${resolved_task_uid}"
             echo "receipt=${GITHUB_WORKSPACE}/output/cargo-checker-stage-admission/post-run-receipt.json"
           } >>"${GITHUB_OUTPUT}"
           echo "trusted checker-stage route selected for PR ${CHECKER_PR_NUMBER}"

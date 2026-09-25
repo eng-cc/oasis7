@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import base64
+import datetime as dt
 import hashlib
 import io
 import json
@@ -34,8 +35,13 @@ PLANNER_COMMENT = 5744986195
 PLANNER_PR = 3821
 PLANNER_ISSUE = 3818
 PLANNER_TASK_UID = "task_e21604f5cdb3476c8e146332a68a05b4"
-CHECKER_ISSUE = 3827
-CHECKER_TASK_UID = "task_be264ac2833044969d3c2c50b2b83cea"
+# Frozen from the unique canonical Project task mapping during this ordered
+# Stage2 authority delivery. Issue #3827 remains historical predecessor truth;
+# it is never a runtime fallback for the successor binding below.
+LEGACY_CHECKER_ISSUE = 3827
+LEGACY_CHECKER_TASK_UID = "task_be264ac2833044969d3c2c50b2b83cea"
+CHECKER_ISSUE = 3971
+CHECKER_TASK_UID = "task_4a631678a50b4fcb952a3c2778b15677"
 GITHUB_ACTIONS_APP_ID = 15368
 NORMATIVE_PATH = "doc/engineering/workflow/source-of-truth.md"
 PLANNER_PATH = "scripts/pm/cargo_package_profile_planner.py"
@@ -578,16 +584,30 @@ def verify_executing_planner(
     }
 
 
-def _pr_files(repository: str, pr_number: int) -> list[str]:
-    names: list[str] = []
+def _pr_files(repository: str, pr_number: int) -> list[dict[str, Any]]:
+    files: list[dict[str, Any]] = []
     for page in range(1, 101):
         response = gh_api(f"repos/{repository}/pulls/{pr_number}/files?per_page=100&page={page}")
         if not isinstance(response, list):
             raise AdmissionError("checker PR changed-file readback is malformed")
-        names.extend(str(item.get("filename")) for item in response)
+        if any(not isinstance(item, dict) for item in response):
+            raise AdmissionError("checker PR changed-file record is malformed")
+        files.extend(response)
         if len(response) < 100:
-            return names
+            return files
     raise AdmissionError("checker PR changed-file pagination overflow")
+
+
+def _parse_live_time(value: Any, field: str) -> dt.datetime:
+    if not isinstance(value, str) or not value:
+        raise AdmissionError(f"live {field} timestamp is unavailable")
+    try:
+        parsed = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise AdmissionError(f"live {field} timestamp is malformed") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise AdmissionError(f"live {field} timestamp lacks a timezone")
+    return parsed
 
 
 def verify_checker_pr(
@@ -619,12 +639,15 @@ def verify_checker_pr(
         raise AdmissionError("checker PR base repository mismatch")
     if (head.get("repo") or {}).get("full_name") != repository:
         raise AdmissionError("checker PR head repository mismatch")
-    verify_checker_task_binding(repository, pr_number, task_uid, head_oid, pull)
+    verify_checker_task_binding(repository, pr_number, task_uid, base_oid, head_oid, pull)
     body = pull.get("body") or ""
     matches = re.findall(r"^Task: (task_[0-9a-f]{32})$", body, re.MULTILINE)
     if not isinstance(task_uid, str) or not task_uid.startswith("task_") or len(matches) != 1 or matches[0] != task_uid:
         raise AdmissionError("checker PR task identity mismatch")
-    changed = sorted(_pr_files(repository, pr_number))
+    changed_files = _pr_files(repository, pr_number)
+    if any(item.get("status") != "modified" or item.get("previous_filename") for item in changed_files):
+        raise AdmissionError("checker PR contains rename/copy or non-modification paths")
+    changed = sorted(str(item.get("filename") or "") for item in changed_files)
     if changed != sorted(CHECKER_SCOPE):
         raise AdmissionError("checker PR write scope is not the exact checker-only scope")
     local_scope = _git(repo_root, "merge-base", base_oid, head_oid)
@@ -671,21 +694,84 @@ def _read_checker_task_binding(repository: str) -> dict[str, Any]:
         raise AdmissionError("checker task reciprocal PR binding is unavailable")
     if len(unique) != 1:
         raise AdmissionError("checker task reciprocal PR binding is ambiguous")
-    return {"issue_number": CHECKER_ISSUE, "task_uid": CHECKER_TASK_UID, "pr_number": unique[0]}
+    return {
+        "issue_number": CHECKER_ISSUE,
+        "task_uid": CHECKER_TASK_UID,
+        "pr_number": unique[0],
+        "issue_created_at": issue.get("created_at"),
+    }
 
 
-def classify_checker_stage(repository: str, pr_number: int, task_uid: str | None) -> bool:
+def _verify_live_checker_task_pr(
+    repository: str,
+    pr_number: int,
+    task_uid: str | None,
+    base_oid: str,
+    head_oid: str,
+    binding: dict[str, Any],
+    pull: dict[str, Any],
+) -> None:
+    if pull.get("number") != binding["pr_number"] or pr_number != binding["pr_number"]:
+        raise AdmissionError("checker task reciprocal PR identity mismatch")
+    if task_uid != binding["task_uid"]:
+        raise AdmissionError("checker task UID is not the trusted Issue UID")
+    if pull.get("state") != "open" or pull.get("merged") is True:
+        raise AdmissionError("checker task reciprocal PR is not open and unmerged")
+    base = pull.get("base") or {}
+    head = pull.get("head") or {}
+    if base.get("ref") != DEFAULT_BRANCH or base.get("sha") != base_oid:
+        raise AdmissionError("checker PR base identity mismatch")
+    if head.get("sha") != head_oid:
+        raise AdmissionError("checker PR head identity mismatch")
+    if (base.get("repo") or {}).get("full_name") != repository:
+        raise AdmissionError("checker PR base repository mismatch")
+    if (head.get("repo") or {}).get("full_name") != repository:
+        raise AdmissionError("checker PR head repository mismatch")
+    body = pull.get("body")
+    if not isinstance(body, str):
+        raise AdmissionError("checker PR reciprocal task references are unavailable")
+    task_lines = re.findall(r"(?m)^Task:[^\n]*$", body)
+    if task_lines != [f"Task: {CHECKER_TASK_UID}"]:
+        raise AdmissionError("checker PR task UID reference is missing or ambiguous")
+    issue_refs = re.findall(r"(?m)^Refs #(\d+)\s*$", body)
+    if issue_refs != [str(CHECKER_ISSUE)]:
+        raise AdmissionError("checker PR reciprocal Issue reference is missing or ambiguous")
+    issue_created = _parse_live_time(binding.get("issue_created_at"), "checker task Issue")
+    pr_created = _parse_live_time(pull.get("created_at"), "checker PR")
+    if issue_created >= pr_created:
+        raise AdmissionError("checker task Issue must predate its reciprocal PR")
+    changed_files = _pr_files(repository, pr_number)
+    if any(item.get("status") != "modified" or item.get("previous_filename") for item in changed_files):
+        raise AdmissionError("checker PR contains rename/copy or non-modification paths")
+    changed_paths = sorted(str(item.get("filename") or "") for item in changed_files)
+    if changed_paths != sorted(CHECKER_SCOPE):
+        raise AdmissionError("checker PR changed paths are not the exact checker-only scope")
+
+
+def classify_checker_stage(
+    repository: str,
+    pr_number: int,
+    task_uid: str | None,
+    base_oid: str,
+    head_oid: str,
+) -> bool:
     """Return whether the exact trusted checker-stage route is selected.
 
     Ordinary PRs must retain the conservative path.  The checker PR number is
     discovered from the live task Issue; any missing or foreign identity on that
     exact PR is suspicious and blocks rather than downgrading silently.
     """
+    _require_oid(base_oid, "checker PR base")
+    _require_oid(head_oid, "checker PR head")
     binding = _read_checker_task_binding(repository)
     if pr_number != binding["pr_number"]:
         return False
     if task_uid != CHECKER_TASK_UID:
         raise AdmissionError("checker stage task identity is not the trusted task")
+    pull = gh_api(f"repos/{repository}/pulls/{pr_number}")
+    if not isinstance(pull, dict):
+        raise AdmissionError("checker task reciprocal PR readback is unavailable")
+    _verify_live_checker_task_pr(repository, pr_number, task_uid, base_oid, head_oid, binding, pull)
     return True
 
 
@@ -693,20 +779,13 @@ def verify_checker_task_binding(
     repository: str,
     pr_number: int,
     task_uid: str | None,
+    base_oid: str,
     head_oid: str,
     pull: dict[str, Any],
 ) -> None:
-    """Bind the candidate to canonical Issue #3827 and its reciprocal PR."""
+    """Bind the candidate to the frozen successor Issue and reciprocal PR."""
     binding = _read_checker_task_binding(repository)
-    if pr_number != binding["pr_number"]:
-        raise AdmissionError("checker task reciprocal PR identity mismatch")
-    if task_uid != binding["task_uid"]:
-        raise AdmissionError("checker task UID is not the trusted Issue UID")
-    if pull.get("number") != binding["pr_number"]:
-        raise AdmissionError("checker PR number readback mismatch")
-    live_head = ((pull.get("head") or {}).get("sha"))
-    if live_head != head_oid:
-        raise AdmissionError("checker task reciprocal PR head mismatch")
+    _verify_live_checker_task_pr(repository, pr_number, task_uid, base_oid, head_oid, binding, pull)
 
 
 def _serializable_authority(authority: dict[str, Any]) -> dict[str, Any]:
@@ -733,7 +812,7 @@ def build_preflight(
 ) -> dict[str, Any]:
     if not isinstance(task_uid, str) or not task_uid.startswith("task_"):
         raise AdmissionError("current checker task UID is required")
-    if not classify_checker_stage(repository, pr_number, task_uid):
+    if not classify_checker_stage(repository, pr_number, task_uid, base_oid, head_oid):
         raise AdmissionError("checker stage route is not the trusted exact-stage PR")
     authorities = verify_authority_chain(repository)
     planner = verify_executing_planner(planner_path, authorities["planner"], repo_root)
@@ -959,13 +1038,13 @@ def resolve_live_check_head(args: argparse.Namespace) -> str:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("phase", choices=("preflight", "post-run", "postrun"))
+    parser.add_argument("phase", choices=("classify", "preflight", "post-run", "postrun"))
     parser.add_argument("--repository", default=os.environ.get("GITHUB_REPOSITORY", REPOSITORY))
     parser.add_argument("--pr-number", type=int, required=True)
-    parser.add_argument("--repo-root", type=Path, required=True)
+    parser.add_argument("--repo-root", type=Path, default=Path("."))
     parser.add_argument("--base", dest="base_oid", required=True)
     parser.add_argument("--head", dest="head_oid", required=True)
-    parser.add_argument("--scope-base", dest="scope_base_oid", required=True)
+    parser.add_argument("--scope-base", dest="scope_base_oid")
     parser.add_argument("--planner-path", type=Path)
     parser.add_argument("--checker-path", type=Path)
     parser.add_argument("--policy-path", type=Path)
@@ -988,7 +1067,18 @@ def _parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     args = _parser().parse_args(argv)
     try:
+        if args.phase == "classify":
+            if not args.task_uid:
+                raise AdmissionError("checker-stage classification requires the candidate task UID")
+            if not classify_checker_stage(
+                args.repository, args.pr_number, args.task_uid, args.base_oid, args.head_oid
+            ):
+                raise AdmissionError("checker stage route is not the trusted successor PR")
+            print(f"{args.pr_number}\t{CHECKER_TASK_UID}")
+            return 0
         if args.phase == "preflight":
+            if args.scope_base_oid is None:
+                raise AdmissionError("preflight requires scope-base")
             missing = [
                 name
                 for name, value in (
@@ -1018,7 +1108,7 @@ def main(argv: list[str] | None = None) -> int:
                 workflow_sha=args.workflow_sha,
             )
         else:
-            if not args.preflight or args.preflight_digest is None:
+            if not args.scope_base_oid or not args.preflight or args.preflight_digest is None:
                 raise AdmissionError("post-run requires preflight and preflight-digest")
             preflight = json.loads(Path(args.preflight).read_text(encoding="utf-8"))
             if preflight.get("repository") != args.repository or preflight.get("pr_number") != args.pr_number:
