@@ -418,12 +418,12 @@ missing `comparison.json` is normally a consequence, not the root failure.
 
 ## 9. Rollout and rollback
 
-### Phase A: contract implementation behind an opt-in flag
+### Phase A: contract implementation (implemented; still opt-in)
 
-Implement the CLI option, workflow inputs, schema fields, gate option, and
-contract tests without changing default workflow triggers or cold thresholds.
-Run current-only warm measurements to validate command identity and artifact
-shape. This phase does not make a release or merge claim from a warm number.
+The CLI option, workflow inputs, schema fields, gate option, and contract tests
+are implemented. Default workflow triggers and cold thresholds remain
+unchanged. Current-only warm measurements validate command identity and
+artifact shape; they do not make a release or merge claim from a warm number.
 
 ### Phase B: paired report-only observation
 
