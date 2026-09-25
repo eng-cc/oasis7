@@ -25,6 +25,7 @@ REPOSITORY = "eng-cc/oasis7"
 TASK_UID_RE = re.compile(r"(?<![A-Za-z0-9_])task_[0-9a-f]{32}(?![A-Za-z0-9_])")
 SHA_RE = re.compile(r"[0-9a-f]{40}\Z")
 FIXTURE = "scripts/fixtures/ci-required-scope.versioned-test.json"
+LEGACY_FIXTURE = "scripts/fixtures/ci-required-scope.legacy-test.json"
 EFFECTIVE_CONFIG = "scripts/ci-required-scope.v2.json"
 EXPECTED_FIXTURE_SHA256 = "2d4228e5d7446c393ea3811084183860b5f8b4bb0e3b673957a3a020ab172dec"
 EXPECTED_LEGACY_CONFIG_SHA256 = "d656841b3c9fcf66fcd5ea1c37b43d9628e61d13ea48be8bda54e71511d505b4"
@@ -202,7 +203,10 @@ def plan_scenario(root: Path, scenario: str, mode: str = "versioned") -> dict[st
         fail("planner mode must be legacy or versioned")
     if mode == "legacy" and scenario != "ordinary_document":
         fail("legacy comparison is defined only for the ordinary-document scenario")
-    config_path = EFFECTIVE_CONFIG if mode == "legacy" else FIXTURE
+    config_path = LEGACY_FIXTURE if mode == "legacy" else FIXTURE
+    expected_digest = EXPECTED_LEGACY_CONFIG_SHA256 if mode == "legacy" else EXPECTED_FIXTURE_SHA256
+    if hashlib.sha256((root / config_path).read_bytes()).hexdigest() != expected_digest:
+        fail(f"trusted {mode} planner config fixture changed; update must be independently reviewed")
     command = [sys.executable, str(root / "scripts/plan-rust-required-scope.py"),
                "--event-name", "pull_request", "--config", str(root / config_path),
                "--changed-path", selected["path"]]
@@ -212,7 +216,6 @@ def plan_scenario(root: Path, scenario: str, mode: str = "versioned") -> dict[st
     if result.returncode:
         fail("trusted planner failed: " + (result.stderr.strip() or str(result.returncode)))
     fields = parse_plan(result.stdout)
-    expected_digest = EXPECTED_LEGACY_CONFIG_SHA256 if mode == "legacy" else EXPECTED_FIXTURE_SHA256
     if fields.get("planner_config_sha256") != "sha256:" + expected_digest:
         fail(f"{mode} planner config digest does not match the trusted pinned config")
     if mode == "legacy":

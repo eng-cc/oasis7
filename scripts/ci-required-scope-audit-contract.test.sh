@@ -5,6 +5,9 @@ repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 planner="$repo_root/scripts/plan-rust-required-scope.sh"
 ci_tests="$repo_root/scripts/ci-tests.sh"
 versioned_config="$repo_root/scripts/fixtures/ci-required-scope.versioned-test.json"
+legacy_config="$repo_root/scripts/fixtures/ci-required-scope.legacy-test.json"
+legacy_config_sha256="sha256:d656841b3c9fcf66fcd5ea1c37b43d9628e61d13ea48be8bda54e71511d505b4"
+versioned_config_sha256="sha256:2d4228e5d7446c393ea3811084183860b5f8b4bb0e3b673957a3a020ab172dec"
 
 value_for_key() {
   local output="$1"
@@ -87,6 +90,28 @@ require_key "$minimal_plan" run_required_gate_baseline true
 require_key "$minimal_plan" run_operational_contracts false
 require_key "$minimal_plan" selected_capabilities required_gate_baseline
 require_reason_contains "$minimal_plan" required_gate_baseline:always_on
+effective_execution_contract="$(value_for_key "$minimal_plan" execution_contract)"
+effective_config_sha256="$(value_for_key "$minimal_plan" planner_config_sha256)"
+if [[ -z "$effective_execution_contract" && "$effective_config_sha256" == "$legacy_config_sha256" ]]; then
+  effective_policy_mode=legacy
+  cmp -s "$repo_root/scripts/ci-required-scope.v2.json" "$legacy_config" || {
+    echo "legacy effective required-scope config differs from its pinned compatibility fixture" >&2
+    exit 1
+  }
+elif [[ "$effective_execution_contract" == required-domain-split/v1 && "$effective_config_sha256" == "$versioned_config_sha256" ]]; then
+  effective_policy_mode=versioned
+  cmp -s "$repo_root/scripts/ci-required-scope.v2.json" "$versioned_config" || {
+    echo "versioned effective required-scope config differs from its pinned fixture" >&2
+    exit 1
+  }
+  require_key "$minimal_plan" run_packaging_contracts false
+  require_key "$minimal_plan" run_workflow_governance_contracts false
+  require_key "$minimal_plan" run_doc_checker_contracts false
+  require_key "$minimal_plan" run_cargo_tooling_contracts false
+else
+  echo "effective required-scope config has an unsupported contract or digest: contract=${effective_execution_contract:-legacy} digest=$effective_config_sha256" >&2
+  exit 1
+fi
 
 packaging_plan="$($planner --event-name pull_request \
   --changed-path scripts/package-native-installer.sh \
@@ -98,7 +123,16 @@ packaging_plan="$($planner --event-name pull_request \
   --changed-path scripts/package-workflow-cache-reuse-contract.test.sh)"
 require_key "$packaging_plan" scope targeted
 require_key "$packaging_plan" selected_capabilities packaging_contracts
-require_key "$packaging_plan" run_operational_contracts true
+if [[ "$effective_policy_mode" == legacy ]]; then
+  require_key "$packaging_plan" run_operational_contracts true
+else
+  require_key "$packaging_plan" execution_contract required-domain-split/v1
+  require_key "$packaging_plan" planner_config_sha256 "$versioned_config_sha256"
+  require_key "$packaging_plan" run_packaging_contracts true
+  require_key "$packaging_plan" run_operational_contracts false
+  require_key "$packaging_plan" needs_python true
+  require_key "$packaging_plan" needs_markdown true
+fi
 require_key "$packaging_plan" run_rust_baseline false
 require_key "$packaging_plan" needs_rust_toolchain false
 require_key "$packaging_plan" needs_node false
@@ -115,10 +149,9 @@ for packaging_path in \
 done
 require_reason_contains "$packaging_plan" "required_gate_baseline:always_on"
 
-# The effective policy remains legacy until the separately authorized
-# activation stage. Audit the versioned interpretation through its pinned
-# trusted fixture so old aliased fields cannot accidentally stand in for the
-# new capability selector.
+# Exercise versioned packaging semantics against the pinned fixture regardless
+# of the current effective policy; effective assertions above are selected
+# only after validating its contract and config digest.
 versioned_packaging_plan="$("$planner" --event-name pull_request --config "$versioned_config" \
   --changed-path scripts/package-native-installer.sh \
   --changed-path scripts/validate-release-platform-entrypoints.sh \
@@ -149,6 +182,11 @@ require_key "$release_packaging_plan" needs_rust_toolchain true
 operational_plan="$("$planner" --event-name pull_request --changed-path scripts/p2p-public-testnet-package-rollout.test.sh)"
 require_key "$operational_plan" run_required_gate_baseline true
 require_key "$operational_plan" run_operational_contracts true
+if [[ "$effective_policy_mode" == versioned ]]; then
+  require_key "$operational_plan" execution_contract required-domain-split/v1
+  require_key "$operational_plan" planner_config_sha256 "$versioned_config_sha256"
+  require_key "$operational_plan" run_packaging_contracts false
+fi
 require_key "$operational_plan" run_rust_baseline false
 require_key "$operational_plan" needs_rust_toolchain false
 require_key "$operational_plan" selected_capabilities operational_contracts
@@ -217,6 +255,9 @@ for package_workflow_path in \
   require_key "$package_workflow_plan" scope full
   require_key "$package_workflow_plan" run_operational_contracts true
   require_key "$package_workflow_plan" run_rust_baseline true
+  if [[ "$effective_policy_mode" == versioned ]]; then
+    require_key "$package_workflow_plan" run_packaging_contracts true
+  fi
   require_reason_contains "$package_workflow_plan" "packaging_workflow:$package_workflow_path"
 done
 
