@@ -820,8 +820,8 @@ jobs:
             libudev-dev
       - name: Install product-document Markdown parser
         run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
-      - id: required-gate-tests
-        name: Run required test tier
+      - name: Run required test tier
+        id: required-gate-tests
         env:
           GH_TOKEN: ${{ github.token }}
           INTEGRATION_MODE: ${{ inputs.run_mode }}
