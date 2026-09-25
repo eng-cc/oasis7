@@ -1188,6 +1188,7 @@ jobs:
       - name: Verify fleet-health collection contract
         env:
           INTEGRATION_WORKTREE: ${{ steps.integration.outputs.worktree }}
+        shell: bash
         run: |
           set -euo pipefail
           if [[ -n "${INTEGRATION_WORKTREE}" ]]; then cd "${INTEGRATION_WORKTREE}"; fi
