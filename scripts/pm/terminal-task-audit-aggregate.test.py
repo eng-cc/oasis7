@@ -213,6 +213,8 @@ class AggregateTerminalAudit(unittest.TestCase):
         self.mapping_path.write_text(json.dumps(mapping, sort_keys=True) + "\n", encoding="utf-8")
         issue_body = "\n".join((
             f"task_uid: {UID}",
+            "- status: `done`",
+            "- workflow_phase: `task_done`",
             f"- completion_mode: `ordered_delivery_aggregate`",
             f"- aggregate_plan_comment_id: `{self.receipt['plan_comment_id']}`",
             f"- aggregate_plan_sha256: `{self.comment_sha}`",
@@ -302,6 +304,22 @@ class AggregateTerminalAudit(unittest.TestCase):
         self.assertEqual("drifted", report["status"], report)
         self.assertFalse(report["checks"].get("aggregate_child_proofs_live"), report)
         self.assertIn("aggregate_child_proofs_live", report["drift"])
+
+    def test_closed_aggregate_audit_rejects_live_coordinator_lifecycle_drift(self):
+        cases = (
+            ("status drift", "- status: `done`", "- status: `committed`"),
+            ("phase drift", "- workflow_phase: `task_done`", "- workflow_phase: `execution`"),
+        )
+        for name, old, new in cases:
+            with self.subTest(name=name):
+                issue = {**self.issue, "body": self.issue["body"].replace(old, new)}
+                with patch.object(AGGREGATE, "validate_terminal_receipt", return_value=None):
+                    report = self._run_audit(issue=issue)
+                self.assertEqual("drifted", report["status"], report)
+                self.assertIs(
+                    False, report["checks"].get("aggregate_coordinator_lifecycle"), report,
+                )
+                self.assertIn("aggregate_coordinator_lifecycle", report["drift"])
 
     def test_rejects_typed_receipt_journal_and_live_identity_drift(self):
         terminal = json.loads(self.terminal_path.read_text(encoding="utf-8"))

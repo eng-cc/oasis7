@@ -83,6 +83,34 @@ def validate_terminal_receipt(
         fail(f"closed aggregate child proof revalidation failed: {exc}")
 
 
+def validate_coordinator_lifecycle(
+    root: pathlib.Path,
+    task_uid: str,
+    task: dict,
+    issue: dict,
+    *,
+    expected_state: str,
+) -> None:
+    """Apply the task helper's strict live Issue projection before effects."""
+    helper = root / "scripts/pm/github-project-task.py"
+    # Unit fixtures can provide only the finalizer inputs; keep the production
+    # validator available from this script's sibling in that case.
+    if not helper.is_file():
+        helper = pathlib.Path(__file__).with_name("github-project-task.py")
+    spec = importlib.util.spec_from_file_location("finalize_aggregate_task_lifecycle", helper)
+    if spec is None or spec.loader is None:
+        fail("aggregate coordinator lifecycle validator is unavailable")
+    module = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(module)
+        module.validate_live_aggregate_lifecycle(
+            str(task.get("repository") or ""), task_uid, task, issue,
+            expected_state=expected_state,
+        )
+    except (Exception, SystemExit) as exc:
+        fail(f"aggregate coordinator lifecycle validation failed: {exc}")
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--repo-root", type=pathlib.Path, required=True)
@@ -117,12 +145,19 @@ def main() -> int:
     issue_number = task.get("issue_number")
     if not repository or not isinstance(issue_number, int):
         fail("coordinator repository/Issue identity is incomplete")
-    issue = json.loads(command("gh", "issue", "view", str(issue_number), "-R", repository, "--json", "state,body"))
+    issue = json.loads(command(
+        "gh", "issue", "view", str(issue_number), "-R", repository,
+        "--json", "number,url,state,body",
+    ))
     if f"task_uid: {args.task_uid}" not in str(issue.get("body") or ""):
         fail("live coordinator Issue Task UID mismatch")
     if task.get("workflow_phase") == "task_done" and issue.get("state") != "OPEN":
         fail("coordinator Issue closed before terminal proof")
     closed_retry = task.get("workflow_phase") == "post_merge_done" and issue.get("state") == "CLOSED"
+    validate_coordinator_lifecycle(
+        root, args.task_uid, task, issue,
+        expected_state=str(issue.get("state") or "").upper(),
+    )
     if closed_retry:
         # The OPEN-only validator cannot accept a completed coordinator. Replay
         # the terminal aggregate receipt against current child readbacks instead.
@@ -241,6 +276,7 @@ def main() -> int:
     task = (read_json(root / ".pm/github-project-sync/tasks.json").get("tasks") or {}).get(args.task_uid) or {}
     if task.get("workflow_phase") != "post_merge_done" or (task.get("phase_receipt_sha256") or {}).get("post_merge_done") != terminal_sha:
         fail("post_merge_done receipt did not read back from task truth")
+    validate_coordinator_lifecycle(root, args.task_uid, task, issue, expected_state="OPEN")
     journal["phase_readback"] = True
     write_json_atomic(journal_path, journal)
     audit = json.loads(command(sys.executable, str(root / "scripts/pm/github-project-workflow.py"),
@@ -249,12 +285,23 @@ def main() -> int:
         fail("coordinator Project audit did not read back")
     journal["project_readback"] = True
     write_json_atomic(journal_path, journal)
-    issue = json.loads(command("gh", "issue", "view", str(issue_number), "-R", repository, "--json", "state"))
+    issue = json.loads(command(
+        "gh", "issue", "view", str(issue_number), "-R", repository,
+        "--json", "number,url,state,body",
+    ))
+    issue_state = str(issue.get("state") or "").upper()
+    if issue_state not in {"OPEN", "CLOSED"}:
+        fail("coordinator Issue state is unavailable before terminal close")
+    validate_coordinator_lifecycle(root, args.task_uid, task, issue, expected_state=issue_state)
     if issue.get("state") != "CLOSED":
         command("gh", "issue", "close", str(issue_number), "-R", repository, "--reason", "completed")
-        issue = json.loads(command("gh", "issue", "view", str(issue_number), "-R", repository, "--json", "state"))
+        issue = json.loads(command(
+            "gh", "issue", "view", str(issue_number), "-R", repository,
+            "--json", "number,url,state,body",
+        ))
     if issue.get("state") != "CLOSED":
         fail("coordinator Issue close did not read back")
+    validate_coordinator_lifecycle(root, args.task_uid, task, issue, expected_state="CLOSED")
     journal["issue_closed_readback"] = True
     write_json_atomic(journal_path, journal)
     lock.close()

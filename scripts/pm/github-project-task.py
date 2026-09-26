@@ -1681,6 +1681,103 @@ def require_live_issue_route_matches_cache(repo: str, task_uid: str, record: dic
     return live
 
 
+def validate_live_aggregate_lifecycle(
+    repo: str,
+    task_uid: str,
+    record: dict[str, Any],
+    live_issue: dict[str, Any],
+    *,
+    expected_state: str,
+) -> dict[str, Any]:
+    """Require the live coordinator Issue to retain its task_done projection.
+
+    Aggregate terminal completion advances the Project/mapping phase and then
+    closes the Issue. The Issue body remains at its verified `done/task_done`
+    closeout projection, so every terminal consumer checks that projection
+    against the bound aggregate route and receipt instead of trusting cache.
+    """
+    expected_state = expected_state.upper()
+    if expected_state not in {"OPEN", "CLOSED"}:
+        die("aggregate coordinator lifecycle expected Issue state is invalid")
+    if not isinstance(live_issue, dict):
+        die("aggregate coordinator lifecycle live Issue is unavailable")
+
+    body = live_issue.get("body")
+    if isinstance(body, str):
+        body = body.replace("\r\n", "\n")
+        uid_lines = re.findall(r"(?m)^[ \t]*(?:-[ \t]+)?task_uid[ \t]*:[^\n]*$", body)
+        if uid_lines != [f"task_uid: {task_uid}"]:
+            die("aggregate coordinator lifecycle Task UID is missing, malformed, or ambiguous")
+        try:
+            live_fields = issue_task_fields(body)
+        except SystemExit as exc:
+            die(f"aggregate coordinator lifecycle fields are malformed: {exc}")
+        if live_fields.get("trace_projection_error"):
+            die(f"aggregate coordinator lifecycle fields are malformed: {live_fields['trace_projection_error']}")
+        issue_url = str(live_issue.get("url") or "")
+        issue_state = str(live_issue.get("state") or "")
+    else:
+        # github_issue_record() is also a live source: it verifies the unique
+        # canonical UID in the Issue body and returns its strict parsed fields.
+        if live_issue.get("task_uid") != task_uid:
+            die("aggregate coordinator lifecycle Task UID is missing or ambiguous")
+        live_fields = live_issue
+        issue_url = str(live_issue.get("issue_url") or "")
+        issue_state = str(live_issue.get("issue_state") or "")
+
+    issue_number = live_issue.get("number", live_issue.get("issue_number"))
+    expected_url = f"https://github.com/{repo}/issues/{record.get('issue_number')}"
+    if (record.get("task_uid") != task_uid or record.get("repository") != repo
+            or type(record.get("issue_number")) is not int
+            or issue_number != record.get("issue_number") or issue_url != expected_url):
+        die("aggregate coordinator lifecycle Issue identity differs from task truth")
+    if issue_state.upper() != expected_state:
+        die(f"aggregate coordinator lifecycle Issue must remain {expected_state.lower()}")
+
+    if (record.get("status") != "done"
+            or record.get("workflow_phase") not in {"task_done", "post_merge_done"}
+            or record.get("completion_mode") != "ordered_delivery_aggregate"
+            or record.get("pr_number") or record.get("pr_url")
+            or not record.get("aggregate_plan_comment_id")
+            or not record.get("aggregate_plan_sha256")
+            or not re.fullmatch(r"[0-9a-f]{64}", str(record.get("aggregate_completion_receipt_sha256") or ""))):
+        die("aggregate coordinator lifecycle task truth is not terminalizable")
+
+    expected_fields = {
+        "status": "done",
+        "workflow_phase": "task_done",
+        "completion_mode": "ordered_delivery_aggregate",
+        "aggregate_plan_comment_id": str(record["aggregate_plan_comment_id"]),
+        "aggregate_plan_sha256": record["aggregate_plan_sha256"],
+        "aggregate_completion_receipt_sha256": record["aggregate_completion_receipt_sha256"],
+    }
+    if (any(live_fields.get(key) != value for key, value in expected_fields.items())
+            or live_fields.get("pr_number") not in (None, "")
+            or live_fields.get("pr_url") not in (None, "")):
+        die("aggregate coordinator lifecycle differs from the verified done/task_done route")
+    return live_fields
+
+
+def require_live_aggregate_lifecycle(
+    repo: str,
+    task_uid: str,
+    record: dict[str, Any],
+    *,
+    expected_state: str,
+) -> dict[str, Any]:
+    """Read and validate the live coordinator lifecycle before terminal effects."""
+    try:
+        live_issue = github_issue_record(repo, task_uid)
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError, RuntimeError, SystemExit) as exc:
+        die(f"aggregate coordinator lifecycle live Issue read failed closed: {exc}")
+    if not isinstance(live_issue, dict):
+        die("aggregate coordinator lifecycle live Issue is unavailable")
+    validate_live_aggregate_lifecycle(
+        repo, task_uid, record, live_issue, expected_state=expected_state,
+    )
+    return live_issue
+
+
 def recover_missing_project_item(args: argparse.Namespace, record: dict[str, Any]) -> None:
     if record.get("project_item_id"):
         return
@@ -2360,6 +2457,9 @@ def command_set_phase(args: argparse.Namespace) -> int:
         if validation.returncode or hashlib.sha256(pathlib.Path(args.aggregate_receipt).read_bytes()).hexdigest() != digest:
             die("set-phase: aggregate completion receipt no longer verifies live")
         validate_canonical_aggregate_terminal_receipt(args, original, receipt, receipt_bytes)
+        require_live_aggregate_lifecycle(
+            args.repo, args.task_uid, original, expected_state="OPEN",
+        )
     record = json.loads(json.dumps(original))
     record["workflow_phase"] = args.phase
     record.setdefault("phase_receipts", {})[args.phase] = receipt

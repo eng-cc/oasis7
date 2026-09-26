@@ -7,14 +7,14 @@ trap 'rm -rf "$TMPDIR"' EXIT
 mkdir -p "$TMPDIR/bin" "$TMPDIR/root/.pm/github-project-sync"
 TASK_UID=task_11111111111111111111111111111111
 cat >"$TMPDIR/root/.pm/github-project-sync/tasks.json" <<JSON
-{"tasks":{"$TASK_UID":{"issue_number":1,"merge_hold":{"kind":"normal_pr_ci_watch","requester":"workflow","reason":"normal","resume_authority":"workflow","active":false,"evidence_receipt":{"source":"github_task_issue_comment","runtime_verified":true,"task_uid":"$TASK_UID","repository":"eng-cc/oasis7","issue_number":1,"pr_number":9,"head_oid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","github_node_id":"IC_hold","url":"https://github.com/eng-cc/oasis7/issues/1#issuecomment-hold","author":"workflow","observed_at":"2026-07-11T00:00:00Z","digest":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}}}}}
+{"tasks":{"$TASK_UID":{"task_uid":"$TASK_UID","repository":"eng-cc/oasis7","issue_number":1,"issue_url":"https://github.com/eng-cc/oasis7/issues/1","pr_number":9,"pr_url":"https://github.com/eng-cc/oasis7/pull/9","merge_hold":{"kind":"normal_pr_ci_watch","requester":"workflow","reason":"normal","resume_authority":"workflow","active":false,"evidence_receipt":{"source":"github_task_issue_comment","runtime_verified":true,"task_uid":"$TASK_UID","repository":"eng-cc/oasis7","issue_number":1,"pr_number":9,"head_oid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","github_node_id":"IC_hold","url":"https://github.com/eng-cc/oasis7/issues/1#issuecomment-hold","author":"workflow","observed_at":"2026-07-11T00:00:00Z","digest":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"}}}}}
 JSON
 cat >"$TMPDIR/bin/gh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >>"$GH_LOG"
 case "$1 $2" in
-  "pr view") printf '{"number":9,"url":"https://example.invalid/pull/9","state":"OPEN","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"APPROVED","headRefName":"task/x","headRefOid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","baseRefName":"main"}\n' ;;
+  "pr view") printf '{"number":9,"url":"https://example.invalid/pull/9","state":"OPEN","isDraft":false,"body":"","mergeable":"MERGEABLE","mergeStateStatus":"CLEAN","reviewDecision":"APPROVED","headRefName":"task/x","headRefOid":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","baseRefName":"main","baseRefOid":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}\n' ;;
   "repo view") printf '{"nameWithOwner":"eng-cc/oasis7"}\n' ;;
   "api graphql")
     if [[ "$*" == *comments* || "$*" == *reviews* || "$*" == *reviewThreads* ]]; then
@@ -29,6 +29,7 @@ case "$1 $2" in
       *) echo 'gh: Not Found (HTTP 404)' >&2 ;;
     esac
     exit 1 ;;
+  "api repos/eng-cc/oasis7/issues/1") printf '{"number":1,"url":"https://github.com/eng-cc/oasis7/issues/1","state":"OPEN","body":"<!-- oasis7-pm-task -->\\ntask_uid: %s\\n"}\n' "$TASK_UID" ;;
   "api repos/eng-cc/oasis7/rulesets")
     case "${POLICY_CASE:?}" in
       ruleset) printf '[{"id":7,"enforcement":"active","conditions":{"ref_name":{"include":["~DEFAULT_BRANCH"]}},"rules":[{"type":"required_status_checks","parameters":{"required_status_checks":[{"context":"required-gate","integration_id":42}]}}]}]\n' ;;
@@ -53,7 +54,7 @@ run_case() {
   local name="$1"
   : >"$TMPDIR/$name.log"
   set +e
-  GH_LOG="$TMPDIR/$name.log" POLICY_CASE="$name" PATH="$TMPDIR/bin:$PATH" \
+  GH_LOG="$TMPDIR/$name.log" POLICY_CASE="$name" TASK_UID="$TASK_UID" PATH="$TMPDIR/bin:$PATH" \
     python3 "$ROOT_DIR/scripts/pm/pr-lifecycle-gate.py" 9 --root "$TMPDIR/root" \
     --task-uid "$TASK_UID" --json >"$TMPDIR/$name.out" 2>"$TMPDIR/$name.err"
   local status=$?

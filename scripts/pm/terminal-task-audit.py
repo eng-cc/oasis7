@@ -331,9 +331,16 @@ def _audit_aggregate(
         and _body_field(issue_body, "completion_mode") == "ordered_delivery_aggregate"
         and _body_field_absent(issue_body, "pr_number") and _body_field_absent(issue_body, "pr_url")
     )
+    coordinator_lifecycle = bool(
+        not issue.get("query_error")
+        and str(issue.get("state") or "").upper() == "CLOSED"
+        and _body_field(issue_body, "status") == "done"
+        and _body_field(issue_body, "workflow_phase") == "task_done"
+    )
     checks.update({
         "mapping_post_merge_done": terminal_phase,
         "issue_closed": issue_closed and issue_identity,
+        "aggregate_coordinator_lifecycle": coordinator_lifecycle,
         "project_item_bound": project_item_bound,
         "project_item_identity": project_identity,
         "project_field_values_complete": project_fields_complete,

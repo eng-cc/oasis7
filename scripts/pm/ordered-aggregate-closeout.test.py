@@ -457,7 +457,7 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
 
     def run_finalizer_retry(
         self, phase: str, issue_state: str, *, preflight=False, registered_default=True,
-        child_proof_drift=False,
+        child_proof_drift=False, live_status=None, live_phase=None,
     ):
         with tempfile.TemporaryDirectory() as temp:
             root = pathlib.Path(temp).resolve()
@@ -501,10 +501,24 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
             task = {"task_uid": UID, "completion_mode": "ordered_delivery_aggregate",
                     "status": "done", "workflow_phase": phase, "repository": REPO,
                     "issue_number": issue_number, "aggregate_completion_receipt_sha256": completion_sha,
+                    "aggregate_plan_comment_id": "6001", "aggregate_plan_sha256": "sha256:" + "9" * 64,
                     "phase_receipt_sha256": {"post_merge_done": terminal_sha} if terminal_sha else {}}
             mapping_path = root / ".pm/github-project-sync/tasks.json"
             mapping_path.write_text(json.dumps({"version": 1, "tasks": {UID: task}}), encoding="utf-8")
-            issue = {"state": issue_state, "body": f"task_uid: {UID}\n"}
+            issue = {
+                "number": issue_number,
+                "url": f"https://github.com/{REPO}/issues/{issue_number}",
+                "state": issue_state,
+                "body": "\n".join((
+                    f"task_uid: {UID}",
+                    "- status: `" + str(live_status or "done") + "`",
+                    "- workflow_phase: `" + str(live_phase or "task_done") + "`",
+                    "- completion_mode: `ordered_delivery_aggregate`",
+                    "- aggregate_plan_comment_id: `6001`",
+                    "- aggregate_plan_sha256: `sha256:" + "9" * 64 + "`",
+                    "- aggregate_completion_receipt_sha256: `" + completion_sha + "`",
+                )) + "\n",
+            }
             events: list[str] = []
             terminal_validation_calls: list[tuple] = []
 
@@ -603,6 +617,115 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
         self.assertIn("aggregate_validate", events)
         self.assertNotIn("terminal_validate", events)
         self.assertIn("issue_close", events)
+
+    def test_finalizer_rejects_live_coordinator_lifecycle_drift_before_effects(self):
+        cases = (
+            ("status drift", {"live_status": "committed"}),
+            ("phase drift", {"live_phase": "execution"}),
+        )
+        for name, options in cases:
+            with self.subTest(name=name):
+                result, events, _task, issue, terminal_exists, before, after, mapping_unchanged, *_rest = (
+                    self.run_finalizer_retry("task_done", "OPEN", **options)
+                )
+                self.assertNotEqual(result, 0, f"finalizer accepted coordinator {name}")
+                self.assertEqual(issue["state"], "OPEN")
+                self.assertFalse(terminal_exists, "lifecycle drift wrote a terminal receipt")
+                self.assertEqual(before, after, "lifecycle drift wrote durable terminal effects")
+                self.assertTrue(mapping_unchanged, "lifecycle drift changed task truth")
+                self.assertNotIn("set_phase", events)
+                self.assertNotIn("project_audit", events)
+                self.assertNotIn("issue_close", events)
+
+    def test_closed_finalizer_retry_rejects_live_coordinator_lifecycle_drift(self):
+        cases = (
+            ("status drift", {"live_status": "committed"}),
+            ("phase drift", {"live_phase": "execution"}),
+        )
+        for name, options in cases:
+            with self.subTest(name=name):
+                result, events, _task, issue, terminal_exists, before, after, mapping_unchanged, *_rest = (
+                    self.run_finalizer_retry("post_merge_done", "CLOSED", **options)
+                )
+                self.assertNotEqual(result, 0, f"closed retry accepted coordinator {name}")
+                self.assertEqual(issue["state"], "CLOSED")
+                self.assertTrue(terminal_exists)
+                self.assertEqual(before, after, "closed lifecycle drift wrote durable effects")
+                self.assertTrue(mapping_unchanged, "closed lifecycle drift changed task truth")
+                self.assertNotIn("project_audit", events)
+                self.assertNotIn("issue_close", events)
+
+    def test_aggregate_terminal_phase_rejects_live_coordinator_lifecycle_drift_before_effects(self):
+        record = {
+            "task_uid": UID, "issue_number": 4035, "status": "done", "workflow_phase": "task_done",
+            "completion_mode": "ordered_delivery_aggregate", "repository": REPO,
+            "aggregate_plan_comment_id": "6001", "aggregate_plan_sha256": "sha256:" + "9" * 64,
+            "aggregate_completion_receipt_sha256": "",
+        }
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp).resolve()
+            common = root / ".git"
+            common.mkdir()
+            (root / ".pm/github-project-sync").mkdir(parents=True)
+            inputs = {}
+            for name, value in (("plan.json", {"plan": True}), ("candidate.json", {"candidate": True}),
+                                ("evidence.json", [{"evidence": True}]),
+                                ("completion.json", {"receipt": True})):
+                path = root / name
+                path.write_text(json.dumps(value), encoding="utf-8")
+                inputs[name] = path
+            completion_sha = hashlib.sha256(inputs["completion.json"].read_bytes()).hexdigest()
+            record["aggregate_completion_receipt_sha256"] = completion_sha
+            payload = {
+                "schema": "oasis7.aggregate-terminal/v1", "receipt_type": "oasis7_aggregate_terminal",
+                "issuer": "aggregate-task-finalizer", "task_uid": UID, "repository": REPO,
+                "issue_number": 4035, "aggregate_completion_receipt_sha256": completion_sha,
+                "plan_comment_id": 6001, "observed_at": "2026-09-25T10:00:00Z",
+            }
+            canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+            terminal = {**payload, "receipt_sha256": hashlib.sha256(canonical).hexdigest()}
+            terminal_path = common / "oasis7-workflow-receipts" / UID / "aggregate-terminal-receipt.json"
+            terminal_path.parent.mkdir(parents=True)
+            terminal_path.write_text(json.dumps(terminal, sort_keys=True, indent=2) + "\n", encoding="utf-8")
+            live_issue = {
+                "number": 4035, "url": f"https://github.com/{REPO}/issues/4035", "state": "OPEN",
+                "body": "\n".join((
+                    f"task_uid: {UID}", "- status: `done`", "- workflow_phase: `execution`",
+                    "- completion_mode: `ordered_delivery_aggregate`",
+                    "- aggregate_plan_comment_id: `6001`", "- aggregate_plan_sha256: `sha256:" + "9" * 64 + "`",
+                    "- aggregate_completion_receipt_sha256: `" + completion_sha + "`",
+                )),
+            }
+            args = Namespace(
+                task_uid=UID, phase="post_merge_done", receipt_json=str(terminal_path),
+                root=root, role="tpm", repo=REPO,
+                aggregate_plan=str(inputs["plan.json"]), aggregate_candidate=str(inputs["candidate.json"]),
+                aggregate_evidence=str(inputs["evidence.json"]), aggregate_receipt=str(inputs["completion.json"]),
+            )
+            effects = []
+            issue = live_issue
+            def run_text(command):
+                if command[0:3] == ["git", "-C", str(root)]:
+                    return str(common)
+                if command[0:2] == ["gh", "api"]:
+                    return json.dumps(issue)
+                raise AssertionError(f"unexpected run_text command: {command}")
+            with mock.patch.object(self.task, "require_record", return_value=(root / "tasks.json", {}, record)), \
+                    mock.patch.object(self.task, "github_issue_record", return_value=live_issue), \
+                    mock.patch.object(self.task, "run_text", side_effect=run_text), \
+                    mock.patch.object(self.task.subprocess, "run", return_value=SimpleNamespace(returncode=0, stdout="{}", stderr="")), \
+                    mock.patch.object(self.task, "issue_comment", side_effect=lambda *a, **k: effects.append("comment")), \
+                    mock.patch.object(self.task, "update_project_fields", side_effect=lambda *a, **k: effects.append("project")), \
+                    mock.patch.object(self.task, "merge_task_mapping", side_effect=lambda *a, **k: effects.append("mapping")), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                failure = None
+                try:
+                    self.task.command_set_phase(args)
+                except SystemExit as exc:
+                    failure = str(exc)
+            self.assertEqual(effects, [], "set-phase mutated despite live coordinator lifecycle drift")
+            self.assertIsNotNone(failure, "set-phase accepted live coordinator lifecycle drift")
+            self.assertIn("lifecycle", failure or "")
 
     def test_finalizer_closed_retry_is_idempotent_without_open_only_validator(self):
         result, events, task, issue, _terminal, _before, _after, _mapping_same, calls, root, plan, candidate, evidence, receipt = self.run_finalizer_retry("post_merge_done", "CLOSED")
