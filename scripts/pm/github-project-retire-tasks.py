@@ -3,11 +3,22 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import pathlib
 from collections import Counter, OrderedDict
 from datetime import datetime
 from typing import Any
+
+
+_STORE_PATH = pathlib.Path(__file__).with_name("workflow-durable-store.py")
+if not _STORE_PATH.exists():
+    _STORE_PATH = pathlib.Path.cwd() / "scripts" / "pm" / "workflow-durable-store.py"
+_STORE_SPEC = importlib.util.spec_from_file_location("workflow_durable_store_retire_tasks", _STORE_PATH)
+if _STORE_SPEC is None or _STORE_SPEC.loader is None:
+    raise RuntimeError(f"cannot load durable task mapping validator at {_STORE_PATH}")
+DURABLE_STORE = importlib.util.module_from_spec(_STORE_SPEC)
+_STORE_SPEC.loader.exec_module(DURABLE_STORE)
 
 
 ALL_STATUSES = ("candidate", "committed", "blocked", "done", "deferred")
@@ -43,9 +54,7 @@ def load_simple_yaml(path: pathlib.Path) -> OrderedDict[str, Any]:
 
 
 def load_mapping(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists():
-        return {"version": 1, "tasks": {}}
-    return json.loads(path.read_text(encoding="utf-8"))
+    return DURABLE_STORE.read_mapping(path, {"version": 1, "tasks": {}})
 
 
 def sha256_text(text: str) -> str:

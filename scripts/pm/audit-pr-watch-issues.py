@@ -14,6 +14,14 @@ from datetime import datetime
 from typing import Any
 
 
+_STORE_PATH = pathlib.Path(__file__).with_name("workflow-durable-store.py")
+_STORE_SPEC = importlib.util.spec_from_file_location("workflow_durable_store_audit_pr_watch", _STORE_PATH)
+if _STORE_SPEC is None or _STORE_SPEC.loader is None:
+    raise RuntimeError(f"cannot load durable mapping store at {_STORE_PATH}")
+durable_store = importlib.util.module_from_spec(_STORE_SPEC)
+_STORE_SPEC.loader.exec_module(durable_store)
+
+
 DEFAULT_REPO = "eng-cc/oasis7"
 DEFAULT_PROJECT_OWNER = "eng-cc"
 DEFAULT_PROJECT_NUMBER = 1
@@ -48,13 +56,13 @@ def load_mapping(root: pathlib.Path, mapping_arg: str) -> tuple[pathlib.Path, di
         mapping_path = root / mapping_path
     if not mapping_path.exists():
         return mapping_path, {"version": 1, "tasks": {}}
-    return mapping_path, json.loads(mapping_path.read_text(encoding="utf-8"))
+    return mapping_path, durable_store.read_mapping(mapping_path, {"version": 1, "tasks": {}})
 
 
 def save_mapping(path: pathlib.Path, mapping: dict[str, Any]) -> None:
     if not path.exists():
         return
-    path.write_text(json.dumps(mapping, indent=2, sort_keys=True, ensure_ascii=False) + "\n", encoding="utf-8")
+    durable_store.merge_mapping_document(path, mapping)
 
 
 def parse_task_body(body: str) -> dict[str, str]:
@@ -266,6 +274,15 @@ def audit(args: argparse.Namespace) -> list[dict[str, Any]]:
         body = str(issue.get("body") or "")
         fields = parse_task_body(body)
         task_uid = fields.get("task_uid") or ""
+        if task_uid:
+            try:
+                retired = durable_store.retired_task(mapping, task_uid)
+            except ValueError as exc:
+                results.append({"issue_number": issue_number, "task_uid": task_uid, "status": "blocked", "reason": f"retirement ledger is invalid: {exc}"})
+                continue
+            if retired is not None:
+                results.append({"issue_number": issue_number, "task_uid": task_uid, "status": "blocked", "reason": "Task UID is retired; pr-watch audit cannot refresh or reintroduce it"})
+                continue
         if args.task_uid and task_uid != args.task_uid:
             results.append({"issue_number":issue_number,"task_uid":task_uid or None,
                             "status":"blocked","reason":"selected issue task_uid does not match requested task"})

@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
 """Record and read back task/head/base identity before draft PR side effects."""
 from __future__ import annotations
-import argparse, json, os, re, subprocess, sys, tempfile
+import argparse, importlib.util, json, os, re, subprocess, sys, tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
 MARKER = "<!-- oasis7-pm-evidence -->"
 KEYS = ("Task UID", "Source Worktree", "Source Branch", "Source Head", "Comparison Ref", "Comparison OID")
+_STORE_PATH = Path(__file__).with_name("workflow-durable-store.py")
+_STORE_SPEC = importlib.util.spec_from_file_location("workflow_durable_store_draft_freeze", _STORE_PATH)
+if _STORE_SPEC is None or _STORE_SPEC.loader is None: raise RuntimeError(f"cannot load durable task mapping validator at {_STORE_PATH}")
+DURABLE_STORE = importlib.util.module_from_spec(_STORE_SPEC)
+_STORE_SPEC.loader.exec_module(DURABLE_STORE)
 
 def fail(message: str) -> None:
     raise SystemExit(f"draft freeze evidence: {message}")
@@ -33,7 +38,7 @@ def main() -> int:
     args = parser.parse_args()
     worktree = Path(args.worktree).resolve()
     try:
-        mapping = json.loads((worktree / ".pm/github-project-sync/tasks.json").read_text(encoding="utf-8"))
+        mapping = DURABLE_STORE.read_mapping(worktree / ".pm/github-project-sync/tasks.json")
     except (OSError, json.JSONDecodeError) as exc:
         fail(f"cannot read canonical task mapping: {exc}")
     tasks = mapping.get("tasks") if isinstance(mapping, dict) else None

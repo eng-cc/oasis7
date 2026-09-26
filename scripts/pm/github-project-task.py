@@ -80,6 +80,22 @@ if not _store_path.exists(): _store_path = pathlib.Path.cwd()/"scripts/pm/workfl
 _store_spec = importlib.util.spec_from_file_location("workflow_durable_store", _store_path)
 assert _store_spec and _store_spec.loader
 durable_store = importlib.util.module_from_spec(_store_spec); _store_spec.loader.exec_module(durable_store)
+_candidate_guard_path = pathlib.Path(__file__).with_name("closed_duplicate_candidate_guard.py")
+_candidate_guard_module: Any | None = None
+
+
+def candidate_admission_guard_module() -> Any:
+    global _candidate_guard_module
+    if _candidate_guard_module is not None:
+        return _candidate_guard_module
+    if not _candidate_guard_path.is_file():
+        raise RuntimeError(f"candidate admission guard is unavailable beside this task entrypoint: {_candidate_guard_path}")
+    spec = importlib.util.spec_from_file_location("closed_duplicate_candidate_guard", _candidate_guard_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load candidate admission guard at {_candidate_guard_path}")
+    _candidate_guard_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(_candidate_guard_module)
+    return _candidate_guard_module
 
 
 class _CommandExit(SystemExit):
@@ -138,9 +154,7 @@ def load_non_merge_finalizer_module() -> Any:
 
 
 def load_mapping(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists():
-        return {"version": 1, "tasks": {}}
-    return json.loads(path.read_text(encoding="utf-8"))
+    return durable_store.read_mapping(path, {"version": 1, "tasks": {}})
 
 
 save_mapping = durable_store.replace_json
@@ -1637,6 +1651,12 @@ def require_record(args: argparse.Namespace) -> tuple[pathlib.Path, dict[str, An
     root = args.root.resolve()
     mapping_path = mapping_path_for(root, args.mapping)
     mapping = load_mapping(mapping_path)
+    try:
+        retired = durable_store.retired_task(mapping, args.task_uid)
+    except ValueError as exc:
+        die(f"task UID retirement ledger is invalid: {exc}")
+    if retired is not None:
+        die(f"task UID is retired and cannot be read or mutated: {args.task_uid}")
     record = mapping.get("tasks", {}).get(args.task_uid)
     if not record:
         try:
@@ -2880,8 +2900,21 @@ def preserve_identity_bound_cache(
 def command_refresh_task(args: argparse.Namespace) -> int:
     mapping_path = mapping_path_for(args.root.resolve(), args.mapping)
     latest = load_mapping(mapping_path)
+    try:
+        retired = durable_store.retired_task(latest, args.task_uid)
+    except ValueError as exc:
+        die(f"refresh-task: retirement ledger is invalid: {exc}")
+    if retired is not None:
+        die(f"refresh-task: Task UID is retired and cannot be refreshed: {args.task_uid}")
     existing = dict((latest.get("tasks") or {}).get(args.task_uid) or {})
     root = args.root.resolve()
+    if existing:
+        try:
+            candidate_admission_guard_module().guard_candidate_issue(latest, mapping_path, args.task_uid, existing)
+        except ValueError as exc:
+            die(f"refresh-task: {exc}")
+        except RuntimeError as exc:
+            die(f"refresh-task: {exc}")
     project = latest.get("project") or {}
     project = project if isinstance(project, dict) else {}
     canonical_owner = str(project.get("owner") or args.project_owner or "")

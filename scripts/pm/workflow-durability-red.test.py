@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """RED contracts for durable workflow writers and terminal recovery."""
 from __future__ import annotations
-import importlib.util, json, multiprocessing, os, re, subprocess, tempfile, unittest
+import hashlib, importlib.util, json, multiprocessing, os, re, subprocess, tempfile, unittest
 from pathlib import Path
 
 ROOT=Path(__file__).resolve().parents[2]; PM=ROOT/"scripts/pm"
@@ -114,6 +114,159 @@ class MappingDurabilityContract(unittest.TestCase):
             self.assertEqual("new",record["phase_receipts"]["main_sync"]["oid"])
             self.assertEqual("new-digest",record["phase_receipt_sha256"]["main_sync"])
             self.assertEqual("2026-07-12T10:00:00Z",record["updated_at"])
+
+
+class ClosedDuplicateRetirementReservationContract(unittest.TestCase):
+    """A retirement tombstone is durable authority, not mergeable metadata."""
+
+    @staticmethod
+    def _digest(value: object) -> str:
+        canonical = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        return "sha256:" + hashlib.sha256(canonical).hexdigest()
+
+    def _fixture(self, mapping: Path) -> tuple[object, str, dict[str, object]]:
+        store = load(STORE, "retirement_reservation_store")
+        retired_uid = "task_" + "7" * 32
+        active_uid = "task_" + "8" * 32
+        old_record: dict[str, object] = {
+            "task_uid": retired_uid,
+            "repository": "eng-cc/oasis7",
+            "issue_number": 900007,
+            "project_item_id": "PVTI_retired_fixture",
+            "status": "candidate",
+            "workflow_phase": "bootstrap",
+        }
+        tombstone: dict[str, object] = {
+            "schema": "oasis7.duplicate-candidate-retirement/v1",
+            "task_uid": retired_uid,
+            "old_record": old_record,
+            "old_record_sha256": self._digest(old_record),
+            "evidence": {
+                "candidate_issue": {"repository": "eng-cc/oasis7", "issue_number": 900007, "task_uid": retired_uid},
+                "candidate_project_item": "PVTI_retired_fixture",
+                "disposition_comment": {"id": 555007, "body_sha256": "sha256:fixture-comment"},
+                "permission": {"login": "fixture-admin", "permission": "admin"},
+                "replacement": {"repository": "eng-cc/oasis7", "issue_number": 900008, "task_uid": "task_" + "6" * 32},
+                "artifact_discovery": {"complete": True, "candidate_artifacts": []},
+            },
+            "issuer": "fixture-admin",
+            "time": "2026-09-26T00:00:00Z",
+            "reason": "duplicate",
+            "transaction_id": "retirement-fixture-transaction",
+        }
+        tombstone["digest"] = self._digest(tombstone)
+        store.atomic_replace_json(
+            mapping,
+            {
+                "version": 1,
+                "project": {"repo": "eng-cc/oasis7", "number": 1},
+                "tasks": {
+                    active_uid: {"task_uid": active_uid, "status": "committed"},
+                },
+                "retired_duplicate_candidates": [tombstone],
+            },
+        )
+        return store, retired_uid, tombstone
+
+    def test_stale_mapping_merge_cannot_reintroduce_a_tombstoned_uid_or_partially_write(self):
+        with tempfile.TemporaryDirectory() as td:
+            mapping = Path(td) / "tasks.json"
+            store, retired_uid, _ = self._fixture(mapping)
+            before = mapping.read_bytes()
+            error = None
+            try:
+                store.merge_mapping_document(
+                    mapping,
+                    {
+                        "version": 1,
+                        "project": {"repo": "eng-cc/oasis7", "number": 1},
+                        "tasks": {retired_uid: {"task_uid": retired_uid, "status": "candidate"}},
+                    },
+                )
+            except (ValueError, RuntimeError) as exc:
+                error = exc
+            self.assertEqual(before, mapping.read_bytes(), "a rejected stale merge must leave bytes unchanged")
+            self.assertIsNotNone(error, "generic mapping merge must reserve retired UIDs")
+
+    def test_task_record_merge_cannot_recreate_a_retired_candidate(self):
+        with tempfile.TemporaryDirectory() as td:
+            mapping = Path(td) / "tasks.json"
+            store, retired_uid, _ = self._fixture(mapping)
+            before = mapping.read_bytes()
+            error = None
+            try:
+                store.merge_task_record(
+                    mapping,
+                    retired_uid,
+                    {"task_uid": retired_uid, "repository": "eng-cc/oasis7", "issue_number": 900001},
+                )
+            except (ValueError, RuntimeError) as exc:
+                error = exc
+            self.assertEqual(before, mapping.read_bytes(), "a rejected task merge must leave bytes unchanged")
+            self.assertIsNotNone(error, "task writer must honor retirement reservation")
+
+    def test_sync_and_workflow_mapping_writers_cannot_resurrect_a_retired_uid(self):
+        with tempfile.TemporaryDirectory() as td:
+            mapping = Path(td) / "tasks.json"
+            _, retired_uid, _ = self._fixture(mapping)
+            before = mapping.read_bytes()
+            sync = load(PM / "github-project-sync.py", "sync_retirement_reservation")
+            workflow = load(PM / "github-project-workflow.py", "workflow_retirement_reservation")
+            patch = {"version": 1, "tasks": {retired_uid: {"task_uid": retired_uid, "status": "candidate"}}}
+            for writer in (sync, workflow):
+                error = None
+                try:
+                    writer.persist_mapping(mapping, patch)
+                except (ValueError, RuntimeError) as exc:
+                    error = exc
+                with self.subTest(writer=writer.__name__):
+                    self.assertEqual(before, mapping.read_bytes(), "a blocked writer must not partially update the mapping")
+                    self.assertIsNotNone(error, "mapping adapter must honor retired UID reservation")
+
+    def test_truncated_existing_task_map_blocks_stale_snapshot_replace_without_mutation(self):
+        with tempfile.TemporaryDirectory() as td:
+            mapping = Path(td) / "tasks.json"
+            store, retired_uid, _ = self._fixture(mapping)
+            valid_with_tombstone = mapping.read_bytes()
+            truncated = valid_with_tombstone[:-2]
+            self.assertTrue(truncated)
+            mapping.write_bytes(truncated)
+            stale_snapshot = {
+                "version": 1,
+                "tasks": {retired_uid: {"task_uid": retired_uid, "status": "candidate"}},
+            }
+            error = None
+            try:
+                store.atomic_replace_json(mapping, stale_snapshot)
+            except (ValueError, RuntimeError, json.JSONDecodeError) as exc:
+                error = exc
+            self.assertEqual(truncated, mapping.read_bytes(), "corrupt existing mapping bytes must never be replaced")
+            self.assertIsNotNone(error, "an unreadable prior ledger must fail closed, not become an empty ledger")
+
+    def test_missing_task_map_allows_distinct_first_creation(self):
+        with tempfile.TemporaryDirectory() as td:
+            mapping = Path(td) / "tasks.json"
+            store = load(STORE, "first_mapping_creation_store")
+            initial = {"version": 1, "tasks": {"task_" + "5" * 32: {"task_uid": "task_" + "5" * 32}}}
+            store.atomic_replace_json(mapping, initial)
+            self.assertEqual(initial, json.loads(mapping.read_text(encoding="utf-8")))
+
+    def test_generic_snapshot_cannot_truncate_the_append_only_retirement_ledger(self):
+        with tempfile.TemporaryDirectory() as td:
+            mapping = Path(td) / "tasks.json"
+            store, _, tombstone = self._fixture(mapping)
+            other_uid = "task_" + "9" * 32
+            store.merge_mapping_document(
+                mapping,
+                {
+                    "version": 1,
+                    "retired_duplicate_candidates": [],
+                    "tasks": {other_uid: {"task_uid": other_uid, "status": "committed"}},
+                },
+            )
+            payload = json.loads(mapping.read_text(encoding="utf-8"))
+            self.assertEqual([tombstone], payload["retired_duplicate_candidates"])
+            self.assertIn(other_uid, payload["tasks"], "unrelated active task merges should continue to work")
 
 class CleanupJournalContract(unittest.TestCase):
     def test_cleanup_uses_fsync_backed_atomic_journal(self):
