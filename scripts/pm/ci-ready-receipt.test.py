@@ -7,6 +7,7 @@ import integration_ci
 import integration_executor_contract as request_contract
 import ci_input_scope
 import ci_required_artifact_v2
+from ci_reuse_validation_test_support import validation_only_artifacts
 
 P=Path(__file__).with_name("ci-ready-receipt.py")
 S=importlib.util.spec_from_file_location("ci_ready_receipt",P); M=importlib.util.module_from_spec(S); S.loader.exec_module(M)
@@ -881,6 +882,20 @@ class ReceiptTest(unittest.TestCase):
           M._verified_v2_required_evidence("eng-cc/oasis7",check,candidate,
             request_key=key,request_identity=identity,task_uid=UID,pr_number=7,
             integration_base_oid="b"*40,head_oid="a"*40)
+
+  def test_validation_payload_authority_and_readback_cannot_be_required_plan_evidence(self):
+    key,identity,context,plan_payload,result,proof,snapshot=v2_reader_fixture()
+    check={"id":902,"name":"required-gate","app":{"id":42},
+      "status":"completed","conclusion":"success"}
+    for candidate in validation_only_artifacts():
+      rejected=copy.deepcopy(proof)
+      rejected["required_plan_v2_payload"]=candidate
+      with self.subTest(schema=candidate["schema"]), self.assertRaisesRegex(
+          SystemExit,"trusted v2 required evidence blocked",
+      ):
+        M._verified_v2_required_evidence("eng-cc/oasis7",check,rejected,
+          request_key=key,request_identity=identity,task_uid=UID,pr_number=7,
+          integration_base_oid="b"*40,head_oid="a"*40)
 
   def test_keyed_v2_receipt_uses_verified_payload_and_digest_binds_its_locators(self):
     key,identity,context,plan_payload,result,proof,snapshot=v2_reader_fixture()

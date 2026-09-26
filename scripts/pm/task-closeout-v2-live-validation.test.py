@@ -12,6 +12,8 @@ import sys
 import tempfile
 import unittest
 
+from ci_reuse_validation_test_support import validation_only_artifacts
+
 
 PM = Path(__file__).parent
 ROOT = PM.parent.parent
@@ -160,6 +162,12 @@ if '--integration-run-id' not in args:
 receipt = json.loads(Path(args[args.index('--receipt') + 1]).read_text())
 if os.environ['CI_MODE'] == 'reject':
     raise SystemExit('forged receipt rejected by live validator')
+if os.environ['CI_MODE'] == 'validation-only':
+    import ci_ready_receipt_identity
+    try:
+        ci_ready_receipt_identity.review_evidence_identity(receipt)
+    except (TypeError, ValueError) as exc:
+        raise SystemExit(f'validation-only evidence rejected: {exc}')
 if os.environ['CI_MODE'] == 'changed-tree':
     receipt['tested_tree_oid'] = 'e' * 40
 print(json.dumps(receipt))
@@ -313,6 +321,40 @@ print(json.dumps(receipt))
         self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertEqual((self.root / "ci-calls.log").read_text(), "called\n")
         self.assertEqual((self.root / "events.log").read_text(), "")
+
+    def test_validation_only_authority_payload_and_readback_cannot_advance_closeout(self):
+        identity = load_identity_module(PM / "ci_ready_receipt_identity.py")
+        base = json.loads(self.receipt.read_text(encoding="utf-8"))
+        required_v2_values = {
+            "planner_config_sha256": "sha256:" + "9" * 64,
+            "run_rust_baseline": True,
+            "request_key": "sha256:" + "a" * 64,
+            "request_identity": {},
+            "bootstrap_epoch": 1,
+            "request_id": 12,
+            "request_created_at": "2026-09-11T00:00:00Z",
+            "live_validation": "ci-ready-receipt-live",
+            "trusted_integration_artifact": True,
+            "source_scope_oid": "b" * 40,
+            "trusted_policy_context": {},
+            "effective_policy_identity": {},
+            "required_plan_v2_artifact_id": 101,
+            "required_plan_v2_artifact_name": "oasis7-required-plan-v2-12-a1",
+            "required_result_v2_artifacts": [],
+            "trusted_planner_inventory": {},
+            "execution_jobs": [],
+            "trusted_source_attempt": {},
+        }
+        for candidate in validation_only_artifacts():
+            receipt = {**base, **required_v2_values, "required_plan_v2_payload": candidate}
+            with self.subTest(schema=candidate["schema"]):
+                with self.assertRaisesRegex(ValueError, "v2 required evidence plan payload is malformed"):
+                    identity.review_evidence_identity(receipt)
+                self.receipt.write_text(json.dumps(receipt), encoding="utf-8")
+                result = self._run_closeout("validation-only")
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual((self.root / "ci-calls.log").read_text(), "called\n")
+                self.assertEqual((self.root / "events.log").read_text(), "")
 
     def test_newer_explicit_dispatch_may_reuse_source_review_across_target_tree_drift(self):
         receipt = json.loads(self.receipt.read_text(encoding="utf-8"))
