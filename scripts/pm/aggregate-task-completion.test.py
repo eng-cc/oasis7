@@ -228,6 +228,39 @@ class AggregateTaskCompletionTests(unittest.TestCase):
                 with self.assertRaises(self.helper.ReceiptError):
                     self.build(tuple(values))
 
+    def test_rejects_malformed_duplicate_coordinator_route_fields_on_open_and_closed_paths(self):
+        plan, candidate, evidence, coordinator, comment, children = self.context()
+        receipt = self.build((plan, candidate, evidence, coordinator, comment, children))
+        malformed_fields = (
+            ("completion mode", "- completion_mode : `pr_task`"),
+            ("plan comment pointer", "- aggregate_plan_comment_id : `9999`"),
+            ("singular PR number", "- pr_number : `9999`"),
+            ("singular PR URL", "- pr_url : `https://github.com/eng-cc/oasis7/pull/9999`"),
+        )
+        for label, malformed_field in malformed_fields:
+            body = coordinator["body"] + malformed_field + "\n"
+            open_issue = {**coordinator, "body": body}
+            with self.subTest(field=label, path="open-build"):
+                with self.assertRaises(self.helper.ReceiptError):
+                    self.build((plan, candidate, evidence, open_issue, comment, children))
+
+            closed_issue = {**coordinator, "state": "CLOSED", "body": body}
+            with self.subTest(field=label, path="closed-replay"):
+                with (
+                    mock.patch.object(
+                        self.helper, "read_coordinator", return_value=(closed_issue, comment),
+                    ),
+                    mock.patch.object(
+                        self.helper,
+                        "read_child_report",
+                        side_effect=lambda _root, delivery, _branch: children[delivery["task_uid"]],
+                    ),
+                ):
+                    with self.assertRaises(self.helper.ReceiptError):
+                        self.helper.validate_terminal_receipt(
+                            ROOT, plan["task_uid"], plan, candidate, evidence, receipt,
+                        )
+
     def test_rejects_duplicate_or_noncontiguous_delivery_ordinals(self):
         for mutate in (
             lambda plan: plan["required_deliveries"][1].update(ordinal=1),

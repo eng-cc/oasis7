@@ -203,7 +203,20 @@ def _validate_dependency_merge_chronology(deliveries: list[dict[str, Any]]) -> N
 
 
 def _parse_body_field(body: str, key: str) -> str | None:
-    values = re.findall(rf"(?m)^\s*(?:-\s*)?{re.escape(key)}:\s*([^\n]*)$", body)
+    body = body.replace("\r\n", "\n")
+    field_lines = re.findall(
+        rf"(?m)^[ \t]*(?:-[ \t]+)?{re.escape(key)}[ \t]*:[^\n]*$",
+        body,
+    )
+    values: list[str] = []
+    for line in field_lines:
+        match = re.fullmatch(
+            rf"[ \t]*(?:-[ \t]+)?{re.escape(key)}:[ \t]*([^\n]*)",
+            line,
+        )
+        if match is None:
+            raise ReceiptError(f"coordinator Issue {key} field is malformed")
+        values.append(match.group(1))
     if len(values) > 1:
         raise ReceiptError(f"coordinator Issue repeats {key}")
     if not values:
@@ -236,7 +249,8 @@ def _validate_coordinator(
         raise ReceiptError("coordinator Issue must declare exactly the requested Task UID")
     if _parse_body_field(body, "completion_mode") != "ordered_delivery_aggregate":
         raise ReceiptError("coordinator Issue does not select ordered_delivery_aggregate")
-    if _parse_body_field(body, "pr_number") or _parse_body_field(body, "pr_url"):
+    if (_parse_body_field(body, "pr_number") is not None
+            or _parse_body_field(body, "pr_url") is not None):
         raise ReceiptError("aggregate coordinator cannot bind a singular PR")
 
     comment_id = _positive_int(comment.get("id"), "plan comment ID")

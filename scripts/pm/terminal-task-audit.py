@@ -59,7 +59,24 @@ def _canonical_digest(value: object, *, prefix: bool = False) -> str:
 
 
 def _body_field_values(body: str, key: str) -> list[str]:
-    return re.findall(rf"(?m)^\s*(?:-\s*)?{re.escape(key)}:\s*([^\n]*)$", body)
+    body = body.replace("\r\n", "\n")
+    field_lines = re.findall(
+        rf"(?m)^[ \t]*(?:-[ \t]+)?{re.escape(key)}[ \t]*:[^\n]*$",
+        body,
+    )
+    values: list[str] = []
+    for line in field_lines:
+        match = re.fullmatch(
+            rf"[ \t]*(?:-[ \t]+)?{re.escape(key)}:[ \t]*([^\n]*)",
+            line,
+        )
+        if match is None:
+            # Keep malformed-but-field-like data present so identity checks fail
+            # and forbidden-field checks never mistake it for absence.
+            values.append("\x00malformed-field")
+        else:
+            values.append(match.group(1))
+    return values
 
 
 def _body_field(body: str, key: str) -> str | None:

@@ -352,6 +352,26 @@ class AggregateTerminalAudit(unittest.TestCase):
         self.assertFalse(report["checks"]["aggregate_plan_live"], report)
         self.assertFalse(report["checks"]["issue_closed"], report)
 
+    def test_rejects_malformed_duplicate_route_fields_on_closed_aggregate_issue(self):
+        malformed_fields = (
+            ("completion mode", "- completion_mode : `pr_task`"),
+            ("aggregate plan pointer", "- aggregate_plan_comment_id : `9999`"),
+            ("singular PR number", "- pr_number : `9999`"),
+            ("singular PR URL", "- pr_url : `https://github.com/eng-cc/oasis7/pull/9999`"),
+        )
+        for label, malformed_field in malformed_fields:
+            with self.subTest(field=label):
+                issue = {
+                    **self.issue,
+                    "body": self.issue["body"] + "\n" + malformed_field + "\n",
+                }
+                # Keep the child replay valid so this specifically exercises
+                # the terminal auditor's own live coordinator field parsing.
+                with patch.object(AGGREGATE, "validate_terminal_receipt", return_value=None):
+                    report = self._run_audit(issue=issue)
+                self.assertEqual("drifted", report["status"], report)
+                self.assertFalse(report["checks"]["aggregate_plan_live"], report)
+
     def test_aggregate_audit_requires_the_exact_four_input_files(self):
         with patch.object(
             AUDIT.subprocess, "run",
