@@ -96,18 +96,12 @@ W derives a validation ID from the verified request and issues a separately vers
 Every production receipt, applicability, closeout, lifecycle, merge, and release consumer must explicitly reject this authority, payload, and readback envelope before any can affect receipt status, reusable units, readiness, merge decisions, or task lifecycle. Validation evidence does not satisfy the production required check or authorize capability activation. Compatible code and hosted-readback work is a separately bound linked delivery task that depends on this source revision being merged and binds its exact source commit, clauses, and declared scope; it remains subject to independent QA review and the existing explicit production enablement process.
 
 ## Lifecycle ownership
-TPM is the accountable workflow coordinator / integrator and continuation owner.
-A professional **phase owner** owns only its bounded slice; the **task owner role** remains
-accountable for task outcome and evidence. Bootstrap establishes truth and the
-router selects a phase; neither owns continuation.
+TPM is the accountable workflow coordinator / integrator and continuation owner. A professional **phase owner** owns only its bounded slice; the **task owner role** remains accountable for task outcome and evidence. Bootstrap establishes truth and the router selects a phase; neither owns continuation.
 
-The **target production supervisor** is the durable runtime executor, not an
-accountability owner. It is `blocked`, so TPM coordinates each action explicitly.
+The **target production supervisor** is the durable runtime executor, not an accountability owner. It is `blocked`, so TPM coordinates each action explicitly.
 <a id="canonical-lifecycle"></a>
 ## Canonical state machine
-The production supervisor is a target runtime executor and is currently
-blocked; the state machine below defines required order, not implemented
-automation.
+The production supervisor is a target runtime executor and is currently blocked; the state machine below defines required order, not implemented automation.
 
 `bootstrap -> route -> professional execution -> freeze -> draft_candidate -> create/record/comment draft PR -> CI verify -> review -> pre_pr_ready -> promote_draft -> pr_watch/fix/reverify/review -> merge -> merge receipt -> task done -> main sync -> safe cleanup receipt -> post-merge finalize -> post_merge_done`; for an ordered multi-PR task, `merge -> merge receipt` returns to the next declared delivery obligation (or aggregate verification) and cannot enter `task done` until every required delivery is merged. A classified non-merge outcome may branch from bootstrap, planning, execution, or task done directly to `closed_without_merge` through the canonical non-merge finalizer.
 ## Workflow states
@@ -119,17 +113,14 @@ automation.
 - `failed`: a non-retryable contract violation; stop and escalate. Recovery
   requires an authorized new evidence epoch or a fresh bootstrap, not resume.
 
-This enumeration is closed; phase names and blocker reasons are separate fields.
-Recorded action authority is task/checkpoint-bound permission to execute or
-resume the typed action, not a role title.
+This enumeration is closed; phase names and blocker reasons are separate fields. Recorded action authority is task/checkpoint-bound permission to execute or resume the typed action, not a role title.
 
 <a id="canonical-gates"></a>
 ## Ready and Done
 
 These are the only gate definitions in this specification.
 
-Ordinary local `git commit` is not a gate: repository pre-commit hooks run no formatting or validation, and `scripts/pre-commit.sh` is only a silent legacy
-compatibility entrypoint. CI required and frozen-head readiness remain authoritative.
+Ordinary local `git commit` is not a gate: repository pre-commit hooks run no formatting or validation, and `scripts/pre-commit.sh` is only a silent legacy compatibility entrypoint. CI required and frozen-head readiness remain authoritative.
 
 <a id="freeze-gate"></a>
 **Freeze gate.**
@@ -140,11 +131,7 @@ The final implementation head freezes one immutable tree; later code
 <a id="pre-pr-ready-gate"></a>
 **Pre-PR Ready.**
 
-The draft PR's trusted CI receipt and required involved-role review bind the same frozen reviewed PR head and have passed. Draft PR creation is an identity/readback step before CI and review; Ready is a pre-PR gate, not promotion or Done. The human-operated path requires a
-GitHub task packet, all-required-role ledger, head binding, artifact digests,
-findings dispositions, and residual risk. Runtime-issued provenance applies
-only to unattended supervision, which remains `capability_blocked`. Fixtures
-never satisfy a live task.
+The draft PR's trusted CI receipt and required involved-role review bind the same frozen reviewed PR head and have passed. Draft PR creation is an identity/readback step before CI and review; Ready is a pre-PR gate, not promotion or Done. The human-operated path requires a GitHub task packet, all-required-role ledger, head binding, artifact digests, findings dispositions, and residual risk. Runtime-issued provenance applies only to unattended supervision, which remains `capability_blocked`. Fixtures never satisfy a live task.
 
 <a id="pr-creation-gate"></a>
 **Draft candidate and promotion gate.**
@@ -153,47 +140,17 @@ A draft candidate opens or resumes its frozen-head draft PR before exact-head CI
 <a id="split-source-review-integration-contract"></a>**Source professional review and CI (v2).** `oasis7-review-plan/v2` records `source_review_identity={task_uid,bootstrap_epoch,repository,pr_number,source_head_oid,source_scope_oid,changed_paths_digest,ordered_role_ids,role_contract_digest,review_policy_digest,input_contract_digest}` and `source_review_digest` as the SHA-256 of its canonical JSON; `source_scope_oid` is the fixed immutable source-review range base and is never redefined by a later target advance. Every accepted CI receipt binds the repository, task, PR, source head, required check name/app/run, planner identity, terminal successful conclusion, and the check's target ref. An ordinary PR receipt may retain the base OID used by its PR check when that base is older than the current target; that base is audit provenance and does not claim to validate the later target combination. An escalated integration snapshot additionally records `integration_ci_identity={repository,task_uid,pr_number,source_head_oid,integration_base_oid,workflow_ref,workflow_sha,request_id,request_created_at,run_id,run_attempt,check_app_id,check_run_id,planner_digest,tested_tree_oid,conclusion}` and `integration_ci_digest` over that canonical JSON. Source-review reuse requires the verified applicability identity—changed paths, ordered roles, role contract, review policy and input contract—to remain equal; `tested_tree_oid` is integration evidence, not review applicability. Ordinary promotion and merge use a fresh live read of the source-bound PR CI receipt and source review; they do not require a latest exact integration dispatch merely because the target branch advanced. A fresh exact integration dispatch/attempt and live current-PR readback remain mandatory for an explicit high-risk escalation or a verified related target change. Changed source/role/policy/input applicability, new findings, unknown dependency or authority closure, or legacy v1 requires a full new review epoch; verified target-only drift may reuse source review when the applicable ordinary policy permits it.
 `record-pr` has a separate live write barrier: before any Project, Issue, comment, or mapping write, it requires the authoritative task Issue exactly `OPEN` with matching UID, number/URL, lifecycle fields, and worktree, plus the live requested PR exactly `OPEN`, unmerged, same repository/number/URL, task branch, default base, requested draft state, and head commit equal to canonical task `HEAD`; missing, non-OPEN, malformed, or mismatched live identity fails before every writer, and cached Issue state is not authority.
 
-Promotion-side review revalidation binds the packet's immutable `Comparison OID`
-to the fresh receipt/plan base OID; `Comparison Ref` is audit context and may
-move, but receipt base/head or PR base identity mismatch is rejected.
-Promotion also requires a fresh live repository default-branch read to match
-the task mapping's recorded `default_branch` and the caller-selected base;
-missing or drifted authority is rejected safely and never redefines the task base.
-The draft candidate remains PM status `committed` while its workflow phase is
-`verification`; selected-task audit projects that explicit pair as Project
-workflow phase `verification`. Other `committed` task states project as
-`execution`.
+Promotion-side review revalidation binds the packet's immutable `Comparison OID` to the fresh receipt/plan base OID; `Comparison Ref` is audit context and may move, but receipt base/head or PR base identity mismatch is rejected. Promotion also requires a fresh live repository default-branch read to match the task mapping's recorded `default_branch` and the caller-selected base; missing or drifted authority is rejected safely and never redefines the task base. The draft candidate remains PM status `committed` while its workflow phase is `verification`; selected-task audit projects that explicit pair as Project workflow phase `verification`. Other `committed` task states project as `execution`.
 
 **Risk-triggered integration policy.** The trusted impact projection and its published planner identity select one of two evidence modes. The ordinary mode is valid when the source head, required PR CI check, source review applicability, target ref, and mergeability remain valid and the projection contains no high-risk or unknown trigger. It may reuse successful PR CI whose recorded target base is older than current main; main advancement alone is not a failure. The strict mode is required for workflow/check/permission policy changes, public API or WASM ABI changes, persistence/serialization/state-root/consensus changes, security or critical dependency changes, verified related consumer/contract drift, merge conflicts, or unknown impact closure. When the target advances, a consumed contract or affected-consumer declaration counts as related only through a trusted repository-relative path and stable fragment mapping; an absent or unverifiable mapping, including incomplete closure evidence, escalates strictly because unrelatedness cannot be proven. Strict mode requires the latest matching trusted integration request and successful attempt against the current target. Both modes reject missing, pending, cancelled, failed, wrong-head, wrong-app, wrong-ref, malformed, or unreadable evidence and never fall back to an older green result.
 Before freeze, affected changes run the smallest production-entry loop—configuration generation through runtime admission, Viewer through the runtime protocol, persistence write through recovery, or the skill command through its helper. These loops find boundary breaks early but never replace final CI, environment/browser, recovery or professional-review evidence.
 <a id="post-pr-merge-ready-gate"></a>
 **Post-PR merge-ready.**
 
-The canonical live PR gate permits merge for its current head and epoch. It is
-not terminal completion. It inspects all applicable required-check identities,
-mergeability, requested changes, conversation comments, each reviewer's latest
-effective review, and every paginated review thread. Permission, transport,
-pagination, policy-discovery, or evidence-readback uncertainty fails closed.
-Actionable comments require a current-head disposition; acknowledgements and
-status chatter do not block. `REVIEW_REQUIRED` and `BEHIND` alone are
-informational.
-The gate does not wait for a GitHub Codex review absent from that fresh read. For post-publication GitHub feedback, only a credible `P0` finding caused or exposed by the current PR diff requires repair in this PR. `P0` is review-finding severity (an immediate merge-safety risk such as a critical correctness, security, data-loss, or unrecoverable-regression defect), not GitHub Project scheduling `Priority`. Lower-severity or out-of-scope findings require no code/doc change; record `non_actionable` or `rejected_with_evidence`, and create no follow-up without separate authorization. Requested-change state or required thread resolution may still require reviewer/admin disposition or thread-resolution action under live repository policy, but that administrative clearance does not make repair mandatory. Required checks, mergeability, holds, readback certainty, and pre-PR repo-owned role review remain unchanged.
-A successful gate emits a trusted receipt bound to issuer, repository, PR,
-head, observation time, and gate epoch. Holds and dispositions are accepted
-only from verified GitHub-backed evidence. When GitHub reports the current head
-as `MERGEABLE`, `REVIEW_REQUIRED`, and either `BLOCKED` solely by approval or
-`BEHIND`, repository standing policy selects the admin merge path by default
-after a fresh recheck of required
-checks, mergeability, requested changes, conversation comments, review threads,
-and merge holds. This exact approval-only state does not require a per-task
-authority comment, a caller flag, or another user prompt. The successful live
-gate still emits a head-bound readiness receipt and `use_admin_merge: true`;
-that receipt, not a local assertion, is the execution prerequisite.
-`record-admin-merge-authority.sh` may preserve an optional head-bound audit note for exceptional requester context, but it is not an additional gate.
-Admin merge remains forbidden for active holds, failed or missing
-checks, requested changes, actionable comments, unresolved threads,
-non-mergeable heads, or any blocking state not attributable to missing review
-approval or the up-to-date protection represented by `BEHIND`. No separate collaboration/runtime producer is required for this repository-policy path.
+The canonical live PR gate permits merge for its current head and epoch. It is not terminal completion. It inspects all applicable required-check identities, mergeability, requested changes, conversation comments, each reviewer's latest effective review, and every paginated review thread. Permission, transport, pagination, policy-discovery, or evidence-readback uncertainty fails closed. Actionable comments require a current-head disposition; acknowledgements and status chatter do not block. `REVIEW_REQUIRED` and `BEHIND` alone are informational.
+The gate does not wait for a GitHub Codex review absent from that fresh read. For post-publication GitHub feedback, only a credible `P0` finding caused or exposed by the current PR diff requires repair in this PR. `P0` is review-finding severity (an immediate merge-safety risk such as a critical correctness, security, data-loss, or unrecoverable-regression defect), not GitHub Project scheduling `Priority`. Lower-severity or out-of-scope findings require no code/doc change; record `non_actionable` or `rejected_with_evidence`, and create no follow-up without separate authorization. Requested-change state or required thread resolution may still require reviewer/admin disposition or thread-resolution action under live repository policy, but that administrative clearance does not make repair mandatory. Required checks, mergeability, holds, readback certainty, and pre-PR repo-owned role review remain unchanged. A successful gate emits a trusted receipt bound to issuer, repository, PR, head, observation time, and gate epoch. Holds and dispositions are accepted only from verified GitHub-backed evidence. When GitHub reports the current head as `MERGEABLE`, `REVIEW_REQUIRED`, and either `BLOCKED` solely by approval or `BEHIND`, repository standing policy selects the admin merge path by default after a fresh recheck of required
+checks, mergeability, requested changes, conversation comments, review threads, and merge holds. This exact approval-only state does not require a per-task authority comment, a caller flag, or another user prompt. The successful live gate still emits a head-bound readiness receipt and `use_admin_merge: true`; that receipt, not a local assertion, is the execution prerequisite.
+`record-admin-merge-authority.sh` may preserve an optional head-bound audit note for exceptional requester context, but it is not an additional gate. Admin merge remains forbidden for active holds, failed or missing checks, requested changes, actionable comments, unresolved threads, non-mergeable heads, or any blocking state not attributable to missing review approval or the up-to-date protection represented by `BEHIND`. No separate collaboration/runtime producer is required for this repository-policy path.
 
 <a id="post-merge-done-gate"></a>
 **Terminal Done.**
@@ -212,12 +169,7 @@ A fresh merge receipt, task done truth, main sync, safe-cleanup receipt, and pos
 | `failed` | non-retryable contract failure | blocked | escalation authority may authorize a new epoch or rebootstrap |
 
 ## Documentation policy
-`AGENTS.md`, `finishing-a-development-branch`, `tpm.md`, and `.pm/README.md`
-are thin operational entrypoints. They may contain local triggers, commands,
-I/O, and minimal safety invariants, but must not restate
-[ownership](#lifecycle-ownership), [state machine](#canonical-state-machine),
-[states](#workflow-states), [gates](#ready-and-done), or the
-[review packet](#pre-pr-review-packet).
+`AGENTS.md`, `finishing-a-development-branch`, `tpm.md`, and `.pm/README.md` are thin operational entrypoints. They may contain local triggers, commands, I/O, and minimal safety invariants, but must not restate [ownership](#lifecycle-ownership), [state machine](#canonical-state-machine), [states](#workflow-states), [gates](#ready-and-done), or the [review packet](#pre-pr-review-packet).
 
 ## 1. Phase Diagram
 ```mermaid
@@ -324,8 +276,7 @@ The always-bootstrap rule protects traceability, but it must not turn every smal
   for a separate coordination task.
 
 ### 1.2.2 Learning Intake / Loop Closeout
-Reflection signal: use `capture-todo.sh` for an uncommitted cross-task idea;
-same-task evidence stays in the bound GitHub task.
+Reflection signal: use `capture-todo.sh` for an uncommitted cross-task idea; same-task evidence stays in the bound GitHub task.
 
 Learning artifacts are supporting context, never task truth: raw
 session/transcript material may be used only as explicit evidence, must first
@@ -356,7 +307,12 @@ per-PR truth artifact.
 
 - **Ordered multi-PR task contract.** One GitHub-backed task MAY authorize a finite, ordered set of delivery PRs when its Issue first declares required obligations, order and mapping slots. Each entry has a unique ordinal and binds its PR number/URL, source head, base OID, review/CI evidence and live merge receipt. A later entry cannot be promoted before the preceding required entry is verified merged unless the Issue explicitly declares independence. Each merge is a delivery milestone: it does not write `task_done`, `post_merge_done`, or close the Issue. Completion requires every required entry merged, canonical Issue readback of all per-PR evidence, and aggregate verification of the integrated tested tree. Missing, duplicate, out-of-order, stale or ambiguous entries fail closed and cannot be dropped.
 - This normative contract is inactive until a compatible multi-PR adapter, receipt schema, closeout/finalizer and negative tests are merged and explicitly activated. Current helpers consume singular `pr_number`/`pr_url` and one receipt; a second PR under one Task UID MUST fail closed. Single-PR tasks retain the legacy route, and no task with multiple required entries may complete after its first PR.
-- Until activation, TPM MAY use one recorded coordinating Issue with ordered linked delivery tasks. Before the first child starts, coordinating evidence binds every child Task UID, owner/worktree, required PR, order/dependency and completion receipt target. Each child retains its own task truth and receipts; it cannot copy the coordinator's UID or receipt. The coordinating Issue remains open until every required delivery is merged and aggregate verification is recorded. Retire this bridge after native activation; it is not same-UID multi-PR support.
+- **Linked-delivery aggregate completion route.** A coordinating Issue with linked delivery tasks is a separate completion route from same-UID multi-PR and from `non_pr_task`. Its task truth MUST select `completion_mode=ordered_delivery_aggregate`; the coordinator MUST NOT acquire a synthetic `pr_number` or `pr_url`. After every required child PR identity is known and while all required child PRs are still open and unmerged, but before the first child merge/promotion, the coordinator Issue MUST bind one immutable plan comment with the exact marker `<!-- oasis7-aggregate-delivery-plan/v1 -->`, followed by one LF and canonical compact JSON, with no trailing newline. The comment is identified by its server-assigned ID and SHA-256 of the exact body bytes. The plan binds the exact coordinator Task UID/repository/Issue, change ID, each required delivery's unique contiguous ordinal, obligation ID, child Task UID/Issue, reciprocal PR number/URL, and declared dependencies, plus the exact aggregate candidate and evidence digests and candidate tuple (`integration_base_oid`, `tested_tree_oid`, configuration digest, entry, environment, and evidence window). Every dependency MUST name an earlier declared required delivery. After binding, plan or selection changes require a separately authorized task evidence revision and new live pointer; the consumer MUST NOT infer, add, omit, or reorder obligations from delivery history.
+- Plan JSON has exactly these top-level fields: `schema`, `task_uid`, `repository`, `issue_number`, `change_id`, `required_deliveries`, and `candidate_selection`. Each delivery has exactly `ordinal`, `obligation_id`, `task_uid`, `issue_number`, `pr_number`, `pr_url`, and `depends_on`. Candidate selection has exactly `candidate_sha256`, `evidence_sha256`, `integration_base_oid`, `tested_tree_oid`, `configuration_digest`, `entry`, `environment`, and `evidence_window`. The coordinator Issue body carries the exact server-assigned `aggregate_plan_comment_id` and `aggregate_plan_sha256`; the plan does not contain its own comment digest. The helper CLI is `python3 scripts/pm/aggregate-task-completion.py create --repo-root <root> --task-uid <uid> --record <plan.json> --candidate <candidate.json> --evidence <evidence.json> --output <receipt.json> --json`; the matching `validate` command takes the same identity/input arguments and `--receipt <receipt.json>` instead of `--output`. All JSON digests are SHA-256 over canonical UTF-8 JSON with sorted object keys and compact separators; the plan body digest covers the exact marker, one LF, and canonical plan bytes without a trailing newline.
+- Receipt JSON has exactly `schema`, `receipt_type`, `issuer`, `evidence_mode`, `status`, `claim_type`, `task_uid`, `repository`, `issue_number`, `plan_comment_id`, `plan_body_sha256`, `plan_sha256`, `candidate_sha256`, `evidence_sha256`, `candidate_selection`, `effective_validator_commit`, `observed_at`, `deliveries`, and `receipt_sha256`. It uses `receipt_type=oasis7_aggregate_task_complete`, `issuer=github_live_query`, `evidence_mode=production`, `status=verified`, and `claim_type=task_complete`. Each receipt delivery copies the exact plan entry and adds `merge_commit_oid`, `head_oid`, `base_ref`, `merged_at`, `task_complete_claim_sha256`, `merge_receipt_sha256`, `main_sync_receipt_sha256`, `terminal_receipt_sha256`, and `terminal_tombstone_sha256`. All required fields have concrete typed values; unknown versions/fields, duplicate identities, and null placeholders fail closed.
+- `scripts/pm/aggregate-task-completion.py create` MUST live-read the coordinator Issue and the exact plan comment, prove the Issue body declares the same comment ID/digest and exact Task UID, verify the comment's live server author has current repository `admin` permission, and compare input plan/candidate/evidence to those live identities and hashes. For every required child, it MUST live-read the exact child Issue and Project mapping and verify reciprocal Task UID, Issue, PR number/URL, default-branch base, and merged PR identity; it MUST consume the child's existing verified `task_complete` and fully reconciled `post_merge_done` receipt chain. It MUST reject missing, duplicate, extra, out-of-order, stale, conflicting, unavailable, or ambiguous evidence. The resulting canonical `oasis7.aggregate-task-completion/v1` receipt MUST bind the coordinator identity, plan comment ID/body digest, candidate/evidence digests and tuple, effective validator commit, and each ordered child's merge, task-complete, and terminal receipt digests. `validate` MUST repeat live reads and prove the receipt digest and every bound input still match; a caller-created JSON file, comment URL without server ID, or digest without live readback is not authority.
+- Aggregate `task_done` requires that verified receipt and fresh `task_complete` verification. Bind the frozen plan through `github-project-task.py bind-aggregate-plan <root> --task-uid <uid> --plan <plan.json> --comment-id <server-id>` before any child promotion. The dedicated `finalize-aggregate-task.py --repo-root <default-worktree> --task-uid <uid> --record <plan.json> --candidate <candidate.json> --evidence <evidence.json> --receipt <aggregate-receipt.json>` route-tagged finalizer MUST consume the same receipt, persist a canonical `oasis7.aggregate-terminal/v1` receipt and effect journal, read back the coordinator's terminal Project fields and closed Issue, and bind the aggregate receipt digest. Its `--preflight` validates without mutation; retries after closure verify the stored terminal receipt and live Project/Issue readback. It does not invent a coordinator PR, main-sync receipt, branch, or worktree-cleanup proof; its child delivery proofs MUST remain intact and verifiable. `post_merge_done` consumers MUST select the tagged single-PR or linked-delivery proof route from trusted task truth and fail closed on mixed/unknown mode. Preserve all existing single-PR and classified non-PR gates unchanged. This aggregate adapter remains inactive until compatible closeout/finalizer consumers and negative tests are merged and explicitly activated. Do not retire the linked-delivery bridge merely because same-UID multi-PR is activated; retire it only when the activated route covers this coordinator case.
+- Until aggregate activation, TPM MAY use one recorded coordinating Issue with ordered linked delivery tasks. Each child retains its own task truth and receipts; it cannot copy the coordinator's UID or receipt. The coordinating Issue stays open until every required delivery is merged and aggregate verification is recorded. This bridge does not authorize coordinator `task_done` or terminal completion through the singular PR or non-PR helper.
 
 - `workflow-report --phase start` and `workflow-report --phase close` require the selected `--task-uid` before any mapping or GitHub mutation. UID-less `workflow-report --phase review` remains the repository-wide review report.
   A workflow-report `close` records report/evidence completion only through

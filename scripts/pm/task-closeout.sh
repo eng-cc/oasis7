@@ -33,6 +33,10 @@ Options:
   --review-packet-file <path> Passed review packet bound to frozen HEAD (required for ready)
   --ci-ready-receipt <path> Trusted CI receipt bound to the reviewed draft head
   --pr-receipt <path>    Trusted merged-PR receipt (required for PR-backed done)
+  --aggregate-plan <path>       Frozen linked-delivery plan for aggregate done
+  --aggregate-candidate <path>  Exact tested candidate for aggregate done
+  --aggregate-evidence <path>   Aggregate verification evidence
+  --aggregate-receipt <path>    Live-verified linked-delivery completion receipt
   --traceability-mode <leaf|aggregate>
                           Optional coordinating-record preflight mode
   --traceability-record <path>
@@ -66,6 +70,10 @@ OUTPUT_JSON=0
 REVIEW_PACKET_FILE=""
 CI_READY_RECEIPT=""
 PR_MERGE_RECEIPT=""
+AGGREGATE_PLAN=""
+AGGREGATE_CANDIDATE=""
+AGGREGATE_EVIDENCE=""
+AGGREGATE_RECEIPT=""
 REVIEW_PLAN_SCHEMA=""
 TRACEABILITY_MODE=""
 TRACEABILITY_RECORD=""
@@ -102,6 +110,10 @@ while [[ $# -gt 0 ]]; do
     --review-packet-file) REVIEW_PACKET_FILE="${2:-}"; shift 2 ;;
     --ci-ready-receipt) CI_READY_RECEIPT="${2:-}"; shift 2 ;;
     --pr-receipt) PR_MERGE_RECEIPT="${2:-}"; shift 2 ;;
+    --aggregate-plan) AGGREGATE_PLAN="${2:-}"; shift 2 ;;
+    --aggregate-candidate) AGGREGATE_CANDIDATE="${2:-}"; shift 2 ;;
+    --aggregate-evidence) AGGREGATE_EVIDENCE="${2:-}"; shift 2 ;;
+    --aggregate-receipt) AGGREGATE_RECEIPT="${2:-}"; shift 2 ;;
     --traceability-mode)
       TRACEABILITY_MODE="${2:-}"
       shift 2
@@ -133,6 +145,12 @@ done
 
 [[ -n "$ROLE" ]] || die "--role is required"
 [[ -n "$TASK_UID" ]] || die "--task-uid is required"
+if [[ -n "$AGGREGATE_PLAN$AGGREGATE_CANDIDATE$AGGREGATE_EVIDENCE$AGGREGATE_RECEIPT" ]]; then
+  [[ "$TARGET_STATUS" == "done" && -z "$PR_MERGE_RECEIPT" ]] \
+    || die "aggregate completion is done-only and cannot combine with a singular PR receipt"
+  [[ -f "$AGGREGATE_PLAN" && -f "$AGGREGATE_CANDIDATE" && -f "$AGGREGATE_EVIDENCE" && -f "$AGGREGATE_RECEIPT" ]] \
+    || die "aggregate completion requires all four readable plan/candidate/evidence/receipt files"
+fi
 [[ "$TARGET_STATUS" == "ready" || "$TARGET_STATUS" == "done" || "$TARGET_STATUS" == "deferred" ]] || die "--to-status must be ready, done, or deferred"
 [[ -z "$TRACEABILITY_MODE" || "$TRACEABILITY_MODE" == "leaf" || "$TRACEABILITY_MODE" == "aggregate" ]] \
   || die "--traceability-mode must be leaf or aggregate"
@@ -631,6 +649,20 @@ PY
     || die "ready closeout role-return validation failed (roles=$REVIEW_ROLES ledger=$REVIEW_LEDGER); regenerate the immutable review plan/preflight with ./scripts/pm/review-plan.py --preflight-dir <dir>, rerun record-pre-pr-review, and retry task-closeout"
 fi
 if [[ "$TARGET_STATUS" == "done" ]]; then
+  if [[ -n "$AGGREGATE_RECEIPT" ]]; then
+    python3 "$SCRIPT_DIR/aggregate-task-completion.py" validate \
+      --repo-root "$ROOT_DIR" --task-uid "$TASK_UID" \
+      --record "$AGGREGATE_PLAN" --candidate "$AGGREGATE_CANDIDATE" \
+      --evidence "$AGGREGATE_EVIDENCE" --receipt "$AGGREGATE_RECEIPT" --json >/dev/null \
+      || die "aggregate completion receipt failed fresh live validation"
+    python3 - "$ROOT_DIR/.pm/github-project-sync/tasks.json" "$TASK_UID" <<'PY' \
+      || die "aggregate completion task truth is not explicitly bound"
+import json,sys
+record=(json.load(open(sys.argv[1],encoding='utf-8')).get('tasks') or {}).get(sys.argv[2]) or {}
+if record.get('completion_mode')!='ordered_delivery_aggregate' or record.get('pr_number') or record.get('pr_url'):
+    raise SystemExit('aggregate completion requires explicit coordinator mode and no singular PR')
+PY
+  else
   RECORDED_PR_NUMBER="$(python3 - "$ROOT_DIR/.pm/github-project-sync/tasks.json" "$TASK_UID" <<'PY'
 import json,sys
 r=(json.load(open(sys.argv[1],encoding='utf-8')).get('tasks') or {}).get(sys.argv[2]) or {}
@@ -670,6 +702,7 @@ if age < -30 or age>600: raise SystemExit('task-closeout: merged PR receipt is s
 PY
   [[ -z "$LIVE_PR_RECEIPT" ]] || rm -f "$LIVE_PR_RECEIPT"
   trap - EXIT
+  fi
 fi
 
 # A caller-owned CI receipt is immutable. Every closeout performs one complete
@@ -781,6 +814,7 @@ AUDIT_INPUT_MAPPING_SHA="$(sha256_file "$ROOT_DIR/.pm/github-project-sync/tasks.
 AUDIT_INPUT_REVIEW_SHA="$([[ -n "$REVIEW_PACKET_FILE" ]] && sha256_file "$REVIEW_PACKET_FILE" || printf none)"
 AUDIT_INPUT_LEDGER_SHA="$([[ -n "${REVIEW_LEDGER_PATH:-}" ]] && sha256_file "$REVIEW_LEDGER_PATH" || printf none)"
 AUDIT_INPUT_PR_RECEIPT_SHA="$([[ -n "$PR_MERGE_RECEIPT" ]] && sha256_file "$PR_MERGE_RECEIPT" || printf none)"
+AUDIT_INPUT_AGGREGATE_SHA="$([[ -n "$AGGREGATE_RECEIPT" ]] && printf '%s\n' "$(sha256_file "$AGGREGATE_PLAN")" "$(sha256_file "$AGGREGATE_CANDIDATE")" "$(sha256_file "$AGGREGATE_EVIDENCE")" "$(sha256_file "$AGGREGATE_RECEIPT")" || printf none)"
 if [[ "$TARGET_STATUS" != "deferred" ]]; then
   CLAIM_ARGS=(--claim-type "$CLAIM_TYPE" --verification-profile "$VERIFICATION_PROFILE" --task-uid "$TASK_UID" --json)
   if [[ "$CLAIM_TYPE" == "ready_for_pr" && -n "$CI_READY_RECEIPT" ]]; then
@@ -811,9 +845,11 @@ CURRENT_MAPPING_SHA="$(sha256_file "$ROOT_DIR/.pm/github-project-sync/tasks.json
 CURRENT_REVIEW_SHA="$([[ -n "$REVIEW_PACKET_FILE" ]] && sha256_file "$REVIEW_PACKET_FILE" || printf none)"
 CURRENT_LEDGER_SHA="$([[ -n "${REVIEW_LEDGER_PATH:-}" ]] && sha256_file "$REVIEW_LEDGER_PATH" || printf none)"
 CURRENT_PR_RECEIPT_SHA="$([[ -n "$PR_MERGE_RECEIPT" ]] && sha256_file "$PR_MERGE_RECEIPT" || printf none)"
+CURRENT_AGGREGATE_SHA="$([[ -n "$AGGREGATE_RECEIPT" ]] && printf '%s\n' "$(sha256_file "$AGGREGATE_PLAN")" "$(sha256_file "$AGGREGATE_CANDIDATE")" "$(sha256_file "$AGGREGATE_EVIDENCE")" "$(sha256_file "$AGGREGATE_RECEIPT")" || printf none)"
 [[ "$CURRENT_HEAD" == "$AUDIT_INPUT_HEAD" && "$CURRENT_MAPPING_SHA" == "$AUDIT_INPUT_MAPPING_SHA" && \
    "$CURRENT_REVIEW_SHA" == "$AUDIT_INPUT_REVIEW_SHA" && "$CURRENT_LEDGER_SHA" == "$AUDIT_INPUT_LEDGER_SHA" && \
-   "$CURRENT_PR_RECEIPT_SHA" == "$AUDIT_INPUT_PR_RECEIPT_SHA" ]] \
+   "$CURRENT_PR_RECEIPT_SHA" == "$AUDIT_INPUT_PR_RECEIPT_SHA" && \
+   "$CURRENT_AGGREGATE_SHA" == "$AUDIT_INPUT_AGGREGATE_SHA" ]] \
   || die "closeout inputs changed during verification; restart selected-task closeout"
 # Traceability context is a separate read-only projection only for declared
 # bound paths. Ordinary closeout therefore retains exactly the two lifecycle
@@ -834,6 +870,10 @@ TRANSITION_AUDIT_JSON="$TASK_AUDIT_JSON"
 CLOSEOUT_ARGS=(closeout-task "$ROOT_DIR" --task-uid "$TASK_UID" --role "$ROLE" \
   --to-status "$TARGET_STATUS" --claim-json "$CLAIM_READY_JSON")
 [[ -z "$PR_MERGE_RECEIPT" ]] || CLOSEOUT_ARGS+=(--pr-receipt "$PR_MERGE_RECEIPT")
+if [[ -n "$AGGREGATE_RECEIPT" ]]; then
+  CLOSEOUT_ARGS+=(--aggregate-plan "$AGGREGATE_PLAN" --aggregate-candidate "$AGGREGATE_CANDIDATE"
+    --aggregate-evidence "$AGGREGATE_EVIDENCE" --aggregate-receipt "$AGGREGATE_RECEIPT")
+fi
 if ! CLOSEOUT_JSON="$(python3 "$SCRIPT_DIR/github-project-task.py" "${CLOSEOUT_ARGS[@]}" --json)"; then
   die "remote closeout was incomplete; run ./scripts/pm/refresh-task-cache.sh --task-uid $TASK_UID --json, verify selected-task audit, then retry task-closeout"
 fi

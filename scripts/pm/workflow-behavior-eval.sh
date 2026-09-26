@@ -604,6 +604,7 @@ import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
+source_text = (root / "doc/engineering/workflow/source-of-truth.md").read_text(encoding="utf-8")
 
 surfaces = {
     ".codex/config.toml": (root / ".codex/config.toml").read_text(encoding="utf-8"),
@@ -809,15 +810,17 @@ scenarios = [
         "expected_route": "freeze -> concurrent trusted exact-head CI and formal review -> current-identity join -> Pre-PR Ready/promotion",
         "surface": "doc/engineering/workflow/source-of-truth.md",
         "required_markers": [
-            "Parallel verification and fail-closed join.",
-            "trusted exact-head CI and role-complete professional review run concurrently",
-            "CI planning, role selection, review planning, closeout and promotion consume that projection",
-            "missing, pending, uncertain, stale, drifted, failed or unreadable evidence blocks the join",
-            "Explicit v1 remains read-only compatibility",
-            "configuration generation\nthrough the real parser/admission path",
-            "viewer through the runtime protocol",
-            "persistence write through real recovery",
-            "standard skill command through\nthe actual helper output",
+            "| Human-operated pre-PR role review | implemented |",
+            "TPM starts trusted same-head CI and source-bound professional review concurrently, then joins both current identities before readiness or promotion.",
+            "After freeze, build one verified impact projection, create/admit the default v2 source plan, and dispatch CI plus the complete formal-review batch concurrently.",
+            "task/head/base/projection/batch/packet drift fails closed.",
+            "Closeout and promotion live-validate the latest explicitly requested CI identity and join it with the completed source review; neither branch authorizes readiness alone",
+            "explicit v1 remains compatibility-only.",
+            "Both modes reject missing, pending, cancelled, failed, wrong-head, wrong-app, wrong-ref, malformed, or unreadable evidence",
+            "configuration generation through runtime admission",
+            "Viewer through the runtime protocol",
+            "persistence write through recovery",
+            "the skill command through its helper",
         ],
     },
     {
@@ -831,11 +834,12 @@ scenarios = [
             "generation to `record-pre-pr-review.sh`",
             "Require each role to return `findings` or `no_findings`, plus `residual_risk`",
             "Require trusted runtime attestation only when operating the future unattended supervisor.",
-            "Record plan/batch paths and digests in GitHub task issue evidence comments.",
+            "Before dispatch, record the plan and batch paths and digests in GitHub task issue evidence comments.",
             "dispatch the complete role batch while exact-head CI runs independently",
             "CI planner, role selector, plan, admission and closeout must bind the same projection digest",
             "Before Pre-PR Ready or promotion, perform the fail-closed",
-            "legacy `--evidence-digest` or audit-only shadow result never satisfies this",
+            "A legacy `--evidence-digest` or audit-only shadow result",
+            "never satisfies this join.",
         ],
     },
     {
@@ -1007,21 +1011,26 @@ scenarios = [
 ]
 
 review_skill = surfaces[".agents/skills/requesting-repo-owned-review/SKILL.md"]
-parallel_marker = "Parallel verification and fail-closed join."
+parallel_marker = "| Human-operated pre-PR role review | implemented |"
 join_marker = "Before Pre-PR Ready or promotion, perform the fail-closed"
 if source_text.index(parallel_marker) >= source_text.index("<a id=\"post-pr-merge-ready-gate\">"):
     raise SystemExit("workflow-behavior-eval: parallel CI/review contract must precede post-PR gates")
 if (
-    parallel_marker not in source_text
-    or "trusted exact-head CI and role-complete professional review run concurrently" not in source_text
-    or "CI planning, role selection, review planning, closeout and promotion consume that projection" not in source_text
+    "trusted same-head CI and source-bound professional review concurrently" not in source_text
+    or "then joins both current identities before readiness or promotion." not in source_text
+    or "CI plus the complete formal-review batch concurrently" not in source_text
+    or "task/head/base/projection/batch/packet drift fails closed." not in source_text
+    or "Closeout and promotion live-validate the latest explicitly requested CI identity and join it with the completed source review; neither branch authorizes readiness alone" not in source_text
 ):
     raise SystemExit("workflow-behavior-eval: fail-closed parallel CI/review join contract is incomplete")
 if "dispatch the complete role batch while exact-head CI runs independently" not in review_skill:
     raise SystemExit("workflow-behavior-eval: review skill does not activate concurrent CI/review scheduling")
 if join_marker not in review_skill and "fail-closed\njoin against the current PR" not in review_skill:
     raise SystemExit("workflow-behavior-eval: review skill does not require the current-identity join")
-if "legacy `--evidence-digest` or audit-only shadow result never satisfies this" not in review_skill:
+if (
+    "A legacy `--evidence-digest` or audit-only shadow result" not in review_skill
+    or "never satisfies this join." not in review_skill
+):
     raise SystemExit("workflow-behavior-eval: legacy evidence-digest restriction is missing")
 
 evaluated: list[dict[str, object]] = []

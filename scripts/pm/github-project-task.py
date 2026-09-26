@@ -9,6 +9,7 @@ import json
 import os
 import pathlib
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -16,6 +17,8 @@ import uuid
 from collections import OrderedDict
 from datetime import datetime
 from typing import Any
+
+from loop_leaf_result import verification_projection_errors
 
 
 ALL_STATUSES = ("candidate", "committed", "blocked", "ready", "pr_watch", "done", "deferred")
@@ -31,6 +34,8 @@ issue_authoritative_keys = frozenset(
         "source_type", "severity", "pr_url", "pr_number", "merge_hold",
         "primary_package",
         "loop_binding", "bootstrap_base_oid", "completion_mode",
+        "aggregate_plan_comment_id", "aggregate_plan_sha256",
+        "aggregate_completion_receipt_sha256",
         "traceability_mode", "coordination_ref", "traceability_record",
         "coordination_record", "traceability_candidate", "aggregate_candidate",
         "non_pr_completion_evidence", "non_pr_completion_evidence_sha256",
@@ -46,6 +51,11 @@ traceability_context_keys = frozenset(
 )
 traceability_issue_keys = frozenset({"loop_binding", *traceability_context_keys})
 project_lifecycle_keys = frozenset({"status", "workflow_phase"})
+ISSUE_ROUTE_FIELDS = (
+    "status", "workflow_phase", "completion_mode", "aggregate_plan_comment_id",
+    "aggregate_plan_sha256", "aggregate_completion_receipt_sha256", "pr_number", "pr_url",
+)
+LIVE_ROUTE_CACHE_FIELDS = ISSUE_ROUTE_FIELDS
 identity_bound_cache_keys = frozenset(
     {
         "repository", "canonical_worktree", "task_branch", "default_branch",
@@ -489,6 +499,26 @@ def issue_section_rows(body: str, header: str, *, references: bool) -> list[str]
     return values
 
 
+def strict_issue_scalar_fields(body: str, keys: tuple[str, ...]) -> dict[str, str]:
+    """Read safety-sensitive Issue scalars without accepting first-match ambiguity."""
+    fields: dict[str, str] = {}
+    for key in keys:
+        lines = re.findall(
+            rf"^[ \t]*(?:-[ \t]+)?{re.escape(key)}\b[^\n]*$",
+            body,
+            re.MULTILINE,
+        )
+        if not lines:
+            continue
+        if len(lines) != 1:
+            die(f"task Issue {key} field is duplicated")
+        match = re.fullmatch(rf"[ \t]*-[ \t]+{re.escape(key)}: `([^`\n]*)`[ \t]*", lines[0])
+        if not match:
+            die(f"task Issue {key} field is malformed")
+        fields[key] = match.group(1)
+    return fields
+
+
 def issue_task_fields(body: str) -> dict[str, Any]:
     body = body.replace("\r\n", "\n")
     fields: dict[str, Any] = {}
@@ -533,7 +563,8 @@ def issue_task_fields(body: str) -> dict[str, Any]:
         except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             die(f"invalid traceability context: {exc}")
         fields.update(context)
-    for key in ("owner_role", "module", "status", "workflow_phase", "priority", "worktree_hint", "source_signal", "source_type", "severity", "completion_mode", "bootstrap_base_oid", "non_pr_completion_evidence_sha256", "last_closed_at"):
+    fields.update(strict_issue_scalar_fields(body, ISSUE_ROUTE_FIELDS))
+    for key in ("owner_role", "module", "priority", "worktree_hint", "source_signal", "source_type", "severity", "bootstrap_base_oid", "non_pr_completion_evidence_sha256", "last_closed_at"):
         match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
         if match:
             fields[key] = match.group(1)
@@ -570,10 +601,6 @@ def issue_task_fields(body: str) -> dict[str, Any]:
     if hold_values:
         hold_values["active"] = str(hold_values.get("active", "false")).lower() == "true"
         fields["merge_hold"] = hold_values
-    for key in ("pr_url", "pr_number"):
-        match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
-        if match:
-            fields[key] = match.group(1)
     for key, header in (("source_refs", "Source refs:"), ("doc_refs", "Doc refs:"), ("related_prd", "Related PRD:")):
         values = issue_section_rows(body, header, references=True)
         if values is not None:
@@ -638,7 +665,7 @@ def github_issue_record(repo: str, task_uid: str) -> dict[str, Any] | None:
         if not number:
             die("task Issue discovery returned invalid identity")
         candidate = json.loads(run_text(["gh", "issue", "view", str(number), "-R", repo,
-                                         "--json", "body,number,title,url,state,stateReason"]))
+                                         "--json", "body,number,title,url,state,stateReason,updatedAt"]))
         candidate_body = str(candidate.get("body") or "").replace("\r\n", "\n")
         fields = re.findall(r"^task_uid:[^\n]*$", candidate_body, re.MULTILINE)
         uids = re.findall(r"^task_uid:\s*(task_[0-9a-f]{32})$", candidate_body, re.MULTILINE)
@@ -670,6 +697,7 @@ def github_issue_record(repo: str, task_uid: str) -> dict[str, Any] | None:
             "issue_url": str(issue.get("url") or hits[0].get("url") or ""),
             "issue_state": str(issue.get("state") or hits[0].get("state") or ""),
             "issue_state_reason": str(issue.get("stateReason") or ""),
+            "updated_at": str(issue.get("updatedAt") or ""),
             "_github_source": "issue_search",
         }
     )
@@ -814,6 +842,9 @@ def task_from_record(uid: str, record: dict[str, Any]) -> OrderedDict[str, Any]:
             ("loop_binding", record.get("loop_binding")),
             ("bootstrap_base_oid", record.get("bootstrap_base_oid")),
             ("completion_mode", record.get("completion_mode") or ""),
+            ("aggregate_plan_comment_id", record.get("aggregate_plan_comment_id") or ""),
+            ("aggregate_plan_sha256", record.get("aggregate_plan_sha256") or ""),
+            ("aggregate_completion_receipt_sha256", record.get("aggregate_completion_receipt_sha256") or ""),
             ("traceability_mode", record.get("traceability_mode")),
             ("coordination_ref", record.get("coordination_ref")),
             ("traceability_record", record.get("traceability_record")),
@@ -889,6 +920,12 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
         lines.append(f"- pr_number: `{task.get('pr_number')}`")
     if task.get("completion_mode"):
         lines.append(f"- completion_mode: `{task.get('completion_mode')}`")
+        if task.get("aggregate_plan_comment_id"):
+            lines.append(f"- aggregate_plan_comment_id: `{task.get('aggregate_plan_comment_id')}`")
+        if task.get("aggregate_plan_sha256"):
+            lines.append(f"- aggregate_plan_sha256: `{task.get('aggregate_plan_sha256')}`")
+        if task.get("aggregate_completion_receipt_sha256"):
+            lines.append(f"- aggregate_completion_receipt_sha256: `{task.get('aggregate_completion_receipt_sha256')}`")
         evidence = str(task.get("non_pr_completion_evidence") or "").encode("utf-8")
         encoded = base64.urlsafe_b64encode(evidence).decode("ascii").rstrip("=")
         lines.append(f"- non_pr_completion_evidence_b64: `{encoded}`")
@@ -1612,6 +1649,290 @@ def require_record(args: argparse.Namespace) -> tuple[pathlib.Path, dict[str, An
     return mapping_path, mapping, record
 
 
+def require_live_issue_route_matches_cache(repo: str, task_uid: str, record: dict[str, Any]) -> dict[str, Any]:
+    """Require the canonical Issue route and lifecycle to match the local projection."""
+    try:
+        live = github_issue_record(repo, task_uid)
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError, RuntimeError) as exc:
+        die(f"done transition: canonical live Issue route lookup failed closed: {exc}")
+    if not isinstance(live, dict):
+        die("done transition: canonical live Issue route is unavailable")
+    if (live.get("task_uid") != task_uid or type(live.get("issue_number")) is not int
+            or type(record.get("issue_number")) is not int
+            or live.get("issue_number") != record.get("issue_number")):
+        die("done transition: canonical live Issue identity differs from task mapping")
+
+    mismatched = []
+    for key in LIVE_ROUTE_CACHE_FIELDS:
+        cached_value = record.get(key)
+        live_value = live.get(key)
+        if key == "pr_number":
+            cached_value = None if cached_value in (None, "") else str(cached_value)
+            live_value = None if live_value in (None, "") else str(live_value)
+        else:
+            cached_value = None if cached_value in (None, "") else cached_value
+            live_value = None if live_value in (None, "") else live_value
+        if cached_value != live_value:
+            mismatched.append(key)
+    if mismatched:
+        aggregate_route = (
+            record.get("completion_mode") == "ordered_delivery_aggregate"
+            or live.get("completion_mode") == "ordered_delivery_aggregate"
+            or any(key.startswith("aggregate_") for key in mismatched)
+        )
+        route_name = "aggregate route/pointers" if aggregate_route else "Issue route/lifecycle"
+        die(f"done transition: canonical live {route_name} differ from task mapping ({', '.join(mismatched)})")
+    return live
+
+
+def validate_aggregate_task_complete_claim(
+    repo: str,
+    root: pathlib.Path,
+    task_uid: str,
+    claim: Any,
+    live_issue: dict[str, Any],
+) -> None:
+    """Validate the local claim-ready projection consumed by aggregate closeout.
+
+    This checks the repository-owned claim shape and its exact local source
+    identity. It does not claim trusted runtime attestation; that is outside the
+    current human-operated closeout contract.
+    """
+    if not isinstance(claim, dict):
+        die("closeout-task: aggregate completion requires canonical task_complete claim evidence")
+    if (claim.get("claim_type") != "task_complete" or claim.get("status") != "verified"
+            or claim.get("allowed_to_claim") is not True
+            or type(claim.get("verification_exit_code")) is not int
+            or claim.get("verification_exit_code") != 0
+            or claim.get("task_uid") != task_uid):
+        die("closeout-task: aggregate task_complete claim identity or result is invalid")
+
+    profile = claim.get("verification_profile")
+    if not isinstance(profile, str) or profile == "fixture_repository_state":
+        die("closeout-task: aggregate task_complete claim requires a production verification profile")
+    profile_commands = {
+        # Keep these command identities aligned with claim-ready.sh's
+        # repository-owned verification-profile switch. Profile/mode support
+        # itself is shared with loop_leaf_result.py.
+        "codex_subagent_role_fit": (
+            "./scripts/pm/verify-codex-subagent-role-fit.sh --task-uid " + shlex.quote(task_uid)
+        ),
+        "workflow_behavior": "./scripts/pm/workflow-behavior-eval.sh",
+        "repository_required": "true",
+    }
+    if profile not in profile_commands or claim.get("verify_command") != profile_commands[profile]:
+        die("closeout-task: aggregate task_complete claim profile/command is not repository-owned")
+
+    verification = {
+        "profile": profile,
+        "mode": claim.get("verification_mode"),
+        "frozen_source_head": claim.get("frozen_source_head"),
+        "frozen_source_tree": claim.get("frozen_source_tree"),
+        "repository_fingerprint_before": claim.get("repository_fingerprint_before"),
+        "repository_fingerprint_after": claim.get("repository_fingerprint_after"),
+        "verification_epoch_stable": claim.get("verification_epoch_stable"),
+        "verification_exit_code": claim.get("verification_exit_code"),
+    }
+    if verification_projection_errors(verification):
+        die("closeout-task: aggregate task_complete verification projection is incomplete or unsupported")
+    if claim.get("verification_mode") != "detached_frozen_tree":
+        die("closeout-task: aggregate task_complete claim must use detached frozen-tree verification")
+
+    try:
+        verified_at = datetime.fromisoformat(str(claim.get("verified_at") or "").replace("Z", "+00:00"))
+        current_time = datetime.now().astimezone()
+    except (TypeError, ValueError):
+        die("closeout-task: aggregate task_complete claim timestamp is invalid")
+    if verified_at.tzinfo is None or verified_at > current_time:
+        die("closeout-task: aggregate task_complete claim timestamp is not a valid current-round time")
+
+    validate_latest_task_complete_comment(repo, live_issue, task_uid, claim, profile_commands[profile], verified_at)
+
+    root = root.resolve()
+    fingerprint_tool = root / "scripts/pm/repo-state-fingerprint.py"
+    try:
+        fingerprint = json.loads(subprocess.check_output(
+            [sys.executable, str(fingerprint_tool), str(root)],
+            text=True,
+            stderr=subprocess.PIPE,
+        ))
+        head = str(fingerprint.get("head") or "")
+        tree = subprocess.check_output(
+            ["git", "-C", str(root), "rev-parse", "HEAD^{tree}"],
+            text=True,
+            stderr=subprocess.PIPE,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        die(f"closeout-task: aggregate task_complete source identity read failed: {exc}")
+
+    expected_head = str(claim.get("frozen_source_head") or "")
+    expected_tree = str(claim.get("frozen_source_tree") or "")
+    if (not re.fullmatch(r"[0-9a-f]{40}", head)
+            or claim.get("repository_head") != head
+            or expected_head != head
+            or expected_tree != tree
+            or claim.get("repository_index_sha256") != fingerprint.get("index_sha256")
+            or claim.get("repository_fingerprint_before") != fingerprint.get("sha256")
+            or claim.get("repository_fingerprint_after") != fingerprint.get("sha256")):
+        die("closeout-task: aggregate task_complete claim does not bind current HEAD/tree/index/fingerprint")
+
+
+def validate_latest_task_complete_comment(
+    repo: str,
+    live_issue: dict[str, Any],
+    task_uid: str,
+    claim: dict[str, Any],
+    verify_command: str,
+    verified_at: datetime,
+) -> None:
+    """Require the latest Issue update to be the exact claim-ready readback."""
+    issue_number = live_issue.get("issue_number")
+    issue_url = f"https://github.com/{repo}/issues/{issue_number}"
+    if (type(issue_number) is not int or issue_number <= 0
+            or live_issue.get("issue_url") != issue_url
+            or str(live_issue.get("issue_state") or "").upper() != "OPEN"):
+        die("closeout-task: aggregate claim verification requires the exact open task Issue")
+    try:
+        comments = json.loads(run_text([
+            "gh", "api",
+            f"repos/{repo}/issues/{issue_number}/comments?per_page=1&sort=created&direction=desc",
+        ]))
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError, RuntimeError, subprocess.TimeoutExpired) as exc:
+        die(f"closeout-task: latest task claim comment readback failed closed: {exc}")
+    if not isinstance(comments, list) or len(comments) != 1 or not isinstance(comments[0], dict):
+        die("closeout-task: latest task claim comment readback is missing or malformed")
+    comment = comments[0]
+    expected_body = "\n".join((
+        "<!-- oasis7-pm-claim-verification -->",
+        f"Task UID: {task_uid}",
+        f"Claim Type: {claim['claim_type']}",
+        f"Verified At: {claim['verified_at']}",
+        f"Verification Exit Code: {claim['verification_exit_code']}",
+        f"Verification Status: {claim['status']}",
+        f"Verify Command: {verify_command}",
+        f"Claim Message: {claim.get('claim_message') or ''}",
+        "",
+    ))
+    comment_id = comment.get("id")
+    expected_comment_url = (
+        f"https://github.com/{repo}/issues/{issue_number}#issuecomment-{comment_id}"
+    )
+    expected_api_issue_url = f"https://api.github.com/repos/{repo}/issues/{issue_number}"
+    if (comment.get("body") != expected_body
+            or type(comment_id) is not int or comment_id <= 0
+            or comment.get("html_url") != expected_comment_url
+            or comment.get("issue_url") != expected_api_issue_url):
+        die("closeout-task: latest task comment does not exactly bind the task_complete claim")
+    try:
+        created_at = datetime.fromisoformat(str(comment.get("created_at") or "").replace("Z", "+00:00"))
+        comment_updated_at = datetime.fromisoformat(str(comment.get("updated_at") or "").replace("Z", "+00:00"))
+        issue_updated_at = datetime.fromisoformat(str(live_issue.get("updated_at") or "").replace("Z", "+00:00"))
+        current_time = datetime.now().astimezone()
+    except (TypeError, ValueError):
+        die("closeout-task: latest task claim comment timestamps are invalid")
+    if (created_at.tzinfo is None or comment_updated_at.tzinfo is None or issue_updated_at.tzinfo is None
+            or created_at < verified_at or created_at > current_time
+            or comment_updated_at != created_at or issue_updated_at != comment_updated_at):
+        die("closeout-task: task claim comment is stale, edited, or superseded on the live Issue")
+
+
+def validate_live_aggregate_lifecycle(
+    repo: str,
+    task_uid: str,
+    record: dict[str, Any],
+    live_issue: dict[str, Any],
+    *,
+    expected_state: str,
+) -> dict[str, Any]:
+    """Require the live coordinator Issue to retain its task_done projection.
+
+    Aggregate terminal completion advances the Project/mapping phase and then
+    closes the Issue. The Issue body remains at its verified `done/task_done`
+    closeout projection, so every terminal consumer checks that projection
+    against the bound aggregate route and receipt instead of trusting cache.
+    """
+    expected_state = expected_state.upper()
+    if expected_state not in {"OPEN", "CLOSED"}:
+        die("aggregate coordinator lifecycle expected Issue state is invalid")
+    if not isinstance(live_issue, dict):
+        die("aggregate coordinator lifecycle live Issue is unavailable")
+
+    body = live_issue.get("body")
+    if isinstance(body, str):
+        body = body.replace("\r\n", "\n")
+        uid_lines = re.findall(r"(?m)^[ \t]*(?:-[ \t]+)?task_uid[ \t]*:[^\n]*$", body)
+        if uid_lines != [f"task_uid: {task_uid}"]:
+            die("aggregate coordinator lifecycle Task UID is missing, malformed, or ambiguous")
+        try:
+            live_fields = issue_task_fields(body)
+        except SystemExit as exc:
+            die(f"aggregate coordinator lifecycle fields are malformed: {exc}")
+        if live_fields.get("trace_projection_error"):
+            die(f"aggregate coordinator lifecycle fields are malformed: {live_fields['trace_projection_error']}")
+        issue_url = str(live_issue.get("url") or "")
+        issue_state = str(live_issue.get("state") or "")
+    else:
+        # github_issue_record() is also a live source: it verifies the unique
+        # canonical UID in the Issue body and returns its strict parsed fields.
+        if live_issue.get("task_uid") != task_uid:
+            die("aggregate coordinator lifecycle Task UID is missing or ambiguous")
+        live_fields = live_issue
+        issue_url = str(live_issue.get("issue_url") or "")
+        issue_state = str(live_issue.get("issue_state") or "")
+
+    issue_number = live_issue.get("number", live_issue.get("issue_number"))
+    expected_url = f"https://github.com/{repo}/issues/{record.get('issue_number')}"
+    if (record.get("task_uid") != task_uid or record.get("repository") != repo
+            or type(record.get("issue_number")) is not int
+            or issue_number != record.get("issue_number") or issue_url != expected_url):
+        die("aggregate coordinator lifecycle Issue identity differs from task truth")
+    if issue_state.upper() != expected_state:
+        die(f"aggregate coordinator lifecycle Issue must remain {expected_state.lower()}")
+
+    if (record.get("status") != "done"
+            or record.get("workflow_phase") not in {"task_done", "post_merge_done"}
+            or record.get("completion_mode") != "ordered_delivery_aggregate"
+            or record.get("pr_number") or record.get("pr_url")
+            or not record.get("aggregate_plan_comment_id")
+            or not record.get("aggregate_plan_sha256")
+            or not re.fullmatch(r"[0-9a-f]{64}", str(record.get("aggregate_completion_receipt_sha256") or ""))):
+        die("aggregate coordinator lifecycle task truth is not terminalizable")
+
+    expected_fields = {
+        "status": "done",
+        "workflow_phase": "task_done",
+        "completion_mode": "ordered_delivery_aggregate",
+        "aggregate_plan_comment_id": str(record["aggregate_plan_comment_id"]),
+        "aggregate_plan_sha256": record["aggregate_plan_sha256"],
+        "aggregate_completion_receipt_sha256": record["aggregate_completion_receipt_sha256"],
+    }
+    if (any(live_fields.get(key) != value for key, value in expected_fields.items())
+            or live_fields.get("pr_number") not in (None, "")
+            or live_fields.get("pr_url") not in (None, "")):
+        die("aggregate coordinator lifecycle differs from the verified done/task_done route")
+    return live_fields
+
+
+def require_live_aggregate_lifecycle(
+    repo: str,
+    task_uid: str,
+    record: dict[str, Any],
+    *,
+    expected_state: str,
+) -> dict[str, Any]:
+    """Read and validate the live coordinator lifecycle before terminal effects."""
+    try:
+        live_issue = github_issue_record(repo, task_uid)
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError, RuntimeError, SystemExit) as exc:
+        die(f"aggregate coordinator lifecycle live Issue read failed closed: {exc}")
+    if not isinstance(live_issue, dict):
+        die("aggregate coordinator lifecycle live Issue is unavailable")
+    validate_live_aggregate_lifecycle(
+        repo, task_uid, record, live_issue, expected_state=expected_state,
+    )
+    return live_issue
+
+
 def recover_missing_project_item(args: argparse.Namespace, record: dict[str, Any]) -> None:
     if record.get("project_item_id"):
         return
@@ -1898,6 +2219,13 @@ def command_move_task(args: argparse.Namespace) -> int:
     mapping_path, mapping, record = require_record(args)
     previous = str(record.get("status") or "")
     previous_phase = str(record.get("workflow_phase") or "")
+    if args.to_status == "done" and record.get("completion_mode") == "ordered_delivery_aggregate":
+        die(
+            "move-task: ordered aggregate completion requires the exact aggregate receipt, plan, candidate, "
+            "and evidence through task-closeout.sh; generic move-task cannot publish aggregate task_done"
+        )
+    if args.to_status == "done":
+        require_live_issue_route_matches_cache(args.repo, args.task_uid, record)
     if args.to_status in GATE_OWNED_STATUSES:
         canonical_writer = (
             "task-closeout.sh with canonical review/CI evidence"
@@ -1971,9 +2299,36 @@ def command_closeout_task(args: argparse.Namespace) -> int:
     mapping_path, mapping, original = require_record(args)
     previous = str(original.get("status") or "")
     claim = json.loads(args.claim_json)
+    if args.to_status == "done" and original.get("completion_mode") == "ordered_delivery_aggregate" and not args.aggregate_receipt:
+        die("closeout-task: ordered aggregate completion requires an aggregate receipt")
+    if args.aggregate_receipt and original.get("completion_mode") != "ordered_delivery_aggregate":
+        die("closeout-task: aggregate receipt requires ordered aggregate task truth")
+    live_issue = None
+    if args.to_status == "done":
+        live_issue = require_live_issue_route_matches_cache(
+            getattr(args, "repo", DEFAULT_REPO), args.task_uid, original,
+        )
     if args.to_status != "deferred":
         if claim.get("status") != "verified" or not claim.get("allowed_to_claim"):
             die("closeout-task: verified immutable claim evidence is required")
+    if args.aggregate_receipt:
+        if args.to_status != "done" or args.pr_receipt:
+            die("closeout-task: aggregate receipt is done-only and excludes singular PR receipt")
+        if original.get("completion_mode") != "ordered_delivery_aggregate" or original.get("pr_number") or original.get("pr_url"):
+            die("closeout-task: coordinator mode/PR identity is invalid")
+        if not all((args.aggregate_plan, args.aggregate_candidate, args.aggregate_evidence)):
+            die("closeout-task: aggregate receipt requires plan, candidate and evidence")
+        validate_aggregate_task_complete_claim(
+            getattr(args, "repo", DEFAULT_REPO), args.root, args.task_uid, claim, live_issue or {},
+        )
+        validation = subprocess.run([
+            sys.executable, str(args.root.resolve() / "scripts/pm/aggregate-task-completion.py"), "validate",
+            "--repo-root", str(args.root.resolve()), "--task-uid", args.task_uid,
+            "--record", args.aggregate_plan, "--candidate", args.aggregate_candidate,
+            "--evidence", args.aggregate_evidence, "--receipt", args.aggregate_receipt, "--json",
+        ], text=True, capture_output=True)
+        if validation.returncode:
+            die("closeout-task: aggregate receipt live validation failed: " + (validation.stderr.strip() or validation.stdout.strip()))
     record = json.loads(json.dumps(original))
     closed_at = now()
     record.setdefault("claim_verifications", []).append(claim)
@@ -1985,6 +2340,11 @@ def command_closeout_task(args: argparse.Namespace) -> int:
         receipt = json.loads(pathlib.Path(args.pr_receipt).read_text(encoding="utf-8"))
         record["merge_receipt"] = receipt
         record["merge_receipt_sha256"] = hashlib.sha256(pathlib.Path(args.pr_receipt).read_bytes()).hexdigest()
+    if args.to_status == "done" and args.aggregate_receipt:
+        aggregate_path = pathlib.Path(args.aggregate_receipt)
+        receipt = json.loads(aggregate_path.read_text(encoding="utf-8"))
+        record["aggregate_completion_receipt"] = receipt
+        record["aggregate_completion_receipt_sha256"] = hashlib.sha256(aggregate_path.read_bytes()).hexdigest()
     if args.to_status == "done":
         recover_missing_project_item(args, record)
         if not record.get("project_item_id"):
@@ -2012,6 +2372,12 @@ def command_closeout_task(args: argparse.Namespace) -> int:
             "Merge Receipt PR": receipt.get("pr_url"),
             "Merge Receipt Head": receipt.get("head_oid"),
             "Merge Receipt Observed At": receipt.get("observed_at"),
+        })
+    if record.get("aggregate_completion_receipt"):
+        evidence_fields.update({
+            "Aggregate Receipt Type": "oasis7_aggregate_task_complete",
+            "Aggregate Receipt SHA256": record["aggregate_completion_receipt_sha256"],
+            "Aggregate Plan Comment ID": record["aggregate_completion_receipt"].get("plan_comment_id"),
         })
     comment_url = issue_comment(
         args.repo,
@@ -2048,6 +2414,9 @@ def command_closeout_task(args: argparse.Namespace) -> int:
         if record.get("merge_receipt"):
             cache_patch["merge_receipt"] = record["merge_receipt"]
             cache_patch["merge_receipt_sha256"] = record["merge_receipt_sha256"]
+        if record.get("aggregate_completion_receipt"):
+            cache_patch["aggregate_completion_receipt"] = record["aggregate_completion_receipt"]
+            cache_patch["aggregate_completion_receipt_sha256"] = record["aggregate_completion_receipt_sha256"]
         if record.get("project_item_id"):
             cache_patch["project_item_id"] = record["project_item_id"]
         for key in traceability_issue_keys:
@@ -2070,22 +2439,192 @@ def command_closeout_task(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_bind_aggregate_plan(args: argparse.Namespace) -> int:
+    """Bind an immutable linked-delivery plan before any declared PR merges."""
+    mapping_path, _mapping, original = require_record(args)
+    if original.get("pr_number") or original.get("pr_url"):
+        die("bind-aggregate-plan: coordinator cannot have a singular PR")
+    if original.get("completion_mode") not in {None, "", "ordered_delivery_aggregate"}:
+        die("bind-aggregate-plan: coordinator already uses a different completion route")
+    if original.get("status") in {"done", "deferred"} or original.get("workflow_phase") in TERMINAL_WORKFLOW_PHASES:
+        die("bind-aggregate-plan: terminal coordinator cannot be rebound")
+    plan_path = pathlib.Path(args.plan).resolve(strict=True)
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    aggregate_path = args.root.resolve() / "scripts/pm/aggregate-task-completion.py"
+    aggregate_spec = importlib.util.spec_from_file_location("aggregate_task_completion", aggregate_path)
+    if not aggregate_spec or not aggregate_spec.loader:
+        die("bind-aggregate-plan: aggregate plan validator is unavailable")
+    aggregate_module = importlib.util.module_from_spec(aggregate_spec)
+    aggregate_spec.loader.exec_module(aggregate_module)
+    try:
+        aggregate_module.validate_plan(plan, args.task_uid)
+    except aggregate_module.ReceiptError as exc:
+        die(f"bind-aggregate-plan: invalid versioned plan: {exc}")
+    if plan.get("task_uid") != args.task_uid or plan.get("repository") != args.repo or plan.get("issue_number") != original.get("issue_number"):
+        die("bind-aggregate-plan: plan/coordinator identity mismatch")
+    canonical = json.dumps(plan, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    body = "<!-- oasis7-aggregate-delivery-plan/v1 -->\n" + canonical
+    expected_sha = "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest()
+    comment = json.loads(run_text(["gh", "api", f"repos/{args.repo}/issues/comments/{args.comment_id}"]))
+    if (comment.get("id") != args.comment_id or comment.get("body") != body or
+            str(comment.get("issue_url") or "").rstrip("/").split("/")[-1] != str(original.get("issue_number"))):
+        die("bind-aggregate-plan: live plan comment body/Issue identity mismatch")
+    author = str((comment.get("user") or {}).get("login") or "")
+    if not author:
+        die("bind-aggregate-plan: live plan author is unavailable")
+    permission = json.loads(run_text(["gh", "api", f"repos/{args.repo}/collaborators/{author}/permission"]))
+    if permission.get("permission") != "admin":
+        die("bind-aggregate-plan: plan author lacks repository admin authority")
+    issue = json.loads(run_text(["gh", "api", f"repos/{args.repo}/issues/{original['issue_number']}"]))
+    issue_body = str(issue.get("body") or "").replace("\r\n", "\n")
+    issue_uid_fields = re.findall(r"(?m)^[ \t]*(?:-[ \t]+)?task_uid\b[^\n]*$", issue_body)
+    if issue.get("state") != "open" or issue_uid_fields != [f"task_uid: {args.task_uid}"]:
+        die("bind-aggregate-plan: live coordinator Issue identity/state mismatch")
+    live_fields = issue_task_fields(issue_body)
+    if live_fields.get("completion_mode") not in {None, "", "ordered_delivery_aggregate"}:
+        die("bind-aggregate-plan: live coordinator already uses a different completion route")
+    live_pointer = (live_fields.get("aggregate_plan_comment_id"), live_fields.get("aggregate_plan_sha256"))
+    if any(live_pointer) and live_pointer != (str(args.comment_id), expected_sha):
+        die("bind-aggregate-plan: live immutable plan pointer differs")
+    for child in plan.get("required_deliveries") or []:
+        number = child.get("pr_number") if isinstance(child, dict) else None
+        if not isinstance(number, int) or number <= 0:
+            die("bind-aggregate-plan: required delivery PR identity is invalid")
+        pr = json.loads(run_text(["gh", "pr", "view", str(number), "-R", args.repo, "--json", "state,isDraft,number,url"]))
+        if pr.get("state") != "OPEN" or pr.get("isDraft") is not True or pr.get("number") != number or pr.get("url") != child.get("pr_url"):
+            die("bind-aggregate-plan: all required PRs must be live drafts at binding")
+    old = (original.get("aggregate_plan_comment_id"), original.get("aggregate_plan_sha256"))
+    if any(old) and old != (str(args.comment_id), expected_sha):
+        die("bind-aggregate-plan: an immutable coordinator plan is already bound")
+    record = json.loads(json.dumps(original))
+    record.update(completion_mode="ordered_delivery_aggregate",
+                  aggregate_plan_comment_id=str(args.comment_id), aggregate_plan_sha256=expected_sha)
+    update_issue_body(args.repo, int(record["issue_number"]), task_from_record(args.task_uid, record))
+    reread = json.loads(run_text(["gh", "api", f"repos/{args.repo}/issues/{record['issue_number']}"]))
+    fields = issue_task_fields(str(reread.get("body") or ""))
+    if any(fields.get(key) != value for key, value in (("completion_mode", "ordered_delivery_aggregate"),
+                                                       ("aggregate_plan_comment_id", str(args.comment_id)),
+                                                       ("aggregate_plan_sha256", expected_sha))):
+        die("bind-aggregate-plan: live Issue pointer readback mismatch")
+    merge_task_mapping(mapping_path, args.task_uid, {
+        "completion_mode": "ordered_delivery_aggregate",
+        "aggregate_plan_comment_id": str(args.comment_id), "aggregate_plan_sha256": expected_sha,
+    })
+    print(json.dumps({"status": "bound", "task_uid": args.task_uid, "comment_id": args.comment_id,
+                      "plan_body_sha256": expected_sha}, sort_keys=True))
+    return 0
+
+
+def validate_canonical_aggregate_terminal_receipt(
+    args: argparse.Namespace,
+    record: dict[str, Any],
+    receipt: Any,
+    receipt_bytes: bytes,
+) -> None:
+    """Accept only the finalizer's exact, canonical durable aggregate receipt."""
+    root = args.root.resolve()
+    common = pathlib.Path(run_text(["git", "-C", str(root), "rev-parse", "--git-common-dir"]).strip())
+    if not common.is_absolute():
+        common = (root / common).resolve()
+    durable_root = common / "oasis7-workflow-receipts"
+    task_root = durable_root / args.task_uid
+    terminal_path = task_root / "aggregate-terminal-receipt.json"
+    supplied_path = pathlib.Path(args.receipt_json)
+    try:
+        supplied_resolved = supplied_path.resolve(strict=True)
+        terminal_resolved = terminal_path.resolve(strict=True)
+        canonical_bytes = terminal_path.read_bytes()
+    except OSError:
+        die("set-phase: canonical aggregate terminal receipt is not durably present")
+    if (durable_root.is_symlink() or task_root.is_symlink() or terminal_path.is_symlink()
+            or supplied_resolved != terminal_resolved or canonical_bytes != receipt_bytes):
+        die("set-phase: aggregate terminal receipt is not at its canonical durable identity")
+
+    expected_keys = {
+        "schema", "receipt_type", "issuer", "task_uid", "repository", "issue_number",
+        "aggregate_completion_receipt_sha256", "plan_comment_id", "observed_at", "receipt_sha256",
+    }
+    if not isinstance(receipt, dict) or set(receipt) != expected_keys:
+        die("set-phase: canonical aggregate terminal receipt schema is incomplete or ambiguous")
+    expected_storage = (json.dumps(receipt, sort_keys=True, indent=2) + "\n").encode("utf-8")
+    if receipt_bytes != expected_storage:
+        die("set-phase: aggregate terminal receipt bytes are not canonical finalizer output")
+    payload = {key: value for key, value in receipt.items() if key != "receipt_sha256"}
+    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    completion_sha = str(record.get("aggregate_completion_receipt_sha256") or "")
+    plan_comment_id = str(record.get("aggregate_plan_comment_id") or "")
+    plan_sha = str(record.get("aggregate_plan_sha256") or "")
+    expected_repository = str(args.repo or "")
+    cached_repository = str(record.get("repository") or expected_repository)
+    issue_number = record.get("issue_number")
+    try:
+        observed = datetime.fromisoformat(str(receipt.get("observed_at") or "").replace("Z", "+00:00"))
+        observed_valid = observed.tzinfo is not None
+    except ValueError:
+        observed_valid = False
+    if (
+        receipt.get("schema") != "oasis7.aggregate-terminal/v1"
+        or receipt.get("receipt_type") != "oasis7_aggregate_terminal"
+        or receipt.get("issuer") != "aggregate-task-finalizer"
+        or receipt.get("task_uid") != args.task_uid
+        or cached_repository != expected_repository
+        or receipt.get("repository") != expected_repository
+        or type(issue_number) is not int
+        or type(receipt.get("issue_number")) is not int
+        or receipt.get("issue_number") != issue_number
+        or not re.fullmatch(r"[0-9a-f]{64}", completion_sha)
+        or receipt.get("aggregate_completion_receipt_sha256") != completion_sha
+        or not plan_comment_id
+        or not plan_comment_id.isdecimal()
+        or int(plan_comment_id) <= 0
+        or type(receipt.get("plan_comment_id")) is not int
+        or receipt.get("plan_comment_id") <= 0
+        or not re.fullmatch(r"sha256:[0-9a-f]{64}", plan_sha)
+        or str(receipt.get("plan_comment_id")) != plan_comment_id
+        or not observed_valid
+        or receipt.get("receipt_sha256") != hashlib.sha256(canonical).hexdigest()
+    ):
+        die("set-phase: canonical aggregate terminal receipt identity or digest mismatch")
+
+
 def command_set_phase(args: argparse.Namespace) -> int:
     mapping_path, _mapping, original = require_record(args)
-    receipt = json.loads(pathlib.Path(args.receipt_json).read_text(encoding="utf-8"))
+    receipt_bytes = pathlib.Path(args.receipt_json).read_bytes()
+    receipt = json.loads(receipt_bytes.decode("utf-8"))
     current = str(original.get("workflow_phase") or "")
-    allowed_transition = args.phase in ALLOWED_PHASE_TRANSITIONS.get(current, set())
+    aggregate_terminal = args.phase == "post_merge_done" and original.get("completion_mode") == "ordered_delivery_aggregate"
+    allowed_transition = args.phase in ALLOWED_PHASE_TRANSITIONS.get(current, set()) or (aggregate_terminal and current == "task_done")
     if not allowed_transition:
         die(f"set-phase: transition {current!r} -> {args.phase!r} is not allowed")
-    receipt_schema = RECEIPT_SCHEMAS.get(args.phase)
+    receipt_schema = ("oasis7_aggregate_terminal", "aggregate-task-finalizer") if aggregate_terminal else RECEIPT_SCHEMAS.get(args.phase)
     if not receipt_schema or (receipt.get("receipt_type"), receipt.get("issuer")) != receipt_schema:
         die("set-phase: receipt schema or issuer mismatch")
     if receipt.get("task_uid") != args.task_uid:
         die("set-phase: receipt task_uid mismatch")
+    if aggregate_terminal:
+        if original.get("pr_number") or original.get("pr_url") or original.get("status") != "done":
+            die("set-phase: aggregate terminal coordinator identity/status is invalid")
+        digest = str(original.get("aggregate_completion_receipt_sha256") or "")
+        if not digest or receipt.get("aggregate_completion_receipt_sha256") != digest:
+            die("set-phase: aggregate terminal receipt chain mismatch")
+        if not all((args.aggregate_plan, args.aggregate_candidate, args.aggregate_evidence, args.aggregate_receipt)):
+            die("set-phase: aggregate terminal requires the exact plan/candidate/evidence/completion receipt")
+        validation = subprocess.run([
+            sys.executable, str(args.root.resolve() / "scripts/pm/aggregate-task-completion.py"), "validate",
+            "--repo-root", str(args.root.resolve()), "--task-uid", args.task_uid,
+            "--record", args.aggregate_plan, "--candidate", args.aggregate_candidate,
+            "--evidence", args.aggregate_evidence, "--receipt", args.aggregate_receipt, "--json",
+        ], text=True, capture_output=True)
+        if validation.returncode or hashlib.sha256(pathlib.Path(args.aggregate_receipt).read_bytes()).hexdigest() != digest:
+            die("set-phase: aggregate completion receipt no longer verifies live")
+        validate_canonical_aggregate_terminal_receipt(args, original, receipt, receipt_bytes)
+        require_live_aggregate_lifecycle(
+            args.repo, args.task_uid, original, expected_state="OPEN",
+        )
     record = json.loads(json.dumps(original))
     record["workflow_phase"] = args.phase
     record.setdefault("phase_receipts", {})[args.phase] = receipt
-    record.setdefault("phase_receipt_sha256", {})[args.phase] = hashlib.sha256(pathlib.Path(args.receipt_json).read_bytes()).hexdigest()
+    record.setdefault("phase_receipt_sha256", {})[args.phase] = hashlib.sha256(receipt_bytes).hexdigest()
     comment_url = issue_comment(args.repo, int(record["issue_number"]), evidence_body(
         args.task_uid, args.role, args.phase,
         {"Workflow Phase": args.phase, "Receipt Type": receipt.get("receipt_type"),
@@ -3028,15 +3567,31 @@ def build_parser() -> argparse.ArgumentParser:
     closeout.add_argument("--to-status", required=True, choices=("ready", "done", "deferred"))
     closeout.add_argument("--claim-json", required=True)
     closeout.add_argument("--pr-receipt")
+    closeout.add_argument("--aggregate-plan")
+    closeout.add_argument("--aggregate-candidate")
+    closeout.add_argument("--aggregate-evidence")
+    closeout.add_argument("--aggregate-receipt")
     closeout.add_argument("--json", action="store_true")
     closeout.set_defaults(func=command_closeout_task)
+
+    bind_aggregate = subparsers.add_parser("bind-aggregate-plan")
+    add_common(bind_aggregate)
+    bind_aggregate.add_argument("--task-uid", required=True)
+    bind_aggregate.add_argument("--plan", required=True)
+    bind_aggregate.add_argument("--comment-id", type=int, required=True)
+    bind_aggregate.add_argument("--json", action="store_true")
+    bind_aggregate.set_defaults(func=command_bind_aggregate_plan)
 
     phase = subparsers.add_parser("set-phase")
     add_common(phase)
     phase.add_argument("--task-uid", required=True)
     phase.add_argument("--role", default="tpm")
-    phase.add_argument("--phase", required=True, choices=("main_sync",))
+    phase.add_argument("--phase", required=True, choices=("main_sync", "post_merge_done"))
     phase.add_argument("--receipt-json", required=True)
+    phase.add_argument("--aggregate-plan")
+    phase.add_argument("--aggregate-candidate")
+    phase.add_argument("--aggregate-evidence")
+    phase.add_argument("--aggregate-receipt")
     phase.add_argument("--json", action="store_true")
     phase.set_defaults(func=command_set_phase)
 

@@ -106,8 +106,13 @@ if [[ "${1:-}" == "api" && "${2:-}" == repos/*/issues/* ]]; then
   exit 0
 fi
 
+if [[ "${1:-}" == "api" && "${2:-}" == repos/*/pulls/* ]]; then
+  cat "${TEST_GH_PR_JSON:?}"
+  exit 0
+fi
+
 if [[ "${1:-}" == "pr" && "${2:-}" == "create" ]]; then
-  printf 'https://github.com/example/oasis7/pull/999\n'
+  printf 'https://github.com/eng-cc/oasis7/pull/999\n'
   exit 0
 fi
 
@@ -127,7 +132,7 @@ if [[ "${1:-}" == "pr" && "${2:-}" == "ready" ]]; then
 fi
 
 if [[ "${1:-}" == "repo" && "${2:-}" == "view" ]]; then
-  printf 'example/oasis7\n'
+  printf '%s\n' "${TEST_GH_CURRENT_REPO:-example/oasis7}"
   exit 0
 fi
 
@@ -178,7 +183,15 @@ state.setdefault("comments", []).append({"body": body_path.read_text(encoding="u
 state_path.write_text(json.dumps(state), encoding="utf-8")
 PY
   fi
-  printf 'https://github.com/example/oasis7/issues/%s#issuecomment-fixture\n' "${3:-0}"
+  comment_issue="${3:-0}"
+  comment_repo=""
+  for ((i=1; i<=$#; i++)); do
+    if [[ "${!i}" == "-R" ]]; then
+      j=$((i+1)); comment_repo="${!j}"; break
+    fi
+  done
+  [[ -n "$comment_repo" ]] || { echo "issue comment missing -R repository" >&2; exit 1; }
+  printf 'https://github.com/%s/issues/%s#issuecomment-fixture\n' "$comment_repo" "$comment_issue"
   exit 0
 fi
 
@@ -462,6 +475,8 @@ run_prepare() {
     TEST_GH_ISSUE_BODY_JSON="${TEST_GH_ISSUE_BODY_JSON:-}" \
     TEST_GH_ISSUE_FULL_JSON="${TEST_GH_ISSUE_FULL_JSON:-}" \
     TEST_GH_ISSUE_VIEW_JSON="${TEST_GH_ISSUE_VIEW_JSON:-}" \
+    TEST_GH_PR_JSON="${TEST_GH_PR_JSON:-}" \
+    TEST_GH_CURRENT_REPO="${TEST_GH_CURRENT_REPO:-example/oasis7}" \
     TEST_PR_STATE_TSV="${TEST_PR_STATE_TSV:-}" \
     TEST_PR_BASE_REF="${TEST_PR_BASE_REF:-}" \
     TEST_GH_DEFAULT_BRANCH="${TEST_GH_DEFAULT_BRANCH-main}" \
@@ -497,6 +512,138 @@ write_changed_path_fixture() {
   write_project_trace
   write_role_review_packet "$SOURCE_HEAD" "no_findings"
   commit_fixture_evidence
+}
+
+run_cargo_package_required_fixture() {
+  local changed_path="$1"
+  local primary_package="$2"
+  local fixture_name="$3"
+  local output_json="$4"
+  local original_base_oid="$COMPARISON_OID"
+  reset_smoke_branch_to_base
+  write_project_trace
+  mkdir -p "$SMOKE_WORKTREE/.pm/github-project-sync"
+  cat > "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" <<EOF
+{"project":{"repo":"eng-cc/oasis7"},"tasks":{"$TASK_UID":{"issue_number":123,"issue_url":"https://github.com/eng-cc/oasis7/issues/123","owner_role":"tpm","priority":"P3","project_item_id":"PVTI_fixture","repository":"eng-cc/oasis7","primary_package":"$primary_package","status":"ready","workflow_phase":"verification","task_uid":"$TASK_UID","title":"$fixture_name package scope fixture","canonical_worktree":"$SMOKE_WORKTREE_CANONICAL","task_branch":"$SMOKE_BRANCH","default_branch":"main","worktree_hint":"$SMOKE_WORKTREE_CANONICAL","evidence_comments":["https://github.com/eng-cc/oasis7/issues/123#issuecomment-1001","https://github.com/eng-cc/oasis7/issues/123#issuecomment-1002"],"claim_verifications":[{"status":"verified"}] }},"version":1}
+EOF
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" add doc/engineering/project.md
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" add -f .pm/github-project-sync/tasks.json
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" \
+    -c user.name="oasis7 smoke" \
+    -c user.email="smoke@example.invalid" \
+    -c commit.gpgsign=false \
+    commit --no-verify -m "test: $fixture_name package scope comparison base" >/dev/null
+  local package_base_oid
+  package_base_oid="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+  "$REAL_GIT" -C "$ROOT_DIR" update-ref refs/remotes/origin/main "$package_base_oid"
+  COMPARISON_OID="$package_base_oid"
+
+  mkdir -p "$SMOKE_WORKTREE/$(dirname "$changed_path")"
+  printf '\n// prepare-task-pr local required command fixture\n' >> "$SMOKE_WORKTREE/$changed_path"
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" add "$changed_path"
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" \
+    -c user.name="oasis7 smoke" \
+    -c user.email="smoke@example.invalid" \
+    -c commit.gpgsign=false \
+    commit --no-verify -m "test: local $fixture_name required command fixture" >/dev/null
+  local package_source_head
+  package_source_head="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+  local changed_paths
+  changed_paths="$("$REAL_GIT" -C "$SMOKE_WORKTREE" diff --name-only "$package_base_oid" "$package_source_head")"
+  if [[ "$changed_paths" != "$changed_path" ]]; then
+    echo "$fixture_name package scope range must contain only $changed_path: $changed_paths" >&2
+    return 1
+  fi
+
+  local issue_body="$TMPDIR/$fixture_name-issue-body.json"
+  local issue_comments="$TMPDIR/$fixture_name-issue-comments.json"
+  local issue_list="$TMPDIR/$fixture_name-issue-list.json"
+  python3 - "$issue_body" "$issue_comments" "$TASK_UID" "$SMOKE_WORKTREE_CANONICAL" "$SMOKE_BRANCH" "$package_source_head" "$package_base_oid" "$changed_path" "$primary_package" "$fixture_name" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+body_path, comments_path, task_uid, worktree, branch, source_head, comparison_oid, changed_path, package, name = sys.argv[1:]
+issue_body = "\n".join((
+    "<!-- oasis7-pm-task -->",
+    f"task_uid: {task_uid}",
+    "",
+    "Task metadata:",
+    "- owner_role: `tpm`",
+    "- status: `ready`",
+    "- priority: `P3`",
+    "- workflow_phase: `verification`",
+    f"- primary_package: `{package}`",
+    f"- worktree_hint: `{worktree}`",
+)) + "\n"
+review = "\n".join((
+    "<!-- oasis7-pm-evidence -->",
+    f"Task UID: {task_uid}",
+    "Evidence Phase: pre_pr_ready",
+    "## 2026-06-03 00:00:00 CST / tpm",
+    "- Pre-PR Local Role Review: passed",
+    f"- Task UID: {task_uid}",
+    f"- Source Worktree: {worktree}",
+    f"- Source Branch: {branch}",
+    f"- Source Head: {source_head}",
+    "- Comparison Ref: refs/remotes/origin/main",
+    f"- Comparison OID: {comparison_oid}",
+    f"- Reviewed Changed Paths: {changed_path}",
+    f"- Review Package: .pm/scratch/{task_uid}/review-packages/{name}-fixture.diff",
+    "- Review Evidence Digest: aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    f"- Role Selection Basis: changed path {changed_path}; package {package}.",
+    "- Review Roles: qa_engineer,runtime_engineer,viewer_engineer,game_visual_interaction_designer",
+    "- Review Evidence: qa_engineer: 2026-06-03 00:00:00 CST; no_findings; fixture; runtime_engineer: 2026-06-03 00:00:00 CST; no_findings; fixture; viewer_engineer: 2026-06-03 00:00:00 CST; no_findings; fixture; game_visual_interaction_designer: 2026-06-03 00:00:00 CST; no_findings; fixture",
+    "- Review Verdicts: qa_engineer scope/spec compliance=approved; role quality/risk=approved; runtime_engineer scope/spec compliance=approved; role quality/risk=approved; viewer_engineer scope/spec compliance=approved; role quality/risk=approved; game_visual_interaction_designer scope/spec compliance=approved; role quality/risk=approved",
+    "- Review Findings Disposition: no_findings",
+    "- Finding Disposition Evidence: fixture evidence",
+    "- Verification Matrix: runtime replay/recovery/checkpoint/long-run applicability verified by fixture",
+    "- Visual Evidence: fixture screenshot and S6 model review",
+    "- WASM Evidence: n/a; explicit exemption reason no WASM code changed",
+    "- Ops Evidence: readiness and rollback are not applicable; explicit exemption reason no deployment code changed",
+    "- LiveOps Evidence: messaging is not applicable; explicit exemption reason no public-facing change",
+    "- Residual Risk: fixture residual risk",
+    f"- Slice Ledger: .pm/scratch/{task_uid}/slice-ledger.jsonl",
+)) + "\n"
+comments = [
+    {
+        "body": "\n".join((
+            "<!-- oasis7-pm-claim-verification -->",
+            f"Task UID: {task_uid}",
+            "Claim Type: ready_for_pr",
+            "Verification Status: verified",
+            "Verified At: 2026-06-03T00:00:00+08:00",
+        )),
+        "url": "https://github.com/eng-cc/oasis7/issues/123#issuecomment-1001",
+    },
+    {
+        "body": review,
+        "url": "https://github.com/eng-cc/oasis7/issues/123#issuecomment-1002",
+    },
+]
+Path(comments_path).write_text(json.dumps({"comments": comments}) + "\n", encoding="utf-8")
+Path(body_path).write_text(json.dumps({
+    "body": issue_body,
+    "comments": comments,
+    "number": 123,
+    "state": "OPEN",
+    "title": f"{name} package scope fixture",
+    "url": "https://github.com/eng-cc/oasis7/issues/123",
+}) + "\n", encoding="utf-8")
+PY
+  printf '[{"number":123,"url":"https://github.com/eng-cc/oasis7/issues/123","title":"%s package scope fixture","state":"OPEN"}]\n' "$fixture_name" > "$issue_list"
+  TEST_GH_CURRENT_REPO="eng-cc/oasis7" \
+  TEST_GH_DEFAULT_BRANCH=main \
+  TEST_GH_ISSUE_LIST_JSON="$issue_list" \
+  TEST_GH_ISSUE_BODY_JSON="$issue_body" \
+  TEST_GH_ISSUE_FULL_JSON="$issue_body" \
+  TEST_GH_ISSUE_VIEW_JSON="$issue_comments" \
+    run_prepare "$TMPDIR/gh-$fixture_name.log" "$TMPDIR/git-$fixture_name.log" --json >"$output_json"
+
+  "$REAL_GIT" -C "$ROOT_DIR" update-ref refs/remotes/origin/main "$original_base_oid"
+  COMPARISON_OID="$original_base_oid"
+  reset_smoke_branch_to_base
+  SOURCE_HEAD="$original_base_oid"
 }
 
 helper_functions="$(
@@ -763,10 +910,26 @@ refresh_current_issue_identity_fixture() {
       "body": "<!-- oasis7-pm-evidence -->\\nTask UID: $TASK_UID\\nEvidence Phase: freeze\\nRole: tpm\\nRecorded At: 2026-06-03T00:06:00+08:00\\n\\nSource Worktree: $SMOKE_WORKTREE_CANONICAL\\nSource Branch: $SMOKE_BRANCH\\nSource Head: $current_head\\nComparison Ref: refs/remotes/origin/main\\nComparison OID: $COMPARISON_OID\\n"
     }
   ]
-}
+  }
 EOF
+  local current_pr_json="${current_draft_pr:-$draft_pr}"
+  python3 - "$current_pr_json" "$current_head" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path, source_head = sys.argv[1:]
+payload = json.loads(Path(path).read_text(encoding="utf-8"))
+payload["head"]["sha"] = source_head
+Path(path).write_text(json.dumps(payload) + "\n", encoding="utf-8")
+PY
   export TEST_GH_ISSUE_BODY_JSON="$draft_issue_body"
+  export TEST_GH_ISSUE_FULL_JSON="$draft_issue_body"
+  export TEST_GH_ISSUE_LIST_JSON="$draft_issue_list"
   export TEST_GH_ISSUE_VIEW_JSON="$output_path"
+  export TEST_GH_CURRENT_REPO="eng-cc/oasis7"
+  export TEST_GH_PR_JSON="$current_pr_json"
+  export TEST_GH_PERSIST_COMMENT=1
 }
 
 # A fresh task has no role-review packet or provenance ledger yet. The draft
@@ -776,7 +939,7 @@ write_task_binding
 write_project_trace
 mkdir -p "$SMOKE_WORKTREE/.pm/github-project-sync"
 cat > "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" <<EOF
-{"project":{"repo":"example/oasis7"},"tasks":{"$TASK_UID":{"issue_number":123,"issue_url":"https://github.com/example/oasis7/issues/123","owner_role":"tpm","priority":"P3","project_item_id":"PVTI_fixture","status":"committed","workflow_phase":"implementation","task_uid":"$TASK_UID","title":"fresh draft candidate fixture","canonical_worktree":"$SMOKE_WORKTREE_CANONICAL","task_branch":"$SMOKE_BRANCH","worktree_hint":"$TMPDIR/historical-worktree","branch":"task/historical"}},"version":1}
+{"project":{"repo":"eng-cc/oasis7"},"tasks":{"$TASK_UID":{"issue_number":123,"issue_url":"https://github.com/eng-cc/oasis7/issues/123","owner_role":"tpm","priority":"P3","project_item_id":"PVTI_fixture","repository":"eng-cc/oasis7","status":"committed","workflow_phase":"implementation","task_uid":"$TASK_UID","title":"fresh draft candidate fixture","canonical_worktree":"$SMOKE_WORKTREE_CANONICAL","task_branch":"$SMOKE_BRANCH","default_branch":"main","worktree_hint":"$SMOKE_WORKTREE_CANONICAL","branch":"task/historical"}},"version":1}
 EOF
 "$REAL_GIT" -C "$SMOKE_WORKTREE" add ".pm/tasks/$TASK_UID.yaml" "doc/engineering/project.md"
 "$REAL_GIT" -C "$SMOKE_WORKTREE" add -f ".pm/github-project-sync/tasks.json"
@@ -861,7 +1024,7 @@ PY
 SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
 stale_package_body="$TMPDIR/stale-package-body.json"
 stale_package_comments="$TMPDIR/stale-package-comments.json"
-printf '{"body":"<!-- oasis7-pm-task -->\\ntask_uid: %s\\n\\nTask metadata:\\n- primary_package: `live-package`\\n","number":123,"title":"fixture","url":"https://github.com/example/oasis7/issues/123"}\n' "$TASK_UID" >"$stale_package_body"
+printf '{"body":"<!-- oasis7-pm-task -->\\ntask_uid: %s\\n\\nTask metadata:\\n- primary_package: `live-package`\\n","number":123,"title":"fixture","url":"https://github.com/eng-cc/oasis7/issues/123"}\n' "$TASK_UID" >"$stale_package_body"
 cat >"$stale_package_comments" <<EOF
 {"comments":[{"body":"<!-- oasis7-pm-evidence -->\\nTask UID: $TASK_UID\\nSource Worktree: $SMOKE_WORKTREE_CANONICAL\\nSource Branch: $SMOKE_BRANCH\\nSource Head: $SOURCE_HEAD\\nComparison Ref: refs/remotes/origin/main\\nComparison OID: $COMPARISON_OID\\n"}]}
 EOF
@@ -886,9 +1049,99 @@ draft_out="$TMPDIR/draft-candidate.out"
 draft_err="$TMPDIR/draft-candidate.err"
 draft_issue_body="$TMPDIR/draft-issue-body.json"
 draft_issue_comments="$TMPDIR/draft-issue-comments.json"
-printf '{"body":"<!-- oasis7-pm-task -->\\ntask_uid: %s\\n","number":123,"title":"fixture","url":"https://github.com/example/oasis7/issues/123"}\n' "$TASK_UID" >"$draft_issue_body"
+draft_issue_list="$TMPDIR/draft-issue-list.json"
+draft_pr="$TMPDIR/draft-pr.json"
+python3 - "$draft_issue_body" "$TASK_UID" "$SMOKE_WORKTREE_CANONICAL" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path, task_uid, worktree_hint = sys.argv[1:]
+body = "\n".join((
+    "<!-- oasis7-pm-task -->",
+    f"task_uid: {task_uid}",
+    "",
+    "Task metadata:",
+    "- owner_role: `tpm`",
+    "- status: `committed`",
+    "- priority: `P3`",
+    "- workflow_phase: `implementation`",
+    f"- worktree_hint: `{worktree_hint}`",
+)) + "\n"
+payload = {
+    "body": body,
+    "comments": [],
+    "number": 123,
+    "state": "OPEN",
+    "title": "fixture",
+    "url": "https://github.com/eng-cc/oasis7/issues/123",
+}
+Path(path).write_text(json.dumps(payload) + "\n", encoding="utf-8")
+PY
 printf '{"comments":[]}\n' >"$draft_issue_comments"
-if ! run_prepare_with_issue_fixture "$draft_issue_body" "$draft_issue_comments" \
+printf '[{"number":123,"url":"https://github.com/eng-cc/oasis7/issues/123","title":"fixture","state":"OPEN"}]\n' >"$draft_issue_list"
+python3 - "$draft_pr" "$SMOKE_BRANCH" "$SOURCE_HEAD" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path, branch, head = sys.argv[1:]
+payload = {
+    "number": 999,
+    "html_url": "https://github.com/eng-cc/oasis7/pull/999",
+    "state": "open",
+    "merged_at": None,
+    "draft": True,
+    "head": {
+        "ref": branch,
+        "sha": head,
+        "repo": {"full_name": "eng-cc/oasis7"},
+    },
+    "base": {
+        "ref": "main",
+        "repo": {"full_name": "eng-cc/oasis7"},
+    },
+}
+Path(path).write_text(json.dumps(payload) + "\n", encoding="utf-8")
+PY
+run_bound_draft_candidate() {
+  local gh_log="$1"
+  local git_log="$2"
+  shift 2
+  cat >"$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" <<EOF
+{"project":{"repo":"eng-cc/oasis7"},"tasks":{"$TASK_UID":{"issue_number":123,"issue_url":"https://github.com/eng-cc/oasis7/issues/123","owner_role":"tpm","priority":"P3","project_item_id":"PVTI_fixture","repository":"eng-cc/oasis7","status":"committed","workflow_phase":"implementation","task_uid":"$TASK_UID","title":"bound draft candidate fixture","canonical_worktree":"$SMOKE_WORKTREE_CANONICAL","task_branch":"$SMOKE_BRANCH","default_branch":"main","worktree_hint":"$SMOKE_WORKTREE_CANONICAL"}},"version":1}
+EOF
+  if ! "$REAL_GIT" -C "$SMOKE_WORKTREE" diff --quiet -- .pm/github-project-sync/tasks.json; then
+    "$REAL_GIT" -C "$SMOKE_WORKTREE" add -f .pm/github-project-sync/tasks.json
+    "$REAL_GIT" -C "$SMOKE_WORKTREE" \
+      -c user.name="oasis7 smoke" \
+      -c user.email="smoke@example.invalid" \
+      -c commit.gpgsign=false \
+      commit --no-verify -m "test: restore canonical draft candidate identity" >/dev/null
+  fi
+  local current_source_head
+  current_source_head="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+  python3 - "${current_draft_pr:-$draft_pr}" "$current_source_head" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path, source_head = sys.argv[1:]
+payload = json.loads(Path(path).read_text(encoding="utf-8"))
+payload["head"]["sha"] = source_head
+Path(path).write_text(json.dumps(payload) + "\n", encoding="utf-8")
+PY
+  TEST_GH_CURRENT_REPO="eng-cc/oasis7" \
+  TEST_GH_ISSUE_LIST_JSON="$draft_issue_list" \
+  TEST_GH_ISSUE_BODY_JSON="$draft_issue_body" \
+  TEST_GH_ISSUE_FULL_JSON="$draft_issue_body" \
+  TEST_GH_ISSUE_VIEW_JSON="$draft_issue_comments" \
+  TEST_GH_PR_JSON="${current_draft_pr:-$draft_pr}" \
+  TEST_GH_PERSIST_COMMENT=1 \
+    run_prepare "$gh_log" "$git_log" "$@"
+}
+if ! TEST_GH_CURRENT_REPO="eng-cc/oasis7" TEST_GH_PR_JSON="$draft_pr" TEST_GH_ISSUE_LIST_JSON="$draft_issue_list" \
+  run_prepare_with_issue_fixture "$draft_issue_body" "$draft_issue_comments" \
   "$draft_log" "$draft_git_log" --draft-candidate >"$draft_out" 2>"$draft_err"; then
   cat "$draft_err" >&2
   exit 1
@@ -902,7 +1155,7 @@ err=Path(sys.argv[3]).read_text(encoding="utf-8")
 branch=sys.argv[4]
 if f"pr create --base main --head {branch} --fill" not in gh or "--draft" not in gh:
     raise SystemExit(f"fresh task did not reach draft PR creation: {gh}")
-freeze_write = "issue comment 123 -R example/oasis7 --body-file "
+freeze_write = "issue comment 123 -R eng-cc/oasis7 --body-file "
 if freeze_write not in gh or gh.index(freeze_write) > gh.index("pr create "):
     raise SystemExit(f"draft freeze evidence was not produced before PR creation: {gh}")
 if "Created PR:" not in out:
@@ -911,8 +1164,13 @@ if "pre-PR local role-return validation failed" in err or "machine-checkable rol
     raise SystemExit(f"draft candidate incorrectly required review provenance: {err}")
 project_writes=[line for line in gh.splitlines() if line.startswith("project item-edit ")]
 pr_writes=[line for line in project_writes if "--field-id FIELD_PR " in line]
-if len(pr_writes)!=1 or "--text https://github.com/example/oasis7/pull/999" not in pr_writes[0]:
+if len(pr_writes)!=1 or "--text https://github.com/eng-cc/oasis7/pull/999" not in pr_writes[0]:
     raise SystemExit(f"draft candidate must update exactly one Project PR field: {project_writes}")
+task_uid = "task_11111111111111111111111111111111"
+issue_list = f"issue list -R eng-cc/oasis7 --state all --search {task_uid} in:body --json number,url,title,state --limit 5"
+issue_view = f"issue view 123 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason"
+if issue_list not in gh.splitlines() or issue_view not in gh.splitlines():
+    raise SystemExit(f"record-pr must read back the exact bound Issue before recording the PR: {gh}")
 for forbidden in ("OPT_PR_WATCH", "OPT_PR_WATCH_PM", "OPT_PR_WATCH_PHASE"):
     if any(forbidden in line for line in project_writes):
         raise SystemExit(f"draft candidate advanced lifecycle to pr_watch via {forbidden}: {project_writes}")
@@ -922,7 +1180,7 @@ PY
 # worktree/branch binding must drive draft-candidate task inference.
 rm -rf "$SMOKE_WORKTREE/.pm/tasks"
 cat > "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" <<EOF
-{"project":{"repo":"example/oasis7"},"tasks":{"$TASK_UID":{"issue_number":123,"issue_url":"https://github.com/example/oasis7/issues/123","owner_role":"tpm","priority":"P3","project_item_id":"PVTI_fixture","status":"committed","workflow_phase":"bootstrap","task_uid":"$TASK_UID","title":"migrated draft candidate fixture","canonical_worktree":"$SMOKE_WORKTREE_CANONICAL","task_branch":"$SMOKE_BRANCH","worktree_hint":"$TMPDIR/historical-worktree","branch":"task/historical"}},"version":1}
+{"project":{"repo":"eng-cc/oasis7"},"tasks":{"$TASK_UID":{"issue_number":123,"issue_url":"https://github.com/eng-cc/oasis7/issues/123","owner_role":"tpm","priority":"P3","project_item_id":"PVTI_fixture","repository":"eng-cc/oasis7","status":"committed","workflow_phase":"implementation","task_uid":"$TASK_UID","title":"migrated draft candidate fixture","canonical_worktree":"$SMOKE_WORKTREE_CANONICAL","task_branch":"$SMOKE_BRANCH","default_branch":"main","worktree_hint":"$SMOKE_WORKTREE_CANONICAL","branch":"task/historical"}},"version":1}
 EOF
 "$REAL_GIT" -C "$SMOKE_WORKTREE" add -u .pm/tasks
 "$REAL_GIT" -C "$SMOKE_WORKTREE" add -f .pm/github-project-sync/tasks.json
@@ -932,6 +1190,24 @@ EOF
   -c commit.gpgsign=false \
   commit --no-verify -m "test: migrated draft candidate mapping fixture" >/dev/null
 migrated_source_head="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+migrated_draft_pr="$TMPDIR/migrated-draft-pr.json"
+python3 - "$migrated_draft_pr" "$SMOKE_BRANCH" "$migrated_source_head" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path, branch, head = sys.argv[1:]
+payload = {
+    "number": 999,
+    "html_url": "https://github.com/eng-cc/oasis7/pull/999",
+    "state": "open",
+    "merged_at": None,
+    "draft": True,
+    "head": {"ref": branch, "sha": head, "repo": {"full_name": "eng-cc/oasis7"}},
+    "base": {"ref": "main", "repo": {"full_name": "eng-cc/oasis7"}},
+}
+Path(path).write_text(json.dumps(payload) + "\n", encoding="utf-8")
+PY
 migrated_draft_comments="$TMPDIR/migrated-draft-issue-comments.json"
 cat >"$migrated_draft_comments" <<EOF
 {
@@ -944,11 +1220,13 @@ cat >"$migrated_draft_comments" <<EOF
 EOF
 migrated_draft_log="$TMPDIR/gh-migrated-draft-candidate.log"
 migrated_draft_git_log="$TMPDIR/git-migrated-draft-candidate.log"
-if ! run_prepare_with_issue_fixture "$draft_issue_body" "$migrated_draft_comments" \
+if ! TEST_GH_CURRENT_REPO="eng-cc/oasis7" TEST_GH_PR_JSON="$migrated_draft_pr" TEST_GH_ISSUE_LIST_JSON="$draft_issue_list" \
+  run_prepare_with_issue_fixture "$draft_issue_body" "$migrated_draft_comments" \
   "$migrated_draft_log" "$migrated_draft_git_log" --draft-candidate >/dev/null 2>"$TMPDIR/migrated-draft-candidate.err"; then
   cat "$TMPDIR/migrated-draft-candidate.err" >&2
   exit 1
 fi
+current_draft_pr="$migrated_draft_pr"
 reset_project_mapping_after_record_pr
 
 assert_draft_candidate_issue_rejection_has_no_side_effects() {
@@ -964,12 +1242,12 @@ gh_lines = Path(sys.argv[1]).read_text(encoding="utf-8").splitlines()
 git_lines = Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
 stderr = Path(sys.argv[3]).read_text(encoding="utf-8")
 expected_error = sys.argv[4]
-issue_read = "issue view 123 -R example/oasis7 --json comments"
-identity_read = "issue view 123 -R example/oasis7 --json body,number,url"
+issue_read = "issue view 123 -R eng-cc/oasis7 --json comments"
+identity_read = "issue view 123 -R eng-cc/oasis7 --json body,number,url"
 unexpected_gh = [
     line for line in gh_lines
     if line not in {issue_read, identity_read}
-    and not line.startswith("issue comment 123 -R example/oasis7 --body-file ")
+    and not line.startswith("issue comment 123 -R eng-cc/oasis7 --body-file ")
 ]
 if unexpected_gh:
     raise SystemExit(f"draft candidate rejection reached a PR side effect: {gh_lines}")
@@ -1203,9 +1481,10 @@ if not expected.issubset(missing):
     raise SystemExit(f"expected exact field mismatch markers {expected}, got: {missing}")
 PY
 
-# Ordinary review validation must bind the packet's symbolic Comparison Ref.
-# The immutable receipt OID override is promotion-only; a non-promotion JSON
-# preflight must reject a packet whose ref does not match the active base ref.
+# Ordinary legacy review validation receives the exact Comparison OID but must
+# still bind the packet's symbolic Comparison Ref. The OID-only audit-context
+# exception belongs to promotion; this non-promotion preflight must reject a
+# different symbolic ref even when the OID itself matches.
 reset_smoke_branch_to_base
 write_task_binding
 write_project_trace
@@ -1233,7 +1512,9 @@ path.write_text(body, encoding="utf-8")
 PY
 commit_fixture_evidence
 comparison_ref_mismatch_json="$TMPDIR/comparison-ref-mismatch.json"
-run_prepare "$TMPDIR/gh-comparison-ref-mismatch.log" "$TMPDIR/git-comparison-ref-mismatch.log" --json >"$comparison_ref_mismatch_json"
+TEST_PREPARE_USE_V1_COMPAT=1 run_prepare \
+  "$TMPDIR/gh-comparison-ref-mismatch.log" \
+  "$TMPDIR/git-comparison-ref-mismatch.log" --json >"$comparison_ref_mismatch_json"
 python3 - "$comparison_ref_mismatch_json" <<'PY'
 import json
 import sys
@@ -1266,7 +1547,7 @@ moved_main_oid="$("$REAL_GIT" -C "$ROOT_DIR" commit-tree "$COMPARISON_OID^{tree}
 "$REAL_GIT" -C "$ROOT_DIR" update-ref refs/remotes/origin/main "$moved_main_oid"
 moved_main_review="$TMPDIR/moved-main-immutable-review.env"
 PREPARE_TASK_PR_ALLOW_RETIRED_PM_TASKS=1 \
-  local_role_review_status "$SMOKE_WORKTREE" "$SMOKE_BRANCH" "$SOURCE_HEAD" refs/remotes/origin/main "$COMPARISON_OID" >"$moved_main_review"
+  local_role_review_status "$SMOKE_WORKTREE" "$SMOKE_BRANCH" "$SOURCE_HEAD" refs/remotes/origin/main "$COMPARISON_OID" 1 >"$moved_main_review"
 python3 - "$moved_main_review" "$COMPARISON_OID" <<'PY'
 from pathlib import Path
 import sys
@@ -1576,7 +1857,7 @@ moved_promotion_base_oid="$("$REAL_GIT" -C "$ROOT_DIR" commit-tree "$COMPARISON_
 "$REAL_GIT" -C "$ROOT_DIR" update-ref refs/remotes/origin/main "$moved_promotion_base_oid"
 PROMOTION_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
 cat >"$promotion_receipt" <<EOF
-{"receipt_type":"oasis7_ci_ready_receipt","issuer":"github_live_query","repository":"example/oasis7","task_uid":"$TASK_UID","task_issue_number":123,"pr_number":999,"base_oid":"$COMPARISON_OID","head_oid":"$PROMOTION_HEAD","check_name":"required-gate","check_app_id":42,"check_run_id":9,"planner_digest":"fixture","planner_config_sha256":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","run_rust_baseline":true,"conclusion":"success","observed_at":"2000-01-01T00:00:00+00:00","review_evidence_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+{"receipt_type":"oasis7_ci_ready_receipt","issuer":"github_live_query","repository":"eng-cc/oasis7","task_uid":"$TASK_UID","task_issue_number":123,"pr_number":999,"base_oid":"$COMPARISON_OID","head_oid":"$PROMOTION_HEAD","check_name":"required-gate","check_app_id":42,"check_run_id":9,"planner_digest":"fixture","planner_config_sha256":"sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc","run_rust_baseline":true,"conclusion":"success","observed_at":"2000-01-01T00:00:00+00:00","review_evidence_digest":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
 EOF
 promotion_receipt_helper="$TMPDIR/promotion-receipt-helper.py"
 cat >"$promotion_receipt_helper" <<'PY'
@@ -1602,6 +1883,9 @@ with open(os.environ["TEST_GH_LOG"],"a") as f: f.write("record-pr ordinary\n")
 PY
 chmod +x "$promotion_receipt_helper" "$promotion_project_helper"
 
+PROMOTION_PR_STATE_TSV=$'true\tOPEN\t__none__\t'"$COMPARISON_OID"
+PROMOTION_ALREADY_READY_PR_STATE_TSV=$'false\tOPEN\t__none__\t'"$COMPARISON_OID"
+
 set_promotion_ready_truth() {
   python3 - "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" "$TASK_UID" <<'PY'
 import json,sys
@@ -1622,7 +1906,7 @@ PY
 set_promotion_ready_truth
 promotion_log="$TMPDIR/gh-promotion.log"
 PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
-PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'true\tOPEN\t' \
+PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV="$PROMOTION_PR_STATE_TSV" \
   run_prepare "$promotion_log" "$TMPDIR/git-promotion.log" --promote-draft "$promotion_receipt" >/dev/null
 python3 - "$promotion_log" <<'PY'
 import sys
@@ -1654,7 +1938,7 @@ PY
   identity_err="$TMPDIR/promotion-identity-$identity_case.err"
   if TEST_GH_PROMOTION_ISSUE_JSON="$identity_issue" \
     PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
-    PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'true\tOPEN\t' \
+    PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV="$PROMOTION_PR_STATE_TSV" \
       run_prepare "$identity_log" "$TMPDIR/git-promotion-identity-$identity_case.log" --promote-draft "$promotion_receipt" >/dev/null 2>"$identity_err"; then
     echo "promotion accepted noncanonical Issue identity: $identity_case" >&2
     exit 1
@@ -1673,7 +1957,7 @@ set_promotion_ready_truth
 retargeted_base_log="$TMPDIR/gh-promotion-retargeted-base.log"
 retargeted_base_err="$TMPDIR/retargeted-base.err"
 if PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
-  PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'true\tOPEN\t' TEST_PR_BASE_REF=release \
+  PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV="$PROMOTION_PR_STATE_TSV" TEST_PR_BASE_REF=release \
     run_prepare "$retargeted_base_log" "$TMPDIR/git-promotion-retargeted-base.log" --promote-draft "$promotion_receipt" >/dev/null 2>"$retargeted_base_err"; then
   echo "promotion must reject a PR retargeted to another base branch at the same base OID" >&2
   exit 1
@@ -1695,7 +1979,7 @@ set_promotion_ready_truth
 caller_override_log="$TMPDIR/gh-promotion-caller-base-override.log"
 caller_override_err="$TMPDIR/promotion-caller-base-override.err"
 if PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
-  PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'true\tOPEN\t' TEST_PR_BASE_REF=release \
+  PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV="$PROMOTION_PR_STATE_TSV" TEST_PR_BASE_REF=release \
     run_prepare "$caller_override_log" "$TMPDIR/git-promotion-caller-base-override.log" --base release --promote-draft "$promotion_receipt" >/dev/null 2>"$caller_override_err"; then
   echo "promotion must reject a caller base override that differs from task default_branch" >&2
   exit 1
@@ -1720,7 +2004,7 @@ set_promotion_ready_truth
 stale_default_log="$TMPDIR/gh-promotion-stale-default.log"
 stale_default_err="$TMPDIR/promotion-stale-default.err"
 if PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
-  PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'true\tOPEN\t' TEST_PR_BASE_REF=main TEST_GH_DEFAULT_BRANCH=release \
+  PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV="$PROMOTION_PR_STATE_TSV" TEST_PR_BASE_REF=main TEST_GH_DEFAULT_BRANCH=release \
     run_prepare "$stale_default_log" "$TMPDIR/git-promotion-stale-default.log" --promote-draft "$promotion_receipt" >/dev/null 2>"$stale_default_err"; then
   echo "promotion must reject stale task default_branch after repository default drift" >&2
   exit 1
@@ -1729,7 +2013,7 @@ if ! grep -Eq 'live repository default_branch|repository default' "$stale_defaul
   echo "stale-default promotion failed for an unrelated reason: $(cat "$stale_default_err")" >&2
   exit 1
 fi
-if ! grep -Fq 'api repos/example/oasis7 --jq .default_branch' "$stale_default_log"; then
+if ! grep -Fq 'api repos/eng-cc/oasis7 --jq .default_branch' "$stale_default_log"; then
   echo "stale-default promotion did not perform the fresh repository default read: $(cat "$stale_default_log")" >&2
   exit 1
 fi
@@ -1746,7 +2030,7 @@ set_promotion_ready_truth
 missing_default_log="$TMPDIR/gh-promotion-missing-default.log"
 missing_default_err="$TMPDIR/promotion-missing-default.err"
 if PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
-  PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'true\tOPEN\t' TEST_PR_BASE_REF=main TEST_GH_DEFAULT_BRANCH= \
+  PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV="$PROMOTION_PR_STATE_TSV" TEST_PR_BASE_REF=main TEST_GH_DEFAULT_BRANCH= \
     run_prepare "$missing_default_log" "$TMPDIR/git-promotion-missing-default.log" --promote-draft "$promotion_receipt" >/dev/null 2>"$missing_default_err"; then
   echo "promotion must reject missing live repository default_branch authority" >&2
   exit 1
@@ -1755,7 +2039,7 @@ if ! grep -Eq 'live repository default_branch' "$missing_default_err"; then
   echo "missing-default promotion failed for an unrelated reason: $(cat "$missing_default_err")" >&2
   exit 1
 fi
-if ! grep -Fq 'api repos/example/oasis7 --jq .default_branch' "$missing_default_log"; then
+if ! grep -Fq 'api repos/eng-cc/oasis7 --jq .default_branch' "$missing_default_log"; then
   echo "missing-default promotion did not perform the fresh repository default read: $(cat "$missing_default_log")" >&2
   exit 1
 fi
@@ -1774,7 +2058,7 @@ PY
 set_promotion_ready_truth
 wrong_base_promotion_log="$TMPDIR/gh-promotion-wrong-base.log"
 if PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
-  PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'true\tOPEN\t' \
+  PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV="$PROMOTION_PR_STATE_TSV" \
     run_prepare "$wrong_base_promotion_log" "$TMPDIR/git-promotion-wrong-base.log" --promote-draft "$promotion_receipt" >/dev/null 2>&1; then
   echo "promotion must reject a receipt whose base OID differs from the reviewed packet" >&2
   exit 1
@@ -1795,7 +2079,7 @@ PY
 set_promotion_ready_truth
 wrong_head_promotion_log="$TMPDIR/gh-promotion-wrong-head.log"
 if PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
-  PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'true\tOPEN\t' \
+  PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV="$PROMOTION_PR_STATE_TSV" \
     run_prepare "$wrong_head_promotion_log" "$TMPDIR/git-promotion-wrong-head.log" --promote-draft "$promotion_receipt" >/dev/null 2>&1; then
   echo "promotion must reject a receipt bound to a different source head" >&2
   exit 1
@@ -1819,7 +2103,7 @@ open(p,"w").write(json.dumps(r)+"\n")
 PY
 set_promotion_ready_truth
 if PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
-  PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'true\tOPEN\t' \
+  PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV="$PROMOTION_PR_STATE_TSV" \
     run_prepare "$TMPDIR/gh-promotion-mismatch.log" "$TMPDIR/git-promotion-mismatch.log" --promote-draft "$promotion_receipt" >/dev/null 2>&1; then
   echo "promotion must reject a receipt whose authority digest differs from review evidence" >&2
   exit 1
@@ -1833,7 +2117,7 @@ PY
 set_promotion_ready_truth
 recovery_log="$TMPDIR/gh-promotion-recovery.log"
 PREPARE_TASK_PR_CI_READY_RECEIPT_PATH="$promotion_receipt_helper" \
-PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV=$'false\tOPEN\t' \
+PREPARE_TASK_PR_PROJECT_TASK_PATH="$promotion_project_helper" TEST_PR_STATE_TSV="$PROMOTION_ALREADY_READY_PR_STATE_TSV" \
   run_prepare "$recovery_log" "$TMPDIR/git-promotion-recovery.log" --promote-draft "$promotion_receipt" >/dev/null
 if grep -q '^pr ready ' "$recovery_log"; then
   echo "already-ready recovery must not call gh pr ready" >&2
@@ -1865,7 +2149,7 @@ title_log="$TMPDIR/gh-title.log"
 title_git_log="$TMPDIR/git-title.log"
 title_out="$TMPDIR/title.out"
 title_err="$TMPDIR/title.err"
-if ! run_prepare "$title_log" "$title_git_log" --draft-candidate --title "Fixture PR title" >"$title_out" 2>"$title_err"; then
+if ! run_bound_draft_candidate "$title_log" "$title_git_log" --draft-candidate --title "Fixture PR title" >"$title_out" 2>"$title_err"; then
   cat "$title_err" >&2
   exit 1
 fi
@@ -1896,8 +2180,8 @@ closed_reuse_log="$TMPDIR/gh-closed-reuse.log"
 closed_reuse_git_log="$TMPDIR/git-closed-reuse.log"
 closed_reuse_out="$TMPDIR/closed-reuse.out"
 closed_reuse_err="$TMPDIR/closed-reuse.err"
-TEST_EXISTING_PR_JSON="[{\"url\":\"https://github.com/example/oasis7/pull/closed\",\"headRefName\":\"$SMOKE_BRANCH\",\"baseRefName\":\"main\",\"state\":\"CLOSED\",\"headRepository\":{\"name\":\"oasis7\"},\"headRepositoryOwner\":{\"login\":\"example\"}}]" \
-  run_prepare "$closed_reuse_log" "$closed_reuse_git_log" --draft-candidate \
+TEST_EXISTING_PR_JSON="[{\"url\":\"https://github.com/eng-cc/oasis7/pull/closed\",\"headRefName\":\"$SMOKE_BRANCH\",\"baseRefName\":\"main\",\"state\":\"CLOSED\",\"headRepository\":{\"name\":\"oasis7\"},\"headRepositoryOwner\":{\"login\":\"eng-cc\"}}]" \
+  run_bound_draft_candidate "$closed_reuse_log" "$closed_reuse_git_log" --draft-candidate \
   >"$closed_reuse_out" 2>"$closed_reuse_err"
 python3 - "$closed_reuse_log" "$closed_reuse_out" "$closed_reuse_err" "$SMOKE_BRANCH" <<'PY'
 from pathlib import Path
@@ -1919,7 +2203,7 @@ reset_project_mapping_after_record_pr
 foreign_log="$TMPDIR/gh-foreign.log"
 foreign_git_log="$TMPDIR/git-foreign.log"
 TEST_EXISTING_PR_JSON="[{\"url\":\"https://github.com/foreign/oasis7/pull/7\",\"headRefName\":\"$SMOKE_BRANCH\",\"baseRefName\":\"main\",\"state\":\"OPEN\",\"headRepository\":{\"name\":\"oasis7\"},\"headRepositoryOwner\":{\"login\":\"foreign\"}}]" \
-  run_prepare "$foreign_log" "$foreign_git_log" --draft-candidate >"$TMPDIR/foreign.out" 2>"$TMPDIR/foreign.err"
+  run_bound_draft_candidate "$foreign_log" "$foreign_git_log" --draft-candidate >"$TMPDIR/foreign.out" 2>"$TMPDIR/foreign.err"
 grep -F "pr create --base main --head $SMOKE_BRANCH" "$foreign_log" >/dev/null
 if grep -F 'foreign/oasis7/pull/7' "$TMPDIR/foreign.out" >/dev/null; then
   echo "foreign same-name head PR must not be reused" >&2; exit 1
@@ -1928,8 +2212,8 @@ reset_project_mapping_after_record_pr
 
 merged_log="$TMPDIR/gh-merged.log"
 merged_git_log="$TMPDIR/git-merged.log"
-if TEST_EXISTING_PR_JSON="[{\"url\":\"https://github.com/example/oasis7/pull/8\",\"headRefName\":\"$SMOKE_BRANCH\",\"baseRefName\":\"main\",\"state\":\"MERGED\",\"headRepository\":{\"name\":\"oasis7\"},\"headRepositoryOwner\":{\"login\":\"example\"}}]" \
-  run_prepare "$merged_log" "$merged_git_log" --draft-candidate >"$TMPDIR/merged.out" 2>"$TMPDIR/merged.err"; then
+if TEST_EXISTING_PR_JSON="[{\"url\":\"https://github.com/eng-cc/oasis7/pull/8\",\"headRefName\":\"$SMOKE_BRANCH\",\"baseRefName\":\"main\",\"state\":\"MERGED\",\"headRepository\":{\"name\":\"oasis7\"},\"headRepositoryOwner\":{\"login\":\"eng-cc\"}}]" \
+  run_bound_draft_candidate "$merged_log" "$merged_git_log" --draft-candidate >"$TMPDIR/merged.out" 2>"$TMPDIR/merged.err"; then
   echo "MERGED exact PR must block replacement creation" >&2; exit 1
 fi
 grep -F 'already MERGED; reconcile task truth' "$TMPDIR/merged.err" >/dev/null
@@ -1943,7 +2227,7 @@ printf 'Task body without GitHub task reference.\n' > "$bad_body_file"
 bad_body_log="$TMPDIR/gh-bad-body.log"
 bad_body_git_log="$TMPDIR/git-bad-body.log"
 bad_body_err="$TMPDIR/bad-body.err"
-if run_prepare "$bad_body_log" "$bad_body_git_log" --draft-candidate --body-file "$bad_body_file" >/dev/null 2>"$bad_body_err"; then
+if run_bound_draft_candidate "$bad_body_log" "$bad_body_git_log" --draft-candidate --body-file "$bad_body_file" >/dev/null 2>"$bad_body_err"; then
   echo "expected --body-file without task reference to fail" >&2
   exit 1
 fi
@@ -1971,7 +2255,7 @@ for closing_link in \
   "Fixes https://github.com/eng-cc/oasis7/issues/123"; do
   closing_body_file="$TMPDIR/closing-pr-body.md"
   printf 'Refs #123\n%s\n' "$closing_link" > "$closing_body_file"
-  if run_prepare "$TMPDIR/gh-closing-body.log" "$TMPDIR/git-closing-body.log" \
+  if run_bound_draft_candidate "$TMPDIR/gh-closing-body.log" "$TMPDIR/git-closing-body.log" \
     --draft-candidate --body-file "$closing_body_file" >/dev/null 2>"$TMPDIR/closing-body.err"; then
     echo "expected qualified auto-close link to fail: $closing_link" >&2
     exit 1
@@ -1983,7 +2267,7 @@ behind_log="$TMPDIR/gh-behind.log"
 behind_git_log="$TMPDIR/git-behind.log"
 behind_out="$TMPDIR/behind.out"
 behind_err="$TMPDIR/behind.err"
-TEST_REV_LIST_COUNTS="1 2" run_prepare "$behind_log" "$behind_git_log" --draft-candidate >"$behind_out" 2>"$behind_err"
+TEST_REV_LIST_COUNTS="1 2" run_bound_draft_candidate "$behind_log" "$behind_git_log" --draft-candidate >"$behind_out" 2>"$behind_err"
 
 python3 - "$behind_log" "$behind_git_log" "$behind_out" "$behind_err" "$SMOKE_BRANCH" <<'PY'
 from __future__ import annotations
@@ -2136,10 +2420,8 @@ if review["status"] != "passed":
     raise SystemExit(f"expected generated PM views to be allowed after review, got: {review}")
 PY
 
-reset_smoke_branch_to_base
-write_changed_path_fixture "crates/oasis7_node/src/network_bridge.rs" "oasis7_node"
 node_required_json="$TMPDIR/node-required.json"
-run_prepare "$TMPDIR/gh-node-required.log" "$TMPDIR/git-node-required.log" --json >"$node_required_json"
+run_cargo_package_required_fixture "crates/oasis7_node/src/network_bridge.rs" "oasis7_node" "node-required" "$node_required_json"
 
 python3 - "$node_required_json" <<'PY'
 from __future__ import annotations
@@ -2167,10 +2449,8 @@ if "node:crates/oasis7_node/src/network_bridge.rs" not in reason:
     raise SystemExit(f"expected node reason, got: {reason}")
 PY
 
-reset_smoke_branch_to_base
-write_changed_path_fixture "crates/oasis7_net/src/lib.rs" "oasis7_net"
 net_required_json="$TMPDIR/net-required.json"
-run_prepare "$TMPDIR/gh-net-required.log" "$TMPDIR/git-net-required.log" --json >"$net_required_json"
+run_cargo_package_required_fixture "crates/oasis7_net/src/lib.rs" "oasis7_net" "net-required" "$net_required_json"
 
 python3 - "$net_required_json" <<'PY'
 from __future__ import annotations
@@ -2197,10 +2477,8 @@ if "net:crates/oasis7_net/src/lib.rs" not in reason:
     raise SystemExit(f"expected net reason, got: {reason}")
 PY
 
-reset_smoke_branch_to_base
-write_changed_path_fixture "crates/oasis7_viewer/src/lib.rs" "oasis7_viewer"
 viewer_required_json="$TMPDIR/viewer-required.json"
-run_prepare "$TMPDIR/gh-viewer-required.log" "$TMPDIR/git-viewer-required.log" --json >"$viewer_required_json"
+run_cargo_package_required_fixture "crates/oasis7_viewer/src/lib.rs" "oasis7_viewer" "viewer-required" "$viewer_required_json"
 
 python3 - "$viewer_required_json" <<'PY'
 from __future__ import annotations
@@ -2262,6 +2540,11 @@ if required.get("planner_config_sha256") != expected_digest:
         f"expected {expected_digest!r}, got {required}"
     )
 
+planner_config = json.loads((fixture_root / "scripts/ci-required-scope.v2.json").read_text(encoding="utf-8"))
+resources = set(planner_config["baseline_resources"])
+for capability in expected_capabilities.split(";"):
+    resources.update(planner_config["resource_requirements"][capability])
+
 expected_selectors = {
     "OASIS7_CI_EXECUTION_CONTRACT": "required-domain-split/v1",
     "OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS": "false",
@@ -2286,7 +2569,7 @@ expected_selectors = {
     "OASIS7_CI_RUN_SITE_CONTRACT_TESTS": "false",
     "OASIS7_CI_RUN_CODEX_AGENT_CONFIG_VALIDATION": "false",
     "OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS": "false",
-    "OASIS7_CI_RUN_RUST_BASELINE": "false",
+    "OASIS7_CI_RUN_RUST_BASELINE": "true" if "rust_toolchain" in resources else "false",
 }
 if expected_true_selector not in expected_selectors:
     raise SystemExit(f"unknown expected planner selector: {expected_true_selector}")
@@ -2302,10 +2585,6 @@ if missing:
         f"missing {missing}: {command}"
     )
 
-planner_config = json.loads((fixture_root / "scripts/ci-required-scope.v2.json").read_text(encoding="utf-8"))
-resources = set(planner_config["baseline_resources"])
-for capability in expected_capabilities.split(";"):
-    resources.update(planner_config["resource_requirements"][capability])
 for resource in (
     "python", "markdown", "rust_toolchain", "node", "system_deps", "trunk", "wasm_target"
 ):
