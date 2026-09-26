@@ -567,7 +567,7 @@
     },
     {
       "path": "doc/engineering/workflow/source-of-truth.md",
-      "content_sha256": "aa4b20691f8d63a2b0c6b2fd03ce6666eb6dc462338ff72fff621d38a1c817aa",
+      "content_sha256": "57fdd0e6c1cf7742dc52ba530926082c085c372ab062faa3416c61cb4329af75",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
