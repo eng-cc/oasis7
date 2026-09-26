@@ -1449,7 +1449,7 @@
     },
     {
       "path": "doc/p2p/consensus/consensus-code-consolidation-to-oasis7-consensus.design.md",
-      "content_sha256": "138befa9c33d40d83475938c9af10f3b547d47e806189eade6d6bbad304587d8",
+      "content_sha256": "1b028c4323dd70233ec4eb86951bf392088efc5efdfae1ac911d5f8540b0b674",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1463,7 +1463,7 @@
     },
     {
       "path": "doc/p2p/consensus/consensus-code-consolidation-to-oasis7-consensus.prd.md",
-      "content_sha256": "f093572a50d66420b699b66568db46fc882a8c985ad8672eedd152eca8173a27",
+      "content_sha256": "6947fc754a33784d47caa3ca2b58f899494b735184bba957ae61d46801298efd",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1477,7 +1477,7 @@
     },
     {
       "path": "doc/p2p/design.md",
-      "content_sha256": "7016ea2d1e20369ed782fec96921952597fd394651e4246cc03f465aa9739110",
+      "content_sha256": "64771a8a5834eb7536e6c089f2b83751d07336848ada9e49cdbadaa5996f839f",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1505,7 +1505,7 @@
     },
     {
       "path": "doc/p2p/distfs/distfs-distributed-resilience.design.md",
-      "content_sha256": "1da9aada83dfc12cf659adbed0d6175aae6bcbd5b2b3d8c274dc10dacd05e042",
+      "content_sha256": "fa52ab88601a422c6ebc675d39a6dd7d7661ab661709673372b65035b0312c68",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1519,7 +1519,7 @@
     },
     {
       "path": "doc/p2p/distfs/distfs-distributed-resilience.prd.md",
-      "content_sha256": "27baa331cbc7d7e4d992000b8a33574f51968f47c5073af7a583e451aa1bcc7f",
+      "content_sha256": "93bdf4bd64254d3957bf03abbffaf4aea0cadfed42dd0a26c2a3e230e739bf4f",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1561,7 +1561,7 @@
     },
     {
       "path": "doc/p2p/distfs/distfs-production-hardening.design.md",
-      "content_sha256": "3af8ecd6905e0a43016ea7ccb9953803afd2de34a0ec4c7eeb49cd7f06975a9f",
+      "content_sha256": "12ef636b4fe6820aeceaf75d6624031072c60f884bc95bbbf19f31e95b22a2f5",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1575,7 +1575,7 @@
     },
     {
       "path": "doc/p2p/distfs/distfs-production-hardening.prd.md",
-      "content_sha256": "01f291deb82747482b46c89b754973ed71b968129094cf9b2510fbb06e89b08e",
+      "content_sha256": "67954f2eea410487c0e686f4008a21aacd12b187fe45fa25161b0b0a7b3c4962",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1729,7 +1729,7 @@
     },
     {
       "path": "doc/p2p/node/node-identity-replication-contract.design.md",
-      "content_sha256": "6bbf55020046332711649c560341cd01ca931bd70aa2411e218b220bbb1a0f4b",
+      "content_sha256": "7bdab3c011a3282a8dab79f75990e481b5bebb13df82c32b09725c95953c9590",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1743,7 +1743,7 @@
     },
     {
       "path": "doc/p2p/node/node-identity-replication-contract.prd.md",
-      "content_sha256": "6a72ae229c4cca7c78f9a36b324dd3166ec3d4422305fa2959e0b6d36c6b0837",
+      "content_sha256": "094c62f261c6fe7514a61e58c801e5caf0dd33aae789b55b785210f642136ddc",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1911,7 +1911,7 @@
     },
     {
       "path": "doc/p2p/prd.md",
-      "content_sha256": "2810f8ca028acfecf085c8fdc15654f1b2c809be115b729752d866db82e994e2",
+      "content_sha256": "c6cbf1ce0f6b962e8531ce3768464a67667dc7b85765ad5093dc7f29b58b1c84",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
