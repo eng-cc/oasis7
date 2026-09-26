@@ -5,10 +5,11 @@
 - Approval and acceptance source: [GitHub Issue #3606](https://github.com/eng-cc/oasis7/issues/3606)
 - Implementation surfaces: [`scripts/ci-compile-metrics.sh`](../../../scripts/ci-compile-metrics.sh), [`scripts/ci-compile-metrics-gate.py`](../../../scripts/ci-compile-metrics-gate.py), [`scripts/ci-compile-metrics-contract.test.sh`](../../../scripts/ci-compile-metrics-contract.test.sh), and [`.github/workflows/compile-metrics.yml`](../../../.github/workflows/compile-metrics.yml)
 
-This document defines the technical contract for the approved first Compile
-Metrics V2 slice: an opt-in warm/no-op `cargo check` measurement. It is a
-design authority, not a task ledger. Task status, execution evidence, review
-returns, and mutable acceptance state remain in the GitHub task issue.
+This document records the technical contract and current behavior for the
+approved first Compile Metrics V2 slice: an opt-in warm/no-op `cargo check`
+measurement. It is a design authority, not a task ledger. Task status,
+execution evidence, review returns, and mutable acceptance state remain in the
+GitHub task issue.
 
 ## 1. Purpose and scope
 
@@ -43,22 +44,29 @@ planner, and default workflow behavior remain unchanged.
 
 ## 2. Current facts and evidence boundary
 
-These facts describe the repository surfaces that the target contract extends;
-they are not a claim that the warm option is already implemented.
+These facts describe the current repository behavior. The warm option, manual
+workflow input, and optional threshold validation are implemented; the
+following sections specify their contract and boundaries.
 
 | Surface | Current behavior | Consequence for V2 |
 | --- | --- | --- |
-| `ci-compile-metrics.sh` | Measures one offline/locked `cargo check` per checkout, plus an optional release build and binary size. It counts one forward dependency tree and records commit OIDs, package identity, feature mode, and metric values. | `cargo_check_seconds` must remain the cold value. The warm value needs a distinct field and an identity bit. |
-| Cargo target isolation | Current and baseline check builds use separate temporary target directories. Check and release builds are also separated. `CARGO_HOME` may be shared for registry/source data. | Warm reuse must happen only within one checkout's existing run-owned check target directory outside the checkout; current and baseline must never share target outputs. |
+| `ci-compile-metrics.sh` | Measures one offline/locked cold `cargo check` per checkout by default. With `--measure-warm-check`, it immediately measures an identical no-op check after the cold check. Optional release build and binary size remain separate. It records commit OIDs, package identity, feature mode, and metric values. | `cargo_check_seconds` remains the cold value; warm duration and its identity bit are recorded separately. |
+| Cargo target isolation | Each current/baseline checkout has a separate run-owned external check target. Cold and warm checks reuse that target within the same checkout; release builds use a separate target. `CARGO_HOME` may be shared for registry/source data. | Reuse stays within one checkout; current and baseline never share target outputs. |
 | Measurement environment | Cargo calls normalize `CARGO_INCREMENTAL=0`, development/test debug settings, and an unset `RUSTC_WRAPPER`. Timed check/build commands run `--offline --locked` after host-target prefetch. | The warm check must use the same normalization and must not introduce network or wrapper-dependent timing. |
-| `.github/workflows/compile-metrics.yml` | `workflow_dispatch` runs a three-platform matrix. `baseline_ref` is optional. Thresholds are manual string inputs; cold gates run only when a baseline is available. | Warm measurement is an opt-in manual input. It does not become an automatic PR trigger or a new required check in this slice. |
-| `ci-compile-metrics-gate.py` | Validates measurement identity, commit provenance, unique known metric rows, finite non-negative values, arithmetic, and configured cold thresholds. | Warm identity and row validation must use the same fail-closed rules. No implicit warm threshold may be added. |
-| Performance matrix | Compile metrics are currently `on-demand`; the documented gap is cold-only coverage and the cost/noise of three-platform paired runs. | The matrix should point to this design and state that warm/no-op remains opt-in/report-only unless a threshold is explicitly supplied. |
+| `.github/workflows/compile-metrics.yml` | `workflow_dispatch` runs a three-platform matrix. `baseline_ref` is optional. `measure_warm_check` defaults to `false`; the warm threshold defaults to empty and is rejected unless warm measurement is enabled. | Warm measurement remains manual and opt-in. It does not add an automatic PR trigger or required check. |
+| `ci-compile-metrics-gate.py` | Validates V2 warm identity/value fields and metric rows fail-closed. It evaluates a warm threshold only when explicitly supplied with a baseline; without a baseline, the summary reports that the threshold was skipped. | Warm reporting has no default threshold; selected thresholds retain fail-closed validation and comparison. |
+| Performance matrix | Compile metrics remain `on-demand`; warm/no-op collection is opt-in and report-only unless a caller explicitly supplies a warm threshold. | Keep this manual path separate from required-gate and do not infer a default threshold. |
 
 The current harness has no touched-source incremental scenario. A warm/no-op
 result must never be presented as evidence for `touch-proto`, `touch-node`,
 `touch-launcher-ui`, or `touch-wasm-abi`; those are future scenarios described
 in Section 11.
+
+### 2.1 需求承接与分配表
+
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| [Testing technical specifications](../prd.md#4-technical-specifications) | Keep compile measurements scoped to their selected surface and distinguish manual performance evidence from required-gate or release claims. | [Warm measurement rollout](#9-rollout-and-rollback) | `qa_engineer`; compile-metrics workflow maintainers | No touched-source incremental claim, live hosted-runner baseline, or release-readiness claim follows from a warm/no-op sample. |
 
 ## 3. Non-goals and invariants
 
@@ -410,12 +418,12 @@ missing `comparison.json` is normally a consequence, not the root failure.
 
 ## 9. Rollout and rollback
 
-### Phase A: contract implementation behind an opt-in flag
+### Phase A: contract implementation (implemented; still opt-in)
 
-Implement the CLI option, workflow inputs, schema fields, gate option, and
-contract tests without changing default workflow triggers or cold thresholds.
-Run current-only warm measurements to validate command identity and artifact
-shape. This phase does not make a release or merge claim from a warm number.
+The CLI option, workflow inputs, schema fields, gate option, and contract tests
+are implemented. Default workflow triggers and cold thresholds remain
+unchanged. Current-only warm measurements validate command identity and
+artifact shape; they do not make a release or merge claim from a warm number.
 
 ### Phase B: paired report-only observation
 
@@ -547,11 +555,18 @@ bash ./scripts/ci-compile-metrics-contract.test.sh
 git diff --check
 ```
 
-The first command is a future implementation contract for this design; the
-documentation-only authoring slice need not claim that it passes until the
-implementation exists.
+The contract test exercises the implemented warm path, including command
+identity, opt-in defaults, threshold validation, report-only output, and
+failure behavior. Run it alongside the documentation governance check when
+updating this authority.
 
 ## 11. Future touch-based incremental metrics
+
+### 11.1 验证映射表
+
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [Testing technical specifications](../prd.md#4-technical-specifications) | [Warm measurement rollout](#9-rollout-and-rollback) | Verify that the default run records cold-only metrics, opt-in mode records a separate no-op warm check, and only an explicit supported threshold can evaluate a paired warm comparison. | Run `bash ./scripts/ci-compile-metrics-contract.test.sh` ([contract test](../../../scripts/ci-compile-metrics-contract.test.sh)); its fake-Cargo fixtures cover the disabled default, command/target identity, report-only output, selected threshold, and failure behavior on this candidate. | Issue #4065 implementation evidence and exact-head required CI receipt. | Does not establish hosted-runner performance, platform noise bounds, or release readiness. |
 
 Warm/no-op is a prerequisite observation, not the final developer inner-loop
 metric. A later Compile Metrics V2 slice may add these independent scenarios:

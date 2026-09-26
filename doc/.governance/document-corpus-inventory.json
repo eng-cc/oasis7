@@ -3843,7 +3843,7 @@
     },
     {
       "path": "doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.design.md",
-      "content_sha256": "cac0ae0257bbff09ff4110d677449b85d794a3f8fad9c404f02d579b741eeea4",
+      "content_sha256": "c9c41c05e250ef49d978e631935311e74ac7b129c311a6282d92c57e37801438",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -3857,7 +3857,7 @@
     },
     {
       "path": "doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md",
-      "content_sha256": "8c8162ed154e6f1487061167e79a647e870f328b15a84558b36126fd15fcd8ed",
+      "content_sha256": "b32a78a9185a9e62208d989a03a68d22ed064681eebe8be62f2d808d9e7d0cef",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -4347,7 +4347,7 @@
     },
     {
       "path": "doc/testing/performance/compile-metrics-v2-warm-check.design.md",
-      "content_sha256": "84f9bcdeef5c1dcd5161adc8af037ad3f9ceb7ba59f2a4042561923d4e57ed54",
+      "content_sha256": "eed4abfd223500e09fea4665d6a23c5ebaedd086cc890dd21f448c5f817fe7e0",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -4361,7 +4361,7 @@
     },
     {
       "path": "doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md",
-      "content_sha256": "fd61b0ae091bf91aef5eb0b3464332e31880bc6eb5fbc3fc7a5596fd529d85c2",
+      "content_sha256": "2f753f244af1a6ec0668b15ec1f6f5a21a19939943e833a29c6f353a6a047979",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
