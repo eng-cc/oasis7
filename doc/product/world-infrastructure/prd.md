@@ -135,6 +135,7 @@
 
 该边界保持 **world-first**：工业结果由同一 `world_id`、版本化执行与 committed receipt 决定，而不是由某个设施进程或客户端缓存决定；保持 **emergence-first**：玩家/Agent 可在约束内选择来源、工厂、路线和恢复，不获得预写的免费转换；保持 **persistent / auditable**：root、child lineage、批次、receipt、损耗与 terminal disposition 跨重连、恢复和 replay 延续；保持 **extensible**：未来增加新的工厂、配方、材料或物流 profile 时复用同一组合边界而不改变既有历史。
 
+<a id="world-infrastructure-done"></a>
 ## 5. Done：成功标准与验收
 
 - SC-1：一个受治理验证者集合在唯一 `world_id` 上形成可验证的 deterministic BFT commit certificate；错误签名、阈值、验证者集合或 round 状态均不能推进历史。

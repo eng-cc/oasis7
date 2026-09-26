@@ -15,7 +15,7 @@
     },
     {
       "path": "doc/.governance/document-semantic-review-overrides.json",
-      "content_sha256": "b7c163124080cc63b932b5056cab9d88897457e311495a11e5fa8489f32e4182"
+      "content_sha256": "a0d6ccab5fa2b88dd8f666d7eb4b12688371895273cface602c284f928b0053c"
     },
     {
       "path": "doc/testing/evidence/inventory.json",
@@ -2653,7 +2653,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/prd.md",
-      "content_sha256": "adcec6c62b84c42500cd538d9cc5d601f8daf064be55d00a80ed03a3b715c4dd",
+      "content_sha256": "ff01adf02c849a7c5704622a728b87a6c4a9ae4d324237abb8ccd620cda7aaa9",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -4151,7 +4151,7 @@
     },
     {
       "path": "doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md",
-      "content_sha256": "1e8ada4d8cd666faf2309b030886c2b297bb81b37267f647e85c4beeb14c4ebb",
+      "content_sha256": "acf325f9129f86955f87aaa061564796ef0e03e50e0d3b408eeb0a59433cf397",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
