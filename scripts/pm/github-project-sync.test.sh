@@ -147,7 +147,8 @@ response = {
 }
 calls = []
 sync.github_token = lambda: "TEST_TOKEN"
-sync.graphql_request = lambda token, query, variables: calls.append((token, query, variables)) or response
+# Fake the HTTP response, not graphql_request: it unwraps payload["data"].
+sync.github_json_request = lambda token, url, payload: calls.append((token, url, payload)) or response
 
 values = sync.read_project_item_field_values("PROJECT_ID", "ITEM_ID")
 assert values == {
@@ -155,10 +156,12 @@ assert values == {
     "Status": "In Progress",
 }, values
 assert calls[0][0] == "TEST_TOKEN", calls
-assert "$item: ID!" in calls[0][1], calls
-assert "$project" not in calls[0][1], calls
-assert "project { id }" in calls[0][1], calls
-assert calls[0][2] == {"item": "ITEM_ID"}, calls
+assert calls[0][1] == "https://api.github.com/graphql", calls
+request = calls[0][2]
+assert "$item: ID!" in request["query"], request
+assert "$project" not in request["query"], request
+assert "project { id }" in request["query"], request
+assert request["variables"] == {"item": "ITEM_ID"}, request
 
 response["data"]["node"]["project"]["id"] = "OTHER_PROJECT_ID"
 try:

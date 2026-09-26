@@ -732,7 +732,7 @@ def read_project_item_field_values(project_id: str, item_id: str) -> dict[str, s
     }
     """
     payload = graphql_request(token, query, {"item": item_id})
-    node = ((payload.get("data") or {}).get("node") or {})
+    node = payload.get("node") or {}
     if str(((node.get("project") or {}).get("id") or "")) != project_id:
         raise RuntimeError("Project item belongs to a different Project")
     values: dict[str, str] = {}
