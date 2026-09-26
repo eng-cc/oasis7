@@ -89,3 +89,35 @@
 - 将 `chain_node_tick_ms` 写成 slot duration 会造成跨 launcher/control-plane 的时序漂移。
 - 将 strict-lag recovery 写成 sticky retry 或 guard bypass 会损害确定性与安全顺序。
 - 本专题不定义 slot 经济、奖励、validator 准入、签名方案、fee policy、外部节点 runbook 或 release verdict。
+
+## 专业接受与证据边界
+当前 timing 合同 SC-1/2/3 与 PRD-WORLD_RUNTIME-001 原样保留，接受 [同输入执行](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001) 的共享时序输入子义务及 [同世界恢复](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002) 的 counters/config 连续性子义务。准确设计与分项验证见 [timing design](chain-pos-control-plane.design.md#pos-timing-state)。默认数值仍来自 config/chain-pos-defaults.env，本文不复制常量。
+logical slot/tick 不等于 canonical activation height；恢复 timing、status green 或一次 off-phase edge 不选择 manifest、开放写入、刷新工业 lease/priority 或 reset W。产品根 SC-1/3/4/7/9 的其余 certificate/service/industrial 义务分别由 root runtime/P2P/domain/ops/consumer 承接，不由 timing green 关闭。[Canonical version](../design.md#runtime-version-design)、[service gate](../design.md#runtime-recovery-design) 是 target 跨域约束，当前 timing 只保留全部既有 guards。§4 命令是验证入口，实际 candidate/config/environment/window/exit/artifact 由 task evidence 接收，本文无新执行/网络发行证据。
+
+<a id="pos-acceptance-registry"></a>
+### 时间合同分项接受定位
+以下分项保留旧 §2.1–2.4/SC-1–3 原义，配对设计逐行接受，不授予共识/服务/玩家规则。
+
+<a id="pos-accept-shared-formula"></a>
+- 共享genesis与整数logical_tick/slot/phase公式跨节点同输入同结果，missed accounting不补历史；设计接受与未运行验证见配对设计的 pos-case-shared-formula。
+
+<a id="pos-accept-config-rejection"></a>
+- duration/ticks正值、phase<tps，explicit非法CLI字段级拒绝；default config权威与透传；设计接受与未运行验证见配对设计的 pos-case-config-rejection。
+
+<a id="pos-accept-phase-guards"></a>
+- steady phase gate、next_slot条件及全部pending/replication/participation/proposer/signature/execution/finality guard；设计接受与未运行验证见配对设计的 pos-case-phase-guards。
+
+<a id="pos-accept-edge-nonsticky"></a>
+- strict next_slot<current本tick恢复edge，guard blocked即丢弃，next tick无继承；设计接受与未运行验证见配对设计的 pos-case-edge-nonsticky。
+
+<a id="pos-accept-admission-window"></a>
+- future/stale与target epoch不匹配拒绝，不借jitter放宽；设计接受与未运行验证见配对设计的 pos-case-admission-window。
+
+<a id="pos-accept-readonly-status"></a>
+- status immutable timing/counters，只读不推进slot/续租/制造evidence；poll≠slot；设计接受与未运行验证见配对设计的 pos-case-readonly-status。
+
+<a id="pos-accept-restart-monotonic"></a>
+- persistedconfig/counters一致，restart不倒退重复计；inconsistentfail closed保留诊断；设计接受与未运行验证见配对设计的 pos-case-restart-monotonic。
+
+<a id="pos-accept-replay-recorded"></a>
+- replay只按snapshot/events/log，不当前wall clock补proposal/block/event；设计接受与未运行验证见配对设计的 pos-case-replay-recorded。
