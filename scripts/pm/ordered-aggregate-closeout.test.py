@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import contextlib
+import datetime as dt
 import hashlib
 import importlib.util
 import io
 import json
 import pathlib
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -71,6 +73,167 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.task = load_module(TASK_PATH, "aggregate_closeout_task")
         cls.finalizer = load_module(FINALIZER_PATH, "aggregate_closeout_finalizer")
+
+    @staticmethod
+    def production_task_complete_claim() -> dict:
+        head = subprocess.check_output(
+            ["git", "-C", str(ROOT), "rev-parse", "HEAD"], text=True,
+        ).strip()
+        tree = subprocess.check_output(
+            ["git", "-C", str(ROOT), "rev-parse", "HEAD^{tree}"], text=True,
+        ).strip()
+        fingerprint = json.loads(subprocess.check_output(
+            [sys.executable, str(ROOT / "scripts/pm/repo-state-fingerprint.py"), str(ROOT)],
+            text=True,
+        ))
+        comparison_ref = subprocess.check_output(
+            ["git", "-C", str(ROOT), "rev-parse", "--verify", "HEAD^"], text=True,
+        ).strip()
+        return {
+            "claim_type": "task_complete",
+            "verify_command": "true",
+            "verified_at": dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+            "verification_exit_code": 0,
+            "status": "verified",
+            "allowed_to_claim": True,
+            "claim_message": "Fresh verification passed; the task can now be claimed complete.",
+            "blocked_phrase": "Do not claim the task is complete.",
+            "success_phrase": "Fresh verification passed; the task can now be claimed complete.",
+            "task_uid": UID,
+            "repository_fingerprint_before": fingerprint["sha256"],
+            "repository_fingerprint_after": fingerprint["sha256"],
+            "verification_epoch_stable": True,
+            "verification_mode": "detached_frozen_tree",
+            "frozen_source_head": head,
+            "frozen_source_tree": tree,
+            "comparison_ref": comparison_ref,
+            "verification_profile": "repository_required",
+            "repository_head": head,
+            "repository_index_sha256": fingerprint["index_sha256"],
+        }
+
+    def invoke_aggregate_closeout(self, claim: dict) -> tuple[list[str], str | None]:
+        with tempfile.TemporaryDirectory() as temp:
+            temp_root = pathlib.Path(temp)
+            paths = {}
+            for name, value in (
+                ("plan.json", {"plan": True}),
+                ("candidate.json", {"candidate": True}),
+                ("evidence.json", [{"evidence": True}]),
+                ("receipt.json", {"receipt_type": "oasis7_aggregate_task_complete"}),
+            ):
+                path = temp_root / name
+                path.write_text(json.dumps(value), encoding="utf-8")
+                paths[name] = path
+            record = {
+                "task_uid": UID, "repository": REPO, "issue_number": 4035,
+                "issue_url": f"https://github.com/{REPO}/issues/4035",
+                "status": "committed", "workflow_phase": "execution",
+                "completion_mode": "ordered_delivery_aggregate",
+                "project_item_id": "PVTI_1", "owner_role": "tpm",
+                "updated_at": (dt.datetime.now(dt.timezone.utc) - dt.timedelta(hours=1))
+                .isoformat().replace("+00:00", "Z"),
+                "aggregate_plan_comment_id": "6001", "aggregate_plan_sha256": "sha256:" + "3" * 64,
+                "claim_verifications": [],
+            }
+            issue_body = "\n".join((
+                f"task_uid: {UID}",
+                "- status: `committed`",
+                "- workflow_phase: `execution`",
+                "- completion_mode: `ordered_delivery_aggregate`",
+                "- aggregate_plan_comment_id: `6001`",
+                "- aggregate_plan_sha256: `sha256:" + "3" * 64 + "`",
+            )) + "\n"
+            live_issue_payload = {
+                "body": issue_body, "number": 4035, "title": "[PM] ordered aggregate",
+                "url": f"https://github.com/{REPO}/issues/4035", "state": "OPEN",
+                "stateReason": "", "updatedAt": record["updated_at"],
+            }
+
+            def read_live_issue(command):
+                if command[:3] == ["gh", "issue", "list"]:
+                    return json.dumps([{
+                        "number": 4035, "url": live_issue_payload["url"],
+                        "title": live_issue_payload["title"], "state": "OPEN",
+                    }])
+                if command[:3] == ["gh", "issue", "view"] and command[3] == "4035":
+                    self.assertIn("updatedAt", command[command.index("--json") + 1])
+                    return json.dumps(live_issue_payload)
+                raise AssertionError(f"unexpected live Issue read: {command}")
+            args = Namespace(
+                root=ROOT, task_uid=UID, to_status="done", repo=REPO, role="tpm",
+                json=False, claim_json=json.dumps(claim), pr_receipt=None,
+                aggregate_receipt=str(paths["receipt.json"]),
+                aggregate_plan=str(paths["plan.json"]),
+                aggregate_candidate=str(paths["candidate.json"]),
+                aggregate_evidence=str(paths["evidence.json"]),
+            )
+            effects: list[str] = []
+            real_subprocess_run = subprocess.run
+
+            def run_aggregate_validator_or_delegate(command, *args, **kwargs):
+                if (isinstance(command, (list, tuple)) and len(command) > 1
+                        and str(command[1]).endswith("aggregate-task-completion.py")):
+                    return SimpleNamespace(returncode=0, stdout="{}", stderr="")
+                return real_subprocess_run(command, *args, **kwargs)
+
+            with mock.patch.object(self.task, "require_record",
+                                   return_value=(temp_root / "tasks.json", {}, record)), \
+                    mock.patch.object(self.task, "run_text", side_effect=read_live_issue), \
+                    mock.patch.object(self.task.subprocess, "run",
+                                      side_effect=run_aggregate_validator_or_delegate), \
+                    mock.patch.object(self.task, "recover_missing_project_item"), \
+                    mock.patch.object(self.task, "synchronize_live_issue_traceability", return_value=frozenset()), \
+                    mock.patch.object(self.task, "issue_comment",
+                                      side_effect=lambda *a, **k: effects.append("comment") or "comment-url"), \
+                    mock.patch.object(self.task, "update_done_project_fields",
+                                      side_effect=lambda *a, **k: effects.append("project") or 1), \
+                    mock.patch.object(self.task, "update_issue_body",
+                                      side_effect=lambda *a, **k: effects.append("issue")), \
+                    mock.patch.object(self.task, "merge_task_mapping",
+                                      side_effect=lambda *a, **k: effects.append("mapping")), \
+                    contextlib.redirect_stdout(io.StringIO()):
+                failure = None
+                try:
+                    self.task.command_closeout_task(args)
+                except SystemExit as exc:
+                    failure = str(exc)
+        return effects, failure
+
+    def test_aggregate_closeout_rejects_forged_or_wrongly_bound_claim_before_effects(self):
+        canonical = self.production_task_complete_claim()
+        mutations = {
+            "prior two-flag acceptance": {
+                "claim_type": "task_complete", "status": "verified",
+                "allowed_to_claim": True, "verification_exit_code": 0,
+            },
+            "wrong task uid": {"task_uid": "task_" + "0" * 32},
+            "fixture-only profile": {"verification_profile": "fixture_repository_state"},
+            "wrong command": {"verify_command": "pytest tests"},
+            "wrong source head": {"frozen_source_head": "0" * 40},
+            "wrong source tree": {"frozen_source_tree": "0" * 40},
+            "wrong repository head": {"repository_head": "0" * 40},
+            "wrong repository index": {"repository_index_sha256": "0" * 64},
+            "non-frozen mode": {"verification_mode": "live_nonfinal"},
+            "unstable epoch": {"verification_epoch_stable": False},
+            "changed repository fingerprint": {"repository_fingerprint_after": "b" * 64},
+            "nonzero verification": {"verification_exit_code": 1},
+            "stale verification": {"verified_at": "2000-01-01T00:00:00Z"},
+        }
+        for label, changes in mutations.items():
+            with self.subTest(label=label):
+                claim = (
+                    dict(changes) if label == "prior two-flag acceptance"
+                    else {**canonical, **changes}
+                )
+                effects, failure = self.invoke_aggregate_closeout(claim)
+                self.assertEqual(effects, [], f"{label}: closeout persisted task truth")
+                self.assertIsNotNone(failure, f"{label}: aggregate closeout accepted the claim")
+
+    def test_aggregate_closeout_accepts_canonical_production_profile_claim(self):
+        effects, failure = self.invoke_aggregate_closeout(self.production_task_complete_claim())
+        self.assertIsNone(failure)
+        self.assertEqual(effects, ["comment", "project", "issue", "mapping"])
 
     def invoke_binder(
         self, *, permission="admin", deliveries=None, promoted_pr=None,

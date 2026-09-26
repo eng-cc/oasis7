@@ -9,6 +9,7 @@ import json
 import os
 import pathlib
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -16,6 +17,8 @@ import uuid
 from collections import OrderedDict
 from datetime import datetime
 from typing import Any
+
+from loop_leaf_result import verification_projection_errors
 
 
 ALL_STATUSES = ("candidate", "committed", "blocked", "ready", "pr_watch", "done", "deferred")
@@ -662,7 +665,7 @@ def github_issue_record(repo: str, task_uid: str) -> dict[str, Any] | None:
         if not number:
             die("task Issue discovery returned invalid identity")
         candidate = json.loads(run_text(["gh", "issue", "view", str(number), "-R", repo,
-                                         "--json", "body,number,title,url,state,stateReason"]))
+                                         "--json", "body,number,title,url,state,stateReason,updatedAt"]))
         candidate_body = str(candidate.get("body") or "").replace("\r\n", "\n")
         fields = re.findall(r"^task_uid:[^\n]*$", candidate_body, re.MULTILINE)
         uids = re.findall(r"^task_uid:\s*(task_[0-9a-f]{32})$", candidate_body, re.MULTILINE)
@@ -694,6 +697,7 @@ def github_issue_record(repo: str, task_uid: str) -> dict[str, Any] | None:
             "issue_url": str(issue.get("url") or hits[0].get("url") or ""),
             "issue_state": str(issue.get("state") or hits[0].get("state") or ""),
             "issue_state_reason": str(issue.get("stateReason") or ""),
+            "updated_at": str(issue.get("updatedAt") or ""),
             "_github_source": "issue_search",
         }
     )
@@ -1681,6 +1685,98 @@ def require_live_issue_route_matches_cache(repo: str, task_uid: str, record: dic
     return live
 
 
+def validate_aggregate_task_complete_claim(
+    root: pathlib.Path,
+    task_uid: str,
+    claim: Any,
+    live_issue: dict[str, Any],
+) -> None:
+    """Validate the local claim-ready projection consumed by aggregate closeout.
+
+    This checks the repository-owned claim shape and its exact local source
+    identity. It does not claim trusted runtime attestation; that is outside the
+    current human-operated closeout contract.
+    """
+    if not isinstance(claim, dict):
+        die("closeout-task: aggregate completion requires canonical task_complete claim evidence")
+    if (claim.get("claim_type") != "task_complete" or claim.get("status") != "verified"
+            or claim.get("allowed_to_claim") is not True
+            or type(claim.get("verification_exit_code")) is not int
+            or claim.get("verification_exit_code") != 0
+            or claim.get("task_uid") != task_uid):
+        die("closeout-task: aggregate task_complete claim identity or result is invalid")
+
+    profile = claim.get("verification_profile")
+    if not isinstance(profile, str) or profile == "fixture_repository_state":
+        die("closeout-task: aggregate task_complete claim requires a production verification profile")
+    profile_commands = {
+        # Keep these command identities aligned with claim-ready.sh's
+        # repository-owned verification-profile switch. Profile/mode support
+        # itself is shared with loop_leaf_result.py.
+        "codex_subagent_role_fit": (
+            "./scripts/pm/verify-codex-subagent-role-fit.sh --task-uid " + shlex.quote(task_uid)
+        ),
+        "workflow_behavior": "./scripts/pm/workflow-behavior-eval.sh",
+        "repository_required": "true",
+    }
+    if profile not in profile_commands or claim.get("verify_command") != profile_commands[profile]:
+        die("closeout-task: aggregate task_complete claim profile/command is not repository-owned")
+
+    verification = {
+        "profile": profile,
+        "mode": claim.get("verification_mode"),
+        "frozen_source_head": claim.get("frozen_source_head"),
+        "frozen_source_tree": claim.get("frozen_source_tree"),
+        "repository_fingerprint_before": claim.get("repository_fingerprint_before"),
+        "repository_fingerprint_after": claim.get("repository_fingerprint_after"),
+        "verification_epoch_stable": claim.get("verification_epoch_stable"),
+        "verification_exit_code": claim.get("verification_exit_code"),
+    }
+    if verification_projection_errors(verification):
+        die("closeout-task: aggregate task_complete verification projection is incomplete or unsupported")
+    if claim.get("verification_mode") != "detached_frozen_tree":
+        die("closeout-task: aggregate task_complete claim must use detached frozen-tree verification")
+
+    try:
+        verified_at = datetime.fromisoformat(str(claim.get("verified_at") or "").replace("Z", "+00:00"))
+        current_time = datetime.now().astimezone()
+        round_value = live_issue.get("updated_at")
+        round_at = datetime.fromisoformat(str(round_value or "").replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        die("closeout-task: aggregate task_complete claim timestamp or live task round is invalid")
+    if (verified_at.tzinfo is None or round_at.tzinfo is None
+            or verified_at > current_time or verified_at < round_at):
+        die("closeout-task: aggregate task_complete claim is not fresh for the current live task round")
+
+    root = root.resolve()
+    fingerprint_tool = root / "scripts/pm/repo-state-fingerprint.py"
+    try:
+        fingerprint = json.loads(subprocess.check_output(
+            [sys.executable, str(fingerprint_tool), str(root)],
+            text=True,
+            stderr=subprocess.PIPE,
+        ))
+        head = str(fingerprint.get("head") or "")
+        tree = subprocess.check_output(
+            ["git", "-C", str(root), "rev-parse", "HEAD^{tree}"],
+            text=True,
+            stderr=subprocess.PIPE,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        die(f"closeout-task: aggregate task_complete source identity read failed: {exc}")
+
+    expected_head = str(claim.get("frozen_source_head") or "")
+    expected_tree = str(claim.get("frozen_source_tree") or "")
+    if (not re.fullmatch(r"[0-9a-f]{40}", head)
+            or claim.get("repository_head") != head
+            or expected_head != head
+            or expected_tree != tree
+            or claim.get("repository_index_sha256") != fingerprint.get("index_sha256")
+            or claim.get("repository_fingerprint_before") != fingerprint.get("sha256")
+            or claim.get("repository_fingerprint_after") != fingerprint.get("sha256")):
+        die("closeout-task: aggregate task_complete claim does not bind current HEAD/tree/index/fingerprint")
+
+
 def validate_live_aggregate_lifecycle(
     repo: str,
     task_uid: str,
@@ -2148,8 +2244,11 @@ def command_closeout_task(args: argparse.Namespace) -> int:
         die("closeout-task: ordered aggregate completion requires an aggregate receipt")
     if args.aggregate_receipt and original.get("completion_mode") != "ordered_delivery_aggregate":
         die("closeout-task: aggregate receipt requires ordered aggregate task truth")
+    live_issue = None
     if args.to_status == "done":
-        require_live_issue_route_matches_cache(getattr(args, "repo", DEFAULT_REPO), args.task_uid, original)
+        live_issue = require_live_issue_route_matches_cache(
+            getattr(args, "repo", DEFAULT_REPO), args.task_uid, original,
+        )
     if args.to_status != "deferred":
         if claim.get("status") != "verified" or not claim.get("allowed_to_claim"):
             die("closeout-task: verified immutable claim evidence is required")
@@ -2160,6 +2259,7 @@ def command_closeout_task(args: argparse.Namespace) -> int:
             die("closeout-task: coordinator mode/PR identity is invalid")
         if not all((args.aggregate_plan, args.aggregate_candidate, args.aggregate_evidence)):
             die("closeout-task: aggregate receipt requires plan, candidate and evidence")
+        validate_aggregate_task_complete_claim(args.root, args.task_uid, claim, live_issue or {})
         validation = subprocess.run([
             sys.executable, str(args.root.resolve() / "scripts/pm/aggregate-task-completion.py"), "validate",
             "--repo-root", str(args.root.resolve()), "--task-uid", args.task_uid,
