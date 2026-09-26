@@ -93,12 +93,35 @@ def stage_receipt(task_uid=SUCCESSOR_UID,pr_number=SUCCESSOR_PR,base_oid="b"*40,
     "policy_executable":"/tmp/cargo-package-scope-policy.json","repo_root":"/tmp/oasis7",
     "primary_package":"auto"}
   command=A._checker_command(execution,scope_base_oid=scope_base_oid,head_oid=head_oid)
+  integration_base=A.PLANNER_AUTHORITY_EXPECTED["trusted_integration_base"]
+  source_head=A.PLANNER_AUTHORITY_EXPECTED["source_head"]
+  planner_tested_tree=A.PLANNER_AUTHORITY_EXPECTED["trusted_integration_tested_tree"]
+  plan={"schema":"oasis7-cargo-package-profile-plan/v1","plan_id":"sha256:"+"1"*64,
+    "integration_base":integration_base,"source_head":source_head,"tested_tree":planner_tested_tree}
+  results=[{"status":"passed","exit_code":0,"integration_base":integration_base,
+    "source_head":source_head,"tested_tree":planner_tested_tree}]
+  profile_receipt={"status":"passed","plan_id":plan["plan_id"],"integration_base":integration_base,
+    "source_head":source_head,"tested_tree":planner_tested_tree}
+  payload_digest=lambda value:"sha256:"+hashlib.sha256(json.dumps(value,sort_keys=True,separators=(",",":")).encode()).hexdigest()
+  planner_integration_envelope={"schema":"oasis7-cargo-package-profile-envelope/v1",
+    "repository":"eng-cc/oasis7","task_uid":A.PLANNER_AUTHORITY_EXPECTED["task_uid"],
+    "pr_number":A.PLANNER_AUTHORITY_EXPECTED["pr_number"],"run_id":A.PLANNER_INTEGRATION_RUN,
+    "run_attempt":1,"check_name":"required-gate","check_app_id":A.GITHUB_ACTIONS_APP_ID,
+    "check_run_id":123,"integration_base":integration_base,"source_head":source_head,
+    "tested_tree":planner_tested_tree,
+    "workflow_ref":"eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main",
+    "workflow_sha":integration_base,"plan_digest":payload_digest(plan),
+    "results_digest":payload_digest(results),"receipt_digest":payload_digest(profile_receipt)}
   receipt={"schema":A.SCHEMA,"phase":"post_run","activation":"provisional","repository":"eng-cc/oasis7","task_uid":task_uid,"pr_number":pr_number,
     "base_oid":base_oid,"head_oid":head_oid,"scope_base_oid":scope_base_oid,"tested_tree":tested_tree,
     "runner":{"run_id":run_id,"run_attempt":run_attempt,"workflow_ref":"eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main","workflow_sha":workflow_sha},
-    "normative_authority":{**A.NORMATIVE_AUTHORITY_EXPECTED,"stage":"normative_source"},
+    "normative_authority":{**A.NORMATIVE_AUTHORITY_EXPECTED,"stage":"normative_source",
+      "task_created_at":"2026-09-23T10:00:00Z"},
     "planner_authority":{**A.PLANNER_AUTHORITY_EXPECTED,"stage":"planner_authority",
-      "trusted_integration_run_id":A.PLANNER_INTEGRATION_RUN,"verification_evidence":"verified live planner fixture"},
+      "trusted_integration_run_id":A.PLANNER_INTEGRATION_RUN,
+      "verification_evidence":"verified live planner fixture",
+      "task_created_at":"2026-09-24T21:31:40Z",
+      "trusted_integration_envelope":planner_integration_envelope},
     "executing_planner":{"path":A.PLANNER_PATH,"authority_path":A.PLANNER_PATH,
       "merged_commit":A.PLANNER_AUTHORITY_EXPECTED["merged_commit"],
       "source_ref":f"refs/pull/{A.PLANNER_PR}/head",

@@ -544,6 +544,56 @@ class CheckerStageAdmissionTest(unittest.TestCase):
         self.profile_patch.start()
         self.addCleanup(self.profile_patch.stop)
 
+    def _live_authority_chain(self):
+        with patch.object(MODULE, "gh_api", side_effect=_authority_api()), \
+             patch.object(MODULE, "_recompute_planner_integration_tree", return_value=TESTED_TREE):
+            return MODULE.verify_authority_chain(REPOSITORY, Path("."))
+
+    def _build_live_shaped_postrun_receipt(self):
+        authorities = self._live_authority_chain()
+        normative_authority = MODULE._serializable_authority(authorities["normative"])
+        planner_authority = MODULE._serializable_authority(authorities["planner"])
+        execution = self._checker_execution_fixture(CHECKER_SCOPE)
+        command = MODULE._checker_command(
+            execution, scope_base_oid=CHECKER_SCOPE, head_oid=CHECKER_HEAD
+        )
+        preflight = {
+            "schema": MODULE.SCHEMA, "phase": "preflight", "repository": REPOSITORY,
+            "task_uid": TASK_UID, "pr_number": CHECKER_PR, "base_oid": CHECKER_BASE,
+            "head_oid": CHECKER_HEAD, "scope_base_oid": CHECKER_SCOPE,
+            "tested_tree": TESTED_TREE, "checker_command": command,
+            "checker_command_digest": MODULE.command_digest(command),
+            "checker_execution": execution,
+            "normative_authority": normative_authority,
+            "planner_authority": planner_authority,
+            "runner": {"run_id": "99", "run_attempt": "1", "workflow_ref": "workflow",
+                       "workflow_sha": "5" * 40},
+        }
+        executing_planner = {
+            "path": MODULE.PLANNER_PATH,
+            "authority_path": authorities["planner"]["authority_path"],
+            "source_ref": f"refs/pull/{MODULE.PLANNER_PR}/head",
+            "source_head": authorities["planner"]["source_head"],
+            "merged_commit": authorities["planner"]["merged_commit"],
+            "bytes_sha256": authorities["planner"]["authority_bytes_sha256"],
+            "size": authorities["planner"]["authority_size"],
+        }
+        check = {
+            "check_name": "required-gate", "check_app_id": MODULE.GITHUB_ACTIONS_APP_ID,
+            "check_app_slug": "github-actions", "check_run_id": 123,
+            "check_head": CHECKER_HEAD, "workflow_run_id": "99",
+        }
+        producer_job = {
+            "job_name": MODULE.CHECKER_STAGE_PRODUCER_JOB, "job_id": 55,
+            "check_run_id": 56, "workflow_run_id": 99, "run_attempt": 1,
+            "head_sha": CHECKER_HEAD,
+        }
+        receipt = MODULE.build_postrun_receipt(
+            preflight, authorities, executing_planner, check, producer_job,
+            status="passed", exit_code=0,
+        )
+        return authorities, preflight, executing_planner, execution, receipt
+
     def test_workflow_checker_route_does_not_depend_on_optional_impact_marker(self):
         workflow = (Path(__file__).parents[2] / ".github/workflows/rust.yml").read_text(
             encoding="utf-8"
@@ -1732,107 +1782,90 @@ class CheckerStageAdmissionTest(unittest.TestCase):
             MODULE.verify_live_producer_job_identity(REPOSITORY, "99", "1", "candidate-job")
 
     def test_postrun_receipt_is_durable_and_complete(self):
-        normative_authority = {**MODULE.NORMATIVE_AUTHORITY_EXPECTED, "stage": "normative_source"}
-        planner_authority = {
-            **MODULE.PLANNER_AUTHORITY_EXPECTED,
-            "stage": "planner_authority",
-            "trusted_integration_run_id": MODULE.PLANNER_INTEGRATION_RUN,
-            "verification_evidence": "verified live planner publication fixture",
-        }
-        execution = self._checker_execution_fixture(CHECKER_SCOPE)
-        command = MODULE._checker_command(
-            execution, scope_base_oid=CHECKER_SCOPE, head_oid=CHECKER_HEAD
-        )
-        preflight = {
-            "schema": MODULE.SCHEMA, "phase": "preflight", "repository": REPOSITORY,
-            "task_uid": TASK_UID, "pr_number": CHECKER_PR, "base_oid": CHECKER_BASE,
-            "head_oid": CHECKER_HEAD, "scope_base_oid": CHECKER_SCOPE,
-            "tested_tree": TESTED_TREE, "checker_command": command,
-            "checker_command_digest": MODULE.command_digest(command),
-            "checker_execution": execution,
-            "normative_authority": normative_authority,
-            "planner_authority": planner_authority,
-            "runner": {"run_id": "99", "run_attempt": "1", "workflow_ref": "workflow", "workflow_sha": "w" * 40},
-        }
-        receipt = MODULE.build_postrun_receipt(
-            preflight,
-            {"normative": normative_authority, "planner": planner_authority},
-            {"path": MODULE.PLANNER_PATH, "authority_path": MODULE.PLANNER_PATH,
-             "source_ref": f"refs/pull/{MODULE.PLANNER_PR}/head",
-             "source_head": MODULE.PLANNER_AUTHORITY_EXPECTED["source_head"],
-             "merged_commit": MODULE.PLANNER_AUTHORITY_EXPECTED["merged_commit"],
-             "bytes_sha256": MODULE.PLANNER_AUTHORITY_EXPECTED["authority_bytes_sha256"],
-             "size": MODULE.PLANNER_AUTHORITY_EXPECTED["authority_size"]},
-            {"check_name": "required-gate", "check_app_id": 15368,
-             "check_app_slug": "github-actions", "check_run_id": 123,
-             "check_head": CHECKER_HEAD, "workflow_run_id": "99"},
-            {"job_name": MODULE.CHECKER_STAGE_PRODUCER_JOB, "job_id": 55,
-             "check_run_id": 56, "workflow_run_id": 99, "run_attempt": 1,
-             "head_sha": CHECKER_HEAD},
-            status="passed", exit_code=0,
-        )
+        authorities, preflight, _, execution, receipt = self._build_live_shaped_postrun_receipt()
         self.assertEqual("provisional", receipt["activation"])
         for field in ("normative_authority", "planner_authority", "executing_planner", "check", "producer_job", "result"):
             self.assertIn(field, receipt)
         self.assertEqual("passed", receipt["result"]["status"])
         self.assertEqual(preflight["checker_execution"], receipt["checker_execution"])
+        self.assertEqual(
+            authorities["normative"]["task_created_at"],
+            receipt["normative_authority"]["task_created_at"],
+        )
+        self.assertEqual(
+            authorities["planner"]["task_created_at"],
+            receipt["planner_authority"]["task_created_at"],
+        )
+        self.assertEqual(
+            authorities["planner"]["trusted_integration_envelope"],
+            receipt["planner_authority"]["trusted_integration_envelope"],
+        )
         self.assertIs(MODULE.verify_durable_postrun_receipt(receipt), receipt)
+
+        checker_bytes = b"fixture trusted checker source"
+        policy_bytes = b"fixture trusted policy source"
+        base_api = _authority_api()
+
+        def live_api(path):
+            if f"/contents/{MODULE.CHECKER_EXECUTION_PATH}?ref={CHECKER_SCOPE}" in path:
+                return _content(checker_bytes, execution["checker_source_blob"], MODULE.CHECKER_EXECUTION_PATH)
+            if f"/contents/{MODULE.CHECKER_POLICY_PATH}?ref={CHECKER_SCOPE}" in path:
+                return _content(policy_bytes, execution["policy_source_blob"], MODULE.CHECKER_POLICY_PATH)
+            return base_api(path)
+
+        with patch.object(MODULE, "gh_api", side_effect=live_api), \
+             patch.object(MODULE, "_recompute_planner_integration_tree", return_value=TESTED_TREE), \
+             patch.object(MODULE, "verify_executing_planner", return_value=receipt["executing_planner"]):
+            MODULE.verify_postrun_receipt_authority(receipt, REPOSITORY, Path("."))
+
         tampered = dict(receipt, head_oid="9" * 40)
         with self.assertRaisesRegex(MODULE.AdmissionError, "digest"):
             MODULE.verify_durable_postrun_receipt(tampered)
 
         changed_authorities = {
-            "normative": normative_authority,
-            "planner": {**planner_authority, "merged_commit": "9" * 40},
+            **authorities,
+            "planner": {**authorities["planner"], "merged_commit": "9" * 40},
         }
         with self.assertRaisesRegex(MODULE.AdmissionError, "planner_authority identity changed"):
             MODULE._assert_preflight_authorities_unchanged(preflight, changed_authorities)
+        for change in (
+            {"task_created_at": "2026-09-25T00:00:00Z"},
+            {"trusted_integration_envelope": {
+                **authorities["planner"]["trusted_integration_envelope"],
+                "run_attempt": 2,
+            }},
+        ):
+            with self.subTest(preflight_authority_change=change):
+                changed_planner = {**authorities["planner"], **change}
+                with self.assertRaisesRegex(MODULE.AdmissionError, "planner_authority identity changed"):
+                    MODULE._assert_preflight_authorities_unchanged(
+                        preflight, {**authorities, "planner": changed_planner}
+                    )
 
     def test_durable_postrun_rejects_recomputed_public_digest_with_forged_authority(self):
-        normative_authority = {**MODULE.NORMATIVE_AUTHORITY_EXPECTED, "stage": "normative_source"}
-        planner_authority = {
-            **MODULE.PLANNER_AUTHORITY_EXPECTED,
-            "stage": "planner_authority",
-            "trusted_integration_run_id": MODULE.PLANNER_INTEGRATION_RUN,
-            "verification_evidence": "verified live planner publication fixture",
-        }
-        execution = self._checker_execution_fixture(CHECKER_SCOPE)
-        command = MODULE._checker_command(
-            execution, scope_base_oid=CHECKER_SCOPE, head_oid=CHECKER_HEAD
-        )
-        preflight = {
-            "schema": MODULE.SCHEMA, "phase": "preflight", "repository": REPOSITORY,
-            "task_uid": TASK_UID, "pr_number": CHECKER_PR, "base_oid": CHECKER_BASE,
-            "head_oid": CHECKER_HEAD, "scope_base_oid": CHECKER_SCOPE,
-            "tested_tree": TESTED_TREE, "checker_command": command,
-            "checker_command_digest": MODULE.command_digest(command),
-            "checker_execution": execution,
-            "normative_authority": normative_authority,
-            "planner_authority": planner_authority,
-            "runner": {"run_id": "99", "run_attempt": "1", "workflow_ref": "workflow", "workflow_sha": "w" * 40},
-        }
-        receipt = MODULE.build_postrun_receipt(
-            preflight,
-            {"normative": normative_authority, "planner": planner_authority},
-            {"path": MODULE.PLANNER_PATH, "authority_path": MODULE.PLANNER_PATH,
-             "source_ref": f"refs/pull/{MODULE.PLANNER_PR}/head",
-             "source_head": MODULE.PLANNER_AUTHORITY_EXPECTED["source_head"],
-             "merged_commit": MODULE.PLANNER_AUTHORITY_EXPECTED["merged_commit"],
-             "bytes_sha256": MODULE.PLANNER_AUTHORITY_EXPECTED["authority_bytes_sha256"],
-             "size": MODULE.PLANNER_AUTHORITY_EXPECTED["authority_size"]},
-            {"check_name": "required-gate", "check_app_id": 15368,
-             "check_app_slug": "github-actions", "check_run_id": 123,
-             "check_head": CHECKER_HEAD, "workflow_run_id": "99"},
-            {"job_name": MODULE.CHECKER_STAGE_PRODUCER_JOB, "job_id": 55,
-             "check_run_id": 56, "workflow_run_id": 99, "run_attempt": 1,
-             "head_sha": CHECKER_HEAD},
-            status="passed", exit_code=0,
-        )
+        _, _, _, _, receipt = self._build_live_shaped_postrun_receipt()
+        normative_authority = receipt["normative_authority"]
+        planner_authority = receipt["planner_authority"]
         for field, forged in (
             ("normative_authority", {}),
             ("planner_authority", {}),
             ("planner_authority", {**planner_authority, "merged_commit": "9" * 40}),
             ("planner_authority", {**planner_authority, "untrusted_extra": "candidate"}),
+            ("normative_authority", {**normative_authority, "untrusted_extra": "candidate"}),
+            ("normative_authority", {key: value for key, value in normative_authority.items()
+                                      if key != "task_created_at"}),
+            ("planner_authority", {key: value for key, value in planner_authority.items()
+                                   if key != "task_created_at"}),
+            ("planner_authority", {key: value for key, value in planner_authority.items()
+                                   if key != "trusted_integration_envelope"}),
+            ("planner_authority", {**planner_authority, "task_created_at": "not-a-timestamp"}),
+            ("planner_authority", {
+                **planner_authority,
+                "trusted_integration_envelope": {
+                    **planner_authority["trusted_integration_envelope"],
+                    "unexpected": "candidate",
+                },
+            }),
         ):
             with self.subTest(field=field, forged=forged):
                 tampered = json.loads(json.dumps(receipt))
@@ -1862,6 +1895,38 @@ class CheckerStageAdmissionTest(unittest.TestCase):
         forged_producer["receipt_digest"] = MODULE.durable_receipt_digest(forged_producer)
         with self.assertRaisesRegex(MODULE.AdmissionError, "producer job"):
             MODULE.verify_durable_postrun_receipt(forged_producer)
+
+    def test_postrun_receipt_authority_rejects_dynamic_authority_mutations(self):
+        _, _, _, _, receipt = self._build_live_shaped_postrun_receipt()
+        checker_bytes = b"fixture trusted checker source"
+        policy_bytes = b"fixture trusted policy source"
+        original_authorities = self._live_authority_chain()
+
+        def live_source(path):
+            data = checker_bytes if MODULE.CHECKER_EXECUTION_PATH in path else policy_bytes
+            blob_oid = hashlib.sha1(b"blob " + str(len(data)).encode() + b"\0" + data).hexdigest()
+            return {"encoding": "base64", "content": base64.b64encode(data).decode("ascii"),
+                    "sha": blob_oid, "size": len(data)}
+
+        mutations = (
+            ("normative task creation", "normative_authority", "task_created_at", "2026-09-22T10:00:00Z"),
+            ("planner task creation", "planner_authority", "task_created_at", "2026-09-25T10:00:00Z"),
+            ("planner envelope run", "planner_authority", "trusted_integration_run_id", 999999),
+            ("planner envelope attempt", "planner_authority", "trusted_integration_envelope", {
+                **receipt["planner_authority"]["trusted_integration_envelope"],
+                "run_attempt": 2,
+            }),
+        )
+        for label, field, key, value in mutations:
+            with self.subTest(label=label):
+                forged = json.loads(json.dumps(receipt))
+                forged[field][key] = value
+                forged["receipt_digest"] = MODULE.durable_receipt_digest(forged)
+                with patch.object(MODULE, "verify_authority_chain", return_value=original_authorities), \
+                     patch.object(MODULE, "verify_executing_planner", return_value=forged["executing_planner"]), \
+                     patch.object(MODULE, "gh_api", side_effect=live_source):
+                    with self.assertRaisesRegex(MODULE.AdmissionError, "differs from live authority"):
+                        MODULE.verify_postrun_receipt_authority(forged, REPOSITORY, Path("."))
 
     def test_postrun_receipt_authority_rechecks_live_receipts_and_command_sources(self):
         checker_bytes = b"fixture trusted checker source"

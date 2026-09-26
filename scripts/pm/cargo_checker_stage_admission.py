@@ -124,6 +124,12 @@ PLANNER_AUTHORITY_EXPECTED = {
     "predecessor_fragment_sha256": PLANNER_PREDECESSOR_FRAGMENT_SHA256,
     "cleanup_comment": PLANNER_CLEANUP_COMMENT,
 }
+PLANNER_INTEGRATION_ENVELOPE_FIELDS = frozenset({
+    "schema", "repository", "task_uid", "pr_number", "run_id", "run_attempt",
+    "check_name", "check_app_id", "check_run_id", "integration_base", "source_head",
+    "tested_tree", "workflow_ref", "workflow_sha", "plan_digest", "results_digest",
+    "receipt_digest",
+})
 CHECKER_SCOPE = (
     "scripts/pm/check-cargo-package-scope",
     "scripts/pm/check-cargo-package-scope.test.py",
@@ -397,6 +403,8 @@ def _verify_live_integration_run(
     expected["tested_tree"] = tested_tree
     if tested_tree != PLANNER_AUTHORITY_EXPECTED["trusted_integration_tested_tree"]:
         raise AdmissionError("planner integration tested tree differs from the approved readback")
+    if set(envelope) != PLANNER_INTEGRATION_ENVELOPE_FIELDS:
+        raise AdmissionError("planner integration envelope fields are incomplete or unexpected")
     if any(envelope.get(field) != value for field, value in expected.items()):
         raise AdmissionError("planner integration envelope identity mismatch")
     for field in ("plan", "results", "receipt"):
@@ -1474,8 +1482,37 @@ def _assert_preflight_authorities_unchanged(
         after = authorities.get("normative" if field == "normative_authority" else "planner")
         if not isinstance(before, dict) or not isinstance(after, dict):
             raise AdmissionError(f"post-run {field} readback is missing")
-        if any(before.get(name) != after.get(name) for name in expected):
+        if before != _serializable_authority(after):
             raise AdmissionError(f"post-run {field} identity changed after preflight")
+
+
+def _validate_durable_planner_integration_envelope(
+    envelope: Any, trusted_run_id: int
+) -> None:
+    if not isinstance(envelope, dict) or set(envelope) != PLANNER_INTEGRATION_ENVELOPE_FIELDS:
+        raise AdmissionError("durable planner authority integration envelope fields are incomplete or unexpected")
+    expected = {
+        "schema": "oasis7-cargo-package-profile-envelope/v1",
+        "repository": REPOSITORY,
+        "task_uid": PLANNER_AUTHORITY_EXPECTED["task_uid"],
+        "pr_number": PLANNER_AUTHORITY_EXPECTED["pr_number"],
+        "run_id": trusted_run_id,
+        "check_name": "required-gate",
+        "check_app_id": GITHUB_ACTIONS_APP_ID,
+        "integration_base": PLANNER_AUTHORITY_EXPECTED["trusted_integration_base"],
+        "source_head": PLANNER_AUTHORITY_EXPECTED["source_head"],
+        "tested_tree": PLANNER_AUTHORITY_EXPECTED["trusted_integration_tested_tree"],
+        "workflow_ref": f"{REPOSITORY}/.github/workflows/rust.yml@refs/heads/{DEFAULT_BRANCH}",
+        "workflow_sha": PLANNER_AUTHORITY_EXPECTED["trusted_integration_base"],
+    }
+    if any(envelope.get(field) != value for field, value in expected.items()):
+        raise AdmissionError("durable planner integration envelope differs from trusted identity")
+    if type(envelope.get("run_attempt")) is not int or envelope["run_attempt"] < 1:
+        raise AdmissionError("durable planner integration envelope attempt is invalid")
+    if type(envelope.get("check_run_id")) is not int or envelope["check_run_id"] < 1:
+        raise AdmissionError("durable planner integration envelope check-run identity is invalid")
+    for field in ("plan_digest", "results_digest", "receipt_digest"):
+        _require_digest(envelope.get(field), f"durable planner integration {field}")
 
 
 def verify_durable_postrun_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
@@ -1506,18 +1543,28 @@ def verify_durable_postrun_receipt(receipt: dict[str, Any]) -> dict[str, Any]:
     ):
         authority = receipt[name]
         exact_authority_fields = set(expected) | {"stage"}
-        if name == "planner_authority":
-            exact_authority_fields |= {"trusted_integration_run_id", "verification_evidence"}
+        if name == "normative_authority":
+            exact_authority_fields |= {"task_created_at"}
+        else:
+            exact_authority_fields |= {
+                "task_created_at", "trusted_integration_run_id",
+                "trusted_integration_envelope", "verification_evidence",
+            }
         if set(authority) != exact_authority_fields:
             raise AdmissionError(f"durable post-run {name} fields are incomplete or unexpected")
         for key, value in {**expected, "stage": stage}.items():
             if authority.get(key) != value:
                 raise AdmissionError(f"durable post-run {name} differs from trusted authority")
+        _parse_live_time(authority.get("task_created_at"), f"{name} task creation")
         if name == "planner_authority":
             if (authority.get("trusted_integration_run_id") != PLANNER_INTEGRATION_RUN
                     or not isinstance(authority.get("verification_evidence"), str)
                     or not authority["verification_evidence"]):
                 raise AdmissionError("durable post-run planner authority readback is incomplete")
+            _validate_durable_planner_integration_envelope(
+                authority.get("trusted_integration_envelope"),
+                authority["trusted_integration_run_id"],
+            )
     result = receipt["result"]
     if set(result) != {
         "status", "exit_code", "command", "command_digest", "base_oid", "head_oid",
