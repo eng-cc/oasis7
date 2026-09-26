@@ -1,5 +1,59 @@
 # p2p PRD
 
+## P2P 专业承接与设计分配
+
+Owner role：runtime_engineer；canonical repository：eng-cc/oasis7；审读 source baseline：f9d5a552d9af04c1b1398262808198a58e560230（2026-09-26）。本文的 current 指冻结源所记专业合同；本次未独立验证实现、部署或测试通过。target 是规范目标，historical 是 MIG/CCG/TASK 与 dated evidence provenance。GitHub Issue/Project 维护实际任务与候选证据。新增稳定条款是原义务的细化入口；原章节/常量/命令/失败边界仍有效。
+
+<a id="p2p-ordered-execution"></a>
+### 有序动作与执行绑定
+
+admission 身份/认证、非零 identity、payload/queue 上限；同一确定有序序列贯穿 action_root、proposal/commit、execution context；下一 committed height 才可执行；decode/root/journal/proof mismatch 阻断并显式失败或 requeue。
+
+配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
+
+<a id="p2p-receipt-finality-boundary"></a>
+### 执行 receipt 与最终性
+
+receipt 不是 certificate；活动 validator 在投票前按同一 parent/manifest/动作重执行并核对 action/execution/event/state roots。工件/fault/root 错误拒绝；旧 threshold-1 TickCertificate 仅兼容诊断，不能推进 committed/replication/checkpoint/light-final。
+
+配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
+
+<a id="p2p-replication-recovery"></a>
+### 复制和权威恢复
+
+同 world 单调 head；writer epoch/sequence 单调且切换从1开始；鉴权/hash/写入失败不污染 guard；权威恢复 root/journal/checkpoint/proof 不匹配停止。严格 DHT fetch 与 root storage-challenge 的有界 availability fallback 是不同调用合同。
+
+配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
+
+<a id="p2p-target-bft"></a>
+### 目标 BFT 证书闸门
+
+目标 Propose→Prevote→Precommit→verified >2/3 active stake certificate；world/height/round/phase/roots/set 与去重签名绑定；锁定/解锁、anti-double-sign、timeout/new-round、set transition、partition/heal/restart 都须验证。当前 prototype 缺 QC/round/复验，不是当前能力。
+
+配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
+
+<a id="p2p-target-recovery-trust-chain"></a>
+### 目标同世界恢复链
+
+immutable tier/genesis manifest→verified finalized checkpoint/header+validator transition→hash-bound snapshot→canonical committed replay→verified state root→serve/vote；任何 identity/signature/continuity/hash/replay/root mismatch 阻断；prune 前证明可重建及冗余 archive。
+
+配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
+
+<a id="p2p-target-role-isolation"></a>
+### 目标角色与权威隔离
+
+world-state registry 的有效 membership/stake/signer 是 validator 投票真值；受保护 validator 与公开 sentry/relay/full/state-sync/archive/RPC/proof 服务隔离；服务只供应可验证材料。公网 IP 不是通用参与前提；validator 治理准入与服务本地 role/reachability policy 分开。
+
+配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
+
+<a id="p2p-service-gate"></a>
+### 目标恢复与重新服务
+
+历史链验证只允许只读；同世界材料、当前追加/finality、版本化 manifest compatibility、单调 head 全成立才可服务。陈旧/追赶/只读/隔离新 intent 无效果，committed receipt 为0；恢复按当前条件重审 pending，不继承期限/优先级，不改已确认 receipt。消费者反馈/lineage/manifest schema 由外部 authority 拥有，未闭合。
+
+配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
+
+
 > 专业域 authority：本文件拥有网络、共识、DistFS、复制、同步、恢复与节点可观测性契约；它向 [`doc/product/world-infrastructure/prd.md`](../product/world-infrastructure/prd.md) 提供分布式状态层证据，并为 [`doc/product/world-rules-core-gameplay/prd.md`](../product/world-rules-core-gameplay/prd.md) 的权限与治理边界提供专业合同，但不是并列产品入口。
 
 审计轮次: 15

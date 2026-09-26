@@ -8,6 +8,51 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
+
+
+def await_pr_binding(args, pr, issue, number, uid):
+    """Only an absent initial PR-number field can enter the publication wait."""
+    def pr_fields(body):
+        return re.findall(r'^[ \t]*(?:-[ \t]*)?pr_number\b[^\n]*', body, re.MULTILINE)
+
+    def identity(value):
+        body = value.get('body') or ''
+        head, base = value['head'], value['base']
+        if (value.get('number') != args.pr_number or value.get('state') != 'open'
+                or value.get('merged_at', 'missing') is not None or value.get('draft') is not True
+                or head['sha'] != args.head
+                or base['repo']['full_name'] != args.repository
+                or not head.get('ref') or not base.get('ref')
+                or set(re.findall(r'task_[0-9a-f]{32}', body)) != {uid}):
+            raise ValueError('pending PR binding identity invalid or drifted')
+        return (head['ref'], head['repo']['full_name'], base['ref'],
+                tuple(sorted(set(re.findall(r'(?:Refs|Fixes|Closes)\s+#(\d+)', body, re.I)))))
+
+    body = (issue.get('body') or '').replace('\r\n', '\n')
+    expected = f'- pr_number: `{args.pr_number}`'
+    if pr_fields(body):
+        if pr_fields(body) != [expected]:
+            raise ValueError('live task Issue does not bind this PR number; refresh task PR identity')
+        return body
+    frozen = identity(pr)
+    for attempt in range(7):
+        body = (issue.get('body') or '').replace('\r\n', '\n')
+        if (issue.get('number') != int(number) or issue.get('state') != 'open'
+                or '<!-- oasis7-pm-task -->' not in body
+                or re.findall(r'^task_uid:[^\n]*$', body, re.MULTILINE) != ['task_uid: ' + uid]
+                or identity(pr) != frozen):
+            raise ValueError('pending task/PR binding identity invalid or drifted')
+        fields = pr_fields(body)
+        if fields:
+            if fields != [expected]:
+                raise ValueError('live task Issue does not bind this PR number; refresh task PR identity')
+            return body
+        if attempt == 6:
+            raise ValueError('initial task PR binding publication timeout after 30 seconds of waiting')
+        time.sleep(5)
+        pr = json.loads(run('gh', 'api', f'repos/{args.repository}/pulls/{args.pr_number}'))
+        issue = json.loads(run('gh', 'api', f'repos/{args.repository}/issues/{number}'))
 
 
 def run(*args):
@@ -68,9 +113,7 @@ def main():
             if len(issue_uids) != 1: raise ValueError('Issue UID missing')
             uid = issue_uids[0]
         if issue_uids != [uid]: raise ValueError('Issue UID mismatch')
-        bound_pr = re.findall(r'^- pr_number: `([0-9]+)`$', body, re.MULTILINE)
-        if bound_pr != [str(args.pr_number)]:
-            raise ValueError('live task Issue does not bind this PR number; refresh task PR identity')
+        body = await_pr_binding(args, pr, issue, number, uid)
         if 'loop_binding_b64:' not in body:
             pages = json.loads(run('gh', 'api', f'repos/{args.repository}/issues/{number}/comments', '--paginate', '--slurp'))
             if not isinstance(pages, list): raise ValueError('lineage readback unavailable')

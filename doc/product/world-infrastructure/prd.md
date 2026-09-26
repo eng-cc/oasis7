@@ -21,6 +21,18 @@
 
 它是下层 provider，而不是设施、市场、区域、frontier、组织治理或玩家循环的产品入口。世界规则与玩法系统、智能体、世界模拟与交互、玩家接入与发行在此基础上组合各自产品语义；它们都不能借由本模块的技术能力直接扩张为权威写入权。
 
+### 使用者情境与正常路径
+
+玩家希望知道一次行动是否真的改变了目标世界，Agent 需要据此决定下一动作，节点运营者需要知道副本何时可以提供可信状态。正常路径是：消费者先确认目标世界身份与可用性，读取已验证的状态，再按适用协议提交意图；活动验证者重执行同一有序输入，最终性证明确认后产生已提交结果，消费者核对其 receipt 才更新世界结论。提交被入口接受只是请求进入处理路径，不是资源、权限、生产完成或交付的保证。
+
+当当前条件不能得到证明时，使用者可以查看最后可信状态、等待、重新验证或重新规划；撤回、替代和补偿只能采用专业合同明确支持的路径。等待可能延迟行动，重新规划可能放弃原计划，但重连和重提不会免费解除已经提交的义务、返还已消费投入或取得新的优先级。实际资源成本、损失和可退出条件由相应玩法及专业合同定义，本模块不增加费用或完成时间承诺。
+
+### 阅读术语
+
+`world_id` 是世界身份；`canonical` 指该世界唯一的权威顺序；`intent` 是请求产生效果的意图，`pending` 是尚无世界效果的待决状态；`committed` 指已进入权威历史，`finality` 是使该提交可验证且不能由本地推测替代的最终性。`receipt` 是关联已提交结果的回执，不是再次执行授权；`manifest` 是版本化执行规则及工件的声明，提交端兼容声明不能选择它。`hash-bound` 表示材料与其哈希承诺绑定，`state root` 是用于核对状态一致性的根；`fail closed` 表示无法证明安全条件时拒绝或保持无效果，而不尝试产生部分结果。
+
+工业 `root` 是一次操作的不可变因果身份，`revision/child` 记录因果变更和子效果，`lineage` 是这些请求或操作的可追溯关联；它们不等于状态根。`hold/reservation` 是有界且排他的容量或投入承诺，`WIP` 是在制状态。下文单独说明 `W`、window 与 lease 的专业语义，不能从英文名称推导资源、进度或授权。共识消息、执行版本字段和上述关联的具体格式仍由专业 authority 定义。
+
 ## 2. 范围
 
 本模块只覆盖区块链/分布式底层和其上的确定性世界执行。它不拥有上层的游戏规则、Agent 行为或玩家入口，但这些消费者必须遵循其最终性、版本与 committed-state 边界。
@@ -144,8 +156,8 @@
 
 ### 5.1 验收追踪
 
-| 成功标准 | 专业 owner | 权威文档 | 验证证据 | 测试层级 |
-| --- | --- | --- | --- | --- |
+| 成功标准 | 专业 owner | 专业域 PRD-ID | 权威文档 | 验证证据 | 测试层级 |
+| --- | --- | --- | --- | --- | --- |
 | SC-1 | blockchain_ops_engineer / runtime_engineer / qa_engineer | PRD-P2P-001 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/p2p/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | certificate、验证者转换、分区/Byzantine 与权限负例 | test_tier_full |
 | SC-2 | blockchain_ops_engineer / qa_engineer | PRD-P2P-001 / PRD-P2P-002 / PRD-TESTING-003 | `doc/p2p/prd.md`; `doc/testing/prd.md` | 复制、存储角色、proof-serving 与非权威权限负例 | test_tier_full |
 | SC-3 | blockchain_ops_engineer / runtime_engineer / qa_engineer | PRD-P2P-002 / PRD-WORLD_RUNTIME-003 / PRD-TESTING-003 | `doc/p2p/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | bootstrap、checkpoint、snapshot、replay、root verification 与 restore drill | test_tier_full |
@@ -156,6 +168,37 @@
 | SC-8 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-WORLD_RUNTIME-043 / PRD-WORLD_SIMULATOR-047 / PRD-TESTING-003 | `doc/world-runtime/prd.md`; `doc/product/world-rules-core-gameplay/prd.md`; `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`; `doc/testing/prd.md` | 代表性工厂→配方/input join→原料 handoff→物流/transit→产物/终端路径的 root/revision/parent lineage、缺失/冲突 identity fail-closed、已接受与容量/预留的区分、有界 hold 与 buffer 满载背压、释放后单次重评、因果 cutover、blocked/terminal 读面、单次 sink/credit 与 retry/restore/replay 证据；包含 Agent/Viewer/pure API 对 blocker、投入、未满足/剩余量、复查边界与 terminal disposition 的读取一致，且不把局部完成、在途或缓存伪装为交付/生产完成 | test_tier_full |
 | SC-9 | producer_system_designer / gameplay_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-WORLD_RUNTIME-001 / PRD-WORLD_RUNTIME-043 / PRD-WORLD_SIMULATOR-047 / PRD-TESTING-003 | `doc/world-runtime/prd.md`; `doc/product/world-rules-core-gameplay/prd.md`; `doc/game/gameplay/gameplay-top-level-design.prd.md`; `doc/product/player-entry-distribution/free-entry-world-progression-and-recognition.prd.md`; `doc/world-simulator/m4/industrial-resource-flow-contract.prd.md`; `doc/testing/prd.md` | 同一 baseline（world/root/revision/child/stage/edge/batch、quantities、states、window/lease、receipts、W、progression、next action/recheck）在 `stage_finish`/`transit`/`buffer_admission`/`terminal_settlement` 四边界成对注入权威与非权威 outage；required 覆盖 deterministic protocol matrix + active-LLM/provider-backed pure API parity；full 追加真实本地栈/provider 的 external headed S6/Playwright desktop+narrow screenshots/console 与 provider-backed Agent parity，并记录 decision source/backend/contract/transport；各边界 fresh snapshot、canonical disposition、exactly-once/idempotency、root/quantity/state/receipt/W/progression 保持一致，`provider_local_mock` 非替代证据 | test_tier_full |
 | SC-10 | producer_system_designer / runtime_engineer / agent_engineer / viewer_engineer / qa_engineer | PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-001 / PRD-TESTING-003 | `doc/world-runtime/prd.md`; `doc/world-simulator/prd.md`; `doc/testing/prd.md` | 在 distinct global/local `world_id` 样例中验证 consumer target scope、intent 与 committed receipt identity continuity；跨世界提交、replay 或 receipt reuse 不产生或声称 global effect，scope 缺失/不匹配 fail closed | test_tier_required |
+
+### 5.2 根成功标准的义务分配
+
+下表保留根 SC 的独立判定边界，分配的是产品义务与专业责任，不是已完成的系统设计映射或任务状态。专题叶子与组合验收共同承接相关义务；SC-8、SC-9、SC-10 仍由根条款及跨模块专业合同承担，不能因为两个专题共有九组 REQ/AC 就从验收范围中消失。具体系统设计条款与验证场景须由对应专业 owner 确认，缺少它们时仍是映射缺口。
+
+| 根 SC | 必须分别判定的义务与前置条件 | 产品承接与专业分工 |
+| --- | --- | --- |
+| SC-1 | 唯一世界与受治理活动验证者集合；有效最终性证明；错误签名、阈值、集合、round 状态各自不得推进历史 | [REQ-DCS-001](distributed-consensus-and-state-availability.prd.md#req-dcs-001)、[REQ-DCS-004](distributed-consensus-and-state-availability.prd.md#req-dcs-004)及 DC-1/DC-4；P2P 拥有证书、集合和 round 合同，runtime 拥有执行绑定，运维负责拓扑事实，QA 判定组合证据 |
+| SC-2 | 各角色的复制、存储、证明提供与验证；非权威服务不得获得最终性或写入权；pruning 须先证明可重建、hash/root 校验及冗余 archive 可用 | [REQ-DCS-001](distributed-consensus-and-state-availability.prd.md#req-dcs-001)、[REQ-DCS-003](distributed-consensus-and-state-availability.prd.md#req-dcs-003)及专题存储边界；P2P 拥有角色与存储合同，运维负责暴露面和隔离，QA 核对权限负例 |
+| SC-3 | bootstrap、snapshot、replay、state sync、pruning、灾备各自重建同一历史与根；任何缺失或不匹配证明都停止 serving/voting | [REQ-DCS-002](distributed-consensus-and-state-availability.prd.md#req-dcs-002)、DC-2 与 DE-3；P2P/运维负责恢复材料与同窗口事实，runtime 负责 replay/root，QA 核对信任链各环及失败结果 |
+| SC-4 | 全部活动验证者先重执行再 attestation；同版本、顺序、父状态得到同结果；升级、混合版本及历史 replay 不产生第二个权威结果 | [REQ-DWE-001](deterministic-world-execution.prd.md#req-dwe-001)、[REQ-DWE-004](deterministic-world-execution.prd.md#req-dwe-004)及 DE-1/DE-3/DE-4；runtime 拥有确定性与版本合同，P2P 拥有 attestation/finality，QA 判定同候选组合 |
+| SC-5 | committed-only 消费；待决无资格或效果；恢复按当前条件重审且 receipt 才改变结论；互斥 lineage 首个有效 receipt 唯一胜出并原子终止其余成员；拒绝/过期仅终止自身，独立 intent 可并发；原请求与撤回/替代真实关联可读 | [REQ-DWE-002](deterministic-world-execution.prd.md#req-dwe-002)、[REQ-DWE-003](deterministic-world-execution.prd.md#req-dwe-003)及 DE-2；runtime/P2P 拥有顺序、去重和回执，Agent/Viewer/入口拥有消费与反馈，QA 核对竞态及独立请求负例 |
+| SC-6 | 同一世界 checkpoint/snapshot、replay、root 验证链；缺失、冲突、错误世界隔离且不接受新权威 intent；已提交历史保留，未 final 请求不被静默确认、取消、重放或迁移；替代世界不是恢复副作用 | [REQ-DCS-002](distributed-consensus-and-state-availability.prd.md#req-dcs-002)、DE-3 与根恢复身份边界；P2P/runtime/运维负责连续性与隔离，Viewer 负责恢复表述，跨世界迁移须独立产品决策，QA 核对身份负例 |
+| SC-7 | 同候选只读、可服务、受阻/隔离与闸门回退；历史验证不足以开放写入，追加/finality/版本/head 同时成立；不成立时 receipt 为 0；成立后 pending 当前条件重审、无期限/优先级继承且至多一次效果；回退不改已确认历史；blocker/下一步可读 | [AC-DCS-002](distributed-consensus-and-state-availability.prd.md#ac-dcs-002)、[AC-DCS-005](distributed-consensus-and-state-availability.prd.md#ac-dcs-005)及 DC-5；P2P/runtime 拥有服务闸门，运维捕获恢复窗口，消费者投影真实等级，QA 核对状态转换及每个 intent 的 receipt |
+| SC-8 | 同世界/版本/immutable root 的代表性工业流水线；child identity 在首个不可逆效果前校验；accepted 不等于预留；有界独占 hold 与满载背压；同一事件释放与 fresh snapshot 重评各一次；因果变化 linked revision/child；retry/restore/replay 无第二效果；数量、最早 blocker、复查边界可读 | 根工业跨域边界及 [runtime 工业权威矩阵](../../world-runtime/prd.md#industrial-execution-status-and-authority-matrix)、[工业资源流合同](../../world-simulator/m4/industrial-resource-flow-contract.prd.md)；runtime 拥有跨阶段因果与单次效果，玩法 authority 拥有资源/容量规则，Agent/Viewer/API 拥有投影，QA 判定整条流水线 |
+| SC-9 | 四个边界分别成对注入权威与非权威 outage；提交前无效果，提交后保留实际数量与 lineage；恢复 fresh snapshot 重评与 disposition 各一次；只有 gameplay canonical interruption 可将当前未完成 candidate 的 W reset 一次；读面仅 stale/unknown/reconcile 且不改世界/W；Agent/Viewer/API 同义；固定 baseline、真实 provider 与 required/full 环境限制全部保留 | 根工业 outage 边界、[工业资源流合同](../../world-simulator/m4/industrial-resource-flow-contract.prd.md)及 [gameplay 稳定产线合同](../../game/gameplay/gameplay-top-level-design.prd.md)；runtime 判定权威依赖与恢复效果，gameplay 拥有 W/window 处置，消费者拥有跨入口一致性，QA 拥有四边界成对矩阵与真实环境证据 |
+| SC-10 | 提交前识别 global 与隔离 local 的目标身份；intent/receipt/result 同世界；local receipt 不证明 global effect；身份缺失或不匹配不得接受或呈现为 global effect | 根世界身份边界及 [消费者专业 PRD](../../world-simulator/prd.md)；runtime 拥有身份校验，Agent/Viewer/API 各自拥有 scope 表达，QA 核对跨世界提交、replay 与 receipt reuse 负例 |
+
+表中的分配不改变 §5 成功标准的测试层级。专题局部检查不能替代根 SC 的同候选组合证据；SC-9 的 `test_tier_required` 确定性矩阵与真实 provider API parity、以及 `test_tier_full` 增加的真实浏览器和 provider-backed Agent parity 是分别适用的义务，不能互相代签。
+
+### 5.3 事实边界与未决承接
+
+本文记录目标产品合同。共识原型与执行、恢复、消费者的当前能力边界分别由[分布式专题的现状](distributed-consensus-and-state-availability.prd.md#5-当前与目标的分离)、[执行专题的现状](deterministic-world-execution.prd.md#3-当前与目标的分离)及专业 authority 说明。文档采纳、设计承接、实现、已执行验证与公开发行是不同事实；本节和追踪表中的场景说明是验证要求，不能读作已有测试或已经通过。
+
+| 未决问题 / 影响 | 决策 role 与所需信息 | 解决触发与临时边界 |
+| --- | --- | --- |
+| SC-1～SC-10 的哪些准确专业接受条款、系统设计和验证场景分别承接各项义务？当前模块路径或泛化锚点不足以判定全量覆盖 | 对应 P2P/runtime 专业 owner、消费者 owner 与 QA；逐项核对真实条款、环境、判定条件和未覆盖范围，产品 owner 核对产品含义 | 专业承接条款获批准并可定位后复核产品回链；此前不得宣称跨层映射闭合，缺设计或可判断计划不能以未来任务代替 |
+| SC-1/SC-4 等组合 full 验收与专题 required 局部检查分别覆盖哪些义务？ | 对应专业 owner 与 QA；提供相同义务的局部范围、组合范围和证据身份 | 验证设计明确覆盖边界后确认；此前保留根及正文更完整的验收条件，不以局部绿色结果降低组合要求 |
+| SC-7/DC-5 的结构化 attachment/schema 是否覆盖状态转换、manifest/head 负例、receipt 0/1 与消费者 blocker/下一步？ | runtime/P2P、运维、消费者 owner 与 QA；核对同候选、同证据窗口的字段与判定 | 验证设计及附件合同可定位后复核；仅有 state-sync 模板或 health/transport 成功不能判通过 |
+
+上述问题由[文档迁移协调任务 #3935](https://github.com/eng-cc/oasis7/issues/3935)接收；交付身份、依赖、处置和结果证据仅由 GitHub Issue/Project-backed task truth 维护，本文件不复制可变任务进度。技术设计或测试尚未安排时也不虚构任务、锚点或执行结果。
 
 ## 6. Non-Goals
 

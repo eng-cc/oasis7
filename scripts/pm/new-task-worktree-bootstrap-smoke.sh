@@ -78,9 +78,27 @@ printf '%q ' "$@" >> "$GH_CALL_LOG"
 printf '\n' >> "$GH_CALL_LOG"
 case "$*" in
   "issue create -R eng-cc/oasis7 --title "*)
+    cp "${@: -1}" "$GH_ISSUE_BODY_STATE_FILE"
     printf 'https://github.com/eng-cc/oasis7/issues/2401\n'
     ;;
+  issue\ list\ -R\ eng-cc/oasis7\ --state\ all\ --search\ task_*\ in:body\ --json\ number,url,title,state\ --limit\ 5)
+    printf '[{"number":2401,"state":"OPEN","title":"[PM] smoke bootstrap task","url":"https://github.com/eng-cc/oasis7/issues/2401"}]\n'
+    ;;
+  "issue view 2401 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason")
+    python3 - "$GH_ISSUE_BODY_STATE_FILE" <<'PY'
+import json, pathlib, sys
+print(json.dumps({
+    "body": pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"),
+    "number": 2401,
+    "title": "[PM] smoke bootstrap task",
+    "url": "https://github.com/eng-cc/oasis7/issues/2401",
+    "state": "OPEN",
+    "stateReason": None,
+}))
+PY
+    ;;
   "issue edit 2401 -R eng-cc/oasis7 --body-file "*)
+    cp "${@: -1}" "$GH_ISSUE_BODY_STATE_FILE"
     printf '%s\n' '--- issue edit body ---' >> "$GH_EDIT_BODY_LOG"
     cat "${@: -1}" >> "$GH_EDIT_BODY_LOG"
     printf '\n' >> "$GH_EDIT_BODY_LOG"
@@ -128,6 +146,7 @@ export PATH="$TMPDIR/bin:$PATH"
 export GH_CALL_LOG="$TMPDIR/gh-calls.log"
 export GH_COMMENT_LOG="$TMPDIR/gh-comments.log"
 export GH_EDIT_BODY_LOG="$TMPDIR/issue-body-edited.md"
+export GH_ISSUE_BODY_STATE_FILE="$TMPDIR/issue-live-body.md"
 : > "$GH_CALL_LOG"
 : > "$GH_COMMENT_LOG"
 : > "$GH_EDIT_BODY_LOG"

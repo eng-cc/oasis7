@@ -605,7 +605,8 @@ local_role_review_status() {
   local source_head="$3"
   local comparison_ref="$4"
   local expected_comparison_oid="${5:-}"
-  python3 - "$source_worktree" "$source_branch" "$source_head" "$comparison_ref" "$expected_comparison_oid" <<'PY'
+  local allow_moved_comparison_ref="${6:-0}"
+  python3 - "$source_worktree" "$source_branch" "$source_head" "$comparison_ref" "$expected_comparison_oid" "$allow_moved_comparison_ref" <<'PY'
 from __future__ import annotations
 
 from pathlib import Path
@@ -620,6 +621,7 @@ source_branch = sys.argv[2]
 source_head = sys.argv[3]
 comparison_ref = sys.argv[4]
 expected_comparison_oid = sys.argv[5] if len(sys.argv) > 5 else ""
+allow_moved_comparison_ref = len(sys.argv) > 6 and sys.argv[6] == "1"
 root = source_worktree
 tasks_dir = root / ".pm" / "tasks"
 
@@ -960,23 +962,18 @@ required = {
     "Comparison OID": comparison_oid,
 }
 
-# Promotion binds the packet to the immutable receipt base OID.  Keep the
-# packet field as the default authority for pre-promotion validation, then
-# override that expected value only when promotion supplies a receipt base.
+# Every ordinary admission binds both the packet's symbolic Comparison Ref
+# and its resolved OID. Promotion alone may retain an older symbolic ref after
+# the base moves; there the immutable receipt OID is the range authority.
 if expected_comparison_oid:
     required["Comparison OID"] = expected_comparison_oid
-
-# The symbolic ref is audit context.  During promotion the receipt's base
-# OID is the immutable review-range authority, so a later move of the symbolic
-# base ref must not invalidate an otherwise exact packet.  Without a receipt,
-# retain the current comparison ref as the pre-PR validation authority.
-if not expected_comparison_oid:
+if not allow_moved_comparison_ref:
     required["Comparison Ref"] = comparison_ref
 
 missing: list[str] = []
 
 packet_comparison_ref = parse_field(selected_block, "Comparison Ref")
-if expected_comparison_oid:
+if allow_moved_comparison_ref:
     if not packet_comparison_ref:
         missing.append("Comparison Ref")
     elif not re.fullmatch(
@@ -1468,6 +1465,10 @@ if [[ -z "$REVIEW_COMPARISON_OID" ]]; then
     REVIEW_COMPARISON_OID="$SOURCE_SCOPE_BASE"
   fi
 fi
+REVIEW_COMPARISON_REF_MAY_MOVE=0
+if [[ -n "$PROMOTE_DRAFT_RECEIPT" ]]; then
+  REVIEW_COMPARISON_REF_MAY_MOVE=1
+fi
 BASE_WORKTREE=""
 if [[ -n "$LOCAL_BASE_REF" ]]; then
   BASE_WORKTREE="$(branch_checkout_path "$BASE_BRANCH" 2>/dev/null || true)"
@@ -1802,7 +1803,7 @@ if git show-ref --verify --quiet "refs/remotes/$REMOTE_NAME/$SOURCE_BRANCH"; the
   REMOTE_SOURCE_REF="refs/remotes/$REMOTE_NAME/$SOURCE_BRANCH"
 fi
 
-LOCAL_ROLE_REVIEW_OUTPUT="$(local_role_review_status "$SOURCE_WORKTREE" "$SOURCE_BRANCH" "$SOURCE_HEAD" "$COMPARISON_REF" "$REVIEW_COMPARISON_OID")"
+LOCAL_ROLE_REVIEW_OUTPUT="$(local_role_review_status "$SOURCE_WORKTREE" "$SOURCE_BRANCH" "$SOURCE_HEAD" "$COMPARISON_REF" "$REVIEW_COMPARISON_OID" "$REVIEW_COMPARISON_REF_MAY_MOVE")"
 LOCAL_ROLE_REVIEW_STATUS="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "status")"
 LOCAL_ROLE_REVIEW_TASK_UID="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "task_uid")"
 LOCAL_ROLE_REVIEW_LOG_PATH="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "evidence_sink")"

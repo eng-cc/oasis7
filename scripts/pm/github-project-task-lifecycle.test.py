@@ -166,6 +166,16 @@ class MoveTaskLifecycleContract(unittest.TestCase):
                 mapping_path = self.write_mapping(root, record)
                 before = self.digest(mapping_path)
                 with (
+                    mock.patch.object(
+                        MODULE,
+                        "github_issue_record",
+                        return_value={
+                            "task_uid": UID,
+                            "issue_number": record["issue_number"],
+                            "status": record["status"],
+                            "workflow_phase": record["workflow_phase"],
+                        },
+                    ),
                     mock.patch.object(MODULE, "update_issue_body") as update_issue,
                     mock.patch.object(MODULE, "update_project_fields", return_value=0) as update_project,
                     mock.patch("builtins.print"),

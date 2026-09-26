@@ -426,15 +426,29 @@ module.commit_terminal(root,uid,{'receipt_type':'forged'},'0'*64)
         self.assertRegex(phase_function, r"done[^\n]{0,120}task_done|task_done[^\n]{0,120}done")
         self.assertNotRegex(phase_function, r"done[^\n]{0,120}post_merge_done")
 
-    def test_generic_set_phase_cannot_mint_terminal_authority(self) -> None:
+    def test_generic_set_phase_only_accepts_aggregate_terminal_with_durable_receipt(self) -> None:
         task = TASK.read_text(encoding="utf-8")
         set_phase = function(task, "command_set_phase")
-        self.assertNotIn('args.phase == "post_merge_done"', set_phase)
+        self.assertIn(
+            'args.phase == "post_merge_done" and original.get("completion_mode") == "ordered_delivery_aggregate"',
+            set_phase,
+        )
         self.assertRegex(set_phase, r"ALLOWED_PHASE_TRANSITIONS|allowed_transition")
+        self.assertIn("validate_canonical_aggregate_terminal_receipt(args, original, receipt, receipt_bytes)", set_phase)
+        terminal_guard = set_phase.index("validate_canonical_aggregate_terminal_receipt(args, original, receipt, receipt_bytes)")
+        first_effect = min(
+            set_phase.index(marker)
+            for marker in ("comment_url = issue_comment(", "update_project_fields(args, task", "merge_task_mapping(")
+        )
+        self.assertLess(terminal_guard, first_effect)
         self.assertRegex(set_phase, r"RECEIPT_SCHEMAS|receipt_schema")
         parser = function(task, "build_parser")
-        self.assertRegex(parser, r"--phase[^\n]+choices=")
-        self.assertNotRegex(parser, r"choices=.*post_merge_done")
+        phase_parser = parser.split('phase = subparsers.add_parser("set-phase")', 1)[1].split(
+            'refresh = subparsers.add_parser("refresh-task")', 1
+        )[0]
+        self.assertIn('choices=("main_sync", "post_merge_done")', phase_parser)
+        for flag in ("--aggregate-plan", "--aggregate-candidate", "--aggregate-evidence", "--aggregate-receipt"):
+            self.assertIn(flag, phase_parser)
 
     def test_public_task_cli_cannot_bypass_the_receipt_bound_finalizer(self) -> None:
         task = TASK.read_text(encoding="utf-8")

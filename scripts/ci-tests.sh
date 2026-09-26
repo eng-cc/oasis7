@@ -388,6 +388,10 @@ run_workflow_governance_baseline_contract_tests() {
 
 run_workflow_governance_operational_contract_tests() {
   run ./scripts/ci-required-scope-audit-contract.test.sh
+  run python3 ./scripts/pm/aggregate-task-completion.test.py
+  run python3 ./scripts/pm/ordered-aggregate-closeout.test.py
+  run python3 ./scripts/pm/terminal-task-audit-aggregate.test.py
+  run python3 ./scripts/pm/terminal-task-audit-project-semantics.test.py
   run python3 ./scripts/pm/ci-ready-receipt.test.py
   run python3 ./scripts/pm/review-plan.test.py
   run python3 ./scripts/pm/subagent-task-packet.test.py
