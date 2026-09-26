@@ -19,6 +19,84 @@ UID = 'task_' + 'a' * 32
 
 
 class CIGateTests(unittest.TestCase):
+    def retry_case(self, arrival=1, change=None, field=None, issue_change=None, read_error=False):
+        pr = {'number': 2, 'state': 'open', 'merged_at': None, 'draft': True,
+              'body': UID + '\nRefs #1',
+              'head': {'sha': 'b'*40, 'ref': 'task-branch', 'repo': {'full_name': 'fixture/repo'}},
+              'base': {'ref': 'main', 'repo': {'full_name': 'fixture/repo'}}}
+        reads = {'pr': 0, 'issue': 0}
+        sleeps = []
+        def live(*args):
+            endpoint = args[2]
+            if read_error and sleeps:
+                raise subprocess.CalledProcessError(1, args)
+            if endpoint.endswith('/comments'): return '[]'
+            if '/pulls/' in endpoint:
+                reads['pr'] += 1
+                value = json.loads(json.dumps(pr))
+                if change and reads['pr'] > 1: change(value)
+                return json.dumps(value)
+            reads['issue'] += 1
+            binding = field if field is not None else ('- pr_number: `2`' if len(sleeps) >= arrival else '')
+            value = {'number': 1, 'state': 'open', 'body': '<!-- oasis7-pm-task -->\ntask_uid: '+UID+'\n'+binding}
+            if issue_change and sleeps: issue_change(value)
+            return json.dumps(value)
+        with patch.object(module, 'run', side_effect=live), patch('time.sleep', side_effect=sleeps.append), patch('sys.argv', ['loop-ci.py','--repository','fixture/repo','--pr-number','2','--base','a'*40,'--head','b'*40]), patch('sys.stdout',new_callable=io.StringIO) as output:
+            result = module.main()
+        return result, sleeps, reads, output.getvalue()
+
+    def test_initial_binding_arrives_after_one_wait(self):
+        result, sleeps, reads, _ = self.retry_case()
+        self.assertEqual(result, 0)
+        self.assertEqual(sleeps, [5])
+        self.assertEqual(reads['pr'], 2)
+
+    def test_absent_binding_wait_is_bounded(self):
+        result, sleeps, _, output = self.retry_case(arrival=99)
+        self.assertEqual(result, 2)
+        self.assertEqual(sleeps, [5]*6)
+        self.assertIn('timeout', output)
+
+    def test_binding_arrival_does_not_mask_identity_drift(self):
+        for change in (lambda pr: pr['head'].update(sha='c'*40),
+                       lambda pr: pr.update(body=UID+'\nRefs #9'),
+                       lambda pr: pr['base'].update(ref='other'),
+                       lambda pr: pr['head'].update(ref='other'),
+                       lambda pr: pr['base']['repo'].update(full_name='other/repo'),
+                       lambda pr: pr.update(body='task_'+'c'*32+'\nRefs #1'),
+                       lambda pr: pr.update(draft=False),
+                       lambda pr: pr.update(state='closed'),
+                       lambda pr: pr.update(merged_at='now')):
+            with self.subTest(change=change):
+                result, sleeps, reads, _ = self.retry_case(change=change)
+                self.assertEqual(result, 2)
+                self.assertEqual(sleeps, [5])
+                self.assertEqual(reads['pr'], 2)
+
+    def test_conflicting_or_malformed_binding_never_waits(self):
+        for field in ('- pr_number: `3`', '- pr_number: malformed', '- pr_number malformed', '- pr_number: `2`\n- pr_number: `2`'):
+            with self.subTest(field=field):
+                result, sleeps, _, _ = self.retry_case(field=field)
+                self.assertEqual(result, 2)
+                self.assertEqual(sleeps, [])
+
+    def test_pending_issue_drift_blocks_binding_arrival(self):
+        for change in (lambda issue: issue.update(number=9),
+                       lambda issue: issue.update(state='closed'),
+                       lambda issue: issue.update(body=issue['body'].replace(UID, 'task_'+'c'*32)),
+                       lambda issue: issue.update(body=issue['body'].replace('<!-- oasis7-pm-task -->', ''))):
+            with self.subTest(change=change):
+                result, sleeps, _, _ = self.retry_case(issue_change=change)
+                self.assertEqual((result, sleeps), (2, [5]))
+
+    def test_pending_api_failure_is_not_retried(self):
+        result, sleeps, _, _ = self.retry_case(read_error=True)
+        self.assertEqual((result, sleeps), (2, [5]))
+
+    def test_binding_can_arrive_on_final_attempt(self):
+        result, sleeps, _, _ = self.retry_case(arrival=6)
+        self.assertEqual((result, sleeps), (0, [5]*6))
+
     def test_hosted_path_does_not_require_project_token_or_local_admission(self):
         source = Path(module.__file__).read_text()
         self.assertNotIn('OASIS7_LOOP_READ_TOKEN', source)
