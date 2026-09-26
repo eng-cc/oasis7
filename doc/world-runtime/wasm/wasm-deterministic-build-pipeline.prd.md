@@ -1,5 +1,64 @@
 # oasis7 Runtime：WASM Docker 确定性构建与工件治理管线
 
+- 专业 owner：`wasm_platform_engineer`；状态：active professional authority（目标合同不等于已实现）。
+- 内容审读基线：`eng-cc/oasis7`，源提交 `9c41d57b4436f71f0cf9b481043d882cfdc551ed`；本次文档采纳任务：[Issue 4102](https://github.com/eng-cc/oasis7/issues/4102)，Task UID `task_9f4c3a6c2daa40a0ae3e2c86bdf35e02`；内容整理日期：2026-09-26。
+- 独立审读与实际实现/测试候选证据由该 task evidence 记录；此处不预报审读通过、runtime capability、发布或 full proof。下方既有条款仍有效；仅显式日期/历史基线条款按其证据范围解释。
+
+<a id="sr2-acceptance"></a>
+## SR2 具体目标验收与专业承接
+
+<a id="sr2-domain-case-1"></a>
+
+### BUILD-01 专业接受条件
+
+输入：pinned image/platform/source closure/tooling/wasm mismatch。断言：受控Docker拒绝wrong identity；发布只一个linux token。目标字段、算法和恢复条件由 [BUILD-01精确设计](wasm-deterministic-build-pipeline.design.md#sr2-build-contract) 承接；跨域 proof/publication obligation 由 [BUILD-01外部接收器](wasm-deterministic-build-pipeline.design.md#sr2-build-contract) 承接。required codec/deterministic fixture 与 full actual finality/candidate artifacts 是不同层，本次未运行。
+
+<a id="sr2-domain-case-2"></a>
+
+### BUILD-02 专业接受条件
+
+输入：Linux-only vs Darwin+Linux actual Docker summaries。断言：Linux仅partial；双宿主full必须同candidate且bytes一致。目标字段、算法和恢复条件由 [BUILD-02精确设计](wasm-deterministic-build-pipeline.design.md#sr2-build-contract) 承接；跨域 proof/publication obligation 由 [BUILD-02外部接收器](wasm-deterministic-build-pipeline.design.md#sr2-build-contract) 承接。required codec/deterministic fixture 与 full actual finality/candidate artifacts 是不同层，本次未运行。
+
+<a id="sr2-domain-case-3"></a>
+
+### BUILD-03 专业接受条件
+
+输入：node-side missing/forged proof、production host compile、materializer fallback。断言：独立policy/trust receiver拒绝；不以source compile-off代fallback proof。目标字段、算法和恢复条件由 [BUILD-03精确设计](wasm-deterministic-build-pipeline.design.md#sr2-build-contract) 承接；跨域 proof/publication obligation 由 [BUILD-03外部接收器](../module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-trust) 承接。required codec/deterministic fixture 与 full actual finality/candidate artifacts 是不同层，本次未运行。
+
+
+既有所有成功标准、验收、limits、公式、historical identities和能力限制保留；下表逐项承接到 [精确target设计](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)，而非以任务链接代替设计。Issue4102只承担文档合同采纳；现行实现partial与未来所需runtime/proof验证保持独立。typed字段共用 [interface types](wasm-interface.md#sr2-types)；build/signature/SDK/metrics局部结果均不证明canonical世界效果。
+
+| 原 obligation identity（下方完整原文） | 具体承接结果 / 适用条件 | 精确设计 receiver | 验证范围 / evidence |
+| --- | --- | --- | --- |
+| [SC-1原文](#sr2-obligation-sc-1) | SC-1: 同一 commit 在 macOS 与 Linux 上通过同一 pinned Docker builder image 构建时，得到的 canonical packaged wasm hash 一致率为 100%。 | [SC-1本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [SC-2原文](#sr2-obligation-sc-2) | SC-2: 发布级模块工件只产生一个 canonical publish hash，来源固定为 linux-x86_64 容器构建；宿主平台不再写入独立发布 hash。 | [SC-2本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [SC-3原文](#sr2-obligation-sc-3) | SC-3: build receipt 必须能追溯 builder_image_ref + builder_image_digest + container_platform + source_hash(含模块本地 path 依赖闭包) + build_manifest_hash + wasm_hash + canonicalizer_version。 | [SC-3本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [SC-4原文](#sr2-obligation-sc-4) | SC-4: runtime 与节点执行路径默认只接受 Docker canonical build 产生的 wasm binary 与其 identity/release evidence，不要求节点重新编译源码。 | [SC-4本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [SC-5原文](#sr2-obligation-sc-5) | SC-5: ModuleSourcePackage 的生产发布路径不得继续依赖 runtime 进程在宿主机直接编译；必须迁移到同一 Docker builder 或显式 gated 为 dev/test only。 | [SC-5本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [SC-6原文](#sr2-obligation-sc-6) | SC-6: 发布候选要宣称“跨宿主 determinism 已收口”时，必须归档至少一条 linux-x86_64 与一条 Docker-capable darwin-arm64 的 canonical summary / release evidence；Linux-only gate 只能代表稳定基线，不能代表跨宿主 closure。 | [SC-6本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [SC-7原文](#sr2-obligation-sc-7) | SC-7: 生产 runtime / node 入口必须默认关闭 builtin manifest fallback、本地 identity hash 签名、本地 finality signing 与 runtime source compile，保证 binary-only policy 是生产默认行为而不是测试显式开关。 | [SC-7本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [SC-8原文](#sr2-obligation-sc-8) | SC-8: 跨宿主 Docker release evidence 必须可被包装成 node-side attestation proof payload，并进入 ModuleReleaseSubmitAttestation.proof_cid；仅存在于 CI artifact 的 report 不能单独视为生产 closure。 | [SC-8本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [SC-9原文](#sr2-obligation-sc-9) | SC-9: Docker-first canonical build 链路的 operator env key 必须统一到 OASIS7_WASM_* 当前入口；不得再保留任何旧品牌前缀作为有效运行入口，避免 host wrapper、builder image、sync/check 与 build receipt 采集口径分叉。 | [SC-9本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [PRD-WORLD_RUNTIME-020原文](#sr2-obligation-prd-world_runtime-020) | PRD-WORLD_RUNTIME-020: As a wasm_platform_engineer, I want publishable WASM to be built only inside a pinned Docker builder image, so that host platform differences stop influencing release hashes. | [PRD-WORLD_RUNTIME-020本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [PRD-WORLD_RUNTIME-021原文](#sr2-obligation-prd-world_runtime-021) | PRD-WORLD_RUNTIME-021: As a 发布节点运营者, I want each artifact to carry a build receipt that binds builder image digest, source hash, build manifest hash, and canonical wasm hash, so that social verification no longer depends on “which laptop built it”. | [PRD-WORLD_RUNTIME-021本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [PRD-WORLD_RUNTIME-022原文](#sr2-obligation-prd-world_runtime-022) | PRD-WORLD_RUNTIME-022: As a runtime_engineer / qa_engineer, I want runtime to consume only Docker-canonical binaries and CI to compare Docker outputs across hosts, so that drift is blocked before execution. | [PRD-WORLD_RUNTIME-022本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [AC-1原文](#sr2-obligation-ac-1) | AC-1 (PRD-WORLD_RUNTIME-020): 必须新增并固定一份 WASM builder Docker image，镜像引用必须以 digest pin；所有 publishable wasm 构建都通过 docker run 进入该镜像。 | [AC-1本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [AC-2原文](#sr2-obligation-ac-2) | AC-2 (PRD-WORLD_RUNTIME-020): builder image 必须封装 Rust toolchain、rust-src、wasm32-unknown-unknown 目标、linker/canonicalizer 所需依赖，并把这些版本信息收敛到 build_manifest_hash。 | [AC-2本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [AC-3原文](#sr2-obligation-ac-3) | AC-3 (PRD-WORLD_RUNTIME-020): scripts/build-wasm-module.sh 的 canonical path 必须改为 Docker wrapper；publishable 构建不再保留 host-native cargo fallback。 | [AC-3本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [AC-4原文](#sr2-obligation-ac-4) | AC-4 (PRD-WORLD_RUNTIME-021): 发布级 hash manifest 目标态只允许写入单个 canonical token：linux-x86_64=<sha256>；darwin-arm64 不再作为发布 hash 来源。 | [AC-4本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [AC-5原文](#sr2-obligation-ac-5) | AC-5 (PRD-WORLD_RUNTIME-021): build receipt 至少绑定 builder_image_digest + container_platform + source_hash(含本地 path 依赖闭包) + build_manifest_hash + wasm_hash + canonicalizer_version，并进入 identity/release evidence。 | [AC-5本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [AC-6原文](#sr2-obligation-ac-6) | AC-6 (PRD-WORLD_RUNTIME-022): multi-runner CI 必须比较“相同 Docker builder 在不同宿主上产出的 canonical hash”，而不是继续比较 host-native cargo 输出。 | [AC-6本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [AC-7原文](#sr2-obligation-ac-7) | AC-7 (PRD-WORLD_RUNTIME-022): runtime 与节点执行路径默认只接受 canonical Docker build 产物；节点不通过重新编译源码参与执行合法性判断。 | [AC-7本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [AC-8原文](#sr2-obligation-ac-8) | AC-8 (PRD-WORLD_RUNTIME-022): compile_module_artifact_from_source 的生产路径必须迁移到外部 Docker builder 或直接禁用；runtime 进程内 host 直编只允许在 dev/test 模式下显式开启。 | [AC-8本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [AC-9原文](#sr2-obligation-ac-9) | AC-9 (PRD-WORLD_RUNTIME-021/022): 若 GitHub-hosted CI 因 runner 能力不足只能保留 Linux-only stable gate，PRD / project / evidence 报告必须把跨宿主 evidence 标记为 pending，直到导入 Docker-capable macOS summary 为止。 | [AC-9本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [AC-10原文](#sr2-obligation-ac-10) | AC-10 (PRD-WORLD_RUNTIME-022): production 运行入口必须提供 release security policy 绑定证据，证明 fallback / 本地签名 / runtime source compile 默认关闭；仅在测试里调用 enable_production_release_policy() 不足以视为完成。 | [AC-10本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [AC-11原文](#sr2-obligation-ac-11) | AC-11 (PRD-WORLD_RUNTIME-021/022): release evidence 除了 CI/report 汇总外，还必须存在 node-side proof payload 打包与 attestation submit 入口，使 builder_image_digest/container_platform/canonicalizer_version 可作为发布节点提交的正式证明字段进入共识链路。 | [AC-11本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [AC-12原文](#sr2-obligation-ac-12) | AC-12 (PRD-WORLD_RUNTIME-020/021): scripts/build-wasm-module.sh、scripts/sync-m1-builtin-wasm-artifacts.sh、scripts/ci-m1-wasm-summary.sh、tools/wasm_build_suite 与 docker/wasm-builder/Dockerfile 必须只写入或读取 OASIS7_WASM_*；wrapper usage、错误提示、容器注入 env 与 build receipt 元数据采集不得再接受任何旧品牌前缀作为有效运行入口。 | [AC-12本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [AC-13原文](#sr2-obligation-ac-13) | AC-13 (PRD-WORLD_RUNTIME-021/022): builtin wasm materializer、release manifest fallback 与 DistFS root override 的 runtime env key 必须只读取 OASIS7_BUILTIN_WASM_*；Docker-first build 已完成品牌迁移后，runtime 取件/抓取/编译 fallback 不得继续接受任何旧品牌前缀作为有效运行入口。 | [AC-13本域合同](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../scripts/ci-verify-m1-wasm-summaries.py)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+
+目标 acceptance 另外要求：有效 ModuleExecutionReceiptV1 仅 committed_success；canonical no-effect由runtime IntentDecisionV1区分；world branch、member_generation、decimal U64与UTF8byte bound全链一致；receipt core不包含递归blockproof。migration/state/schedule/replay精确字段由interface独占，运行发布点由lifecycle/executor独占。观测不可进入计费/世界hash；Docker构建proof与external release finality独立；SDK旧wasm-1 optional/default不变。完整DC5 attachment由GWSC/schema接收，SC9全部8cells与provider/headed proof不裁剪。
+
+
 - 对应设计文档: `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.design.md`
 - 稳定证据入口: `doc/world-runtime/wasm/evidence.md`
 
@@ -9,14 +68,32 @@
 - Problem Statement: 当前仓库已经有 host 侧 deterministic guard、canonical packaging、keyed hash manifest、identity manifest、DistFS 与 multi-runner 对账，但这些机制本质上仍是在“接受不同宿主平台会产出不同 wasm，然后用治理和对账去兜底”。如果目标是从源头解决 `darwin-arm64` / `linux-x86_64` 的 hash 漂移，仅靠 host 原生构建护栏不够，必须把发布级构建环境收敛到同一容器镜像。
 - Proposed Solution: 把 publishable WASM 的 canonical build path 改为 Docker-first。所有可进入发布链路的 wasm 都必须在 pinned builder image 中构建，容器平台固定为 `linux-x86_64`，并由同一容器内的 build suite 产出 canonical packaged wasm。宿主机只负责调用 `docker run`；真正进入 module id、release manifest、identity 与 runtime 执行链路的 hash，只认容器产物，不认 host-native 构建结果。
 - Success Criteria:
+<a id="sr2-obligation-sc-1"></a>
+
   - SC-1: 同一 commit 在 macOS 与 Linux 上通过同一 pinned Docker builder image 构建时，得到的 canonical packaged wasm hash 一致率为 `100%`。
+<a id="sr2-obligation-sc-2"></a>
+
   - SC-2: 发布级模块工件只产生一个 canonical publish hash，来源固定为 `linux-x86_64` 容器构建；宿主平台不再写入独立发布 hash。
+<a id="sr2-obligation-sc-3"></a>
+
   - SC-3: build receipt 必须能追溯 `builder_image_ref + builder_image_digest + container_platform + source_hash(含模块本地 path 依赖闭包) + build_manifest_hash + wasm_hash + canonicalizer_version`。
+<a id="sr2-obligation-sc-4"></a>
+
   - SC-4: runtime 与节点执行路径默认只接受 Docker canonical build 产生的 wasm binary 与其 identity/release evidence，不要求节点重新编译源码。
+<a id="sr2-obligation-sc-5"></a>
+
   - SC-5: `ModuleSourcePackage` 的生产发布路径不得继续依赖 runtime 进程在宿主机直接编译；必须迁移到同一 Docker builder 或显式 gated 为 dev/test only。
+<a id="sr2-obligation-sc-6"></a>
+
   - SC-6: 发布候选要宣称“跨宿主 determinism 已收口”时，必须归档至少一条 `linux-x86_64` 与一条 Docker-capable `darwin-arm64` 的 canonical summary / release evidence；Linux-only gate 只能代表稳定基线，不能代表跨宿主 closure。
+<a id="sr2-obligation-sc-7"></a>
+
   - SC-7: 生产 runtime / node 入口必须默认关闭 builtin manifest fallback、本地 identity hash 签名、本地 finality signing 与 runtime source compile，保证 binary-only policy 是生产默认行为而不是测试显式开关。
+<a id="sr2-obligation-sc-8"></a>
+
   - SC-8: 跨宿主 Docker release evidence 必须可被包装成 node-side attestation proof payload，并进入 `ModuleReleaseSubmitAttestation.proof_cid`；仅存在于 CI artifact 的 report 不能单独视为生产 closure。
+<a id="sr2-obligation-sc-9"></a>
+
   - SC-9: Docker-first canonical build 链路的 operator env key 必须统一到 `OASIS7_WASM_*` 当前入口；不得再保留任何旧品牌前缀作为有效运行入口，避免 host wrapper、builder image、sync/check 与 build receipt 采集口径分叉。
 
 ## 2. User Experience & Functionality
@@ -31,8 +108,14 @@
   - 发布候选验证：每个候选版本至少执行一次跨宿主 Docker reproducibility 对账。
   - 源码包发布：每次玩家/Agent 源码包要进入正式模块市场时执行。
 - User Stories:
+<a id="sr2-obligation-prd-world_runtime-020"></a>
+
   - PRD-WORLD_RUNTIME-020: As a `wasm_platform_engineer`, I want publishable WASM to be built only inside a pinned Docker builder image, so that host platform differences stop influencing release hashes.
+<a id="sr2-obligation-prd-world_runtime-021"></a>
+
   - PRD-WORLD_RUNTIME-021: As a 发布节点运营者, I want each artifact to carry a build receipt that binds builder image digest, source hash, build manifest hash, and canonical wasm hash, so that social verification no longer depends on “which laptop built it”.
+<a id="sr2-obligation-prd-world_runtime-022"></a>
+
   - PRD-WORLD_RUNTIME-022: As a `runtime_engineer` / `qa_engineer`, I want runtime to consume only Docker-canonical binaries and CI to compare Docker outputs across hosts, so that drift is blocked before execution.
 - Critical User Flows:
   1. Flow-WDBP-001（builtin Docker 构建）:
@@ -55,18 +138,44 @@
 | source package policy | `source_bundle_hash`、`compile_mode=external-builder|dev-only` | 生产路径提交到外部 builder；runtime 直编仅限 dev/test | `submitted -> queued_for_build -> built/rejected` | 生产不得继续走 runtime host compile；dev/test 路径显式 gated | 仅受控发布节点可产出 publishable artifact |
 | production release policy | `allow_builtin_manifest_fallback`、`allow_identity_hash_signature`、`allow_local_finality_signing`、`allow_runtime_source_compile` | 生产入口启动时必须切到 fallback-off / local-signing-off / source-compile-off | `dev-default -> production-hardened` | 仅显式 dev/test 配置可放宽；不能依赖测试中手工调用作为生产证据 | `runtime_engineer` 负责入口绑定，`wasm_platform_engineer` / `qa_engineer` 负责 gate |
 - Acceptance Criteria:
+<a id="sr2-obligation-ac-1"></a>
+
   - AC-1 (PRD-WORLD_RUNTIME-020): 必须新增并固定一份 WASM builder Docker image，镜像引用必须以 digest pin；所有 publishable wasm 构建都通过 `docker run` 进入该镜像。
+<a id="sr2-obligation-ac-2"></a>
+
   - AC-2 (PRD-WORLD_RUNTIME-020): builder image 必须封装 Rust toolchain、`rust-src`、`wasm32-unknown-unknown` 目标、linker/canonicalizer 所需依赖，并把这些版本信息收敛到 `build_manifest_hash`。
+<a id="sr2-obligation-ac-3"></a>
+
   - AC-3 (PRD-WORLD_RUNTIME-020): `scripts/build-wasm-module.sh` 的 canonical path 必须改为 Docker wrapper；publishable 构建不再保留 host-native cargo fallback。
+<a id="sr2-obligation-ac-4"></a>
+
   - AC-4 (PRD-WORLD_RUNTIME-021): 发布级 hash manifest 目标态只允许写入单个 canonical token：`linux-x86_64=<sha256>`；`darwin-arm64` 不再作为发布 hash 来源。
+<a id="sr2-obligation-ac-5"></a>
+
   - AC-5 (PRD-WORLD_RUNTIME-021): build receipt 至少绑定 `builder_image_digest + container_platform + source_hash(含本地 path 依赖闭包) + build_manifest_hash + wasm_hash + canonicalizer_version`，并进入 identity/release evidence。
+<a id="sr2-obligation-ac-6"></a>
+
   - AC-6 (PRD-WORLD_RUNTIME-022): multi-runner CI 必须比较“相同 Docker builder 在不同宿主上产出的 canonical hash”，而不是继续比较 host-native cargo 输出。
+<a id="sr2-obligation-ac-7"></a>
+
   - AC-7 (PRD-WORLD_RUNTIME-022): runtime 与节点执行路径默认只接受 canonical Docker build 产物；节点不通过重新编译源码参与执行合法性判断。
+<a id="sr2-obligation-ac-8"></a>
+
   - AC-8 (PRD-WORLD_RUNTIME-022): `compile_module_artifact_from_source` 的生产路径必须迁移到外部 Docker builder 或直接禁用；runtime 进程内 host 直编只允许在 dev/test 模式下显式开启。
+<a id="sr2-obligation-ac-9"></a>
+
   - AC-9 (PRD-WORLD_RUNTIME-021/022): 若 GitHub-hosted CI 因 runner 能力不足只能保留 Linux-only stable gate，PRD / project / evidence 报告必须把跨宿主 evidence 标记为 pending，直到导入 Docker-capable macOS summary 为止。
+<a id="sr2-obligation-ac-10"></a>
+
   - AC-10 (PRD-WORLD_RUNTIME-022): production 运行入口必须提供 release security policy 绑定证据，证明 fallback / 本地签名 / runtime source compile 默认关闭；仅在测试里调用 `enable_production_release_policy()` 不足以视为完成。
+<a id="sr2-obligation-ac-11"></a>
+
   - AC-11 (PRD-WORLD_RUNTIME-021/022): release evidence 除了 CI/report 汇总外，还必须存在 node-side proof payload 打包与 attestation submit 入口，使 `builder_image_digest/container_platform/canonicalizer_version` 可作为发布节点提交的正式证明字段进入共识链路。
+<a id="sr2-obligation-ac-12"></a>
+
   - AC-12 (PRD-WORLD_RUNTIME-020/021): `scripts/build-wasm-module.sh`、`scripts/sync-m1-builtin-wasm-artifacts.sh`、`scripts/ci-m1-wasm-summary.sh`、`tools/wasm_build_suite` 与 `docker/wasm-builder/Dockerfile` 必须只写入或读取 `OASIS7_WASM_*`；wrapper usage、错误提示、容器注入 env 与 build receipt 元数据采集不得再接受任何旧品牌前缀作为有效运行入口。
+<a id="sr2-obligation-ac-13"></a>
+
   - AC-13 (PRD-WORLD_RUNTIME-021/022): builtin wasm materializer、release manifest fallback 与 DistFS root override 的 runtime env key 必须只读取 `OASIS7_BUILTIN_WASM_*`；Docker-first build 已完成品牌迁移后，runtime 取件/抓取/编译 fallback 不得继续接受任何旧品牌前缀作为有效运行入口。
 - Non-Goals:
   - 不在本专题中要求所有节点运行 Docker 再执行模块；Docker 只解决发布级构建，不进入 runtime 执行热路径。

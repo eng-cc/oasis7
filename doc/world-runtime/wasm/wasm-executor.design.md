@@ -40,3 +40,127 @@
 - 再补宿主交互与资源约束。
 - 最后沉淀错误观测与回归。
 - 修改 capability、sandbox limits 或 cache 格式时，同步更新 ABI 兼容与损坏恢复测试。
+
+## SR2 目标执行与验收合同
+
+Owner runtime_engineer；source baseline `9c41d57b4436f71f0cf9b481043d882cfdc551ed`；2026-09-26 作者审读，独立 review pending。上文 current obligations 保留；本节目标/unimplemented，不修改 wasm-1/current fees/cache、也不宣称 target fixture 已运行。
+
+## 1. 问题、目标与非目标
+当前 sandbox result、prepared publication 和 local receipt 不足以证明 finalized world effect。目标将 validation、bounded execution、deterministic usage、prepare 和 canonical publication 交给具体 receiver；不更改经济率、不引入新字节码、不从 compiled-cache 或可编译推断 release。
+
+## 2. 上游约束与相关角色
+WASM owns wire/codec/schedule；runtime owns host publication；P2P owns finality/head；QA owns actual attachment 和合并 verdict；Agent/Viewer owns实际 consumer projection。所有 source refs 是 canonical `eng-cc/oasis7` path#fragment，不隐式引用另一个仓库的同名条款。
+
+### 2.1 需求承接与分配表
+
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 明确排除或未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| [req-dcs-005](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-005) | actual same-candidate semantic attachment | [sr2-dc5-semantic-validator](wasm-executor.design.md#sr2-dc5-semantic-validator) | WASM/runtime/P2P/QA exact receiver 与 candidate readback | schema pass 无真实 proof |
+| [sr2-execution-contract](wasm-interface.md#sr2-execution-contract) | successful receipt bound to charge/state and no partial output | [sr2-host-publication](wasm-executor.design.md#sr2-host-publication) | WASM/runtime/P2P/QA exact receiver 与 candidate readback | located tests 未运行且不覆盖全目标 |
+| [sr2-metering-contract](wasm-interface.md#sr2-metering-contract) | old schedule recorded, local clocks excluded | [sr2-host-publication](wasm-executor.design.md#sr2-host-publication) | WASM/runtime/P2P/QA exact receiver 与 candidate readback | process metrics 不是 authority |
+| [req-dwe-003](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-003) | pending replacement and version authority | [sr2-host-publication](wasm-executor.design.md#sr2-host-publication) | WASM/runtime/P2P/QA exact receiver 与 candidate readback | current prepared seam 非完整 durable lineage |
+
+## 3. 当前状态、目标状态与差距
+Current：Wasmtime fuel/memory/watchdog、hash-before-cache、kind/state/CBOR、pure-state rejection 与 optional capability/context contracts 仍由 PRD/interface/evidence 约束。Current governed proposal seam 仅限定入口；ModuleExecutionReceiptV1、schedule identity、migration/DC5 joined evidence 是 target。Located tests 和历史 evidence 不证明当前候选通过，更不证明完整 crash-safe external outbox。
+
+## 4. 边界与结构
+Host 承认 immutable world baseline、active manifest、artifact、schedule 与 caller authority；sandbox 只产出 bounded bytes/effects/emits/usage。Receipt core 由 host 构建，sandbox 不能生成 canonical finality。Publication transaction 包含 state/resources/events/decision/receipt；canonical certificate 由 P2P 外部验证。Metering local clock/metrics、cache hit 与 process timestamp 不进入 consensus。
+
+## 5. 关键运行流程
+<a id="sr2-host-publication"></a>
+### 请求、执行、usage、prepare、publish
+1. decode/version/UTF8 byte/U64/resource bounds；拒绝 malformed、unknown enum/fields/version，保留原 opaque payload bytes。
+2. 验证 world/branch/request/module/version/instance/interface/wasm、manifest、activation、descriptor 与 schedule exact identity；读取并 rehash artifact，hash before compiled cache；unknown schedule/schema 拒绝。
+3. 验证 canonical bytes/digests 和 detached proof/trust root/epoch/inclusion；proof 不可达只 blocked，不 unsigned downgrade。
+4. 当前 gate 必须 verified_serviceable 且 compatibility/head-continuity/finality-append 全部 verified；对所有受影响 NEW intents 否则 count=0/effects=0、state/resources 不变，保留历史 receipt。无 finality 时 local audit 不是 finalized decision。
+5. 根据 final committed canonical block/activation 选择版本；重新检查 live permission、resources、expiry、target 和 explicit lineage，旧 acceptance/quote 无执行优先权。
+6. bounded deterministic execution 后 validate output/effects/emits/caps、fuel_used<=fuel_limit、input/output bounds、journal lexicographic era/event_id 与 checked amounts；unsupported/not-used access 为0，supported but uncharged actual access 可非0。
+7. 构建 [R5 execution/receipt cores](wasm-interface.md#sr2-execution-contract)，先核验 execution_id，再 hash receipt_core；staged charge/state/effect/emit/decision/journal/cache/schedule mutation 全部基于同一 immutable base，winner 与 exclusive loser 同 transaction。
+8. validate all prepare steps、durability/journal/backpressure 与 canonical append。单一不可失败 publication seam 安装；durable commit 后输出 original receipt，detached inclusion 同时绑定 execution_id/receipt_id/version/activation。同 wrapper 错 block 不可接受。
+9. Retry same immutable key/hash 返回 pending/decision/receipt；changed body 拒绝。Crash before durable seam no effect 或完整 committed transaction；after durable seam 不重跑 WASM、重扣费或发送新 effect identity。
+
+Failure matrix：decode/identity/trust/gate/precondition/execution/output/usage/prepare 任一失败均不发布新的 state/effects/charges/success receipt；only verified canonical decision 可以结束 pending。任何 post-prepare injected failure 保持 registry/instance/artifact/schedule/resources/event era/journal/receipt 原基线。Publish 是已准备的不可失败安装，不能在半发布后调用 fallible validator；持久恢复须通过 transaction commit marker 区分完整与未提交。
+
+## 6. 接口与数据合同
+唯一字段 authority：[types](wasm-interface.md#sr2-types)、[execution cores/wrappers](wasm-interface.md#sr2-execution-contract)、[metering](wasm-interface.md#sr2-metering-contract)、[migration](wasm-interface.md#sr2-migration-contract)；runtime pending/activation/external authority：[lifecycle](../module/module-lifecycle.md#sr2-pending-contract)。
+`H(domain,body)=SHA256(UTF8(domain)||0x00||CanonicalCBOR(body))`，execution/result、receipt、intent/request/decision、external effect、activation、migrated、attachment 各使用明确 versioned domain。Canonical CBOR shortest unsigned integer、definite length、canonical encoded-key map order、unique keys/no floats，semantic arrays 保序，sets 按 complete key 排序去重；ContentRef commits digest+byte_length，locator 不属于 authority。Id UTF8 1..256 BYTES 无归一化；所有 U64 lossless canonical decimal JSON string、checked max18446744073709551615；counts0|1 为显式 JSON integer exception。Local timestamp/self-id/signatures/递归 containing-block proofs 不进入 core。
+ExecutionIdentity wrapper scope 只继承 execution_core；ModuleExecutionReceipt wrapper 只继承 receipt_core.execution_core，无 duplicate scope。仅 committed_success 是 execution receipt；no-effect rejected/expired/replan/terminated 属 IntentDecision，不允许 committed_rejection 偷渡。
+
+## 7. 状态、事务与持久化
+accepted pending != committed effect != durable receipt != published consumer。Immutable pending request 与 terminal durable index 分离；activation、schedule 和历史 payload 不因最新版本而重写。Snapshot+tail 包含原 request/lineage/winner、journal era、state/resource hashes 与 receipt identities；restart 返回 original terminal record。历史 reexecution 只 audit compare，不替代 recorded result/charge；旧价格重算禁止。
+
+## 8. 部署、安全与运行约束
+Production external proof、trust root、branch 与 authority snapshot 必须 actual readback。Current local effect signer、prototype finality、provider response、CI 只能证明各自层。Unknown scheme/key/manifest、missing proof bytes、不兼容 runtime 均 fail closed。Shared Cargo/cache constraints 原样；本次没有实际 runtime/provider/browser执行。
+
+## 9. 质量与容量
+Required tier 为 candidate-bound deterministic fault fixtures：每个 step 注入 failure、检查 full bytes/state/resource/journal/charge/receipt 相等；same inputs/core 更换合法 detached inclusion wrapper 不能改变 core IDs。Full 增加真实 canonical proof、多节点恢复和 consumer evidence。预算沿用 PRD fuel/memory/output 与 current compute/electricity ceil-KiB formula，clock/reset/cache variation 不改变费率/ID；不存在本次 benchmark pass。
+
+## 10. 兼容、迁移与回滚
+旧 wasm-1 optional/default、CBOR fixtures、compiled cache version/checksum/domain 和损坏 miss 保留。新目标 schema/version 使用独立 closed records；unknown 新版本拒绝，不要求旧 ABI 突然携带新字段。Activation 与 migration [lifecycle sequencing](../module/module-lifecycle.md#sr2-migration-publication) 明确旧字节/旧 schedule retained；回滚经治理新记录，不撤销历史 committed effects。
+
+## 11. 验证设计与可追溯性
+<a id="sr2-dc5-semantic-validator"></a>
+### DC-5 target attachment semantic receiver
+Physical closed JSON receiver 是 [actual target schema](../../testing/schemas/world-execution-state-sync-attachment.schema.json)，attachment 字段 authority 和 actual scenario receiver 为 [GWSC](../../testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md#sr2-dc5-attachment)。以下算法是目标 semantic validator，未实现；JSON Schema 或 fixture pass 不能代替它。
+1. Validate shape/version，再 semantic UTF8 bytes、lossless U64 maximum、GitOid40 commit/commit/tree readback 与 Hash32 区分；diagnostic code 分别 utf8_id_byte_bound、u64_out_of_range、u64_noncanonical_decimal、git_object_type_mismatch、hash_domain_mismatch。
+2. Resolve execution_attachment/state_sync_attachment 和所有 evidence/proof refs；fetch bytes、check byte_length+digest+proof body，locator 变更但相同 bytes 不改变 identity；missing/unreadable/wrong proof bytes blocked。
+3. Join exact scope/candidate（source_oid/integration_base_oid/tested_tree_oid/execution_version/protocol_version/test_contract_version）与 canonical window start/end heights+hashes；禁止混候选、嵌套 scope shadow 或另一个 window。
+4. Require complete cases、transition strictly increasing sequences、真实 last_trusted/observed head、manifest/version、compatibility/head/finality verdict、affected operations/blocker/meaningful next_step evidence。verified_serviceable→stale_catching_up→verified_read_only→verified_serviceable 与 conflict→unavailable_isolated 皆须覆盖。Chain recovery alone 仅 read-only；health/reconnect 不升级 authority。
+5. 每 row 新 receipt refs length=count0|1；count1 需 exact successful canonical receipt/core/decision/proof；nonserviceable、invalid governing manifest/head/finality 为 count0/effects0、before==after state/resources。不得混入 historical receipts 充数；historical receipt bytes 不变。
+6. 校验 admitted explicit exclusive set lineage sum effective<=1；independent 不取消；loser/reject/expire 无 mutation；pending 恢复以新 live conditions revalidate，outage 不延长 expiry。Validate generation/predecessor 与 canonical first-effective ordering。
+7. Consumer sample joins transition_sequence/intent/version、visible grade/disposition、last trusted boundary、operation/blocker/next_step；证据必须实际可读并对应 original/replacement，不接受 template/not_collected/author-set pass。
+8. Compute combined verdict only after all joins/proof/scenarios succeed；任何 missing/conflicting/incompatible 或 coverage gap 使 blocked，保留精确诊断与 evidence，绝不从本地 metrics 或 schema valid 推断 DC-5 full pass。
+
+### 11.1 验证映射表
+
+| 上游 requirement / product AC / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source 或 ID、scenario/layer、candidate/environment 要求或选择规则 | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [req-dcs-005](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-005) | [sr2-dc5-semantic-validator](wasm-executor.design.md#sr2-dc5-semantic-validator) | actual same-candidate semantic attachment | DC5-01..05, SR2-RT-01/09; required swap candidate/world/window, missing proof/consumer, regressing head, absent append, waiting intent proof revoked; full actual execution+state-sync+consumer joins；[located partial source](../../../scripts/game-world-state-sync-commit-module-required.test.sh) | GWSC #sr2-qa-negative-matrix / Task candidate artifact | schema pass 无真实 proof |
+| [sr2-execution-contract](wasm-interface.md#sr2-execution-contract) | [sr2-host-publication](wasm-executor.design.md#sr2-host-publication) | successful receipt bound to charge/state and no partial output | MET-02, SR2-RT-07/08; overflow/fuel/balance/collection and each prepare failure; located crates/oasis7_wasm_executor/src/tests.rs + module_output_publication_transaction_regressions.rs；[located partial source](../../../crates/oasis7/tests/module_lifecycle.rs) | required before/after roots/journal/receipt comparison | located tests 未运行且不覆盖全目标 |
+| [sr2-metering-contract](wasm-interface.md#sr2-metering-contract) | [sr2-host-publication](wasm-executor.design.md#sr2-host-publication) | old schedule recorded, local clocks excluded | MET-01, SR2-RT-10; change clock/reset/degraded/current prices, expect identical core IDs/charges; full historical replay original schedule；[located partial source](../../../scripts/oasis7-node-wasm-metrics-monitor.test.sh) | candidate-bound canonical bytes and replay | process metrics 不是 authority |
+| [req-dwe-003](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-003) | [sr2-host-publication](wasm-executor.design.md#sr2-host-publication) | pending replacement and version authority | LIN-01..04 / ACT-01 / SR2-RT-02..05; required both winner orders, crash reservation/pre/post commit, old/new activation; located governed_module_lifecycle_transaction_regressions.rs；[located partial source](../../../crates/oasis7/tests/module_lifecycle.rs) | lifecycle + GWSC runtime scenarios | current prepared seam 非完整 durable lineage |
+
+## 12. 决策、长期风险与未决问题
+
+### SR2 runtime 十组目标 fixture allocation
+每行是目标 fixture contract；required 为同候选 deterministic test，full 为同候选真实 canonical/proof/consumer readback。尚未运行；现有 narrow tests 仅 partial locator，全部结果必须写 Task4102 的 actual evidence，不伪造未来 task IDs。
+
+| Group | 注入与步骤 | 必须断言 | receiver / tier / current locator |
+| --- | --- | --- | --- |
+| SR2-RT-01 | submit/recovery前 loss finality，再reconnect | pending/expiry不延长，0receipt/effect/charge，state/resources不变 | #sr2-dc5-semantic-validator；DC5-03..05；required fault/full proof；effect_publication_transaction_regressions.rs partial |
+| SR2-RT-02 | original/replacement/withdrawal两 canonical orders、same-block tie、duplicate transport、snapshot-tail restart | first effective one winner，exclusive losers0，reject/expire仅自己，independent能成功 | lifecycle #sr2-pending-contract；LIN-01..04；required/full consumer；current Agent ledger不是general test |
+| SR2-RT-03 | recovery时撤权、耗尽resource、旧quote过期 | fresh revalidation reject/replan/expire，不partial publish | lifecycle #sr2-pending-contract；DC5-05；required/full actual state；module_runtime_tests.rs due-record preflight partial |
+| SR2-RT-04 | activation前/at/后、oldsubmit/newfinalize、crossversionreplacement | finalized block chooses version，最多oneeffect，无payloadtranslation | lifecycle #sr2-activation-contract；ACT-01/LIN-01；required/full proof；governed_module_lifecycle_transaction_regressions.rs partial |
+| SR2-RT-05 | missing/conflicting activation/historicalartifact、改变currentprice | restore failclosed，historicalbytes/schedule/charges不变 | lifecycle #sr2-activation-contract；MET-01；required/full replay；module_store.rs partial |
+| SR2-RT-06 | forged/wrong world/request/provider/key/digest/root/branch/orphan receipt，exactduplicate | no unverified effects，originalduplicate stable，无productionselfsignfallback | lifecycle #sr2-external-contract/release #sr2-release-trust；RCP-01/02；required/full trust；effect_publication_transaction_regressions.rs partial |
+| SR2-RT-07 | twoobjectmigration secondfail、outputcap/hash mismatch、eachpreparefailure | ALL oldbytes/registry/artifacts/schedule/resources/fees/events intact，success replay root equal | lifecycle #sr2-migration-publication；MIG-01/02；required/full replay；module_instance_publication_transaction_regressions.rs partial |
+| SR2-RT-08 | oldSDK/manifestgolden/defaults、old/newevent exact replay、unknownnewversion | currentwire compatible，newunknownfailclosed，不混marker/contentaddress | interface #sr2-migration-contract；MIG-03；required/full replay；module_input_cbor.rs/module_lifecycle.rs partial |
+| SR2-RT-09 | attachment swaps/missing/digestwrong/mixedtree/consumerblockermissing | schema+semantic reject，不DC5pass，newnonserviceablecount0 | #sr2-dc5-semantic-validator；DC5-01..05；required shape/full joined actual proof；game-world-state-sync-commit-module-required.sh partial |
+| SR2-RT-10 | clock/reset/degraded/cache/uncharged-supported access变化 | unchanged deterministically coreID/state/root/fees；actualaccesscounts不因zero coefficient清零 | #sr2-host-publication；MET-01/02；required/full recorded replay；oasis7-node-wasm-metrics-monitor.test.sh partial |
+
+### QA 十七负例在 runtime authority 的精确分配
+同一候选/世界/窗口选择规则与 proof tier 继承上一表；schema negatives只能证明shape，runtime fault证明mutation，full才证明实际combined evidence。完整 QA receiver [GWSC negative matrix](../../testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md#sr2-qa-negative-matrix) 与本表是分层分配而非重复 authority。
+
+| Case | exact receiver | 注入 → assertion | required / full proof boundary |
+| --- | --- | --- | --- |
+| DC5-01 | #sr2-dc5-semantic-validator steps2/3 | swap candidate/world/source/window → invalid/blocked | structure+semantic joins / actual attachments |
+| DC5-02 | #sr2-dc5-semantic-validator steps2/4/7 | remove attachment/proof/transition/consumer或template → blocked | schema/ref fixtures / actual bytes |
+| DC5-03 | #sr2-dc5-semantic-validator steps4/5 | headregress/manifestconflict/compatmismatch/orphanfinality → no service/count0 | runtime fault / canonical proof |
+| DC5-04 | #sr2-dc5-semantic-validator step4 | historychain有效但append/version缺失 → read-only/count0 | gate fixture / actual sync+execution |
+| DC5-05 | #sr2-host-publication steps4/5 | greenreconnect后waiting intent proofrevoked → revalidate/zeroeffects/realblocker | fault / consumer readback |
+| RCP-01 | lifecycle #sr2-external-contract | request/target/block/hash错或proof不可达 → unverified/rejected zeroeffects | trust fixture / provider+canonical bytes |
+| RCP-02 | release #sr2-release-trust | local signer/provider/CI冒充proof → reject | negative fixtures / external trust readback |
+| LIN-01 | lifecycle #sr2-pending-contract | activation original/replacement races bothorders → one winner losers0 | runtime / actual consumer+proof |
+| LIN-02 | lifecycle #sr2-pending-contract | samehashduplicate then changedhash → stable result then no-mutation conflict | idempotency fixture / crossentry retry |
+| LIN-03 | lifecycle #sr2-pending-contract | dangling/cycle/worldsubjectmismatch/regressedgeneration → reject independentunaffected | lineage fixture / actual snapshot |
+| LIN-04 | lifecycle #sr2-migration-publication | crash reservation/prepublication/postpublication → none or one durablewinner no rerun | restart fixtures / durable actual journal |
+| MIG-01 | lifecycle #sr2-migration-publication | missingdeclaration/badfromto/hash/artifact/state → oldstate/versionretained | migration fixture / retained bytes readback |
+| MIG-02 | lifecycle #sr2-migration-publication | oversize/noncanonical/namespace/forgedcontext → wholeabort | bounded fixture / runtime replay |
+| MIG-03 | lifecycle #sr2-migration-publication | oldbytesacrossmigration+restart → exactstate/hash/receipt no rewrite | replay fixture / actual snapshot-tail |
+| MET-01 | #sr2-host-publication + lifecycle #sr2-activation-contract | changeprice/scheduleaftercommit → historicalcostunchanged | replay fixture / recorded receipt |
+| MET-02 | #sr2-host-publication steps6/7 | count/chargeoverflow/fuel/balance/unsorted → no partialcharge/state/effect | bounds fixture / runtime transaction |
+| ACT-01 | lifecycle #sr2-activation-contract | client/time/candidateblock disagrees → finalizedactivation selects; missingproof0effect | boundary fixture / canonical proof |
+
+Additional encoding fixtures target exact semantic receiver: multibyte256byte overflow despite JSON character bound; U64 max/max+1/>2^53/leadingzero/exponent; Git SHA256 confusion and commit/tree swap; conflicting shadow scope; committed_rejection receipt; execution_core hash mismatch/circular inclusion; locatorchanged samebytes identity equal; matching digest wrongproofbody; supported unchargedaccess incorrectlyzeroed. Each rejects before authoritative mutation except valid equivalent-locator case; these are planned not executed.
+
+选择 core/wrapper 分离防递归 hash，选择 canonical successful receipt count 防 rejection冒充效果。Current JSON receipt_leaf_hash/domain、local signer 与 target H 无替代关系。完整 durable implementation、P2P proof、consumer adapters 由 respective specialist 实现并由 QA fresh full evidence 解除；本次仅 author/check source。SC-9 八完整 proof cells、required provider-backed API parity、full真实 headed desktop/narrow S6 与 provider-backed Agent parity 保留 [GWSC SC9](../../testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md#sr2-sc9-eight-cells)，generic runtime scenarios 不 discharge 工业 gameplay obligation。

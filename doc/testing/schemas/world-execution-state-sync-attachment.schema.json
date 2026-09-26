@@ -1,0 +1,1554 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.oasis7.org/testing/world-execution-state-sync-attachment/v1",
+  "title": "WorldExecutionStateSyncAttachmentV1 target acceptance shape",
+  "description": "Target QA evidence attachment, not current deployed wire, implementation proof or DC-5 pass. Normative semantic receiver: doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md#sr2-dc5-semantic-validator. Exact proof readback, UTF8 bytes/U64 maximum, Git object kinds, canonical encoding, cross-record identity/counts and scenario coverage require that receiver.",
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "const": "WorldExecutionStateSyncAttachmentV1"
+    },
+    "scope": {
+      "$ref": "#/$defs/WorldScopeV1"
+    },
+    "candidate": {
+      "$ref": "#/$defs/CandidateIdentityV1"
+    },
+    "evidence_window": {
+      "type": "object",
+      "properties": {
+        "window_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "start_height": {
+          "$ref": "#/$defs/U64"
+        },
+        "start_block_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "end_height": {
+          "$ref": "#/$defs/U64"
+        },
+        "end_block_hash": {
+          "$ref": "#/$defs/Hash32"
+        }
+      },
+      "required": [
+        "window_id",
+        "start_height",
+        "start_block_hash",
+        "end_height",
+        "end_block_hash"
+      ],
+      "additionalProperties": false
+    },
+    "execution_attachment": {
+      "$ref": "#/$defs/ContentRefV1"
+    },
+    "state_sync_attachment": {
+      "$ref": "#/$defs/ContentRefV1"
+    },
+    "transitions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/TransitionV1"
+      },
+      "minItems": 1
+    },
+    "intent_results": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/IntentResultV1"
+      },
+      "minItems": 1
+    },
+    "consumer_samples": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ConsumerSampleV1"
+      },
+      "minItems": 1
+    },
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "case_id": {
+            "$ref": "#/$defs/Id"
+          },
+          "expected": {
+            "$ref": "#/$defs/Id"
+          },
+          "observed": {
+            "$ref": "#/$defs/Id"
+          },
+          "evidence_refs": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/ContentRefV1"
+            },
+            "minItems": 1
+          }
+        },
+        "required": [
+          "case_id",
+          "expected",
+          "observed",
+          "evidence_refs"
+        ],
+        "additionalProperties": false
+      },
+      "minItems": 1
+    }
+  },
+  "required": [
+    "schema_version",
+    "scope",
+    "candidate",
+    "evidence_window",
+    "execution_attachment",
+    "state_sync_attachment",
+    "transitions",
+    "intent_results",
+    "consumer_samples",
+    "cases"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "Id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "description": "1..256 UTF-8 bytes; schema character bound is only lexical. Receiver must measure encoded bytes without normalization."
+    },
+    "Hash32": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "GitOid40": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$",
+      "description": "Git SHA1 OID; commit vs tree object kind is verified by semantic receiver."
+    },
+    "U64": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4]|18446744073709551615)$",
+      "description": "Lossless U64 decimal projection, exact <=18446744073709551615; semantic receiver still checks arithmetic and conversion."
+    },
+    "PositiveU64": {
+      "type": "string",
+      "pattern": "^([1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4]|18446744073709551615)$",
+      "description": "Lossless decimal PositiveU64, exact 1..18446744073709551615."
+    },
+    "ResourceAmount": {
+      "type": "string",
+      "pattern": "^(0|[1-9][0-9]{0,18}|1[0-7][0-9]{18}|18[0-3][0-9]{17}|184[0-3][0-9]{16}|1844[0-5][0-9]{15}|18446[0-6][0-9]{14}|184467[0-3][0-9]{13}|1844674[0-3][0-9]{12}|184467440[0-6][0-9]{10}|1844674407[0-2][0-9]{9}|18446744073[0-6][0-9]{8}|1844674407370[0-8][0-9]{6}|18446744073709[0-4][0-9]{5}|184467440737095[0-4][0-9]{4}|18446744073709550[0-9]{3}|18446744073709551[0-5][0-9]{2}|1844674407370955160[0-9]{1}|1844674407370955161[0-4]|18446744073709551615)$",
+      "description": "Lossless nonnegative U64 projection in explicit runtime unit; semantic receiver checks current signed range conversion."
+    },
+    "ServiceGradeV1": {
+      "enum": [
+        "verified_serviceable",
+        "stale_catching_up",
+        "verified_read_only",
+        "unavailable_isolated"
+      ]
+    },
+    "VerificationVerdictV1": {
+      "enum": [
+        "verified",
+        "missing",
+        "conflicting",
+        "incompatible"
+      ]
+    },
+    "WorldScopeV1": {
+      "type": "object",
+      "properties": {
+        "world_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "branch_id": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "world_id",
+        "branch_id"
+      ],
+      "additionalProperties": false
+    },
+    "JournalPositionV1": {
+      "type": "object",
+      "properties": {
+        "event_id_era": {
+          "$ref": "#/$defs/U64"
+        },
+        "event_id": {
+          "$ref": "#/$defs/U64"
+        }
+      },
+      "required": [
+        "event_id_era",
+        "event_id"
+      ],
+      "additionalProperties": false
+    },
+    "ContentRefV1": {
+      "type": "object",
+      "properties": {
+        "digest": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "byte_length": {
+          "$ref": "#/$defs/U64"
+        },
+        "locator": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "digest",
+        "byte_length",
+        "locator"
+      ],
+      "additionalProperties": false
+    },
+    "CandidateIdentityV1": {
+      "type": "object",
+      "properties": {
+        "source_oid": {
+          "$ref": "#/$defs/GitOid40"
+        },
+        "integration_base_oid": {
+          "$ref": "#/$defs/GitOid40"
+        },
+        "tested_tree_oid": {
+          "$ref": "#/$defs/GitOid40"
+        },
+        "execution_version": {
+          "$ref": "#/$defs/Id"
+        },
+        "protocol_version": {
+          "$ref": "#/$defs/Id"
+        },
+        "test_contract_version": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "source_oid",
+        "integration_base_oid",
+        "tested_tree_oid",
+        "execution_version",
+        "protocol_version",
+        "test_contract_version"
+      ],
+      "additionalProperties": false
+    },
+    "LastTrustedV1": {
+      "type": "object",
+      "properties": {
+        "height": {
+          "$ref": "#/$defs/U64"
+        },
+        "block_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "state_root": {
+          "$ref": "#/$defs/Hash32"
+        }
+      },
+      "required": [
+        "height",
+        "block_hash",
+        "state_root"
+      ],
+      "additionalProperties": false
+    },
+    "CanonicalInclusionV1": {
+      "type": "object",
+      "properties": {
+        "canonical_block_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "canonical_block_height": {
+          "$ref": "#/$defs/U64"
+        },
+        "proof": {
+          "$ref": "#/$defs/ContentRefV1"
+        }
+      },
+      "required": [
+        "canonical_block_hash",
+        "canonical_block_height",
+        "proof"
+      ],
+      "additionalProperties": false
+    },
+    "ModuleIdentityV1": {
+      "type": "object",
+      "properties": {
+        "module_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "module_version": {
+          "$ref": "#/$defs/Id"
+        },
+        "instance_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "interface_version": {
+          "$ref": "#/$defs/Id"
+        },
+        "wasm_hash": {
+          "$ref": "#/$defs/Hash32"
+        }
+      },
+      "required": [
+        "module_id",
+        "module_version",
+        "instance_id",
+        "interface_version",
+        "wasm_hash"
+      ],
+      "additionalProperties": false
+    },
+    "ExecutionResultCoreV1": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "ExecutionResultCoreV1"
+        },
+        "scope": {
+          "$ref": "#/$defs/WorldScopeV1"
+        },
+        "intent_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "request_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "execution_version": {
+          "$ref": "#/$defs/Id"
+        },
+        "governing_manifest_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "parent_state_root": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "ordered_input_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "activation_id": {
+          "$ref": "#/$defs/Hash32"
+        }
+      },
+      "required": [
+        "schema_version",
+        "scope",
+        "intent_id",
+        "request_hash",
+        "execution_version",
+        "governing_manifest_hash",
+        "parent_state_root",
+        "ordered_input_hash",
+        "activation_id"
+      ],
+      "additionalProperties": false
+    },
+    "ExecutionIdentityV1": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "ExecutionIdentityV1"
+        },
+        "execution_id": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "execution_core": {
+          "$ref": "#/$defs/ExecutionResultCoreV1"
+        },
+        "canonical_inclusion": {
+          "$ref": "#/$defs/CanonicalInclusionV1"
+        }
+      },
+      "required": [
+        "schema_version",
+        "execution_id",
+        "execution_core",
+        "canonical_inclusion"
+      ],
+      "additionalProperties": false
+    },
+    "ChargeV1": {
+      "type": "object",
+      "properties": {
+        "resource_type": {
+          "$ref": "#/$defs/Id"
+        },
+        "amount": {
+          "$ref": "#/$defs/ResourceAmount"
+        },
+        "balance_before": {
+          "$ref": "#/$defs/ResourceAmount"
+        },
+        "balance_after": {
+          "$ref": "#/$defs/ResourceAmount"
+        }
+      },
+      "required": [
+        "resource_type",
+        "amount",
+        "balance_before",
+        "balance_after"
+      ],
+      "additionalProperties": false
+    },
+    "ModuleExecutionReceiptCoreV1": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "ModuleExecutionReceiptCoreV1"
+        },
+        "execution_id": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "execution_core": {
+          "$ref": "#/$defs/ExecutionResultCoreV1"
+        },
+        "module_identity": {
+          "$ref": "#/$defs/ModuleIdentityV1"
+        },
+        "metering_schedule_version": {
+          "$ref": "#/$defs/Id"
+        },
+        "metering_schedule_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "input_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "output_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "input_bytes": {
+          "$ref": "#/$defs/U64"
+        },
+        "output_bytes": {
+          "$ref": "#/$defs/U64"
+        },
+        "fuel_limit": {
+          "$ref": "#/$defs/U64"
+        },
+        "fuel_used": {
+          "$ref": "#/$defs/U64"
+        },
+        "effect_count": {
+          "$ref": "#/$defs/U64"
+        },
+        "emit_count": {
+          "$ref": "#/$defs/U64"
+        },
+        "access_counts": {
+          "type": "object",
+          "properties": {
+            "component_reads": {
+              "$ref": "#/$defs/U64"
+            },
+            "component_writes": {
+              "$ref": "#/$defs/U64"
+            },
+            "schema_decodes": {
+              "$ref": "#/$defs/U64"
+            }
+          },
+          "required": [
+            "component_reads",
+            "component_writes",
+            "schema_decodes"
+          ],
+          "additionalProperties": false
+        },
+        "state_before_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "state_after_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "ordered_effects_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "ordered_emits_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "charges": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ChargeV1"
+          },
+          "minItems": 0
+        },
+        "journal_start": {
+          "$ref": "#/$defs/JournalPositionV1"
+        },
+        "journal_end": {
+          "$ref": "#/$defs/JournalPositionV1"
+        },
+        "status": {
+          "const": "committed_success"
+        }
+      },
+      "required": [
+        "schema_version",
+        "execution_id",
+        "execution_core",
+        "module_identity",
+        "metering_schedule_version",
+        "metering_schedule_hash",
+        "input_hash",
+        "output_hash",
+        "input_bytes",
+        "output_bytes",
+        "fuel_limit",
+        "fuel_used",
+        "effect_count",
+        "emit_count",
+        "access_counts",
+        "state_before_hash",
+        "state_after_hash",
+        "ordered_effects_hash",
+        "ordered_emits_hash",
+        "charges",
+        "journal_start",
+        "journal_end",
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "ModuleExecutionReceiptV1": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "ModuleExecutionReceiptV1"
+        },
+        "receipt_id": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "receipt_core": {
+          "$ref": "#/$defs/ModuleExecutionReceiptCoreV1"
+        },
+        "finality_binding": {
+          "$ref": "#/$defs/CanonicalInclusionV1"
+        }
+      },
+      "required": [
+        "schema_version",
+        "receipt_id",
+        "receipt_core",
+        "finality_binding"
+      ],
+      "additionalProperties": false
+    },
+    "PendingIntentV1": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "PendingIntentV1"
+        },
+        "scope": {
+          "$ref": "#/$defs/WorldScopeV1"
+        },
+        "intent_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "request_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "payload_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "subject_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "target_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "lineage_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "member_generation": {
+          "$ref": "#/$defs/U64"
+        },
+        "relation": {
+          "enum": [
+            "original",
+            "linked_replacement",
+            "withdrawal",
+            "independent"
+          ]
+        },
+        "exclusive_set_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "predecessor_intent_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "predecessor_request_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "compatibility_declaration_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "accepted_position": {
+          "$ref": "#/$defs/JournalPositionV1"
+        },
+        "expiry_boundary": {
+          "$ref": "#/$defs/U64"
+        },
+        "disposition": {
+          "const": "pending"
+        }
+      },
+      "required": [
+        "schema_version",
+        "scope",
+        "intent_id",
+        "request_hash",
+        "payload_hash",
+        "subject_id",
+        "target_hash",
+        "lineage_id",
+        "member_generation",
+        "relation",
+        "compatibility_declaration_hash",
+        "accepted_position",
+        "disposition"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "relation": {
+                "enum": [
+                  "linked_replacement",
+                  "withdrawal"
+                ]
+              }
+            },
+            "required": [
+              "relation"
+            ]
+          },
+          "then": {
+            "required": [
+              "exclusive_set_id",
+              "predecessor_intent_id",
+              "predecessor_request_hash"
+            ]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "predecessor_intent_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "predecessor_request_hash"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "IntentDecisionV1": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "IntentDecisionV1"
+        },
+        "scope": {
+          "$ref": "#/$defs/WorldScopeV1"
+        },
+        "intent_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "request_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "lineage_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "member_generation": {
+          "$ref": "#/$defs/U64"
+        },
+        "disposition": {
+          "enum": [
+            "committed_effect",
+            "rejected",
+            "expired",
+            "replan_required",
+            "terminated_without_effect"
+          ]
+        },
+        "reason_code": {
+          "$ref": "#/$defs/Id"
+        },
+        "decision_position": {
+          "$ref": "#/$defs/JournalPositionV1"
+        },
+        "execution_receipt_ref": {
+          "$ref": "#/$defs/ContentRefV1"
+        },
+        "winner_intent_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "winner_receipt_ref": {
+          "$ref": "#/$defs/ContentRefV1"
+        }
+      },
+      "required": [
+        "schema_version",
+        "scope",
+        "intent_id",
+        "request_hash",
+        "lineage_id",
+        "member_generation",
+        "disposition",
+        "decision_position"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "disposition": {
+                "const": "committed_effect"
+              }
+            },
+            "required": [
+              "disposition"
+            ]
+          },
+          "then": {
+            "required": [
+              "execution_receipt_ref"
+            ]
+          },
+          "else": {
+            "required": [
+              "reason_code"
+            ],
+            "not": {
+              "required": [
+                "execution_receipt_ref"
+              ]
+            }
+          }
+        },
+        {
+          "dependentRequired": {
+            "winner_intent_id": [
+              "winner_receipt_ref"
+            ],
+            "winner_receipt_ref": [
+              "winner_intent_id"
+            ]
+          }
+        }
+      ]
+    },
+    "ExternalEffectReceiptV1": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "ExternalEffectReceiptV1"
+        },
+        "scope": {
+          "$ref": "#/$defs/WorldScopeV1"
+        },
+        "receipt_id": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "effect_intent_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "request_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "parent_execution_receipt_id": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "provider_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "provider_key_epoch": {
+          "$ref": "#/$defs/U64"
+        },
+        "status": {
+          "enum": [
+            "succeeded",
+            "failed"
+          ]
+        },
+        "result_payload_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "request_payload_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "response_payload_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "provider_proof": {
+          "$ref": "#/$defs/ContentRefV1"
+        },
+        "canonical_inclusion": {
+          "type": "object",
+          "properties": {
+            "canonical_block_hash": {
+              "$ref": "#/$defs/Hash32"
+            },
+            "canonical_block_height": {
+              "$ref": "#/$defs/U64"
+            },
+            "journal_position": {
+              "$ref": "#/$defs/JournalPositionV1"
+            },
+            "receipts_root": {
+              "$ref": "#/$defs/Hash32"
+            },
+            "authority_snapshot_hash": {
+              "$ref": "#/$defs/Hash32"
+            },
+            "finality_proof": {
+              "$ref": "#/$defs/ContentRefV1"
+            }
+          },
+          "required": [
+            "canonical_block_hash",
+            "canonical_block_height",
+            "journal_position",
+            "receipts_root",
+            "authority_snapshot_hash",
+            "finality_proof"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "scope",
+        "receipt_id",
+        "effect_intent_id",
+        "request_hash",
+        "parent_execution_receipt_id",
+        "provider_id",
+        "provider_key_epoch",
+        "status",
+        "result_payload_hash",
+        "request_payload_hash",
+        "response_payload_hash",
+        "provider_proof"
+      ],
+      "additionalProperties": false
+    },
+    "ExternalReceiptVerificationV1": {
+      "type": "object",
+      "properties": {
+        "receipt_id": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "verdict": {
+          "enum": [
+            "unverified",
+            "verified_canonical",
+            "reorged",
+            "suspended"
+          ]
+        },
+        "reason_code": {
+          "$ref": "#/$defs/Id"
+        }
+      },
+      "required": [
+        "receipt_id",
+        "verdict"
+      ],
+      "additionalProperties": false
+    },
+    "SchemaMigrationV1": {
+      "type": "object",
+      "properties": {
+        "object_kind": {
+          "enum": [
+            "component",
+            "event"
+          ]
+        },
+        "namespace": {
+          "$ref": "#/$defs/Id"
+        },
+        "name": {
+          "$ref": "#/$defs/Id"
+        },
+        "from_schema_version": {
+          "$ref": "#/$defs/PositiveU64"
+        },
+        "to_schema_version": {
+          "$ref": "#/$defs/PositiveU64"
+        },
+        "from_schema_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "to_schema_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "migration_wasm_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "migration_manifest_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "instance_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "entity_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "output_limit_bytes": {
+          "$ref": "#/$defs/PositiveU64"
+        }
+      },
+      "required": [
+        "object_kind",
+        "namespace",
+        "name",
+        "from_schema_version",
+        "to_schema_version",
+        "from_schema_hash",
+        "to_schema_hash",
+        "migration_wasm_hash",
+        "migration_manifest_hash",
+        "instance_id",
+        "entity_id",
+        "output_limit_bytes"
+      ],
+      "additionalProperties": false
+    },
+    "VersionActivationV1": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "VersionActivationV1"
+        },
+        "scope": {
+          "$ref": "#/$defs/WorldScopeV1"
+        },
+        "activation_id": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "proposal_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "prior_activation_id": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "base_manifest_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "new_manifest_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "from_execution_version": {
+          "$ref": "#/$defs/Id"
+        },
+        "to_execution_version": {
+          "$ref": "#/$defs/Id"
+        },
+        "effective_canonical_height": {
+          "$ref": "#/$defs/U64"
+        },
+        "metering_schedule_version": {
+          "$ref": "#/$defs/Id"
+        },
+        "metering_schedule_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "artifact_identities": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "module_id": {
+                "$ref": "#/$defs/Id"
+              },
+              "module_version": {
+                "$ref": "#/$defs/Id"
+              },
+              "wasm_hash": {
+                "$ref": "#/$defs/Hash32"
+              },
+              "artifact_identity_hash": {
+                "$ref": "#/$defs/Hash32"
+              }
+            },
+            "required": [
+              "module_id",
+              "module_version",
+              "wasm_hash",
+              "artifact_identity_hash"
+            ],
+            "additionalProperties": false
+          },
+          "minItems": 0
+        },
+        "compatibility_declaration_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "migrations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/SchemaMigrationV1"
+          },
+          "minItems": 0
+        },
+        "governance_receipt_ref": {
+          "$ref": "#/$defs/ContentRefV1"
+        },
+        "finality_binding": {
+          "type": "object",
+          "properties": {
+            "canonical_block_hash": {
+              "$ref": "#/$defs/Hash32"
+            },
+            "canonical_block_height": {
+              "$ref": "#/$defs/U64"
+            },
+            "certificate": {
+              "$ref": "#/$defs/ContentRefV1"
+            }
+          },
+          "required": [
+            "canonical_block_hash",
+            "canonical_block_height",
+            "certificate"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "schema_version",
+        "scope",
+        "activation_id",
+        "proposal_id",
+        "base_manifest_hash",
+        "new_manifest_hash",
+        "from_execution_version",
+        "to_execution_version",
+        "effective_canonical_height",
+        "metering_schedule_version",
+        "metering_schedule_hash",
+        "artifact_identities",
+        "compatibility_declaration_hash",
+        "migrations",
+        "governance_receipt_ref",
+        "finality_binding"
+      ],
+      "additionalProperties": false
+    },
+    "ModuleStateMigratedV1": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "ModuleStateMigratedV1"
+        },
+        "scope": {
+          "$ref": "#/$defs/WorldScopeV1"
+        },
+        "migration": {
+          "$ref": "#/$defs/SchemaMigrationV1"
+        },
+        "from_state_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "to_state_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "base_manifest_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "governing_manifest_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "activation_id": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "caused_by": {
+          "$ref": "#/$defs/ContentRefV1"
+        },
+        "journal_position": {
+          "$ref": "#/$defs/JournalPositionV1"
+        },
+        "canonical_block_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "canonical_block_height": {
+          "$ref": "#/$defs/U64"
+        }
+      },
+      "required": [
+        "schema_version",
+        "scope",
+        "migration",
+        "from_state_hash",
+        "to_state_hash",
+        "base_manifest_hash",
+        "governing_manifest_hash",
+        "activation_id",
+        "caused_by",
+        "journal_position",
+        "canonical_block_hash",
+        "canonical_block_height"
+      ],
+      "additionalProperties": false
+    },
+    "TransitionV1": {
+      "type": "object",
+      "properties": {
+        "sequence": {
+          "$ref": "#/$defs/U64"
+        },
+        "from_grade": {
+          "$ref": "#/$defs/ServiceGradeV1"
+        },
+        "to_grade": {
+          "$ref": "#/$defs/ServiceGradeV1"
+        },
+        "trigger": {
+          "$ref": "#/$defs/Id"
+        },
+        "last_trusted": {
+          "$ref": "#/$defs/LastTrustedV1"
+        },
+        "observed_head": {
+          "type": "object",
+          "properties": {
+            "height": {
+              "$ref": "#/$defs/U64"
+            },
+            "block_hash": {
+              "$ref": "#/$defs/Hash32"
+            }
+          },
+          "required": [
+            "height",
+            "block_hash"
+          ],
+          "additionalProperties": false
+        },
+        "governing_manifest_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "execution_version": {
+          "$ref": "#/$defs/Id"
+        },
+        "compatibility_result": {
+          "$ref": "#/$defs/VerificationVerdictV1"
+        },
+        "head_continuity_result": {
+          "$ref": "#/$defs/VerificationVerdictV1"
+        },
+        "finality_append_result": {
+          "$ref": "#/$defs/VerificationVerdictV1"
+        },
+        "blocker_codes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "minItems": 0,
+          "uniqueItems": true
+        },
+        "affected_operations": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "next_step": {
+          "$ref": "#/$defs/Id"
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ContentRefV1"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "sequence",
+        "from_grade",
+        "to_grade",
+        "trigger",
+        "last_trusted",
+        "observed_head",
+        "governing_manifest_hash",
+        "execution_version",
+        "compatibility_result",
+        "head_continuity_result",
+        "finality_append_result",
+        "blocker_codes",
+        "affected_operations",
+        "next_step",
+        "evidence_refs"
+      ],
+      "additionalProperties": false
+    },
+    "IntentResultV1": {
+      "type": "object",
+      "properties": {
+        "intent_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "request_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "lineage_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "member_generation": {
+          "$ref": "#/$defs/U64"
+        },
+        "submitted_grade": {
+          "$ref": "#/$defs/ServiceGradeV1"
+        },
+        "decision": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/IntentDecisionV1"
+            },
+            {
+              "$ref": "#/$defs/PendingIntentV1"
+            }
+          ]
+        },
+        "committed_receipt_count": {
+          "enum": [
+            0,
+            1
+          ]
+        },
+        "effective_world_effect_count": {
+          "enum": [
+            0,
+            1
+          ]
+        },
+        "execution_receipt_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ContentRefV1"
+          },
+          "minItems": 0
+        },
+        "state_before_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "state_after_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "resources_before_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "resources_after_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "revalidation_result": {
+          "enum": [
+            "verified",
+            "rejected",
+            "expired",
+            "replan_required",
+            "not_admitted"
+          ]
+        },
+        "evidence_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ContentRefV1"
+          },
+          "minItems": 1
+        }
+      },
+      "required": [
+        "intent_id",
+        "request_hash",
+        "lineage_id",
+        "member_generation",
+        "submitted_grade",
+        "decision",
+        "committed_receipt_count",
+        "effective_world_effect_count",
+        "execution_receipt_refs",
+        "state_before_hash",
+        "state_after_hash",
+        "resources_before_hash",
+        "resources_after_hash",
+        "revalidation_result",
+        "evidence_refs"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "committed_receipt_count": {
+                "const": 0
+              }
+            },
+            "required": [
+              "committed_receipt_count"
+            ]
+          },
+          "then": {
+            "properties": {
+              "execution_receipt_refs": {
+                "maxItems": 0
+              },
+              "effective_world_effect_count": {
+                "const": 0
+              },
+              "decision": {
+                "not": {
+                  "properties": {
+                    "disposition": {
+                      "const": "committed_effect"
+                    }
+                  },
+                  "required": [
+                    "disposition"
+                  ]
+                }
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "execution_receipt_refs": {
+                "minItems": 1,
+                "maxItems": 1
+              },
+              "effective_world_effect_count": {
+                "const": 1
+              },
+              "decision": {
+                "properties": {
+                  "disposition": {
+                    "const": "committed_effect"
+                  }
+                },
+                "required": [
+                  "disposition"
+                ]
+              },
+              "revalidation_result": {
+                "const": "verified"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "PendingRequestCoreV1": {
+      "type": "object",
+      "properties": {
+        "schema_version": {
+          "const": "PendingIntentV1"
+        },
+        "scope": {
+          "$ref": "#/$defs/WorldScopeV1"
+        },
+        "intent_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "payload_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "subject_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "target_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "lineage_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "member_generation": {
+          "$ref": "#/$defs/U64"
+        },
+        "relation": {
+          "enum": [
+            "original",
+            "linked_replacement",
+            "withdrawal",
+            "independent"
+          ]
+        },
+        "exclusive_set_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "predecessor_intent_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "predecessor_request_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "compatibility_declaration_hash": {
+          "$ref": "#/$defs/Hash32"
+        },
+        "expiry_boundary": {
+          "$ref": "#/$defs/U64"
+        }
+      },
+      "required": [
+        "schema_version",
+        "scope",
+        "intent_id",
+        "payload_hash",
+        "subject_id",
+        "target_hash",
+        "lineage_id",
+        "member_generation",
+        "relation",
+        "compatibility_declaration_hash"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "relation": {
+                "enum": [
+                  "linked_replacement",
+                  "withdrawal"
+                ]
+              }
+            },
+            "required": [
+              "relation"
+            ]
+          },
+          "then": {
+            "required": [
+              "exclusive_set_id",
+              "predecessor_intent_id",
+              "predecessor_request_hash"
+            ]
+          },
+          "else": {
+            "not": {
+              "anyOf": [
+                {
+                  "required": [
+                    "predecessor_intent_id"
+                  ]
+                },
+                {
+                  "required": [
+                    "predecessor_request_hash"
+                  ]
+                }
+              ]
+            }
+          }
+        }
+      ],
+      "description": "Exact PendingIntentV1 canonical request projection retaining schema_version PendingIntentV1, excluding request_hash/accepted_position/disposition; runtime member_generation assigned before hashing. Not current wire."
+    },
+    "IntentDecisionCoreV1": {
+      "$ref": "#/$defs/IntentDecisionV1",
+      "description": "Same present-field shape; canonicalization excludes ContentRef locator metadata and refers to block-independent receipt_core bytes, never finalized wrappers."
+    },
+    "ConsumerSampleV1": {
+      "type": "object",
+      "properties": {
+        "consumer_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "consumer_version": {
+          "$ref": "#/$defs/Id"
+        },
+        "transition_sequence": {
+          "$ref": "#/$defs/U64"
+        },
+        "intent_id": {
+          "$ref": "#/$defs/Id"
+        },
+        "visible_grade": {
+          "$ref": "#/$defs/ServiceGradeV1"
+        },
+        "affected_operation": {
+          "$ref": "#/$defs/Id"
+        },
+        "last_trusted": {
+          "$ref": "#/$defs/LastTrustedV1"
+        },
+        "blocker_codes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Id"
+          },
+          "minItems": 0,
+          "uniqueItems": true
+        },
+        "next_step": {
+          "$ref": "#/$defs/Id"
+        },
+        "visible_intent_disposition": {
+          "enum": [
+            "pending",
+            "committed_effect",
+            "rejected",
+            "expired",
+            "replan_required",
+            "terminated_without_effect"
+          ]
+        },
+        "evidence_ref": {
+          "$ref": "#/$defs/ContentRefV1"
+        }
+      },
+      "required": [
+        "consumer_id",
+        "consumer_version",
+        "transition_sequence",
+        "visible_grade",
+        "affected_operation",
+        "last_trusted",
+        "blocker_codes",
+        "next_step",
+        "evidence_ref"
+      ],
+      "additionalProperties": false,
+      "dependentRequired": {
+        "intent_id": [
+          "visible_intent_disposition"
+        ],
+        "visible_intent_disposition": [
+          "intent_id"
+        ]
+      }
+    }
+  }
+}
