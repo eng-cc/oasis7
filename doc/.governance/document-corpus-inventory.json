@@ -15,7 +15,7 @@
     },
     {
       "path": "doc/.governance/document-semantic-review-overrides.json",
-      "content_sha256": "f040d80f6d8cbc26ef9ff15925211e699772bd9f278e8458897eec0ffe9eb4ac"
+      "content_sha256": "d75b9e9b29b5d771d18a41b0c3d4c0e22c0b3164f72e175e71418c7503833b7d"
     },
     {
       "path": "doc/testing/evidence/inventory.json",
@@ -567,7 +567,7 @@
     },
     {
       "path": "doc/engineering/workflow/source-of-truth.md",
-      "content_sha256": "aa4b20691f8d63a2b0c6b2fd03ce6666eb6dc462338ff72fff621d38a1c817aa",
+      "content_sha256": "ef24c0689ec92797db62767bbcbabad183a954f28ea79e4542c190037ebf8f81",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -2499,7 +2499,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/provider-agent-experience-continuity.prd.md",
-      "content_sha256": "9fc9a8fcc47debd6a89b9af77be2997605fb8c66383b366135d1174bc965264a",
+      "content_sha256": "303eaed48345c594ec3e648a33e95f065822a3b1ad12b52e325cb4639e4ea725",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2625,7 +2625,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/deterministic-world-execution.prd.md",
-      "content_sha256": "a122af0077b252d67d32f2abeadf14c4a8a802412cc6f5a7bb13ba40be0e8037",
+      "content_sha256": "c630fbb5122402719be894711b0efb82223c36e7453cdc3f9367f7716102ebe0",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2639,7 +2639,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/distributed-consensus-and-state-availability.prd.md",
-      "content_sha256": "41141ed4e7deb8fe94da08775c283dbc8af5cd89fe31664dfb84f7723160cf64",
+      "content_sha256": "a727100d3cc2275f0f8dbb47cf28d33e23018864a4fcbe7040017d90f4d7e54e",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2653,7 +2653,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/prd.md",
-      "content_sha256": "2fab798c7b7de1be6ea7948822d3fc5c69c9d4b6f8e8f8889d93f715885a48b4",
+      "content_sha256": "adcec6c62b84c42500cd538d9cc5d601f8daf064be55d00a80ed03a3b715c4dd",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -6244,6 +6244,20 @@
       "authority_layer": "professional_domain",
       "semantic_decision_owner": "runtime_engineer",
       "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "world-simulator-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/world-simulator/llm/provider-switch-intent-continuity.design.md",
+      "content_sha256": "4b57c87ae0a34b4e4791952e793cbee6b6186d60f7c5180599b875a63dbdedf2",
+      "registry_type": "professional_domain",
+      "structural_owner": "runtime_engineer",
+      "authority_entry": "doc/world-simulator/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "runtime_engineer",
+      "object_kind": "design",
       "lifecycle_candidate": "active_candidate",
       "inventory_disposition": "retain_for_owner_review",
       "routing_batch": "world-simulator-corpus-review",
