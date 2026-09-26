@@ -57,6 +57,51 @@ class UnicodeHistoryContractTests(unittest.TestCase):
         self.assertEqual(self.expected_title, selected["display_title"])
         self.assertTrue(selected["display_title"].isascii())
 
+    def test_complete_history_accepts_long_unicode_noncandidate_and_selects_exact_ascii_run(self):
+        long_title = "🌱" * 1100
+        self.assertGreater(len(long_title), 1024)
+        self.assertGreater(len(long_title.encode("utf-8")), 4096)
+        historical = {"id": 698, "display_title": long_title}
+        complete = contract.collect_workflow_runs(
+            (run_page([historical, self.fixture["run_api"]]),),
+        )
+
+        selected = contract.select_unique_run(complete, self.authority)
+
+        self.assertEqual(2, len(complete))
+        self.assertEqual(long_title, complete[0]["display_title"])
+        self.assertEqual(self.fixture["run"]["id"], selected["id"])
+        self.assertEqual(self.expected_title, selected["display_title"])
+        self.assertTrue(selected["display_title"].isascii())
+
+    def test_long_unicode_near_candidates_remain_blocking(self):
+        validation_id = self.authority.validation_id
+        prefix = self.expected_title[: -len(validation_id)]
+        long_tail = "🌱" * 1100
+        near_candidates = (
+            {
+                "id": 697,
+                "display_title": prefix + "different-request-key-" + long_tail,
+            },
+            {
+                "id": 696,
+                "display_title": long_tail + "|" + validation_id,
+            },
+        )
+
+        for near in near_candidates:
+            with self.subTest(run_id=near["id"]):
+                self.assertGreater(len(near["display_title"]), 1024)
+                self.assertGreater(len(near["display_title"].encode("utf-8")), 4096)
+                with self.assertRaisesRegex(
+                    contract.ContractError, "another or malformed",
+                ):
+                    contract.select_unique_run([near], self.authority)
+                with self.assertRaisesRegex(
+                    contract.ContractError, "unique workflow run ID",
+                ):
+                    contract.select_unique_run([self.fixture["run_api"], near], self.authority)
+
     def test_unicode_near_candidates_are_not_ignored_or_normalized(self):
         validation_id = self.authority.validation_id
         prefix = self.expected_title[: -len(validation_id)]
@@ -168,6 +213,34 @@ class UnicodeHistoryReadbackTests(unittest.TestCase):
         self.assertEqual(self.fixture["run"]["id"], envelope["run_id"])
         self.assertEqual(2, api.run_listing_count)
         self.assertEqual(2, api.unicode_history_pages)
+        self.assertEqual(2, api.run_direct_count)
+        self.assertEqual(0, api.write_calls)
+
+    def test_initial_and_final_full_enumerations_accept_long_unicode_history(self):
+        long_title = "🌱" * 1100
+        self.assertGreater(len(long_title), 1024)
+        self.assertGreater(len(long_title.encode("utf-8")), 4096)
+
+        class API(readback_tests.FakeReadbackAPI):
+            def __init__(self, fixture):
+                super().__init__(fixture)
+                self.long_unicode_history_pages = 0
+
+            def workflow_run_pages(self, workflow_id, repository_id):
+                pages = super().workflow_run_pages(workflow_id, repository_id)
+                page = pages[0]
+                rows = list(page["runs"])
+                rows.insert(0, {"id": 795, "display_title": long_title})
+                self.long_unicode_history_pages += 1
+                return (run_page(rows),)
+
+        api = API(self.fixture)
+        envelope = self._readback(api)
+
+        self.assertEqual(readback.contract.READBACK_SCHEMA, envelope["schema"])
+        self.assertEqual(self.fixture["run"]["id"], envelope["run_id"])
+        self.assertEqual(2, api.run_listing_count)
+        self.assertEqual(2, api.long_unicode_history_pages)
         self.assertEqual(2, api.run_direct_count)
         self.assertEqual(0, api.write_calls)
 

@@ -396,8 +396,23 @@ class WorkflowDiscoveryTests(unittest.TestCase):
                 with self.assertRaises(contract.ContractError):
                     contract.select_unique_run([target, candidate], authority)
 
-    def test_history_titles_must_be_bounded_well_formed_utf8_strings(self):
-        malformed_titles = ("", "unpaired surrogate \ud800", "x" * 1025, "nul\x00", "line\nfeed")
+    def test_history_titles_accept_long_well_formed_unicode_without_normalization(self):
+        *_, authority = validation_fixture()
+        historical = {"id": 698, "display_title": "🌱" * 1025}
+        target = live_run(authority)
+
+        complete = contract.collect_workflow_runs([
+            {"total_count": 2, "runs": [historical, target], "has_next": False},
+        ])
+        selected = contract.select_unique_run(complete, authority)
+
+        self.assertEqual(historical["display_title"], complete[0]["display_title"])
+        self.assertEqual(target["id"], selected["id"])
+        self.assertEqual(contract.expected_run_title(authority), selected["display_title"])
+        self.assertTrue(selected["display_title"].isascii())
+
+    def test_history_titles_must_be_well_formed_utf8_strings(self):
+        malformed_titles = ("", "unpaired surrogate \ud800", "nul\x00", "carriage\rreturn", "line\nfeed")
         for index, title in enumerate(malformed_titles, start=710):
             with self.subTest(title_kind=index):
                 page = [{"total_count": 1, "runs": [{"id": index, "display_title": title}], "has_next": False}]

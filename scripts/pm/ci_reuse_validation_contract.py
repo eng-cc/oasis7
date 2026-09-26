@@ -99,8 +99,6 @@ _VALIDATION_ID_RE = re.compile(r"[0-9a-f]{64}\Z")
 _LOGIN_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37})\Z")
 _MAX_PLANNER_STRING_CHARS = 1024
 _MAX_PLANNER_STRING_UTF8_BYTES = 4096
-_MAX_HISTORY_TITLE_CHARS = 1024
-_MAX_HISTORY_TITLE_UTF8_BYTES = 4096
 
 
 class ContractError(ValueError):
@@ -294,16 +292,13 @@ def _string(value: Any, field: str, *, allow_empty: bool = False) -> str:
 
 
 def _history_title(value: Any, field: str) -> str:
-    """Validate bounded REST history text without normalizing its Unicode."""
+    """Validate REST history text without normalizing its Unicode."""
     if type(value) is not str or not value:
         raise ContractError(f"{field} must be a non-empty string")
     try:
-        encoded = value.encode("utf-8", errors="strict")
+        value.encode("utf-8", errors="strict")
     except UnicodeEncodeError as exc:
         raise ContractError(f"{field} is not valid UTF-8") from exc
-    if (len(value) > _MAX_HISTORY_TITLE_CHARS
-            or len(encoded) > _MAX_HISTORY_TITLE_UTF8_BYTES):
-        raise ContractError(f"{field} exceeds the history title size limit")
     if any(char in value for char in "\x00\r\n"):
         raise ContractError(f"{field} contains a control character")
     return value
