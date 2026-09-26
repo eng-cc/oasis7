@@ -185,11 +185,14 @@ def _read_live_issue_route(
         if any((live_pr_number, cached_pr_number, live_pr_url, cached_pr_url)):
             return issue, None, "aggregate route is mixed with single-PR identity"
         cached_plan_comment_id = record.get("aggregate_plan_comment_id")
-        if type(cached_plan_comment_id) is not int or cached_plan_comment_id < 1:
+        if not re.fullmatch(r"[1-9][0-9]*", str(cached_plan_comment_id or "")):
             return issue, None, "cached aggregate plan comment ID is malformed"
-        for key in ("aggregate_plan_sha256", "aggregate_completion_receipt_sha256"):
+        for key, pattern in (
+            ("aggregate_plan_sha256", r"sha256:[0-9a-f]{64}"),
+            ("aggregate_completion_receipt_sha256", r"[0-9a-f]{64}"),
+        ):
             if not isinstance(record.get(key), str) or not re.fullmatch(
-                r"sha256:[0-9a-f]{64}", str(record.get(key)),
+                pattern, str(record.get(key)),
             ):
                 return issue, None, f"cached {key} is malformed"
         for key, (live_value, cached_value) in pointer_pairs.items():
