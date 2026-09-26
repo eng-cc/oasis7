@@ -481,6 +481,66 @@ class RequiredInventoryTests(unittest.TestCase):
         self.assertTrue(registry["consensus"]["obligations"])
         self.assertTrue(registry["required_gate_baseline"]["obligations"])
 
+    def test_site_quality_tracks_root_readme_as_a_file_input(self):
+        with tempfile.TemporaryDirectory(prefix="ci-required-inventory-readme-input-") as temp:
+            trusted, target, _ = self.make_fixture(Path(temp))
+            readme = target / "README.md"
+            readme.write_text("# First README\n", encoding="utf-8")
+            subprocess.run(["git", "add", "README.md"], cwd=target, check=True)
+            subprocess.run(["git", "commit", "-qm", "add root README blob"], cwd=target, check=True)
+
+            target_oid = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=target, text=True,
+            ).strip()
+            c2 = self.inventory._load_module(
+                trusted / "scripts/pm/ci_input_scope.py", "ci_input_scope_readme_regression",
+            )
+            site_spec = self.inventory.required_test_unit_registry(
+                self.planner.CAPABILITIES,
+            )["site_quality"]
+            paths = self.inventory._target_input_paths(
+                "site_quality", site_spec, target, c2, target_oid,
+            )
+            self.assertIn("README.md", paths)
+            self.assertNotIn("README.md", site_spec["member_roots"])
+
+            def fingerprint():
+                _, _, entries = c2.git_tree_entries(str(target), target_oid)
+                spec = {
+                    "unit_id": "site_quality",
+                    "unit_contract": {"kind": "site-quality/v1"},
+                    "obligation_set": ["site_quality:README.md"],
+                    "command_checker_paths": [],
+                    "input_paths": paths,
+                    "member_roots": site_spec["member_roots"],
+                    "dependency_edges": [],
+                    "applicable_policy": {},
+                    "environment_contract": {},
+                }
+                selected_paths = set(paths)
+                selected_paths.update(
+                    path for path in entries
+                    if any(path.startswith(root + "/") for root in site_spec["member_roots"])
+                )
+                blob_ids = {entry["oid"] for path, entry in entries.items()
+                            if path in selected_paths and entry["type"] == "blob"}
+                hashes, contents = c2._git_blob_hashes(str(target), blob_ids)
+                return c2._unit_input_fingerprint(entries, spec, hashes, contents)
+
+            first_fingerprint = fingerprint()
+            readme.write_text("# Changed README\n", encoding="utf-8")
+            subprocess.run(["git", "add", "README.md"], cwd=target, check=True)
+            subprocess.run(["git", "commit", "-qm", "change root README blob"], cwd=target, check=True)
+            target_oid = subprocess.check_output(
+                ["git", "rev-parse", "HEAD"], cwd=target, text=True,
+            ).strip()
+            changed_paths = self.inventory._target_input_paths(
+                "site_quality", site_spec, target, c2, target_oid,
+            )
+            self.assertEqual(paths, changed_paths)
+            paths = changed_paths
+            self.assertNotEqual(first_fingerprint, fingerprint())
+
     def test_runner_image_observation_requires_ubuntu24_and_github_image_markers(self):
         with ExitStack() as stack:
             stack.enter_context(patch.object(self.inventory.platform, "system", return_value="Linux"))
