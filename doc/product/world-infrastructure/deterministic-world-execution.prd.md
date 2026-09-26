@@ -11,6 +11,16 @@
 
 本文定义分布式共识底层之上的确定性世界执行层。它是基础设施内部的上层：接收已签名意图、在版本化规则边界内确定性重执行、提交已最终化结果，并向游戏、Agent 与玩家入口提供稳定协议；它不定义那些消费者的规则、行为或界面。
 
+### 使用者情境、正常路径与选择
+
+玩家提交行动后需要知道它是否真正生效，Agent 需要基于真实结果继续规划，验证者需要确认同一输入确实得到相同结果。正常路径是：消费者确认目标 `world_id`、已验证可服务状态和协议兼容性，签名并提交 intent；活动验证者按同一版本、有序输入和父状态重执行，在可验证最终性成立后形成 committed receipt，消费者再据此更新世界结论。客户端 compatibility declaration 只说明客户端是否能理解协议，执行版本仍按 §2.2 的 canonical block 与激活边界确定。
+
+未得到已提交结果时，使用者可以查看请求、等待或重新规划；专业域支持安全撤回/替代时才可选择该动作。等待可能延迟行动，激活后的重新校验可能使旧计划不再适用；原请求和替代请求仍须分别呈现真实状态，不能用重提换取免费取消、旧报价、优先级或第二次效果。已经消费的投入、可用的退出处置和实际成本由相关专业合同决定，本专题不承诺完成时间或返还。失效、拒绝、过期和恢复后的选择见 §2.1/§2.2。
+
+### 阅读术语
+
+`intent` 是请求产生效果的意图；`pending` 是尚无世界效果的待决；`committed receipt` 是关联已提交结果的回执，提交端接收回执不等于它。`canonical block` 是权威历史中的执行区块，candidate/proposed block 只是候选；`manifest` 是版本化执行规则及工件的声明，`governing version` 是该区块实际适用的执行版本。`attestation` 是验证者对重执行结果的确认，`replay` 是按原历史和版本重放；`intent lineage` 是原请求及其明确撤回/替代请求的可追溯关联，只有专业域标记的互斥成员才受唯一胜者规则约束。`fail closed`、最终性、世界身份与状态根的含义见[根 PRD 的阅读术语](prd.md#阅读术语)。这些说明不定义 schema、排序算法或新的客户端能力。
+
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
@@ -125,6 +135,18 @@ intent 的 governing version 必须由其首次进入已 committed、finality-ve
 - 不定义配方、设施、市场、区域/组织治理、Agent 决策、玩家动作、UX 或数值平衡。
 - 不定义 BFT 消息、签名格式、存储实现、节点部署或具体运行手册。
 
+## 未决问题与追踪解释
+
+本专题四组叶子并不代替根 SC-1～SC-10 的组合验收。追踪表中重复的工业状态锚点与模块导航不能单独证明通用确定性、待决、互斥 lineage、版本激活的系统设计承接；产品 owner 不代替 runtime/P2P 的技术 owner、Agent/Viewer 的消费者 owner 或 QA 的验证判断。正文目标、专业设计、当前实现与执行证据分别成立，不能由文档采纳推导能力或发行完成。
+
+| 未决问题 / 影响 | 决策 role 与所需信息 | 解决触发与临时边界 |
+| --- | --- | --- |
+| DWE-001 的同输入/父状态/版本重执行和原子拒绝、DWE-002/003 的待决持久化、恢复重审及互斥胜者由哪些真实设计条款承担？ | runtime、P2P、消费者 owner 与 QA；需要技术接受条款、状态/原子边界及竞态、独立 intent、消费者场景 | 专业设计与验证场景获批准后回链；此前工业状态锚点或单节点成功不构成通用承接及组合证据 |
+| DWE-004 的激活证明、工件可用性、首次已提交区块选版、跨版本 linked replacement 与历史 replay 如何共同验证？ | runtime、适用 WASM/模块 owner、P2P、消费者 owner 与 QA；需要激活窗口、历史版本、失败关闭和消费者重规划判定 | 条款及同候选验证设计可定位后复核；缺证/冲突时仍按正文拒绝或无效果待决，不锁定旧版本、不静默翻译 |
+| DWE-001 的 required 局部检查与 SC-4 的 full 组合证据如何区分？ | runtime/P2P 与 QA；需要全部活动验证者及 replay 的适用范围和证据身份 | 验证设计明确范围后确认；局部检查不能代签组合条件，DWE-004/DE-4 仍按 full 验收 |
+
+问题由[文档迁移协调任务 #3935](https://github.com/eng-cc/oasis7/issues/3935)接收；任务、依赖和解决进度由 GitHub task truth 维护，本表不维护第二台账。下面的“验证证据”导航描述不表示测试已接入或已执行，准确专业设计及验证回链尚须复核。
+
 ## 全量语义追踪
 
 | REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
@@ -132,4 +154,4 @@ intent 的 governing version 必须由其首次进入已 committed、finality-ve
 | [REQ-DWE-001](#req-dwe-001) / [AC-DWE-001](#ac-dwe-001) | `producer_system_designer` | [`doc/world-runtime/prd.md`](../../world-runtime/prd.md#industrial-execution-status-and-authority-matrix)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、Agent 与入口/Viewer 的 [`doc/world-simulator/prd.md`](../../world-simulator/prd.md)；入口动作的具体跨表面契约见 [`客户端启动器跨表面受控动作契约`](../../world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-DWE-002](#req-dwe-002) / [AC-DWE-002](#ac-dwe-002) | `producer_system_designer` | [`doc/world-runtime/prd.md`](../../world-runtime/prd.md#industrial-execution-status-and-authority-matrix)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、Agent 与入口/Viewer 的 [`doc/world-simulator/prd.md`](../../world-simulator/prd.md)；入口动作的具体跨表面契约见 [`客户端启动器跨表面受控动作契约`](../../world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-DWE-003](#req-dwe-003) / [AC-DWE-003](#ac-dwe-003) | `producer_system_designer` | [`doc/world-runtime/prd.md`](../../world-runtime/prd.md#industrial-execution-status-and-authority-matrix)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、Agent 与入口/Viewer 的 [`doc/world-simulator/prd.md`](../../world-simulator/prd.md)；入口动作的具体跨表面契约见 [`客户端启动器跨表面受控动作契约`](../../world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
-| [REQ-DWE-004](#req-dwe-004) / [AC-DWE-004](#ac-dwe-004) | `producer_system_designer` | [`doc/world-runtime/prd.md`](../../world-runtime/prd.md#industrial-execution-status-and-authority-matrix)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、Agent 与入口/Viewer 的 [`doc/world-simulator/prd.md`](../../world-simulator/prd.md)；入口动作的具体跨表面契约见 [`客户端启动器跨表面受控动作契约`](../../world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-DWE-004](#req-dwe-004) / [AC-DWE-004](#ac-dwe-004) | `producer_system_designer` | [`doc/world-runtime/prd.md`](../../world-runtime/prd.md#industrial-execution-status-and-authority-matrix)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、Agent 与入口/Viewer 的 [`doc/world-simulator/prd.md`](../../world-simulator/prd.md)；入口动作的具体跨表面契约见 [`客户端启动器跨表面受控动作契约`](../../world-simulator/launcher/game-client-launcher-cross-surface-action-parity.prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_full` |
