@@ -493,10 +493,13 @@ native_wasm_contract = canonical_workflow_text[
     native_wasm_anchor_end if native_wasm_anchor_end >= 0 else None
 ]
 for contract_fragment in (
-    "`wasm_build_suite-native`",
-    "`RUST_TOOLCHAIN`",
+    "Cargo package-profile planner's `target` field is a selector",
+    "`native` selects host-native Cargo tests",
+    "every planned item whose `target` is `native`",
     "`OASIS7_WASM_BUILD_STD=0`",
-    "sibling profile items inherit the workflow environment",
+    "independent of package name",
+    "copied subprocess environment",
+    "non-native items",
     "`OASIS7_WASM_TOOLCHAIN=nightly-2025-12-11`",
     "`OASIS7_WASM_BUILD_STD=1`",
     "`OASIS7_WASM_BUILD_STD_COMPONENTS=std,panic_abort`",
@@ -523,8 +526,17 @@ profile_plan = {
             "command": ["cargo", "test", "--package", "wasm_build_suite_native"],
             "command_digest": "native-command-digest",
             "package": "wasm_build_suite",
-            "profile": "dev",
-            "target": "x86_64-unknown-linux-gnu",
+            "profile": "native",
+            "target": "native",
+            "features": [],
+        },
+        {
+            "id": "wasm_module_observe-native",
+            "command": ["cargo", "test", "--package", "wasm_module_observe"],
+            "command_digest": "observer-command-digest",
+            "package": "wasm_module_observe",
+            "profile": "native",
+            "target": "native",
             "features": [],
         },
         {
@@ -532,8 +544,17 @@ profile_plan = {
             "command": ["cargo", "test", "--package", "unrelated_native"],
             "command_digest": "other-command-digest",
             "package": "unrelated_native",
-            "profile": "dev",
-            "target": "x86_64-unknown-linux-gnu",
+            "profile": "native",
+            "target": "native",
+            "features": [],
+        },
+        {
+            "id": "wasm_build_suite-wasm",
+            "command": ["cargo", "check", "--package", "wasm_build_suite", "--target", "wasm32-unknown-unknown"],
+            "command_digest": "wasm-command-digest",
+            "package": "wasm_build_suite",
+            "profile": "wasm",
+            "target": "wasm32-unknown-unknown",
             "features": [],
         },
     ],
@@ -552,9 +573,11 @@ with tempfile.TemporaryDirectory() as temporary_directory:
     prior_run = subprocess.run
     prior_build_std = os.environ.get("OASIS7_WASM_BUILD_STD")
     observed_profile_envs = []
+    observed_global_build_std = []
 
     def record_profile_run(command, *, env, check):
         observed_profile_envs.append((command, dict(env), check))
+        observed_global_build_std.append(os.environ.get("OASIS7_WASM_BUILD_STD"))
         return SimpleNamespace(returncode=0)
 
     os.environ["OASIS7_WASM_BUILD_STD"] = "1"
@@ -570,20 +593,42 @@ with tempfile.TemporaryDirectory() as temporary_directory:
         else:
             os.environ["OASIS7_WASM_BUILD_STD"] = prior_build_std
 
-observed_build_std_by_package = {
-    command[-1]: environment.get("OASIS7_WASM_BUILD_STD")
-    for command, environment, check in observed_profile_envs
+if len(observed_profile_envs) != len(profile_plan["items"]):
+    raise SystemExit("required-gate profile runner omitted planned item invocations")
+observed_build_std_by_item = {
+    item["id"]: environment.get("OASIS7_WASM_BUILD_STD")
+    for item, (_, environment, _) in zip(profile_plan["items"], observed_profile_envs)
 }
-if observed_build_std_by_package.get("wasm_build_suite_native") != "0":
+for item_id in (
+    "wasm_build_suite-native",
+    "wasm_module_observe-native",
+    "unrelated-native-profile",
+):
+    if observed_build_std_by_item.get(item_id) != "0":
+        raise SystemExit(
+            "required-gate native-target item must disable build-std independent of package name: "
+            f"{item_id}={observed_build_std_by_item.get(item_id)!r}"
+        )
+if observed_build_std_by_item.get("wasm_build_suite-wasm") != "1":
     raise SystemExit(
-        "required-gate native wasm_build_suite profile must disable build-std"
+        "required-gate non-native item must inherit the workflow build-std environment"
     )
-if observed_build_std_by_package.get("unrelated_native") != "1":
-    raise SystemExit(
-        "required-gate build-std override leaked into an unrelated profile item"
-    )
+if observed_global_build_std != ["1"] * len(profile_plan["items"]):
+    raise SystemExit("required-gate native override mutated the workflow-level environment")
 if any(check for _, _, check in observed_profile_envs):
     raise SystemExit("required-gate profile runner changed subprocess check semantics")
+
+for workflow_fragment in (
+    '  OASIS7_WASM_TOOLCHAIN: nightly-2025-12-11',
+    '  OASIS7_WASM_BUILD_STD: "1"',
+    "  OASIS7_WASM_BUILD_STD_COMPONENTS: std,panic_abort",
+    'rustup toolchain install "${OASIS7_WASM_TOOLCHAIN}" --profile minimal --component rust-src',
+):
+    if workflow_fragment not in workflow_text:
+        raise SystemExit(
+            "required-gate native override must preserve pinned nightly determinism contract: "
+            f"{workflow_fragment}"
+        )
 
 for name, item in declared.items():
     if item.get("mode") == "planner-owned":

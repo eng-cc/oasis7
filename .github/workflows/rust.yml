@@ -930,7 +930,8 @@ jobs:
               environment = dict(os.environ)
               environment.pop("RUSTC_WRAPPER", None)
               # Contract: doc/engineering/workflow/source-of-truth.md#required-gate-native-wasm-smoke.
-              if item["id"] == "wasm_build_suite-native":
+              # The planner's target selector is "native" for every host-native profile item.
+              if item["target"] == "native":
                   environment["OASIS7_WASM_BUILD_STD"] = "0"
               completed = subprocess.run(command, env=environment, check=False)
               results.append({
