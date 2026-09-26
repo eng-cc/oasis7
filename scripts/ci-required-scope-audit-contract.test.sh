@@ -267,9 +267,13 @@ python3 - \
   "$repo_root/.github/workflows/rust.yml" \
   "$planner" <<'PY'
 import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
+import textwrap
+from types import SimpleNamespace
 from pathlib import Path
 
 config_path, ci_tests_path, workflow_path, planner_path = map(Path, sys.argv[1:])
@@ -473,6 +477,84 @@ run_tier_match = re.search(
 if not run_tier_match:
     raise SystemExit("required-gate test-tier env path is missing")
 run_tier_body = run_tier_match.group("body")
+
+profile_runner_match = re.search(
+    r"(?ms)^[ \t]*python3 -I - \"\$\{OASIS7_CARGO_PROFILE_PLAN\}\" "
+    r"\"\$\{OASIS7_CARGO_PROFILE_RESULTS\}\" <<'PY'[ \t]*\n"
+    r"(?P<source>.*?)^[ \t]*PY[ \t]*$",
+    run_tier_body,
+)
+if not profile_runner_match:
+    raise SystemExit("required-gate package-profile runner heredoc is missing")
+profile_runner_source = textwrap.dedent(profile_runner_match.group("source"))
+profile_plan = {
+    "items": [
+        {
+            "id": "wasm_build_suite-native",
+            "command": ["cargo", "test", "--package", "wasm_build_suite_native"],
+            "command_digest": "native-command-digest",
+            "package": "wasm_build_suite",
+            "profile": "dev",
+            "target": "x86_64-unknown-linux-gnu",
+            "features": [],
+        },
+        {
+            "id": "unrelated-native-profile",
+            "command": ["cargo", "test", "--package", "unrelated_native"],
+            "command_digest": "other-command-digest",
+            "package": "unrelated_native",
+            "profile": "dev",
+            "target": "x86_64-unknown-linux-gnu",
+            "features": [],
+        },
+    ],
+    "plan_id": "profile-env-contract-test",
+    "trusted_authority": {"toolchain": "1.96.0"},
+    "integration_base": "base-commit",
+    "source_head": "head-commit",
+    "tested_tree": "tested-tree",
+}
+with tempfile.TemporaryDirectory() as temporary_directory:
+    temporary_path = Path(temporary_directory)
+    plan_path = temporary_path / "plan.json"
+    results_path = temporary_path / "results.json"
+    plan_path.write_text(json.dumps(profile_plan), encoding="utf-8")
+    prior_argv = sys.argv
+    prior_run = subprocess.run
+    prior_build_std = os.environ.get("OASIS7_WASM_BUILD_STD")
+    observed_profile_envs = []
+
+    def record_profile_run(command, *, env, check):
+        observed_profile_envs.append((command, dict(env), check))
+        return SimpleNamespace(returncode=0)
+
+    os.environ["OASIS7_WASM_BUILD_STD"] = "1"
+    subprocess.run = record_profile_run
+    sys.argv = ["required-gate-profile-runner", str(plan_path), str(results_path)]
+    try:
+        exec(compile(profile_runner_source, "required-gate-profile-runner", "exec"), {})
+    finally:
+        sys.argv = prior_argv
+        subprocess.run = prior_run
+        if prior_build_std is None:
+            os.environ.pop("OASIS7_WASM_BUILD_STD", None)
+        else:
+            os.environ["OASIS7_WASM_BUILD_STD"] = prior_build_std
+
+observed_build_std_by_package = {
+    command[-1]: environment.get("OASIS7_WASM_BUILD_STD")
+    for command, environment, check in observed_profile_envs
+}
+if observed_build_std_by_package.get("wasm_build_suite_native") != "0":
+    raise SystemExit(
+        "required-gate native wasm_build_suite profile must disable build-std"
+    )
+if observed_build_std_by_package.get("unrelated_native") != "1":
+    raise SystemExit(
+        "required-gate build-std override leaked into an unrelated profile item"
+    )
+if any(check for _, _, check in observed_profile_envs):
+    raise SystemExit("required-gate profile runner changed subprocess check semantics")
 
 for name, item in declared.items():
     if item.get("mode") == "planner-owned":
