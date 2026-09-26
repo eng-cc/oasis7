@@ -478,6 +478,35 @@ if not run_tier_match:
     raise SystemExit("required-gate test-tier env path is missing")
 run_tier_body = run_tier_match.group("body")
 
+canonical_workflow_text = (
+    repo_root / "doc/engineering/workflow/source-of-truth.md"
+).read_text(encoding="utf-8")
+native_wasm_anchor = '<a id="required-gate-native-wasm-smoke"></a>'
+native_wasm_anchor_start = canonical_workflow_text.find(native_wasm_anchor)
+if native_wasm_anchor_start < 0:
+    raise SystemExit("canonical native WASM smoke exception is missing")
+native_wasm_anchor_end = canonical_workflow_text.find(
+    "<a id=", native_wasm_anchor_start + len(native_wasm_anchor)
+)
+native_wasm_contract = canonical_workflow_text[
+    native_wasm_anchor_start:
+    native_wasm_anchor_end if native_wasm_anchor_end >= 0 else None
+]
+for contract_fragment in (
+    "`wasm_build_suite-native`",
+    "`RUST_TOOLCHAIN`",
+    "`OASIS7_WASM_BUILD_STD=0`",
+    "sibling profile items inherit the workflow environment",
+    "`OASIS7_WASM_TOOLCHAIN=nightly-2025-12-11`",
+    "`OASIS7_WASM_BUILD_STD=1`",
+    "`OASIS7_WASM_BUILD_STD_COMPONENTS=std,panic_abort`",
+):
+    if contract_fragment not in native_wasm_contract:
+        raise SystemExit(
+            "canonical native WASM smoke exception omits required contract: "
+            f"{contract_fragment}"
+        )
+
 profile_runner_match = re.search(
     r"(?ms)^[ \t]*python3 -I - \"\$\{OASIS7_CARGO_PROFILE_PLAN\}\" "
     r"\"\$\{OASIS7_CARGO_PROFILE_RESULTS\}\" <<'PY'[ \t]*\n"
