@@ -126,6 +126,49 @@ assert confirmed["Task UID"] == "task_x", confirmed
 assert "Last PM Update" not in confirmed, confirmed
 PY
 
+python3 - "$TMPDIR/github-project-sync.py" <<'PY'
+import importlib.util
+import sys
+
+spec = importlib.util.spec_from_file_location("sync", sys.argv[1])
+sync = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(sync)
+
+response = {
+    "data": {
+        "node": {
+            "project": {"id": "PROJECT_ID"},
+            "fieldValues": {"nodes": [
+                {"text": "task_11111111111111111111111111111111", "field": {"name": "Task UID"}},
+                {"name": "In Progress", "field": {"name": "Status"}},
+            ]},
+        }
+    }
+}
+calls = []
+sync.github_token = lambda: "TEST_TOKEN"
+sync.graphql_request = lambda token, query, variables: calls.append((token, query, variables)) or response
+
+values = sync.read_project_item_field_values("PROJECT_ID", "ITEM_ID")
+assert values == {
+    "Task UID": "task_11111111111111111111111111111111",
+    "Status": "In Progress",
+}, values
+assert calls[0][0] == "TEST_TOKEN", calls
+assert "$item: ID!" in calls[0][1], calls
+assert "$project" not in calls[0][1], calls
+assert "project { id }" in calls[0][1], calls
+assert calls[0][2] == {"item": "ITEM_ID"}, calls
+
+response["data"]["node"]["project"]["id"] = "OTHER_PROJECT_ID"
+try:
+    sync.read_project_item_field_values("PROJECT_ID", "ITEM_ID")
+except RuntimeError as exc:
+    assert str(exc) == "Project item belongs to a different Project", exc
+else:
+    raise AssertionError("wrong Project identity was accepted")
+PY
+
 DRY_JSON="$TMPDIR/dry.json"
 GH_FAKE_RECOVER_EXISTING=1 python3 "$TMPDIR/github-project-sync.py" "$TMPDIR" \
   --repo eng-cc/oasis7 \

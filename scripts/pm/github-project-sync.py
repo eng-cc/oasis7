@@ -719,7 +719,7 @@ def read_project_item_field_values(project_id: str, item_id: str) -> dict[str, s
     """Read back the authoritative Project fields for one item after mutation."""
     token = github_token()
     query = """
-    query($project: ID!, $item: ID!) {
+    query($item: ID!) {
       node(id: $item) {
         ... on ProjectV2Item {
           project { id }
@@ -731,7 +731,7 @@ def read_project_item_field_values(project_id: str, item_id: str) -> dict[str, s
       }
     }
     """
-    payload = graphql_request(token, query, {"project": project_id, "item": item_id})
+    payload = graphql_request(token, query, {"item": item_id})
     node = ((payload.get("data") or {}).get("node") or {})
     if str(((node.get("project") or {}).get("id") or "")) != project_id:
         raise RuntimeError("Project item belongs to a different Project")
