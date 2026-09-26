@@ -741,3 +741,43 @@ Site registration、location anchor、Agent location assignment、ownership/acce
 - Raw alliance form/join/leave/dissolve 与 war declare/conclude 必须先形成完整事件绑定的 sparse delta。该 delta 原子覆盖 touched alliances、wars、participants、reputation 与 compatibility materials；prospective root 只加入既有 raw actor 的单次路由，conclusion 保持无路由。所有成员、资源和 outcome 的既有校验顺序必须在 publication 前完成，失败不得留下 alliance/war/resource/activity 半写入。
 - Raw governance proposal、crisis、meta-progress 与 product-validation publication 分别使用窄的 full-event projector：proposal 保留 duplicate-open votes 与 recast 语义，crisis 保留 legacy resolve/spawn/timeout payload authority，meta self-target 合并为一个 AgentCell，product requester 缺失仍提交 validation 且不路由。所有 prospective roots 仅覆盖对应 map 与既有单次 mailbox route。
 - 本节吸收已完成 README gap 专题中的仍有效 runtime 合同；历史里程碑、旧路径与完成状态从 Git history 和 GitHub task evidence 追溯。
+
+<a id="module-store-persistence-and-recovery-contract"></a>
+本锚点是旧 ModuleStore persistence and recovery contract 的兼容定位，原有 load/save/late-record/error/cache/instance 条款保持原节全文，接受关系消费该节而非通用工业矩阵。
+
+## 基础设施专业接受与事实边界
+
+本文保留所有既有 PRD-ID、SC、AC、专题/实现历史及 current/legacy/target 条款。本节承接产品基础设施结果，属于目标专业合同；文档采纳不改变 §工业执行矩阵的当前字段、不使 §ExecutionTransaction 的整体 partial 能力成为 proven，也不替代已执行证据。产品根 SC-8/9 与本文旧 SC-8/9 使用各自 path#fragment 身份，不能混用编号。批准阅读基线为 eng-cc/oasis7 的 f9d5a552d9af04c1b1398262808198a58e560230；后续相关输入须独立重审。
+
+<a id="runtime-deterministic-acceptance"></a>
+### 确定性与原子拒绝的专业接受
+承接 [REQ/AC-DWE-001](../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-001) 与产品根 SC-1/4：同 world、governing version、ordered input、parent committed state 的 action root/execution hash/state root/receipt-journal binding 必须一致。活动验证者在 attestation 前各自重执行；缺证、冲突、越权、artifact/版本不一致不能产生部分 receipt、资源或状态效果。runtime 提供执行绑定，P2P 提供最终性、活动集合/epoch、round/threshold 检查；四种证书负例各自阻断。见 [确定性设计](design.md#runtime-deterministic-design)。本地 root 一致性不代签 SC-1/4 的 full 同候选组合证据。
+
+<a id="runtime-pending-acceptance"></a>
+### 无效果待决与当前条件重审
+承接 [REQ/AC-DWE-002](../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-002)、DE-2 与产品根 SC-5。签名送出、transport 接收、排队、重连或 UI 成功都不产生资源、控制权、资格、声誉、阶段或依赖结果。runtime/P2P 必须持久保留可读的原请求身份及真实待决处置；恢复可服务后从 fresh authoritative snapshot 读取当前权限、资源、期限与前置条件，在 canonical 顺序重新裁决为执行、拒绝、过期或须重规划。只有对应 committed receipt 更新世界结论。等待不授予完成时间、返还或旧优先级；消费者可查看/等待/重规划，只有专业域支持时才可明确撤回/替代。见 [待决设计](design.md#runtime-pending-design)。现有 effect/cognition pending 路径不证明所有 signed finality-pending 请求持久化。
+
+<a id="runtime-lineage-acceptance"></a>
+### 互斥 lineage 的唯一有效胜者
+承接 [REQ/AC-DWE-003](../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-003)。专业域明确标记互斥的同 lineage 原请求、withdrawal、replacement，由首个产生有效世界效果的 committed receipt 唯一获胜，在同一个原子边界终止其余成员为无效果、不可执行、可追溯。拒绝/过期仅终止自己，未标记互斥的独立 intent 可并发。撤回/替代在自身 committed receipt 前不能取消、隐藏、覆盖或宣称优先于原请求；关联和各自真实状态可读。retry/reconnect/restore/replay 只能读取同一处置，不产生第二 sink/receipt/effect。见 [lineage 设计](design.md#runtime-lineage-design)。普通 operation idempotency 或签名真实性不是 lineage 原子仲裁；标记、排序和 schema 的批准仍是外部依赖。
+
+<a id="runtime-version-acceptance"></a>
+### Canonical execution block 的版本接受
+承接 [REQ/AC-DWE-004](../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004)、DE-4、产品根 SC-4。首次进入已 committed 且 finality-verified canonical execution block 时，相对治理 activation boundary 确定 governing manifest：boundary 前旧版本，at/after 新版本。candidate/proposed block、提交时间、client compatibility declaration 或节点软件不能选版。激活前待决但激活后首次执行的请求必须按新 manifest 当前权限/资源/前置条件重裁决；不兼容只能原子拒绝/过期或主体明确提交新兼容请求，禁止静默翻译、旧报价/资格或混合规则部分效果。明确跨版本 replacement 进入原互斥 lineage，未关联新请求只有经专业域确认独立才可并发。历史 receipt 按原 block manifest/artifact replay；缺失/冲突 activation proof、artifact 或 compatibility 阻断执行与恢复，保留已确认历史和真实未确认处置。见 [版本设计](design.md#runtime-version-design)。四条 release lane 保持独立；普通 rolling node release 不激活世界语义。
+
+<a id="runtime-recovery-acceptance"></a>
+### 同世界恢复与重新服务的专业接受
+承接 [REQ/AC-DCS-002](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002)、[REQ/AC-DCS-005](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-005)、DC-2/5、DE-3 和产品根 SC-2/3/6/7。bootstrap/snapshot/replay/state-sync/pruning/disaster 各自证明同 world identity → finalized checkpoint/registry → hash-bound snapshot → canonical replay → state root。缺失/冲突/其他 world 候选保持原世界不可用/隔离，不接受新权威效果、不静默确认/取消/重放/迁移未 final 请求；旧 receipt 保持原历史。替代世界与受治理迁移是独立产品决策。
+历史验证只允许作恢复只读的必要依据；追加、最终性、当前版本化执行及单调 head 连续性共同重新成立才能开放新 intent。失败闸门后每个受测新 intent 的 committed receipt 为 0；可服务后 pending 当前条件重审，无期限/优先级继承，每个新 intent 至多一 committed receipt、无第二效果。闸门在提交/恢复中回退到只读/隔离，不撤销/改写已确认历史。正式消费者读到等级、主要 blocker、下一步。见 [恢复服务设计](design.md#runtime-recovery-design)。本地 bridge v3/CAS root 与 R0/R1 不是 checkpoint-finality 或开放写入证明；pruning 的冗余 archive/角色权限由 P2P/ops 承担，SC-1/2 的完整网络职责不移入 runtime。
+
+<a id="runtime-industrial-acceptance"></a>
+### 工业跨阶段因果与有界容量接受
+承接产品根 [工业跨域边界](../product/world-infrastructure/prd.md#工业流水线的跨域执行边界) SC-8/9，既有 PRD-WORLD_RUNTIME-043 不变。代表性 factory → recipe/input join → handoff → transit → output/terminal 在同 world/version/immutable root 产生 accepted/blocked/terminal。child 的 root/revision/parent/目的状态在首个不可逆 sink 前校验，缺失/冲突 fail closed；accepted 不是原料/容量 reservation。hold 必须有界、独占、绑定 root/阶段/边/批次；中间 edge 与 destination buffer 满载只可保留未消费投入、接收仍有容量的已结算产出，或原子拒绝/延期新承诺，不能丢弃/瞬移/无限积压/隐式改道/伪造完成。
+同一 authoritative release/arrival 对同 hold 的释放及 fresh-snapshot 重评各最多一次；后续不同事件只对仍有效 intent 的未满足剩余量从新权威快照重评。因果变化生成 parent-linked revision/child root；非因果 checkpoint 不改 root。retry/reconnect/restore/replay 重读同 disposition，不重复 sink/credit/progress/receipt/reward。消费者能读最早 blocker、held/consumed/unmet/residual 与 next recheck；局部完成/在途/缓存不等于生产或交付。M4/gameplay 拥有容量、资源、window/W 规则，runtime 拥有事件/持久化/原子执行。见 [工业设计](design.md#runtime-industrial-design)。现有 ActionId、ready_at、consume/produce vector 不重命名成尚缺的 root/join/window/bundle 字段。
+
+<a id="runtime-world-scope-acceptance"></a>
+### 世界身份与消费者作用域
+承接产品根 SC-10 [基础不变量](../product/world-infrastructure/prd.md#基础不变量)。提交前消费者区分 global-authoritative 与隔离 local/development 目标；intent/committed receipt/result 绑定同 world。缺失/错 world 或 local receipt reuse/replay 不接受、不产生、不呈现 global effect；local 历史永不合入 global。见 [身份设计](design.md#runtime-world-scope-design)。scope 呈现由 Agent/Viewer/API 专业 authority 定义，runtime 不新增 UX/schema。
+
+### 专业验收接收边界
+上面每一专业接受都由 root design 的 §2.1 与 §11.1 分配到真实条款和验证场景。既有其他 PRD/AC/历史 Test Plan 不删除、不因新增产品关系被覆盖。pending、lineage、version、service gate 及完整工业 root/hold 仍是 target；现有分散的 typed publication/current bridge 属 current/partial。定义测试、文档 active、PR merged 与实际执行证据是独立事实；完整 SC/DC/DE 组合结果需要同一 candidate/config/world/entry/environment/evidence window 的 runtime/P2P/ops/consumer/QA 证据。

@@ -59,6 +59,7 @@ Agent-owned session/turn/provider/context/memory/goal 合同见
   - `pre_action`：规则模块先行校验/计费/覆盖动作参数。
   - `post_action`：动作应用后派发衍生事件或效果。
 - **Event 路由**：`event.*` 订阅在事件追加后触发（`post_event`），用于捕获已落盘事件。
+  - “已落盘”保留旧集成摘要用语；current `post_event` 表示 canonical append/routing 阶段，单凭该阶段不证明 filesystem generation 已 sync/commit，durability 仍按 root/storage 合同验证。
 - **阶段默认值**：`event_kinds` 默认 `post_event`；`action_kinds` 默认 `pre_action`；二者同时存在视为无效订阅。
 - **订阅校验**：`post_event` 不允许配置 `action_kinds`，`pre_action/post_action` 不允许配置 `event_kinds`。
 - **输入结构**：`pre_action` 仅传入 action；`post_action` 同时传入 action + 结果事件；`post_event` 仅传入 event。阶段信息通过 `ctx.stage` 传递。
@@ -111,3 +112,44 @@ Agent-owned session/turn/provider/context/memory/goal 合同见
 - `GovernanceEvent::Applied` 当前字段为 `manifest_hash`/`consensus_height`/`threshold`/`signer_node_ids`（不含 `module_changes`）。
 - `module_changes` 在提案应用时通过 `ModuleEvent` 序列落盘，再由 `ManifestUpdated` 写入去除 `module_changes` 的目标 manifest。
 - 审计导出支持 `module_call_failed` 与 `governance` 记录
+
+## 集成合同的适用设计视图
+owner runtime_engineer；本分册是 active runtime integration design，旧“草案”标题和接口清单保留其历史/混合成熟度，不宣告每个接口已持久完成。审读输入 eng-cc/oasis7@f9d5a552d9af04c1b1398262808198a58e560230，当前实现以对应源码入口为准，测试定义不等于已运行。目标是 sandbox/module/LLM 输出经统一 Kernel/proof/transaction 边界；非目标是重定义 ABI、Agent cognition、BFT 或消费者 DTO。
+
+<a id="integration-module-boundary"></a>
+### Module 输入输出与外部 authority
+wasm_hash 唯一加载键、cache/LRU、Canonical CBOR、memory/alloc/reduce/call、输出 limits、pure new_state 拒绝及全部错误码仍按旧文。wire/default/extension/schema 的权威为 [WASM interface](../wasm/wasm-interface.md)、[executor PRD](../wasm/wasm-executor.prd.md)；sandbox 只隔离计量，不赋资源/策略/最终性。ModuleContext 的当前 manifest hash 是已选版本的上下文，不是客户端选版权。历史调用需要 [root version 设计](../design.md#runtime-version-design) 的原 block manifest/artifact binding，missing/mismatch 失败关闭；cache hit/编译成功不证明 activation。epoch/watchdog 本地安全界不变成 consensus clock。
+Action/Event 从 envelope/ctx.stage 输入，按 instance_id 确定排序/隔离，legacy module_id fallback 只用于旧无实例记录。pre_action/post_action/post_event 及无效 subscriptions 规则保持原文。旧 post_event “已落盘”指 canonical event append/routing 后的阶段；没有 filesystem generation proof 时不能据此声明 fsync/durable commit。output/cap_ref/required_caps/policy/limits preflight 在 root stage；失败丢弃业务输出，既有单独 ModuleCallFailed audit 的有界顺序保持 root §5/6 原文，不扩展为完整 receipt 原子性。
+
+<a id="integration-state-persistence"></a>
+### 状态、事务与持久化
+reducer state/new_state、module instance/registry、scheduler wake、pending effect 是不同持久事实；输入输出是候选，Kernel apply 后才为 canonical。目标统一 buffer 同时 prepare module state、费用、effects/emits、allocator/queue/journal/consensus，publish 前不改 live state；当前 direct/trusted 和 governed proposal typed stages 已有有界保证，step cloned boundary/其他生命周期/receipt/outbox/generation 整体仍 partial。事务失败不能消费 queue/费用/ID，infrastructure failure 不伪装业务拒绝。持久化用 [root generation/replay 合同](../design.md#runtime-pending-design) 及 ModuleStore integrity；replay 原事件/state 不重新调用 LLM，外部 effect 由目标 durable outbox postcommit 投递。通用 signed pending/lineage/service schemas 未完成，现有 effect queue 不能代签。
+LLM observation/decision/provider/context/memory/goal 依赖原 cognition/harness authority，推理失败/accepted acknowledgement 不产生世界效果。消费者受 [pending](../design.md#runtime-pending-design)、[lineage](../design.md#runtime-lineage-design)、[service](../design.md#runtime-recovery-design)、[world scope](../design.md#runtime-world-scope-design) 约束，只以 committed receipt 改结论，本节不新增 DTO/UI。
+
+<a id="integration-governance-api"></a>
+### 当前入口、失败与兼容
+接口表的 World::apply_proposal(id) 是现有 local-policy-gated wrapper；explicit certificate API 是 World::apply_proposal_with_finality(proposal_id,&certificate)，见 [治理设计](../governance/zero-trust-governance-receipt-hardening-2026-02-26.design.md#hardening-governance-boundary)。旧零信任两参数 apply_proposal 是历史 proposal spelling。Manifest version/content/module_changes 与 Applied 现有字段保持不变。signature/threshold/artifact/output 错误保留优先级、HMAC/legacy replay 及 ABI 默认兼容；不得隐式降级 missing authority/artifact。容量由 ModuleLimits/queue/profile authority 控制，cache eviction 不驱动世界进度，审计 errors 不包含额外敏感 payload。target 接口/activation/full durable 迁移需要 runtime/WASM/Agent 联审与 replay/failure evidence；风险是旧 draft 与 current 入口混淆，输入/ABI/消费者变更触发复核。
+
+### 2.1 需求承接与分配表
+
+输入身份 eng-cc/oasis7@f9d5a552d9af04c1b1398262808198a58e560230；新增 local anchors 是本文技术接受关系，非机器 schema。每行范围独立，外部未决保留。
+
+| 上游 requirement / acceptance | 具体 obligation 与条件 | 本设计条款 | 外部 owner / dependency | 排除或未覆盖 |
+| --- | --- | --- | --- | --- |
+| [条款](../prd.md#runtime-deterministic-acceptance) | hash load/CBOR/limits/pure-state/output/cap/policy/instance排序，missing/mismatch零业务效果 | [设计](#integration-module-boundary) | WASM ABI/executor；runtime Kernel | cache/ModuleCallFailed不等于durable receipt |
+| [条款](../prd.md#runtime-version-acceptance) | 历史governing version/artifact输入不可由cache/client选择 | [设计](#integration-module-boundary) | WASM compatibility与P2P proof | activation历史未proved |
+| [条款](../prd.md#runtime-pending-acceptance) | LLM/effect候选不等于world effect，no recall replay及pending真实处置 | [设计](#integration-state-persistence) | Agent cognition/harness；P2P/consumer | 通用pending DTO未落地 |
+| [条款](../prd.md#module-store-persistence-and-recovery-contract) | module state/registry/artifact/cache完整 hydration，mixed generation拒绝 | [设计](#integration-state-persistence) | runtime storage；WASM identity | whole root/outbox仍partial |
+| [条款](../governance/zero-trust-governance-receipt-hardening-2026-02-26.prd.md#retained-active-hardening-contract-与历史-provenance) | wrapper与explicit finality API区分，ordered module→manifest→Applied | [设计](#integration-governance-api) | runtime governance；P2P finality；WASM | 历史两参数spelling非current API |
+
+### 11.1 验证映射表
+
+所有下列行为验证在本次文档编辑中未运行。定义/计划与当前实现、实际执行、发布分别成立；执行须另固定 source/integration/tested tree、config/world/entry/environment/window、exit/result/artifacts，并回 GitHub task evidence。target场景尚无完整runner时明确保持待证明，现有test/manual只是有界接收入口，不能伪称已实现或通过。
+
+| 上游 requirement / acceptance | 本设计条款 | 独立 obligation / 条件 | 验证 source / ID、层级及候选环境 | 证据目标 | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [条款](../prd.md#runtime-deterministic-acceptance) | [设计](#integration-module-boundary) | hash load/CBOR/limits/pure-state/output/cap/policy/instance排序，missing/mismatch零业务效果 | [现有 test/manual](../../../crates/oasis7/src/runtime/tests/modules_permissions_policy_hooks.rs)；required 局部 permit/deny/context hash；target同manifest/parent输出越限/pure-state拒绝和全部stage/default/subscription invalid，记录root/fee/event | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | cache/ModuleCallFailed不等于durable receipt |
+| [条款](../prd.md#runtime-version-acceptance) | [设计](#integration-module-boundary) | 历史governing version/artifact输入不可由cache/client选择 | [现有 test/manual](../../../crates/oasis7/src/runtime/tests/module_action_loop_release_controls.rs)；full target activation窗口+missing历史工件，局部release control定义，不执行 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | activation历史未proved |
+| [条款](../prd.md#runtime-pending-acceptance) | [设计](#integration-state-persistence) | LLM/effect候选不等于world effect，no recall replay及pending真实处置 | [现有 test/manual](../../../crates/oasis7/src/runtime/tests/execution_transaction_regressions.rs)；required局部queue/ingest rollback；target provider outage/restart/replay无调用/费用/效果及committed-only consumer | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 通用pending DTO未落地 |
+| [条款](../prd.md#module-store-persistence-and-recovery-contract) | [设计](#integration-state-persistence) | module state/registry/artifact/cache完整 hydration，mixed generation拒绝 | [现行 manual](../../../testing-manual.md)；精确局部 source ../../../crates/oasis7/src/runtime/world/module_store_load_transaction_regressions.rs（定义/入口，非执行证据）；required late record/missing/tamper/no-store兼容局部定义；full target generation/crash/历史binding | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | whole root/outbox仍partial |
+| [条款](../governance/zero-trust-governance-receipt-hardening-2026-02-26.prd.md#retained-active-hardening-contract-与历史-provenance) | [设计](#integration-governance-api) | wrapper与explicit finality API区分，ordered module→manifest→Applied | [现有 test/manual](../../../crates/oasis7/src/runtime/tests/governance.rs)；required governance_policy_blocks_local_apply_proposal_path 定义；target复核调用边界/invalid certificate零部分apply | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 历史两参数spelling非current API |

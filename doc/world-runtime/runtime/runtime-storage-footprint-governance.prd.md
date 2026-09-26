@@ -160,3 +160,83 @@
 | DEC-RSF-003 | `tick_consensus_records` 热冷分层并保留 archive anchor | 直接禁止记录 tick consensus 历史 | 会损失审计与链路验证能力，不符合 runtime 可追溯目标。 |
 | DEC-RSF-004 | 采用 profile-based storage policy（`dev_local` / `release_default` / `soak_forensics`） | 单一全局 retention 常量 | 开发、启动器、长跑取证三类环境的预算差异显著，需要明确可观测的模式治理。 |
 | DEC-RSF-005 | canonical replay source 采用变更日志（commit log）+ checkpoint，snapshot 仅作为加速缓存 | 继续把每高度完整 snapshot 作为默认真相源 | 现有样本证明“每高度全量快照”体积不可控；日志为真更符合可回放要求。 |
+
+## 当前合同、历史样本与上游接受
+2102 heights 的 2026-03-08 占用和 2026-05-15 压缩补充保留为历史 diagnosis/decision，不能当本轮当前测量；SC/AC/NFR 的 2500 heights、budget、p95/CPU/频率仍是独立有条件目标，§6 旧 tasks/decisions 是 provenance，不刷新为新执行证据。
+本合同接受 [DCS-002 同世界恢复](../../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#req-dcs-002) 的本地 material/replay 子义务、[DWE-004 历史版本](../../product/world-infrastructure/deterministic-world-execution.prd.md#req-dwe-004) 的 retained manifest/artifact 支持，以及产品根 SC-2/3/6/7 的 pin/reconstruction 子义务。保留高度 H 的 canonical log、checkpoint、原版本/hash/module binding 必须唯一解析，依赖未验证不能 aggressive sweep。准确设计见 [storage history](runtime-storage-footprint-governance.design.md#storage-history-dependency)。
+schema v3+V1/V2 compatibility、last_applied 连续性/current local binding 与 R0 latest/R1 retained 保证分开；root equality/启动不证明 finalized checkpoint、redundant archive、light proof/DA 或可投票/写入。重新服务另走 [root gate](../design.md#runtime-recovery-design)，ops/P2P 提供同窗口 proof/role/archive evidence；本地存储 profile 不改变产品 world identity 或迁移权限。各 SC/AC/NFR 的独立验证及未运行范围见配对 design 的新增 §11.1，旧 §16/历史 trace 保留。
+
+## 存储分项接受定位
+下列定位分别保留旧SC/AC/NFR/规则条件；预算均为目标，未由本轮实际测量证明；原DEC-RSF和迁移历史不变。
+
+<a id="storage-accept-ac1"></a>
+- AC-1/SC-1：2500 committed heights llm_bootstrap dev/launcher store≤256 MiB，record引用无dangling。该独立条件由配对设计 storage-case-ac1 与其验证场景承接。
+
+<a id="storage-accept-ac2"></a>
+- AC-2/SC-2：latest+rollback-safe引用集合，sidecar≤16 MiB，orphan=0。该独立条件由配对设计 storage-case-ac2 与其验证场景承接。
+
+<a id="storage-accept-ac3"></a>
+- AC-3/SC-4：GC后latest restart，execution root/journal_len/module_registry相同。该独立条件由配对设计 storage-case-ac3 与其验证场景承接。
+
+<a id="storage-accept-ac4"></a>
+- AC-4：GC中断/partialwrite/pin失败不删latest，degraded保恢复。该独立条件由配对设计 storage-case-ac4 与其验证场景承接。
+
+<a id="storage-accept-ac5"></a>
+- AC-5/SC-6：每policy-retained H由nearestC<=H+canonical log重建原root。该独立条件由配对设计 storage-case-ac5 与其验证场景承接。
+
+<a id="storage-accept-ac6"></a>
+- AC-6/SC-5：profile/effective_budget/bytes/retained/checkpoint/replay/lastgc/error/degraded可读，无额外扫描。该独立条件由配对设计 storage-case-ac6 与其验证场景承接。
+
+<a id="storage-accept-ac61"></a>
+- AC-6.1：四入口同枚举无损透传，三wrapper OASIS7_CHAIN_STORAGE_PROFILE非空注入/默认继承/bundle runtime。该独立条件由配对设计 storage-case-ac61 与其验证场景承接。
+
+<a id="storage-accept-ac7"></a>
+- AC-7/SC-3：2500 heights snapshot≤512KiB，archive区间读取+链路校验。该独立条件由配对设计 storage-case-ac7 与其验证场景承接。
+
+<a id="storage-accept-ac8"></a>
+- AC-8：required/full分别含footprint/restart/failsafe/profile/archive/retained replay矩阵。该独立条件由配对设计 storage-case-ac8 与其验证场景承接。
+
+<a id="storage-accept-sc7"></a>
+- SC-7：release_default hot_head_heights≤checkpoint_interval，不重复保留额外同区间snapshot。该独立条件由配对设计 storage-case-sc7 与其验证场景承接。
+
+<a id="storage-accept-nfr1"></a>
+- NFR-1：2500 heights node root≤384MiB且store≤256MiB。该独立条件由配对设计 storage-case-nfr1 与其验证场景承接。
+
+<a id="storage-accept-nfr2"></a>
+- NFR-2：2500 heights localSSD sweep p95≤500ms。该独立条件由配对设计 storage-case-nfr2 与其验证场景承接。
+
+<a id="storage-accept-nfr3"></a>
+- NFR-3：default latest restart p95≤5s。该独立条件由配对设计 storage-case-nfr3 与其验证场景承接。
+
+<a id="storage-accept-nfr4"></a>
+- NFR-4：优化不能降低replay/recovery确定性，相关回归100%。该独立条件由配对设计 storage-case-nfr4 与其验证场景承接。
+
+<a id="storage-accept-nfr5"></a>
+- NFR-5：所有policy retained heights replay成功100%且原root相等。该独立条件由配对设计 storage-case-nfr5 与其验证场景承接。
+
+<a id="storage-accept-nfr6"></a>
+- NFR-6：metrics采集发布频率不高于每1s一次，额外CPU≤5% local单节点。该独立条件由配对设计 storage-case-nfr6 与其验证场景承接。
+
+<a id="storage-accept-nfr7"></a>
+- NFR-7：soak显式更高占用、metrics增长/可配上限。该独立条件由配对设计 storage-case-nfr7 与其验证场景承接。
+
+<a id="storage-accept-compression"></a>
+- 原payload content_hash不变，compressed header后更小才压缩，读回rawbytes。该独立条件由配对设计 storage-case-compression 与其验证场景承接。
+
+<a id="storage-accept-cold-range"></a>
+- continuous latest hot range/shared coldanchor scan seek同边界，pack len/offset/hash与canonical/legacy别名回填。该独立条件由配对设计 storage-case-cold-range 与其验证场景承接。
+
+<a id="storage-accept-legacy-height"></a>
+- v3新写/V1V2兼容，stale/noncontiguous heightfailclosed；legacy仅latest-safe无aggressiveGC。该独立条件由配对设计 storage-case-legacy-height 与其验证场景承接。
+
+<a id="storage-accept-save-failure"></a>
+- save满盘/新generation中断保旧，pin/latestmissing停止，replay mismatch阻aggressiveGC。该独立条件由配对设计 storage-case-save-failure 与其验证场景承接。
+
+<a id="storage-accept-single-writer"></a>
+- 仅runtime指定根删除，显式pin/无mtime猜测，第二writer检测阻止、metrics不新增payload。该独立条件由配对设计 storage-case-single-writer 与其验证场景承接。
+
+<a id="storage-accept-version-dependency"></a>
+- retained原manifest/artifact/moduleanchor唯一解析，missing/hashconflict停止unsafe sweep/不称matched。该独立条件由配对设计 storage-case-version-dependency 与其验证场景承接。
+
+<a id="storage-accept-service-boundary"></a>
+- localroot/restart仅历史条件，append/finality/version/head与redundantarchive仍外部。该独立条件由配对设计 storage-case-service-boundary 与其验证场景承接。

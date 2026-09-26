@@ -15,7 +15,7 @@
     },
     {
       "path": "doc/.governance/document-semantic-review-overrides.json",
-      "content_sha256": "d75b9e9b29b5d771d18a41b0c3d4c0e22c0b3164f72e175e71418c7503833b7d"
+      "content_sha256": "22e912229eda31ba0eb94c5a10d9fd4ff9086e134d7ec659e600e00573a597f3"
     },
     {
       "path": "doc/testing/evidence/inventory.json",
@@ -5047,7 +5047,7 @@
     },
     {
       "path": "doc/world-runtime/design.md",
-      "content_sha256": "b0da2507c63bfdec9c4c2272cf227d41aee333beae273ad2762dd783f2eddd97",
+      "content_sha256": "b1277581ef636f4ec6bea7d4dbf2e199916986fc6ac3a4d36c48f213d5aecd5f",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5215,7 +5215,7 @@
     },
     {
       "path": "doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.design.md",
-      "content_sha256": "8485d5c4d8ca19fd00c23694de5b0e39996fd0e2d4e0dcbe47dd28d5cc55ff53",
+      "content_sha256": "0fdcec0f1a886025a0038150cc52051d6357961d1cb7739de1cb02a94a1b229e",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5229,7 +5229,7 @@
     },
     {
       "path": "doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.prd.md",
-      "content_sha256": "bbea4b6c83c5225f125ebfa5c34a70870e485a3932f3f22b7a0d5c8d25c0ae60",
+      "content_sha256": "79659612342d07eee0c85b043d5a255caa4c78438939145bd938834ef17f0322",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5397,7 +5397,7 @@
     },
     {
       "path": "doc/world-runtime/prd.md",
-      "content_sha256": "f6fde455ef85e9243d1b9abdf854e6215c588b213bb7ca0c5a89de0b52c750f4",
+      "content_sha256": "b7f3837ff53f0a1f1149b2e156764cc3162e5a6fc131f11747865a491f6970ce",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5439,7 +5439,7 @@
     },
     {
       "path": "doc/world-runtime/runtime/chain-pos-control-plane.design.md",
-      "content_sha256": "287a5c1e6db22afe662202185ab6bad35030ad779fa12ad2e8076867a6bfb26b",
+      "content_sha256": "66593eead1003f1d720e782353e2b67381f324a78a7a9cbed6e8fb2f121c804e",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5453,7 +5453,7 @@
     },
     {
       "path": "doc/world-runtime/runtime/chain-pos-control-plane.prd.md",
-      "content_sha256": "9bbd18c4bca4b6164ea00e9f96d56fb03812b2d26d34bc75e0a6ee934b47ea19",
+      "content_sha256": "314141466870d7cc29f631ce321df4f7347ec5c87c7d53530bc2d9574ab72359",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5509,7 +5509,7 @@
     },
     {
       "path": "doc/world-runtime/runtime/runtime-integration.md",
-      "content_sha256": "4f3bb4998fe6c7dab802343b2a58e7f2ebb8c6d81813426265c600984f3c8804",
+      "content_sha256": "e67e3d592b987a7752011f46f2c829f1cfb6bd5488b3dc010ec464d7736b73c8",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5551,7 +5551,7 @@
     },
     {
       "path": "doc/world-runtime/runtime/runtime-storage-footprint-governance.design.md",
-      "content_sha256": "6b36ed51726d044107fc05a410bb669e48a0109fa06c7e9a876ea7a593dda45e",
+      "content_sha256": "e782c25042dc64350345edc76bc2281996bba703761e517ee6fa683a47c0724c",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5565,7 +5565,7 @@
     },
     {
       "path": "doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md",
-      "content_sha256": "c007a2c6dcd03e02f40f94b2354d5e7180b442db6bd3d273e94bdd0222c52729",
+      "content_sha256": "749cec30680780bcbd67a4d479fbc74d3906016a4a90c39cd3e49a65d5e97a3c",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",

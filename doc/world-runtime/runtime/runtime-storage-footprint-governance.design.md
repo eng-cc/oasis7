@@ -499,3 +499,178 @@ struct StorageReplaySummary {
   - **latest head 为快速恢复缓存**
   - **GC 只删除不被 replay contract 引用的数据**
 - 这份设计将把当前的“快照主导存储”收敛为“日志主导、快照加速”的运行态持久化体系。
+
+## 存储适用设计承接视图
+owner runtime_engineer；eng-cc/oasis7 审读基线 f9d5a552d9af04c1b1398262808198a58e560230。旧 §§1–18 全部保留；尤其旧 §11.1 目标仍是 tick compaction anchor，不改名。新增“11.1 验证映射表”是 trace view，语义/heading 不覆盖旧 anchor。历史体积样本不是当前测量，定义结构/测试不是 proven capability。
+
+<a id="storage-history-dependency"></a>
+### 历史版本、引用与权威材料
+retained H 从最近 C<=H checkpoint + canonical committed log 重建，原 governing manifest/artifact/hash/schema/module binding 唯一解析；当前版本不能解释旧 receipt/资源/责任。R0 latest、R1 retained、R2 audit metadata、R3 fail-safe 各自独立；pin includes latest/rollback-safe、hot/checkpoint、archive、恢复所需历史 module artifacts，缺 anchor/artifact/hash mismatch 不称 matched replay，停止不安全 sweep。具体 ABI/schema/migration 由 [WASM interface](../wasm/wasm-interface.md)，finalized checkpoint/active registry/redundant archive 由 P2P/ops。旧 ModuleAnchor 概念与 open question 保留，不声称实际完整 schema 已实现。
+current ExecutionBridgeRecord 在 crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/mod.rs 为 v3，new_v3/V1/V2 reader；旧 schematic hot_snapshot_ref/hot_journal_ref 描述 retention 角色，不是新增 DTO 字段。实际 snapshot_ref/journal_ref/ref reader 以 source 为准，不能因 schematic prose 改 current schema。record/checkpoint/root/CAS 只证明本地 committed binding，不提供 BFT/light proof。
+
+<a id="storage-state-transaction-persistence"></a>
+### 状态、事务与持久化
+canonical commit log 先持久，再执行 bridge/records/latest/checkpoint，最后 retention/metrics；记录 last_applied 防 stale/noncontiguous，restore/checkpoint 重新核 refs/log/root。world generation 先 staging/校验/sync，再原子 latest pointer，旧 latest rollback-safe 仍 pin，GC 在 generation commit 外且只在授权 runtime 根目录。pin 构建失败/latest missing/未知引用保留数据、degraded、停止 sweep；save failed 保留旧 generation，不能先删后写。replay mismatch 标记 replay_contract_broken 并阻断 aggressive GC/full release verdict；留更多数据 rollback 不改 canonical log。
+R0 latest-only restart 与 R1 retained exact H 分开，超 policy 深历史无默认保证；legacy 无 ref 只 latest-safe sweep。原始 payload hash 不受磁盘压缩编码影响，只有 header 后确实更小才压缩。continuous latest-based hot range 与 shared cold anchor/segmented pack/双写别名回填保持旧合同，seek/scan 边界同源。多进程第二 writer 必须检测阻止，不新增多writer协调。budget/p95/CPU/metrics采样依旧 PRD NFR；soak_growth 显式 profile，不作为 leak 豁免。
+
+<a id="storage-service-limit"></a>
+### 只读恢复、服务限制与演进
+restore root 相等仅本地历史材料条件，开放 voting/serving/new intent 还需 [root recovery gate](../design.md#runtime-recovery-design) 的同world/finality/append/version/head；state-sync/ops 同窗口材料不可由 latest-only green 代签。CLI/launcher/bundle 同名 profile 和 OASIS7_CHAIN_STORAGE_PROFILE 非空注入、默认继承及 bundle runtime 路径保持旧 AC-6.1/§6.8。status 仅 budget/bytes/pins/replay/GC/原因，不导出 payload；不按 file mtime 猜删除。migration 按 §14 渐进保留 legacy refs，external-effect committed payload materialization 未完整时保留 §17 风险、禁止假定 bit-identical replay；输入/profile/retention/version/消费者变更触发 runtime/P2P/WASM/launcher/QA 复核。
+
+<a id="storage-case-ac1"></a>
+#### AC-1/SC-1：2500 committed heights llm_bootstrap dev/launcher store≤256 MiB，record引用无dangling
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+<a id="storage-case-ac2"></a>
+#### AC-2/SC-2：latest+rollback-safe引用集合，sidecar≤16 MiB，orphan=0
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+<a id="storage-case-ac3"></a>
+#### AC-3/SC-4：GC后latest restart，execution root/journal_len/module_registry相同
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+<a id="storage-case-ac4"></a>
+#### AC-4：GC中断/partialwrite/pin失败不删latest，degraded保恢复
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+<a id="storage-case-ac5"></a>
+#### AC-5/SC-6：每policy-retained H由nearestC<=H+canonical log重建原root
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+<a id="storage-case-ac6"></a>
+#### AC-6/SC-5：profile/effective_budget/bytes/retained/checkpoint/replay/lastgc/error/degraded可读，无额外扫描
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+<a id="storage-case-ac61"></a>
+#### AC-6.1：四入口同枚举无损透传，三wrapper OASIS7_CHAIN_STORAGE_PROFILE非空注入/默认继承/bundle runtime
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+<a id="storage-case-ac7"></a>
+#### AC-7/SC-3：2500 heights snapshot≤512KiB，archive区间读取+链路校验
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+<a id="storage-case-ac8"></a>
+#### AC-8：required/full分别含footprint/restart/failsafe/profile/archive/retained replay矩阵
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+<a id="storage-case-sc7"></a>
+#### SC-7：release_default hot_head_heights≤checkpoint_interval，不重复保留额外同区间snapshot
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+<a id="storage-case-nfr1"></a>
+#### NFR-1：2500 heights node root≤384MiB且store≤256MiB
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+<a id="storage-case-nfr2"></a>
+#### NFR-2：2500 heights localSSD sweep p95≤500ms
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+<a id="storage-case-nfr3"></a>
+#### NFR-3：default latest restart p95≤5s
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+<a id="storage-case-nfr4"></a>
+#### NFR-4：优化不能降低replay/recovery确定性，相关回归100%
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+<a id="storage-case-nfr5"></a>
+#### NFR-5：所有policy retained heights replay成功100%且原root相等
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+<a id="storage-case-nfr6"></a>
+#### NFR-6：metrics采集发布频率不高于每1s一次，额外CPU≤5% local单节点
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+<a id="storage-case-nfr7"></a>
+#### NFR-7：soak显式更高占用、metrics增长/可配上限
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+<a id="storage-case-compression"></a>
+#### 原payload content_hash不变，compressed header后更小才压缩，读回rawbytes
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+<a id="storage-case-cold-range"></a>
+#### continuous latest hot range/shared coldanchor scan seek同边界，pack len/offset/hash与canonical/legacy别名回填
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+<a id="storage-case-legacy-height"></a>
+#### v3新写/V1V2兼容，stale/noncontiguous heightfailclosed；legacy仅latest-safe无aggressiveGC
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+<a id="storage-case-save-failure"></a>
+#### save满盘/新generation中断保旧，pin/latestmissing停止，replay mismatch阻aggressiveGC
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+<a id="storage-case-single-writer"></a>
+#### 仅runtime指定根删除，显式pin/无mtime猜测，第二writer检测阻止、metrics不新增payload
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+<a id="storage-case-version-dependency"></a>
+#### retained原manifest/artifact/moduleanchor唯一解析，missing/hashconflict停止unsafe sweep/不称matched
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+<a id="storage-case-service-boundary"></a>
+#### localroot/restart仅历史条件，append/finality/version/head与redundantarchive仍外部
+按 [历史依赖](#storage-history-dependency)、[状态/事务/持久化](#storage-state-transaction-persistence) 及 [服务限制](#storage-service-limit) 执行；具体旧字段/目录/枚举/预算/失败优先级原样适用。本条件保留独立判断，局部测试或document检查不能替代实际阈值/同窗口材料。
+
+### 2.1 需求承接与分配表
+
+输入身份 eng-cc/oasis7@f9d5a552d9af04c1b1398262808198a58e560230；新增 local anchors 是本文技术接受关系，非机器 schema。每行范围独立，外部未决保留。
+
+| 上游 requirement / acceptance | 具体 obligation 与条件 | 本设计条款 | 外部 owner / dependency | 排除或未覆盖 |
+| --- | --- | --- | --- | --- |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-ac1) | AC-1/SC-1：2500 committed heights llm_bootstrap dev/launcher store≤256 MiB，record引用无dangling | [设计](#storage-case-ac1) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-ac2) | AC-2/SC-2：latest+rollback-safe引用集合，sidecar≤16 MiB，orphan=0 | [设计](#storage-case-ac2) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-ac3) | AC-3/SC-4：GC后latest restart，execution root/journal_len/module_registry相同 | [设计](#storage-case-ac3) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-ac4) | AC-4：GC中断/partialwrite/pin失败不删latest，degraded保恢复 | [设计](#storage-case-ac4) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-ac5) | AC-5/SC-6：每policy-retained H由nearestC<=H+canonical log重建原root | [设计](#storage-case-ac5) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-ac6) | AC-6/SC-5：profile/effective_budget/bytes/retained/checkpoint/replay/lastgc/error/degraded可读，无额外扫描 | [设计](#storage-case-ac6) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-ac61) | AC-6.1：四入口同枚举无损透传，三wrapper OASIS7_CHAIN_STORAGE_PROFILE非空注入/默认继承/bundle runtime | [设计](#storage-case-ac61) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-ac7) | AC-7/SC-3：2500 heights snapshot≤512KiB，archive区间读取+链路校验 | [设计](#storage-case-ac7) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-ac8) | AC-8：required/full分别含footprint/restart/failsafe/profile/archive/retained replay矩阵 | [设计](#storage-case-ac8) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-sc7) | SC-7：release_default hot_head_heights≤checkpoint_interval，不重复保留额外同区间snapshot | [设计](#storage-case-sc7) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-nfr1) | NFR-1：2500 heights node root≤384MiB且store≤256MiB | [设计](#storage-case-nfr1) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-nfr2) | NFR-2：2500 heights localSSD sweep p95≤500ms | [设计](#storage-case-nfr2) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-nfr3) | NFR-3：default latest restart p95≤5s | [设计](#storage-case-nfr3) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-nfr4) | NFR-4：优化不能降低replay/recovery确定性，相关回归100% | [设计](#storage-case-nfr4) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-nfr5) | NFR-5：所有policy retained heights replay成功100%且原root相等 | [设计](#storage-case-nfr5) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-nfr6) | NFR-6：metrics采集发布频率不高于每1s一次，额外CPU≤5% local单节点 | [设计](#storage-case-nfr6) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-nfr7) | NFR-7：soak显式更高占用、metrics增长/可配上限 | [设计](#storage-case-nfr7) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-compression) | 原payload content_hash不变，compressed header后更小才压缩，读回rawbytes | [设计](#storage-case-compression) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-cold-range) | continuous latest hot range/shared coldanchor scan seek同边界，pack len/offset/hash与canonical/legacy别名回填 | [设计](#storage-case-cold-range) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-legacy-height) | v3新写/V1V2兼容，stale/noncontiguous heightfailclosed；legacy仅latest-safe无aggressiveGC | [设计](#storage-case-legacy-height) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-save-failure) | save满盘/新generation中断保旧，pin/latestmissing停止，replay mismatch阻aggressiveGC | [设计](#storage-case-save-failure) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-single-writer) | 仅runtime指定根删除，显式pin/无mtime猜测，第二writer检测阻止、metrics不新增payload | [设计](#storage-case-single-writer) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-version-dependency) | retained原manifest/artifact/moduleanchor唯一解析，missing/hashconflict停止unsafe sweep/不称matched | [设计](#storage-case-version-dependency) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-service-boundary) | localroot/restart仅历史条件，append/finality/version/head与redundantarchive仍外部 | [设计](#storage-case-service-boundary) | runtime storage；WASM历史artifact；launcher；P2P/ops proof；QA | 定义/局部material不证明量化阈值/BFT/服务 |
+
+### 11.1 验证映射表
+
+所有下列行为验证在本次文档编辑中未运行。定义/计划与当前实现、实际执行、发布分别成立；执行须另固定 source/integration/tested tree、config/world/entry/environment/window、exit/result/artifacts，并回 GitHub task evidence。target场景尚无完整runner时明确保持待证明，现有test/manual只是有界接收入口，不能伪称已实现或通过。
+
+| 上游 requirement / acceptance | 本设计条款 | 独立 obligation / 条件 | 验证 source / ID、层级及候选环境 | 证据目标 | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-ac1) | [设计](#storage-case-ac1) | AC-1/SC-1：2500 committed heights llm_bootstrap dev/launcher store≤256 MiB，record引用无dangling | [现有 test/manual](../../../crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/retention.rs)；required 目标场景：AC-1/SC-1：2500 committed heights llm_bootstrap dev/launcher store≤256 MiB，record引用无dangling；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-ac2) | [设计](#storage-case-ac2) | AC-2/SC-2：latest+rollback-safe引用集合，sidecar≤16 MiB，orphan=0 | [现有 test/manual](../../../crates/oasis7/src/runtime/tests/persistence.rs)；required 目标场景：AC-2/SC-2：latest+rollback-safe引用集合，sidecar≤16 MiB，orphan=0；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-ac3) | [设计](#storage-case-ac3) | AC-3/SC-4：GC后latest restart，execution root/journal_len/module_registry相同 | [现有 test/manual](../../../crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/driver_authoritative_recovery.rs)；required 目标场景：AC-3/SC-4：GC后latest restart，execution root/journal_len/module_registry相同；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-ac4) | [设计](#storage-case-ac4) | AC-4：GC中断/partialwrite/pin失败不删latest，degraded保恢复 | [现有 test/manual](../../../crates/oasis7/src/runtime/tests/persistence.rs)；full 目标场景：AC-4：GC中断/partialwrite/pin失败不删latest，degraded保恢复；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-ac5) | [设计](#storage-case-ac5) | AC-5/SC-6：每policy-retained H由nearestC<=H+canonical log重建原root | [现有 test/manual](../../../crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/replay.rs)；required 目标场景：AC-5/SC-6：每policy-retained H由nearestC<=H+canonical log重建原root；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-ac6) | [设计](#storage-case-ac6) | AC-6/SC-5：profile/effective_budget/bytes/retained/checkpoint/replay/lastgc/error/degraded可读，无额外扫描 | [现有 test/manual](../../../crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/driver_observability.rs)；required 目标场景：AC-6/SC-5：profile/effective_budget/bytes/retained/checkpoint/replay/lastgc/error/degraded可读，无额外扫描；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-ac61) | [设计](#storage-case-ac61) | AC-6.1：四入口同枚举无损透传，三wrapper OASIS7_CHAIN_STORAGE_PROFILE非空注入/默认继承/bundle runtime | [现有 test/manual](../../../testing-manual.md)；required 目标场景：AC-6.1：四入口同枚举无损透传，三wrapper OASIS7_CHAIN_STORAGE_PROFILE非空注入/默认继承/bundle runtime；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-ac7) | [设计](#storage-case-ac7) | AC-7/SC-3：2500 heights snapshot≤512KiB，archive区间读取+链路校验 | [现有 test/manual](../../../crates/oasis7/src/runtime/tests/persistence.rs)；required 目标场景：AC-7/SC-3：2500 heights snapshot≤512KiB，archive区间读取+链路校验；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-ac8) | [设计](#storage-case-ac8) | AC-8：required/full分别含footprint/restart/failsafe/profile/archive/retained replay矩阵 | [现有 test/manual](../../../testing-manual.md)；required 目标场景：AC-8：required/full分别含footprint/restart/failsafe/profile/archive/retained replay矩阵；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-sc7) | [设计](#storage-case-sc7) | SC-7：release_default hot_head_heights≤checkpoint_interval，不重复保留额外同区间snapshot | [现有 test/manual](../../../crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/driver_storage_profile.rs)；required 目标场景：SC-7：release_default hot_head_heights≤checkpoint_interval，不重复保留额外同区间snapshot；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-nfr1) | [设计](#storage-case-nfr1) | NFR-1：2500 heights node root≤384MiB且store≤256MiB | [现有 test/manual](../../../testing-manual.md)；required 目标场景：NFR-1：2500 heights node root≤384MiB且store≤256MiB；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-nfr2) | [设计](#storage-case-nfr2) | NFR-2：2500 heights localSSD sweep p95≤500ms | [现有 test/manual](../../../testing-manual.md)；required 目标场景：NFR-2：2500 heights localSSD sweep p95≤500ms；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-nfr3) | [设计](#storage-case-nfr3) | NFR-3：default latest restart p95≤5s | [现有 test/manual](../../../testing-manual.md)；required 目标场景：NFR-3：default latest restart p95≤5s；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-nfr4) | [设计](#storage-case-nfr4) | NFR-4：优化不能降低replay/recovery确定性，相关回归100% | [现有 test/manual](../../../testing-manual.md)；required 目标场景：NFR-4：优化不能降低replay/recovery确定性，相关回归100%；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-nfr5) | [设计](#storage-case-nfr5) | NFR-5：所有policy retained heights replay成功100%且原root相等 | [现有 test/manual](../../../crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/replay.rs)；required 目标场景：NFR-5：所有policy retained heights replay成功100%且原root相等；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-nfr6) | [设计](#storage-case-nfr6) | NFR-6：metrics采集发布频率不高于每1s一次，额外CPU≤5% local单节点 | [现有 test/manual](../../../testing-manual.md)；required 目标场景：NFR-6：metrics采集发布频率不高于每1s一次，额外CPU≤5% local单节点；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-nfr7) | [设计](#storage-case-nfr7) | NFR-7：soak显式更高占用、metrics增长/可配上限 | [现有 test/manual](../../../testing-manual.md)；required 目标场景：NFR-7：soak显式更高占用、metrics增长/可配上限；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-compression) | [设计](#storage-case-compression) | 原payload content_hash不变，compressed header后更小才压缩，读回rawbytes | [现有 test/manual](../../../testing-manual.md)；required 目标场景：原payload content_hash不变，compressed header后更小才压缩，读回rawbytes；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-cold-range) | [设计](#storage-case-cold-range) | continuous latest hot range/shared coldanchor scan seek同边界，pack len/offset/hash与canonical/legacy别名回填 | [现有 test/manual](../../../testing-manual.md)；required 目标场景：continuous latest hot range/shared coldanchor scan seek同边界，pack len/offset/hash与canonical/legacy别名回填；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-legacy-height) | [设计](#storage-case-legacy-height) | v3新写/V1V2兼容，stale/noncontiguous heightfailclosed；legacy仅latest-safe无aggressiveGC | [现有 test/manual](../../../crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/driver_authoritative_recovery.rs)；required 目标场景：v3新写/V1V2兼容，stale/noncontiguous heightfailclosed；legacy仅latest-safe无aggressiveGC；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-save-failure) | [设计](#storage-case-save-failure) | save满盘/新generation中断保旧，pin/latestmissing停止，replay mismatch阻aggressiveGC | [现有 test/manual](../../../crates/oasis7/src/runtime/tests/persistence.rs)；full 目标场景：save满盘/新generation中断保旧，pin/latestmissing停止，replay mismatch阻aggressiveGC；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-single-writer) | [设计](#storage-case-single-writer) | 仅runtime指定根删除，显式pin/无mtime猜测，第二writer检测阻止、metrics不新增payload | [现有 test/manual](../../../testing-manual.md)；required 目标场景：仅runtime指定根删除，显式pin/无mtime猜测，第二writer检测阻止、metrics不新增payload；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-version-dependency) | [设计](#storage-case-version-dependency) | retained原manifest/artifact/moduleanchor唯一解析，missing/hashconflict停止unsafe sweep/不称matched | [现有 test/manual](../../../crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/replay.rs)；required 目标场景：retained原manifest/artifact/moduleanchor唯一解析，missing/hashconflict停止unsafe sweep/不称matched；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
+| [条款](runtime-storage-footprint-governance.prd.md#storage-accept-service-boundary) | [设计](#storage-case-service-boundary) | localroot/restart仅历史条件，append/finality/version/head与redundantarchive仍外部 | [现行 manual](../../../testing-manual.md)；精确局部 source ../../testing/templates/state-sync-closure-evidence-packet-template.md（定义/入口，非执行证据）；full 目标场景：localroot/restart仅历史条件，append/finality/version/head与redundantarchive仍外部；固定2500 heights/profile/localSSD或适用fault/targetH，同candidate/config/world/window采样；source为局部定义/现行manual入口，未运行，无阈值通过声明 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 定义/局部material不证明量化阈值/BFT/服务 |
