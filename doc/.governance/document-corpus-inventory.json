@@ -497,7 +497,7 @@
     },
     {
       "path": "doc/engineering/workflow/ci-parallel-evidence-reuse.design.md",
-      "content_sha256": "0f4c3cf5ff03a6984c62d186b41a2e51110814a8e752f24cae3bdf90d9f3eff9",
+      "content_sha256": "4e71fce00255e097b9ae01efc51766cb02a49b16a1d4593fbf7bf0788ca50008",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -567,7 +567,7 @@
     },
     {
       "path": "doc/engineering/workflow/source-of-truth.md",
-      "content_sha256": "ef24c0689ec92797db62767bbcbabad183a954f28ea79e4542c190037ebf8f81",
+      "content_sha256": "b90b2041428c2a987b76627ba3a4b1961977d35be21483044fc56fb83e8e628d",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -5411,7 +5411,7 @@
     },
     {
       "path": "doc/world-runtime/runtime/agent-cognition-lifecycle.design.md",
-      "content_sha256": "8f6e837c2dc27e4d97162bc3c20774dbd290ff6a86d71a85b54e69b244932290",
+      "content_sha256": "a5f458f402966a5439dcaf1c2c4f7b0eb5735f5f9d9983142436c60be77eca3b",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5425,7 +5425,7 @@
     },
     {
       "path": "doc/world-runtime/runtime/agent-cognition-lifecycle.prd.md",
-      "content_sha256": "e0dfc208ffff2ccd5a816f896de44ac9d482eb5dc397fa50a94307abdb80bf5a",
+      "content_sha256": "d6be3ef24d48af427912ffe39a48424d04a5adc4c077db472a1662a7a1079cc7",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
