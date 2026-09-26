@@ -93,10 +93,10 @@ SDK ABI、wire 使用和 wasm32 兼容的稳定验证入口见
 [`evidence.md`](evidence.md)。任务批次、当前状态和已完成工作历史由 GitHub
 task issue / Project 与 Git history 承接。
 
-| PRD-ID | 测试层级 | 验证方法 | 回归范围 |
-| --- | --- | --- | --- |
 <a id="sr2-obligation-prd-world_runtime-042"></a>
 
+| PRD-ID | 测试层级 | 验证方法 | 回归范围 |
+| --- | --- | --- | --- |
 | PRD-WORLD_RUNTIME-042 | `test_tier_required` | SDK tests、可用时 wasm32 check、builtin wire usage scan、required-tier build | SDK ABI、builtin 模块编译与 wire 兼容 |
 
 | 决策 ID | 选定方案 | 否决方案 | 依据 |

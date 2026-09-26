@@ -214,11 +214,11 @@
 PRD，统一由 GitHub task issue / Project 与 Git history 追溯。
 
 - Test Plan & Traceability:
+<a id="sr2-obligation-prd-world_runtime-037"></a>
+
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
 | PRD-WORLD_RUNTIME-036 | `wasm-observability-timing-metrics` | `test_tier_required` | 设计文档审查、`doc-governance-check`、状态字段/schema 校验用例、summary 脚本 dry-run | WASM build/executor/router 热点归因、节点 status 可观测性 |
-<a id="sr2-obligation-prd-world_runtime-037"></a>
-
 | PRD-WORLD_RUNTIME-037 | `wasm-module-observability-standardization` | `test_tier_required` | observe runner tests、代表模块 spec、wrapper shell check、JSON/Markdown summary | 模块级 contract/perf 证据与新模块接入 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |

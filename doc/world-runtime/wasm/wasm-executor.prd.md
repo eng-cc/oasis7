@@ -52,7 +52,7 @@
 | [E10原文](#sr2-obligation-e10) | ### 实现要点（E10） | [E10本域合同](wasm-interface.md#sr2-execution-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../crates/oasis7_wasm_executor/src/tests.rs)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
 | [E11原文](#sr2-obligation-e11) | ### 实现要点（E11） | [E11本域合同](wasm-interface.md#sr2-execution-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../crates/oasis7_wasm_executor/src/tests.rs)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
 | [E12原文](#sr2-obligation-e12) | ### 实现要点（E12） | [E12本域合同](wasm-interface.md#sr2-execution-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../crates/oasis7_wasm_executor/src/tests.rs)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
-| [E1原文](#sr2-obligation-e1) | ### 实现要点（E10） | [E1本域合同](wasm-interface.md#sr2-execution-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../crates/oasis7_wasm_executor/src/tests.rs)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
+| [E1原文](#sr2-obligation-e1) | E1：选择 WASM 引擎并完成配置结构体与沙箱实现骨架。 | [E1本域合同](wasm-interface.md#sr2-execution-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../crates/oasis7_wasm_executor/src/tests.rs)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
 | [E9原文](#sr2-obligation-e9) | E9**：模块调用入口按 ModuleKind 选择并补充测试。 | [E9本域合同](wasm-interface.md#sr2-execution-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../crates/oasis7_wasm_executor/src/tests.rs)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
 | [E13原文](#sr2-obligation-e13) | E13**：将磁盘编译缓存从“原始 wasm 回盘”修正为“序列化 compiled artifact 回盘”，补齐 round-trip 与损坏恢复回归。 | [E13本域合同](wasm-interface.md#sr2-execution-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../crates/oasis7_wasm_executor/src/tests.rs)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
 | [E14原文](#sr2-obligation-e14) | E14**：将 agent-os 对齐增强与 sandbox 安全硬化的永久契约并入本稳定权威，退役重复专题文档。 | [E14本域合同](wasm-interface.md#sr2-execution-contract)；下方原详细设计继续规定条款内的具体limits/policy/tooling | [partial验证入口](../../../crates/oasis7_wasm_executor/src/tests.rs)；§11.1精确target场景；本次仅文档采纳，运行proof未执行 |
@@ -189,8 +189,6 @@ AUTHZ-01..18 的原文与原 required/full tier 继续有效；其唯一规则 a
 
 <a id="sr2-obligation-e10"></a>
 
-<a id="sr2-obligation-e1"></a>
-
 ### 实现要点（E10）
 - reducer 调用输入携带 `state`（空字节串代表无历史状态）。
 - 模块返回 `new_state` 时记录 `ModuleStateUpdated` 并更新状态，保证回放一致。
@@ -228,6 +226,8 @@ AUTHZ-01..18 的原文与原 required/full tier 继续有效；其唯一规则 a
 - 引擎初始化、缓存目录和 codec 失败返回结构化错误，不允许以 panic 终止宿主。
 
 ## 5. Risks & Roadmap
+<a id="sr2-obligation-e1"></a>
+
 - **E1**：选择 WASM 引擎并完成配置结构体与沙箱实现骨架。
 - **E2**：接入燃料/超时/内存限制，输出校验与错误码映射。
 - **E3**：实现编译缓存与并发安全策略。
@@ -261,10 +261,10 @@ AUTHZ-01..18 的原文与原 required/full tier 继续有效；其唯一规则 a
 task issue / Project 与 Git history 追溯，不能由本文代替。
 
 - Test Plan & Traceability:
-| PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
-| --- | --- | --- | --- | --- |
 <a id="sr2-obligation-prd-engineering-006"></a>
 
+| PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
+| --- | --- | --- | --- | --- |
 | PRD-ENGINEERING-006 | 文档内既有任务条目 | `test_tier_required` | `./scripts/doc-governance-check.sh` + 引用可达性扫描 | 迁移文档命名一致性与可追溯性 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |

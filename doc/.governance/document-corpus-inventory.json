@@ -15,7 +15,7 @@
     },
     {
       "path": "doc/.governance/document-semantic-review-overrides.json",
-      "content_sha256": "6ce66c858ff03849472ea919b922efa5a06c931c9c4c3c3457ac01d4d8c03b43"
+      "content_sha256": "b7c163124080cc63b932b5056cab9d88897457e311495a11e5fa8489f32e4182"
     },
     {
       "path": "doc/testing/evidence/inventory.json",
@@ -5705,7 +5705,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-executor.prd.md",
-      "content_sha256": "995c2cb34e8598d183efcdca56af9ad2ea23ae7730b48b41d037f0f3d9ab6e49",
+      "content_sha256": "e563e7fc4e2c3b22101c27038b665f123035174121cccdbf7d36e006183fdb21",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5719,7 +5719,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-interface.md",
-      "content_sha256": "b8aba0c850ed5b066977268d0df65536884f063e4070fee5ed0b8a570452d085",
+      "content_sha256": "efd5b2369313c27059ce629308906b08b7d7f02c797446aaa5faee5c6dd48710",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5747,7 +5747,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md",
-      "content_sha256": "5722314068acaab071f6ebd28af229e198f0c37c64a799a479387155f0f62477",
+      "content_sha256": "048ab7560cd75269ccd7be54cb79d1d47a2a21eee15f546034db63ed0916d8f9",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5775,7 +5775,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-sdk.prd.md",
-      "content_sha256": "a785351eeaa51aaad85c0372ceba4833812d1d1c3adcabd870a472515ac96f13",
+      "content_sha256": "a00fb3ea2288789c8a8f57e6f1449ab3a394b6df4c9359cad96f2f0e8011355e",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
