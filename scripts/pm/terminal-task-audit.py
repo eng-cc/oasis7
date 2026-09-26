@@ -92,6 +92,127 @@ def _body_field_absent(body: str, key: str) -> bool:
     return not _body_field_values(body, key)
 
 
+def _strict_body_field(body: str, key: str) -> str | None:
+    values = _body_field_values(body, key)
+    if len(values) > 1:
+        raise ValueError(f"live Issue has duplicate {key} fields")
+    if not values:
+        return None
+    value = values[0].strip().strip("`").strip()
+    if value == "\x00malformed-field":
+        raise ValueError(f"live Issue has malformed {key} field")
+    return value
+
+
+def _route_field(record: dict, issue_body: str, key: str) -> tuple[str | None, str | None]:
+    live_value = _strict_body_field(issue_body, key)
+    cached = record.get(key)
+    if cached is None or cached == "":
+        cached_value = None
+    else:
+        cached_value = str(cached).strip().strip("`").strip()
+        if not cached_value:
+            cached_value = None
+    return live_value, cached_value
+
+
+def _read_live_issue_route(
+    task_uid: str, record: dict,
+) -> tuple[dict, str | None, str | None]:
+    repository = record.get("repository")
+    issue_number = record.get("issue_number")
+    if not isinstance(repository, str) or not re.fullmatch(r"[^/\s]+/[^/\s]+", repository):
+        return {}, None, "cached repository identity is missing or malformed"
+    if type(issue_number) is not int or issue_number < 1:
+        return {}, None, "cached Issue number is missing or malformed"
+    if not re.fullmatch(r"task_[0-9a-f]{32}", task_uid):
+        return {}, None, "task UID is malformed"
+    if record.get("task_uid") not in (None, task_uid):
+        return {}, None, "cached task UID does not match the requested task"
+
+    issue = run_json([
+        "gh", "issue", "view", str(issue_number), "-R", repository,
+        "--json", "number,url,state,body,projectItems",
+    ])
+    if issue.get("query_error"):
+        return issue, None, f"live Issue read failed: {issue['query_error']}"
+    expected_issue_url = f"https://github.com/{repository}/issues/{issue_number}"
+    if (
+        type(issue.get("number")) is not int
+        or issue.get("number") != issue_number
+        or issue.get("url") != expected_issue_url
+    ):
+        return issue, None, "live Issue number or URL does not match cached identity"
+    issue_body = issue.get("body")
+    if not isinstance(issue_body, str):
+        return issue, None, "live Issue body is missing"
+    try:
+        live_uid = _strict_body_field(issue_body, "task_uid")
+        live_mode = _strict_body_field(issue_body, "completion_mode")
+        live_pr_number, cached_pr_number = _route_field(record, issue_body, "pr_number")
+        live_pr_url, cached_pr_url = _route_field(record, issue_body, "pr_url")
+        pointer_pairs = {
+            key: _route_field(record, issue_body, key)
+            for key in (
+                "aggregate_plan_comment_id",
+                "aggregate_plan_sha256",
+                "aggregate_completion_receipt_sha256",
+            )
+        }
+    except ValueError as exc:
+        return issue, None, str(exc)
+    canonical_uids = re.findall(r"(?m)^task_uid: (task_[0-9a-f]{32})$", issue_body)
+    if live_uid != task_uid or canonical_uids != [task_uid]:
+        return issue, None, "live Issue task_uid is missing or mismatched"
+
+    cached_mode = record.get("completion_mode")
+    if cached_mode in (None, ""):
+        cached_mode = "pr_task"
+    if live_mode == "":
+        return issue, None, "live completion_mode is empty"
+    if live_mode is None:
+        live_mode = "pr_task"
+    if not isinstance(cached_mode, str):
+        return issue, None, "cached completion mode is malformed"
+    if cached_mode not in {"pr_task", "ordered_delivery_aggregate"}:
+        return issue, None, f"unsupported cached completion mode: {cached_mode}"
+    if live_mode not in {"pr_task", "ordered_delivery_aggregate"}:
+        return issue, None, f"unsupported live completion mode: {live_mode}"
+    if live_mode != cached_mode:
+        return issue, None, "live and cached completion routes do not match"
+
+    if live_mode == "ordered_delivery_aggregate":
+        if any((live_pr_number, cached_pr_number, live_pr_url, cached_pr_url)):
+            return issue, None, "aggregate route is mixed with single-PR identity"
+        cached_plan_comment_id = record.get("aggregate_plan_comment_id")
+        if type(cached_plan_comment_id) is not int or cached_plan_comment_id < 1:
+            return issue, None, "cached aggregate plan comment ID is malformed"
+        for key in ("aggregate_plan_sha256", "aggregate_completion_receipt_sha256"):
+            if not isinstance(record.get(key), str) or not re.fullmatch(
+                r"sha256:[0-9a-f]{64}", str(record.get(key)),
+            ):
+                return issue, None, f"cached {key} is malformed"
+        for key, (live_value, cached_value) in pointer_pairs.items():
+            if live_value != cached_value:
+                return issue, None, f"live and cached {key} do not match"
+            if not live_value:
+                return issue, None, f"aggregate route lacks {key}"
+    else:
+        if any(value is not None for values in pointer_pairs.values() for value in values):
+            return issue, None, "aggregate proof is mixed with single-PR task truth"
+        cached_pr_value = record.get("pr_number")
+        if type(cached_pr_value) is not int or cached_pr_value < 1:
+            return issue, None, "cached PR number is malformed"
+        if live_pr_number is None or cached_pr_number is None or live_pr_number != cached_pr_number:
+            return issue, None, "live and cached PR numbers do not match"
+        if not re.fullmatch(r"[1-9][0-9]*", live_pr_number):
+            return issue, None, "live PR number is malformed"
+        expected_pr_url = f"https://github.com/{repository}/pull/{live_pr_number}"
+        if live_pr_url != expected_pr_url or cached_pr_url != expected_pr_url:
+            return issue, None, "live and cached PR URLs do not match canonical identity"
+    return issue, live_mode, None
+
+
 def _load_json(path: pathlib.Path) -> dict:
     value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
@@ -243,6 +364,9 @@ def _audit_aggregate(
     task_uid: str,
     mapping: dict,
     record: dict,
+    issue: dict,
+    completion_route_identity: bool,
+    route_error: str | None,
     aggregate_plan: pathlib.Path | str | None,
     aggregate_candidate: pathlib.Path | str | None,
     aggregate_evidence: pathlib.Path | str | None,
@@ -254,11 +378,10 @@ def _audit_aggregate(
     receipt_root = _receipt_root(root, task_uid)
     terminal_path = receipt_root / "aggregate-terminal-receipt.json"
     journal_path = receipt_root / "aggregate-terminal-effects.json"
-    issue = run_json([
-        "gh", "issue", "view", str(record.get("issue_number")), "-R", str(record.get("repository")),
-        "--json", "number,url,state,body,projectItems",
-    ])
     checks, details, completion_sha = _aggregate_completion_proof(root, task_uid, record, issue, paths)
+    checks["completion_route_identity"] = completion_route_identity
+    if route_error:
+        details.setdefault("errors", []).append(f"completion route validation failed: {route_error}")
 
     terminal = load(terminal_path)
     terminal_sha = digest(terminal_path)
@@ -409,6 +532,22 @@ def _audit_aggregate(
     }
 
 
+def _route_drift_result(task_uid: str, record: dict, issue: dict, error: str) -> dict:
+    return {
+        "schema": "oasis7_terminal_task_audit_v1",
+        "task_uid": task_uid,
+        "status": "drifted",
+        "checks": {"completion_route_identity": False},
+        "drift": ["completion_route_identity"],
+        "route_error": error,
+        "task": {key: record.get(key) for key in (
+            "repository", "issue_number", "pr_number", "status", "workflow_phase", "completion_mode",
+        )},
+        "live": {"issue": issue},
+        "receipt_root": "",
+    }
+
+
 def aggregate_resume_command(
     root: pathlib.Path,
     task_uid: str,
@@ -460,21 +599,32 @@ def audit(
     if not record:
         raise SystemExit(f"terminal-task-audit: unknown task UID: {task_uid}")
     aggregate_inputs = (aggregate_plan, aggregate_candidate, aggregate_evidence, aggregate_receipt)
-    completion_mode = str(record.get("completion_mode") or "")
-    if completion_mode == "ordered_delivery_aggregate":
+    cached_mode = record.get("completion_mode") or "pr_task"
+    if not isinstance(cached_mode, str) or cached_mode not in {"pr_task", "ordered_delivery_aggregate"}:
+        issue, _, route_error = _read_live_issue_route(task_uid, record)
+        return _route_drift_result(
+            task_uid, record, issue, route_error or f"unsupported cached completion mode: {cached_mode}"
+        )
+    if cached_mode == "ordered_delivery_aggregate":
+        _resolve_aggregate_inputs(*aggregate_inputs)
+    issue, live_mode, route_error = _read_live_issue_route(task_uid, record)
+    completion_route_identity = route_error is None and live_mode == cached_mode
+    if cached_mode == "ordered_delivery_aggregate":
         return _audit_aggregate(
-            root, task_uid, mapping, record,
+            root, task_uid, mapping, record, issue, completion_route_identity, route_error,
             aggregate_plan, aggregate_candidate, aggregate_evidence, aggregate_receipt,
         )
     if any(aggregate_inputs) or any(record.get(key) for key in (
         "aggregate_plan_comment_id", "aggregate_plan_sha256", "aggregate_completion_receipt",
         "aggregate_completion_receipt_sha256",
     )):
-        raise SystemExit("terminal-task-audit: aggregate proof is mixed with non-aggregate task truth")
-    if completion_mode not in {"", "pr_task"}:
-        raise SystemExit(f"terminal-task-audit: unsupported terminal completion mode: {completion_mode}")
+        completion_route_identity = False
+        route_error = "aggregate proof is mixed with non-aggregate task truth"
     if not record.get("pr_number"):
-        raise SystemExit("terminal-task-audit: post_merge_done task lacks a recognized PR completion route")
+        return _route_drift_result(
+            task_uid, record, issue,
+            route_error or "post_merge_done task lacks a recognized PR completion route",
+        )
     receipt_root_result = subprocess.run(
         [sys.executable, str(root / "scripts/pm/canonical-receipt-root.py"),
          "--default-worktree", str(root), "--task-uid", task_uid],
@@ -499,8 +649,6 @@ def audit(
         ["git", "-C", str(root), "ls-remote", "--heads", "origin", f"refs/heads/{branch}"],
         text=True, capture_output=True,
     )
-    issue = run_json(["gh", "issue", "view", str(record.get("issue_number")),
-                      "-R", str(record.get("repository")), "--json", "state,projectItems"])
     pr = run_json(["gh", "pr", "view", str(record.get("pr_number")),
                    "-R", str(record.get("repository")), "--json", "state,mergedAt,headRefName"])
     terminal_data, ledger_data, tombstone_data = load(terminal), load(ledger), load(tombstone)
@@ -581,6 +729,7 @@ def audit(
                 }.items())
             )
     checks = {
+        "completion_route_identity": completion_route_identity,
         "mapping_post_merge_done": record.get("workflow_phase") == "post_merge_done",
         "terminal_receipt_chain_valid": terminal_identity,
         "finalizer_ledger_committed": ledger_valid,
@@ -613,6 +762,7 @@ def audit(
         "status": "reconciled" if not drift else "drifted",
         "checks": checks,
         "drift": drift,
+        "route_error": route_error,
         "task": {key: record.get(key) for key in
                  ("repository", "issue_number", "pr_number", "status", "workflow_phase",
                   "canonical_worktree", "task_branch")},
@@ -644,6 +794,8 @@ def main(argv: list[str] | None = None) -> int:
         aggregate_receipt=args.aggregate_receipt,
     )
     if args.resume_finalizer and result["status"] != "reconciled":
+        if result.get("checks", {}).get("completion_route_identity") is not True:
+            raise SystemExit("terminal-task-audit: refusing resume without a verified live completion route")
         if result["task"].get("completion_mode") == "ordered_delivery_aggregate":
             paths = _resolve_aggregate_inputs(*aggregate_inputs)
             resume_aggregate_finalizer(root, args.task_uid, *paths)

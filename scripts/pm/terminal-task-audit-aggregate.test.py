@@ -381,8 +381,16 @@ class AggregateTerminalAudit(unittest.TestCase):
                 AUDIT.audit(self.root, UID)
 
     def test_resume_uses_the_route_specific_finalizer_and_exact_inputs(self):
-        drifted = {"status": "drifted", "task": {"completion_mode": "ordered_delivery_aggregate"}}
-        reconciled = {"status": "reconciled", "task": {"completion_mode": "ordered_delivery_aggregate"}}
+        drifted = {
+            "status": "drifted",
+            "checks": {"completion_route_identity": True},
+            "task": {"completion_mode": "ordered_delivery_aggregate"},
+        }
+        reconciled = {
+            "status": "reconciled",
+            "checks": {"completion_route_identity": True},
+            "task": {"completion_mode": "ordered_delivery_aggregate"},
+        }
         with (
             patch.object(AUDIT.subprocess, "check_output", return_value=f"{self.root}\n"),
             patch.object(AUDIT, "audit", side_effect=(drifted, reconciled)) as audit_call,
@@ -405,6 +413,33 @@ class AggregateTerminalAudit(unittest.TestCase):
         self.assertEqual(command[command.index("--evidence") + 1], str(self.input_paths[2].resolve()))
         self.assertEqual(command[command.index("--receipt") + 1], str(self.input_paths[3].resolve()))
         self.assertNotIn("--pr", command)
+
+    def test_resume_refuses_absent_or_false_live_completion_route(self):
+        args = [
+            "--repo-root", str(self.root), "--task-uid", UID, "--resume-finalizer",
+            "--aggregate-plan", str(self.input_paths[0]),
+            "--aggregate-candidate", str(self.input_paths[1]),
+            "--aggregate-evidence", str(self.input_paths[2]),
+            "--aggregate-receipt", str(self.input_paths[3]), "--json",
+        ]
+        for checks in ({}, {"completion_route_identity": False}):
+            with self.subTest(checks=checks):
+                drifted = {
+                    "status": "drifted",
+                    "checks": checks,
+                    "task": {"completion_mode": "ordered_delivery_aggregate"},
+                }
+                with (
+                    patch.object(AUDIT.subprocess, "check_output", return_value=f"{self.root}\n"),
+                    patch.object(AUDIT, "audit", return_value=drifted),
+                    patch.object(AUDIT.subprocess, "run") as run,
+                    redirect_stdout(io.StringIO()),
+                ):
+                    with self.assertRaisesRegex(
+                        SystemExit, "refusing resume without a verified live completion route",
+                    ):
+                        AUDIT.main(args)
+                run.assert_not_called()
 
 
 if __name__ == "__main__":
