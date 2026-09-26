@@ -97,6 +97,8 @@ _OID_RE = re.compile(r"[0-9a-f]{40}\Z")
 _DIGEST_RE = re.compile(r"sha256:[0-9a-f]{64}\Z")
 _VALIDATION_ID_RE = re.compile(r"[0-9a-f]{64}\Z")
 _LOGIN_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37})\Z")
+_MAX_PLANNER_STRING_CHARS = 1024
+_MAX_PLANNER_STRING_UTF8_BYTES = 4096
 
 
 class ContractError(ValueError):
@@ -289,6 +291,22 @@ def _string(value: Any, field: str, *, allow_empty: bool = False) -> str:
     return value
 
 
+def _planner_string(value: Any, field: str) -> str:
+    """Validate an exact, bounded UTF-8 string from the trusted planner."""
+    if type(value) is not str or not value or value != value.strip():
+        raise ContractError(f"{field} must be a non-empty trimmed planner string")
+    try:
+        encoded = value.encode("utf-8", errors="strict")
+    except UnicodeEncodeError as exc:
+        raise ContractError(f"{field} is not valid UTF-8") from exc
+    if (len(value) > _MAX_PLANNER_STRING_CHARS
+            or len(encoded) > _MAX_PLANNER_STRING_UTF8_BYTES):
+        raise ContractError(f"{field} exceeds the planner string size limit")
+    if any(char in value for char in "\x00\r\n"):
+        raise ContractError(f"{field} contains a control character")
+    return value
+
+
 def _oid(value: Any, field: str) -> str:
     if type(value) is not str or not _OID_RE.fullmatch(value):
         raise ContractError(f"{field} must be a 40-character lowercase Git OID")
@@ -432,14 +450,14 @@ def _validate_context(
     if type(context.planner_unit_ids) not in {tuple, list} or not context.planner_unit_ids:
         raise ContractError("trusted planner unit inventory must be a non-empty ordered sequence")
     planner_ids_list = [
-        _string(item, "context.planner_unit_ids[]") for item in context.planner_unit_ids
+        _planner_string(item, "context.planner_unit_ids[]")
+        for item in context.planner_unit_ids
     ]
     # The complete planner inventory includes product-corpus IDs such as
-    # `product-document::doc/product/system.md`; those trusted IDs are wider
-    # than the intentionally restricted request schema's unit-ID alphabet.
-    if (any(len(item) > 1024 for item in planner_ids_list)
-            or planner_ids_list != sorted(set(planner_ids_list), key=lambda item: item.encode("ascii"))):
-        raise ContractError("trusted planner unit IDs are not unique canonical ASCII order")
+    # `product-link::...#1-设计原则`; these trusted UTF-8 IDs are wider than the
+    # intentionally restricted ASCII request schema's unit-ID alphabet.
+    if planner_ids_list != sorted(set(planner_ids_list)):
+        raise ContractError("trusted planner unit IDs are not unique canonical Unicode order")
     planner_ids = tuple(planner_ids_list)
     if not isinstance(context.planner_unit_obligations, Mapping):
         raise ContractError("trusted planner unit obligations are unavailable")
@@ -450,9 +468,11 @@ def _validate_context(
         values = context.planner_unit_obligations[unit_id]
         if type(values) not in {tuple, list} or not values:
             raise ContractError(f"trusted planner obligations are missing for {unit_id}")
-        strings = tuple(_string(item, f"planner obligations {unit_id}[]") for item in values)
-        if len(strings) != len(set(strings)):
-            raise ContractError(f"trusted planner obligations contain duplicates for {unit_id}")
+        strings = tuple(_planner_string(item, f"planner obligations {unit_id}[]") for item in values)
+        if strings != tuple(sorted(set(strings))):
+            raise ContractError(
+                f"trusted planner obligations are not unique canonical Unicode order for {unit_id}"
+            )
         obligations[unit_id] = strings
     return task_uid, head_oid, source_scope_oid, projection_digest, planner_ids, obligations
 

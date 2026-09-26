@@ -24,6 +24,18 @@ def marked(marker: str, payload: dict) -> str:
 
 def validation_fixture():
     """Build live-shaped inputs for contract and downstream reader tests."""
+    product_link_unit = (
+        "product-link::doc/product/agents-world-simulation/"
+        "agent-conversation-and-prompt-control.prd.md->"
+        "doc/product/agents-world-simulation/"
+        "agent-conversation-and-prompt-control.design.md#1-设计原则"
+    )
+    product_link_obligation = (
+        "product-link:doc/product/agents-world-simulation/"
+        "agent-conversation-and-prompt-control.prd.md->"
+        "doc/product/agents-world-simulation/"
+        "agent-conversation-and-prompt-control.design.md#1-设计原则"
+    )
     context = contract.TrustedRequestContext(
         task_uid="task_" + "a" * 32,
         head_oid="1" * 40,
@@ -34,12 +46,14 @@ def validation_fixture():
         planner_unit_ids=(
             "product-corpus:membership",
             "product-document::doc/product/system.md",
+            product_link_unit,
             "required_gate_baseline",
             "workflow_governance",
         ),
         planner_unit_obligations={
             "product-corpus:membership": ("product-corpus:membership",),
             "product-document::doc/product/system.md": ("product-document:doc/product/system.md",),
+            product_link_unit: (product_link_obligation,),
             "required_gate_baseline": ("required_gate_baseline:000:baseline",),
             "workflow_governance": ("workflow_governance:000:contracts",),
         },
@@ -179,6 +193,40 @@ def payload_fixture(authority=None, run=None):
 
 
 class CanonicalAuthorityTests(unittest.TestCase):
+    def test_trusted_planner_inventory_preserves_unicode_ids_and_obligations(self):
+        unit_id = (
+            "product-link::doc/product/agents-world-simulation/"
+            "agent-conversation-and-prompt-control.prd.md->"
+            "doc/product/agents-world-simulation/"
+            "agent-conversation-and-prompt-control.design.md#1-设计原则"
+        )
+        obligation = (
+            "product-link:doc/product/agents-world-simulation/"
+            "agent-conversation-and-prompt-control.prd.md->"
+            "doc/product/agents-world-simulation/"
+            "agent-conversation-and-prompt-control.design.md#1-设计原则"
+        )
+        context, request, _, _, _, _, authority = validation_fixture()
+        self.assertIn(unit_id, context.planner_unit_ids)
+        self.assertEqual((obligation,), context.planner_unit_obligations[unit_id])
+        validated_context = contract._validate_context(context)
+        self.assertIn(unit_id, validated_context[4])
+        self.assertEqual((obligation,), validated_context[5][unit_id])
+        self.assertEqual(set(request["validation_units"]), set(authority.planner_unit_obligations))
+        self.assertEqual(
+            ["required_gate_baseline", "workflow_governance"],
+            request["validation_units"],
+        )
+        self.assertEqual(
+            ["required_gate_baseline", "workflow_governance"],
+            contract._validate_units(
+                ["required_gate_baseline", "workflow_governance"],
+                "request.validation_units",
+            ),
+        )
+        with self.assertRaises(contract.ContractError):
+            contract._validate_units([unit_id], "request.validation_units")
+
     def test_public_validation_authority_constructor_is_closed(self):
         with self.assertRaisesRegex(contract.ContractError, "closed resolver"):
             contract.ValidationAuthority(
