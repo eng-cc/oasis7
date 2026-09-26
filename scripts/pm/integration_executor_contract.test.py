@@ -149,6 +149,145 @@ class ValidationRequestTests(unittest.TestCase):
         self.assertEqual(first["intent_order"], retry["intent_order"])
         self.assertEqual(2, second["intent_order"])
 
+    def test_different_key_reservation_recovers_single_pending_intent(self):
+        first_identity = request_identity()
+        second_identity = request_identity(
+            source_projection_digest="sha256:" + "9" * 64,
+        )
+        third_identity = request_identity(
+            source_projection_digest="sha256:" + "8" * 64,
+        )
+        first_key = contract.validation_request_key(first_identity)
+        second_key = contract.validation_request_key(second_identity)
+        third_key = contract.validation_request_key(third_identity)
+        with tempfile.TemporaryDirectory() as directory:
+            contract.reserve_validation_request(
+                directory, first_key, first_identity, "1" * 40,
+            )
+            state_path = Path(directory) / ".validation-intent-order"
+            before_second = json.loads(state_path.read_text(encoding="utf-8"))
+            contract.reserve_validation_request(directory, second_key, second_identity, "2" * 40)
+            # Simulate a process exit after the second request row was made
+            # durable but before its order was added to the sidecar.
+            state_path.write_text(json.dumps(before_second), encoding="utf-8")
+
+            third, created = contract.reserve_validation_request(
+                directory, third_key, third_identity, "3" * 40,
+            )
+            recovered = contract._read_request_record(
+                contract._request_path(Path(directory), second_key), second_key,
+            )
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            self.assertEqual(2, recovered["intent_order"])
+            self.assertTrue(created)
+            self.assertEqual(3, third["intent_order"])
+            self.assertEqual(4, state["next_order"])
+            self.assertEqual({
+                first_key.removeprefix("sha256:"): 1,
+                second_key.removeprefix("sha256:"): 2,
+                third_key.removeprefix("sha256:"): 3,
+            }, state["orders"])
+
+    def test_same_key_retry_still_recovers_single_pending_intent(self):
+        first_identity = request_identity()
+        second_identity = request_identity(
+            source_projection_digest="sha256:" + "9" * 64,
+        )
+        first_key = contract.validation_request_key(first_identity)
+        second_key = contract.validation_request_key(second_identity)
+        with tempfile.TemporaryDirectory() as directory:
+            contract.reserve_validation_request(
+                directory, first_key, first_identity, "1" * 40,
+            )
+            state_path = Path(directory) / ".validation-intent-order"
+            before_second = json.loads(state_path.read_text(encoding="utf-8"))
+            contract.reserve_validation_request(
+                directory, second_key, second_identity, "2" * 40,
+            )
+            state_path.write_text(json.dumps(before_second), encoding="utf-8")
+
+            retry, created = contract.reserve_validation_request(
+                directory, second_key, second_identity, "9" * 40,
+            )
+            self.assertFalse(created)
+            self.assertEqual(2, retry["intent_order"])
+            self.assertEqual(3, contract.validate_validation_intent_order_state(directory))
+
+    def test_pending_order_recovery_rejects_ambiguous_or_tampered_rows(self):
+        for mutation in ("multiple pending", "wrong order", "already transitioned"):
+            with self.subTest(mutation=mutation), tempfile.TemporaryDirectory() as directory:
+                first_identity = request_identity()
+                second_identity = request_identity(
+                    source_projection_digest="sha256:" + "9" * 64,
+                )
+                third_identity = request_identity(
+                    source_projection_digest="sha256:" + "8" * 64,
+                )
+                fourth_identity = request_identity(
+                    source_projection_digest="sha256:" + "7" * 64,
+                )
+                first_key = contract.validation_request_key(first_identity)
+                second_key = contract.validation_request_key(second_identity)
+                third_key = contract.validation_request_key(third_identity)
+                fourth_key = contract.validation_request_key(fourth_identity)
+                contract.reserve_validation_request(
+                    directory, first_key, first_identity, "1" * 40,
+                )
+                state_path = Path(directory) / ".validation-intent-order"
+                before_pending = json.loads(state_path.read_text(encoding="utf-8"))
+                contract.reserve_validation_request(
+                    directory, second_key, second_identity, "2" * 40,
+                )
+                if mutation == "multiple pending":
+                    contract.reserve_validation_request(
+                        directory, third_key, third_identity, "3" * 40,
+                    )
+                    attempted_key = fourth_key
+                    attempted_identity = fourth_identity
+                else:
+                    pending_path = contract._request_path(Path(directory), second_key)
+                    pending = json.loads(pending_path.read_text(encoding="utf-8"))
+                    if mutation == "wrong order":
+                        pending["intent_order"] = 99
+                    else:
+                        pending["dispatch_attempts"] = 1
+                        pending["status"] = "dispatch_uncertain"
+                    pending_path.write_text(json.dumps(pending), encoding="utf-8")
+                    attempted_key = third_key
+                    attempted_identity = third_identity
+                state_path.write_text(json.dumps(before_pending), encoding="utf-8")
+
+                with self.assertRaisesRegex(ValueError, "sequence is inconsistent"):
+                    contract.reserve_validation_request(
+                        directory, attempted_key, attempted_identity, "4" * 40,
+                    )
+                self.assertFalse(contract._request_path(
+                    Path(directory), attempted_key,
+                ).exists())
+                self.assertEqual(
+                    before_pending,
+                    json.loads(state_path.read_text(encoding="utf-8")),
+                )
+
+    def test_intent_order_state_with_a_gap_fails_closed(self):
+        identity = request_identity()
+        key = contract.validation_request_key(identity)
+        next_identity = request_identity(
+            source_projection_digest="sha256:" + "9" * 64,
+        )
+        next_key = contract.validation_request_key(next_identity)
+        with tempfile.TemporaryDirectory() as directory:
+            contract.reserve_validation_request(directory, key, identity, "1" * 40)
+            state_path = Path(directory) / ".validation-intent-order"
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            state["next_order"] = 3
+            state_path.write_text(json.dumps(state), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "sequence is inconsistent"):
+                contract.reserve_validation_request(
+                    directory, next_key, next_identity, "2" * 40,
+                )
+            self.assertFalse(contract._request_path(Path(directory), next_key).exists())
+
     def test_intent_order_counter_corruption_or_disappearance_fails_closed(self):
         identity = request_identity()
         key = contract.validation_request_key(identity)

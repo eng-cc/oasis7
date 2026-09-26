@@ -612,8 +612,6 @@ def _product_environment_contract(
         line.strip() for line in trusted_requirements.decode("utf-8", errors="replace").splitlines()
         if line.strip() and not line.lstrip().startswith("#")
     ]
-    source_attempt_digest = None
-    source_gate_job_digest = None
     source_environment_eligible = True
     if trusted_source_product_environment is None:
         runtime_packages: dict[str, str] = {}
@@ -635,13 +633,9 @@ def _product_environment_contract(
             and python_cache_tag == "cpython-312"
         )
         runner_matches=runner["matches_trusted_W"]
-        environment_source="observed-required-gate-runtime"
     else:
-        observed, source_attempt_digest = _trusted_source_product_environment(
+        observed, _ = _trusted_source_product_environment(
             trusted_source_product_environment,
-        )
-        source_gate_job_digest = _canonical_digest(
-            trusted_source_product_environment["required_gate_job"],
         )
         runner=observed["runner_identity"]
         runtime_packages=observed["runtime_packages"]
@@ -656,7 +650,6 @@ def _product_environment_contract(
             and observed["markdown_parser_matches_trusted_W"]
             and observed["markdown_requirements_match_trusted_W"]
         )
-        environment_source="authenticated-source-attempt"
     dependencies_match = (
         requirement_lines == ["markdown-it-py==3.0.0"]
         and runtime_packages == _TRUSTED_MARKDOWN_PACKAGES
@@ -683,11 +676,6 @@ def _product_environment_contract(
             else "unverified-runner-python-markdown-runtime-or-target-parser",
         "reuse_eligible": reuse_eligible,
     }
-    if source_attempt_digest is not None:
-        result["source_attempt_digest"] = source_attempt_digest
-        result["source_gate_job_digest"] = source_gate_job_digest
-        result["source_environment_eligible"] = source_environment_eligible
-        result["environment_source"] = environment_source
     return result
 
 

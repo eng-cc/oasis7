@@ -711,6 +711,12 @@ class RequiredInventoryTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="ci-required-inventory-local-host-drift-") as temp:
             trusted, target, plan = self.make_fixture(Path(temp))
             source_environment = self.trusted_source_product_environment()
+            with self.observed_product_runtime():
+                source = self.build_fixture_inventory(trusted, target, plan)
+            source_product_units = [item for item in source["unit_specs"]
+                                    if item["unit_id"].startswith("product-")]
+            self.assertTrue(source_product_units)
+            source_environment["environment_contract"] = source_product_units[0]["environment_contract"]
             with self.observed_product_runtime(
                 runner_image="macos-14", python_version="3.13.0", mdurl_version="0.1.3",
             ):
@@ -722,12 +728,20 @@ class RequiredInventoryTests(unittest.TestCase):
                              if item["unit_id"].startswith("product-")]
             self.assertTrue(product_units)
             self.assertTrue(all(item["applicable_policy"]["reuse_eligible"] for item in product_units))
-            self.assertTrue(all(
-                item["environment_contract"].get("source_attempt_digest")
-                and item["environment_contract"].get("source_gate_job_digest")
-                and item["environment_contract"].get("source_environment_eligible") is True
-                for item in product_units
-            ))
+            source_by_id = {item["unit_id"]: item for item in source_product_units}
+            for item in product_units:
+                with self.subTest(unit_id=item["unit_id"]):
+                    self.assertEqual(
+                        source_by_id[item["unit_id"]]["environment_contract"],
+                        item["environment_contract"],
+                    )
+                    self.assertEqual(
+                        source["input_scope"]["input_fingerprints"][item["unit_id"]],
+                        result["input_scope"]["input_fingerprints"][item["unit_id"]],
+                    )
+                    self.assertNotIn("source_attempt_digest", item["environment_contract"])
+                    self.assertNotIn("source_gate_job_digest", item["environment_contract"])
+                    self.assertNotIn("environment_source", item["environment_contract"])
 
     def test_actual_source_runtime_drift_keeps_product_units_ineligible(self):
         changed_source_parser = self.trusted_source_product_environment()

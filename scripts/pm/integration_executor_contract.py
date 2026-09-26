@@ -378,6 +378,7 @@ def _read_intent_order_state(state_path: Path) -> dict[str, Any]:
         raise ValueError("validation intent order state is invalid")
     values = list(orders.values())
     if (len(values) != len(set(values))
+            or len(values) != state["next_order"] - 1
             or any(order >= state["next_order"] for order in values)):
         raise ValueError("validation intent order sequence is inconsistent")
     return state
@@ -404,8 +405,10 @@ def validate_validation_intent_order_state(directory: str | Path) -> int | None:
     return state["next_order"]
 
 
-def _recover_pending_intent_order(directory: Path, request_key: str) -> None:
-    """Reconcile only the single record written just before a process crash."""
+def _recover_pending_intent_order(
+    directory: Path, expected_request_key: str | None = None,
+) -> None:
+    """Reconcile only one untouched request row after a process crash."""
     state_path = _intent_order_state_path(directory)
     if not state_path.exists():
         raise ValueError("validation intent order state is missing")
@@ -413,10 +416,25 @@ def _recover_pending_intent_order(directory: Path, request_key: str) -> None:
     records = _intent_order_records(directory)
     journal_orders = {path.stem: record["intent_order"] for path, record in records}
     state_orders = state["orders"]
-    unrecorded = {key: order for key, order in journal_orders.items() if key not in state_orders}
-    if (not unrecorded
+    unrecorded = {
+        key: order for key, order in journal_orders.items() if key not in state_orders
+    }
+    if (len(unrecorded) != 1
             or set(state_orders) - set(journal_orders)
-            or unrecorded != {request_key.removeprefix("sha256:"): state["next_order"]}):
+            or next(iter(unrecorded.values())) != state["next_order"]):
+        raise ValueError("validation intent order sequence is inconsistent")
+    pending_key, pending_order = next(iter(unrecorded.items()))
+    if (expected_request_key is not None
+            and pending_key != expected_request_key.removeprefix("sha256:")):
+        raise ValueError("validation intent order sequence is inconsistent")
+    pending_record = next(
+        record for path, record in records if path.stem == pending_key
+    )
+    if (pending_record.get("status") != "prepared"
+            or pending_record.get("dispatch_attempts") != 0
+            or pending_record.get("run_id") is not None
+            or pending_record.get("run_attempt") is not None
+            or pending_record.get("intent_order") != pending_order):
         raise ValueError("validation intent order sequence is inconsistent")
     state["orders"].update(unrecorded)
     state["next_order"] += 1
@@ -452,7 +470,13 @@ def reserve_validation_request(
                 else:
                     validate_validation_intent_order_state(directory)
                 return record, False
-            next_order = validate_validation_intent_order_state(directory)
+            try:
+                next_order = validate_validation_intent_order_state(directory)
+            except ValueError as exc:
+                if str(exc) != "validation intent order sequence is inconsistent":
+                    raise
+                _recover_pending_intent_order(directory)
+                next_order = validate_validation_intent_order_state(directory)
             state_path = _intent_order_state_path(directory)
             if next_order is None:
                 next_order = 1
