@@ -92,7 +92,8 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
         return {
             "claim_type": "task_complete",
             "verify_command": "true",
-            "verified_at": dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z"),
+            "verified_at": (dt.datetime.now().astimezone() - dt.timedelta(seconds=5))
+            .isoformat(timespec="seconds"),
             "verification_exit_code": 0,
             "status": "verified",
             "allowed_to_claim": True,
@@ -112,7 +113,33 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
             "repository_index_sha256": fingerprint["index_sha256"],
         }
 
-    def invoke_aggregate_closeout(self, claim: dict) -> tuple[list[str], str | None]:
+    @staticmethod
+    def task_complete_comment_body(claim: dict) -> str:
+        return "\n".join((
+            "<!-- oasis7-pm-claim-verification -->",
+            f"Task UID: {claim.get('task_uid') or ''}",
+            f"Claim Type: {claim.get('claim_type') or ''}",
+            f"Verified At: {claim.get('verified_at') or ''}",
+            f"Verification Exit Code: {claim.get('verification_exit_code')}",
+            f"Verification Status: {claim.get('status') or ''}",
+            f"Verify Command: {claim.get('verify_command') or ''}",
+            f"Claim Message: {claim.get('claim_message') or ''}",
+        )) + "\n"
+
+    @staticmethod
+    def task_complete_comment(body: str, created_at: str, *, comment_id: int = 6001) -> dict:
+        return {
+            "id": comment_id,
+            "body": body,
+            "created_at": created_at,
+            "updated_at": created_at,
+            "html_url": f"https://github.com/{REPO}/issues/4035#issuecomment-{comment_id}",
+            "issue_url": f"https://api.github.com/repos/{REPO}/issues/4035",
+        }
+
+    def invoke_aggregate_closeout(
+        self, claim: dict, *, live_state="OPEN", live_updated_at=None, claim_comments=None,
+    ) -> tuple[list[str], str | None]:
         with tempfile.TemporaryDirectory() as temp:
             temp_root = pathlib.Path(temp)
             paths = {}
@@ -136,6 +163,11 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
                 "aggregate_plan_comment_id": "6001", "aggregate_plan_sha256": "sha256:" + "3" * 64,
                 "claim_verifications": [],
             }
+            live_updated_at = live_updated_at or str(claim.get("verified_at") or record["updated_at"])
+            if claim_comments is None:
+                claim_comments = ([{
+                    **self.task_complete_comment(self.task_complete_comment_body(claim), live_updated_at),
+                }] if claim.get("verified_at") else [])
             issue_body = "\n".join((
                 f"task_uid: {UID}",
                 "- status: `committed`",
@@ -146,8 +178,8 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
             )) + "\n"
             live_issue_payload = {
                 "body": issue_body, "number": 4035, "title": "[PM] ordered aggregate",
-                "url": f"https://github.com/{REPO}/issues/4035", "state": "OPEN",
-                "stateReason": "", "updatedAt": record["updated_at"],
+                "url": f"https://github.com/{REPO}/issues/4035", "state": live_state,
+                "stateReason": "", "updatedAt": live_updated_at,
             }
 
             def read_live_issue(command):
@@ -159,6 +191,9 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
                 if command[:3] == ["gh", "issue", "view"] and command[3] == "4035":
                     self.assertIn("updatedAt", command[command.index("--json") + 1])
                     return json.dumps(live_issue_payload)
+                if (command[:2] == ["gh", "api"]
+                        and command[2] == f"repos/{REPO}/issues/4035/comments?per_page=1&sort=created&direction=desc"):
+                    return json.dumps(claim_comments)
                 raise AssertionError(f"unexpected live Issue read: {command}")
             args = Namespace(
                 root=ROOT, task_uid=UID, to_status="done", repo=REPO, role="tpm",
@@ -218,7 +253,6 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
             "unstable epoch": {"verification_epoch_stable": False},
             "changed repository fingerprint": {"repository_fingerprint_after": "b" * 64},
             "nonzero verification": {"verification_exit_code": 1},
-            "stale verification": {"verified_at": "2000-01-01T00:00:00Z"},
         }
         for label, changes in mutations.items():
             with self.subTest(label=label):
@@ -231,9 +265,80 @@ class OrderedAggregateCloseoutTests(unittest.TestCase):
                 self.assertIsNotNone(failure, f"{label}: aggregate closeout accepted the claim")
 
     def test_aggregate_closeout_accepts_canonical_production_profile_claim(self):
-        effects, failure = self.invoke_aggregate_closeout(self.production_task_complete_claim())
+        claim = self.production_task_complete_claim()
+        verified_at = dt.datetime.fromisoformat(claim["verified_at"].replace("Z", "+00:00"))
+        comment_at = (verified_at + dt.timedelta(seconds=1)).isoformat().replace("+00:00", "Z")
+        effects, failure = self.invoke_aggregate_closeout(
+            claim,
+            live_updated_at=comment_at,
+            claim_comments=[self.task_complete_comment(self.task_complete_comment_body(claim), comment_at)],
+        )
         self.assertIsNone(failure)
         self.assertEqual(effects, ["comment", "project", "issue", "mapping"])
+
+    def test_aggregate_closeout_requires_exact_latest_claim_comment_readback(self):
+        claim = self.production_task_complete_claim()
+        verified_at = dt.datetime.fromisoformat(claim["verified_at"].replace("Z", "+00:00"))
+        claim_at = verified_at.isoformat().replace("+00:00", "Z")
+        comment_at = (verified_at + dt.timedelta(seconds=1)).isoformat().replace("+00:00", "Z")
+        canonical_comment = self.task_complete_comment_body(claim)
+        cases = {
+            "missing comment": ("OPEN", claim_at, []),
+            "wrong task UID": ("OPEN", claim_at, [{
+                **self.task_complete_comment(canonical_comment.replace(UID, "task_" + "0" * 32), claim_at),
+            }]),
+            "wrong claim type": ("OPEN", claim_at, [{
+                **self.task_complete_comment(
+                    canonical_comment.replace("Claim Type: task_complete", "Claim Type: tests_passed"), claim_at,
+                ),
+            }]),
+            "wrong verification time": ("OPEN", claim_at, [{
+                **self.task_complete_comment(
+                    canonical_comment.replace(claim["verified_at"], "2000-01-01T00:00:00Z"), claim_at,
+                ),
+            }]),
+            "wrong exit code": ("OPEN", claim_at, [{
+                **self.task_complete_comment(
+                    canonical_comment.replace("Verification Exit Code: 0", "Verification Exit Code: 1"), claim_at,
+                ),
+            }]),
+            "wrong status": ("OPEN", claim_at, [{
+                **self.task_complete_comment(
+                    canonical_comment.replace("Verification Status: verified", "Verification Status: blocked"),
+                    claim_at,
+                ),
+            }]),
+            "wrong verify command": ("OPEN", claim_at, [{
+                **self.task_complete_comment(
+                    canonical_comment.replace("Verify Command: true", "Verify Command: false"), claim_at,
+                ),
+            }]),
+            "wrong claim message": ("OPEN", claim_at, [{
+                **self.task_complete_comment(
+                    canonical_comment.replace(
+                        "Claim Message: Fresh verification passed; the task can now be claimed complete.",
+                        "Claim Message: Do not claim the task is complete.",
+                    ), claim_at,
+                ),
+            }]),
+            "comment predates verification": ("OPEN", "2000-01-01T00:00:00Z", [{
+                **self.task_complete_comment(canonical_comment, "2000-01-01T00:00:00Z"),
+            }]),
+            "newer unrelated comment": ("OPEN", comment_at, [{
+                **self.task_complete_comment("unrelated operator comment\n", comment_at),
+            }]),
+            "closed Issue state": ("CLOSED", claim_at, [{
+                **self.task_complete_comment(canonical_comment, claim_at),
+            }]),
+        }
+        for label, (state, issue_updated_at, comments) in cases.items():
+            with self.subTest(label=label):
+                effects, failure = self.invoke_aggregate_closeout(
+                    claim, live_state=state, live_updated_at=issue_updated_at,
+                    claim_comments=comments,
+                )
+                self.assertEqual(effects, [], f"{label}: closeout persisted task truth")
+                self.assertIsNotNone(failure, f"{label}: closeout accepted noncanonical claim readback")
 
     def invoke_binder(
         self, *, permission="admin", deliveries=None, promoted_pr=None,

@@ -1686,6 +1686,7 @@ def require_live_issue_route_matches_cache(repo: str, task_uid: str, record: dic
 
 
 def validate_aggregate_task_complete_claim(
+    repo: str,
     root: pathlib.Path,
     task_uid: str,
     claim: Any,
@@ -1740,13 +1741,12 @@ def validate_aggregate_task_complete_claim(
     try:
         verified_at = datetime.fromisoformat(str(claim.get("verified_at") or "").replace("Z", "+00:00"))
         current_time = datetime.now().astimezone()
-        round_value = live_issue.get("updated_at")
-        round_at = datetime.fromisoformat(str(round_value or "").replace("Z", "+00:00"))
     except (TypeError, ValueError):
-        die("closeout-task: aggregate task_complete claim timestamp or live task round is invalid")
-    if (verified_at.tzinfo is None or round_at.tzinfo is None
-            or verified_at > current_time or verified_at < round_at):
-        die("closeout-task: aggregate task_complete claim is not fresh for the current live task round")
+        die("closeout-task: aggregate task_complete claim timestamp is invalid")
+    if verified_at.tzinfo is None or verified_at > current_time:
+        die("closeout-task: aggregate task_complete claim timestamp is not a valid current-round time")
+
+    validate_latest_task_complete_comment(repo, live_issue, task_uid, claim, profile_commands[profile], verified_at)
 
     root = root.resolve()
     fingerprint_tool = root / "scripts/pm/repo-state-fingerprint.py"
@@ -1775,6 +1775,65 @@ def validate_aggregate_task_complete_claim(
             or claim.get("repository_fingerprint_before") != fingerprint.get("sha256")
             or claim.get("repository_fingerprint_after") != fingerprint.get("sha256")):
         die("closeout-task: aggregate task_complete claim does not bind current HEAD/tree/index/fingerprint")
+
+
+def validate_latest_task_complete_comment(
+    repo: str,
+    live_issue: dict[str, Any],
+    task_uid: str,
+    claim: dict[str, Any],
+    verify_command: str,
+    verified_at: datetime,
+) -> None:
+    """Require the latest Issue update to be the exact claim-ready readback."""
+    issue_number = live_issue.get("issue_number")
+    issue_url = f"https://github.com/{repo}/issues/{issue_number}"
+    if (type(issue_number) is not int or issue_number <= 0
+            or live_issue.get("issue_url") != issue_url
+            or str(live_issue.get("issue_state") or "").upper() != "OPEN"):
+        die("closeout-task: aggregate claim verification requires the exact open task Issue")
+    try:
+        comments = json.loads(run_text([
+            "gh", "api",
+            f"repos/{repo}/issues/{issue_number}/comments?per_page=1&sort=created&direction=desc",
+        ]))
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError, RuntimeError, subprocess.TimeoutExpired) as exc:
+        die(f"closeout-task: latest task claim comment readback failed closed: {exc}")
+    if not isinstance(comments, list) or len(comments) != 1 or not isinstance(comments[0], dict):
+        die("closeout-task: latest task claim comment readback is missing or malformed")
+    comment = comments[0]
+    expected_body = "\n".join((
+        "<!-- oasis7-pm-claim-verification -->",
+        f"Task UID: {task_uid}",
+        f"Claim Type: {claim['claim_type']}",
+        f"Verified At: {claim['verified_at']}",
+        f"Verification Exit Code: {claim['verification_exit_code']}",
+        f"Verification Status: {claim['status']}",
+        f"Verify Command: {verify_command}",
+        f"Claim Message: {claim.get('claim_message') or ''}",
+        "",
+    ))
+    comment_id = comment.get("id")
+    expected_comment_url = (
+        f"https://github.com/{repo}/issues/{issue_number}#issuecomment-{comment_id}"
+    )
+    expected_api_issue_url = f"https://api.github.com/repos/{repo}/issues/{issue_number}"
+    if (comment.get("body") != expected_body
+            or type(comment_id) is not int or comment_id <= 0
+            or comment.get("html_url") != expected_comment_url
+            or comment.get("issue_url") != expected_api_issue_url):
+        die("closeout-task: latest task comment does not exactly bind the task_complete claim")
+    try:
+        created_at = datetime.fromisoformat(str(comment.get("created_at") or "").replace("Z", "+00:00"))
+        comment_updated_at = datetime.fromisoformat(str(comment.get("updated_at") or "").replace("Z", "+00:00"))
+        issue_updated_at = datetime.fromisoformat(str(live_issue.get("updated_at") or "").replace("Z", "+00:00"))
+        current_time = datetime.now().astimezone()
+    except (TypeError, ValueError):
+        die("closeout-task: latest task claim comment timestamps are invalid")
+    if (created_at.tzinfo is None or comment_updated_at.tzinfo is None or issue_updated_at.tzinfo is None
+            or created_at < verified_at or created_at > current_time
+            or comment_updated_at != created_at or issue_updated_at != comment_updated_at):
+        die("closeout-task: task claim comment is stale, edited, or superseded on the live Issue")
 
 
 def validate_live_aggregate_lifecycle(
@@ -2259,7 +2318,9 @@ def command_closeout_task(args: argparse.Namespace) -> int:
             die("closeout-task: coordinator mode/PR identity is invalid")
         if not all((args.aggregate_plan, args.aggregate_candidate, args.aggregate_evidence)):
             die("closeout-task: aggregate receipt requires plan, candidate and evidence")
-        validate_aggregate_task_complete_claim(args.root, args.task_uid, claim, live_issue or {})
+        validate_aggregate_task_complete_claim(
+            getattr(args, "repo", DEFAULT_REPO), args.root, args.task_uid, claim, live_issue or {},
+        )
         validation = subprocess.run([
             sys.executable, str(args.root.resolve() / "scripts/pm/aggregate-task-completion.py"), "validate",
             "--repo-root", str(args.root.resolve()), "--task-uid", args.task_uid,
