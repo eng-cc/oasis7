@@ -99,6 +99,8 @@ _VALIDATION_ID_RE = re.compile(r"[0-9a-f]{64}\Z")
 _LOGIN_RE = re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37})\Z")
 _MAX_PLANNER_STRING_CHARS = 1024
 _MAX_PLANNER_STRING_UTF8_BYTES = 4096
+_MAX_HISTORY_TITLE_CHARS = 1024
+_MAX_HISTORY_TITLE_UTF8_BYTES = 4096
 
 
 class ContractError(ValueError):
@@ -286,6 +288,22 @@ def _string(value: Any, field: str, *, allow_empty: bool = False) -> str:
         value.encode("ascii")
     except UnicodeEncodeError as exc:
         raise ContractError(f"{field} must be ASCII") from exc
+    if any(char in value for char in "\x00\r\n"):
+        raise ContractError(f"{field} contains a control character")
+    return value
+
+
+def _history_title(value: Any, field: str) -> str:
+    """Validate bounded REST history text without normalizing its Unicode."""
+    if type(value) is not str or not value:
+        raise ContractError(f"{field} must be a non-empty string")
+    try:
+        encoded = value.encode("utf-8", errors="strict")
+    except UnicodeEncodeError as exc:
+        raise ContractError(f"{field} is not valid UTF-8") from exc
+    if (len(value) > _MAX_HISTORY_TITLE_CHARS
+            or len(encoded) > _MAX_HISTORY_TITLE_UTF8_BYTES):
+        raise ContractError(f"{field} exceeds the history title size limit")
     if any(char in value for char in "\x00\r\n"):
         raise ContractError(f"{field} contains a control character")
     return value
@@ -836,7 +854,7 @@ def collect_workflow_runs(pages: Iterable[Mapping[str, Any]]) -> tuple[Mapping[s
             if not isinstance(row, Mapping):
                 raise ContractError("workflow-run history contains a malformed run")
             run_id = _positive_int(row.get("id"), "workflow run ID")
-            title = _string(row.get("display_title"), "workflow display_title")
+            title = _history_title(row.get("display_title"), "workflow display_title")
             if run_id in run_ids:
                 raise ContractError("workflow-run history contains a duplicate run ID")
             run_ids.add(run_id)
@@ -891,7 +909,7 @@ def select_unique_run(runs: Iterable[Mapping[str, Any]], authority: ValidationAu
         if not isinstance(run, Mapping):
             raise ContractError("workflow run candidate is malformed")
         run_id = _positive_int(run.get("id"), "workflow run candidate ID")
-        title = _string(run.get("display_title"), "workflow run candidate display_title")
+        title = _history_title(run.get("display_title"), "workflow run candidate display_title")
         if run_id in seen_ids:
             raise ContractError("workflow run candidate list contains duplicate IDs")
         seen_ids.add(run_id)

@@ -361,6 +361,54 @@ class CanonicalAuthorityTests(unittest.TestCase):
 
 
 class WorkflowDiscoveryTests(unittest.TestCase):
+    def test_complete_history_accepts_bounded_unicode_beside_exact_ascii_candidate(self):
+        *_, authority = validation_fixture()
+        historical = {"id": 699, "display_title": "nightly 日本語 🌱 — прошлый запуск"}
+        target = live_run(authority)
+        pages = [{"total_count": 2, "runs": [historical, target], "has_next": False}]
+
+        complete = contract.collect_workflow_runs(pages)
+        selected = contract.select_unique_run(complete, authority)
+
+        self.assertEqual(historical["display_title"], complete[0]["display_title"])
+        self.assertEqual(target["id"], selected["id"])
+        self.assertEqual(contract.expected_run_title(authority), selected["display_title"])
+        self.assertTrue(selected["display_title"].isascii())
+
+    def test_unicode_prefix_and_suffix_near_candidates_still_block(self):
+        *_, authority = validation_fixture()
+        target = live_run(authority)
+        expected = contract.expected_run_title(authority)
+        validation_id = authority.validation_id
+        prefix_candidate = {
+            "id": 701,
+            "display_title": expected[:-len(validation_id)] + "wrong-key-🌱",
+        }
+        suffix_candidate = {
+            "id": 702,
+            "display_title": "unrelated history—日本語|" + validation_id,
+        }
+
+        for candidate in (prefix_candidate, suffix_candidate):
+            with self.subTest(run_id=candidate["id"]):
+                with self.assertRaises(contract.ContractError):
+                    contract.select_unique_run([candidate], authority)
+                with self.assertRaises(contract.ContractError):
+                    contract.select_unique_run([target, candidate], authority)
+
+    def test_history_titles_must_be_bounded_well_formed_utf8_strings(self):
+        malformed_titles = ("", "unpaired surrogate \ud800", "x" * 1025, "nul\x00", "line\nfeed")
+        for index, title in enumerate(malformed_titles, start=710):
+            with self.subTest(title_kind=index):
+                page = [{"total_count": 1, "runs": [{"id": index, "display_title": title}], "has_next": False}]
+                with self.assertRaises(contract.ContractError):
+                    contract.collect_workflow_runs(page)
+        for row in ({"id": 720}, {"id": 721, "display_title": None}, {"id": 722, "display_title": 42}):
+            with self.subTest(row=row):
+                page = [{"total_count": 1, "runs": [row], "has_next": False}]
+                with self.assertRaises(contract.ContractError):
+                    contract.collect_workflow_runs(page)
+
     def test_unfiltered_history_exhaustion_accepts_more_than_one_thousand_runs(self):
         pages = []
         next_id = 10000
