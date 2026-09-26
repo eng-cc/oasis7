@@ -50,7 +50,7 @@ elif a[:2]==['issue','comment']:
 elif a[:1]==['api'] and a[1].startswith('repos/eng-cc/oasis7/issues?'):
  emit([{'id':1,'number':1,'body':s['body']}] if s.get('body') else [])
 elif a[:2]==['api','repos/eng-cc/oasis7/issues/1/comments']: emit([s.get('comments',[])])
-elif a[:2]==['api','repos/eng-cc/oasis7/issues/1']: emit({'number':1,'body':s['body'],'url':url})
+elif a[:2]==['api','repos/eng-cc/oasis7/issues/1']: emit({'number':1,'body':s['body'],'url':url,'state':'OPEN'})
 elif a[:1]==['api'] and a[1].startswith('repos/eng-cc/oasis7/issues/comments/'): emit(s['comments'][int(a[1].rsplit('/',1)[1])-1])
 elif a[:2]==['project','view']: emit({'id':'P','number':1})
 elif a[:2]==['project','item-add']: emit({'id':'I'})

@@ -10,12 +10,27 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import importlib.util
 import json
 import pathlib
 import re
 import subprocess
 import sys
 from typing import Any
+
+
+_STORE_PATH = pathlib.Path(__file__).with_name("workflow-durable-store.py")
+_STORE_SPEC = importlib.util.spec_from_file_location("workflow_durable_store_workflow_next", _STORE_PATH)
+if _STORE_SPEC is None or _STORE_SPEC.loader is None:
+    raise RuntimeError(f"cannot load durable task mapping validator at {_STORE_PATH}")
+DURABLE_STORE = importlib.util.module_from_spec(_STORE_SPEC)
+_STORE_SPEC.loader.exec_module(DURABLE_STORE)
+_ADMISSION_PATH = pathlib.Path(__file__).with_name("closed_duplicate_candidate_guard.py")
+_ADMISSION_SPEC = importlib.util.spec_from_file_location("closed_duplicate_candidate_guard_workflow_next", _ADMISSION_PATH)
+if _ADMISSION_SPEC is None or _ADMISSION_SPEC.loader is None:
+    raise RuntimeError(f"cannot load candidate admission guard at {_ADMISSION_PATH}")
+ADMISSION_GUARD = importlib.util.module_from_spec(_ADMISSION_SPEC)
+_ADMISSION_SPEC.loader.exec_module(ADMISSION_GUARD)
 
 
 TASK_UID_RE = re.compile(r"^task_[0-9a-f]{32}$")
@@ -966,9 +981,24 @@ def main() -> int:
         add_blocker(blockers, "stale identity: invalid task UID")
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 1
-    mapping, error = load_json(mapping_path)
-    if error or not isinstance(mapping, dict):
-        add_blocker(blockers, f"stale identity: canonical task mapping is unreadable ({error or 'not an object'})")
+    try:
+        mapping = DURABLE_STORE.read_mapping(mapping_path)
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        add_blocker(blockers, f"stale identity: canonical task mapping/retirement tombstone is invalid ({exc})")
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 1
+    if not isinstance(mapping, dict):
+        add_blocker(blockers, "stale identity: canonical task mapping is not an object")
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 1
+    try:
+        tombstone = DURABLE_STORE.retired_task(mapping, args.task_uid)
+    except ValueError as exc:
+        add_blocker(blockers, f"stale identity: retirement tombstone validation failed ({exc})")
+        print(json.dumps(payload, indent=2, sort_keys=True))
+        return 1
+    if tombstone is not None:
+        add_blocker(blockers, f"stale identity: task UID is retired by a validated tombstone: {args.task_uid}")
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 1
     task = (mapping.get("tasks") or {}).get(args.task_uid)
@@ -977,6 +1007,12 @@ def main() -> int:
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 1
     task = dict(task)
+    try:
+        ADMISSION_GUARD.guard_candidate_issue(mapping, mapping_path, args.task_uid, task)
+    except ADMISSION_GUARD.CandidateAdmissionError as exc:
+        add_blocker(blockers, f"stale identity: candidate live admission blocked: {exc}")
+        if exc.reconcile_command:
+            payload["reconcile_command"] = exc.reconcile_command
     if task.get("loop_binding") is not None:
         from loop_policy import validate_binding
         binding = task["loop_binding"]

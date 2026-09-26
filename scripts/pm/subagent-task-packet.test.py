@@ -33,6 +33,8 @@ class PacketTest(unittest.TestCase):
             (self.repo / path).mkdir(parents=True, exist_ok=True)
         shutil.copy2(SOURCE, self.repo / "scripts/pm/subagent-task-packet.py")
         shutil.copy2(SOURCE.with_name("ci_ready_receipt_identity.py"), self.repo / "scripts/pm/ci_ready_receipt_identity.py")
+        shutil.copy2(SOURCE.with_name("workflow-durable-store.py"), self.repo / "scripts/pm/workflow-durable-store.py")
+        shutil.copy2(SOURCE.with_name("closed_duplicate_candidate_guard.py"), self.repo / "scripts/pm/closed_duplicate_candidate_guard.py")
         for helper in ('loop_gate.py', 'loop.py', 'loop_recovery.py'):
             shutil.copy2(SOURCE.with_name(helper), self.repo / 'scripts/pm' / helper)
         fakebin = Path(self.tmp.name) / 'fakebin'

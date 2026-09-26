@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import os
 import subprocess
 import sys
 import tempfile
@@ -45,6 +46,22 @@ class WorkflowNextTest(unittest.TestCase):
             check=True,
         )
         self.mapping = self.root / ".pm/github-project-sync/tasks.json"
+        self.bin = Path(self.tmp.name) / "bin"
+        self.bin.mkdir()
+        gh_stub = self.bin / "gh"
+        gh_stub.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, sys\n"
+            "if len(sys.argv) == 3 and sys.argv[1] == 'api' and '/issues/' in sys.argv[2]:\n"
+            "    number = int(sys.argv[2].rsplit('/', 1)[1])\n"
+            f"    print(json.dumps({{'number': number, 'body': 'task_uid: {UID}', 'state': 'OPEN'}}))\n"
+            "else:\n"
+            "    print('unexpected gh fixture command', file=sys.stderr)\n"
+            "    sys.exit(2)\n"
+        )
+        gh_stub.chmod(0o755)
+        self.env = os.environ.copy()
+        self.env["PATH"] = f"{self.bin}{os.pathsep}{self.env.get('PATH', '')}"
 
     def tearDown(self) -> None:
         self.tmp.cleanup()
@@ -75,6 +92,7 @@ class WorkflowNextTest(unittest.TestCase):
              "--task-uid", UID, "--request-identity", "Workflow next fixture", "--producer", "fixture"],
             check=True,
             capture_output=True,
+            env=self.env,
         )
         task.update(updates)
         self.mapping.write_text(json.dumps({"version": 1, "project": {"owner": "fixture", "number": 1, "id": "PROJECT1"}, "tasks": {UID: task}}))
@@ -333,6 +351,7 @@ class WorkflowNextTest(unittest.TestCase):
             [sys.executable, str(SCRIPT), "--repo-root", str(query_root), "--task-uid", UID, "--json", *extra],
             text=True,
             capture_output=True,
+            env=self.env,
         )
         if not result.stdout.strip():
             raise AssertionError(f"workflow-next helper unavailable: {result.stderr.strip()}")
