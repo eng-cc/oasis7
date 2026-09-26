@@ -39,6 +39,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 PM = ROOT / "scripts/pm"
 HELPER = PM / "retire-closed-duplicate-candidate.py"
+BOOTSTRAP = PM / "bootstrap-task-snapshot.py"
 CANDIDATE_UID = "task_" + "a" * 32
 FOREIGN_UID = "task_" + "b" * 32
 CANDIDATE_ISSUE = 900001
@@ -46,6 +47,15 @@ REPLACEMENT_ISSUE = 900002
 FOREIGN_BRANCH = "codex/foreign-owner-fixture"
 FOREIGN_PR = 900003
 DISPOSITION_MARKER = "<!-- oasis7.duplicate-candidate-disposition/v1 -->"
+# Read-only GitHub schema introspection on 2026-09-27 reports these concrete
+# types for ProjectV2FieldConfiguration. Field-name selections must use inline
+# fragments because the field is a union, not an interface.
+PROJECT_FIELD_CONFIGURATION_TYPES = (
+    "ProjectV2Field",
+    "ProjectV2IterationField",
+    "ProjectV2MultiSelectField",
+    "ProjectV2SingleSelectField",
+)
 
 
 def canonical_bytes(value: object) -> bytes:
@@ -54,6 +64,27 @@ def canonical_bytes(value: object) -> bytes:
 
 def sha256(value: bytes) -> str:
     return "sha256:" + hashlib.sha256(value).hexdigest()
+
+
+def graphql_braced_selections(query: str, name: str) -> list[str]:
+    selections = []
+    for match in re.finditer(rf"\b{re.escape(name)}\s*\{{", query):
+        opening = query.find("{", match.start())
+        depth = 0
+        for index in range(opening, len(query)):
+            if query[index] == "{":
+                depth += 1
+            elif query[index] == "}":
+                depth -= 1
+                if depth == 0:
+                    selections.append(query[opening + 1:index])
+                    break
+    return selections
+
+
+def graphql_braced_selection(query: str, name: str) -> str:
+    selections = graphql_braced_selections(query, name)
+    return selections[0] if selections else ""
 
 
 def load_helper():
@@ -116,6 +147,23 @@ def foreign_record(foreign_worktree: Path) -> dict[str, object]:
     }
 
 
+def duplicate_issue_for_task_uid(proof: dict[str, object], source_issue_number: int, duplicate_issue_number: int) -> None:
+    issues = proof["issues"]["items"]
+    source = next(item for item in issues if item.get("number") == source_issue_number)
+    duplicate = copy.deepcopy(source)
+    duplicate["number"] = duplicate_issue_number
+    duplicate["url"] = f"https://github.com/eng-cc/oasis7/issues/{duplicate_issue_number}"
+    issues.append(duplicate)
+
+
+def duplicate_project_identity_for_task_uid(proof: dict[str, object], task_uid: str) -> None:
+    items = proof["project_items"]["items"]
+    source = next(item for item in items if item.get("task_uid") == task_uid)
+    duplicate = copy.deepcopy(source)
+    duplicate["id"] = f"{source['id']}_duplicate"
+    items.append(duplicate)
+
+
 class RetirementFixture:
     """An isolated registered worktree pair and non-networking gh command."""
 
@@ -132,8 +180,8 @@ class RetirementFixture:
         self.foreign_snapshot = self.foreign_worktree / ".pm/scratch" / FOREIGN_UID / "bootstrap-task-snapshot.json"
         self._create_git_worktrees()
         self._write_mapping()
-        self._write_foreign_snapshot()
         self._write_gh_stub()
+        self._write_foreign_snapshot()
 
     def _create_git_worktrees(self) -> None:
         self.repository.mkdir(parents=True)
@@ -146,7 +194,7 @@ class RetirementFixture:
         git("remote", "add", "origin", "https://github.com/eng-cc/oasis7.git", cwd=self.repository)
         git("branch", FOREIGN_BRANCH, cwd=self.repository)
         git("worktree", "add", "--quiet", "--detach", str(self.mapping_root), "main", cwd=self.repository)
-        git("worktree", "add", "--quiet", "--detach", str(self.foreign_worktree), FOREIGN_BRANCH, cwd=self.repository)
+        git("worktree", "add", "--quiet", str(self.foreign_worktree), FOREIGN_BRANCH, cwd=self.repository)
 
     def _write_mapping(self) -> None:
         self.mapping.parent.mkdir(parents=True, exist_ok=True)
@@ -161,19 +209,71 @@ class RetirementFixture:
         self.mapping.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
     def _write_foreign_snapshot(self) -> None:
-        snapshot = self.foreign_snapshot
-        snapshot.parent.mkdir(parents=True, exist_ok=True)
-        payload: dict[str, object] = {
-            "schema": "oasis7.bootstrap-task-snapshot/v1",
-            "task": {"task_uid": FOREIGN_UID, "issue_number": 900004},
-            "repository": "eng-cc/oasis7",
-            "git": {"worktree": str(self.foreign_worktree), "branch": FOREIGN_BRANCH},
-            "request": {"request_id": "foreign-fixture"},
-            "producer": "test-fixture",
-            "created_at": "2026-01-01T00:00:00Z",
-        }
-        payload["digest"] = sha256(canonical_bytes(payload))
-        snapshot.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        producer_mapping = self.foreign_worktree / ".pm/github-project-sync/tasks.json"
+        producer_mapping.parent.mkdir(parents=True, exist_ok=True)
+        producer_task = foreign_record(self.foreign_worktree)
+        producer_task.update(
+            {
+                "default_branch": "main",
+                "acceptance": ["preserve the independently mapped foreign task"],
+                "bootstrap_epoch": 1,
+            }
+        )
+        producer_mapping.write_text(
+            json.dumps(
+                {
+                    "version": 1,
+                    "project": {"repo": "eng-cc/oasis7", "owner": "eng-cc", "number": 1, "id": "PVT_fixture"},
+                    "tasks": {FOREIGN_UID: producer_task},
+                },
+                indent=2,
+                sort_keys=True,
+            ) + "\n",
+            encoding="utf-8",
+        )
+        environment = os.environ.copy()
+        environment["PATH"] = str(self.bin) + os.pathsep + environment.get("PATH", "")
+        environment["RETIREMENT_GH_LOG"] = str(self.gh_log)
+        result = subprocess.run(
+            [
+                sys.executable,
+                str(BOOTSTRAP),
+                "create",
+                "--repo-root", str(self.foreign_worktree),
+                "--tasks-json", str(producer_mapping),
+                "--task-uid", FOREIGN_UID,
+                "--request-identity", "foreign-fixture-request",
+                "--producer", "retirement-regression-test",
+            ],
+            cwd=ROOT,
+            env=environment,
+            text=True,
+            capture_output=True,
+            check=False,
+        )
+        if result.returncode != 0:
+            raise AssertionError(f"real bootstrap snapshot producer failed: {result.stderr.strip()}")
+        if self.gh_log.exists():
+            raise AssertionError("active foreign snapshot producer unexpectedly called GitHub")
+
+    def assert_canonical_snapshot_for_validator_isolation(self, proof: dict[str, object]) -> None:
+        """Keep RH-2 negative cases based on the real canonical producer bytes."""
+        snapshot_bytes = self.foreign_snapshot.read_bytes()
+        snapshot_payload = json.loads(snapshot_bytes)
+        if snapshot_payload.get("schema") != "oasis7.bootstrap-task-snapshot/v1":
+            raise AssertionError("RH-2 baseline must retain the canonical bootstrap snapshot schema")
+        if snapshot_payload.get("task", {}).get("uid") != FOREIGN_UID:
+            raise AssertionError("RH-2 baseline must retain the canonical producer task UID")
+        if snapshot_payload.get("task", {}).get("issue", {}).get("number") != 900004:
+            raise AssertionError("RH-2 baseline must retain the canonical producer Issue identity")
+        digest = snapshot_payload.pop("digest")
+        if sha256(canonical_bytes(snapshot_payload)) != digest:
+            raise AssertionError("RH-2 baseline snapshot producer digest is invalid")
+        foreign_owner = proof["artifact_discovery"]["foreign_owners"][0]
+        if str(self.foreign_snapshot) != foreign_owner["snapshot"]["path"]:
+            raise AssertionError("RH-2 baseline proof must bind the canonical snapshot path")
+        if sha256(snapshot_bytes) != foreign_owner["snapshot"]["sha256"]:
+            raise AssertionError("RH-2 baseline proof must bind the unchanged canonical snapshot bytes")
 
     def write_candidate_artifact(self, kind: str) -> Path:
         """Create a real local artifact under the candidate UID for CLI scans."""
@@ -182,7 +282,13 @@ class RetirementFixture:
             path = task_scratch / "bootstrap-task-snapshot.json"
             payload: dict[str, object] = {
                 "schema": "oasis7.bootstrap-task-snapshot/v1",
-                "task": {"task_uid": CANDIDATE_UID, "issue_number": CANDIDATE_ISSUE},
+                "task": {
+                    "uid": CANDIDATE_UID,
+                    "issue": {
+                        "number": CANDIDATE_ISSUE,
+                        "url": f"https://github.com/eng-cc/oasis7/issues/{CANDIDATE_ISSUE}",
+                    },
+                },
                 "repository": "eng-cc/oasis7",
                 "git": {"worktree": str(self.foreign_worktree), "branch": FOREIGN_BRANCH},
                 "request": {"request_id": "candidate-started-fixture"},
@@ -395,7 +501,12 @@ class RetirementFixture:
         )
         executable.chmod(0o755)
 
-    def _write_paginated_live_gh_stub(self, pagination_mode: str = "complete", validate_project_owner_schema: bool = False) -> None:
+    def _write_paginated_live_gh_stub(
+        self,
+        pagination_mode: str = "complete",
+        validate_project_owner_schema: bool = False,
+        validate_project_field_schema: bool = False,
+    ) -> None:
         """Install fake `gh` and logging `git` executables for CLI integration.
 
         The fake GH transport answers ordinary Issue, ProjectV2, comment,
@@ -420,6 +531,7 @@ class RetirementFixture:
                     "pull_requests": [[], proof["artifact_discovery"]["pull_requests"]],
                     "pagination_mode": pagination_mode,
                     "validate_project_owner_schema": validate_project_owner_schema,
+                    "validate_project_field_schema": validate_project_field_schema,
                 },
                 sort_keys=True,
             ),
@@ -434,8 +546,20 @@ class RetirementFixture:
             "fixture=json.loads(pathlib.Path(os.environ['RETIREMENT_GH_FIXTURE']).read_text(encoding='utf-8'))\n"
             "mode=fixture['pagination_mode']\n"
             "def emit(value): print(json.dumps(value,sort_keys=True))\n"
+            "joined=' '.join(args)\n"
+            "project_query='projectV2(number:' in joined\n"
+            "owner_root=('user' if re.search(r'\\buser\\s*\\(\\s*login\\s*:',joined) else 'organization' if re.search(r'\\borganization\\s*\\(\\s*login\\s*:',joined) else None)\n"
             "def field_values(item):\n"
-            "  return {'pageInfo':{'hasNextPage':False,'endCursor':None},'nodes':[{'name':v,'text':v,'field':{'name':k}} for k,v in item['fields'].items()]}\n"
+            "  query=' '.join(args)\n"
+            "  single_value=re.search(r'\\.\\.\\.\\s*on\\s*ProjectV2ItemFieldSingleSelectValue\\s*\\{\\s*name\\b',query) is not None\n"
+            "  text_value=re.search(r'\\.\\.\\.\\s*on\\s*ProjectV2ItemFieldTextValue\\s*\\{\\s*text\\b',query) is not None\n"
+            "  single_field=re.search(r'\\.\\.\\.\\s*on\\s*ProjectV2SingleSelectField\\s*\\{\\s*name\\s*\\}',query) is not None\n"
+            "  text_field=re.search(r'\\.\\.\\.\\s*on\\s*ProjectV2Field\\s*\\{\\s*name\\s*\\}',query) is not None\n"
+            "  nodes=[]\n"
+            "  for key,value in item['fields'].items():\n"
+            "    if key=='Canonical Worktree' and text_value and text_field: nodes.append({'text':value,'field':{'name':key}})\n"
+            "    elif key!='Canonical Worktree' and single_value and single_field: nodes.append({'name':value,'field':{'name':key}})\n"
+            "  return {'pageInfo':{'hasNextPage':False,'endCursor':None},'nodes':nodes}\n"
             "def gql_item(item):\n"
             "  issue=next((x for x in fixture['issues'] if x['number']==item['issue_number']),{})\n"
             "  return {'id':item['id'],'isArchived':item.get('archived',False),'project':{'id':item['project_id'],'number':item['project_number'],'owner':{'login':item['project_owner']}},'content':{'__typename':'Issue','number':item['issue_number'],'url':item['issue_url'],'body':issue.get('body',''),'state':issue.get('state',''),'stateReason':issue.get('state_reason')},'fieldValues':field_values(item)}\n"
@@ -450,13 +574,21 @@ class RetirementFixture:
             "  issue_end_cursor=('retirement-issue-cursor-1' if issue_has_next else None)\n"
             "  issue_connection={'nodes':issue_nodes,'pageInfo':{'hasNextPage':issue_has_next,'endCursor':issue_end_cursor}}\n"
             "  if mode=='issues_raw_list': issue_connection=fixture['issues']\n"
+            "  project_has_next=has_next\n"
+            "  project_cursor=cursor\n"
+            "  if mode=='project_user_partial' and owner_root=='user': project_has_next=True; project_cursor='retirement-cursor-1'\n"
+            "  if mode=='project_user_repeated_cursor' and owner_root=='user': project_has_next=True; project_cursor='retirement-cursor-1'\n"
+            "  if mode=='project_user_repeated_cursor' and owner_root=='user' and page>0: project_cursor='retirement-cursor-1'\n"
+            "  connection={'pageInfo':{'hasNextPage':project_has_next,'endCursor':project_cursor},'nodes':[gql_item(x) for x in selected]}\n"
             "  project={'id':'PVT_fixture','number':1,'owner':{'login':'eng-cc'},'items':connection}\n"
             "  issue_number=900002 if '900002' in ' '.join(args) else 900001\n"
             "  selected_issue=next(x for x in fixture['issues'] if x['number']==issue_number)\n"
             "  selected_items=[gql_item(x) for x in fixture['project_items'] if x['issue_number']==issue_number]\n"
             "  selected_issue=dict(selected_issue,projectItems={'pageInfo':{'hasNextPage':False,'endCursor':None},'nodes':selected_items})\n"
             "  repository={'issue':selected_issue,'issues':issue_connection}\n"
-            "  data={'organization':{'projectV2':project,'project':project},'repository':repository,'projectV2':project,'nodes':[gql_item(x) for x in selected]}\n"
+            "  data={'repository':repository}\n"
+            "  if owner_root: data[owner_root]={'projectV2':project}\n"
+            "  elif not project_query: data.update({'projectV2':project,'nodes':[gql_item(x) for x in selected]})\n"
             "  query=' '.join(args)\n"
             "  for alias in re.findall(r'\\b([A-Za-z_][A-Za-z_0-9]*):\\s*issue\\s*\\(',query):\n"
             "    key='replacement' if 'replacement' in alias.lower() else 'candidate'\n"
@@ -467,10 +599,28 @@ class RetirementFixture:
             "  return {'data':data}\n"
             "if args[:2]==['api','graphql']:\n"
             "  joined=' '.join(args)\n"
-            "  if fixture.get('validate_project_owner_schema') and 'projectV2(number:' in joined and re.search(r'owner\\s*\\{\\s*login\\s*\\}',joined) and '... on Organization' not in joined and '... on User' not in joined:\n"
-            "    emit({'errors':[{'message':'Cannot query field login on ProjectV2Owner interface'}]}); raise SystemExit(1)\n"
+            "  if fixture.get('validate_project_owner_schema') and project_query:\n"
+            "    missing_owner_fragments=[kind for kind in ('Organization','User') if re.search(r'\\.\\.\\.\\s*on\\s*'+kind+r'\\s*\\{\\s*login\\b',joined) is None]\n"
+            "    if missing_owner_fragments: emit({'errors':[{'message':'ProjectV2Owner union selections are incomplete: '+','.join(missing_owner_fragments)}]}); raise SystemExit(1)\n"
+            "  if fixture.get('validate_project_field_schema') and 'projectV2(number:' in joined:\n"
+            "    field_types=['ProjectV2Field','ProjectV2IterationField','ProjectV2MultiSelectField','ProjectV2SingleSelectField']\n"
+            "    missing_names=[name for name in field_types if re.search(r'\\.\\.\\.\\s*on\\s*'+name+r'\\s*\\{\\s*name\\s*\\}',joined) is None]\n"
+            "    missing_values=[name for name,pattern in [('ProjectV2ItemFieldSingleSelectValue',r'\\.\\.\\.\\s*on\\s*ProjectV2ItemFieldSingleSelectValue\\s*\\{\\s*name\\b'),('ProjectV2ItemFieldTextValue',r'\\.\\.\\.\\s*on\\s*ProjectV2ItemFieldTextValue\\s*\\{\\s*text\\b')] if re.search(pattern,joined) is None]\n"
+            "    if re.search(r'field\\s*\\{\\s*name\\s*\\}',joined) or missing_names or missing_values:\n"
+            "      emit({'errors':[{'message':'ProjectV2FieldConfiguration union/value selections are incomplete: '+','.join(missing_names+missing_values)}]}); raise SystemExit(1)\n"
             "  page=1 if 'retirement-cursor-1' in joined else 0\n"
+            "  if project_query and mode=='project_org_not_found_user_success' and owner_root=='organization': emit({'errors':[{'message':\"Could not resolve to an Organization with the login of 'eng-cc'.\"}]}); raise SystemExit(1)\n"
+            "  if project_query and mode=='project_org_auth_error' and owner_root=='organization': emit({'errors':[{'message':'Resource not accessible by integration'}]}); raise SystemExit(1)\n"
+            "  if project_query and mode=='project_org_schema_error' and owner_root=='organization': emit({'errors':[{'message':'Cannot query field unexpectedField on ProjectV2'}]}); raise SystemExit(1)\n"
+            "  if project_query and mode=='project_org_transport_error' and owner_root=='organization': print('fixture: Organization Project transport unavailable',file=sys.stderr); sys.exit(73)\n"
+            "  if project_query and mode in ('project_user_error','project_user_partial','project_user_repeated_cursor') and owner_root=='organization': emit({'errors':[{'message':\"Could not resolve to an Organization with the login of 'eng-cc'.\"}]}); raise SystemExit(1)\n"
+            "  if project_query and mode=='project_user_error' and owner_root=='user': emit({'errors':[{'message':'Resource not accessible by integration'}]}); raise SystemExit(1)\n"
+            "  if project_query and mode in ('project_user_partial','project_user_repeated_cursor') and owner_root=='user' and 'retirement-cursor-1' in joined and mode=='project_user_partial': print('fixture: later User Project page unavailable',file=sys.stderr); sys.exit(73)\n"
+            "  if project_query and owner_root is None: emit({'errors':[{'message':'fixture expected an explicit Project owner root'}]}); raise SystemExit(1)\n"
             "  if '--paginate' in args and '--slurp' in args and mode=='complete': emit([graph(0),graph(1)])\n"
+            "  elif '--paginate' in args and '--slurp' in args and mode=='project_org_not_found_user_success' and owner_root=='user': emit([graph(0),graph(1)])\n"
+            "  elif '--paginate' in args and '--slurp' in args and mode=='project_user_partial' and owner_root=='user': emit([graph(0)])\n"
+            "  elif '--paginate' in args and '--slurp' in args and mode=='project_user_repeated_cursor' and owner_root=='user': emit([graph(0)])\n"
             "  elif '--paginate' in args and '--slurp' in args and mode=='issues_incomplete' and 'retirement-issue-cursor-1' in ' '.join(args): print('fixture: later Issue page unavailable',file=sys.stderr); sys.exit(73)\n"
             "  elif '--paginate' in args and '--slurp' in args: emit([graph(0)])\n"
             "  else: emit(graph(page))\n"
@@ -850,6 +1000,133 @@ class RetirementHelperBoundaryTests(unittest.TestCase):
             self.assertEqual(foreign_git_before["foreign_readme"], (fixture.foreign_worktree / "README.fixture").read_bytes())
             self.assertEqual(foreign_git_before["foreign_snapshot"], fixture.foreign_snapshot.read_bytes())
 
+    def test_cli_project_query_uses_live_schema_valid_field_union_fragments(self):
+        with tempfile.TemporaryDirectory(prefix="retire-project-field-union-schema-") as temporary:
+            fixture = RetirementFixture(Path(temporary))
+            fixture._write_paginated_live_gh_stub(validate_project_field_schema=True)
+            before = fixture.mapping.read_bytes()
+
+            result = fixture.run_helper("preflight")
+
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertEqual(before, fixture.mapping.read_bytes(), "schema-valid Project preflight must remain read-only")
+            calls = [json.loads(line) for line in fixture.gh_log.read_text(encoding="utf-8").splitlines()]
+            graphql_calls = [call for call in calls if call[:2] == ["api", "graphql"] and "projectV2(number:" in " ".join(call)]
+            self.assertTrue(graphql_calls, "live provider did not query the canonical Project")
+            query = " ".join(graphql_calls[0])
+            field_configurations = graphql_braced_selections(query, "field")
+            self.assertEqual(2, len(field_configurations), "single-select and text values must each select their Project field")
+            for field_configuration in field_configurations:
+                for type_name in PROJECT_FIELD_CONFIGURATION_TYPES:
+                    self.assertEqual(
+                        "name",
+                        graphql_braced_selection(field_configuration, type_name).strip(),
+                        f"field configuration fragment {type_name} must select name",
+                    )
+                self.assertNotEqual("name", field_configuration.strip(), "union fields cannot select name directly")
+            for value_type, value_name in (
+                ("ProjectV2ItemFieldSingleSelectValue", "name"),
+                ("ProjectV2ItemFieldTextValue", "text"),
+            ):
+                value_selection = graphql_braced_selection(query, value_type)
+                self.assertTrue(value_selection, f"query must retain the {value_type} value variant")
+                self.assertIn(value_name, value_selection, f"query must select {value_name} from {value_type}")
+                nested_fields = graphql_braced_selections(value_selection, "field")
+                self.assertEqual(1, len(nested_fields), f"{value_type} must select its Project field name")
+                for type_name in PROJECT_FIELD_CONFIGURATION_TYPES:
+                    self.assertEqual(
+                        "name",
+                        graphql_braced_selection(nested_fields[0], type_name).strip(),
+                        f"{value_type} nested {type_name} fragment must select name",
+                    )
+
+    def test_cli_project_owner_fallback_uses_user_root_and_complete_pages(self):
+        with tempfile.TemporaryDirectory(prefix="retire-project-owner-user-fallback-") as temporary:
+            fixture = RetirementFixture(Path(temporary))
+            fixture._write_paginated_live_gh_stub(
+                "project_org_not_found_user_success",
+                validate_project_owner_schema=True,
+                validate_project_field_schema=True,
+            )
+            before = json.loads(fixture.mapping.read_text(encoding="utf-8"))
+
+            result = fixture.run_helper("apply")
+
+            self.assertEqual(0, result.returncode, result.stderr)
+            committed = json.loads(fixture.mapping.read_text(encoding="utf-8"))
+            self.assertNotIn(CANDIDATE_UID, committed["tasks"])
+            self.assertEqual(before["tasks"][FOREIGN_UID], committed["tasks"][FOREIGN_UID])
+            evidence = json.dumps(committed["retired_duplicate_candidates"][0]["evidence"], sort_keys=True)
+            self.assertIn(FOREIGN_UID, evidence, "the second User-root Project page must contribute foreign-owner proof")
+            self.assertIn(str(FOREIGN_PR), evidence)
+
+            calls = [json.loads(line) for line in fixture.gh_log.read_text(encoding="utf-8").splitlines()]
+            project_calls = [call for call in calls if call[:2] == ["api", "graphql"] and "projectV2(number:" in " ".join(call)]
+            roots = []
+            for call in project_calls:
+                query = " ".join(call)
+                if re.search(r"\buser\s*\(\s*login\s*:", query):
+                    roots.append("user")
+                elif re.search(r"\borganization\s*\(\s*login\s*:", query):
+                    roots.append("organization")
+                else:
+                    roots.append("missing")
+            self.assertEqual(["organization", "user"], roots, "only the explicit owner-type error may switch query roots")
+            user_calls = [call for call, root in zip(project_calls, roots) if root == "user"]
+            self.assertTrue(user_calls)
+            self.assertTrue(any("--paginate" in call and "--slurp" in call for call in user_calls))
+            user_query = " ".join(user_calls[0])
+            self.assertRegex(user_query, r"\.\.\.\s*on\s*Organization\s*\{\s*login\b")
+            self.assertRegex(user_query, r"\.\.\.\s*on\s*User\s*\{\s*login\b")
+
+    def test_cli_owner_fallback_errors_fail_closed_without_mapping_writes(self):
+        cases = (
+            ("project_org_auth_error", ["organization"], False),
+            ("project_org_schema_error", ["organization"], False),
+            ("project_org_transport_error", ["organization"], False),
+            ("project_user_error", ["organization", "user"], False),
+            ("project_user_partial", ["organization", "user"], True),
+            ("project_user_repeated_cursor", ["organization", "user"], True),
+        )
+        for pagination_mode, expected_roots, expects_cursor_resume in cases:
+            with self.subTest(pagination_mode=pagination_mode), tempfile.TemporaryDirectory(
+                prefix="retire-project-owner-fallback-fail-closed-"
+            ) as temporary:
+                fixture = RetirementFixture(Path(temporary))
+                fixture._write_paginated_live_gh_stub(
+                    pagination_mode,
+                    validate_project_owner_schema=True,
+                    validate_project_field_schema=True,
+                )
+                before = fixture.mapping.read_bytes()
+                foreign_snapshot_before = fixture.foreign_snapshot.read_bytes()
+
+                result = fixture.run_helper("apply")
+
+                self.assertNotEqual(0, result.returncode, result.stdout)
+                self.assertEqual(before, fixture.mapping.read_bytes())
+                self.assertEqual(foreign_snapshot_before, fixture.foreign_snapshot.read_bytes())
+                self.assertFalse(list(fixture.mapping.parent.glob("tasks.json.tmp.*")))
+                calls = [json.loads(line) for line in fixture.gh_log.read_text(encoding="utf-8").splitlines()]
+                project_calls = [call for call in calls if call[:2] == ["api", "graphql"] and "projectV2(number:" in " ".join(call)]
+                roots = []
+                for call in project_calls:
+                    query = " ".join(call)
+                    if re.search(r"\buser\s*\(\s*login\s*:", query):
+                        roots.append("user")
+                    elif re.search(r"\borganization\s*\(\s*login\s*:", query):
+                        roots.append("organization")
+                    else:
+                        roots.append("missing")
+                self.assertEqual(expected_roots, roots[:len(expected_roots)])
+                if expects_cursor_resume:
+                    self.assertTrue(roots[len(expected_roots):])
+                    self.assertTrue(all(root == "user" for root in roots[len(expected_roots):]))
+                    self.assertTrue(
+                        any("endCursor=retirement-cursor-1" in " ".join(call) for call in project_calls),
+                        "an advertised User-root cursor must be followed or rejected, never silently truncated",
+                    )
+
     def test_cli_rejects_incomplete_pagination_with_zero_mapping_writes(self):
         for pagination_mode in ("project_incomplete", "comments_incomplete", "pull_requests_incomplete"):
             with self.subTest(pagination_mode=pagination_mode), tempfile.TemporaryDirectory(
@@ -934,20 +1211,49 @@ class RetirementHelperBehaviorTests(unittest.TestCase):
             "missing production behavior: trusted closed-duplicate retirement helper",
         )
 
-    def _assert_rejected_without_partial_mapping_write(self, fixture: RetirementFixture, proof: dict[str, object]) -> None:
+    def _assert_rejected_without_partial_mapping_write(
+        self,
+        fixture: RetirementFixture,
+        proof: dict[str, object],
+        expected_error_pattern: str | None = None,
+    ) -> str:
         helper = load_helper()
         before = fixture.mapping.read_bytes()
+        snapshot_before = fixture.foreign_snapshot.read_bytes()
         error = None
         try:
             run_test_seam(fixture, "apply", proof)
         except helper.RetirementError as exc:
             error = exc
-        self.assertEqual(before, fixture.mapping.read_bytes(), "failed proof must not partially mutate mapping")
-        self.assertIsNotNone(error, "unsafe proof must fail closed")
+        failures = []
+        if error is None:
+            expected = f" with ambiguity diagnostic {expected_error_pattern!r}" if expected_error_pattern else ""
+            failures.append(f"unsafe proof was accepted instead of failing closed{expected}")
+        elif expected_error_pattern and re.search(expected_error_pattern, str(error)) is None:
+            failures.append(f"rejection did not identify the expected ambiguity: {error}")
+        if before != fixture.mapping.read_bytes():
+            failures.append("failed proof partially mutated the active task mapping")
+        if snapshot_before != fixture.foreign_snapshot.read_bytes():
+            failures.append("failed proof changed the foreign snapshot bytes")
+        if list(fixture.mapping.parent.glob("tasks.json.tmp.*")):
+            failures.append("rejected authority left a mapping temporary file")
+        self.assertFalse(failures, "; ".join(failures))
+        return str(error)
 
-    def test_preflight_is_complete_but_byte_for_byte_read_only(self):
+    def test_preflight_accepts_canonical_bootstrap_producer_snapshot(self):
         with tempfile.TemporaryDirectory(prefix="retire-duplicate-preflight-") as temporary:
             fixture = RetirementFixture(Path(temporary))
+            snapshot = json.loads(fixture.foreign_snapshot.read_text(encoding="utf-8"))
+            self.assertEqual(FOREIGN_UID, snapshot["task"]["uid"])
+            self.assertEqual(
+                {"number": 900004, "url": "https://github.com/eng-cc/oasis7/issues/900004"},
+                snapshot["task"]["issue"],
+                "fixture must match bootstrap-task-snapshot.py's canonical producer identity",
+            )
+            self.assertEqual("retirement-regression-test", snapshot["producer"])
+            digest = snapshot.pop("digest")
+            self.assertEqual(sha256(canonical_bytes(snapshot)), digest, "fixture digest must come from the producer's canonical payload")
+            self.assertFalse(fixture.gh_log.exists(), "active-task snapshot production must not access GitHub")
             before = fixture.mapping.read_bytes()
             result = run_test_seam(fixture, "preflight")
             self.assertEqual(before, fixture.mapping.read_bytes())
@@ -1029,12 +1335,18 @@ class RetirementHelperBehaviorTests(unittest.TestCase):
             self.assertIsNotNone(error, "apply must fail on permission drift since preflight")
 
     def test_incomplete_or_ambiguous_live_authority_and_invalid_disposition_fail_without_partial_write(self):
+        def duplicate_foreign_item(proof):
+            duplicate_project_identity_for_task_uid(proof, FOREIGN_UID)
+
         mutations = [
             ("incomplete Issue pagination", lambda p: p["issues"].update(complete=False)),
             ("ambiguous candidate Issue", lambda p: p["issues"]["items"].append(copy.deepcopy(p["issues"]["items"][0]))),
+            ("replacement UID repeated on a different Issue", lambda p: duplicate_issue_for_task_uid(p, REPLACEMENT_ISSUE, REPLACEMENT_ISSUE + 10)),
+            ("foreign UID repeated on a different Issue", lambda p: duplicate_issue_for_task_uid(p, 900004, 900004 + 10)),
             ("incomplete Project pagination", lambda p: p["project_items"].update(complete=False)),
             ("duplicate candidate Project item", lambda p: p["project_items"]["items"].append(copy.deepcopy(p["project_items"]["items"][0]))),
             ("duplicate replacement Project item", lambda p: p["project_items"]["items"].append(copy.deepcopy(p["project_items"]["items"][1]))),
+            ("duplicate foreign Project identity", duplicate_foreign_item),
             ("incomplete comment pagination", lambda p: p["candidate_comments"].update(complete=False)),
             ("ambiguous disposition comments", lambda p: p["candidate_comments"]["items"].append(copy.deepcopy(p["candidate_comments"]["items"][1]))),
             ("comment ID/body mismatch", lambda p: p["comment_by_id"].update(body="different server body")),
@@ -1088,12 +1400,24 @@ class RetirementHelperBehaviorTests(unittest.TestCase):
             ("foreign worktree branch mismatch", lambda p: p["artifact_discovery"]["foreign_owners"][0]["worktree"].update(branch="unexpected-branch")),
             ("foreign snapshot digest mismatch", lambda p: p["artifact_discovery"]["foreign_owners"][0]["snapshot"].update(sha256="sha256:stale")),
         ]
+        specific_rejection = {
+            "replacement UID repeated on a different Issue": r"(?i)replacement.*UID.*(duplicated|ambiguous)",
+            "foreign UID repeated on a different Issue": r"(?i)foreign.*UID.*(duplicated|ambiguous)",
+            "duplicate foreign Project identity": r"(?i)foreign.*Project.*(duplicated|ambiguous)",
+        }
         for name, mutate in mutations:
             with self.subTest(name=name), tempfile.TemporaryDirectory(prefix="retire-duplicate-negative-") as temporary:
                 fixture = RetirementFixture(Path(temporary))
                 proof = fixture.live_proof()
+                fixture.assert_canonical_snapshot_for_validator_isolation(proof)
+                baseline = run_test_seam(fixture, "preflight", proof)
+                self.assertIn(baseline.get("status"), {"preflight_ok", "ready"}, "isolation baseline must be valid before mutation")
                 mutate(proof)
-                self._assert_rejected_without_partial_mapping_write(fixture, proof)
+                self._assert_rejected_without_partial_mapping_write(
+                    fixture,
+                    proof,
+                    expected_error_pattern=specific_rejection.get(name),
+                )
 
     def test_any_candidate_owned_work_or_unregistered_artifact_blocks_with_zero_writes(self):
         artifact_keys = (

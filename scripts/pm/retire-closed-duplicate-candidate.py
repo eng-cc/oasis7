@@ -29,6 +29,12 @@ SCHEMA = "oasis7.duplicate-candidate-retirement/v1"
 DISPOSITION_MARKER = "<!-- oasis7.duplicate-candidate-disposition/v1 -->"
 TASK_UID_RE = re.compile(r"task_[0-9a-f]{32}\Z")
 GITHUB_REPO_RE = re.compile(r"[^/\s]+/[^/\s]+\Z")
+PROJECT_FIELD_CONFIGURATION_NAME_SELECTION = (
+    "... on ProjectV2Field { name } "
+    "... on ProjectV2IterationField { name } "
+    "... on ProjectV2MultiSelectField { name } "
+    "... on ProjectV2SingleSelectField { name }"
+)
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 STORE_PATH = pathlib.Path(__file__).with_name("workflow-durable-store.py")
 STORE_SPEC = importlib.util.spec_from_file_location("workflow_durable_store_retirement", STORE_PATH)
@@ -135,7 +141,9 @@ def _graphql_pages(query: str, **variables: str | int) -> list[dict[str, Any]]:
             raise RetirementError("GitHub GraphQL pagination page has no data object")
         if "items(first:" in query:
             organization = data.get("organization")
-            project = organization.get("projectV2") if isinstance(organization, dict) else None
+            user = data.get("user")
+            owner = organization if isinstance(organization, dict) else user
+            project = owner.get("projectV2") if isinstance(owner, dict) else None
             if not isinstance(project, dict):
                 project = data.get("projectV2")
             connection = project.get("items") if isinstance(project, dict) else None
@@ -270,6 +278,18 @@ def _collect_repository_issues(owner: str, name: str, repository: str) -> list[d
     return list(found.values())
 
 
+def _require_issue_in_complete_collection(
+    complete_issues: list[dict[str, Any]], direct_issue: dict[str, Any], label: str,
+) -> None:
+    issue_number = int(direct_issue.get("number") or 0)
+    matches = [issue for issue in complete_issues if int(issue.get("number") or 0) == issue_number]
+    _require(len(matches) == 1, f"complete Issue collection does not uniquely include the directly read {label} Issue")
+    _require(
+        matches[0] == direct_issue,
+        f"direct {label} Issue read differs from the complete paginated Issue collection",
+    )
+
+
 def _project_item_fields(raw: dict[str, Any]) -> tuple[dict[str, str], bool]:
     connection = raw.get("fieldValues")
     if not isinstance(connection, dict) or not isinstance(connection.get("nodes"), list):
@@ -312,7 +332,9 @@ def _project_node_to_item(raw: dict[str, Any], repository: str, project: dict[st
 def _extract_project_connection(page: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     data = page.get("data")
     organization = data.get("organization") if isinstance(data, dict) else None
-    project = organization.get("projectV2") if isinstance(organization, dict) else None
+    user = data.get("user") if isinstance(data, dict) else None
+    owner = organization if isinstance(organization, dict) else user
+    project = owner.get("projectV2") if isinstance(owner, dict) else None
     if not isinstance(project, dict):
         data_project = data.get("projectV2") if isinstance(data, dict) else None
         project = data_project if isinstance(data_project, dict) else None
@@ -329,17 +351,34 @@ def _extract_project_connection(page: dict[str, Any]) -> tuple[dict[str, Any], d
 
 
 def _collect_project_items(owner: str, number: int, repository: str) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    query = (
-        "query RetirementProject($owner: String!, $number: Int!, $endCursor: String) { "
-        "organization(login: $owner) { projectV2(number: $number) { id number owner { "
-        "... on Organization { login } ... on User { login } } "
-        "items(first: 100, after: $endCursor) { nodes { id isArchived content { __typename "
-        "... on Issue { number url state stateReason body repository { nameWithOwner } } } "
-        "fieldValues(first: 100) { nodes { ... on ProjectV2ItemFieldSingleSelectValue { name field { name } } "
-        "... on ProjectV2ItemFieldTextValue { text field { name } } } pageInfo { hasNextPage endCursor } } } "
-        "pageInfo { hasNextPage endCursor } } } } }"
-    )
-    pages = _graphql_pages(query, owner=owner, number=number)
+    def query_for(owner_kind: str) -> str:
+        return (
+            "query RetirementProject($owner: String!, $number: Int!, $endCursor: String) { "
+            + owner_kind
+            + "(login: $owner) { projectV2(number: $number) { id number owner { "
+            "... on Organization { login } ... on User { login } } "
+            "items(first: 100, after: $endCursor) { nodes { id isArchived content { __typename "
+            "... on Issue { number url state stateReason body repository { nameWithOwner } } } "
+            "fieldValues(first: 100) { nodes { ... on ProjectV2ItemFieldSingleSelectValue { name field { "
+            + PROJECT_FIELD_CONFIGURATION_NAME_SELECTION
+            + " } } ... on ProjectV2ItemFieldTextValue { text field { "
+            + PROJECT_FIELD_CONFIGURATION_NAME_SELECTION
+            + " } } } pageInfo { hasNextPage endCursor } } } "
+            "pageInfo { hasNextPage endCursor } } } } }"
+        )
+
+    query = query_for("organization")
+    try:
+        pages = _graphql_pages(query, owner=owner, number=number)
+    except RetirementError as exc:
+        # owner may name a personal account rather than an Organization.
+        # Fall back only on GitHub's explicit owner-type resolution error;
+        # auth, transport, schema, and pagination failures remain blockers.
+        owner_not_organization = f"Could not resolve to an Organization with the login of '{owner}'."
+        if owner_not_organization not in str(exc):
+            raise
+        query = query_for("user")
+        pages = _graphql_pages(query, owner=owner, number=number)
     expected_project: dict[str, Any] | None = None
     items: list[dict[str, Any]] = []
     pagination: list[bool | None] = []
@@ -388,6 +427,40 @@ def _collect_project_items(owner: str, number: int, repository: str) -> tuple[di
 def _task_uid_from_body(body: str) -> str:
     matches = re.findall(r"(?m)^task_uid:\s*(task_[0-9a-f]{32})\s*$", body)
     return matches[0] if len(matches) == 1 else ""
+
+
+def _issue_uid_markers(issue: dict[str, Any]) -> set[str]:
+    body = str(issue.get("body") or "")
+    markers = set(re.findall(r"(?m)^task_uid:\s*(task_[0-9a-f]{32})\s*$", body))
+    declared = issue.get("task_uid")
+    if isinstance(declared, str) and TASK_UID_RE.fullmatch(declared):
+        markers.add(declared)
+    return markers
+
+
+def _require_unique_issue_uid(
+    issues: list[dict[str, Any]], task_uid: str, issue_number: int, label: str,
+) -> dict[str, Any]:
+    matches = [issue for issue in issues if task_uid in _issue_uid_markers(issue)]
+    _require(len(matches) == 1, f"{label} Issue Task UID is duplicated or ambiguous across Issues")
+    _require(
+        int(matches[0].get("number") or 0) == issue_number,
+        f"{label} Issue Task UID is bound to a different Issue number",
+    )
+    return matches[0]
+
+
+def _require_unique_project_uid(
+    items: list[dict[str, Any]], repository: str, task_uid: str, issue_number: int, label: str,
+) -> dict[str, Any]:
+    matches = [item for item in items if item.get("task_uid") == task_uid]
+    _require(len(matches) == 1, f"{label} Project Task UID is duplicated or ambiguous across Project items")
+    item = matches[0]
+    _require(
+        item.get("repository") == repository and int(item.get("issue_number") or 0) == issue_number,
+        f"{label} Project Task UID is bound to a different Issue identity",
+    )
+    return item
 
 
 def _issue_metadata(issue: dict[str, Any]) -> dict[str, str]:
@@ -718,12 +791,14 @@ def _collect_foreign_owners(
         raise RetirementError("cached foreign task is terminal; duplicate mapping needs separate reconciliation")
     issue_number = int(record.get("issue_number") or 0)
     issue = _read_issue(repository, issue_number)
-    item = next(
-        (value for value in project_items if value.get("issue_number") == issue_number and value.get("task_uid") == foreign_uid),
-        None,
-    )
-    if item is None:
+    foreign_items = [
+        value for value in project_items
+        if value.get("issue_number") == issue_number and value.get("task_uid") == foreign_uid
+        and value.get("repository") == repository
+    ]
+    if len(foreign_items) != 1:
         raise RetirementError("foreign task has no unique live Project item")
+    item = foreign_items[0]
     worktree = next((value for value in worktrees if value.get("path") == cached_path), None)
     branch_item = next((value for value in branches if value.get("name") == cached_branch), None)
     if worktree is None or not worktree.get("registered") or worktree.get("branch") != cached_branch:
@@ -741,16 +816,15 @@ def _collect_foreign_owners(
     unsigned_snapshot.pop("digest", None)
     if snapshot_digest != canonical_digest(unsigned_snapshot):
         raise RetirementError("foreign task bootstrap snapshot digest is invalid")
-    snapshot_task = snapshot.get("task") or {}
-    snapshot_git = snapshot.get("git") or {}
-    if (
-        snapshot_task.get("task_uid") != foreign_uid
-        or str(snapshot_task.get("issue_number")) != str(issue_number)
-        or snapshot.get("repository") != repository
-        or str(pathlib.Path(str(snapshot_git.get("worktree") or "")).resolve()) != cached_path
-        or snapshot_git.get("branch") != cached_branch
-    ):
-        raise RetirementError("foreign task bootstrap snapshot identity differs from its mapping")
+    _validate_foreign_snapshot_payload(
+        snapshot,
+        record,
+        issue,
+        repository,
+        mapping.get("project") or {},
+        cached_path,
+        cached_branch,
+    )
     prs = [pr for pr in pull_requests if _pr_binds_task(pr, record, foreign_uid)]
     mapped_pr = int(record.get("pr_number") or 0)
     if mapped_pr:
@@ -789,6 +863,79 @@ def _terminal_record(record: dict[str, Any]) -> bool:
     return str(record.get("status") or "") in {"done", "deferred"} or str(record.get("workflow_phase") or "") in {
         "task_done", "main_sync", "closed_without_merge", "post_merge_done"
     }
+
+
+def _validate_foreign_snapshot_payload(
+    payload: Any,
+    record: dict[str, Any],
+    issue: dict[str, Any],
+    repository: str,
+    project: dict[str, Any],
+    expected_worktree: str,
+    expected_branch: str,
+) -> None:
+    _require(
+        isinstance(payload, dict) and payload.get("schema") == "oasis7.bootstrap-task-snapshot/v1",
+        "foreign immutable snapshot schema is unsupported",
+    )
+    task = payload.get("task")
+    _require(isinstance(task, dict), "foreign immutable snapshot task identity is malformed")
+    snapshot_issue = task.get("issue")
+    snapshot_project = task.get("project")
+    snapshot_git = payload.get("git")
+    snapshot_base = snapshot_git.get("base") if isinstance(snapshot_git, dict) else None
+    snapshot_request = payload.get("request")
+    _require(isinstance(snapshot_issue, dict), "foreign immutable snapshot Issue identity is malformed")
+    _require(isinstance(snapshot_project, dict), "foreign immutable snapshot Project identity is malformed")
+    _require(isinstance(snapshot_git, dict), "foreign immutable snapshot Git identity is malformed")
+    _require(isinstance(snapshot_base, dict), "foreign immutable snapshot base identity is malformed")
+    _require(isinstance(snapshot_request, dict), "foreign immutable snapshot request identity is malformed")
+
+    acceptance = task.get("acceptance")
+    _require(
+        isinstance(acceptance, list) and bool(acceptance)
+        and snapshot_request.get("acceptance") == acceptance
+        and isinstance(snapshot_request.get("identity"), str) and bool(snapshot_request["identity"]),
+        "foreign immutable snapshot request/acceptance binding is incomplete",
+    )
+    if isinstance(record.get("acceptance"), list):
+        _require(acceptance == record["acceptance"], "foreign immutable snapshot acceptance differs from its task mapping")
+    expected_epoch = record.get("bootstrap_epoch", 1)
+    _require(type(expected_epoch) is int and expected_epoch > 0, "foreign task mapping bootstrap epoch is malformed")
+    _require(task.get("bootstrap_epoch") == expected_epoch, "foreign immutable snapshot epoch differs from its task mapping")
+    _require(
+        task.get("uid") == record.get("task_uid")
+        and task.get("owner_role") == record.get("owner_role")
+        and snapshot_issue.get("number") == record.get("issue_number")
+        and snapshot_issue.get("url") == issue.get("url")
+        and snapshot_project.get("owner") == project.get("owner")
+        and int(snapshot_project.get("number") or 0) == int(project.get("number") or 0)
+        and snapshot_project.get("item_id") == record.get("project_item_id")
+        and snapshot_project.get("status") == record.get("status")
+        and payload.get("repository") == repository,
+        "foreign immutable snapshot Project/task identity differs from its task mapping",
+    )
+    _require(
+        str(pathlib.Path(str(snapshot_git.get("worktree") or "")).resolve()) == expected_worktree
+        and snapshot_git.get("branch") == expected_branch,
+        "foreign immutable snapshot worktree/branch identity differs from its task mapping",
+    )
+    default_branch = record.get("default_branch")
+    base_oid = str(snapshot_base.get("oid") or "")
+    head_oid = str(snapshot_git.get("head") or "")
+    _require(
+        isinstance(snapshot_base.get("branch"), str) and bool(snapshot_base["branch"])
+        and (not default_branch or snapshot_base.get("branch") == default_branch)
+        and isinstance(snapshot_base.get("ref"), str) and bool(snapshot_base["ref"])
+        and re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", base_oid) is not None
+        and re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", head_oid) is not None,
+        "foreign immutable snapshot Git base/head identity is malformed",
+    )
+    _require(
+        isinstance(payload.get("producer"), str) and bool(payload["producer"])
+        and isinstance(payload.get("created_at"), str) and bool(payload["created_at"]),
+        "foreign immutable snapshot producer provenance is incomplete",
+    )
 
 
 def _read_issue(repository: str, issue_number: int) -> dict[str, Any]:
@@ -845,25 +992,21 @@ class LiveProofProvider:
         issues = _collect_repository_issues(owner, name, repository)
         prs = _collect_pull_requests(repository)
         discovery = _artifact_discovery(mapping_root, mapping, task_uid, project_items, prs)
+        _require_issue_in_complete_collection(issues, candidate_issue, "candidate")
+        _require_issue_in_complete_collection(issues, replacement_issue, "replacement")
+        for owner_proof in discovery["foreign_owners"]:
+            _require_issue_in_complete_collection(issues, owner_proof["issue"], "foreign-owner")
         permission_raw = _gh_json(f"repos/{repository}/collaborators/{comment_by_id['user']['login']}/permission")
         permission = {
             "login": str((permission_raw.get("user") or {}).get("login") or comment_by_id["user"]["login"]),
             "permission": str(permission_raw.get("permission") or "").lower(),
         }
         comments = [_normalize_comment(comment, issue_number) for comment in candidate_comments_raw]
-        # The issue enumeration is intentionally a complete paginated read so
-        # duplicate task_uid markers elsewhere in this repository are visible.
         normalized_issues = [_normalize_issue_for_proof(issue) for issue in issues]
-        normalized_issues_by_number = {issue["number"]: issue for issue in normalized_issues}
-        normalized_issues_by_number[issue_number] = candidate_issue
-        normalized_issues_by_number[replacement_issue_number] = replacement_issue
-        for owner_proof in discovery["foreign_owners"]:
-            foreign_issue_number = int(owner_proof["mapping_record"].get("issue_number") or 0)
-            normalized_issues_by_number[foreign_issue_number] = owner_proof["issue"]
         return {
             "repository": repository,
             "project": project_live,
-            "issues": {"complete": True, "items": list(normalized_issues_by_number.values())},
+            "issues": {"complete": True, "items": normalized_issues},
             "project_items": {"complete": True, "items": project_items},
             "candidate_comments": {"complete": True, "items": comments},
             "comment_by_id": comment_by_id,
@@ -1008,18 +1151,17 @@ def _validate_live_proof(mapping: dict[str, Any], task_uid: str, row: dict[str, 
     issues = issues_payload.get("items")
     _require(isinstance(issues, list) and all(isinstance(item, dict) for item in issues), "Issue collection is malformed")
     candidate_issue = _unique_issue(issues, issue_number, task_uid, "candidate")
+    _require_unique_issue_uid(issues, task_uid, issue_number, "candidate")
     candidate_metadata = _validate_issue_identity(candidate_issue, repository, issue_number, task_uid, "candidate")
     _require(candidate_issue.get("state") == "CLOSED" and candidate_issue.get("state_reason") == "DUPLICATE", "candidate Issue is not closed as DUPLICATE")
     _require(candidate_metadata["status"] == "candidate" and candidate_metadata["workflow_phase"] == "bootstrap", "candidate Issue has started workflow")
     _require(not candidate_metadata["worktree_hint"] and not candidate_metadata["pr_number"] and not candidate_metadata["pr_url"], "candidate Issue records worktree or PR activity")
-    uid_occurrences = [item for item in issues if _task_uid_from_body(str(item.get("body") or "")) == task_uid]
-    _require(len(uid_occurrences) == 1 and uid_occurrences[0].get("number") == issue_number, "candidate Task UID is duplicated or ambiguous across Issues")
-
     items_payload = proof.get("project_items")
     _require(isinstance(items_payload, dict) and items_payload.get("complete") is True, "Project item pagination is incomplete")
     project_items = items_payload.get("items")
     _require(isinstance(project_items, list) and all(isinstance(item, dict) for item in project_items), "Project item collection is malformed")
     candidate_item = _unique_project_item(project_items, project, repository, issue_number, task_uid, "candidate")
+    _require_unique_project_uid(project_items, repository, task_uid, issue_number, "candidate")
     _require(candidate_item.get("id") == row.get("project_item_id"), "candidate Project item differs from cached mapping")
     fields = candidate_item.get("fields") or {}
     _require(fields.get("Status") == "Done", "candidate Project Status is not Done")
@@ -1062,9 +1204,11 @@ def _validate_live_proof(mapping: dict[str, Any], task_uid: str, row: dict[str, 
     replacement_issue_number = int(replacement_binding.get("issue_number") or 0)
     _require(replacement_issue_number > 0 and replacement_issue_number != issue_number, "replacement Issue number is invalid or aliases candidate")
     replacement_issue = _unique_issue(issues, replacement_issue_number, replacement_uid, "replacement")
+    _require_unique_issue_uid(issues, replacement_uid, replacement_issue_number, "replacement")
     replacement_metadata = _validate_issue_identity(replacement_issue, repository, replacement_issue_number, replacement_uid, "replacement")
     _require(replacement_issue.get("state_reason") != "DUPLICATE", "replacement Issue is itself closed as DUPLICATE")
     replacement_item = _unique_project_item(project_items, project, repository, replacement_issue_number, replacement_uid, "replacement")
+    _require_unique_project_uid(project_items, repository, replacement_uid, replacement_issue_number, "replacement")
     _require(replacement_item.get("id") == replacement_binding.get("project_item_id"), "replacement Project item differs from disposition binding")
     if replacement_issue.get("state") == "CLOSED" or replacement_metadata["workflow_phase"] in {"task_done", "main_sync", "post_merge_done"}:
         replacement_row = (mapping.get("tasks") or {}).get(replacement_uid)
@@ -1140,10 +1284,23 @@ def _validate_live_proof(mapping: dict[str, Any], task_uid: str, row: dict[str, 
         foreign_issue_number = int(foreign.get("issue_number") or 0)
         foreign_issue = owner.get("issue")
         _require(isinstance(foreign_issue, dict), "live foreign Issue evidence is missing")
+        _require_unique_issue_uid(issues, foreign_uid, foreign_issue_number, "foreign")
+        enumerated_foreign_issue = _unique_issue(issues, foreign_issue_number, foreign_uid, "foreign")
+        _require(
+            _normalize_issue_for_proof(enumerated_foreign_issue) == _normalize_issue_for_proof(foreign_issue),
+            "foreign Issue differs from its complete paginated Issue collection entry",
+        )
         _validate_issue_identity(foreign_issue, repository, foreign_issue_number, foreign_uid, "foreign")
         _require(foreign_issue.get("state") != "CLOSED" or foreign_issue.get("state_reason") != "DUPLICATE", "foreign task Issue is itself a closed duplicate")
         foreign_item = owner.get("project_item")
         _require(isinstance(foreign_item, dict), "live foreign Project item evidence is missing")
+        enumerated_foreign_item = _require_unique_project_uid(
+            project_items, repository, foreign_uid, foreign_issue_number, "foreign"
+        )
+        _require(
+            enumerated_foreign_item.get("id") == foreign_item.get("id"),
+            "foreign Project item differs from its complete Project collection entry",
+        )
         _require(
             foreign_item.get("repository") == repository
             and foreign_item.get("issue_number") == foreign_issue_number
@@ -1193,15 +1350,14 @@ def _validate_live_proof(mapping: dict[str, Any], task_uid: str, row: dict[str, 
         unsigned_snapshot = dict(snapshot_payload) if isinstance(snapshot_payload, dict) else {}
         unsigned_snapshot.pop("digest", None)
         _require(snapshot_payload_digest == canonical_digest(unsigned_snapshot), "foreign immutable snapshot payload digest is invalid")
-        snapshot_task = snapshot_payload.get("task") or {}
-        snapshot_git = snapshot_payload.get("git") or {}
-        _require(
-            snapshot_task.get("task_uid") == foreign_uid
-            and str(snapshot_task.get("issue_number")) == str(foreign_issue_number)
-            and snapshot_payload.get("repository") == repository
-            and str(pathlib.Path(str(snapshot_git.get("worktree") or "")).resolve()) == cached_path
-            and snapshot_git.get("branch") == cached_branch,
-            "foreign immutable snapshot identity differs from its task mapping",
+        _validate_foreign_snapshot_payload(
+            snapshot_payload,
+            foreign,
+            foreign_issue,
+            repository,
+            project,
+            cached_path,
+            cached_branch,
         )
         prs = owner.get("pull_requests")
         _require(isinstance(prs, list), "foreign PR evidence is malformed")
