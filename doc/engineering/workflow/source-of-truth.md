@@ -98,13 +98,10 @@ Every production receipt, applicability, closeout, lifecycle, merge, and release
 ## Lifecycle ownership
 TPM is the accountable workflow coordinator / integrator and continuation owner. A professional **phase owner** owns only its bounded slice; the **task owner role** remains accountable for task outcome and evidence. Bootstrap establishes truth and the router selects a phase; neither owns continuation.
 
-The **target production supervisor** is the durable runtime executor, not an
-accountability owner. It is `blocked`, so TPM coordinates each action explicitly.
+The **target production supervisor** is the durable runtime executor, not an accountability owner. It is `blocked`, so TPM coordinates each action explicitly.
 <a id="canonical-lifecycle"></a>
 ## Canonical state machine
-The production supervisor is a target runtime executor and is currently
-blocked; the state machine below defines required order, not implemented
-automation.
+The production supervisor is a target runtime executor and is currently blocked; the state machine below defines required order, not implemented automation.
 
 `bootstrap -> route -> professional execution -> freeze -> draft_candidate -> create/record/comment draft PR -> CI verify -> review -> pre_pr_ready -> promote_draft -> pr_watch/fix/reverify/review -> merge -> merge receipt -> task done -> main sync -> safe cleanup receipt -> post-merge finalize -> post_merge_done`; for an ordered multi-PR task, `merge -> merge receipt` returns to the next declared delivery obligation (or aggregate verification) and cannot enter `task done` until every required delivery is merged. A classified non-merge outcome may branch from bootstrap, planning, execution, or task done directly to `closed_without_merge` through the canonical non-merge finalizer.
 ## Workflow states
@@ -116,17 +113,14 @@ automation.
 - `failed`: a non-retryable contract violation; stop and escalate. Recovery
   requires an authorized new evidence epoch or a fresh bootstrap, not resume.
 
-This enumeration is closed; phase names and blocker reasons are separate fields.
-Recorded action authority is task/checkpoint-bound permission to execute or
-resume the typed action, not a role title.
+This enumeration is closed; phase names and blocker reasons are separate fields. Recorded action authority is task/checkpoint-bound permission to execute or resume the typed action, not a role title.
 
 <a id="canonical-gates"></a>
 ## Ready and Done
 
 These are the only gate definitions in this specification.
 
-Ordinary local `git commit` is not a gate: repository pre-commit hooks run no formatting or validation, and `scripts/pre-commit.sh` is only a silent legacy
-compatibility entrypoint. CI required and frozen-head readiness remain authoritative.
+Ordinary local `git commit` is not a gate: repository pre-commit hooks run no formatting or validation, and `scripts/pre-commit.sh` is only a silent legacy compatibility entrypoint. CI required and frozen-head readiness remain authoritative.
 
 <a id="freeze-gate"></a>
 **Freeze gate.**
@@ -282,8 +276,7 @@ The always-bootstrap rule protects traceability, but it must not turn every smal
   for a separate coordination task.
 
 ### 1.2.2 Learning Intake / Loop Closeout
-Reflection signal: use `capture-todo.sh` for an uncommitted cross-task idea;
-same-task evidence stays in the bound GitHub task.
+Reflection signal: use `capture-todo.sh` for an uncommitted cross-task idea; same-task evidence stays in the bound GitHub task.
 
 Learning artifacts are supporting context, never task truth: raw
 session/transcript material may be used only as explicit evidence, must first
