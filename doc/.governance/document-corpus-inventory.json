@@ -3843,7 +3843,7 @@
     },
     {
       "path": "doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.design.md",
-      "content_sha256": "cac0ae0257bbff09ff4110d677449b85d794a3f8fad9c404f02d579b741eeea4",
+      "content_sha256": "c9c41c05e250ef49d978e631935311e74ac7b129c311a6282d92c57e37801438",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -3857,7 +3857,7 @@
     },
     {
       "path": "doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md",
-      "content_sha256": "8c8162ed154e6f1487061167e79a647e870f328b15a84558b36126fd15fcd8ed",
+      "content_sha256": "b32a78a9185a9e62208d989a03a68d22ed064681eebe8be62f2d808d9e7d0cef",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
