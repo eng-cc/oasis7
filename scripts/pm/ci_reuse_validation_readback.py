@@ -88,7 +88,9 @@ def _decode_included_response(raw: bytes) -> tuple[dict[str, str], bytes]:
     return headers, body
 
 
-def _next_link(link_header: str | None, *, origin_path: str, current_url: str) -> str | None:
+def _next_link(
+    link_header: str | None, *, allowed_paths: frozenset[str], current_url: str,
+) -> str | None:
     if link_header is None:
         return None
     next_links: list[str] = []
@@ -104,8 +106,10 @@ def _next_link(link_header: str | None, *, origin_path: str, current_url: str) -
         return None
     candidate = next_links[0]
     parsed, current = urlsplit(candidate), urlsplit(current_url)
-    if (parsed.scheme != "https" or parsed.netloc != "api.github.com"
-            or parsed.path != origin_path or parsed.fragment):
+    if (current.scheme != "https" or current.netloc != "api.github.com"
+            or current.path not in allowed_paths or current.fragment
+            or parsed.scheme != "https" or parsed.netloc != "api.github.com"
+            or parsed.path not in allowed_paths or parsed.fragment):
         raise ReadbackError("GitHub pagination next link leaves the canonical API endpoint")
     try:
         from urllib.parse import parse_qs
@@ -113,14 +117,20 @@ def _next_link(link_header: str | None, *, origin_path: str, current_url: str) -
         current_params = parse_qs(current.query, keep_blank_values=True, strict_parsing=True)
     except ValueError as exc:
         raise ReadbackError("GitHub pagination query is malformed") from exc
-    if (set(params) != {"per_page", "page"} or params.get("per_page") != [str(PAGE_SIZE)]
+    if (set(params) != {"per_page", "page"}
+            or params.get("per_page") != [str(PAGE_SIZE)]
             or len(params.get("page", [])) != 1
             or not re.fullmatch(r"[1-9][0-9]*", params["page"][0])):
         raise ReadbackError("GitHub pagination next link changes the unfiltered page query")
     old_pages = current_params.get("page", ["1"])
-    if len(old_pages) != 1 or not old_pages[0].isdigit():
+    if (set(current_params) not in ({"per_page"}, {"per_page", "page"})
+            or current_params.get("per_page") != [str(PAGE_SIZE)]
+            or len(old_pages) != 1
+            or not re.fullmatch(r"[1-9][0-9]*", old_pages[0])):
         raise ReadbackError("GitHub pagination current page is malformed")
-    if int(params["page"][0]) != int(old_pages[0]) + 1:
+    expected_page = int(old_pages[0]) + 1
+    if (int(params["page"][0]) != expected_page
+            or parsed.query != f"per_page={PAGE_SIZE}&page={expected_page}"):
         raise ReadbackError("GitHub pagination next link is not the following page")
     return parsed.path + "?" + parsed.query
 
@@ -155,11 +165,15 @@ class GitHubReadOnly:
 
     def _paginated_observations(
         self, endpoint: str, *, collection_key: str | None,
+        allowed_paths: frozenset[str] | None = None,
     ) -> tuple[tuple[Any, bool], ...]:
         parsed = urlsplit(endpoint)
         if parsed.scheme or parsed.netloc or parsed.fragment or not parsed.path.startswith("repos/"):
             raise ReadbackError("GitHub pagination endpoint is not a repository-relative path")
         origin_path = "/" + parsed.path
+        accepted_paths = frozenset({origin_path}) if allowed_paths is None else allowed_paths
+        if origin_path not in accepted_paths or any(not path.startswith("/") for path in accepted_paths):
+            raise ReadbackError("GitHub pagination endpoint is outside its authenticated resource paths")
         current_url = API_ORIGIN + origin_path + ("?" + parsed.query if parsed.query else "")
         current_endpoint = endpoint
         visited: set[str] = set()
@@ -174,7 +188,9 @@ class GitHubReadOnly:
                     raise ReadbackError("GitHub paginated array is malformed")
             elif not isinstance(value, dict) or type(value.get(collection_key)) is not list:
                 raise ReadbackError("GitHub paginated collection is malformed")
-            following = _next_link(headers.get("link"), origin_path=origin_path, current_url=current_url)
+            following = _next_link(
+                headers.get("link"), allowed_paths=accepted_paths, current_url=current_url,
+            )
             pages.append((value, following is not None))
             if following is None:
                 return tuple(pages)
@@ -202,13 +218,29 @@ class GitHubReadOnly:
             collection_key=None,
         )
 
-    def workflow_run_pages(self, workflow_id: int) -> tuple[dict[str, Any], ...]:
+    def workflow_run_pages(
+        self, workflow_id: int, repository_id: int | None = None,
+    ) -> tuple[dict[str, Any], ...]:
         if type(workflow_id) is not int or workflow_id <= 0:
             raise ReadbackError("live workflow ID is invalid")
+        if (repository_id is not None
+                and (type(repository_id) is not int or repository_id <= 0)):
+            raise ReadbackError("live repository ID is invalid")
+        live_workflow_id, _default_branch, live_repository_id = _live_workflow(self)
+        if workflow_id != live_workflow_id:
+            raise ReadbackError("workflow-run pagination ID differs from live rust.yml")
+        if repository_id is not None and repository_id != live_repository_id:
+            raise ReadbackError("workflow-run pagination repository ID differs from live repository")
+        repository_id = live_repository_id
         # Intentionally no filter query: filtered Actions searches are capped.
+        workflow_paths = frozenset({
+            f"/repos/{REPOSITORY}/actions/workflows/{workflow_id}/runs",
+            f"/repositories/{repository_id}/actions/workflows/{workflow_id}/runs",
+        })
         observations = self._paginated_observations(
             f"repos/{REPOSITORY}/actions/workflows/{workflow_id}/runs?per_page={PAGE_SIZE}",
             collection_key="workflow_runs",
+            allowed_paths=workflow_paths,
         )
         pages: list[dict[str, Any]] = []
         for page, has_next in observations:
@@ -314,17 +346,22 @@ def _resolve_records(comment_pages: tuple[Any, ...]):
     return comments, authority
 
 
-def _live_workflow(api: GitHubReadOnly) -> tuple[int, str]:
+def _live_workflow(api: GitHubReadOnly) -> tuple[int, str, int]:
     repo = api.get_json(f"repos/{REPOSITORY}")
-    if not isinstance(repo, Mapping) or repo.get("default_branch") != "main":
-        raise ReadbackError("canonical repository default branch is not the frozen main branch")
+    owner = repo.get("owner") if isinstance(repo, Mapping) else None
+    repository_id = repo.get("id") if isinstance(repo, Mapping) else None
+    if (not isinstance(repo, Mapping) or repo.get("full_name") != REPOSITORY
+            or repo.get("name") != "oasis7" or not isinstance(owner, Mapping)
+            or owner.get("login") != "eng-cc" or type(repository_id) is not int
+            or repository_id <= 0 or repo.get("default_branch") != "main"):
+        raise ReadbackError("canonical repository identity or default branch is invalid")
     workflow = api.get_json(f"repos/{REPOSITORY}/actions/workflows/rust.yml")
     if (not isinstance(workflow, Mapping) or workflow.get("path") != WORKFLOW_FILE
             or type(workflow.get("id")) is not int or workflow["id"] <= 0):
         raise ReadbackError("canonical rust.yml workflow ID is missing or ambiguous")
     if workflow.get("state") != "active":
         raise ReadbackError("canonical rust.yml workflow is not active")
-    return workflow["id"], repo["default_branch"]
+    return workflow["id"], repo["default_branch"], repository_id
 
 
 def _run_identity(row: Mapping[str, Any], workflow_id: int, default_branch: str) -> dict[str, Any]:
@@ -777,8 +814,8 @@ def read_validation(api: GitHubReadOnly | None = None) -> dict[str, Any]:
     if (request["task_uid"] != task_uid or request["head_oid"] != pr_head
             or request["integration_base_oid"] != pr.get("base", {}).get("sha")):
         raise ReadbackError("frozen request differs from live Task UID or PR head")
-    workflow_id, default_branch = _live_workflow(api)
-    pages = api.workflow_run_pages(workflow_id)
+    workflow_id, default_branch, repository_id = _live_workflow(api)
+    pages = api.workflow_run_pages(workflow_id, repository_id)
     complete_runs = contract.collect_workflow_runs(pages)
     selected = contract.select_unique_run(complete_runs, provisional)
     run = _read_live_run(api, selected, workflow_id, default_branch)
@@ -823,7 +860,7 @@ def read_validation(api: GitHubReadOnly | None = None) -> dict[str, Any]:
         api, authority, trusted_context, authority_record, run["created_at"],
     )
     _compare_authority(authority, final_authority)
-    final_pages = api.workflow_run_pages(workflow_id)
+    final_pages = api.workflow_run_pages(workflow_id, repository_id)
     final_runs = contract.collect_workflow_runs(final_pages)
     final_selected = contract.select_unique_run(final_runs, final_authority)
     if final_selected.get("id") != run["id"] or final_selected.get("display_title") != run["display_title"]:
