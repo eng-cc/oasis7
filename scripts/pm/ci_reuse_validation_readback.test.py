@@ -3,7 +3,9 @@
 
 from __future__ import annotations
 
+import ast
 import importlib.util
+import inspect
 import io
 import json
 from pathlib import Path
@@ -27,9 +29,239 @@ def http_response(body: bytes, *, link: str | None = None, status: str = "200 OK
     return ("\r\n".join(headers) + "\r\n\r\n").encode("ascii") + body
 
 
+def patch_live_workflow_metadata(api, *, repository_id=1148737145, workflow_id=230018940):
+    responses = {
+        "repos/eng-cc/oasis7": {
+            "id": repository_id, "name": "oasis7", "full_name": "eng-cc/oasis7",
+            "owner": {"login": "eng-cc"}, "default_branch": "main",
+        },
+        "repos/eng-cc/oasis7/actions/workflows/rust.yml": {
+            "id": workflow_id, "path": readback.WORKFLOW_FILE, "state": "active",
+        },
+    }
+
+    def get_json(endpoint):
+        if endpoint not in responses:
+            raise AssertionError(f"unexpected live identity read: {endpoint}")
+        return responses[endpoint]
+
+    return patch.object(api, "get_json", side_effect=get_json)
+
+
 class GitHubPaginationTests(unittest.TestCase):
+    def test_producer_run_discovery_calls_the_compatible_one_argument_api(self):
+        producer_path = Path(__file__).with_name("ci-reuse-validation.py")
+        producer_tree = ast.parse(producer_path.read_text(encoding="utf-8"))
+        calls = [
+            node for node in ast.walk(producer_tree)
+            if isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr == "workflow_run_pages"
+        ]
+
+        self.assertEqual(2, len(calls))
+        self.assertTrue(all(len(call.args) == 1 and not call.keywords for call in calls))
+        self.assertTrue(all(
+            isinstance(call.args[0], ast.Name) and call.args[0].id == "workflow_id"
+            for call in calls
+        ))
+        repository_id = inspect.signature(
+            readback.GitHubReadOnly.workflow_run_pages,
+        ).parameters["repository_id"]
+        self.assertIsNone(repository_id.default)
+
+    def test_live_workflow_binds_canonical_repository_id_and_workflow(self):
+        api = readback.GitHubReadOnly()
+        with patch.object(api, "get_json", side_effect=[
+            {
+                "id": 1148737145,
+                "name": "oasis7",
+                "full_name": "eng-cc/oasis7",
+                "owner": {"login": "eng-cc"},
+                "default_branch": "main",
+            },
+            {"id": 230018940, "path": readback.WORKFLOW_FILE, "state": "active"},
+        ]) as get:
+            identity = readback._live_workflow(api)
+
+        self.assertEqual((230018940, "main", 1148737145), identity)
+        self.assertEqual([
+            "repos/eng-cc/oasis7",
+            "repos/eng-cc/oasis7/actions/workflows/rust.yml",
+        ], [call.args[0] for call in get.call_args_list])
+
+    def test_live_workflow_rejects_wrong_repository_or_workflow_identity(self):
+        bad_repositories = [
+            {"id": 1148737146, "name": "oasis7", "full_name": "other/oasis7",
+             "owner": {"login": "other"}, "default_branch": "main"},
+            {"id": True, "name": "oasis7", "full_name": "eng-cc/oasis7",
+             "owner": {"login": "eng-cc"}, "default_branch": "main"},
+            {"id": 1148737145, "name": "oasis7", "full_name": "eng-cc/oasis7",
+             "owner": {"login": "eng-cc"}, "default_branch": "develop"},
+        ]
+        for repository in bad_repositories:
+            with self.subTest(repository=repository):
+                api = readback.GitHubReadOnly()
+                with patch.object(api, "get_json", side_effect=[
+                    repository,
+                    {"id": 230018940, "path": readback.WORKFLOW_FILE, "state": "active"},
+                ]):
+                    with self.assertRaisesRegex(readback.ReadbackError, "canonical repository"):
+                        readback._live_workflow(api)
+
+        bad_workflows = [
+            {"id": True, "path": readback.WORKFLOW_FILE, "state": "active"},
+            {"id": 0, "path": readback.WORKFLOW_FILE, "state": "active"},
+            {"id": 230018940, "path": ".github/workflows/other.yml", "state": "active"},
+            {"id": 230018940, "path": readback.WORKFLOW_FILE, "state": "disabled"},
+        ]
+        for workflow in bad_workflows:
+            with self.subTest(workflow=workflow):
+                api = readback.GitHubReadOnly()
+                with patch.object(api, "get_json", side_effect=[
+                    {
+                        "id": 1148737145, "name": "oasis7", "full_name": "eng-cc/oasis7",
+                        "owner": {"login": "eng-cc"}, "default_branch": "main",
+                    }, workflow,
+                ]):
+                    with self.assertRaisesRegex(readback.ReadbackError, "canonical rust.yml workflow"):
+                        readback._live_workflow(api)
+
+    def test_run_pages_accept_authenticated_slug_to_numeric_repository_alias(self):
+        workflow_id = 230018940
+        repository_id = 1148737145
+        rows = [
+            {"id": 1, "display_title": "first"},
+            {"id": 2, "display_title": "second"},
+        ]
+        first = readback.json.dumps(
+            {"total_count": 2, "workflow_runs": rows[:1]}, separators=(",", ":"),
+        ).encode("utf-8")
+        second = readback.json.dumps(
+            {"total_count": 2, "workflow_runs": rows[1:]}, separators=(",", ":"),
+        ).encode("utf-8")
+        next_link = (
+            f'<https://api.github.com/repositories/{repository_id}/actions/workflows/'
+            f'{workflow_id}/runs?per_page=100&page=2>; rel="next"'
+        )
+        api = readback.GitHubReadOnly()
+        with patch_live_workflow_metadata(api) as identity_read, patch.object(
+            readback.subprocess, "check_output", side_effect=[
+                http_response(first, link=next_link), http_response(second),
+            ],
+        ) as call:
+            # This is the exact one-argument call used by the validation producer.
+            page_values = api.workflow_run_pages(workflow_id)
+
+        self.assertEqual([[rows[0]], [rows[1]]], [page["runs"] for page in page_values])
+        self.assertEqual([2, 2], [page["total_count"] for page in page_values])
+        self.assertEqual([True, False], [page["has_next"] for page in page_values])
+        self.assertEqual([
+            "repos/eng-cc/oasis7",
+            "repos/eng-cc/oasis7/actions/workflows/rust.yml",
+        ], [call.args[0] for call in identity_read.call_args_list])
+        self.assertEqual(
+            [
+                f"repos/eng-cc/oasis7/actions/workflows/{workflow_id}/runs?per_page=100",
+                f"repositories/{repository_id}/actions/workflows/{workflow_id}/runs?per_page=100&page=2",
+            ],
+            [invocation.args[0][-1] for invocation in call.call_args_list],
+        )
+
+    def test_run_pages_reject_supplied_repository_id_that_differs_from_live_id(self):
+        api = readback.GitHubReadOnly()
+        with patch_live_workflow_metadata(api):
+            with self.assertRaisesRegex(readback.ReadbackError, "differs from live repository"):
+                api.workflow_run_pages(230018940, 1148737146)
+
+    def test_run_pagination_rejects_noncanonical_repository_or_workflow_alias(self):
+        workflow_id = 230018940
+        repository_id = 1148737145
+        bad_targets = [
+            f"https://api.github.com/repositories/{repository_id + 1}/actions/workflows/{workflow_id}/runs?per_page=100&page=2",
+            f"https://api.github.com/repositories/{repository_id}/actions/workflows/{workflow_id + 1}/runs?per_page=100&page=2",
+            f"https://api.github.com/repos/other/oasis7/actions/workflows/{workflow_id}/runs?per_page=100&page=2",
+        ]
+        payload = readback.json.dumps(
+            {"total_count": 2, "workflow_runs": [{"id": 1, "display_title": "x"}]},
+            separators=(",", ":"),
+        ).encode("utf-8")
+        for target in bad_targets:
+            with self.subTest(target=target):
+                api = readback.GitHubReadOnly()
+                with patch_live_workflow_metadata(api), patch.object(
+                    readback.subprocess, "check_output", return_value=http_response(
+                        payload, link=f'<{target}>; rel="next"',
+                    ),
+                ):
+                    with self.assertRaisesRegex(readback.ReadbackError, "pagination"):
+                        api.workflow_run_pages(workflow_id, repository_id)
+
+    def test_run_pagination_rejects_extra_mutated_or_nonsequential_query(self):
+        workflow_id = 230018940
+        repository_id = 1148737145
+        bad_queries = [
+            "per_page=99&page=2",
+            "per_page=100&page=2&event=workflow_dispatch",
+            "per_page=100&page=3",
+            "per_page=100&page=02",
+            "page=2&per_page=100",
+        ]
+        payload = readback.json.dumps(
+            {"total_count": 2, "workflow_runs": [{"id": 1, "display_title": "x"}]},
+            separators=(",", ":"),
+        ).encode("utf-8")
+        for query in bad_queries:
+            with self.subTest(query=query):
+                target = (
+                    f"https://api.github.com/repositories/{repository_id}/actions/workflows/"
+                    f"{workflow_id}/runs?{query}"
+                )
+                api = readback.GitHubReadOnly()
+                with patch_live_workflow_metadata(api), patch.object(
+                    readback.subprocess, "check_output", return_value=http_response(
+                        payload, link=f'<{target}>; rel="next"',
+                    ),
+                ):
+                    with self.assertRaisesRegex(readback.ReadbackError, "pagination"):
+                        api.workflow_run_pages(workflow_id, repository_id)
+
+    def test_run_pagination_rejects_duplicate_next_relations_and_invalid_identity_values(self):
+        workflow_id = 230018940
+        repository_id = 1148737145
+        payload = readback.json.dumps(
+            {"total_count": 2, "workflow_runs": [{"id": 1, "display_title": "x"}]},
+            separators=(",", ":"),
+        ).encode("utf-8")
+        link = (
+            f'<https://api.github.com/repositories/{repository_id}/actions/workflows/{workflow_id}'
+            '/runs?per_page=100&page=2>; rel="next", '
+            f'<https://api.github.com/repos/eng-cc/oasis7/actions/workflows/{workflow_id}'
+            '/runs?per_page=100&page=2>; rel="next"'
+        )
+        api = readback.GitHubReadOnly()
+        with patch_live_workflow_metadata(api), patch.object(
+            readback.subprocess, "check_output", return_value=http_response(
+                payload, link=link,
+            ),
+        ):
+            with self.assertRaisesRegex(readback.ReadbackError, "multiple next"):
+                api.workflow_run_pages(workflow_id, repository_id)
+
+        for invalid_workflow_id, invalid_repository_id in (
+            (True, repository_id), (workflow_id, True), (workflow_id, 0),
+        ):
+            with self.subTest(
+                workflow_id=invalid_workflow_id, repository_id=invalid_repository_id,
+            ):
+                with self.assertRaisesRegex(readback.ReadbackError, "ID is invalid"):
+                    readback.GitHubReadOnly().workflow_run_pages(
+                        invalid_workflow_id, invalid_repository_id,
+                    )
+
     def test_unfiltered_run_pages_continue_past_search_ceiling(self):
         workflow_id = 230018940
+        repository_id = 1148737145
         rows = [{"id": index, "display_title": f"unrelated-{index}"}
                 for index in range(1, 1002)]
         pages = [rows[offset:offset + 100] for offset in range(0, len(rows), 100)]
@@ -38,7 +270,7 @@ class GitHubPaginationTests(unittest.TestCase):
             next_link = None
             if index < len(pages):
                 next_link = (
-                    f'<https://api.github.com/repos/eng-cc/oasis7/actions/workflows/'
+                    f'<https://api.github.com/repositories/{repository_id}/actions/workflows/'
                     f'{workflow_id}/runs?per_page=100&page={index + 1}>; rel="next"'
                 )
             payload = readback.json.dumps(
@@ -47,8 +279,11 @@ class GitHubPaginationTests(unittest.TestCase):
             ).encode("utf-8")
             responses.append(http_response(payload, link=next_link))
 
-        with patch.object(readback.subprocess, "check_output", side_effect=responses) as call:
-            page_values = readback.GitHubReadOnly().workflow_run_pages(workflow_id)
+        api = readback.GitHubReadOnly()
+        with patch_live_workflow_metadata(api), patch.object(
+            readback.subprocess, "check_output", side_effect=responses,
+        ) as call:
+            page_values = api.workflow_run_pages(workflow_id, repository_id)
 
         self.assertEqual(len(pages), len(page_values))
         self.assertEqual(1001, sum(len(page["runs"]) for page in page_values))
@@ -80,7 +315,7 @@ class GitHubPaginationTests(unittest.TestCase):
             next_link = None
             if index < len(pages):
                 next_link = (
-                    f'<https://api.github.com/repos/eng-cc/oasis7/actions/workflows/'
+                    f'<https://api.github.com/repositories/1148737145/actions/workflows/'
                     f'{workflow_id}/runs?per_page=100&page={index + 1}>; rel="next"'
                 )
             payload = readback.json.dumps(
@@ -88,8 +323,11 @@ class GitHubPaginationTests(unittest.TestCase):
                 separators=(",", ":"),
             ).encode("utf-8")
             responses.append(http_response(payload, link=next_link))
-        with patch.object(readback.subprocess, "check_output", side_effect=responses):
-            pages = readback.GitHubReadOnly().workflow_run_pages(workflow_id)
+        api = readback.GitHubReadOnly()
+        with patch_live_workflow_metadata(api), patch.object(
+            readback.subprocess, "check_output", side_effect=responses,
+        ):
+            pages = api.workflow_run_pages(workflow_id, 1148737145)
         complete = readback.contract.collect_workflow_runs(pages)
         self.assertEqual(1002, len(complete))
         with self.assertRaisesRegex(readback.contract.ContractError, "unique"):
@@ -102,13 +340,16 @@ class GitHubPaginationTests(unittest.TestCase):
             separators=(",", ":"),
         ).encode("utf-8")
         repeated = (
-            f'<https://api.github.com/repos/eng-cc/oasis7/actions/workflows/{workflow_id}'
+            f'<https://api.github.com/repositories/1148737145/actions/workflows/{workflow_id}'
             '/runs?per_page=100&page=1>; rel="next"'
         )
         response = http_response(payload, link=repeated)
-        with patch.object(readback.subprocess, "check_output", return_value=response):
+        api = readback.GitHubReadOnly()
+        with patch_live_workflow_metadata(api), patch.object(
+            readback.subprocess, "check_output", return_value=response,
+        ):
             with self.assertRaisesRegex(readback.ReadbackError, "pagination"):
-                readback.GitHubReadOnly().workflow_run_pages(workflow_id)
+                api.workflow_run_pages(workflow_id, 1148737145)
 
     def test_unexpected_next_origin_fails_closed(self):
         workflow_id = 230018940
@@ -117,9 +358,12 @@ class GitHubPaginationTests(unittest.TestCase):
             separators=(",", ":"),
         ).encode("utf-8")
         link = '<https://example.invalid/page>; rel="next"'
-        with patch.object(readback.subprocess, "check_output", return_value=http_response(payload, link=link)):
+        api = readback.GitHubReadOnly()
+        with patch_live_workflow_metadata(api), patch.object(
+            readback.subprocess, "check_output", return_value=http_response(payload, link=link),
+        ):
             with self.assertRaisesRegex(readback.ReadbackError, "pagination"):
-                readback.GitHubReadOnly().workflow_run_pages(workflow_id)
+                api.workflow_run_pages(workflow_id, 1148737145)
 
     def test_collection_count_and_page_state_must_be_complete(self):
         row = {"id": 1}
@@ -258,9 +502,9 @@ def readback_fixture():
         "number": c.PR_NUMBER, "state": "open", "merged": False,
         "body": f"Task: {task_uid}\nRefs #{c.TASK_ISSUE_NUMBER}\n",
         "head": {"sha": request_context.head_oid,
-                 "repo": {"full_name": c.REPOSITORY, "id": 1234}},
+                 "repo": {"full_name": c.REPOSITORY, "id": 1148737145}},
         "base": {"sha": request["integration_base_oid"], "ref": "main",
-                 "repo": {"full_name": c.REPOSITORY, "id": 1234}},
+                 "repo": {"full_name": c.REPOSITORY, "id": 1148737145}},
     }
     issue = {"number": c.TASK_ISSUE_NUMBER, "body": task_body}
     return {
@@ -289,7 +533,10 @@ class FakeReadbackAPI:
         if endpoint == f"repos/eng-cc/oasis7/pulls/{readback.PR_NUMBER}":
             return self.fixture["pr"]
         if endpoint == "repos/eng-cc/oasis7":
-            return {"default_branch": "main"}
+            return {
+                "id": 1148737145, "name": "oasis7", "full_name": "eng-cc/oasis7",
+                "owner": {"login": "eng-cc"}, "default_branch": "main",
+            }
         if endpoint == "repos/eng-cc/oasis7/actions/workflows/rust.yml":
             return {"id": self.fixture["run"]["workflow_id"],
                     "path": readback.WORKFLOW_FILE, "state": "active"}
@@ -314,8 +561,10 @@ class FakeReadbackAPI:
             comments[-1]["updated_at"] = "2026-01-01T00:02:30Z"
         return (comments,)
 
-    def workflow_run_pages(self, workflow_id):
+    def workflow_run_pages(self, workflow_id, repository_id):
         self.assert_workflow_id(workflow_id)
+        if repository_id != 1148737145:
+            raise AssertionError("repository ID mismatch")
         self.run_listing_count += 1
         rows = [dict(self.fixture["run_api"])]
         if self.duplicate_second_run and self.run_listing_count >= 2:
