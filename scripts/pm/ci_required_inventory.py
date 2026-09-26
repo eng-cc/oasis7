@@ -75,6 +75,9 @@ ROOT_CARGO_INPUTS = (
     ".cargo/config.toml",
     ".cargo/config",
 )
+STATIC_INPUT_PATHS: dict[str, tuple[str, ...]] = {
+    "site_quality": ("README.md",),
+}
 
 CAPABILITY_RUNNERS: dict[str, tuple[str, ...]] = {
     "required_gate_baseline": ("run_required_gate_checks",),
@@ -147,7 +150,7 @@ STATIC_MEMBER_ROOTS: dict[str, tuple[str, ...]] = {
     "workflow_governance": ("scripts", ".agents", ".codex", ".github", "doc/engineering"),
     "codex_agent_config_validation": ("scripts", ".agents", ".codex"),
     "compile_metrics": ("scripts", ".github/workflows", ".cargo"),
-    "site_quality": ("scripts", "site", "doc", "README.md"),
+    "site_quality": ("scripts", "site", "doc"),
     "doc_checker_contracts": ("scripts", ".agents", "doc/engineering", "doc/product"),
     "cargo_tooling_contracts": ("scripts", ".cargo", "crates/oasis7_client_launcher"),
 }
@@ -290,6 +293,7 @@ def required_test_unit_registry(
             "commands": commands,
             "obligations": list(commands),
             "package_names": list(RUST_PACKAGES.get(capability, ())),
+            "input_paths": list(STATIC_INPUT_PATHS.get(capability, ())),
             "member_roots": list(STATIC_MEMBER_ROOTS.get(capability, ())),
             "selector_env": SELECTOR_ENV.get(capability),
         }
@@ -1012,6 +1016,15 @@ def _target_root_inputs(
     return sorted(paths)
 
 
+def _target_input_paths(
+    capability: str, spec: dict[str, Any], target_repo_root: Path, c2: Any, target_oid: str,
+) -> list[str]:
+    """Combine canonical file inputs with dynamic root-level workspace inputs."""
+    return sorted(set(spec["input_paths"]) | set(
+        _target_root_inputs(capability, target_repo_root, c2, target_oid)
+    ))
+
+
 def _unit_spec(
     capability: str, spec: dict[str, Any], planner: Any, planner_facts: dict[str, Any],
     planner_root: Path, target_repo_root: Path, target_oid: str, c2: Any,
@@ -1084,7 +1097,9 @@ def _unit_spec(
         "unit_contract": contract,
         "obligation_set": [f"{capability}:{index:03d}:{item}" for index, item in enumerate(commands)],
         "command_checker_paths": sorted(command_paths),
-        "input_paths": _target_root_inputs(capability, target_repo_root, c2, target_oid),
+        "input_paths": _target_input_paths(
+            capability, spec, target_repo_root, c2, target_oid,
+        ),
         "member_roots": _target_member_roots(
             capability, {capability: spec}, metadata, target_repo_root, c2, target_oid,
         ),
