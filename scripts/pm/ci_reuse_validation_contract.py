@@ -291,6 +291,19 @@ def _string(value: Any, field: str, *, allow_empty: bool = False) -> str:
     return value
 
 
+def _history_title(value: Any, field: str) -> str:
+    """Validate REST history text without normalizing its Unicode."""
+    if type(value) is not str or not value:
+        raise ContractError(f"{field} must be a non-empty string")
+    try:
+        value.encode("utf-8", errors="strict")
+    except UnicodeEncodeError as exc:
+        raise ContractError(f"{field} is not valid UTF-8") from exc
+    if any(char in value for char in "\x00\r\n"):
+        raise ContractError(f"{field} contains a control character")
+    return value
+
+
 def _planner_string(value: Any, field: str) -> str:
     """Validate an exact, bounded UTF-8 string from the trusted planner."""
     if type(value) is not str or not value or value != value.strip():
@@ -836,7 +849,7 @@ def collect_workflow_runs(pages: Iterable[Mapping[str, Any]]) -> tuple[Mapping[s
             if not isinstance(row, Mapping):
                 raise ContractError("workflow-run history contains a malformed run")
             run_id = _positive_int(row.get("id"), "workflow run ID")
-            title = _string(row.get("display_title"), "workflow display_title")
+            title = _history_title(row.get("display_title"), "workflow display_title")
             if run_id in run_ids:
                 raise ContractError("workflow-run history contains a duplicate run ID")
             run_ids.add(run_id)
@@ -891,7 +904,7 @@ def select_unique_run(runs: Iterable[Mapping[str, Any]], authority: ValidationAu
         if not isinstance(run, Mapping):
             raise ContractError("workflow run candidate is malformed")
         run_id = _positive_int(run.get("id"), "workflow run candidate ID")
-        title = _string(run.get("display_title"), "workflow run candidate display_title")
+        title = _history_title(run.get("display_title"), "workflow run candidate display_title")
         if run_id in seen_ids:
             raise ContractError("workflow run candidate list contains duplicate IDs")
         seen_ids.add(run_id)
