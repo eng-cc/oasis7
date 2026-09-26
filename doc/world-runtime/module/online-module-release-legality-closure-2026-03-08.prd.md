@@ -160,3 +160,26 @@
 | DEC-OMR-002 | 生产禁用 `identity_hash_v1` 回退 | 长期保留回退作为默认路径 | 回退路径无法提供可追责签名保证。 |
 | DEC-OMR-003 | 外部 finality 证书强制化 | 运行时本地派生证书自动 apply | 本地可伪造路径与分布式治理目标冲突。 |
 | DEC-OMR-004 | 生产发布完全去 CI 依赖 | 由 CI bot 充当唯一发布入口 | 去中心化运行目标要求生产发布在无中心服务下仍可达成。 |
+
+## SR2 目标承接与实施证据边界
+
+本专题 owner runtime_engineer；source baseline `9c41d57b4436f71f0cf9b481043d882cfdc551ed`；2026-09-26 作者内容审读，独立 review pending。原 SC-1..7、AC-1..17、PRD-WORLD_RUNTIME-016..018、NFR、DEC 与 TASK 历史身份及全部阈值仍有效。Task 4102 采纳 concrete target documentation；实现状态、历史 proof 和当前候选 proof 单独记，不由文档 active 或合入推断。
+
+<a id="sr2-release-acceptance"></a>
+### 发布、finality 与实际 execution 的独立接受关系
+
+| 原专业接受关系 | 具体 target receiver | 实施与证明状态 | 独立验证要求 |
+| --- | --- | --- | --- |
+| SC-1/2、AC-2/3/4/8/9、PRD-WORLD_RUNTIME-017 | [release trust](online-module-release-legality-closure-2026-03-08.design.md#sr2-release-trust) | current production action gates 有 partial locators；prototype finality 非 BFT；full target external trust未证明 | actual signature bytes、epoch/set/stake/threshold/minsigners、certificate、negative local self-sign/unsigned/unknown proof，不以 CI/provider/localEffectReceipt 替代 |
+| SC-3、AC-1、PRD-WORLD_RUNTIME-016 | [release trust](online-module-release-legality-closure-2026-03-08.design.md#sr2-release-trust) | online action authorization 不关闭 current builtin materializer source fallback；materializer 无 identity/receipt/policy input仍是能力差距 | verify fetched artifact exact bytes before load/cache；production hardening须实际关闭fallback且negative proof，不能从action tests推断 |
+| SC-4/5/6/7、AC-5/6/7/10/11/13/14/15/16/17、PRD-WORLD_RUNTIME-018 | [release proof sequence](online-module-release-legality-closure-2026-03-08.design.md#sr2-release-trust) | current node submit/packaging 是 narrower entrypoint；submit ACK不是 finalized/applied；external worker availability未证明 | proof_cid archive/readback/hash/body、same-platform reproducibility、signer/platform去重/冲突、node-side submit与CI不可用实际flow、S11 runbook faults |
+| AC-12、NFR-OMR-1..7（两条原 NFR-OMR-6 分别 submit 响应/finality latency） | [release validation](online-module-release-legality-closure-2026-03-08.design.md#sr2-release-validation) | 历史 TASK保留历史，不是Task4102 fresh benchmark | p95<=200ms模块校验、100 signer热cache p95<=50ms、<=2epoch收敛、trace100%、forged acceptance0；fixed script与summary产物逐项证明 |
+| new target activation/migration dependency of AC-2/8/9/10 | [VersionActivationV1](module-lifecycle.md#sr2-activation-contract) + [migration publication](module-lifecycle.md#sr2-migration-publication) | target/unimplemented；原 governed proposal seam只是partial | canonical inclusive height selects version，exact migration declarations，all-object atomic failure、old bytes/schedule retained，ACT-01/MIG-01..03 |
+| external proof dependency of actual effect acceptance | [ExternalEffectReceiptV1](module-lifecycle.md#sr2-external-contract) + [host publication](../wasm/wasm-executor.design.md#sr2-host-publication) | provider immutable result与canonical verification分离，local unsigned/signable EffectReceipt不是productiontrust | RCP-01/02；raw provider response0 committed effect，verified successful module receipt才计1；wrong scope/request/root/epoch/proof拒绝，不承诺provider exactly-once |
+
+该表承接专业接受关系，不增加产品模块或新的经济规则。Target receipt唯一 successful status为 committed_success；rejected/expired/replan_required/terminated_without_effect 是 IntentDecision，不算executionreceipt或lineagewinner。Missing/invalid governing manifest/head/finality 与非 verified_serviceable 的受影响 NEW intents均0新receipt/0effect/无charge/无state publication；历史receipt不可改。Service recovery重审权利、资源、expiry、preconditions；accepted/requestACK不是effect。
+
+<a id="sr2-release-node-proof"></a>
+### SC-9 / DC-5 组合证明保持独立
+
+[GWSC actual DC5 receiver](../../testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md#sr2-dc5-attachment) 必须消费 execution+state-sync 同 candidate/world/canonical window 的真实附件，schema valid不等于pass。SC-9 两 outage classes × stage_finish/transit/buffer_admission/terminal_settlement 八完整 cells、fixed baseline identities/quantities/state/window/lease/receipt/W/progression/next action/recheck 均保留；required deterministic matrix + active LLM/provider pure API parity，full真实localstack/provider external headed desktop+narrow S6/Playwright/screenshots/console + provider Agent parity（decision source/backend/contract/transport），provider_local_mock不能替代。只有 gameplay canonical interruption可reset unfinished W一次；read-plane outage仅stale/unknown/reconcile，不能改世界/W。Release/receipt目标合同只提供依赖，不把genericWASM场景当这些cells完成证据。
