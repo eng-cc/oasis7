@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import json
 import subprocess
 import sys
@@ -180,6 +181,173 @@ class PublicationMatrixTests(unittest.TestCase):
             patch.object(publish_module.pr_projection_journal, "open_journal", return_value=journal),
         ):
             return publish_module.publish(args)
+
+    def assert_old_head_rejected_before_effects(self, attempt, adapter, journal,
+                                                *, prior_action_ids=()):
+        error = None
+        result = None
+        try:
+            result = attempt()
+        except Exception as exc:  # capture the real failure signature for this boundary
+            error = exc
+        with journal.locked():
+            actions = journal.read()["actions"]
+        action_ids = [item.get("action_id") for item in actions]
+        action_kinds = [item.get("kind") for item in actions]
+        writes = {
+            event: adapter.events.count(event)
+            for event in ("task-intent", "patch-pr", "push", "record-pr", "publish-reciprocal")
+        }
+        evidence = (
+            f"result={result!r} error={type(error).__name__ if error else None}: {error!r}; "
+            f"events={adapter.events!r}; journal_action_ids={action_ids!r}; "
+            f"journal_action_kinds={action_kinds!r}; write_counts={writes!r}"
+        )
+        self.assertIsInstance(
+            error, (publication_module.PublicationError, publish_module.PublishInputError),
+            "old H0 must fail closed before publication effects; " + evidence,
+        )
+        self.assertEqual(list(prior_action_ids), action_ids, evidence)
+        self.assertEqual({
+            "task-intent": 0, "patch-pr": 0, "push": 0,
+            "record-pr": 0, "publish-reciprocal": 0,
+        }, writes, evidence)
+
+    def test_invalid_caller_discovered_and_readback_h0_rejected_before_intent(self):
+        """Reject malformed H0 even when fake discovery and live readback agree."""
+        invalid_heads = (None, "", "not-an-oid", "a" * 39, "A" * 40)
+        for source in ("caller", "discovered-readback"):
+            for case, old_head in enumerate(invalid_heads):
+                with self.subTest(source=source, old_head=old_head):
+                    with tempfile.TemporaryDirectory() as temp:
+                        publication, projection = make_publication(1110 + case, head="d" * 40)
+                        pr_number = 201 + case
+                        body = f"Task: {UID}\nRefs #1\n"
+                        pr = {
+                            "repository": publication["repository"],
+                            "source_ref": publication["source_ref"],
+                            "target_ref": publication["target_ref"],
+                            "head_oid": old_head, "body": body,
+                            "state": "open", "merged": False, "draft": True,
+                            "number": pr_number,
+                        }
+                        adapter = FakeAdapter(
+                            publication, projection, initial_head=old_head, initial_pr=pr,
+                        )
+                        journal = self.journal(temp, publication)
+
+                        if source == "caller":
+                            attempt = lambda: publication_module.publish_update(
+                                adapter, journal, publication=publication,
+                                projection=projection, pr_number=pr_number,
+                                old_head_oid=old_head, body=body,
+                            )
+                        else:
+                            attempt = lambda: self.run_publish_entrypoint(
+                                temp, publication, projection, adapter, journal,
+                            )
+                        self.assert_old_head_rejected_before_effects(attempt, adapter, journal)
+
+    def test_null_discovered_head_and_absent_source_ref_rejected_before_intent(self):
+        """A missing PR head plus absent source ref must never acquire a null lease."""
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection = make_publication(1118, head="e" * 40)
+            pr = {
+                "repository": publication["repository"],
+                "source_ref": publication["source_ref"],
+                "target_ref": publication["target_ref"],
+                "head_oid": None, "body": f"Task: {UID}\nRefs #1\n",
+                "state": "open", "merged": False, "draft": True, "number": 219,
+            }
+            adapter = FakeAdapter(publication, projection, initial_head=None, initial_pr=pr)
+            journal = self.journal(temp, publication)
+            self.assertIsNone(adapter.source_ref, "fixture must model an absent source ref")
+            self.assert_old_head_rejected_before_effects(
+                lambda: self.run_publish_entrypoint(
+                    temp, publication, projection, adapter, journal,
+                ),
+                adapter, journal,
+            )
+
+    def test_malformed_journal_pinned_h0_rejected_before_task_or_pr_writes(self):
+        invalid_heads = (None, "", "not-an-oid", "b" * 39, "B" * 40)
+        for case, pinned_head in enumerate(invalid_heads):
+            with self.subTest(pinned_head=pinned_head):
+                with tempfile.TemporaryDirectory() as temp:
+                    publication, projection = make_publication(1120 + case, head="d" * 40)
+                    pr_number = 230 + case
+                    body = f"Task: {UID}\nRefs #1\n"
+                    pr = {
+                        "repository": publication["repository"],
+                        "source_ref": publication["source_ref"],
+                        "target_ref": publication["target_ref"],
+                        "head_oid": pinned_head, "body": body,
+                        "state": "open", "merged": False, "draft": True,
+                        "number": pr_number,
+                    }
+                    adapter = FakeAdapter(
+                        publication, projection, initial_head=pinned_head, initial_pr=pr,
+                    )
+                    journal = self.journal(temp, publication)
+                    state_id = "update-state:" + publication["publication_id"]
+                    with journal.locked():
+                        journal.intent(state_id, "pin_update_state", {
+                            "pr_number": pr_number, "expected_draft": True,
+                            "existing_ready_update": False, "old_head_oid": pinned_head,
+                        })
+                    self.assert_old_head_rejected_before_effects(
+                        lambda: publication_module.publish_update(
+                            adapter, journal, publication=publication,
+                            projection=projection, pr_number=pr_number,
+                            old_head_oid="c" * 40, body=body,
+                        ),
+                        adapter, journal, prior_action_ids=(state_id,),
+                    )
+
+    def test_malformed_recovery_patch_h0_rejected_before_new_intents_or_writes(self):
+        invalid_heads = (None, "", "not-an-oid", "c" * 39, "C" * 40)
+        for case, recovery_head in enumerate(invalid_heads):
+            with self.subTest(recovery_head=recovery_head):
+                with tempfile.TemporaryDirectory() as temp:
+                    publication, projection = make_publication(1130 + case, head="e" * 40)
+                    pr_number = 240 + case
+                    body = publication_module.replace_projection_marker(
+                        f"Task: {UID}\nRefs #1\n",
+                        publication_module.prepare(
+                            task_uid=UID,
+                            source_head_oid=publication["source_head_oid"],
+                            scope_base_oid=publication["source_scope_oid"],
+                            projection_digest=publication["projection_digest"],
+                        )[1],
+                    )
+                    pr = {
+                        "repository": publication["repository"],
+                        "source_ref": publication["source_ref"],
+                        "target_ref": publication["target_ref"],
+                        "head_oid": publication["source_head_oid"], "body": body,
+                        "state": "open", "merged": False, "draft": True,
+                        "number": pr_number,
+                    }
+                    adapter = FakeAdapter(
+                        publication, projection,
+                        initial_head=publication["source_head_oid"], initial_pr=pr,
+                    )
+                    journal = self.journal(temp, publication)
+                    patch_id = "patch-body:" + publication["publication_id"]
+                    body_hash = "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest()
+                    with journal.locked():
+                        journal.intent(patch_id, "patch_projection_body", {
+                            "pr_number": pr_number, "new_body_sha256": body_hash,
+                            "old_head_oid": recovery_head,
+                        })
+                    self.assert_old_head_rejected_before_effects(
+                        lambda: publication_module.publish_update(
+                            adapter, journal, publication=publication,
+                            projection=projection, pr_number=pr_number,
+                            old_head_oid="b" * 40, body=body,
+                        ),
+                        adapter, journal, prior_action_ids=(patch_id,),
+                    )
 
     def test_record_pr_passes_canonical_repository_to_task_helper(self):
         publication, _projection = make_publication(7000, repository="example/oasis7")

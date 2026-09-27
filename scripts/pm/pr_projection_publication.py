@@ -18,12 +18,18 @@ from projection_publication_contract import (
 PUBLICATION_BINDING_SCHEMA = "oasis7-ci-publication-binding/v1"
 _BODY_MARKER = "<!-- oasis7-ci-impact-publication:v2 -->"
 _BINDING_MARKER = "<!-- oasis7-ci-publication-binding/v1 -->"
+_SHA1_OID_RE = re.compile(r"[0-9a-f]{40}\Z")
 
 
 class PublicationError(RuntimeError):
     def __init__(self, code: str, detail: str):
         super().__init__(f"{code}: {detail}")
         self.code, self.detail = code, detail
+
+
+def _is_full_sha1_oid(value: Any) -> bool:
+    """Whether value is a complete lowercase Git SHA-1 object ID."""
+    return isinstance(value, str) and _SHA1_OID_RE.fullmatch(value) is not None
 
 
 def prepare(*, task_uid: str, source_head_oid: str, scope_base_oid: str,
@@ -602,6 +608,8 @@ def publish_create(adapter: Any, journal: PublicationJournal, *, publication: di
 
 def _check_pr(pr: dict[str, Any], publication: dict[str, Any], number: int, head: str,
               expected_draft: bool = True) -> None:
+    if not _is_full_sha1_oid(head) or not _is_full_sha1_oid(pr.get("head_oid")):
+        raise PublicationError("TASK_IDENTITY_CONFLICT", "PR head is not a full SHA-1 commit OID")
     if type(expected_draft) is not bool or type(pr.get("draft")) is not bool:
         raise PublicationError("TASK_IDENTITY_CONFLICT", "PR draft expectation is invalid")
     actual = (pr.get("repository"), pr.get("number"), pr.get("source_ref"),
@@ -624,6 +632,8 @@ def publish_update(adapter: Any, journal: PublicationJournal, *, publication: di
         raise PublicationError("TASK_IDENTITY_CONFLICT", "explicit ready update and draft expectation disagree")
     if type(pr_number) is not int or pr_number < 1:
         raise PublicationError("TASK_IDENTITY_CONFLICT", "PR number is invalid")
+    if not _is_full_sha1_oid(old_head_oid):
+        raise PublicationError("TASK_IDENTITY_CONFLICT", "old PR head is not a full SHA-1 commit OID")
     body = replace_projection_marker(body, marker, legacy_projection_b64=legacy_projection_b64)
     try:
         with journal.locked():
@@ -639,12 +649,13 @@ def publish_update(adapter: Any, journal: PublicationJournal, *, publication: di
             state_action = "update-state:" + publication["publication_id"]
             prior_state = _prior(journal, state_action)
             if prior_state is not None:
-                pinned = prior_state.get("expected", {})
+                pinned = prior_state.get("expected")
                 if (prior_state.get("kind") != "pin_update_state"
+                        or not isinstance(pinned, dict)
                         or pinned.get("pr_number") != pr_number
                         or pinned.get("expected_draft") is not expected_draft
                         or pinned.get("existing_ready_update") is not existing_ready_update
-                        or not isinstance(pinned.get("old_head_oid"), str)):
+                        or not _is_full_sha1_oid(pinned.get("old_head_oid"))):
                     raise PublicationError("TASK_IDENTITY_CONFLICT", "pinned update state differs")
                 old_head_oid = pinned["old_head_oid"]
             current = adapter.read_pr(publication["repository"], pr_number)
@@ -658,7 +669,14 @@ def publish_update(adapter: Any, journal: PublicationJournal, *, publication: di
                 if existing_ready_update:
                     raise PublicationError("TASK_IDENTITY_CONFLICT", "H1 recovery lacks pinned update identity")
                 if prior_patch is not None:
-                    old_head_oid = prior_patch["expected"]["old_head_oid"]
+                    recovery_expected = prior_patch.get("expected")
+                    recovery_head = (recovery_expected.get("old_head_oid")
+                                     if isinstance(recovery_expected, dict) else None)
+                    if not _is_full_sha1_oid(recovery_head):
+                        raise PublicationError(
+                            "TASK_IDENTITY_CONFLICT", "recovery PR head is not a full SHA-1 commit OID",
+                        )
+                    old_head_oid = recovery_head
             old_body = current.get("body")
             if not isinstance(old_body, str):
                 raise PublicationError("EVENT_PROJECTION_INVALID", "live PR body is not text")
