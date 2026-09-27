@@ -100,19 +100,20 @@ def _gh_pages(*arguments: str) -> list[Any]:
         payload = json.loads(output)
     except json.JSONDecodeError as exc:
         raise RetirementError(f"GitHub returned invalid paginated JSON: {exc}") from exc
-    if isinstance(payload, list):
-        return payload
-    return [payload]
+    if not isinstance(payload, list) or not payload:
+        raise RetirementError("GitHub REST pagination returned no complete pages")
+    return payload
 
 
 def _flatten_rest_pages(pages: list[Any], label: str) -> list[dict[str, Any]]:
+    if not isinstance(pages, list) or not pages:
+        raise RetirementError(f"{label} pagination returned no complete pages")
     records: list[dict[str, Any]] = []
     for page in pages:
         # gh --paginate --slurp wraps each REST page in an array.
-        values = page if isinstance(page, list) else [page]
-        if not isinstance(values, list) or any(not isinstance(value, dict) for value in values):
+        if not isinstance(page, list) or any(not isinstance(value, dict) for value in page):
             raise RetirementError(f"{label} pagination returned a malformed page")
-        records.extend(values)
+        records.extend(page)
     return records
 
 
@@ -424,14 +425,23 @@ def _collect_project_items(owner: str, number: int, repository: str) -> tuple[di
     return expected_project, list(by_id.values())
 
 
+def _raw_task_uid_values(body: str) -> list[str]:
+    # Count every canonical field line before validating its value. Otherwise a
+    # valid line plus a malformed duplicate could be mistaken for a unique UID.
+    return [value.rstrip("\r").strip(" \t") for value in re.findall(r"(?m)^task_uid:[ \t]*(.*)$", body)]
+
+
 def _task_uid_from_body(body: str) -> str:
-    matches = re.findall(r"(?m)^task_uid:\s*(task_[0-9a-f]{32})\s*$", body)
-    return matches[0] if len(matches) == 1 else ""
+    values = _raw_task_uid_values(body)
+    if len(values) != 1 or TASK_UID_RE.fullmatch(values[0]) is None:
+        return ""
+    return values[0]
 
 
 def _issue_uid_markers(issue: dict[str, Any]) -> set[str]:
     body = str(issue.get("body") or "")
-    markers = set(re.findall(r"(?m)^task_uid:\s*(task_[0-9a-f]{32})\s*$", body))
+    body_uid = _task_uid_from_body(body)
+    markers = {body_uid} if body_uid else set()
     declared = issue.get("task_uid")
     if isinstance(declared, str) and TASK_UID_RE.fullmatch(declared):
         markers.add(declared)
@@ -475,10 +485,30 @@ def _issue_metadata(issue: dict[str, Any]) -> dict[str, str]:
         "pr_url": "",
     }
     for key in tuple(fields)[1:]:
-        matches = re.findall(rf"(?m)^- {re.escape(key)}:\s*`([^`]*)`\s*$", body)
+        matches = _raw_issue_metadata_values(body, key)
         if len(matches) == 1:
-            fields[key] = matches[0].strip()
+            value = re.fullmatch(r"[ \t]*`([^`\r\n]*)`[ \t]*", matches[0])
+            if value is not None:
+                fields[key] = value.group(1).strip()
     return fields
+
+
+def _raw_issue_metadata_values(body: str, key: str) -> list[str]:
+    return [value.rstrip("\r") for value in re.findall(rf"(?m)^- {re.escape(key)}:(.*)$", body)]
+
+
+def _project_status_for_foreign_record(record: dict[str, Any]) -> str:
+    status = str(record.get("status") or "")
+    statuses = {
+        "candidate": "Todo",
+        "committed": "In Progress",
+        "blocked": "Blocked",
+        "ready": "Ready / PR",
+        "pr_watch": "PR Watch",
+    }
+    expected = statuses.get(status)
+    _require(expected is not None, "foreign task mapping status cannot be projected to a live Project Status")
+    return expected
 
 
 def _normalize_issue_for_proof(issue: dict[str, Any]) -> dict[str, Any]:
@@ -797,7 +827,7 @@ def _collect_foreign_owners(
         and value.get("repository") == repository
     ]
     if len(foreign_items) != 1:
-        raise RetirementError("foreign task has no unique live Project item")
+        raise RetirementError("foreign task has no unique live Project item bound to its task_uid")
     item = foreign_items[0]
     worktree = next((value for value in worktrees if value.get("path") == cached_path), None)
     branch_item = next((value for value in branches if value.get("name") == cached_branch), None)
@@ -911,7 +941,6 @@ def _validate_foreign_snapshot_payload(
         and snapshot_project.get("owner") == project.get("owner")
         and int(snapshot_project.get("number") or 0) == int(project.get("number") or 0)
         and snapshot_project.get("item_id") == record.get("project_item_id")
-        and snapshot_project.get("status") == record.get("status")
         and payload.get("repository") == repository,
         "foreign immutable snapshot Project/task identity differs from its task mapping",
     )
@@ -1086,7 +1115,7 @@ def _unique_issue(items: list[dict[str, Any]], issue_number: int, task_uid: str,
     _require(len(matches) == 1, f"{label} Issue #{issue_number} is missing or ambiguous")
     issue = matches[0]
     observed_uid = issue.get("task_uid") or _task_uid_from_body(str(issue.get("body") or ""))
-    _require(observed_uid == task_uid, f"{label} Issue Task UID does not match")
+    _require(observed_uid == task_uid, f"{label} Issue task_uid does not match")
     return issue
 
 
@@ -1155,6 +1184,13 @@ def _validate_live_proof(mapping: dict[str, Any], task_uid: str, row: dict[str, 
     candidate_metadata = _validate_issue_identity(candidate_issue, repository, issue_number, task_uid, "candidate")
     _require(candidate_issue.get("state") == "CLOSED" and candidate_issue.get("state_reason") == "DUPLICATE", "candidate Issue is not closed as DUPLICATE")
     _require(candidate_metadata["status"] == "candidate" and candidate_metadata["workflow_phase"] == "bootstrap", "candidate Issue has started workflow")
+    candidate_body = str(candidate_issue.get("body") or "")
+    for field in ("worktree_hint", "pr_number", "pr_url"):
+        raw_values = _raw_issue_metadata_values(candidate_body, field)
+        _require(len(raw_values) == 1, f"candidate Issue {field} must appear exactly once")
+        parsed_value = re.fullmatch(r"[ \t]*`([^`\r\n]*)`[ \t]*", raw_values[0])
+        _require(parsed_value is not None, f"candidate Issue {field} metadata is malformed")
+        _require(not parsed_value.group(1).strip(), f"candidate Issue records {field} activity")
     _require(not candidate_metadata["worktree_hint"] and not candidate_metadata["pr_number"] and not candidate_metadata["pr_url"], "candidate Issue records worktree or PR activity")
     items_payload = proof.get("project_items")
     _require(isinstance(items_payload, dict) and items_payload.get("complete") is True, "Project item pagination is incomplete")
@@ -1292,6 +1328,19 @@ def _validate_live_proof(mapping: dict[str, Any], task_uid: str, row: dict[str, 
         )
         _validate_issue_identity(foreign_issue, repository, foreign_issue_number, foreign_uid, "foreign")
         _require(foreign_issue.get("state") != "CLOSED" or foreign_issue.get("state_reason") != "DUPLICATE", "foreign task Issue is itself a closed duplicate")
+        foreign_mapping_record = owner.get("mapping_record")
+        _require(
+            isinstance(foreign_mapping_record, dict) and foreign_mapping_record == foreign,
+            "live foreign owner mapping record differs from the active task mapping",
+        )
+        foreign_metadata = _issue_metadata(foreign_issue)
+        foreign_status = str(foreign.get("status") or "")
+        foreign_phase = str(foreign.get("workflow_phase") or "")
+        _require(
+            bool(foreign_status) and foreign_metadata.get("status") == foreign_status
+            and bool(foreign_phase) and foreign_metadata.get("workflow_phase") == foreign_phase,
+            "live foreign Issue lifecycle differs from its task mapping",
+        )
         foreign_item = owner.get("project_item")
         _require(isinstance(foreign_item, dict), "live foreign Project item evidence is missing")
         enumerated_foreign_item = _require_unique_project_uid(
@@ -1312,6 +1361,14 @@ def _validate_live_proof(mapping: dict[str, Any], task_uid: str, row: dict[str, 
             "live foreign Project identity differs from its task mapping",
         )
         _require(foreign_item.get("id") == foreign.get("project_item_id"), "foreign Project item differs from its task mapping")
+        foreign_fields = foreign_item.get("fields")
+        _require(
+            isinstance(foreign_fields, dict)
+            and foreign_fields.get("Status") == _project_status_for_foreign_record(foreign)
+            and foreign_fields.get("PM Status") == foreign_status
+            and foreign_fields.get("Workflow Phase") == foreign_phase,
+            "live foreign Project lifecycle differs from its task mapping",
+        )
         foreign_worktree = owner.get("worktree")
         foreign_branch = owner.get("branch")
         if foreign_branch is None:

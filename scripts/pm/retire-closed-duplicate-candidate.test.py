@@ -130,7 +130,7 @@ def candidate_record(foreign_worktree: Path) -> dict[str, object]:
     }
 
 
-def foreign_record(foreign_worktree: Path) -> dict[str, object]:
+def foreign_record(foreign_worktree: Path, *, include_pr: bool = True) -> dict[str, object]:
     return {
         "task_uid": FOREIGN_UID,
         "repository": "eng-cc/oasis7",
@@ -142,8 +142,8 @@ def foreign_record(foreign_worktree: Path) -> dict[str, object]:
         "workflow_phase": "execution",
         "canonical_worktree": str(foreign_worktree),
         "task_branch": FOREIGN_BRANCH,
-        "pr_number": FOREIGN_PR,
-        "pr_url": f"https://github.com/eng-cc/oasis7/pull/{FOREIGN_PR}",
+        "pr_number": FOREIGN_PR if include_pr else None,
+        "pr_url": f"https://github.com/eng-cc/oasis7/pull/{FOREIGN_PR}" if include_pr else None,
     }
 
 
@@ -167,8 +167,9 @@ def duplicate_project_identity_for_task_uid(proof: dict[str, object], task_uid: 
 class RetirementFixture:
     """An isolated registered worktree pair and non-networking gh command."""
 
-    def __init__(self, directory: Path):
+    def __init__(self, directory: Path, *, include_foreign_pr: bool = True):
         self.directory = directory
+        self.include_foreign_pr = include_foreign_pr
         self.repository = directory / "repository"
         self.mapping_root = directory / "candidate-worktree"
         self.foreign_worktree = directory / "foreign-worktree"
@@ -203,7 +204,7 @@ class RetirementFixture:
             "project": {"repo": "eng-cc/oasis7", "owner": "eng-cc", "number": 1, "id": "PVT_fixture"},
             "tasks": {
                 CANDIDATE_UID: candidate_record(self.foreign_worktree),
-                FOREIGN_UID: foreign_record(self.foreign_worktree),
+                FOREIGN_UID: foreign_record(self.foreign_worktree, include_pr=self.include_foreign_pr),
             },
         }
         self.mapping.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -211,7 +212,7 @@ class RetirementFixture:
     def _write_foreign_snapshot(self) -> None:
         producer_mapping = self.foreign_worktree / ".pm/github-project-sync/tasks.json"
         producer_mapping.parent.mkdir(parents=True, exist_ok=True)
-        producer_task = foreign_record(self.foreign_worktree)
+        producer_task = foreign_record(self.foreign_worktree, include_pr=self.include_foreign_pr)
         producer_task.update(
             {
                 "default_branch": "main",
@@ -342,7 +343,7 @@ class RetirementFixture:
         paginated GitHub and Git reads before calling the shared validator.
         """
         candidate = candidate_record(self.foreign_worktree)
-        foreign = foreign_record(self.foreign_worktree)
+        foreign = foreign_record(self.foreign_worktree, include_pr=self.include_foreign_pr)
         candidate_issue = {
             "repository": "eng-cc/oasis7",
             "number": CANDIDATE_ISSUE,
@@ -365,7 +366,14 @@ class RetirementFixture:
             "url": str(foreign["issue_url"]),
             "state": "OPEN",
             "state_reason": None,
-            "body": self.issue_body(FOREIGN_UID, "committed", "execution", str(self.foreign_worktree), str(FOREIGN_PR), str(foreign["pr_url"])),
+            "body": self.issue_body(
+                FOREIGN_UID,
+                "committed",
+                "execution",
+                str(self.foreign_worktree),
+                str(foreign["pr_number"] or ""),
+                str(foreign["pr_url"] or ""),
+            ),
         }
 
         def item(record: dict[str, object], fields: dict[str, str]) -> dict[str, object]:
@@ -435,6 +443,7 @@ class RetirementFixture:
             "issue_number": int(foreign["issue_number"]),
             "task_uid": FOREIGN_UID,
         }
+        foreign_prs = [foreign_pr] if self.include_foreign_pr else []
         return {
             "repository": "eng-cc/oasis7",
             "project": {"owner": "eng-cc", "number": 1, "id": "PVT_fixture"},
@@ -481,10 +490,10 @@ class RetirementFixture:
                         "mapping_record": foreign,
                         "worktree": {"path": str(self.foreign_worktree), "registered": True, "branch": FOREIGN_BRANCH},
                         "snapshot": {"path": str(self.foreign_snapshot), "sha256": sha256(self.foreign_snapshot.read_bytes())},
-                        "pull_requests": [foreign_pr],
+                        "pull_requests": foreign_prs,
                     }
                 ],
-                "pull_requests": [foreign_pr],
+                "pull_requests": foreign_prs,
             },
         }
 
@@ -770,6 +779,12 @@ class RetirementFixture:
             check=False,
             timeout=10,
         )
+
+    def rewrite_live_gh_fixture(self, mutate) -> None:
+        """Change one raw transport response while retaining the CLI boundary."""
+        payload = json.loads(self.gh_fixture.read_text(encoding="utf-8"))
+        mutate(payload)
+        self.gh_fixture.write_text(json.dumps(payload, sort_keys=True), encoding="utf-8")
 
 
 class FixtureLiveProofProvider:
@@ -1173,6 +1188,107 @@ class RetirementHelperBoundaryTests(unittest.TestCase):
                 if pagination_mode == "issues_incomplete":
                     self.assertTrue(any("retirement-issue-cursor-1" in " ".join(call) for call in issue_calls))
 
+    def test_cli_rejects_malformed_duplicate_task_uid_on_each_relied_issue(self):
+        relied_issues = (
+            ("candidate", CANDIDATE_ISSUE),
+            ("replacement", REPLACEMENT_ISSUE),
+            ("foreign owner", 900004),
+        )
+        for label, issue_number in relied_issues:
+            with self.subTest(issue=label), tempfile.TemporaryDirectory(
+                prefix="retire-duplicate-malformed-task-uid-cli-"
+            ) as temporary:
+                fixture = RetirementFixture(Path(temporary))
+                fixture._write_paginated_live_gh_stub()
+                before = fixture.mapping.read_bytes()
+                snapshot_before = fixture.foreign_snapshot.read_bytes()
+
+                baseline = fixture.run_helper("preflight")
+                self.assertEqual(0, baseline.returncode, baseline.stderr)
+                self.assertIn("preflight_ok", baseline.stdout)
+                self.assertEqual(before, fixture.mapping.read_bytes())
+
+                def duplicate_malformed_uid(payload):
+                    issue = next(item for item in payload["issues"] if item["number"] == issue_number)
+                    issue["body"] = issue["body"].rstrip("\n") + "\ntask_uid: malformed-second-value\n"
+
+                fixture.rewrite_live_gh_fixture(duplicate_malformed_uid)
+                result = fixture.run_helper("apply")
+
+                failures = []
+                if result.returncode == 0:
+                    failures.append(f"{label} Issue with malformed duplicate task_uid was accepted: {result.stdout.strip()}")
+                if not re.search(r"(?i)task_uid", result.stderr + result.stdout):
+                    failures.append(f"{label} Issue failure did not identify task_uid ambiguity: {result.stderr.strip()}")
+                if before != fixture.mapping.read_bytes():
+                    failures.append("ambiguous Issue identity changed the active task mapping")
+                if snapshot_before != fixture.foreign_snapshot.read_bytes():
+                    failures.append("ambiguous Issue identity changed the foreign snapshot")
+                if list(fixture.mapping.parent.glob("tasks.json.tmp.*")):
+                    failures.append("ambiguous Issue identity left a mapping temporary file")
+                gh_calls = fixture.gh_log.read_text(encoding="utf-8")
+                if re.search(r'"(?:POST|PATCH|DELETE)"', gh_calls):
+                    failures.append("CLI issued a mutating GitHub request while rejecting malformed Issue identity")
+                self.assertFalse(failures, "; ".join(failures))
+
+    def test_cli_rejects_invalid_pull_request_slurp_envelopes_and_accepts_one_empty_page(self):
+        invalid_envelopes = (
+            ("zero pages", []),
+            ("object instead of page-array envelope", {}),
+            ("page object instead of page array", [{}]),
+        )
+        for label, envelope in invalid_envelopes:
+            with self.subTest(envelope=label), tempfile.TemporaryDirectory(
+                prefix="retire-duplicate-malformed-pr-pages-"
+            ) as temporary:
+                fixture = RetirementFixture(Path(temporary), include_foreign_pr=False)
+                fixture._write_paginated_live_gh_stub()
+                before = fixture.mapping.read_bytes()
+                snapshot_before = fixture.foreign_snapshot.read_bytes()
+
+                baseline = fixture.run_helper("preflight")
+                self.assertEqual(0, baseline.returncode, baseline.stderr)
+                self.assertIn("preflight_ok", baseline.stdout)
+
+                fixture.rewrite_live_gh_fixture(lambda payload: payload.update(pull_requests=envelope))
+                result = fixture.run_helper("apply")
+
+                failures = []
+                if result.returncode == 0:
+                    failures.append(f"malformed PR envelope {label!r} was accepted: {result.stdout.strip()}")
+                if before != fixture.mapping.read_bytes():
+                    failures.append("malformed PR pagination changed the active task mapping")
+                if snapshot_before != fixture.foreign_snapshot.read_bytes():
+                    failures.append("malformed PR pagination changed the foreign snapshot")
+                if list(fixture.mapping.parent.glob("tasks.json.tmp.*")):
+                    failures.append("malformed PR pagination left a mapping temporary file")
+                calls = [json.loads(line) for line in fixture.gh_log.read_text(encoding="utf-8").splitlines()]
+                pr_calls = [call for call in calls if any("/pulls" in arg for arg in call)]
+                if not pr_calls:
+                    failures.append("the production CLI did not reach the paginated PR collection")
+                if not any("--paginate" in call and "--slurp" in call for call in pr_calls):
+                    failures.append("the PR request omitted complete pagination/slurp flags")
+                if re.search(r'"(?:POST|PATCH|DELETE)"', fixture.gh_log.read_text(encoding="utf-8")):
+                    failures.append("CLI issued a mutating GitHub request while rejecting malformed PR pagination")
+                self.assertFalse(failures, "; ".join(failures))
+
+        with tempfile.TemporaryDirectory(prefix="retire-duplicate-empty-pr-page-") as temporary:
+            fixture = RetirementFixture(Path(temporary), include_foreign_pr=False)
+            fixture._write_paginated_live_gh_stub()
+            fixture.rewrite_live_gh_fixture(lambda payload: payload.update(pull_requests=[[]]))
+            before = fixture.mapping.read_bytes()
+
+            result = fixture.run_helper("preflight")
+
+            self.assertEqual(0, result.returncode, result.stderr)
+            self.assertIn("preflight_ok", result.stdout, "one valid empty REST page is complete evidence of no PRs")
+            self.assertEqual(before, fixture.mapping.read_bytes(), "valid empty-page preflight must remain read-only")
+            self.assertFalse(list(fixture.mapping.parent.glob("tasks.json.tmp.*")))
+            calls = [json.loads(line) for line in fixture.gh_log.read_text(encoding="utf-8").splitlines()]
+            pr_calls = [call for call in calls if any("/pulls" in arg for arg in call)]
+            self.assertTrue(pr_calls)
+            self.assertTrue(any("--paginate" in call and "--slurp" in call for call in pr_calls))
+
     def test_cli_discovers_real_candidate_snapshot_execution_and_terminal_artifacts(self):
         expected_diagnostics = {
             "snapshot": r"snapshot|bootstrap-task-snapshot",
@@ -1259,6 +1375,82 @@ class RetirementHelperBehaviorTests(unittest.TestCase):
             self.assertEqual(before, fixture.mapping.read_bytes())
             self.assertFalse(list(fixture.mapping.parent.glob("tasks.json.tmp.*")))
             self.assertIn(result.get("status"), {"preflight_ok", "ready"})
+
+    def test_preflight_accepts_foreign_lifecycle_progress_without_rewriting_immutable_snapshot(self):
+        with tempfile.TemporaryDirectory(prefix="retire-duplicate-foreign-progress-") as temporary:
+            fixture = RetirementFixture(Path(temporary))
+            original_snapshot = fixture.foreign_snapshot.read_bytes()
+
+            mapping = json.loads(fixture.mapping.read_text(encoding="utf-8"))
+            progressed_record = mapping["tasks"][FOREIGN_UID]
+            progressed_record["status"] = "pr_watch"
+            progressed_record["workflow_phase"] = "pr_watch"
+            fixture.mapping.write_text(json.dumps(mapping, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+            proof = fixture.live_proof()
+            foreign_owner = proof["artifact_discovery"]["foreign_owners"][0]
+            foreign_owner["mapping_record"].update(status="pr_watch", workflow_phase="pr_watch")
+            foreign_owner["issue"]["body"] = fixture.issue_body(
+                FOREIGN_UID,
+                "pr_watch",
+                "pr_watch",
+                str(fixture.foreign_worktree),
+                str(FOREIGN_PR),
+                f"https://github.com/eng-cc/oasis7/pull/{FOREIGN_PR}",
+            )
+            foreign_owner["project_item"]["fields"].update(
+                {
+                    "Status": "PR Watch",
+                    "PM Status": "pr_watch",
+                    "Workflow Phase": "pr_watch",
+                    "Canonical Worktree": str(fixture.foreign_worktree),
+                }
+            )
+            fixture.assert_canonical_snapshot_for_validator_isolation(proof)
+            mapping_before_preflight = fixture.mapping.read_bytes()
+
+            helper = load_helper()
+            try:
+                result = run_test_seam(fixture, "preflight", proof)
+            except helper.RetirementError as exc:
+                self.fail(f"legitimate foreign lifecycle progress must not invalidate its immutable bootstrap snapshot: {exc}")
+
+            self.assertIn(result.get("status"), {"preflight_ok", "ready"})
+            self.assertEqual(mapping_before_preflight, fixture.mapping.read_bytes(), "preflight must not rewrite the progressed task mapping")
+            self.assertEqual(original_snapshot, fixture.foreign_snapshot.read_bytes(), "the original producer snapshot is immutable across lifecycle progress")
+
+    def test_candidate_metadata_must_be_present_exactly_once_and_fail_apply_without_partial_write(self):
+        duplicate_values = {
+            "worktree_hint": "/candidate-started",
+            "pr_number": "900099",
+            "pr_url": "https://github.com/eng-cc/oasis7/pull/900099",
+        }
+        for field, duplicate_value in duplicate_values.items():
+            for occurrence in ("missing", "duplicate"):
+                with self.subTest(field=field, occurrence=occurrence), tempfile.TemporaryDirectory(
+                    prefix="retire-duplicate-candidate-metadata-"
+                ) as temporary:
+                    fixture = RetirementFixture(Path(temporary))
+                    proof = fixture.live_proof()
+                    baseline = run_test_seam(fixture, "preflight", proof)
+                    self.assertIn(baseline.get("status"), {"preflight_ok", "ready"}, "valid producer fixture must pass before isolated mutation")
+
+                    issue = proof["issues"]["items"][0]
+                    body = issue["body"]
+                    field_line = rf"(?m)^- {re.escape(field)}:.*\n"
+                    self.assertEqual(1, len(re.findall(field_line, body)), "fixture must begin with exactly one canonical field")
+                    if occurrence == "missing":
+                        body, count = re.subn(field_line, "", body, count=1)
+                        self.assertEqual(1, count)
+                    else:
+                        body = body.rstrip("\n") + f"\n- {field}: `{duplicate_value}`\n"
+                    issue["body"] = body
+
+                    self._assert_rejected_without_partial_mapping_write(
+                        fixture,
+                        proof,
+                        expected_error_pattern=rf"(?i){re.escape(field)}",
+                    )
 
     def test_apply_appends_bound_tombstone_atomically_preserves_foreign_owner_and_retry_is_idempotent(self):
         with tempfile.TemporaryDirectory(prefix="retire-duplicate-apply-") as temporary:
