@@ -162,10 +162,10 @@ class PublicationMatrixTests(unittest.TestCase):
         )
 
     def run_publish_entrypoint(self, temp, publication, projection, adapter, journal,
-                               *, existing_ready_update=False):
+                               *, existing_ready_update=False, body=None):
         root = Path(temp)
         body_file = root / "body.md"
-        body_file.write_text(f"Task: {UID}\nRefs #1\n", encoding="utf-8")
+        body_file.write_text(body if body is not None else f"Task: {UID}\nRefs #1\n", encoding="utf-8")
         projection_file = root / "projection.json"
         projection_file.write_text("{}\n", encoding="utf-8")
         args = type("Args", (), {
@@ -325,6 +325,142 @@ class PublicationMatrixTests(unittest.TestCase):
             with patch.object(adapter, "gh", side_effect=fake_gh):
                 with self.assertRaisesRegex(RuntimeError, "live PR repository/ref/head/state identity mismatch"):
                     adapter.read_task_pr_binding(UID)
+
+    def test_ready_update_rejects_noncanonical_task_and_refs_lines_at_each_body_boundary(self):
+        wrong_uid = "task_" + "b" * 32
+        malformed_bodies = {
+            "wrong_task_uid": f"Task: {wrong_uid}\nRefs #1\n",
+            "task_uid_suffix": f"Task: {UID}-stale\nRefs #1\n",
+            "wrong_issue_number": f"Task: {UID}\nRefs #2\n",
+            "refs_number_suffix": f"Task: {UID}\nRefs #1-suffix\n",
+            "missing_task_line_with_prose_substring": f"prose says Task: {UID}\nRefs #1\n",
+            "missing_refs_line_with_prose_substring": f"Task: {UID}\nprose says Refs #1\n",
+            "duplicate_task_same_value": f"Task: {UID}\nTask: {UID}\nRefs #1\n",
+            "duplicate_task_conflicting_value": f"Task: {UID}\nTask: {wrong_uid}\nRefs #1\n",
+            "duplicate_refs_same_value": f"Task: {UID}\nRefs #1\nRefs #1\n",
+            "duplicate_refs_conflicting_value": f"Task: {UID}\nRefs #1\nRefs #2\n",
+        }
+        write_events = {"task-intent", "patch-pr", "push", "record-pr", "publish-reciprocal"}
+
+        for boundary in ("supplied", "discovered"):
+            for name, malformed_body in malformed_bodies.items():
+                with self.subTest(boundary=boundary, body=name), tempfile.TemporaryDirectory() as temp:
+                    old_head = "c" * 40
+                    new_head = "d" * 40
+                    publication, projection = make_publication(1200 + len(name), head=new_head)
+                    pr = {
+                        "repository": publication["repository"],
+                        "source_ref": publication["source_ref"],
+                        "target_ref": publication["target_ref"],
+                        "head_oid": old_head,
+                        "body": malformed_body if boundary == "discovered" else f"Task: {UID}\nRefs #1\n",
+                        "state": "open", "merged": False, "draft": False, "number": 120,
+                    }
+                    adapter = FakeAdapter(
+                        publication, projection, initial_head=old_head, initial_pr=pr,
+                    )
+                    adapter.ready_update_admitted = True
+                    journal = self.journal(temp, publication)
+                    supplied_body = malformed_body if boundary == "supplied" else f"Task: {UID}\nRefs #1\n"
+
+                    error = None
+                    try:
+                        self.run_publish_entrypoint(
+                            temp, publication, projection, adapter, journal,
+                            existing_ready_update=True, body=supplied_body,
+                        )
+                    except (publish_module.PublishInputError, publication_module.PublicationError) as exc:
+                        error = exc
+
+                    leaked = [event for event in adapter.events if event in write_events]
+                    self.assertIsNotNone(
+                        error,
+                        f"{boundary} body {name} was accepted; result events={adapter.events!r}",
+                    )
+                    self.assertEqual(
+                        [], leaked,
+                        f"{boundary} body {name} reached C1 writes before rejection: {adapter.events!r}",
+                    )
+
+    def test_ready_update_rejects_noncanonical_live_pr_task_and_refs_lines_before_writes(self):
+        wrong_uid = "task_" + "b" * 32
+        malformed_bodies = {
+            "wrong_task_uid": f"Task: {wrong_uid}\nRefs #123\n",
+            "task_uid_suffix": f"Task: {UID}-stale\nRefs #123\n",
+            "wrong_issue_number": f"Task: {UID}\nRefs #124\n",
+            "refs_number_suffix": f"Task: {UID}\nRefs #1234\n",
+            "missing_task_line_with_prose_substring": f"prose says Task: {UID}\nRefs #123\n",
+            "missing_refs_line_with_prose_substring": f"Task: {UID}\nprose says Refs #123\n",
+            "duplicate_task_same_value": f"Task: {UID}\nTask: {UID}\nRefs #123\n",
+            "duplicate_task_conflicting_value": f"Task: {UID}\nTask: {wrong_uid}\nRefs #123\n",
+            "duplicate_refs_same_value": f"Task: {UID}\nRefs #123\nRefs #123\n",
+            "duplicate_refs_conflicting_value": f"Task: {UID}\nRefs #123\nRefs #124\n",
+        }
+
+        for name, body in malformed_bodies.items():
+            with self.subTest(body=name), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp).resolve()
+                publication, _projection = make_publication(1300 + len(name))
+                source_ref = publication["source_ref"]
+                target_ref = publication["target_ref"]
+                record = {
+                    "task_uid": UID,
+                    "repository": publication["repository"],
+                    "issue_number": 123,
+                    "task_branch": source_ref,
+                    "default_branch": target_ref,
+                    "canonical_worktree": str(root),
+                    "worktree_hint": str(root),
+                    "status": "pr_watch",
+                    "workflow_phase": "pr_watch",
+                    "pr_number": 123,
+                    "pr_url": f"https://github.com/{publication['repository']}/pull/123",
+                }
+                mapping_path = root / ".pm/github-project-sync/tasks.json"
+                mapping_path.parent.mkdir(parents=True)
+                mapping_path.write_text(json.dumps({"version": 1, "tasks": {UID: record}}), encoding="utf-8")
+                args = type("Args", (), {
+                    "repo": publication["repository"], "issue_number": 123,
+                    "task_uid": UID, "task_helper": str(root / "github-project-task.py"),
+                    "source_ref": source_ref, "target_ref": target_ref,
+                    "existing_ready_update": True,
+                })()
+                issue = {
+                    "number": 123,
+                    "state": "open",
+                    "body": (
+                        f"task_uid: {UID}\n- status: `pr_watch`\n- workflow_phase: `pr_watch`\n"
+                        f"- worktree_hint: `{root}`\n- pr_url: `{record['pr_url']}`\n- pr_number: `123`\n"
+                    ),
+                }
+                live_pr = {
+                    "number": 123,
+                    "html_url": record["pr_url"],
+                    "state": "open",
+                    "merged_at": None,
+                    "draft": False,
+                    "head": {"ref": source_ref, "sha": publication["source_head_oid"],
+                             "repo": {"full_name": publication["repository"]}},
+                    "base": {"ref": target_ref, "repo": {"full_name": publication["repository"]}},
+                    "body": body,
+                }
+                adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+
+                def fake_gh(*command, timeout=5.0):
+                    if command == ("api", f"repos/{publication['repository']}/issues/123"):
+                        return json.dumps(issue)
+                    if command == ("api", f"repos/{publication['repository']}/pulls/123"):
+                        return json.dumps(live_pr)
+                    raise AssertionError(f"unexpected adapter read: {command}")
+
+                with patch.object(adapter, "gh", side_effect=fake_gh):
+                    try:
+                        adapter.read_task_pr_binding(UID)
+                    except RuntimeError:
+                        error = True
+                    else:
+                        error = False
+                self.assertTrue(error, f"live PR body {name} was accepted as reciprocal identity")
 
     def test_task_binding_readback_rejects_wrong_repo_and_malformed_identity(self):
         with self.assertRaisesRegex(publication_module.ContractError, "repository mismatch"):

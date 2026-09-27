@@ -175,6 +175,10 @@ done
 if [[ "${#POSITIONAL[@]}" -gt 1 ]]; then
   die "expected at most one optional [source-branch]"
 fi
+if [[ "$EXISTING_READY_UPDATE" == "1" \
+  && ( "$LEGACY_REVIEW_V1" == "1" || -z "$IMPACT_PROJECTION" ) ]]; then
+  die "existing-ready-update requires --impact-projection and cannot use --legacy-review-v1"
+fi
 if [[ -n "$IMPACT_PROJECTION" && -z "$REVIEW_CHANGE_CLASS" ]]; then
   die "--impact-projection requires --review-change-class so role identity can be verified"
 fi
@@ -2192,6 +2196,8 @@ if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" == "1" && -n "$LOCAL_ROLE_REVIEW
   CREATE_PR=0
 fi
 if [[ "$CREATE_PR" == "1" ]]; then
+  [[ "$EXISTING_READY_UPDATE" != "1" ]] \
+    || die "existing-ready-update cannot use the generic CREATE_PR fallback"
   command -v gh >/dev/null 2>&1 || die '`gh` not found in PATH'
   if [[ -z "$REMOTE_SOURCE_REF" ]]; then
     git -C "$SOURCE_WORKTREE" push -u "$REMOTE_NAME" "$SOURCE_BRANCH"

@@ -32,6 +32,19 @@ class PublishInputError(RuntimeError):
     pass
 
 
+def has_exact_task_pr_linkage(body: Any, task_uid: str, issue_number: int) -> bool:
+    """Require one canonical whole-line Task marker and non-closing Refs line."""
+    if not isinstance(body, str):
+        return False
+    lines = body.splitlines()
+    task_lines = [line for line in lines if line.startswith("Task:")]
+    refs_lines = [line for line in lines if line.startswith("Refs")]
+    return (
+        task_lines == [f"Task: {task_uid}"]
+        and refs_lines == [f"Refs #{issue_number}"]
+    )
+
+
 def command_output(args: list[str], *, timeout: float = LOCAL_COMMAND_TIMEOUT_SECONDS) -> str:
     try:
         return subprocess.run(args, check=True, text=True, encoding="utf-8",
@@ -365,9 +378,10 @@ class GitHubPublicationAdapter:
                 raise RuntimeError("live ready-update Task PR number is missing or conflicting")
             live_pr = self.read_pr(self.args.repo, number)
             publication._check_pr(live_pr, self.publication, number, live_pr.get("head_oid"), False)
-            if (f"Task: {task_uid}" not in str(live_pr.get("body") or "")
-                    or f"Refs #{self.issue_number}" not in str(live_pr.get("body") or "")):
-                raise RuntimeError("live ready-update PR lost reciprocal Task/Refs identity")
+            if not has_exact_task_pr_linkage(
+                live_pr.get("body"), task_uid, self.issue_number,
+            ):
+                raise RuntimeError("live ready-update PR lacks exact unique Task/Refs identity")
         if number is not None:
             self.pr_number = number
         binding = {"task_uid": task_uid, "pr_number": number}
@@ -507,8 +521,10 @@ def publish(args: argparse.Namespace) -> dict[str, Any]:
     )
     body = Path(args.body_file).read_text(encoding="utf-8")
     ready_update = bool(getattr(args, "existing_ready_update", False))
-    if (f"Task: {args.task_uid}" not in body or f"Refs #{args.issue_number}" not in body):
-        raise PublishInputError("PR body must preserve the canonical Task UID and non-closing Refs line")
+    if not has_exact_task_pr_linkage(body, args.task_uid, args.issue_number):
+        raise PublishInputError(
+            "PR body must contain exactly one canonical Task UID line and non-closing Refs line"
+        )
     legacy_projection_b64 = base64.b64encode(Path(args.projection).read_bytes()).decode("ascii")
     visible = adapter.find_task_prs(candidate["task_uid"], candidate["source_ref"], candidate["target_ref"])
     if visible.get("complete") is not True or not isinstance(visible.get("pull_requests"), list):
@@ -520,9 +536,8 @@ def publish(args: argparse.Namespace) -> dict[str, Any]:
         raise PublishInputError("existing-ready-update requires one existing PR; creation is forbidden")
     if prs:
         pr = prs[0]
-        if (f"Task: {args.task_uid}" not in pr["body"]
-                or f"Refs #{args.issue_number}" not in pr["body"]):
-            raise PublishInputError("existing PR body lost canonical Task identity")
+        if not has_exact_task_pr_linkage(pr.get("body"), args.task_uid, args.issue_number):
+            raise PublishInputError("existing PR body lacks exact unique Task/Refs identity")
         if not ready_update and _is_exact_create_retry(pr, candidate, projection_value):
             # A previous create may already have pushed H1 and created this
             # exact draft even if its final response or Task URL write was

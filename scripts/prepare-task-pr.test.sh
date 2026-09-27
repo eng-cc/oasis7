@@ -2,6 +2,22 @@
 set -euo pipefail
 export OASIS7_TEST_ALLOW_UNATTESTED_DISPATCH_RECEIPTS=1
 
+WRAPPER_BOUNDARY_DIAG_DIR="${TEST_WRAPPER_BOUNDARY_DIAG_DIR:-}"
+WRAPPER_BOUNDARY_DIAG_CALL_COUNTER=0
+if [[ -n "$WRAPPER_BOUNDARY_DIAG_DIR" ]]; then
+  if [[ ! -d "$WRAPPER_BOUNDARY_DIAG_DIR" || -e "$WRAPPER_BOUNDARY_DIAG_DIR/run-start.txt" ]]; then
+    echo "wrapper boundary diagnostic directory must exist and be unused: $WRAPPER_BOUNDARY_DIAG_DIR" >&2
+    exit 2
+  fi
+  {
+    printf 'run_id=%q\n' "$(basename "$WRAPPER_BOUNDARY_DIAG_DIR")"
+    printf 'pid=%s\n' "$$"
+    printf 'start_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    printf 'fallback_selector=%q\n' "${TEST_ONLY_EXISTING_READY_FALLBACK_RED:-unset}"
+    printf 'projected_c1_selector=%q\n' "${TEST_ONLY_EXISTING_READY_C1:-unset}"
+  } >"$WRAPPER_BOUNDARY_DIAG_DIR/run-start.txt"
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 SOURCE_ROOT="$ROOT_DIR"
@@ -23,6 +39,23 @@ mkdir -p "$FIXTURE_ROOT"
 COMPARISON_OID="$("$REAL_GIT" -C "$FIXTURE_ROOT" rev-parse refs/remotes/origin/main)"
 ROOT_DIR="$FIXTURE_ROOT"
 cleanup() {
+  local cleanup_entry_status="${1:-unknown}"
+  local cleanup_entry_command="${2:-unknown}"
+  local cleanup_source_stack="${3:-}"
+  local cleanup_line_stack="${4:-}"
+  local cleanup_function_stack="${5:-}"
+  local cleanup_subshell="${6:-unknown}"
+  if [[ -n "$WRAPPER_BOUNDARY_DIAG_DIR" ]]; then
+    {
+      printf 'exit_status=%s\n' "$cleanup_entry_status"
+      printf 'last_command=%q\n' "$cleanup_entry_command"
+      printf 'source_stack=%q\n' "$cleanup_source_stack"
+      printf 'line_stack=%q\n' "$cleanup_line_stack"
+      printf 'function_stack=%q\n' "$cleanup_function_stack"
+      printf 'subshell=%s\n' "$cleanup_subshell"
+      printf 'end_utc=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    } >"$WRAPPER_BOUNDARY_DIAG_DIR/outer-exit-context.txt"
+  fi
   "$REAL_GIT" -C "$ROOT_DIR" worktree remove -f "${SMOKE_WORKTREE:-$TMPDIR/smoke-worktree}" >/dev/null 2>&1 || true
   if [[ -n "${SMOKE_WORKTREE_CANONICAL:-}" ]]; then
     "$REAL_GIT" -C "$ROOT_DIR" worktree remove -f "$SMOKE_WORKTREE_CANONICAL" >/dev/null 2>&1 || true
@@ -31,7 +64,16 @@ cleanup() {
   "$REAL_GIT" -C "$ROOT_DIR" branch -D "${SMOKE_BRANCH:-temp/prepare-pr-role-review-test}" >/dev/null 2>&1 || true
   rm -rf "$TMPDIR"
 }
-trap cleanup EXIT
+trap 'cleanup "$?" "$BASH_COMMAND" "${BASH_SOURCE[*]-}" "${BASH_LINENO[*]-}" "${FUNCNAME[*]-}" "$BASH_SUBSHELL"' EXIT
+
+preserve_integrated_artifact() {
+  local source_path="$1"
+  local artifact_name="$2"
+  local evidence_dir="${TEST_WRAPPER_INTEGRATED_EVIDENCE_DIR:-}"
+  [[ -n "$evidence_dir" ]] || return 0
+  mkdir -p "$evidence_dir"
+  cp "$source_path" "$evidence_dir/$artifact_name"
+}
 
 SMOKE_WORKTREE="$TMPDIR/smoke-worktree"
 SMOKE_BRANCH="temp/prepare-pr-role-review-test-$$"
@@ -57,6 +99,14 @@ mkdir -p "$TMPDIR/bin"
 cat >"$TMPDIR/bin/python3" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ "\${1:-}" == *"/record-draft-freeze-evidence.py" && -n "\${TEST_PM_EFFECT_LOG:-}" ]]; then
+  printf '%s\n' "draft-freeze-evidence" >>"\$TEST_PM_EFFECT_LOG"
+  exit 0
+fi
+if [[ "\${1:-}" == *"/github-project-task.py" && "\${2:-}" == "record-pr" && -n "\${TEST_PM_EFFECT_LOG:-}" ]]; then
+  printf '%s\n' "record-pr" >>"\$TEST_PM_EFFECT_LOG"
+  exit 97
+fi
 if [[ "\${1:-}" == "\${TEST_C1_PUBLISH_SCRIPT:-}" && -n "\${TEST_C1_CAPTURE_FILE:-}" ]]; then
   shift
   printf '%s\n' "\$@" >"\$TEST_C1_CAPTURE_FILE"
@@ -476,11 +526,119 @@ run_prepare() {
   local git_log="$2"
   shift 2
   local compatibility_args=()
+  local boundary_call_dir=""
+  local boundary_call_id=""
+  local boundary_child_rc=0
+  local boundary_pm_events_before=0
+  local boundary_pm_events_after=0
+  local boundary_started_utc=""
+  local boundary_ended_utc=""
+  local boundary_arg_index=0
+  local boundary_argument=""
+  local -a boundary_child_argv=()
   if [[ "${TEST_PREPARE_USE_V1_COMPAT:-1}" == "1" ]]; then
     compatibility_args+=(--legacy-review-v1)
   fi
+  if [[ -n "$WRAPPER_BOUNDARY_DIAG_DIR" ]]; then
+    while :; do
+      WRAPPER_BOUNDARY_DIAG_CALL_COUNTER=$((WRAPPER_BOUNDARY_DIAG_CALL_COUNTER + 1))
+      printf -v boundary_call_id 'call-%04d' "$WRAPPER_BOUNDARY_DIAG_CALL_COUNTER"
+      boundary_call_dir="$WRAPPER_BOUNDARY_DIAG_DIR/$boundary_call_id"
+      [[ -e "$boundary_call_dir" ]] || break
+    done
+    mkdir "$boundary_call_dir"
+    boundary_child_argv=("$ROOT_DIR/scripts/prepare-task-pr.sh" "$SMOKE_BRANCH")
+    if [[ "${TEST_PREPARE_USE_V1_COMPAT:-1}" == "1" ]]; then
+      boundary_child_argv+=(--legacy-review-v1)
+    fi
+    boundary_child_argv+=("$@")
+    boundary_started_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    if [[ -n "${TEST_PM_EFFECT_LOG:-}" && -f "$TEST_PM_EFFECT_LOG" ]]; then
+      boundary_pm_events_before="$(wc -l <"$TEST_PM_EFFECT_LOG")"
+    fi
+    {
+      printf 'call_id=%s\n' "$boundary_call_id"
+      printf 'start_utc=%s\n' "$boundary_started_utc"
+      printf 'run_prepare_caller_source=%q\n' "${BASH_SOURCE[1]:-}"
+      printf 'run_prepare_caller_line=%s\n' "${BASH_LINENO[0]:-}"
+      printf 'run_prepare_caller_function=%q\n' "${FUNCNAME[1]:-main}"
+      printf 'caller_source_stack=%q\n' "${BASH_SOURCE[*]-}"
+      printf 'caller_line_stack=%q\n' "${BASH_LINENO[*]-}"
+      printf 'caller_function_stack=%q\n' "${FUNCNAME[*]-}"
+      printf 'caller_subshell=%s\n' "$BASH_SUBSHELL"
+      printf 'fake_gh_log=%q\n' "$gh_log"
+      printf 'fake_git_log=%q\n' "$git_log"
+      printf 'pm_effect_log=%q\n' "${TEST_PM_EFFECT_LOG:-}"
+      if declare -p fixture_name >/dev/null 2>&1; then
+        printf 'fixture_name=%q\n' "$fixture_name"
+      fi
+      printf 'child_argv_count=%s\n' "${#boundary_child_argv[@]}"
+      for boundary_argument in "${boundary_child_argv[@]}"; do
+        printf 'child_argv[%04d]=%q\n' "$boundary_arg_index" "$boundary_argument"
+        boundary_arg_index=$((boundary_arg_index + 1))
+      done
+    } >"$boundary_call_dir/call.txt"
+  fi
   : > "$gh_log"
   : > "$git_log"
+  if [[ -n "$boundary_call_dir" ]]; then
+    if PATH="$TMPDIR/bin:$PATH" \
+      PM_ROOT_DIR="$SMOKE_WORKTREE_CANONICAL" \
+      PREPARE_TASK_PR_ALLOW_RETIRED_PM_TASKS="${PREPARE_TASK_PR_ALLOW_RETIRED_PM_TASKS:-1}" \
+      PREPARE_TASK_PR_ALLOW_GITHUB_ISSUE_FALLBACK="${PREPARE_TASK_PR_ALLOW_GITHUB_ISSUE_FALLBACK:-0}" \
+      PREPARE_TASK_PR_WORKFLOW_LINT_PATH="$ROOT_DIR/scripts/pm/workflow-lint.sh" \
+      TEST_GH_LOG="$gh_log" \
+      TEST_GIT_LOG="$git_log" \
+      TEST_GH_ISSUE_LIST_JSON="${TEST_GH_ISSUE_LIST_JSON:-}" \
+      TEST_GH_ISSUE_BODY_JSON="${TEST_GH_ISSUE_BODY_JSON:-}" \
+      TEST_GH_ISSUE_FULL_JSON="${TEST_GH_ISSUE_FULL_JSON:-}" \
+      TEST_GH_ISSUE_VIEW_JSON="${TEST_GH_ISSUE_VIEW_JSON:-}" \
+      TEST_GH_PR_JSON="${TEST_GH_PR_JSON:-}" \
+      TEST_EXISTING_PR_JSON="${TEST_EXISTING_PR_JSON:-[]}" \
+      TEST_PM_EFFECT_LOG="${TEST_PM_EFFECT_LOG:-}" \
+      TEST_GH_CURRENT_REPO="${TEST_GH_CURRENT_REPO:-example/oasis7}" \
+      TEST_PR_STATE_TSV="${TEST_PR_STATE_TSV:-}" \
+      TEST_PR_BASE_REF="${TEST_PR_BASE_REF:-}" \
+      TEST_GH_DEFAULT_BRANCH="${TEST_GH_DEFAULT_BRANCH-main}" \
+      "${boundary_child_argv[@]}" >"$boundary_call_dir/child.stdout" 2>"$boundary_call_dir/child.stderr"; then
+      boundary_child_rc=0
+    else
+      boundary_child_rc=$?
+    fi
+    boundary_ended_utc="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+    {
+      printf 'end_utc=%s\n' "$boundary_ended_utc"
+      printf 'child_exit_status=%s\n' "$boundary_child_rc"
+      printf 'fake_gh_events=%s\n' "$(wc -l <"$gh_log")"
+      printf 'fake_git_events=%s\n' "$(wc -l <"$git_log")"
+      if [[ -f "$gh_log" ]]; then
+        cp "$gh_log" "$boundary_call_dir/gh-adapter.log"
+        printf 'fake_gh_artifact=gh-adapter.log\n'
+      else
+        printf 'fake_gh_artifact=missing\n'
+      fi
+      if [[ -f "$git_log" ]]; then
+        cp "$git_log" "$boundary_call_dir/git-adapter.log"
+        printf 'fake_git_artifact=git-adapter.log\n'
+      else
+        printf 'fake_git_artifact=missing\n'
+      fi
+      if [[ -n "${TEST_PM_EFFECT_LOG:-}" && -f "$TEST_PM_EFFECT_LOG" ]]; then
+        boundary_pm_events_after="$(wc -l <"$TEST_PM_EFFECT_LOG")"
+        if (( boundary_pm_events_after > boundary_pm_events_before )); then
+          tail -n "+$((boundary_pm_events_before + 1))" "$TEST_PM_EFFECT_LOG" >"$boundary_call_dir/pm-adapter.log"
+        else
+          : >"$boundary_call_dir/pm-adapter.log"
+        fi
+        printf 'pm_event_count_delta=%s\n' "$((boundary_pm_events_after - boundary_pm_events_before))"
+      else
+        printf 'pm_adapter_log=not-configured\n'
+      fi
+    } >>"$boundary_call_dir/call.txt"
+    cat "$boundary_call_dir/child.stdout"
+    cat "$boundary_call_dir/child.stderr" >&2
+    return "$boundary_child_rc"
+  fi
   PATH="$TMPDIR/bin:$PATH" \
     PM_ROOT_DIR="$SMOKE_WORKTREE_CANONICAL" \
     PREPARE_TASK_PR_ALLOW_RETIRED_PM_TASKS="${PREPARE_TASK_PR_ALLOW_RETIRED_PM_TASKS:-1}" \
@@ -493,12 +651,451 @@ run_prepare() {
     TEST_GH_ISSUE_FULL_JSON="${TEST_GH_ISSUE_FULL_JSON:-}" \
     TEST_GH_ISSUE_VIEW_JSON="${TEST_GH_ISSUE_VIEW_JSON:-}" \
     TEST_GH_PR_JSON="${TEST_GH_PR_JSON:-}" \
+    TEST_EXISTING_PR_JSON="${TEST_EXISTING_PR_JSON:-[]}" \
+    TEST_PM_EFFECT_LOG="${TEST_PM_EFFECT_LOG:-}" \
     TEST_GH_CURRENT_REPO="${TEST_GH_CURRENT_REPO:-example/oasis7}" \
     TEST_PR_STATE_TSV="${TEST_PR_STATE_TSV:-}" \
     TEST_PR_BASE_REF="${TEST_PR_BASE_REF:-}" \
     TEST_GH_DEFAULT_BRANCH="${TEST_GH_DEFAULT_BRANCH-main}" \
     "$ROOT_DIR/scripts/prepare-task-pr.sh" "$SMOKE_BRANCH" "${compatibility_args[@]}" "$@"
 }
+
+# A narrow selector keeps the legacy/no-projection boundary independently
+# executable without paying for every unrelated wrapper fixture in this file.
+run_existing_ready_legacy_fallback_red_fixture() {
+  local issue_body="$TMPDIR/existing-ready-red-issue.json"
+  local issue_list="$TMPDIR/existing-ready-red-issue-list.json"
+  local issue_view="$TMPDIR/existing-ready-red-issue-view.json"
+  local pr_json="$TMPDIR/existing-ready-red-pr.json"
+  local pr_list="$TMPDIR/existing-ready-red-pr-list.json"
+  local gh_log="$TMPDIR/gh-existing-ready-red.log"
+  local git_log="$TMPDIR/git-existing-ready-red.log"
+  local pm_log="$TMPDIR/pm-existing-ready-red.log"
+  local stdout_path="$TMPDIR/existing-ready-red.stdout"
+  local stderr_path="$TMPDIR/existing-ready-red.stderr"
+
+  # The new early compatibility guard should stop before any adapter is
+  # invoked. Create empty logs up front so zero-call behavior is measurable.
+  : >"$gh_log"
+  : >"$git_log"
+  : >"$pm_log"
+
+  write_task_binding
+  write_project_trace
+  printf '\n# focused existing-ready fallback fixture\n' >>"$SMOKE_WORKTREE/scripts/prepare-task-pr.sh"
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" add scripts/prepare-task-pr.sh
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" \
+    -c user.name="oasis7 smoke" \
+    -c user.email="smoke@example.invalid" \
+    -c commit.gpgsign=false \
+    commit --no-verify -m "test: focused existing-ready fallback fixture" >/dev/null
+  local source_head
+  source_head="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+  write_role_review_packet "$source_head" "no_findings"
+  commit_fixture_evidence
+  source_head="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+
+  mkdir -p "$SMOKE_WORKTREE/.pm/github-project-sync"
+  cat >"$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" <<EOF
+{"project":{"repo":"eng-cc/oasis7"},"tasks":{"$TASK_UID":{"issue_number":123,"issue_url":"https://github.com/eng-cc/oasis7/issues/123","owner_role":"tpm","priority":"P3","project_item_id":"PVTI_fixture","repository":"eng-cc/oasis7","status":"pr_watch","workflow_phase":"pr_watch","task_uid":"$TASK_UID","title":"focused existing-ready fallback fixture","canonical_worktree":"$SMOKE_WORKTREE_CANONICAL","task_branch":"$SMOKE_BRANCH","default_branch":"main","worktree_hint":"$SMOKE_WORKTREE_CANONICAL","pr_number":999,"pr_url":"https://github.com/eng-cc/oasis7/pull/999"}},"version":1}
+EOF
+  "$REAL_PYTHON" - "$issue_body" "$issue_list" "$issue_view" "$pr_json" "$pr_list" "$TASK_UID" "$SMOKE_WORKTREE_CANONICAL" "$SMOKE_BRANCH" "$source_head" "$COMPARISON_OID" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+issue_body_path, issue_list_path, issue_view_path, pr_path, pr_list_path, uid, worktree, branch, head, comparison = sys.argv[1:]
+body = "\n".join((
+    "<!-- oasis7-pm-task -->",
+    f"task_uid: {uid}",
+    "",
+    "Task metadata:",
+    "- owner_role: `tpm`",
+    "- status: `pr_watch`",
+    "- priority: `P3`",
+    "- workflow_phase: `pr_watch`",
+    f"- worktree_hint: `{worktree}`",
+)) + "\n"
+issue = {
+    "body": body,
+    "comments": [],
+    "number": 123,
+    "state": "OPEN",
+    "title": "focused existing-ready fallback fixture",
+    "url": "https://github.com/eng-cc/oasis7/issues/123",
+}
+Path(issue_body_path).write_text(json.dumps(issue) + "\n", encoding="utf-8")
+Path(issue_list_path).write_text(json.dumps([{
+    "number": 123,
+    "url": issue["url"],
+    "title": issue["title"],
+    "state": "OPEN",
+}]) + "\n", encoding="utf-8")
+freeze = "\n".join((
+    "<!-- oasis7-pm-evidence -->",
+    f"Task UID: {uid}",
+    "Evidence Phase: draft_candidate_freeze",
+    "Role: tpm",
+    "Recorded At: 2026-06-03T00:06:00+08:00",
+    "",
+    f"Source Worktree: {worktree}",
+    f"Source Branch: {branch}",
+    f"Source Head: {head}",
+    "Comparison Ref: refs/remotes/origin/main",
+    f"Comparison OID: {comparison}",
+))
+Path(issue_view_path).write_text(json.dumps({"comments": [{"body": freeze}]}) + "\n", encoding="utf-8")
+pr = {
+    "number": 999,
+    "html_url": "https://github.com/eng-cc/oasis7/pull/999",
+    "state": "open",
+    "merged_at": None,
+    "draft": False,
+    "head": {"ref": branch, "sha": head, "repo": {"full_name": "eng-cc/oasis7"}},
+    "base": {"ref": "main", "repo": {"full_name": "eng-cc/oasis7"}},
+}
+Path(pr_path).write_text(json.dumps(pr) + "\n", encoding="utf-8")
+Path(pr_list_path).write_text(json.dumps([{
+    "url": pr["html_url"],
+    "headRefName": branch,
+    "baseRefName": "main",
+    "state": "OPEN",
+    "headRepository": {"name": "oasis7"},
+    "headRepositoryOwner": {"login": "eng-cc"},
+}]) + "\n", encoding="utf-8")
+PY
+  local baseline_comments
+  baseline_comments="$("$REAL_PYTHON" - "$issue_view" <<'PY'
+import json, sys
+print(len(json.load(open(sys.argv[1])).get("comments", [])))
+PY
+)"
+
+  local wrapper_rc
+  if TEST_PREPARE_USE_V1_COMPAT=0 \
+    PATH="$TMPDIR/bin:$PATH" \
+    PM_ROOT_DIR="$SMOKE_WORKTREE_CANONICAL" \
+    PREPARE_TASK_PR_ALLOW_RETIRED_PM_TASKS="${PREPARE_TASK_PR_ALLOW_RETIRED_PM_TASKS:-1}" \
+    PREPARE_TASK_PR_ALLOW_GITHUB_ISSUE_FALLBACK="${PREPARE_TASK_PR_ALLOW_GITHUB_ISSUE_FALLBACK:-0}" \
+    PREPARE_TASK_PR_WORKFLOW_LINT_PATH="$ROOT_DIR/scripts/pm/workflow-lint.sh" \
+    TEST_GH_LOG="$gh_log" \
+    TEST_GIT_LOG="$git_log" \
+    TEST_GH_CURRENT_REPO="eng-cc/oasis7" \
+    TEST_GH_ISSUE_LIST_JSON="$issue_list" \
+    TEST_GH_ISSUE_BODY_JSON="$issue_body" \
+    TEST_GH_ISSUE_FULL_JSON="$issue_body" \
+    TEST_GH_ISSUE_VIEW_JSON="$issue_view" \
+    TEST_GH_PR_JSON="$pr_json" \
+    TEST_EXISTING_PR_JSON="$(cat "$pr_list")" \
+    TEST_GH_DEFAULT_BRANCH="${TEST_GH_DEFAULT_BRANCH:-main}" \
+    TEST_PR_STATE_TSV="${TEST_PR_STATE_TSV:-}" \
+    TEST_PR_BASE_REF="${TEST_PR_BASE_REF:-}" \
+    TEST_GH_PERSIST_COMMENT=1 \
+    TEST_PM_EFFECT_LOG="$pm_log" \
+      "$ROOT_DIR/scripts/prepare-task-pr.sh" "$SMOKE_BRANCH" \
+        --existing-ready-update --legacy-review-v1 \
+        --review-change-class mixed \
+        --review-manual-role producer_system_designer \
+        --review-manual-role repository_health_engineer \
+        --review-manual-role qa_engineer >"$stdout_path" 2>"$stderr_path"; then
+    wrapper_rc=0
+  else
+    wrapper_rc=$?
+  fi
+  "$REAL_PYTHON" - "$pm_log" "$gh_log" "$git_log" "$issue_view" "$stderr_path" "$stdout_path" "$baseline_comments" "$wrapper_rc" <<'PY'
+from pathlib import Path
+import json
+import os
+import re
+import sys
+
+pm_path, gh_path, git_path, issue_view_path, error_path, output_path = map(Path, sys.argv[1:7])
+baseline_comments = int(sys.argv[7])
+wrapper_rc = int(sys.argv[8])
+pm_events = pm_path.read_text(encoding="utf-8").splitlines() if pm_path.exists() else []
+gh_lines = gh_path.read_text(encoding="utf-8").splitlines()
+git_lines = git_path.read_text(encoding="utf-8").splitlines()
+issue_view = json.loads(issue_view_path.read_text(encoding="utf-8"))
+stderr = error_path.read_text(encoding="utf-8")
+stdout = output_path.read_text(encoding="utf-8")
+gh_writes = [
+    line for line in gh_lines
+    if line.startswith(("issue comment ", "issue edit ", "project item-edit "))
+    or (line.startswith("api ") and re.search(r"(?:^| )--method (POST|PATCH|PUT|DELETE)(?: |$)", line))
+]
+counters = {
+    "draft_freeze_evidence": pm_events.count("draft-freeze-evidence"),
+    "git_push": sum(bool(re.search(r"(?:^| )push(?: |$)", line)) for line in git_lines),
+    "pr_create": sum(line.startswith("pr create ") for line in gh_lines),
+    "record_pr": pm_events.count("record-pr"),
+    "github_task_project_writes": len(gh_writes),
+    "persisted_issue_comments": len(issue_view.get("comments", [])) - baseline_comments,
+}
+expected_counters = {key: 0 for key in counters}
+expected_diagnostic = "existing-ready-update requires --impact-projection and cannot use --legacy-review-v1"
+evidence = {
+    "wrapper_exit_code": wrapper_rc,
+    "expected_diagnostic": expected_diagnostic,
+    "observed_stderr": stderr,
+    "observed_stdout": stdout,
+    "observed_counters": counters,
+    "expected_counters_after_guard": expected_counters,
+    "github_adapter_events": gh_lines,
+    "git_adapter_events": git_lines,
+    "pm_adapter_events": pm_events,
+}
+print(json.dumps(evidence, indent=2, sort_keys=True))
+evidence_path = os.environ.get("TEST_WRAPPER_RED_EVIDENCE_LOG")
+if evidence_path:
+    Path(evidence_path).write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+if wrapper_rc == 0:
+    raise SystemExit(f"legacy/no-projection existing-ready request unexpectedly succeeded: {evidence}")
+if expected_diagnostic not in stderr:
+    raise SystemExit(f"existing-ready request did not stop at the exact compatibility guard: {evidence}")
+if counters != expected_counters:
+    raise SystemExit(f"existing-ready request reached a forbidden publication side effect: {evidence}")
+PY
+}
+
+run_existing_ready_projected_c1_fixture() {
+  local issue_body="$TMPDIR/existing-ready-c1-issue.json"
+  local issue_list="$TMPDIR/existing-ready-c1-issue-list.json"
+  local issue_view="$TMPDIR/existing-ready-c1-issue-view.json"
+  local pr_json="$TMPDIR/existing-ready-c1-pr.json"
+  local pr_list="$TMPDIR/existing-ready-c1-pr-list.json"
+  local projection_input="$TMPDIR/existing-ready-c1-projection-input.json"
+  local projection_path="$TMPDIR/existing-ready-c1-projection.json"
+  local gh_log="$TMPDIR/gh-existing-ready-c1.log"
+  local git_log="$TMPDIR/git-existing-ready-c1.log"
+  local pm_log="$TMPDIR/pm-existing-ready-c1.log"
+  local publisher_args="$TMPDIR/existing-ready-c1-publisher-args.txt"
+  local stdout_path="$TMPDIR/existing-ready-c1.stdout"
+  local stderr_path="$TMPDIR/existing-ready-c1.stderr"
+  local evidence_path="${TEST_WRAPPER_INTEGRATED_EVIDENCE_DIR:-}/projected-ready.json"
+
+  : >"$gh_log"
+  : >"$git_log"
+  : >"$pm_log"
+  write_task_binding
+  write_project_trace
+  printf '\n# focused projected existing-ready fixture\n' >>"$SMOKE_WORKTREE/scripts/prepare-task-pr.sh"
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" add scripts/prepare-task-pr.sh
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" \
+    -c user.name="oasis7 smoke" \
+    -c user.email="smoke@example.invalid" \
+    -c commit.gpgsign=false \
+    commit --no-verify -m "test: focused projected existing-ready fixture" >/dev/null
+  local source_head
+  source_head="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+  mkdir -p "$SMOKE_WORKTREE/.pm/github-project-sync"
+  cat >"$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" <<EOF
+{"project":{"repo":"eng-cc/oasis7"},"tasks":{"$TASK_UID":{"issue_number":123,"issue_url":"https://github.com/eng-cc/oasis7/issues/123","owner_role":"tpm","priority":"P3","project_item_id":"PVTI_fixture","repository":"eng-cc/oasis7","status":"pr_watch","workflow_phase":"pr_watch","task_uid":"$TASK_UID","title":"focused projected existing-ready fixture","canonical_worktree":"$SMOKE_WORKTREE_CANONICAL","task_branch":"$SMOKE_BRANCH","default_branch":"main","worktree_hint":"$SMOKE_WORKTREE_CANONICAL","pr_number":999,"pr_url":"https://github.com/eng-cc/oasis7/pull/999"}},"version":1}
+EOF
+  write_role_review_packet "$source_head" "no_findings"
+  commit_fixture_evidence
+  source_head="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+  local scope_base_oid
+  scope_base_oid="$("$REAL_GIT" -C "$SMOKE_WORKTREE" merge-base "$COMPARISON_OID" "$source_head")"
+  local changed_path_list
+  changed_path_list="$("$REAL_GIT" -C "$SMOKE_WORKTREE" diff --name-only "$scope_base_oid" "$source_head" | paste -sd ';' -)"
+  "$REAL_PYTHON" - "$projection_input" "$SMOKE_WORKTREE" "$TASK_UID" "$source_head" "$scope_base_oid" "$changed_path_list" <<'PY'
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+out, root, task_uid, head, base, raw_paths = sys.argv[1:]
+paths = [path for path in raw_paths.split(";") if path]
+payload = {
+    "task_uid": task_uid,
+    "source_head_oid": head,
+    "scope_base_oid": base,
+    "changed_paths": paths,
+    "change_class": "mixed",
+    "manual_roles": ["producer_system_designer", "repository_health_engineer", "qa_engineer"],
+    "domain_role": None,
+    "test_profile": "required",
+    "declared_tests": ["required_gate_baseline"],
+    "consumed_contracts": [{"id": "workflow-contract", "revision": "v1"}],
+    "public_semantics": [],
+    "affected_consumers": ["required-ci"],
+    "closure_status": {
+        "status": "complete",
+        "reason": "fixture source scope is explicit",
+        "evidence": [{
+            "path": "Cargo.toml",
+            "sha256": "sha256:" + hashlib.sha256((Path(root) / "Cargo.toml").read_bytes()).hexdigest(),
+        }],
+    },
+}
+Path(out).write_text(json.dumps(payload), encoding="utf-8")
+PY
+  "$REAL_PYTHON" "$ROOT_DIR/scripts/pm/workflow-impact-projection.py" \
+    --root "$SMOKE_WORKTREE" --input "$projection_input" --out "$projection_path" \
+    --planner-authority-oid "$scope_base_oid" >/dev/null
+  "$REAL_PYTHON" - "$issue_body" "$issue_list" "$issue_view" "$pr_json" "$pr_list" "$TASK_UID" "$SMOKE_WORKTREE_CANONICAL" "$SMOKE_BRANCH" "$source_head" "$COMPARISON_OID" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+body_path, issue_list_path, view_path, pr_path, pr_list_path, uid, worktree, branch, head, comparison = sys.argv[1:]
+body = "\n".join((
+    "<!-- oasis7-pm-task -->",
+    f"task_uid: {uid}",
+    "",
+    "Task metadata:",
+    "- owner_role: `tpm`",
+    "- status: `committed`",
+    "- priority: `P3`",
+    "- workflow_phase: `implementation`",
+    f"- worktree_hint: `{worktree}`",
+)) + "\n"
+issue = {"body": body, "comments": [], "number": 123, "state": "OPEN", "title": "focused projected existing-ready fixture", "url": "https://github.com/eng-cc/oasis7/issues/123"}
+Path(body_path).write_text(json.dumps(issue) + "\n", encoding="utf-8")
+Path(issue_list_path).write_text(json.dumps([{"number": 123, "url": issue["url"], "title": issue["title"], "state": "OPEN"}]) + "\n", encoding="utf-8")
+freeze = "\n".join((
+    "<!-- oasis7-pm-evidence -->",
+    f"Task UID: {uid}",
+    "Evidence Phase: draft_candidate_freeze",
+    "Role: tpm",
+    "Recorded At: 2026-06-03T00:06:00+08:00",
+    "",
+    f"Source Worktree: {worktree}",
+    f"Source Branch: {branch}",
+    f"Source Head: {head}",
+    "Comparison Ref: refs/remotes/origin/main",
+    f"Comparison OID: {comparison}",
+))
+Path(view_path).write_text(json.dumps({"comments": [{"body": freeze}]}) + "\n", encoding="utf-8")
+pr = {
+    "number": 999,
+    "html_url": "https://github.com/eng-cc/oasis7/pull/999",
+    "state": "open",
+    "merged_at": None,
+    "draft": False,
+    "head": {"ref": branch, "sha": head, "repo": {"full_name": "eng-cc/oasis7"}},
+    "base": {"ref": "main", "repo": {"full_name": "eng-cc/oasis7"}},
+}
+Path(pr_path).write_text(json.dumps(pr) + "\n", encoding="utf-8")
+Path(pr_list_path).write_text(json.dumps([{
+    "url": pr["html_url"], "headRefName": branch, "baseRefName": "main", "state": "OPEN",
+    "headRepository": {"name": "oasis7"}, "headRepositoryOwner": {"login": "eng-cc"},
+}]) + "\n", encoding="utf-8")
+PY
+
+  local baseline_comments
+  baseline_comments="$("$REAL_PYTHON" - "$issue_view" <<'PY'
+import json, sys
+print(len(json.load(open(sys.argv[1])).get("comments", [])))
+PY
+)"
+  local wrapper_rc=0
+  if TEST_PREPARE_USE_V1_COMPAT=0 \
+    PATH="$TMPDIR/bin:$PATH" \
+    PM_ROOT_DIR="$SMOKE_WORKTREE_CANONICAL" \
+    PREPARE_TASK_PR_ALLOW_RETIRED_PM_TASKS="${PREPARE_TASK_PR_ALLOW_RETIRED_PM_TASKS:-1}" \
+    PREPARE_TASK_PR_ALLOW_GITHUB_ISSUE_FALLBACK="${PREPARE_TASK_PR_ALLOW_GITHUB_ISSUE_FALLBACK:-0}" \
+    PREPARE_TASK_PR_WORKFLOW_LINT_PATH="$ROOT_DIR/scripts/pm/workflow-lint.sh" \
+    TEST_GH_LOG="$gh_log" \
+    TEST_GIT_LOG="$git_log" \
+    TEST_GH_CURRENT_REPO="eng-cc/oasis7" \
+    TEST_GH_ISSUE_LIST_JSON="$issue_list" \
+    TEST_GH_ISSUE_BODY_JSON="$issue_body" \
+    TEST_GH_ISSUE_FULL_JSON="$issue_body" \
+    TEST_GH_ISSUE_VIEW_JSON="$issue_view" \
+    TEST_GH_PR_JSON="$pr_json" \
+    TEST_EXISTING_PR_JSON="$(cat "$pr_list")" \
+    TEST_GH_DEFAULT_BRANCH="${TEST_GH_DEFAULT_BRANCH:-main}" \
+    TEST_GH_PERSIST_COMMENT=1 \
+    TEST_PM_EFFECT_LOG="$pm_log" \
+    TEST_C1_PUBLISH_SCRIPT="$ROOT_DIR/scripts/pm/pr_projection_publish.py" \
+    TEST_C1_CAPTURE_FILE="$publisher_args" \
+    TEST_C1_PUBLISH_FAIL=1 \
+      "$ROOT_DIR/scripts/prepare-task-pr.sh" "$SMOKE_BRANCH" \
+        --existing-ready-update --impact-projection "$projection_path" \
+        --review-change-class mixed \
+        --review-manual-role producer_system_designer \
+        --review-manual-role repository_health_engineer \
+        --review-manual-role qa_engineer >"$stdout_path" 2>"$stderr_path"; then
+    wrapper_rc=0
+  else
+    wrapper_rc=$?
+  fi
+  "$REAL_PYTHON" - "$publisher_args" "$gh_log" "$git_log" "$pm_log" "$issue_view" "$stderr_path" "$stdout_path" "$baseline_comments" "$wrapper_rc" "$TASK_UID" "$source_head" "$evidence_path" <<'PY'
+from pathlib import Path
+import json
+import os
+import re
+import sys
+
+args_path, gh_path, git_path, pm_path, view_path, err_path, out_path = map(Path, sys.argv[1:8])
+baseline = int(sys.argv[8])
+wrapper_rc = int(sys.argv[9])
+uid = sys.argv[10]
+head = sys.argv[11]
+evidence_path = Path(sys.argv[12])
+args = args_path.read_text(encoding="utf-8").splitlines() if args_path.exists() else []
+gh_lines = gh_path.read_text(encoding="utf-8").splitlines()
+git_lines = git_path.read_text(encoding="utf-8").splitlines()
+pm_events = pm_path.read_text(encoding="utf-8").splitlines()
+view = json.loads(view_path.read_text(encoding="utf-8"))
+stderr = err_path.read_text(encoding="utf-8")
+stdout = out_path.read_text(encoding="utf-8")
+gh_writes = [
+    line for line in gh_lines
+    if line.startswith(("issue comment ", "issue edit ", "project item-edit "))
+    or (line.startswith("api ") and re.search(r"(?:^| )--method (POST|PATCH|PUT|DELETE)(?: |$)", line))
+]
+counters = {
+    "c1_publisher_invocations": 1 if args_path.exists() else 0,
+    "draft_freeze_evidence": pm_events.count("draft-freeze-evidence"),
+    "git_push": sum(bool(re.search(r"(?:^| )push(?: |$)", line)) for line in git_lines),
+    "pr_create": sum(line.startswith("pr create ") for line in gh_lines),
+    "record_pr": pm_events.count("record-pr"),
+    "github_task_project_writes": len(gh_writes),
+    "persisted_issue_comments": len(view.get("comments", [])) - baseline,
+}
+evidence = {
+    "case": "projected_c1_existing_ready",
+    "wrapper_exit_code": wrapper_rc,
+    "publisher_stub_expected_stderr": "existing-ready-update requires one existing PR; creation is forbidden",
+    "observed_stderr": stderr,
+    "observed_stdout": stdout,
+    "publisher_arguments": args,
+    "observed_counters": counters,
+    "github_adapter_events": gh_lines,
+    "git_adapter_events": git_lines,
+    "pm_adapter_events": pm_events,
+}
+if args.count("--existing-ready-update") != 1 or "--draft-candidate" in args:
+    raise SystemExit(f"projected C1 mode was not forwarded exactly: {evidence}")
+for key, expected in (("--task-uid", uid), ("--source-head", head), ("--repo", "eng-cc/oasis7")):
+    try:
+        actual = args[args.index(key) + 1]
+    except (ValueError, IndexError):
+        raise SystemExit(f"projected C1 omitted publisher argument {key}: {evidence}")
+    if actual != expected:
+        raise SystemExit(f"projected C1 publisher argument {key} mismatched: {evidence}")
+if wrapper_rc == 0 or evidence["publisher_stub_expected_stderr"] not in stderr:
+    raise SystemExit(f"projected C1 did not reach the expected publisher rejection: {evidence}")
+if any(line.startswith("pr create ") or line.startswith("project item-edit ") or line.startswith("issue edit ") for line in gh_lines):
+    raise SystemExit(f"projected C1 publisher rejection reached generic fallback writes: {evidence}")
+if counters["git_push"] or counters["record_pr"]:
+    raise SystemExit(f"projected C1 publisher rejection reached generic push/record fallback: {evidence}")
+evidence_path.parent.mkdir(parents=True, exist_ok=True)
+evidence_path.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+print(json.dumps(evidence, indent=2, sort_keys=True))
+PY
+}
+
+if [[ "${TEST_ONLY_EXISTING_READY_FALLBACK_RED:-0}" == "1" ]]; then
+  run_existing_ready_legacy_fallback_red_fixture
+  exit $?
+fi
+if [[ "${TEST_ONLY_EXISTING_READY_C1:-0}" == "1" ]]; then
+  run_existing_ready_projected_c1_fixture
+  exit $?
+fi
 
 ready_update_help="$(
   PATH="$TMPDIR/bin:$PATH" \
@@ -1203,6 +1800,14 @@ for forbidden in ("OPT_PR_WATCH", "OPT_PR_WATCH_PM", "OPT_PR_WATCH_PHASE"):
     if any(forbidden in line for line in project_writes):
         raise SystemExit(f"draft candidate advanced lifecycle to pr_watch via {forbidden}: {project_writes}")
 PY
+if [[ -n "${TEST_WRAPPER_INTEGRATED_EVIDENCE_DIR:-}" ]]; then
+  preserve_integrated_artifact "$draft_log" draft-gh.log
+  preserve_integrated_artifact "$draft_git_log" draft-git.log
+  preserve_integrated_artifact "$draft_out" draft.stdout
+  preserve_integrated_artifact "$draft_err" draft.stderr
+  printf 'case=ordinary-draft-candidate\nwrapper_exit_code=0\nassertions=passed\n' \
+    >"$TEST_WRAPPER_INTEGRATED_EVIDENCE_DIR/ordinary-draft.result"
+fi
 
 # A migrated task retains historical compatibility hints, but its canonical
 # worktree/branch binding must drive draft-candidate task inference.
@@ -2882,6 +3487,7 @@ existing_ready_issue_log="$TMPDIR/gh-existing-ready-update.log"
 existing_ready_git_log="$TMPDIR/git-existing-ready-update.log"
 existing_ready_publisher_args="$TMPDIR/existing-ready-publisher-args.txt"
 existing_ready_err="$TMPDIR/existing-ready-update.err"
+existing_ready_wrapper_rc=0
 if TEST_PREPARE_USE_V1_COMPAT=0 \
   TEST_GH_CURRENT_REPO="eng-cc/oasis7" \
   TEST_GH_ISSUE_LIST_JSON="$draft_issue_list" \
@@ -2901,12 +3507,15 @@ if TEST_PREPARE_USE_V1_COMPAT=0 \
       --review-manual-role qa_engineer >"$TMPDIR/existing-ready-update.out" 2>"$existing_ready_err"; then
   echo "existing-ready wrapper fixture must return the mocked publisher rejection" >&2
   exit 1
+else
+  existing_ready_wrapper_rc=$?
 fi
-python3 - "$existing_ready_publisher_args" "$existing_ready_issue_log" "$existing_ready_git_log" "$existing_ready_err" "$TASK_UID" "$SOURCE_HEAD" <<'PY'
+python3 - "$existing_ready_publisher_args" "$existing_ready_issue_log" "$existing_ready_git_log" "$existing_ready_err" "$TASK_UID" "$SOURCE_HEAD" "$existing_ready_wrapper_rc" <<'PY'
 from pathlib import Path
 import sys
 
-args_path, gh_path, git_path, err_path, task_uid, source_head = map(Path, sys.argv[1:])
+args_path, gh_path, git_path, err_path, task_uid, source_head = map(Path, sys.argv[1:7])
+wrapper_rc = int(sys.argv[7])
 args = args_path.read_text(encoding="utf-8").splitlines()
 gh_lines = gh_path.read_text(encoding="utf-8").splitlines()
 git_lines = git_path.read_text(encoding="utf-8").splitlines()
@@ -2928,6 +3537,152 @@ if any("push" in line for line in git_lines):
     raise SystemExit(f"publisher rejection was followed by a source push: {git_lines}")
 if "existing-ready-update requires one existing PR; creation is forbidden" not in stderr:
     raise SystemExit(f"expected mocked no-create publisher rejection, got: {stderr}")
+if wrapper_rc == 0:
+    raise SystemExit("projected C1 publisher rejection unexpectedly returned wrapper success")
+PY
+if [[ -n "${TEST_WRAPPER_INTEGRATED_EVIDENCE_DIR:-}" ]]; then
+  preserve_integrated_artifact "$existing_ready_issue_log" projected-ready-gh.log
+  preserve_integrated_artifact "$existing_ready_git_log" projected-ready-git.log
+  preserve_integrated_artifact "$existing_ready_publisher_args" projected-ready-publisher-args.txt
+  preserve_integrated_artifact "$existing_ready_err" projected-ready.stderr
+  preserve_integrated_artifact "$TMPDIR/existing-ready-update.out" projected-ready.stdout
+  printf 'case=projected-c1-existing-ready\nwrapper_exit_code=%s\nc1_publisher_stub_exit_code=1\nassertions=passed\n' \
+    "$existing_ready_wrapper_rc" >"$TEST_WRAPPER_INTEGRATED_EVIDENCE_DIR/projected-ready.result"
+fi
+
+# Legacy-v1 compatibility must not let an existing-ready request bypass C1
+# and reach the generic push/create/record path when no projection is given.
+legacy_ready_view="$TMPDIR/existing-ready-legacy-view.json"
+cp "$existing_ready_issue_view" "$legacy_ready_view"
+legacy_ready_issue_body="$TMPDIR/existing-ready-legacy-issue-body.json"
+"$REAL_PYTHON" - "$draft_issue_body" "$legacy_ready_issue_body" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+source_path, output_path = map(Path, sys.argv[1:])
+issue = json.loads(source_path.read_text(encoding="utf-8"))
+body = issue.get("body", "")
+expected = (
+    ("- status: `committed`", "- status: `pr_watch`"),
+    ("- workflow_phase: `implementation`", "- workflow_phase: `pr_watch`"),
+)
+for old, new in expected:
+    if body.count(old) != 1:
+        raise SystemExit(f"ready-update fixture could not transform exactly one {old!r} field: {body!r}")
+    body = body.replace(old, new, 1)
+issue["body"] = body
+output_path.write_text(json.dumps(issue) + "\n", encoding="utf-8")
+PY
+legacy_ready_pr="$TMPDIR/existing-ready-legacy-pr.json"
+legacy_ready_pr_list="$TMPDIR/existing-ready-legacy-pr-list.json"
+"$REAL_PYTHON" - "$legacy_ready_pr" "$legacy_ready_pr_list" "$SMOKE_BRANCH" "$SOURCE_HEAD" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+pr_path, pr_list_path, branch, head = sys.argv[1:]
+pr = {
+    "number": 999,
+    "html_url": "https://github.com/eng-cc/oasis7/pull/999",
+    "state": "open",
+    "merged_at": None,
+    "draft": False,
+    "head": {"ref": branch, "sha": head, "repo": {"full_name": "eng-cc/oasis7"}},
+    "base": {"ref": "main", "repo": {"full_name": "eng-cc/oasis7"}},
+}
+Path(pr_path).write_text(json.dumps(pr) + "\n", encoding="utf-8")
+Path(pr_list_path).write_text(json.dumps([{
+    "url": pr["html_url"],
+    "headRefName": branch,
+    "baseRefName": "main",
+    "state": "OPEN",
+    "headRepository": {"name": "oasis7"},
+    "headRepositoryOwner": {"login": "eng-cc"},
+}]) + "\n", encoding="utf-8")
+PY
+legacy_ready_issue_log="$TMPDIR/gh-existing-ready-legacy.log"
+legacy_ready_git_log="$TMPDIR/git-existing-ready-legacy.log"
+legacy_ready_pm_log="$TMPDIR/pm-existing-ready-legacy.log"
+legacy_ready_err="$TMPDIR/existing-ready-legacy.err"
+legacy_ready_out="$TMPDIR/existing-ready-legacy.out"
+legacy_ready_comment_count_before="$("$REAL_PYTHON" - "$legacy_ready_view" <<'PY'
+import json, sys
+print(len(json.load(open(sys.argv[1])).get("comments", [])))
+PY
+)"
+if TEST_PREPARE_USE_V1_COMPAT=0 \
+  TEST_GH_CURRENT_REPO="eng-cc/oasis7" \
+  TEST_GH_ISSUE_LIST_JSON="$draft_issue_list" \
+  TEST_GH_ISSUE_BODY_JSON="$legacy_ready_issue_body" \
+  TEST_GH_ISSUE_FULL_JSON="$legacy_ready_issue_body" \
+  TEST_GH_ISSUE_VIEW_JSON="$legacy_ready_view" \
+  TEST_GH_PR_JSON="$legacy_ready_pr" \
+  TEST_EXISTING_PR_JSON="$(cat "$legacy_ready_pr_list")" \
+  TEST_GH_PERSIST_COMMENT=1 \
+  TEST_PM_EFFECT_LOG="$legacy_ready_pm_log" \
+    run_prepare "$legacy_ready_issue_log" "$legacy_ready_git_log" \
+      --existing-ready-update \
+      --legacy-review-v1 \
+      --review-change-class mixed \
+      --review-manual-role producer_system_designer \
+      --review-manual-role repository_health_engineer \
+      --review-manual-role qa_engineer >"$legacy_ready_out" 2>"$legacy_ready_err"; then
+  legacy_ready_rc=0
+else
+  legacy_ready_rc=$?
+fi
+python3 - "$legacy_ready_pm_log" "$legacy_ready_issue_log" "$legacy_ready_git_log" "$legacy_ready_view" "$legacy_ready_err" "$legacy_ready_out" "$legacy_ready_comment_count_before" "$legacy_ready_rc" <<'PY'
+from pathlib import Path
+import json
+import re
+import sys
+
+pm_path, gh_path, git_path, issue_view_path, error_path, output_path = map(Path, sys.argv[1:7])
+baseline_comment_count = int(sys.argv[7])
+return_code = int(sys.argv[8])
+pm_events = pm_path.read_text(encoding="utf-8").splitlines() if pm_path.exists() else []
+gh_lines = gh_path.read_text(encoding="utf-8").splitlines()
+git_lines = git_path.read_text(encoding="utf-8").splitlines()
+issue_view = json.loads(issue_view_path.read_text(encoding="utf-8"))
+stderr = error_path.read_text(encoding="utf-8")
+stdout = output_path.read_text(encoding="utf-8")
+gh_writes = [
+    line for line in gh_lines
+    if line.startswith(("issue comment ", "issue edit ", "project item-edit "))
+    or (line.startswith("api ") and re.search(r"(?:^| )--method (POST|PATCH|PUT|DELETE)(?: |$)", line))
+]
+observed = {
+    "draft_freeze_evidence": pm_events.count("draft-freeze-evidence"),
+    "git_push": sum(bool(re.search(r"(?:^| )push(?: |$)", line)) for line in git_lines),
+    "pr_create": sum(line.startswith("pr create ") for line in gh_lines),
+    "record_pr": pm_events.count("record-pr"),
+    "github_task_project_writes": len(gh_writes),
+    "persisted_issue_comments": len(issue_view.get("comments", [])) - baseline_comment_count,
+}
+expected = {key: 0 for key in observed}
+expected_diagnostic = "existing-ready-update requires --impact-projection and cannot use --legacy-review-v1"
+evidence = {
+    "return_code": return_code,
+    "expected_diagnostic": expected_diagnostic,
+    "stderr": stderr,
+    "stdout": stdout,
+    "observed_counters": observed,
+    "expected_counters": expected,
+    "github_adapter_events": gh_lines,
+    "git_adapter_events": git_lines,
+    "pm_adapter_events": pm_events,
+}
+print(json.dumps(evidence, indent=2, sort_keys=True))
+evidence_path = Path(__import__("os").environ["TEST_WRAPPER_RED_EVIDENCE_LOG"]) if __import__("os").environ.get("TEST_WRAPPER_RED_EVIDENCE_LOG") else None
+if evidence_path is not None:
+    evidence_path.write_text(json.dumps(evidence, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+if return_code == 0:
+    raise SystemExit(f"existing-ready legacy-v1/no-projection route unexpectedly succeeded; evidence={evidence}")
+if expected_diagnostic not in stderr:
+    raise SystemExit(f"existing-ready route did not fail at the exact C1/legacy guard; evidence={evidence}")
+if observed != expected:
+    raise SystemExit(f"existing-ready route reached publication side effects; evidence={evidence}")
 PY
 
 echo "prepare-task-pr.test: OK"

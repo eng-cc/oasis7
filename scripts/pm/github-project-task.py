@@ -712,12 +712,24 @@ def github_pull_request(repo: str, pr_number: int) -> dict[str, Any]:
     return payload
 
 
+def has_exact_task_pr_linkage(body: Any, task_uid: str, issue_number: int) -> bool:
+    """Require one canonical whole-line Task marker and non-closing Refs line."""
+    if not isinstance(body, str):
+        return False
+    lines = body.splitlines()
+    task_lines = [line for line in lines if line.startswith("Task:")]
+    refs_lines = [line for line in lines if line.startswith("Refs")]
+    return task_lines == [f"Task: {task_uid}"] and refs_lines == [f"Refs #{issue_number}"]
+
+
 def validate_record_pr_live_identity(
     args: argparse.Namespace,
     record: dict[str, Any],
     pr_number: int,
     *,
     allow_exact_publication_poststate: bool = False,
+    publication_intent: dict[str, Any] | None = None,
+    publication_module: Any | None = None,
 ) -> dict[str, Any]:
     """Bind record-pr to the live task Issue, registered worktree and live PR head."""
     try:
@@ -789,6 +801,18 @@ def validate_record_pr_live_identity(
         die(f"record-pr: canonical task HEAD readback failed: {exc}")
     if not re.fullmatch(r"[0-9a-fA-F]{40,64}", canonical_head):
         die("record-pr: canonical task HEAD identity is malformed")
+    if bool(getattr(args, "existing_ready_update", False)) and publication_intent is not None:
+        if publication_module is None:
+            die("record-pr: existing ready update requires validated C1 publication evidence")
+        if (
+            publication_intent.get("repository") != args.repo
+            or publication_intent.get("task_uid") != args.task_uid
+            or publication_intent.get("source_repository_id") != publication_intent.get("repository_id")
+            or publication_intent.get("source_ref") != identity["task_branch"]
+            or publication_intent.get("target_ref") != identity["default_branch"]
+            or str(publication_intent.get("source_head_oid") or "").casefold() != canonical_head.casefold()
+        ):
+            die("record-pr: C1 publication intent differs from current canonical task identity")
 
     try:
         live_pr = github_pull_request(args.repo, pr_number)
@@ -821,6 +845,25 @@ def validate_record_pr_live_identity(
         die("record-pr: live PR head does not match canonical task HEAD")
     if type(live_pr.get("draft")) is not bool or live_pr.get("draft") != bool(getattr(args, "draft_candidate", False)):
         die("record-pr: live PR draft state does not match requested task transition")
+    if bool(getattr(args, "existing_ready_update", False)):
+        if not isinstance(publication_intent, dict) or publication_module is None:
+            die("record-pr: existing ready update requires validated C1 publication evidence")
+        if not has_exact_task_pr_linkage(
+            live_pr.get("body"), args.task_uid, int(record.get("issue_number") or 0),
+        ):
+            die("record-pr: live ready-update PR lacks exact unique Task/Refs identity")
+        try:
+            live_projection = publication_module.decode_marker(live_pr.get("body"))
+        except (TypeError, ValueError) as exc:
+            die(f"record-pr: live ready-update PR projection marker is invalid: {exc}")
+        if (
+            live_projection.get("task_uid") != publication_intent.get("task_uid")
+            or str(live_projection.get("source_head_oid") or "").casefold()
+                != str(publication_intent.get("source_head_oid") or "").casefold()
+            or live_projection.get("scope_base_oid") != publication_intent.get("source_scope_oid")
+            or live_projection.get("projection_digest") != publication_intent.get("projection_digest")
+        ):
+            die("record-pr: live ready-update PR projection differs from C1 publication intent")
     return live_issue
 
 
@@ -3242,15 +3285,17 @@ def command_record_pr(args: argparse.Namespace) -> int:
         )
     if requested_pr_number is None:
         die("record-pr: PR number is missing or malformed")
+    publication_binding_path = getattr(args, "publication_binding_json", None)
     publication_binding = None
+    publication_intent = None
     publication_module = None
     binding_comment_exists = False
     comments: list[dict[str, Any]] = []
-    if getattr(args, "publication_binding_json", None):
+    if publication_binding_path:
         publication_module = load_pr_projection_publication_module()
         try:
             publication_binding = json.loads(
-                pathlib.Path(args.publication_binding_json).read_text(encoding="utf-8")
+                pathlib.Path(publication_binding_path).read_text(encoding="utf-8")
             )
             publication_binding = publication_module.validate_publication_binding(publication_binding)
         except (OSError, json.JSONDecodeError, ValueError) as exc:
@@ -3281,6 +3326,7 @@ def command_record_pr(args: argparse.Namespace) -> int:
         if len(matching_publications) != 1:
             die("record-pr: exact unique CI publication intent is not present on Task Issue")
         intent = matching_publications[0]
+        publication_intent = intent
         conflicting_same_head = [
             item for item in publication_records
             if (item.get("task_uid") == intent["task_uid"]
@@ -3309,6 +3355,8 @@ def command_record_pr(args: argparse.Namespace) -> int:
         record,
         requested_pr_number,
         allow_exact_publication_poststate=(publication_binding is not None and is_draft_candidate),
+        publication_intent=publication_intent if is_ready_update else None,
+        publication_module=publication_module if is_ready_update else None,
     )
     record["pr_url"] = args.pr_url
     number = pr_number_from_url(args.pr_url)
