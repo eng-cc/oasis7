@@ -7,6 +7,7 @@ use super::{
 
 #[test]
 fn build_viewer_live_command_keeps_explicit_chain_status_bind_for_hosted_public_join() {
+    let _env = crate::hosted_test_env::HostedTestEnvironment::acquire();
     let options = parse_options(
         [
             "--deployment-mode",
@@ -38,6 +39,7 @@ fn build_viewer_live_command_keeps_explicit_chain_status_bind_for_hosted_public_
 
 #[test]
 fn build_viewer_live_command_omits_chain_status_bind_when_hosted_chain_is_disabled() {
+    let _env = crate::hosted_test_env::HostedTestEnvironment::acquire();
     let options = parse_options(["--deployment-mode", "hosted_public_join"].into_iter())
         .expect("hosted public join should parse");
     assert!(!options.chain_enabled);
@@ -55,14 +57,10 @@ fn build_viewer_live_command_omits_chain_status_bind_when_hosted_chain_is_disabl
 
 #[test]
 fn build_viewer_live_command_derives_trusted_registration_issuer_key() {
+    let env = crate::hosted_test_env::HostedTestEnvironment::acquire();
     let options = parse_options(["--deployment-mode", "hosted_public_join"].into_iter())
         .expect("hosted public join should parse");
-    unsafe {
-        std::env::set_var(
-            oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV,
-            hex::encode([81_u8; 32]),
-        );
-    }
+    env.set_issuer(Some(std::ffi::OsStr::new(&hex::encode([81_u8; 32]))));
 
     let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
     let private_key_env = command
@@ -78,15 +76,19 @@ fn build_viewer_live_command_derives_trusted_registration_issuer_key() {
         })
         .expect("trusted issuer public key env");
 
-    unsafe {
-        std::env::remove_var(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV);
-    }
     assert_eq!(
         private_key_env,
         Some(None),
         "the hosted viewer child must explicitly remove the issuer private key"
     );
-    assert_eq!(trusted_public_key.len(), 64);
+    assert_eq!(
+        trusted_public_key,
+        hex::encode(
+            ed25519_dalek::SigningKey::from_bytes(&[81_u8; 32])
+                .verifying_key()
+                .to_bytes()
+        )
+    );
 }
 
 #[test]
@@ -95,6 +97,7 @@ fn build_viewer_live_command_derives_trusted_registration_issuer_key() {
     reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
 )]
 fn build_viewer_live_command_wires_llm_timeout_default_into_spawn_path() {
+    let _env = crate::hosted_test_env::HostedTestEnvironment::acquire();
     let mut options = CliOptions::default();
     options.agent_decision_source = BUILTIN_LLM_DECISION_SOURCE.to_string();
     let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
