@@ -440,8 +440,12 @@ def _task_uid_from_body(body: str) -> str:
 
 def _issue_uid_markers(issue: dict[str, Any]) -> set[str]:
     body = str(issue.get("body") or "")
-    body_uid = _task_uid_from_body(body)
-    markers = {body_uid} if body_uid else set()
+    # Global uniqueness must retain a relied UID even when this Issue's raw
+    # metadata is malformed or duplicated. Strict single-Issue parsing remains
+    # the selected Issue validator's responsibility; dropping the whole UID
+    # set here would let an ambiguous extra Issue disappear from collision
+    # detection.
+    markers = set(_raw_task_uid_values(body))
     declared = issue.get("task_uid")
     if isinstance(declared, str) and TASK_UID_RE.fullmatch(declared):
         markers.add(declared)

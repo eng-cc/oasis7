@@ -1231,6 +1231,153 @@ class RetirementHelperBoundaryTests(unittest.TestCase):
                     failures.append("CLI issued a mutating GitHub request while rejecting malformed Issue identity")
                 self.assertFalse(failures, "; ".join(failures))
 
+    def test_cli_rejects_repeated_relied_uid_on_extra_enumerated_issue_and_accepts_unrelated_issue(self):
+        relied_issues = (
+            ("candidate", CANDIDATE_ISSUE),
+            ("replacement", REPLACEMENT_ISSUE),
+            ("foreign owner", 900004),
+        )
+
+        def append_issue(payload, issue):
+            payload["issues"].append(issue)
+
+        def append_unrelated_task(payload, issue, project_item):
+            payload["issues"].append(issue)
+            payload["project_items"].append(project_item)
+
+        for label, issue_number in relied_issues:
+            for action in ("preflight", "apply"):
+                with self.subTest(issue=label, action=action), tempfile.TemporaryDirectory(
+                    prefix="retire-duplicate-extra-issue-uid-cli-"
+                ) as temporary:
+                    fixture = RetirementFixture(Path(temporary))
+                    fixture._write_paginated_live_gh_stub()
+                    source = next(
+                        item for item in json.loads(fixture.gh_fixture.read_text(encoding="utf-8"))["issues"]
+                        if item["number"] == issue_number
+                    )
+                    extra_issue = {
+                        "number": 900099,
+                        "url": "https://github.com/eng-cc/oasis7/issues/900099",
+                        "state": "OPEN",
+                        "state_reason": None,
+                        "body": source["body"].rstrip("\n") + "\ntask_uid: malformed-second-value\n",
+                    }
+                    fixture.rewrite_live_gh_fixture(lambda payload: append_issue(payload, extra_issue))
+                    mapping_before = fixture.mapping.read_bytes()
+                    snapshot_before = fixture.foreign_snapshot.read_bytes()
+                    git_before = {
+                        "refs": git("show-ref", "--heads", cwd=fixture.repository),
+                        "worktrees": git("worktree", "list", "--porcelain", cwd=fixture.repository),
+                        "foreign_branch_oid": git("rev-parse", f"refs/heads/{FOREIGN_BRANCH}", cwd=fixture.repository),
+                        "foreign_readme": (fixture.foreign_worktree / "README.fixture").read_bytes(),
+                    }
+                    mapping_lock = fixture.mapping.with_name("tasks.json.lock")
+                    self.assertFalse(mapping_lock.exists(), "fixture must start without a mapping lock sidecar")
+
+                    result = fixture.run_helper(action)
+
+                    failures = []
+                    if result.returncode == 0:
+                        failures.append(
+                            f"{action} accepted an extra enumerated Issue carrying the {label} UID plus a malformed duplicate: {result.stdout.strip()}"
+                        )
+                    if not re.search(
+                        r"(?i)issue.*task.?uid.*(duplicated|ambiguous)|task.?uid.*(duplicated|ambiguous)",
+                        result.stderr + result.stdout,
+                    ):
+                        failures.append(f"failure did not identify global Task UID ambiguity: {result.stderr.strip()}")
+                    if mapping_before != fixture.mapping.read_bytes():
+                        failures.append("ambiguous global Issue identity changed the active task mapping")
+                    if snapshot_before != fixture.foreign_snapshot.read_bytes():
+                        failures.append("ambiguous global Issue identity changed the foreign snapshot")
+                    if list(fixture.mapping.parent.glob("tasks.json.tmp.*")):
+                        failures.append("failed authority left a temporary mapping")
+                    if action == "preflight" and mapping_lock.exists():
+                        failures.append("failed authority created a mapping lock sidecar")
+                    if git_before["refs"] != git("show-ref", "--heads", cwd=fixture.repository):
+                        failures.append("failed authority changed Git refs")
+                    if git_before["worktrees"] != git("worktree", "list", "--porcelain", cwd=fixture.repository):
+                        failures.append("failed authority changed registered worktrees")
+                    if git_before["foreign_branch_oid"] != git(
+                        "rev-parse", f"refs/heads/{FOREIGN_BRANCH}", cwd=fixture.repository
+                    ):
+                        failures.append("failed authority changed the foreign branch")
+                    if git_before["foreign_readme"] != (fixture.foreign_worktree / "README.fixture").read_bytes():
+                        failures.append("failed authority changed the foreign worktree contents")
+
+                    calls = [json.loads(line) for line in fixture.gh_log.read_text(encoding="utf-8").splitlines()]
+                    issue_calls = [call for call in calls if call[:2] == ["api", "graphql"] and "issues(first:" in " ".join(call)]
+                    if not issue_calls:
+                        failures.append("CLI did not enumerate the complete repository Issue collection")
+                    if not any("--paginate" in call and "--slurp" in call for call in issue_calls):
+                        failures.append("Issue inventory was not fetched through a complete paginator")
+                    if len(json.loads(fixture.gh_fixture.read_text(encoding="utf-8"))["issues"]) != 4:
+                        failures.append("fixture does not contain the three relied Issues plus the extra enumerated Issue")
+                    if re.search(r'"(?:POST|PATCH|DELETE)"', fixture.gh_log.read_text(encoding="utf-8")):
+                        failures.append("CLI issued a mutating GitHub request while checking ambiguous Issue identity")
+                    self.assertFalse(failures, "; ".join(failures))
+
+        for action in ("preflight", "apply"):
+            with self.subTest(control="unique unrelated Issue", action=action), tempfile.TemporaryDirectory(
+                prefix="retire-duplicate-unrelated-issue-control-"
+            ) as temporary:
+                fixture = RetirementFixture(Path(temporary))
+                fixture._write_paginated_live_gh_stub()
+                unrelated_issue = {
+                    "number": 900099,
+                    "url": "https://github.com/eng-cc/oasis7/issues/900099",
+                    "state": "OPEN",
+                    "state_reason": None,
+                    "body": fixture.issue_body("task_" + "d" * 32, "committed", "execution"),
+                }
+                unrelated_project_item = {
+                    "id": "PVTI_unrelated_fixture",
+                    "project_id": "PVT_fixture",
+                    "project_owner": "eng-cc",
+                    "project_number": 1,
+                    "repository": "eng-cc/oasis7",
+                    "issue_number": 900099,
+                    "issue_url": unrelated_issue["url"],
+                    "task_uid": "task_" + "d" * 32,
+                    "archived": False,
+                    "fields": {
+                        "Status": "In Progress",
+                        "PM Status": "committed",
+                        "Workflow Phase": "execution",
+                        "Canonical Worktree": "",
+                    },
+                }
+                fixture.rewrite_live_gh_fixture(
+                    lambda payload: append_unrelated_task(payload, unrelated_issue, unrelated_project_item)
+                )
+                mapping_before = fixture.mapping.read_bytes()
+                mapping_before_payload = json.loads(mapping_before)
+                snapshot_before = fixture.foreign_snapshot.read_bytes()
+
+                result = fixture.run_helper(action)
+
+                self.assertEqual(0, result.returncode, result.stderr)
+                if action == "preflight":
+                    self.assertIn("preflight_ok", result.stdout)
+                    self.assertEqual(mapping_before, fixture.mapping.read_bytes(), "preflight control must be read-only")
+                    self.assertFalse(fixture.mapping.with_name("tasks.json.lock").exists(), "preflight must not create a lock sidecar")
+                else:
+                    committed = json.loads(fixture.mapping.read_text(encoding="utf-8"))
+                    self.assertNotIn(CANDIDATE_UID, committed["tasks"])
+                    self.assertEqual({FOREIGN_UID}, set(committed["tasks"]))
+                    self.assertEqual(mapping_before_payload["tasks"][FOREIGN_UID], committed["tasks"][FOREIGN_UID])
+                    self.assertEqual(1, len(committed["retired_duplicate_candidates"]))
+                self.assertEqual(snapshot_before, fixture.foreign_snapshot.read_bytes(), "unrelated Issue control must preserve the foreign snapshot")
+                calls = [json.loads(line) for line in fixture.gh_log.read_text(encoding="utf-8").splitlines()]
+                issue_calls = [call for call in calls if call[:2] == ["api", "graphql"] and "issues(first:" in " ".join(call)]
+                self.assertTrue(issue_calls)
+                self.assertTrue(any("--paginate" in call and "--slurp" in call for call in issue_calls))
+                fixture_payload = json.loads(fixture.gh_fixture.read_text(encoding="utf-8"))
+                self.assertEqual(4, len(fixture_payload["issues"]))
+                self.assertEqual(4, len(fixture_payload["project_items"]))
+                self.assertNotRegex(fixture.gh_log.read_text(encoding="utf-8"), r'"(?:POST|PATCH|DELETE)"')
+
     def test_cli_rejects_invalid_pull_request_slurp_envelopes_and_accepts_one_empty_page(self):
         invalid_envelopes = (
             ("zero pages", []),
