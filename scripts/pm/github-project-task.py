@@ -732,6 +732,8 @@ def validate_record_pr_live_identity(
         die("record-pr: live task Issue is not OPEN")
     expected_status = "committed" if bool(getattr(args, "draft_candidate", False)) else "pr_watch"
     expected_phase = "verification" if bool(getattr(args, "draft_candidate", False)) else "pr_watch"
+    if bool(getattr(args, "existing_ready_update", False)):
+        expected_status, expected_phase = record.get("status"), record.get("workflow_phase")
     expected_url = f"https://github.com/{args.repo}/pull/{pr_number}"
     exact_publication_poststate = allow_exact_publication_poststate and all(
         live_issue.get(key) == value
@@ -3209,6 +3211,9 @@ def command_record_pr(args: argparse.Namespace) -> int:
     previous = str(record.get("status") or "")
     previous_phase = str(record.get("workflow_phase") or "")
     is_draft_candidate = bool(getattr(args, "draft_candidate", False))
+    is_ready_update = bool(getattr(args, "existing_ready_update", False))
+    if is_ready_update and is_draft_candidate:
+        die("record-pr: existing ready update and draft candidate are mutually exclusive")
     if not re.fullmatch(
         rf"https://github\.com/{re.escape(args.repo)}/pull/[1-9][0-9]*(?:[?#].*)?",
         args.pr_url,
@@ -3226,7 +3231,11 @@ def command_record_pr(args: argparse.Namespace) -> int:
         die(
             "record-pr: terminal task cannot be reclassified; use its canonical finalizer or terminal runbook"
         )
-    if not is_draft_candidate and (previous, previous_phase) != ("ready", "pre_pr_ready"):
+    if is_ready_update:
+        if ((previous, previous_phase) not in {("pr_watch", "pr_watch"), ("ready", "pre_pr_ready")}
+                or not existing_pr_number or not existing_pr_urls):
+            die("record-pr: existing ready update requires the exact already-bound ready/pr_watch PR")
+    elif not is_draft_candidate and (previous, previous_phase) != ("ready", "pre_pr_ready"):
         die(
             "record-pr: non-draft pr_watch transition requires task truth at ready/pre_pr_ready; "
             "use prepare-task-pr.sh --promote-draft with canonical CI/review evidence"
@@ -3305,8 +3314,8 @@ def command_record_pr(args: argparse.Namespace) -> int:
     number = pr_number_from_url(args.pr_url)
     if number is not None:
         record["pr_number"] = number
-    target_status = "committed" if is_draft_candidate else "pr_watch"
-    target_phase = "verification" if is_draft_candidate else "pr_watch"
+    target_status = previous if is_ready_update else ("committed" if is_draft_candidate else "pr_watch")
+    target_phase = previous_phase if is_ready_update else ("verification" if is_draft_candidate else "pr_watch")
     record["status"] = target_status
     record["workflow_phase"] = target_phase
     record.setdefault("merge_hold", {
@@ -3342,13 +3351,13 @@ def command_record_pr(args: argparse.Namespace) -> int:
         args.role,
         target_phase,
         {
-            "Completed": "Draft Candidate Action recorded without advancing PR watch." if is_draft_candidate else "PR created and task moved to PR watch.",
+            "Completed": "Existing ready PR source binding updated without changing lifecycle state." if is_ready_update else ("Draft Candidate Action recorded without advancing PR watch." if is_draft_candidate else "PR created and task moved to PR watch."),
             "Pending": "Wait for same-head CI receipt." if is_draft_candidate else "Watch required checks, mergeability, comments, and review threads.",
             "Action": "record-pr",
             "Validation Command": args.validation_command,
             "Expected Result": f"Task phase is {target_phase} and PR URL is mapped.",
             "Actual Result": args.pr_url,
-            "Blocker / Next Action": "Obtain the same-head CI receipt, complete role review and ready closeout, then promote the draft." if is_draft_candidate else "Continue normal PR watch/fix/merge unless manual packaging hold is explicitly recorded.",
+            "Blocker / Next Action": "Obtain new-head required CI and all required-role review, applicable current-target strict evidence and fresh merge gate; old-head approvals are historical." if is_ready_update else ("Obtain the same-head CI receipt, complete role review and ready closeout, then promote the draft." if is_draft_candidate else "Continue normal PR watch/fix/merge unless manual packaging hold is explicitly recorded."),
         },
     )
     comment_url = None
@@ -3608,6 +3617,7 @@ def build_parser() -> argparse.ArgumentParser:
     record_pr.add_argument("--role", default="tpm")
     record_pr.add_argument("--validation-command", default="./scripts/prepare-task-pr.sh --create")
     record_pr.add_argument("--draft-candidate", action="store_true")
+    record_pr.add_argument("--existing-ready-update", action="store_true")
     record_pr.add_argument("--publication-binding-json")
     record_pr.add_argument("--json", action="store_true")
     record_pr.set_defaults(func=command_record_pr)

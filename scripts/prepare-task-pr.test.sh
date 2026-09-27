@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 SOURCE_ROOT="$ROOT_DIR"
 REAL_GIT="$(command -v git)"
+REAL_PYTHON="$(command -v python3)"
 
 TMPDIR="$(mktemp -d)"
 FIXTURE_ROOT="$TMPDIR/repo"
@@ -53,6 +54,22 @@ PY
 SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
 
 mkdir -p "$TMPDIR/bin"
+cat >"$TMPDIR/bin/python3" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ "\${1:-}" == "\${TEST_C1_PUBLISH_SCRIPT:-}" && -n "\${TEST_C1_CAPTURE_FILE:-}" ]]; then
+  shift
+  printf '%s\n' "\$@" >"\$TEST_C1_CAPTURE_FILE"
+  if [[ "\${TEST_C1_PUBLISH_FAIL:-0}" == "1" ]]; then
+    printf '%s\n' "existing-ready-update requires one existing PR; creation is forbidden" >&2
+    exit 1
+  fi
+  printf '%s\n' '{"pr_url":"https://github.com/eng-cc/oasis7/pull/999"}'
+  exit 0
+fi
+exec "$REAL_PYTHON" "\$@"
+EOF
+chmod +x "$TMPDIR/bin/python3"
 cat > "$TMPDIR/bin/git" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
@@ -482,6 +499,17 @@ run_prepare() {
     TEST_GH_DEFAULT_BRANCH="${TEST_GH_DEFAULT_BRANCH-main}" \
     "$ROOT_DIR/scripts/prepare-task-pr.sh" "$SMOKE_BRANCH" "${compatibility_args[@]}" "$@"
 }
+
+ready_update_help="$(
+  PATH="$TMPDIR/bin:$PATH" \
+    TEST_GIT_LOG="$TMPDIR/git-help.log" \
+    PM_ROOT_DIR="$SMOKE_WORKTREE_CANONICAL" \
+    "$ROOT_DIR/scripts/prepare-task-pr.sh" --help
+)"
+if [[ "$ready_update_help" != *"--existing-ready-update"* ]]; then
+  echo "prepare-task-pr help must expose the admitted existing-ready-update route" >&2
+  exit 1
+fi
 
 reset_smoke_branch_to_base() {
   "$REAL_GIT" -C "$SMOKE_WORKTREE" reset --hard refs/remotes/origin/main >/dev/null
@@ -1168,8 +1196,8 @@ if len(pr_writes)!=1 or "--text https://github.com/eng-cc/oasis7/pull/999" not i
     raise SystemExit(f"draft candidate must update exactly one Project PR field: {project_writes}")
 task_uid = "task_11111111111111111111111111111111"
 issue_list = f"issue list -R eng-cc/oasis7 --state all --search {task_uid} in:body --json number,url,title,state --limit 5"
-issue_view = f"issue view 123 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason"
-if issue_list not in gh.splitlines() or issue_view not in gh.splitlines():
+issue_read = "api repos/eng-cc/oasis7/issues/123"
+if issue_list not in gh.splitlines() or issue_read not in gh.splitlines():
     raise SystemExit(f"record-pr must read back the exact bound Issue before recording the PR: {gh}")
 for forbidden in ("OPT_PR_WATCH", "OPT_PR_WATCH_PM", "OPT_PR_WATCH_PHASE"):
     if any(forbidden in line for line in project_writes):
@@ -2784,6 +2812,122 @@ if not any("--full-corpus" in command for command in required["recommended_extra
         "product-only PR preparation must recommend full-corpus product-document validation: "
         f"{required}"
     )
+PY
+
+# Existing-ready updates must reach the ordered publisher with the explicit
+# admission flag and must stop there if the publisher rejects the route.
+reset_smoke_branch_to_base
+COMPARISON_OID="$("$REAL_GIT" -C "$ROOT_DIR" rev-parse refs/remotes/origin/main)"
+write_task_binding
+write_project_trace
+printf '\n# existing-ready wrapper forwarding fixture\n' >>"$SMOKE_WORKTREE/scripts/prepare-task-pr.sh"
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add scripts/prepare-task-pr.sh
+"$REAL_GIT" -C "$SMOKE_WORKTREE" \
+  -c user.name="oasis7 smoke" \
+  -c user.email="smoke@example.invalid" \
+  -c commit.gpgsign=false \
+  commit --no-verify -m "test: existing-ready wrapper forwarding fixture" >/dev/null
+SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+mkdir -p "$SMOKE_WORKTREE/.pm/github-project-sync"
+cat >"$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" <<EOF
+{"project":{"repo":"eng-cc/oasis7"},"tasks":{"$TASK_UID":{"issue_number":123,"issue_url":"https://github.com/eng-cc/oasis7/issues/123","owner_role":"tpm","priority":"P3","project_item_id":"PVTI_fixture","repository":"eng-cc/oasis7","status":"pr_watch","workflow_phase":"pr_watch","task_uid":"$TASK_UID","title":"existing ready update fixture","canonical_worktree":"$SMOKE_WORKTREE_CANONICAL","task_branch":"$SMOKE_BRANCH","default_branch":"main","worktree_hint":"$SMOKE_WORKTREE_CANONICAL","pr_number":999,"pr_url":"https://github.com/eng-cc/oasis7/pull/999"}},"version":1}
+EOF
+write_role_review_packet "$SOURCE_HEAD" "no_findings"
+commit_fixture_evidence
+SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+scope_base_oid="$("$REAL_GIT" -C "$SMOKE_WORKTREE" merge-base "$COMPARISON_OID" "$SOURCE_HEAD")"
+changed_path_list="$("$REAL_GIT" -C "$SMOKE_WORKTREE" diff --name-only "$scope_base_oid" "$SOURCE_HEAD" | paste -sd ';' -)"
+projection_input="$TMPDIR/existing-ready-projection-input.json"
+projection_path="$TMPDIR/existing-ready-projection.json"
+"$REAL_PYTHON" - "$projection_input" "$SMOKE_WORKTREE" "$TASK_UID" "$SOURCE_HEAD" "$scope_base_oid" "$changed_path_list" <<'PY'
+import hashlib
+import json
+import sys
+from pathlib import Path
+
+out, root, task_uid, head, base, raw_paths = sys.argv[1:]
+paths = [path for path in raw_paths.split(";") if path]
+payload = {
+    "task_uid": task_uid,
+    "source_head_oid": head,
+    "scope_base_oid": base,
+    "changed_paths": paths,
+    "change_class": "mixed",
+    "manual_roles": ["producer_system_designer", "repository_health_engineer", "qa_engineer"],
+    "domain_role": None,
+    "test_profile": "required",
+    "declared_tests": ["required_gate_baseline"],
+    "consumed_contracts": [{"id": "workflow-contract", "revision": "v1"}],
+    "public_semantics": [],
+    "affected_consumers": ["required-ci"],
+    "closure_status": {
+        "status": "complete",
+        "reason": "fixture source scope is explicit",
+        "evidence": [{
+            "path": "Cargo.toml",
+            "sha256": "sha256:" + hashlib.sha256((Path(root) / "Cargo.toml").read_bytes()).hexdigest(),
+        }],
+    },
+}
+Path(out).write_text(json.dumps(payload), encoding="utf-8")
+PY
+"$REAL_PYTHON" "$ROOT_DIR/scripts/pm/workflow-impact-projection.py" \
+  --root "$SMOKE_WORKTREE" --input "$projection_input" --out "$projection_path" \
+  --planner-authority-oid "$scope_base_oid" >/dev/null
+existing_ready_issue_view="$TMPDIR/existing-ready-issue-view.json"
+cat >"$existing_ready_issue_view" <<EOF
+{"comments":[{"body":"<!-- oasis7-pm-evidence -->\nTask UID: $TASK_UID\nEvidence Phase: draft_candidate_freeze\nRole: tpm\nRecorded At: 2026-06-03T00:06:00+08:00\n\nSource Worktree: $SMOKE_WORKTREE_CANONICAL\nSource Branch: $SMOKE_BRANCH\nSource Head: $SOURCE_HEAD\nComparison Ref: refs/remotes/origin/main\nComparison OID: $COMPARISON_OID\n"}]}
+EOF
+existing_ready_issue_log="$TMPDIR/gh-existing-ready-update.log"
+existing_ready_git_log="$TMPDIR/git-existing-ready-update.log"
+existing_ready_publisher_args="$TMPDIR/existing-ready-publisher-args.txt"
+existing_ready_err="$TMPDIR/existing-ready-update.err"
+if TEST_PREPARE_USE_V1_COMPAT=0 \
+  TEST_GH_CURRENT_REPO="eng-cc/oasis7" \
+  TEST_GH_ISSUE_LIST_JSON="$draft_issue_list" \
+  TEST_GH_ISSUE_BODY_JSON="$draft_issue_body" \
+  TEST_GH_ISSUE_FULL_JSON="$draft_issue_body" \
+  TEST_GH_ISSUE_VIEW_JSON="$existing_ready_issue_view" \
+  TEST_GH_PR_JSON="$draft_pr" \
+  TEST_GH_PERSIST_COMMENT=1 \
+  TEST_C1_PUBLISH_SCRIPT="$ROOT_DIR/scripts/pm/pr_projection_publish.py" \
+  TEST_C1_CAPTURE_FILE="$existing_ready_publisher_args" \
+  TEST_C1_PUBLISH_FAIL=1 \
+    run_prepare "$existing_ready_issue_log" "$existing_ready_git_log" \
+      --existing-ready-update --impact-projection "$projection_path" \
+      --review-change-class mixed \
+      --review-manual-role producer_system_designer \
+      --review-manual-role repository_health_engineer \
+      --review-manual-role qa_engineer >"$TMPDIR/existing-ready-update.out" 2>"$existing_ready_err"; then
+  echo "existing-ready wrapper fixture must return the mocked publisher rejection" >&2
+  exit 1
+fi
+python3 - "$existing_ready_publisher_args" "$existing_ready_issue_log" "$existing_ready_git_log" "$existing_ready_err" "$TASK_UID" "$SOURCE_HEAD" <<'PY'
+from pathlib import Path
+import sys
+
+args_path, gh_path, git_path, err_path, task_uid, source_head = map(Path, sys.argv[1:])
+args = args_path.read_text(encoding="utf-8").splitlines()
+gh_lines = gh_path.read_text(encoding="utf-8").splitlines()
+git_lines = git_path.read_text(encoding="utf-8").splitlines()
+stderr = err_path.read_text(encoding="utf-8")
+if args.count("--existing-ready-update") != 1:
+    raise SystemExit(f"wrapper did not forward one explicit ready-update admission flag: {args}")
+if "--draft-candidate" in args:
+    raise SystemExit(f"ready update was incorrectly forwarded as draft-candidate mode: {args}")
+for key, expected in (("--task-uid", str(task_uid)), ("--source-head", str(source_head)), ("--repo", "eng-cc/oasis7")):
+    try:
+        actual = args[args.index(key) + 1]
+    except (ValueError, IndexError):
+        raise SystemExit(f"wrapper omitted publisher argument {key}: {args}")
+    if actual != expected:
+        raise SystemExit(f"wrapper publisher argument {key} was {actual!r}, expected {expected!r}")
+if any(line.startswith("pr create ") or line.startswith("project item-edit ") or line.startswith("issue edit ") for line in gh_lines):
+    raise SystemExit(f"publisher rejection fell through to PR creation or task/Project mutation: {gh_lines}")
+if any("push" in line for line in git_lines):
+    raise SystemExit(f"publisher rejection was followed by a source push: {git_lines}")
+if "existing-ready-update requires one existing PR; creation is forbidden" not in stderr:
+    raise SystemExit(f"expected mocked no-create publisher rejection, got: {stderr}")
 PY
 
 echo "prepare-task-pr.test: OK"

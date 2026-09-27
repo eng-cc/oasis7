@@ -53,7 +53,7 @@ def args(root: pathlib.Path, target: str) -> Namespace:
     )
 
 
-def record_pr_args(root: pathlib.Path) -> Namespace:
+def record_pr_args(root: pathlib.Path, *, existing_ready_update: bool = False) -> Namespace:
     return Namespace(
         root=root,
         mapping=".pm/github-project-sync/tasks.json",
@@ -65,6 +65,7 @@ def record_pr_args(root: pathlib.Path) -> Namespace:
         role="tpm",
         validation_command="record-pr lifecycle contract",
         draft_candidate=False,
+        existing_ready_update=existing_ready_update,
         json=True,
     )
 
@@ -80,7 +81,7 @@ def record_pr_identity(root: pathlib.Path) -> dict[str, object]:
 
 
 def record_pr_live_issue(record: dict[str, object]) -> dict[str, object]:
-    return {
+    issue = {
         "task_uid": UID,
         "issue_number": 2001,
         "issue_url": "https://github.com/eng-cc/oasis7/issues/2001",
@@ -92,6 +93,11 @@ def record_pr_live_issue(record: dict[str, object]) -> dict[str, object]:
         "workflow_phase": record["workflow_phase"],
         "worktree_hint": record["worktree_hint"],
     }
+    if record.get("pr_url"):
+        issue["pr_url"] = record["pr_url"]
+    if record.get("pr_number"):
+        issue["pr_number"] = record["pr_number"]
+    return issue
 
 
 def record_pr_live_pr(**overrides: object) -> dict[str, object]:
@@ -617,6 +623,118 @@ class MoveTaskLifecycleContract(unittest.TestCase):
             comment.assert_not_called()
             merge_mapping.assert_not_called()
             update_project.assert_not_called()
+
+    def test_record_pr_cli_accepts_explicit_existing_ready_update_mode(self) -> None:
+        parsed = MODULE.build_parser().parse_args([
+            "record-pr", "/tmp/existing-ready-update-fixture",
+            "--task-uid", UID,
+            "--pr-url", "https://github.com/eng-cc/oasis7/pull/2001",
+            "--existing-ready-update",
+        ])
+        self.assertTrue(parsed.existing_ready_update)
+        self.assertFalse(parsed.draft_candidate)
+
+    def test_existing_ready_record_pr_preserves_pr_watch_status_and_phase(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            record = mapping_record(status="pr_watch", phase="pr_watch")
+            record.update(record_pr_identity(root))
+            record["pr_url"] = "https://github.com/eng-cc/oasis7/pull/2001"
+            record["pr_number"] = 2001
+            mapping_path = self.write_mapping(root, record)
+            before = self.digest(mapping_path)
+            with (
+                mock.patch.object(MODULE, "github_issue_record", return_value=record_pr_live_issue(record)),
+                mock.patch.object(MODULE, "authoritative_repository_identity", return_value=record_pr_identity(root)),
+                mock.patch.object(MODULE, "github_pull_request", return_value=record_pr_live_pr(), create=True),
+                mock.patch.object(MODULE, "run_text", return_value="a" * 40),
+                mock.patch.object(MODULE, "synchronize_live_issue_traceability", return_value=[]),
+                mock.patch.object(MODULE, "update_project_fields", return_value=0) as update_project,
+                mock.patch.object(MODULE, "update_issue_body") as update_issue,
+                mock.patch.object(MODULE, "issue_comment", return_value="comment-url") as comment,
+                mock.patch.object(MODULE, "merge_task_mapping") as merge_mapping,
+            ):
+                result = MODULE.command_record_pr(record_pr_args(root, existing_ready_update=True))
+
+            self.assertEqual(0, result)
+            merge_mapping.assert_called_once()
+            written_record = merge_mapping.call_args.args[2]
+            self.assertEqual("pr_watch", written_record["status"])
+            self.assertEqual("pr_watch", written_record["workflow_phase"])
+            projected_task = update_project.call_args.args[1]
+            self.assertEqual("pr_watch", projected_task["status"])
+            self.assertEqual("pr_watch", projected_task["workflow_phase"])
+            issue_task = update_issue.call_args.args[2]
+            self.assertEqual("pr_watch", issue_task["status"])
+            self.assertEqual("pr_watch", issue_task["workflow_phase"])
+            self.assertTrue(comment.called)
+            self.assertEqual(before, self.digest(mapping_path), "the mocked persistence seam must leave fixture bytes unchanged")
+
+    def test_existing_ready_record_pr_rejects_live_identity_drift_before_writers(self) -> None:
+        cases = (
+            ("draft", {"draft": True}, "live PR draft state does not match requested task transition"),
+            ("head", {"head": {"ref": "task/other", "sha": "a" * 40,
+                                "repo": {"full_name": "eng-cc/oasis7"}}},
+             "live PR branch does not match canonical task branch"),
+            ("repository", {"head": {"ref": "task/lifecycle-move-contract", "sha": "a" * 40,
+                                      "repo": {"full_name": "outside/oasis7"}}},
+             "live PR head repository does not match task repository"),
+        )
+        for name, pr_overrides, expected in cases:
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                root = pathlib.Path(directory)
+                record = mapping_record(status="pr_watch", phase="pr_watch")
+                record.update(record_pr_identity(root))
+                record["pr_url"] = "https://github.com/eng-cc/oasis7/pull/2001"
+                record["pr_number"] = 2001
+                mapping_path = self.write_mapping(root, record)
+                before = self.digest(mapping_path)
+                with (
+                    mock.patch.object(MODULE, "github_issue_record", return_value=record_pr_live_issue(record)),
+                    mock.patch.object(MODULE, "authoritative_repository_identity", return_value=record_pr_identity(root)),
+                    mock.patch.object(MODULE, "github_pull_request", return_value=record_pr_live_pr(**pr_overrides), create=True),
+                    mock.patch.object(MODULE, "run_text", return_value="a" * 40),
+                    mock.patch.object(MODULE, "update_project_fields") as update_project,
+                    mock.patch.object(MODULE, "update_issue_body") as update_issue,
+                    mock.patch.object(MODULE, "issue_comment") as comment,
+                    mock.patch.object(MODULE, "merge_task_mapping") as merge_mapping,
+                ):
+                    with self.assertRaisesRegex(MODULE._CommandExit, expected):
+                        MODULE.command_record_pr(record_pr_args(root, existing_ready_update=True))
+                self.assertEqual(before, self.digest(mapping_path))
+                update_project.assert_not_called()
+                update_issue.assert_not_called()
+                comment.assert_not_called()
+                merge_mapping.assert_not_called()
+
+    def test_existing_ready_mode_cannot_be_combined_with_draft_candidate(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            record = mapping_record(status="pr_watch", phase="pr_watch")
+            record.update(record_pr_identity(root))
+            record["pr_url"] = "https://github.com/eng-cc/oasis7/pull/2001"
+            record["pr_number"] = 2001
+            mapping_path = self.write_mapping(root, record)
+            before = self.digest(mapping_path)
+            args = record_pr_args(root, existing_ready_update=True)
+            args.draft_candidate = True
+            with (
+                mock.patch.object(MODULE, "github_issue_record", return_value=record_pr_live_issue(record)),
+                mock.patch.object(MODULE, "authoritative_repository_identity", return_value=record_pr_identity(root)),
+                mock.patch.object(MODULE, "github_pull_request", return_value=record_pr_live_pr(), create=True),
+                mock.patch.object(MODULE, "run_text", return_value="a" * 40),
+                mock.patch.object(MODULE, "update_project_fields") as update_project,
+                mock.patch.object(MODULE, "update_issue_body") as update_issue,
+                mock.patch.object(MODULE, "issue_comment") as comment,
+                mock.patch.object(MODULE, "merge_task_mapping") as merge_mapping,
+            ):
+                with self.assertRaisesRegex(MODULE._CommandExit, "mutually exclusive"):
+                    MODULE.command_record_pr(args)
+            self.assertEqual(before, self.digest(mapping_path))
+            update_project.assert_not_called()
+            update_issue.assert_not_called()
+            comment.assert_not_called()
+            merge_mapping.assert_not_called()
 
     def test_record_pr_preserves_authoritative_ready_writer(self) -> None:
         with tempfile.TemporaryDirectory() as directory:

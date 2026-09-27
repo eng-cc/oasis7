@@ -54,6 +54,7 @@ class FakeAdapter:
         self.pr_binding = None
         self.events = []
         self.source_ref = initial_head
+        self.ready_update_admitted = False
         self.projection = projection
         self.prs = []
         if initial_pr:
@@ -95,7 +96,10 @@ class FakeAdapter:
 
     def read_task_pr_binding(self, task_uid):
         self.events.append("read-task-pr-binding")
-        return copy.deepcopy(self.pr_binding or {"task_uid": task_uid, "pr_number": None})
+        binding = copy.deepcopy(self.pr_binding or {"task_uid": task_uid, "pr_number": None})
+        if self.ready_update_admitted:
+            binding["existing_ready_update"] = True
+        return binding
 
     def record_pr(self, task_uid, number, publication_id):
         self.events.append("record-pr")
@@ -157,7 +161,8 @@ class PublicationMatrixTests(unittest.TestCase):
             projection_digest=publication["projection_digest"],
         )
 
-    def run_publish_entrypoint(self, temp, publication, projection, adapter, journal):
+    def run_publish_entrypoint(self, temp, publication, projection, adapter, journal,
+                               *, existing_ready_update=False):
         root = Path(temp)
         body_file = root / "body.md"
         body_file.write_text(f"Task: {UID}\nRefs #1\n", encoding="utf-8")
@@ -166,6 +171,7 @@ class PublicationMatrixTests(unittest.TestCase):
         args = type("Args", (), {
             "worktree": str(root), "task_uid": UID, "issue_number": 1,
             "body_file": str(body_file), "projection": str(projection_file),
+            "existing_ready_update": existing_ready_update,
         })()
         with (
             patch.object(publish_module, "task_publication", return_value=(publication, projection)),
@@ -194,6 +200,23 @@ class PublicationMatrixTests(unittest.TestCase):
         self.assertEqual("example/oasis7", argv[repo_index + 1])
         self.assertEqual("https://github.com/example/oasis7/pull/999",
                          argv[argv.index("--pr-url") + 1])
+
+    def test_record_pr_forwards_explicit_ready_update_mode(self):
+        publication, _projection = make_publication(7000)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            args = type("Args", (), {
+                "repo": publication["repository"], "issue_number": 123,
+                "task_uid": UID, "task_helper": str(root / "github-project-task.py"),
+                "existing_ready_update": True,
+            })()
+            adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+            with patch.object(publish_module, "command_output", return_value="") as command:
+                adapter.record_pr(UID, 999, publication["publication_id"])
+
+        argv = command.call_args.args[0]
+        self.assertIn("--existing-ready-update", argv)
+        self.assertNotIn("--draft-candidate", argv)
 
     def test_target_oid_cannot_be_substituted_for_projection_source_scope(self):
         publication, projection = make_publication(7001)
@@ -224,6 +247,84 @@ class PublicationMatrixTests(unittest.TestCase):
         absent, remembered_number = self.read_live_task_binding(f"task_uid: {UID}\n")
         self.assertEqual({"task_uid": UID, "pr_number": None}, absent)
         self.assertIsNone(remembered_number)
+
+    def test_production_ready_admission_marker_requires_matching_task_and_nondraft_pr(self):
+        publication, _projection = make_publication(7005)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp).resolve()
+            pr_number = 115
+            pr_url = f"https://github.com/{publication['repository']}/pull/{pr_number}"
+            record = {
+                "task_uid": UID,
+                "repository": publication["repository"],
+                "issue_number": 123,
+                "task_branch": publication["source_ref"],
+                "default_branch": publication["target_ref"],
+                "canonical_worktree": str(root),
+                "status": "pr_watch",
+                "workflow_phase": "pr_watch",
+                "pr_number": pr_number,
+                "pr_url": pr_url,
+            }
+            mapping_path = root / ".pm/github-project-sync/tasks.json"
+            mapping_path.parent.mkdir(parents=True)
+            mapping_path.write_text(json.dumps({"version": 1, "tasks": {UID: record}}), encoding="utf-8")
+            issue = {
+                "number": 123,
+                "state": "open",
+                "body": "\n".join((
+                    f"task_uid: {UID}",
+                    "- status: `pr_watch`",
+                    "- workflow_phase: `pr_watch`",
+                    f"- worktree_hint: `{root}`",
+                    f"- pr_url: `{pr_url}`",
+                    f"- pr_number: `{pr_number}`",
+                )),
+            }
+            live_pr = {
+                "number": pr_number,
+                "html_url": pr_url,
+                "state": "open",
+                "merged_at": None,
+                "draft": False,
+                "head": {
+                    "ref": publication["source_ref"],
+                    "sha": publication["source_head_oid"],
+                    "repo": {"full_name": publication["repository"]},
+                },
+                "base": {
+                    "ref": publication["target_ref"],
+                    "repo": {"full_name": publication["repository"]},
+                },
+                "body": f"Task: {UID}\nRefs #123\n",
+            }
+            args = type("Args", (), {
+                "repo": publication["repository"], "issue_number": 123,
+                "task_uid": UID, "task_helper": str(root / "github-project-task.py"),
+                "source_ref": publication["source_ref"], "target_ref": publication["target_ref"],
+                "existing_ready_update": True,
+            })()
+            adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+
+            def fake_gh(*command, timeout=5.0, input_json=None):
+                if command == ("api", f"repos/{publication['repository']}/issues/123"):
+                    return json.dumps(issue)
+                if command == ("api", f"repos/{publication['repository']}/pulls/{pr_number}"):
+                    return json.dumps(live_pr)
+                raise AssertionError(f"unexpected live-adapter read: {command}")
+
+            with patch.object(adapter, "gh", side_effect=fake_gh):
+                admitted = adapter.read_task_pr_binding(UID)
+            self.assertEqual({
+                "task_uid": UID,
+                "pr_number": pr_number,
+                "existing_ready_update": True,
+            }, admitted)
+
+            live_pr["draft"] = True
+            with patch.object(adapter, "gh", side_effect=fake_gh):
+                with self.assertRaisesRegex(RuntimeError, "live PR repository/ref/head/state identity mismatch"):
+                    adapter.read_task_pr_binding(UID)
 
     def test_task_binding_readback_rejects_wrong_repo_and_malformed_identity(self):
         with self.assertRaisesRegex(publication_module.ContractError, "repository mismatch"):
@@ -445,6 +546,295 @@ class PublicationMatrixTests(unittest.TestCase):
                 self.assertLess(adapter.events.index("patch-pr"), adapter.events.index("push"))
                 self.assertEqual(new_head, adapter.prs[0]["head_oid"])
                 self.assertEqual(result["binding"]["binding_digest"], adapter.bindings[0]["binding_digest"])
+
+    def test_existing_ready_update_keeps_exact_bound_nondraft_pr(self):
+        """A ready update is the same-PR H1 path with a pinned false draft bit."""
+        with tempfile.TemporaryDirectory() as temp:
+            old_head = "c" * 40
+            new_head = "d" * 40
+            publication, projection = make_publication(1090, head=new_head)
+            _, old_marker = publication_module.prepare(
+                task_uid=UID, source_head_oid=old_head, scope_base_oid=SCOPE,
+                projection_digest=digest({"ready-update": "old"}),
+            )
+            pr = {
+                "repository": publication["repository"],
+                "source_ref": publication["source_ref"],
+                "target_ref": publication["target_ref"],
+                "head_oid": old_head,
+                "body": f"Manually retained summary\n\nTask: {UID}\nRefs #1\n\n{old_marker}",
+                "state": "open", "merged": False, "draft": False, "number": 109,
+            }
+            adapter = FakeAdapter(
+                publication, projection, initial_head=old_head, initial_pr=pr,
+            )
+            adapter.ready_update_admitted = True
+            journal = self.journal(temp, publication)
+
+            result = self.run_publish_entrypoint(
+                temp, publication, projection, adapter, journal,
+                existing_ready_update=True,
+            )
+
+            self.assertEqual("published", result["status"])
+            self.assertEqual(109, result["pr_number"])
+            self.assertEqual(1, len(adapter.prs), "ready update must reuse the exact existing PR")
+            self.assertFalse(adapter.prs[0]["draft"], "the ready PR must remain non-draft")
+            self.assertEqual(new_head, adapter.prs[0]["head_oid"])
+            self.assertTrue(adapter.prs[0]["body"].startswith("Manually retained summary\n\n"))
+            self.assertNotIn("create-pr", adapter.events)
+            self.assertLess(adapter.events.index("task-intent"), adapter.events.index("patch-pr"))
+            self.assertLess(adapter.events.index("patch-pr"), adapter.events.index("push"))
+            self.assertLess(adapter.events.index("push"), adapter.events.index("record-pr"))
+            self.assertLess(adapter.events.index("record-pr"), adapter.events.index("publish-reciprocal"))
+            with journal.locked():
+                actions = journal.read()["actions"]
+            pinned_state = next(item for item in actions if item["action_id"] == "update-state:" + publication["publication_id"])
+            push = next(item for item in actions if item["action_id"] == "push:" + publication["publication_id"])
+            self.assertEqual({
+                "pr_number": 109,
+                "expected_draft": False,
+                "existing_ready_update": True,
+                "old_head_oid": old_head,
+            }, pinned_state["expected"])
+            self.assertEqual(old_head, push["expected"]["lease_oid"])
+
+    def test_ready_update_preserves_original_lease_after_record_response_loss(self):
+        class LostReadyRecordAdapter(FakeAdapter):
+            def __init__(self, publication, projection, *, initial_head, initial_pr):
+                super().__init__(publication, projection, initial_head=initial_head, initial_pr=initial_pr)
+                self.ready_update_admitted = True
+                self.record_attempts = 0
+
+            def record_pr(self, task_uid, number, publication_id):
+                self.record_attempts += 1
+                if self.record_attempts == 1:
+                    self.events.append("record-pr")
+                    raise RuntimeError("simulated lost ready-update Task writer response")
+                super().record_pr(task_uid, number, publication_id)
+
+        with tempfile.TemporaryDirectory() as temp:
+            old_head = "5" * 40
+            new_head = "6" * 40
+            publication, projection = make_publication(1094, head=new_head)
+            _, old_marker = publication_module.prepare(
+                task_uid=UID, source_head_oid=old_head, scope_base_oid=SCOPE,
+                projection_digest=digest({"ready-retry": "old"}),
+            )
+            pr = {
+                "repository": publication["repository"], "source_ref": publication["source_ref"],
+                "target_ref": publication["target_ref"], "head_oid": old_head,
+                "body": f"Task: {UID}\nRefs #1\n\n{old_marker}",
+                "state": "open", "merged": False, "draft": False, "number": 112,
+            }
+            adapter = LostReadyRecordAdapter(
+                publication, projection, initial_head=old_head, initial_pr=pr,
+            )
+            journal = self.journal(temp, publication)
+
+            with self.assertRaisesRegex(publication_module.PublicationError, "record-pr transition did not confirm"):
+                self.run_publish_entrypoint(
+                    temp, publication, projection, adapter, journal,
+                    existing_ready_update=True,
+                )
+            self.assertEqual(new_head, adapter.prs[0]["head_oid"])
+            with journal.locked():
+                first_actions = journal.read()["actions"]
+            pinned = next(item for item in first_actions if item["action_id"] == "update-state:" + publication["publication_id"])
+            push = next(item for item in first_actions if item["action_id"] == "push:" + publication["publication_id"])
+            self.assertEqual(old_head, pinned["expected"]["old_head_oid"])
+            self.assertEqual(old_head, push["expected"]["lease_oid"])
+
+            adapter.events.clear()
+            result = self.run_publish_entrypoint(
+                temp, publication, projection, adapter, journal,
+                existing_ready_update=True,
+            )
+
+            self.assertEqual("published", result["status"])
+            self.assertEqual(2, adapter.record_attempts)
+            self.assertEqual(1, len(adapter.prs))
+            self.assertEqual(new_head, adapter.prs[0]["head_oid"])
+            self.assertNotIn("push", adapter.events, "H1 recovery must reuse the original lease without a second push")
+            self.assertNotIn("create-pr", adapter.events)
+            self.assertEqual(1, len(adapter.bindings))
+
+    def test_ready_update_h1_without_pinned_admission_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            new_head = "7" * 40
+            publication, projection = make_publication(1095, head=new_head)
+            pr = {
+                "repository": publication["repository"], "source_ref": publication["source_ref"],
+                "target_ref": publication["target_ref"], "head_oid": new_head,
+                "body": f"Task: {UID}\nRefs #1\n", "state": "open", "merged": False,
+                "draft": False, "number": 113,
+            }
+            adapter = FakeAdapter(publication, projection, initial_head=new_head, initial_pr=pr)
+            adapter.ready_update_admitted = True
+            journal = self.journal(temp, publication)
+
+            with self.assertRaisesRegex(publication_module.PublicationError, "H1 recovery lacks pinned update identity"):
+                publication_module.publish_update(
+                    adapter, journal, publication=publication, projection=projection,
+                    pr_number=113, old_head_oid=new_head, body=pr["body"],
+                    expected_draft=False, existing_ready_update=True,
+                )
+
+            self.assertNotIn("task-intent", adapter.events)
+            self.assertNotIn("patch-pr", adapter.events)
+            self.assertNotIn("push", adapter.events)
+            self.assertNotIn("record-pr", adapter.events)
+            self.assertNotIn("publish-reciprocal", adapter.events)
+
+    def test_ready_update_rechecks_false_draft_after_metadata_patch(self):
+        class DraftFlipAdapter(FakeAdapter):
+            def patch_pr_body(self, repository, number, body):
+                super().patch_pr_body(repository, number, body)
+                self.prs[0]["draft"] = True
+
+        with tempfile.TemporaryDirectory() as temp:
+            old_head = "8" * 40
+            publication, projection = make_publication(1096, head="9" * 40)
+            pr = {
+                "repository": publication["repository"], "source_ref": publication["source_ref"],
+                "target_ref": publication["target_ref"], "head_oid": old_head,
+                "body": f"Task: {UID}\nRefs #1\n", "state": "open", "merged": False,
+                "draft": False, "number": 114,
+            }
+            adapter = DraftFlipAdapter(publication, projection, initial_head=old_head, initial_pr=pr)
+            adapter.ready_update_admitted = True
+            journal = self.journal(temp, publication)
+
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "live PR repository/ref/head/state identity mismatch",
+            ):
+                publication_module.publish_update(
+                    adapter, journal, publication=publication, projection=projection,
+                    pr_number=114, old_head_oid=old_head, body=pr["body"],
+                    expected_draft=False, existing_ready_update=True,
+                )
+
+            self.assertIn("patch-pr", adapter.events)
+            self.assertNotIn("push", adapter.events)
+            self.assertNotIn("record-pr", adapter.events)
+            self.assertNotIn("publish-reciprocal", adapter.events)
+
+    def test_ready_update_rechecks_nondraft_pr_after_task_record(self):
+        class DraftFlipAfterRecordAdapter(FakeAdapter):
+            def __init__(self, publication, projection, *, initial_head, initial_pr):
+                super().__init__(publication, projection, initial_head=initial_head, initial_pr=initial_pr)
+                self.ready_update_admitted = True
+
+            def record_pr(self, task_uid, number, publication_id):
+                super().record_pr(task_uid, number, publication_id)
+                self.prs[0]["draft"] = True
+
+        with tempfile.TemporaryDirectory() as temp:
+            old_head = "a" * 40
+            publication, projection = make_publication(1097, head="b" * 40)
+            pr = {
+                "repository": publication["repository"], "source_ref": publication["source_ref"],
+                "target_ref": publication["target_ref"], "head_oid": old_head,
+                "body": f"Task: {UID}\nRefs #1\n", "state": "open", "merged": False,
+                "draft": False, "number": 116,
+            }
+            adapter = DraftFlipAfterRecordAdapter(
+                publication, projection, initial_head=old_head, initial_pr=pr,
+            )
+            journal = self.journal(temp, publication)
+
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "live PR repository/ref/head/state identity mismatch",
+            ):
+                self.run_publish_entrypoint(
+                    temp, publication, projection, adapter, journal,
+                    existing_ready_update=True,
+                )
+
+            self.assertIn("record-pr", adapter.events)
+            self.assertIn("read-pr", adapter.events, "record completion must be followed by PR state readback")
+            self.assertNotIn("publish-reciprocal", adapter.events)
+
+    def test_existing_ready_update_without_existing_pr_fails_before_create(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_head = "e" * 40
+            publication, projection = make_publication(1091, head="f" * 40)
+            adapter = FakeAdapter(publication, projection, initial_head=old_head)
+            journal = self.journal(temp, publication)
+
+            rejected = False
+            try:
+                self.run_publish_entrypoint(
+                    temp, publication, projection, adapter, journal,
+                    existing_ready_update=True,
+                )
+            except publish_module.PublishInputError as exc:
+                rejected = True
+                self.assertRegex(str(exc), "existing-ready-update.*existing PR")
+
+            self.assertNotIn("task-intent", adapter.events)
+            self.assertNotIn("push", adapter.events)
+            self.assertNotIn("create-pr", adapter.events)
+            self.assertNotIn("record-pr", adapter.events)
+            self.assertNotIn("publish-reciprocal", adapter.events)
+            self.assertTrue(rejected, "ready-update mode must reject when exact existing PR discovery is empty")
+
+    def test_existing_ready_update_rejects_missing_live_admission_marker(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_head = "1" * 40
+            new_head = "2" * 40
+            publication, projection = make_publication(1092, head=new_head)
+            pr = {
+                "repository": publication["repository"],
+                "source_ref": publication["source_ref"],
+                "target_ref": publication["target_ref"],
+                "head_oid": old_head,
+                "body": f"Task: {UID}\nRefs #1\n",
+                "state": "open", "merged": False, "draft": False, "number": 110,
+            }
+            adapter = FakeAdapter(publication, projection, initial_head=old_head, initial_pr=pr)
+            journal = self.journal(temp, publication)
+
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "live existing-ready-update admission is missing",
+            ):
+                publication_module.publish_update(
+                    adapter, journal, publication=publication, projection=projection,
+                    pr_number=110, old_head_oid=old_head, body=pr["body"],
+                    expected_draft=False, existing_ready_update=True,
+                )
+
+            self.assertNotIn("task-intent", adapter.events)
+            self.assertNotIn("patch-pr", adapter.events)
+            self.assertNotIn("push", adapter.events)
+            self.assertNotIn("record-pr", adapter.events)
+            self.assertNotIn("publish-reciprocal", adapter.events)
+
+    def test_expected_nondraft_without_explicit_ready_mode_is_rejected_before_reads(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_head = "3" * 40
+            publication, projection = make_publication(1093, head="4" * 40)
+            pr = {
+                "repository": publication["repository"],
+                "source_ref": publication["source_ref"],
+                "target_ref": publication["target_ref"],
+                "head_oid": old_head,
+                "body": f"Task: {UID}\nRefs #1\n",
+                "state": "open", "merged": False, "draft": False, "number": 111,
+            }
+            adapter = FakeAdapter(publication, projection, initial_head=old_head, initial_pr=pr)
+            journal = self.journal(temp, publication)
+
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "explicit ready update and draft expectation disagree",
+            ):
+                publication_module.publish_update(
+                    adapter, journal, publication=publication, projection=projection,
+                    pr_number=111, old_head_oid=old_head, body=pr["body"],
+                    expected_draft=False,
+                )
+
+            self.assertEqual([], adapter.events, "unadmitted expected_draft=False must not read or write live state")
 
     def test_lost_create_response_recovers_by_exact_readback_without_second_post(self):
         with tempfile.TemporaryDirectory() as temp:

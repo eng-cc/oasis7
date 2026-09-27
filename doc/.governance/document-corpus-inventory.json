@@ -497,7 +497,7 @@
     },
     {
       "path": "doc/engineering/workflow/ci-parallel-evidence-reuse.design.md",
-      "content_sha256": "0f4c3cf5ff03a6984c62d186b41a2e51110814a8e752f24cae3bdf90d9f3eff9",
+      "content_sha256": "4e71fce00255e097b9ae01efc51766cb02a49b16a1d4593fbf7bf0788ca50008",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -567,7 +567,7 @@
     },
     {
       "path": "doc/engineering/workflow/source-of-truth.md",
-      "content_sha256": "ef24c0689ec92797db62767bbcbabad183a954f28ea79e4542c190037ebf8f81",
+      "content_sha256": "94a47f586cef6bb611e3446a48b743146fbef2cdceae4357108c3f1d386b324b",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",

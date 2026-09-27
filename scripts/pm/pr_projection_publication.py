@@ -480,7 +480,8 @@ def _wait_created_pr(adapter: Any, publication: dict[str, Any], body: str, *,
 
 
 def _record_and_bind(adapter: Any, journal: PublicationJournal,
-                     publication: dict[str, Any], pr: dict[str, Any]) -> dict[str, Any]:
+                     publication: dict[str, Any], pr: dict[str, Any],
+                     expected_draft: bool = True) -> dict[str, Any]:
     number = pr["number"]
     action = "record-pr:" + publication["publication_id"]
     journal.intent(action, "record_pr", {
@@ -514,6 +515,10 @@ def _record_and_bind(adapter: Any, journal: PublicationJournal,
     if not isinstance(live, dict) or live.get("task_uid") != publication["task_uid"] or live.get("pr_number") != number:
         journal.uncertain(action, "NETWORK_UNCERTAIN")
         raise PublicationError("NETWORK_UNCERTAIN", "record-pr lacks exact Task readback")
+    recorded_pr = adapter.read_pr(publication["repository"], number)
+    _check_pr(recorded_pr, publication, number, publication["source_head_oid"], expected_draft)
+    if recorded_pr.get("body") != pr.get("body"):
+        raise PublicationError("PUBLICATION_WRITE_CONFLICT", "PR body changed during record-pr")
     journal.observe(action, {"pr_number": number}, phase="METADATA_CONFIRMED")
 
     url = f"https://github.com/{publication['repository']}/pull/{number}"
@@ -595,21 +600,28 @@ def publish_create(adapter: Any, journal: PublicationJournal, *, publication: di
         raise PublicationError("PUBLICATION_WRITE_CONFLICT", str(exc)) from exc
 
 
-def _check_pr(pr: dict[str, Any], publication: dict[str, Any], number: int, head: str) -> None:
+def _check_pr(pr: dict[str, Any], publication: dict[str, Any], number: int, head: str,
+              expected_draft: bool = True) -> None:
+    if type(expected_draft) is not bool or type(pr.get("draft")) is not bool:
+        raise PublicationError("TASK_IDENTITY_CONFLICT", "PR draft expectation is invalid")
     actual = (pr.get("repository"), pr.get("number"), pr.get("source_ref"),
               pr.get("target_ref"), pr.get("head_oid"), pr.get("state"), pr.get("merged"),
               pr.get("draft"))
     expected = (publication["repository"], number, publication["source_ref"],
-                publication["target_ref"], head, "open", False, True)
+                publication["target_ref"], head, "open", False, expected_draft)
     if actual != expected:
         raise PublicationError("TASK_IDENTITY_CONFLICT", "live PR repository/ref/head/state identity mismatch")
 
 
 def publish_update(adapter: Any, journal: PublicationJournal, *, publication: dict[str, Any],
                    projection: dict[str, Any], pr_number: int, old_head_oid: str,
-                   body: str, legacy_projection_b64: str | None = None) -> dict[str, Any]:
+                   body: str, legacy_projection_b64: str | None = None,
+                   expected_draft: bool = True, existing_ready_update: bool = False) -> dict[str, Any]:
     """Patch and verify P(H1) before pushing H1 under a lease on H0."""
     publication, marker = _candidate(publication, projection)
+    if (type(expected_draft) is not bool or type(existing_ready_update) is not bool
+            or expected_draft == existing_ready_update):
+        raise PublicationError("TASK_IDENTITY_CONFLICT", "explicit ready update and draft expectation disagree")
     if type(pr_number) is not int or pr_number < 1:
         raise PublicationError("TASK_IDENTITY_CONFLICT", "PR number is invalid")
     body = replace_projection_marker(body, marker, legacy_projection_b64=legacy_projection_b64)
@@ -618,17 +630,45 @@ def publish_update(adapter: Any, journal: PublicationJournal, *, publication: di
             _preflight_task_pr_binding(
                 adapter, publication, expected_pr_number=pr_number,
             )
+            if existing_ready_update:
+                admission = adapter.read_task_pr_binding(publication["task_uid"])
+                if (admission.get("existing_ready_update") is not True
+                        or admission.get("task_uid") != publication["task_uid"]
+                        or admission.get("pr_number") != pr_number):
+                    raise PublicationError("TASK_IDENTITY_CONFLICT", "live existing-ready-update admission is missing")
+            state_action = "update-state:" + publication["publication_id"]
+            prior_state = _prior(journal, state_action)
+            if prior_state is not None:
+                pinned = prior_state.get("expected", {})
+                if (prior_state.get("kind") != "pin_update_state"
+                        or pinned.get("pr_number") != pr_number
+                        or pinned.get("expected_draft") is not expected_draft
+                        or pinned.get("existing_ready_update") is not existing_ready_update
+                        or not isinstance(pinned.get("old_head_oid"), str)):
+                    raise PublicationError("TASK_IDENTITY_CONFLICT", "pinned update state differs")
+                old_head_oid = pinned["old_head_oid"]
             current = adapter.read_pr(publication["repository"], pr_number)
             head = current.get("head_oid") if isinstance(current, dict) else None
             if head not in (old_head_oid, publication["source_head_oid"]):
                 raise PublicationError("SOURCE_SUPERSEDED", f"live PR head advanced to {head!r}")
-            _check_pr(current, publication, pr_number, head)
+            _check_pr(current, publication, pr_number, head, expected_draft)
+            if head == publication["source_head_oid"] and prior_state is None:
+                # Preserve legacy draft recovery with its original patch/push lease.
+                prior_patch = _prior(journal, "patch-body:" + publication["publication_id"])
+                if existing_ready_update:
+                    raise PublicationError("TASK_IDENTITY_CONFLICT", "H1 recovery lacks pinned update identity")
+                if prior_patch is not None:
+                    old_head_oid = prior_patch["expected"]["old_head_oid"]
             old_body = current.get("body")
             if not isinstance(old_body, str):
                 raise PublicationError("EVENT_PROJECTION_INVALID", "live PR body is not text")
             body = replace_projection_marker(
                 old_body, marker, legacy_projection_b64=legacy_projection_b64,
             )
+            journal.intent(state_action, "pin_update_state", {
+                "pr_number": pr_number, "expected_draft": expected_draft,
+                "existing_ready_update": existing_ready_update, "old_head_oid": old_head_oid,
+            })
             _intent(adapter, journal, publication)
 
             action = "patch-body:" + publication["publication_id"]
@@ -646,7 +686,7 @@ def publish_update(adapter: Any, journal: PublicationJournal, *, publication: di
                     # body under the same single-publisher lock.
                     for attempt in range(2):
                         current = adapter.read_pr(publication["repository"], pr_number)
-                        _check_pr(current, publication, pr_number, publication["source_head_oid"])
+                        _check_pr(current, publication, pr_number, publication["source_head_oid"], expected_draft)
                         live_body = current.get("body")
                         if live_body == body:
                             journal.observe(action, {"body_sha256": body_hash(body)}, phase="METADATA_CONFIRMED")
@@ -659,7 +699,7 @@ def publish_update(adapter: Any, journal: PublicationJournal, *, publication: di
                         except Exception:
                             pass
                         observed = adapter.read_pr(publication["repository"], pr_number)
-                        _check_pr(observed, publication, pr_number, publication["source_head_oid"])
+                        _check_pr(observed, publication, pr_number, publication["source_head_oid"], expected_draft)
                         if observed.get("body") == body:
                             journal.observe(action, {"body_sha256": body_hash(body)}, phase="METADATA_CONFIRMED")
                             break
@@ -671,7 +711,7 @@ def publish_update(adapter: Any, journal: PublicationJournal, *, publication: di
                             raise PublicationError("NETWORK_UNCERTAIN", "H1 projection repair did not read back")
             else:
                 current = adapter.read_pr(publication["repository"], pr_number)
-                _check_pr(current, publication, pr_number, old_head_oid)
+                _check_pr(current, publication, pr_number, old_head_oid, expected_draft)
                 if current.get("body") == body:
                     journal.observe(action, {"body_sha256": body_hash(body)}, phase="METADATA_CONFIRMED")
                 elif current.get("body") != old_body:
@@ -685,7 +725,7 @@ def publish_update(adapter: Any, journal: PublicationJournal, *, publication: di
                         except Exception:
                             pass
                         observed = adapter.read_pr(publication["repository"], pr_number)
-                        _check_pr(observed, publication, pr_number, old_head_oid)
+                        _check_pr(observed, publication, pr_number, old_head_oid, expected_draft)
                         if observed.get("body") == body:
                             journal.observe(action, {"body_sha256": body_hash(body)}, phase="METADATA_CONFIRMED")
                             break
@@ -696,13 +736,17 @@ def publish_update(adapter: Any, journal: PublicationJournal, *, publication: di
                             journal.uncertain(action, "NETWORK_UNCERTAIN")
                             raise PublicationError("NETWORK_UNCERTAIN", "projection PATCH did not read back")
 
+            before_push = adapter.read_pr(publication["repository"], pr_number)
+            _check_pr(before_push, publication, pr_number, head, expected_draft)
+            if before_push.get("body") != body:
+                raise PublicationError("PUBLICATION_WRITE_CONFLICT", "projection body changed before H1 push")
             _push(adapter, journal, publication, old_head_oid)
             final = adapter.read_pr(publication["repository"], pr_number)
-            _check_pr(final, publication, pr_number, publication["source_head_oid"])
+            _check_pr(final, publication, pr_number, publication["source_head_oid"], expected_draft)
             if final.get("body") != body:
                 journal.disposition("CONFLICT")
                 raise PublicationError("PUBLICATION_WRITE_CONFLICT", "projection body changed after H1 push")
-            binding = _record_and_bind(adapter, journal, publication, final)
+            binding = _record_and_bind(adapter, journal, publication, final, expected_draft)
             return {"status": "published", "task_uid": publication["task_uid"],
                     "publication_id": publication["publication_id"], "pr_number": pr_number,
                     "head_oid": publication["source_head_oid"], "projection_digest": publication["projection_digest"],
