@@ -1,5 +1,24 @@
 use super::*;
 
+fn assert_real_registration_grant(token: &str, player: &str, browser: &str, device: &str) {
+    let parts: Vec<_> = token.split('.').collect();
+    assert_eq!(parts.len(), 3);
+    assert_eq!(parts[0], "v1");
+    let payload = hex::decode(parts[1]).expect("registration payload");
+    let signature = ed25519_dalek::Signature::from_slice(
+        &hex::decode(parts[2]).expect("registration signature bytes"),
+    )
+    .expect("registration signature");
+    ed25519_dalek::SigningKey::from_bytes(&[71_u8; 32])
+        .verifying_key()
+        .verify_strict(&payload, &signature)
+        .expect("real hosted issuer signature");
+    let payload: serde_json::Value = serde_json::from_slice(&payload).expect("grant JSON");
+    assert_eq!(payload["player_id"], player);
+    assert_eq!(payload["public_key"], browser);
+    assert_eq!(payload["device_session_id"], device);
+}
+
 #[test]
 fn hosted_player_session_issue_returns_structured_grant() {
     let mut issuer = HostedPlayerSessionIssuer::default();
@@ -30,18 +49,11 @@ fn hosted_player_session_issue_returns_structured_grant() {
 
 #[test]
 fn hosted_player_session_test_login_issues_identity_and_registration_grant_for_browser_key() {
-    unsafe {
-        std::env::set_var(
-            oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV,
-            hex::encode([71_u8; 32]),
-        );
-    }
+    let env = crate::hosted_test_env::HostedTestEnvironment::acquire();
+    env.set_issuer(Some(std::ffi::OsStr::new(&hex::encode([71_u8; 32]))));
     let browser_key = hex::encode([72_u8; 32]);
     let mut issuer = HostedPlayerSessionIssuer::default();
     let response = issuer.issue_with_key(DeploymentMode::HostedPublicJoin, &browser_key);
-    unsafe {
-        std::env::remove_var(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV);
-    }
     assert!(
         response.ok,
         "test login must use the real hosted issuer: {response:?}"
@@ -55,7 +67,29 @@ fn hosted_player_session_test_login_issues_identity_and_registration_grant_for_b
     );
     assert_eq!(grant.auth_mode, "browser_local_ephemeral_ed25519");
     assert!(grant.registration_grant.is_some());
+    assert_real_registration_grant(
+        grant.registration_grant.as_deref().unwrap(),
+        &grant.player_id,
+        &browser_key,
+        &grant.device_session_id,
+    );
     assert_eq!(grant.release_token.len(), 64);
+}
+
+#[test]
+fn hosted_player_session_test_login_without_issuer_fails_closed() {
+    let env = crate::hosted_test_env::HostedTestEnvironment::acquire();
+    env.set_issuer(None);
+    let mut issuer = HostedPlayerSessionIssuer::default();
+    let response =
+        issuer.issue_with_key(DeploymentMode::HostedPublicJoin, &hex::encode([72_u8; 32]));
+    assert!(!response.ok);
+    assert_eq!(
+        response.error_code.as_deref(),
+        Some("registration_issuer_not_configured")
+    );
+    assert!(response.grant.is_none());
+    assert_eq!(response.admission.active_player_sessions, 0);
 }
 
 #[test]
@@ -302,12 +336,8 @@ fn hosted_player_session_refresh_keeps_slot_alive() {
 fn hosted_player_session_refresh_rotates_registration_grant_for_new_browser_key() {
     let issuer_private_key = [71_u8; 32];
     let browser_key = ed25519_dalek::SigningKey::from_bytes(&[72_u8; 32]);
-    unsafe {
-        std::env::set_var(
-            oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV,
-            hex::encode(issuer_private_key),
-        );
-    }
+    let env = crate::hosted_test_env::HostedTestEnvironment::acquire();
+    env.set_issuer(Some(std::ffi::OsStr::new(&hex::encode(issuer_private_key))));
     let mut issuer = HostedPlayerSessionIssuer::default();
     let grant = issuer
         .issue_for_player(
@@ -324,15 +354,18 @@ fn hosted_player_session_refresh_rotates_registration_grant_for_new_browser_key(
         Some(hex::encode(browser_key.verifying_key().to_bytes()).as_str()),
     );
 
-    unsafe {
-        std::env::remove_var(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV);
-    }
     assert!(
         response.ok,
         "refresh must rotate registration grant: {response:?}"
     );
     assert!(response.registration_grant.is_some());
     assert!(response.device_session_id.is_some());
+    assert_real_registration_grant(
+        response.registration_grant.as_deref().unwrap(),
+        &grant.player_id,
+        &hex::encode(browser_key.verifying_key().to_bytes()),
+        response.device_session_id.as_deref().unwrap(),
+    );
 }
 
 #[test]

@@ -478,6 +478,7 @@ fn parse_options_accepts_agent_direct_connect_alias() {
 
 #[test]
 fn parse_options_accepts_local_test_authority_for_builtin_llm() {
+    let _env = crate::hosted_test_env::HostedTestEnvironment::acquire();
     let options = parse_options(
         [
             "--deployment-mode",
@@ -884,6 +885,7 @@ fn parse_options_rejects_hosted_builtin_llm_local_funding() {
 
 #[test]
 fn build_viewer_live_command_wires_agent_chat_echo_flag_from_env() {
+    let _env = crate::hosted_test_env::HostedTestEnvironment::acquire();
     // SAFETY: This test/setup code mutates process environment in a controlled scope.
     unsafe {
         oasis7::env_mut::set_var("OASIS7_RUNTIME_AGENT_CHAT_ECHO", "1");
@@ -911,6 +913,7 @@ fn build_viewer_live_command_wires_agent_chat_echo_flag_from_env() {
     reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
 )]
 fn build_viewer_live_command_wires_auto_play_flags() {
+    let _env = crate::hosted_test_env::HostedTestEnvironment::acquire();
     let options = CliOptions::default();
     let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
     assert!(command.get_args().any(|arg| arg == "--auto-play"));
@@ -928,6 +931,7 @@ fn build_viewer_live_command_wires_auto_play_flags() {
     reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
 )]
 fn build_viewer_live_command_wires_debug_scenario_opt_in() {
+    let _env = crate::hosted_test_env::HostedTestEnvironment::acquire();
     let mut options = CliOptions::default();
     options.scenario = "llm_bootstrap".to_string();
     options.allow_debug_scenario = true;
@@ -946,6 +950,7 @@ fn build_viewer_live_command_wires_debug_scenario_opt_in() {
     reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
 )]
 fn build_viewer_live_command_wires_generated_world_dir() {
+    let _env = crate::hosted_test_env::HostedTestEnvironment::acquire();
     let mut options = CliOptions::default();
     options.generated_world_dir = "output/public-testnet/generated-world".to_string();
     let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
@@ -963,6 +968,7 @@ fn build_viewer_live_command_wires_generated_world_dir() {
 
 #[test]
 fn build_viewer_live_command_skips_default_llm_timeout_when_repo_config_exists() {
+    let _env = crate::hosted_test_env::HostedTestEnvironment::acquire();
     let options = CliOptions::default();
     let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, true);
     let args: Vec<String> = command

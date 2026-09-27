@@ -2,10 +2,7 @@ use std::fs;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
-use std::sync::Mutex;
 use std::thread;
-
-static HOSTED_TEST_LOGIN_ENV_LOCK: Mutex<()> = Mutex::new(());
 
 use super::super::{content_type_for_path, resolve_static_asset_path};
 use super::super::{
@@ -14,6 +11,16 @@ use super::super::{
 };
 use super::{DeploymentMode, make_temp_dir};
 use crate::static_http;
+
+// Declared after the environment fixture, so unwind stops all readers before
+// the fixture restores process-global values and unlocks.
+struct HostedTestHttpServer(crate::StaticHttpServer);
+
+impl Drop for HostedTestHttpServer {
+    fn drop(&mut self) {
+        stop_static_http_server(&mut self.0);
+    }
+}
 
 #[test]
 fn hosted_test_login_host_gate_accepts_only_loopback_addresses() {
@@ -196,16 +203,9 @@ fn hosted_public_unauthenticated_get_cannot_issue_player_session() {
 
 #[test]
 fn hosted_test_login_requires_opt_in_and_returns_server_issued_grant() {
-    let _guard = HOSTED_TEST_LOGIN_ENV_LOCK
-        .lock()
-        .expect("test login env lock");
-    unsafe {
-        std::env::remove_var("OASIS7_HOSTED_TEST_LOGIN_ENABLED");
-        std::env::set_var(
-            oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV,
-            hex::encode([71_u8; 32]),
-        );
-    }
+    let env = crate::hosted_test_env::HostedTestEnvironment::acquire();
+    env.set_login_enabled(false);
+    env.set_issuer(Some(std::ffi::OsStr::new(&hex::encode([71_u8; 32]))));
     let temp_dir = make_temp_dir("hosted_test_login");
     fs::write(temp_dir.join("index.html"), b"ok").expect("write index");
     let probe = TcpListener::bind(("127.0.0.1", 0)).expect("bind port probe");
@@ -219,6 +219,7 @@ fn hosted_test_login_requires_opt_in_and_returns_server_issued_grant() {
         temp_dir.as_path(),
         None,
     )
+    .map(HostedTestHttpServer)
     .expect("start static HTTP server");
     let body =
         r#"{"public_key":"4848484848484848484848484848484848484848484848484848484848484848"}"#;
@@ -246,13 +247,9 @@ fn hosted_test_login_requires_opt_in_and_returns_server_issued_grant() {
         String::from_utf8_lossy(&disabled).starts_with("HTTP/1.1 404 Not Found"),
         "test login must stay unavailable until explicitly enabled"
     );
-    unsafe { std::env::set_var("OASIS7_HOSTED_TEST_LOGIN_ENABLED", "1") };
+    env.set_login_enabled(true);
     let enabled = send();
-    stop_static_http_server(&mut server);
-    unsafe {
-        std::env::remove_var("OASIS7_HOSTED_TEST_LOGIN_ENABLED");
-        std::env::remove_var(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV);
-    }
+    stop_static_http_server(&mut server.0);
     let enabled_text = String::from_utf8_lossy(&enabled);
     assert!(
         enabled_text.starts_with("HTTP/1.1 200 OK"),
@@ -285,8 +282,9 @@ fn hosted_test_login_requires_opt_in_and_returns_server_issued_grant() {
         temp_dir.as_path(),
         None,
     )
+    .map(HostedTestHttpServer)
     .expect("start wildcard static HTTP server");
-    unsafe { std::env::set_var("OASIS7_HOSTED_TEST_LOGIN_ENABLED", "1") };
+    env.set_login_enabled(true);
     let mut wildcard_response = Vec::new();
     for _ in 0..50 {
         match TcpStream::connect(("127.0.0.1", wildcard_port)) {
@@ -302,12 +300,11 @@ fn hosted_test_login_requires_opt_in_and_returns_server_issued_grant() {
             Err(_) => thread::sleep(std::time::Duration::from_millis(20)),
         }
     }
-    stop_static_http_server(&mut wildcard_server);
+    stop_static_http_server(&mut wildcard_server.0);
     assert!(
         String::from_utf8_lossy(&wildcard_response).starts_with("HTTP/1.1 404 Not Found"),
         "wildcard viewer HTTP bind must keep test login unavailable"
     );
-    unsafe { std::env::remove_var("OASIS7_HOSTED_TEST_LOGIN_ENABLED") };
     let _ = fs::remove_dir_all(temp_dir);
 }
 

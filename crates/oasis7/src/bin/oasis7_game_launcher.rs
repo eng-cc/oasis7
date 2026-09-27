@@ -1090,6 +1090,9 @@ fn open_browser(url: &str) -> Result<(), String> {
 }
 
 #[cfg(test)]
+#[path = "oasis7_game_launcher/hosted_test_env.rs"]
+mod hosted_test_env;
+#[cfg(test)]
 #[path = "oasis7_game_launcher/launcher_visibility_policy_tests.rs"]
 mod launcher_visibility_policy_tests;
 #[cfg(test)]
