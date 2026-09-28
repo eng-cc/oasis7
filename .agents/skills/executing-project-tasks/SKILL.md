@@ -31,7 +31,9 @@ python3 ./scripts/pm/workflow-next.py --repo-root <canonical-worktree> \
 7. Append result, evidence, deviation, and next step to the same task issue.
 8. Repeat until scope is implemented and verified, then route to `finishing-a-development-branch`. A leaf may complete truthfully while aggregate obligations remain pending.
 
-If any command, test, or behavior is unexpected, automatically route to `systematic-debugging`, resolve the root cause, and resume the same step. Pause only for canonical `external_wait` or `capability_blocked`, recording resume authority and instruction from the canonical state contract.
+If any command, test, or behavior is unexpected, automatically route to `systematic-debugging`. Diagnosis, isolated tests, and repair may continue only within the existing authorized change. Resume the same step only while the canonical state permits that typed action and its task/checkpoint-bound authority remains valid.
+
+If the canonical state is `failed`, stop and escalate; recovery requires an authorized new evidence epoch or fresh bootstrap, not resumption. If a trusted helper reports `no_safe_repair` or `new_review_epoch_required`, preserve its reason and fail-closed immutable evidence: do not invent a CLI, overwrite or recreate immutable evidence, claim it was restored, expand scope, or resume the old epoch. Stop and escalate for `no_safe_repair`; begin a new epoch only after its authority is recorded. For `external_wait` or `capability_blocked`, record the canonical resume authority and instruction before continuing.
 
 Use `./scripts/pm/append-execution-log.sh` when a durable local execution ledger is required. Module verification does not imply integration or release readiness.
 
