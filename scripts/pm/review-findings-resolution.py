@@ -364,6 +364,8 @@ def validate_v2_handoff(root: Path, handoff_path: Path, task_uid: str, head: str
     plan = validated["plan"]
     if not isinstance(handoff, dict) or not isinstance(plan, dict):
         raise ContractError("v2 handoff validation returned invalid evidence")
+    if handoff.get("schema") != "oasis7-review-return-handoff/v2":
+        raise ContractError("v2 resolution manifest requires a dispatch-bound handoff/v2")
     if Path(str(validated["handoff_path"])).resolve(strict=True) != handoff_path.resolve(strict=True):
         raise ContractError("v2 handoff path is not canonical for task and epoch")
     if (handoff.get("task_uid") != task_uid or handoff.get("frozen_head") != head

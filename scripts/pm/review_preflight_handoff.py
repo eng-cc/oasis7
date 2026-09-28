@@ -11,13 +11,20 @@ import json
 import os
 import re
 import stat
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 
-HANDOFF_SCHEMA = "oasis7-review-return-handoff/v1"
+HANDOFF_SCHEMA_V1 = "oasis7-review-return-handoff/v1"
+HANDOFF_SCHEMA_V2 = "oasis7-review-return-handoff/v2"
+HANDOFF_SCHEMA = HANDOFF_SCHEMA_V2
+DISPATCH_SCHEMA = "oasis7-review-dispatch/v1"
+DISPATCH_MARKER = "<!-- oasis7-review-dispatch/v1 -->"
+PM_TASK_MARKER = "<!-- oasis7-pm-task -->"
 REPOSITORY = "eng-cc/oasis7"
 TASK_RE = re.compile(r"task_[0-9a-f]{32}\Z")
 HEAD_RE = re.compile(r"[0-9a-f]{40,64}\Z")
@@ -41,13 +48,21 @@ PLAN_KEYS = {
     "loop_binding", "ci_validation_mode", "ci_ready_receipt_digest",
     "incremental_review_context",
 }
-HANDOFF_FIELDS = {
+HANDOFF_FIELDS_V1 = {
     "schema", "repository", "task_uid", "pr_number", "comparison_ref", "comparison_oid",
     "frozen_head", "source_review_identity", "source_review_digest", "epoch", "plan_path",
     "plan_sha256", "batch_path", "batch_sha256", "preflight_ledger_path",
     "preflight_ledger_sha256", "rows", "handoff_digest",
 }
-HANDOFF_ROW_FIELDS = {"role", "slice_id", "artifact_path", "return_sha256", "findings_digest"}
+HANDOFF_FIELDS_V2 = HANDOFF_FIELDS_V1 | {"dispatch_evidence"}
+HANDOFF_ROW_FIELDS_V1 = {"role", "slice_id", "artifact_path", "return_sha256", "findings_digest"}
+HANDOFF_ROW_FIELDS_V2 = HANDOFF_ROW_FIELDS_V1 | {"packet_path", "packet_digest"}
+DISPATCH_FIELDS = {
+    "schema", "repository", "task_uid", "issue_number", "pr_number", "frozen_head", "epoch",
+    "plan_path", "plan_sha256", "batch_path", "batch_sha256", "rows",
+}
+DISPATCH_ROW_FIELDS = {"role", "slice_id", "packet_path", "packet_digest"}
+DISPATCH_EVIDENCE_FIELDS = {"issue_number", "issue_url", "comment_id", "author", "body_digest"}
 SOURCE_IDENTITY_FIELDS = {
     "task_uid", "bootstrap_epoch", "repository", "pr_number", "source_head_oid",
     "source_scope_oid", "changed_paths_digest", "ordered_role_ids", "role_contract_digest",
@@ -143,6 +158,111 @@ def resolve_repo_destination(root: Path, raw_path: object, label: str) -> Path:
     except (OSError, ValueError) as exc:
         raise ContractError(f"{label} path escapes the repository: {raw_path}") from exc
     return resolved
+
+
+def gh_json(arguments: list[str], label: str) -> object:
+    try:
+        result = subprocess.run(
+            ["gh", "api", *arguments], text=True, capture_output=True, check=False,
+        )
+    except OSError as exc:
+        raise ContractError(f"cannot read live {label}: {exc}") from exc
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or f"gh exited {result.returncode}"
+        raise ContractError(f"cannot read live {label}: {detail}")
+    return parse_json(result.stdout.encode("utf-8"), f"live {label}")
+
+
+def canonical_task_issue_number(root: Path, task_uid: str) -> int:
+    mapping_path = root / ".pm" / "github-project-sync" / "tasks.json"
+    mapping, _ = read_json(mapping_path, "canonical task mapping")
+    if not isinstance(mapping, dict):
+        raise ContractError("canonical task mapping is not an object")
+    project = mapping.get("project")
+    if isinstance(project, dict) and project.get("repo") not in (None, REPOSITORY):
+        raise ContractError("canonical task mapping repository is not eng-cc/oasis7")
+    tasks = mapping.get("tasks")
+    record = tasks.get(task_uid) if isinstance(tasks, dict) else None
+    issue_number = record.get("issue_number") if isinstance(record, dict) else None
+    if not isinstance(issue_number, int) or isinstance(issue_number, bool) or issue_number <= 0:
+        raise ContractError(f"canonical task Issue mapping is invalid for {task_uid}")
+    return issue_number
+
+
+def canonical_issue_api_url(issue_number: int) -> str:
+    return f"https://api.github.com/repos/{REPOSITORY}/issues/{issue_number}"
+
+
+def validate_live_task_issue(issue_number: int, task_uid: str, pr_number: int) -> dict[str, object]:
+    issue_value = gh_json([f"repos/{REPOSITORY}/issues/{issue_number}"], "canonical task Issue")
+    live_issue_number = issue_value.get("number") if isinstance(issue_value, dict) else None
+    if (not isinstance(live_issue_number, int) or isinstance(live_issue_number, bool)
+            or live_issue_number != issue_number):
+        raise ContractError("live canonical task Issue number mismatch")
+    if issue_value.get("html_url") != f"https://github.com/{REPOSITORY}/issues/{issue_number}":
+        raise ContractError("live canonical task Issue URL mismatch")
+    body = issue_value.get("body")
+    if not isinstance(body, str):
+        raise ContractError("live canonical task Issue body is missing")
+    body = body.replace("\r\n", "\n")
+    if body.count(PM_TASK_MARKER) != 1:
+        raise ContractError("live canonical task Issue marker is missing or ambiguous")
+    uid_lines = re.findall(r"^[ \t]*(?:[-*][ \t]*)?task_uid\b.*$", body, re.MULTILINE)
+    if uid_lines != [f"task_uid: {task_uid}"]:
+        raise ContractError("live canonical task Issue UID mismatch or ambiguity")
+    expected_pr_url = f"https://github.com/{REPOSITORY}/pull/{pr_number}"
+    pr_url_lines = re.findall(r"^[ \t]*-[ \t]*pr_url\b.*$", body, re.MULTILINE)
+    pr_number_lines = re.findall(r"^[ \t]*-[ \t]*pr_number\b.*$", body, re.MULTILINE)
+    if (pr_url_lines != [f"- pr_url: `{expected_pr_url}`"]
+            or pr_number_lines != [f"- pr_number: `{pr_number}`"]):
+        raise ContractError("live canonical task Issue reciprocal PR binding is missing or ambiguous")
+    return issue_value
+
+
+def flatten_comment_pages(value: object) -> list[dict[str, object]]:
+    if not isinstance(value, list):
+        raise ContractError("paginated dispatch comment response is malformed")
+    comments: list[dict[str, object]] = []
+    for page in value:
+        if not isinstance(page, list):
+            raise ContractError("paginated dispatch comment page is malformed")
+        for comment in page:
+            if not isinstance(comment, dict) or not isinstance(comment.get("body"), str):
+                raise ContractError("paginated dispatch comment entry is malformed")
+            comments.append(comment)
+    return comments
+
+
+def dispatch_body(payload: dict[str, object]) -> bytes:
+    return f"{DISPATCH_MARKER}\n```json\n".encode("utf-8") + canonical_bytes(payload) + b"\n```"
+
+
+def parse_dispatch_body(body: str) -> dict[str, object]:
+    prefix = f"{DISPATCH_MARKER}\n```json\n"
+    suffix = "\n```"
+    if not body.startswith(prefix) or not body.endswith(suffix) or body.count(DISPATCH_MARKER) != 1:
+        raise ContractError("review dispatch comment framing is invalid")
+    payload_raw = body[len(prefix):-len(suffix)].encode("utf-8")
+    payload_value = parse_json(payload_raw, "review dispatch payload")
+    if not isinstance(payload_value, dict) or set(payload_value) != DISPATCH_FIELDS:
+        raise ContractError("review dispatch payload fields are invalid")
+    if payload_raw != canonical_bytes(payload_value):
+        raise ContractError("review dispatch payload is not canonical JSON")
+    return payload_value
+
+
+def matching_dispatch_comments(comments: list[dict[str, object]], expected: dict[str, object]) -> list[dict[str, object]]:
+    matching: list[dict[str, object]] = []
+    identity_fields = ("repository", "task_uid", "pr_number", "frozen_head", "epoch")
+    for comment in comments:
+        body = comment.get("body")
+        assert isinstance(body, str)
+        if DISPATCH_MARKER not in body:
+            continue
+        payload = parse_dispatch_body(body)
+        if all(payload.get(key) == expected[key] for key in identity_fields):
+            matching.append(comment)
+    return matching
 
 
 def repo_relative(root: Path, path: Path, label: str) -> str:
@@ -339,6 +459,8 @@ def validate_packet_refs(root: Path, plan: dict[str, object], expected_slices: l
             "activation": PACKET_ACTIVATIONS[activation_mode],
             "context_delivery": PACKET_CONTEXT_DELIVERY[context_mode],
             "actual_runtime": f"{model_reasoning}: {runtime_reason}",
+            "packet_path": repo_relative(root, packet_path, "slice packet"),
+            "packet_digest": packet_digest,
         }
     if set(metadata) != expected:
         raise ContractError("plan packet refs do not cover every expected role/slice")
@@ -361,6 +483,13 @@ def validate_return(return_value: object, *, role: str, slice_id: str, task_uid:
         for key in ("activation", "context_delivery", "actual_runtime"):
             if return_value.get(key) != packet_metadata[key]:
                 raise ContractError(f"review return {key} conflicts with packet metadata for role {role}")
+        if "packet_digest" in packet_metadata:
+            admitted_digest = require_string(
+                return_value.get("admitted_packet_digest"),
+                f"review return admitted packet digest for role {role}", SHA_RE,
+            )
+            if admitted_digest != packet_metadata["packet_digest"]:
+                raise ContractError(f"review return admitted packet digest conflicts with dispatch packet for role {role}")
     disposition = return_value.get("disposition")
     findings = return_value.get("findings")
     if disposition not in {"findings", "no_findings"} or not isinstance(findings, list):
@@ -480,11 +609,192 @@ def validate_plan_inputs(
     return plan, source_identity, resolved_plan, batch_path, ledger_path, batch_slices, plan_raw, batch_raw, ledger_raw
 
 
-def create_handoff(root: Path, plan_path: Path) -> dict[str, object]:
+def dispatch_payload_for_plan(
+    root: Path, plan_path: Path, *, allow_promoted_ledger: bool = False,
+) -> dict[str, object]:
+    root = root.resolve(strict=True)
+    (plan, source_identity, resolved_plan, batch_path, _ledger_path, expected_slices,
+     plan_raw, batch_raw, _ledger_raw) = validate_plan_inputs(
+        root, plan_path, allow_promoted_ledger=allow_promoted_ledger,
+    )
+    packet_metadata = validate_packet_refs(root, plan, expected_slices, source_identity)
+    task_uid = str(plan["task_uid"])
+    issue_number = canonical_task_issue_number(root, task_uid)
+    rows = [
+        {
+            "role": item["role"], "slice_id": item["slice_id"],
+            "packet_path": packet_metadata[(item["role"], item["slice_id"])]["packet_path"],
+            "packet_digest": packet_metadata[(item["role"], item["slice_id"])]["packet_digest"],
+        }
+        for item in expected_slices
+    ]
+    rows.sort(key=lambda item: (item["role"].encode(), item["slice_id"].encode()))
+    return {
+        "schema": DISPATCH_SCHEMA, "repository": REPOSITORY,
+        "task_uid": task_uid, "issue_number": issue_number,
+        "pr_number": source_identity["pr_number"], "frozen_head": plan["frozen_head"],
+        "epoch": plan["epoch"], "plan_path": repo_relative(root, resolved_plan, "plan"),
+        "plan_sha256": sha256_bytes(plan_raw), "batch_path": repo_relative(root, batch_path, "batch"),
+        "batch_sha256": sha256_bytes(batch_raw), "rows": rows,
+    }
+
+
+def validate_dispatch_payload(payload: object) -> dict[str, object]:
+    if not isinstance(payload, dict) or set(payload) != DISPATCH_FIELDS:
+        raise ContractError("review dispatch payload fields are invalid")
+    if payload.get("schema") != DISPATCH_SCHEMA or payload.get("repository") != REPOSITORY:
+        raise ContractError("review dispatch schema or repository is invalid")
+    require_string(payload.get("task_uid"), "dispatch task UID", TASK_RE)
+    require_string(payload.get("frozen_head"), "dispatch frozen head", HEAD_RE)
+    require_string(payload.get("epoch"), "dispatch epoch", SHA_RE)
+    require_string(payload.get("plan_path"), "dispatch plan path")
+    require_string(payload.get("batch_path"), "dispatch batch path")
+    for key in ("plan_sha256", "batch_sha256"):
+        require_string(payload.get(key), f"dispatch {key}", SHA_RE)
+    for key in ("issue_number", "pr_number"):
+        value = payload.get(key)
+        if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+            raise ContractError(f"dispatch {key} is invalid")
+    rows = payload.get("rows")
+    if not isinstance(rows, list) or not rows:
+        raise ContractError("dispatch rows are invalid")
+    seen: set[tuple[str, str]] = set()
+    for row in rows:
+        if not isinstance(row, dict) or set(row) != DISPATCH_ROW_FIELDS:
+            raise ContractError("dispatch row fields are invalid")
+        role = require_string(row.get("role"), "dispatch role")
+        slice_id = require_string(row.get("slice_id"), "dispatch slice ID", UUID_RE)
+        require_string(row.get("packet_path"), "dispatch packet path")
+        require_string(row.get("packet_digest"), "dispatch packet digest", SHA_RE)
+        identity = (role, slice_id)
+        if identity in seen:
+            raise ContractError("dispatch contains a duplicate role/slice row")
+        seen.add(identity)
+    if rows != sorted(rows, key=lambda item: (item["role"].encode(), item["slice_id"].encode())):
+        raise ContractError("dispatch rows are not deterministically sorted")
+    return payload
+
+
+def paginated_task_issue_comments(issue_number: int) -> list[dict[str, object]]:
+    pages = gh_json([
+        f"repos/{REPOSITORY}/issues/{issue_number}/comments?per_page=100", "--paginate", "--slurp",
+    ], "paginated task Issue comments")
+    return flatten_comment_pages(pages)
+
+
+def live_dispatch_readback(root: Path, expected_payload: dict[str, object], comment_id: object) -> dict[str, object]:
+    expected_payload = validate_dispatch_payload(expected_payload)
+    issue_number = int(expected_payload["issue_number"])
+    task_uid = str(expected_payload["task_uid"])
+    pr_number = int(expected_payload["pr_number"])
+    if not isinstance(comment_id, int) or isinstance(comment_id, bool) or comment_id <= 0:
+        raise ContractError("dispatch comment ID is invalid")
+    if canonical_task_issue_number(root, task_uid) != issue_number:
+        raise ContractError("dispatch Issue number does not match canonical task mapping")
+    validate_live_task_issue(issue_number, task_uid, pr_number)
+    comments = paginated_task_issue_comments(issue_number)
+    matches = matching_dispatch_comments(comments, expected_payload)
+    if len(matches) != 1:
+        raise ContractError("live task Issue does not contain exactly one matching dispatch marker")
+    listed_comment = matches[0]
+    listed_id = listed_comment.get("id")
+    if not isinstance(listed_id, int) or isinstance(listed_id, bool) or listed_id != comment_id:
+        raise ContractError("dispatch comment ID does not match the unique live marker")
+    expected_body = dispatch_body(expected_payload)
+    listed_body = listed_comment.get("body")
+    if not isinstance(listed_body, str) or listed_body.encode("utf-8") != expected_body:
+        raise ContractError("live dispatch comment body differs from the exact plan and packet payload")
+
+    live_comment = gh_json(
+        [f"repos/{REPOSITORY}/issues/comments/{comment_id}"], "live dispatch comment",
+    )
+    live_comment_id = live_comment.get("id") if isinstance(live_comment, dict) else None
+    if (not isinstance(live_comment_id, int) or isinstance(live_comment_id, bool)
+            or live_comment_id != comment_id):
+        raise ContractError("live dispatch comment ID mismatch")
+    if live_comment.get("issue_url") != canonical_issue_api_url(issue_number):
+        raise ContractError("live dispatch comment is not attached to the canonical task Issue")
+    body = live_comment.get("body")
+    if not isinstance(body, str) or body.encode("utf-8") != expected_body:
+        raise ContractError("live dispatch comment readback body mismatch")
+    listed_user = listed_comment.get("user")
+    live_user = live_comment.get("user")
+    listed_author = listed_user.get("login") if isinstance(listed_user, dict) else None
+    author = live_user.get("login") if isinstance(live_user, dict) else None
+    author = require_string(author, "dispatch comment author", re.compile(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?\Z"))
+    if listed_author != author:
+        raise ContractError("paginated and direct dispatch comment author readbacks differ")
+    permission = gh_json(
+        [f"repos/{REPOSITORY}/collaborators/{quote(author, safe='')}/permission"],
+        "dispatch author repository permission",
+    )
+    if not isinstance(permission, dict) or permission.get("permission") != "admin":
+        raise ContractError("dispatch comment author is not a current repository admin")
+    return {
+        "issue_number": issue_number, "issue_url": canonical_issue_api_url(issue_number),
+        "comment_id": comment_id, "author": author,
+        "body_digest": sha256_bytes(body.encode("utf-8")),
+        "payload": expected_payload, "body": body,
+    }
+
+
+def publish_dispatch(root: Path, plan_path: Path) -> dict[str, object]:
+    root = root.resolve(strict=True)
+    payload = validate_dispatch_payload(dispatch_payload_for_plan(root, plan_path))
+    issue_number = int(payload["issue_number"])
+    validate_live_task_issue(issue_number, str(payload["task_uid"]), int(payload["pr_number"]))
+    comments = paginated_task_issue_comments(issue_number)
+    matches = matching_dispatch_comments(comments, payload)
+    if len(matches) > 1:
+        raise ContractError("duplicate live task Issue dispatch markers make publication ambiguous")
+    if matches:
+        comment_id = matches[0].get("id")
+    else:
+        body = dispatch_body(payload).decode("utf-8")
+        created = gh_json([
+            f"repos/{REPOSITORY}/issues/{issue_number}/comments", "--method", "POST",
+            "--field", f"body={body}",
+        ], "dispatch comment publication")
+        comment_id = created.get("id") if isinstance(created, dict) else None
+    readback = live_dispatch_readback(root, payload, comment_id)
+    return {
+        "status": "published", "task_uid": payload["task_uid"],
+        "issue_number": readback["issue_number"], "pr_number": payload["pr_number"],
+        "head": payload["frozen_head"], "epoch": payload["epoch"],
+        "dispatch_comment_id": readback["comment_id"], "author": readback["author"],
+        "issue_url": readback["issue_url"], "body_digest": readback["body_digest"],
+        "rows": payload["rows"],
+    }
+
+
+def create_handoff(root: Path, plan_path: Path, dispatch_comment_id: int) -> dict[str, object]:
     root = root.resolve(strict=True)
     (plan, source_identity, resolved_plan, batch_path, ledger_path, expected_slices,
      plan_raw, batch_raw, ledger_raw) = validate_plan_inputs(root, plan_path)
     packet_metadata = validate_packet_refs(root, plan, expected_slices, source_identity)
+    expected_dispatch = dispatch_payload_for_plan(root, resolved_plan)
+    snapshot_rows = [
+        {
+            "role": item["role"], "slice_id": item["slice_id"],
+            "packet_path": packet_metadata[(item["role"], item["slice_id"])]["packet_path"],
+            "packet_digest": packet_metadata[(item["role"], item["slice_id"])]["packet_digest"],
+        }
+        for item in expected_slices
+    ]
+    snapshot_rows.sort(key=lambda item: (item["role"].encode(), item["slice_id"].encode()))
+    snapshot_dispatch = validate_dispatch_payload({
+        "schema": DISPATCH_SCHEMA, "repository": REPOSITORY,
+        "task_uid": plan["task_uid"],
+        "issue_number": canonical_task_issue_number(root, str(plan["task_uid"])),
+        "pr_number": source_identity["pr_number"], "frozen_head": plan["frozen_head"],
+        "epoch": plan["epoch"], "plan_path": repo_relative(root, resolved_plan, "plan"),
+        "plan_sha256": sha256_bytes(plan_raw),
+        "batch_path": repo_relative(root, batch_path, "batch"),
+        "batch_sha256": sha256_bytes(batch_raw), "rows": snapshot_rows,
+    })
+    if expected_dispatch != snapshot_dispatch:
+        raise ContractError("plan, batch, or packet bytes changed while validating dispatch evidence")
+    dispatch_readback = live_dispatch_readback(root, expected_dispatch, dispatch_comment_id)
     rows: list[dict[str, object]] = []
     preflight_rows = { (row["role"], row["slice_id"]): row for row in parse_ledger(ledger_raw, "preflight ledger") }
     for expected in expected_slices:
@@ -499,6 +809,8 @@ def create_handoff(root: Path, plan_path: Path) -> dict[str, object]:
         )
         rows.append({
             "role": expected["role"], "slice_id": expected["slice_id"],
+            "packet_path": packet_metadata[identity]["packet_path"],
+            "packet_digest": packet_metadata[identity]["packet_digest"],
             "artifact_path": repo_relative(root, artifact_path, "review return"),
             "return_sha256": sha256_bytes(return_raw), "findings_digest": canonical_digest(findings),
         })
@@ -512,7 +824,12 @@ def create_handoff(root: Path, plan_path: Path) -> dict[str, object]:
         "plan_path": repo_relative(root, resolved_plan, "plan"), "plan_sha256": sha256_bytes(plan_raw),
         "batch_path": repo_relative(root, batch_path, "batch"), "batch_sha256": sha256_bytes(batch_raw),
         "preflight_ledger_path": repo_relative(root, ledger_path, "preflight ledger"),
-        "preflight_ledger_sha256": sha256_bytes(ledger_raw), "rows": rows,
+        "preflight_ledger_sha256": sha256_bytes(ledger_raw),
+        "dispatch_evidence": {
+            key: dispatch_readback[key]
+            for key in ("issue_number", "issue_url", "comment_id", "author", "body_digest")
+        },
+        "rows": rows,
     }
     handoff = {**payload, "handoff_digest": canonical_digest(payload)}
     output = root / ".pm" / "scratch" / str(plan["task_uid"]) / "review-handoffs" / f"{plan['epoch']}.json"
@@ -566,10 +883,19 @@ def validate_handoff(root: Path, handoff_path: Path, *, expected_plan_path: Path
     root = root.resolve(strict=True)
     resolved_handoff = resolve_repo_file(root, str(handoff_path), "review handoff")
     handoff_value, raw = read_json(resolved_handoff, "review handoff")
-    if not isinstance(handoff_value, dict) or set(handoff_value) != HANDOFF_FIELDS:
+    if not isinstance(handoff_value, dict):
         raise ContractError("review handoff fields are invalid")
     handoff = handoff_value
-    if handoff.get("schema") != HANDOFF_SCHEMA or handoff.get("repository") != REPOSITORY:
+    schema = handoff.get("schema")
+    if schema == HANDOFF_SCHEMA_V1:
+        handoff_fields = HANDOFF_FIELDS_V1
+        row_fields = HANDOFF_ROW_FIELDS_V1
+    elif schema == HANDOFF_SCHEMA_V2:
+        handoff_fields = HANDOFF_FIELDS_V2
+        row_fields = HANDOFF_ROW_FIELDS_V2
+    else:
+        raise ContractError("review handoff schema is invalid")
+    if set(handoff) != handoff_fields or handoff.get("repository") != REPOSITORY:
         raise ContractError("review handoff schema or repository is invalid")
     if canonical_digest({key: value for key, value in handoff.items() if key != "handoff_digest"}) != handoff.get("handoff_digest"):
         raise ContractError("review handoff digest mismatch")
@@ -581,6 +907,34 @@ def validate_handoff(root: Path, handoff_path: Path, *, expected_plan_path: Path
         root, plan_path, allow_promoted_ledger=True
     )
     packet_metadata = validate_packet_refs(root, plan, expected_slices, source_identity)
+    dispatch_rows: dict[tuple[str, str], dict[str, object]] = {}
+    if schema == HANDOFF_SCHEMA_V2:
+        expected_dispatch = validate_dispatch_payload(dispatch_payload_for_plan(
+            root, validated_plan, allow_promoted_ledger=True,
+        ))
+        live_dispatch = live_dispatch_readback(
+            root, expected_dispatch,
+            handoff.get("dispatch_evidence", {}).get("comment_id")
+            if isinstance(handoff.get("dispatch_evidence"), dict) else None,
+        )
+        evidence = handoff.get("dispatch_evidence")
+        if not isinstance(evidence, dict) or set(evidence) != DISPATCH_EVIDENCE_FIELDS:
+            raise ContractError("review handoff dispatch evidence fields are invalid")
+        for key in ("issue_number", "comment_id"):
+            value = evidence.get(key)
+            if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+                raise ContractError(f"review handoff dispatch {key} is invalid")
+        require_string(evidence.get("issue_url"), "handoff dispatch Issue URL")
+        require_string(evidence.get("author"), "handoff dispatch author")
+        require_string(evidence.get("body_digest"), "handoff dispatch body digest", SHA_RE)
+        for key in DISPATCH_EVIDENCE_FIELDS:
+            if evidence.get(key) != live_dispatch.get(key):
+                raise ContractError(f"review handoff dispatch {key} does not match live readback")
+        dispatch_rows = {
+            (str(row["role"]), str(row["slice_id"])): row
+            for row in expected_dispatch["rows"]
+            if isinstance(row, dict)
+        }
     if repo_relative(root, validated_plan, "plan") != handoff.get("plan_path"):
         raise ContractError("review handoff plan path is not canonical")
     ledger_rows = parse_ledger(original_ledger_raw, "preflight ledger")
@@ -608,7 +962,7 @@ def validate_handoff(root: Path, handoff_path: Path, *, expected_plan_path: Path
     rows = handoff.get("rows")
     if not isinstance(rows, list) or len(rows) != len(expected_slices):
         raise ContractError("review handoff rows are invalid")
-    if any(not isinstance(row, dict) or set(row) != HANDOFF_ROW_FIELDS for row in rows):
+    if any(not isinstance(row, dict) or set(row) != row_fields for row in rows):
         raise ContractError("review handoff row fields are invalid")
     expected_rows = {(item["role"], item["slice_id"]): item for item in expected_slices}
     seen: set[tuple[str, str]] = set()
@@ -621,6 +975,21 @@ def validate_handoff(root: Path, handoff_path: Path, *, expected_plan_path: Path
         if identity in seen or identity not in expected_rows:
             raise ContractError("review handoff has duplicate or unexpected role/slice row")
         seen.add(identity)
+        return_packet_metadata = packet_metadata[identity]
+        if schema == HANDOFF_SCHEMA_V2:
+            dispatch_row = dispatch_rows.get(identity)
+            if dispatch_row is None:
+                raise ContractError(f"dispatch comment lacks packet row for {role}")
+            for field in ("packet_path", "packet_digest"):
+                if row.get(field) != dispatch_row.get(field) or row.get(field) != packet_metadata[identity][field]:
+                    raise ContractError(f"review handoff {field} does not match dispatch packet for {role}")
+        else:
+            # Historical v1 handoffs predate dispatch evidence and remain
+            # content-only audit records; do not reinterpret their returns.
+            return_packet_metadata = {
+                key: value for key, value in packet_metadata[identity].items()
+                if key not in {"packet_path", "packet_digest"}
+            }
         artifact_path = resolve_repo_file(root, row.get("artifact_path"), "handoff return")
         if repo_relative(root, artifact_path, "handoff return") != row.get("artifact_path"):
             raise ContractError("review handoff return path is not canonical")
@@ -630,7 +999,7 @@ def validate_handoff(root: Path, handoff_path: Path, *, expected_plan_path: Path
         return_value, return_raw = read_json(artifact_path, f"review return for {role}")
         findings = validate_return(return_value, role=role, slice_id=slice_id, task_uid=str(plan["task_uid"]),
                                    head=str(plan["frozen_head"]), epoch=str(plan["epoch"]),
-                                   packet_metadata=packet_metadata[identity])
+                                   packet_metadata=return_packet_metadata)
         if row.get("return_sha256") != sha256_bytes(return_raw) or row.get("findings_digest") != canonical_digest(findings):
             raise ContractError(f"review handoff return digest mismatch for {role}")
         returns[identity] = (artifact_path, return_raw, return_value)
@@ -777,6 +1146,8 @@ def promote_handoff(root: Path, plan_path: Path, manifest_path: Path,
         manifest_before = manifest_path.read_bytes()
         readback_before = readback_path.read_bytes()
         validated = validate_handoff(root, handoff_path, expected_plan_path=plan_path)
+        if validated["handoff"].get("schema") != HANDOFF_SCHEMA_V2:
+            raise ContractError("plan-owned preflight promotion requires a v2 dispatch-bound handoff")
         resolution = review_findings_resolution.validate_manifest(
             root, manifest_path, Path(str(validated["ledger_path"])),
             task_uid, frozen_head,
@@ -784,6 +1155,8 @@ def promote_handoff(root: Path, plan_path: Path, manifest_path: Path,
         # Use the immutable plan-bound path returned by independent H validation;
         # the canonical epoch filename above is never treated as ledger authority.
         validated = validate_handoff(root, handoff_path, expected_plan_path=plan_path)
+        if validated["handoff"].get("schema") != HANDOFF_SCHEMA_V2:
+            raise ContractError("plan-owned preflight promotion requires a v2 dispatch-bound handoff")
         if (validated["plan"].get("task_uid") != task_uid
                 or validated["plan"].get("frozen_head") != frozen_head
                 or validated["plan"].get("epoch") != epoch):

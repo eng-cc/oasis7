@@ -30,6 +30,7 @@ SLICE = "11111111-1111-4111-8111-111111111111"
 REPO = "eng-cc/oasis7"
 ISSUE = 3615
 COMMENT_ID = 3934017999
+DISPATCH_COMMENT_ID = 3934017998
 ADMIN = "repo-admin"
 
 
@@ -62,6 +63,7 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
         self.manifest.parent.mkdir()
         self.ledger = self.task_root / "slice-ledger.jsonl"
         self.gh_log = self.root / "gh.log"
+        self.gh_dispatch_fixture = self.root / "dispatch-gh-fixture.json"
         self.bin = self.root / "bin"
         self.bin.mkdir()
         self.fake_gh = self.bin / "gh"
@@ -79,21 +81,53 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
             body = self.body
         if task_body is None:
             task_body = f"<!-- oasis7-pm-task -->\ntask_uid: {TASK}\n"
+        config = {
+            "repository": REPO, "issue_number": issue_number, "task_body": task_body,
+            "resolution_comment_id": COMMENT_ID, "resolution_body": body,
+            "resolution_issue_number": comment_issue_number,
+            "author": author, "permission": permission,
+        }
         self.fake_gh.write_text(
             "#!/usr/bin/env python3\n"
             "import json, os, sys\n"
+            f"CONFIG = json.loads({json.dumps(config)!r})\n"
             "args = sys.argv[1:]\n"
+            "if not args or args[0] != 'api' or len(args) < 2: raise SystemExit('unexpected gh call')\n"
+            "endpoint = args[1]\n"
             "open(os.environ['GH_LOG'], 'a').write(' '.join(args) + '\\n')\n"
-            f"if args[:2] != ['api', 'repos/eng-cc/oasis7/issues/{issue_number}'] and args[:2] != ['api', 'repos/eng-cc/oasis7/issues/{issue_number}/comments'] and args[:2] != ['api', 'repos/eng-cc/oasis7/issues/comments/3934017999'] and args[:2] != ['api', 'repos/eng-cc/oasis7/collaborators/{author}/permission']:\n"
-            "    raise SystemExit('unexpected gh call: ' + ' '.join(args))\n"
-            f"if args[1] == 'repos/eng-cc/oasis7/issues/{issue_number}':\n"
-            "    print(json.dumps({'number': " + str(issue_number) + ", 'body': " + repr(task_body) + "}))\n"
-            f"elif args[1] == 'repos/eng-cc/oasis7/issues/{issue_number}/comments':\n"
-            "    print('[]')\n"
-            "elif 'comments' in args[1]:\n"
-            "    print(json.dumps({'id': 3934017999, 'body': " + repr(body) + ", 'issue_url': 'https://api.github.com/repos/eng-cc/oasis7/issues/" + str(comment_issue_number) + "', 'user': {'login': " + repr(author) + "}, 'created_at': '2026-09-06T10:00:00Z'}))\n"
-            "else:\n"
-            "    print(json.dumps({'permission': " + repr(permission) + "}))\n",
+            "def read_dispatch():\n"
+            "    path = os.environ.get('GH_DISPATCH_FIXTURE')\n"
+            "    if not path or not os.path.isfile(path): return None\n"
+            "    with open(path, encoding='utf-8') as handle: return json.load(handle)\n"
+            "dispatch = read_dispatch()\n"
+            "issue_route = f\"repos/{CONFIG['repository']}/issues/{CONFIG['issue_number']}\"\n"
+            "if endpoint == issue_route:\n"
+            "    print(json.dumps(dispatch['issue'] if dispatch else {'number': CONFIG['issue_number'], 'html_url': f\"https://github.com/{CONFIG['repository']}/issues/{CONFIG['issue_number']}\", 'body': CONFIG['task_body']}))\n"
+            "elif endpoint.startswith(issue_route + '/comments'):\n"
+            "    method = next((args[i + 1] for i, arg in enumerate(args[:-1]) if arg == '--method'), 'GET')\n"
+            "    if method == 'POST':\n"
+            "        if dispatch is None: raise SystemExit('dispatch fixture is missing for POST')\n"
+            "        body = next((args[i + 1][5:] for i, arg in enumerate(args[:-1]) if arg in ('--field', '-f') and args[i + 1].startswith('body=')), None)\n"
+            "        if body is None: raise SystemExit('missing POST body')\n"
+            "        comment = {'id': dispatch['comment_id'], 'body': body, 'issue_url': f\"https://api.github.com/repos/{CONFIG['repository']}/issues/{CONFIG['issue_number']}\", 'html_url': f\"https://github.com/{CONFIG['repository']}/issues/{CONFIG['issue_number']}#issuecomment-{dispatch['comment_id']}\", 'user': {'login': dispatch['author']}, 'created_at': '2026-09-29T00:00:00Z'}\n"
+            "        dispatch['comment_pages'][-1].append(comment)\n"
+            "        with open(os.environ['GH_DISPATCH_FIXTURE'], 'w', encoding='utf-8') as handle: json.dump(dispatch, handle, ensure_ascii=False, sort_keys=True)\n"
+            "        print(json.dumps(comment))\n"
+            "    elif dispatch is not None:\n"
+            "        print(json.dumps(dispatch['comment_pages'] if '--paginate' in args else (dispatch['comment_pages'][0] if dispatch['comment_pages'] else [])))\n"
+            "    else: print('[]')\n"
+            "elif endpoint.startswith(f\"repos/{CONFIG['repository']}/issues/comments/\"):\n"
+            "    comment_id = int(endpoint.rsplit('/', 1)[1])\n"
+            "    if comment_id == CONFIG['resolution_comment_id']:\n"
+            "        print(json.dumps({'id': comment_id, 'body': CONFIG['resolution_body'], 'issue_url': f\"https://api.github.com/repos/{CONFIG['repository']}/issues/{CONFIG['resolution_issue_number']}\", 'user': {'login': CONFIG['author']}, 'created_at': '2026-09-06T10:00:00Z'}))\n"
+            "    elif dispatch is not None:\n"
+            "        matches = [comment for page in dispatch['comment_pages'] for comment in page if comment.get('id') == comment_id]\n"
+            "        if len(matches) != 1: raise SystemExit('dispatch comment fixture is not unique')\n"
+            "        print(json.dumps(matches[0]))\n"
+            "    else: raise SystemExit('unknown comment id')\n"
+            "elif endpoint.startswith(f\"repos/{CONFIG['repository']}/collaborators/\"):\n"
+            "    print(json.dumps({'permission': CONFIG['permission']}))\n"
+            "else: raise SystemExit('unexpected gh call: ' + ' '.join(args))\n",
             encoding="utf-8",
         )
         self.fake_gh.chmod(0o755)
@@ -341,6 +375,7 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
             **os.environ,
             "PATH": f"{self.bin}:{os.environ['PATH']}",
             "GH_LOG": str(self.gh_log),
+            "GH_DISPATCH_FIXTURE": str(self.gh_dispatch_fixture),
         }
         planned = subprocess.run(
             [str(PLAN_SCRIPT), "--root", str(self.root), "--task-uid", TASK,
@@ -368,6 +403,26 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
         self.v2_handoff.parent.mkdir(parents=True, exist_ok=True)
         self.v2_manifest.parent.mkdir(parents=True, exist_ok=True)
 
+        issue_url = f"https://api.github.com/repos/{REPO}/issues/{ISSUE}"
+        self.gh_dispatch_fixture.write_text(json.dumps({
+            "issue": {
+                "number": ISSUE,
+                "html_url": f"https://github.com/{REPO}/issues/{ISSUE}",
+                "body": (
+                    f"<!-- oasis7-pm-task -->\ntask_uid: {TASK}\n"
+                    f"- pr_url: `https://github.com/{REPO}/pull/{ISSUE}`\n"
+                    f"- pr_number: `{ISSUE}`\n"
+                ),
+            },
+            "comment_id": DISPATCH_COMMENT_ID,
+            "author": ADMIN,
+            "comment_pages": [[{
+                "id": DISPATCH_COMMENT_ID - 1, "body": "unrelated older issue comment",
+                "issue_url": issue_url, "user": {"login": "someone"},
+                "created_at": "2026-09-28T00:00:00Z",
+            }], []],
+        }, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+
         returned = json.loads(returned_path.read_text(encoding="utf-8"))
         fixture_finding = {
             "id": "V2-P1", "summary": "source-shaped v2 finding",
@@ -385,6 +440,39 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
             "disposition": "findings" if findings else "no_findings",
             "findings": fixture_findings, "residual_risk": "fixture risk",
         })
+        returned_path.write_text(
+            json.dumps(returned, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        original_ledger_raw = self.v2_ledger.read_bytes()
+        dispatch_env = {
+            **os.environ,
+            "PATH": f"{self.bin}:{os.environ['PATH']}",
+            "GH_LOG": str(self.gh_log),
+            "GH_DISPATCH_FIXTURE": str(self.gh_dispatch_fixture),
+        }
+        dispatched = subprocess.run(
+            [str(BATCH_SCRIPT), "--root", str(self.root), "dispatch", "--plan", str(self.v2_plan)],
+            text=True, capture_output=True, env=dispatch_env,
+        )
+        self.assertEqual(0, dispatched.returncode, dispatched.stderr)
+        dispatch_record = json.loads(dispatched.stdout)
+        self.assertEqual("published", dispatch_record["status"])
+        self.assertEqual(DISPATCH_COMMENT_ID, dispatch_record["dispatch_comment_id"])
+        dispatch_digests = {
+            (row["role"], row["slice_id"]): row["packet_digest"]
+            for row in dispatch_record["rows"]
+        }
+        returned["admitted_packet_digest"] = dispatch_digests[(ROLE, self.v2_slice)]
+        returned_path.write_text(
+            json.dumps(returned, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        handoff_result = subprocess.run(
+            [str(BATCH_SCRIPT), "--root", str(self.root), "handoff", "--plan", str(self.v2_plan),
+             "--dispatch-comment-id", str(DISPATCH_COMMENT_ID)],
+            text=True, capture_output=True, env=dispatch_env,
+        )
+        self.assertEqual(0, handoff_result.returncode, handoff_result.stderr)
+        handoff = json.loads(self.v2_handoff.read_text(encoding="utf-8"))
         if mutation == "not_completed":
             returned["status"] = "incomplete"
         elif mutation == "wrong_disposition":
@@ -392,39 +480,17 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
         elif mutation == "nonempty_findings":
             returned["findings"] = [{"id": "unexpected", "summary": "fixture"}]
             returned["disposition"] = "no_findings"
-        returned_path.write_text(
-            json.dumps(returned, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8"
-        )
-        return_raw = returned_path.read_bytes()
-
-        original_ledger_raw = self.v2_ledger.read_bytes()
-        original_ledger_raw = self.v2_ledger.read_bytes()
-        source_identity = plan["source_review_identity"]
-        source_digest = plan["source_review_digest"]
-        comparison_oid = plan["comparison_oid"]
-        handoff_payload = {
-            "schema": "oasis7-review-return-handoff/v1", "repository": REPO,
-            "task_uid": TASK, "pr_number": source_identity["pr_number"],
-            "comparison_ref": plan["comparison_ref"],
-            "comparison_oid": comparison_oid, "frozen_head": self.v2_head,
-            "source_review_identity": source_identity, "source_review_digest": source_digest,
-            "epoch": epoch, "plan_path": self.v2_plan.relative_to(self.root).as_posix(),
-            "plan_sha256": hashlib.sha256(self.v2_plan.read_bytes()).hexdigest(),
-            "batch_path": batch_path.resolve().relative_to(self.root.resolve()).as_posix(),
-            "batch_sha256": hashlib.sha256(batch_path.read_bytes()).hexdigest(),
-            "preflight_ledger_path": self.v2_ledger.resolve().relative_to(self.root.resolve()).as_posix(),
-            "preflight_ledger_sha256": hashlib.sha256(original_ledger_raw).hexdigest(),
-            "rows": [{
-                "role": ROLE, "slice_id": self.v2_slice,
-                "artifact_path": returned_path.resolve().relative_to(self.root.resolve()).as_posix(),
-                "return_sha256": hashlib.sha256(return_raw).hexdigest(),
-                "findings_digest": digest(returned["findings"]),
-            }],
-        }
-        handoff = {**handoff_payload, "handoff_digest": digest(handoff_payload)}
-        self.v2_handoff.write_text(
-            json.dumps(handoff, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8"
-        )
+        if mutation in {"not_completed", "wrong_disposition", "nonempty_findings"}:
+            returned_path.write_text(
+                json.dumps(returned, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            handoff_payload = {key: value for key, value in handoff.items() if key != "handoff_digest"}
+            handoff_payload["rows"][0]["return_sha256"] = hashlib.sha256(returned_path.read_bytes()).hexdigest()
+            handoff_payload["rows"][0]["findings_digest"] = digest(returned["findings"])
+            handoff = {**handoff_payload, "handoff_digest": digest(handoff_payload)}
+            self.v2_handoff.write_text(
+                json.dumps(handoff, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8"
+            )
 
         role_records: list[dict[str, object]] = []
         if findings:
@@ -510,13 +576,30 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
         self.assertEqual((TASK, ROLE, self.v2_slice, self.v2_head, plan["epoch"], "completed"),
                          (returned["task_uid"], returned["role"], returned["slice_id"],
                           returned["head"], returned["epoch"], returned["status"]))
-        self.assertEqual("oasis7-review-return-handoff/v1", handoff["schema"])
+        self.assertEqual("oasis7-review-return-handoff/v2", handoff["schema"])
+        self.assertEqual({
+            "issue_number": ISSUE,
+            "issue_url": f"https://api.github.com/repos/{REPO}/issues/{ISSUE}",
+            "comment_id": DISPATCH_COMMENT_ID,
+            "author": ADMIN,
+            "body_digest": hashlib.sha256(
+                next(comment["body"].encode() for page in json.loads(
+                    self.gh_dispatch_fixture.read_text(encoding="utf-8")
+                )["comment_pages"] for comment in page if comment["id"] == DISPATCH_COMMENT_ID)
+            ).hexdigest(),
+        }, handoff["dispatch_evidence"])
         self.assertEqual(hashlib.sha256(self.v2_plan.read_bytes()).hexdigest(), handoff["plan_sha256"])
         self.assertEqual(hashlib.sha256(batch_path.read_bytes()).hexdigest(), handoff["batch_sha256"])
         self.assertEqual(hashlib.sha256(self.v2_ledger.read_bytes()).hexdigest(),
                          handoff["preflight_ledger_sha256"])
         self.assertEqual(hashlib.sha256(self.v2_artifact.read_bytes()).hexdigest(),
                          handoff["rows"][0]["return_sha256"])
+        returned = json.loads(self.v2_artifact.read_text(encoding="utf-8"))
+        packet_path = self.root / plan["packet_refs"][0]["packet_ref"]
+        packet = json.loads(packet_path.read_text(encoding="utf-8"))
+        self.assertEqual(packet["packet_digest"], returned["admitted_packet_digest"])
+        self.assertEqual(packet["packet_digest"], handoff["rows"][0]["packet_digest"])
+        self.assertEqual(plan["packet_refs"][0]["packet_ref"], handoff["rows"][0]["packet_path"])
         payload = {key: value for key, value in handoff.items() if key != "handoff_digest"}
         self.assertEqual(digest(payload), handoff["handoff_digest"])
 
@@ -586,7 +669,10 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
     def run_validation_raw(
         self, manifest: Path, ledger: Path, *, expected_head: str = HEAD
     ) -> subprocess.CompletedProcess[str]:
-        env = {**os.environ, "PATH": f"{self.bin}:{os.environ['PATH']}", "GH_LOG": str(self.gh_log)}
+        env = {
+            **os.environ, "PATH": f"{self.bin}:{os.environ['PATH']}",
+            "GH_LOG": str(self.gh_log), "GH_DISPATCH_FIXTURE": str(self.gh_dispatch_fixture),
+        }
         return subprocess.run(
             [str(SCRIPT), "validate", "--root", str(self.root), "--task-uid", TASK,
              "--head", expected_head, "--ledger", str(ledger), "--manifest", str(manifest)],
@@ -605,7 +691,10 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
 
     def run_script(self, *extra: str, ok: bool = True) -> subprocess.CompletedProcess[str]:
         if extra:
-            env = {**os.environ, "PATH": f"{self.bin}:{os.environ['PATH']}", "GH_LOG": str(self.gh_log)}
+            env = {
+                **os.environ, "PATH": f"{self.bin}:{os.environ['PATH']}",
+                "GH_LOG": str(self.gh_log), "GH_DISPATCH_FIXTURE": str(self.gh_dispatch_fixture),
+            }
             result = subprocess.run(
                 [str(SCRIPT), "validate", "--root", str(self.root), "--task-uid", TASK,
                  "--head", HEAD, "--ledger", str(self.ledger), "--manifest", str(self.manifest), *extra],
@@ -650,6 +739,37 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
         self.assertEqual("passed", result["status"])
         self.assertEqual("no_findings", result["aggregate"])
         self.assertEqual(original_ledger, ledger.read_bytes())
+
+    def test_v2_manifest_rejects_correctly_rehashed_legacy_v1_handoff(self) -> None:
+        manifest, ledger, _ = self._write_v2_no_findings_fixture()
+        handoff = json.loads(self.v2_handoff.read_text(encoding="utf-8"))
+        manifest_value = json.loads(manifest.read_text(encoding="utf-8"))
+        handoff_payload = {key: value for key, value in handoff.items() if key != "handoff_digest"}
+        handoff_payload["schema"] = "oasis7-review-return-handoff/v1"
+        handoff_payload.pop("dispatch_evidence")
+        for row in handoff_payload["rows"]:
+            row.pop("packet_path")
+            row.pop("packet_digest")
+        handoff = {**handoff_payload, "handoff_digest": digest(handoff_payload)}
+        self.v2_handoff.write_text(json.dumps(handoff, ensure_ascii=False, sort_keys=True) + "\n")
+        manifest_payload = {key: value for key, value in manifest_value.items() if key != "manifest_digest"}
+        manifest_payload["handoff_digest"] = handoff["handoff_digest"]
+        manifest_value = {**manifest_payload, "manifest_digest": digest(manifest_payload)}
+        manifest.write_text(json.dumps(manifest_value, ensure_ascii=False, sort_keys=True) + "\n")
+        self._resign_v2_manifest(manifest)
+        handoff = json.loads(self.v2_handoff.read_text(encoding="utf-8"))
+        manifest_value = json.loads(manifest.read_text(encoding="utf-8"))
+        handoff_payload = {key: value for key, value in handoff.items() if key != "handoff_digest"}
+        manifest_payload = {key: value for key, value in manifest_value.items() if key != "manifest_digest"}
+        self.assertEqual("oasis7-review-return-handoff/v1", handoff["schema"])
+        self.assertEqual(digest(handoff_payload), handoff["handoff_digest"])
+        self.assertEqual("oasis7-review-resolution/v2", manifest_value["schema"])
+        self.assertEqual(handoff["handoff_digest"], manifest_value["handoff_digest"])
+        self.assertEqual(digest(manifest_payload), manifest_value["manifest_digest"])
+        self._assert_v2_failure_preserves_preflight(
+            manifest, ledger, expected_head=self.v2_head,
+            diagnostic=r"v2|handoff|dispatch|schema",
+        )
 
     def test_v2_finding_role_record_accepts_exact_bound_terminal_evidence(self) -> None:
         manifest, ledger, original_ledger = self._write_v2_finding_fixture()

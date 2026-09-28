@@ -306,6 +306,9 @@ def parser() -> argparse.ArgumentParser:
     preflight_parser.add_argument("--out-dir", required=True)
     handoff_parser = sub.add_parser("handoff")
     handoff_parser.add_argument("--plan", required=True)
+    handoff_parser.add_argument("--dispatch-comment-id", required=True, type=int)
+    dispatch_parser = sub.add_parser("dispatch")
+    dispatch_parser.add_argument("--plan", required=True)
     reconcile_parser = sub.add_parser("reconcile")
     reconcile_parser.add_argument("--batch", required=True)
     reconcile_parser.add_argument("--ledger", required=True)
@@ -322,7 +325,10 @@ def main() -> int:
     try:
         result = (create(args) if args.command == "create" else
                   preflight(args) if args.command == "preflight" else
-                  review_preflight_handoff.create_handoff(Path(args.root), Path(args.plan)) if args.command == "handoff" else
+                  review_preflight_handoff.publish_dispatch(Path(args.root), Path(args.plan)) if args.command == "dispatch" else
+                  review_preflight_handoff.create_handoff(
+                      Path(args.root), Path(args.plan), args.dispatch_comment_id,
+                  ) if args.command == "handoff" else
                   reconcile(args) if args.command == "reconcile" else validate(args))
     except ContractError as exc:
         print(f"review-batch-epoch: {exc}", file=sys.stderr)

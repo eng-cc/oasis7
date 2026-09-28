@@ -305,6 +305,99 @@ class PublicationMatrixTests(unittest.TestCase):
                 "complete Task comments pagination must use the 30-second read budget",
             )
 
+    def test_publish_task_intent_requires_exact_full_body_readback(self):
+        publication, _projection = make_publication(7006)
+        expected_body = publication_module.publication_comment(publication)
+        issue = {"number": 123, "state": "open", "body": f"task_uid: {UID}\n"}
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            args = type("Args", (), {
+                "repo": publication["repository"], "issue_number": 123,
+                "task_uid": UID, "task_helper": str(root / "github-project-task.py"),
+            })()
+            adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+
+            def exact_readback(*command, timeout=5.0, input_json=None):
+                if command[:2] == ("api", f"repos/{publication['repository']}/issues/123"):
+                    return json.dumps(issue)
+                if command[:2] == ("issue", "comment"):
+                    body_path = Path(command[command.index("--body-file") + 1])
+                    self.assertEqual(expected_body, body_path.read_text(encoding="utf-8"))
+                    return f"https://github.com/{publication['repository']}/issues/123#issuecomment-7006"
+                if command[:2] == (
+                    "api", f"repos/{publication['repository']}/issues/comments/7006",
+                ):
+                    return json.dumps({"id": 7006, "body": expected_body})
+                raise AssertionError(f"unexpected mocked GitHub call: {command!r}")
+
+            with patch.object(adapter, "gh", side_effect=exact_readback):
+                adapter.publish_task_intent(publication)
+
+    def test_publish_task_intent_rejects_altered_full_body_readback(self):
+        publication, _projection = make_publication(7007)
+        expected_body = publication_module.publication_comment(publication)
+        issue = {"number": 123, "state": "open", "body": f"task_uid: {UID}\n"}
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            args = type("Args", (), {
+                "repo": publication["repository"], "issue_number": 123,
+                "task_uid": UID, "task_helper": str(root / "github-project-task.py"),
+            })()
+            adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+
+            def altered_readback(*command, timeout=5.0, input_json=None):
+                if command[:2] == ("api", f"repos/{publication['repository']}/issues/123"):
+                    return json.dumps(issue)
+                if command[:2] == ("issue", "comment"):
+                    body_path = Path(command[command.index("--body-file") + 1])
+                    self.assertEqual(expected_body, body_path.read_text(encoding="utf-8"))
+                    return f"https://github.com/{publication['repository']}/issues/123#issuecomment-7007"
+                if command[:2] == (
+                    "api", f"repos/{publication['repository']}/issues/comments/7007",
+                ):
+                    return json.dumps({"id": 7007, "body": expected_body + "\nchanged"})
+                raise AssertionError(f"unexpected mocked GitHub call: {command!r}")
+
+            with patch.object(adapter, "gh", side_effect=altered_readback):
+                with self.assertRaisesRegex(RuntimeError, "Issue comment exact readback failed"):
+                    adapter.publish_task_intent(publication)
+
+    def test_find_task_publication_on_later_paginated_comment_page(self):
+        publication, _projection = make_publication(7008)
+        issue = {"number": 123, "state": "open", "body": f"task_uid: {UID}\n"}
+        first_page = [{"id": 10, "body": "older task evidence"}]
+        second_page = [{
+            "id": 11,
+            "body": publication_module.publication_comment(publication),
+        }]
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            args = type("Args", (), {
+                "repo": publication["repository"], "issue_number": 123,
+                "task_uid": UID, "task_helper": str(root / "github-project-task.py"),
+            })()
+            adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+
+            def paginated_readback(*command, timeout=5.0, input_json=None):
+                if command[:2] == ("api", f"repos/{publication['repository']}/issues/123"):
+                    return json.dumps(issue)
+                if command[:2] == (
+                    "api", f"repos/{publication['repository']}/issues/123/comments?per_page=100",
+                ):
+                    self.assertIn("--paginate", command)
+                    self.assertIn("--slurp", command)
+                    return json.dumps([first_page, second_page])
+                raise AssertionError(f"unexpected mocked GitHub call: {command!r}")
+
+            with patch.object(adapter, "gh", side_effect=paginated_readback):
+                result = adapter.find_task_publications(publication["publication_id"])
+
+        self.assertIs(result["complete"], True)
+        self.assertEqual([publication], result["publications"])
+
     def test_pr_discovery_filters_large_history_server_side(self):
         repository = "eng-cc/oasis7"
         source_ref = "task/engineering-ci-parallel-reuse-c1"

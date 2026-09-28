@@ -19,6 +19,9 @@ EVIDENCE = "b" * 64
 QA_SLICE = "11111111-1111-4111-8111-111111111111"
 HEALTH_SLICE = "22222222-2222-4222-8222-222222222222"
 REPOSITORY = "eng-cc/oasis7"
+TASK_ISSUE = 1
+DISPATCH_COMMENT_ID = 3934017999
+DISPATCH_AUTHOR = "repo-admin"
 ACTUAL_DISPATCHED_MODEL_REASONING = "inherited/unverified"
 ACTUAL_RUNTIME_EVIDENCE_REASON = (
     "message-assigned fallback; adapter inactive on this surface; "
@@ -42,6 +45,58 @@ class ReviewBatchEpochTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.batch = self.root / "batch.json"
+        task_map = self.root / ".pm" / "github-project-sync" / "tasks.json"
+        task_map.parent.mkdir(parents=True)
+        task_map.write_text(json.dumps({
+            "project": {"repo": REPOSITORY},
+            "tasks": {TASK: {"issue_number": TASK_ISSUE}},
+        }) + "\n", encoding="utf-8")
+        self.gh_data = self.root / "gh-fixture.json"
+        self.gh_bin = self.root / "bin"
+        self.gh_bin.mkdir()
+        fake_gh = self.gh_bin / "gh"
+        fake_gh.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, os, sys\n"
+            "args = sys.argv[1:]\n"
+            "endpoint = next((arg for arg in args[1:] if arg.startswith('repos/')), None)\n"
+            "if not args or args[0] != 'api' or endpoint is None: raise SystemExit('unexpected gh call')\n"
+            "with open(os.environ['GH_FIXTURE'], encoding='utf-8') as handle: data = json.load(handle)\n"
+            "method = next((args[i + 1] for i, arg in enumerate(args[:-1]) if arg == '--method'), 'GET')\n"
+            "if method == 'POST' and endpoint == f\"repos/{data['repository']}/issues/{data['issue_number']}/comments\":\n"
+            "    body = next((args[i + 1][5:] for i, arg in enumerate(args[:-1]) if arg in ('--field', '-f') and args[i + 1].startswith('body=')), None)\n"
+            "    if body is None: raise SystemExit('missing POST body')\n"
+            "    comment = {'id': data['comment_id'], 'body': body, 'issue_url': f\"https://api.github.com/repos/{data['repository']}/issues/{data['issue_number']}\", 'html_url': f\"https://github.com/{data['repository']}/issues/{data['issue_number']}#issuecomment-{data['comment_id']}\", 'user': {'login': data['author']}, 'created_at': '2026-09-29T00:00:00Z'}\n"
+            "    data['comment_pages'][-1].append(comment)\n"
+            "    with open(os.environ['GH_FIXTURE'], 'w', encoding='utf-8') as handle: json.dump(data, handle, ensure_ascii=False, sort_keys=True)\n"
+            "    print(json.dumps(comment))\n"
+            "elif endpoint == f\"repos/{data['repository']}/issues/{data['issue_number']}\": print(json.dumps(data['issue']))\n"
+            "elif endpoint.startswith(f\"repos/{data['repository']}/issues/{data['issue_number']}/comments\"):\n"
+            "    pages = data['comment_pages']\n"
+            "    print(json.dumps(pages if '--paginate' in args else (pages[0] if pages else [])))\n"
+            "elif endpoint.startswith(f\"repos/{data['repository']}/issues/comments/\"):\n"
+            "    comment_id = int(endpoint.rsplit('/', 1)[1])\n"
+            "    matches = [comment for page in data['comment_pages'] for comment in page if comment.get('id') == comment_id]\n"
+            "    if len(matches) != 1: raise SystemExit('comment fixture is not unique')\n"
+            "    print(json.dumps(matches[0]))\n"
+            "elif endpoint.startswith(f\"repos/{data['repository']}/collaborators/\"): print(json.dumps({'permission': 'admin'}))\n"
+            "else: raise SystemExit('unexpected endpoint: ' + endpoint)\n",
+            encoding="utf-8",
+        )
+        fake_gh.chmod(0o755)
+        old_path = os.environ.get("PATH")
+        old_fixture = os.environ.get("GH_FIXTURE")
+        os.environ["PATH"] = f"{self.gh_bin}:{old_path or ''}"
+        os.environ["GH_FIXTURE"] = str(self.gh_data)
+        self.addCleanup(self._restore_env, "PATH", old_path)
+        self.addCleanup(self._restore_env, "GH_FIXTURE", old_fixture)
+
+    @staticmethod
+    def _restore_env(key: str, value: str | None) -> None:
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
 
     def tearDown(self) -> None:
         self.temp.cleanup()
@@ -64,13 +119,56 @@ class ReviewBatchEpochTests(unittest.TestCase):
         )
         return json.loads(result.stdout)
 
+    def initialize_dispatch_issue(self) -> None:
+        issue_url = f"https://api.github.com/repos/{REPOSITORY}/issues/{TASK_ISSUE}"
+        self.gh_data.write_text(json.dumps({
+            "repository": REPOSITORY,
+            "issue_number": TASK_ISSUE,
+            "comment_id": DISPATCH_COMMENT_ID,
+            "author": DISPATCH_AUTHOR,
+            "issue": {
+                "number": TASK_ISSUE,
+                "html_url": f"https://github.com/{REPOSITORY}/issues/{TASK_ISSUE}",
+                "body": (f"<!-- oasis7-pm-task -->\ntask_uid: {TASK}\n"
+                         f"- pr_url: `https://github.com/{REPOSITORY}/pull/1`\n"
+                         "- pr_number: `1`\n"),
+            },
+            "comment_pages": [[{
+                "id": DISPATCH_COMMENT_ID - 1,
+                "body": "unrelated task comment",
+                "issue_url": issue_url,
+                "user": {"login": "someone"},
+                "created_at": "2026-09-28T00:00:00Z",
+            }], []],
+        }, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+
+    def dispatch_command(self, plan_path: Path) -> dict[str, object]:
+        result = self.run_script("dispatch", "--plan", str(plan_path))
+        dispatched = json.loads(result.stdout)
+        self.assertEqual("published", dispatched["status"])
+        self.assertEqual(TASK, dispatched["task_uid"])
+        self.assertEqual(TASK_ISSUE, dispatched["issue_number"])
+        self.assertEqual(1, dispatched["pr_number"])
+        self.assertEqual(HEAD, dispatched["head"])
+        self.assertEqual(DISPATCH_COMMENT_ID, dispatched["dispatch_comment_id"])
+        self.assertEqual(DISPATCH_AUTHOR, dispatched["author"])
+        self.dispatch_comment_id = DISPATCH_COMMENT_ID
+        return dispatched
+
     def handoff_fixture(self, root: Path | None = None) -> dict[str, object]:
         """Create a complete isolated v2 plan whose preflight bytes stay original."""
         if root is not None:
             self.root = root
+        task_map = self.root / ".pm" / "github-project-sync" / "tasks.json"
+        task_map.parent.mkdir(parents=True, exist_ok=True)
+        task_map.write_text(json.dumps({
+            "project": {"repo": REPOSITORY},
+            "tasks": {TASK: {"issue_number": TASK_ISSUE}},
+        }) + "\n", encoding="utf-8")
         task_root = self.root / ".pm" / "scratch" / TASK
         batch_path = task_root / "review-batches" / "batch.json"
         batch_path.parent.mkdir(parents=True, exist_ok=True)
+        self.initialize_dispatch_issue()
         self.batch = batch_path
         expected_slices = [
             {"role": "qa_engineer", "slice_id": QA_SLICE},
@@ -205,6 +303,19 @@ class ReviewBatchEpochTests(unittest.TestCase):
             "roles": ordered_roles, "expected_slices": expected_slices,
         }
         plan_path.write_text(json.dumps(plan, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+        dispatch = self.dispatch_command(plan_path)
+        admitted_digests = {
+            (row["role"], row["slice_id"]): row["packet_digest"]
+            for row in dispatch["rows"]
+        }
+        for expected, returned_path in zip(expected_slices, returned_paths):
+            returned = json.loads(returned_path.read_text(encoding="utf-8"))
+            returned["admitted_packet_digest"] = admitted_digests[
+                (expected["role"], expected["slice_id"])
+            ]
+            returned_path.write_text(
+                json.dumps(returned, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8"
+            )
         collection_path = batch_path.with_name(f"{batch_path.stem}.collection.json")
         handoff_path = task_root / "review-handoffs" / f"{epoch}.json"
         return {
@@ -212,11 +323,15 @@ class ReviewBatchEpochTests(unittest.TestCase):
             "plan_path": plan_path, "plan": plan, "ledger_path": ledger_path,
             "original_ledger": original_ledger, "returns": returned_paths,
             "packets": packet_paths,
+            "dispatch": dispatch,
             "collection_path": collection_path, "handoff_path": handoff_path,
         }
 
     def handoff_command(self, plan_path: Path, *, ok: bool = True) -> subprocess.CompletedProcess[str]:
-        return self.run_script("handoff", "--plan", str(plan_path), ok=ok)
+        return self.run_script(
+            "handoff", "--plan", str(plan_path),
+            "--dispatch-comment-id", str(self.dispatch_comment_id), ok=ok,
+        )
 
     def test_handoff_cli_route_is_recognized(self) -> None:
         result = subprocess.run(
@@ -250,14 +365,22 @@ class ReviewBatchEpochTests(unittest.TestCase):
         handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
         payload = {key: value for key, value in handoff.items() if key != "handoff_digest"}
         self.assertEqual("created", created["status"])
-        self.assertEqual("oasis7-review-return-handoff/v1", handoff["schema"])
+        self.assertEqual("oasis7-review-return-handoff/v2", handoff["schema"])
         self.assertEqual({
             "schema", "repository", "task_uid", "pr_number", "comparison_ref",
             "comparison_oid", "frozen_head", "source_review_identity",
             "source_review_digest", "epoch", "plan_path", "plan_sha256",
             "batch_path", "batch_sha256", "preflight_ledger_path",
-            "preflight_ledger_sha256", "rows", "handoff_digest",
+            "preflight_ledger_sha256", "dispatch_evidence", "rows", "handoff_digest",
         }, set(handoff))
+        dispatch = fixture["dispatch"]
+        self.assertEqual({
+            "issue_number": TASK_ISSUE,
+            "issue_url": f"https://api.github.com/repos/{REPOSITORY}/issues/{TASK_ISSUE}",
+            "comment_id": DISPATCH_COMMENT_ID,
+            "author": DISPATCH_AUTHOR,
+            "body_digest": dispatch["body_digest"],
+        }, handoff["dispatch_evidence"])
         self.assertEqual({
             "task_uid", "bootstrap_epoch", "repository", "pr_number",
             "source_head_oid", "source_scope_oid", "changed_paths_digest",
@@ -302,17 +425,20 @@ class ReviewBatchEpochTests(unittest.TestCase):
             handoff["preflight_ledger_path"],
         )
         expected_rows = []
-        for item, path in zip(fixture["batch"]["expected_slices"], fixture["returns"], strict=True):
+        for item, path in zip(fixture["batch"]["expected_slices"], fixture["returns"]):
             returned = json.loads(path.read_text(encoding="utf-8"))
             expected_rows.append({
                 "role": item["role"], "slice_id": item["slice_id"],
+                "packet_path": Path(fixture["packets"][len(expected_rows)]).relative_to(self.root).as_posix(),
+                "packet_digest": json.loads(fixture["packets"][len(expected_rows)].read_text(encoding="utf-8"))["packet_digest"],
                 "artifact_path": path.relative_to(self.root).as_posix(),
                 "return_sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
                 "findings_digest": digest(returned["findings"]),
             })
         expected_rows.sort(key=lambda row: (row["role"].encode(), row["slice_id"].encode()))
         self.assertTrue(all(set(row) == {
-            "role", "slice_id", "artifact_path", "return_sha256", "findings_digest"
+            "role", "slice_id", "packet_path", "packet_digest", "artifact_path",
+            "return_sha256", "findings_digest"
         } for row in handoff["rows"]))
         self.assertEqual(expected_rows, handoff["rows"])
         for path, before in snapshots.items():

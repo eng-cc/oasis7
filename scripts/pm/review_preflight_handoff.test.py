@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -15,6 +16,9 @@ HERE = Path(__file__).resolve().parent
 BATCH_SCRIPT = HERE / "review-batch-epoch.py"
 HANDOFF_SCRIPT = HERE / "review_preflight_handoff.py"
 TASK = "task_" + "1" * 32
+TASK_ISSUE = 4137
+DISPATCH_COMMENT_ID = 3934017999
+DISPATCH_AUTHOR = "repo-admin"
 ROLE = "qa_engineer"
 SLICE = "11111111-1111-4111-8111-111111111111"
 HEAD = "a" * 40
@@ -27,6 +31,7 @@ RUNTIME_REASON = (
     "message-assigned fallback; adapter inactive on this surface; "
     "actual runtime/model/reasoning unverified"
 )
+DISPATCH_MARKER = "<!-- oasis7-review-dispatch/v1 -->"
 
 
 def canonical(value: object) -> bytes:
@@ -53,6 +58,74 @@ class ReviewPreflightHandoffTests(unittest.TestCase):
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
         self.task_root = self.root / ".pm" / "scratch" / TASK
+        mapping_root = self.root / ".pm" / "github-project-sync"
+        mapping_root.mkdir(parents=True, exist_ok=True)
+        (mapping_root / "tasks.json").write_text(json.dumps({
+            "project": {"repo": REPOSITORY},
+            "tasks": {TASK: {"issue_number": TASK_ISSUE}},
+        }) + "\n", encoding="utf-8")
+        self.gh_log = self.root / "gh.log"
+        self.gh_data = self.root / "gh-fixture.json"
+        self.gh_bin = self.root / "bin"
+        self.gh_bin.mkdir()
+        self.fake_gh = self.gh_bin / "gh"
+        self.fake_gh.write_text(
+            "#!/usr/bin/env python3\n"
+            "import json, os, sys\n"
+            "args = sys.argv[1:]\n"
+            "open(os.environ['GH_LOG'], 'a').write(' '.join(args) + '\\n')\n"
+            "if not args or args[0] != 'api': raise SystemExit('unexpected gh call: ' + ' '.join(args))\n"
+            "endpoint = next((arg for arg in args[1:] if arg.startswith('repos/')), None)\n"
+            "if endpoint is None: raise SystemExit('missing endpoint: ' + ' '.join(args))\n"
+            "with open(os.environ['GH_FIXTURE'], encoding='utf-8') as handle: data = json.load(handle)\n"
+            "method = next((args[i + 1] for i, arg in enumerate(args[:-1]) if arg == '--method'), 'GET')\n"
+            "if method == 'POST' and endpoint == f\"repos/{data['repository']}/issues/{data['issue_number']}/comments\":\n"
+            "    body = next((args[i + 1][5:] for i, arg in enumerate(args[:-1]) if arg in ('--field', '-f') and args[i + 1].startswith('body=')), None)\n"
+            "    if body is None: raise SystemExit('missing POST body')\n"
+            "    comment = {'id': data['next_comment_id'], 'body': body, 'issue_url': f\"https://api.github.com/repos/{data['repository']}/issues/{data['issue_number']}\", 'html_url': f\"https://github.com/{data['repository']}/issues/{data['issue_number']}#issuecomment-{data['next_comment_id']}\", 'user': {'login': data['post_author']}, 'created_at': '2026-09-29T00:00:00Z'}\n"
+            "    if not data['comment_pages']: data['comment_pages'] = [[]]\n"
+            "    data['comment_pages'][-1].append(comment)\n"
+            "    with open(os.environ['GH_FIXTURE'], 'w', encoding='utf-8') as handle: json.dump(data, handle, ensure_ascii=False, sort_keys=True)\n"
+            "    print(json.dumps(comment))\n"
+            "elif endpoint == f\"repos/{data['repository']}/issues/{data['issue_number']}\":\n"
+            "    print(json.dumps(data['issue']))\n"
+            "elif endpoint.startswith(f\"repos/{data['repository']}/issues/{data['issue_number']}/comments\"):\n"
+            "    pages = data['comment_pages']\n"
+            "    print(json.dumps(pages if '--paginate' in args else (pages[0] if pages else [])))\n"
+            "elif endpoint.startswith(f\"repos/{data['repository']}/issues/comments/\"):\n"
+            "    comment_id = int(endpoint.rsplit('/', 1)[1])\n"
+            "    matches = [comment for page in data['comment_pages'] for comment in page if comment.get('id') == comment_id]\n"
+            "    if len(matches) != 1: raise SystemExit('comment fixture is not unique')\n"
+            "    print(json.dumps(matches[0]))\n"
+            "elif endpoint.startswith(f\"repos/{data['repository']}/collaborators/\") and endpoint.endswith('/permission'):\n"
+            "    print(json.dumps({'permission': data['permission']}))\n"
+            "else: raise SystemExit('unexpected gh endpoint: ' + endpoint)\n",
+            encoding="utf-8",
+        )
+        self.fake_gh.chmod(0o755)
+        old_path = os.environ.get("PATH")
+        os.environ["PATH"] = f"{self.gh_bin}:{old_path or ''}"
+        self.addCleanup(self._restore_path, old_path)
+        old_log = os.environ.get("GH_LOG")
+        old_fixture = os.environ.get("GH_FIXTURE")
+        os.environ["GH_LOG"] = str(self.gh_log)
+        os.environ["GH_FIXTURE"] = str(self.gh_data)
+        self.addCleanup(self._restore_env, "GH_LOG", old_log)
+        self.addCleanup(self._restore_env, "GH_FIXTURE", old_fixture)
+
+    @staticmethod
+    def _restore_path(value: str | None) -> None:
+        if value is None:
+            os.environ.pop("PATH", None)
+        else:
+            os.environ["PATH"] = value
+
+    @staticmethod
+    def _restore_env(key: str, value: str | None) -> None:
+        if value is None:
+            os.environ.pop(key, None)
+        else:
+            os.environ[key] = value
 
     def tearDown(self) -> None:
         self.temp.cleanup()
@@ -65,7 +138,99 @@ class ReviewPreflightHandoffTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
         return json.loads(result.stdout)
 
-    def make_fixture(self) -> dict[str, object]:
+    def run_dispatch(self, fixture: dict[str, object], *, ok: bool = True) -> subprocess.CompletedProcess[str]:
+        result = subprocess.run(
+            [sys.executable, str(BATCH_SCRIPT), "--root", str(self.root), "dispatch",
+             "--plan", str(fixture["plan_path"])],
+            text=True, capture_output=True,
+        )
+        self.assertEqual(0 if ok else 2, result.returncode, result.stdout + result.stderr)
+        return result
+
+    def run_handoff(self, fixture: dict[str, object], *, ok: bool = True,
+                    comment_id: int = DISPATCH_COMMENT_ID) -> subprocess.CompletedProcess[str]:
+        result = subprocess.run(
+            [sys.executable, str(BATCH_SCRIPT), "--root", str(self.root), "handoff",
+             "--plan", str(fixture["plan_path"]), "--dispatch-comment-id", str(comment_id)],
+            text=True, capture_output=True,
+        )
+        self.assertEqual(0 if ok else 2, result.returncode, result.stdout + result.stderr)
+        return result
+
+    def write_live_issue(self, body: str | None, *, author: str = DISPATCH_AUTHOR,
+                         permission: str = "admin", issue_task_uid: str = TASK,
+                         issue_pr_number: int = 1, pages: list[list[dict[str, object]]] | None = None) -> None:
+        comment = {
+            "id": DISPATCH_COMMENT_ID,
+            "body": body,
+            "issue_url": f"https://api.github.com/repos/{REPOSITORY}/issues/{TASK_ISSUE}",
+            "html_url": f"https://github.com/{REPOSITORY}/issues/{TASK_ISSUE}#issuecomment-{DISPATCH_COMMENT_ID}",
+            "user": {"login": author},
+            "created_at": "2026-09-29T00:00:00Z",
+        }
+        if pages is None:
+            prior = [{
+                "id": DISPATCH_COMMENT_ID - 1, "body": "unrelated prior task comment",
+                "issue_url": comment["issue_url"], "user": {"login": "someone"},
+                "created_at": "2026-09-28T00:00:00Z",
+            }]
+            pages = [prior, [comment] if body is not None else []]
+        issue_body = (
+            f"<!-- oasis7-pm-task -->\ntask_uid: {issue_task_uid}\n"
+            f"- pr_url: `https://github.com/{REPOSITORY}/pull/{issue_pr_number}`\n"
+            f"- pr_number: `{issue_pr_number}`\n"
+        )
+        self.gh_data.write_text(json.dumps({
+            "repository": REPOSITORY,
+            "issue_number": TASK_ISSUE,
+            "issue": {
+                "number": TASK_ISSUE,
+                "html_url": f"https://github.com/{REPOSITORY}/issues/{TASK_ISSUE}",
+                "body": issue_body,
+            },
+            "comment_pages": pages,
+            "permission": permission,
+            "next_comment_id": DISPATCH_COMMENT_ID,
+            "post_author": author,
+        }, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+
+    def dispatch_payload(self, plan: dict[str, object], plan_path: Path,
+                         batch_path: Path) -> dict[str, object]:
+        packet_refs = plan["packet_refs"]
+        assert isinstance(packet_refs, list)
+        rows: list[dict[str, object]] = []
+        for ref in packet_refs:
+            assert isinstance(ref, dict)
+            packet_path = self.root / str(ref["packet_ref"])
+            packet = json.loads(packet_path.read_text(encoding="utf-8"))
+            rows.append({
+                "role": ref["role"], "slice_id": ref["slice_id"],
+                "packet_path": str(ref["packet_ref"]), "packet_digest": packet["packet_digest"],
+            })
+        rows.sort(key=lambda row: (str(row["role"]).encode(), str(row["slice_id"]).encode()))
+        batch = json.loads(batch_path.read_text(encoding="utf-8"))
+        source_identity = plan["source_review_identity"]
+        assert isinstance(source_identity, dict)
+        return {
+            "schema": "oasis7-review-dispatch/v1",
+            "repository": REPOSITORY,
+            "task_uid": plan["task_uid"],
+            "issue_number": TASK_ISSUE,
+            "pr_number": source_identity["pr_number"],
+            "frozen_head": plan["frozen_head"],
+            "epoch": plan["epoch"],
+            "plan_path": plan_path.relative_to(self.root).as_posix(),
+            "plan_sha256": hashlib.sha256(plan_path.read_bytes()).hexdigest(),
+            "batch_path": batch_path.relative_to(self.root).as_posix(),
+            "batch_sha256": hashlib.sha256(batch_path.read_bytes()).hexdigest(),
+            "rows": rows,
+        }
+
+    @staticmethod
+    def dispatch_body(payload: dict[str, object]) -> str:
+        return f"{DISPATCH_MARKER}\n```json\n{canonical(payload).decode('utf-8')}\n```"
+
+    def make_fixture(self, *, create_handoff: bool = True) -> dict[str, object]:
         expected_slices = [{"role": ROLE, "slice_id": SLICE}]
         source_identity = {
             "task_uid": TASK,
@@ -106,7 +271,6 @@ class ReviewPreflightHandoffTests(unittest.TestCase):
             "findings": [],
             "residual_risk": "fixture risk",
         })
-        return_path.write_text(json.dumps(returned, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
 
         packet_path = self.task_root / "slice-packets" / f"{SLICE}.json"
         packet_path.parent.mkdir(parents=True, exist_ok=True)
@@ -160,18 +324,53 @@ class ReviewPreflightHandoffTests(unittest.TestCase):
             "preflight": {"status": "incomplete", "ledger_path": preflight["ledger_path"]},
         }
         plan_path.write_text(json.dumps(plan, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
-        created = HANDOFF.create_handoff(self.root, plan_path)
-        return {
+        dispatch = self.dispatch_payload(plan, plan_path, batch_path)
+        dispatch_comment_body = self.dispatch_body(dispatch)
+        self.write_live_issue(None)
+        fixture = {
             "batch": batch,
             "batch_path": batch_path,
+            "collection_path": Path(str(plan["collection_path"])),
+            "dispatch_body": dispatch_comment_body,
+            "dispatch_payload": dispatch,
             "epoch": epoch,
-            "handoff_path": Path(str(created["handoff_path"])),
+            "handoff_path": self.task_root / "review-handoffs" / f"{epoch}.json",
             "plan": plan,
             "plan_path": plan_path,
             "packet_path": packet_path,
             "return_path": return_path,
+            "ledger_path": Path(str(plan["preflight"]["ledger_path"])),
             "source_digest": source_digest,
         }
+        dispatch_result = json.loads(self.run_dispatch(fixture).stdout)
+        self.assertEqual(TASK, dispatch_result["task_uid"])
+        self.assertEqual(TASK_ISSUE, dispatch_result["issue_number"])
+        self.assertEqual(1, dispatch_result["pr_number"])
+        self.assertEqual(HEAD, dispatch_result["head"])
+        self.assertEqual(epoch, dispatch_result["epoch"])
+        self.assertEqual(DISPATCH_COMMENT_ID, dispatch_result["dispatch_comment_id"])
+        self.assertEqual(DISPATCH_AUTHOR, dispatch_result["author"])
+        self.assertEqual(f"https://api.github.com/repos/{REPOSITORY}/issues/{TASK_ISSUE}",
+                         dispatch_result["issue_url"])
+        row_matches = [row for row in dispatch_result["rows"]
+                       if row.get("role") == ROLE and row.get("slice_id") == SLICE]
+        self.assertEqual(1, len(row_matches), dispatch_result)
+        self.assertEqual(packet["packet_digest"], row_matches[0]["packet_digest"])
+        returned["admitted_packet_digest"] = row_matches[0]["packet_digest"]
+        return_path.write_text(json.dumps(returned, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+        live = json.loads(self.gh_data.read_text(encoding="utf-8"))
+        posted = [comment for page in live["comment_pages"] for comment in page
+                  if comment.get("id") == DISPATCH_COMMENT_ID]
+        self.assertEqual(1, len(posted))
+        self.assertEqual(dispatch_comment_body, posted[0]["body"])
+        self.assertEqual(hashlib.sha256(dispatch_comment_body.encode("utf-8")).hexdigest(),
+                         dispatch_result["body_digest"])
+        fixture["dispatch_body"] = dispatch_comment_body
+        fixture["dispatch_result"] = dispatch_result
+        fixture["dispatch_comment_id"] = DISPATCH_COMMENT_ID
+        if create_handoff:
+            self.run_handoff(fixture, comment_id=DISPATCH_COMMENT_ID)
+        return fixture
 
     def rebind_return_and_handoff(self, fixture: dict[str, object], field: str, value: str) -> None:
         return_path = Path(str(fixture["return_path"]))
@@ -187,13 +386,149 @@ class ReviewPreflightHandoffTests(unittest.TestCase):
         handoff["handoff_digest"] = digest({key: item for key, item in handoff.items() if key != "handoff_digest"})
         handoff_path.write_text(json.dumps(handoff, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
 
+    def rebind_return_packet_digest(self, fixture: dict[str, object], value: str | None) -> None:
+        return_path = Path(str(fixture["return_path"]))
+        returned = json.loads(return_path.read_text(encoding="utf-8"))
+        if value is None:
+            returned.pop("admitted_packet_digest", None)
+        else:
+            returned["admitted_packet_digest"] = value
+        raw = json.dumps(returned, ensure_ascii=False, sort_keys=True).encode() + b"\n"
+        return_path.write_bytes(raw)
+        handoff_path = Path(str(fixture["handoff_path"]))
+        handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
+        row = handoff["rows"][0]
+        row["return_sha256"] = hashlib.sha256(raw).hexdigest()
+        row["findings_digest"] = digest(returned["findings"])
+        handoff["handoff_digest"] = digest({key: item for key, item in handoff.items() if key != "handoff_digest"})
+        handoff_path.write_text(json.dumps(handoff, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+
+    def rebind_handoff_dispatch_body(self, fixture: dict[str, object], body: str) -> None:
+        handoff_path = Path(str(fixture["handoff_path"]))
+        handoff = json.loads(handoff_path.read_text(encoding="utf-8"))
+        handoff["dispatch_evidence"]["body_digest"] = hashlib.sha256(body.encode("utf-8")).hexdigest()
+        handoff["handoff_digest"] = digest({key: item for key, item in handoff.items() if key != "handoff_digest"})
+        handoff_path.write_text(json.dumps(handoff, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+
     def test_accepts_return_metadata_bound_to_slice_packet(self) -> None:
         fixture = self.make_fixture()
         validated = HANDOFF.validate_handoff(self.root, Path(str(fixture["handoff_path"])))
         returned = validated["returns"][(ROLE, SLICE)][2]
+        handoff = validated["handoff"]
         self.assertEqual(ACTIVATION, returned["activation"])
         self.assertEqual(CONTEXT_DELIVERY, returned["context_delivery"])
         self.assertEqual(f"{MODEL_REASONING}: {RUNTIME_REASON}", returned["actual_runtime"])
+        self.assertEqual(fixture["dispatch_result"]["rows"][0]["packet_digest"], returned["admitted_packet_digest"])
+        self.assertEqual("oasis7-review-return-handoff/v2", handoff["schema"])
+        self.assertEqual({"issue_number", "issue_url", "comment_id", "author", "body_digest"},
+                         set(handoff["dispatch_evidence"]))
+        self.assertEqual(TASK_ISSUE, handoff["dispatch_evidence"]["issue_number"])
+        self.assertEqual(f"https://api.github.com/repos/{REPOSITORY}/issues/{TASK_ISSUE}",
+                         handoff["dispatch_evidence"]["issue_url"])
+        self.assertEqual(DISPATCH_COMMENT_ID, handoff["dispatch_evidence"]["comment_id"])
+        self.assertEqual(DISPATCH_AUTHOR, handoff["dispatch_evidence"]["author"])
+        self.assertEqual(hashlib.sha256(str(fixture["dispatch_body"]).encode("utf-8")).hexdigest(),
+                         handoff["dispatch_evidence"]["body_digest"])
+        comments_reads = [line for line in self.gh_log.read_text(encoding="utf-8").splitlines()
+                          if f"issues/{TASK_ISSUE}/comments?per_page=100" in line]
+        self.assertTrue(any("--paginate" in line and "--slurp" in line for line in comments_reads),
+                        self.gh_log.read_text(encoding="utf-8"))
+        row = handoff["rows"][0]
+        self.assertEqual({"role", "slice_id", "packet_path", "packet_digest", "artifact_path",
+                          "return_sha256", "findings_digest"}, set(row))
+        self.assertEqual(fixture["dispatch_result"]["rows"][0]["packet_path"], row["packet_path"])
+        self.assertEqual(fixture["dispatch_result"]["rows"][0]["packet_digest"], row["packet_digest"])
+
+    def test_rejects_missing_admitted_packet_digest_after_return_and_handoff_rehash(self) -> None:
+        fixture = self.make_fixture()
+        self.rebind_return_packet_digest(fixture, None)
+        with self.assertRaisesRegex(HANDOFF.ContractError, "admitted.*packet|packet.*digest|packet metadata"):
+            HANDOFF.validate_handoff(self.root, Path(str(fixture["handoff_path"])))
+
+    def test_rejects_wrong_admitted_packet_digest_after_return_and_handoff_rehash(self) -> None:
+        fixture = self.make_fixture()
+        self.rebind_return_packet_digest(fixture, "9" * 64)
+        with self.assertRaisesRegex(HANDOFF.ContractError, "admitted.*packet|packet.*digest|packet metadata"):
+            HANDOFF.validate_handoff(self.root, Path(str(fixture["handoff_path"])))
+
+    def test_dispatch_rejects_self_consistent_packet_substitution_without_side_effects(self) -> None:
+        fixture = self.make_fixture(create_handoff=False)
+        packet_path = Path(str(fixture["packet_path"]))
+        packet = json.loads(packet_path.read_text(encoding="utf-8"))
+        original_digest = packet["packet_digest"]
+        packet["slice"]["role_activation"] = "named_role_adapter_backed"
+        packet["packet_digest"] = digest({key: value for key, value in packet.items() if key != "packet_digest"})
+        packet_path.write_text(json.dumps(packet, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+        self.assertNotEqual(original_digest, packet["packet_digest"])
+        self.assertEqual(packet["packet_digest"], digest({key: value for key, value in packet.items()
+                                                           if key != "packet_digest"}))
+        return_path = Path(str(fixture["return_path"]))
+        returned = json.loads(return_path.read_text(encoding="utf-8"))
+        returned["activation"] = "adapter-backed"
+        returned["admitted_packet_digest"] = packet["packet_digest"]
+        return_path.write_text(json.dumps(returned, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+        ledger_path = Path(str(fixture["ledger_path"]))
+        ledger_before = ledger_path.read_bytes()
+        failure = self.run_handoff(fixture, ok=False)
+        self.assertRegex((failure.stderr + failure.stdout).lower(), r"dispatch|packet|digest")
+        self.assertFalse(Path(str(fixture["handoff_path"])).exists())
+        self.assertEqual(ledger_before, ledger_path.read_bytes())
+        collection_path = Path(str(fixture["collection_path"]))
+        self.assertFalse(collection_path.exists())
+
+    def test_rejects_altered_live_dispatch_comment_body(self) -> None:
+        fixture = self.make_fixture()
+        self.write_live_issue(str(fixture["dispatch_body"]) + " ")
+        with self.assertRaisesRegex(HANDOFF.ContractError, "dispatch|body|digest|readback"):
+            HANDOFF.validate_handoff(self.root, Path(str(fixture["handoff_path"])))
+
+    def test_rejects_wrong_task_dispatch_comment_even_when_handoff_rehashed(self) -> None:
+        fixture = self.make_fixture()
+        payload = json.loads(canonical(fixture["dispatch_payload"]).decode("utf-8"))
+        payload["task_uid"] = "task_" + "2" * 32
+        wrong_task_body = self.dispatch_body(payload)
+        self.write_live_issue(wrong_task_body)
+        self.rebind_handoff_dispatch_body(fixture, wrong_task_body)
+        with self.assertRaisesRegex(HANDOFF.ContractError, "dispatch|task|identity|body"):
+            HANDOFF.validate_handoff(self.root, Path(str(fixture["handoff_path"])))
+
+    def test_rejects_dispatch_comment_without_live_admin_authority(self) -> None:
+        fixture = self.make_fixture()
+        self.write_live_issue(str(fixture["dispatch_body"]), permission="write")
+        with self.assertRaisesRegex(HANDOFF.ContractError, "admin|permission|author|dispatch"):
+            HANDOFF.validate_handoff(self.root, Path(str(fixture["handoff_path"])))
+
+    def test_rejects_duplicate_reciprocal_pr_issue_field_without_side_effects(self) -> None:
+        fixture = self.make_fixture(create_handoff=False)
+        data = json.loads(self.gh_data.read_text(encoding="utf-8"))
+        data["issue"]["body"] += f"- pr_url: `https://github.com/{REPOSITORY}/pull/1`\n"
+        self.gh_data.write_text(json.dumps(data, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+        ledger_path = Path(str(fixture["ledger_path"]))
+        ledger_before = ledger_path.read_bytes()
+        handoff_path = Path(str(fixture["handoff_path"]))
+        collection_path = Path(str(fixture["collection_path"]))
+
+        failure = self.run_handoff(fixture, ok=False)
+        self.assertRegex((failure.stderr + failure.stdout).lower(), r"pr binding|reciprocal|ambiguous")
+        self.assertEqual(ledger_before, ledger_path.read_bytes())
+        self.assertFalse(handoff_path.exists())
+        self.assertFalse(collection_path.exists())
+
+    def test_rejects_duplicate_task_uid_issue_field_without_side_effects(self) -> None:
+        fixture = self.make_fixture(create_handoff=False)
+        data = json.loads(self.gh_data.read_text(encoding="utf-8"))
+        data["issue"]["body"] += f"task_uid: {TASK}\n"
+        self.gh_data.write_text(json.dumps(data, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+        ledger_path = Path(str(fixture["ledger_path"]))
+        ledger_before = ledger_path.read_bytes()
+        handoff_path = Path(str(fixture["handoff_path"]))
+        collection_path = Path(str(fixture["collection_path"]))
+
+        failure = self.run_handoff(fixture, ok=False)
+        self.assertRegex((failure.stderr + failure.stdout).lower(), r"uid|identity|ambiguous")
+        self.assertEqual(ledger_before, ledger_path.read_bytes())
+        self.assertFalse(handoff_path.exists())
+        self.assertFalse(collection_path.exists())
 
     def test_rejects_return_activation_conflicting_with_slice_packet(self) -> None:
         fixture = self.make_fixture()

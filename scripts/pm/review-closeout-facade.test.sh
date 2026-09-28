@@ -259,10 +259,14 @@ cp "$TMPDIR/original-outside-ledger.jsonl" "$LEDGER"
 COLLECTION="${BATCH%.json}.collection.json"
 HANDOFF="$TASK_ROOT/review-handoffs/$EPOCH.json"
 MANIFEST="$TASK_ROOT/review-resolutions/$EPOCH.json"
-mkdir -p "$(dirname "$HANDOFF")" "$(dirname "$MANIFEST")"
-python3 - "$REPO" "$PLAN" "$BATCH" "$LEDGER" "$ARTIFACT" "$HANDOFF" "$MANIFEST" <<'PY'
+DISPATCH_COMMENT_ID=3934017998
+DISPATCH_BODY_FILE="$TASK_ROOT/review-dispatch/expected-body.txt"
+mkdir -p "$(dirname "$HANDOFF")" "$(dirname "$MANIFEST")" "$(dirname "$DISPATCH_BODY_FILE")"
+python3 - "$REPO" "$PLAN" "$BATCH" "$LEDGER" "$ARTIFACT" "$HANDOFF" "$MANIFEST" \
+  "$DISPATCH_BODY_FILE" "$DISPATCH_COMMENT_ID" <<'PY'
 import hashlib, json, pathlib, sys
-root, plan_path, batch_path, ledger_path, artifact_path, handoff_path, manifest_path = map(pathlib.Path, sys.argv[1:])
+root, plan_path, batch_path, ledger_path, artifact_path, handoff_path, manifest_path, dispatch_body_path = map(pathlib.Path, sys.argv[1:9])
+dispatch_comment_id = int(sys.argv[9])
 root = root.resolve()
 def canonical(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
@@ -273,8 +277,40 @@ def relative(path):
 plan = json.loads(plan_path.read_text(encoding="utf-8"))
 source_identity = plan["source_review_identity"]
 returned = json.loads(artifact_path.read_text(encoding="utf-8"))
+packet_ref = plan["packet_refs"][0]["packet_ref"]
+packet_path = root / packet_ref
+packet = json.loads(packet_path.read_text(encoding="utf-8"))
+returned["admitted_packet_digest"] = packet["packet_digest"]
+artifact_path.write_text(json.dumps(returned, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+ledger_rows = [json.loads(line) for line in ledger_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+if len(ledger_rows) != 1:
+    raise SystemExit("no-findings fixture expected one preflight ledger row")
+ledger_rows[0]["artifact_digest"] = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+ledger_path.write_text(json.dumps(ledger_rows[0], ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+dispatch_payload = {
+    "schema": "oasis7-review-dispatch/v1", "repository": "eng-cc/oasis7",
+    "task_uid": plan["task_uid"], "issue_number": 3379,
+    "pr_number": source_identity["pr_number"], "frozen_head": plan["frozen_head"],
+    "epoch": plan["epoch"], "plan_path": relative(plan_path),
+    "plan_sha256": hashlib.sha256(plan_path.read_bytes()).hexdigest(),
+    "batch_path": relative(batch_path),
+    "batch_sha256": hashlib.sha256(batch_path.read_bytes()).hexdigest(),
+    "rows": [{"role": returned["role"], "slice_id": returned["slice_id"],
+              "packet_path": relative(packet_path), "packet_digest": packet["packet_digest"]}],
+}
+dispatch_body = (
+    "<!-- oasis7-review-dispatch/v1 -->\n```json\n".encode()
+    + canonical(dispatch_payload) + b"\n```"
+)
+dispatch_body_path.write_bytes(dispatch_body)
+dispatch_evidence = {
+    "issue_number": 3379,
+    "issue_url": "https://api.github.com/repos/eng-cc/oasis7/issues/3379",
+    "comment_id": dispatch_comment_id, "author": "repo-admin",
+    "body_digest": hashlib.sha256(dispatch_body).hexdigest(),
+}
 handoff_payload = {
-    "schema": "oasis7-review-return-handoff/v1", "repository": "eng-cc/oasis7",
+    "schema": "oasis7-review-return-handoff/v2", "repository": "eng-cc/oasis7",
     "task_uid": plan["task_uid"], "pr_number": source_identity["pr_number"],
     "comparison_ref": plan["comparison_ref"], "comparison_oid": plan["comparison_oid"],
     "frozen_head": plan["frozen_head"], "source_review_identity": source_identity,
@@ -283,8 +319,10 @@ handoff_payload = {
     "batch_path": relative(batch_path), "batch_sha256": hashlib.sha256(batch_path.read_bytes()).hexdigest(),
     "preflight_ledger_path": relative(ledger_path),
     "preflight_ledger_sha256": hashlib.sha256(ledger_path.read_bytes()).hexdigest(),
+    "dispatch_evidence": dispatch_evidence,
     "rows": [{
         "role": returned["role"], "slice_id": returned["slice_id"],
+        "packet_path": relative(packet_path), "packet_digest": packet["packet_digest"],
         "artifact_path": relative(artifact_path),
         "return_sha256": hashlib.sha256(artifact_path.read_bytes()).hexdigest(),
         "findings_digest": digest(returned["findings"]),
@@ -327,8 +365,12 @@ args = sys.argv[1:]
 endpoint = None
 if args[:2] == ["api", "repos/eng-cc/oasis7/issues/3379"]:
     endpoint = "issue"
+elif args[:2] == ["api", "repos/eng-cc/oasis7/issues/3379/comments?per_page=100"]:
+    endpoint = "dispatch-comments"
 elif args[:2] == ["api", f"repos/eng-cc/oasis7/issues/comments/{int(os.environ.get('GH_COMMENT_ID', '3934017999'))}"]:
-    endpoint = "comment"
+    endpoint = "resolution-comment"
+elif args[:2] == ["api", f"repos/eng-cc/oasis7/issues/comments/{int(os.environ.get('DISPATCH_COMMENT_ID', '3934017998'))}"]:
+    endpoint = "dispatch-comment"
 elif args[:2] == ["api", "repos/eng-cc/oasis7/collaborators/repo-admin/permission"]:
     endpoint = "permission"
 if endpoint is None:
@@ -342,28 +384,48 @@ count = int(counter.read_text() or "0") + 1 if counter.exists() else 1
 counter.write_text(str(count))
 
 if endpoint == "issue":
-    body = "<!-- oasis7-pm-task -->\ntask_uid: task_11111111111111111111111111111111\n"
-    if count >= 2 and mode == "issue-marker":
-        body = "task_uid: task_11111111111111111111111111111111\n"
-    elif count >= 2 and mode == "issue-task-uid":
-        body = "<!-- oasis7-pm-task -->\ntask_uid: task_22222222222222222222222222222222\n"
-    response = {"number": 3379, "body": body}
-elif endpoint == "comment":
-    body = pathlib.Path(os.environ["V2_BODY_FILE"]).read_text()
-    author = "repo-admin"
-    if count >= 2 and mode == "comment-body":
-        payload = json.loads(body)
-        payload["task_uid"] = "task_22222222222222222222222222222222"
-        body = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-    elif count >= 2 and mode == "comment-author":
-        author = "different-user"
-    comment_id = int(os.environ.get("GH_COMMENT_ID", "3934017999"))
-    response = {"id": comment_id, "body": body,
-                "issue_url": "https://api.github.com/repos/eng-cc/oasis7/issues/3379",
-                "html_url": f"https://github.com/eng-cc/oasis7/issues/3379#issuecomment-{comment_id}",
-                "user": {"login": author}, "created_at": "2026-09-06T10:00:00Z"}
+    body = (
+        "<!-- oasis7-pm-task -->\n"
+        "task_uid: task_11111111111111111111111111111111\n"
+        "- pr_url: `https://github.com/eng-cc/oasis7/pull/4139`\n"
+        "- pr_number: `4139`\n"
+    )
+    if count >= 4 and mode == "issue-marker":
+        body = body.replace("<!-- oasis7-pm-task -->\n", "")
+    elif count >= 4 and mode == "issue-task-uid":
+        body = body.replace("task_11111111111111111111111111111111", "task_22222222222222222222222222222222")
+    response = {"number": 3379, "body": body,
+                "html_url": "https://github.com/eng-cc/oasis7/issues/3379"}
+elif endpoint == "dispatch-comments":
+    body = pathlib.Path(os.environ["DISPATCH_BODY_FILE"]).read_text()
+    comment = {"id": int(os.environ.get("DISPATCH_COMMENT_ID", "3934017998")),
+               "body": body, "user": {"login": "repo-admin"}}
+    response = [[comment]] if "--slurp" in args else [comment]
+elif endpoint in {"resolution-comment", "dispatch-comment"}:
+    if endpoint == "dispatch-comment":
+        body = pathlib.Path(os.environ["DISPATCH_BODY_FILE"]).read_text()
+        comment_id = int(os.environ.get("DISPATCH_COMMENT_ID", "3934017998"))
+        author = "repo-admin"
+        response = {"id": comment_id, "body": body,
+                    "issue_url": "https://api.github.com/repos/eng-cc/oasis7/issues/3379",
+                    "html_url": f"https://github.com/eng-cc/oasis7/issues/3379#issuecomment-{comment_id}",
+                    "user": {"login": author}, "created_at": "2026-09-06T10:00:00Z"}
+    else:
+        body = pathlib.Path(os.environ["V2_BODY_FILE"]).read_text()
+        author = "repo-admin"
+        if count >= 2 and mode == "comment-body":
+            payload = json.loads(body)
+            payload["task_uid"] = "task_22222222222222222222222222222222"
+            body = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        elif count >= 2 and mode == "comment-author":
+            author = "different-user"
+        comment_id = int(os.environ.get("GH_COMMENT_ID", "3934017999"))
+        response = {"id": comment_id, "body": body,
+                    "issue_url": "https://api.github.com/repos/eng-cc/oasis7/issues/3379",
+                    "html_url": f"https://github.com/eng-cc/oasis7/issues/3379#issuecomment-{comment_id}",
+                    "user": {"login": author}, "created_at": "2026-09-06T10:00:00Z"}
 else:
-    permission = "write" if count >= 2 and mode == "permission" else "admin"
+    permission = "write" if count >= 4 and mode == "permission" else "admin"
     response = {"permission": permission}
 
 print(json.dumps(response))
@@ -386,6 +448,7 @@ GH_MODE=valid
 GH_COMMENT_ID=3934017999
 export V2_BODY_FILE
 export GH_STATE_DIR GH_MODE GH_COMMENT_ID
+export DISPATCH_BODY_FILE DISPATCH_COMMENT_ID
 
 cp "$LEDGER" "$TMPDIR/original-preflight-ledger.jsonl"
 RED_FAILURES=()
@@ -604,26 +667,44 @@ check_positive_event_order() {
   python3 - "$event_log" <<'PY'
 import json, pathlib, sys
 events = [json.loads(line) for line in pathlib.Path(sys.argv[1]).read_text().splitlines() if line]
-for endpoint in ("issue", "comment", "permission"):
+expected_counts = {
+    "issue": 7, "dispatch-comments": 5, "dispatch-comment": 5,
+    "resolution-comment": 2, "permission": 7,
+}
+pre_reservation_counts = {
+    "issue": 2, "dispatch-comments": 1, "dispatch-comment": 1,
+    "resolution-comment": 1, "permission": 2,
+}
+post_cas_counts = {
+    "issue": 1, "dispatch-comments": 1, "dispatch-comment": 1,
+    "resolution-comment": 0, "permission": 1,
+}
+for endpoint, expected_count in expected_counts.items():
     reads = [index for index, item in enumerate(events)
              if item.get("event") == "GH_RESPONSE" and item.get("endpoint") == endpoint]
-    if len(reads) != 2:
-        raise SystemExit(f"ordered remote-read oracle expected exactly two {endpoint} responses, got {len(reads)}")
+    if len(reads) != expected_count:
+        raise SystemExit(f"ordered remote-read oracle expected {expected_count} {endpoint} responses, got {len(reads)}")
 held = [index for index, item in enumerate(events) if item.get("event") == "RESERVATION_HELD"]
 cas = [index for index, item in enumerate(events) if item.get("event") == "CAS_ATTEMPT"]
 reconcile = [item for item in events if item.get("event") == "RECONCILE_START"]
 if len(held) != 1 or len(cas) != 1 or reconcile:
     raise SystemExit(f"positive v2 oracle requires one held reservation/CAS and zero reconcile; held={len(held)} cas={len(cas)} reconcile={len(reconcile)}")
-for endpoint in ("issue", "comment", "permission"):
+for endpoint, expected_count in expected_counts.items():
     reads = [index for index, item in enumerate(events)
              if item.get("event") == "GH_RESPONSE" and item.get("endpoint") == endpoint]
-    if not reads[0] < held[0] < reads[1] < cas[0]:
-        raise SystemExit(f"{endpoint} first/second remote reads are not ordered around reservation and CAS")
+    pre_count = pre_reservation_counts[endpoint]
+    before = [index for index in reads if index < held[0]]
+    reserved = [index for index in reads if held[0] < index < cas[0]]
+    post_cas = [index for index in reads if index > cas[0]]
+    expected_post = post_cas_counts[endpoint]
+    if (len(before) != pre_count or len(reserved) != expected_count - pre_count - expected_post
+            or len(post_cas) != expected_post):
+        raise SystemExit(f"{endpoint} pre-reservation, reserved, and post-CAS reads are not in their expected phases")
 if sum(item.get("event") == "CAS_APPLIED" for item in events) != 1:
     raise SystemExit("positive v2 oracle did not observe exactly one applied CAS")
 if sum(item.get("event") == "COLLECTION_CREATE" for item in events) != 1:
     raise SystemExit("positive v2 oracle did not observe exactly one collection creation")
-print("positive v2 oracle: first reads < acquired reservation < second reads < one CAS; zero reconcile")
+print("positive v2 oracle: pre-reservation reads < reservation < reserved revalidation < one CAS < read-only post-CAS validation; zero reconcile")
 PY
 }
 
@@ -832,6 +913,9 @@ python3 "$REPO/scripts/pm/review-batch-epoch.py" --root "$REPO" create \
 EPOCH_FINDINGS="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["epoch"])' "$TMPDIR/batch-findings.json")"
 HANDOFF_FINDINGS="$TASK_ROOT/review-handoffs/$EPOCH_FINDINGS.json"
 MANIFEST_FINDINGS="$TASK_ROOT/review-resolutions/$EPOCH_FINDINGS.json"
+DISPATCH_COMMENT_ID_FINDINGS=3934018998
+DISPATCH_BODY_FILE_FINDINGS="$TASK_ROOT/review-dispatch/findings-expected-body.txt"
+mkdir -p "$(dirname "$DISPATCH_BODY_FILE_FINDINGS")"
 python3 "$REPO/scripts/pm/review-batch-epoch.py" --root "$REPO" preflight \
   --batch "$BATCH_FINDINGS" --out-dir "$PREFLIGHT_FINDINGS" >"$TMPDIR/preflight-findings.json"
 LEDGER_FINDINGS="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["ledger_path"])' "$TMPDIR/preflight-findings.json")"
@@ -840,9 +924,12 @@ VERIFY_FINDINGS="$TASK_ROOT/verify-finding-v2.txt"
 printf 'exact finding verification bytes\n' >"$VERIFY_FINDINGS"
 python3 - "$ARTIFACT_FINDINGS" "$PLAN" "$PLAN_FINDINGS" "$BATCH_FINDINGS" "$LEDGER_FINDINGS" \
   "$HANDOFF_FINDINGS" "$MANIFEST_FINDINGS" "$REPO" "$VERIFY_FINDINGS" \
+  "$DISPATCH_BODY_FILE_FINDINGS" "$DISPATCH_COMMENT_ID_FINDINGS" \
   "$TMPDIR/expected-findings-promoted-ledger.jsonl" <<'PY'
 import hashlib, json, pathlib, sys
-artifact_path, base_plan_path, plan_path, batch_path, ledger_path, handoff_path, manifest_path, root_path, verify_path, expected_ledger_path = map(pathlib.Path, sys.argv[1:])
+artifact_path, base_plan_path, plan_path, batch_path, ledger_path, handoff_path, manifest_path, root_path, verify_path, dispatch_body_path = map(pathlib.Path, sys.argv[1:11])
+dispatch_comment_id = int(sys.argv[11])
+expected_ledger_path = pathlib.Path(sys.argv[12])
 root = root_path.resolve()
 def canonical(value):
     return json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
@@ -852,9 +939,13 @@ def relative(path):
     return path.resolve().relative_to(root).as_posix()
 
 returned = json.loads(artifact_path.read_text(encoding="utf-8"))
+base_plan = json.loads(base_plan_path.read_text(encoding="utf-8"))
+base_packet_path = root / base_plan["packet_refs"][0]["packet_ref"]
+base_packet = json.loads(base_packet_path.read_text(encoding="utf-8"))
 finding = {"id": "FIX-V2-REJECTED", "summary": "fixture finding with repository verification evidence",
            "triage": {"classification": "blocking", "basis": "the exact fixture verification output"}}
 returned.update({"status": "completed", "activation": "message-assigned",
+                 "admitted_packet_digest": base_packet["packet_digest"],
                  "context_delivery": "minimal-task-packet",
                  "actual_runtime": (
                      "inherited/unverified: message-assigned fallback; adapter inactive on this surface; "
@@ -882,8 +973,32 @@ plan["batch_path"] = str(batch_path.resolve())
 plan["preflight"] = {"status": "incomplete", "ledger_path": str(ledger_path.resolve())}
 plan_path.write_text(json.dumps(plan, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
 source_identity = plan["source_review_identity"]
+packet_path = root / plan["packet_refs"][0]["packet_ref"]
+packet = json.loads(packet_path.read_text(encoding="utf-8"))
+dispatch_payload = {
+    "schema": "oasis7-review-dispatch/v1", "repository": "eng-cc/oasis7",
+    "task_uid": plan["task_uid"], "issue_number": 3379,
+    "pr_number": source_identity["pr_number"], "frozen_head": plan["frozen_head"],
+    "epoch": batch["epoch"], "plan_path": relative(plan_path),
+    "plan_sha256": hashlib.sha256(plan_path.read_bytes()).hexdigest(),
+    "batch_path": relative(batch_path),
+    "batch_sha256": hashlib.sha256(batch_path.read_bytes()).hexdigest(),
+    "rows": [{"role": returned["role"], "slice_id": returned["slice_id"],
+              "packet_path": relative(packet_path), "packet_digest": packet["packet_digest"]}],
+}
+dispatch_body = (
+    "<!-- oasis7-review-dispatch/v1 -->\n```json\n".encode()
+    + canonical(dispatch_payload) + b"\n```"
+)
+dispatch_body_path.write_bytes(dispatch_body)
+dispatch_evidence = {
+    "issue_number": 3379,
+    "issue_url": "https://api.github.com/repos/eng-cc/oasis7/issues/3379",
+    "comment_id": dispatch_comment_id, "author": "repo-admin",
+    "body_digest": hashlib.sha256(dispatch_body).hexdigest(),
+}
 handoff_payload = {
-    "schema": "oasis7-review-return-handoff/v1", "repository": "eng-cc/oasis7",
+    "schema": "oasis7-review-return-handoff/v2", "repository": "eng-cc/oasis7",
     "task_uid": plan["task_uid"], "pr_number": source_identity["pr_number"],
     "comparison_ref": plan["comparison_ref"], "comparison_oid": plan["comparison_oid"],
     "frozen_head": plan["frozen_head"], "source_review_identity": source_identity,
@@ -892,7 +1007,9 @@ handoff_payload = {
     "batch_path": relative(batch_path), "batch_sha256": hashlib.sha256(batch_path.read_bytes()).hexdigest(),
     "preflight_ledger_path": relative(ledger_path),
     "preflight_ledger_sha256": hashlib.sha256(ledger_path.read_bytes()).hexdigest(),
+    "dispatch_evidence": dispatch_evidence,
     "rows": [{"role": returned["role"], "slice_id": returned["slice_id"],
+              "packet_path": relative(packet_path), "packet_digest": packet["packet_digest"],
               "artifact_path": relative(artifact_path),
               "return_sha256": hashlib.sha256(artifact_path.read_bytes()).hexdigest(),
               "findings_digest": digest(returned["findings"])}],
@@ -936,7 +1053,10 @@ cp "$ARTIFACT_FINDINGS" "$TMPDIR/finding-return-before-v2.json"
 V2_BODY_FILE="${MANIFEST_FINDINGS%.json}.expected-body.txt"
 GH_STATE_DIR="$TMPDIR/gh-state-findings"
 GH_COMMENT_ID=3934018000
+DISPATCH_BODY_FILE="$DISPATCH_BODY_FILE_FINDINGS"
+DISPATCH_COMMENT_ID="$DISPATCH_COMMENT_ID_FINDINGS"
 export V2_BODY_FILE GH_STATE_DIR GH_COMMENT_ID
+export DISPATCH_BODY_FILE DISPATCH_COMMENT_ID
 FINDINGS_EVENTS="$TMPDIR/finding-bearing.events"
 FINDINGS_BOUND="$TMPDIR/finding-bearing-bound-before"
 rm -rf "$FINDINGS_BOUND" "$GH_STATE_DIR"
@@ -1027,7 +1147,9 @@ EXPECTED_LEDGER_SHA256="$(shasum -a 256 "$EXPECTED_LEDGER" | awk '{print $1}')"
 V2_BODY_FILE="$TASK_ROOT/review-resolutions/expected-body.txt"
 GH_STATE_DIR="$TMPDIR/gh-state-matrix"
 GH_COMMENT_ID=3934017999
-export V2_BODY_FILE GH_STATE_DIR GH_COMMENT_ID
+DISPATCH_BODY_FILE="$TASK_ROOT/review-dispatch/expected-body.txt"
+DISPATCH_COMMENT_ID=3934017998
+export V2_BODY_FILE GH_STATE_DIR GH_COMMENT_ID DISPATCH_BODY_FILE DISPATCH_COMMENT_ID
 
 # Exercise each plan-owned local input only after the positive reservation
 # event. A watchdog may fail and clean up this harness but never proves a pass.
@@ -1231,8 +1353,8 @@ try:
     if result["returncode"] == 0:
         raise RuntimeError(f"TEST ASSERTION FAILURE [{case}]: drifted bound input was accepted")
     patterns = {
-        "plan": r"review handoff.*plan|plan.*(binding|digest)",
-        "batch": r"review handoff.*batch|batch.*(binding|digest)",
+        "plan": r"review handoff.*plan|plan.*(binding|digest)|dispatch comment.*(plan|packet payload)",
+        "batch": r"review handoff.*batch|batch.*(binding|digest)|dispatch comment.*(plan|packet payload)",
         "handoff": r"review handoff digest mismatch|handoff.*digest",
         "ledger": r"preflight ledger.*(binding|digest)|handoff.*preflight ledger|v2 resolution ledger",
         "return": r"review handoff return digest|artifact digest mismatch",
@@ -1341,8 +1463,10 @@ run_second_read_drift_case() {
     return 1
   }
   [[ -f "$GH_STATE_DIR/$endpoint.count" ]] && count="$(<"$GH_STATE_DIR/$endpoint.count")"
-  [[ "$count" -ge 2 ]] || {
-    echo "second-read case did not observe the targeted endpoint twice: $mode count=$count" >&2
+  local minimum_count=2
+  [[ "$endpoint" == issue || "$endpoint" == permission ]] && minimum_count=4
+  [[ "$count" -ge "$minimum_count" ]] || {
+    echo "second-read case did not observe the targeted endpoint enough times: $mode count=$count expected>=$minimum_count" >&2
     return 1
   }
   assert_bound_artifacts_unchanged "$NO_FINDINGS_BOUND" unchanged
@@ -1354,8 +1478,9 @@ endpoint, mode = sys.argv[2:]
 reads = [index for index, item in enumerate(events)
          if item.get("event") == "GH_RESPONSE" and item.get("endpoint") == endpoint]
 held = [index for index, item in enumerate(events) if item.get("event") == "RESERVATION_HELD"]
-if len(reads) != 2 or len(held) != 1 or not reads[0] < held[0] < reads[1]:
-    raise SystemExit(f"{mode} drift did not positively order its second {endpoint} read after reservation")
+expected_count = 4 if endpoint in {"issue", "permission"} else 2
+if len(reads) != expected_count or len(held) != 1 or not reads[0] < held[0] < reads[-1]:
+    raise SystemExit(f"{mode} drift did not positively order its targeted {endpoint} read after reservation")
 for forbidden in ("RECONCILE_START", "CAS_ATTEMPT", "COLLECTION_CREATE"):
     if any(item.get("event") == forbidden for item in events):
         raise SystemExit(f"{mode} second-read drift observed forbidden {forbidden}")
@@ -1365,7 +1490,7 @@ PY
 for drift_case in issue-marker issue-task-uid comment-body comment-author permission; do
   case "$drift_case" in
     issue-marker|issue-task-uid) endpoint=issue ;;
-    comment-body|comment-author) endpoint=comment ;;
+    comment-body|comment-author) endpoint=resolution-comment ;;
     permission) endpoint=permission ;;
   esac
   run_second_read_drift_case "$drift_case" "$endpoint"

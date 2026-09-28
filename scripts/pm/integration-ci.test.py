@@ -427,16 +427,19 @@ class CurrentRequestSelectionTests(unittest.TestCase):
    ),
   }
 
- def unrelated_run_row(self,run_id,mode):
-  other_uid='task_'+'2'*32
+ def unrelated_run_row(self,run_id,mode,*,request_key=None,request_uid=None,request_pr=8):
+  other_uid=request_uid or 'task_'+'2'*32
+  title=(
+   f'oasis7-ci|workflow_dispatch|{mode}|{other_uid}|{request_pr}|'
+   f'{"c"*40}|{"d"*40}'
+  )
+  if request_key is not None:
+   title+=f'|{request_key}'
   return {
    'id':run_id,'run_attempt':1,'created_at':'2026-09-26T00:00:00Z',
    'event':'workflow_dispatch','path':self.api.WORKFLOW,
    'head_sha':self.base,'head_branch':'main','repository':{'full_name':'owner/repo'},
-   'display_title':(
-    f'oasis7-ci|workflow_dispatch|{mode}|{other_uid}|8|'
-    f'{"c"*40}|{"d"*40}'
-   ),
+   'display_title':title,
   }
 
  def select(self,rows,request_key):
@@ -464,10 +467,35 @@ class CurrentRequestSelectionTests(unittest.TestCase):
 
  def test_remote_selection_skips_unrelated_v1_reuse_validation_run(self):
   key='sha256:'+'1'*64
-  unrelated=self.unrelated_run_row(98,'v1_reuse_validation_only')
+  validation_id='e'*64
+  unrelated=self.unrelated_run_row(
+   98,'v1_reuse_validation_only',request_key=validation_id,
+  )
   integration=self.run_row(99,key)
   selected=self.select([unrelated,integration],key)
   self.assertEqual(99,selected['id'])
+  self.assertIsNone(self.select([unrelated],key))
+
+ def test_remote_selection_still_rejects_malformed_or_conflicting_v1_identity(self):
+  key='sha256:'+'1'*64
+  malformed_key=self.unrelated_run_row(
+   98,'v1_reuse_validation_only',request_key='not-a-validation-id',
+  )
+  malformed_identity=self.unrelated_run_row(
+   99,'v1_reuse_validation_only',request_key='e'*64,request_uid='task-invalid',
+  )
+  conflicting_identity=self.unrelated_run_row(
+   100,'v1_reuse_validation_only',request_uid=self.uid,
+  )
+  cases=(
+   (malformed_key,'request key malformed'),
+   (malformed_identity,'current request identity malformed'),
+   (conflicting_identity,'request task/PR identity conflicts'),
+  )
+  for row,diagnostic in cases:
+   with self.subTest(diagnostic=diagnostic):
+    with self.assertRaisesRegex(ValueError,diagnostic):
+     self.select([row],key)
 
  def test_remote_selection_still_rejects_malformed_or_ambiguous_current_identity(self):
   key='sha256:'+'1'*64
