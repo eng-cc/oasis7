@@ -250,6 +250,57 @@ class PublicationMatrixTests(unittest.TestCase):
                 "- pr_url: `https://github.com/eng-cc/oasis7/pull/3989`\n",
             )
 
+    def test_issue_comments_paginates_100_items_and_rejects_incomplete_pages(self):
+        publication, _projection = make_publication(7005)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            args = type("Args", (), {
+                "repo": publication["repository"], "issue_number": 123,
+                "task_uid": UID, "task_helper": str(root / "github-project-task.py"),
+            })()
+            adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+            first_page = [
+                {"id": 10, "body": "older task evidence"},
+                {"id": 11, "body": "older task follow-up"},
+            ]
+            second_page = [{"id": 110, "body": "latest task decision"}]
+            with patch.object(
+                adapter, "gh", return_value=json.dumps([first_page, second_page]),
+            ) as gh:
+                comments = adapter._issue_comments()
+
+            self.assertEqual(first_page + second_page, comments)
+            gh.assert_called_once()
+            request_args = gh.call_args.args
+            self.assertEqual("api", request_args[0])
+            self.assertIn("repos/eng-cc/oasis7/issues/123/comments", request_args[1])
+            self.assertIn("--paginate", request_args)
+            self.assertIn("--slurp", request_args)
+            self.assertEqual(5.0, gh.call_args.kwargs["timeout"])
+            requests_100_comments = any(
+                "per_page=100" in str(argument) for argument in request_args
+            )
+
+            malformed_responses = {
+                "non-array second page": json.dumps([
+                    first_page, {"id": 110, "body": "not a slurped page"},
+                ]),
+                "missing comment body on later page": json.dumps([
+                    first_page, [{"id": 110}],
+                ]),
+                "malformed JSON": "[{not-json]",
+            }
+            for label, response in malformed_responses.items():
+                with self.subTest(response=label):
+                    with patch.object(adapter, "gh", return_value=response):
+                        with self.assertRaisesRegex(RuntimeError, "malformed"):
+                            adapter._issue_comments()
+
+            self.assertTrue(
+                requests_100_comments,
+                "Task comments pagination must request per_page=100",
+            )
+
     def test_pr_discovery_filters_large_history_server_side(self):
         repository = "eng-cc/oasis7"
         source_ref = "task/engineering-ci-parallel-reuse-c1"
