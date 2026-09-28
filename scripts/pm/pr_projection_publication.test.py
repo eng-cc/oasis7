@@ -276,7 +276,7 @@ class PublicationMatrixTests(unittest.TestCase):
             self.assertIn("repos/eng-cc/oasis7/issues/123/comments", request_args[1])
             self.assertIn("--paginate", request_args)
             self.assertIn("--slurp", request_args)
-            self.assertEqual(5.0, gh.call_args.kwargs["timeout"])
+            request_timeout = gh.call_args.kwargs["timeout"]
             requests_100_comments = any(
                 "per_page=100" in str(argument) for argument in request_args
             )
@@ -299,6 +299,10 @@ class PublicationMatrixTests(unittest.TestCase):
             self.assertTrue(
                 requests_100_comments,
                 "Task comments pagination must request per_page=100",
+            )
+            self.assertEqual(
+                30.0, request_timeout,
+                "complete Task comments pagination must use the 30-second read budget",
             )
 
     def test_pr_discovery_filters_large_history_server_side(self):

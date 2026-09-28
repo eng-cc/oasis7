@@ -188,7 +188,7 @@ class GitHubPublicationAdapter:
 
     def _issue_comments(self) -> list[dict[str, Any]]:
         raw = self.gh("api", f"repos/{self.args.repo}/issues/{self.issue_number}/comments?per_page=100",
-                      "--paginate", "--slurp", timeout=5.0)
+                      "--paginate", "--slurp", timeout=30.0)
         try:
             pages = json.loads(raw)
         except json.JSONDecodeError as exc:
