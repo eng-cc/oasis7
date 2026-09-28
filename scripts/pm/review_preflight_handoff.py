@@ -61,6 +61,14 @@ COMPLETED_ROW_FIELDS = {
     "context_delivery", "actual_runtime", "scope_verdict", "risk_verdict", "findings",
     "residual_risk", "artifact_digest", "artifacts",
 }
+PACKET_ACTIVATIONS = {
+    "message_assigned_adapter_inactive": "message-assigned",
+    "named_role_adapter_backed": "adapter-backed",
+}
+PACKET_CONTEXT_DELIVERY = {
+    "minimal_head_bound_task_packet": "minimal-task-packet",
+    "full_history_escalation": "full-history",
+}
 
 
 class ContractError(ValueError):
@@ -241,6 +249,8 @@ def validate_plan(plan_value: object, raw: bytes) -> tuple[dict[str, object], di
     comparison_ref = require_string(plan.get("comparison_ref"), "plan comparison ref")
     comparison_oid = require_string(plan.get("comparison_oid"), "plan comparison OID", HEAD_RE)
     source_identity, source_digest = validate_source_identity(plan, task_uid, head)
+    if comparison_oid != source_identity.get("source_scope_oid"):
+        raise ContractError("plan comparison OID does not match source-review scope OID")
     applicability = plan.get("professional_review_applicability")
     if not isinstance(applicability, dict) or set(applicability) != {"identity", "identity_digest", "verified"}:
         raise ContractError("plan professional review applicability is invalid")
@@ -263,8 +273,81 @@ def validate_plan(plan_value: object, raw: bytes) -> tuple[dict[str, object], di
     return plan, source_identity, source_digest
 
 
+def validate_packet_refs(root: Path, plan: dict[str, object], expected_slices: list[dict[str, str]],
+                         source_identity: dict[str, object]) -> dict[tuple[str, str], dict[str, str]]:
+    """Validate plan-owned packet bindings and return the metadata each return must echo."""
+    refs = plan.get("packet_refs")
+    if not isinstance(refs, list) or len(refs) != len(expected_slices):
+        raise ContractError("plan packet refs do not cover every expected role/slice")
+
+    expected = {(item["role"], item["slice_id"]) for item in expected_slices}
+    metadata: dict[tuple[str, str], dict[str, str]] = {}
+    packet_paths: set[Path] = set()
+    for ref in refs:
+        if not isinstance(ref, dict) or set(ref) != {"role", "slice_id", "packet_ref"}:
+            raise ContractError("plan packet ref fields are invalid")
+        role = require_string(ref.get("role"), "plan packet role")
+        slice_id = require_string(ref.get("slice_id"), "plan packet slice ID", UUID_RE)
+        identity = (role, slice_id)
+        if identity not in expected or identity in metadata:
+            raise ContractError("plan packet refs contain duplicate or unexpected role/slice")
+        packet_ref = ref.get("packet_ref")
+        expected_ref = f".pm/scratch/{plan['task_uid']}/slice-packets/{slice_id}.json"
+        if packet_ref != expected_ref:
+            raise ContractError(f"plan packet ref is not canonical for {role}")
+        packet_path = resolve_repo_file(root, packet_ref, "slice packet")
+        if packet_path in packet_paths:
+            raise ContractError("plan packet refs contain a duplicate packet path")
+        packet_paths.add(packet_path)
+        packet, _ = read_json(packet_path, f"slice packet for {role}")
+        if not isinstance(packet, dict) or packet.get("schema") != "oasis7-subagent-task-packet/v1":
+            raise ContractError(f"slice packet schema is invalid for {role}")
+        packet_digest = require_string(packet.get("packet_digest"), f"slice packet digest for {role}", SHA_RE)
+        unsigned_packet = {key: value for key, value in packet.items() if key != "packet_digest"}
+        if canonical_digest(unsigned_packet) != packet_digest:
+            raise ContractError(f"slice packet digest mismatch for {role}")
+
+        packet_identity = packet.get("identity")
+        if not isinstance(packet_identity, dict):
+            raise ContractError(f"slice packet identity is invalid for {role}")
+        for field, wanted in (
+            ("task_uid", plan["task_uid"]), ("head", plan["frozen_head"]),
+            ("base_sha", source_identity["source_scope_oid"]),
+        ):
+            if packet_identity.get(field) != wanted:
+                raise ContractError(f"slice packet {field} mismatch for {role}")
+
+        packet_slice = packet.get("slice")
+        if not isinstance(packet_slice, dict):
+            raise ContractError(f"slice packet metadata is invalid for {role}")
+        for field, wanted in (("role", role), ("slice_id", slice_id)):
+            if packet_slice.get(field) != wanted:
+                raise ContractError(f"slice packet {field} mismatch for {role}")
+        activation_mode = packet_slice.get("role_activation")
+        context_mode = packet_slice.get("context_delivery_mode")
+        if (not isinstance(activation_mode, str) or activation_mode not in PACKET_ACTIVATIONS
+                or not isinstance(context_mode, str) or context_mode not in PACKET_CONTEXT_DELIVERY):
+            raise ContractError(f"slice packet activation/context mode is invalid for {role}")
+        if context_mode == "full_history_escalation":
+            require_string(packet_slice.get("full_history_escalation_reason"),
+                           f"slice packet full-history escalation reason for {role}")
+        model_reasoning = require_string(packet_slice.get("actual_dispatched_model_reasoning"),
+                                         f"slice packet actual dispatched model/reasoning for {role}")
+        runtime_reason = require_string(packet_slice.get("actual_runtime_evidence_reason"),
+                                        f"slice packet runtime evidence reason for {role}")
+        metadata[identity] = {
+            "activation": PACKET_ACTIVATIONS[activation_mode],
+            "context_delivery": PACKET_CONTEXT_DELIVERY[context_mode],
+            "actual_runtime": f"{model_reasoning}: {runtime_reason}",
+        }
+    if set(metadata) != expected:
+        raise ContractError("plan packet refs do not cover every expected role/slice")
+    return metadata
+
+
 def validate_return(return_value: object, *, role: str, slice_id: str, task_uid: str,
-                    head: str, epoch: str) -> list[object]:
+                    head: str, epoch: str,
+                    packet_metadata: dict[str, str] | None = None) -> list[object]:
     if not isinstance(return_value, dict):
         raise ContractError(f"review return is not an object for role {role}")
     identity = {"task_uid": task_uid, "role": role, "slice_id": slice_id,
@@ -274,6 +357,10 @@ def validate_return(return_value: object, *, role: str, slice_id: str, task_uid:
             raise ContractError(f"review return {key} mismatch for role {role}")
     for key in ("activation", "context_delivery", "actual_runtime", "scope_verdict", "risk_verdict"):
         require_string(return_value.get(key), f"review return {key} for role {role}")
+    if packet_metadata is not None:
+        for key in ("activation", "context_delivery", "actual_runtime"):
+            if return_value.get(key) != packet_metadata[key]:
+                raise ContractError(f"review return {key} conflicts with packet metadata for role {role}")
     disposition = return_value.get("disposition")
     findings = return_value.get("findings")
     if disposition not in {"findings", "no_findings"} or not isinstance(findings, list):
@@ -310,6 +397,7 @@ def validate_plan_inputs(
     batch_slices = validate_batch(
         batch_value, batch_path, str(plan["task_uid"]), str(plan["frozen_head"]), source_digest, str(plan["epoch"])
     )
+    validate_packet_refs(root, plan, batch_slices, source_identity)
     plan_slices = plan.get("expected_slices")
     if (plan.get("epoch") != batch_value.get("epoch") or not isinstance(plan_slices, list)
             or any(not isinstance(item, dict) or set(item) != {"role", "slice_id"} for item in plan_slices)
@@ -396,6 +484,7 @@ def create_handoff(root: Path, plan_path: Path) -> dict[str, object]:
     root = root.resolve(strict=True)
     (plan, source_identity, resolved_plan, batch_path, ledger_path, expected_slices,
      plan_raw, batch_raw, ledger_raw) = validate_plan_inputs(root, plan_path)
+    packet_metadata = validate_packet_refs(root, plan, expected_slices, source_identity)
     rows: list[dict[str, object]] = []
     preflight_rows = { (row["role"], row["slice_id"]): row for row in parse_ledger(ledger_raw, "preflight ledger") }
     for expected in expected_slices:
@@ -406,6 +495,7 @@ def create_handoff(root: Path, plan_path: Path) -> dict[str, object]:
         findings = validate_return(
             return_value, role=expected["role"], slice_id=expected["slice_id"],
             task_uid=str(plan["task_uid"]), head=str(plan["frozen_head"]), epoch=str(plan["epoch"]),
+            packet_metadata=packet_metadata[identity],
         )
         rows.append({
             "role": expected["role"], "slice_id": expected["slice_id"],
@@ -490,6 +580,7 @@ def validate_handoff(root: Path, handoff_path: Path, *, expected_plan_path: Path
      plan_raw, batch_raw, original_ledger_raw) = validate_plan_inputs(
         root, plan_path, allow_promoted_ledger=True
     )
+    packet_metadata = validate_packet_refs(root, plan, expected_slices, source_identity)
     if repo_relative(root, validated_plan, "plan") != handoff.get("plan_path"):
         raise ContractError("review handoff plan path is not canonical")
     ledger_rows = parse_ledger(original_ledger_raw, "preflight ledger")
@@ -538,7 +629,8 @@ def validate_handoff(root: Path, handoff_path: Path, *, expected_plan_path: Path
             raise ContractError("review handoff return path does not match preflight ledger")
         return_value, return_raw = read_json(artifact_path, f"review return for {role}")
         findings = validate_return(return_value, role=role, slice_id=slice_id, task_uid=str(plan["task_uid"]),
-                                   head=str(plan["frozen_head"]), epoch=str(plan["epoch"]))
+                                   head=str(plan["frozen_head"]), epoch=str(plan["epoch"]),
+                                   packet_metadata=packet_metadata[identity])
         if row.get("return_sha256") != sha256_bytes(return_raw) or row.get("findings_digest") != canonical_digest(findings):
             raise ContractError(f"review handoff return digest mismatch for {role}")
         returns[identity] = (artifact_path, return_raw, return_value)

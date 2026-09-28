@@ -19,6 +19,14 @@ EVIDENCE = "b" * 64
 QA_SLICE = "11111111-1111-4111-8111-111111111111"
 HEALTH_SLICE = "22222222-2222-4222-8222-222222222222"
 REPOSITORY = "eng-cc/oasis7"
+ACTUAL_DISPATCHED_MODEL_REASONING = "inherited/unverified"
+ACTUAL_RUNTIME_EVIDENCE_REASON = (
+    "message-assigned fallback; adapter inactive on this surface; "
+    "actual runtime/model/reasoning unverified"
+)
+RETURN_ACTUAL_RUNTIME = (
+    f"{ACTUAL_DISPATCHED_MODEL_REASONING}: {ACTUAL_RUNTIME_EVIDENCE_REASON}"
+)
 
 
 def canonical(value: object) -> bytes:
@@ -92,14 +100,79 @@ class ReviewBatchEpochTests(unittest.TestCase):
         ledger_path = Path(str(preflight["ledger_path"]))
         original_ledger = ledger_path.read_bytes()
         returned_paths: list[Path] = []
+        packet_paths: list[Path] = []
         expected_slices = batch["expected_slices"]
+        packet_refs = [
+            {
+                "role": expected["role"],
+                "slice_id": expected["slice_id"],
+                "packet_ref": (
+                    f".pm/scratch/{TASK}/slice-packets/{expected['slice_id']}.json"
+                ),
+            }
+            for expected in expected_slices
+        ]
+        for expected, packet_ref in zip(expected_slices, packet_refs):
+            packet_path = self.root / str(packet_ref["packet_ref"])
+            packet_path.parent.mkdir(parents=True, exist_ok=True)
+            packet_payload = {
+                "schema": "oasis7-subagent-task-packet/v1",
+                "created_at": "2026-09-28T00:00:00+00:00",
+                "identity": {
+                    "task_uid": TASK,
+                    "issue_url": "https://github.com/eng-cc/oasis7/issues/1",
+                    "repository": REPOSITORY,
+                    "project_item_id": "fixture-project-item",
+                    "task_status": "committed",
+                    "packet_producer": "tpm",
+                    "worktree": str(self.root),
+                    "branch": "main",
+                    "base_ref": "refs/heads/main",
+                    "base_binding": "immutable_oid",
+                    "base_sha": source_identity["source_scope_oid"],
+                    "head": HEAD,
+                },
+                "slice": {
+                    "slice_id": expected["slice_id"],
+                    "role": expected["role"],
+                    "slice_type": "focused_review",
+                    "owner_role": expected["role"],
+                    "integration_owner": "tpm",
+                    "integration_order": "1",
+                    "context_delivery_mode": "minimal_head_bound_task_packet",
+                    "intended_model_configuration": "inherit current parent selection",
+                    "actual_dispatched_model_reasoning": ACTUAL_DISPATCHED_MODEL_REASONING,
+                    "actual_runtime_evidence_reason": ACTUAL_RUNTIME_EVIDENCE_REASON,
+                    "role_activation": "message_assigned_adapter_inactive",
+                    "write_scope": "isolated review-batch test fixture",
+                    "return_contract": "complete immutable return fixture",
+                    "validation_command": "rtk python3.12 scripts/pm/review-batch-epoch.test.py",
+                    "formal_sink": "https://github.com/eng-cc/oasis7/issues/1",
+                    "full_history_escalation_reason": "",
+                },
+                "context": {
+                    "user_intent": "exercise plan-owned v2 handoff packet validation",
+                    "work_item": "isolated review-batch handoff fixture",
+                    "non_goals": "No production changes or external writes",
+                    "acceptance_target": "valid digest-bound packets are accepted",
+                    "governance_refs": [
+                        "AGENTS.md", "doc/engineering/workflow/source-of-truth.md",
+                    ],
+                    "scoped_refs": ["scripts/pm/review-batch-epoch.test.py"],
+                    "evidence_summary": "synthetic immutable plan and packet fixture",
+                    "collaboration_boundary": "temporary test repository only",
+                },
+            }
+            packet = {**packet_payload, "packet_digest": digest(packet_payload)}
+            packet_path.write_bytes(canonical(packet) + b"\n")
+            packet_paths.append(packet_path)
         for expected in expected_slices:
             artifact = preflight_dir / f'{expected["slice_id"]}.json'
             returned = json.loads(artifact.read_text(encoding="utf-8"))
             returned.update({
                 "status": "completed", "activation": "message-assigned",
                 "context_delivery": "minimal-task-packet",
-                "actual_runtime": "inherited/unverified: human-operated",
+                "actual_runtime": RETURN_ACTUAL_RUNTIME,
                 "scope_verdict": "approved", "risk_verdict": "approved",
                 "disposition": "no_findings", "findings": [],
                 "residual_risk": "fixture risk",
@@ -126,6 +199,7 @@ class ReviewBatchEpochTests(unittest.TestCase):
             "professional_review_applicability": {
                 "identity": applicability, "identity_digest": digest(applicability), "verified": True,
             },
+            "packet_refs": packet_refs,
             "epoch": epoch, "batch_path": str(batch_path),
             "preflight": {"status": "incomplete", "ledger_path": str(ledger_path)},
             "roles": ordered_roles, "expected_slices": expected_slices,
@@ -137,6 +211,7 @@ class ReviewBatchEpochTests(unittest.TestCase):
             "task_root": task_root, "batch_path": batch_path, "batch": batch,
             "plan_path": plan_path, "plan": plan, "ledger_path": ledger_path,
             "original_ledger": original_ledger, "returns": returned_paths,
+            "packets": packet_paths,
             "collection_path": collection_path, "handoff_path": handoff_path,
         }
 
@@ -168,6 +243,7 @@ class ReviewBatchEpochTests(unittest.TestCase):
             Path(fixture["batch_path"]): Path(fixture["batch_path"]).read_bytes(),
             Path(fixture["ledger_path"]): Path(fixture["ledger_path"]).read_bytes(),
             **{path: path.read_bytes() for path in fixture["returns"]},
+            **{path: path.read_bytes() for path in fixture["packets"]},
         }
         created = json.loads(self.handoff_command(Path(fixture["plan_path"])).stdout)
         handoff_path = Path(fixture["handoff_path"])

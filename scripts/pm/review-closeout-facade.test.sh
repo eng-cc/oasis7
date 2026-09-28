@@ -94,7 +94,10 @@ path = sys.argv[1]
 payload = json.load(open(path, encoding="utf-8"))
 payload.update({"status": "completed", "activation": "message-assigned",
                "context_delivery": "minimal-task-packet",
-               "actual_runtime": "inherited/unverified: human-operated",
+               "actual_runtime": (
+                   "inherited/unverified: message-assigned fallback; adapter inactive on this surface; "
+                   "actual runtime/model/reasoning unverified"
+               ),
                "scope_verdict": "approved", "risk_verdict": "approved",
                "disposition": "no_findings", "findings": [], "residual_risk": "fixture residual risk"})
 with open(path, "w", encoding="utf-8") as handle:
@@ -104,7 +107,7 @@ PY
 PLAN="$TASK_ROOT/review-plans/fixture.json"
 mkdir -p "$(dirname "$PLAN")"
 python3 - "$PLAN" "$BATCH" "$HEAD_OID" "$BASE_OID" "$EVIDENCE_DIGEST" "$EPOCH" "$LEDGER" <<'PY'
-import hashlib, json, sys
+import hashlib, json, pathlib, sys
 plan, batch, head, comparison, evidence, epoch, ledger = sys.argv[1:]
 roles = ["repository_health_engineer"]
 applicability_identity = {
@@ -131,11 +134,64 @@ payload = {
         "identity": applicability_identity, "identity_digest": digest(applicability_identity), "verified": True,
     }, "roles": roles,
     "expected_slices": [{"role": roles[0], "slice_id": "11111111-1111-4111-8111-111111111111"}],
+    "packet_refs": [{
+        "role": roles[0], "slice_id": "11111111-1111-4111-8111-111111111111",
+        "packet_ref": (
+            ".pm/scratch/task_11111111111111111111111111111111/"
+            "slice-packets/11111111-1111-4111-8111-111111111111.json"
+        ),
+    }],
     "epoch": epoch, "batch_path": batch, "preflight": {"status": "incomplete", "ledger_path": ledger},
 }
 with open(plan, "w", encoding="utf-8") as handle:
     json.dump(payload, handle, sort_keys=True)
     handle.write("\n")
+packet_payload = {
+    "schema": "oasis7-subagent-task-packet/v1",
+    "created_at": "2026-09-28T00:00:00+00:00",
+    "identity": {
+        "task_uid": payload["task_uid"],
+        "issue_url": "https://github.com/eng-cc/oasis7/issues/3379",
+        "repository": "eng-cc/oasis7", "project_item_id": "fixture-project-item",
+        "task_status": "committed", "packet_producer": "tpm",
+        "worktree": str(pathlib.Path(plan).parents[4]), "branch": "main",
+        "base_ref": "refs/heads/review-base", "base_binding": "immutable_oid",
+        "base_sha": comparison, "head": head,
+    },
+    "slice": {
+        "slice_id": "11111111-1111-4111-8111-111111111111",
+        "role": "repository_health_engineer", "slice_type": "focused_review",
+        "owner_role": "repository_health_engineer", "integration_owner": "tpm",
+        "integration_order": "1",
+        "context_delivery_mode": "minimal_head_bound_task_packet",
+        "intended_model_configuration": "inherit current parent selection",
+        "actual_dispatched_model_reasoning": "inherited/unverified",
+        "actual_runtime_evidence_reason": (
+            "message-assigned fallback; adapter inactive on this surface; "
+            "actual runtime/model/reasoning unverified"
+        ),
+        "role_activation": "message_assigned_adapter_inactive",
+        "write_scope": "isolated closeout facade test fixture",
+        "return_contract": "complete immutable return fixture",
+        "validation_command": "rtk ./scripts/pm/review-closeout-facade.test.sh",
+        "formal_sink": "https://github.com/eng-cc/oasis7/issues/3379",
+        "full_history_escalation_reason": "",
+    },
+    "context": {
+        "user_intent": "exercise the valid v2 closeout promotion fixture",
+        "work_item": "isolated review-closeout facade test",
+        "non_goals": "No production changes or external writes",
+        "acceptance_target": "valid packet-bound v2 promotion passes",
+        "governance_refs": ["AGENTS.md", "doc/engineering/workflow/source-of-truth.md"],
+        "scoped_refs": ["scripts/pm/review-closeout-facade.test.sh"],
+        "evidence_summary": "synthetic immutable plan and packet fixture",
+        "collaboration_boundary": "temporary test repository only",
+    },
+}
+packet = {**packet_payload, "packet_digest": digest(packet_payload)}
+packet_path = pathlib.Path(plan).parents[1] / "slice-packets" / "11111111-1111-4111-8111-111111111111.json"
+packet_path.parent.mkdir(parents=True, exist_ok=True)
+packet_path.write_text(json.dumps(packet, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
 PY
 
 # A malformed plan must fail before reconcile can rewrite the ledger or publish
@@ -800,7 +856,10 @@ finding = {"id": "FIX-V2-REJECTED", "summary": "fixture finding with repository 
            "triage": {"classification": "blocking", "basis": "the exact fixture verification output"}}
 returned.update({"status": "completed", "activation": "message-assigned",
                  "context_delivery": "minimal-task-packet",
-                 "actual_runtime": "inherited/unverified: human-operated",
+                 "actual_runtime": (
+                     "inherited/unverified: message-assigned fallback; adapter inactive on this surface; "
+                     "actual runtime/model/reasoning unverified"
+                 ),
                  "scope_verdict": "approved", "risk_verdict": "approved",
                  "disposition": "findings", "findings": [finding],
                  "residual_risk": "fixture finding remains rejected with evidence"})

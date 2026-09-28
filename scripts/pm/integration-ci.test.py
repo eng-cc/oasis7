@@ -427,6 +427,18 @@ class CurrentRequestSelectionTests(unittest.TestCase):
    ),
   }
 
+ def unrelated_run_row(self,run_id,mode):
+  other_uid='task_'+'2'*32
+  return {
+   'id':run_id,'run_attempt':1,'created_at':'2026-09-26T00:00:00Z',
+   'event':'workflow_dispatch','path':self.api.WORKFLOW,
+   'head_sha':self.base,'head_branch':'main','repository':{'full_name':'owner/repo'},
+   'display_title':(
+    f'oasis7-ci|workflow_dispatch|{mode}|{other_uid}|8|'
+    f'{"c"*40}|{"d"*40}'
+   ),
+  }
+
  def select(self,rows,request_key):
   with patch.object(self.api,'gh',return_value={'workflow_runs':rows}):
    return self.api.current_request(
@@ -449,6 +461,29 @@ class CurrentRequestSelectionTests(unittest.TestCase):
   selected_b=self.select(rows,key_b)
   self.assertEqual((99,99),(selected_a['id'],selected_a['run_attempt']))
   self.assertEqual((100,100),(selected_b['id'],selected_b['run_attempt']))
+
+ def test_remote_selection_skips_unrelated_v1_reuse_validation_run(self):
+  key='sha256:'+'1'*64
+  unrelated=self.unrelated_run_row(98,'v1_reuse_validation_only')
+  integration=self.run_row(99,key)
+  selected=self.select([unrelated,integration],key)
+  self.assertEqual(99,selected['id'])
+
+ def test_remote_selection_still_rejects_malformed_or_ambiguous_current_identity(self):
+  key='sha256:'+'1'*64
+  malformed=self.run_row(99,key)
+  parts=malformed['display_title'].split('|')
+  parts[3]='task-invalid'
+  malformed['display_title']='|'.join(parts)
+  ambiguous=self.run_row(100,key)
+  parts=ambiguous['display_title'].split('|')
+  parts[4]='8'
+  ambiguous['display_title']='|'.join(parts)
+  cases=((malformed,'malformed'),(ambiguous,'conflicts'))
+  for row,diagnostic in cases:
+   with self.subTest(diagnostic=diagnostic):
+    with self.assertRaisesRegex(ValueError,diagnostic):
+     self.select([row],key)
 
  def test_remote_selection_rejects_timezone_naive_creation_time(self):
   row=self.run_row(99,'sha256:'+'1'*64,created_at='2026-09-26T00:00:00')

@@ -238,6 +238,79 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
         self.assertEqual(0, updated.returncode, updated.stderr)
         self.v2_git_initialized = True
 
+    def _materialize_v2_task_packets(self, plan: dict[str, object]) -> None:
+        """Write complete digest-bound packet fixtures at every immutable plan ref."""
+        refs = plan["packet_refs"]
+        slices = plan["expected_slices"]
+        source_identity = plan["source_review_identity"]
+        self.assertIsInstance(refs, list)
+        self.assertIsInstance(slices, list)
+        self.assertIsInstance(source_identity, dict)
+        self.assertEqual(len(refs), len(slices))
+        runtime_reason = (
+            "message-assigned fallback; adapter inactive on this surface; "
+            "actual runtime/model/reasoning unverified"
+        )
+        for ref, expected in zip(refs, slices):
+            self.assertIsInstance(ref, dict)
+            self.assertIsInstance(expected, dict)
+            role = expected["role"]
+            slice_id = expected["slice_id"]
+            self.assertEqual({"role": role, "slice_id": slice_id},
+                             {key: ref[key] for key in ("role", "slice_id")})
+            packet_path = self.root / ref["packet_ref"]
+            packet_path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "schema": "oasis7-subagent-task-packet/v1",
+                "created_at": "2026-09-28T00:00:00+00:00",
+                "identity": {
+                    "task_uid": TASK,
+                    "issue_url": f"https://github.com/{REPO}/issues/{ISSUE}",
+                    "repository": REPO,
+                    "project_item_id": "fixture-project-item",
+                    "task_status": "committed",
+                    "packet_producer": "tpm",
+                    "worktree": str(self.root),
+                    "branch": "main",
+                    "base_ref": "refs/remotes/origin/main",
+                    "base_binding": "immutable_oid",
+                    "base_sha": source_identity["source_scope_oid"],
+                    "head": plan["frozen_head"],
+                },
+                "slice": {
+                    "slice_id": slice_id,
+                    "role": role,
+                    "slice_type": "focused_review",
+                    "owner_role": role,
+                    "integration_owner": "tpm",
+                    "integration_order": "1",
+                    "context_delivery_mode": "minimal_head_bound_task_packet",
+                    "intended_model_configuration": "inherit current parent selection",
+                    "actual_dispatched_model_reasoning": "inherited/unverified",
+                    "actual_runtime_evidence_reason": runtime_reason,
+                    "role_activation": "message_assigned_adapter_inactive",
+                    "write_scope": "isolated review-resolution test fixture",
+                    "return_contract": "complete immutable return fixture",
+                    "validation_command": "rtk python3.12 scripts/pm/review-findings-resolution.test.py",
+                    "formal_sink": f"https://github.com/{REPO}/issues/{ISSUE}",
+                    "full_history_escalation_reason": "",
+                },
+                "context": {
+                    "user_intent": "exercise plan-owned v2 handoff packet validation",
+                    "work_item": "isolated review-resolution consumer fixture",
+                    "non_goals": "No production changes or external writes",
+                    "acceptance_target": "valid digest-bound packet is accepted",
+                    "governance_refs": ["AGENTS.md", "doc/engineering/workflow/source-of-truth.md"],
+                    "scoped_refs": ["scripts/pm/review-findings-resolution.test.py"],
+                    "evidence_summary": "synthetic immutable plan and packet fixture",
+                    "collaboration_boundary": "temporary test repository only",
+                },
+            }
+            packet = {**payload, "packet_digest": digest(payload)}
+            packet_path.write_text(
+                json.dumps(packet, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8"
+            )
+
     def _write_v2_fixture(self, *, findings: bool, mutation: str | None = None) -> tuple[Path, Path, bytes]:
         """Build a v2 fixture from canonical plan/batch/preflight producers and bound return bytes."""
         self.v2_fixture_counter += 1
@@ -279,6 +352,7 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
         )
         self.assertEqual(0, planned.returncode, planned.stderr)
         plan = json.loads(planned.stdout)
+        self._materialize_v2_task_packets(plan)
         epoch = plan["epoch"]
         self.v2_slice = plan["expected_slices"][0]["slice_id"]
         self.v2_plan = task_plans / f"{epoch}.json"
@@ -303,7 +377,10 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
         returned.update({
             "status": "completed", "activation": "message-assigned",
             "context_delivery": "minimal-task-packet",
-            "actual_runtime": "inherited/unverified: human-operated",
+            "actual_runtime": (
+                "inherited/unverified: message-assigned fallback; adapter inactive on this surface; "
+                "actual runtime/model/reasoning unverified"
+            ),
             "scope_verdict": "approved", "risk_verdict": "approved",
             "disposition": "findings" if findings else "no_findings",
             "findings": fixture_findings, "residual_risk": "fixture risk",
