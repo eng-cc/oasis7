@@ -12,6 +12,8 @@ selection.
 from __future__ import annotations
 
 import importlib.util
+import base64
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -552,6 +554,35 @@ def _resolve_records(
     return comments, authority
 
 
+def _resolve_records_with_predecessor(
+    api: GitHubReadOnly, comments: tuple[Mapping[str, Any], ...],
+    expected_identity: Mapping[str, Any], workflow_id: int,
+    default_branch: str, repository_id: int | None,
+) -> tuple[Any, dict[str, Any] | None]:
+    """Resolve V1 normally or V2 against a server-observed failed predecessor."""
+    successor_markers = (
+        contract.SUCCESSOR_REQUEST_MARKER,
+        contract.SUCCESSOR_AUTHORIZATION_MARKER,
+        contract.SUCCESSOR_PIN_MARKER,
+    )
+    if not any(marker in str(comment.get("body", ""))
+               for comment in comments for marker in successor_markers):
+        return contract.resolve_records_for_readback(
+            comments, expected_identity=expected_identity,
+        ), None
+    predecessor_identity = {
+        key: expected_identity[key]
+        for key in ("task_uid", "task_issue_number", "pr_number")
+    }
+    predecessor = _predecessor_observation(
+        api, comments, predecessor_identity, workflow_id, default_branch, repository_id,
+    )
+    authority = contract.resolve_successor_records_for_readback(
+        comments, expected_identity, predecessor,
+    )
+    return authority, predecessor
+
+
 def _live_workflow(api: GitHubReadOnly) -> tuple[int, str, int]:
     repo = api.get_json(f"repos/{REPOSITORY}")
     owner = repo.get("owner") if isinstance(repo, Mapping) else None
@@ -559,7 +590,7 @@ def _live_workflow(api: GitHubReadOnly) -> tuple[int, str, int]:
     if (not isinstance(repo, Mapping) or repo.get("full_name") != REPOSITORY
             or repo.get("name") != "oasis7" or not isinstance(owner, Mapping)
             or owner.get("login") != "eng-cc" or type(repository_id) is not int
-            or repository_id <= 0 or repo.get("default_branch") != "main"):
+            or repository_id <= 0 or type(repo.get("default_branch")) is not str):
         raise ReadbackError("canonical repository identity or default branch is invalid")
     workflow = api.get_json(f"repos/{REPOSITORY}/actions/workflows/rust.yml")
     if (not isinstance(workflow, Mapping) or workflow.get("path") != WORKFLOW_FILE
@@ -567,6 +598,10 @@ def _live_workflow(api: GitHubReadOnly) -> tuple[int, str, int]:
         raise ReadbackError("canonical rust.yml workflow ID is missing or ambiguous")
     if workflow.get("state") != "active":
         raise ReadbackError("canonical rust.yml workflow is not active")
+    try:
+        contract.normalize_workflow_identity(repo["default_branch"], workflow.get("path"))
+    except contract.ContractError as exc:
+        raise ReadbackError("live repository default branch is not a canonical ref") from exc
     return workflow["id"], repo["default_branch"], repository_id
 
 
@@ -574,13 +609,17 @@ def _run_identity(row: Mapping[str, Any], workflow_id: int, default_branch: str)
     run_id = row.get("id")
     attempt = row.get("run_attempt")
     sha = row.get("head_sha")
-    path = row.get("path")
+    raw_path = row.get("path")
     branch = row.get("head_branch")
     head_repo = row.get("head_repository")
     repository = row.get("repository")
+    try:
+        workflow_identity = contract.normalize_workflow_identity(default_branch, raw_path)
+    except contract.ContractError as exc:
+        raise ReadbackError("raw REST workflow path differs from exact live workflow identity") from exc
     if (type(run_id) is not int or run_id <= 0 or type(attempt) is not int or attempt <= 0
             or type(sha) is not str or not _OID_RE.fullmatch(sha)
-            or path != WORKFLOW_PATH or branch != default_branch
+            or branch != default_branch
             or not isinstance(head_repo, Mapping) or head_repo.get("full_name") != REPOSITORY
             or not isinstance(repository, Mapping) or repository.get("full_name") != REPOSITORY
             or row.get("workflow_id") != workflow_id):
@@ -589,14 +628,14 @@ def _run_identity(row: Mapping[str, Any], workflow_id: int, default_branch: str)
         "repository": REPOSITORY,
         "id": run_id,
         "workflow_id": workflow_id,
-        "workflow_path": path,
-        "workflow_ref": f"{REPOSITORY}/{WORKFLOW_FILE}@refs/heads/{default_branch}",
+        **workflow_identity,
         "workflow_sha": sha,
         "event": row.get("event"),
         "display_title": row.get("display_title"),
         "dispatched_head_sha": sha,
         "run_attempt": attempt,
         "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
         "head_branch": branch,
         "head_repository": head_repo,
         "status": row.get("status"),
@@ -612,10 +651,115 @@ def _read_live_run(api: GitHubReadOnly, row: Mapping[str, Any], workflow_id: int
     response = api.get_json(f"repos/{REPOSITORY}/actions/runs/{run_id}")
     if not isinstance(response, Mapping) or response.get("id") != run_id:
         raise ReadbackError("selected workflow run live readback has another identity")
+    if response.get("run_attempt") != row.get("run_attempt"):
+        raise ReadbackError("selected workflow run latest R/A changed between discovery and direct read")
+    for field in ("path", "workflow_id", "head_sha", "head_branch", "event",
+                  "created_at", "updated_at", "status", "conclusion"):
+        if response.get(field) != row.get(field):
+            raise ReadbackError(f"selected workflow run {field} changed between discovery and direct read")
     current = _run_identity(response, workflow_id, default_branch)
     if response.get("display_title") != row.get("display_title"):
         raise ReadbackError("selected workflow run title changed between discovery and direct read")
     return current
+
+
+def _workflow_blob_at(api: GitHubReadOnly, head_sha: str) -> tuple[str, str]:
+    """Read the exact immutable workflow file at an authenticated run head SHA."""
+    if type(head_sha) is not str or not _OID_RE.fullmatch(head_sha):
+        raise ReadbackError("predecessor server head SHA is malformed")
+    endpoint = f"repos/{REPOSITORY}/contents/{WORKFLOW_FILE}?ref={head_sha}"
+    observation = api.get_json(endpoint)
+    if (not isinstance(observation, Mapping) or observation.get("path") != WORKFLOW_FILE
+            or observation.get("encoding") != "base64" or type(observation.get("content")) is not str
+            or type(observation.get("sha")) is not str or not _OID_RE.fullmatch(observation["sha"])):
+        raise ReadbackError("predecessor workflow source blob readback is incomplete")
+    try:
+        encoded = "".join(observation["content"].split())
+        content = base64.b64decode(encoded, validate=True)
+    except (ValueError, base64.binascii.Error) as exc:
+        raise ReadbackError("predecessor workflow source blob content is malformed") from exc
+    git_blob_oid = hashlib.sha1(b"blob " + str(len(content)).encode("ascii") + b"\0" + content).hexdigest()
+    if git_blob_oid != observation["sha"]:
+        raise ReadbackError("predecessor workflow content does not match its immutable Git blob OID")
+    try:
+        text = content.decode("utf-8", "strict")
+    except UnicodeDecodeError as exc:
+        raise ReadbackError("predecessor workflow source is not UTF-8 text") from exc
+    expected_run_name = (
+        "run-name: oasis7-ci|${{ github.event_name }}|${{ inputs.run_mode }}|"
+        "${{ inputs.task_uid }}|${{ inputs.pr_number }}|${{ inputs.integration_base }}|"
+        "${{ inputs.expected_head }}${{ inputs.request_key != '' && format('|{0}', inputs.request_key) || '' }}"
+    )
+    if expected_run_name not in text.splitlines():
+        raise ReadbackError("predecessor source does not bind dispatch inputs through canonical run-name")
+    return git_blob_oid, contract.body_digest(content)
+
+
+def _predecessor_observation(
+    api: GitHubReadOnly, comments: tuple[Mapping[str, Any], ...],
+    expected_identity: Mapping[str, Any], workflow_id: int, default_branch: str,
+    repository_id: int | None = None,
+) -> dict[str, Any]:
+    """Prove the unique failed V1 predecessor from comments and live server identity."""
+    try:
+        predecessor = contract.resolve_predecessor_v1_records(comments, expected_identity)
+        pages = api.workflow_run_pages(workflow_id, repository_id)
+        complete_runs = contract.collect_workflow_runs(pages)
+        selected = contract.select_unique_run(complete_runs, predecessor)
+    except (contract.ContractError, ReadbackError) as exc:
+        raise ReadbackError("same-task V1 predecessor records or full run history are ambiguous") from exc
+    run = _read_live_run(api, selected, workflow_id, default_branch)
+    if (run["display_title"] != contract.expected_run_title(predecessor)
+            or run["event"] != "workflow_dispatch"
+            or run["event_ref"] != f"refs/heads/{default_branch}"
+            or run["workflow_default_branch"] != default_branch
+            or run["status"] != "completed" or run["conclusion"] != "failure"):
+        raise ReadbackError("same-task predecessor is not the unique terminal failed default-branch run")
+    try:
+        contract.validate_authority_precedes_run(predecessor, run["created_at"])
+    except contract.ContractError as exc:
+        raise ReadbackError("predecessor request/auth/pin does not precede its failed run") from exc
+    if run["display_title"] != contract.expected_run_title(predecessor):
+        raise ReadbackError("predecessor display title does not bind its exact V1 request")
+    blob_oid, blob_digest = _workflow_blob_at(api, run["dispatched_head_sha"])
+    return {
+        "schema": contract.PREDECESSOR_OBSERVATION_SCHEMA,
+        "repository": REPOSITORY,
+        "task_uid": predecessor.request["task_uid"],
+        "task_issue_number": predecessor.request["task_issue_number"],
+        "pr_number": predecessor.request["pr_number"],
+        "head_oid": predecessor.request["head_oid"],
+        "integration_base_oid": predecessor.request["integration_base_oid"],
+        "request_comment_id": predecessor.request_comment_id,
+        "request_body_digest": predecessor.request_body_digest,
+        "request_digest": predecessor.request["request_digest"],
+        "authorization_comment_id": predecessor.authorization_comment_id,
+        "authorization_body_digest": predecessor.authorization_body_digest,
+        "pin_comment_id": predecessor.pin_comment_id,
+        "pin_body_digest": predecessor.pin_body_digest,
+        "validation_id": predecessor.validation_id,
+        "workflow_id": run["workflow_id"],
+        "workflow_api_path": run["workflow_api_path"],
+        "workflow_default_branch": run["workflow_default_branch"],
+        "workflow_path": run["workflow_path"],
+        "workflow_ref": run["workflow_ref"],
+        "event_ref": run["event_ref"],
+        "event": run["event"],
+        # Workflow-runs REST does not expose historical workflow_dispatch
+        # inputs. The exact server-rendered title and immutable workflow blob
+        # bind the predecessor request commitment; they do not prove the old
+        # scope was executed.
+        "display_title": run["display_title"],
+        "dispatched_head_sha": run["dispatched_head_sha"],
+        "run_id": run["id"],
+        "run_attempt": run["run_attempt"],
+        "run_status": run["status"],
+        "run_conclusion": run["conclusion"],
+        "run_head_sha": run["dispatched_head_sha"],
+        "run_terminal_updated_at": run["updated_at"],
+        "workflow_blob_oid": blob_oid,
+        "workflow_blob_digest": blob_digest,
+    }
 
 
 def _latest_validation_check(api: GitHubReadOnly, run: Mapping[str, Any]) -> dict[str, Any]:
@@ -660,8 +804,12 @@ def _latest_validation_check(api: GitHubReadOnly, run: Mapping[str, Any]) -> dic
 
 def _exact_artifact(api: GitHubReadOnly, run: Mapping[str, Any], authority: Any) -> Mapping[str, Any]:
     rows = _collection_rows(api.artifact_pages(run["id"]), "artifacts", "run artifacts")
-    expected_name = contract.artifact_name(authority.validation_id, run["id"], run["run_attempt"])
-    attempt_prefix = f"oasis7-ci-reuse-validation-v1-{authority.validation_id}-r{run['id']}-a"
+    successor = contract.is_successor_authority(authority)
+    expected_name = contract.artifact_name(
+        authority.validation_id, run["id"], run["run_attempt"], successor=successor,
+    )
+    version = 2 if successor else 1
+    attempt_prefix = f"oasis7-ci-reuse-validation-v{version}-{authority.validation_id}-r{run['id']}-a"
     candidates: list[Mapping[str, Any]] = []
     for item in rows:
         name = item.get("name")
@@ -870,7 +1018,7 @@ def _trusted_inventory(context: Mapping[str, Any], run: Mapping[str, Any], check
             try:
                 result = inventory.build_required_inventory(
                     w_root, m_root, merge_oid, planner_output,
-                    repository=REPOSITORY, workflow_ref=WORKFLOW_REF,
+                    repository=REPOSITORY, workflow_ref=run["workflow_ref"],
                     planner_authority_oid=workflow_sha, event_name="workflow_dispatch",
                     run_mode="legacy", changed_paths=changed_paths,
                     base_ref=base, head_ref=head, task_uid=task_uid,
@@ -937,7 +1085,8 @@ _AUTHORITY_RECORD_FIELDS = (
     "request_comment_id", "request_body_digest", "request_digest",
     "authorization_comment_id", "authorization_body_digest", "pin_comment_id",
     "pin_body_digest", "authorized_actor", "pin_actor", "approval_permission",
-    "pin_permission", "run_id", "workflow_id", "workflow_path", "workflow_ref",
+    "pin_permission", "run_id", "workflow_id", "workflow_api_path",
+    "workflow_default_branch", "workflow_path", "workflow_ref", "event_ref",
     "workflow_sha", "event", "display_title", "dispatched_head_sha",
 )
 
@@ -945,11 +1094,18 @@ _AUTHORITY_RECORD_FIELDS = (
 def _authority_record_from_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, Mapping):
         raise ReadbackError("downloaded validation payload is not an object")
+    successor = payload.get("schema") == contract.SUCCESSOR_PAYLOAD_SCHEMA
+    if payload.get("schema") not in {contract.PAYLOAD_SCHEMA, contract.SUCCESSOR_PAYLOAD_SCHEMA}:
+        raise ReadbackError("downloaded payload schema is unsupported")
+    fields = set(contract._AUTHORITY_RECORD_FIELDS)
+    if successor:
+        fields = set(contract._SUCCESSOR_AUTHORITY_FIELDS)
     try:
-        record = {key: payload[key] for key in _AUTHORITY_RECORD_FIELDS}
+        record = {key: payload[key] for key in fields if key != "schema"}
     except KeyError as exc:
         raise ReadbackError("downloaded payload lacks its complete authority record") from exc
-    record["schema"] = contract.AUTHORITY_SCHEMA
+    record["schema"] = (contract.SUCCESSOR_AUTHORITY_SCHEMA
+                        if successor else contract.AUTHORITY_SCHEMA)
     return record
 
 
@@ -976,8 +1132,11 @@ def _parse_payload_bytes(payload_bytes: bytes) -> dict[str, Any]:
 
 
 def _recheck_comments(api: GitHubReadOnly, initial: Any, context: Any,
-                      authority_record: Mapping[str, Any], run_created_at: str) -> Any:
+                      authority_record: Mapping[str, Any], run_created_at: str,
+                      workflow_id: int, default_branch: str,
+                      repository_id: int | None) -> Any:
     pages = api.issue_comment_pages(context.task_issue_number)
+    comments = _flatten_array_pages(pages, "Issue comment")
     expected_identity = {
         "task_uid": context.task_uid,
         "task_issue_number": context.task_issue_number,
@@ -985,7 +1144,9 @@ def _recheck_comments(api: GitHubReadOnly, initial: Any, context: Any,
         "head_oid": context.head_oid,
         "integration_base_oid": initial.request["integration_base_oid"],
     }
-    _, provisional = _resolve_records(pages, expected_identity)
+    provisional, _predecessor = _resolve_records_with_predecessor(
+        api, comments, expected_identity, workflow_id, default_branch, repository_id,
+    )
     _compare_issue_authority(initial, provisional)
     contract.validate_authority_precedes_run(provisional, run_created_at)
     authority = contract.bind_recorded_admin_snapshot(provisional, authority_record)
@@ -997,13 +1158,19 @@ def _recheck_comments(api: GitHubReadOnly, initial: Any, context: Any,
 def _envelope(authority: Any, run: Mapping[str, Any], check: Mapping[str, Any],
               artifact: Mapping[str, Any], payload_bytes: bytes, archive_bytes: bytes) -> dict[str, Any]:
     record = contract.build_authority_record(authority, run)
-    return {
-        "schema": contract.READBACK_SCHEMA,
+    successor = contract.is_successor_authority(authority)
+    envelope = {
+        "schema": (contract.SUCCESSOR_READBACK_SCHEMA
+                   if successor else contract.READBACK_SCHEMA),
         "authority_digest": contract.authority_digest(record),
         "validation_id": authority.validation_id,
         "run_id": run["id"], "run_attempt": run["run_attempt"],
-        "workflow_id": run["workflow_id"], "workflow_path": run["workflow_path"],
-        "workflow_ref": run["workflow_ref"], "workflow_sha": run["workflow_sha"],
+        "workflow_id": run["workflow_id"],
+        "workflow_api_path": run["workflow_api_path"],
+        "workflow_default_branch": run["workflow_default_branch"],
+        "workflow_path": run["workflow_path"],
+        "workflow_ref": run["workflow_ref"], "event_ref": run["event_ref"],
+        "workflow_sha": run["workflow_sha"],
         "event": run["event"], "display_title": run["display_title"],
         "dispatched_head_sha": run["dispatched_head_sha"],
         "check_name": check["name"], "check_run_id": check["id"],
@@ -1012,6 +1179,13 @@ def _envelope(authority: Any, run: Mapping[str, Any], check: Mapping[str, Any],
         "artifact_content_digest": contract.body_digest(archive_bytes),
         "payload_digest": contract.body_digest(payload_bytes),
     }
+    if successor:
+        for key in (
+            "successor_sequence", "reason", "predecessor", "predecessor_digest",
+            "successor_workflow", "successor_workflow_digest",
+        ):
+            envelope[key] = record[key]
+    return envelope
 
 
 def read_validation(task_uid: str, api: GitHubReadOnly | None = None) -> dict[str, Any]:
@@ -1041,8 +1215,12 @@ def read_validation(task_uid: str, api: GitHubReadOnly | None = None) -> dict[st
         "pr_number": pr_number, "head_oid": pr_head,
         "integration_base_oid": pr.get("base", {}).get("sha"),
     }
-    initial_comments, provisional = _resolve_records(
-        api.issue_comment_pages(task_issue_number), expected_identity,
+    workflow_id, default_branch, repository_id = _live_workflow(api)
+    initial_comments = _flatten_array_pages(
+        api.issue_comment_pages(task_issue_number), "Issue comment",
+    )
+    provisional, predecessor_observation = _resolve_records_with_predecessor(
+        api, initial_comments, expected_identity, workflow_id, default_branch, repository_id,
     )
     request = provisional.request
     if (request["task_uid"] != task_uid
@@ -1050,7 +1228,6 @@ def read_validation(task_uid: str, api: GitHubReadOnly | None = None) -> dict[st
             or request["pr_number"] != pr_number or request["head_oid"] != pr_head
             or request["integration_base_oid"] != pr.get("base", {}).get("sha")):
         raise ReadbackError("frozen request differs from Project-backed Task UID/Issue or reciprocal PR")
-    workflow_id, default_branch, repository_id = _live_workflow(api)
     pages = api.workflow_run_pages(workflow_id, repository_id)
     complete_runs = contract.collect_workflow_runs(pages)
     selected = contract.select_unique_run(complete_runs, provisional)
@@ -1058,7 +1235,9 @@ def read_validation(task_uid: str, api: GitHubReadOnly | None = None) -> dict[st
     if run["display_title"] != contract.expected_run_title(provisional):
         raise ReadbackError("live selected run title differs from frozen request")
     contract.validate_authority_precedes_run(provisional, run["created_at"])
-    if run["workflow_ref"] != WORKFLOW_REF or run["event"] != "workflow_dispatch":
+    if (run["workflow_ref"] != f"{REPOSITORY}/{WORKFLOW_FILE}@refs/heads/{default_branch}"
+            or run["event_ref"] != f"refs/heads/{default_branch}"
+            or run["event"] != "workflow_dispatch"):
         raise ReadbackError("selected run is not from the canonical default-branch dispatch")
     if run["workflow_sha"] != run["dispatched_head_sha"]:
         raise ReadbackError("run workflow SHA differs from dispatched workflow head")
@@ -1078,6 +1257,9 @@ def read_validation(task_uid: str, api: GitHubReadOnly | None = None) -> dict[st
         "projection_digest": request["projection_digest"],
         "repository_id": pr.get("base", {}).get("repo", {}).get("id"),
         "source_repository_id": pr.get("head", {}).get("repo", {}).get("id"),
+        "workflow_id": workflow_id,
+        "workflow_default_branch": default_branch,
+        "repository_id": repository_id,
     }
     # The exact W projection resolver and inventory replay verify H/S/D against
     # the live PR before an authorization context is built.
@@ -1096,6 +1278,7 @@ def read_validation(task_uid: str, api: GitHubReadOnly | None = None) -> dict[st
     # only after run/check/artifact provenance and canonical payload bytes.
     final_authority = _recheck_comments(
         api, authority, trusted_context, authority_record, run["created_at"],
+        workflow_id, default_branch, repository_id,
     )
     _compare_authority(authority, final_authority)
     final_project_issue = api.resolve_project_task_issue(task_uid)
@@ -1118,8 +1301,11 @@ def read_validation(task_uid: str, api: GitHubReadOnly | None = None) -> dict[st
     if (final_run["id"] != run["id"] or final_run["run_attempt"] != run["run_attempt"]
             or final_run["status"] != "completed" or final_run["conclusion"] != "success"
             or final_run["workflow_id"] != run["workflow_id"]
+            or final_run["workflow_api_path"] != run["workflow_api_path"]
+            or final_run["workflow_default_branch"] != run["workflow_default_branch"]
             or final_run["workflow_path"] != run["workflow_path"]
             or final_run["workflow_ref"] != run["workflow_ref"]
+            or final_run["event_ref"] != run["event_ref"]
             or final_run["event"] != run["event"]
             or final_run["display_title"] != run["display_title"]
             or final_run["workflow_sha"] != run["workflow_sha"]

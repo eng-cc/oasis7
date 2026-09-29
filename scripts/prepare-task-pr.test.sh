@@ -509,16 +509,15 @@ EOF
 }
 
 commit_fixture_evidence() {
-  local add_paths=(".pm/tasks/$TASK_UID.yaml" ".pm/tasks/$TASK_UID.execution.md" "doc/engineering/project.md")
-  "$REAL_GIT" -C "$SMOKE_WORKTREE" add "${add_paths[@]}"
-  if [[ -f "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" ]]; then
-    "$REAL_GIT" -C "$SMOKE_WORKTREE" add -f ".pm/github-project-sync/tasks.json"
+  local project_doc="doc/engineering/project.md"
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" add "$project_doc"
+  if ! "$REAL_GIT" -C "$SMOKE_WORKTREE" diff --cached --quiet -- "$project_doc"; then
+    "$REAL_GIT" -C "$SMOKE_WORKTREE" \
+      -c user.name="oasis7 smoke" \
+      -c user.email="smoke@example.invalid" \
+      -c commit.gpgsign=false \
+      commit --only --no-verify -m "test: pre-pr project trace fixture" -- "$project_doc" >/dev/null
   fi
-  "$REAL_GIT" -C "$SMOKE_WORKTREE" \
-    -c user.name="oasis7 smoke" \
-    -c user.email="smoke@example.invalid" \
-    -c commit.gpgsign=false \
-    commit --no-verify -m "test: pre-pr local role review evidence" >/dev/null
 }
 
 run_prepare() {
@@ -871,7 +870,7 @@ run_existing_ready_projected_c1_fixture() {
   local publisher_args="$TMPDIR/existing-ready-c1-publisher-args.txt"
   local stdout_path="$TMPDIR/existing-ready-c1.stdout"
   local stderr_path="$TMPDIR/existing-ready-c1.stderr"
-  local evidence_path="${TEST_WRAPPER_INTEGRATED_EVIDENCE_DIR:-}/projected-ready.json"
+  local evidence_path="${TEST_WRAPPER_INTEGRATED_EVIDENCE_DIR:-$TMPDIR}/projected-ready.json"
 
   : >"$gh_log"
   : >"$git_log"
@@ -1133,10 +1132,33 @@ write_changed_path_fixture() {
     -c commit.gpgsign=false \
     commit --no-verify -m "test: local required command fixture" >/dev/null
   SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+  local committed_paths
+  committed_paths="$("$REAL_GIT" -C "$SMOKE_WORKTREE" diff --name-only "$COMPARISON_OID" "$SOURCE_HEAD")"
+  if [[ "$committed_paths" != "$changed_path" ]]; then
+    echo "changed-path fixture must commit only $changed_path, got: $committed_paths" >&2
+    return 1
+  fi
   write_task_binding "$primary_package"
-  write_project_trace
   write_role_review_packet "$SOURCE_HEAD" "no_findings"
-  commit_fixture_evidence
+}
+
+write_tracked_legacy_process_fixture() {
+  local process_path=".pm/tasks/$TASK_UID.yaml"
+  write_task_binding
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" add -f "$process_path"
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" \
+    -c user.name="oasis7 smoke" \
+    -c user.email="smoke@example.invalid" \
+    -c commit.gpgsign=false \
+    commit --no-verify -m "test: tracked legacy process input fixture" >/dev/null
+  SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+  local committed_paths
+  committed_paths="$("$REAL_GIT" -C "$SMOKE_WORKTREE" diff --name-only "$COMPARISON_OID" "$SOURCE_HEAD")"
+  if [[ "$committed_paths" != "$process_path" ]]; then
+    echo "legacy process fixture must commit only $process_path, got: $committed_paths" >&2
+    return 1
+  fi
+  write_role_review_packet "$SOURCE_HEAD" "no_findings"
 }
 
 run_cargo_package_required_fixture() {
@@ -1566,7 +1588,8 @@ mkdir -p "$SMOKE_WORKTREE/.pm/github-project-sync"
 cat > "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" <<EOF
 {"project":{"repo":"eng-cc/oasis7"},"tasks":{"$TASK_UID":{"issue_number":123,"issue_url":"https://github.com/eng-cc/oasis7/issues/123","owner_role":"tpm","priority":"P3","project_item_id":"PVTI_fixture","repository":"eng-cc/oasis7","status":"committed","workflow_phase":"implementation","task_uid":"$TASK_UID","title":"fresh draft candidate fixture","canonical_worktree":"$SMOKE_WORKTREE_CANONICAL","task_branch":"$SMOKE_BRANCH","default_branch":"main","worktree_hint":"$SMOKE_WORKTREE_CANONICAL","branch":"task/historical"}},"version":1}
 EOF
-"$REAL_GIT" -C "$SMOKE_WORKTREE" add ".pm/tasks/$TASK_UID.yaml" "doc/engineering/project.md"
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add -f ".pm/tasks/$TASK_UID.yaml"
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add "doc/engineering/project.md"
 "$REAL_GIT" -C "$SMOKE_WORKTREE" add -f ".pm/github-project-sync/tasks.json"
 "$REAL_GIT" -C "$SMOKE_WORKTREE" \
   -c user.name="oasis7 smoke" \
@@ -1948,7 +1971,7 @@ import sys
 print(Path(sys.argv[1]).resolve())
 PY
 )"
-GITHUB_FALLBACK_HEAD="1111111111111111111111111111111111111111"
+GITHUB_FALLBACK_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
 mkdir -p "$GITHUB_FALLBACK_ROOT/.pm/tasks" "$GITHUB_FALLBACK_ROOT/.pm/github-project-sync"
 touch "$GITHUB_FALLBACK_ROOT/.pm/tasks/.gitkeep"
 cat > "$GITHUB_FALLBACK_ROOT/.pm/github-project-sync/tasks.json" <<EOF
@@ -2122,7 +2145,8 @@ reset_smoke_branch_to_base
 write_task_binding
 write_project_trace
 printf '\n// prepare-task-pr comparison ref regression fixture\n' >> "$SMOKE_WORKTREE/scripts/prepare-task-pr.sh"
-"$REAL_GIT" -C "$SMOKE_WORKTREE" add scripts/prepare-task-pr.sh .pm/tasks/"$TASK_UID.yaml" doc/engineering/project.md
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add -f ".pm/tasks/$TASK_UID.yaml"
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add scripts/prepare-task-pr.sh doc/engineering/project.md
 "$REAL_GIT" -C "$SMOKE_WORKTREE" \
   -c user.name="oasis7 smoke" \
   -c user.email="smoke@example.invalid" \
@@ -2197,6 +2221,9 @@ PY
 "$REAL_GIT" -C "$ROOT_DIR" update-ref refs/remotes/origin/main "$COMPARISON_OID"
 
 reset_smoke_branch_to_base
+# Ignored PM runtime caches survive `git clean -fd`; clear them so this fixture
+# exercises the GitHub issue fallback instead of a stale local task packet.
+rm -rf "$SMOKE_WORKTREE/.pm/tasks" "$SMOKE_WORKTREE/.pm/github-project-sync"
 rm -f "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json"
 if "$REAL_GIT" -C "$SMOKE_WORKTREE" ls-files --error-unmatch .pm/github-project-sync/tasks.json >/dev/null 2>&1; then
   "$REAL_GIT" -C "$SMOKE_WORKTREE" add -u .pm/github-project-sync/tasks.json
@@ -2322,7 +2349,8 @@ PY
 reset_smoke_branch_to_base
 write_task_binding
 write_project_trace
-"$REAL_GIT" -C "$SMOKE_WORKTREE" add ".pm/tasks/$TASK_UID.yaml" "doc/engineering/project.md"
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add -f ".pm/tasks/$TASK_UID.yaml"
+"$REAL_GIT" -C "$SMOKE_WORKTREE" add "doc/engineering/project.md"
 "$REAL_GIT" -C "$SMOKE_WORKTREE" \
   -c user.name="oasis7 smoke" \
   -c user.email="smoke@example.invalid" \
@@ -3322,6 +3350,12 @@ if "OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS=true" not in command:
     raise SystemExit(f"workflow-governance plan must enable its focused contract: {command}")
 PY
 assert_planner_selector_evidence "$workflow_governance_required_json" "workflow_governance" "$ROOT_DIR" "OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS"
+
+reset_smoke_branch_to_base
+write_tracked_legacy_process_fixture
+legacy_process_required_json="$TMPDIR/legacy-process-required.json"
+run_prepare "$TMPDIR/gh-legacy-process-required.log" "$TMPDIR/git-legacy-process-required.log" --json >"$legacy_process_required_json"
+assert_planner_selector_evidence "$legacy_process_required_json" "workflow_governance" "$ROOT_DIR" "OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS"
 
 reset_smoke_branch_to_base
 write_changed_path_fixture "scripts/ci-required-baseline-routing.test.sh"

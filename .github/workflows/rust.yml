@@ -20,6 +20,7 @@ on:
           - full_escalation
           - newapi_bridge_package
           - v1_reuse_validation_only
+          - v2_reuse_validation_successor_only
       newapi_bridge_build_profile:
         description: "Cargo profile when run_mode=newapi_bridge_package"
         required: true
@@ -45,11 +46,11 @@ on:
         required: false
         type: string
       source_scope_oid:
-        description: "Frozen S OID for v1_reuse_validation_only"
+        description: "Frozen S OID for validation-only request or successor"
         required: false
         type: string
       projection_digest:
-        description: "Frozen trusted projection D for v1_reuse_validation_only"
+        description: "Frozen trusted projection D for validation-only request or successor"
         required: false
         type: string
       escalation_reason:
@@ -893,7 +894,8 @@ jobs:
     name: v1-reuse-validation-only
     if: >-
       ${{ github.event_name == 'workflow_dispatch' &&
-          inputs.run_mode == 'v1_reuse_validation_only' &&
+          (inputs.run_mode == 'v1_reuse_validation_only' ||
+           inputs.run_mode == 'v2_reuse_validation_successor_only') &&
           github.ref == 'refs/heads/main' }}
     runs-on: ubuntu-24.04
     permissions:

@@ -215,7 +215,7 @@ class LiveIdentityTests(unittest.TestCase):
         row = {
             "id": 700,
             "workflow_id": 800,
-            "path": producer.WORKFLOW_PATH,
+            "path": producer.WORKFLOW_FILE,
             "event": "workflow_dispatch",
             "head_branch": "main",
             "display_title": expected_title,
@@ -245,6 +245,8 @@ class LiveIdentityTests(unittest.TestCase):
         self.assertEqual("repos/eng-cc/oasis7/actions/runs/700", api.endpoint)
         self.assertEqual(2, result["run_attempt"])
         self.assertEqual(oid, result["workflow_sha"])
+        self.assertEqual(producer.WORKFLOW_FILE, result["workflow_api_path"])
+        self.assertEqual(producer.WORKFLOW_PATH, result["workflow_path"])
 
         for field, value in (
             ("event", "push"),
@@ -260,12 +262,51 @@ class LiveIdentityTests(unittest.TestCase):
             changed[field] = value
             with self.subTest(field=field), self.assertRaises(producer.ProducerError):
                 producer._check_dispatch_run(API(changed), 700, 800, "main", expected_title, environment)
-
         bad_environment = dict(environment)
         bad_environment["GITHUB_WORKFLOW_SHA"] = "b" * 40
         with self.assertRaises(producer.ProducerError):
             producer._check_dispatch_run(API(row), 700, 800, "main", expected_title, bad_environment)
 
+    def test_run_identity_uses_live_default_branch_and_exact_raw_path_forms(self):
+        oid = "a" * 40
+        title = "oasis7-ci|workflow_dispatch|validation-id"
+        row = {
+            "id": 701, "workflow_id": 801, "path": producer.WORKFLOW_FILE,
+            "event": "workflow_dispatch", "head_branch": "release/ready",
+            "display_title": title, "head_sha": oid, "run_attempt": 1,
+            "repository": {"full_name": producer.REPOSITORY},
+            "head_repository": {"full_name": producer.REPOSITORY},
+        }
+        environment = {
+            "GITHUB_WORKFLOW_SHA": oid, "GITHUB_SHA": oid,
+            "GITHUB_REF": "refs/heads/release/ready",
+            "GITHUB_WORKFLOW_REF": (
+                f"{producer.REPOSITORY}/{producer.WORKFLOW_FILE}@refs/heads/release/ready"
+            ),
+        }
+
+        class API:
+            def __init__(self, value):
+                self.value = value
+
+            def get_json(self, endpoint):
+                return self.value
+
+        result = producer._check_dispatch_run(
+            API(row), 701, 801, "release/ready", title, environment,
+        )
+        self.assertEqual(producer.WORKFLOW_FILE, result["workflow_api_path"])
+        self.assertEqual(f"{producer.WORKFLOW_FILE}@release/ready", result["workflow_path"])
+        self.assertEqual("refs/heads/release/ready", result["event_ref"])
+        for path in (
+            f"{producer.WORKFLOW_FILE}@main",
+            f"{producer.WORKFLOW_FILE}@refs/heads/release/ready",
+            ".github/workflows/other.yml",
+        ):
+            with self.subTest(path=path), self.assertRaises(producer.ProducerError):
+                producer._check_dispatch_run(
+                    API({**row, "path": path}), 701, 801, "release/ready", title, environment,
+                )
 
 class CompleteCollectionTests(unittest.TestCase):
     def test_collection_requires_stable_total_unique_ids_and_complete_pagination(self):
@@ -300,6 +341,7 @@ class WorkflowIsolationTests(unittest.TestCase):
         job = job_match.group(1)
         self.assertIn("name: v1-reuse-validation-only", job)
         self.assertIn("inputs.run_mode == 'v1_reuse_validation_only'", job)
+        self.assertIn("inputs.run_mode == 'v2_reuse_validation_successor_only'", job)
         self.assertIn("github.ref == 'refs/heads/main'", job)
         self.assertIn("GH_TOKEN: ${{ github.token }}", job)
         self.assertIn("python3 -I scripts/pm/ci-reuse-validation.py", job)
@@ -311,9 +353,20 @@ class WorkflowIsolationTests(unittest.TestCase):
         required_gate = re.search(r"(?ms)^  required-gate:\n(.*?)(?=^  [a-z0-9_-]+:|\Z)", workflow)
         self.assertIsNotNone(required_gate)
         self.assertNotIn("v1_reuse_validation_only", required_gate.group(1))
+        self.assertNotIn("v2_reuse_validation_successor_only", required_gate.group(1))
         required_result = re.search(r"(?ms)^  required-result-v2:\n(.*?)(?=^  full-regression:)", workflow)
         self.assertIsNotNone(required_result)
         self.assertNotIn("v1_reuse_validation_only", required_result.group(1))
+        self.assertNotIn("v2_reuse_validation_successor_only", required_result.group(1))
+
+        jobs_section = workflow.split("jobs:\n", 1)[1]
+        job_blocks = re.findall(
+            r"(?ms)^  ([a-z0-9_-]+):\n(.*?)(?=^  [a-z0-9_-]+:|\Z)", jobs_section,
+        )
+        for name, body in job_blocks:
+            if name != "v1-reuse-validation-only":
+                with self.subTest(job=name):
+                    self.assertNotIn("v2_reuse_validation_successor_only", body)
 
 
 class ExecutionPlanTests(unittest.TestCase):
