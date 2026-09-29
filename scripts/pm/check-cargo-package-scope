@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+from collections import Counter
 import io
 import json
 import os
@@ -90,7 +91,10 @@ def safe_relative(path: str) -> str:
 
 def resolve_relative(source: str, target: str) -> str | None:
     try:
-        value = PurePosixPath(source).parent.joinpath(target)
+        target_path = PurePosixPath(target)
+        if target_path.is_absolute() or re.match(r"^[A-Za-z]:[/\\]", target):
+            return None
+        value = PurePosixPath(source).parent.joinpath(target_path)
     except Exception:
         return None
     parts: list[str] = []
@@ -552,7 +556,9 @@ def metadata_dependency_names(metadata: dict[str, Any], package: str) -> set[str
     return names
 
 
-def lock_diff_has_unattributable_lines(repo: Path, base: str, head: str) -> bool:
+def lock_diff_has_unattributable_lines(
+    repo: Path, base: str, head: str, path: str = "Cargo.lock"
+) -> bool:
     def is_mechanical_lock(text: str) -> bool:
         in_dependencies = False
         for line in text.splitlines():
@@ -587,10 +593,275 @@ def lock_diff_has_unattributable_lines(repo: Path, base: str, head: str) -> bool
         return not in_dependencies
 
     for revision in (base, head):
-        lock_blob = git_blob(repo, revision, "Cargo.lock")
+        lock_blob = git_blob(repo, revision, path)
         if lock_blob is None or not is_mechanical_lock(lock_blob.decode("utf-8", errors="replace")):
             return True
     return False
+
+
+def standalone_workspace_metadata(root: Path, manifest_path: str) -> dict[str, Any] | None:
+    """Return repository-relative metadata for a workspace rooted by a changed lock."""
+    workspace = root / PurePosixPath(manifest_path).parent
+    try:
+        metadata = cargo_metadata(workspace)
+    except ScopeError:
+        return None
+    try:
+        workspace_root = Path(str(metadata.get("workspace_root", ""))).resolve()
+        workspace_rel = workspace_root.relative_to(root.resolve()).as_posix()
+    except (OSError, ValueError):
+        return None
+    packages: list[dict[str, Any]] = []
+    for package in metadata.get("packages", []):
+        if not isinstance(package, dict) or not isinstance(package.get("name"), str):
+            return None
+        try:
+            package_manifest = Path(str(package.get("manifest_path", ""))).resolve()
+            package_manifest_rel = package_manifest.relative_to(root.resolve()).as_posix()
+        except (OSError, ValueError):
+            return None
+        dependencies: list[tuple[str, str | None, str | None]] = []
+        for dependency in package.get("dependencies", []):
+            if not isinstance(dependency, dict) or not isinstance(dependency.get("name"), str):
+                return None
+            dependency_path = dependency.get("path")
+            dependency_rel: str | None = None
+            if dependency_path is not None:
+                try:
+                    dependency_rel = Path(str(dependency_path)).resolve().relative_to(root.resolve()).as_posix()
+                except (OSError, ValueError):
+                    return None
+            kind = dependency.get("kind")
+            if kind is not None and not isinstance(kind, str):
+                return None
+            dependencies.append((dependency["name"], kind, dependency_rel))
+        packages.append({
+            "name": package["name"],
+            "manifest_path": package_manifest_rel,
+            "dependencies": sorted(dependencies, key=lambda item: (item[0], item[1] or "", item[2] or "")),
+        })
+    return {"workspace_root": workspace_rel, "packages": packages}
+
+
+def lock_record_index(
+    records: dict[str, list[dict[str, Any]]],
+) -> dict[tuple[str, str, str | None], dict[str, Any]] | None:
+    indexed: dict[tuple[str, str, str | None], dict[str, Any]] = {}
+    for name, package_records in records.items():
+        for record in package_records:
+            version, source = record.get("version"), record.get("source")
+            if not isinstance(version, str) or not version:
+                return None
+            if source is not None and (not isinstance(source, str) or not source):
+                return None
+            key = (name, version, source)
+            if key in indexed:
+                return None
+            dependencies = record.get("dependencies", [])
+            if not isinstance(dependencies, list) or not all(isinstance(item, str) for item in dependencies):
+                return None
+            if len(dependencies) != len(set(dependencies)):
+                return None
+            indexed[key] = record
+    return indexed
+
+
+def lock_reference_index(
+    records: dict[str, list[dict[str, Any]]],
+) -> dict[str, tuple[str, str, str | None]] | None:
+    references: dict[str, tuple[str, str, str | None]] = {}
+    for name, package_records in records.items():
+        for record in package_records:
+            version, source = record.get("version"), record.get("source")
+            if not isinstance(version, str) or not version:
+                return None
+            if source is not None and (not isinstance(source, str) or not source):
+                return None
+            if len(package_records) == 1:
+                reference = name
+            else:
+                reference = f"{name} {version}"
+                same_version = [item for item in package_records if item.get("version") == version]
+                if len(same_version) > 1:
+                    if source is None:
+                        if sum(item.get("source") is None for item in same_version) != 1:
+                            return None
+                    else:
+                        reference += f" ({source})"
+            key = (name, version, source)
+            if reference in references:
+                return None
+            references[reference] = key
+    return references
+
+
+def standalone_lock_is_mechanical(
+    repo: Path,
+    base: str,
+    head: str,
+    base_root_metadata: dict[str, Any],
+    head_root_metadata: dict[str, Any],
+    base_packages: dict[str, list[tuple[str, str]]],
+    head_packages: dict[str, list[tuple[str, str]]],
+    standalone_metadata: tuple[dict[str, Any], dict[str, Any]] | None,
+    path: str,
+    primary: str,
+    added_edges: set[tuple[str, str, str]],
+) -> bool:
+    """Prove a separate lock changed only through one admitted package edge."""
+    if not path.endswith("/Cargo.lock") or standalone_metadata is None:
+        return False
+    manifest_path = path[: -len("Cargo.lock")] + "Cargo.toml"
+    old_manifest, new_manifest = git_blob(repo, base, manifest_path), git_blob(repo, head, manifest_path)
+    if old_manifest is None or old_manifest != new_manifest:
+        return False
+
+    base_standalone, head_standalone = standalone_metadata
+    workspace_path = str(PurePosixPath(manifest_path).parent)
+    if (
+        base_standalone.get("workspace_root") != workspace_path
+        or head_standalone.get("workspace_root") != workspace_path
+    ):
+        return False
+    if manifest_path in package_manifest_paths(base_packages).values() or manifest_path in package_manifest_paths(head_packages).values():
+        return False
+    if not isinstance(base_standalone.get("packages"), list) or not isinstance(head_standalone.get("packages"), list):
+        return False
+    base_members = {item.get("manifest_path"): item for item in base_standalone["packages"]}
+    head_members = {item.get("manifest_path"): item for item in head_standalone["packages"]}
+    if not base_members or len(base_members) != len(base_standalone["packages"]):
+        return False
+    if set(base_members) != set(head_members) or len(head_members) != len(head_standalone["packages"]):
+        return False
+    base_manifest = package_manifest_paths(base_packages).get(primary)
+    head_manifest = package_manifest_paths(head_packages).get(primary)
+    if base_manifest is None or head_manifest is None:
+        return False
+    base_target_path = str(PurePosixPath(base_manifest).parent)
+    head_target_path = str(PurePosixPath(head_manifest).parent)
+    consumers = 0
+    for consumer_manifest, base_consumer in base_members.items():
+        head_consumer = head_members[consumer_manifest]
+        if base_consumer.get("name") != head_consumer.get("name"):
+            return False
+        base_dependencies = base_consumer.get("dependencies")
+        head_dependencies = head_consumer.get("dependencies")
+        if not isinstance(base_dependencies, list) or base_dependencies != head_dependencies:
+            return False
+        if git_blob(repo, base, consumer_manifest) != git_blob(repo, head, consumer_manifest):
+            return False
+        if (primary, None, base_target_path) in base_dependencies and (
+            primary, None, head_target_path
+        ) in head_dependencies:
+            consumers += 1
+    if consumers == 0:
+        return False
+
+    admitted = [edge for edge in added_edges if edge[0] == primary and edge[2] == "normal"]
+    if len(admitted) != 1 or len(admitted) != len(added_edges):
+        return False
+    target = admitted[0][1]
+    old_blob, new_blob = git_blob(repo, base, path), git_blob(repo, head, path)
+    if old_blob is None or new_blob is None:
+        return False
+    old_text, new_text = old_blob.decode("utf-8", errors="replace"), new_blob.decode("utf-8", errors="replace")
+    if lock_diff_has_unattributable_lines(repo, base, head, path):
+        return False
+    old_header, _, old_packages_text = old_text.partition("[[package]]")
+    new_header, _, new_packages_text = new_text.partition("[[package]]")
+    if old_header != new_header or not re.fullmatch(r"(?:[^\S\n]*#.*\n|\s)*version\s*=\s*\d+\s*\n?", old_header):
+        return False
+    if not old_packages_text or not new_packages_text:
+        return False
+
+    old_records = lock_records(old_text)
+    new_records = lock_records(new_text)
+    old_index, new_index = lock_record_index(old_records), lock_record_index(new_records)
+    old_references, new_references = lock_reference_index(old_records), lock_reference_index(new_records)
+    if old_index is None or new_index is None or old_references is None or new_references is None:
+        return False
+    if not set(old_index).issubset(new_index):
+        return False
+    primary_base = [key for key in old_index if key[0] == primary and key[2] is None]
+    primary_head = [key for key in new_index if key[0] == primary and key[2] is None]
+    if len(primary_base) != 1 or len(primary_head) != 1 or primary_base[0] != primary_head[0]:
+        return False
+    primary_key = primary_base[0]
+    base_primary_metadata = metadata_package(base_root_metadata, primary)
+    head_primary_metadata = metadata_package(head_root_metadata, primary)
+    if (
+        base_primary_metadata is None
+        or head_primary_metadata is None
+        or primary_key != (
+            primary,
+            base_primary_metadata.get("version"),
+            base_primary_metadata.get("source"),
+        )
+        or primary_key != (
+            primary,
+            head_primary_metadata.get("version"),
+            head_primary_metadata.get("source"),
+        )
+    ):
+        return False
+    old_primary, new_primary = old_index[primary_key], new_index[primary_key]
+    if {key: value for key, value in old_primary.items() if key != "dependencies"} != {
+        key: value for key, value in new_primary.items() if key != "dependencies"
+    }:
+        return False
+    if any(old_index[key] != new_index[key] for key in old_index if key != primary_key):
+        return False
+
+    old_dependencies = old_primary.get("dependencies", [])
+    new_dependencies = new_primary.get("dependencies", [])
+    if not isinstance(old_dependencies, list) or not isinstance(new_dependencies, list):
+        return False
+    try:
+        old_keys = Counter(old_references[item] for item in old_dependencies)
+        new_keys = Counter(new_references[item] for item in new_dependencies)
+    except KeyError:
+        return False
+    target_metadata = metadata_package(head_root_metadata, target)
+    if target_metadata is None or not isinstance(target_metadata.get("version"), str):
+        return False
+    target_key = (target, target_metadata["version"], target_metadata.get("source"))
+    if target_key not in new_index or new_keys - old_keys != Counter({target_key: 1}) or old_keys - new_keys:
+        return False
+
+    added_records = set(new_index) - set(old_index)
+    by_target_name = [key for key in new_index if key[0] == target]
+    if len(by_target_name) != 1 or by_target_name[0] != target_key:
+        return False
+    target_dependencies = new_index[target_key].get("dependencies", [])
+    expected_target_dependencies = metadata_dependency_names(head_root_metadata, target)
+    if not isinstance(target_dependencies, list) or expected_target_dependencies is None:
+        return False
+    try:
+        actual_target_dependencies = {new_references[item][0] for item in target_dependencies}
+    except KeyError:
+        return False
+    if actual_target_dependencies != expected_target_dependencies:
+        return False
+
+    reachable: set[tuple[str, str, str | None]] = set()
+    pending = [target_key]
+    while pending:
+        key = pending.pop()
+        if key in reachable:
+            continue
+        record = new_index.get(key)
+        if record is None:
+            return False
+        reachable.add(key)
+        references = record.get("dependencies", [])
+        if not isinstance(references, list):
+            return False
+        for reference in references:
+            dependency_key = new_references.get(reference)
+            if dependency_key is None:
+                return False
+            pending.append(dependency_key)
+    return added_records.issubset(reachable)
 
 
 def root_manifest_is_mechanical(repo: Path, base: str, head: str, new_manifest_paths: set[str]) -> bool:
@@ -683,7 +954,7 @@ def check_cross_package_edges(
     affected_packages = {owner_for(path, packages) for path in changed} - {None}
     for path in paths:
         owner = owner_for(path, packages)
-        if owner is None or not path.endswith(".rs"):
+        if not path.endswith(".rs"):
             continue
         text = without_rust_comments(source_text(repo, head, path))
         for prefix, terminator, reason in (
@@ -697,11 +968,15 @@ def check_cross_package_edges(
                         raise ScopeError("unresolved_rust_source_reference", f"{path} has non-literal {reason}")
                     continue
                 target = match.group(1) or match.group(3)
-                if match.group(1) is not None and "\\" in target:
+                if "\\" in target:
                     if affected_packages:
                         raise ScopeError("unresolved_rust_source_reference", f"{path} has escaped {reason}")
                     continue
                 resolved = resolve_relative(path, target)
+                if resolved is None:
+                    if affected_packages:
+                        raise ScopeError("unresolved_rust_source_reference", f"{path} has out-of-repository {reason}")
+                    continue
                 target_owner = owner_for(resolved, packages) if resolved else None
                 if target_owner is not None and target_owner != owner and (
                     owner in affected_packages or target_owner in affected_packages
@@ -748,6 +1023,12 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
     policy_path, policy = parse_policy(repo, args.base, args.policy)
     protected = {safe_relative(path) for path in policy["protected_paths"]}
     normalized_paths = [safe_relative(path) for path in paths]
+    standalone_lock_paths = sorted(
+        path for path in normalized_paths if path.endswith("/Cargo.lock")
+    )
+    if len(standalone_lock_paths) > 1:
+        raise ScopeError("ambiguous_package_attribution", ", ".join(standalone_lock_paths))
+    standalone_metadata: tuple[dict[str, Any], dict[str, Any]] | None = None
     if policy_path in normalized_paths or protected.intersection(normalized_paths):
         raise ScopeError("policy_self_modification", "protected scope policy changed")
     with tempfile.TemporaryDirectory(prefix="cargo-scope-base-") as base_dir, tempfile.TemporaryDirectory(
@@ -797,6 +1078,16 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
             head_root, head_metadata, head_packages
         )
         added_dependency_edges = head_dependency_edges - base_dependency_edges
+        if standalone_lock_paths:
+            lock_path = standalone_lock_paths[0]
+            manifest_path = lock_path[: -len("Cargo.lock")] + "Cargo.toml"
+            old_manifest = git_blob(repo, args.base, manifest_path)
+            new_manifest = git_blob(repo, args.head, manifest_path)
+            if old_manifest is not None and old_manifest == new_manifest:
+                base_standalone = standalone_workspace_metadata(base_root, manifest_path)
+                head_standalone = standalone_workspace_metadata(head_root, manifest_path)
+                if base_standalone is not None and head_standalone is not None:
+                    standalone_metadata = (base_standalone, head_standalone)
     requested_primary = None if args.primary_package == "auto" else args.primary_package
     if requested_primary is not None and requested_primary not in head_packages:
         raise ScopeError("unknown_primary_package", args.primary_package)
@@ -837,9 +1128,6 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         primary_package = next(iter(package_owners))
     if package_owners and package_owners != {primary_package}:
         raise ScopeError("primary_package_mismatch", ", ".join(sorted(package_owners)))
-    if unowned_paths and primary_package is not None:
-        raise ScopeError("ambiguous_package_attribution", ", ".join(unowned_paths))
-
     if added_dependency_edges:
         base_package_names = set(base_packages)
         base_edge_pairs = {(source, target) for source, target, _ in base_dependency_edges}
@@ -867,6 +1155,25 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
                 f"{source} -[{kind}]-> {target}" for source, target, kind in invalid_edges
             )
             raise ScopeError("cross_package_dependency", detail)
+
+    other_unowned_paths = [path for path in unowned_paths if path not in standalone_lock_paths]
+    if other_unowned_paths and primary_package is not None:
+        raise ScopeError("ambiguous_package_attribution", ", ".join(other_unowned_paths))
+    for path in standalone_lock_paths:
+        if primary_package is None or not standalone_lock_is_mechanical(
+            repo,
+            args.base,
+            args.head,
+            base_metadata,
+            head_metadata,
+            base_packages,
+            head_packages,
+            standalone_metadata,
+            path,
+            primary_package,
+            added_dependency_edges,
+        ):
+            raise ScopeError("unattributable_lock_change", path)
 
     root_manifest_changed = "Cargo.toml" in normalized_paths
     root_lock_changed = "Cargo.lock" in normalized_paths

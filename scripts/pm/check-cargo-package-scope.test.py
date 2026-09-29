@@ -282,6 +282,268 @@ path = "src/lib.rs"
         repo, base = self._fixture()
         self._assert_allowed(repo, base, "alpha", self._add_normal_path_dependency_with_generated_lockfile)
 
+    def _standalone_fixture(self, *, depends_on_primary: bool = True) -> tuple[Path, str]:
+        repo, _ = self._fixture()
+        primary_dependency = (
+            '\n[dependencies]\nalpha = { path = "../../crates/alpha" }\n'
+            if depends_on_primary
+            else ""
+        )
+        self._write(
+            repo,
+            "tools/runner/Cargo.toml",
+            """[package]
+name = "runner"
+version = "0.1.0"
+edition = "2021"
+
+[workspace]
+""" + primary_dependency,
+        )
+        self._write(repo, "tools/runner/src/main.rs", "fn main() {}\n")
+        generated = subprocess.run(
+            [
+                "cargo",
+                "generate-lockfile",
+                "--offline",
+                "--manifest-path",
+                str(repo / "tools/runner/Cargo.toml"),
+            ],
+            cwd=repo,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(0, generated.returncode, generated.stderr)
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "standalone workspace base")
+        return repo, self._git(repo, "rev-parse", "HEAD")
+
+    def _add_standalone_lock_for_normal_path_edge(self, root: Path) -> None:
+        manifest = root / "crates/alpha/Cargo.toml"
+        manifest.write_text(
+            manifest.read_text(encoding="utf-8")
+            + '\n[dependencies]\nbeta = { path = "../beta" }\n',
+            encoding="utf-8",
+        )
+        generated = subprocess.run(
+            [
+                "cargo",
+                "generate-lockfile",
+                "--offline",
+                "--manifest-path",
+                str(root / "tools/runner/Cargo.toml"),
+            ],
+            cwd=root,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        if generated.returncode != 0:
+            raise AssertionError(generated.stderr)
+
+    def test_standalone_cargo_generated_lock_for_admitted_path_edge_is_allowed(self) -> None:
+        repo, base = self._standalone_fixture()
+        self._assert_allowed(repo, base, "alpha", self._add_standalone_lock_for_normal_path_edge)
+
+    def test_standalone_lock_unrelated_record_change_is_rejected(self) -> None:
+        repo, base = self._standalone_fixture()
+
+        def mutate(root: Path) -> None:
+            self._add_standalone_lock_for_normal_path_edge(root)
+            lock = root / "tools/runner/Cargo.lock"
+            lock.write_text(
+                lock.read_text(encoding="utf-8")
+                + '\n[[package]]\nname = "unrelated"\nversion = "9.9.9"\n',
+                encoding="utf-8",
+            )
+
+        self._assert_rejected(repo, base, "alpha", mutate, "unattributable_lock_change")
+
+    def test_standalone_lock_metadata_change_is_rejected(self) -> None:
+        repo, base = self._standalone_fixture()
+
+        def mutate(root: Path) -> None:
+            self._add_standalone_lock_for_normal_path_edge(root)
+            lock = root / "tools/runner/Cargo.lock"
+            text = lock.read_text(encoding="utf-8")
+            version_start = text.index("version = ")
+            version_end = text.index("\n", version_start)
+            lock.write_text(
+                text[:version_start] + "version = 999" + text[version_end:],
+                encoding="utf-8",
+            )
+
+        self._assert_rejected(repo, base, "alpha", mutate, "unattributable_lock_change")
+
+    def test_standalone_lock_unrelated_text_change_is_rejected(self) -> None:
+        repo, base = self._standalone_fixture()
+
+        def mutate(root: Path) -> None:
+            self._add_standalone_lock_for_normal_path_edge(root)
+            lock = root / "tools/runner/Cargo.lock"
+            lock.write_text(
+                lock.read_text(encoding="utf-8").replace(
+                    'name = "beta"\nversion = "0.1.0"',
+                    'name = "beta"\nversion = "0.1.0"\nmanual = "drift"',
+                ),
+                encoding="utf-8",
+            )
+
+        self._assert_rejected(repo, base, "alpha", mutate, "unattributable_lock_change")
+
+    def test_standalone_lock_with_changed_manifest_is_rejected(self) -> None:
+        repo, base = self._standalone_fixture()
+
+        def mutate(root: Path) -> None:
+            self._add_standalone_lock_for_normal_path_edge(root)
+            manifest = root / "tools/runner/Cargo.toml"
+            manifest.write_text(
+                manifest.read_text(encoding="utf-8").replace(
+                    'version = "0.1.0"', 'version = "0.1.1"'
+                ),
+                encoding="utf-8",
+            )
+
+        self._assert_rejected(repo, base, "alpha", mutate, "ambiguous_package_attribution")
+
+    def test_second_standalone_lock_change_is_rejected(self) -> None:
+        repo, base = self._standalone_fixture()
+
+        def mutate(root: Path) -> None:
+            self._add_standalone_lock_for_normal_path_edge(root)
+            self._write(
+                root,
+                "tools/other/Cargo.lock",
+                (root / "tools/runner/Cargo.lock").read_text(encoding="utf-8"),
+            )
+
+        self._assert_rejected(repo, base, "alpha", mutate, "ambiguous_package_attribution")
+
+    def test_standalone_lock_missing_base_primary_record_is_rejected(self) -> None:
+        repo, _ = self._standalone_fixture()
+        lock = repo / "tools/runner/Cargo.lock"
+        lock.write_text(
+            "version = 3\n\n[[package]]\nname = \"runner\"\nversion = \"0.1.0\"\n",
+            encoding="utf-8",
+        )
+        self._git(repo, "add", "tools/runner/Cargo.lock")
+        self._git(repo, "commit", "-qm", "standalone lock missing primary record")
+        base = self._git(repo, "rev-parse", "HEAD")
+        self._assert_rejected(
+            repo, base, "alpha", self._add_standalone_lock_for_normal_path_edge,
+            "unattributable_lock_change",
+        )
+
+    def test_standalone_lock_missing_base_manifest_dependency_is_rejected(self) -> None:
+        repo, base = self._standalone_fixture(depends_on_primary=False)
+
+        def mutate(root: Path) -> None:
+            self._add_standalone_lock_for_normal_path_edge(root)
+            lock = root / "tools/runner/Cargo.lock"
+            lock.write_text(
+                lock.read_text(encoding="utf-8")
+                + '\n[[package]]\nname = "alpha"\nversion = "0.1.0"\n\n'
+                + '[[package]]\nname = "beta"\nversion = "0.1.0"\n',
+                encoding="utf-8",
+            )
+
+        self._assert_rejected(repo, base, "alpha", mutate, "unattributable_lock_change")
+
+    def _standalone_consumer_with_reference(self, reference: str) -> tuple[Path, str]:
+        repo, _ = self._standalone_fixture()
+        self._write(repo, "crates/alpha/src/shared.rs", "pub fn shared() {}\n")
+        self._write(repo, "tools/runner/src/main.rs", reference)
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "standalone consumer references primary source")
+        return repo, self._git(repo, "rev-parse", "HEAD")
+
+    def test_unchanged_standalone_consumer_include_into_changed_source_is_rejected(self) -> None:
+        repo, base = self._standalone_consumer_with_reference(
+            'include!("../../../crates/alpha/src/shared.rs");\nfn main() {}\n'
+        )
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(
+                root, "crates/alpha/src/shared.rs", "pub fn changed() {}\n"
+            ),
+            "cross_package_include",
+        )
+
+    def test_unchanged_standalone_consumer_path_into_changed_source_is_rejected(self) -> None:
+        repo, base = self._standalone_consumer_with_reference(
+            '#[path = "../../../crates/alpha/src/shared.rs"]\nmod imported;\nfn main() {}\n'
+        )
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(
+                root, "crates/alpha/src/shared.rs", "pub fn changed() {}\n"
+            ),
+            "cross_package_path",
+        )
+
+    def test_unchanged_standalone_consumer_absolute_include_fails_closed(self) -> None:
+        repo, _ = self._standalone_fixture()
+        self._write(repo, "crates/alpha/src/shared.rs", "pub fn shared() {}\n")
+        absolute_source = (repo / "crates/alpha/src/shared.rs").as_posix()
+        self._write(repo, "tools/runner/src/main.rs", f'include!("{absolute_source}");\nfn main() {{}}\n')
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "standalone consumer uses absolute source path")
+        base = self._git(repo, "rev-parse", "HEAD")
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(
+                root, "crates/alpha/src/shared.rs", "pub fn changed() {}\n"
+            ),
+            "unresolved_rust_source_reference",
+        )
+
+    def test_unchanged_standalone_consumer_raw_backslash_path_fails_closed(self) -> None:
+        repo, base = self._standalone_consumer_with_reference(
+            'include!(r"..\\..\\..\\crates\\alpha\\src\\shared.rs");\nfn main() {}\n'
+        )
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(
+                root, "crates/alpha/src/shared.rs", "pub fn changed() {}\n"
+            ),
+            "unresolved_rust_source_reference",
+        )
+
+    def test_unchanged_standalone_consumer_symlink_into_changed_source_is_rejected(self) -> None:
+        repo, _ = self._standalone_fixture()
+        self._write(repo, "crates/alpha/src/shared.rs", "pub fn shared() {}\n")
+        link = repo / "tools/runner/src/linked.rs"
+        link.symlink_to("../../../crates/alpha/src/shared.rs")
+        self._write(repo, "tools/runner/src/main.rs", "mod linked;\nfn main() {}\n")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "standalone consumer has reverse symlink")
+        base = self._git(repo, "rev-parse", "HEAD")
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(
+                root, "crates/alpha/src/shared.rs", "pub fn changed() {}\n"
+            ),
+            "cross_package_symlink",
+        )
+
+    def test_unchanged_standalone_consumer_directory_symlink_into_changed_source_is_rejected(self) -> None:
+        repo, _ = self._standalone_fixture()
+        self._write(repo, "crates/alpha/src/generated/shared.rs", "pub fn shared() {}\n")
+        link = repo / "tools/runner/src/alias"
+        link.symlink_to("../../../crates/alpha/src/generated", target_is_directory=True)
+        self._write(repo, "tools/runner/src/main.rs", "pub mod alias;\nfn main() {}\n")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "standalone consumer has reverse directory symlink")
+        base = self._git(repo, "rev-parse", "HEAD")
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(
+                root, "crates/alpha/src/generated/shared.rs", "pub fn changed() {}\n"
+            ),
+            "cross_package_symlink",
+        )
+
     def test_generated_lock_dependency_array_replacement_is_rejected(self) -> None:
         repo, base = self._fixture()
 
