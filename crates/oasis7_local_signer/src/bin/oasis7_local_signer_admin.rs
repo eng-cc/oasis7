@@ -440,7 +440,7 @@ fn blocked(code: &str, reason: &str, exit_code: i32) -> serde_json::Value {
 
 #[cfg(test)]
 mod tests {
-    use super::{CliError, Command, parse_command};
+    use super::{CliError, Command, blocked, execute, parse_command};
     use oasis7_local_signer::types::{CallerBinding, InstallationConfig};
     use std::path::Path;
 
@@ -643,6 +643,24 @@ mod tests {
             Ok(Command::RestoreCommit)
         ));
         assert_eq!(CliError::recovery("x").exit_code, 10);
+    }
+
+    #[test]
+    fn install_apply_execute_returns_safe_block_without_host_access() {
+        // This command must hit execute's early gate before opening AdminStore
+        // or reading the fixed host installation configuration.
+        let error = execute(&arguments(&["install", "--apply"]))
+            .expect_err("initial host installation must remain gated");
+        assert_eq!(error.code, "UNSUPPORTED_PLATFORM_OR_FS");
+        assert_eq!(error.exit_code, 9);
+        assert!(error.reason.contains("no host changes were made"));
+
+        // Match the BLOCKED response that main emits for this execution error.
+        let result = blocked(error.code, error.reason, error.exit_code);
+        assert_eq!(result["status"], "BLOCKED");
+        assert_eq!(result["code"], "UNSUPPORTED_PLATFORM_OR_FS");
+        assert_eq!(result["host_mutated"], false);
+        assert_eq!(result["signing_enabled"], false);
     }
 
     #[test]
