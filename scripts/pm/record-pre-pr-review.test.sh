@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 export OASIS7_TEST_ALLOW_UNATTESTED_DISPATCH_RECEIPTS=1
+export PYTHONDONTWRITEBYTECODE=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -16,6 +17,8 @@ mkdir -p "$TEST_REPO/scripts/pm" "$TMPDIR/bin"
 cp "$ROOT_DIR/scripts/pm/record-pre-pr-review.sh" "$TEST_REPO/scripts/pm/record-pre-pr-review.sh"
 cp "$ROOT_DIR/scripts/pm/validate-review-provenance.py" "$TEST_REPO/scripts/pm/validate-review-provenance.py"
 cp "$ROOT_DIR/scripts/pm/review-findings-resolution.py" "$TEST_REPO/scripts/pm/review-findings-resolution.py"
+cp "$ROOT_DIR/scripts/pm/review-batch-epoch.py" "$TEST_REPO/scripts/pm/review-batch-epoch.py"
+cp "$ROOT_DIR/scripts/pm/review_preflight_handoff.py" "$TEST_REPO/scripts/pm/review_preflight_handoff.py"
 chmod +x "$TEST_REPO/scripts/pm/record-pre-pr-review.sh"
 
 cat > "$TMPDIR/bin/gh" <<'EOF'
@@ -41,7 +44,7 @@ git -C "$TEST_REPO" init -q -b main
 printf 'base\n' > "$TEST_REPO/README.md"
 mkdir -p "$TEST_REPO/.pm"
 printf 'scratch/\n' >"$TEST_REPO/.pm/.gitignore"
-git -C "$TEST_REPO" add README.md .pm/.gitignore scripts/pm/record-pre-pr-review.sh scripts/pm/validate-review-provenance.py scripts/pm/review-findings-resolution.py
+git -C "$TEST_REPO" add README.md .pm/.gitignore scripts/pm/record-pre-pr-review.sh scripts/pm/validate-review-provenance.py scripts/pm/review-findings-resolution.py scripts/pm/review-batch-epoch.py scripts/pm/review_preflight_handoff.py
 git -C "$TEST_REPO" -c user.name="oasis7 smoke" -c user.email="smoke@example.invalid" commit -q -m "base"
 git -C "$TEST_REPO" branch base
 
@@ -202,17 +205,62 @@ BASE_A="$(git -C "$TEST_REPO" rev-parse refs/heads/base)"
 BASE_B="$(git -C "$TEST_REPO" commit-tree "$HEAD_SHA^{tree}" -p "$BASE_A" -m 'moved symbolic comparison ref')"
 PLAN="$TEST_REPO/.pm/scratch/task_11111111111111111111111111111111/review-plans/frozen-plan.json"
 mkdir -p "$(dirname "$PLAN")"
-python3 - "$PLAN" "$HEAD_SHA" "$BASE_A" "$LEDGER_REL" <<'PY'
-import json, sys
-json.dump({"schema":"oasis7-review-plan/v1","task_uid":"task_11111111111111111111111111111111","frozen_head":sys.argv[2],"comparison_ref":"refs/heads/base","comparison_oid":sys.argv[3],"relevant_evidence_digest":"b"*64,"roles":["repository_health_engineer"],"expected_slices":[{"role":"repository_health_engineer","slice_id":"11111111-1111-4111-8111-111111111111"}],"epoch":"a"*64,"batch_path":".pm/scratch/task_11111111111111111111111111111111/review-batches/"+("a"*64)+".json","preflight":{"status":"incomplete","ledger_path":sys.argv[4]}},open(sys.argv[1],"w"))
+BATCH_EVIDENCE_DIGEST="$(python3 -c 'print("b" * 64)')"
+BATCH_RESULT="$TMPDIR/frozen-batch.json"
+python3 "$TEST_REPO/scripts/pm/review-batch-epoch.py" --root "$TEST_REPO" create \
+  --task-uid task_11111111111111111111111111111111 --head "$HEAD_SHA" \
+  --evidence-digest "$BATCH_EVIDENCE_DIGEST" \
+  --slice repository_health_engineer=11111111-1111-4111-8111-111111111111 \
+  >"$BATCH_RESULT"
+BATCH_EPOCH="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["epoch"])' "$BATCH_RESULT")"
+BATCH_PATH="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["batch_path"])' "$BATCH_RESULT")"
+python3 - "$BATCH_RESULT" "$BATCH_PATH" "$TEST_REPO" "$HEAD_SHA" "$BATCH_EVIDENCE_DIGEST" "$BATCH_EPOCH" <<'PY'
+import json, pathlib, sys
+result_path, batch_path, root, head, evidence, epoch = sys.argv[1:]
+result = json.loads(pathlib.Path(result_path).read_text(encoding="utf-8"))
+batch = json.loads(pathlib.Path(batch_path).read_text(encoding="utf-8"))
+expected = {
+    "schema": "oasis7-review-batch/v1", "epoch": epoch,
+    "task_uid": "task_11111111111111111111111111111111",
+    "frozen_head": head, "relevant_evidence_digest": evidence,
+    "expected_slices": [{"role": "repository_health_engineer",
+                          "slice_id": "11111111-1111-4111-8111-111111111111"}],
+}
+if result.get("batch_path") != batch_path or batch != expected:
+    raise SystemExit("canonical fixture batch does not match the helper-returned plan identity")
+if pathlib.Path(batch_path).resolve() != (pathlib.Path(root) / ".pm" / "scratch" /
+                                             expected["task_uid"] / "review-batches" / f"{epoch}.json").resolve():
+    raise SystemExit("canonical fixture batch path is not the derived epoch path")
 PY
-python3 - "$TEST_REPO/$LEDGER_REL" <<'PY'
+python3 - "$TEST_REPO/.pm/scratch/task_11111111111111111111111111111111/review-return.md" \
+  "$TEST_REPO/$LEDGER_REL" "$BATCH_EPOCH" <<'PY'
+import hashlib, json, pathlib, sys
+artifact_path, ledger_path, epoch = map(pathlib.Path, sys.argv[1:])
+payload = json.loads(artifact_path.read_text(encoding="utf-8"))
+payload["epoch"] = str(epoch)
+artifact_path.write_text(json.dumps(payload) + "\n", encoding="utf-8")
+rows = [json.loads(line) for line in ledger_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+if len(rows) != 1 or (rows[0].get("role"), rows[0].get("slice_id")) != (
+        "repository_health_engineer", "11111111-1111-4111-8111-111111111111"):
+    raise SystemExit("canonical batch fixture expected exactly its one completed role row")
+rows[0]["epoch"] = str(epoch)
+rows[0]["artifact_digest"] = hashlib.sha256(artifact_path.read_bytes()).hexdigest()
+ledger_path.write_text("".join(json.dumps(row) + "\n" for row in rows), encoding="utf-8")
+PY
+python3 - "$PLAN" "$HEAD_SHA" "$BASE_A" "$LEDGER_REL" "$BATCH_EVIDENCE_DIGEST" "$BATCH_EPOCH" "$BATCH_PATH" <<'PY'
+import json, sys
+plan, head, comparison, ledger, evidence, epoch, batch_path = sys.argv[1:]
+json.dump({"schema":"oasis7-review-plan/v1","task_uid":"task_11111111111111111111111111111111","frozen_head":head,"comparison_ref":"refs/heads/base","comparison_oid":comparison,"relevant_evidence_digest":evidence,"roles":["repository_health_engineer"],"expected_slices":[{"role":"repository_health_engineer","slice_id":"11111111-1111-4111-8111-111111111111"}],"epoch":epoch,"batch_path":batch_path,"preflight":{"status":"incomplete","ledger_path":ledger}},open(plan,"w"))
+PY
+python3 - "$TEST_REPO/$LEDGER_REL" "$BATCH_EPOCH" <<'PY'
 import json,sys
 path=sys.argv[1]
 rows=[json.loads(line) for line in open(path) if line.strip()]
-for row in rows: row["epoch"]="a"*64
+for row in rows: row["epoch"]=sys.argv[2]
 open(path,"w").write("".join(json.dumps(row)+"\n" for row in rows))
 PY
+PLAN_ORIGINAL="$TEST_REPO/.pm/scratch/task_11111111111111111111111111111111/review-plans/frozen-plan-original.json"
+cp "$PLAN" "$PLAN_ORIGINAL"
 git -C "$TEST_REPO" update-ref refs/heads/base "$BASE_B"
 
 # Review plans are authoritative, so traversal and escaping symlink paths must
@@ -451,5 +499,161 @@ if "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" --task-uid task_1111111111111
   exit 1
 fi
 grep -qi "comparison OID" "$TMPDIR/tampered-oid.err"
+
+# A missing immutable batch is recoverable only from a fully validated plan.
+# The recorder prints the exact helper command but never executes it.
+MISSING_PLAN="$TEST_REPO/.pm/scratch/task_11111111111111111111111111111111/review-plans/missing-batch-plan.json"
+cp "$PLAN_ORIGINAL" "$MISSING_PLAN"
+MISSING_COLLECTION="${BATCH_PATH%.json}.collection.json"
+RECOVERY_LEDGER_BEFORE="$TMPDIR/recovery-ledger-before.jsonl"
+cp "$TEST_REPO/$LEDGER_REL" "$RECOVERY_LEDGER_BEFORE"
+rm "$BATCH_PATH"
+
+run_missing_plan_recorder() {
+  "$TEST_REPO/scripts/pm/record-pre-pr-review.sh" \
+    --task-uid task_11111111111111111111111111111111 \
+    --review-plan "$MISSING_PLAN" \
+    --review-evidence "repository_health_engineer: no_findings; recovery fixture" \
+    --review-verdicts "repository_health_engineer scope/spec compliance=approved; role quality/risk=approved" \
+    --finding-disposition-evidence "recovery fixture" \
+    --verification "validated plan -> missing batch -> printed command" \
+    --residual-risk "recovery fixture risk" \
+    --slice-ledger "$LEDGER_REL" --print-only "$@"
+}
+
+if run_missing_plan_recorder >"$TMPDIR/missing-batch.out" 2>"$TMPDIR/missing-batch.err"; then
+  echo "record-pre-pr-review accepted a plan whose immutable batch was missing" >&2
+  exit 1
+fi
+python3 - "$TMPDIR/missing-batch.err" "$TMPDIR/missing-batch.out" "$MISSING_PLAN" \
+  "$TEST_REPO" "$TEST_REPO/scripts/pm/review-batch-epoch.py" "$HEAD_SHA" \
+  "$BATCH_EVIDENCE_DIGEST" "$BATCH_PATH" "$MISSING_COLLECTION" <<'PY'
+import json
+import pathlib
+import shlex
+import sys
+
+stderr_path, stdout_path, plan_path, root, helper, head, evidence, batch_path, collection_path = sys.argv[1:]
+root = str(pathlib.Path(root).resolve())
+helper = str(pathlib.Path(helper).resolve())
+stderr = pathlib.Path(stderr_path).read_text(encoding="utf-8")
+stdout = pathlib.Path(stdout_path).read_text(encoding="utf-8")
+plan = json.loads(pathlib.Path(plan_path).read_text(encoding="utf-8"))
+expected_slices = sorted(plan["expected_slices"], key=lambda item: (item["role"], item["slice_id"]))
+command = ["python3", helper, "--root", root, "create", "--task-uid", plan["task_uid"],
+           "--head", head, "--evidence-digest", evidence]
+for item in expected_slices:
+    command.extend(("--slice", f'{item["role"]}={item["slice_id"]}'))
+lines = [line[2:] for line in stderr.splitlines() if line.startswith("  python3 ")]
+if "immutable review-plan batch is missing" not in stderr or "not executed" not in stderr:
+    raise SystemExit("missing-batch failure did not explain the nonexecuted recovery hint")
+if lines != [shlex.join(command)]:
+    raise SystemExit(f"missing-batch recovery command is not exact: {lines!r}")
+if stdout:
+    raise SystemExit("missing-batch failure emitted a review packet")
+if pathlib.Path(batch_path).exists() or pathlib.Path(collection_path).exists():
+    raise SystemExit("recorder executed recovery or wrote a collection")
+PY
+cmp -s "$TEST_REPO/$LEDGER_REL" "$RECOVERY_LEDGER_BEFORE"
+
+assert_no_recovery_hint() {
+  local label="$1"
+  shift
+  if run_missing_plan_recorder "$@" >"$TMPDIR/$label.out" 2>"$TMPDIR/$label.err"; then
+    echo "invalid missing-batch plan was accepted: $label" >&2
+    exit 1
+  fi
+  if grep -Eq 'review-batch-epoch\.py|recovery command was not executed' "$TMPDIR/$label.err"; then
+    echo "invalid missing-batch plan received an actionable recovery hint: $label" >&2
+    cat "$TMPDIR/$label.err" >&2
+    exit 1
+  fi
+  [[ ! -s "$TMPDIR/$label.out" ]] || {
+    echo "invalid missing-batch plan emitted a packet: $label" >&2
+    exit 1
+  }
+}
+
+cp "$PLAN_ORIGINAL" "$MISSING_PLAN"
+assert_no_recovery_hint wrong-head --source-head "$BASE_A"
+
+cp "$PLAN_ORIGINAL" "$MISSING_PLAN"
+python3 - "$MISSING_PLAN" <<'PY'
+import json, sys
+path = sys.argv[1]
+plan = json.load(open(path, encoding="utf-8"))
+plan["epoch"] = "0" * 64
+json.dump(plan, open(path, "w", encoding="utf-8"))
+PY
+assert_no_recovery_hint wrong-epoch
+
+cp "$PLAN_ORIGINAL" "$MISSING_PLAN"
+python3 - "$MISSING_PLAN" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+plan = json.loads(path.read_text(encoding="utf-8"))
+plan["batch_path"] = str(path.parent.parent / "review-batches" / "wrong-epoch.json")
+path.write_text(json.dumps(plan), encoding="utf-8")
+PY
+assert_no_recovery_hint wrong-path
+
+cp "$PLAN_ORIGINAL" "$MISSING_PLAN"
+python3 - "$MISSING_PLAN" "$BATCH_PATH" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+plan = json.loads(path.read_text(encoding="utf-8"))
+plan["batch_path"] = str(pathlib.Path(sys.argv[2]).with_name("custom-missing.json"))
+path.write_text(json.dumps(plan), encoding="utf-8")
+PY
+assert_no_recovery_hint missing-custom-batch
+grep -q 'no_safe_repair; new_review_epoch_required' "$TMPDIR/missing-custom-batch.err"
+
+cp "$PLAN_ORIGINAL" "$MISSING_PLAN"
+python3 - "$MISSING_PLAN" <<'PY'
+import json, sys
+path = sys.argv[1]
+plan = json.load(open(path, encoding="utf-8"))
+plan["roles"] = ["qa_engineer"]
+plan["expected_slices"][0]["role"] = "qa_engineer"
+json.dump(plan, open(path, "w", encoding="utf-8"))
+PY
+assert_no_recovery_hint wrong-role
+
+cp "$PLAN_ORIGINAL" "$MISSING_PLAN"
+python3 - "$MISSING_PLAN" <<'PY'
+import json, sys
+path = sys.argv[1]
+plan = json.load(open(path, encoding="utf-8"))
+plan["roles"] *= 2
+plan["expected_slices"] *= 2
+json.dump(plan, open(path, "w", encoding="utf-8"))
+PY
+assert_no_recovery_hint duplicate-role-slice
+
+cp "$PLAN_ORIGINAL" "$MISSING_PLAN"
+python3 - "$MISSING_PLAN" "$TEST_REPO/$LEDGER_REL" <<'PY'
+import json, pathlib, sys
+path = pathlib.Path(sys.argv[1])
+plan = json.loads(path.read_text(encoding="utf-8"))
+plan["preflight"]["ledger_path"] = str(pathlib.Path(sys.argv[2]).with_name("missing-preflight-ledger.jsonl"))
+path.write_text(json.dumps(plan), encoding="utf-8")
+PY
+assert_no_recovery_hint missing-preflight-ledger
+grep -qi 'Review Plan preflight ledger cannot be resolved' "$TMPDIR/missing-preflight-ledger.err"
+
+cp "$PLAN_ORIGINAL" "$MISSING_PLAN"
+printf '{"schema":"oasis7-review-collection/v1","status":"passed"}\n' >"$MISSING_COLLECTION"
+if run_missing_plan_recorder >"$TMPDIR/collected-missing-batch.out" 2>"$TMPDIR/collected-missing-batch.err"; then
+  echo "record-pre-pr-review accepted a missing batch with a collection receipt" >&2
+  exit 1
+fi
+if grep -Eq 'review-batch-epoch\.py|recovery command was not executed' "$TMPDIR/collected-missing-batch.err"; then
+  echo "collected missing-batch plan received an actionable recovery hint" >&2
+  cat "$TMPDIR/collected-missing-batch.err" >&2
+  exit 1
+fi
+[[ ! -s "$TMPDIR/collected-missing-batch.out" ]]
+cmp -s "$TEST_REPO/$LEDGER_REL" "$RECOVERY_LEDGER_BEFORE"
+[[ -f "$MISSING_COLLECTION" ]]
 
 echo "record-pre-pr-review.test: OK"

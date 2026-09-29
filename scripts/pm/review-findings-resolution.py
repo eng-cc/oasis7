@@ -14,6 +14,7 @@ from typing import Any, Optional
 
 
 SCHEMA = "oasis7-review-resolution/v1"
+SCHEMA_V2 = "oasis7-review-resolution/v2"
 MARKER = "oasis7-review-resolution"
 CANONICAL_REPOSITORY = "eng-cc/oasis7"
 PM_TASK_MARKER = "<!-- oasis7-pm-task -->"
@@ -61,6 +62,22 @@ def validate_finding_triage(finding: object, role: str) -> str:
 def load_json(path: Path, label: str) -> object:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ContractError(f"cannot read valid {label} JSON from {path}: {exc}") from exc
+
+
+def _unique_object(pairs: list[tuple[str, object]]) -> dict[str, object]:
+    result: dict[str, object] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ContractError(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
+def load_json_strict(path: Path, label: str) -> object:
+    try:
+        return json.loads(path.read_bytes().decode("utf-8"), object_pairs_hook=_unique_object)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
         raise ContractError(f"cannot read valid {label} JSON from {path}: {exc}") from exc
 
@@ -119,7 +136,8 @@ def read_ledger(path: Path) -> list[dict[str, object]]:
     return entries
 
 
-def artifact_for_row(root: Path, ledger: Path, row: dict[str, object]) -> tuple[Path, bytes, dict[str, object]]:
+def artifact_for_row(root: Path, ledger: Path, row: dict[str, object],
+                     bound_return_digest: Optional[str] = None) -> tuple[Path, bytes, dict[str, object]]:
     artifacts = row.get("artifacts")
     if not isinstance(artifacts, list) or len(artifacts) != 1 or not isinstance(artifacts[0], str):
         raise ContractError(f"role {row.get('role')} must bind exactly one returned artifact")
@@ -128,7 +146,7 @@ def artifact_for_row(root: Path, ledger: Path, row: dict[str, object]) -> tuple[
         raw = artifact.read_bytes()
     except OSError as exc:
         raise ContractError(f"cannot read review artifact for role {row.get('role')}: {artifact}") from exc
-    expected_digest = row.get("artifact_digest")
+    expected_digest = bound_return_digest if bound_return_digest is not None else row.get("artifact_digest")
     if not isinstance(expected_digest, str) or SHA_RE.fullmatch(expected_digest) is None:
         raise ContractError(f"invalid artifact digest for role {row.get('role')}")
     actual_digest = sha256_bytes(raw)
@@ -174,7 +192,9 @@ def validate_live_task_issue(task_uid: str, issue_number: int) -> None:
 
 
 def validate_artifacts(root: Path, ledger_path: Path, rows: list[dict[str, object]],
-                       task_uid: str, head: str) -> tuple[dict[tuple[str, str], dict[str, object]], list[dict[str, object]]]:
+                       task_uid: str, head: str,
+                       bound_return_digests: Optional[dict[tuple[str, str], str]] = None
+                       ) -> tuple[dict[tuple[str, str], dict[str, object]], list[dict[str, object]]]:
     by_identity: dict[tuple[str, str], dict[str, object]] = {}
     finding_roles: list[dict[str, object]] = []
     epochs: set[str] = set()
@@ -190,7 +210,12 @@ def validate_artifacts(root: Path, ledger_path: Path, rows: list[dict[str, objec
         row_epoch = row.get("epoch", row.get("review_epoch"))
         if row_epoch is not None:
             epochs.add(require_string(row_epoch, f"ledger epoch for {role}", SHA_RE))
-        _, _, artifact = artifact_for_row(root, ledger_path, row)
+        if bound_return_digests is not None and identity not in bound_return_digests:
+            raise ContractError(f"preflight ledger role/slice is absent from the validated handoff: {role}/{slice_id}")
+        _, _, artifact = artifact_for_row(
+            root, ledger_path, row,
+            bound_return_digests.get(identity) if bound_return_digests is not None else None,
+        )
         for field, expected in (("task_uid", task_uid), ("role", role), ("slice_id", slice_id), ("head", head), ("status", "completed")):
             if artifact.get(field) != expected:
                 raise ContractError(f"review artifact {field} mismatch for role {role}")
@@ -277,34 +302,8 @@ def validate_entry(root: Path, entry: object, finding: dict[str, object], expect
     return entry
 
 
-def validate_manifest(root: Path, manifest_path: Path, ledger_path: Path, task_uid: str, head: str,
-                      expected_issue_number: Optional[int] = None) -> dict[str, object]:
-    try:
-        manifest_path.relative_to(root)
-        ledger_path.relative_to(root)
-    except ValueError as exc:
-        raise ContractError("resolution manifest and ledger must be repository-owned paths") from exc
-    manifest_value = load_json(manifest_path, "resolution manifest")
-    if not isinstance(manifest_value, dict):
-        raise ContractError("resolution manifest must be an object")
-    manifest = manifest_value
-    if manifest.get("schema") != SCHEMA:
-        raise ContractError("resolution manifest schema is invalid")
-    if manifest.get("task_uid") != task_uid:
-        raise ContractError("resolution manifest task UID mismatch")
-    if manifest.get("head") != head:
-        raise ContractError("resolution manifest head mismatch")
-    epoch = require_string(manifest.get("epoch"), "resolution manifest epoch", SHA_RE)
-    forbidden = {"repository", "issue_number", "comment_id", "comment_url", "author", "created_at", "observed_at", "body_digest", "readback"}
-    if forbidden.intersection(manifest):
-        raise ContractError("resolution manifest contains server readback fields")
-    supplied_manifest_digest = manifest.get("manifest_digest")
-    if not isinstance(supplied_manifest_digest, str) or SHA_RE.fullmatch(supplied_manifest_digest) is None:
-        raise ContractError("resolution manifest digest is missing or invalid")
-    payload = {key: value for key, value in manifest.items() if key != "manifest_digest"}
-    if canonical_digest(payload) != supplied_manifest_digest:
-        raise ContractError("resolution manifest digest mismatch")
-    role_records = manifest.get("role_records")
+def validate_role_records(root: Path, role_records: object,
+                          finding_roles: list[dict[str, object]]) -> dict[tuple[str, str], dict[str, object]]:
     if not isinstance(role_records, list):
         raise ContractError("resolution manifest role_records are invalid")
     record_keys = {"role", "slice_id", "findings_digest", "entries"}
@@ -324,11 +323,6 @@ def validate_manifest(root: Path, manifest_path: Path, ledger_path: Path, task_u
         records[identity] = record
     if role_records != sorted(role_records, key=lambda item: (str(item["role"]), str(item["slice_id"]))):
         raise ContractError("resolution role records are not deterministically sorted")
-    ledger_rows = read_ledger(ledger_path)
-    by_identity, finding_roles = validate_artifacts(root, ledger_path, ledger_rows, task_uid, head)
-    ledger_epoch = next(iter({str(value["epoch"]) for value in by_identity.values()}), "")
-    if ledger_epoch != epoch:
-        raise ContractError("resolution manifest epoch does not match role-return ledger")
     expected_identities = {(str(item["role"]), str(item["slice_id"])) for item in finding_roles}
     if set(records) != expected_identities:
         raise ContractError("resolution role records do not exactly cover finding-bearing returns")
@@ -352,12 +346,135 @@ def validate_manifest(root: Path, manifest_path: Path, ledger_path: Path, task_u
             if finding_digest in seen_finding_digests:
                 raise ContractError(f"duplicate finding resolution for role {role}")
             seen_finding_digests.add(finding_digest)
+    return records
+
+
+def validate_v2_handoff(root: Path, handoff_path: Path, task_uid: str, head: str,
+                        epoch: str) -> dict[str, object]:
+    canonical_handoff = root / ".pm" / "scratch" / task_uid / "review-handoffs" / f"{epoch}.json"
+    if handoff_path.resolve(strict=True) != canonical_handoff.resolve(strict=False):
+        raise ContractError("v2 handoff path is not canonical for task and epoch")
+    handoff_path = root / ".pm" / "scratch" / task_uid / "review-handoffs" / f"{epoch}.json"
+    try:
+        import review_preflight_handoff
+    except ImportError as exc:
+        raise ContractError(f"v2 handoff validator is unavailable: {exc}") from exc
+    validated = review_preflight_handoff.validate_handoff(root, handoff_path)
+    handoff = validated["handoff"]
+    plan = validated["plan"]
+    if not isinstance(handoff, dict) or not isinstance(plan, dict):
+        raise ContractError("v2 handoff validation returned invalid evidence")
+    if handoff.get("schema") != "oasis7-review-return-handoff/v2":
+        raise ContractError("v2 resolution manifest requires a dispatch-bound handoff/v2")
+    if Path(str(validated["handoff_path"])).resolve(strict=True) != handoff_path.resolve(strict=True):
+        raise ContractError("v2 handoff path is not canonical for task and epoch")
+    if (handoff.get("task_uid") != task_uid or handoff.get("frozen_head") != head
+            or handoff.get("epoch") != epoch or plan.get("task_uid") != task_uid
+            or plan.get("frozen_head") != head or plan.get("epoch") != epoch):
+        raise ContractError("v2 handoff plan identity mismatch")
+    return validated
+
+
+def handoff_return_digests(validated_handoff: dict[str, object]) -> dict[tuple[str, str], str]:
+    handoff = validated_handoff.get("handoff")
+    rows = handoff.get("rows") if isinstance(handoff, dict) else None
+    if not isinstance(rows, list):
+        raise ContractError("validated handoff rows are invalid")
+    digests: dict[tuple[str, str], str] = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            raise ContractError("validated handoff row is invalid")
+        role = require_string(row.get("role"), "handoff role")
+        slice_id = require_string(row.get("slice_id"), f"handoff slice ID for {role}", SLICE_RE)
+        return_digest = require_string(row.get("return_sha256"), f"handoff return digest for {role}", SHA_RE)
+        identity = (role, slice_id)
+        if identity in digests:
+            raise ContractError(f"duplicate handoff return row: {role}/{slice_id}")
+        digests[identity] = return_digest
+    return digests
+
+
+def validate_v2_handoff_binding(root: Path, manifest_path: Path, ledger_path: Path,
+                                task_uid: str, head: str, epoch: str,
+                                manifest_handoff_digest: object) -> dict[str, object]:
+    canonical_manifest = root / ".pm" / "scratch" / task_uid / "review-resolutions" / f"{epoch}.json"
+    if manifest_path.resolve(strict=True) != canonical_manifest.resolve(strict=False):
+        raise ContractError("v2 resolution manifest path is not canonical for task and epoch")
+    handoff_path = root / ".pm" / "scratch" / task_uid / "review-handoffs" / f"{epoch}.json"
+    validated = validate_v2_handoff(root, handoff_path, task_uid, head, epoch)
+    handoff = validated["handoff"]
+    if (manifest_handoff_digest != handoff.get("handoff_digest")
+            or not isinstance(manifest_handoff_digest, str)
+            or SHA_RE.fullmatch(manifest_handoff_digest) is None):
+        raise ContractError("resolution handoff digest mismatch")
+    validated_ledger = Path(str(validated["ledger_path"])).resolve(strict=True)
+    if ledger_path.resolve(strict=True) != validated_ledger:
+        raise ContractError("v2 resolution ledger does not match handoff-bound preflight ledger")
+    return validated
+
+
+def validate_manifest(root: Path, manifest_path: Path, ledger_path: Path, task_uid: str, head: str,
+                      expected_issue_number: Optional[int] = None) -> dict[str, object]:
+    try:
+        manifest_path.relative_to(root)
+        ledger_path.relative_to(root)
+    except ValueError as exc:
+        raise ContractError("resolution manifest and ledger must be repository-owned paths") from exc
+    manifest_value = load_json(manifest_path, "resolution manifest")
+    if isinstance(manifest_value, dict) and manifest_value.get("schema") == SCHEMA_V2:
+        manifest_value = load_json_strict(manifest_path, "v2 resolution manifest")
+    if not isinstance(manifest_value, dict):
+        raise ContractError("resolution manifest must be an object")
+    manifest = manifest_value
+    manifest_schema = manifest.get("schema")
+    if manifest_schema != SCHEMA and manifest_schema != SCHEMA_V2:
+        raise ContractError("resolution manifest schema is invalid")
+    if manifest_schema == SCHEMA_V2 and set(manifest) != {
+        "schema", "task_uid", "head", "epoch", "handoff_digest", "role_records", "manifest_digest",
+    }:
+        raise ContractError("v2 resolution manifest fields are invalid")
+    if manifest_schema == SCHEMA and "handoff_digest" in manifest:
+        raise ContractError("v1 resolution manifest cannot bind a preflight handoff")
+    if manifest.get("task_uid") != task_uid:
+        raise ContractError("resolution manifest task UID mismatch")
+    if manifest.get("head") != head:
+        raise ContractError("resolution manifest head mismatch")
+    epoch = require_string(manifest.get("epoch"), "resolution manifest epoch", SHA_RE)
+    forbidden = {"repository", "issue_number", "comment_id", "comment_url", "author", "created_at", "observed_at", "body_digest", "readback"}
+    if forbidden.intersection(manifest):
+        raise ContractError("resolution manifest contains server readback fields")
+    supplied_manifest_digest = manifest.get("manifest_digest")
+    if not isinstance(supplied_manifest_digest, str) or SHA_RE.fullmatch(supplied_manifest_digest) is None:
+        raise ContractError("resolution manifest digest is missing or invalid")
+    payload = {key: value for key, value in manifest.items() if key != "manifest_digest"}
+    if canonical_digest(payload) != supplied_manifest_digest:
+        raise ContractError("resolution manifest digest mismatch")
+    if manifest_schema == SCHEMA_V2:
+        v2_handoff_validation = validate_v2_handoff_binding(
+            root, manifest_path, ledger_path, task_uid, head, epoch, manifest.get("handoff_digest")
+        )
+        bound_return_digests = handoff_return_digests(v2_handoff_validation)
+    else:
+        bound_return_digests = None
+    ledger_rows = read_ledger(ledger_path)
+    if manifest_schema == SCHEMA and any(row.get("status") != "completed" for row in ledger_rows):
+        raise ContractError("v1 resolution manifest is valid only for an already-completed ledger")
+    by_identity, finding_roles = validate_artifacts(
+        root, ledger_path, ledger_rows, task_uid, head, bound_return_digests
+    )
+    ledger_epoch = next(iter({str(value["epoch"]) for value in by_identity.values()}), "")
+    if ledger_epoch != epoch:
+        raise ContractError("resolution manifest epoch does not match role-return ledger")
+    validate_role_records(root, manifest.get("role_records"), finding_roles)
     readback_path = resolve_under_root(
         root,
         str(manifest_path.with_name(f"{manifest_path.stem}.readback.json")),
         "resolution readback",
     )
-    readback_value = load_json(readback_path, "resolution readback")
+    readback_value = (
+        load_json_strict(readback_path, "v2 resolution readback")
+        if manifest_schema == SCHEMA_V2 else load_json(readback_path, "resolution readback")
+    )
     if not isinstance(readback_value, dict):
         raise ContractError("resolution readback must be an object")
     readback = readback_value
@@ -367,7 +484,7 @@ def validate_manifest(root: Path, manifest_path: Path, ledger_path: Path, task_u
     required_readback = {"schema", "marker", "task_uid", "head", "epoch", "manifest_digest", "repository", "issue_number", "comment_id", "comment_url", "author", "created_at", "observed_at", "body_digest"}
     if set(readback) != required_readback:
         raise ContractError("resolution readback fields are invalid")
-    for key, expected in (("schema", SCHEMA), ("marker", MARKER), ("task_uid", task_uid), ("head", head), ("epoch", epoch), ("manifest_digest", supplied_manifest_digest), ("repository", CANONICAL_REPOSITORY)):
+    for key, expected in (("schema", manifest_schema), ("marker", MARKER), ("task_uid", task_uid), ("head", head), ("epoch", epoch), ("manifest_digest", supplied_manifest_digest), ("repository", CANONICAL_REPOSITORY)):
         if readback.get(key) != expected:
             raise ContractError(f"resolution readback {key} mismatch")
     issue_number = readback.get("issue_number")
@@ -404,7 +521,7 @@ def validate_manifest(root: Path, manifest_path: Path, ledger_path: Path, task_u
         parsed_body = json.loads(body)
     except json.JSONDecodeError as exc:
         raise ContractError("GitHub resolution comment body is not canonical JSON") from exc
-    expected_body_payload = {"marker": MARKER, "schema": SCHEMA, "task_uid": task_uid, "head": head, "epoch": epoch, "manifest_digest": supplied_manifest_digest}
+    expected_body_payload = {"marker": MARKER, "schema": manifest_schema, "task_uid": task_uid, "head": head, "epoch": epoch, "manifest_digest": supplied_manifest_digest}
     expected_body = canonical_bytes(expected_body_payload)
     if body.encode("utf-8") != expected_body or parsed_body != expected_body_payload:
         raise ContractError("GitHub resolution comment body binding mismatch")
@@ -426,7 +543,7 @@ def validate_manifest(root: Path, manifest_path: Path, ledger_path: Path, task_u
 
 
 def create_manifest(root: Path, task_uid: str, head: str, epoch: str, records_path: Path,
-                    output_path: Optional[Path]) -> dict[str, object]:
+                    output_path: Optional[Path], handoff_path: Optional[Path] = None) -> dict[str, object]:
     require_string(task_uid, "--task-uid", TASK_RE)
     require_string(head, "--head", HEAD_RE)
     require_string(epoch, "--epoch", SHA_RE)
@@ -434,7 +551,10 @@ def create_manifest(root: Path, task_uid: str, head: str, epoch: str, records_pa
         records_path.relative_to(root)
     except ValueError as exc:
         raise ContractError("role records must be a repository-owned path") from exc
-    records = load_json(records_path, "role records")
+    records = (
+        load_json_strict(records_path, "v2 role records")
+        if handoff_path is not None else load_json(records_path, "role records")
+    )
     if not isinstance(records, list):
         raise ContractError("role records must be a JSON array")
     path = output_path or root / ".pm" / "scratch" / task_uid / "review-resolutions" / f"{epoch}.json"
@@ -443,10 +563,33 @@ def create_manifest(root: Path, task_uid: str, head: str, epoch: str, records_pa
         path.relative_to(root)
     except ValueError as exc:
         raise ContractError("resolution manifest output must be repository-owned") from exc
-    payload = {"schema": SCHEMA, "task_uid": task_uid, "head": head, "epoch": epoch, "role_records": records}
+    if handoff_path is None:
+        payload = {"schema": SCHEMA, "task_uid": task_uid, "head": head, "epoch": epoch, "role_records": records}
+    else:
+        canonical_path = root / ".pm" / "scratch" / task_uid / "review-resolutions" / f"{epoch}.json"
+        if path != canonical_path.resolve(strict=False):
+            raise ContractError("v2 resolution manifest output path is not canonical for task and epoch")
+        handoff_validation = validate_v2_handoff(root, handoff_path, task_uid, head, epoch)
+        handoff = handoff_validation["handoff"]
+        ledger_path = Path(str(handoff_validation["ledger_path"])).resolve(strict=True)
+        ledger_rows = read_ledger(ledger_path)
+        _, finding_roles = validate_artifacts(
+            root, ledger_path, ledger_rows, task_uid, head,
+            handoff_return_digests(handoff_validation),
+        )
+        validate_role_records(root, records, finding_roles)
+        payload = {
+            "schema": SCHEMA_V2, "task_uid": task_uid, "head": head,
+            "epoch": epoch, "handoff_digest": handoff["handoff_digest"],
+            "role_records": records,
+        }
     manifest = {**payload, "manifest_digest": canonical_digest(payload)}
     write_new(path, manifest)
-    return {"status": "created", "manifest": str(path), "manifest_digest": manifest["manifest_digest"], "epoch": epoch}
+    result = {"status": "created", "manifest": str(path),
+              "manifest_digest": manifest["manifest_digest"], "epoch": epoch}
+    if handoff_path is not None:
+        result["schema"] = SCHEMA_V2
+    return result
 
 
 def gh_json(command: list[str], label: str) -> object:
@@ -472,6 +615,7 @@ def parser() -> argparse.ArgumentParser:
     create.add_argument("--head", required=True)
     create.add_argument("--epoch", required=True)
     create.add_argument("--role-records", required=True)
+    create.add_argument("--handoff")
     create.add_argument("--out")
     validate = sub.add_parser("validate")
     validate.add_argument("--root", required=True)
@@ -491,7 +635,8 @@ def main() -> int:
         if args.command == "create":
             result = create_manifest(Path(args.root).resolve(), task_uid, head, args.epoch,
                                      Path(args.role_records).resolve(),
-                                     Path(args.out).resolve() if args.out else None)
+                                     Path(args.out).resolve() if args.out else None,
+                                     Path(args.handoff).resolve() if args.handoff else None)
         else:
             result = validate_manifest(Path(args.root).resolve(), Path(args.manifest).resolve(), Path(args.ledger).resolve(), task_uid, head, args.issue_number)
     except ContractError as exc:

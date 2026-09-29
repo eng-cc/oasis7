@@ -8,9 +8,10 @@ import hashlib
 import json
 import re
 import sys
-import tempfile
 import uuid
 from pathlib import Path
+
+import review_preflight_handoff
 
 
 TASK_RE = re.compile(r"task_[0-9a-f]{32}")
@@ -153,63 +154,18 @@ def preflight(args: argparse.Namespace) -> dict[str, object]:
 
 
 def reconcile(args: argparse.Namespace) -> dict[str, object]:
-    """Validate completed preflight artifacts and atomically publish their ledger."""
-    batch = validate_batch(load_json(Path(args.batch).resolve()))
-    ledger_path = Path(args.ledger).resolve()
-    entries, _ = read_ledger(ledger_path)
-    expected = {(item["role"], item["slice_id"]) for item in batch["expected_slices"]}  # type: ignore[index]
-    if {(item.get("role"), item.get("slice_id")) for item in entries} != expected or len(entries) != len(expected):
-        raise ContractError("preflight ledger identity mismatch")
-    rows: list[dict[str, object]] = []
-    root = Path(args.root).resolve()
-    for item in entries:
-        role, slice_id = item.get("role"), item.get("slice_id")
-        artifacts = item.get("artifacts")
-        if not isinstance(artifacts, list) or len(artifacts) != 1 or not isinstance(artifacts[0], str):
-            raise ContractError(f"role {role} must bind exactly one returned artifact")
-        artifact_path = resolve_artifact(ledger_path, artifacts[0], root)
-        returned = load_json(artifact_path)
-        if not isinstance(returned, dict):
-            raise ContractError(f"review artifact is not an object for role {role}")
-        identity = {"role": role, "slice_id": slice_id, "task_uid": batch["task_uid"],
-                    "head": batch["frozen_head"], "epoch": batch["epoch"], "status": "completed"}
-        for field, value in identity.items():
-            if returned.get(field) != value:
-                raise ContractError(f"review artifact {field} mismatch for role {role}")
-        disposition = returned.get("disposition")
-        findings = returned.get("findings")
-        residual_risk = returned.get("residual_risk")
-        if disposition not in {"findings", "no_findings"}:
-            raise ContractError(f"review artifact disposition is invalid for role {role}")
-        if not isinstance(findings, list) or (disposition == "findings" and not findings):
-            raise ContractError(f"review artifact findings are invalid for role {role}")
-        if disposition == "no_findings" and findings:
-            raise ContractError(f"no_findings artifact contains findings for role {role}")
-        if not isinstance(residual_risk, str) or not residual_risk.strip():
-            raise ContractError(f"review artifact residual_risk is missing for role {role}")
-        scope_verdict = returned.get("scope_verdict", args.scope_verdict)
-        risk_verdict = returned.get("risk_verdict", args.risk_verdict)
-        rows.append({**identity,
-                     "activation": args.activation,
-                     "context_delivery": args.context_delivery,
-                     "actual_runtime": args.actual_runtime,
-                     "scope_verdict": scope_verdict,
-                     "risk_verdict": risk_verdict,
-                     "findings": disposition,
-                     "residual_risk": residual_risk,
-                     "artifact_digest": sha256_bytes(artifact_path.read_bytes()),
-                     "artifacts": [str(artifact_path)]})
-    rows.sort(key=lambda row: (str(row["role"]), str(row["slice_id"])))
-    ledger_path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=ledger_path.parent,
-                                     prefix=f".{ledger_path.name}.", delete=False) as handle:
-        temporary = Path(handle.name)
-        for row in rows:
-            handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
-        handle.flush()
-    temporary.replace(ledger_path)
-    return {"status": "completed", "epoch": batch["epoch"], "ledger_path": str(ledger_path),
-            "roles": [str(row["role"]) for row in rows]}
+    """Reject the legacy writer; plan-backed preflight promotion requires v2 proof."""
+    try:
+        entries, _ = read_ledger(Path(args.ledger).resolve())
+    except ContractError:
+        raise
+    if any(item.get("status") == "incomplete" for item in entries):
+        raise ContractError(
+            "direct reconcile cannot write a candidate incomplete preflight ledger without v2 handoff promotion proof"
+        )
+    raise ContractError(
+        "direct reconcile is not an authorized promotion path; use collect-only for an already-completed ledger"
+    )
 
 
 def read_ledger(path: Path) -> tuple[list[dict[str, object]], str]:
@@ -348,6 +304,11 @@ def parser() -> argparse.ArgumentParser:
     preflight_parser = sub.add_parser("preflight")
     preflight_parser.add_argument("--batch", required=True)
     preflight_parser.add_argument("--out-dir", required=True)
+    handoff_parser = sub.add_parser("handoff")
+    handoff_parser.add_argument("--plan", required=True)
+    handoff_parser.add_argument("--dispatch-comment-id", required=True, type=int)
+    dispatch_parser = sub.add_parser("dispatch")
+    dispatch_parser.add_argument("--plan", required=True)
     reconcile_parser = sub.add_parser("reconcile")
     reconcile_parser.add_argument("--batch", required=True)
     reconcile_parser.add_argument("--ledger", required=True)
@@ -364,8 +325,15 @@ def main() -> int:
     try:
         result = (create(args) if args.command == "create" else
                   preflight(args) if args.command == "preflight" else
+                  review_preflight_handoff.publish_dispatch(Path(args.root), Path(args.plan)) if args.command == "dispatch" else
+                  review_preflight_handoff.create_handoff(
+                      Path(args.root), Path(args.plan), args.dispatch_comment_id,
+                  ) if args.command == "handoff" else
                   reconcile(args) if args.command == "reconcile" else validate(args))
     except ContractError as exc:
+        print(f"review-batch-epoch: {exc}", file=sys.stderr)
+        return 2
+    except review_preflight_handoff.ContractError as exc:
         print(f"review-batch-epoch: {exc}", file=sys.stderr)
         return 2
     print(json.dumps(result, ensure_ascii=False, sort_keys=True))
