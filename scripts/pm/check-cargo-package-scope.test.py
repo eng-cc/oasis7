@@ -319,6 +319,121 @@ edition = "2021"
         self._git(repo, "commit", "-qm", "standalone workspace base")
         return repo, self._git(repo, "rev-parse", "HEAD")
 
+    def _standalone_transitive_fixture(self) -> tuple[Path, str]:
+        repo, _ = self._standalone_fixture()
+        workspace = repo / "Cargo.toml"
+        workspace.write_text(
+            workspace.read_text(encoding="utf-8").replace(
+                'members = ["crates/alpha", "crates/beta"]',
+                'members = ["crates/alpha", "crates/beta", "crates/gamma"]',
+            ),
+            encoding="utf-8",
+        )
+        self._write(
+            repo,
+            "crates/gamma/Cargo.toml",
+            """[package]
+name = "gamma"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+""",
+        )
+        self._write(repo, "crates/gamma/src/lib.rs", "pub fn gamma() {}\n")
+        beta_manifest = repo / "crates/beta/Cargo.toml"
+        beta_manifest.write_text(
+            beta_manifest.read_text(encoding="utf-8")
+            + '\n[dependencies]\ngamma = { path = "../gamma" }\n',
+            encoding="utf-8",
+        )
+        generated = subprocess.run(
+            [
+                "cargo",
+                "generate-lockfile",
+                "--offline",
+                "--manifest-path",
+                str(repo / "Cargo.toml"),
+            ],
+            cwd=repo,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(
+            0,
+            generated.returncode,
+            f"cargo workspace lock fixture failed: stdout={generated.stdout!r} stderr={generated.stderr!r}",
+        )
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "standalone transitive dependency base")
+        return repo, self._git(repo, "rev-parse", "HEAD")
+
+    def _standalone_edge_substitution_fixture(self) -> tuple[Path, str]:
+        repo, _ = self._standalone_transitive_fixture()
+        workspace = repo / "Cargo.toml"
+        workspace_text = workspace.read_text(encoding="utf-8")
+        members = 'members = ["crates/alpha", "crates/beta", "crates/gamma"]'
+        self.assertEqual(1, workspace_text.count(members))
+        workspace.write_text(
+            workspace_text.replace(
+                members,
+                'members = ["crates/alpha", "crates/beta", "crates/gamma", '
+                '"crates/delta", "crates/epsilon"]',
+                1,
+            ),
+            encoding="utf-8",
+        )
+        for package in ("delta", "epsilon"):
+            self._write(
+                repo,
+                f"crates/{package}/Cargo.toml",
+                f"""[package]
+name = "{package}"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+path = "src/lib.rs"
+""",
+            )
+            self._write(repo, f"crates/{package}/src/lib.rs", f"pub fn {package}() {{}}\n")
+
+        beta_manifest = repo / "crates/beta/Cargo.toml"
+        beta_manifest.write_text(
+            beta_manifest.read_text(encoding="utf-8")
+            + 'delta = { path = "../delta" }\nepsilon = { path = "../epsilon" }\n',
+            encoding="utf-8",
+        )
+        gamma_manifest = repo / "crates/gamma/Cargo.toml"
+        gamma_manifest.write_text(
+            gamma_manifest.read_text(encoding="utf-8")
+            + '\n[dependencies]\ndelta = { path = "../delta" }\n',
+            encoding="utf-8",
+        )
+        generated = subprocess.run(
+            [
+                "cargo",
+                "generate-lockfile",
+                "--offline",
+                "--manifest-path",
+                str(repo / "Cargo.toml"),
+            ],
+            cwd=repo,
+            check=False,
+            text=True,
+            capture_output=True,
+        )
+        self.assertEqual(
+            0,
+            generated.returncode,
+            f"cargo workspace lock fixture failed: stdout={generated.stdout!r} stderr={generated.stderr!r}",
+        )
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "standalone edge substitution base")
+        return repo, self._git(repo, "rev-parse", "HEAD")
+
     def _add_standalone_lock_for_normal_path_edge(self, root: Path) -> None:
         manifest = root / "crates/alpha/Cargo.toml"
         manifest.write_text(
@@ -345,6 +460,67 @@ edition = "2021"
     def test_standalone_cargo_generated_lock_for_admitted_path_edge_is_allowed(self) -> None:
         repo, base = self._standalone_fixture()
         self._assert_allowed(repo, base, "alpha", self._add_standalone_lock_for_normal_path_edge)
+
+    def test_standalone_lock_reachable_transitive_identity_mismatch_is_rejected(self) -> None:
+        repo, base = self._standalone_transitive_fixture()
+        self._assert_allowed(
+            repo, base, "alpha", self._add_standalone_lock_for_normal_path_edge
+        )
+        valid_migration_head = self._git(repo, "rev-parse", "HEAD")
+
+        def forge_gamma_lock_identity(root: Path) -> None:
+            lock = root / "tools/runner/Cargo.lock"
+            text = lock.read_text(encoding="utf-8")
+            original = 'name = "gamma"\nversion = "0.1.0"'
+            self.assertEqual(1, text.count(original), "expected one Cargo-generated gamma lock record")
+            lock.write_text(
+                text.replace(original, 'name = "gamma"\nversion = "99.0.0"', 1),
+                encoding="utf-8",
+            )
+
+        forged_head = self._head(
+            repo, forge_gamma_lock_identity, "forge reachable gamma lock identity"
+        )
+        result = self._run_checker(repo, base, forged_head, "alpha")
+        combined = (result.stdout + "\n" + result.stderr).lower()
+        self.assertNotEqual(
+            0,
+            result.returncode,
+            "expected semantic scope rejection for forged reachable gamma identity; "
+            f"fixture_base={base} valid_migration_head={valid_migration_head} "
+            f"forged_head={forged_head}; stdout={result.stdout!r} stderr={result.stderr!r}",
+        )
+        self.assertNotIn("cargo_metadata_unavailable", combined, combined)
+        self.assertNotIn("git_range_unavailable", combined, combined)
+        self.assertIn("unattributable_lock_change", combined, combined)
+
+    def test_standalone_lock_transitive_edge_substitution_is_rejected(self) -> None:
+        repo, base = self._standalone_edge_substitution_fixture()
+        self._assert_allowed(
+            repo, base, "alpha", self._add_standalone_lock_for_normal_path_edge
+        )
+
+        def substitute_gamma_lock_edge(root: Path) -> None:
+            lock = root / "tools/runner/Cargo.lock"
+            text = lock.read_text(encoding="utf-8")
+            for package in ("delta", "epsilon"):
+                identity = f'[[package]]\nname = "{package}"\nversion = "0.1.0"'
+                self.assertEqual(1, text.count(identity), f"expected one valid {package} lock identity")
+            original = (
+                '[[package]]\nname = "gamma"\nversion = "0.1.0"\n'
+                'dependencies = [\n "delta",\n]'
+            )
+            replacement = original.replace(' "delta",', ' "epsilon",', 1)
+            self.assertEqual(1, text.count(original), "expected Cargo-generated gamma -> delta lock edge")
+            lock.write_text(text.replace(original, replacement, 1), encoding="utf-8")
+
+        self._assert_rejected(
+            repo,
+            base,
+            "alpha",
+            substitute_gamma_lock_edge,
+            "unattributable_lock_change",
+        )
 
     def test_standalone_lock_unrelated_record_change_is_rejected(self) -> None:
         repo, base = self._standalone_fixture()

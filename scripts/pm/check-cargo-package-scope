@@ -158,9 +158,14 @@ def extract_git_tree(repo: Path, revision: str, target: Path) -> None:
         archive.close()
 
 
-def cargo_metadata(root: Path) -> dict[str, Any]:
+def cargo_metadata(root: Path, *, locked: bool = False) -> dict[str, Any]:
+    command = ["cargo", "metadata"]
+    command.append("--locked" if locked else "--no-deps")
+    command.extend(
+        ["--format-version", "1", "--manifest-path", str(root / "Cargo.toml")]
+    )
     result = subprocess.run(
-        ["cargo", "metadata", "--no-deps", "--format-version", "1", "--manifest-path", str(root / "Cargo.toml")],
+        command,
         cwd=root,
         check=False,
         text=True,
@@ -600,10 +605,10 @@ def lock_diff_has_unattributable_lines(
 
 
 def standalone_workspace_metadata(root: Path, manifest_path: str) -> dict[str, Any] | None:
-    """Return repository-relative metadata for a workspace rooted by a changed lock."""
+    """Return locked, resolved metadata for a standalone workspace in a Git snapshot."""
     workspace = root / PurePosixPath(manifest_path).parent
     try:
-        metadata = cargo_metadata(workspace)
+        metadata = cargo_metadata(workspace, locked=True)
     except ScopeError:
         return None
     try:
@@ -611,22 +616,83 @@ def standalone_workspace_metadata(root: Path, manifest_path: str) -> dict[str, A
         workspace_rel = workspace_root.relative_to(root.resolve()).as_posix()
     except (OSError, ValueError):
         return None
+
+    raw_packages = metadata.get("packages")
+    workspace_members = metadata.get("workspace_members")
+    resolve = metadata.get("resolve")
+    if (
+        not isinstance(raw_packages, list)
+        or not isinstance(workspace_members, list)
+        or not workspace_members
+        or not all(isinstance(item, str) and item for item in workspace_members)
+        or len(workspace_members) != len(set(workspace_members))
+        or not isinstance(resolve, dict)
+        or not isinstance(resolve.get("nodes"), list)
+    ):
+        return None
+
+    package_by_id: dict[str, dict[str, Any]] = {}
+    identities_by_id: dict[str, tuple[str, str, str | None]] = {}
+    seen_identities: set[tuple[str, str, str | None]] = set()
+    for package in raw_packages:
+        if not isinstance(package, dict):
+            return None
+        package_id = package.get("id")
+        name, version, source = (
+            package.get("name"),
+            package.get("version"),
+            package.get("source"),
+        )
+        if (
+            not isinstance(package_id, str)
+            or not package_id
+            or not isinstance(name, str)
+            or not name
+            or not isinstance(version, str)
+            or not version
+            or (source is not None and (not isinstance(source, str) or not source))
+            or package_id in package_by_id
+        ):
+            return None
+        identity = (name, version, source)
+        # A Cargo.lock reference cannot distinguish two package IDs with the
+        # same name/version/source, so ambiguous metadata must fail closed.
+        if identity in seen_identities:
+            return None
+        seen_identities.add(identity)
+        package_by_id[package_id] = package
+        identities_by_id[package_id] = identity
+
     packages: list[dict[str, Any]] = []
-    for package in metadata.get("packages", []):
-        if not isinstance(package, dict) or not isinstance(package.get("name"), str):
+    member_paths: set[str] = set()
+    for package_id in workspace_members:
+        package = package_by_id.get(package_id)
+        if package is None:
             return None
         try:
             package_manifest = Path(str(package.get("manifest_path", ""))).resolve()
             package_manifest_rel = package_manifest.relative_to(root.resolve()).as_posix()
         except (OSError, ValueError):
             return None
+        if package_manifest_rel in member_paths:
+            return None
+        member_paths.add(package_manifest_rel)
+        raw_dependencies = package.get("dependencies")
+        if not isinstance(raw_dependencies, list):
+            return None
         dependencies: list[tuple[str, str | None, str | None]] = []
-        for dependency in package.get("dependencies", []):
-            if not isinstance(dependency, dict) or not isinstance(dependency.get("name"), str):
+        for dependency in raw_dependencies:
+            if (
+                not isinstance(dependency, dict)
+                or not isinstance(dependency.get("name"), str)
+                or not dependency["name"]
+            ):
                 return None
             dependency_path = dependency.get("path")
             dependency_rel: str | None = None
             if dependency_path is not None:
+                if not isinstance(dependency_path, str):
+                    return None
                 try:
                     dependency_rel = Path(str(dependency_path)).resolve().relative_to(root.resolve()).as_posix()
                 except (OSError, ValueError):
@@ -636,11 +702,58 @@ def standalone_workspace_metadata(root: Path, manifest_path: str) -> dict[str, A
                 return None
             dependencies.append((dependency["name"], kind, dependency_rel))
         packages.append({
+            "id": package_id,
             "name": package["name"],
             "manifest_path": package_manifest_rel,
             "dependencies": sorted(dependencies, key=lambda item: (item[0], item[1] or "", item[2] or "")),
         })
-    return {"workspace_root": workspace_rel, "packages": packages}
+
+    resolved_edges: dict[str, list[str]] = {}
+    for node in resolve["nodes"]:
+        if not isinstance(node, dict):
+            return None
+        package_id = node.get("id")
+        dependencies = node.get("deps")
+        if (
+            not isinstance(package_id, str)
+            or package_id not in package_by_id
+            or package_id in resolved_edges
+            or not isinstance(dependencies, list)
+        ):
+            return None
+        dependency_ids: set[str] = set()
+        for dependency in dependencies:
+            if not isinstance(dependency, dict):
+                return None
+            dependency_id = dependency.get("pkg")
+            dependency_name = dependency.get("name")
+            dependency_kinds = dependency.get("dep_kinds")
+            if (
+                not isinstance(dependency_id, str)
+                or dependency_id not in package_by_id
+                or not isinstance(dependency_name, str)
+                or not dependency_name
+                or not isinstance(dependency_kinds, list)
+            ):
+                return None
+            for kind in dependency_kinds:
+                if (
+                    not isinstance(kind, dict)
+                    or kind.get("kind") not in (None, "normal", "build", "dev")
+                    or (kind.get("target") is not None and not isinstance(kind.get("target"), str))
+                ):
+                    return None
+            dependency_ids.add(dependency_id)
+        resolved_edges[package_id] = sorted(dependency_ids)
+
+    if any(package_id not in resolved_edges for package_id in workspace_members):
+        return None
+    return {
+        "workspace_root": workspace_rel,
+        "packages": packages,
+        "resolved_identities": identities_by_id,
+        "resolved_edges": resolved_edges,
+    }
 
 
 def lock_record_index(
@@ -693,6 +806,84 @@ def lock_reference_index(
                 return None
             references[reference] = key
     return references
+
+
+def lock_closure_matches_metadata(
+    records: dict[tuple[str, str, str | None], dict[str, Any]],
+    references: dict[str, tuple[str, str, str | None]],
+    metadata: dict[str, Any],
+    root_identity: tuple[str, str, str | None],
+) -> set[tuple[str, str, str | None]] | None:
+    """Prove lock identities and outgoing edges for one resolved package closure."""
+    identities = metadata.get("resolved_identities")
+    resolved_edges = metadata.get("resolved_edges")
+    if not isinstance(identities, dict) or not isinstance(resolved_edges, dict):
+        return None
+
+    identity_to_id: dict[tuple[str, str, str | None], str] = {}
+    for package_id, identity in identities.items():
+        if (
+            not isinstance(package_id, str)
+            or not package_id
+            or not isinstance(identity, tuple)
+            or len(identity) != 3
+            or not isinstance(identity[0], str)
+            or not isinstance(identity[1], str)
+            or (identity[2] is not None and not isinstance(identity[2], str))
+            or identity in identity_to_id
+        ):
+            return None
+        identity_to_id[identity] = package_id
+
+    if root_identity not in identity_to_id:
+        return None
+    reachable: set[tuple[str, str, str | None]] = set()
+    pending = [root_identity]
+    while pending:
+        identity = pending.pop()
+        if identity in reachable:
+            continue
+        record = records.get(identity)
+        package_id = identity_to_id.get(identity)
+        dependency_ids = resolved_edges.get(package_id) if package_id is not None else None
+        if (
+            record is None
+            or not isinstance(dependency_ids, list)
+            or not all(isinstance(item, str) for item in dependency_ids)
+        ):
+            return None
+
+        expected_dependencies: set[tuple[str, str, str | None]] = set()
+        for dependency_id in dependency_ids:
+            dependency_identity = identities.get(dependency_id)
+            if (
+                not isinstance(dependency_identity, tuple)
+                or len(dependency_identity) != 3
+                or not isinstance(dependency_identity[0], str)
+                or not isinstance(dependency_identity[1], str)
+                or (dependency_identity[2] is not None and not isinstance(dependency_identity[2], str))
+                or dependency_identity not in records
+            ):
+                return None
+            expected_dependencies.add(dependency_identity)
+
+        lock_dependencies = record.get("dependencies", [])
+        if not isinstance(lock_dependencies, list) or not all(
+            isinstance(item, str) for item in lock_dependencies
+        ):
+            return None
+        actual_dependencies: set[tuple[str, str, str | None]] = set()
+        for reference in lock_dependencies:
+            dependency_identity = references.get(reference)
+            if dependency_identity is None:
+                return None
+            actual_dependencies.add(dependency_identity)
+        if actual_dependencies != expected_dependencies:
+            return None
+
+        reachable.add(identity)
+        pending.extend(expected_dependencies)
+    return reachable
 
 
 def standalone_lock_is_mechanical(
@@ -843,25 +1034,18 @@ def standalone_lock_is_mechanical(
     if actual_target_dependencies != expected_target_dependencies:
         return False
 
-    reachable: set[tuple[str, str, str | None]] = set()
-    pending = [target_key]
-    while pending:
-        key = pending.pop()
-        if key in reachable:
-            continue
-        record = new_index.get(key)
-        if record is None:
-            return False
-        reachable.add(key)
-        references = record.get("dependencies", [])
-        if not isinstance(references, list):
-            return False
-        for reference in references:
-            dependency_key = new_references.get(reference)
-            if dependency_key is None:
-                return False
-            pending.append(dependency_key)
-    return added_records.issubset(reachable)
+    base_reachable = lock_closure_matches_metadata(
+        old_index, old_references, base_standalone, primary_key
+    )
+    head_reachable = lock_closure_matches_metadata(
+        new_index, new_references, head_standalone, primary_key
+    )
+    target_reachable = lock_closure_matches_metadata(
+        new_index, new_references, head_standalone, target_key
+    )
+    if base_reachable is None or head_reachable is None or target_reachable is None:
+        return False
+    return added_records.issubset(target_reachable)
 
 
 def root_manifest_is_mechanical(repo: Path, base: str, head: str, new_manifest_paths: set[str]) -> bool:
