@@ -55,6 +55,8 @@ class TaskCloseoutV2LiveValidationTest(unittest.TestCase):
         shutil.copy2(PM / "ci_ready_receipt_identity.py", self.root / "scripts/pm/ci_ready_receipt_identity.py")
         shutil.copy2(PM / "workflow-impact-projection.py", self.root / "scripts/pm/workflow-impact-projection.py")
         shutil.copy2(PM / "bootstrap-task-snapshot.py", self.root / "scripts/pm/bootstrap-task-snapshot.py")
+        shutil.copy2(PM / "workflow-durable-store.py", self.root / "scripts/pm/workflow-durable-store.py")
+        shutil.copy2(PM / "closed_duplicate_candidate_guard.py", self.root / "scripts/pm/closed_duplicate_candidate_guard.py")
         subprocess.run(["git", "-C", str(self.root), "init", "-q", "-b", "main"], check=True)
         subprocess.run(["git", "-C", str(self.root), "config", "user.email", "fixture@example.invalid"], check=True)
         subprocess.run(["git", "-C", str(self.root), "config", "user.name", "Fixture"], check=True)
