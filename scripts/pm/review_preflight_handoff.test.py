@@ -17,6 +17,7 @@ HERE = Path(__file__).resolve().parent
 BATCH_SCRIPT = HERE / "review-batch-epoch.py"
 HANDOFF_SCRIPT = HERE / "review_preflight_handoff.py"
 PROJECTION_SCRIPT = HERE / "workflow-impact-projection.py"
+REVIEW_PLAN_SCRIPT = HERE / "review-plan.py"
 PROJECT_ROOT = HERE.parent.parent
 TASK = "task_" + "1" * 32
 TASK_ISSUE = 4137
@@ -61,14 +62,26 @@ def load_projection_module():
     return module
 
 
+def load_review_plan_module():
+    spec = importlib.util.spec_from_file_location("review_plan_for_handoff_tests", REVIEW_PLAN_SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 HANDOFF = load_handoff_module()
 IMPACT_PROJECTION = load_projection_module()
+REVIEW_PLAN = load_review_plan_module()
 
 
 class ReviewPreflightHandoffTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
+        global HEAD, SCOPE_OID
+        original_head, original_scope_oid = HEAD, SCOPE_OID
+        self.addCleanup(self._restore_fixture_oids, original_head, original_scope_oid)
         self.task_root = self.root / ".pm" / "scratch" / TASK
         mapping_root = self.root / ".pm" / "github-project-sync"
         mapping_root.mkdir(parents=True, exist_ok=True)
@@ -76,6 +89,37 @@ class ReviewPreflightHandoffTests(unittest.TestCase):
             "project": {"repo": REPOSITORY},
             "tasks": {TASK: {"issue_number": TASK_ISSUE}},
         }) + "\n", encoding="utf-8")
+
+        # The handoff validator compares the packet's frozen base/head OIDs to
+        # the repository's actual changed paths. Give every fixture a tiny real
+        # Git history whose sole source change matches make_fixture's default
+        # projection path.
+        subprocess.run(["git", "-C", str(self.root), "init", "-q", "-b", "main"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "config", "user.email", "qa@example.invalid"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "config", "user.name", "QA temp fixture"], check=True)
+        source_path = self.root / "scripts" / "pm" / "review_preflight_handoff.test.py"
+        source_path.parent.mkdir(parents=True, exist_ok=True)
+        source_path.write_text("baseline\n", encoding="utf-8")
+        subprocess.run([
+            "git", "-C", str(self.root), "add",
+            ".pm/github-project-sync/tasks.json", "scripts/pm/review_preflight_handoff.test.py",
+        ], check=True)
+        subprocess.run(["git", "-C", str(self.root), "commit", "-qm", "fixture base"], check=True)
+        SCOPE_OID = subprocess.check_output(
+            ["git", "-C", str(self.root), "rev-parse", "HEAD"], text=True,
+        ).strip()
+        source_path.write_text("baseline\nsource change\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.root), "add", "scripts/pm/review_preflight_handoff.test.py"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "commit", "-qm", "fixture source change"], check=True)
+        HEAD = subprocess.check_output(
+            ["git", "-C", str(self.root), "rev-parse", "HEAD"], text=True,
+        ).strip()
+        self.assertEqual(
+            ["scripts/pm/review_preflight_handoff.test.py"],
+            subprocess.check_output([
+                "git", "-C", str(self.root), "diff", "--name-only", "--no-renames", SCOPE_OID, HEAD,
+            ], text=True).splitlines(),
+        )
         self.gh_log = self.root / "gh.log"
         self.gh_data = self.root / "gh-fixture.json"
         self.gh_bin = self.root / "bin"
@@ -141,6 +185,11 @@ class ReviewPreflightHandoffTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp.cleanup()
+
+    @staticmethod
+    def _restore_fixture_oids(head: str, scope_oid: str) -> None:
+        global HEAD, SCOPE_OID
+        HEAD, SCOPE_OID = head, scope_oid
 
     def command_json(self, *args: str) -> dict[str, object]:
         result = subprocess.run(
@@ -242,7 +291,9 @@ class ReviewPreflightHandoffTests(unittest.TestCase):
     def dispatch_body(payload: dict[str, object]) -> str:
         return f"{DISPATCH_MARKER}\n```json\n{canonical(payload).decode('utf-8')}\n```"
 
-    def make_fixture(self, *, create_handoff: bool = True) -> dict[str, object]:
+    def make_fixture(self, *, create_handoff: bool = True,
+                     changed_paths: list[str] | None = None,
+                     publish_dispatch: bool = True) -> dict[str, object]:
         expected_slices = [{"role": ROLE, "slice_id": SLICE}]
         impact_projection = IMPACT_PROJECTION.build_projection(
             PROJECT_ROOT,
@@ -250,7 +301,7 @@ class ReviewPreflightHandoffTests(unittest.TestCase):
                 "task_uid": TASK,
                 "source_head_oid": HEAD,
                 "scope_base_oid": SCOPE_OID,
-                "changed_paths": ["scripts/pm/review_preflight_handoff.test.py"],
+                "changed_paths": changed_paths or ["scripts/pm/review_preflight_handoff.test.py"],
                 "change_class": "unknown",
                 "manual_roles": [ROLE],
                 "domain_role": None,
@@ -383,6 +434,8 @@ class ReviewPreflightHandoffTests(unittest.TestCase):
             "ledger_path": Path(str(plan["preflight"]["ledger_path"])),
             "source_digest": source_digest,
         }
+        if not publish_dispatch:
+            return fixture
         dispatch_result = json.loads(self.run_dispatch(fixture).stdout)
         self.assertEqual(TASK, dispatch_result["task_uid"])
         self.assertEqual(TASK_ISSUE, dispatch_result["issue_number"])
@@ -632,6 +685,152 @@ class ReviewPreflightHandoffTests(unittest.TestCase):
         self.assert_dispatch_rejects_projection_mutation_without_side_effects(
             fixture, expected_error=r"projection|digest|role|identity|contract",
         )
+
+    def test_dispatch_rejects_self_consistent_projection_paths_outside_frozen_git_diff(self) -> None:
+        frozen_paths = subprocess.check_output(
+            ["git", "-C", str(self.root), "diff", "--name-only", "--no-renames", SCOPE_OID, HEAD],
+            text=True,
+        ).splitlines()
+        self.assertEqual(["scripts/pm/review_preflight_handoff.test.py"], frozen_paths)
+
+        fixture = self.make_fixture(create_handoff=False, changed_paths=frozen_paths)
+        plan_path = Path(str(fixture["plan_path"]))
+        valid_plan, _, *_ = HANDOFF.validate_plan_inputs(self.root, plan_path)
+        self.assertEqual(frozen_paths, valid_plan["impact_projection"]["changed_paths"])
+        self.assertEqual(TASK, HANDOFF.dispatch_payload_for_plan(self.root, plan_path)["task_uid"])
+
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        projection = plan["impact_projection"]
+        self.assertIsInstance(projection, dict)
+        forged_paths = ["NOT-IN-FROZEN-DIFF.md"]
+        projection["changed_paths"] = forged_paths
+        projection["changed_paths_digest"] = IMPACT_PROJECTION.canonical_digest(forged_paths)
+        projection["projection_digest"] = IMPACT_PROJECTION.canonical_digest(
+            {key: value for key, value in projection.items() if key != "projection_digest"}
+        )
+        plan["impact_projection_digest"] = projection["projection_digest"]
+
+        source_identity = plan["source_review_identity"]
+        source_identity["changed_paths_digest"] = projection["changed_paths_digest"].removeprefix("sha256:")
+        source_identity["input_contract_digest"] = projection["projection_digest"].removeprefix("sha256:")
+        source_digest = digest(source_identity)
+        plan["source_review_digest"] = source_digest
+        plan["relevant_evidence_digest"] = source_digest
+        applicability_identity = {
+            key: source_identity[key] for key in (
+                "changed_paths_digest", "input_contract_digest", "ordered_role_ids",
+                "role_contract_digest", "review_policy_digest",
+            )
+        }
+        plan["professional_review_applicability"] = {
+            "identity": applicability_identity,
+            "identity_digest": digest(applicability_identity),
+            "verified": True,
+        }
+
+        batch_path = self.task_root / "review-batches" / "reauthored.json"
+        batch = self.command_json(
+            "create", "--task-uid", TASK, "--head", HEAD,
+            "--evidence-digest", source_digest, "--slice", f"{ROLE}={SLICE}",
+            "--out", str(batch_path),
+        )
+        preflight = self.command_json(
+            "preflight", "--batch", str(batch_path),
+            "--out-dir", str(self.task_root / "review-plans" / "reauthored-preflight"),
+        )
+        plan["epoch"] = batch["epoch"]
+        plan["batch_path"] = str(batch_path)
+        collection_path = batch_path.with_name("reauthored.collection.json")
+        plan["collection_path"] = str(collection_path)
+        plan["preflight"]["ledger_path"] = preflight["ledger_path"]
+        plan_path.write_bytes(canonical(plan) + b"\n")
+
+        fixture["ledger_path"] = Path(str(preflight["ledger_path"]))
+        fixture["collection_path"] = collection_path
+        fixture["handoff_path"] = self.task_root / "review-handoffs" / f"{batch['epoch']}.json"
+        self.write_live_issue(None)
+        ledger_before = Path(str(fixture["ledger_path"])).read_bytes()
+        gh_log_before = self.gh_log.read_bytes()
+        gh_fixture_before = self.gh_data.read_bytes()
+        self.assertFalse(Path(str(fixture["collection_path"])).exists())
+        self.assertFalse(Path(str(fixture["handoff_path"])).exists())
+
+        failure = subprocess.run(
+            [sys.executable, str(BATCH_SCRIPT), "--root", str(self.root), "dispatch",
+             "--plan", str(plan_path)],
+            text=True, capture_output=True,
+        )
+
+        self.assertEqual(gh_log_before, self.gh_log.read_bytes(), "self-consistent wrong scope reached GitHub")
+        self.assertEqual(gh_fixture_before, self.gh_data.read_bytes(), "self-consistent wrong scope changed live Issue")
+        self.assertEqual(ledger_before, Path(str(fixture["ledger_path"])).read_bytes())
+        self.assertFalse(Path(str(fixture["collection_path"])).exists())
+        self.assertFalse(Path(str(fixture["handoff_path"])).exists())
+        self.assertEqual(2, failure.returncode, failure.stdout + failure.stderr)
+        self.assertRegex(
+            (failure.stderr + failure.stdout).lower(),
+            r"projection|changed path|frozen|base.*head|scope identity",
+        )
+
+    def test_dispatch_rejects_unrelated_comparison_commit_before_side_effects(self) -> None:
+        global SCOPE_OID
+        original_scope_oid = SCOPE_OID
+        try:
+            base_tree = subprocess.check_output(
+                ["git", "-C", str(self.root), "rev-parse", f"{SCOPE_OID}^{{tree}}"], text=True,
+            ).strip()
+            unrelated_scope_oid = subprocess.check_output(
+                ["git", "-C", str(self.root), "commit-tree", base_tree, "-m", "unrelated fixture base"],
+                text=True,
+            ).strip()
+            self.assertNotEqual(SCOPE_OID, unrelated_scope_oid)
+            self.assertEqual(1, subprocess.run([
+                "git", "-C", str(self.root), "merge-base", "--is-ancestor", unrelated_scope_oid, HEAD,
+            ], capture_output=True).returncode)
+            self.assertEqual(
+                ["scripts/pm/review_preflight_handoff.test.py"],
+                subprocess.check_output([
+                    "git", "-C", str(self.root), "diff", "--name-only", "--no-renames",
+                    unrelated_scope_oid, HEAD,
+                ], text=True).splitlines(),
+            )
+            with self.assertRaisesRegex(REVIEW_PLAN.ContractError, "not an ancestor"):
+                REVIEW_PLAN.require_comparison_ancestor(self.root, unrelated_scope_oid, HEAD)
+
+            SCOPE_OID = unrelated_scope_oid
+            fixture = self.make_fixture(
+                create_handoff=False,
+                changed_paths=["scripts/pm/review_preflight_handoff.test.py"],
+                publish_dispatch=False,
+            )
+            plan_path = Path(str(fixture["plan_path"]))
+            ledger_path = Path(str(fixture["ledger_path"]))
+            ledger_before = ledger_path.read_bytes()
+            gh_log_before = self.gh_log.read_bytes() if self.gh_log.exists() else b""
+            gh_fixture_before = self.gh_data.read_bytes()
+            collection_path = Path(str(fixture["collection_path"]))
+            handoff_path = Path(str(fixture["handoff_path"]))
+            self.assertFalse(collection_path.exists())
+            self.assertFalse(handoff_path.exists())
+
+            failure = subprocess.run(
+                [sys.executable, str(BATCH_SCRIPT), "--root", str(self.root), "dispatch",
+                 "--plan", str(plan_path)],
+                text=True, capture_output=True,
+            )
+
+            self.assertEqual(
+                gh_log_before, self.gh_log.read_bytes() if self.gh_log.exists() else b"",
+                "unrelated comparison reached GitHub before rejection",
+            )
+            self.assertEqual(gh_fixture_before, self.gh_data.read_bytes())
+            self.assertEqual(ledger_before, ledger_path.read_bytes())
+            self.assertFalse(collection_path.exists())
+            self.assertFalse(handoff_path.exists())
+            self.assertEqual(2, failure.returncode, failure.stdout + failure.stderr)
+            self.assertRegex((failure.stderr + failure.stdout).lower(), r"ancestor|ancestry|merge.base")
+        finally:
+            SCOPE_OID = original_scope_oid
 
     def test_rejects_missing_admitted_packet_digest_after_return_and_handoff_rehash(self) -> None:
         fixture = self.make_fixture()

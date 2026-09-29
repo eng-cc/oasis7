@@ -428,6 +428,40 @@ def validate_plan_impact_projection(
     return verified
 
 
+def frozen_changed_paths(root: Path, comparison_oid: str, head: str) -> list[str]:
+    """Require the plan's base to precede its frozen head, then derive review paths."""
+    try:
+        ancestry = subprocess.run(
+            ["git", "-C", str(root), "merge-base", "--is-ancestor", comparison_oid, head],
+            text=True, capture_output=True, check=False,
+        )
+    except (OSError, UnicodeError) as exc:
+        raise ContractError(f"cannot validate comparison ancestry: {exc}") from exc
+    if ancestry.returncode == 1:
+        raise ContractError(
+            "comparison OID is not an ancestor of frozen head: "
+            f"comparison={comparison_oid}, head={head}"
+        )
+    if ancestry.returncode != 0:
+        detail = ancestry.stderr.strip() or ancestry.stdout.strip() or f"git exited {ancestry.returncode}"
+        raise ContractError(f"cannot validate comparison ancestry: {detail}")
+
+    try:
+        result = subprocess.run(
+            ["git", "-C", str(root), "diff", "--name-only", "--no-renames", comparison_oid, head],
+            text=True, capture_output=True, check=False,
+        )
+    except (OSError, UnicodeError) as exc:
+        raise ContractError(f"cannot derive frozen base..head changed paths: {exc}") from exc
+    if result.returncode != 0:
+        detail = result.stderr.strip() or result.stdout.strip() or f"git exited {result.returncode}"
+        raise ContractError(f"cannot derive frozen base..head changed paths: {detail}")
+    paths = [line for line in result.stdout.splitlines() if line]
+    if len(paths) != len(set(paths)):
+        raise ContractError("frozen base..head changed path set contains duplicates")
+    return sorted(paths)
+
+
 def validate_packet_refs(root: Path, plan: dict[str, object], expected_slices: list[dict[str, str]],
                          source_identity: dict[str, object]) -> dict[tuple[str, str], dict[str, str]]:
     """Validate plan-owned packet bindings and return the metadata each return must echo."""
@@ -551,7 +585,23 @@ def validate_plan_inputs(
     resolved_plan = resolve_repo_file(root, str(plan_path), "review plan")
     plan_value, plan_raw = read_json(resolved_plan, "review plan")
     plan, source_identity, source_digest = validate_plan(plan_value, plan_raw)
-    validate_plan_impact_projection(root, plan, source_identity)
+    projection = validate_plan_impact_projection(root, plan, source_identity)
+    derived_paths = frozen_changed_paths(
+        root, str(source_identity["source_scope_oid"]), str(plan["frozen_head"]),
+    )
+    if projection["changed_paths"] != derived_paths:
+        projected_paths = projection["changed_paths"]
+        missing = sorted(set(derived_paths) - set(projected_paths))
+        extra = sorted(set(projected_paths) - set(derived_paths))
+        details = []
+        if missing:
+            details.append("missing=" + ",".join(missing))
+        if extra:
+            details.append("extra=" + ",".join(extra))
+        raise ContractError(
+            "impact projection changed paths do not match frozen base..head: "
+            + ("; ".join(details) if details else "ordering differs")
+        )
     batch_path = resolve_repo_file(root, plan.get("batch_path"), "review batch")
     if plan.get("collection_path") is not None:
         collection_path_value = resolve_repo_destination(root, plan.get("collection_path"), "collection receipt")

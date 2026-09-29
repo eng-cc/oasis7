@@ -24,6 +24,7 @@ WORKFLOW_IMPACT = importlib.util.module_from_spec(PROJECTION_SPEC)
 PROJECTION_SPEC.loader.exec_module(WORKFLOW_IMPACT)
 TASK = "task_" + "1" * 32
 HEAD = "a" * 40
+BASE_OID = "c" * 40
 EVIDENCE = "b" * 64
 QA_SLICE = "11111111-1111-4111-8111-111111111111"
 HEALTH_SLICE = "22222222-2222-4222-8222-222222222222"
@@ -53,6 +54,9 @@ class ReviewBatchEpochTests(unittest.TestCase):
     def setUp(self) -> None:
         self.temp = tempfile.TemporaryDirectory()
         self.root = Path(self.temp.name)
+        global HEAD, BASE_OID
+        original_head, original_base_oid = HEAD, BASE_OID
+        self.addCleanup(self._restore_fixture_oids, original_head, original_base_oid)
         self.batch = self.root / "batch.json"
         task_map = self.root / ".pm" / "github-project-sync" / "tasks.json"
         task_map.parent.mkdir(parents=True)
@@ -60,6 +64,10 @@ class ReviewBatchEpochTests(unittest.TestCase):
             "project": {"repo": REPOSITORY},
             "tasks": {TASK: {"issue_number": TASK_ISSUE}},
         }) + "\n", encoding="utf-8")
+        # Plan-owned handoff validation derives changed paths from real Git
+        # commits. Use the same single changed path as handoff_fixture's
+        # projection, with task mapping present in both commits.
+        self.initialize_fixture_git()
         self.gh_data = self.root / "gh-fixture.json"
         self.gh_bin = self.root / "bin"
         self.gh_bin.mkdir()
@@ -109,6 +117,41 @@ class ReviewBatchEpochTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.temp.cleanup()
+
+    @staticmethod
+    def _restore_fixture_oids(head: str, base_oid: str) -> None:
+        global HEAD, BASE_OID
+        HEAD, BASE_OID = head, base_oid
+
+    def initialize_fixture_git(self) -> None:
+        """Create a base/head pair whose only committed diff is the projected path."""
+        global HEAD, BASE_OID
+        subprocess.run(["git", "-C", str(self.root), "init", "-q", "-b", "main"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "config", "user.email", "qa@example.invalid"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "config", "user.name", "QA temp fixture"], check=True)
+        source_path = self.root / "scripts" / "pm" / "review-batch-epoch.test.py"
+        source_path.parent.mkdir(parents=True, exist_ok=True)
+        source_path.write_text("baseline\n", encoding="utf-8")
+        subprocess.run([
+            "git", "-C", str(self.root), "add",
+            ".pm/github-project-sync/tasks.json", "scripts/pm/review-batch-epoch.test.py",
+        ], check=True)
+        subprocess.run(["git", "-C", str(self.root), "commit", "-qm", "fixture base"], check=True)
+        BASE_OID = subprocess.check_output(
+            ["git", "-C", str(self.root), "rev-parse", "HEAD"], text=True,
+        ).strip()
+        source_path.write_text("baseline\nsource change\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.root), "add", "scripts/pm/review-batch-epoch.test.py"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "commit", "-qm", "fixture source change"], check=True)
+        HEAD = subprocess.check_output(
+            ["git", "-C", str(self.root), "rev-parse", "HEAD"], text=True,
+        ).strip()
+        self.assertEqual(
+            ["scripts/pm/review-batch-epoch.test.py"],
+            subprocess.check_output([
+                "git", "-C", str(self.root), "diff", "--name-only", "--no-renames", BASE_OID, HEAD,
+            ], text=True).splitlines(),
+        )
 
     def run_script(self, *args: str, ok: bool = True) -> subprocess.CompletedProcess[str]:
         result = subprocess.run(
@@ -174,6 +217,8 @@ class ReviewBatchEpochTests(unittest.TestCase):
             "project": {"repo": REPOSITORY},
             "tasks": {TASK: {"issue_number": TASK_ISSUE}},
         }) + "\n", encoding="utf-8")
+        if not (self.root / ".git").is_dir():
+            self.initialize_fixture_git()
         task_root = self.root / ".pm" / "scratch" / TASK
         batch_path = task_root / "review-batches" / "batch.json"
         batch_path.parent.mkdir(parents=True, exist_ok=True)
@@ -188,7 +233,7 @@ class ReviewBatchEpochTests(unittest.TestCase):
             {
                 "task_uid": TASK,
                 "source_head_oid": HEAD,
-                "scope_base_oid": "c" * 40,
+                "scope_base_oid": BASE_OID,
                 "changed_paths": ["scripts/pm/review-batch-epoch.test.py"],
                 "change_class": "unknown",
                 "manual_roles": [str(item["role"]) for item in expected_slices],
@@ -209,7 +254,7 @@ class ReviewBatchEpochTests(unittest.TestCase):
         ordered_roles = impact_projection["ordered_role_ids"]
         source_identity = {
             "task_uid": TASK, "bootstrap_epoch": 1, "repository": REPOSITORY, "pr_number": 1,
-            "source_head_oid": HEAD, "source_scope_oid": "c" * 40,
+            "source_head_oid": HEAD, "source_scope_oid": BASE_OID,
             "changed_paths_digest": impact_projection["changed_paths_digest"].removeprefix("sha256:"),
             "ordered_role_ids": ordered_roles,
             "role_contract_digest": "d" * 64, "review_policy_digest": "e" * 64,
@@ -323,8 +368,8 @@ class ReviewBatchEpochTests(unittest.TestCase):
         plan_path.parent.mkdir(parents=True, exist_ok=True)
         plan = {
             "schema": "oasis7-review-plan/v2", "task_uid": TASK, "frozen_head": HEAD,
-            "comparison_ref": "refs/heads/main", "comparison_oid": "c" * 40,
-            "source_scope_oid": "c" * 40, "source_review_identity": source_identity,
+            "comparison_ref": "refs/heads/main", "comparison_oid": BASE_OID,
+            "source_scope_oid": BASE_OID, "source_review_identity": source_identity,
             "source_review_digest": digest(source_identity),
             "relevant_evidence_digest": digest(source_identity),
             "professional_review_applicability": {
@@ -492,6 +537,7 @@ class ReviewBatchEpochTests(unittest.TestCase):
             self.assertEqual(before, path.read_bytes(), f"repeat-create mutated input {path}")
 
     def test_handoff_invalid_inputs_are_gated_on_valid_route_and_control(self) -> None:
+        global HEAD, BASE_OID
         route = subprocess.run(
             [str(SCRIPT), "--root", str(self.root), "handoff", "--help"],
             text=True, capture_output=True,
@@ -504,6 +550,7 @@ class ReviewBatchEpochTests(unittest.TestCase):
         self.assertTrue(Path(control["handoff_path"]).is_file(), "valid handoff fixture control did not create output")
 
         original_root, original_batch = self.root, self.batch
+        original_head, original_base_oid = HEAD, BASE_OID
         cases = (
             ("plan_identity", r"task|identity"),
             ("plan_unknown_key", r"plan|field|unknown"),
@@ -614,6 +661,7 @@ class ReviewBatchEpochTests(unittest.TestCase):
                         self.assertEqual(outside_link, os.readlink(return_paths[0]))
         finally:
             self.root, self.batch = original_root, original_batch
+            HEAD, BASE_OID = original_head, original_base_oid
 
     def ledger(self, epoch: str, *, omit_health: bool = False, duplicate: bool = False,
                wrong_head: bool = False, wrong_epoch: bool = False, bad_digest: bool = False,
