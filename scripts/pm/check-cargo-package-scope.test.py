@@ -745,6 +745,20 @@ path = "src/lib.rs"
 
         self._assert_rejected(repo, base, "alpha", mutate, "cross_package_include")
 
+    def test_windows_drive_relative_include_fails_closed(self) -> None:
+        repo, base = self._fixture()
+        self._assert_rejected(
+            repo,
+            base,
+            "alpha",
+            lambda root: self._write(
+                root,
+                "crates/alpha/src/lib.rs",
+                'include!("C:../../beta/src/shared.rs");\npub fn alpha() {}\n',
+            ),
+            "unresolved_rust_source_reference",
+        )
+
     def test_cross_package_include_bytes_is_rejected(self) -> None:
         repo, base = self._fixture()
         self._assert_rejected(
@@ -853,6 +867,51 @@ path = "src/lib.rs"
             )
 
         self._assert_rejected(repo, base, "alpha", mutate, "cross_package_path")
+
+    def test_windows_drive_relative_path_attribute_fails_closed(self) -> None:
+        repo, base = self._fixture()
+        self._assert_rejected(
+            repo,
+            base,
+            "alpha",
+            lambda root: self._write(
+                root,
+                "crates/alpha/src/lib.rs",
+                '#[path = "C:../../beta/src/shared.rs"]\nmod imported;\npub fn alpha() {}\n',
+            ),
+            "unresolved_rust_source_reference",
+        )
+
+    def test_windows_drive_absolute_path_attribute_fails_closed(self) -> None:
+        repo, base = self._fixture()
+        self._assert_rejected(
+            repo,
+            base,
+            "alpha",
+            lambda root: self._write(
+                root,
+                "crates/alpha/src/lib.rs",
+                '#[path = "C:/crates/beta/src/shared.rs"]\nmod imported;\npub fn alpha() {}\n',
+            ),
+            "unresolved_rust_source_reference",
+        )
+
+    def test_same_package_path_attribute_is_allowed(self) -> None:
+        repo, _ = self._fixture()
+        self._write(repo, "crates/alpha/src/sibling.rs", "pub fn sibling() {}\n")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "base with alpha sibling source")
+        base = self._git(repo, "rev-parse", "HEAD")
+        self._assert_allowed(
+            repo,
+            base,
+            "alpha",
+            lambda root: self._write(
+                root,
+                "crates/alpha/src/lib.rs",
+                '#[path = "sibling.rs"]\nmod sibling;\npub fn alpha() {}\n',
+            ),
+        )
 
     def test_comment_separated_cross_package_include_is_rejected(self) -> None:
         repo, base = self._fixture()

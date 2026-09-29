@@ -5,6 +5,55 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-pm-lint-test.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
+
+run_pycache_isolation_fixture() {
+  local fixture="$TMP_DIR/pycache-isolation-fixture"
+  mkdir -p "$fixture/scripts"
+  cp -R "$ROOT_DIR/scripts/pm" "$fixture/scripts/pm"
+  find "$fixture/scripts/pm" -type d -name __pycache__ -prune -exec rm -rf {} +
+  find "$fixture/scripts/pm" -type f -name '*.pyc' -delete
+  cp -R "$ROOT_DIR/.pm" "$fixture/.pm"
+
+  shopt -s dotglob nullglob
+  for path in "$ROOT_DIR"/*; do
+    name="$(basename "$path")"
+    [[ "$name" == ".pm" || "$name" == ".git" || "$name" == "scripts" ]] && continue
+    ln -s "$path" "$fixture/$name"
+  done
+  for path in "$ROOT_DIR/scripts"/*; do
+    name="$(basename "$path")"
+    [[ "$name" == "pm" ]] && continue
+    ln -s "$path" "$fixture/scripts/$name"
+  done
+  shopt -u dotglob nullglob
+  git -C "$fixture" init -q
+
+  if ! env -u PYTHONDONTWRITEBYTECODE \
+    PYTHONPYCACHEPREFIX="$fixture/scripts/pm/.pycache-probe" \
+    PM_ROOT_DIR="$fixture" "$fixture/scripts/pm/lint.sh" \
+    >"$TMP_DIR/pycache-isolation-lint.out" \
+    2>"$TMP_DIR/pycache-isolation-lint.err"; then
+    echo "pm-lint.test: isolated pycache fixture lint failed unexpectedly" >&2
+    cat "$TMP_DIR/pycache-isolation-lint.out" "$TMP_DIR/pycache-isolation-lint.err" >&2
+    return 1
+  fi
+  grep -Fx "pm-lint: OK" "$TMP_DIR/pycache-isolation-lint.out" >/dev/null
+
+  local generated
+  generated="$(find "$fixture/scripts/pm" -type f -name 'pm_store_*.pyc' -print | sort)"
+  if [[ -n "$generated" ]]; then
+    echo "pm-lint.test: canonical scripts/pm ignored Python artifacts changed in isolated fixture" >&2
+    printf '%s\n' "$generated" >&2
+    return 1
+  fi
+}
+
+if [[ "${PM_LINT_TEST_PYCACHE_ISOLATION_ONLY:-0}" == "1" ]]; then
+  run_pycache_isolation_fixture
+  printf 'pm-lint isolated bytecode isolation: PASS\n'
+  exit 0
+fi
+
 ignored_before="$(find "$ROOT_DIR/scripts/pm" \( -type d -name __pycache__ -o -type f -name '*.pyc' \) -print | sort)"
 
 python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" snapshot \
@@ -250,6 +299,8 @@ if PM_ROOT_DIR="$ROOT_LINK_FIXTURE" "$ROOT_DIR/scripts/pm/lint.sh" \
   exit 1
 fi
 grep -F "root path is a forbidden symlink" "$TMP_DIR/root-pm-lint.err" >/dev/null
+
+run_pycache_isolation_fixture
 
 ignored_after="$(find "$ROOT_DIR/scripts/pm" \( -type d -name __pycache__ -o -type f -name '*.pyc' \) -print | sort)"
 if [[ "$ignored_before" != "$ignored_after" ]]; then

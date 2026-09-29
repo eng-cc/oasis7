@@ -92,7 +92,7 @@ def safe_relative(path: str) -> str:
 def resolve_relative(source: str, target: str) -> str | None:
     try:
         target_path = PurePosixPath(target)
-        if target_path.is_absolute() or re.match(r"^[A-Za-z]:[/\\]", target):
+        if target_path.is_absolute() or re.match(r"^[A-Za-z]:", target):
             return None
         value = PurePosixPath(source).parent.joinpath(target_path)
     except Exception:
