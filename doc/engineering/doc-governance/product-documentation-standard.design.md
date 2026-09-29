@@ -192,4 +192,4 @@ git diff --check
 
 ## 参考范围
 
-本规范的仓库依据包括当前任务 HEAD 上的 `doc/product/README.md`、现有 `doc-structure-standard.*`、四个模块根 PRD、首局与持续游玩分册、Agent Prompt 产品 PRD/design、可玩性证据边界和 `AGENTS.md`。附件 v1 的固定旧基线与 PR #3645 状态只作为提案历史来源，不作为当前能力或现行 workflow 断言；外部需求写作、规范词和场景描述仅作为方法参考，不改变仓库 authority。
+本规范的仓库依据包括当前任务 HEAD 上的 `doc/product/README.md`、现有 `doc-structure-standard.*`、四个模块根 PRD、首局与持续游玩分册、Agent Prompt 产品 PRD/design、可玩性证据边界和 `AGENTS.md`。附件 v1 的固定旧基线与状态证据属于其 GitHub Project-backed task evidence，不在本规范中充当当前能力或 workflow 断言；外部需求写作、规范词和场景描述仅作为方法参考，不改变仓库 authority。

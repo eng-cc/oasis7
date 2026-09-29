@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""Contract tests for the single authorized fast-recovery artifact edge."""
+"""Focused tests for project-bound artifact readiness and live CI identity."""
 from __future__ import annotations
 
 import importlib.util
+import json
+from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
 from pathlib import Path
+from unittest.mock import patch
 
 
 SCRIPT = Path(__file__).with_name("workflow-delivery-readiness.py")
@@ -14,253 +16,324 @@ assert SPEC and SPEC.loader
 DELIVERY = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(DELIVERY)
 
-DOWNSTREAM_UID = "task_7d9db27bcc2b4359b02fdf3bff5a609e"
-UPSTREAM_UID = "task_5fe52e7477774b10af6655ad298eedd5"
-MERGE_OID = "52d86940cad7d6ad0b67dc1e931e350882ef5eb5"
-SOURCE_HEAD = "f8b65ffa9b9a61262936ce37e52b7f7e6ea978ab"
-BASE_OID = "917f7172e856fc6a3a2523bccd5a5b9b13dcfa29"
-STRICT_TITLE = (
-    "oasis7-ci|workflow_dispatch|integration_revalidation|"
-    f"{UPSTREAM_UID}|4139|{BASE_OID}|{SOURCE_HEAD}"
-)
+TASK_UID = "task_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+HEAD = "a" * 40
+REPO = "eng-cc/oasis7"
+PR = 901
+RUN = 902
+CHECK = 903
+JOB = 9901
 
 
-def evidence() -> dict:
+def check_row(*, check_id: int = CHECK, run_id: int = RUN, head: str = HEAD,
+              pr_numbers: list[int] | None = None, conclusion: str = "success") -> dict:
     return {
-        "edge": {
-            "coordinator_issue": 4082,
-            "comment_id": 5885353387,
-            "downstream_issue": 4095,
-            "downstream_task_uid": DOWNSTREAM_UID,
-            "upstream_issue": 4137,
-            "upstream_task_uid": UPSTREAM_UID,
-            "upstream_pr": 4139,
-            "merge_commit_oid": MERGE_OID,
-            "required_source_path": "doc/engineering/workflow/source-of-truth.md",
-        },
-        "edge_authority": {
-            "comment_id": 5885353387,
-            "author": "eng-cc",
-            "permission": "admin",
-            "body_valid": True,
-        },
-        "downstream": {
-            "issue_number": 4095,
-            "task_uid": DOWNSTREAM_UID,
-            "input_commit_oid": MERGE_OID,
-            "input_files_match": True,
-        },
-        "upstream_issue": {
-            "issue_number": 4137,
-            "task_uid": UPSTREAM_UID,
-            "status": "done",
-            "workflow_phase": "task_done",
-            "pr_number": 4139,
-            "merge_hold_active": False,
-        },
-        "pr": {
-            "repository": "eng-cc/oasis7",
-            "number": 4139,
-            "issue_number": 4137,
-            "task_uid": UPSTREAM_UID,
-            "state": "closed",
-            "merged": True,
-            "merge_commit_oid": MERGE_OID,
-            "head_oid": SOURCE_HEAD,
-            "base_ref": "main",
-        },
-        "review": {
-            "comment_id": 5884285458,
-            "task_uid": UPSTREAM_UID,
-            "source_head_oid": SOURCE_HEAD,
-            "author": "eng-cc",
-            "passed": True,
-            "roles": ["producer_system_designer", "repository_health_engineer", "qa_engineer"],
-            "findings_disposition": "addressed",
-        },
-        "source_ci": {
-            "check_name": "required-gate",
-            "app_id": 15368,
-            "head_oid": SOURCE_HEAD,
-            "status": "completed",
-            "conclusion": "success",
-            "run_id": 36523663147,
-            "run_attempt": 1,
-        },
-        "strict_ci": {
-            "run_id": 36523710522,
-            "run_attempt": 1,
-            "event": "workflow_dispatch",
-            "workflow_path": ".github/workflows/rust.yml",
-            "head_branch": "main",
-            "head_oid": BASE_OID,
-            "status": "completed",
-            "conclusion": "success",
-            "display_title": STRICT_TITLE,
-            "required_gate_job": {
-                "name": "required-gate",
-                "status": "completed",
-                "conclusion": "success",
-                "app_id": 15368,
-                "run_attempt": 1,
-            },
-        },
-        "local_input": {
-            "repository": "eng-cc/oasis7",
-            "head_contains_merge_commit": True,
-            "source_path_present": True,
-            "source_path_matches_merge_commit": True,
-            "review_handoff_closure_matches_merge_commit": True,
-        },
+        "id": check_id,
+        "name": "required-gate",
+        "app": {"id": DELIVERY.REQUIRED_GATE_APP_ID},
+        "pull_requests": [{"number": number} for number in (pr_numbers if pr_numbers is not None else [PR])],
+        "details_url": f"https://github.com/{REPO}/actions/runs/{run_id}/job/{JOB}",
+        "head_sha": head,
+        "status": "completed",
+        "conclusion": conclusion,
     }
 
 
-class DeliveryReadinessTest(unittest.TestCase):
-    def test_explicit_edge_is_delivered_while_managed_cleanup_is_deferred(self) -> None:
-        result = DELIVERY.derive_delivery_readiness(DOWNSTREAM_UID, evidence())
-        self.assertTrue(result["delivery_ready"], result)
-        self.assertEqual(result["cleanup_state"], "cleanup_deferred", result)
-        codes = {item["code"] for item in result["action_blockers"]}
-        self.assertEqual(codes, {"CLEANUP_DEFERRED"}, result)
-        blocker = result["action_blockers"][0]
-        self.assertIn("consume_verified_artifact", blocker["allowed_actions"], result)
-        self.assertIn("cleanup", blocker["blocks_actions"], result)
-        self.assertNotIn("consume_verified_artifact", blocker["blocks_actions"], result)
+def mocked_ci(*, check: dict, run_pr_numbers: list[int] | None = None,
+              run_branch: str = "feature", run_head: str = HEAD,
+              run_path: str = ".github/workflows/rust.yml", job_id: int = JOB,
+              job_check_id: int | None = None, job_conclusion: str = "success"):
+    run_id = int(check["details_url"].split("/runs/")[1].split("/")[0])
+    check_id = check["id"]
+    job_check_id = check_id if job_check_id is None else job_check_id
 
-    def test_unclassified_task_does_not_gain_artifact_delivery(self) -> None:
-        result = DELIVERY.derive_delivery_readiness("task_11111111111111111111111111111111", evidence())
-        self.assertIsNone(result["delivery_ready"], result)
-        self.assertEqual(result["cleanup_state"], "not_applicable", result)
-        self.assertEqual(result["action_blockers"], [], result)
+    def gh_json(path: str) -> dict:
+        if path == f"repos/{REPO}/check-runs/{check_id}":
+            return check
+        if path == f"repos/{REPO}/actions/runs/{run_id}":
+            return {
+                "id": run_id, "run_attempt": 2, "head_sha": run_head,
+                "head_branch": run_branch, "path": run_path, "event": "pull_request",
+                "pull_requests": [{"number": n} for n in (run_pr_numbers if run_pr_numbers is not None else [PR])],
+                "status": "completed", "conclusion": "success",
+            }
+        raise AssertionError(path)
 
-    def test_wrong_merge_identity_blocks_only_the_named_consumption(self) -> None:
-        proof = evidence()
-        proof["pr"]["merge_commit_oid"] = "a" * 40
-        result = DELIVERY.derive_delivery_readiness(DOWNSTREAM_UID, proof)
-        self.assertFalse(result["delivery_ready"], result)
-        self.assertEqual(result["cleanup_state"], "not_applicable", result)
-        self.assertIn("TASK_BINDING_CONFLICT", {item["code"] for item in result["action_blockers"]})
+    def pages(path: str, key: str | None = None) -> list:
+        if path == f"repos/{REPO}/actions/runs/{run_id}/jobs":
+            return [{
+                "id": job_id, "name": "required-gate", "run_attempt": 2,
+                "check_run_url": f"https://api.github.com/repos/{REPO}/check-runs/{job_check_id}",
+                "status": "completed", "conclusion": job_conclusion,
+            }]
+        raise AssertionError((path, key))
 
-    def test_missing_or_failed_current_ci_cannot_be_covered_by_cleanup_deferred(self) -> None:
-        proof = evidence()
-        proof["strict_ci"]["conclusion"] = "failure"
-        result = DELIVERY.derive_delivery_readiness(DOWNSTREAM_UID, proof)
-        self.assertFalse(result["delivery_ready"], result)
-        self.assertEqual(result["cleanup_state"], "not_applicable", result)
-        blocker = next(item for item in result["action_blockers"] if item["code"] == "CURRENT_CHECK_FAILED")
-        self.assertIn("consume_artifact", blocker["blocks_actions"], result)
+    return gh_json, pages
 
-    def test_stale_review_and_hold_remain_delivery_blockers(self) -> None:
-        for mutate, code in (
-            (lambda proof: proof["review"].update(source_head_oid="b" * 40), "REVIEW_FINDING_BLOCKING"),
-            (lambda proof: proof["upstream_issue"].update(merge_hold_active=True), "TASK_BINDING_CONFLICT"),
-            (lambda proof: proof["downstream"].update(input_files_match=False), "SOURCE_NOT_PUBLISHED"),
-        ):
-            with self.subTest(code=code):
-                proof = evidence()
-                mutate(proof)
-                result = DELIVERY.derive_delivery_readiness(DOWNSTREAM_UID, proof)
-                self.assertFalse(result["delivery_ready"], result)
-                self.assertIn(code, {item["code"] for item in result["action_blockers"]}, result)
 
-    def test_action_projection_preserves_each_distinct_blocking_class(self) -> None:
-        projected = DELIVERY.project_action_blockers([
-            "stale identity: canonical task Issue URL is malformed",
-            "required check conclusion=failure",
-            "review finding blocks merge",
-            "archive readback missing",
-        ])
-        self.assertEqual(
-            [item["code"] for item in projected],
-            ["TASK_BINDING_CONFLICT", "CURRENT_CHECK_FAILED",
-             "REVIEW_FINDING_BLOCKING", "CAPABILITY_MISSING_ARCHIVE_READBACK"],
-        )
-        for item in projected:
-            self.assertIn("blocks_actions", item)
-            self.assertIn("allowed_actions", item)
-            self.assertIn("next_action_kind", item)
-            self.assertIsNone(item["next_command"])
-            self.assertTrue(item["reason"])
+class DeclaredSourceCiTest(unittest.TestCase):
+    def test_exact_ci_locator_checks_distinct_job_and_check_ids(self) -> None:
+        check = check_row()
+        gh_json, pages = mocked_ci(check=check, job_id=JOB, job_check_id=CHECK)
+        with patch.object(DELIVERY, "_gh_json", side_effect=gh_json), \
+                patch.object(DELIVERY, "_pages", side_effect=pages):
+            result = DELIVERY._verify_declared_ci(
+                REPO,
+                {"pr_number": PR, "head_oid": HEAD, "check_run_id": CHECK,
+                 "run_id": RUN, "run_attempt": 2},
+                PR, HEAD, "feature",
+            )
+        self.assertTrue(result["pr_association_verified"])
+        self.assertEqual(result["check_run_id"], CHECK)
+        self.assertNotEqual(JOB, CHECK)
 
-    def test_current_pr_projection_keeps_local_remote_ci_and_failure_phase_separate(self) -> None:
-        local_head = "1" * 40
-        remote_head = "2" * 40
-        task = {
-            "task_uid": DOWNSTREAM_UID,
-            "repository": "eng-cc/oasis7",
-            "issue_number": 4095,
-            "pr_number": "4200",
-        }
+    def test_same_sha_from_another_pr_cannot_be_selected(self) -> None:
+        check = check_row(pr_numbers=[PR + 1])
+        gh_json, pages = mocked_ci(check=check, run_pr_numbers=[PR + 1])
+        with patch.object(DELIVERY, "_gh_json", side_effect=gh_json), \
+                patch.object(DELIVERY, "_pages", side_effect=pages):
+            with self.assertRaisesRegex(ValueError, "PR association"):
+                DELIVERY._verify_declared_ci(
+                    REPO,
+                    {"pr_number": PR, "head_oid": HEAD, "check_run_id": CHECK,
+                     "run_id": RUN, "run_attempt": 2},
+                    PR, HEAD, "feature",
+                )
 
-        def run_read(conclusion: str) -> tuple[dict, list]:
-            def gh_json(path: str) -> dict:
-                if path == "repos/eng-cc/oasis7/pulls/4200":
+    def test_empty_associations_need_exact_authorized_binding(self) -> None:
+        check = check_row(pr_numbers=[])
+        gh_json, pages = mocked_ci(check=check, run_pr_numbers=[])
+        locator = {"pr_number": PR, "head_oid": HEAD, "check_run_id": CHECK,
+                   "run_id": RUN, "run_attempt": 2}
+        with patch.object(DELIVERY, "_gh_json", side_effect=gh_json), \
+                patch.object(DELIVERY, "_pages", side_effect=pages):
+            with self.assertRaisesRegex(ValueError, "PR association"):
+                DELIVERY._verify_declared_ci(REPO, locator, PR, HEAD, "feature")
+        with patch.object(DELIVERY, "_gh_json", side_effect=gh_json), \
+                patch.object(DELIVERY, "_pages", side_effect=pages):
+            result = DELIVERY._verify_declared_ci(
+                REPO, locator, PR, HEAD, "feature", allow_empty_pr_association=True,
+            )
+        self.assertEqual(result["pr_association_basis"], "authenticated_task_evidence_and_exact_run_identity")
+
+    def test_nonempty_conflicting_association_is_never_waived(self) -> None:
+        check = check_row(pr_numbers=[PR, PR + 1])
+        gh_json, pages = mocked_ci(check=check, run_pr_numbers=[PR])
+        with patch.object(DELIVERY, "_gh_json", side_effect=gh_json), \
+                patch.object(DELIVERY, "_pages", side_effect=pages):
+            with self.assertRaisesRegex(ValueError, "PR association"):
+                DELIVERY._verify_declared_ci(
+                    REPO,
+                    {"pr_number": PR, "head_oid": HEAD, "check_run_id": CHECK,
+                     "run_id": RUN, "run_attempt": 2},
+                    PR, HEAD, "feature", allow_empty_pr_association=True,
+                )
+
+
+class CurrentPrProjectionTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.local_head = "b" * 40
+        self.task = {"task_uid": TASK_UID, "repository": REPO, "issue_number": 900, "pr_number": str(PR)}
+        self.pr = {"number": PR, "body": f"Task: {TASK_UID}\nRefs #900",
+                   "head": {"sha": HEAD, "ref": "feature"}}
+
+    def project(self, checks: list[dict], *, run_prs: dict[int, list[int]] | None = None,
+                run_conclusions: dict[int, str] | None = None):
+        run_prs = run_prs or {}
+        run_conclusions = run_conclusions or {}
+        runs = {int(row["details_url"].split("/runs/")[1].split("/")[0]): row for row in checks}
+
+        def gh_json(path: str) -> dict:
+            if path == f"repos/{REPO}/pulls/{PR}":
+                return self.pr
+            for run_id, row in runs.items():
+                if path == f"repos/{REPO}/actions/runs/{run_id}":
                     return {
-                        "number": 4200,
-                        "body": f"Task: {DOWNSTREAM_UID}\nRefs #4095",
-                        "head": {"sha": remote_head},
-                    }
-                if path == "repos/eng-cc/oasis7/actions/runs/777":
-                    return {
-                        "id": 777,
-                        "head_sha": remote_head,
-                        "run_attempt": 2,
-                        "path": ".github/workflows/rust.yml",
+                        "id": run_id, "run_attempt": 2, "head_sha": HEAD,
+                        "head_branch": "feature", "path": ".github/workflows/rust.yml",
                         "event": "pull_request",
+                        "pull_requests": [{"number": n} for n in run_prs.get(run_id, [PR])],
+                        "status": "completed",
+                        "conclusion": run_conclusions.get(run_id, "success"),
                     }
-                raise AssertionError(path)
+            raise AssertionError(path)
 
-            def pages(path: str, key: str | None = None) -> list:
-                if "check-runs" in path:
+        def pages(path: str, key: str | None = None) -> list:
+            if path == f"repos/{REPO}/commits/{HEAD}/check-runs":
+                return {"check_runs": checks}.get(key, [])
+            for run_id, row in runs.items():
+                if path == f"repos/{REPO}/actions/runs/{run_id}/jobs":
+                    check_id = row["id"]
                     return [{
-                        "id": 999,
-                        "name": "required-gate",
-                        "app": {"id": 15368},
-                        "pull_requests": [{"number": 4200}],
-                        "details_url": "https://github.com/eng-cc/oasis7/actions/runs/777/job/4",
-                        "head_sha": remote_head,
-                        "status": "completed",
-                        "conclusion": conclusion,
+                        "id": JOB, "name": "required-gate", "run_attempt": 2,
+                        "check_run_url": f"https://api.github.com/repos/{REPO}/check-runs/{check_id}",
+                        "status": "completed", "conclusion": row["conclusion"],
+                        "steps": [{"name": "tests", "conclusion": row["conclusion"]}],
                     }]
-                if "/jobs" in path:
-                    row = {
-                        "name": "required-gate",
-                        "run_attempt": 2,
-                        "check_run_url": "https://api.github.com/repos/eng-cc/oasis7/check-runs/999",
-                        "status": "completed",
-                        "conclusion": conclusion,
-                    }
-                    if conclusion == "failure":
-                        row["steps"] = [{"name": "unit tests", "conclusion": "failure"}]
-                    return [row]
-                raise AssertionError(path)
+            raise AssertionError((path, key))
 
-            with patch.object(DELIVERY, "_git_value", return_value=local_head), \
-                    patch.object(DELIVERY, "_gh_json", side_effect=gh_json), \
-                    patch.object(DELIVERY, "_pages", side_effect=pages):
-                return DELIVERY.read_current_pr_projection(Path("."), task)
+        with patch.object(DELIVERY, "_git_value", return_value=self.local_head), \
+                patch.object(DELIVERY, "_gh_json", side_effect=gh_json), \
+                patch.object(DELIVERY, "_pages", side_effect=pages):
+            return DELIVERY.read_current_pr_projection(Path("."), self.task)
 
-        projection, blockers = run_read("success")
-        self.assertEqual(projection["local_candidate_head_oid"], local_head)
-        self.assertEqual(projection["remote_pr_head_oid"], remote_head)
-        self.assertEqual(projection["required_ci"]["run_attempt"], 2)
-        self.assertEqual(projection["required_ci"]["event"], "pull_request")
-        self.assertEqual(projection["failure_phase"], None)
-        self.assertIn("SOURCE_NOT_PUBLISHED", {item["code"] for item in blockers})
-        publication = next(item for item in blockers if item["code"] == "SOURCE_NOT_PUBLISHED")
-        self.assertNotIn("consume_artifact", publication["blocks_actions"], publication)
+    def test_later_matching_success_supersedes_old_failed_attempt(self) -> None:
+        failed = check_row(check_id=CHECK, run_id=RUN, conclusion="failure")
+        passed = check_row(check_id=CHECK + 2, run_id=RUN + 2, conclusion="success")
+        projection, blockers = self.project([failed, passed], run_conclusions={RUN: "failure"})
+        self.assertEqual(projection["required_ci"]["run_id"], RUN + 2)
+        self.assertNotIn("CURRENT_CHECK_FAILED", {row["code"] for row in blockers})
+        self.assertIn("SOURCE_NOT_PUBLISHED", {row["code"] for row in blockers})
 
-        projection, blockers = run_read("failure")
-        self.assertEqual(projection["failure_phase"], {"job": "required-gate", "step": "unit tests"})
-        self.assertIn("CURRENT_CHECK_FAILED", {item["code"] for item in blockers})
+    def test_wrong_pr_same_head_is_not_selected_and_cannot_hide_local_head_blocker(self) -> None:
+        wrong = check_row(pr_numbers=[PR + 1])
+        with patch.object(DELIVERY, "_current_pr_process_waiver", return_value={"applicable": False}):
+            projection, blockers = self.project([wrong])
+        codes = {row["code"] for row in blockers}
+        self.assertIn("SOURCE_NOT_PUBLISHED", codes)
+        self.assertIn("CURRENT_CHECK_FAILED", codes)
+        self.assertEqual(projection["remote_pr_head_oid"], HEAD)
 
-    def test_unclassified_workflow_projection_keeps_legacy_delivery_semantics(self) -> None:
-        result = DELIVERY.workflow_projection(Path("."), {
-            "task_uid": "task_11111111111111111111111111111111",
-        }, [])
+    def test_empty_run_association_requires_process_exception_and_keeps_source_blocker(self) -> None:
+        check = check_row()
+        verified_replacement = {"check_run_id": CHECK + 5, "run_id": RUN + 5}
+        with patch.object(DELIVERY, "_current_pr_process_waiver", return_value={
+            "applicable": True, "verified_replacement_ci": verified_replacement,
+        }):
+            projection, blockers = self.project([check], run_prs={RUN: []})
+        self.assertIn("SOURCE_NOT_PUBLISHED", {row["code"] for row in blockers})
+        self.assertEqual(projection["replacement_ci_identity"], verified_replacement)
+
+    def test_process_waiver_does_not_rewrite_actual_failed_test_result(self) -> None:
+        failed = check_row(conclusion="failure")
+        replacement = {"check_run_id": CHECK + 5, "run_id": RUN + 5, "run_attempt": 1}
+        with patch.object(DELIVERY, "_current_pr_process_waiver", return_value={
+            "applicable": True, "verified_replacement_ci": replacement,
+        }):
+            projection, blockers = self.project([failed])
+        self.assertEqual(projection["required_ci"]["conclusion"], "failure")
+        self.assertEqual(projection["failure_phase"], {"job": "required-gate", "step": "tests"})
+        self.assertEqual(projection["replacement_ci_identity"], replacement)
+        self.assertNotIn("CURRENT_CHECK_FAILED", {row["code"] for row in blockers})
+
+    def test_final_workflow_projection_exposes_waiver_and_replacement_without_rewriting_failure(self) -> None:
+        original_ci = {"check_run_id": CHECK, "run_id": RUN, "conclusion": "failure"}
+        process_exception = {"status": "applied", "decision": "waive_process_check", "comment_id": 44}
+        replacement = {"check_run_id": CHECK + 1, "run_id": RUN + 1, "conclusion": "success"}
+        live_projection = {
+            "local_candidate_head_oid": HEAD,
+            "remote_pr_head_oid": HEAD,
+            "required_ci": original_ci,
+            "process_exception": process_exception,
+            "replacement_ci_identity": replacement,
+            "failure_phase": {"job": "required-gate", "step": "tests"},
+        }
+        with patch.object(DELIVERY, "read_explicit_edge", return_value={}), \
+                patch.object(DELIVERY, "read_current_pr_projection", return_value=(live_projection, [])):
+            final_projection = DELIVERY.workflow_projection(Path("."), self.task, [])
+        self.assertEqual(final_projection["process_exception"], process_exception)
+        self.assertEqual(final_projection["replacement_ci_identity"], replacement)
+        self.assertEqual(final_projection["ci_identity"], original_ci)
+
+
+class LegacyProjectionTest(unittest.TestCase):
+    def test_missing_artifact_declaration_retains_legacy_terminal_semantics(self) -> None:
+        result = DELIVERY.derive_delivery_readiness(TASK_UID, {})
         self.assertIsNone(result["delivery_ready"])
-        self.assertEqual(result["cleanup_state"], "not_applicable")
         self.assertEqual(result["action_blockers"], [])
+
+    def test_task_without_typed_edge_does_not_require_project_resolution(self) -> None:
+        task = {"task_uid": TASK_UID, "repository": REPO, "issue_number": 900}
+        issue = {"number": 900, "body": f"task_uid: {TASK_UID}"}
+        with patch.object(DELIVERY, "_gh_json", return_value=issue), \
+                patch.object(DELIVERY, "_pages", return_value=[]), \
+                patch.object(DELIVERY, "_resolve_project_task_issue", side_effect=AssertionError("unexpected Project lookup")):
+            self.assertEqual(DELIVERY.read_explicit_edge(Path("."), task), {})
+
+    def test_noncanonical_repository_preserves_unclassified_legacy_delivery(self) -> None:
+        task = {"task_uid": "task_" + "b" * 32, "repository": "fixture/repo", "issue_number": 11}
+        with patch.object(DELIVERY, "_gh_json", side_effect=AssertionError("must not query GitHub")), \
+                patch.object(DELIVERY, "_pages", side_effect=AssertionError("must not query GitHub")):
+            self.assertEqual(DELIVERY.read_explicit_edge(Path("."), task), {})
+        projected = DELIVERY.derive_delivery_readiness(task["task_uid"], {})
+        self.assertIsNone(projected["delivery_ready"])
+
+
+class PermissionNotFoundRecoveryTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.issue_url = f"https://api.github.com/repos/{REPO}/issues/900"
+
+    def exception_comment(self, comment_id: int, login: str, created_at: str) -> dict:
+        payload = {
+            "schema": "oasis7-process-exception/v1",
+            "task_uid": TASK_UID,
+            "action": "current_pr_validation",
+            "head_oid": HEAD,
+            "scope": "required-gate",
+            "decision": "waive_process_check",
+            "reason": "synthetic test decision",
+            "authorized_decision": "synthetic authorization",
+            "replacement_evidence": {"pr_number": PR, "head_oid": HEAD,
+                                      "check_run_id": CHECK, "run_id": RUN, "run_attempt": 1},
+        }
+        body = DELIVERY.PROCESS_EXCEPTIONS.MARKER + "\n" + json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return {"id": comment_id, "issue_url": self.issue_url, "created_at": created_at,
+                "updated_at": created_at, "user": {"login": login}, "body": body}
+
+    @staticmethod
+    def permission_api(args, **_kwargs):
+        login = args[-1].split("/")[-2]
+        status = (200 if login == "synthetic-admin" else 404 if login == "synthetic-public"
+                  else 403 if login == "synthetic-forbidden" else 503)
+        body = (json.dumps({"permission": "admin", "user": {"login": login}})
+                if status == 200 else json.dumps({"message": "permission read failed", "status": str(status)}))
+        response = f"HTTP/2.0 {status} {'OK' if status == 200 else 'Unavailable' if status == 503 else 'Not Found'}\nContent-Type: application/json\n\n{body}"
+        return SimpleNamespace(returncode=0 if status == 200 else 1, stdout=response,
+                               stderr="" if status == 200 else f"gh: HTTP {status}")
+
+    def resolve(self, comments):
+        return DELIVERY.PROCESS_EXCEPTIONS.resolve_process_exception(
+            comments,
+            repository=REPO,
+            issue_number=900,
+            task_uid=TASK_UID,
+            action="current_pr_validation",
+            head_oid=HEAD,
+            scope="required-gate",
+            live_admin_by_login=lambda login: DELIVERY._is_admin(REPO, login),
+            replacement_validator=lambda _evidence, _record: True,
+            process_check_waivable=True,
+        )
+
+    def test_http_404_public_comment_does_not_poison_older_admin_exception(self) -> None:
+        comments = [
+            self.exception_comment(1, "synthetic-admin", "2026-09-29T00:00:01Z"),
+            self.exception_comment(2, "synthetic-public", "2026-09-29T00:00:02Z"),
+        ]
+        with patch.object(DELIVERY.subprocess, "run", side_effect=self.permission_api):
+            result = self.resolve(comments)
+        self.assertEqual(result["status"], "applied")
+        self.assertEqual(result["comment_id"], 1)
+
+    def test_http_503_permission_uncertainty_still_blocks_newer_matching_record(self) -> None:
+        comments = [
+            self.exception_comment(1, "synthetic-admin", "2026-09-29T00:00:01Z"),
+            self.exception_comment(2, "synthetic-temporary-failure", "2026-09-29T00:00:02Z"),
+        ]
+        with patch.object(DELIVERY.subprocess, "run", side_effect=self.permission_api):
+            result = self.resolve(comments)
+        self.assertEqual(result["status"], "rejected")
+        self.assertIn("permission is unreadable", result["reason"])
+
+    def test_http_403_permission_uncertainty_is_not_treated_as_nonadmin(self) -> None:
+        comments = [
+            self.exception_comment(1, "synthetic-admin", "2026-09-29T00:00:01Z"),
+            self.exception_comment(2, "synthetic-forbidden", "2026-09-29T00:00:02Z"),
+        ]
+        with patch.object(DELIVERY.subprocess, "run", side_effect=self.permission_api):
+            result = self.resolve(comments)
+        self.assertEqual(result["status"], "rejected")
+        self.assertIn("permission is unreadable", result["reason"])
 
 
 if __name__ == "__main__":

@@ -1057,6 +1057,29 @@ def command_audit(args: argparse.Namespace) -> int:
 
 
 def command_step3_gate(args: argparse.Namespace) -> int:
+    archive_path = args.root / ".pm/github-project-sync/task-archive.jsonl"
+    if not archive_path.is_file():
+        message = (
+            "historical coverage requires complete GitHub Issue/Project evidence; "
+            "the local legacy archive is unavailable, so this gate cannot establish its historical task set"
+        )
+        if args.json:
+            print(
+                json.dumps(
+                    {
+                        "status": "failed",
+                        "selected_count": 0,
+                        "project_item_count": 0,
+                        "errors": [message],
+                        "warnings": [],
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+        else:
+            print(f"github-project-workflow step3-gate: FAIL: {message}", file=sys.stderr)
+        return 1
     args.include_done = True
     args.strict_mapping = True
     args.full_list = True
