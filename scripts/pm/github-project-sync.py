@@ -148,6 +148,33 @@ if not _store_path.exists(): _store_path = pathlib.Path.cwd()/"scripts/pm/workfl
 _store_spec = importlib.util.spec_from_file_location("workflow_durable_store", _store_path)
 assert _store_spec and _store_spec.loader
 durable_store = importlib.util.module_from_spec(_store_spec); _store_spec.loader.exec_module(durable_store)
+
+
+def guard_missing_mapping_candidates(
+    task_uids: list[str], repository: str, project_owner: str, project_number: int, *, skip_recover: bool,
+) -> None:
+    """Load the shared admission guard only when a candidate identity is absent."""
+    guard_path = pathlib.Path(__file__).with_name("closed_duplicate_candidate_guard.py")
+    spec = importlib.util.spec_from_file_location("closed_duplicate_candidate_guard_sync", guard_path)
+    if spec is None or spec.loader is None:
+        die(f"github-project-sync: shared candidate admission guard is unavailable at {guard_path}")
+    guard = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(guard)
+    except Exception as exc:
+        die(f"github-project-sync: shared candidate admission guard could not be loaded: {exc}")
+    try:
+        guard.guard_missing_mapping_candidates(
+            task_uids,
+            repository,
+            project_owner,
+            project_number,
+            skip_recover=skip_recover,
+        )
+    except guard.CandidateAdmissionError as exc:
+        die(f"github-project-sync: {exc}")
+
+
 def persist_mapping(path: pathlib.Path, snapshot: dict[str, Any]) -> None:
     """Persist explicit per-task patches through the shared field-policy CAS."""
     for task_uid, patch in (snapshot.get("tasks") or {}).items():
@@ -859,6 +886,29 @@ def main(argv: list[str] | None = None) -> int:
                     "github-project-sync: global maintenance selected a retired Task UID from .pm/tasks; "
                     f"remove or reconcile the stale source entry before recovery or apply: {task_uid}"
                 )
+    mapping_tasks = mapping.get("tasks")
+    if not isinstance(mapping_tasks, dict):
+        die("github-project-sync: task mapping is malformed")
+    missing_candidate_uids = []
+    for task in tasks:
+        if str(task.get("status") or "") != "candidate":
+            continue
+        task_uid = str(task.get("task_uid") or "")
+        record = mapping_tasks.get(task_uid)
+        has_complete_identity = isinstance(record, dict) and all(
+            record.get(key) not in (None, "")
+            for key in ("issue_url", "issue_number", "project_item_id")
+        )
+        if not has_complete_identity:
+            missing_candidate_uids.append(task_uid)
+    if missing_candidate_uids:
+        guard_missing_mapping_candidates(
+            missing_candidate_uids,
+            args.repo,
+            args.project_owner,
+            args.project_number,
+            skip_recover=args.skip_recover,
+        )
     mapping.setdefault("tasks", {})
     for task in tasks:
         reject_unretired_closed_duplicate(root, mapping, str(task.get("task_uid") or ""))
