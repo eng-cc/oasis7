@@ -7,6 +7,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import hashlib
+import importlib.util
 import json
 import pathlib
 import re
@@ -18,6 +19,18 @@ from typing import Any
 
 SCHEMA = "oasis7.bootstrap-task-snapshot/v1"
 PRIMARY_PACKAGE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*\Z")
+_STORE_PATH = pathlib.Path(__file__).with_name("workflow-durable-store.py")
+_STORE_SPEC = importlib.util.spec_from_file_location("workflow_durable_store_bootstrap", _STORE_PATH)
+if _STORE_SPEC is None or _STORE_SPEC.loader is None:
+    raise RuntimeError(f"cannot load durable task mapping validator at {_STORE_PATH}")
+DURABLE_STORE = importlib.util.module_from_spec(_STORE_SPEC)
+_STORE_SPEC.loader.exec_module(DURABLE_STORE)
+_ADMISSION_PATH = pathlib.Path(__file__).with_name("closed_duplicate_candidate_guard.py")
+_ADMISSION_SPEC = importlib.util.spec_from_file_location("closed_duplicate_candidate_guard_bootstrap", _ADMISSION_PATH)
+if _ADMISSION_SPEC is None or _ADMISSION_SPEC.loader is None:
+    raise RuntimeError(f"cannot load candidate admission guard at {_ADMISSION_PATH}")
+ADMISSION_GUARD = importlib.util.module_from_spec(_ADMISSION_SPEC)
+_ADMISSION_SPEC.loader.exec_module(ADMISSION_GUARD)
 
 
 class SnapshotError(Exception):
@@ -61,9 +74,12 @@ def git(repo_root: pathlib.Path, *args: str) -> str:
 
 def load_task(tasks_json: pathlib.Path, task_uid: str) -> tuple[dict[str, Any], dict[str, Any]]:
     try:
-        mapping = json.loads(tasks_json.read_text(encoding="utf-8"))
+        mapping = DURABLE_STORE.read_mapping(tasks_json)
     except (OSError, json.JSONDecodeError) as exc:
         raise SnapshotError(f"cannot read tasks mapping {tasks_json}: {exc}") from exc
+    retired = DURABLE_STORE.retired_task(mapping, task_uid)
+    if retired is not None:
+        raise SnapshotError(f"task UID is reserved by a validated retirement tombstone: {task_uid}")
     task = mapping.get("tasks", {}).get(task_uid)
     if not isinstance(task, dict):
         raise SnapshotError(f"task UID not found in tasks mapping: {task_uid}")
@@ -93,6 +109,10 @@ def live_payload(
     request_identity: str,
 ) -> dict[str, Any]:
     mapping, task = load_task(tasks_json, task_uid)
+    try:
+        ADMISSION_GUARD.guard_candidate_issue(mapping, tasks_json, task_uid, task)
+    except ADMISSION_GUARD.CandidateAdmissionError as exc:
+        raise SnapshotError(str(exc)) from exc
     required = (
         "issue_number", "issue_url", "project_item_id", "status", "owner_role",
         "repository", "canonical_worktree", "task_branch", "default_branch", "acceptance",

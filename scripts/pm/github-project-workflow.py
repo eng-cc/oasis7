@@ -400,9 +400,7 @@ def load_archived_tasks(root: pathlib.Path, statuses: set[str]) -> dict[str, Ord
 
 
 def load_mapping(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists():
-        return {"version": 1, "tasks": {}}
-    return json.loads(path.read_text(encoding="utf-8"))
+    return durable_store.read_mapping(path, {"version": 1, "tasks": {}})
 
 
 _store_path = pathlib.Path(__file__).with_name("workflow-durable-store.py")
@@ -760,8 +758,30 @@ def command_audit(args: argparse.Namespace) -> int:
     statuses = selected_statuses(args)
     mapping_path = mapping_path_for(root, args.mapping)
     mapping = load_mapping(mapping_path)
-    tasks = load_tasks(root, statuses, mapping)
     task_uid = getattr(args, "task_uid", None)
+    if task_uid:
+        retired = durable_store.retired_task(mapping, task_uid)
+        if retired is not None:
+            result = {
+                "status": "retired",
+                "project_owner": str((mapping.get("project") or {}).get("owner") or ""),
+                "project_number": (mapping.get("project") or {}).get("number"),
+                "mapping_path": str(mapping_path),
+                "task_uid": task_uid,
+                "selected_count": 0,
+                "project_item_count": 0,
+                "selected_statuses": sorted(statuses),
+                "status_counts": {},
+                "errors": [],
+                "warnings": [],
+                "selected_task": {"task_uid": task_uid, "target": "retired", "workflow_phase": ""},
+            }
+            if args.json:
+                print(json.dumps(result, indent=2, sort_keys=True))
+            else:
+                print(f"github-project-workflow audit: task UID {task_uid} is retired by a validated tombstone")
+            return 0
+    tasks = load_tasks(root, statuses, mapping)
     if task_uid:
         tasks = {uid: task for uid, task in tasks.items() if uid == args.task_uid}
     mapped_tasks = mapping.get("tasks", {})
