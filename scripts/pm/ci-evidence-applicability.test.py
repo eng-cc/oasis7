@@ -8,6 +8,7 @@ import ci_input_scope as input_scope
 import ci_required_artifact_v2 as required_artifact
 import ci_ready_receipt_identity as receipt_identity
 import projection_publication_contract as publication
+from ci_reuse_validation_test_support import validation_only_artifacts
 
 
 UID = "task_12345678901234567890123456789012"
@@ -484,6 +485,17 @@ class ApplicabilityDecisionTests(unittest.TestCase):
         self.assertEqual("disabled", result_status(decision, "test_evidence"))
         self.assertEqual("disabled", result_status(decision, "merge_readiness"))
         self.assertEqual(effective_policy_identity(policy), decision.effective_policy_identity)
+
+    def test_validation_payload_authority_and_readback_cannot_make_units_reusable(self):
+        for candidate in validation_only_artifacts():
+            with self.subTest(schema=candidate["schema"]):
+                decision = applicability.evaluate_evidence_applicability(
+                    candidate, {}, {}, enabled_policy(),
+                )
+                self.assertEqual("blocked", result_status(decision, "source_review"))
+                self.assertEqual("blocked", result_status(decision, "test_evidence"))
+                self.assertEqual("blocked", result_status(decision, "merge_readiness"))
+                self.assertEqual((), tuple(decision.reused_units))
 
     def test_unknown_policy_capability_blocks(self):
         decision = self.evaluate(policy={"enabled_capabilities": ["future-capability/v1"]})

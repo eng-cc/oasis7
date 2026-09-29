@@ -44,7 +44,7 @@
 
 | 上游 requirement / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 排除或未覆盖范围 |
 | --- | --- | --- | --- | --- |
-| [source-of-truth.md#proposed-ci-input-scoped-evidence-reuse-contract](source-of-truth.md#proposed-ci-input-scoped-evidence-reuse-contract) | 新能力默认禁用；仅在完整实现、独立验证和授权后按可信输入适用性复用 | [DES-CIR-01](ci-parallel-evidence-reuse.design.md#des-cir-01) | TPM 冻结用户请求和 v1.0.0 acceptance；QA 验证 20 次无关前进 | 设计和静态文档检查不能证明运行能力 |
+| [source-of-truth.md#proposed-ci-input-scoped-evidence-reuse-contract](source-of-truth.md#proposed-ci-input-scoped-evidence-reuse-contract) | 新能力默认禁用；仅在完整实现、独立验证和授权后按可信输入适用性复用 | [DES-CIR-01](ci-parallel-evidence-reuse.design.md#des-cir-01) | TPM 冻结用户请求和 acceptance；V1-pre 验证隔离路径，V1-prod 在另行启用后验证真实 20 次无关前进 | 设计和静态文档检查不能证明运行能力 |
 | [source-of-truth.md#split-source-review-integration-contract](source-of-truth.md#split-source-review-integration-contract) | 保留不可变 source/review/test/run 身份，并阻止新失败遮蔽旧证据 | [DES-CIR-06](ci-parallel-evidence-reuse.design.md#des-cir-06) | receipt 与 lifecycle owner；QA 审 attempt 隔离 | 不将 reused result 写成本次已执行 |
 | [ci-projection-publication.design.md#des-cip-01](ci-projection-publication.design.md#des-cip-01) | 新建及更新 PR 时按固定候选顺序发布并严格绑定 projection | [DES-CIR-02](ci-parallel-evidence-reuse.design.md#des-cir-02) | C1 publisher/resolver 实施 | 不承诺跨 GitHub API 原子事务 |
 | [ci-projection-publication.design.md#des-cip-04](ci-projection-publication.design.md#des-cip-04) | 每个 receipt 只消费对应 run/attempt 的闭合证据 | [DES-CIR-06](ci-parallel-evidence-reuse.design.md#des-cir-06) | C4 receipt consumers；QA hosted 验证 | artifact 名称或存在本身不是通过证明 |
@@ -259,6 +259,10 @@ source projection 继续为 `oasis7-workflow-impact-projection/v2`；publication
 | Review evidence | role ID、H/S、source change、实际读入契约／上下文、review rules、applicability digest、返回与处置 | 既有角色流程 → review consumer | 相关上下文变更才失效；角色晚返回按原身份归档 |
 | Applicability decision | H、Q、prior assessed target、policy、原 evidence locators、全部 required units、逐项 reuse/revalidate/blocked、原因 | 可信本地评估器 → lifecycle／closeout | 是可重算 observation，不是 CI 通过证明，不把 Q 写成 tested base |
 | Validation request | request key、H、固定 B、unit IDs、输入指纹、executor contract、purpose、创建事实 | 本地 adapter → integration runner/readback | 重试复用 key，B 不可悄悄前移；run ID 只是 locator |
+| V1 validation request / approval / task pin | #4059 上三个分离的闭 schema 评论；pin 绑定 request comment ID、原始 body digest 和 request digest；approval/pin 作者在 W 解析前实时验证为仓库 admin | TPM evidence → trusted W authority resolver | W 全量分页且唯一发现；评论作者和 caller inputs 不能自授权；缺失、重复、编辑或权限读失败即拒绝 |
+| V1 validation ID / artifact selector | request digest 的域分离 validation ID；唯一 attempt artifact 名绑定 validation ID、R、A | trusted W producer → independent reader | producer/reader 使用同一精确派生函数；重复同名或身份不符拒绝，不进入 production selector |
+| V1 request-to-run binding | canonical `rust.yml` validation-only run title carries Task/PR/B/H/validation ID; complete workflow-run pagination maps that request to one R; W authority binds exact R | trusted W producer → independent reader | second distinct R blocks even if pending/failed; response-loss recovery discovers existing R; only a same-R rerun may create newer A |
+| V1 latest-attempt readback | initial unique-R/A, job/check, download/hash, request/approval/pin reread, final full run-set enumeration, final live R/A | independent reader → V1-pre acceptance | ordered terminal observations, not atomic snapshot or GitHub CAS; later acceptance/consumer repeats both |
 
 ### 6.2 结构化决策接口
 
@@ -371,8 +375,9 @@ PR admission 只证明冻结候选的输入一致，不能让已经通过的 che
 | C2 · code | 输入闭包、unit 指纹、全量义务完整性与轻量文档组合 | C0；可与 C1 并行，边界不交叉 |
 | C3 · code | B/W 解耦、executor 合同、幂等请求与独立 merge tree | C0；可与 C1/C2 并行，不直接改最终 workflow 接线 |
 | C4 · code | CI 接线、attempt artifacts、receipt/lifecycle 全消费者迁移 | C1/C2/C3；单独收口共享文件；consumer first |
-| V1 · verification | fake + hosted + 本地 Codex + 20 次无关前进 + 平台门禁验证 | 固定组合候选，不以叶子各自通过代替组合通过 |
-| S1 · system | manual／运行说明与验收结果边界更新 | V1 真实事实；可执行 skill／角色卡另属 code 叶子 |
+| V1-pre · pre-activation validation | fake + hosted + 本地 Codex + latest-attempt negatives + 平台门禁验证 | hosted dispatch 前先有 #4059 唯一 request/approval/task-pin 及 W live admin readback；只证明隔离验证路径，不启用生产复用，也不计入 20 次生产前进 |
+| V1-prod · production acceptance | 单独按现有流程明确启用实现后，从新鲜生产目标 Q0 开始，验证 20 次真实、自然且与所有 required inputs 无关的 main 前进 | 每次均证明 source commit、角色 redispatch、heavy CI execution 和 task phase rollback 为零；禁用期与 V1-pre 前进都计 0 |
+| S1 · system | manual／运行说明与验收结果边界更新 | V1-pre 与 V1-prod 的真实事实；可执行 skill／角色卡另属 code 叶子 |
 
 TPM 在 coordinating Issue 冻结必要交付集合与可并行边界，实际 Task/PR/commit/run/evidence 在执行时回写。旧 #3871 交付若被复用，必须验证已合入内容和实际能力，不根据设计存在就认定依赖完成。
 
@@ -414,7 +419,10 @@ TPM 在 coordinating Issue 冻结必要交付集合与可并行边界，实际 T
 | DES-CIP-07 → CIR-02/08 | 同文件 `create_response_lost`、`record_pr_crash` | macOS/Linux publisher；各副作用后中断 | 同一 PR 恢复；无重复 POST，无伪完成 | 不证明跨主机锁 |
 | DES-CIP-02 → CIR-03 | `pr-projection-resolver.test.py::stale_event_same_head` | event H1/body H0，live P(H1) 已发布 | 严格同 H/S/D 恢复；坏输入不能 fallback | 不证明新 main 已测试 |
 | DES-CIP-02/06 → CIR-02/03 | 同文件 `wrong_task_or_pr`、`invalid_projection` | 错 UID/编号、重复 key、非法 base64、同 H 错 S | toolchain 前拒绝；无假绿 | 不替代专业语义审读 |
-| 用户并行要求 → CIR-01/04 | `ci-evidence-applicability.test.py::twenty_unrelated_advances` | 固定 H／输入／策略，20 个无关 main commits | H、review dispatch、heavy run、task phase 均不变 | 不涵盖真实外部服务输入改变 |
+| validation authority → validation-only contract | `ci_reuse_validation_contract.test.py::unique_issue_pin_and_admin_authority` (Proposed) | fake；完整分页缺失/重复/损坏 request、approval、pin；pin digest 或时间错；approval/pin 非 admin；调用者伪报身份 | 仅一组准确 Task/PR/request 可被 W 接受，且两位评论作者权限均由 live admin lookup 决定 | fake 不证明 GitHub permission endpoint、评论分页或 hosted 权限 |
+| validation identity/latest attempt → validation-only contract | `ci_reuse_validation_contract.test.py::domain_separated_validation_id_and_name`、`ci_reuse_validation_readback.test.py::attempt_advances_during_artifact_readback` (Proposed) | 同一 request 派生 ID/name；R/A 乱序/非规范格式；首读 A1 后、最终 run read 前出现 A2 | 只接受精确 validation ID + R/A artifact 名；A 前进时丢弃本次读回，从最新 attempt 重新完整读取 | fake 不提供跨 GitHub API 原子性；hosted acceptance 仍必需 |
+| validation request-to-run binding → validation-only contract | `ci_reuse_validation_readback.test.py::unique_validation_run_binding`、`own_run_not_listed_blocks`、`unfiltered_workflow_scan_finds_candidates_after_1000`、`duplicate_request_run_beyond_1000_blocks`、`duplicate_dispatch_pending_second_run_blocks`、`dispatch_response_lost_reuses_same_run`、`final_run_set_reenumeration` (Proposed) | fake + hosted readback：unfiltered all-page enumeration with over 1,000 runs; exact request candidate after page 10; duplicate R2 beyond 1,000 results; mismatched/truncated `total_count` or missing terminal link; current R temporarily absent; R1 success plus R2 pending/failed; wrong or duplicate key; response loss; same-R rerun; R2 visible at final scan | API search filters that cap results are omitted; local filtering still finds candidates beyond page 10; only one exact title/event/W/ref/input-bound R may bind; count/pagination uncertainty and every second R block; only same-R rerun may advance A | fake does not prove GitHub pagination/index behavior; hosted acceptance must exercise >1,000 actual/mock-API records and verify the live unfiltered response contract |
+| 用户并行要求 → CIR-01/04 | `ci-evidence-applicability.test.py::twenty_unrelated_advances` | fake 状态机；固定 H／输入／策略，20 个合成无关 main advances | H、review dispatch、heavy run、task phase 均不变；只作 V1-pre 逻辑证据，不计入 V1-prod | 不涵盖真实外部服务输入改变，也不替代启用后的生产测量 |
 | 同上 → CIR-04/05 | 同文件 `elevated_pr_unrelated_docs` | 高风险工程 PR 首次验证成功，main 修改无关文档 | 不因 elevated 重新派发严格集成 | 不对真实全局输入强行复用 |
 | source identity → CIR-04 | 同文件 `dependency_edge_added`、`shared_consumer` | 新增依赖、共同消费者、两端改名、增加测试 | 旧新图并集识别相关；只补对应 units／roles | 不证明未注册单元可细粒度复用 |
 | full-corpus 规范 → CIR-04 | 同文件 `corpus_completeness`、现有 doc checker suite 扩展 | 新增／删除文档、broken anchor、inventory 并发变化 | 覆盖集合完整；坏新增文档拒绝；不重编译无关 Rust | 不改变产品语义验收 |
@@ -431,7 +439,9 @@ TPM 在 coordinating Issue 冻结必要交付集合与可并行边界，实际 T
 
 ### 11.3 总体验收清单
 
-只有在以下结果均可回读时，coordinating task 才能声明本次改造完成：正常创建首轮无需人为重跑；新 head 与 projection 严格匹配；20 次无关前进零重型重做；高风险 PR 也遵守输入复用；相关变更精确触发补验；所有负例无假绿；旧／新协议及回滚已测试；平台 required check 和权限配置已核实；真实合入回读与最终完成边界可恢复。
+V1-pre 是启用前的验证阶段：hosted dispatch 前，W 必须从 #4059 完整分页且唯一读回 request、approval、task-pin 三个 exact-marker 记录，核对原始 body digest、先后时间，并实时确认 approval 与 pin 作者均有 canonical repository `admin` 权限；调用者身份和 Issue 作者身份都不能代替这些检查。对 request-derived validation ID，trusted W 与独立 reader 都必须完整分页 workflow dispatch runs 并证明只存在一个精确 request-bound R；重复 R（包括较早成功加较新 pending/failed）、无结论的丢响应、wrong title/ref/event/input 与最终重新枚举变化均 fail closed。仅对唯一 R 的同 run rerun 可成为更高 A，且只读该 R 的最新 attempt。可用 fake、hosted validation-only、local Codex 和平台门禁证据验证实现及其 non-promotion 边界，但这些结果本身不启用 `input-scope-reuse/v1`，也不证明生产 main 前进。生产验收 V1-prod 只能在实现按现有流程被单独明确启用后开始；先记录启用后的新鲜生产目标 Q0，再只计其后的 20 次真实、自然、经完整输入闭包证明无关的 main 前进。每次都须证明 source commit、角色 redispatch、heavy CI execution 和 task phase rollback 为零。V1-pre、禁用期观察、合成 fake advances、启用前的 main 前进，以及与 required inputs 相关或无法证明无关的前进，均计为 0 次。
+
+只有在正常首轮无需人为重跑；新 head 与 projection 严格匹配；高风险 PR 也遵守输入复用；相关变更精确触发补验；所有负例无假绿；旧／新协议及回滚已测试；平台 required check 和权限配置已核实；真实合入回读与最终完成边界可恢复；且 V1-pre 与启用后的 V1-prod 均有可回读证据时，coordinating task 才能声明本次改造完成。V1-pre 通过、source 合入、文档 checker 通过或单个 PR 绿灯，都不替代 V1-prod，也不单独授权生产启用。
 
 源代码合入、文档 checker 通过、单个 PR 绿灯，都不能替代上述组合验收。
 

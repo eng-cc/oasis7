@@ -144,16 +144,29 @@ def load_verified_projection(
 ) -> dict[str, Any]:
     """Load one immutable projection and fail closed on any identity drift.
 
-    Consumers must call this function instead of decoding projection JSON
-    themselves.  ``expected`` may bind task/head/base/path/class/roles to the
-    caller's current identity.  A projection is never a source of authority by
-    itself; it only permits consumers to use the same already-derived scope.
+    File-based consumers must call this function instead of decoding
+    projection JSON themselves. Embedded consumers should pass their value to
+    :func:`validate_projection_value` for the same checks. ``expected`` may
+    bind task/head/base/path/class/roles to the caller's current identity. A
+    projection is never a source of authority by itself; it only permits
+    consumers to use the same already-derived scope.
     """
     projection_path = Path(path).resolve()
     try:
         value = json.loads(projection_path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as exc:
         raise ProjectionError(f"cannot read valid impact projection: {exc}") from exc
+
+    return validate_projection_value(value, expected=expected, repo_root=repo_root)
+
+
+def validate_projection_value(
+    value: object,
+    *,
+    expected: Optional[dict[str, Any]] = None,
+    repo_root: Optional[Path | str] = None,
+) -> dict[str, Any]:
+    """Validate one embedded projection with the same rules as file readers."""
     if not isinstance(value, dict):
         raise ProjectionError("impact projection must be an object")
     if value.get("schema") not in SUPPORTED_SCHEMAS:

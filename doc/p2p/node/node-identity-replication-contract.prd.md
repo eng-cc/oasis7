@@ -1,5 +1,38 @@
 # Node identity and replication contract
 
+## Node 专业接受与设计分配
+
+Owner role：runtime_engineer；canonical repository：eng-cc/oasis7；审读 source baseline：f9d5a552d9af04c1b1398262808198a58e560230（2026-09-26）。本文的 current 指冻结源所记专业合同；本次未独立验证实现、部署或测试通过。target 是规范目标，historical 是 MIG/CCG/TASK 与 dated evidence provenance。GitHub Issue/Project 维护实际任务与候选证据。新增稳定条款是原义务的细化入口；原章节/常量/命令/失败边界仍有效。
+
+<a id="nir-bootstrap"></a>
+### Local identity
+
+local/dev missing key 仅启用节点启动前在当前 config path 创建；disabled 不创建；missing/malformed/conflict/unwritable 明确失败，不替换已有非法 identity。不是 custody/admission。
+
+配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
+
+<a id="nir-signer-binding"></a>
+### Conditional signer map
+
+配置时完整覆盖 validator set、无 unknown、normalized32-byte ed25519；proposal/attestation/commit 先正常验签再 binding，缺失或 mismatch 拒绝。
+
+配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
+
+<a id="nir-ingest-order"></a>
+### Replication ingest
+
+world/topic-isolated injection；验 signature/source→apply→persist guard→observe progress。stale/duplicate/invalid/失败不推进 peer/committed observation 或污染 guard；local/remote single-writer ordering 与持久 guard 保留。
+
+配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
+
+<a id="nir-recovery"></a>
+### Authoritative recovery
+
+corrupt/unreadable PoS state blocks start，不默认重置；保留诊断并纠正 state/config/deployment 根因。无自动 deploy/state-sync/restore/rollback 或 topology/readiness 承诺。
+
+配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
+
+
 - Design: `doc/p2p/node/node-identity-replication-contract.design.md`
 - Project record: GitHub Issue / GitHub Project
 

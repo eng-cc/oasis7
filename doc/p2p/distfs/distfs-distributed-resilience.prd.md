@@ -1,5 +1,38 @@
 # DistFS 分布式韧性
 
+## DistFS 韧性专业接受与设计分配
+
+Owner role：runtime_engineer；canonical repository：eng-cc/oasis7；审读 source baseline：f9d5a552d9af04c1b1398262808198a58e560230（2026-09-26）。本文的 current 指冻结源所记专业合同；本次未独立验证实现、部署或测试通过。target 是规范目标，historical 是 MIG/CCG/TASK 与 dated evidence provenance。GitHub Issue/Project 维护实际任务与候选证据。新增稳定条款是原义务的细化入口；原章节/常量/命令/失败边界仍有效。
+
+<a id="dr-provider-read"></a>
+### Provider compatibility and strict read
+
+六个 optional 画像字段 None 中性兼容；freshness/uptime/challenge/capacity/load/latency 权重、stable dedup/tie/candidate bound；indexed targeted retry only，empty/exhausted 明确失败，无无-provider fetch fallback。
+
+配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
+
+<a id="dr-distribution"></a>
+### Distribution audit
+
+每 blob 默认至少2副本；多个必要 blob 时拒绝同一 provider 全覆盖；batch fetch 前审计并报告不足 hash/违规 provider。
+
+配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
+
+<a id="dr-maintenance"></a>
+### Bounded maintenance
+
+目标3、repair/rebalance32/32、source/target850‰/450‰；task 包含 hash/source/target/Repair或Rebalance。transfer 成功才发布 target DHT；失败进入 failed_tasks 可重试；DHT滞后不保证全局最优/仲裁。
+
+配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
+
+<a id="dr-runtime-poll"></a>
+### Optional nonblocking polling
+
+到期成功进入轮次才推进 last_polled；未到期None/非法策略error；enabled+DHT+replication runtime+network+sample齐全才运行，缺依赖/无数据保留时间。仅本地target、指定source found+payload+BLAKE3后写CAS；error进last_error不阻tick。时间/错误不是checkpoint。
+
+配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
+
+
 - 对应设计文档: `doc/p2p/distfs/distfs-distributed-resilience.design.md`
 - 对应GitHub Issue/Project task truth: GitHub Issue / GitHub Project
 

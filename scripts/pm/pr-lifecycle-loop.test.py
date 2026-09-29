@@ -14,6 +14,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 import integration_executor_contract as request_contract
+from ci_reuse_validation_test_support import validation_only_artifacts
 
 
 _APPLICABILITY_FIXTURE_SPEC = importlib.util.spec_from_file_location(
@@ -287,6 +288,27 @@ print(json.dumps(result))
         for invalid in (True, '3', 0, -1):
             with self.subTest(invalid_epoch=invalid), self.assertRaises(ValueError):
                 gate._positive_bootstrap_epoch(invalid)
+
+    def test_validation_payload_authority_and_readback_cannot_bind_as_required_plan(self):
+        task = {'bootstrap_epoch': 3, 'loop_binding': {'bootstrap_epoch': 3}}
+        data = {
+            'repository': 'owner/repo', 'number': 12, 'headRefOid': 'b' * 40,
+        }
+        request_identity = {
+            'repository': 'owner/repo', 'task_uid': self.uid, 'pr_number': 12,
+            'bootstrap_epoch': 3, 'source_head_oid': 'b' * 40,
+            'source_projection_digest': 'sha256:' + 'e' * 64,
+        }
+        for candidate in validation_only_artifacts():
+            proof = {
+                'request_key': 'sha256:' + 'd' * 64,
+                'request_identity': request_identity,
+                'assessed_target_oid': 'c' * 40,
+                'source_scope_oid': '2' * 40,
+                'required_plan_v2_payload': candidate,
+            }
+            with self.subTest(schema=candidate['schema']), self.assertRaises(ValueError):
+                gate.validate_keyed_integration_identity(proof, data, self.uid, task)
 
     def test_ordinary_mode_reuses_source_bound_ci_after_unrelated_target_advance(self):
         proof = self.check(run_base='c', artifact_base='c', require_strict=False)
