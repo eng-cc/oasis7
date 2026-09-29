@@ -779,4 +779,3 @@ def workflow_projection(root: pathlib.Path, task: dict[str, Any], legacy_blocker
         "ci_identity": pull_request.get("required_ci"),
         "failure_phase": pull_request.get("failure_phase"),
     }
-
