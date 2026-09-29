@@ -33,6 +33,7 @@ INVENTORY_SCHEMA = "oasis7-trusted-planner-inventory/v1"
 BASELINE_OBLIGATIONS = (
     "product-doc-changed-range",
     "product-doc-full-corpus",
+    "workflow-process-identity",
     "lint-skills",
     "windows-paths",
     "script-executable-bits",
@@ -45,6 +46,7 @@ BASELINE_OBLIGATIONS = (
 BASELINE_CHECKER_PATHS = (
     "scripts/ci-tests.sh",
     "scripts/doc-governance-check.sh",
+    "scripts/workflow-process-identity-check.py",
     "scripts/product-doc-governance-check.py",
     "scripts/product-doc-content-check.py",
     "scripts/lint-skills.sh",

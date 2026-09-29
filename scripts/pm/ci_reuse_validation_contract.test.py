@@ -9,6 +9,8 @@ import unittest
 from pathlib import Path
 
 HERE = Path(__file__).parent
+FIXTURE_ISSUE_NUMBER = 87
+FIXTURE_PR_NUMBER = 143
 SPEC = importlib.util.spec_from_file_location(
     "ci_reuse_validation_contract", HERE / "ci_reuse_validation_contract.py",
 )
@@ -38,6 +40,8 @@ def validation_fixture():
     )
     context = contract.TrustedRequestContext(
         task_uid="task_" + "a" * 32,
+        task_issue_number=FIXTURE_ISSUE_NUMBER,
+        pr_number=FIXTURE_PR_NUMBER,
         head_oid="1" * 40,
         source_scope_oid="2" * 40,
         projection_digest="sha256:" + "3" * 64,
@@ -62,8 +66,8 @@ def validation_fixture():
         "schema": contract.AUTHORIZATION_SCHEMA,
         "repository": "eng-cc/oasis7",
         "task_uid": context.task_uid,
-        "task_issue_number": 4059,
-        "pr_number": 4060,
+        "task_issue_number": FIXTURE_ISSUE_NUMBER,
+        "pr_number": FIXTURE_PR_NUMBER,
         "head_oid": context.head_oid,
         "integration_base_oid": "4" * 40,
         "source_scope_oid": context.source_scope_oid,
@@ -78,8 +82,8 @@ def validation_fixture():
         "schema": contract.REQUEST_SCHEMA,
         "repository": "eng-cc/oasis7",
         "task_uid": context.task_uid,
-        "task_issue_number": 4059,
-        "pr_number": 4060,
+        "task_issue_number": FIXTURE_ISSUE_NUMBER,
+        "pr_number": FIXTURE_PR_NUMBER,
         "head_oid": context.head_oid,
         "integration_base_oid": authorization["integration_base_oid"],
         "source_scope_oid": context.source_scope_oid,
@@ -88,7 +92,7 @@ def validation_fixture():
         "purpose": "v1_pre_activation_validation",
         "authorization_decision": "authorize_validation_only",
         "authorization_source": {
-            "issue_number": 4059,
+            "issue_number": FIXTURE_ISSUE_NUMBER,
             "comment_id": 10,
             "body_digest": authorization_digest,
         },
@@ -100,8 +104,8 @@ def validation_fixture():
         "schema": contract.PIN_SCHEMA,
         "repository": "eng-cc/oasis7",
         "task_uid": context.task_uid,
-        "task_issue_number": 4059,
-        "pr_number": 4060,
+        "task_issue_number": FIXTURE_ISSUE_NUMBER,
+        "pr_number": FIXTURE_PR_NUMBER,
         "request_comment_id": 20,
         "request_body_digest": contract.body_digest(request_body),
         "request_digest": request["request_digest"],
@@ -210,8 +214,8 @@ class CanonicalAuthorityTests(unittest.TestCase):
         self.assertIn(unit_id, context.planner_unit_ids)
         self.assertEqual((obligation,), context.planner_unit_obligations[unit_id])
         validated_context = contract._validate_context(context)
-        self.assertIn(unit_id, validated_context[4])
-        self.assertEqual((obligation,), validated_context[5][unit_id])
+        self.assertIn(unit_id, validated_context[6])
+        self.assertEqual((obligation,), validated_context[7][unit_id])
         self.assertEqual(set(request["validation_units"]), set(authority.planner_unit_obligations))
         self.assertEqual(
             ["required_gate_baseline", "workflow_governance"],
@@ -271,12 +275,29 @@ class CanonicalAuthorityTests(unittest.TestCase):
         self.assertEqual(authority.planner_unit_obligations, bound.planner_unit_obligations)
         wrong_context = contract.TrustedRequestContext(
             task_uid=context.task_uid, head_oid="8" * 40,
+            task_issue_number=context.task_issue_number, pr_number=context.pr_number,
             source_scope_oid=context.source_scope_oid, projection_digest=context.projection_digest,
             planner_unit_ids=context.planner_unit_ids,
             planner_unit_obligations=context.planner_unit_obligations,
         )
         with self.assertRaises(contract.ContractError):
             contract.bind_authority_context(provisional, wrong_context)
+
+    def test_live_task_and_pr_numbers_are_dynamic_but_exactly_bound(self):
+        context, _, _, _, comments, permissions, _ = validation_fixture()
+        self.assertFalse(hasattr(contract, "TASK_ISSUE_NUMBER"))
+        self.assertFalse(hasattr(contract, "PR_NUMBER"))
+        changed_context = contract.TrustedRequestContext(
+            task_uid=context.task_uid, task_issue_number=context.task_issue_number + 1,
+            pr_number=context.pr_number, head_oid=context.head_oid,
+            source_scope_oid=context.source_scope_oid,
+            projection_digest=context.projection_digest,
+            planner_unit_ids=context.planner_unit_ids,
+            planner_unit_obligations=context.planner_unit_obligations,
+        )
+        provisional = contract.resolve_records(comments, permissions)
+        with self.assertRaisesRegex(contract.ContractError, "trusted live Task/H/S identity"):
+            contract.bind_authority_context(provisional, changed_context)
 
     def test_readback_uses_issued_admin_snapshot_without_live_permission_lookup(self):
         context, _, _, _, comments, _, issued = validation_fixture()
@@ -302,6 +323,55 @@ class CanonicalAuthorityTests(unittest.TestCase):
         changed = contract.resolve_records_for_readback(changed_comments)
         with self.assertRaisesRegex(contract.ContractError, "pin_actor"):
             contract.bind_recorded_admin_snapshot(changed, issued_record)
+
+    def test_readback_selects_latest_complete_chain_for_live_task_pr_and_head(self):
+        context, request, authorization, pin, comments, _, issued = validation_fixture()
+        later_authorization_body = marked(contract.AUTHORIZATION_MARKER, dict(authorization))
+        later_request = dict(request)
+        later_request["authorization_source"] = {
+            "issue_number": context.task_issue_number,
+            "comment_id": 40,
+            "body_digest": contract.body_digest(later_authorization_body),
+        }
+        later_request["request_digest"] = contract.request_digest({
+            key: value for key, value in later_request.items() if key != "request_digest"
+        })
+        later_request_body = marked(contract.REQUEST_MARKER, later_request)
+        later_pin = {
+            **pin,
+            "request_comment_id": 50,
+            "request_body_digest": contract.body_digest(later_request_body),
+            "request_digest": later_request["request_digest"],
+        }
+        later_pin_body = marked(contract.PIN_MARKER, later_pin)
+        comments = [
+            *comments,
+            {"id": 40, "body": later_authorization_body,
+             "user": {"login": "approval-admin"},
+             "created_at": "2026-01-01T00:03:00Z", "updated_at": "2026-01-01T00:03:00Z"},
+            {"id": 50, "body": later_request_body,
+             "user": {"login": "requester"},
+             "created_at": "2026-01-01T00:04:00Z", "updated_at": "2026-01-01T00:04:00Z"},
+            {"id": 60, "body": later_pin_body,
+             "user": {"login": "pin-admin"},
+             "created_at": "2026-01-01T00:05:00Z", "updated_at": "2026-01-01T00:05:00Z"},
+        ]
+        expected_identity = {
+            "task_uid": context.task_uid,
+            "task_issue_number": context.task_issue_number,
+            "pr_number": context.pr_number,
+            "head_oid": request["head_oid"],
+            "integration_base_oid": request["integration_base_oid"],
+        }
+
+        current = contract.resolve_records_for_readback(
+            comments, expected_identity=expected_identity,
+        )
+
+        self.assertEqual(50, current.request_comment_id)
+        self.assertEqual(40, current.authorization_comment_id)
+        self.assertEqual(60, current.pin_comment_id)
+        self.assertNotEqual(issued.validation_id, current.validation_id)
 
     def test_duplicate_keys_noncanonical_body_extra_fields_and_marker_duplicates_fail(self):
         _, request, _, _, comments, permissions, _ = validation_fixture()
@@ -375,7 +445,7 @@ class WorkflowDiscoveryTests(unittest.TestCase):
         self.assertEqual(contract.expected_run_title(authority), selected["display_title"])
         self.assertTrue(selected["display_title"].isascii())
 
-    def test_unicode_prefix_and_suffix_near_candidates_still_block(self):
+    def test_malformed_or_superseded_action_titles_do_not_poison_current_request(self):
         *_, authority = validation_fixture()
         target = live_run(authority)
         expected = contract.expected_run_title(authority)
@@ -393,8 +463,29 @@ class WorkflowDiscoveryTests(unittest.TestCase):
             with self.subTest(run_id=candidate["id"]):
                 with self.assertRaises(contract.ContractError):
                     contract.select_unique_run([candidate], authority)
-                with self.assertRaises(contract.ContractError):
-                    contract.select_unique_run([target, candidate], authority)
+                self.assertEqual(target["id"], contract.select_unique_run([target, candidate], authority)["id"])
+
+    def test_failed_cancelled_and_superseded_runs_do_not_poison_successful_retry(self):
+        *_, authority = validation_fixture()
+        successful = live_run(authority)
+        failed = {**successful, "id": 701, "status": "completed", "conclusion": "failure"}
+        cancelled = {**successful, "id": 702, "status": "completed", "conclusion": "cancelled"}
+        superseded = {**successful, "id": 703, "status": "completed", "conclusion": "timed_out"}
+
+        selected = contract.select_unique_run([failed, cancelled, superseded, successful], authority)
+
+        self.assertEqual(successful["id"], selected["id"])
+
+    def test_current_dispatch_selects_current_run_and_rejects_competing_live_attempt(self):
+        *_, authority = validation_fixture()
+        current = {**live_run(authority), "id": 704, "status": "in_progress", "conclusion": None}
+        failed = {**current, "id": 705, "status": "completed", "conclusion": "failure"}
+        selected = contract.select_unique_run([failed, current], authority, current_run_id=704)
+        self.assertEqual(current["id"], selected["id"])
+
+        competing = {**current, "id": 706, "status": "in_progress", "conclusion": None}
+        with self.assertRaisesRegex(contract.ContractError, "competing"):
+            contract.select_unique_run([failed, current, competing], authority, current_run_id=704)
 
     def test_history_titles_accept_long_well_formed_unicode_without_normalization(self):
         *_, authority = validation_fixture()
@@ -449,13 +540,13 @@ class WorkflowDiscoveryTests(unittest.TestCase):
             with self.subTest(pages=pages), self.assertRaises(contract.ContractError):
                 contract.collect_workflow_runs(pages)
 
-    def test_candidate_union_rejects_second_run_even_if_only_prefix_matches(self):
+    def test_other_request_key_for_same_task_head_is_not_a_current_action_candidate(self):
         *_, authority = validation_fixture()
         target = live_run(authority)
         malformed = {**target, "id": 701, "display_title": target["display_title"].rsplit("|", 1)[0] + "|wrong-key"}
+        self.assertEqual(target["id"], contract.select_unique_run([target, malformed], authority)["id"])
         with self.assertRaises(contract.ContractError):
-            contract.select_unique_run([target, malformed], authority)
-        self.assertEqual(target["id"], contract.select_unique_run([target], authority)["id"])
+            contract.select_unique_run([malformed], authority)
 
 
 class PayloadReadbackTests(unittest.TestCase):

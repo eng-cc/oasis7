@@ -9,8 +9,8 @@ usage() {
   cat <<'EOF'
 Usage: ./scripts/pm/review-closeout.sh --task-uid <uid> --review-plan <json> --role-returns <ledger.jsonl> [options]
 
-Reconcile structured role returns for one immutable review plan, collect the
-role-complete ledger, and generate the canonical pre-PR review packet.
+Validate the plan-bound role returns, promote a v2 handoff under reservation
+when required, collect the role-complete ledger, and generate the canonical packet.
 
 Options:
   --task-uid <uid>          Bound GitHub-backed task UID
@@ -104,8 +104,12 @@ if p.get("schema") == "oasis7-review-plan/v2":
 preflight = p.get("preflight")
 if not isinstance(preflight, dict) or not isinstance(preflight.get("ledger_path"), str) or not preflight["ledger_path"].strip():
  raise SystemExit("review-closeout: review plan has no persisted preflight ledger")
+roles = p.get("roles")
+if not isinstance(roles, list) or not roles or not all(isinstance(role, str) and role for role in roles) or len(set(roles)) != len(roles):
+ raise SystemExit("review-closeout: review plan roles must be unique non-empty strings")
 print(p["batch_path"]); print(p["frozen_head"]); print(p["comparison_ref"]); print(p["comparison_oid"]); print(p["epoch"]); print(evidence_digest)
 print(preflight["ledger_path"])
+print(",".join(roles))
 PY
 )"
 BATCH_PATH="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '1p')"
@@ -113,6 +117,7 @@ BATCH_PATH="$(resolve_repo_file "review batch" "$BATCH_PATH")" || exit 1
 FROZEN_HEAD="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '2p')"
 PLAN_EPOCH="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '5p')"
 PLAN_LEDGER="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '7p')"
+PLAN_ROLES="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '8p')"
 PLAN_LEDGER="$(resolve_repo_file "review plan preflight ledger" "$PLAN_LEDGER")" || exit 1
 [[ "$ROLE_RETURNS" == "$PLAN_LEDGER" ]] || die "role-return ledger must match immutable review plan preflight ledger path"
 CURRENT_HEAD="$(git -C "$ROOT_DIR" rev-parse HEAD)" || die "cannot resolve current HEAD"
@@ -230,10 +235,51 @@ else:
 PY
 )" || exit 1
 
+LEDGER_STATE="$(python3 - "$ROLE_RETURNS" <<'PY'
+import json, pathlib, sys
+try:
+    rows = [json.loads(line) for line in pathlib.Path(sys.argv[1]).read_text(encoding="utf-8").splitlines() if line.strip()]
+except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"review-closeout: role-return ledger is invalid: {exc}")
+if not rows or any(not isinstance(row, dict) for row in rows):
+    raise SystemExit("review-closeout: role-return ledger is empty or malformed")
+statuses = {row.get("status") for row in rows}
+if statuses == {"incomplete"}:
+    print("incomplete")
+elif statuses == {"completed"}:
+    print("completed")
+else:
+    raise SystemExit("review-closeout: role-return ledger mixes or has unsupported statuses")
+PY
+)" || exit 1
+if [[ "$COLLECTION_STATE" == "existing" && "$LEDGER_STATE" == "incomplete" ]]; then
+  die "an existing collection cannot authorize an incomplete plan-owned preflight ledger"
+fi
+
+# Read the manifest schema before choosing an owner for live validation.  For an
+# uncollected v2 handoff, the recorder owns both live waves and the reservation;
+# validating here would add an out-of-transaction third wave.
+RESOLUTION_SCHEMA=""
+RESOLUTION_RESULT=""
+if [[ -n "$FINDING_RESOLUTION" ]]; then
+  RESOLUTION_SCHEMA="$(python3 - "$FINDING_RESOLUTION" <<'PY'
+import json, pathlib, sys
+try:
+    value = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"review-closeout: finding resolution manifest is invalid: {exc}")
+if not isinstance(value, dict):
+    raise SystemExit("review-closeout: finding resolution manifest is not an object")
+print(value.get("schema", ""))
+PY
+)" || exit 1
+fi
+
 # Validate finding-bearing returns before reconcile/collection can rewrite the
 # preflight ledger.  A missing resolution is itself a fail-closed condition;
-# it must not leave behind a collection receipt or a rewritten ledger.
-if [[ -n "$FINDING_RESOLUTION" ]]; then
+# it must not leave behind a collection receipt or a rewritten ledger.  The
+# uncollected v2 case is delegated below, before any live validation here.
+if [[ -n "$FINDING_RESOLUTION" && ! ( "$COLLECTION_STATE" == "absent" && "$RESOLUTION_SCHEMA" == "oasis7-review-resolution/v2" ) ]]; then
   RESOLUTION_COMMAND=(python3 "$SCRIPT_DIR/review-findings-resolution.py" validate
     --root "$ROOT_DIR" --task-uid "$TASK_UID" --head "$FROZEN_HEAD"
     --ledger "$ROLE_RETURNS" --manifest "$FINDING_RESOLUTION")
@@ -255,7 +301,7 @@ PY
   fi
   RESOLUTION_RESULT="$("${RESOLUTION_COMMAND[@]}")" \
     || die "finding-resolution validation failed"
-else
+elif [[ -z "$FINDING_RESOLUTION" ]]; then
   python3 - "$ROOT_DIR" "$ROLE_RETURNS" <<'PY' || die "unresolved role findings require an admin-authorized finding resolution manifest"
 import json
 import pathlib
@@ -303,9 +349,42 @@ PY
   RESOLUTION_RESULT=""
 fi
 
-if [[ "$COLLECTION_STATE" == "absent" ]]; then
-  python3 "$SCRIPT_DIR/review-batch-epoch.py" --root "$ROOT_DIR" reconcile \
-    --batch "$BATCH_PATH" --ledger "$ROLE_RETURNS" >/dev/null
+# Plan-owned v2 promotion and packet generation are one recorder-owned
+# transaction.  Delegating before this facade's own live validation avoids a
+# post-CAS recorder read while retaining wave one and the reserved wave two
+# inside the direct recorder invocation.
+if [[ "$COLLECTION_STATE" == "absent" && "$RESOLUTION_SCHEMA" == "oasis7-review-resolution/v2" ]]; then
+  [[ -n "$VERIFICATION" ]] || VERIFICATION="immutable review plan evidence digest $(printf '%s\n' "$PLAN_FIELDS" | sed -n '6p')"
+  ARGS=(--task-uid "$TASK_UID" --review-plan "$REVIEW_PLAN" --roles "$PLAN_ROLES"
+    --review-evidence "derived from validated plan-bound role returns"
+    --review-verdicts "derived from validated plan-bound role returns"
+    --finding-disposition-evidence "derived from validated v2 handoff"
+    --verification "$VERIFICATION" --residual-risk "$EXTRA_RISK"
+    --slice-ledger "$ROLE_RETURNS" --finding-resolution "$FINDING_RESOLUTION")
+  [[ "$PRINT_ONLY" == 0 ]] || ARGS+=(--print-only)
+  PACKET="$("$SCRIPT_DIR/record-pre-pr-review.sh" "${ARGS[@]}")"
+  if [[ "$OUTPUT_JSON" == 1 ]]; then
+    python3 - "$TASK_UID" "$REVIEW_PLAN" "$ROLE_RETURNS" "$PACKET" <<'PY'
+import json,sys
+print(json.dumps({"status":"passed","task_uid":sys.argv[1],"review_plan":sys.argv[2],"role_returns":sys.argv[3],"packet":sys.argv[4]}))
+PY
+  else
+    printf '%s\n' "$PACKET"
+  fi
+  exit 0
+fi
+
+PROMOTION_COLLECTED=0
+if [[ "$COLLECTION_STATE" == "absent" && "$LEDGER_STATE" == "incomplete" ]]; then
+  [[ "$RESOLUTION_SCHEMA" == "oasis7-review-resolution/v2" ]] \
+    || die "incomplete plan-owned preflight requires a v2 handoff-bound resolution manifest"
+fi
+if [[ "$COLLECTION_STATE" == "absent" && "$RESOLUTION_SCHEMA" == "oasis7-review-resolution/v2" ]]; then
+  PROMOTION_RESULT="$(python3 "$SCRIPT_DIR/review_preflight_handoff.py" promote \
+    --root "$ROOT_DIR" --plan "$REVIEW_PLAN" --manifest "$FINDING_RESOLUTION" \
+    --task-uid "$TASK_UID" --head "$FROZEN_HEAD" --epoch "$PLAN_EPOCH")" \
+    || die "v2 handoff promotion failed"
+  PROMOTION_COLLECTED=1
 fi
 SUMMARIES="$(python3 - "$ROLE_RETURNS" "$EXTRA_RISK" "$REVIEW_PLAN" "$RESOLUTION_RESULT" <<'PY'
 import json, pathlib, sys
@@ -336,8 +415,10 @@ if sys.argv[2]: risks.append(sys.argv[2])
 print(roles); print(evidence); print(verdicts); print(disposition); print("; ".join(risks))
 PY
 )"
-python3 "$SCRIPT_DIR/review-batch-epoch.py" --root "$ROOT_DIR" collect \
-  --batch "$BATCH_PATH" --ledger "$ROLE_RETURNS" >/dev/null
+if [[ "$PROMOTION_COLLECTED" == 0 ]]; then
+  python3 "$SCRIPT_DIR/review-batch-epoch.py" --root "$ROOT_DIR" collect \
+    --batch "$BATCH_PATH" --ledger "$ROLE_RETURNS" >/dev/null
+fi
 [[ -n "$VERIFICATION" ]] || VERIFICATION="immutable review plan evidence digest $(printf '%s\n' "$PLAN_FIELDS" | sed -n '6p')"
 ARGS=(--task-uid "$TASK_UID" --review-plan "$REVIEW_PLAN" --roles "$(printf '%s\n' "$SUMMARIES" | sed -n '1p')"
   --review-evidence "$(printf '%s\n' "$SUMMARIES" | sed -n '2p')" --review-verdicts "$(printf '%s\n' "$SUMMARIES" | sed -n '3p')"

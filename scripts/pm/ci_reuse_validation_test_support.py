@@ -12,6 +12,8 @@ import ci_reuse_validation_contract as contract
 def validation_only_artifacts() -> tuple[dict, dict, dict]:
     """Return a valid validation payload, authority record, and readback."""
     task_uid = "task_" + "a" * 32
+    task_issue_number = 87
+    pr_number = 143
     units = ["required_gate_baseline", "workflow_governance"]
     obligations = {
         "required_gate_baseline": ("required_gate_baseline:000:baseline",),
@@ -19,6 +21,8 @@ def validation_only_artifacts() -> tuple[dict, dict, dict]:
     }
     context = contract.TrustedRequestContext(
         task_uid=task_uid,
+        task_issue_number=task_issue_number,
+        pr_number=pr_number,
         head_oid="1" * 40,
         source_scope_oid="2" * 40,
         projection_digest="sha256:" + "3" * 64,
@@ -30,8 +34,8 @@ def validation_only_artifacts() -> tuple[dict, dict, dict]:
         "schema": contract.AUTHORIZATION_SCHEMA,
         "repository": contract.REPOSITORY,
         "task_uid": task_uid,
-        "task_issue_number": contract.TASK_ISSUE_NUMBER,
-        "pr_number": contract.PR_NUMBER,
+        "task_issue_number": task_issue_number,
+        "pr_number": pr_number,
         "head_oid": context.head_oid,
         "integration_base_oid": "4" * 40,
         "source_scope_oid": context.source_scope_oid,
@@ -49,8 +53,8 @@ def validation_only_artifacts() -> tuple[dict, dict, dict]:
         "schema": contract.REQUEST_SCHEMA,
         "repository": contract.REPOSITORY,
         "task_uid": task_uid,
-        "task_issue_number": contract.TASK_ISSUE_NUMBER,
-        "pr_number": contract.PR_NUMBER,
+        "task_issue_number": task_issue_number,
+        "pr_number": pr_number,
         "head_oid": context.head_oid,
         "integration_base_oid": authorization["integration_base_oid"],
         "source_scope_oid": context.source_scope_oid,
@@ -59,7 +63,7 @@ def validation_only_artifacts() -> tuple[dict, dict, dict]:
         "purpose": contract.PURPOSE,
         "authorization_decision": contract.REQUEST_DECISION,
         "authorization_source": {
-            "issue_number": contract.TASK_ISSUE_NUMBER,
+            "issue_number": task_issue_number,
             "comment_id": 10,
             "body_digest": authorization_body_digest,
         },
@@ -74,8 +78,8 @@ def validation_only_artifacts() -> tuple[dict, dict, dict]:
         "schema": contract.PIN_SCHEMA,
         "repository": contract.REPOSITORY,
         "task_uid": task_uid,
-        "task_issue_number": contract.TASK_ISSUE_NUMBER,
-        "pr_number": contract.PR_NUMBER,
+        "task_issue_number": task_issue_number,
+        "pr_number": pr_number,
         "request_comment_id": 20,
         "request_body_digest": contract.body_digest(request_body),
         "request_digest": request["request_digest"],
@@ -124,7 +128,7 @@ def validation_only_artifacts() -> tuple[dict, dict, dict]:
         "inputs": {
             "run_mode": contract.RUN_MODE,
             "task_uid": task_uid,
-            "pr_number": str(contract.PR_NUMBER),
+            "pr_number": str(pr_number),
             "integration_base": request["integration_base_oid"],
             "expected_head": request["head_oid"],
             "source_scope_oid": request["source_scope_oid"],

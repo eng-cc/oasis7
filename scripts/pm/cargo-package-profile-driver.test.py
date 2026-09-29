@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""RED contract for the C2 Cargo package/profile CI driver.
+"""Focused contract tests for the Cargo package/profile CI driver.
 
 The GREEN implementation must provide
 ``scripts/pm/cargo_package_profile_driver.py`` with
@@ -185,6 +185,29 @@ class CargoPackageProfileDriverContract(unittest.TestCase):
         with self.assertRaisesRegex(Exception, "plan.?id|digest|forged"):
             self._validate(
                 [self._result("alpha-native"), self._result("alpha-wasm")]
+            )
+
+    def test_empty_full_escalation_requires_a_passing_generic_full_run(self) -> None:
+        plan = dict(self.plan)
+        plan.update(
+            selected_items=[],
+            items=[],
+            execution_disposition="full_escalation",
+            disposition_validated=True,
+        )
+        unsigned = dict(plan)
+        unsigned.pop("plan_id", None)
+        plan["plan_id"] = "sha256:" + hashlib.sha256(
+            json.dumps(unsigned, sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest()
+
+        with self.assertRaisesRegex(Exception, "empty package plan.*generic full_escalation"):
+            self.api.validate_planned_items(
+                plan,
+                [],
+                integration_base=self.integration_base,
+                source_head=self.source_head,
+                tested_tree=self.tested_tree,
             )
 
 

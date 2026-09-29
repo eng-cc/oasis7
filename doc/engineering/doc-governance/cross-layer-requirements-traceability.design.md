@@ -4,8 +4,8 @@
 - Owner role：`repository_health_engineer`
 - 产品/系统语义联审：`producer_system_designer`
 - QA 证据联审：`qa_engineer`
-- 任务真值：GitHub Issue `#3706` / `task_53191b31a5a9498cb7745fec8ebc0bc8`
-- 上游审计：GitHub Issue `#3704`
+- 任务真值：由 GitHub Project-backed Task mapping、live Task Issue 与其 evidence 提供。
+- 上游审计：以当前 Task Issue 中的 live evidence references 为准。
 - 生命周期权威：[workflow source of truth](../workflow/source-of-truth.md#traceability-record-contract)
 - 配套规范：[系统设计写作规范](system-design-writing-standard.design.md)、[项目管理记录规范](project-management-record-standard.design.md)、[产品文档规范](product-documentation-standard.design.md)
 
@@ -60,40 +60,7 @@
 
 ## 4. Canonical Trace Relation
 
-唯一协调记录继续使用 `oasis7.loop-change/v1`。每个 `required_obligations[]` 元素表示一个可独立判定的 obligation，并增加下列语义：
-
-```yaml
-# 字段节选（不是完整 oasis7.loop-change/v1 记录；不能直接作为 C1 通过样例）
-obligation_id: stable-local-id
-required: true
-applicability: required # required | not_applicable
-trace:
-  upstream_refs:
-    - kind: professional_acceptance # product_requirement 适用于产品义务
-      applicability: required
-      repository: eng-cc/oasis7
-      path: doc/engineering/doc-governance/project-management-record-standard.design.md
-      fragment: 3-固定输入与证据身份
-      contract_id: engineering-project-management-record-standard
-      revision: 1 # 合同 schema revision；不是 Git commit OID
-      contract_digest: sha256:af924078c204d31d8ae63ceddaa6920db723fe8b2dd557353ec6bd823381df11
-      publication_ref:
-        issue_number: 3706
-        comment_id: 5679917357
-  system_design:
-    applicability: required # required | not_applicable
-    repository: eng-cc/oasis7
-    path: doc/engineering/doc-governance/system-design-writing-standard.design.md
-    fragment: 11-验证设计与可追溯性
-    reason: <仅在 not_applicable 分支填写；此字段节选未展开>
-    owner_role: repository_health_engineer
-    evidence_ref: <仅在 not_applicable 分支填写；此字段节选未展开>
-mapping_slot: stable-slot
-owner_loop: code
-owner_role: repository_health_engineer
-acceptance_refs:
-  - doc/engineering/doc-governance/project-management-record-standard.design.md#3-固定输入与证据身份
-```
+唯一协调记录继续使用 `oasis7.loop-change/v1`。每个 `required_obligations[]` 元素表示一个可独立判定的 obligation，绑定稳定 obligation ID、`applicability`、typed upstream 与 system-design 引用、`mapping_slot`、owner loop/role 和 acceptance refs。Upstream 引用使用 kind、适用性、canonical repository、repository-relative path、稳定 fragment、`contract_id`、schema `revision`、`contract_digest` 及 GitHub publication locator；system-design 引用使用适用性、path、fragment、owner role 和 evidence locator。各字段的实际取值从 canonical task/evidence 中解析，不在本文嵌入具体记录或协议 payload。
 
 `required=true` 是 `applicability=required` 的兼容别名。新建或实质修改的记录必须同时生成两者且值一致；既有记录缺少 `applicability` 时标记为 `legacy-unclassified`，不能静默解释成 required 或 N/A。
 
@@ -222,7 +189,7 @@ Checker 必须输出稳定、可定位的诊断，至少区分：
 - `./scripts/doc-governance-check.sh --full-corpus`
 - `python3 scripts/pm/loop-traceability.test.py`
 - `./scripts/pm/lint.sh`
-- `./scripts/pm/workflow-lint.sh --task-uid task_53191b31a5a9498cb7745fec8ebc0bc8 --phase current`
+- `./scripts/pm/workflow-lint.sh --task-uid <TASK-UID> --phase current`
 - non-PR default-worktree refresh/finalizer integration regression
 - `git diff --check "$COMPARISON_REF...$SOURCE_HEAD"`
 

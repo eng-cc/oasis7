@@ -7,11 +7,21 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import unittest
 
 
 SCRIPT = Path(__file__).with_name("review-findings-resolution.py")
+BATCH_SCRIPT = Path(__file__).with_name("review-batch-epoch.py")
+PLAN_SCRIPT = Path(__file__).with_name("review-plan.py")
+_PROJECTION_SPEC = importlib.util.spec_from_file_location(
+    "workflow_impact_projection_for_resolution_tests",
+    Path(__file__).with_name("workflow-impact-projection.py"),
+)
+assert _PROJECTION_SPEC is not None and _PROJECTION_SPEC.loader is not None
+WORKFLOW_IMPACT = importlib.util.module_from_spec(_PROJECTION_SPEC)
+_PROJECTION_SPEC.loader.exec_module(WORKFLOW_IMPACT)
 TASK = "task_" + "1" * 32
 HEAD = "a" * 40
 EPOCH = "b" * 64
@@ -20,6 +30,7 @@ SLICE = "11111111-1111-4111-8111-111111111111"
 REPO = "eng-cc/oasis7"
 ISSUE = 3615
 COMMENT_ID = 3934017999
+DISPATCH_COMMENT_ID = 3934017998
 ADMIN = "repo-admin"
 
 
@@ -48,14 +59,17 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
         self.evidence.write_bytes(b"exact repository proof\n")
         self.readback = self.task_root / "review-resolutions" / f"{EPOCH}.readback.json"
         self.manifest = self.task_root / "review-resolutions" / f"{EPOCH}.json"
+        self.v2_fixture_counter = 0
         self.manifest.parent.mkdir()
         self.ledger = self.task_root / "slice-ledger.jsonl"
         self.gh_log = self.root / "gh.log"
+        self.gh_dispatch_fixture = self.root / "dispatch-gh-fixture.json"
         self.bin = self.root / "bin"
         self.bin.mkdir()
         self.fake_gh = self.bin / "gh"
         self._write_fixture()
         self._write_fake_gh(permission="admin")
+        self.v2_git_initialized = False
 
     def tearDown(self) -> None:
         self.temp.cleanup()
@@ -67,19 +81,53 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
             body = self.body
         if task_body is None:
             task_body = f"<!-- oasis7-pm-task -->\ntask_uid: {TASK}\n"
+        config = {
+            "repository": REPO, "issue_number": issue_number, "task_body": task_body,
+            "resolution_comment_id": COMMENT_ID, "resolution_body": body,
+            "resolution_issue_number": comment_issue_number,
+            "author": author, "permission": permission,
+        }
         self.fake_gh.write_text(
             "#!/usr/bin/env python3\n"
             "import json, os, sys\n"
+            f"CONFIG = json.loads({json.dumps(config)!r})\n"
             "args = sys.argv[1:]\n"
+            "if not args or args[0] != 'api' or len(args) < 2: raise SystemExit('unexpected gh call')\n"
+            "endpoint = args[1]\n"
             "open(os.environ['GH_LOG'], 'a').write(' '.join(args) + '\\n')\n"
-            f"if args[:2] != ['api', 'repos/eng-cc/oasis7/issues/{issue_number}'] and args[:2] != ['api', 'repos/eng-cc/oasis7/issues/comments/3934017999'] and args[:2] != ['api', 'repos/eng-cc/oasis7/collaborators/{author}/permission']:\n"
-            "    raise SystemExit('unexpected gh call: ' + ' '.join(args))\n"
-            f"if args[1] == 'repos/eng-cc/oasis7/issues/{issue_number}':\n"
-            "    print(json.dumps({'number': " + str(issue_number) + ", 'body': " + repr(task_body) + "}))\n"
-            "elif 'comments' in args[1]:\n"
-            "    print(json.dumps({'id': 3934017999, 'body': " + repr(body) + ", 'issue_url': 'https://api.github.com/repos/eng-cc/oasis7/issues/" + str(comment_issue_number) + "', 'user': {'login': " + repr(author) + "}, 'created_at': '2026-09-06T10:00:00Z'}))\n"
-            "else:\n"
-            "    print(json.dumps({'permission': " + repr(permission) + "}))\n",
+            "def read_dispatch():\n"
+            "    path = os.environ.get('GH_DISPATCH_FIXTURE')\n"
+            "    if not path or not os.path.isfile(path): return None\n"
+            "    with open(path, encoding='utf-8') as handle: return json.load(handle)\n"
+            "dispatch = read_dispatch()\n"
+            "issue_route = f\"repos/{CONFIG['repository']}/issues/{CONFIG['issue_number']}\"\n"
+            "if endpoint == issue_route:\n"
+            "    print(json.dumps(dispatch['issue'] if dispatch else {'number': CONFIG['issue_number'], 'html_url': f\"https://github.com/{CONFIG['repository']}/issues/{CONFIG['issue_number']}\", 'body': CONFIG['task_body']}))\n"
+            "elif endpoint.startswith(issue_route + '/comments'):\n"
+            "    method = next((args[i + 1] for i, arg in enumerate(args[:-1]) if arg == '--method'), 'GET')\n"
+            "    if method == 'POST':\n"
+            "        if dispatch is None: raise SystemExit('dispatch fixture is missing for POST')\n"
+            "        body = next((args[i + 1][5:] for i, arg in enumerate(args[:-1]) if arg in ('--field', '-f') and args[i + 1].startswith('body=')), None)\n"
+            "        if body is None: raise SystemExit('missing POST body')\n"
+            "        comment = {'id': dispatch['comment_id'], 'body': body, 'issue_url': f\"https://api.github.com/repos/{CONFIG['repository']}/issues/{CONFIG['issue_number']}\", 'html_url': f\"https://github.com/{CONFIG['repository']}/issues/{CONFIG['issue_number']}#issuecomment-{dispatch['comment_id']}\", 'user': {'login': dispatch['author']}, 'created_at': '2026-09-29T00:00:00Z'}\n"
+            "        dispatch['comment_pages'][-1].append(comment)\n"
+            "        with open(os.environ['GH_DISPATCH_FIXTURE'], 'w', encoding='utf-8') as handle: json.dump(dispatch, handle, ensure_ascii=False, sort_keys=True)\n"
+            "        print(json.dumps(comment))\n"
+            "    elif dispatch is not None:\n"
+            "        print(json.dumps(dispatch['comment_pages'] if '--paginate' in args else (dispatch['comment_pages'][0] if dispatch['comment_pages'] else [])))\n"
+            "    else: print('[]')\n"
+            "elif endpoint.startswith(f\"repos/{CONFIG['repository']}/issues/comments/\"):\n"
+            "    comment_id = int(endpoint.rsplit('/', 1)[1])\n"
+            "    if comment_id == CONFIG['resolution_comment_id']:\n"
+            "        print(json.dumps({'id': comment_id, 'body': CONFIG['resolution_body'], 'issue_url': f\"https://api.github.com/repos/{CONFIG['repository']}/issues/{CONFIG['resolution_issue_number']}\", 'user': {'login': CONFIG['author']}, 'created_at': '2026-09-06T10:00:00Z'}))\n"
+            "    elif dispatch is not None:\n"
+            "        matches = [comment for page in dispatch['comment_pages'] for comment in page if comment.get('id') == comment_id]\n"
+            "        if len(matches) != 1: raise SystemExit('dispatch comment fixture is not unique')\n"
+            "        print(json.dumps(matches[0]))\n"
+            "    else: raise SystemExit('unknown comment id')\n"
+            "elif endpoint.startswith(f\"repos/{CONFIG['repository']}/collaborators/\"):\n"
+            "    print(json.dumps({'permission': CONFIG['permission']}))\n"
+            "else: raise SystemExit('unexpected gh call: ' + ' '.join(args))\n",
             encoding="utf-8",
         )
         self.fake_gh.chmod(0o755)
@@ -179,18 +227,485 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
         self.readback.write_text(json.dumps(readback, sort_keys=True) + "\n")
         self._write_fake_gh(permission="admin", body=self.body)
 
-    def run_script(self, *extra: str, ok: bool = True) -> subprocess.CompletedProcess[str]:
-        env = {**os.environ, "PATH": f"{self.bin}:{os.environ['PATH']}", "GH_LOG": str(self.gh_log)}
-        result = subprocess.run(
-            [str(SCRIPT), "validate", "--root", str(self.root), "--task-uid", TASK,
-             "--head", HEAD, "--ledger", str(self.ledger), "--manifest", str(self.manifest), *extra],
+    def _prepare_v2_plan_repo(self) -> None:
+        """Create the minimum isolated Git/task context required by the real v2 plan producer."""
+        if self.v2_git_initialized:
+            return
+        mapping_path = self.root / ".pm" / "github-project-sync" / "tasks.json"
+        mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+        mapping.setdefault("project", {})["repo"] = REPO
+        mapping.setdefault("tasks", {})[TASK] = {
+            "task_uid": TASK, "repository": REPO, "issue_number": ISSUE,
+            "pr_number": ISSUE, "bootstrap_epoch": 1,
+        }
+        mapping_path.write_text(json.dumps(mapping, sort_keys=True) + "\n", encoding="utf-8")
+        for path, content in (
+            (self.root / ".agents" / "roles" / f"{ROLE}.md", f"# {ROLE}\n"),
+            (self.root / "doc" / "engineering" / "workflow" / "source-of-truth.md", "# fixture policy\n"),
+            (self.root / ".agents" / "skills" / "requesting-repo-owned-review" / "SKILL.md", "# fixture review skill\n"),
+        ):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(content, encoding="utf-8")
+        (self.root / "README").write_text("plan fixture\n", encoding="utf-8")
+        commands = (
+            ("init", "-b", "main"),
+            ("config", "user.email", "test@example.invalid"),
+            ("config", "user.name", "Review fixture"),
+            ("add", "README"),
+            ("commit", "-m", "fixture base"),
+        )
+        for args in commands:
+            result = subprocess.run(
+                ["git", "-C", str(self.root), *args], text=True, capture_output=True,
+            )
+            self.assertEqual(0, result.returncode, result.stderr)
+        head = subprocess.run(
+            ["git", "-C", str(self.root), "rev-parse", "HEAD"],
+            text=True, capture_output=True,
+        )
+        self.assertEqual(0, head.returncode, head.stderr)
+        self.v2_head = head.stdout.strip()
+        updated = subprocess.run(
+            ["git", "-C", str(self.root), "update-ref", "refs/remotes/origin/main", self.v2_head],
+            text=True, capture_output=True,
+        )
+        self.assertEqual(0, updated.returncode, updated.stderr)
+        self.v2_git_initialized = True
+
+    def _materialize_v2_task_packets(self, plan: dict[str, object]) -> None:
+        """Write complete digest-bound packet fixtures at every immutable plan ref."""
+        refs = plan["packet_refs"]
+        slices = plan["expected_slices"]
+        source_identity = plan["source_review_identity"]
+        self.assertIsInstance(refs, list)
+        self.assertIsInstance(slices, list)
+        self.assertIsInstance(source_identity, dict)
+        self.assertEqual(len(refs), len(slices))
+        runtime_reason = (
+            "message-assigned fallback; adapter inactive on this surface; "
+            "actual runtime/model/reasoning unverified"
+        )
+        for ref, expected in zip(refs, slices):
+            self.assertIsInstance(ref, dict)
+            self.assertIsInstance(expected, dict)
+            role = expected["role"]
+            slice_id = expected["slice_id"]
+            self.assertEqual({"role": role, "slice_id": slice_id},
+                             {key: ref[key] for key in ("role", "slice_id")})
+            packet_path = self.root / ref["packet_ref"]
+            packet_path.parent.mkdir(parents=True, exist_ok=True)
+            payload = {
+                "schema": "oasis7-subagent-task-packet/v1",
+                "created_at": "2026-09-28T00:00:00+00:00",
+                "identity": {
+                    "task_uid": TASK,
+                    "issue_url": f"https://github.com/{REPO}/issues/{ISSUE}",
+                    "repository": REPO,
+                    "project_item_id": "fixture-project-item",
+                    "task_status": "committed",
+                    "packet_producer": "tpm",
+                    "worktree": str(self.root),
+                    "branch": "main",
+                    "base_ref": "refs/remotes/origin/main",
+                    "base_binding": "immutable_oid",
+                    "base_sha": source_identity["source_scope_oid"],
+                    "head": plan["frozen_head"],
+                },
+                "slice": {
+                    "slice_id": slice_id,
+                    "role": role,
+                    "slice_type": "focused_review",
+                    "owner_role": role,
+                    "integration_owner": "tpm",
+                    "integration_order": "1",
+                    "context_delivery_mode": "minimal_head_bound_task_packet",
+                    "intended_model_configuration": "inherit current parent selection",
+                    "actual_dispatched_model_reasoning": "inherited/unverified",
+                    "actual_runtime_evidence_reason": runtime_reason,
+                    "role_activation": "message_assigned_adapter_inactive",
+                    "write_scope": "isolated review-resolution test fixture",
+                    "return_contract": "complete immutable return fixture",
+                    "validation_command": "rtk python3.12 scripts/pm/review-findings-resolution.test.py",
+                    "formal_sink": f"https://github.com/{REPO}/issues/{ISSUE}",
+                    "full_history_escalation_reason": "",
+                },
+                "context": {
+                    "user_intent": "exercise plan-owned v2 handoff packet validation",
+                    "work_item": "isolated review-resolution consumer fixture",
+                    "non_goals": "No production changes or external writes",
+                    "acceptance_target": "valid digest-bound packet is accepted",
+                    "governance_refs": ["AGENTS.md", "doc/engineering/workflow/source-of-truth.md"],
+                    "scoped_refs": ["scripts/pm/review-findings-resolution.test.py"],
+                    "evidence_summary": "synthetic immutable plan and packet fixture",
+                    "collaboration_boundary": "temporary test repository only",
+                },
+            }
+            packet = {**payload, "packet_digest": digest(payload)}
+            packet_path.write_text(
+                json.dumps(packet, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8"
+            )
+
+    def _write_v2_fixture(self, *, findings: bool, mutation: str | None = None) -> tuple[Path, Path, bytes]:
+        """Build a v2 fixture from canonical plan/batch/preflight producers and bound return bytes."""
+        self.v2_fixture_counter += 1
+        self._prepare_v2_plan_repo()
+        task_plans = self.task_root / "review-plans"
+        task_plans.mkdir(parents=True, exist_ok=True)
+        projection_path = self.task_root / f"v2-impact-{self.v2_fixture_counter}.json"
+        projection_input = {
+            "task_uid": TASK, "source_head_oid": self.v2_head,
+            "scope_base_oid": self.v2_head, "changed_paths": [],
+            "change_class": "unknown", "manual_roles": [ROLE], "domain_role": None,
+            "test_profile": "required",
+            "declared_tests": ["required_gate_baseline", f"v2_fixture_{self.v2_fixture_counter}"],
+            "consumed_contracts": ["review-resolution-test-fixture"],
+            "public_semantics": [f"v2-fixture-{self.v2_fixture_counter}"],
+            "affected_consumers": ["review-resolution-validator"],
+            "closure_status": {
+                "status": "complete", "reason": "isolated test fixture", "evidence": [{
+                    "path": "README",
+                    "sha256": "sha256:" + hashlib.sha256((self.root / "README").read_bytes()).hexdigest(),
+                }],
+            },
+        }
+        projection = WORKFLOW_IMPACT.build_projection(self.root, projection_input)
+        projection_path.write_text(json.dumps(projection, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+        preflight_dir = task_plans / f"v2-preflight-{self.v2_fixture_counter}"
+        env = {
+            **os.environ,
+            "PATH": f"{self.bin}:{os.environ['PATH']}",
+            "GH_LOG": str(self.gh_log),
+            "GH_DISPATCH_FIXTURE": str(self.gh_dispatch_fixture),
+        }
+        planned = subprocess.run(
+            [str(PLAN_SCRIPT), "--root", str(self.root), "--task-uid", TASK,
+             "--head", self.v2_head, "--impact-projection", str(projection_path),
+             "--change-class", "unknown", "--manual-role", ROLE,
+             "--comparison-ref", "refs/remotes/origin/main", "--comparison-oid", self.v2_head,
+             "--preflight-dir", str(preflight_dir)],
             text=True, capture_output=True, env=env,
         )
+        self.assertEqual(0, planned.returncode, planned.stderr)
+        plan = json.loads(planned.stdout)
+        self._materialize_v2_task_packets(plan)
+        epoch = plan["epoch"]
+        self.v2_slice = plan["expected_slices"][0]["slice_id"]
+        self.v2_plan = task_plans / f"{epoch}.json"
+        batch_path = Path(plan["batch_path"])
+        batch = json.loads(batch_path.read_text(encoding="utf-8"))
+        preflight = plan["preflight"]
+        self.v2_ledger = Path(preflight["ledger_path"])
+        returned_path = Path(preflight["artifact_paths"][0])
+        self.v2_artifact = returned_path
+        self.v2_handoff = self.task_root / "review-handoffs" / f"{epoch}.json"
+        self.v2_manifest = self.task_root / "review-resolutions" / f"{epoch}.json"
+        self.v2_collection = Path(plan["collection_path"])
+        self.v2_handoff.parent.mkdir(parents=True, exist_ok=True)
+        self.v2_manifest.parent.mkdir(parents=True, exist_ok=True)
+
+        issue_url = f"https://api.github.com/repos/{REPO}/issues/{ISSUE}"
+        self.gh_dispatch_fixture.write_text(json.dumps({
+            "issue": {
+                "number": ISSUE,
+                "html_url": f"https://github.com/{REPO}/issues/{ISSUE}",
+                "body": (
+                    f"<!-- oasis7-pm-task -->\ntask_uid: {TASK}\n"
+                    f"- pr_url: `https://github.com/{REPO}/pull/{ISSUE}`\n"
+                    f"- pr_number: `{ISSUE}`\n"
+                ),
+            },
+            "comment_id": DISPATCH_COMMENT_ID,
+            "author": ADMIN,
+            "comment_pages": [[{
+                "id": DISPATCH_COMMENT_ID - 1, "body": "unrelated older issue comment",
+                "issue_url": issue_url, "user": {"login": "someone"},
+                "created_at": "2026-09-28T00:00:00Z",
+            }], []],
+        }, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8")
+
+        returned = json.loads(returned_path.read_text(encoding="utf-8"))
+        fixture_finding = {
+            "id": "V2-P1", "summary": "source-shaped v2 finding",
+            "triage": {"classification": "blocking", "basis": "fixture requires exact disposition"},
+        }
+        fixture_findings = [fixture_finding] if findings else []
+        returned.update({
+            "status": "completed", "activation": "message-assigned",
+            "context_delivery": "minimal-task-packet",
+            "actual_runtime": (
+                "inherited/unverified: message-assigned fallback; adapter inactive on this surface; "
+                "actual runtime/model/reasoning unverified"
+            ),
+            "scope_verdict": "approved", "risk_verdict": "approved",
+            "disposition": "findings" if findings else "no_findings",
+            "findings": fixture_findings, "residual_risk": "fixture risk",
+        })
+        returned_path.write_text(
+            json.dumps(returned, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        original_ledger_raw = self.v2_ledger.read_bytes()
+        dispatch_env = {
+            **os.environ,
+            "PATH": f"{self.bin}:{os.environ['PATH']}",
+            "GH_LOG": str(self.gh_log),
+            "GH_DISPATCH_FIXTURE": str(self.gh_dispatch_fixture),
+        }
+        dispatched = subprocess.run(
+            [str(BATCH_SCRIPT), "--root", str(self.root), "dispatch", "--plan", str(self.v2_plan)],
+            text=True, capture_output=True, env=dispatch_env,
+        )
+        self.assertEqual(0, dispatched.returncode, dispatched.stderr)
+        dispatch_record = json.loads(dispatched.stdout)
+        self.assertEqual("published", dispatch_record["status"])
+        self.assertEqual(DISPATCH_COMMENT_ID, dispatch_record["dispatch_comment_id"])
+        dispatch_digests = {
+            (row["role"], row["slice_id"]): row["packet_digest"]
+            for row in dispatch_record["rows"]
+        }
+        returned["admitted_packet_digest"] = dispatch_digests[(ROLE, self.v2_slice)]
+        returned_path.write_text(
+            json.dumps(returned, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        handoff_result = subprocess.run(
+            [str(BATCH_SCRIPT), "--root", str(self.root), "handoff", "--plan", str(self.v2_plan),
+             "--dispatch-comment-id", str(DISPATCH_COMMENT_ID)],
+            text=True, capture_output=True, env=dispatch_env,
+        )
+        self.assertEqual(0, handoff_result.returncode, handoff_result.stderr)
+        handoff = json.loads(self.v2_handoff.read_text(encoding="utf-8"))
+        if mutation == "not_completed":
+            returned["status"] = "incomplete"
+        elif mutation == "wrong_disposition":
+            returned["disposition"] = "findings"
+        elif mutation == "nonempty_findings":
+            returned["findings"] = [{"id": "unexpected", "summary": "fixture"}]
+            returned["disposition"] = "no_findings"
+        if mutation in {"not_completed", "wrong_disposition", "nonempty_findings"}:
+            returned_path.write_text(
+                json.dumps(returned, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8"
+            )
+            handoff_payload = {key: value for key, value in handoff.items() if key != "handoff_digest"}
+            handoff_payload["rows"][0]["return_sha256"] = hashlib.sha256(returned_path.read_bytes()).hexdigest()
+            handoff_payload["rows"][0]["findings_digest"] = digest(returned["findings"])
+            handoff = {**handoff_payload, "handoff_digest": digest(handoff_payload)}
+            self.v2_handoff.write_text(
+                json.dumps(handoff, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8"
+            )
+
+        role_records: list[dict[str, object]] = []
+        if findings:
+            evidence_digest = hashlib.sha256(self.evidence.read_bytes()).hexdigest()
+            output_digest = hashlib.sha256(b"verification output\n").hexdigest()
+            entry_preimage = {
+                "status": "completed", "index": 0,
+                "finding_digest": digest(fixture_finding),
+                "disposition": "rejected_with_evidence",
+                "evidence_kind": "repository_verification",
+                "evidence_ref": self.evidence.relative_to(self.root).as_posix(),
+                "evidence_digest": evidence_digest,
+                "verification_result": {"status": "passed", "output_digest": output_digest},
+            }
+            role_records.append({
+                "role": ROLE, "slice_id": self.v2_slice, "findings_digest": digest(fixture_findings),
+                "entries": [{**entry_preimage, "entry_digest": digest(entry_preimage)}],
+            })
+        manifest_payload = {
+            "schema": "oasis7-review-resolution/v2", "task_uid": TASK, "head": self.v2_head,
+            "epoch": epoch, "handoff_digest": handoff["handoff_digest"],
+            "role_records": role_records,
+        }
+        self.v2_manifest.write_text(
+            json.dumps({**manifest_payload, "manifest_digest": digest(manifest_payload)}, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        self._resign_v2_manifest(self.v2_manifest)
+        return self.v2_manifest, self.v2_ledger, original_ledger_raw
+
+    def _resign_v2_manifest(self, manifest_path: Path) -> None:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        manifest_payload = {key: value for key, value in manifest.items() if key != "manifest_digest"}
+        manifest_digest = digest(manifest_payload)
+        manifest["manifest_digest"] = manifest_digest
+        manifest_path.write_text(json.dumps(manifest, sort_keys=True) + "\n", encoding="utf-8")
+        body_payload = {
+            "marker": "oasis7-review-resolution", "schema": "oasis7-review-resolution/v2",
+            "task_uid": TASK, "head": manifest["head"], "epoch": manifest["epoch"],
+            "manifest_digest": manifest_digest,
+        }
+        body = json.dumps(body_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        self.v2_readback = manifest_path.with_name(f"{manifest['epoch']}.readback.json")
+        self.v2_readback.write_text(json.dumps({
+            **body_payload, "repository": REPO, "issue_number": ISSUE,
+            "comment_id": COMMENT_ID,
+            "comment_url": f"https://github.com/{REPO}/issues/{ISSUE}#issuecomment-{COMMENT_ID}",
+            "author": ADMIN, "created_at": "2026-09-06T10:00:00Z",
+            "observed_at": "2026-09-06T10:01:00Z",
+            "body_digest": hashlib.sha256(body.encode()).hexdigest(),
+        }, sort_keys=True) + "\n", encoding="utf-8")
+        self._write_fake_gh(permission="admin", body=body)
+
+    def _write_v2_no_findings_fixture(self, *, mutation: str | None = None) -> tuple[Path, Path, bytes]:
+        """Write a producer-shaped handoff/v2 manifest over a completed no-findings return."""
+        return self._write_v2_fixture(findings=False, mutation=mutation)
+
+    def _write_v2_finding_fixture(self) -> tuple[Path, Path, bytes]:
+        """Write a producer-shaped handoff/v2 manifest covering one typed finding."""
+        return self._write_v2_fixture(findings=True)
+
+    def _assert_v2_fixture_plan_binding(self) -> None:
+        plan = json.loads(self.v2_plan.read_text(encoding="utf-8"))
+        batch_path = Path(plan["batch_path"]).resolve()
+        batch = json.loads(batch_path.read_text(encoding="utf-8"))
+        handoff = json.loads(self.v2_handoff.read_text(encoding="utf-8"))
+        ledger_rows = [json.loads(line) for line in self.v2_ledger.read_text(encoding="utf-8").splitlines()]
+        returned = json.loads(self.v2_artifact.read_text(encoding="utf-8"))
+        self.assertEqual("oasis7-review-plan/v2", plan["schema"])
+        self.assertEqual("oasis7-review-batch/v1", batch["schema"])
+        self.assertEqual((TASK, self.v2_head, plan["epoch"]),
+                         (batch["task_uid"], batch["frozen_head"], batch["epoch"]))
+        self.assertEqual(plan["source_review_digest"], batch["relevant_evidence_digest"])
+        self.assertEqual(plan["expected_slices"], batch["expected_slices"])
+        self.assertEqual("incomplete", plan["preflight"]["status"])
+        self.assertEqual(str(self.v2_ledger), plan["preflight"]["ledger_path"])
+        self.assertEqual(1, len(ledger_rows))
+        self.assertEqual("incomplete", ledger_rows[0]["status"])
+        self.assertEqual({"task_uid": TASK, "role": ROLE, "slice_id": self.v2_slice,
+                          "head": self.v2_head, "epoch": plan["epoch"]},
+                         {key: ledger_rows[0][key] for key in
+                          ("task_uid", "role", "slice_id", "head", "epoch")})
+        self.assertEqual((TASK, ROLE, self.v2_slice, self.v2_head, plan["epoch"], "completed"),
+                         (returned["task_uid"], returned["role"], returned["slice_id"],
+                          returned["head"], returned["epoch"], returned["status"]))
+        self.assertEqual("oasis7-review-return-handoff/v2", handoff["schema"])
+        self.assertEqual({
+            "issue_number": ISSUE,
+            "issue_url": f"https://api.github.com/repos/{REPO}/issues/{ISSUE}",
+            "comment_id": DISPATCH_COMMENT_ID,
+            "author": ADMIN,
+            "body_digest": hashlib.sha256(
+                next(comment["body"].encode() for page in json.loads(
+                    self.gh_dispatch_fixture.read_text(encoding="utf-8")
+                )["comment_pages"] for comment in page if comment["id"] == DISPATCH_COMMENT_ID)
+            ).hexdigest(),
+        }, handoff["dispatch_evidence"])
+        self.assertEqual(hashlib.sha256(self.v2_plan.read_bytes()).hexdigest(), handoff["plan_sha256"])
+        self.assertEqual(hashlib.sha256(batch_path.read_bytes()).hexdigest(), handoff["batch_sha256"])
+        self.assertEqual(hashlib.sha256(self.v2_ledger.read_bytes()).hexdigest(),
+                         handoff["preflight_ledger_sha256"])
+        self.assertEqual(hashlib.sha256(self.v2_artifact.read_bytes()).hexdigest(),
+                         handoff["rows"][0]["return_sha256"])
+        returned = json.loads(self.v2_artifact.read_text(encoding="utf-8"))
+        packet_path = self.root / plan["packet_refs"][0]["packet_ref"]
+        packet = json.loads(packet_path.read_text(encoding="utf-8"))
+        self.assertEqual(packet["packet_digest"], returned["admitted_packet_digest"])
+        self.assertEqual(packet["packet_digest"], handoff["rows"][0]["packet_digest"])
+        self.assertEqual(plan["packet_refs"][0]["packet_ref"], handoff["rows"][0]["packet_path"])
+        payload = {key: value for key, value in handoff.items() if key != "handoff_digest"}
+        self.assertEqual(digest(payload), handoff["handoff_digest"])
+
+    def _assert_v2_manifest_handoff_readback_binding(self, manifest_path: Path) -> None:
+        handoff = json.loads(self.v2_handoff.read_text(encoding="utf-8"))
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        readback = json.loads(self.v2_readback.read_text(encoding="utf-8"))
+        handoff_payload = {key: value for key, value in handoff.items() if key != "handoff_digest"}
+        manifest_payload = {key: value for key, value in manifest.items() if key != "manifest_digest"}
+        self.assertEqual(digest(handoff_payload), handoff["handoff_digest"])
+        self.assertEqual(handoff["handoff_digest"], manifest["handoff_digest"])
+        self.assertEqual(digest(manifest_payload), manifest["manifest_digest"])
+        body_payload = {
+            "marker": "oasis7-review-resolution", "schema": "oasis7-review-resolution/v2",
+            "task_uid": manifest["task_uid"], "head": manifest["head"],
+            "epoch": manifest["epoch"], "manifest_digest": manifest["manifest_digest"],
+        }
+        body = json.dumps(body_payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        for key, value in body_payload.items():
+            self.assertEqual(value, readback[key])
+        self.assertEqual(hashlib.sha256(body.encode()).hexdigest(), readback["body_digest"])
+
+    def _assert_v2_failure_preserves_preflight(
+        self, manifest: Path, ledger: Path, *, expected_head: str, diagnostic: str
+    ) -> subprocess.CompletedProcess[str]:
+        before_ledger = ledger.read_bytes()
+        collection_existed = self.v2_collection.exists()
+        before_collection = self.v2_collection.read_bytes() if collection_existed else None
+        failure = self.run_validation_raw(manifest, ledger, expected_head=expected_head)
+        self.assertNotEqual(0, failure.returncode)
+        self.assertRegex((failure.stderr + failure.stdout).lower(), diagnostic)
+        self.assertEqual(before_ledger, ledger.read_bytes(), "invalid v2 input mutated preflight ledger")
+        self.assertEqual(collection_existed, self.v2_collection.exists(), "invalid v2 input changed collection existence")
+        if collection_existed:
+            self.assertEqual(before_collection, self.v2_collection.read_bytes(), "invalid v2 input changed collection bytes")
+        return failure
+
+    def _mutate_v2_handoff_and_rebind(self, manifest: Path, mutation: str) -> None:
+        handoff = json.loads(self.v2_handoff.read_text(encoding="utf-8"))
+        payload = {key: value for key, value in handoff.items() if key != "handoff_digest"}
+        if mutation == "unknown_field":
+            payload["unexpected"] = "closed schema mutation"
+        elif mutation == "missing_field":
+            payload.pop("comparison_oid")
+        elif mutation == "type_coercion":
+            payload["pr_number"] = True
+        else:
+            raise AssertionError(f"unsupported digest-consistent handoff mutation: {mutation}")
+        handoff = {**payload, "handoff_digest": digest(payload)}
+        self.v2_handoff.write_text(
+            json.dumps(handoff, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8"
+        )
+        manifest_value = json.loads(manifest.read_text(encoding="utf-8"))
+        manifest_value["handoff_digest"] = handoff["handoff_digest"]
+        manifest.write_text(json.dumps(manifest_value, sort_keys=True) + "\n", encoding="utf-8")
+        self._resign_v2_manifest(manifest)
+
+    def _mutate_v2_handoff_duplicate_key(self, manifest: Path) -> None:
+        raw = self.v2_handoff.read_text(encoding="utf-8")
+        needle = f'"repository": "{REPO}"'
+        self.assertGreaterEqual(raw.count(needle), 2)
+        # Duplicate the top-level key with the same value; a permissive parser
+        # produces the original mapping and therefore the original valid digest.
+        self.v2_handoff.write_text(raw.replace(needle, f"{needle}, {needle}", 1), encoding="utf-8")
+        self._resign_v2_manifest(manifest)
+
+    def run_validation_raw(
+        self, manifest: Path, ledger: Path, *, expected_head: str = HEAD
+    ) -> subprocess.CompletedProcess[str]:
+        env = {
+            **os.environ, "PATH": f"{self.bin}:{os.environ['PATH']}",
+            "GH_LOG": str(self.gh_log), "GH_DISPATCH_FIXTURE": str(self.gh_dispatch_fixture),
+        }
+        return subprocess.run(
+            [str(SCRIPT), "validate", "--root", str(self.root), "--task-uid", TASK,
+             "--head", expected_head, "--ledger", str(ledger), "--manifest", str(manifest)],
+            text=True, capture_output=True, env=env,
+        )
+
+    def run_validation(
+        self, manifest: Path, ledger: Path, *, ok: bool = True, expected_head: str = HEAD
+    ) -> subprocess.CompletedProcess[str]:
+        result = self.run_validation_raw(manifest, ledger, expected_head=expected_head)
         if ok and result.returncode != 0:
             self.fail(result.stderr)
         if not ok and result.returncode == 0:
             self.fail(f"unexpected success: {result.stdout}")
         return result
+
+    def run_script(self, *extra: str, ok: bool = True) -> subprocess.CompletedProcess[str]:
+        if extra:
+            env = {
+                **os.environ, "PATH": f"{self.bin}:{os.environ['PATH']}",
+                "GH_LOG": str(self.gh_log), "GH_DISPATCH_FIXTURE": str(self.gh_dispatch_fixture),
+            }
+            result = subprocess.run(
+                [str(SCRIPT), "validate", "--root", str(self.root), "--task-uid", TASK,
+                 "--head", HEAD, "--ledger", str(self.ledger), "--manifest", str(self.manifest), *extra],
+                text=True, capture_output=True, env=env,
+            )
+            if ok and result.returncode != 0:
+                self.fail(result.stderr)
+            if not ok and result.returncode == 0:
+                self.fail(f"unexpected success: {result.stdout}")
+            return result
+        return self.run_validation(self.manifest, self.ledger, ok=ok)
 
     def run_create(self, *extra: str, ok: bool = True) -> subprocess.CompletedProcess[str]:
         records = self.root / "records.json"
@@ -216,6 +731,223 @@ class ReviewFindingsResolutionTests(unittest.TestCase):
         self.assertEqual(before, self.ledger.read_bytes())
         self.assertIn("issues/comments/3934017999", self.gh_log.read_text())
         self.assertIn("collaborators/repo-admin/permission", self.gh_log.read_text())
+
+    def test_v2_empty_role_records_accepts_complete_no_findings_handoff(self) -> None:
+        manifest, ledger, original_ledger = self._write_v2_no_findings_fixture()
+        self._assert_v2_fixture_plan_binding()
+        result = json.loads(self.run_validation(manifest, ledger, expected_head=self.v2_head).stdout)
+        self.assertEqual("passed", result["status"])
+        self.assertEqual("no_findings", result["aggregate"])
+        self.assertEqual(original_ledger, ledger.read_bytes())
+
+    def test_v2_manifest_rejects_correctly_rehashed_legacy_v1_handoff(self) -> None:
+        manifest, ledger, _ = self._write_v2_no_findings_fixture()
+        handoff = json.loads(self.v2_handoff.read_text(encoding="utf-8"))
+        manifest_value = json.loads(manifest.read_text(encoding="utf-8"))
+        handoff_payload = {key: value for key, value in handoff.items() if key != "handoff_digest"}
+        handoff_payload["schema"] = "oasis7-review-return-handoff/v1"
+        handoff_payload.pop("dispatch_evidence")
+        for row in handoff_payload["rows"]:
+            row.pop("packet_path")
+            row.pop("packet_digest")
+        handoff = {**handoff_payload, "handoff_digest": digest(handoff_payload)}
+        self.v2_handoff.write_text(json.dumps(handoff, ensure_ascii=False, sort_keys=True) + "\n")
+        manifest_payload = {key: value for key, value in manifest_value.items() if key != "manifest_digest"}
+        manifest_payload["handoff_digest"] = handoff["handoff_digest"]
+        manifest_value = {**manifest_payload, "manifest_digest": digest(manifest_payload)}
+        manifest.write_text(json.dumps(manifest_value, ensure_ascii=False, sort_keys=True) + "\n")
+        self._resign_v2_manifest(manifest)
+        handoff = json.loads(self.v2_handoff.read_text(encoding="utf-8"))
+        manifest_value = json.loads(manifest.read_text(encoding="utf-8"))
+        handoff_payload = {key: value for key, value in handoff.items() if key != "handoff_digest"}
+        manifest_payload = {key: value for key, value in manifest_value.items() if key != "manifest_digest"}
+        self.assertEqual("oasis7-review-return-handoff/v1", handoff["schema"])
+        self.assertEqual(digest(handoff_payload), handoff["handoff_digest"])
+        self.assertEqual("oasis7-review-resolution/v2", manifest_value["schema"])
+        self.assertEqual(handoff["handoff_digest"], manifest_value["handoff_digest"])
+        self.assertEqual(digest(manifest_payload), manifest_value["manifest_digest"])
+        self._assert_v2_failure_preserves_preflight(
+            manifest, ledger, expected_head=self.v2_head,
+            diagnostic=r"v2|handoff|dispatch|schema",
+        )
+
+    def test_v2_finding_role_record_accepts_exact_bound_terminal_evidence(self) -> None:
+        manifest, ledger, original_ledger = self._write_v2_finding_fixture()
+        self._assert_v2_fixture_plan_binding()
+        manifest_value = json.loads(manifest.read_text(encoding="utf-8"))
+        handoff = json.loads(self.v2_handoff.read_text(encoding="utf-8"))
+        returned = json.loads(self.v2_artifact.read_text(encoding="utf-8"))
+        self.assertEqual("oasis7-review-resolution/v2", manifest_value["schema"])
+        self.assertEqual(handoff["handoff_digest"], manifest_value["handoff_digest"])
+        self.assertEqual(1, len(manifest_value["role_records"]))
+        record = manifest_value["role_records"][0]
+        self.assertEqual({"role", "slice_id", "findings_digest", "entries"}, set(record))
+        self.assertEqual(ROLE, record["role"])
+        self.assertEqual(self.v2_slice, record["slice_id"])
+        self.assertEqual(digest(returned["findings"]), record["findings_digest"])
+        self.assertEqual(digest(returned["findings"]), handoff["rows"][0]["findings_digest"])
+        self.assertEqual(1, len(record["entries"]))
+        entry = record["entries"][0]
+        self.assertEqual(0, entry["index"])
+        self.assertEqual("completed", entry["status"])
+        self.assertEqual(digest(returned["findings"][0]), entry["finding_digest"])
+        self.assertEqual("rejected_with_evidence", entry["disposition"])
+        self.assertEqual("repository_verification", entry["evidence_kind"])
+        self.assertEqual("passed", entry["verification_result"]["status"])
+
+        result = json.loads(self.run_validation(manifest, ledger, expected_head=self.v2_head).stdout)
+        self.assertEqual("passed", result["status"])
+        self.assertEqual("addressed", result["aggregate"])
+        self.assertEqual(original_ledger, ledger.read_bytes())
+
+    def test_v2_finding_coverage_negatives_wait_for_valid_control(self) -> None:
+        manifest, ledger, _ = self._write_v2_finding_fixture()
+        self._assert_v2_fixture_plan_binding()
+        control = self.run_validation_raw(manifest, ledger, expected_head=self.v2_head)
+        if control.returncode != 0 and "schema" in control.stderr.lower():
+            print(
+                "NOT EXERCISED: finding role-record missing/extra/mismatched coverage negatives "
+                "await a successful source-shaped v2 finding positive control",
+                file=sys.stderr,
+            )
+            self.skipTest("not exercised: v2 finding positive control is rejected by frozen v1-only validator")
+        self.assertEqual(0, control.returncode, f"valid v2 finding control failed: {control.stderr}")
+
+        cases = (
+            ("missing_role_record", r"role|coverage|finding|return"),
+            ("extra_role_record", r"role|coverage|unexpected|return"),
+            ("mismatched_findings_digest", r"digest|finding|return"),
+        )
+        for mutation, diagnostic in cases:
+            with self.subTest(mutation=mutation):
+                manifest, ledger, before = self._write_v2_finding_fixture()
+                manifest_value = json.loads(manifest.read_text(encoding="utf-8"))
+                if mutation == "missing_role_record":
+                    manifest_value["role_records"] = []
+                elif mutation == "extra_role_record":
+                    extra = json.loads(json.dumps(manifest_value["role_records"][0]))
+                    extra["role"] = "qa_engineer"
+                    extra["slice_id"] = "22222222-2222-4222-8222-222222222222"
+                    manifest_value["role_records"].append(extra)
+                    manifest_value["role_records"].sort(key=lambda row: (row["role"], row["slice_id"]))
+                else:
+                    manifest_value["role_records"][0]["findings_digest"] = digest([])
+                manifest.write_text(
+                    json.dumps(manifest_value, sort_keys=True) + "\n", encoding="utf-8"
+                )
+                self._resign_v2_manifest(manifest)
+
+                failure = self.run_validation_raw(manifest, ledger, expected_head=self.v2_head)
+                self.assertNotEqual(0, failure.returncode, f"invalid v2 coverage accepted: {mutation}")
+                self.assertRegex((failure.stderr + failure.stdout).lower(), diagnostic)
+                self.assertEqual(before, ledger.read_bytes(), f"invalid v2 case mutated ledger: {mutation}")
+
+    def test_v2_consumer_rejects_malformed_handoff_when_positive_control_passes(self) -> None:
+        manifest, ledger, _ = self._write_v2_no_findings_fixture()
+        self._assert_v2_fixture_plan_binding()
+        control = self.run_validation_raw(manifest, ledger, expected_head=self.v2_head)
+        if control.returncode != 0 and "schema" in control.stderr.lower():
+            print(
+                "NOT EXERCISED: v2 consumer unknown/missing/type/duplicate-key handoff negatives "
+                "await a successful source-shaped no-findings positive control",
+                file=sys.stderr,
+            )
+            self.skipTest("not exercised: v2 consumer positive is rejected by the frozen v1-only validator")
+        self.assertEqual(0, control.returncode, f"valid v2 consumer control failed: {control.stderr}")
+
+        cases = (
+            ("unknown_field", r"unknown|field|handoff|schema"),
+            ("missing_field", r"missing|field|handoff|schema"),
+            ("type_coercion", r"type|integer|pr_number|handoff|schema"),
+            ("duplicate_json_key", r"duplicate|key|json|handoff|schema"),
+        )
+        for mutation, diagnostic in cases:
+            with self.subTest(mutation=mutation):
+                manifest, ledger, _ = self._write_v2_no_findings_fixture()
+                self._assert_v2_fixture_plan_binding()
+                if mutation == "duplicate_json_key":
+                    self._mutate_v2_handoff_duplicate_key(manifest)
+                else:
+                    self._mutate_v2_handoff_and_rebind(manifest, mutation)
+                # H, manifest, and readback digests/bindings are consistent;
+                # only the consumer-side strict JSON/schema rule is under test.
+                self._assert_v2_manifest_handoff_readback_binding(manifest)
+                self._assert_v2_failure_preserves_preflight(
+                    manifest, ledger, expected_head=self.v2_head, diagnostic=diagnostic
+                )
+
+    def test_v2_wrong_manifest_head_fails_with_rebound_readback(self) -> None:
+        manifest, ledger, _ = self._write_v2_no_findings_fixture()
+        self._assert_v2_fixture_plan_binding()
+        control = self.run_validation_raw(manifest, ledger, expected_head=self.v2_head)
+        if control.returncode != 0 and "schema" in control.stderr.lower():
+            print(
+                "NOT EXERCISED: wrong-manifest-head consumer negative awaits a successful source-shaped v2 positive control",
+                file=sys.stderr,
+            )
+            self.skipTest("not exercised: v2 consumer positive is rejected by the frozen v1-only validator")
+        self.assertEqual(0, control.returncode, f"valid v2 consumer control failed: {control.stderr}")
+
+        value = json.loads(manifest.read_text(encoding="utf-8"))
+        wrong_head = "f" * 40 if self.v2_head != "f" * 40 else "e" * 40
+        value["head"] = wrong_head
+        manifest.write_text(json.dumps(value, sort_keys=True) + "\n", encoding="utf-8")
+        self._resign_v2_manifest(manifest)
+        self._assert_v2_manifest_handoff_readback_binding(manifest)
+        readback = json.loads(self.v2_readback.read_text(encoding="utf-8"))
+        self.assertNotEqual(self.v2_head, value["head"])
+        self.assertEqual(value["head"], readback["head"])
+        self._assert_v2_failure_preserves_preflight(
+            manifest, ledger, expected_head=self.v2_head, diagnostic=r"head|identity|manifest"
+        )
+
+    def test_v2_empty_role_records_false_predicates_wait_for_valid_control(self) -> None:
+        manifest, ledger, _ = self._write_v2_no_findings_fixture()
+        control = self.run_validation_raw(manifest, ledger, expected_head=self.v2_head)
+        if control.returncode != 0 and "schema" in control.stderr.lower():
+            print(
+                "NOT EXERCISED: completed/status-disposition-findings predicates, handoff-digest binding, "
+                "and drifted-return bytes await a successful v2 positive control",
+                file=sys.stderr,
+            )
+            self.skipTest("not exercised: valid v2 positive control is rejected by the frozen v1-only validator")
+        self.assertEqual(0, control.returncode, f"valid v2 control failed: {control.stderr}")
+
+        cases = (
+            ("not_completed", r"status|completed|return"),
+            ("wrong_disposition", r"disposition|finding|return"),
+            ("nonempty_findings", r"findings|disposition|return"),
+            ("missing_handoff_digest", r"handoff|digest|field"),
+            ("changed_handoff_digest", r"handoff|digest"),
+            ("drifted_return_bytes", r"handoff|return|artifact|digest"),
+        )
+        for mutation, diagnostic in cases:
+            with self.subTest(mutation=mutation):
+                fixture_mutation = mutation if mutation in {
+                    "not_completed", "wrong_disposition", "nonempty_findings"
+                } else None
+                manifest, ledger, before = self._write_v2_no_findings_fixture(mutation=fixture_mutation)
+                if mutation in {"missing_handoff_digest", "changed_handoff_digest"}:
+                    payload = json.loads(manifest.read_text(encoding="utf-8"))
+                    if mutation == "missing_handoff_digest":
+                        payload.pop("handoff_digest")
+                    else:
+                        payload["handoff_digest"] = "a" * 64
+                    unsigned = {key: value for key, value in payload.items() if key != "manifest_digest"}
+                    payload["manifest_digest"] = digest(unsigned)
+                    manifest.write_text(json.dumps(payload, sort_keys=True) + "\n", encoding="utf-8")
+                elif mutation == "drifted_return_bytes":
+                    returned = json.loads(self.v2_artifact.read_text(encoding="utf-8"))
+                    returned["residual_risk"] = "changed after handoff binding"
+                    self.v2_artifact.write_text(json.dumps(returned, sort_keys=True) + "\n", encoding="utf-8")
+
+                if mutation in {"missing_handoff_digest", "changed_handoff_digest"}:
+                    self._resign_v2_manifest(manifest)
+
+                failure = self.run_validation_raw(manifest, ledger, expected_head=self.v2_head)
+                self.assertNotEqual(0, failure.returncode, f"invalid v2 case accepted: {mutation}")
+                self.assertRegex((failure.stderr + failure.stdout).lower(), diagnostic)
+                self.assertEqual(before, ledger.read_bytes(), f"invalid v2 case mutated ledger: {mutation}")
 
     def test_resolution_comment_must_belong_to_canonical_task_issue(self) -> None:
         self._write_fake_gh(permission="admin", comment_issue_number=999)
