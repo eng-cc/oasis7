@@ -1350,6 +1350,7 @@ def bind_recorded_admin_snapshot(
     return _update_validation_authority(
         authority,
         approval_permission="admin",
+        request_permission="admin" if successor else authority.request_permission,
         pin_permission="admin",
         permission_snapshot_bound=True,
     )

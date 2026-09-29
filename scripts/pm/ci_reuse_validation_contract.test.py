@@ -671,6 +671,9 @@ class SuccessorAuthorityTests(unittest.TestCase):
         record = contract.build_authority_record(issued, run)
         snapshot_bound = contract.bind_recorded_admin_snapshot(provisional, record)
         snapshot_bound = contract.bind_authority_context(snapshot_bound, current_context)
+        rebuilt_record = contract.build_authority_record(snapshot_bound, run)
+        self.assertEqual(record, rebuilt_record)
+        self.assertEqual(contract.authority_digest(record), contract.authority_digest(rebuilt_record))
         self.assertEqual(contract.SUCCESSOR_AUTHORITY_SCHEMA, record["schema"])
         self.assertEqual(fixture["predecessor"], record["predecessor"])
         self.assertEqual(fixture["successor_workflow"], record["successor_workflow"])
@@ -705,7 +708,7 @@ class SuccessorAuthorityTests(unittest.TestCase):
                 unit: "sha256:" + "f" * 64 for unit in issued.request["validation_units"]
             },
         }
-        verified = contract.verify_payload(payload, issued, run, check)
+        verified = contract.verify_payload(payload, snapshot_bound, run, check)
         self.assertEqual(contract.SUCCESSOR_PAYLOAD_SCHEMA, verified["schema"])
         payload_bytes = contract.canonical_json_bytes(payload)
         artifact_bytes = b"successor archive"
