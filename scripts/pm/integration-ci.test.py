@@ -200,39 +200,224 @@ class TargetedProjectionPromotionTests(unittest.TestCase):
 
 class IntegrationTests(unittest.TestCase):
  def test_required_workflow_uses_frozen_driver_and_preflight_on_candidate_root(self):
+  repo=HERE.parents[1]
+  trusted_base_ref=os.environ.get('OASIS7_CARGO_SCOPE_BASE','').strip()
+  if not trusted_base_ref:
+   resolved=subprocess.run(['git','merge-base','HEAD','refs/remotes/origin/main'],cwd=repo,text=True,capture_output=True)
+   self.assertEqual(resolved.returncode,0,'trusted Cargo profile base unavailable: '+resolved.stderr.strip())
+   trusted_base_ref=resolved.stdout.strip()
+  trusted_base=subprocess.run(['git','rev-parse','--verify',f'{trusted_base_ref}^{{commit}}'],cwd=repo,text=True,capture_output=True)
+  self.assertEqual(trusted_base.returncode,0,'trusted Cargo profile base unavailable: '+trusted_base.stderr.strip())
+  trusted_base_oid=trusted_base.stdout.strip()
+  trusted_paths=(
+   '.pm/cargo-package-scope-policy.json',
+   'scripts/pm/check-cargo-package-scope',
+   'scripts/pm/workflow-impact-projection.py',
+   'scripts/pm/cargo_package_profile_planner.py',
+   'scripts/pm/cargo_package_profile_driver.py',
+  )
+  trusted_blobs={}
+  trusted_modes={}
+  for path in trusted_paths:
+   blob=subprocess.run(['git','show',f'{trusted_base_oid}:{path}'],cwd=repo,capture_output=True)
+   self.assertEqual(blob.returncode,0,f'trusted Cargo profile base is missing {path}')
+   trusted_blobs[path]=blob.stdout
+   entry=subprocess.check_output(['git','ls-tree',trusted_base_oid,'--',path],cwd=repo,text=True).split()
+   self.assertTrue(entry,f'trusted Cargo profile base has no tree entry for {path}')
+   trusted_modes[path]=entry[0]
+  toolchain=subprocess.run(['git','show',f'{trusted_base_oid}:rust-toolchain.toml'],cwd=repo,capture_output=True)
+  if toolchain.returncode==0:
+   trusted_blobs['rust-toolchain.toml']=toolchain.stdout
+   entry=subprocess.check_output(['git','ls-tree',trusted_base_oid,'--','rust-toolchain.toml'],cwd=repo,text=True).split()
+   trusted_modes['rust-toolchain.toml']=entry[0]
+
+  workflow=(repo/'.github/workflows/rust.yml').read_text()
+  step=workflow.split('      - name: Run required test tier\n',1)[1].split('\n      - name:',1)[0]
+  run=step.split('        run:',1)[1]
+  raw_command=textwrap.dedent(run.split('\n',1)[1]) if run.startswith(' |') else run.strip()
+  fixture_uid='task_'+'1'*32
+  fixture_pr='1'
+  substitutions=(
+   ('${{ steps.scope.outputs.integration_base_oid }}',None),
+   ('${{ github.token }}','fixture-token'),
+   ('${{ inputs.task_uid }}',fixture_uid),
+   ('${{ inputs.pr_number }}',fixture_pr),
+  )
   for event in ('workflow_dispatch','pull_request','push'):
    for candidate_preflight in ('exit 0\n', 'viewer_dependency_preflight() { :; }\n'):
-    with self.subTest(event=event, candidate_preflight=candidate_preflight), tempfile.TemporaryDirectory() as tmp:
-     temp=Path(tmp);candidate=temp/'candidate';scripts=candidate/'scripts';scripts.mkdir(parents=True)
+    with self.subTest(event=event,candidate_preflight=candidate_preflight), tempfile.TemporaryDirectory() as tmp:
+     temp=Path(tmp);candidate=temp/'candidate';candidate.mkdir()
      frozen=temp/'integration-planner';frozen.mkdir()
-     repo=HERE.parents[1]
      for name in ('ci-tests.sh','viewer-dependency-preflight.sh'):
       shutil.copy2(repo/'scripts'/name,frozen/name)
+     frozen_preflight=(frozen/'viewer-dependency-preflight.sh').read_bytes()
      marker=temp/'observed'
-     (temp/'impact-projection.json').write_text('{}')
-     (scripts/'ci-tests.sh').write_text('#!/bin/bash\nprintf candidate > "$OBSERVED"\nexit 0\n')
+     (temp/'impact-projection.json').write_text('{}',encoding='utf-8')
+
+     def git(*args):
+      return subprocess.check_output(['git','-C',str(candidate),*args],text=True).strip()
+
+     subprocess.run(['git','init','-q','-b','main'],cwd=candidate,check=True)
+     git('config','user.name','Integration Fixture')
+     git('config','user.email','integration-fixture@example.invalid')
+     for path,blob in trusted_blobs.items():
+      destination=candidate/path
+      destination.parent.mkdir(parents=True,exist_ok=True)
+      destination.write_bytes(blob)
+      destination.chmod(0o755 if trusted_modes[path]=='100755' else 0o644)
+     (candidate/'Cargo.toml').write_text('[workspace]\nmembers = ["crates/profile-fixture"]\nresolver = "2"\n',encoding='utf-8')
+     package=candidate/'crates/profile-fixture'
+     (package/'src').mkdir(parents=True)
+     (package/'Cargo.toml').write_text('[package]\nname = "profile-fixture"\nversion = "0.1.0"\nedition = "2021"\n',encoding='utf-8')
+     (package/'src/lib.rs').write_text('pub fn fixture() {}\n',encoding='utf-8')
+     git('add','-A')
+     git('commit','-qm','trusted profile authority and minimal Cargo workspace')
+     scope_base=git('rev-parse','HEAD')
+
+     git('switch','-q','-c','source')
+     source_path=candidate/'site/index.html'
+     source_path.parent.mkdir(parents=True)
+     source_path.write_text('<!doctype html><title>source change</title>\n',encoding='utf-8')
+     git('add','site/index.html')
+     git('commit','-qm','source-only site change')
+     source_head=git('rev-parse','HEAD')
+
+     git('switch','-q','--detach',scope_base)
+     scripts=candidate/'scripts'
+     (scripts/'ci-tests.sh').write_text('#!/bin/bash\nprintf candidate > "$OBSERVED"\nexit 0\n',encoding='utf-8')
      (scripts/'ci-tests.sh').chmod(0o755)
-     (scripts/'viewer-dependency-preflight.sh').write_text(candidate_preflight)
-     (scripts/'doc-governance-check.sh').write_text('#!/bin/bash\npwd > "$OBSERVED"\nexit 37\n')
+     (scripts/'viewer-dependency-preflight.sh').write_text(candidate_preflight,encoding='utf-8')
+     (scripts/'doc-governance-check.sh').write_text('#!/bin/bash\npwd > "$OBSERVED"\nexit 37\n',encoding='utf-8')
      (scripts/'doc-governance-check.sh').chmod(0o755)
-     workflow=(repo/'.github/workflows/rust.yml').read_text()
-     step=workflow.split('      - name: Run required test tier\n',1)[1].split('\n      - name:',1)[0]
-     run=step.split('        run:',1)[1]
-     command=textwrap.dedent(run.split('\n',1)[1]) if run.startswith(' |') else run.strip()
-     env={**os.environ,'RUNNER_TEMP':str(temp),'GITHUB_WORKSPACE':str(candidate),
-          'GITHUB_EVENT_NAME':event,'INTEGRATION_MODE':'integration_revalidation','OBSERVED':str(marker),
-          # This contract isolates frozen driver/preflight routing.  Required CI
-          # itself exports package-profile activation identity; do not leak that
-          # unrelated outer workflow state into this intentionally non-Git fixture.
-          'OASIS7_CARGO_SCOPE_BASE':'','OASIS7_CARGO_SCOPE_HEAD':'',
-          'OASIS7_CARGO_PROFILE_PLANNER':'','OASIS7_CARGO_PROFILE_DRIVER':''}
-     result=subprocess.run(['bash','-euo','pipefail','-c',command],cwd=candidate,env=env,text=True,capture_output=True)
+     git('add','scripts/ci-tests.sh','scripts/viewer-dependency-preflight.sh','scripts/doc-governance-check.sh')
+     git('commit','-qm','integration-only candidate script changes')
+     integration_base=git('rev-parse','HEAD')
+     tested_tree=git('merge-tree','--write-tree',integration_base,source_head)
+     git('merge','--no-ff','--no-edit','source')
+     self.assertEqual(git('rev-parse','HEAD^{tree}'),tested_tree)
+     self.assertEqual(git('diff','--name-only',scope_base,source_head),'site/index.html')
+     self.assertEqual(
+      git('diff','--name-only',scope_base,integration_base).splitlines(),
+      ['scripts/ci-tests.sh','scripts/doc-governance-check.sh','scripts/viewer-dependency-preflight.sh'],
+     )
+     self.assertEqual(frozen_preflight,(repo/'scripts/viewer-dependency-preflight.sh').read_bytes())
+     self.assertNotEqual(frozen_preflight,(scripts/'viewer-dependency-preflight.sh').read_bytes())
+
+     event_path=temp/'event.json'
+     event_path.write_text(json.dumps({'inputs':{
+      'integration_base':integration_base,'expected_head':source_head,
+      'task_uid':fixture_uid,'pr_number':fixture_pr,'run_mode':'integration_revalidation',
+     }}),encoding='utf-8')
+     gh_bin=temp/'bin';gh_bin.mkdir()
+     gh_api_log=temp/'gh-api-calls'
+     gh=(gh_bin/'gh')
+     gh.write_text(textwrap.dedent('''\
+      #!/usr/bin/env bash
+      set -euo pipefail
+      expected="api repos/${GITHUB_REPOSITORY}/commits/${GITHUB_SHA}/check-runs?per_page=100"
+      if [[ "$#" -ne 2 || "$1 $2" != "$expected" ]]; then
+        printf 'unexpected gh API request: %s\\n' "$*" >&2
+        exit 2
+      fi
+      printf '%s\\n' "$*" >>"$GH_API_CALL_LOG"
+      printf '{"check_runs":[{"name":"required-gate","details_url":"https://github.com/%s/actions/runs/%s","app":{"id":1},"id":1}]}\\n' "$GITHUB_REPOSITORY" "$GITHUB_RUN_ID"
+     '''),encoding='utf-8')
+     gh.chmod(0o755)
+     env=os.environ.copy()
+     for name in (
+      'OASIS7_PRODUCT_DOC_BASE','OASIS7_PRODUCT_DOC_HEAD','OASIS7_CARGO_SCOPE_CHECKER',
+      'OASIS7_CARGO_PROFILE_OPT_IN','OASIS7_CARGO_PROFILE_PLAN','OASIS7_CARGO_PROFILE_RESULTS',
+      'OASIS7_CARGO_PROFILE_INTEGRATION_BASE','OASIS7_CARGO_PROFILE_SOURCE_HEAD',
+      'OASIS7_CARGO_PROFILE_TESTED_TREE',
+     ):
+      env.pop(name,None)
+     env.update({
+      'RUNNER_TEMP':str(temp),'GITHUB_WORKSPACE':str(candidate),'INTEGRATION_WORKTREE':str(candidate),
+      'GITHUB_EVENT_PATH':str(event_path),'GITHUB_EVENT_NAME':event,
+      'INTEGRATION_MODE':'integration_revalidation','OBSERVED':str(marker),
+      'GH_API_CALL_LOG':str(gh_api_log),'PATH':str(gh_bin)+os.pathsep+env.get('PATH',''),
+      'GITHUB_REPOSITORY':'fixture/oasis7','GITHUB_SHA':source_head,
+      'GITHUB_WORKFLOW_REF':'fixture/oasis7/.github/workflows/rust.yml@refs/heads/main',
+      'GITHUB_WORKFLOW_SHA':scope_base,'GITHUB_RUN_ID':'1701','GITHUB_RUN_ATTEMPT':'1',
+      'GITHUB_ACTIONS':'true','GH_TOKEN':'fixture-token',
+      'OASIS7_CARGO_SCOPE_INTEGRATION_BASE':integration_base,
+     })
+     profile_output=candidate/'output/cargo-package-profile'
+     command=raw_command
+     for expression,replacement in substitutions:
+      if replacement is None:
+       replacement=integration_base
+      self.assertEqual(command.count(expression),1,f'expected one workflow interpolation for {expression}')
+      command=command.replace(expression,replacement)
+     self.assertNotIn('${{',command)
+
      if event=='workflow_dispatch':
+      missing_authority_env=env.copy()
+      missing_authority_env.update({
+       'OASIS7_CARGO_SCOPE_BASE':'','OASIS7_CARGO_SCOPE_HEAD':'',
+       'OASIS7_CARGO_PROFILE_PLANNER':'','OASIS7_CARGO_PROFILE_DRIVER':'',
+      })
+      missing=subprocess.run(['bash','-euo','pipefail','-c',command],cwd=candidate,env=missing_authority_env,text=True,capture_output=True)
+      self.assertEqual(missing.returncode,1,missing.stdout+missing.stderr)
+      self.assertEqual(missing.stderr,'trusted Cargo package profile authority is unavailable\n')
+      self.assertFalse(marker.exists())
+      self.assertFalse(profile_output.exists())
+      self.assertFalse(gh_api_log.exists())
+
+      positive_env=env.copy()
+      positive_env.update({'OASIS7_CARGO_SCOPE_BASE':scope_base,'OASIS7_CARGO_SCOPE_HEAD':source_head})
+      result=subprocess.run(['bash','-euo','pipefail','-c',command],cwd=candidate,env=positive_env,text=True,capture_output=True)
       self.assertEqual(result.returncode,37,result.stdout+result.stderr)
-      self.assertEqual(marker.read_text().strip(),str(candidate))
+      self.assertEqual(marker.read_text(encoding='utf-8').strip(),str(candidate))
+      self.assertEqual(gh_api_log.read_text(encoding='utf-8').splitlines(),[
+       f'api repos/{positive_env["GITHUB_REPOSITORY"]}/commits/{source_head}/check-runs?per_page=100',
+      ])
+      plan_path=profile_output/'cargo-package-profile-plan.json'
+      results_path=profile_output/'cargo-package-profile-results.json'
+      receipt_path=profile_output/'cargo-package-profile-receipt.json'
+      envelope_path=profile_output/'cargo-package-profile-envelope.json'
+      self.assertTrue(plan_path.is_file())
+      self.assertTrue(results_path.is_file())
+      self.assertTrue(receipt_path.is_file())
+      self.assertTrue(envelope_path.is_file())
+      plan=json.loads(plan_path.read_text(encoding='utf-8'))
+      results=json.loads(results_path.read_text(encoding='utf-8'))
+      receipt=json.loads(receipt_path.read_text(encoding='utf-8'))
+      envelope=json.loads(envelope_path.read_text(encoding='utf-8'))
+      self.assertEqual(plan['integration_base'],integration_base)
+      self.assertEqual(plan['source_scope_base'],scope_base)
+      self.assertEqual(plan['source_head'],source_head)
+      self.assertEqual(plan['tested_tree'],tested_tree)
+      self.assertEqual(plan['changed_packages'],[])
+      self.assertEqual(plan['selected_items'],[])
+      self.assertEqual(plan['items'],[])
+      self.assertEqual(plan['execution_disposition'],'legacy_required_coverage')
+      self.assertIs(plan['disposition_validated'],True)
+      self.assertEqual(results,[])
+      self.assertEqual(receipt['status'],'passed')
+      self.assertEqual(receipt['execution_disposition'],'legacy_required_coverage')
+      self.assertEqual(receipt['integration_base'],integration_base)
+      self.assertEqual(receipt['source_head'],source_head)
+      self.assertEqual(receipt['tested_tree'],tested_tree)
+      self.assertEqual(envelope['task_uid'],fixture_uid)
+      self.assertEqual(envelope['pr_number'],int(fixture_pr))
+      self.assertEqual(envelope['integration_base'],integration_base)
+      self.assertEqual(envelope['source_head'],source_head)
+      self.assertEqual(envelope['tested_tree'],tested_tree)
+
+      trusted_authority=temp/'trusted-cargo-profile-authority'
+      self.assertEqual((candidate/'.pm/cargo-package-scope-policy.json').read_bytes(),trusted_blobs['.pm/cargo-package-scope-policy.json'])
+      self.assertEqual((trusted_authority/'pm/workflow-impact-projection.py').read_bytes(),trusted_blobs['scripts/pm/workflow-impact-projection.py'])
+      self.assertEqual((trusted_authority/'cargo_package_profile_planner.py').read_bytes(),trusted_blobs['scripts/pm/cargo_package_profile_planner.py'])
+      self.assertEqual((trusted_authority/'cargo_package_profile_driver.py').read_bytes(),trusted_blobs['scripts/pm/cargo_package_profile_driver.py'])
+      self.assertEqual((temp/'trusted-check-cargo-package-scope').read_bytes(),trusted_blobs['scripts/pm/check-cargo-package-scope'])
      else:
+      env.update({'OASIS7_CARGO_SCOPE_BASE':'','OASIS7_CARGO_SCOPE_HEAD':'',
+                  'OASIS7_CARGO_PROFILE_PLANNER':'','OASIS7_CARGO_PROFILE_DRIVER':''})
+      result=subprocess.run(['bash','-euo','pipefail','-c',command],cwd=candidate,env=env,text=True,capture_output=True)
       self.assertEqual(result.returncode,0,result.stdout+result.stderr)
-      self.assertEqual(marker.read_text(),'candidate')
+      self.assertEqual(marker.read_text(encoding='utf-8'),'candidate')
+      self.assertFalse(profile_output.exists())
 
  def test_integration_freezes_sourced_preflight_before_checkout(self):
   workflow=(HERE.parents[1]/'.github/workflows/rust.yml').read_text()
