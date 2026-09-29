@@ -442,6 +442,21 @@ class CurrentRequestSelectionTests(unittest.TestCase):
    'display_title':title,
   }
 
+ def validation_only_row(self,run_id,*,uid=None,pr='7',base=None,head=None,validation_id=None):
+  uid=self.uid if uid is None else uid
+  base=self.base if base is None else base
+  head=self.head if head is None else head
+  validation_id='c'*64 if validation_id is None else validation_id
+  return {
+   'id':run_id,'run_attempt':1,'created_at':'2026-09-26T00:00:00Z',
+   'event':'workflow_dispatch','path':self.api.WORKFLOW,
+   'head_sha':self.base,'head_branch':'main','repository':{'full_name':'owner/repo'},
+   'display_title':(
+    f'oasis7-ci|workflow_dispatch|v1_reuse_validation_only|{uid}|{pr}|'
+    f'{base}|{head}|{validation_id}'
+   ),
+  }
+
  def select(self,rows,request_key):
   with patch.object(self.api,'gh',return_value={'workflow_runs':rows}):
    return self.api.current_request(
@@ -485,7 +500,7 @@ class CurrentRequestSelectionTests(unittest.TestCase):
    99,'v1_reuse_validation_only',request_key='e'*64,request_uid='task-invalid',
   )
   conflicting_identity=self.unrelated_run_row(
-   100,'v1_reuse_validation_only',request_uid=self.uid,
+   100,'v1_reuse_validation_only',request_key='f'*64,request_uid=self.uid,
   )
   cases=(
    (malformed_key,'request key malformed'),
@@ -517,6 +532,50 @@ class CurrentRequestSelectionTests(unittest.TestCase):
   row=self.run_row(99,'sha256:'+'1'*64,created_at='2026-09-26T00:00:00')
   with self.assertRaisesRegex(ValueError,'request time malformed'):
    self.select([row],'sha256:'+'1'*64)
+
+ def test_valid_unrelated_validation_only_titles_with_bare_ids_are_skipped(self):
+  rows=[
+   self.validation_only_row(
+    101,uid='task_'+'2'*32,pr='8',base='c'*40,head='d'*40,validation_id='e'*64,
+   ),
+   # Same Task/PR, but a different frozen base and source is another request.
+   self.validation_only_row(
+    102,base='f'*40,head='0'*40,validation_id='a'*64,
+   ),
+  ]
+  self.assertIsNone(self.select(rows,'sha256:'+'1'*64))
+
+ def test_validation_only_title_is_never_selected_as_integration_proof(self):
+  validation=self.validation_only_row(101,validation_id='c'*64)
+  integration=self.run_row(102,'sha256:'+'1'*64)
+  selected=self.select([validation,integration],'sha256:'+'1'*64)
+  self.assertEqual(102,selected['id'])
+
+ def test_validation_only_rows_with_malformed_keys_or_identity_are_rejected(self):
+  malformed_rows=[
+   ('key has production prefix',self.validation_only_row(101,validation_id='sha256:'+'c'*64)),
+   ('key has non-hex character',self.validation_only_row(102,validation_id='g'*64)),
+   ('task uid malformed',self.validation_only_row(103,uid='task_bad')),
+   ('PR is not canonical decimal',self.validation_only_row(104,pr='07')),
+   ('base oid malformed',self.validation_only_row(105,base='G'*40)),
+   ('source oid malformed',self.validation_only_row(106,head='not-an-oid')),
+  ]
+  for label,row in malformed_rows:
+   with self.subTest(label=label),self.assertRaises(ValueError):
+    self.select([row],'sha256:'+'1'*64)
+
+ def test_validation_only_title_missing_validation_id_suffix_is_rejected(self):
+  row=self.validation_only_row(107)
+  row['display_title']=row['display_title'].rsplit('|',1)[0]
+  with self.assertRaises(ValueError):
+   self.select([row],'sha256:'+'1'*64)
+
+ def test_validation_only_task_pr_conflicts_are_rejected(self):
+  conflicting_task=self.validation_only_row(101,pr='8')
+  conflicting_pr=self.validation_only_row(102,uid='task_'+'2'*32)
+  for row in (conflicting_task,conflicting_pr):
+   with self.subTest(title=row['display_title']),self.assertRaisesRegex(ValueError,'conflict'):
+    self.select([row],'sha256:'+'1'*64)
 
 class LocalTargetObservationTests(unittest.TestCase):
  def setUp(self):
