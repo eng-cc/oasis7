@@ -73,7 +73,7 @@ _PM_ROLE_MEMORY_RE = re.compile(
 )
 
 _TASK_UID_RE = re.compile(r"(?<![A-Za-z0-9_])task_[0-9a-f]{32}(?![A-Za-z0-9_])")
-_SHA_RE = re.compile(r"(?<![0-9a-fA-F])[0-9a-fA-F]{40}(?![0-9a-fA-F])")
+_SHA_RE = re.compile(r"(?<![0-9a-fA-F])(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})(?![0-9a-fA-F])")
 _GITHUB_PROCESS_URL_RE = re.compile(
     r"https?://(?:www\.)?(?:github\.com|api\.github\.com)/"
     r"(?:repos/)?(?P<owner>[A-Za-z0-9_.-]+)/(?P<repo>[A-Za-z0-9_.-]+)/"
@@ -85,7 +85,7 @@ _GITHUB_PROCESS_URL_RE = re.compile(
 _GITHUB_COMMIT_BLOB_URL_RE = re.compile(
     r"https?://(?:www\.)?github\.com/"
     r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+/"
-    r"(?:commit|commits|blob)/(?P<oid>[0-9a-fA-F]{7,40})(?:/|$)",
+    r"(?:commit|commits|blob)/(?P<oid>[0-9a-fA-F]{7,64})(?:/|$)",
     re.IGNORECASE,
 )
 _PROCESS_FIELD_RE = re.compile(

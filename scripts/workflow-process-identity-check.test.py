@@ -55,6 +55,7 @@ class WorkflowProcessIdentityTests(unittest.TestCase):
         comment = "51" + "24"
         run = "61" + "13"
         digest = "abcdef0123456789" * 2 + "abcdef01"
+        digest64 = "0123456789abcdef" * 4
         self.write(
             "doc/engineering/workflow/archive.md",
             f"Historical workflow issue #{issue} and Task UID {uid}.\n"
@@ -79,7 +80,12 @@ class WorkflowProcessIdentityTests(unittest.TestCase):
             "scripts/pm/commit-authority.md",
             f"source_commit_oid: {digest}\n"
             f"merge_sha: {('e' * 40)}\n"
+            f"source_head_oid: {digest64}\n"
             f"https://github.com/eng-cc/oasis7/blob/{('f' * 40)}/scripts/pm/resolver.py\n",
+        )
+        self.write(
+            "scripts/pm/commit-authority-64-url.md",
+            f"https://github.com/eng-cc/oasis7/commit/{digest64}\n",
         )
         self.write(
             "scripts/full-escalation-receipt.py",
@@ -100,6 +106,10 @@ class WorkflowProcessIdentityTests(unittest.TestCase):
         self.assertIn("github_commit_or_blob_ref", kinds)
         self.assertTrue(any(item.path.endswith("evidence.json") for item in findings))
         self.assertTrue(any(item.path.endswith("dict-evidence.json") for item in findings))
+        self.assertTrue(any(item.kind == "execution_commit_hash" and item.value == digest64
+                            for item in findings))
+        self.assertTrue(any(item.kind == "github_commit_or_blob_ref" and item.value.endswith(digest64)
+                            for item in findings))
         self.assertTrue(any(item.path == "scripts/full-escalation-receipt.py" for item in findings))
         self.assertFalse(any(item.path.endswith("artifact-metadata.json") for item in findings))
 
