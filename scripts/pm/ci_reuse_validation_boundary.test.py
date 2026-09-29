@@ -17,6 +17,8 @@ from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
+FIXTURE_ISSUE_NUMBER = 87
+FIXTURE_PR_NUMBER = 143
 GIT = shutil.which("git")
 if GIT is None:
     raise RuntimeError("git is required for exact-W boundary fixture")
@@ -69,10 +71,10 @@ def projection_fixture(w_root: Path, *, task_uid: str, head: str, scope: str,
         task_uid=task_uid, source_head_oid=head, scope_base_oid=scope,
         projection_digest=projection_digest,
     )
-    body = f"Task: {task_uid}\nRefs #{contract.TASK_ISSUE_NUMBER}\n\n{marker}"
+    body = f"Task: {task_uid}\nRefs #{FIXTURE_ISSUE_NUMBER}\n\n{marker}"
     binding = publication_module.build_publication_binding(
-        publication, contract.PR_NUMBER,
-        f"https://github.com/{contract.REPOSITORY}/pull/{contract.PR_NUMBER}",
+        publication, FIXTURE_PR_NUMBER,
+        f"https://github.com/{contract.REPOSITORY}/pull/{FIXTURE_PR_NUMBER}",
     )
     comments = (
         {"body": publication_module.publication_comment(publication)},
@@ -91,8 +93,8 @@ def validation_comments(context) -> tuple[list[dict], dict[str, dict]]:
         "schema": c.AUTHORIZATION_SCHEMA,
         "repository": c.REPOSITORY,
         "task_uid": context.task_uid,
-        "task_issue_number": c.TASK_ISSUE_NUMBER,
-        "pr_number": c.PR_NUMBER,
+        "task_issue_number": FIXTURE_ISSUE_NUMBER,
+        "pr_number": FIXTURE_PR_NUMBER,
         "head_oid": context.head_oid,
         "integration_base_oid": "4" * 40,
         "source_scope_oid": context.source_scope_oid,
@@ -106,8 +108,8 @@ def validation_comments(context) -> tuple[list[dict], dict[str, dict]]:
         "schema": c.REQUEST_SCHEMA,
         "repository": c.REPOSITORY,
         "task_uid": context.task_uid,
-        "task_issue_number": c.TASK_ISSUE_NUMBER,
-        "pr_number": c.PR_NUMBER,
+        "task_issue_number": FIXTURE_ISSUE_NUMBER,
+        "pr_number": FIXTURE_PR_NUMBER,
         "head_oid": context.head_oid,
         "integration_base_oid": authorization["integration_base_oid"],
         "source_scope_oid": context.source_scope_oid,
@@ -116,7 +118,7 @@ def validation_comments(context) -> tuple[list[dict], dict[str, dict]]:
         "purpose": c.PURPOSE,
         "authorization_decision": c.REQUEST_DECISION,
         "authorization_source": {
-            "issue_number": c.TASK_ISSUE_NUMBER,
+            "issue_number": FIXTURE_ISSUE_NUMBER,
             "comment_id": 10,
             "body_digest": c.body_digest(authorization_body),
         },
@@ -128,8 +130,8 @@ def validation_comments(context) -> tuple[list[dict], dict[str, dict]]:
         "schema": c.PIN_SCHEMA,
         "repository": c.REPOSITORY,
         "task_uid": context.task_uid,
-        "task_issue_number": c.TASK_ISSUE_NUMBER,
-        "pr_number": c.PR_NUMBER,
+        "task_issue_number": FIXTURE_ISSUE_NUMBER,
+        "pr_number": FIXTURE_PR_NUMBER,
         "request_comment_id": 20,
         "request_body_digest": c.body_digest(request_body),
         "request_digest": request["request_digest"],
@@ -180,7 +182,7 @@ class ExactWBoundaryTests(unittest.TestCase):
         run_git("add", str(changed.relative_to(cls.checkout)), cwd=cls.checkout)
         run_git("commit", "--quiet", "-m", "Add local exact-W fixture input", cwd=cls.checkout)
         cls.head = run_git("rev-parse", "HEAD", cwd=cls.checkout)
-        run_git("push", "--quiet", "origin", f"{cls.head}:refs/pull/4060/head", cwd=cls.checkout)
+        run_git("push", "--quiet", "origin", f"{cls.head}:refs/pull/{FIXTURE_PR_NUMBER}/head", cwd=cls.checkout)
         run_git("worktree", "add", "--quiet", "--detach", str(cls.w_root), cls.workflow_sha,
                 cwd=cls.checkout)
 
@@ -209,6 +211,8 @@ class ExactWBoundaryTests(unittest.TestCase):
         )
         cls.context = {
             "task_uid": cls.task_uid,
+            "task_issue_number": FIXTURE_ISSUE_NUMBER,
+            "pr_number": FIXTURE_PR_NUMBER,
             "head_oid": cls.head,
             "integration_base_oid": cls.base,
             "source_scope_oid": cls.source_scope,
@@ -226,7 +230,7 @@ class ExactWBoundaryTests(unittest.TestCase):
             scope=scope, projection_digest=digest,
         )
         pr = {
-            "number": contract.PR_NUMBER,
+            "number": FIXTURE_PR_NUMBER,
             "state": "open",
             "merged": False,
             "body": body,
@@ -276,6 +280,7 @@ class ExactWBoundaryTests(unittest.TestCase):
 
         context = contract.TrustedRequestContext(
             task_uid=trusted.task_uid, head_oid=trusted.head_oid,
+            task_issue_number=FIXTURE_ISSUE_NUMBER, pr_number=FIXTURE_PR_NUMBER,
             source_scope_oid=trusted.source_scope_oid,
             projection_digest=trusted.projection_digest,
             planner_unit_ids=trusted.planner_unit_ids,

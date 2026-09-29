@@ -22,7 +22,8 @@ class UntrustedAuthorityConstructionTests(unittest.TestCase):
     def test_caller_cannot_set_resolver_only_authority_fields(self):
         request = {
             "task_uid": "task_" + "a" * 32,
-            "pr_number": contract.PR_NUMBER,
+            "task_issue_number": fixtures.FIXTURE_ISSUE_NUMBER,
+            "pr_number": fixtures.FIXTURE_PR_NUMBER,
             "head_oid": "1" * 40,
             "integration_base_oid": "4" * 40,
             "source_scope_oid": "2" * 40,

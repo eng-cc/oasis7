@@ -18,8 +18,6 @@ from typing import Any, Iterable, Mapping
 
 
 REPOSITORY = "eng-cc/oasis7"
-TASK_ISSUE_NUMBER = 4059
-PR_NUMBER = 4060
 WORKFLOW_PATH = ".github/workflows/rust.yml@main"
 WORKFLOW_REF = f"{REPOSITORY}/.github/workflows/rust.yml@refs/heads/main"
 WORKFLOW_FILE = ".github/workflows/rust.yml"
@@ -110,6 +108,8 @@ class TrustedRequestContext:
     """Trusted live Task/PR/projection/planner observations, never dispatch input."""
 
     task_uid: str
+    task_issue_number: int
+    pr_number: int
     head_oid: str
     source_scope_oid: str
     projection_digest: str
@@ -291,6 +291,19 @@ def _string(value: Any, field: str, *, allow_empty: bool = False) -> str:
     return value
 
 
+def _history_title(value: Any, field: str) -> str:
+    """Validate REST history text without normalizing its Unicode."""
+    if type(value) is not str or not value:
+        raise ContractError(f"{field} must be a non-empty string")
+    try:
+        value.encode("utf-8", errors="strict")
+    except UnicodeEncodeError as exc:
+        raise ContractError(f"{field} is not valid UTF-8") from exc
+    if any(char in value for char in "\x00\r\n"):
+        raise ContractError(f"{field} contains a control character")
+    return value
+
+
 def _planner_string(value: Any, field: str) -> str:
     """Validate an exact, bounded UTF-8 string from the trusted planner."""
     if type(value) is not str or not value or value != value.strip():
@@ -436,14 +449,94 @@ def _permission(login: str, observations: Mapping[str, Any]) -> str:
     return permission
 
 
+def _current_record_chain(
+    comments: list[Mapping[str, Any]], expected_identity: Mapping[str, Any],
+) -> list[Mapping[str, Any]]:
+    """Select the newest complete authority chain matching live Task/PR/H/B."""
+    required = {"task_uid", "task_issue_number", "pr_number", "head_oid", "integration_base_oid"}
+    if not isinstance(expected_identity, Mapping) or set(expected_identity) != required:
+        raise ContractError("live validation request identity is incomplete or has unsupported fields")
+    by_kind: dict[str, list[tuple[int, Mapping[str, Any], dict[str, Any], bytes]]] = {
+        "authorization": [], "request": [], "pin": [],
+    }
+    marker_to_kind = {
+        AUTHORIZATION_MARKER: "authorization",
+        REQUEST_MARKER: "request",
+        PIN_MARKER: "pin",
+    }
+    seen_comment_ids: set[int] = set()
+    for index, comment in enumerate(comments):
+        if not isinstance(comment, Mapping):
+            raise ContractError("complete Issue comment list contains a malformed entry")
+        comment_id = _positive_int(comment.get("id"), f"comment[{index}].id")
+        if comment_id in seen_comment_ids:
+            raise ContractError("complete Issue comment list contains duplicate comment IDs")
+        seen_comment_ids.add(comment_id)
+        body = comment.get("body")
+        if type(body) is not str:
+            raise ContractError("complete Issue comment list contains a missing body")
+        created = _timestamp(comment.get("created_at"), f"comment[{index}].created_at")
+        updated = _timestamp(comment.get("updated_at"), f"comment[{index}].updated_at")
+        if updated < created:
+            raise ContractError("Issue comment updated_at precedes created_at")
+        present = [marker for marker in marker_to_kind if marker in body]
+        if len(present) > 1:
+            raise ContractError("one Issue comment contains multiple validation authority markers")
+        if present:
+            kind = marker_to_kind[present[0]]
+            record, raw = _parse_marked_record(body, present[0], kind)
+            by_kind[kind].append((index, comment, record, raw))
+
+    matching_requests = [
+        row for row in by_kind["request"]
+        if all(row[2].get(field) == value for field, value in expected_identity.items())
+    ]
+    if not matching_requests:
+        raise ContractError("Issue has no validation request for the live Task/PR/H/B identity")
+    matching_requests.sort(key=lambda item: item[0])
+    request_index, request_comment, request, request_raw = matching_requests[-1]
+    request_id = _positive_int(request_comment.get("id"), "request comment ID")
+
+    source = request.get("authorization_source")
+    if not isinstance(source, Mapping):
+        raise ContractError("current validation request authorization source is malformed")
+    source_id = _positive_int(source.get("comment_id"), "request authorization comment ID")
+    source_digest = _digest(source.get("body_digest"), "request authorization body digest")
+    authorizations = [
+        row for row in by_kind["authorization"]
+        if row[1].get("id") == source_id
+    ]
+    if (len(authorizations) != 1
+            or body_digest(authorizations[0][1]["body"]) != source_digest):
+        raise ContractError("current validation request does not bind one exact authorization comment")
+    authorization_index, authorization_comment, _, _ = authorizations[0]
+    if authorization_index >= request_index:
+        raise ContractError("current validation authorization does not precede its request")
+
+    pins = [
+        row for row in by_kind["pin"]
+        if row[2].get("request_comment_id") == request_id
+    ]
+    if len(pins) != 1:
+        raise ContractError("current validation request does not have one unique pin comment")
+    pin_index, pin_comment, pin, _ = pins[0]
+    if (pin_index <= request_index
+            or pin.get("request_body_digest") != body_digest(request_raw)
+            or pin.get("request_digest") != request.get("request_digest")):
+        raise ContractError("current validation pin does not freeze its exact request after authorization")
+    return [authorization_comment, request_comment, pin_comment]
+
+
 def _validate_context(
     context: TrustedRequestContext,
-) -> tuple[str, str, str, str, tuple[str, ...], dict[str, tuple[str, ...]]]:
+) -> tuple[int, int, str, str, str, str, tuple[str, ...], dict[str, tuple[str, ...]]]:
     if not isinstance(context, TrustedRequestContext):
         raise ContractError("trusted request context has the wrong type")
     task_uid = _string(context.task_uid, "context.task_uid")
     if not _TASK_UID_RE.fullmatch(task_uid):
         raise ContractError("trusted Task UID is malformed")
+    task_issue_number = _positive_int(context.task_issue_number, "context.task_issue_number")
+    pr_number = _positive_int(context.pr_number, "context.pr_number")
     head_oid = _oid(context.head_oid, "context.head_oid")
     source_scope_oid = _oid(context.source_scope_oid, "context.source_scope_oid")
     projection_digest = _digest(context.projection_digest, "context.projection_digest")
@@ -474,7 +567,10 @@ def _validate_context(
                 f"trusted planner obligations are not unique canonical Unicode order for {unit_id}"
             )
         obligations[unit_id] = strings
-    return task_uid, head_oid, source_scope_oid, projection_digest, planner_ids, obligations
+    return (
+        task_issue_number, pr_number, task_uid, head_oid, source_scope_oid,
+        projection_digest, planner_ids, obligations,
+    )
 
 
 def _validate_record_common(
@@ -486,10 +582,8 @@ def _validate_record_common(
         raise ContractError(f"{field}.task_uid is malformed")
     if record["repository"] != REPOSITORY:
         raise ContractError(f"{field} does not bind the canonical repository")
-    if type(record["task_issue_number"]) is not int or record["task_issue_number"] != TASK_ISSUE_NUMBER:
-        raise ContractError(f"{field} does not bind the canonical Task Issue")
-    if type(record["pr_number"]) is not int or record["pr_number"] != PR_NUMBER:
-        raise ContractError(f"{field} does not bind the reciprocal PR")
+    _positive_int(record["task_issue_number"], f"{field}.task_issue_number")
+    _positive_int(record["pr_number"], f"{field}.pr_number")
     _oid(record["head_oid"], f"{field}.head_oid")
     _oid(record["integration_base_oid"], f"{field}.integration_base_oid")
     _oid(record["source_scope_oid"], f"{field}.source_scope_oid")
@@ -498,8 +592,11 @@ def _validate_record_common(
     if record["purpose"] != PURPOSE:
         raise ContractError(f"{field}.purpose is unsupported")
     if context is not None:
-        context_uid, context_head, context_scope, context_projection, planner_ids, _ = _validate_context(context)
-        if task_uid != context_uid or record["head_oid"] != context_head or record["source_scope_oid"] != context_scope:
+        (context_issue, context_pr, context_uid, context_head, context_scope,
+         context_projection, planner_ids, _) = _validate_context(context)
+        if (record["task_issue_number"] != context_issue or record["pr_number"] != context_pr
+                or task_uid != context_uid or record["head_oid"] != context_head
+                or record["source_scope_oid"] != context_scope):
             raise ContractError(f"{field} differs from trusted live Task/H/S identity")
         if record["projection_digest"] != context_projection:
             raise ContractError(f"{field} differs from trusted live projection digest")
@@ -511,10 +608,11 @@ def _validate_record_common(
 def _resolve_comment_records(
     comments: Iterable[Mapping[str, Any]],
     admin_permissions: Mapping[str, Any] | None,
+    expected_identity: Mapping[str, Any] | None = None,
 ) -> ValidationAuthority:
     """Resolve exact Issue records, optionally binding live admin observations.
 
-    `comments` is the complete paginated Issue #4059 comment response in API
+    `comments` is the complete paginated response from the selected Task Issue
     order. If supplied, permission entries are normalized only after the live
     API adapter verifies the returned user login against the requested
     collaborator login. This stage deliberately establishes no live
@@ -523,6 +621,9 @@ def _resolve_comment_records(
     if admin_permissions is not None and not isinstance(admin_permissions, Mapping):
         raise ContractError("live collaborator permission observations are unavailable")
     comment_list = list(comments)
+    if expected_identity is not None:
+        selected_chain = _current_record_chain(comment_list, expected_identity)
+        return _resolve_comment_records(selected_chain, admin_permissions)
     targets = {
         REQUEST_MARKER: "request",
         AUTHORIZATION_MARKER: "authorization",
@@ -588,7 +689,9 @@ def _resolve_comment_records(
     request_body_digest = body_digest(request_raw)
     authorization_body_digest = body_digest(authorization_raw)
     pin_body_digest = body_digest(pin_raw)
-    if source_issue != TASK_ISSUE_NUMBER or source_comment_id != authorization_id:
+    task_issue_number = _positive_int(request["task_issue_number"], "request.task_issue_number")
+    pr_number = _positive_int(request["pr_number"], "request.pr_number")
+    if source_issue != task_issue_number or source_comment_id != authorization_id:
         raise ContractError("request does not point to the unique authorization comment")
     if source_digest != authorization_body_digest:
         raise ContractError("request authorization-source digest differs from exact approval body")
@@ -615,7 +718,7 @@ def _resolve_comment_records(
     pin_issue = _positive_int(pin["task_issue_number"], "pin.task_issue_number")
     pin_pr = _positive_int(pin["pr_number"], "pin.pr_number")
     if (pin["repository"] != REPOSITORY or pin_task_uid != task_uid
-            or pin_issue != TASK_ISSUE_NUMBER or pin_pr != PR_NUMBER):
+            or pin_issue != task_issue_number or pin_pr != pr_number):
         raise ContractError("pin does not bind the canonical repository, Task, and reciprocal PR")
     if pin["purpose"] != PIN_PURPOSE:
         raise ContractError("pin purpose is unsupported")
@@ -637,8 +740,9 @@ def _resolve_comment_records(
         pin_permission = _permission(pin_actor, admin_permissions)
     for field, record in (("request", request), ("authorization", authorization)):
         if (record["repository"] != REPOSITORY or record["task_uid"] != task_uid
-                or record["task_issue_number"] != TASK_ISSUE_NUMBER or record["pr_number"] != PR_NUMBER):
-            raise ContractError(f"{field} does not bind the canonical Task Issue and reciprocal PR")
+                or record["task_issue_number"] != task_issue_number
+                or record["pr_number"] != pr_number):
+            raise ContractError(f"{field} does not bind the selected Task Issue and reciprocal PR")
 
     retained_times = tuple(
         (_positive_int(item.get("id"), "authority comment ID"),
@@ -671,13 +775,15 @@ def _resolve_comment_records(
 def resolve_records(
     comments: Iterable[Mapping[str, Any]],
     admin_permissions: Mapping[str, Any],
+    *, expected_identity: Mapping[str, Any] | None = None,
 ) -> ValidationAuthority:
     """Resolve records for issuance, requiring current live admin observations."""
-    return _resolve_comment_records(comments, admin_permissions)
+    return _resolve_comment_records(comments, admin_permissions, expected_identity)
 
 
 def resolve_records_for_readback(
     comments: Iterable[Mapping[str, Any]],
+    *, expected_identity: Mapping[str, Any] | None = None,
 ) -> ValidationAuthority:
     """Resolve closed records for candidate discovery without rechecking permissions.
 
@@ -686,7 +792,7 @@ def resolve_records_for_readback(
     reader has verified the exact trusted workflow run/check/artifact and has
     called :func:`bind_recorded_admin_snapshot` with that payload's authority.
     """
-    return _resolve_comment_records(comments, None)
+    return _resolve_comment_records(comments, None, expected_identity)
 
 
 def bind_recorded_admin_snapshot(
@@ -716,8 +822,8 @@ def bind_recorded_admin_snapshot(
         "repository": REPOSITORY,
         "validation_id": authority.validation_id,
         "task_uid": request["task_uid"],
-        "task_issue_number": TASK_ISSUE_NUMBER,
-        "pr_number": PR_NUMBER,
+        "task_issue_number": request["task_issue_number"],
+        "pr_number": request["pr_number"],
         "head_oid": request["head_oid"],
         "integration_base_oid": request["integration_base_oid"],
         "source_scope_oid": request["source_scope_oid"],
@@ -767,7 +873,8 @@ def bind_authority_context(
         raise ContractError("provisional validation authority is missing or already bound")
     if not authority.permission_snapshot_bound:
         raise ContractError("issuer permission snapshot must be bound before live planner context")
-    task_uid, head_oid, source_scope_oid, projection_digest, planner_ids, obligations = _validate_context(context)
+    (task_issue_number, pr_number, task_uid, head_oid, source_scope_oid,
+     projection_digest, planner_ids, obligations) = _validate_context(context)
     for field, record in (("request", authority.request), ("authorization", authority.authorization)):
         _validate_record_common(record, field, context)
         if (record["task_uid"] != task_uid or record["head_oid"] != head_oid
@@ -779,7 +886,7 @@ def bind_authority_context(
         raise ContractError("request selects a unit absent from recomputed trusted planner inventory")
     pin = authority.pin
     if (pin["task_uid"] != task_uid or pin["repository"] != REPOSITORY
-            or pin["task_issue_number"] != TASK_ISSUE_NUMBER or pin["pr_number"] != PR_NUMBER):
+            or pin["task_issue_number"] != task_issue_number or pin["pr_number"] != pr_number):
         raise ContractError("pin differs from trusted live Task context")
     selected_obligations = {unit: obligations[unit] for unit in units}
     return _update_validation_authority(
@@ -836,7 +943,7 @@ def collect_workflow_runs(pages: Iterable[Mapping[str, Any]]) -> tuple[Mapping[s
             if not isinstance(row, Mapping):
                 raise ContractError("workflow-run history contains a malformed run")
             run_id = _positive_int(row.get("id"), "workflow run ID")
-            title = _string(row.get("display_title"), "workflow display_title")
+            title = _history_title(row.get("display_title"), "workflow display_title")
             if run_id in run_ids:
                 raise ContractError("workflow-run history contains a duplicate run ID")
             run_ids.add(run_id)
@@ -875,33 +982,67 @@ def expected_event_inputs(authority: ValidationAuthority) -> dict[str, str]:
     }
 
 
-def select_unique_run(runs: Iterable[Mapping[str, Any]], authority: ValidationAuthority) -> Mapping[str, Any]:
+def select_unique_run(
+    runs: Iterable[Mapping[str, Any]], authority: ValidationAuthority, *,
+    current_run_id: int | None = None,
+) -> Mapping[str, Any]:
     authority = _require_validation_authority(authority)
-    """Select only the sole run in the source-defined conservative title union."""
+    """Select this exact action, ignoring only terminal unsuccessful retries.
+
+    The producer supplies its server-provided current run ID. Independent
+    readback instead selects the unique successful run for the exact frozen
+    action. Old failed, cancelled, timed-out, or superseded runs stay in the
+    complete history but do not permanently poison a valid retry.
+    """
     expected = expected_run_title(authority)
-    request = authority.request
-    prefix = (
-        f"oasis7-ci|workflow_dispatch|{RUN_MODE}|{request['task_uid']}|{request['pr_number']}|"
-        f"{request['integration_base_oid']}|{request['head_oid']}|"
-    )
-    suffix = "|" + authority.validation_id
     candidates: list[Mapping[str, Any]] = []
     seen_ids: set[int] = set()
     for run in runs:
         if not isinstance(run, Mapping):
             raise ContractError("workflow run candidate is malformed")
         run_id = _positive_int(run.get("id"), "workflow run candidate ID")
-        title = _string(run.get("display_title"), "workflow run candidate display_title")
+        title = _history_title(run.get("display_title"), "workflow run candidate display_title")
         if run_id in seen_ids:
             raise ContractError("workflow run candidate list contains duplicate IDs")
         seen_ids.add(run_id)
-        if title.endswith(suffix) or title.startswith(prefix):
+        if title == expected:
             candidates.append(run)
-    if len(candidates) != 1:
-        raise ContractError("validation request does not resolve to one unique workflow run ID")
-    if candidates[0]["display_title"] != expected:
-        raise ContractError("unique workflow run candidate has another or malformed display title")
-    return candidates[0]
+
+    terminal_unsuccessful = {
+        "failure", "cancelled", "timed_out", "action_required", "stale",
+        "skipped", "startup_failure", "neutral",
+    }
+
+    def is_terminal_unsuccessful(row: Mapping[str, Any]) -> bool:
+        return row.get("status") == "completed" and row.get("conclusion") in terminal_unsuccessful
+
+    if current_run_id is not None:
+        _positive_int(current_run_id, "current workflow run ID")
+        current = [row for row in candidates if row.get("id") == current_run_id]
+        if len(current) != 1:
+            raise ContractError("current workflow run ID is not the exact current action")
+        competing = [
+            row for row in candidates
+            if row.get("id") != current_run_id
+            and (not is_terminal_unsuccessful(row)
+                 or (row.get("status") == "completed" and row.get("conclusion") == "success"))
+        ]
+        if competing:
+            raise ContractError("another nonterminal or successful workflow run is competing with the current action")
+        return current[0]
+
+    competing_live = [row for row in candidates if row.get("status") != "completed"]
+    if competing_live:
+        raise ContractError("a nonterminal workflow run competes with the current validation action")
+    successful = [
+        row for row in candidates
+        if row.get("status") == "completed" and row.get("conclusion") == "success"
+    ]
+    if len(successful) == 1:
+        return successful[0]
+    if not successful and len(candidates) == 1:
+        return candidates[0]
+    raise ContractError("validation action does not resolve to one unique current successful workflow run")
 
 
 def _normalized_run(run: Mapping[str, Any], authority: ValidationAuthority) -> dict[str, Any]:
@@ -945,8 +1086,8 @@ def build_authority_record(authority: ValidationAuthority, run: Mapping[str, Any
         "capability_under_test": CAPABILITY,
         "validation_id": authority.validation_id,
         "task_uid": request["task_uid"],
-        "task_issue_number": TASK_ISSUE_NUMBER,
-        "pr_number": PR_NUMBER,
+        "task_issue_number": request["task_issue_number"],
+        "pr_number": request["pr_number"],
         "head_oid": request["head_oid"],
         "integration_base_oid": request["integration_base_oid"],
         "source_scope_oid": request["source_scope_oid"],

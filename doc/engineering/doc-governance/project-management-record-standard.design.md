@@ -372,5 +372,5 @@ GitHub Project 只投影可管理字段，不能覆盖 Issue 或 cache 中的细
 - 当前工作流：[`doc/engineering/workflow/source-of-truth.md`](../workflow/source-of-truth.md)。
 - 配套系统设计内容标准：[`system-design-writing-standard.design.md`](system-design-writing-standard.design.md)。
 - 当前 task/project 映射与归档路径：见 [`.pm/README.md`](../../../.pm/README.md) 及 workflow source 的 GitHub Project-backed PM contract。
-- 本规范吸收的系统设计/PM v1、贯通方案和模板均为本任务固定 proposal inputs；原文对照、哈希、历史 PR 状态与未采纳项保留在 GitHub Issue #3662 evidence 和任务 scratch，不把附件 metadata 当作当前 task truth。
+- 本规范吸收的系统设计/PM v1、贯通方案和模板均为可复用语义；原文对照、哈希、过程状态和未采纳项保留在对应 GitHub Project-backed task evidence，不把附件 metadata 当作 task truth。
 - 本规范采用其 PM sections 8–9、Appendices C–F、integration sections 5–8 和 templates B–F/H 的可复用内容语义；具体 lifecycle、schema、adapter、activation 与 release gate 继续由现行 workflow/专业 owner 管理。

@@ -187,15 +187,15 @@ class GitHubPublicationAdapter:
             raise RuntimeError(f"GitHub request failed: {exc}") from exc
 
     def _issue_comments(self) -> list[dict[str, Any]]:
-        raw = self.gh("api", f"repos/{self.args.repo}/issues/{self.issue_number}/comments",
-                      "--paginate", "--slurp", timeout=5.0)
+        raw = self.gh("api", f"repos/{self.args.repo}/issues/{self.issue_number}/comments?per_page=100",
+                      "--paginate", "--slurp", timeout=30.0)
         try:
             pages = json.loads(raw)
         except json.JSONDecodeError as exc:
             raise RuntimeError("Task comments readback is malformed") from exc
-        if not isinstance(pages, list):
+        if not isinstance(pages, list) or any(not isinstance(page, list) for page in pages):
             raise RuntimeError("Task comments readback is malformed")
-        values = [item for page in pages for item in (page if isinstance(page, list) else [page])]
+        values = [item for page in pages for item in page]
         if any(not isinstance(item, dict) or not isinstance(item.get("body"), str) for item in values):
             raise RuntimeError("Task comment entry is malformed")
         return values
