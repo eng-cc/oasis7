@@ -25,7 +25,14 @@ import uuid
 from typing import Any
 
 
-SCHEMA = "oasis7.duplicate-candidate-retirement/v1"
+SCHEMA = "oasis7.duplicate-candidate-retirement/v2"
+TOOL_AUTHORITY_SCHEMA = "oasis7.retirement-tool-authority/v1"
+LAUNCHER_CONTEXT_ENV = "OASIS7_RETIREMENT_LAUNCH_CONTEXT_V1"
+TOOL_ROOT_ENV = "OASIS7_RETIREMENT_TOOL_ROOT_V1"
+AUTHORITY_FILE_ENV = "OASIS7_RETIREMENT_AUTHORITY_FILE_V1"
+CANONICAL_REPOSITORY = "eng-cc/oasis7"
+LAUNCHER_PATH = "scripts/pm/retire-closed-duplicate-candidate.sh"
+HELPER_PATH = "scripts/pm/retire-closed-duplicate-candidate.py"
 DISPOSITION_MARKER = "<!-- oasis7.duplicate-candidate-disposition/v1 -->"
 TASK_UID_RE = re.compile(r"task_[0-9a-f]{32}\Z")
 GITHUB_REPO_RE = re.compile(r"[^/\s]+/[^/\s]+\Z")
@@ -37,11 +44,13 @@ PROJECT_FIELD_CONFIGURATION_NAME_SELECTION = (
 )
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 STORE_PATH = pathlib.Path(__file__).with_name("workflow-durable-store.py")
+sys.path.insert(0, str(STORE_PATH.parent.resolve()))
 STORE_SPEC = importlib.util.spec_from_file_location("workflow_durable_store_retirement", STORE_PATH)
 if STORE_SPEC is None or STORE_SPEC.loader is None:
     raise RuntimeError(f"cannot load pinned durable store at {STORE_PATH}")
 STORE = importlib.util.module_from_spec(STORE_SPEC)
 STORE_SPEC.loader.exec_module(STORE)
+_ACTIVE_TOOL_AUTHORITY: dict[str, Any] | None = None
 
 
 # ValueError is intentionally the shared exception identity: deterministic
@@ -65,6 +74,114 @@ def canonical_digest(value: Any) -> str:
 def _require(condition: bool, message: str) -> None:
     if not condition:
         raise RetirementError(message)
+
+
+def _read_live_tool_pin() -> dict[str, str]:
+    """Resolve the fixed repository's live default-branch commit and tree."""
+    query = (
+        'query RetirementToolAuthority { repository(owner: "eng-cc", name: "oasis7") { '
+        "defaultBranchRef { name target { oid ... on Commit { tree { oid } } } } } }"
+    )
+    try:
+        payload = _gh_json("graphql", "-f", f"query={query}")
+        ref = payload["data"]["repository"]["defaultBranchRef"]
+        target = ref["target"]
+        result = {
+            "default_branch": str(ref["name"]),
+            "commit_oid": str(target["oid"]),
+            "tree_oid": str(target["tree"]["oid"]),
+        }
+    except (KeyError, TypeError, RetirementError) as exc:
+        raise RetirementError(f"canonical live default-branch pin is unavailable: {exc}") from exc
+    for field in ("commit_oid", "tree_oid"):
+        if re.fullmatch(r"[0-9a-f]{40}", result[field]) is None:
+            raise RetirementError(f"canonical live default-branch {field} is malformed")
+    if not result["default_branch"] or any(char in result["default_branch"] for char in "\r\n\0"):
+        raise RetirementError("canonical live default branch is malformed")
+    return result
+
+
+def _check_live_tool_pin(authority: dict[str, Any], reader: Any | None = None) -> None:
+    current = (reader or _read_live_tool_pin)()
+    expected = {
+        "default_branch": authority["default_branch"],
+        "commit_oid": authority["commit_oid"],
+        "tree_oid": authority["tree_oid"],
+    }
+    _require(current == expected, "live default-branch source pin changed during retirement")
+
+
+def _loaded_path(root: pathlib.Path, path: pathlib.Path) -> str | None:
+    try:
+        return path.resolve(strict=True).relative_to(root).as_posix()
+    except (OSError, ValueError):
+        return None
+
+
+def _verify_loaded_closure(authority: dict[str, Any], root: pathlib.Path) -> None:
+    """Require the exact loaded repository-owned code set to match the pin."""
+    manifest = {entry["path"]: entry for entry in authority["closure_manifest"]}
+    helper_path = _loaded_path(root, pathlib.Path(__file__))
+    store_path = _loaded_path(root, STORE_PATH)
+    _require(helper_path == HELPER_PATH, "Python helper is not executing from the pinned isolated closure")
+    _require(store_path == "scripts/pm/workflow-durable-store.py", "durable store is not loaded from the pinned closure")
+    loaded_paths = {LAUNCHER_PATH, helper_path, store_path}
+    for module in tuple(sys.modules.values()):
+        module_path = getattr(module, "__file__", None)
+        if not module_path:
+            continue
+        relative = _loaded_path(root, pathlib.Path(module_path))
+        if relative is not None and relative.endswith(".py"):
+            loaded_paths.add(relative)
+    _require(
+        loaded_paths == set(manifest),
+        "loaded repository-owned code paths differ from the pinned closure manifest",
+    )
+    for relative, entry in manifest.items():
+        path = root / relative
+        try:
+            mode = path.stat().st_mode
+            content = path.read_bytes()
+        except OSError as exc:
+            raise RetirementError(f"pinned closure file is unavailable at {relative}: {exc}") from exc
+        actual_mode = "100755" if mode & 0o111 else "100644"
+        _require(actual_mode == entry["mode"], f"pinned closure mode differs at {relative}")
+        actual_oid = hashlib.sha1(
+            b"blob " + str(len(content)).encode("ascii") + b"\0" + content
+        ).hexdigest()
+        _require(actual_oid == entry["blob_oid"], f"pinned closure bytes differ at {relative}")
+
+
+def _load_launcher_authority() -> tuple[dict[str, Any], pathlib.Path]:
+    """Load only authority emitted by the pinned public shell launcher."""
+    if os.environ.get(LAUNCHER_CONTEXT_ENV) != "pinned-live-source":
+        raise RetirementError("direct or unbound Python invocation is unsupported; use the repository retirement launcher")
+    raw_root = os.environ.get(TOOL_ROOT_ENV, "")
+    raw_authority = os.environ.get(AUTHORITY_FILE_ENV, "")
+    if not raw_root or not raw_authority:
+        raise RetirementError("trusted launcher did not provide its isolated source closure")
+    root = pathlib.Path(raw_root)
+    if root.is_symlink() or not root.is_dir():
+        raise RetirementError("trusted launcher source root is missing or ambiguous")
+    root = root.resolve(strict=True)
+    authority_path = pathlib.Path(raw_authority)
+    if authority_path.is_symlink():
+        raise RetirementError("trusted launcher authority file must not be a symlink")
+    try:
+        authority_path = authority_path.resolve(strict=True)
+        authority_path.relative_to(root)
+        if not authority_path.is_file():
+            raise ValueError("authority file is not regular")
+        authority = json.loads(authority_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, json.JSONDecodeError) as exc:
+        raise RetirementError(f"trusted launcher authority file is unavailable or malformed: {exc}") from exc
+    try:
+        STORE.validate_retirement_tool_authority(authority)
+    except ValueError as exc:
+        raise RetirementError(f"trusted launcher tool authority is invalid: {exc}") from exc
+    _verify_loaded_closure(authority, root)
+    _check_live_tool_pin(authority)
+    return authority, root
 
 
 def _run(command: list[str], *, cwd: pathlib.Path | None = None) -> str:
@@ -1486,10 +1603,19 @@ def retire_candidate(
     *,
     mode: str,
     live_proof_provider: Any,
+    tool_authority: dict[str, Any] | None = None,
+    tool_pin_reader: Any | None = None,
 ) -> dict[str, Any]:
     """Mutation-free preflight or exact, repeat-read atomic retirement."""
     if mode not in {"preflight", "apply"}:
         raise RetirementError("only preflight and apply modes are permitted")
+    if tool_authority is None or _ACTIVE_TOOL_AUTHORITY != tool_authority:
+        raise RetirementError("retirement must run through the pinned repository launcher")
+    try:
+        STORE.validate_retirement_tool_authority(tool_authority)
+    except ValueError as exc:
+        raise RetirementError(f"retirement tool authority is invalid: {exc}") from exc
+    _check_live_tool_pin(tool_authority, tool_pin_reader)
     if TASK_UID_RE.fullmatch(task_uid) is None:
         raise RetirementError("task UID is malformed")
     if not isinstance(disposition_comment_id, int) or disposition_comment_id <= 0:
@@ -1510,6 +1636,7 @@ def retire_candidate(
     if mode == "preflight":
         proof = live_proof_provider.read_live_proof(root, task_uid)
         evidence = _validate_live_proof(initial, task_uid, before_row, disposition_comment_id, proof)
+        _check_live_tool_pin(tool_authority, tool_pin_reader)
         try:
             _checked_mapping_path(root)
             latest = STORE.read_mapping(mapping_path, {"version": 1, "tasks": {}})
@@ -1524,8 +1651,16 @@ def retire_candidate(
         if list(latest.get("retired_duplicate_candidates", [])) != list(initial.get("retired_duplicate_candidates", [])):
             raise RetirementError("retirement ledger changed during no-write preflight")
         _registered_root(root, latest)
-        return {"status": "preflight_ok", "task_uid": task_uid, "evidence_digest": canonical_digest(evidence)}
+        return {
+            "status": "preflight_ok",
+            "task_uid": task_uid,
+            "evidence_digest": canonical_digest(evidence),
+            "tool_authority": copy.deepcopy(tool_authority),
+        }
     try:
+        # The launcher and initial pin are checked before the mapping is read;
+        # repeat the live pin immediately before the first possible lock open.
+        _check_live_tool_pin(tool_authority, tool_pin_reader)
         # Validate every mapping component immediately before the durable
         # store opens or creates the lock sidecar.
         _checked_mapping_path(root)
@@ -1537,6 +1672,7 @@ def retire_candidate(
         ) as locked_mapping:
             _checked_mapping_path(root)
             STORE.validate_retirement_ledger(locked_mapping)
+            STORE.validate_retirement_authority_trees(locked_mapping, mapping_path)
             tombstone = STORE.retired_task(locked_mapping, task_uid)
             if tombstone is not None:
                 raise _AlreadyRetired(tombstone)
@@ -1557,17 +1693,23 @@ def retire_candidate(
             except (OSError, json.JSONDecodeError) as exc:
                 raise RetirementError(f"cannot re-read task mapping for compare-and-swap: {exc}") from exc
             STORE.validate_retirement_ledger(latest)
+            STORE.validate_retirement_authority_trees(latest, mapping_path)
             latest_row = (latest.get("tasks") or {}).get(task_uid)
             if latest_row != before_row:
                 raise RetirementError("candidate mapping row changed during live proof; compare-and-swap refused")
             if list(latest.get("retired_duplicate_candidates", [])) != list(locked_mapping.get("retired_duplicate_candidates", [])):
                 raise RetirementError("retirement ledger changed during live proof; compare-and-swap refused")
+            # The default branch can move while the lock-held GitHub proof is
+            # in flight. Bind the final local mutation to a still-current
+            # source pin, after all remote reads and immediately before CAS.
+            _check_live_tool_pin(tool_authority, tool_pin_reader)
             locked_mapping.clear()
             locked_mapping.update(latest)
             now = dt.datetime.now(dt.timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
             retirement = {
                 "schema": SCHEMA,
                 "task_uid": task_uid,
+                "tool_authority": copy.deepcopy(tool_authority),
                 "old_record": before_row,
                 "old_record_sha256": canonical_digest(before_row),
                 "evidence": evidence,
@@ -1583,6 +1725,7 @@ def retire_candidate(
             del tasks[task_uid]
             locked_mapping.setdefault("retired_duplicate_candidates", []).append(retirement)
             STORE.validate_retirement_ledger(locked_mapping)
+            STORE.validate_retirement_authority_trees(locked_mapping, mapping_path)
             result = {"status": "retired", "task_uid": task_uid, "digest": retirement["digest"]}
         # locked_json has atomically replaced and read-closed the mapping here.
         _checked_mapping_path(root)
@@ -1608,6 +1751,13 @@ def _live_provider() -> LiveProofProvider:
 
 
 def main(argv: list[str] | None = None) -> int:
+    global _ACTIVE_TOOL_AUTHORITY
+    try:
+        tool_authority, _ = _load_launcher_authority()
+    except (RetirementError, OSError, ValueError) as exc:
+        print(f"closed duplicate candidate retirement blocked: {exc}", file=sys.stderr)
+        return 1
+    _ACTIVE_TOOL_AUTHORITY = tool_authority
     parser = argparse.ArgumentParser(description="Safely reconcile one closed duplicate candidate mapping.")
     parser.add_argument("--mapping-root", required=True, help="registered target Git worktree containing .pm/github-project-sync/tasks.json")
     parser.add_argument("--task-uid", required=True)
@@ -1623,6 +1773,7 @@ def main(argv: list[str] | None = None) -> int:
             disposition_comment_id=args.disposition_comment_id,
             mode="apply" if args.apply else "preflight",
             live_proof_provider=_live_provider(),
+            tool_authority=tool_authority,
         )
     except (RetirementError, OSError, ValueError) as exc:
         print(f"closed duplicate candidate retirement blocked: {exc}", file=sys.stderr)

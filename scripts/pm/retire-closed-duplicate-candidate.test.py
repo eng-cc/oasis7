@@ -1,16 +1,16 @@
 #!/usr/bin/env python3
-"""RED acceptance tests for trusted closed-duplicate candidate retirement.
+"""Acceptance tests for trusted closed-duplicate candidate retirement.
 
 The test harness uses an isolated Git repository and a fail-closed ``gh`` stub;
-it never reads or writes live GitHub state.  The future helper's public CLI is
-the one specified by source-of-truth.md:
+it never reads or writes live GitHub state.  The public launcher pins and
+executes the committed source-of-truth helper closure:
 
     --mapping-root <registered-worktree> --task-uid <UID>
     --disposition-comment-id <server-comment-id> --preflight|--apply
 
 Test-only seam contract (not a CLI/config/file input):
 ``retire_candidate(mapping_root, task_uid, disposition_comment_id, *, mode,
-live_proof_provider)`` calls ``read_live_proof(mapping_root, task_uid)`` and
+live_proof_provider, tool_authority)`` calls ``read_live_proof(mapping_root, task_uid)`` and
 validates raw Issues, complete Project/comment/permission collections, the
 server-ID comment readback, and complete Git/PR artifact-discovery evidence.
 Incomplete or ambiguous values raise ``RetirementError`` without mutation.
@@ -39,6 +39,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 PM = ROOT / "scripts/pm"
 HELPER = PM / "retire-closed-duplicate-candidate.py"
+LAUNCHER = PM / "retire-closed-duplicate-candidate.sh"
+TOOL_CLOSURE_PATHS = (
+    "scripts/pm/portable_file_lock.py",
+    "scripts/pm/retire-closed-duplicate-candidate.py",
+    "scripts/pm/retire-closed-duplicate-candidate.sh",
+    "scripts/pm/workflow-durable-store.py",
+)
 BOOTSTRAP = PM / "bootstrap-task-snapshot.py"
 CANDIDATE_UID = "task_" + "a" * 32
 FOREIGN_UID = "task_" + "b" * 32
@@ -64,6 +71,29 @@ def canonical_bytes(value: object) -> bytes:
 
 def sha256(value: bytes) -> str:
     return "sha256:" + hashlib.sha256(value).hexdigest()
+
+
+def test_tool_authority() -> dict[str, object]:
+    manifest = [
+        {
+            "path": path,
+            "mode": "100755" if os.stat(ROOT / path).st_mode & 0o111 else "100644",
+            "blob_oid": f"{index:040x}",
+        }
+        for index, path in enumerate(TOOL_CLOSURE_PATHS, start=1)
+    ]
+    closure_sha256 = hashlib.sha256(canonical_bytes(manifest)).hexdigest()
+    return {
+        "schema": "oasis7.retirement-tool-authority/v1",
+        "canonical_repository": "eng-cc/oasis7",
+        "default_branch": "main",
+        "commit_oid": "1" * 40,
+        "tree_oid": "2" * 40,
+        "launcher_path": "scripts/pm/retire-closed-duplicate-candidate.sh",
+        "helper_path": "scripts/pm/retire-closed-duplicate-candidate.py",
+        "closure_manifest": manifest,
+        "closure_sha256": closure_sha256,
+    }
 
 
 def graphql_braced_selections(query: str, name: str) -> list[str]:
@@ -171,6 +201,7 @@ class RetirementFixture:
         self.directory = directory
         self.include_foreign_pr = include_foreign_pr
         self.repository = directory / "repository"
+        self.tool_repository = directory / "trusted-source"
         self.mapping_root = directory / "candidate-worktree"
         self.foreign_worktree = directory / "foreign-worktree"
         self.bin = directory / "bin"
@@ -180,6 +211,7 @@ class RetirementFixture:
         self.gh_fixture = directory / "live-github-fixture.json"
         self.foreign_snapshot = self.foreign_worktree / ".pm/scratch" / FOREIGN_UID / "bootstrap-task-snapshot.json"
         self._create_git_worktrees()
+        self._create_trusted_tool_source()
         self._write_mapping()
         self._write_gh_stub()
         self._write_foreign_snapshot()
@@ -196,6 +228,49 @@ class RetirementFixture:
         git("branch", FOREIGN_BRANCH, cwd=self.repository)
         git("worktree", "add", "--quiet", "--detach", str(self.mapping_root), "main", cwd=self.repository)
         git("worktree", "add", "--quiet", str(self.foreign_worktree), FOREIGN_BRANCH, cwd=self.repository)
+
+    def _create_trusted_tool_source(self) -> None:
+        self.tool_repository.mkdir(parents=True)
+        git("init", "--quiet", "--initial-branch=main", str(self.tool_repository))
+        git("config", "user.email", "retirement-source@example.invalid", cwd=self.tool_repository)
+        git("config", "user.name", "Retirement Source Fixture", cwd=self.tool_repository)
+        for relative in TOOL_CLOSURE_PATHS:
+            source = ROOT / relative
+            destination = self.tool_repository / relative
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(source, destination)
+            shutil.copystat(source, destination)
+        git("add", *TOOL_CLOSURE_PATHS, cwd=self.tool_repository)
+        git("commit", "--quiet", "-m", "trusted retirement source fixture", cwd=self.tool_repository)
+        self.tool_commit = git("rev-parse", "HEAD", cwd=self.tool_repository)
+        self.tool_tree = git("rev-parse", "HEAD^{tree}", cwd=self.tool_repository)
+        self.tool_authority = {
+            "schema": "oasis7.retirement-tool-authority/v1",
+            "canonical_repository": "eng-cc/oasis7",
+            "default_branch": "main",
+            "commit_oid": self.tool_commit,
+            "tree_oid": self.tool_tree,
+            "launcher_path": "scripts/pm/retire-closed-duplicate-candidate.sh",
+            "helper_path": "scripts/pm/retire-closed-duplicate-candidate.py",
+            "closure_manifest": [],
+            "closure_sha256": "",
+        }
+        for relative in TOOL_CLOSURE_PATHS:
+            raw = git("ls-tree", "HEAD", relative, cwd=self.tool_repository).strip()
+            metadata, actual_path = raw.split("\t", 1)
+            mode, kind, blob_oid = metadata.split(" ")
+            if actual_path != relative or kind != "blob":
+                raise AssertionError(f"trusted source fixture did not bind {relative}")
+            self.tool_authority["closure_manifest"].append(
+                {"path": relative, "mode": mode, "blob_oid": blob_oid}
+            )
+        self.tool_authority["closure_sha256"] = hashlib.sha256(
+            canonical_bytes(self.tool_authority["closure_manifest"])
+        ).hexdigest()
+        git(
+            "fetch", "--no-write-fetch-head", str(self.tool_repository), self.tool_commit,
+            cwd=self.repository,
+        )
 
     def _write_mapping(self) -> None:
         self.mapping.parent.mkdir(parents=True, exist_ok=True)
@@ -549,10 +624,11 @@ class RetirementFixture:
         self.bin.mkdir(parents=True, exist_ok=True)
         (self.bin / "gh").write_text(
             "#!/usr/bin/env python3\n"
-            "import json, os, pathlib, re, sys\n"
+            "import base64, json, os, pathlib, re, subprocess, sys\n"
             "args=sys.argv[1:]\n"
             "with open(os.environ['RETIREMENT_GH_LOG'],'a',encoding='utf-8') as log: log.write(json.dumps(args)+'\\n')\n"
             "fixture=json.loads(pathlib.Path(os.environ['RETIREMENT_GH_FIXTURE']).read_text(encoding='utf-8'))\n"
+            "tool_repo=os.environ['RETIREMENT_TOOL_REPO']; tool_commit=os.environ['RETIREMENT_TOOL_COMMIT']; tool_tree=os.environ['RETIREMENT_TOOL_TREE']\n"
             "mode=fixture['pagination_mode']\n"
             "def emit(value): print(json.dumps(value,sort_keys=True))\n"
             "joined=' '.join(args)\n"
@@ -608,6 +684,8 @@ class RetirementFixture:
             "  return {'data':data}\n"
             "if args[:2]==['api','graphql']:\n"
             "  joined=' '.join(args)\n"
+            "  if 'RetirementToolAuthority' in joined:\n"
+            "    emit({'data':{'repository':{'defaultBranchRef':{'name':'main','target':{'oid':tool_commit,'tree':{'oid':tool_tree}}}}}}); raise SystemExit(0)\n"
             "  if fixture.get('validate_project_owner_schema') and project_query:\n"
             "    missing_owner_fragments=[kind for kind in ('Organization','User') if re.search(r'\\.\\.\\.\\s*on\\s*'+kind+r'\\s*\\{\\s*login\\b',joined) is None]\n"
             "    if missing_owner_fragments: emit({'errors':[{'message':'ProjectV2Owner union selections are incomplete: '+','.join(missing_owner_fragments)}]}); raise SystemExit(1)\n"
@@ -635,6 +713,21 @@ class RetirementFixture:
             "  else: emit(graph(page))\n"
             "elif args[:1]==['api']:\n"
             "  route=next((a for a in args[1:] if not a.startswith('-')),'')\n"
+            "  if '/git/trees/' in route:\n"
+            "    oid=route.rsplit('/',1)[-1]\n"
+            "    output=subprocess.run([os.environ['RETIREMENT_REAL_GIT'],'-C',tool_repo,'ls-tree','-z',oid],check=True,stdout=subprocess.PIPE).stdout\n"
+            "    entries=[]\n"
+            "    for raw in output.split(b'\\0'):\n"
+            "      if not raw: continue\n"
+            "      metadata,path=raw.split(b'\\t',1); mode_bits,kind,sha=metadata.decode().split(' ')\n"
+            "      entries.append({'path':path.decode(),'mode':mode_bits,'type':kind,'sha':sha})\n"
+            "    emit({'sha':oid,'tree':entries,'truncated':False})\n"
+            "    raise SystemExit(0)\n"
+            "  if '/git/blobs/' in route:\n"
+            "    oid=route.rsplit('/',1)[-1]\n"
+            "    content=subprocess.run([os.environ['RETIREMENT_REAL_GIT'],'-C',tool_repo,'cat-file','blob',oid],check=True,stdout=subprocess.PIPE).stdout\n"
+            "    emit({'sha':oid,'encoding':'base64','size':len(content),'content':base64.b64encode(content).decode('ascii')})\n"
+            "    raise SystemExit(0)\n"
             "  match=re.search(r'/issues/(\\d+)(?:/|$|[?])',route)\n"
             "  issue_number=int(match.group(1)) if match else None\n"
             "  if '/collaborators/' in route: emit(fixture['permission'])\n"
@@ -752,6 +845,9 @@ class RetirementFixture:
             environment["RETIREMENT_GH_FIXTURE"] = str(self.gh_fixture)
             environment["RETIREMENT_GIT_LOG"] = str(self.git_log)
             environment["RETIREMENT_REAL_GIT"] = shutil.which("git") or "git"
+            environment["RETIREMENT_TOOL_REPO"] = str(self.tool_repository)
+            environment["RETIREMENT_TOOL_COMMIT"] = self.tool_commit
+            environment["RETIREMENT_TOOL_TREE"] = self.tool_tree
         return environment
 
     def run_helper(
@@ -759,11 +855,14 @@ class RetirementFixture:
         action: str,
         *,
         mapping_root: Path | None = None,
+        environment_overrides: dict[str, str] | None = None,
     ) -> subprocess.CompletedProcess[str]:
+        environment = self.environment()
+        if environment_overrides:
+            environment.update(environment_overrides)
         return subprocess.run(
             [
-                sys.executable,
-                str(HELPER),
+                str(LAUNCHER),
                 "--mapping-root",
                 str(mapping_root or self.mapping_root),
                 "--task-uid",
@@ -773,7 +872,7 @@ class RetirementFixture:
                 f"--{action}",
             ],
             cwd=ROOT,
-            env=self.environment(),
+            env=environment,
             text=True,
             capture_output=True,
             check=False,
@@ -798,6 +897,19 @@ class FixtureLiveProofProvider:
         if self.on_read is not None:
             self.on_read()
         return copy.deepcopy(self.proof)
+
+
+def activate_test_tool_authority(helper, authority=None, pin_reader=None):
+    authority = authority if authority is not None else test_tool_authority()
+    helper._ACTIVE_TOOL_AUTHORITY = authority
+    if pin_reader is None:
+        expected = {
+            "default_branch": authority["default_branch"],
+            "commit_oid": authority["commit_oid"],
+            "tree_oid": authority["tree_oid"],
+        }
+        pin_reader = lambda: dict(expected)
+    return authority, pin_reader
 
 
 def mutate_disposition(proof: dict[str, object], key: str, child_key: str | None, value: object) -> None:
@@ -845,12 +957,15 @@ def run_test_seam(
         raise AssertionError("missing shared retirement validator/transaction entrypoint: retire_candidate")
     if provider is None:
         provider = FixtureLiveProofProvider(proof if proof is not None else fixture.live_proof(), on_read=on_read)
+    authority, pin_reader = activate_test_tool_authority(helper, fixture.tool_authority)
     return function(
         mapping_root=fixture.mapping_root,
         task_uid=CANDIDATE_UID,
         disposition_comment_id=555001,
         mode=mode,
         live_proof_provider=provider,
+        tool_authority=authority,
+        tool_pin_reader=pin_reader,
     )
 
 
@@ -861,7 +976,7 @@ class RetirementHelperBoundaryTests(unittest.TestCase):
             "missing production behavior: trusted closed-duplicate retirement helper",
         )
         result = subprocess.run(
-            [sys.executable, str(HELPER), "--help"],
+            [str(LAUNCHER), "--help"],
             cwd=ROOT,
             text=True,
             capture_output=True,
@@ -873,6 +988,17 @@ class RetirementHelperBoundaryTests(unittest.TestCase):
             self.assertIn(flag, result.stdout)
         for forbidden in ("--proof-file", "--fixture", "--trusted-tool-root", "--tool-root"):
             self.assertNotIn(forbidden, result.stdout, "live CLI must pin tools and refuse caller-supplied authority")
+        direct = subprocess.run(
+            [sys.executable, str(HELPER), "--mapping-root", "/tmp", "--task-uid", CANDIDATE_UID,
+             "--disposition-comment-id", "555001", "--preflight"],
+            cwd=ROOT,
+            text=True,
+            capture_output=True,
+            check=False,
+            timeout=10,
+        )
+        self.assertNotEqual(0, direct.returncode, "direct Python invocation must fail closed")
+        self.assertIn("repository retirement launcher", direct.stderr.lower())
 
     def _assert_unavailable_authority_fails_without_mutation(self, action: str) -> None:
         with tempfile.TemporaryDirectory(prefix="retire-duplicate-red-") as temporary:
@@ -1522,6 +1648,79 @@ class RetirementHelperBehaviorTests(unittest.TestCase):
             self.assertEqual(before, fixture.mapping.read_bytes())
             self.assertFalse(list(fixture.mapping.parent.glob("tasks.json.tmp.*")))
             self.assertIn(result.get("status"), {"preflight_ok", "ready"})
+            self.assertEqual(fixture.tool_authority, result.get("tool_authority"))
+
+    def test_apply_rechecks_source_pin_before_lock_or_live_provider(self):
+        with tempfile.TemporaryDirectory(prefix="retire-duplicate-pin-drift-") as temporary:
+            fixture = RetirementFixture(Path(temporary))
+            helper = load_helper()
+            authority, _ = activate_test_tool_authority(helper, fixture.tool_authority)
+            expected = {
+                "default_branch": authority["default_branch"],
+                "commit_oid": authority["commit_oid"],
+                "tree_oid": authority["tree_oid"],
+            }
+            calls = 0
+
+            def drift_after_initial_pin():
+                nonlocal calls
+                calls += 1
+                return dict(expected) if calls == 1 else {**expected, "commit_oid": "3" * 40}
+
+            provider = FixtureLiveProofProvider(fixture.live_proof())
+            before = fixture.mapping.read_bytes()
+            lock_path = helper.STORE.mapping_lock_path(fixture.mapping)
+            with self.assertRaisesRegex(helper.RetirementError, "source pin changed"):
+                helper.retire_candidate(
+                    mapping_root=fixture.mapping_root,
+                    task_uid=CANDIDATE_UID,
+                    disposition_comment_id=555001,
+                    mode="apply",
+                    live_proof_provider=provider,
+                    tool_authority=authority,
+                    tool_pin_reader=drift_after_initial_pin,
+                )
+            self.assertEqual(2, calls)
+            self.assertEqual(0, provider.read_count)
+            self.assertFalse(lock_path.exists(), "source pin drift must be rejected before opening the mapping lock")
+            self.assertEqual(before, fixture.mapping.read_bytes())
+
+    def test_apply_rechecks_source_pin_after_locked_proof_before_mapping_mutation(self):
+        with tempfile.TemporaryDirectory(prefix="retire-duplicate-pin-drift-during-proof-") as temporary:
+            fixture = RetirementFixture(Path(temporary))
+            helper = load_helper()
+            authority, _ = activate_test_tool_authority(helper, fixture.tool_authority)
+            expected = {
+                "default_branch": authority["default_branch"],
+                "commit_oid": authority["commit_oid"],
+                "tree_oid": authority["tree_oid"],
+            }
+            current_pin = dict(expected)
+            calls = 0
+
+            def read_pin():
+                nonlocal calls
+                calls += 1
+                return dict(current_pin)
+
+            def advance_source_during_proof():
+                current_pin["commit_oid"] = "4" * 40
+
+            provider = FixtureLiveProofProvider(fixture.live_proof(), on_read=advance_source_during_proof)
+            before = fixture.mapping.read_bytes()
+            with self.assertRaisesRegex(helper.RetirementError, "source pin changed"):
+                helper.retire_candidate(
+                    mapping_root=fixture.mapping_root,
+                    task_uid=CANDIDATE_UID,
+                    disposition_comment_id=555001,
+                    mode="apply",
+                    live_proof_provider=provider,
+                    tool_authority=authority,
+                    tool_pin_reader=read_pin,
+                )
+            self.assertEqual(3, calls, "source must be re-read after live proof and before CAS")
+            self.assertEqual(1, provider.read_count)
+            self.assertEqual(before, fixture.mapping.read_bytes(), "source pin drift during proof must not mutate mapping")
 
     def test_preflight_accepts_foreign_lifecycle_progress_without_rewriting_immutable_snapshot(self):
         with tempfile.TemporaryDirectory(prefix="retire-duplicate-foreign-progress-") as temporary:
@@ -1613,7 +1812,8 @@ class RetirementHelperBehaviorTests(unittest.TestCase):
             self.assertEqual(snapshot_before, fixture.foreign_snapshot.read_bytes())
             self.assertEqual(1, len(committed.get("retired_duplicate_candidates", [])))
             tombstone = committed["retired_duplicate_candidates"][0]
-            self.assertEqual("oasis7.duplicate-candidate-retirement/v1", tombstone.get("schema"))
+            self.assertEqual("oasis7.duplicate-candidate-retirement/v2", tombstone.get("schema"))
+            self.assertEqual(fixture.tool_authority, tombstone.get("tool_authority"))
             self.assertEqual(CANDIDATE_UID, tombstone.get("task_uid"))
             self.assertEqual(before["tasks"][CANDIDATE_UID], tombstone.get("old_record"))
             self.assertEqual(sha256(canonical_bytes(tombstone["old_record"])), tombstone.get("old_record_sha256"))
@@ -1829,6 +2029,7 @@ class RetirementHelperBehaviorTests(unittest.TestCase):
             fixture_before = fixture.mapping.read_bytes()
             helper = load_helper()
             provider = FixtureLiveProofProvider(fixture.live_proof())
+            authority, pin_reader = activate_test_tool_authority(helper, fixture.tool_authority)
             unregistered_error = None
             try:
                 helper.retire_candidate(
@@ -1837,6 +2038,8 @@ class RetirementHelperBehaviorTests(unittest.TestCase):
                     disposition_comment_id=555001,
                     mode="apply",
                     live_proof_provider=provider,
+                    tool_authority=authority,
+                    tool_pin_reader=pin_reader,
                 )
             except helper.RetirementError as exc:
                 unregistered_error = exc
@@ -1850,6 +2053,8 @@ class RetirementHelperBehaviorTests(unittest.TestCase):
                     disposition_comment_id=555001,
                     mode="force",
                     live_proof_provider=provider,
+                    tool_authority=authority,
+                    tool_pin_reader=pin_reader,
                 )
             except helper.RetirementError as exc:
                 invalid_mode_error = exc

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib.util
+import copy
+import hashlib
 import json
 import os
 import subprocess
@@ -33,6 +35,66 @@ FIXTURE = load_module(FIXTURE_TEST, "retirement_fixture_for_qa_corrections")
 
 
 class RetirementReaderCorrectionTests(unittest.TestCase):
+    def test_v2_tool_authority_accepts_source_golden_and_rejects_mutated_manifests(self):
+        store = load_module(PM / "workflow-durable-store.py", "retirement_v2_tool_authority_contract")
+        authority = {
+            "canonical_repository": "eng-cc/oasis7",
+            "closure_manifest": [
+                {
+                    "blob_oid": "0123456789abcdef0123456789abcdef01234567",
+                    "mode": "100644",
+                    "path": "scripts/pm/retire-closed-duplicate-candidate.py",
+                },
+                {
+                    "blob_oid": "89abcdef0123456789abcdef0123456789abcdef",
+                    "mode": "100755",
+                    "path": "scripts/pm/retire-closed-duplicate-candidate.sh",
+                },
+            ],
+            "closure_sha256": "107fa627e9449bba09dfb0f517f6dff7d32dd34b6dfba0ba4eaae9f0b13fecd7",
+            "commit_oid": "1" * 40,
+            "default_branch": "main",
+            "helper_path": "scripts/pm/retire-closed-duplicate-candidate.py",
+            "launcher_path": "scripts/pm/retire-closed-duplicate-candidate.sh",
+            "schema": "oasis7.retirement-tool-authority/v1",
+            "tree_oid": "2" * 40,
+        }
+        store.validate_retirement_tool_authority(authority)
+        self.assertEqual(
+            authority["closure_sha256"],
+            hashlib.sha256(store.canonical_json_bytes(authority["closure_manifest"])).hexdigest(),
+        )
+
+        invalid_values = []
+        missing = copy.deepcopy(authority)
+        del missing["tree_oid"]
+        invalid_values.append(missing)
+        unknown = copy.deepcopy(authority)
+        unknown["caller_commit"] = unknown["commit_oid"]
+        invalid_values.append(unknown)
+        stale_digest = copy.deepcopy(authority)
+        stale_digest["closure_sha256"] = "0" * 64
+        invalid_values.append(stale_digest)
+        duplicate_path = copy.deepcopy(authority)
+        duplicate_path["closure_manifest"].append(copy.deepcopy(duplicate_path["closure_manifest"][0]))
+        invalid_values.append(duplicate_path)
+        unsorted = copy.deepcopy(authority)
+        unsorted["closure_manifest"].reverse()
+        unsorted["closure_sha256"] = hashlib.sha256(
+            store.canonical_json_bytes(unsorted["closure_manifest"])
+        ).hexdigest()
+        invalid_values.append(unsorted)
+        traversal = copy.deepcopy(authority)
+        traversal["closure_manifest"][0]["path"] = "scripts/pm/../helper.py"
+        traversal["closure_sha256"] = hashlib.sha256(
+            store.canonical_json_bytes(traversal["closure_manifest"])
+        ).hexdigest()
+        invalid_values.append(traversal)
+        for invalid in invalid_values:
+            with self.subTest(authority=invalid):
+                with self.assertRaises(ValueError):
+                    store.validate_retirement_tool_authority(invalid)
+
     def test_preflight_does_not_create_lock_sidecar(self):
         with tempfile.TemporaryDirectory(prefix="retirement-preflight-no-sidecar-") as temporary:
             fixture = FIXTURE.RetirementFixture(Path(temporary))
@@ -160,13 +222,11 @@ class RetirementReaderCorrectionTests(unittest.TestCase):
             mapping["tasks"][FIXTURE.CANDIDATE_UID]["task_branch"] = branch
             fixture.mapping.write_text(json.dumps(mapping, indent=2, sort_keys=True) + "\n", encoding="utf-8")
             before = fixture.mapping.read_bytes()
-            environment = fixture.environment()
-            environment["RETIREMENT_REMOTE_REFS_JSON"] = json.dumps([{"branch": branch, "oid": "a" * 40}])
-
-            result = subprocess.run(
-                [sys.executable, str(FIXTURE.HELPER), "--mapping-root", str(fixture.mapping_root), "--task-uid", FIXTURE.CANDIDATE_UID,
-                 "--disposition-comment-id", "555001", "--preflight"],
-                cwd=ROOT, env=environment, text=True, capture_output=True, check=False, timeout=15,
+            result = fixture.run_helper(
+                "preflight",
+                environment_overrides={
+                    "RETIREMENT_REMOTE_REFS_JSON": json.dumps([{"branch": branch, "oid": "a" * 40}]),
+                },
             )
 
             self.assertNotEqual(result.returncode, 0, result.stdout)
@@ -183,13 +243,9 @@ class RetirementReaderCorrectionTests(unittest.TestCase):
                 ["git", "-C", str(fixture.repository), "remote", "add", "upstream", "https://github.com/eng-cc/upstream-fixture.git"],
                 check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
             )
-            environment = fixture.environment()
-            environment["RETIREMENT_REMOTE_REFS_JSON"] = "[]"
-
-            result = subprocess.run(
-                [sys.executable, str(FIXTURE.HELPER), "--mapping-root", str(fixture.mapping_root), "--task-uid", FIXTURE.CANDIDATE_UID,
-                 "--disposition-comment-id", "555001", "--preflight"],
-                cwd=ROOT, env=environment, text=True, capture_output=True, check=False, timeout=15,
+            result = fixture.run_helper(
+                "preflight",
+                environment_overrides={"RETIREMENT_REMOTE_REFS_JSON": "[]"},
             )
 
             self.assertEqual(0, result.returncode, result.stderr)

@@ -390,6 +390,20 @@ class WorkflowNextTest(unittest.TestCase):
                     self.assertIn("--resume", payload["next_command"], payload)
                     self.assertNotIn("--preflight", payload["next_command"], payload)
 
+    def test_additive_projection_preserves_unclassified_terminal_delivery_semantics(self) -> None:
+        self.write_mapping(status="candidate", workflow_phase="")
+        code, payload = self.run_query()
+        self.assertEqual(code, 0, payload)
+        self.assertIsNone(payload["delivery_ready"], payload)
+        self.assertEqual(payload["cleanup_state"], "not_applicable", payload)
+        self.assertEqual(payload["action_blockers"], [], payload)
+        self.assertEqual(payload["candidate_head_oid"], subprocess.check_output(
+            ["git", "-C", str(self.root), "rev-parse", "HEAD"], text=True,
+        ).strip(), payload)
+        self.assertIsNone(payload["remote_pr_head_oid"], payload)
+        self.assertIsNone(payload["ci_identity"], payload)
+        self.assertIsNone(payload["failure_phase"], payload)
+
     def test_stale_identity_and_ambiguous_phase_fail_closed(self) -> None:
         self.write_mapping(status="committed", workflow_phase="execution")
         snapshot = self.root / ".pm/scratch" / UID / "bootstrap-task-snapshot.json"

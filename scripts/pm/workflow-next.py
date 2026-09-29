@@ -31,6 +31,12 @@ if _ADMISSION_SPEC is None or _ADMISSION_SPEC.loader is None:
     raise RuntimeError(f"cannot load candidate admission guard at {_ADMISSION_PATH}")
 ADMISSION_GUARD = importlib.util.module_from_spec(_ADMISSION_SPEC)
 _ADMISSION_SPEC.loader.exec_module(ADMISSION_GUARD)
+_DELIVERY_PATH = pathlib.Path(__file__).with_name("workflow-delivery-readiness.py")
+_DELIVERY_SPEC = importlib.util.spec_from_file_location("workflow_delivery_readiness_workflow_next", _DELIVERY_PATH)
+if _DELIVERY_SPEC is None or _DELIVERY_SPEC.loader is None:
+    raise RuntimeError(f"cannot load delivery readiness projection at {_DELIVERY_PATH}")
+DELIVERY_READINESS = importlib.util.module_from_spec(_DELIVERY_SPEC)
+_DELIVERY_SPEC.loader.exec_module(DELIVERY_READINESS)
 
 
 TASK_UID_RE = re.compile(r"^task_[0-9a-f]{32}$")
@@ -975,35 +981,48 @@ def main() -> int:
         "blockers": [],
         "next_command": [],
         "next_action": "blocked",
+        "delivery_ready": None,
+        "cleanup_state": "not_applicable",
+        "action_blockers": [],
+        "candidate_head_oid": None,
+        "remote_pr_head_oid": None,
+        "ci_identity": None,
+        "failure_phase": None,
     }
     blockers = payload["blockers"]
     if not TASK_UID_RE.fullmatch(args.task_uid):
         add_blocker(blockers, "stale identity: invalid task UID")
+        payload["action_blockers"] = DELIVERY_READINESS.project_action_blockers(blockers)
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 1
     try:
         mapping = DURABLE_STORE.read_mapping(mapping_path)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         add_blocker(blockers, f"stale identity: canonical task mapping/retirement tombstone is invalid ({exc})")
+        payload["action_blockers"] = DELIVERY_READINESS.project_action_blockers(blockers)
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 1
     if not isinstance(mapping, dict):
         add_blocker(blockers, "stale identity: canonical task mapping is not an object")
+        payload["action_blockers"] = DELIVERY_READINESS.project_action_blockers(blockers)
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 1
     try:
         tombstone = DURABLE_STORE.retired_task(mapping, args.task_uid)
     except ValueError as exc:
         add_blocker(blockers, f"stale identity: retirement tombstone validation failed ({exc})")
+        payload["action_blockers"] = DELIVERY_READINESS.project_action_blockers(blockers)
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 1
     if tombstone is not None:
         add_blocker(blockers, f"stale identity: task UID is retired by a validated tombstone: {args.task_uid}")
+        payload["action_blockers"] = DELIVERY_READINESS.project_action_blockers(blockers)
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 1
     task = (mapping.get("tasks") or {}).get(args.task_uid)
     if not isinstance(task, dict):
         add_blocker(blockers, "stale identity: task UID is absent from canonical mapping")
+        payload["action_blockers"] = DELIVERY_READINESS.project_action_blockers(blockers)
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 1
     task = dict(task)
@@ -1111,6 +1130,7 @@ def main() -> int:
         payload["identity_status"] = "bound"
     if payload["next_command"]:
         payload["command_cwd"] = str(default_root if phase in {"task_done", "main_sync"} else root)
+    payload.update(DELIVERY_READINESS.workflow_projection(root, task, blockers))
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 1 if blockers else 0
 

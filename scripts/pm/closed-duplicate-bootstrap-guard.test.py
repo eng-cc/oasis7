@@ -858,7 +858,7 @@ class ClosedDuplicateBootstrapGuardTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assertIn("duplicate", (result.stderr + result.stdout).lower())
-        self.assertIn("retire-closed-duplicate-candidate.py", (result.stderr + result.stdout))
+        self.assertIn("retire-closed-duplicate-candidate.sh", (result.stderr + result.stdout))
         self.assertEqual(self.fixture.mapping.read_bytes(), before)
         self.assertFalse(self._snapshot_path().exists(), "rejected candidate bootstrap must not create a snapshot")
 
@@ -872,7 +872,7 @@ class ClosedDuplicateBootstrapGuardTests(unittest.TestCase):
         self.assertEqual(payload["next_action"], "blocked")
         self.assertEqual(payload["next_command"], [])
         self.assertTrue(any("duplicate" in blocker.lower() for blocker in payload["blockers"]))
-        self.assertIn("retire-closed-duplicate-candidate.py", json.dumps(payload))
+        self.assertIn("retire-closed-duplicate-candidate.sh", json.dumps(payload))
 
     def test_bootstrap_refuses_unaliased_live_closed_duplicate_before_snapshot(self):
         self._remove_foreign_owner_mapping()
@@ -883,7 +883,7 @@ class ClosedDuplicateBootstrapGuardTests(unittest.TestCase):
 
         self.assertNotEqual(result.returncode, 0, result.stdout)
         self.assertIn("duplicate", (result.stderr + result.stdout).lower())
-        self.assertIn("retire-closed-duplicate-candidate.py", result.stderr + result.stdout)
+        self.assertIn("retire-closed-duplicate-candidate.sh", result.stderr + result.stdout)
         self.assertEqual(self.fixture.mapping.read_bytes(), before)
         self.assertFalse(self._snapshot_path().exists(), "unaliased closed duplicate must not create a bootstrap snapshot")
         calls = [json.loads(line) for line in self.fixture.gh_log.read_text(encoding="utf-8").splitlines()]
@@ -900,7 +900,7 @@ class ClosedDuplicateBootstrapGuardTests(unittest.TestCase):
         self.assertEqual(payload["next_action"], "blocked")
         self.assertEqual(payload["next_command"], [])
         self.assertTrue(any("duplicate" in blocker.lower() for blocker in payload["blockers"]))
-        self.assertIn("retire-closed-duplicate-candidate.py", json.dumps(payload))
+        self.assertIn("retire-closed-duplicate-candidate.sh", json.dumps(payload))
 
     def test_bootstrap_fails_closed_when_live_issue_authority_is_unavailable(self):
         self._write_unavailable_gh_stub()

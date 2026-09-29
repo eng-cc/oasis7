@@ -224,9 +224,9 @@ def reject_unretired_closed_duplicate(root: pathlib.Path, mapping: dict[str, Any
     marked = [item for item in flattened if str(item.get("body") or "").startswith(marker)]
     if len(marked) != 1 or not int(marked[0].get("id") or 0):
         die(f"github-project-sync: closed duplicate candidate {task_uid} needs one server disposition comment before retirement")
-    helper = pathlib.Path(__file__).with_name("retire-closed-duplicate-candidate.py").resolve()
+    launcher = pathlib.Path(__file__).with_name("retire-closed-duplicate-candidate.sh").resolve()
     command = (
-        f"python3 {helper} --mapping-root {root} --task-uid {task_uid} "
+        f"{launcher} --mapping-root {root} --task-uid {task_uid} "
         f"--disposition-comment-id {int(marked[0]['id'])} --preflight"
     )
     die(f"github-project-sync: closed duplicate candidate mapping must be reconciled before refresh; run: {command}")

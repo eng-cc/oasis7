@@ -339,12 +339,12 @@ def _live_disposition_comment_id(repository: str, issue_number: int) -> int:
 
 
 def _reconcile_command(mapping_path: pathlib.Path, task_uid: str, comment_id: int) -> list[str]:
-    # This is a locator for the established read-only preflight only. It does
-    # not confer trust on this checkout or authorize the explicit apply mode.
+    # The public launcher binds the source closure before starting Python. A
+    # helper path is only a locator and cannot authorize any operation.
     mapping_root = mapping_path.resolve().parents[2]
-    helper = pathlib.Path(__file__).with_name("retire-closed-duplicate-candidate.py").resolve()
+    launcher = pathlib.Path(__file__).with_name("retire-closed-duplicate-candidate.sh").resolve()
     return [
-        "python3", str(helper),
+        str(launcher),
         "--mapping-root", str(mapping_root),
         "--task-uid", task_uid,
         "--disposition-comment-id", str(comment_id),
