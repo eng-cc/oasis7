@@ -501,6 +501,12 @@ class CurrentRequestSelectionTests(unittest.TestCase):
    with self.subTest(label=label),self.assertRaises(ValueError):
     self.select([row],'sha256:'+'1'*64)
 
+ def test_validation_only_title_missing_validation_id_suffix_is_rejected(self):
+  row=self.validation_only_row(107)
+  row['display_title']=row['display_title'].rsplit('|',1)[0]
+  with self.assertRaises(ValueError):
+   self.select([row],'sha256:'+'1'*64)
+
  def test_validation_only_task_pr_conflicts_are_rejected(self):
   conflicting_task=self.validation_only_row(101,pr='8')
   conflicting_pr=self.validation_only_row(102,uid='task_'+'2'*32)
