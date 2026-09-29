@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import os
 from pathlib import Path
@@ -13,6 +14,14 @@ import unittest
 
 
 SCRIPT = Path(__file__).with_name("review-batch-epoch.py")
+PROJECTION_SCRIPT = Path(__file__).with_name("workflow-impact-projection.py")
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECTION_SPEC = importlib.util.spec_from_file_location(
+    "workflow_impact_projection_for_review_batch_tests", PROJECTION_SCRIPT
+)
+assert PROJECTION_SPEC is not None and PROJECTION_SPEC.loader is not None
+WORKFLOW_IMPACT = importlib.util.module_from_spec(PROJECTION_SPEC)
+PROJECTION_SPEC.loader.exec_module(WORKFLOW_IMPACT)
 TASK = "task_" + "1" * 32
 HEAD = "a" * 40
 EVIDENCE = "b" * 64
@@ -174,13 +183,37 @@ class ReviewBatchEpochTests(unittest.TestCase):
             {"role": "qa_engineer", "slice_id": QA_SLICE},
             {"role": "repository_health_engineer", "slice_id": HEALTH_SLICE},
         ]
-        ordered_roles = [str(item["role"]) for item in expected_slices]
+        impact_projection = WORKFLOW_IMPACT.build_projection(
+            PROJECT_ROOT,
+            {
+                "task_uid": TASK,
+                "source_head_oid": HEAD,
+                "scope_base_oid": "c" * 40,
+                "changed_paths": ["scripts/pm/review-batch-epoch.test.py"],
+                "change_class": "unknown",
+                "manual_roles": [str(item["role"]) for item in expected_slices],
+                "domain_role": None,
+                "test_profile": "required",
+                "declared_tests": ["review-batch-epoch"],
+                "consumed_contracts": [],
+                "public_semantics": [],
+                "affected_consumers": [],
+                "closure_status": {
+                    "status": "unknown",
+                    "reason": "fixture impact remains open",
+                    "evidence": [],
+                },
+                "verification_affected": True,
+            },
+        )
+        ordered_roles = impact_projection["ordered_role_ids"]
         source_identity = {
             "task_uid": TASK, "bootstrap_epoch": 1, "repository": REPOSITORY, "pr_number": 1,
             "source_head_oid": HEAD, "source_scope_oid": "c" * 40,
-            "changed_paths_digest": EVIDENCE, "ordered_role_ids": ordered_roles,
+            "changed_paths_digest": impact_projection["changed_paths_digest"].removeprefix("sha256:"),
+            "ordered_role_ids": ordered_roles,
             "role_contract_digest": "d" * 64, "review_policy_digest": "e" * 64,
-            "input_contract_digest": "f" * 64,
+            "input_contract_digest": impact_projection["projection_digest"].removeprefix("sha256:"),
         }
         source_digest = digest(source_identity)
         batch = json.loads(self.run_script(
@@ -297,6 +330,12 @@ class ReviewBatchEpochTests(unittest.TestCase):
             "professional_review_applicability": {
                 "identity": applicability, "identity_digest": digest(applicability), "verified": True,
             },
+            "impact_projection": impact_projection,
+            "impact_projection_schema": impact_projection["schema"],
+            "impact_projection_digest": impact_projection["projection_digest"],
+            "impact_projection_test_profile": impact_projection["test_profile"],
+            "impact_projection_declared_tests": impact_projection["declared_tests"],
+            "impact_projection_planner_digest": impact_projection["planner_digest"],
             "packet_refs": packet_refs,
             "epoch": epoch, "batch_path": str(batch_path),
             "preflight": {"status": "incomplete", "ledger_path": str(ledger_path)},

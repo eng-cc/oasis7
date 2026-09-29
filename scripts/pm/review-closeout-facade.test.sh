@@ -65,18 +65,56 @@ TASK_ROOT="$REPO/.pm/scratch/$UID_VALUE"
 BATCH="$TASK_ROOT/review-batches/epoch.json"
 PREFLIGHT_DIR="$TASK_ROOT/review-preflight"
 mkdir -p "$(dirname "$BATCH")"
-EVIDENCE_DIGEST="$(printf '%s' review-evidence | shasum -a 256 | awk '{print $1}')"
-SOURCE_REVIEW_DIGEST="$(python3 - "$UID_VALUE" "$HEAD_OID" "$BASE_OID" "$EVIDENCE_DIGEST" "$ROLE" <<'PY'
-import hashlib, json, sys
-task, head, comparison, changed, role = sys.argv[1:]
+PROJECTION_PATH="$TMPDIR/impact-projection.json"
+SOURCE_IDENTITY_PATH="$TMPDIR/source-review-identity.json"
+python3 - "$ROOT_DIR" "$PROJECTION_PATH" "$UID_VALUE" "$HEAD_OID" "$BASE_OID" "$ROLE" <<'PY'
+import importlib.util, json, pathlib, sys
+root, output, task, head, comparison, role = sys.argv[1:]
+helper = pathlib.Path(root) / "scripts/pm/workflow-impact-projection.py"
+spec = importlib.util.spec_from_file_location("facade_test_impact_projection", helper)
+assert spec is not None and spec.loader is not None
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+projection = module.build_projection(pathlib.Path(root), {
+    "task_uid": task,
+    "source_head_oid": head,
+    "scope_base_oid": comparison,
+    "changed_paths": ["README.md"],
+    "change_class": "unknown",
+    "manual_roles": [role],
+    "domain_role": None,
+    "test_profile": "required",
+    "declared_tests": ["required_gate_baseline", "review-closeout-facade"],
+    "consumed_contracts": [],
+    "public_semantics": [],
+    "affected_consumers": [],
+    "closure_status": {
+        "status": "unknown",
+        "reason": "fixture impact remains open",
+        "evidence": [],
+    },
+    "verification_affected": True,
+})
+pathlib.Path(output).write_text(
+    json.dumps(projection, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8"
+)
+PY
+SOURCE_REVIEW_DIGEST="$(python3 - "$PROJECTION_PATH" "$SOURCE_IDENTITY_PATH" "$UID_VALUE" "$HEAD_OID" "$BASE_OID" <<'PY'
+import hashlib, json, pathlib, sys
+projection_path, identity_path, task, head, comparison = sys.argv[1:]
+projection = json.loads(pathlib.Path(projection_path).read_text(encoding="utf-8"))
 identity = {
     "task_uid": task, "bootstrap_epoch": 1, "repository": "eng-cc/oasis7", "pr_number": 4139,
     "source_head_oid": head, "source_scope_oid": comparison,
-    "changed_paths_digest": changed, "ordered_role_ids": [role],
+    "changed_paths_digest": projection["changed_paths_digest"].removeprefix("sha256:"),
+    "ordered_role_ids": projection["ordered_role_ids"],
     "role_contract_digest": "2" * 64, "review_policy_digest": "3" * 64,
-    "input_contract_digest": "4" * 64,
+    "input_contract_digest": projection["projection_digest"].removeprefix("sha256:"),
 }
 raw = json.dumps(identity, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
+pathlib.Path(identity_path).write_text(
+    json.dumps(identity, ensure_ascii=False, sort_keys=True) + "\n", encoding="utf-8"
+)
 print(hashlib.sha256(raw).hexdigest())
 PY
 )"
@@ -106,25 +144,21 @@ with open(path, "w", encoding="utf-8") as handle:
 PY
 PLAN="$TASK_ROOT/review-plans/fixture.json"
 mkdir -p "$(dirname "$PLAN")"
-python3 - "$PLAN" "$BATCH" "$HEAD_OID" "$BASE_OID" "$EVIDENCE_DIGEST" "$EPOCH" "$LEDGER" <<'PY'
+python3 - "$PLAN" "$BATCH" "$HEAD_OID" "$BASE_OID" "$EPOCH" "$LEDGER" "$SOURCE_IDENTITY_PATH" "$PROJECTION_PATH" <<'PY'
 import hashlib, json, pathlib, sys
-plan, batch, head, comparison, evidence, epoch, ledger = sys.argv[1:]
-roles = ["repository_health_engineer"]
+plan, batch, head, comparison, epoch, ledger, identity_path, projection_path = sys.argv[1:]
+source_identity = json.loads(pathlib.Path(identity_path).read_text(encoding="utf-8"))
+impact_projection = json.loads(pathlib.Path(projection_path).read_text(encoding="utf-8"))
+roles = source_identity["ordered_role_ids"]
 applicability_identity = {
-    "changed_paths_digest": evidence, "input_contract_digest": "4" * 64,
+    "changed_paths_digest": source_identity["changed_paths_digest"],
+    "input_contract_digest": source_identity["input_contract_digest"],
     "ordered_role_ids": roles, "role_contract_digest": "2" * 64,
     "review_policy_digest": "3" * 64,
 }
 def digest(value):
     raw = json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode()
     return hashlib.sha256(raw).hexdigest()
-source_identity = {
-    "task_uid": "task_11111111111111111111111111111111", "bootstrap_epoch": 1,
-    "repository": "eng-cc/oasis7", "pr_number": 4139, "source_head_oid": head,
-    "source_scope_oid": comparison, "changed_paths_digest": evidence,
-    "ordered_role_ids": roles, "role_contract_digest": "2" * 64,
-    "review_policy_digest": "3" * 64, "input_contract_digest": "4" * 64,
-}
 payload = {
     "schema": "oasis7-review-plan/v2", "task_uid": "task_11111111111111111111111111111111",
     "frozen_head": head, "comparison_ref": "refs/heads/review-base", "comparison_oid": comparison,
@@ -133,6 +167,12 @@ payload = {
     "professional_review_applicability": {
         "identity": applicability_identity, "identity_digest": digest(applicability_identity), "verified": True,
     }, "roles": roles,
+    "impact_projection": impact_projection,
+    "impact_projection_schema": impact_projection["schema"],
+    "impact_projection_digest": impact_projection["projection_digest"],
+    "impact_projection_test_profile": impact_projection["test_profile"],
+    "impact_projection_declared_tests": impact_projection["declared_tests"],
+    "impact_projection_planner_digest": impact_projection["planner_digest"],
     "expected_slices": [{"role": roles[0], "slice_id": "11111111-1111-4111-8111-111111111111"}],
     "packet_refs": [{
         "role": roles[0], "slice_id": "11111111-1111-4111-8111-111111111111",
