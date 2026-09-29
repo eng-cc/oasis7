@@ -126,6 +126,8 @@ grep -F "tracked projection drift: .pm/README.md" \
 COPY_FIXTURE="$TMP_DIR/during-copy-fixture"
 mkdir -p "$COPY_FIXTURE"
 cp -R "$ROOT_DIR/.pm" "$COPY_FIXTURE/.pm"
+mkdir -p "$COPY_FIXTURE/.pm/stage"
+printf 'gate fixture\n' >"$COPY_FIXTURE/.pm/stage/gate.yaml"
 shopt -s dotglob nullglob
 for path in "$ROOT_DIR"/*; do
   name="$(basename "$path")"

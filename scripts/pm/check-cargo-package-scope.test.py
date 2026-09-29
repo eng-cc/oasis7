@@ -470,6 +470,30 @@ edition = "2021"
             "cross_package_include",
         )
 
+    def test_unchanged_standalone_consumer_include_bytes_into_changed_source_is_rejected(self) -> None:
+        repo, base = self._standalone_consumer_with_reference(
+            'include_bytes!("../../../crates/alpha/src/shared.rs");\nfn main() {}\n'
+        )
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(
+                root, "crates/alpha/src/shared.rs", "pub fn changed() {}\n"
+            ),
+            "cross_package_include",
+        )
+
+    def test_unchanged_standalone_consumer_include_str_into_changed_source_is_rejected(self) -> None:
+        repo, base = self._standalone_consumer_with_reference(
+            'include_str!("../../../crates/alpha/src/shared.rs");\nfn main() {}\n'
+        )
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(
+                root, "crates/alpha/src/shared.rs", "pub fn changed() {}\n"
+            ),
+            "cross_package_include",
+        )
+
     def test_unchanged_standalone_consumer_path_into_changed_source_is_rejected(self) -> None:
         repo, base = self._standalone_consumer_with_reference(
             '#[path = "../../../crates/alpha/src/shared.rs"]\nmod imported;\nfn main() {}\n'
@@ -720,6 +744,104 @@ path = "src/lib.rs"
             )
 
         self._assert_rejected(repo, base, "alpha", mutate, "cross_package_include")
+
+    def test_cross_package_include_bytes_is_rejected(self) -> None:
+        repo, base = self._fixture()
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(
+                root, "crates/alpha/src/lib.rs",
+                'include_bytes!("../../beta/src/shared.rs");\npub fn alpha() {}\n',
+            ),
+            "cross_package_include",
+        )
+
+    def test_cross_package_include_str_is_rejected(self) -> None:
+        repo, base = self._fixture()
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(
+                root, "crates/alpha/src/lib.rs",
+                'include_str!("../../beta/src/shared.rs");\npub fn alpha() {}\n',
+            ),
+            "cross_package_include",
+        )
+
+    def test_computed_cross_package_include_bytes_is_rejected(self) -> None:
+        repo, base = self._fixture()
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(
+                root, "crates/alpha/src/lib.rs",
+                'include_bytes!(concat!("../../beta/src/", "shared.rs"));\npub fn alpha() {}\n',
+            ),
+            "unresolved_rust_source_reference",
+        )
+
+    def test_computed_cross_package_include_str_is_rejected(self) -> None:
+        repo, base = self._fixture()
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(
+                root, "crates/alpha/src/lib.rs",
+                'include_str!(concat!("../../beta/src/", "shared.rs"));\npub fn alpha() {}\n',
+            ),
+            "unresolved_rust_source_reference",
+        )
+
+    def test_comment_separated_raw_cross_package_include_bytes_is_rejected(self) -> None:
+        repo, base = self._fixture()
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(
+                root, "crates/alpha/src/lib.rs",
+                'include_bytes /* macro gap */ ! /* paren gap */ ( /* literal gap */ '
+                'r##"../../beta/src/shared.rs"## );\npub fn alpha() {}\n',
+            ),
+            "cross_package_include",
+        )
+
+    def test_comment_separated_raw_cross_package_include_str_is_rejected(self) -> None:
+        repo, base = self._fixture()
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(
+                root, "crates/alpha/src/lib.rs",
+                'include_str /* macro gap */ ! /* paren gap */ ( /* literal gap */ '
+                'r##"../../beta/src/shared.rs"## );\npub fn alpha() {}\n',
+            ),
+            "cross_package_include",
+        )
+
+    def test_same_package_include_bytes_durable_asset_is_allowed(self) -> None:
+        repo, _ = self._fixture()
+        self._write(repo, "crates/alpha/assets/payload.bin", "durable alpha payload\n")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "base with durable alpha asset")
+        base = self._git(repo, "rev-parse", "HEAD")
+        self._assert_allowed(
+            repo, base, "alpha",
+            lambda root: self._write(
+                root, "crates/alpha/src/lib.rs",
+                'const PAYLOAD: &[u8] = include_bytes!("../assets/payload.bin");\n'
+                'pub fn alpha() {}\n',
+            ),
+        )
+
+    def test_same_package_include_str_durable_asset_is_allowed(self) -> None:
+        repo, _ = self._fixture()
+        self._write(repo, "crates/alpha/assets/message.txt", "durable alpha message\n")
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "base with durable alpha asset")
+        base = self._git(repo, "rev-parse", "HEAD")
+        self._assert_allowed(
+            repo, base, "alpha",
+            lambda root: self._write(
+                root, "crates/alpha/src/lib.rs",
+                'const MESSAGE: &str = include_str!("../assets/message.txt");\n'
+                'pub fn alpha() {}\n',
+            ),
+        )
 
     def test_cross_package_path_attribute_is_rejected(self) -> None:
         repo, base = self._fixture()

@@ -959,6 +959,8 @@ def check_cross_package_edges(
         text = without_rust_comments(source_text(repo, head, path))
         for prefix, terminator, reason in (
             (r"\binclude\s*!\s*\(\s*", ")", "cross_package_include"),
+            (r"\binclude_bytes\s*!\s*\(\s*", ")", "cross_package_include"),
+            (r"\binclude_str\s*!\s*\(\s*", ")", "cross_package_include"),
             (r"#\s*\[\s*path\s*=\s*", "]", "cross_package_path"),
         ):
             for reference in re.finditer(prefix, text):
