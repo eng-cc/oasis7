@@ -9,6 +9,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from typing import Callable
 import unittest
 
 
@@ -508,6 +509,129 @@ class ReviewPreflightHandoffTests(unittest.TestCase):
         self.assertFalse(handoff_path.exists())
         self.assertIsNotNone(rejection, "v2 plan without impact_projection was accepted")
         self.assertRegex(str(rejection), "impact projection")
+
+    def assert_dispatch_rejects_projection_mutation_without_side_effects(
+        self, fixture: dict[str, object], *, expected_error: str,
+    ) -> None:
+        plan_path = Path(str(fixture["plan_path"]))
+        ledger_path = Path(str(fixture["ledger_path"]))
+        collection_path = Path(str(fixture["collection_path"]))
+        handoff_path = Path(str(fixture["handoff_path"]))
+        # The fixture's normal setup publishes the original valid plan. Remove that
+        # marker so a mutated plan reaches projection validation before publication.
+        self.write_live_issue(None)
+        gh_log_before = self.gh_log.read_bytes()
+        gh_fixture_before = self.gh_data.read_bytes()
+        ledger_before = ledger_path.read_bytes()
+        self.assertFalse(collection_path.exists())
+        self.assertFalse(handoff_path.exists())
+
+        failure = subprocess.run(
+            [sys.executable, str(BATCH_SCRIPT), "--root", str(self.root), "dispatch",
+             "--plan", str(plan_path)],
+            text=True, capture_output=True,
+        )
+
+        self.assertEqual(gh_log_before, self.gh_log.read_bytes(), "invalid projection reached GitHub")
+        self.assertEqual(gh_fixture_before, self.gh_data.read_bytes(), "invalid projection changed live fixture")
+        self.assertEqual(ledger_before, ledger_path.read_bytes(), "invalid projection changed preflight ledger")
+        self.assertFalse(collection_path.exists(), "invalid projection created a collection receipt")
+        self.assertFalse(handoff_path.exists(), "invalid projection created a handoff")
+        self.assertEqual(2, failure.returncode, failure.stdout + failure.stderr)
+        self.assertRegex((failure.stderr + failure.stdout).lower(), expected_error)
+
+    @staticmethod
+    def rewrite_projection_plan(
+        fixture: dict[str, object], mutate: Callable[[dict[str, object]], None], *,
+        rebind_projection_digest: bool = False,
+    ) -> dict[str, object]:
+        plan_path = Path(str(fixture["plan_path"]))
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+        projection = plan["impact_projection"]
+        assert isinstance(projection, dict)
+        mutate(projection)
+        if rebind_projection_digest:
+            projection["projection_digest"] = IMPACT_PROJECTION.canonical_digest(
+                {key: value for key, value in projection.items() if key != "projection_digest"}
+            )
+            plan["impact_projection_digest"] = projection["projection_digest"]
+        plan_path.write_bytes(canonical(plan) + b"\n")
+        return plan
+
+    def test_valid_v2_impact_projection_is_bound_to_source_review_identity(self) -> None:
+        fixture = self.make_fixture(create_handoff=False)
+        plan_path = Path(str(fixture["plan_path"]))
+        validated, source_identity, *_ = HANDOFF.validate_plan_inputs(self.root, plan_path)
+        projection = validated["impact_projection"]
+        assert isinstance(projection, dict)
+        projection_path = self.root / "impact-projection.json"
+        projection_path.write_bytes(canonical(projection) + b"\n")
+        verified = IMPACT_PROJECTION.load_verified_projection(
+            projection_path,
+            expected={
+                "task_uid": TASK,
+                "source_head_oid": HEAD,
+                "scope_base_oid": SCOPE_OID,
+                "changed_paths_digest": projection["changed_paths_digest"],
+                "ordered_role_ids": source_identity["ordered_role_ids"],
+            },
+        )
+        self.assertEqual(projection, verified)
+        self.assertEqual(
+            "sha256:" + str(source_identity["input_contract_digest"]),
+            projection["projection_digest"],
+        )
+        payload = HANDOFF.dispatch_payload_for_plan(self.root, plan_path)
+        self.assertEqual(TASK, payload["task_uid"])
+
+    def test_dispatch_rejects_stale_impact_projection_digest_after_closure_mutation(self) -> None:
+        fixture = self.make_fixture(create_handoff=False)
+
+        def forge_complete_closure(projection: dict[str, object]) -> None:
+            projection["closure_status"] = {
+                "status": "complete", "reason": "forged evidence closure", "evidence": [],
+            }
+
+        self.rewrite_projection_plan(fixture, forge_complete_closure)
+        self.assert_dispatch_rejects_projection_mutation_without_side_effects(
+            fixture, expected_error=r"projection|digest|closure|identity",
+        )
+
+    def test_dispatch_rejects_stale_impact_projection_digest_after_ci_scope_mutation(self) -> None:
+        fixture = self.make_fixture(create_handoff=False)
+
+        def change_ci_scope(projection: dict[str, object]) -> None:
+            projection["ci_scope"] = "minimal" if projection["ci_scope"] != "minimal" else "full"
+
+        self.rewrite_projection_plan(fixture, change_ci_scope)
+        self.assert_dispatch_rejects_projection_mutation_without_side_effects(
+            fixture, expected_error=r"projection|digest|scope|identity",
+        )
+
+    def test_dispatch_rejects_rehashed_projection_with_changed_paths_binding(self) -> None:
+        fixture = self.make_fixture(create_handoff=False)
+
+        def change_paths_binding(projection: dict[str, object]) -> None:
+            paths = ["scripts/pm/review_preflight_handoff.py"]
+            projection["changed_paths"] = paths
+            projection["changed_paths_digest"] = IMPACT_PROJECTION.canonical_digest(paths)
+
+        self.rewrite_projection_plan(fixture, change_paths_binding, rebind_projection_digest=True)
+        self.assert_dispatch_rejects_projection_mutation_without_side_effects(
+            fixture, expected_error=r"projection|digest|path|identity|contract",
+        )
+
+    def test_dispatch_rejects_rehashed_projection_with_changed_roles_binding(self) -> None:
+        fixture = self.make_fixture(create_handoff=False)
+
+        def change_role_binding(projection: dict[str, object]) -> None:
+            projection["review_roles"] = ["runtime_engineer"]
+            projection["ordered_role_ids"] = ["runtime_engineer"]
+
+        self.rewrite_projection_plan(fixture, change_role_binding, rebind_projection_digest=True)
+        self.assert_dispatch_rejects_projection_mutation_without_side_effects(
+            fixture, expected_error=r"projection|digest|role|identity|contract",
+        )
 
     def test_rejects_missing_admitted_packet_digest_after_return_and_handoff_rehash(self) -> None:
         fixture = self.make_fixture()

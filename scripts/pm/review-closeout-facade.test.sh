@@ -39,7 +39,7 @@ UID_VALUE="task_11111111111111111111111111111111"
 ROLE="repository_health_engineer"
 SLICE="11111111-1111-4111-8111-111111111111"
 mkdir -p "$REPO/scripts/pm" "$REPO/.pm/github-project-sync"
-for helper in review-closeout.sh review-batch-epoch.py record-pre-pr-review.sh validate-review-provenance.py review-findings-resolution.py review_preflight_handoff.py ci_ready_receipt_identity.py; do
+for helper in review-closeout.sh review-batch-epoch.py record-pre-pr-review.sh validate-review-provenance.py review-findings-resolution.py review_preflight_handoff.py workflow-impact-projection.py ci_ready_receipt_identity.py; do
   cp "$ROOT_DIR/scripts/pm/$helper" "$REPO/scripts/pm/$helper"
 done
 chmod +x "$REPO/scripts/pm/review-closeout.sh" "$REPO/scripts/pm/record-pre-pr-review.sh"

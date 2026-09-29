@@ -394,6 +394,40 @@ def validate_plan(plan_value: object, raw: bytes) -> tuple[dict[str, object], di
     return plan, source_identity, source_digest
 
 
+def validate_plan_impact_projection(
+    root: Path, plan: dict[str, object], source_identity: dict[str, object],
+) -> dict[str, Any]:
+    """Verify the embedded projection and bind it to this frozen review identity."""
+    projection = plan.get("impact_projection")
+    if not isinstance(projection, dict):
+        raise ContractError("plan impact projection is invalid")
+    code_root = Path(__file__).resolve().parents[2]
+    try:
+        module = _load_pm_module(code_root, "workflow_impact_projection", "workflow-impact-projection.py")
+        verified = module.validate_projection_value(
+            projection,
+            expected={
+                "task_uid": plan["task_uid"],
+                "source_head_oid": plan["frozen_head"],
+                "scope_base_oid": source_identity["source_scope_oid"],
+                "changed_paths_digest": f"sha256:{source_identity['changed_paths_digest']}",
+                "ordered_role_ids": source_identity["ordered_role_ids"],
+                "test_profile": plan["impact_projection_test_profile"],
+            },
+            repo_root=root,
+        )
+    except (OSError, TypeError, ValueError) as exc:
+        raise ContractError(f"plan impact projection verification failed: {exc}") from exc
+
+    projected_paths_digest = str(verified["changed_paths_digest"]).removeprefix("sha256:")
+    if projected_paths_digest != source_identity["changed_paths_digest"]:
+        raise ContractError("plan impact projection changed-path digest does not match source-review identity")
+    projected_input_digest = str(verified["projection_digest"]).removeprefix("sha256:")
+    if projected_input_digest != source_identity["input_contract_digest"]:
+        raise ContractError("plan impact projection digest does not match source-review input contract")
+    return verified
+
+
 def validate_packet_refs(root: Path, plan: dict[str, object], expected_slices: list[dict[str, str]],
                          source_identity: dict[str, object]) -> dict[tuple[str, str], dict[str, str]]:
     """Validate plan-owned packet bindings and return the metadata each return must echo."""
@@ -517,6 +551,7 @@ def validate_plan_inputs(
     resolved_plan = resolve_repo_file(root, str(plan_path), "review plan")
     plan_value, plan_raw = read_json(resolved_plan, "review plan")
     plan, source_identity, source_digest = validate_plan(plan_value, plan_raw)
+    validate_plan_impact_projection(root, plan, source_identity)
     batch_path = resolve_repo_file(root, plan.get("batch_path"), "review batch")
     if plan.get("collection_path") is not None:
         collection_path_value = resolve_repo_destination(root, plan.get("collection_path"), "collection receipt")
