@@ -1,16 +1,16 @@
 # CI 身份一致发布与并行证据复用系统设计
 
 **设计 ID：OASIS7-CI-PARALLEL-REUSE-1**
-**版本：1.0.0 · 实施设计终稿**
+**版本：1.0.1 · 实施设计终稿**
 **状态：Proposed；尚未实施、验收或启用，不改变当前有效门禁**
 **Owner：repository_health_engineer；独立验证：qa_engineer；任务协调：tpm**
 **模块：engineering/workflow**
 **审读日期：2026-09-24**
-**固定源码基线：`eng-cc/oasis7@539fa28860a5a531a9a9d00c8167e28071377af2`**
-**冻结设计输入 SHA-256：`ba335cf20a69ba6aac69de87d0860847d9b6566d76e3ad3ae4d133f06d52139b`**
+**源码审读与冻结设计输入的精确版本仅记录于对应 GitHub task evidence。**
+
 **建议落位：`doc/engineering/workflow/ci-parallel-evidence-reuse.design.md`**
 
-本文承接本次会话中“CI 秒失败排障”“PR 创建早于 Issue 编号回写”“main 高频前进不应重复工作”三组要求。实施前，TPM 必须将当前用户要求、本文固定版本和验收集合冻结到现有 coordinating Issue，并为代码叶子建立各自 Task/PR；本文不冒用已有 Issue #3871 作为本次任务，也不虚构未来 Task UID、合同 revision 或验收证据。
+本文承接本次会话中“CI 秒失败排障”“PR 创建早于 Issue 编号回写”“main 高频前进不应重复工作”三组要求。实施前，TPM 必须将当前用户要求、本文固定版本和验收集合冻结到现有 coordinating Issue，并为代码叶子建立各自 Task/PR；本文不复用先前 delivery 的身份或 acceptance evidence 作为本次任务，也不虚构未来 Task UID、合同 revision 或验收证据。
 
 文中“必须／不得”表示拟采纳的技术合同；只有 `source-of-truth.md` 先更新、兼容实现通过独立验证并经现有流程授权启用后，才成为实际执行规则。现状事实与设计目标分别标注。
 
@@ -62,11 +62,11 @@
 
 | 上游 requirement／professional acceptance | 具体义务与适用条件 | 本设计条款 | 外部 owner／依赖 | 排除或未证明范围 |
 | --- | --- | --- | --- | --- |
-| [Issue #3951 冻结的 professional acceptance](https://github.com/eng-cc/oasis7/issues/3951#issuecomment-5810526692) | 无关目标变化不触发源码、评审和重型测试重做 | 本文 `#des-cir-01`、`#des-cir-04` | TPM 冻结用户要求；QA 20 次前进验证 | Issue evidence 是任务验收定位；不将聊天记录冒充已发布机器合同 |
-| [Issue #3951 冻结的 professional acceptance](https://github.com/eng-cc/oasis7/issues/3951#issuecomment-5810526692) | 保留严格 source／Task／run／attempt 身份和 required-gate 的 fail-closed 判定 | 本文 `#des-cir-01`、`#des-cir-06`、`#des-cir-09` | repository health 定义身份合同；QA 验证错身份与坏证据负例 | 新能力仍为 Proposed；设计映射不授权放宽当前门禁 |
-| [Issue #3951 冻结的 professional acceptance](https://github.com/eng-cc/oasis7/issues/3951#issuecomment-5810526692) | 真实输入或义务变化时，只补受影响测试单元和专业角色 | 本文 `#des-cir-04`、`#des-cir-05` | 可信 planner 和 QA 完整性验证 | 未证明输入闭包时保守扩大范围，不声称细粒度复用 |
-| [Issue #3951 冻结的 professional acceptance](https://github.com/eng-cc/oasis7/issues/3951#issuecomment-5810526692) | publication／binding 恢复有界、幂等，等待或失败不得伪装为通过 | 本文 `#des-cir-02`、`#des-cir-03`、`#des-cir-08` | publisher、resolver 与 QA 乱序／丢响应验证 | GitHub API 不提供跨调用原子事务 |
-| [Issue #3951 冻结的 professional acceptance](https://github.com/eng-cc/oasis7/issues/3951#issuecomment-5810526692) | 启用前取得独立 QA、hosted 行为和平台 required-check 证据 | 本文 `#des-cir-09`、`#des-cir-10` | QA 独立组合验收；TPM 保留协调任务 | S0 文档门禁通过不等于代码能力或 hosted 验收通过 |
+| 当前 coordinating Task 冻结的 professional acceptance evidence | 无关目标变化不触发源码、评审和重型测试重做 | 本文 `#des-cir-01`、`#des-cir-04` | TPM 冻结用户要求；QA 20 次前进验证 | Issue evidence 是任务验收定位；不将聊天记录冒充已发布机器合同 |
+| 当前 coordinating Task 冻结的 professional acceptance evidence | 保留严格 source／Task／run／attempt 身份和 required-gate 的 fail-closed 判定 | 本文 `#des-cir-01`、`#des-cir-06`、`#des-cir-09` | repository health 定义身份合同；QA 验证错身份与坏证据负例 | 新能力仍为 Proposed；设计映射不授权放宽当前门禁 |
+| 当前 coordinating Task 冻结的 professional acceptance evidence | 真实输入或义务变化时，只补受影响测试单元和专业角色 | 本文 `#des-cir-04`、`#des-cir-05` | 可信 planner 和 QA 完整性验证 | 未证明输入闭包时保守扩大范围，不声称细粒度复用 |
+| 当前 coordinating Task 冻结的 professional acceptance evidence | publication／binding 恢复有界、幂等，等待或失败不得伪装为通过 | 本文 `#des-cir-02`、`#des-cir-03`、`#des-cir-08` | publisher、resolver 与 QA 乱序／丢响应验证 | GitHub API 不提供跨调用原子事务 |
+| 当前 coordinating Task 冻结的 professional acceptance evidence | 启用前取得独立 QA、hosted 行为和平台 required-check 证据 | 本文 `#des-cir-09`、`#des-cir-10` | QA 独立组合验收；TPM 保留协调任务 | S0 文档门禁通过不等于代码能力或 hosted 验收通过 |
 | `source-of-truth.md#manual-three-loop-transition` | 本地手动、单 Task/PR 主链、保留准入与权限边界 | 本文 `#des-cir-02`、`#des-cir-09` | TPM、现有 PM adapter | 不增加自动任务或第四个 loop |
 | `source-of-truth.md#split-source-review-integration-contract` | 严格区分 source、review、integration、run/attempt 身份 | 本文 `#des-cir-01`、`#des-cir-05`、`#des-cir-06` | receipt 与 lifecycle consumers | 新能力未启用前仍按当前高风险 current-target 规则执行 |
 | `ci-projection-publication.design.md#des-cip-01`、`#des-cip-02` | 首次创建和源码更新不暴露可被错误消费的半发布状态 | 本文 `#des-cir-02`、`#des-cir-03` | 既有 publisher/resolver 设计 | 不是跨 GitHub API 原子事务 |
@@ -259,7 +259,7 @@ source projection 继续为 `oasis7-workflow-impact-projection/v2`；publication
 | Review evidence | role ID、H/S、source change、实际读入契约／上下文、review rules、applicability digest、返回与处置 | 既有角色流程 → review consumer | 相关上下文变更才失效；角色晚返回按原身份归档 |
 | Applicability decision | H、Q、prior assessed target、policy、原 evidence locators、全部 required units、逐项 reuse/revalidate/blocked、原因 | 可信本地评估器 → lifecycle／closeout | 是可重算 observation，不是 CI 通过证明，不把 Q 写成 tested base |
 | Validation request | request key、H、固定 B、unit IDs、输入指纹、executor contract、purpose、创建事实 | 本地 adapter → integration runner/readback | 重试复用 key，B 不可悄悄前移；run ID 只是 locator |
-| V1 validation request / approval / task pin | #4059 上三个分离的闭 schema 评论；pin 绑定 request comment ID、原始 body digest 和 request digest；approval/pin 作者在 W 解析前实时验证为仓库 admin | TPM evidence → trusted W authority resolver | W 全量分页且唯一发现；评论作者和 caller inputs 不能自授权；缺失、重复、编辑或权限读失败即拒绝 |
+| V1 validation request / approval / task pin | Pre-existing trusted task/scope authority identifies the Task UID; W resolves exactly one canonical Project-backed Task Issue and one reciprocal PR, then requires three separate closed-schema comments on that Issue; pin binds request comment ID, raw body digest and request digest; approval/pin authors are live-verified as repository admins before W resolves authority | TPM evidence → trusted W authority resolver | W fully paginates and uniquely discovers the task and records; comment authors and caller inputs cannot self-authorize; missing, duplicate, edited or unreadable identity/permission evidence rejects |
 | V1 validation ID / artifact selector | request digest 的域分离 validation ID；唯一 attempt artifact 名绑定 validation ID、R、A | trusted W producer → independent reader | producer/reader 使用同一精确派生函数；重复同名或身份不符拒绝，不进入 production selector |
 | V1 request-to-run binding | canonical `rust.yml` validation-only run title carries Task/PR/B/H/validation ID; complete workflow-run pagination maps that request to one R; W authority binds exact R | trusted W producer → independent reader | second distinct R blocks even if pending/failed; response-loss recovery discovers existing R; only a same-R rerun may create newer A |
 | V1 latest-attempt readback | initial unique-R/A, job/check, download/hash, request/approval/pin reread, final full run-set enumeration, final live R/A | independent reader → V1-pre acceptance | ordered terminal observations, not atomic snapshot or GitHub CAS; later acceptance/consumer repeats both |
@@ -375,11 +375,11 @@ PR admission 只证明冻结候选的输入一致，不能让已经通过的 che
 | C2 · code | 输入闭包、unit 指纹、全量义务完整性与轻量文档组合 | C0；可与 C1 并行，边界不交叉 |
 | C3 · code | B/W 解耦、executor 合同、幂等请求与独立 merge tree | C0；可与 C1/C2 并行，不直接改最终 workflow 接线 |
 | C4 · code | CI 接线、attempt artifacts、receipt/lifecycle 全消费者迁移 | C1/C2/C3；单独收口共享文件；consumer first |
-| V1-pre · pre-activation validation | fake + hosted + 本地 Codex + latest-attempt negatives + 平台门禁验证 | hosted dispatch 前先有 #4059 唯一 request/approval/task-pin 及 W live admin readback；只证明隔离验证路径，不启用生产复用，也不计入 20 次生产前进 |
+| V1-pre · pre-activation validation | fake + hosted + local Codex + latest-attempt negatives + platform-gate validation | Before hosted dispatch, pre-existing trusted task/scope authority supplies the Task UID; W resolves exactly one canonical Project-backed Task Issue and unique reciprocal PR, then requires one request/approval/task-pin set and live admin readback on that Issue; this proves only the isolated validation path, does not enable production reuse, and does not count toward 20 production advances |
 | V1-prod · production acceptance | 单独按现有流程明确启用实现后，从新鲜生产目标 Q0 开始，验证 20 次真实、自然且与所有 required inputs 无关的 main 前进 | 每次均证明 source commit、角色 redispatch、heavy CI execution 和 task phase rollback 为零；禁用期与 V1-pre 前进都计 0 |
 | S1 · system | manual／运行说明与验收结果边界更新 | V1-pre 与 V1-prod 的真实事实；可执行 skill／角色卡另属 code 叶子 |
 
-TPM 在 coordinating Issue 冻结必要交付集合与可并行边界，实际 Task/PR/commit/run/evidence 在执行时回写。旧 #3871 交付若被复用，必须验证已合入内容和实际能力，不根据设计存在就认定依赖完成。
+TPM 在 coordinating Issue 冻结必要交付集合与可并行边界，实际 Task/PR/commit/run/evidence 在执行时只回写到相应 GitHub task evidence。先前交付若被复用，必须验证已合入内容和实际能力，不根据设计存在就认定依赖完成。
 
 ### 10.3 启用顺序
 
@@ -439,7 +439,7 @@ TPM 在 coordinating Issue 冻结必要交付集合与可并行边界，实际 T
 
 ### 11.3 总体验收清单
 
-V1-pre 是启用前的验证阶段：hosted dispatch 前，W 必须从 #4059 完整分页且唯一读回 request、approval、task-pin 三个 exact-marker 记录，核对原始 body digest、先后时间，并实时确认 approval 与 pin 作者均有 canonical repository `admin` 权限；调用者身份和 Issue 作者身份都不能代替这些检查。对 request-derived validation ID，trusted W 与独立 reader 都必须完整分页 workflow dispatch runs 并证明只存在一个精确 request-bound R；重复 R（包括较早成功加较新 pending/failed）、无结论的丢响应、wrong title/ref/event/input 与最终重新枚举变化均 fail closed。仅对唯一 R 的同 run rerun 可成为更高 A，且只读该 R 的最新 attempt。可用 fake、hosted validation-only、local Codex 和平台门禁证据验证实现及其 non-promotion 边界，但这些结果本身不启用 `input-scope-reuse/v1`，也不证明生产 main 前进。生产验收 V1-prod 只能在实现按现有流程被单独明确启用后开始；先记录启用后的新鲜生产目标 Q0，再只计其后的 20 次真实、自然、经完整输入闭包证明无关的 main 前进。每次都须证明 source commit、角色 redispatch、heavy CI execution 和 task phase rollback 为零。V1-pre、禁用期观察、合成 fake advances、启用前的 main 前进，以及与 required inputs 相关或无法证明无关的前进，均计为 0 次。
+V1-pre 是启用前的验证阶段：hosted dispatch 前，W 必须从预先批准的 task/scope authority 解析唯一 canonical Project-backed Task Issue 和互反 PR，并对该 Issue 完整分页且唯一读回 request、approval、task-pin 三个 exact-marker 记录，核对原始 body digest、先后时间，并实时确认 approval 与 pin 作者均有 canonical repository `admin` 权限；调用者身份和 Issue 作者身份都不能代替这些检查。对 request-derived validation ID，trusted W 与独立 reader 都必须完整分页 workflow dispatch runs 并证明只存在一个精确 request-bound R；重复 R（包括较早成功加较新 pending/failed）、无结论的丢响应、wrong title/ref/event/input 与最终重新枚举变化均 fail closed。仅对唯一 R 的同 run rerun 可成为更高 A，且只读该 R 的最新 attempt。可用 fake、hosted validation-only、local Codex 和平台门禁证据验证实现及其 non-promotion 边界，但这些结果本身不启用 `input-scope-reuse/v1`，也不证明生产 main 前进。生产验收 V1-prod 只能在实现按现有流程被单独明确启用后开始；先记录启用后的新鲜生产目标 Q0，再只计其后的 20 次真实、自然、经完整输入闭包证明无关的 main 前进。每次都须证明 source commit、角色 redispatch、heavy CI execution 和 task phase rollback 为零。V1-pre、禁用期观察、合成 fake advances、启用前的 main 前进，以及与 required inputs 相关或无法证明无关的前进，均计为 0 次。
 
 只有在正常首轮无需人为重跑；新 head 与 projection 严格匹配；高风险 PR 也遵守输入复用；相关变更精确触发补验；所有负例无假绿；旧／新协议及回滚已测试；平台 required check 和权限配置已核实；真实合入回读与最终完成边界可恢复；且 V1-pre 与启用后的 V1-prod 均有可回读证据时，coordinating task 才能声明本次改造完成。V1-pre 通过、source 合入、文档 checker 通过或单个 PR 绿灯，都不替代 V1-prod，也不单独授权生产启用。
 
@@ -485,12 +485,12 @@ V1-pre 是启用前的验证阶段：hosted dispatch 前，W 必须从 #4059 完
 
 平台来源：[G1] required check 排障与事件资格；[G2] check 状态；[G3] rerun 语义；[G4] strict/loose 分支保护；[G5] merge API 参数。
 
-[R1]: https://github.com/eng-cc/oasis7/blob/539fa28860a5a531a9a9d00c8167e28071377af2/scripts/prepare-task-pr.sh#L2070-L2134 "PR 创建与 record-pr 时序"
-[R2]: https://github.com/eng-cc/oasis7/blob/539fa28860a5a531a9a9d00c8167e28071377af2/scripts/pm/integration_ci.py#L85-L160 "集成身份、dispatch 与 verified_run"
-[R3]: https://github.com/eng-cc/oasis7/blob/539fa28860a5a531a9a9d00c8167e28071377af2/scripts/pm/ci_ready_receipt_identity.py "source review / integration 身份及复用条件"
-[R4]: https://github.com/eng-cc/oasis7/blob/539fa28860a5a531a9a9d00c8167e28071377af2/doc/engineering/workflow/source-of-truth.md "唯一规范性 workflow source"
-[R5]: https://github.com/eng-cc/oasis7/blob/539fa28860a5a531a9a9d00c8167e28071377af2/doc/engineering/workflow/ci-projection-publication.design.md "既有 Proposed publication 设计"
-[R6]: https://github.com/eng-cc/oasis7/blob/539fa28860a5a531a9a9d00c8167e28071377af2/doc/engineering/doc-governance/system-design-writing-standard.design.md "十二段系统设计规范"
+[R1]: ../../../scripts/prepare-task-pr.sh#L2070-L2134 "PR 创建与 record-pr 时序"
+[R2]: ../../../scripts/pm/integration_ci.py#L85-L160 "集成身份、dispatch 与 verified_run"
+[R3]: ../../../scripts/pm/ci_ready_receipt_identity.py "source review / integration 身份及复用条件"
+[R4]: ../../../doc/engineering/workflow/source-of-truth.md "唯一规范性 workflow source"
+[R5]: ../../../doc/engineering/workflow/ci-projection-publication.design.md "既有 Proposed publication 设计"
+[R6]: ../../../doc/engineering/doc-governance/system-design-writing-standard.design.md "十二段系统设计规范"
 [G1]: https://docs.github.com/en/pull-requests/how-tos/merge-and-close-pull-requests/troubleshooting-required-status-checks "required check 事件资格与 head/merge SHA"
 [G2]: https://docs.github.com/en/pull-requests/reference/status-checks "skip/neutral 的平台语义"
 [G3]: https://docs.github.com/en/actions/how-tos/manage-workflow-runs/re-run-workflows-and-jobs "rerun 沿用原 SHA/ref"

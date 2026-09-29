@@ -25,7 +25,7 @@ class DispatchInputTests(unittest.TestCase):
         expected = {
             "run_mode": "v1_reuse_validation_only",
             "task_uid": "task_" + "a" * 32,
-            "pr_number": "4060",
+            "pr_number": "143",
             "integration_base": "1" * 40,
             "expected_head": "2" * 40,
             "source_scope_oid": "3" * 40,
@@ -64,17 +64,134 @@ class DispatchInputTests(unittest.TestCase):
 
 
 class LiveIdentityTests(unittest.TestCase):
+    def test_task_lookup_uses_complete_rest_issue_pages_then_derived_issue_and_pr(self):
+        task_uid = "task_" + "a" * 32
+        issue_number = 87
+        pr_number = 143
+        body = (
+            "<!-- oasis7-pm-task -->\n"
+            f"task_uid: {task_uid}\n"
+            f"- pr_number: `{pr_number}`\n"
+            f"- pr_url: `https://github.com/eng-cc/oasis7/pull/{pr_number}`\n"
+        )
+        task_issue = {
+            "id": 9001, "number": issue_number,
+            "html_url": f"https://github.com/eng-cc/oasis7/issues/{issue_number}",
+            "body": body,
+        }
+        live_issue = {
+            "id": task_issue["id"], "number": issue_number,
+            "html_url": task_issue["html_url"], "body": body,
+        }
+
+        class API:
+            def __init__(self):
+                self.pages_read = 0
+                self.endpoints = []
+
+            def task_issue_pages(self):
+                self.pages_read += 1
+                unrelated = {
+                    "id": 8999, "number": 86,
+                    "html_url": "https://github.com/eng-cc/oasis7/issues/86",
+                    "body": "ordinary issue that does not contain a canonical Task marker",
+                }
+                return ([unrelated, task_issue],)
+
+            def get_json(self, endpoint):
+                self.endpoints.append(endpoint)
+                return live_issue
+
+        api = API()
+        issue, resolved_issue_number, resolved_pr_number, pr_url = producer._resolve_live_task(api, task_uid)
+        self.assertEqual(1, api.pages_read)
+        self.assertEqual(live_issue, issue)
+        self.assertEqual(issue_number, resolved_issue_number)
+        self.assertEqual(pr_number, resolved_pr_number)
+        self.assertEqual(f"https://github.com/eng-cc/oasis7/pull/{pr_number}", pr_url)
+        self.assertEqual([f"repos/eng-cc/oasis7/issues/{issue_number}"], api.endpoints)
+
+    def test_duplicate_task_uid_issue_matches_fail_closed_without_issue_or_pr_fallback(self):
+        task_uid = "task_" + "a" * 32
+        body = (
+            "<!-- oasis7-pm-task -->\n"
+            f"task_uid: {task_uid}\n"
+            "- pr_number: `143`\n"
+            "- pr_url: `https://github.com/eng-cc/oasis7/pull/143`\n"
+        )
+
+        class API:
+            def task_issue_pages(self):
+                return ([
+                    {"id": 9001, "number": 87, "html_url": "https://github.com/eng-cc/oasis7/issues/87", "body": body},
+                    {"id": 9002, "number": 88, "html_url": "https://github.com/eng-cc/oasis7/issues/88", "body": body},
+                ],)
+
+            def get_json(self, endpoint):
+                raise AssertionError("ambiguous UID must fail before direct issue/PR reads")
+
+        with self.assertRaisesRegex(producer.ProducerError, "exactly one"):
+            producer._resolve_live_task(API(), task_uid)
+
+    def test_task_issue_and_direct_rest_disagreement_fails_closed(self):
+        task_uid = "task_" + "a" * 32
+        body = (
+            "<!-- oasis7-pm-task -->\n"
+            f"task_uid: {task_uid}\n"
+            "- pr_number: `143`\n"
+            "- pr_url: `https://github.com/eng-cc/oasis7/pull/143`\n"
+        )
+        selected = {
+            "id": 9001, "number": 87,
+            "html_url": "https://github.com/eng-cc/oasis7/issues/87", "body": body,
+        }
+
+        class API:
+            def __init__(self, live_issue):
+                self.live_issue = live_issue
+
+            def task_issue_pages(self):
+                return ([selected],)
+
+            def get_json(self, _endpoint):
+                return self.live_issue
+
+        changed_body = body.replace("pull/143", "pull/144").replace("`143`", "`144`")
+        with self.assertRaises(producer.ProducerError):
+            producer._resolve_live_task(API({
+                "id": selected["id"], "number": 87,
+                "html_url": selected["html_url"], "body": changed_body,
+            }), task_uid)
+
+    def test_missing_or_malformed_rest_issue_pages_fail_closed(self):
+        task_uid = "task_" + "a" * 32
+
+        class API:
+            def __init__(self, pages):
+                self.pages = pages
+
+            def task_issue_pages(self):
+                return self.pages
+
+            def get_json(self, _endpoint):
+                raise AssertionError("incomplete history must fail before fallback reads")
+
+        for pages in ((), (None,), ([{"number": 87}],)):
+            with self.subTest(pages=pages), self.assertRaises(producer.ProducerError):
+                producer._resolve_live_task(API(pages), task_uid)
+
     def test_reciprocal_pr_requires_well_typed_same_repository_refs(self):
         pr = {
-            "number": 4060,
+            "number": 143,
             "state": "open",
             "merged": False,
-            "body": "Task: task_" + "a" * 32 + "\nRefs #4059",
+            "body": "Task: task_" + "a" * 32 + "\nRefs #87",
             "base": {"ref": "main", "sha": "1" * 40,
                      "repo": {"full_name": "eng-cc/oasis7"}},
             "head": {"sha": "2" * 40, "repo": {"full_name": "eng-cc/oasis7"}},
         }
-        self.assertEqual(("2" * 40, "1" * 40), producer._check_live_pr(pr, "task_" + "a" * 32))
+        self.assertEqual(("2" * 40, "1" * 40),
+                         producer._check_live_pr(pr, "task_" + "a" * 32, 87, 143))
 
         for changed in (
             {**pr, "head": {"sha": "2" * 40, "repo": None}},
@@ -82,7 +199,15 @@ class LiveIdentityTests(unittest.TestCase):
             {**pr, "head": {**pr["head"], "repo": {"full_name": "fork/project"}}},
         ):
             with self.subTest(changed=changed), self.assertRaises(producer.ProducerError):
-                producer._check_live_pr(changed, "task_" + "a" * 32)
+                producer._check_live_pr(changed, "task_" + "a" * 32, 87, 143)
+
+        for changed in (
+            {**pr, "number": 144},
+            {**pr, "body": pr["body"].replace("#87", "#88")},
+            {**pr, "body": pr["body"].replace("task_" + "a" * 32, "task_" + "b" * 32)},
+        ):
+            with self.subTest(changed=changed), self.assertRaises(producer.ProducerError):
+                producer._check_live_pr(changed, "task_" + "a" * 32, 87, 143)
 
     def test_current_run_must_be_exact_default_branch_workflow_w_and_title(self):
         oid = "a" * 40

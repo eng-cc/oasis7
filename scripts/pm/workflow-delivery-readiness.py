@@ -1,61 +1,30 @@
 #!/usr/bin/env python3
-"""Read-only readiness projection for the explicitly declared fast-recovery edge.
-
-This helper recognizes only the A (#4139) artifact consumed by B (#4095).
-It deliberately does not infer artifact edges for legacy or unrelated tasks.
-"""
+"""Read-only delivery readiness projection for explicitly declared task artifacts."""
 from __future__ import annotations
 
 import hashlib
+import importlib.util
 import json
 import pathlib
 import re
 import subprocess
+import sys
 from typing import Any
 
 
 REPOSITORY = "eng-cc/oasis7"
-DOWNSTREAM_UID = "task_7d9db27bcc2b4359b02fdf3bff5a609e"
-UPSTREAM_UID = "task_5fe52e7477774b10af6655ad298eedd5"
-COORDINATOR_ISSUE = 4082
-EDGE_COMMENT_ID = 5885353387
-DOWNSTREAM_ISSUE = 4095
-UPSTREAM_ISSUE = 4137
-UPSTREAM_PR = 4139
-EDGE_MERGE_OID = "52d86940cad7d6ad0b67dc1e931e350882ef5eb5"
-REVIEW_COMMENT_ID = 5884285458
-REVIEW_DISPATCH_COMMENT_ID = 5883923527
-STRICT_RUN_ID = 36523710522
-SOURCE_HEAD_OID = "f8b65ffa9b9a61262936ce37e52b7f7e6ea978ab"
-STRICT_BASE_OID = "917f7172e856fc6a3a2523bccd5a5b9b13dcfa29"
 REQUIRED_GATE_APP_ID = 15368
-HANDOFF_CLOSURE_PATHS = {
-    "scripts/pm/record-pre-pr-review.sh",
-    "scripts/pm/review-batch-epoch.py",
-    "scripts/pm/review-closeout.sh",
-    "scripts/pm/review-findings-resolution.py",
-    "scripts/pm/review_preflight_handoff.py",
-}
-SOURCE_PATH = "doc/engineering/workflow/source-of-truth.md"
-STRICT_RUN_TITLE = (
-    "oasis7-ci|workflow_dispatch|integration_revalidation|"
-    f"{UPSTREAM_UID}|{UPSTREAM_PR}|{STRICT_BASE_OID}|{SOURCE_HEAD_OID}"
-)
-EDGE_COMMENT_BODY = (
-    "Explicit artifact dependency declaration for fast-recovery delivery consumption: "
-    f"downstream B task #{DOWNSTREAM_ISSUE} UID {DOWNSTREAM_UID} consumes upstream A "
-    f"#{UPSTREAM_ISSUE} / merged PR #{UPSTREAM_PR} commit {EDGE_MERGE_OID} as the exact "
-    "named source input doc/engineering/workflow/source-of-truth.md plus compatible "
-    "review-handoff tool closure from that commit. This edge is artifact-only: it requires "
-    "independent live merged identity, applicable review/CI and hold/acceptance verification "
-    "under the current source contract; A worktree removal is not a prerequisite for B source "
-    "consumption. It grants no generic artifact dependency for unrelated UIDs and does not "
-    "relax any resource/environment edge. The subsequent edge from B to original #3971/#3972 "
-    "may consume only B merged trusted retirement tools after B review/CI/readback; actual "
-    "mapping apply and #3972 candidate validation remain separate actions. Existing "
-    "legacy/unclassified dependencies keep terminal semantics. This records the edge already "
-    "specified by the user design and previous ordering, not a second state ledger or new authority."
-)
+ARTIFACT_DEPENDENCY_MARKER = "<!-- oasis7-artifact-dependency/v1 -->"
+ARTIFACT_DEPENDENCY_SCHEMA = "oasis7-artifact-dependency/v1"
+ARTIFACT_PATH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
+OID_RE = re.compile(r"^[0-9a-f]{40,64}$")
+TASK_UID_RE = re.compile(r"^task_[0-9a-f]{32}$")
+_EXCEPTION_PATH = pathlib.Path(__file__).with_name("workflow-process-exception.py")
+_EXCEPTION_SPEC = importlib.util.spec_from_file_location("workflow_process_exception", _EXCEPTION_PATH)
+if _EXCEPTION_SPEC is None or _EXCEPTION_SPEC.loader is None:
+    raise RuntimeError(f"cannot load process-exception validator at {_EXCEPTION_PATH}")
+PROCESS_EXCEPTIONS = importlib.util.module_from_spec(_EXCEPTION_SPEC)
+_EXCEPTION_SPEC.loader.exec_module(PROCESS_EXCEPTIONS)
 
 
 def _action_blocker(
@@ -174,12 +143,13 @@ def _ci_ok(value: Any, *, head_oid: str | None = None) -> bool:
 
 
 def derive_delivery_readiness(task_uid: str, proof: dict[str, Any]) -> dict[str, Any]:
-    """Evaluate the one exact A-to-B edge from independently loaded live facts.
+    """Evaluate one typed artifact edge from independently loaded live facts.
 
-    ``proof`` is an internal, normalized result of ``read_explicit_edge``. The CLI
-    never accepts caller-authored proof JSON.
+    No declaration means legacy terminal-delivery semantics. ``proof`` is
+    produced internally by ``read_explicit_edge`` and cannot be supplied on CLI.
     """
-    if task_uid != DOWNSTREAM_UID:
+    declaration = proof.get("declaration") if isinstance(proof, dict) else None
+    if not isinstance(declaration, dict):
         return {
             "delivery_ready": None,
             "cleanup_state": "not_applicable",
@@ -188,111 +158,83 @@ def derive_delivery_readiness(task_uid: str, proof: dict[str, Any]) -> dict[str,
         }
 
     reasons: list[tuple[str, str]] = []
-    edge = proof.get("edge") if isinstance(proof, dict) else None
-    edge_authority = proof.get("edge_authority") if isinstance(proof, dict) else None
-    downstream = proof.get("downstream") if isinstance(proof, dict) else None
-    upstream = proof.get("upstream_issue") if isinstance(proof, dict) else None
-    pr = proof.get("pr") if isinstance(proof, dict) else None
-    review = proof.get("review") if isinstance(proof, dict) else None
-    source_ci = proof.get("source_ci") if isinstance(proof, dict) else None
-    strict_ci = proof.get("strict_ci") if isinstance(proof, dict) else None
-    local_input = proof.get("local_input") if isinstance(proof, dict) else None
+    authority = proof.get("declaration_authority")
+    downstream = proof.get("downstream")
+    upstream = proof.get("upstream_issue")
+    pr = proof.get("pr")
+    review = proof.get("review")
+    source_ci = proof.get("source_ci")
+    local_input = proof.get("local_input")
+    pr_number = pr.get("number") if isinstance(pr, dict) else None
+    pr_head_oid = pr.get("head_oid") if isinstance(pr, dict) else None
+    upstream_uid = declaration.get("upstream_task_uid")
+    artifacts = declaration.get("artifacts")
+    locator = declaration.get("source_ci")
 
-    if not isinstance(edge, dict) or not (
-        edge.get("coordinator_issue") == COORDINATOR_ISSUE
-        and edge.get("comment_id") == EDGE_COMMENT_ID
-        and edge.get("downstream_issue") == DOWNSTREAM_ISSUE
-        and edge.get("downstream_task_uid") == DOWNSTREAM_UID
-        and edge.get("upstream_issue") == UPSTREAM_ISSUE
-        and edge.get("upstream_task_uid") == UPSTREAM_UID
-        and edge.get("upstream_pr") == UPSTREAM_PR
-        and edge.get("merge_commit_oid") == EDGE_MERGE_OID
-        and edge.get("required_source_path") == SOURCE_PATH
+    if (declaration.get("schema") != ARTIFACT_DEPENDENCY_SCHEMA
+            or declaration.get("task_uid") != task_uid
+            or not isinstance(upstream_uid, str) or not TASK_UID_RE.fullmatch(upstream_uid)):
+        reasons.append(("TASK_BINDING_CONFLICT", "the typed artifact dependency is malformed or bound to a different task"))
+    if not isinstance(authority, dict) or not (
+        authority.get("permission") == "admin" and authority.get("body_valid") is True
     ):
-        reasons.append(("TASK_BINDING_CONFLICT", "the live coordinator edge does not match the exact approved A-to-B artifact binding"))
-    if not isinstance(edge_authority, dict) or not (
-        edge_authority.get("comment_id") == EDGE_COMMENT_ID
-        and edge_authority.get("author") == "eng-cc"
-        and edge_authority.get("permission") == "admin"
-        and edge_authority.get("body_valid") is True
-    ):
-        reasons.append(("TASK_BINDING_CONFLICT", "the exact artifact-edge declaration lacks current live admin-author authority"))
+        reasons.append(("TASK_BINDING_CONFLICT", "the typed dependency lacks current authenticated Task-Issue authority"))
     if not isinstance(downstream, dict) or not (
-        downstream.get("issue_number") == DOWNSTREAM_ISSUE
-        and downstream.get("task_uid") == DOWNSTREAM_UID
-        and downstream.get("input_commit_oid") == EDGE_MERGE_OID
+        downstream.get("task_uid") == task_uid
+        and downstream.get("issue_number") == declaration.get("task_issue_number")
     ):
-        reasons.append(("TASK_BINDING_CONFLICT", "the downstream task does not bind the exact named source commit"))
-    if not isinstance(downstream, dict) or downstream.get("input_files_match") is not True:
-        reasons.append(("SOURCE_NOT_PUBLISHED", "the downstream worktree does not contain the exact named source and review-handoff tool closure"))
+        reasons.append(("TASK_BINDING_CONFLICT", "the bound Task Issue does not match the dependency declaration"))
     if not isinstance(upstream, dict) or not (
-        upstream.get("issue_number") == UPSTREAM_ISSUE
-        and upstream.get("task_uid") == UPSTREAM_UID
+        upstream.get("task_uid") == upstream_uid
         and upstream.get("status") == "done"
         and upstream.get("workflow_phase") in {"task_done", "main_sync", "post_merge_done"}
-        and str(upstream.get("pr_number") or "") == str(UPSTREAM_PR)
+        and str(upstream.get("pr_number") or "") == str(pr_number or "")
     ):
-        reasons.append(("TASK_BINDING_CONFLICT", "the live upstream task identity or delivered phase is incomplete"))
+        reasons.append(("TASK_BINDING_CONFLICT", "the live upstream Task Issue or delivered phase is incomplete"))
     if not isinstance(upstream, dict) or upstream.get("merge_hold_active") is not False:
         reasons.append(("TASK_BINDING_CONFLICT", "the upstream task has an active or uncertain merge/acceptance hold"))
     if not isinstance(pr, dict) or not (
-        pr.get("repository") == REPOSITORY
-        and pr.get("number") == UPSTREAM_PR
-        and pr.get("issue_number") == UPSTREAM_ISSUE
-        and pr.get("task_uid") == UPSTREAM_UID
+        pr.get("repository") == declaration.get("repository")
+        and pr.get("number") == (locator.get("pr_number") if isinstance(locator, dict) else None)
+        and pr.get("issue_number") == proof.get("upstream_issue_number")
+        and pr.get("task_uid") == upstream_uid
         and str(pr.get("state") or "").lower() == "closed"
         and pr.get("merged") is True
-        and pr.get("merge_commit_oid") == EDGE_MERGE_OID
-        and pr.get("base_ref") == "main"
+        and isinstance(pr.get("merge_commit_oid"), str)
+        and OID_RE.fullmatch(pr["merge_commit_oid"])
+        and pr.get("base_ref") == pr.get("default_branch")
         and isinstance(pr.get("head_oid"), str)
-        and re.fullmatch(r"[0-9a-f]{40,64}", pr["head_oid"])
+        and OID_RE.fullmatch(pr["head_oid"])
     ):
-        reasons.append(("TASK_BINDING_CONFLICT", "live merged PR identity or merge commit differs from the declared artifact"))
+        reasons.append(("TASK_BINDING_CONFLICT", "the uniquely reciprocal live merged PR does not match the declared upstream task"))
     if not isinstance(review, dict) or not (
-        review.get("comment_id") == REVIEW_COMMENT_ID
-        and review.get("task_uid") == UPSTREAM_UID
-        and review.get("source_head_oid") == SOURCE_HEAD_OID
-        and review.get("author") == "eng-cc"
+        review.get("task_uid") == upstream_uid
+        and pr_head_oid is not None and review.get("source_head_oid") == pr_head_oid
         and review.get("passed") is True
+        and review.get("admin_author") is True
         and review.get("findings_disposition") == "addressed"
-        and set(review.get("roles") or []) >= {
-            "producer_system_designer", "repository_health_engineer", "qa_engineer",
-        }
+        and isinstance(review.get("roles"), list) and bool(review["roles"])
     ):
-        reasons.append(("REVIEW_FINDING_BLOCKING", "current source review is missing, stale, incomplete or unresolved"))
+        reasons.append(("REVIEW_FINDING_BLOCKING", "current source-head review is missing, stale, incomplete or unresolved"))
     if not isinstance(source_ci, dict) or not (
-        source_ci.get("check_name") == "required-gate"
+        isinstance(locator, dict)
+        and source_ci.get("check_name") == "required-gate"
         and source_ci.get("app_id") == REQUIRED_GATE_APP_ID
-        and _ci_ok(source_ci, head_oid=SOURCE_HEAD_OID)
+        and source_ci.get("check_run_id") == locator.get("check_run_id")
+        and source_ci.get("run_id") == locator.get("run_id")
+        and source_ci.get("run_attempt") == locator.get("run_attempt")
+        and source_ci.get("pr_number") == pr_number
+        and source_ci.get("head_oid") == pr_head_oid
+        and source_ci.get("pr_association_verified") is True
+        and _ci_ok(source_ci, head_oid=pr_head_oid)
     ):
-        reasons.append(("CURRENT_CHECK_FAILED", "the current required-gate check for the merged source head is missing or unsuccessful"))
-    if not isinstance(strict_ci, dict) or not (
-        strict_ci.get("run_id") == STRICT_RUN_ID
-        and strict_ci.get("event") == "workflow_dispatch"
-        and strict_ci.get("workflow_path") == ".github/workflows/rust.yml"
-        and strict_ci.get("head_branch") == "main"
-        and strict_ci.get("head_oid") == STRICT_BASE_OID
-        and strict_ci.get("status") == "completed"
-        and str(strict_ci.get("conclusion") or "").lower() == "success"
-        and strict_ci.get("display_title") == STRICT_RUN_TITLE
-        and isinstance(strict_ci.get("run_attempt"), int)
-        and strict_ci.get("run_attempt", 0) > 0
-        and isinstance(strict_ci.get("required_gate_job"), dict)
-        and strict_ci["required_gate_job"].get("name") == "required-gate"
-        and strict_ci["required_gate_job"].get("status") == "completed"
-        and str(strict_ci["required_gate_job"].get("conclusion") or "").lower() == "success"
-        and strict_ci["required_gate_job"].get("app_id") == REQUIRED_GATE_APP_ID
-        and strict_ci["required_gate_job"].get("run_attempt") == strict_ci.get("run_attempt")
-    ):
-        reasons.append(("CURRENT_CHECK_FAILED", "the exact trusted current-target integration run or required-gate job is missing or unsuccessful"))
-    if not isinstance(local_input, dict) or not (
-        local_input.get("repository") == REPOSITORY
+        reasons.append(("CURRENT_CHECK_FAILED", "the exact declared source-PR required-gate check/run/attempt is missing, unassociated or unsuccessful"))
+    if not isinstance(artifacts, list) or not artifacts or not isinstance(local_input, dict) or not (
+        local_input.get("repository") == declaration.get("repository")
         and local_input.get("head_contains_merge_commit") is True
-        and local_input.get("source_path_present") is True
-        and local_input.get("source_path_matches_merge_commit") is True
-        and local_input.get("review_handoff_closure_matches_merge_commit") is True
+        and local_input.get("artifacts_match") is True
     ):
-        reasons.append(("SOURCE_NOT_PUBLISHED", "the downstream repository does not consume the exact merged source and helper closure"))
+        reasons.append(("SOURCE_NOT_PUBLISHED", "the downstream worktree does not contain every exact declared artifact from the merged source"))
 
     action_blockers = []
     seen: set[tuple[str, str]] = set()
@@ -325,7 +267,7 @@ def derive_delivery_readiness(task_uid: str, proof: dict[str, Any]) -> dict[str,
         "delivery_ready": ready,
         "cleanup_state": cleanup_state,
         "action_blockers": action_blockers,
-        "dependency": "4082:A4139-to-B4095:artifact",
+        "dependency": f"{upstream_uid}:artifact",
     }
 
 
@@ -371,255 +313,342 @@ def _canonical_uid(body: str) -> str | None:
     return matches[0] if len(matches) == 1 else None
 
 
-def _identity_comment(comment_id: int) -> dict[str, Any]:
-    value = _gh_json(f"repos/{REPOSITORY}/issues/comments/{comment_id}")
-    if not isinstance(value, dict) or type(value.get("id")) is not int:
-        raise ValueError(f"GitHub comment readback is malformed: {comment_id}")
-    return value
+def _positive_int(value: Any) -> bool:
+    return type(value) is int and value > 0
 
 
-def _workflow_run(run_id: int, *, expected_head: str, expected_event: str,
-                  expected_attempt: int | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
-    run = _gh_json(f"repos/{REPOSITORY}/actions/runs/{run_id}")
-    if not isinstance(run, dict) or run.get("id") != run_id:
-        raise ValueError(f"workflow run identity is malformed: {run_id}")
-    if (run.get("path") != ".github/workflows/rust.yml"
-            or run.get("head_sha") != expected_head
-            or run.get("event") != expected_event
-            or run.get("status") != "completed"
-            or str(run.get("conclusion") or "").lower() != "success"):
-        raise ValueError(f"workflow run identity or conclusion is not successful: {run_id}")
-    attempt = run.get("run_attempt")
-    if type(attempt) is not int or attempt < 1 or (expected_attempt is not None and attempt != expected_attempt):
-        raise ValueError(f"workflow run attempt is invalid: {run_id}")
-    jobs = _pages(f"repos/{REPOSITORY}/actions/runs/{run_id}/jobs", "jobs")
-    return run, {"jobs": jobs, "run_attempt": attempt}
-
-
-def _check_for_pr_head(pr_number: int, head_oid: str) -> dict[str, Any]:
-    checks = _pages(f"repos/{REPOSITORY}/commits/{head_oid}/check-runs", "check_runs")
-    matches = [item for item in checks if isinstance(item, dict)
-               and item.get("name") == "required-gate"
-               and (item.get("app") or {}).get("id") == REQUIRED_GATE_APP_ID]
-    if not matches:
-        raise ValueError("exact source-head required-gate check is missing")
-    check = max(matches, key=lambda row: row.get("id") if type(row.get("id")) is int else 0)
-    if (check.get("head_sha") != head_oid or check.get("status") != "completed"
-            or str(check.get("conclusion") or "").lower() != "success"):
-        raise ValueError("exact source-head required-gate check is not successful")
-    details = str(check.get("details_url") or "")
-    match = re.fullmatch(rf"https://github\.com/{re.escape(REPOSITORY)}/actions/runs/([1-9][0-9]*)/job/[1-9][0-9]*", details)
+def _is_admin(repository: str, login: str) -> bool:
+    from urllib.parse import quote
+    endpoint = f"repos/{repository}/collaborators/{quote(login, safe='')}/permission"
+    try:
+        result = subprocess.run(
+            ["gh", "api", "--include", endpoint], text=True, capture_output=True, check=False,
+        )
+    except OSError as exc:
+        raise ValueError(f"GitHub permission read unavailable: {exc}") from exc
+    response = (result.stdout or "").replace("\r\n", "\n")
+    status_line = response.split("\n", 1)[0]
+    match = re.fullmatch(r"HTTP/\S+ ([0-9]{3})(?: .*)?", status_line)
     if not match:
-        raise ValueError("required-gate check does not identify a trusted workflow job")
-    run_id = int(match.group(1))
-    run, attempt_payload = _workflow_run(run_id, expected_head=head_oid, expected_event="pull_request")
-    jobs = [item for item in attempt_payload["jobs"] if isinstance(item, dict)
-            and item.get("name") == "required-gate"
-            and item.get("run_attempt") == attempt_payload["run_attempt"]
-            and str(item.get("check_run_url") or "").endswith(f"/check-runs/{check['id']}")]
-    if len(jobs) != 1 or jobs[0].get("status") != "completed" or jobs[0].get("conclusion") != "success":
-        raise ValueError("required-gate workflow job is missing, ambiguous, or unsuccessful")
+        raise ValueError("GitHub permission response status is unavailable")
+    status = int(match.group(1))
+    if status == 404:
+        return False
+    if result.returncode or not 200 <= status < 300:
+        raise ValueError(f"GitHub permission read failed with HTTP {status}")
+    separator = response.find("\n\n")
+    if separator < 0:
+        raise ValueError("GitHub permission response body is unavailable")
+    try:
+        value = json.loads(response[separator + 2:])
+    except json.JSONDecodeError as exc:
+        raise ValueError("GitHub permission response body is malformed") from exc
+    user = value.get("user") if isinstance(value, dict) else None
+    if not isinstance(user, dict) or user.get("login") != login:
+        raise ValueError("GitHub permission response user does not match the comment author")
+    return value.get("permission") == "admin"
+
+
+def _typed_record(comments: list[Any], marker: str, schema: str, issue_url: str) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    candidates = [item for item in comments if isinstance(item, dict)
+                  and isinstance(item.get("body"), str) and marker in item["body"]]
+    if not candidates:
+        return None
+    if len(candidates) != 1:
+        raise ValueError("Task Issue contains duplicate typed evidence records")
+    comment = candidates[0]
+    body = comment.get("body")
+    if comment.get("issue_url") != issue_url or not body.startswith(marker + "\n") or body.count(marker) != 1:
+        raise ValueError("typed evidence marker framing or Task Issue identity is invalid")
+    raw = body[len(marker) + 1:]
+    try:
+        record = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError("typed evidence is malformed JSON") from exc
+    if (not isinstance(record, dict)
+            or json.dumps(record, ensure_ascii=True, sort_keys=True, separators=(",", ":")) != raw
+            or record.get("schema") != schema
+            or type(comment.get("id")) is not int):
+        raise ValueError("typed evidence is noncanonical or has an unsupported schema")
+    return comment, record
+
+
+def _associated_pr_numbers(value: Any, repository: str) -> list[int]:
+    if not isinstance(value, list) or not value:
+        raise ValueError("check/run has no live PR association")
+    numbers: list[int] = []
+    for item in value:
+        number = item.get("number") if isinstance(item, dict) else None
+        if not _positive_int(number):
+            url = item.get("url") or item.get("html_url") if isinstance(item, dict) else None
+            match = re.fullmatch(rf"https://(?:api\.)?github\.com/{re.escape(repository)}/(?:pulls|pull)/([1-9][0-9]*)(?:/.*)?", str(url or ""))
+            if not match:
+                raise ValueError("check/run PR association is malformed")
+            number = int(match.group(1))
+        numbers.append(number)
+    return numbers
+
+
+def _verify_declared_ci(repository: str, locator: dict[str, Any], pr_number: int,
+                        head_oid: str, head_branch: str, *,
+                        allow_empty_pr_association: bool = False) -> dict[str, Any]:
+    required = {"pr_number", "head_oid", "check_run_id", "run_id", "run_attempt"}
+    if set(locator) != required or not all(_positive_int(locator.get(key)) for key in
+                                           ("pr_number", "check_run_id", "run_id", "run_attempt")):
+        raise ValueError("typed source CI locator has missing or unknown fields")
+    if locator["pr_number"] != pr_number or locator["head_oid"] != head_oid:
+        raise ValueError("typed source CI locator does not bind the derived reciprocal PR head")
+
+    check = _gh_json(f"repos/{repository}/check-runs/{locator['check_run_id']}")
+    if not isinstance(check, dict) or check.get("id") != locator["check_run_id"]:
+        raise ValueError("declared check-run identity is unreadable or mismatched")
+    check_associations = check.get("pull_requests")
+    if not isinstance(check_associations, list):
+        raise ValueError("check-run PR association is malformed")
+    associations = _associated_pr_numbers(check_associations, repository) if check_associations else []
+    if (associations and any(number != pr_number for number in associations)
+            or not associations and not allow_empty_pr_association):
+        raise ValueError("check-run PR association is empty or conflicts with the declared PR")
+    if (check.get("name") != "required-gate"
+            or (check.get("app") or {}).get("id") != REQUIRED_GATE_APP_ID
+            or check.get("head_sha") != head_oid):
+        raise ValueError("declared check-run name, app, or head is not the required source check")
+    details = str(check.get("details_url") or "")
+    match = re.fullmatch(rf"https://github\.com/{re.escape(repository)}/actions/runs/([1-9][0-9]*)/job/([1-9][0-9]*)", details)
+    if not match or int(match.group(1)) != locator["run_id"]:
+        raise ValueError("declared check-run details do not identify the bound workflow run")
+
+    run_id = locator["run_id"]
+    run = _gh_json(f"repos/{repository}/actions/runs/{run_id}")
+    if (not isinstance(run, dict) or run.get("id") != run_id
+            or run.get("run_attempt") != locator["run_attempt"]
+            or run.get("head_sha") != head_oid or run.get("head_branch") != head_branch
+            or run.get("path") != ".github/workflows/rust.yml"
+            or run.get("event") != "pull_request"):
+        raise ValueError("declared workflow run repository/ref/head/event/attempt identity is mismatched")
+    run_association_rows = run.get("pull_requests")
+    if not isinstance(run_association_rows, list):
+        raise ValueError("workflow run PR association is malformed")
+    run_associations = _associated_pr_numbers(run_association_rows, repository) if run_association_rows else []
+    if (run_associations and any(number != pr_number for number in run_associations)
+            or not run_associations and not allow_empty_pr_association):
+        raise ValueError("workflow run PR association is empty or conflicts with the declared PR")
+    jobs = _pages(f"repos/{repository}/actions/runs/{run_id}/jobs", "jobs")
+    job_id = int(match.group(2))
+    job_url = f"https://api.github.com/repos/{repository}/check-runs/{locator['check_run_id']}"
+    matches = [job for job in jobs if isinstance(job, dict)
+               and job.get("id") == job_id and job.get("name") == "required-gate"
+               and job.get("run_attempt") == locator["run_attempt"]
+               and job.get("check_run_url") == job_url]
+    if len(matches) != 1:
+        raise ValueError("declared required-gate job is missing or ambiguous for this attempt")
+    job = matches[0]
+    if (check.get("status") != "completed" or str(check.get("conclusion") or "").lower() != "success"
+            or run.get("status") != "completed" or str(run.get("conclusion") or "").lower() != "success"
+            or job.get("status") != "completed" or str(job.get("conclusion") or "").lower() != "success"):
+        raise ValueError("declared source check/run/job attempt is not successful")
     return {
-        "check_name": "required-gate",
-        "app_id": REQUIRED_GATE_APP_ID,
-        "head_oid": head_oid,
-        "status": check.get("status"),
-        "conclusion": check.get("conclusion"),
-        "check_run_id": check.get("id"),
-        "run_id": run_id,
-        "run_attempt": attempt_payload["run_attempt"],
+        "check_name": check.get("name"), "app_id": (check.get("app") or {}).get("id"),
+        "head_oid": head_oid, "status": check.get("status"), "conclusion": check.get("conclusion"),
+        "check_run_id": check.get("id"), "run_id": run_id, "run_attempt": locator["run_attempt"],
+        "pr_number": pr_number, "pr_association_verified": True,
+        "pr_association_basis": "live_github" if check_associations or run_association_rows else "authenticated_task_evidence_and_exact_run_identity",
+        "workflow_path": run.get("path"), "head_branch": run.get("head_branch"),
+        "job_name": job.get("name"), "job_status": job.get("status"),
+        "job_conclusion": job.get("conclusion"),
     }
 
 
-def _source_files_match(root: pathlib.Path, merge_oid: str, files: list[dict[str, Any]]) -> tuple[bool, list[dict[str, str]]]:
-    names: list[str] = []
-    seen: set[str] = set()
-    for row in files:
+def _safe_artifact_path(name: Any) -> bool:
+    if (not isinstance(name, str) or not ARTIFACT_PATH_RE.fullmatch(name)
+            or name.startswith("/") or "//" in name):
+        return False
+    path = pathlib.PurePosixPath(name)
+    return (not path.is_absolute() and all(part not in {"", ".", ".."} for part in path.parts)
+            and "\\" not in name)
+
+
+def _artifact_matches(root: pathlib.Path, merge_oid: str, declaration_artifacts: list[Any],
+                      changed_files: list[Any]) -> tuple[bool, list[dict[str, str]]]:
+    changed: set[str] = set()
+    for row in changed_files:
         if not isinstance(row, dict) or not isinstance(row.get("filename"), str):
             raise ValueError("merged PR file list contains malformed entry")
-        name = row["filename"]
-        path = pathlib.PurePosixPath(name)
-        if path.is_absolute() or not name or any(part in {"", ".", ".."} for part in path.parts):
-            raise ValueError("merged PR file list contains unsafe repository path")
-        if name in seen:
-            raise ValueError("merged PR file list contains duplicate path")
-        seen.add(name)
-        names.append(name)
-    if SOURCE_PATH not in seen or not HANDOFF_CLOSURE_PATHS <= seen:
-        return False, []
-    exact: list[dict[str, str]] = []
-    for name in sorted(names):
+        changed.add(row["filename"])
+    digests: list[dict[str, str]] = []
+    seen_paths: set[str] = set()
+    for item in declaration_artifacts:
+        if (not isinstance(item, dict) or set(item) != {"path", "sha256"}
+                or not _safe_artifact_path(item.get("path"))
+                or not isinstance(item.get("sha256"), str)
+                or not re.fullmatch(r"[0-9a-f]{64}", item["sha256"])):
+            raise ValueError("typed artifact entry has unsafe path or invalid digest")
+        name = item["path"]
+        if name in seen_paths:
+            raise ValueError("typed artifact paths must be unique")
+        seen_paths.add(name)
+        if name not in changed:
+            return False, digests
         path = root.joinpath(*pathlib.PurePosixPath(name).parts)
-        if not path.is_file():
-            return False, exact
         try:
             expected = subprocess.check_output(
-                ["git", "-C", str(root), "show", f"{merge_oid}:{name}"],
-                stderr=subprocess.DEVNULL,
+                ["git", "-C", str(root), "show", f"{merge_oid}:{name}"], stderr=subprocess.DEVNULL,
             )
             actual = path.read_bytes()
         except (OSError, subprocess.CalledProcessError):
-            return False, exact
-        if actual != expected:
-            return False, exact
-        exact.append({"path": name, "sha256": hashlib.sha256(actual).hexdigest()})
-    return True, exact
+            return False, digests
+        digest = hashlib.sha256(expected).hexdigest()
+        if digest != item["sha256"] or actual != expected:
+            return False, digests
+        digests.append({"path": name, "sha256": digest})
+    return bool(declaration_artifacts), digests
 
 
-def read_explicit_edge(root: pathlib.Path, task_uid: str) -> dict[str, Any]:
-    """Read and validate current GitHub/working-tree proof for the one A-to-B edge."""
-    if task_uid != DOWNSTREAM_UID:
+def read_explicit_edge(root: pathlib.Path, task: dict[str, Any]) -> dict[str, Any]:
+    """Resolve a typed artifact dependency from the bound Task Issue's live evidence."""
+    task_uid = str(task.get("task_uid") or "")
+    repository = str(task.get("repository") or "")
+    issue_number_raw = task.get("issue_number")
+    if isinstance(issue_number_raw, str) and re.fullmatch(r"[1-9][0-9]*", issue_number_raw):
+        issue_number_raw = int(issue_number_raw)
+    if repository != REPOSITORY:
         return {}
-    edge_comment = _identity_comment(EDGE_COMMENT_ID)
-    permission = _gh_json(f"repos/{REPOSITORY}/collaborators/{edge_comment.get('user', {}).get('login')}/permission")
-    edge_text = edge_comment.get("body")
-    if (edge_comment.get("issue_url") != f"https://api.github.com/repos/{REPOSITORY}/issues/{COORDINATOR_ISSUE}"
-            or edge_text != EDGE_COMMENT_BODY
-            or (edge_comment.get("user") or {}).get("login") != "eng-cc"
-            or not isinstance(permission, dict) or permission.get("permission") != "admin"):
-        raise ValueError("explicit artifact edge comment or current admin authority is invalid")
+    if not TASK_UID_RE.fullmatch(task_uid) or not _positive_int(issue_number_raw):
+        raise ValueError("bound task identity is malformed for dependency discovery")
+    issue_number = int(issue_number_raw)
+    issue_url = f"https://api.github.com/repos/{repository}/issues/{issue_number}"
+    issue = _gh_json(f"repos/{repository}/issues/{issue_number}")
+    body = issue.get("body") if isinstance(issue, dict) else None
+    if (not isinstance(issue, dict) or issue.get("number") != issue_number
+            or "pull_request" in issue or not isinstance(body, str)
+            or _canonical_uid(body) != task_uid):
+        raise ValueError("bound Task Issue live UID/number identity is invalid")
+    comments = _pages(f"repos/{repository}/issues/{issue_number}/comments", None)
+    typed = _typed_record(comments, ARTIFACT_DEPENDENCY_MARKER, ARTIFACT_DEPENDENCY_SCHEMA, issue_url)
+    if typed is None:
+        return {}
+    issue = _resolve_project_task_issue(task_uid, issue_number)
+    body = issue["body"]
+    declaration_comment, declaration = typed
+    author = (declaration_comment.get("user") or {}).get("login")
+    if (not isinstance(author, str) or not _is_admin(repository, author)
+            or declaration.get("repository") != repository
+            or declaration.get("task_uid") != task_uid
+            or declaration.get("task_issue_number") != issue_number):
+        raise ValueError("typed artifact dependency lacks current Task-Issue admin authority or exact binding")
+    expected_fields = {"schema", "repository", "task_uid", "task_issue_number", "upstream_task_uid", "artifacts", "source_ci"}
+    if (set(declaration) != expected_fields
+            or not isinstance(declaration.get("upstream_task_uid"), str)
+            or not TASK_UID_RE.fullmatch(declaration["upstream_task_uid"])
+            or not isinstance(declaration.get("artifacts"), list) or not declaration["artifacts"]
+            or not isinstance(declaration.get("source_ci"), dict)):
+        raise ValueError("typed artifact dependency fields are incomplete or unknown")
 
-    downstream_issue = _gh_json(f"repos/{REPOSITORY}/issues/{DOWNSTREAM_ISSUE}")
-    downstream_body = downstream_issue.get("body") if isinstance(downstream_issue, dict) else None
-    if (not isinstance(downstream_issue, dict) or downstream_issue.get("number") != DOWNSTREAM_ISSUE
-            or not isinstance(downstream_body, str) or _canonical_uid(downstream_body) != DOWNSTREAM_UID):
-        raise ValueError("downstream task Issue does not bind the authorized UID")
+    upstream_issue = _resolve_project_task_issue(declaration["upstream_task_uid"])
+    upstream_number = upstream_issue.get("number")
+    upstream_body = upstream_issue["body"]
+    if not _positive_int(upstream_number):
+        raise ValueError("upstream Task Issue number is malformed")
+    project_task_pr_number, project_task_pr_url = _project_readback()._live_task_pr(
+        upstream_issue, declaration["upstream_task_uid"],
+    )
+    pr_number = project_task_pr_number
+    if project_task_pr_url != f"https://github.com/{repository}/pull/{pr_number}":
+        raise ValueError("Project Task Issue PR URL does not match its canonical PR number")
+    pr = _gh_json(f"repos/{repository}/pulls/{pr_number}")
+    repo = _gh_json(f"repos/{repository}")
+    default_branch = repo.get("default_branch") if isinstance(repo, dict) else None
+    pr_body = str(pr.get("body") or "") if isinstance(pr, dict) else ""
+    pr_head = pr.get("head") if isinstance(pr, dict) else None
+    pr_base = pr.get("base") if isinstance(pr, dict) else None
+    task_refs = re.findall(rf"(?m)^Task: {re.escape(declaration['upstream_task_uid'])}$", pr_body)
+    issue_refs = re.findall(rf"(?m)^Refs #{upstream_number}$", pr_body)
+    head_oid = pr_head.get("sha") if isinstance(pr_head, dict) else None
+    head_branch = pr_head.get("ref") if isinstance(pr_head, dict) else None
+    merge_oid = pr.get("merge_commit_sha") if isinstance(pr, dict) else None
+    if (not isinstance(pr, dict) or pr.get("number") != pr_number
+            or len(task_refs) != 1 or len(issue_refs) != 1
+            or pr.get("state") != "closed" or pr.get("merged") is not True
+            or not isinstance(pr_base, dict) or pr_base.get("ref") != default_branch
+            or not isinstance(head_oid, str) or not OID_RE.fullmatch(head_oid)
+            or not isinstance(head_branch, str) or not isinstance(merge_oid, str) or not OID_RE.fullmatch(merge_oid)):
+        raise ValueError("reciprocal source PR is not a verified merged delivery to the default branch")
 
-    upstream_issue = _gh_json(f"repos/{REPOSITORY}/issues/{UPSTREAM_ISSUE}")
-    upstream_body = upstream_issue.get("body") if isinstance(upstream_issue, dict) else None
-    if (not isinstance(upstream_issue, dict) or upstream_issue.get("number") != UPSTREAM_ISSUE
-            or not isinstance(upstream_body, str) or _canonical_uid(upstream_body) != UPSTREAM_UID):
-        raise ValueError("upstream task Issue does not bind the authorized UID")
-
-    pr = _gh_json(f"repos/{REPOSITORY}/pulls/{UPSTREAM_PR}")
-    if not isinstance(pr, dict):
-        raise ValueError("upstream PR read is malformed")
-    pr_body = str(pr.get("body") or "")
-    pr_identity = {
-        "repository": REPOSITORY,
-        "number": pr.get("number"),
-        "issue_number": UPSTREAM_ISSUE,
-        "task_uid": UPSTREAM_UID,
-        "state": pr.get("state"),
-        "merged": pr.get("merged"),
-        "merge_commit_oid": pr.get("merge_commit_sha"),
-        "head_oid": ((pr.get("head") or {}).get("sha")),
-        "base_ref": ((pr.get("base") or {}).get("ref")),
-    }
-    if f"Task: {UPSTREAM_UID}" not in pr_body or f"Refs #{UPSTREAM_ISSUE}" not in pr_body:
-        raise ValueError("upstream PR does not bind the exact task Issue")
-
-    review_comment = _identity_comment(REVIEW_COMMENT_ID)
+    locator = declaration["source_ci"]
+    source_ci = _verify_declared_ci(
+        repository, locator, pr_number, head_oid, head_branch,
+        allow_empty_pr_association=True,
+    )
+    source_comments = _pages(f"repos/{repository}/issues/{upstream_number}/comments", None)
+    reviews = []
+    for comment in source_comments:
+        text = comment.get("body") if isinstance(comment, dict) else None
+        if not isinstance(text, str):
+            continue
+        if (_body_field(text, "Task UID") == declaration["upstream_task_uid"]
+                and _body_field(text, "Source Head") == head_oid
+                and _body_field(text, "Review Roles") is not None
+                and any(line.startswith("- Pre-PR Local Role Review:") for line in text.splitlines())):
+            reviews.append(comment)
+    if not reviews:
+        raise ValueError("source Task Issue lacks an exact source-head review packet")
+    reviews.sort(key=lambda item: (str(item.get("updated_at") or item.get("created_at") or ""),
+                                   int(item.get("id") or 0)))
+    review_comment = reviews[-1]
+    review_author = (review_comment.get("user") or {}).get("login")
     review_text = str(review_comment.get("body") or "")
     role_line = next((line for line in review_text.splitlines() if line.startswith("- Review Roles: ")), "")
-    roles = [role.strip() for role in role_line.removeprefix("- Review Roles: ").split(",")] if role_line else []
+    roles = [role.strip() for role in role_line.removeprefix("- Review Roles: ").split(",") if role.strip()]
     review = {
-        "comment_id": review_comment.get("id"),
-        "task_uid": _body_field(review_text, "Task UID"),
+        "comment_id": review_comment.get("id"), "task_uid": _body_field(review_text, "Task UID"),
         "source_head_oid": _body_field(review_text, "Source Head"),
-        "author": (review_comment.get("user") or {}).get("login"),
         "passed": "- Pre-PR Local Role Review: passed" in review_text,
-        "roles": roles,
-        "findings_disposition": _body_field(review_text, "Review Findings Disposition"),
+        "roles": roles, "findings_disposition": _body_field(review_text, "Review Findings Disposition"),
+        "admin_author": isinstance(review_author, str) and _is_admin(repository, review_author),
     }
-    if review_comment.get("issue_url") != f"https://api.github.com/repos/{REPOSITORY}/issues/{UPSTREAM_ISSUE}":
-        raise ValueError("source review packet is published on the wrong Issue")
+    if review_comment.get("issue_url") != f"https://api.github.com/repos/{repository}/issues/{upstream_number}":
+        raise ValueError("source review packet is published on the wrong Task Issue")
 
-    dispatch_comment = _identity_comment(REVIEW_DISPATCH_COMMENT_ID)
-    dispatch_text = str(dispatch_comment.get("body") or "")
-    if (dispatch_comment.get("issue_url") != f"https://api.github.com/repos/{REPOSITORY}/issues/{UPSTREAM_ISSUE}"
-            or UPSTREAM_UID not in dispatch_text
-            or f"PR # {UPSTREAM_PR}" not in dispatch_text and f"PR #{UPSTREAM_PR}" not in dispatch_text
-            or f"main@{STRICT_BASE_OID}..{SOURCE_HEAD_OID}" not in dispatch_text
-            or f"strict run {STRICT_RUN_ID} pending" not in dispatch_text):
-        raise ValueError("source review/strict-CI dispatch identity is not exact")
-
-    source_ci = _check_for_pr_head(UPSTREAM_PR, SOURCE_HEAD_OID)
-    strict_run = _gh_json(f"repos/{REPOSITORY}/actions/runs/{STRICT_RUN_ID}")
-    strict_jobs_payload = _pages(f"repos/{REPOSITORY}/actions/runs/{STRICT_RUN_ID}/jobs", "jobs")
-    strict_matches = [job for job in strict_jobs_payload if isinstance(job, dict) and job.get("name") == "required-gate"]
-    strict_job: dict[str, Any] = {}
-    if len(strict_matches) == 1:
-        raw_job = strict_matches[0]
-        check_run_url = str(raw_job.get("check_run_url") or "")
-        match = re.fullmatch(rf"https://api\.github\.com/repos/{re.escape(REPOSITORY)}/check-runs/([1-9][0-9]*)", check_run_url)
-        if match:
-            check = _gh_json(f"repos/{REPOSITORY}/check-runs/{match.group(1)}")
-            strict_job = {
-                "name": raw_job.get("name"),
-                "status": raw_job.get("status"),
-                "conclusion": raw_job.get("conclusion"),
-                "app_id": ((check.get("app") or {}).get("id")) if isinstance(check, dict) else None,
-                "run_attempt": raw_job.get("run_attempt"),
-            }
-    strict_ci = {
-        key: strict_run.get(key) for key in (
-            "id", "run_attempt", "event", "path", "head_branch", "head_sha", "status", "conclusion", "display_title",
-        )
-    } if isinstance(strict_run, dict) else {}
-    strict_ci["run_id"] = strict_ci.pop("id", None)
-    strict_ci["workflow_path"] = strict_ci.pop("path", None)
-    strict_ci["head_oid"] = strict_ci.pop("head_sha", None)
-    strict_ci["required_gate_job"] = strict_job
-
-    files = _pages(f"repos/{REPOSITORY}/pulls/{UPSTREAM_PR}/files", None)
-    files_match, file_digests = _source_files_match(root, EDGE_MERGE_OID, files)
+    changed_files = _pages(f"repos/{repository}/pulls/{pr_number}/files", None)
+    artifact_ok, file_digests = _artifact_matches(root, merge_oid, declaration["artifacts"], changed_files)
     local_head = _git_value(root, "rev-parse", "HEAD")
     ancestry = subprocess.run(
-        ["git", "-C", str(root), "merge-base", "--is-ancestor", EDGE_MERGE_OID, "HEAD"],
-        capture_output=True,
-        check=False,
+        ["git", "-C", str(root), "merge-base", "--is-ancestor", merge_oid, "HEAD"],
+        capture_output=True, check=False,
     ).returncode == 0
     local_input = {
-        "repository": REPOSITORY if _repository_identity(root) == REPOSITORY else None,
-        "head_oid": local_head,
-        "head_contains_merge_commit": ancestry,
-        "source_path_present": any(item.get("path") == SOURCE_PATH for item in file_digests),
-        "source_path_matches_merge_commit": any(item.get("path") == SOURCE_PATH for item in file_digests),
-        "review_handoff_closure_matches_merge_commit": HANDOFF_CLOSURE_PATHS <= {
-            item.get("path") for item in file_digests
-        },
+        "repository": repository if _repository_identity(root) == repository else None,
+        "head_oid": local_head, "head_contains_merge_commit": ancestry,
+        "artifacts_match": artifact_ok and ancestry and _repository_identity(root) == repository,
         "file_digests": file_digests,
     }
     hold_value = _body_field(upstream_body, "merge_hold_active")
     merge_hold_active = True if hold_value == "true" else False if hold_value == "false" else None
-    upstream_identity = {
-        "issue_number": upstream_issue.get("number"),
-        "task_uid": _canonical_uid(upstream_body),
-        "status": _body_field(upstream_body, "status"),
-        "workflow_phase": _body_field(upstream_body, "workflow_phase"),
-        "pr_number": _body_field(upstream_body, "pr_number"),
-        "merge_hold_active": merge_hold_active,
-    }
     proof = {
-        "edge": {
-            "coordinator_issue": COORDINATOR_ISSUE,
-            "comment_id": edge_comment.get("id"),
-            "downstream_issue": downstream_issue.get("number"),
-            "downstream_task_uid": _canonical_uid(downstream_body),
-            "upstream_issue": UPSTREAM_ISSUE,
-            "upstream_task_uid": _canonical_uid(upstream_body),
-            "upstream_pr": pr_identity["number"],
-            "merge_commit_oid": pr_identity["merge_commit_oid"],
-            "required_source_path": SOURCE_PATH,
+        "declaration": declaration,
+        "declaration_authority": {
+            "comment_id": declaration_comment.get("id"), "author": author,
+            "permission": "admin", "body_valid": True,
         },
-        "edge_authority": {
-            "comment_id": edge_comment.get("id"),
-            "author": (edge_comment.get("user") or {}).get("login"),
-            "permission": permission.get("permission") if isinstance(permission, dict) else None,
-            "body_valid": edge_text == EDGE_COMMENT_BODY,
+        "downstream": {"issue_number": issue_number, "task_uid": task_uid},
+        "upstream_issue_number": upstream_number,
+        "upstream_issue": {
+            "issue_number": upstream_number,
+            "task_uid": _canonical_uid(upstream_body),
+            "status": _body_field(upstream_body, "status"),
+            "workflow_phase": _body_field(upstream_body, "workflow_phase"),
+            "pr_number": pr_number,
+            "merge_hold_active": merge_hold_active,
         },
-        "downstream": {
-            "issue_number": downstream_issue.get("number"),
-            "task_uid": _canonical_uid(downstream_body),
-            "input_commit_oid": EDGE_MERGE_OID if ancestry else None,
-            "input_files_match": files_match and ancestry and local_input["repository"] == REPOSITORY,
+        "pr": {
+            "repository": repository, "number": pr_number, "issue_number": upstream_number,
+            "task_uid": declaration["upstream_task_uid"], "state": pr.get("state"),
+            "merged": pr.get("merged"), "merge_commit_oid": merge_oid,
+            "head_oid": head_oid, "base_ref": pr_base.get("ref"),
+            "default_branch": default_branch,
         },
-        "upstream_issue": upstream_identity,
-        "pr": pr_identity,
         "review": review,
         "source_ci": source_ci,
-        "strict_ci": strict_ci,
         "local_input": local_input,
     }
     return proof
@@ -636,6 +665,91 @@ def _repository_identity(root: pathlib.Path) -> str | None:
     origin = _git_value(root, "config", "--get", "remote.origin.url")
     match = re.fullmatch(r"(?:https://github\.com/|git@github\.com:)([^/]+/[^/]+?)(?:\.git)?", origin)
     return match.group(1) if match else None
+
+
+_PROJECT_READBACK_MODULE: Any = None
+
+
+def _project_readback() -> Any:
+    global _PROJECT_READBACK_MODULE
+    if _PROJECT_READBACK_MODULE is not None:
+        return _PROJECT_READBACK_MODULE
+    path = pathlib.Path(__file__).with_name("ci_reuse_validation_readback.py")
+    if not path.is_file() or path.is_symlink():
+        raise ValueError("canonical Project task resolver is unavailable")
+    spec = importlib.util.spec_from_file_location("workflow_delivery_project_readback", path)
+    if spec is None or spec.loader is None:
+        raise ValueError("canonical Project task resolver cannot be loaded")
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    sys.path.insert(0, str(path.parent))
+    try:
+        spec.loader.exec_module(module)
+    except (OSError, ImportError, ValueError) as exc:
+        raise ValueError("canonical Project task resolver failed to load") from exc
+    finally:
+        sys.path.pop(0)
+    _PROJECT_READBACK_MODULE = module
+    return module
+
+
+def _resolve_project_task_issue(task_uid: str, expected_issue_number: int | None = None) -> dict[str, Any]:
+    reader = _project_readback()
+    selected = reader.GitHubReadOnly().resolve_project_task_issue(task_uid)
+    number = selected.get("number") if isinstance(selected, dict) else None
+    if not _positive_int(number) or (expected_issue_number is not None and number != expected_issue_number):
+        raise ValueError("Project-backed Task Issue does not match the bound Issue number")
+    live = _gh_json(f"repos/{REPOSITORY}/issues/{number}")
+    if (not isinstance(live, dict) or live.get("number") != number
+            or live.get("url") != selected.get("url") or live.get("body") != selected.get("body")
+            or reader._live_task_uid(live, number) != task_uid
+            or reader._live_task_pr(live, task_uid) != reader._live_task_pr(selected, task_uid)):
+        raise ValueError("live REST Task Issue identity differs from its canonical Project record")
+    return live
+
+
+def _current_pr_process_waiver(repository: str, task: dict[str, Any], pr_number: int,
+                               head_oid: str, head_branch: str) -> dict[str, Any]:
+    issue_number = task.get("issue_number")
+    task_uid = str(task.get("task_uid") or "")
+    if type(issue_number) is str and re.fullmatch(r"[1-9][0-9]*", issue_number):
+        issue_number = int(issue_number)
+    if not _positive_int(issue_number) or not TASK_UID_RE.fullmatch(task_uid):
+        raise ValueError("bound Task Issue identity is incomplete for process exception readback")
+    issue = _gh_json(f"repos/{repository}/issues/{issue_number}")
+    body = issue.get("body") if isinstance(issue, dict) else None
+    if (not isinstance(issue, dict) or issue.get("number") != issue_number
+            or "pull_request" in issue or not isinstance(body, str)
+            or _canonical_uid(body) != task_uid):
+        raise ValueError("live Task Issue identity is invalid for process exception readback")
+    comments = _pages(f"repos/{repository}/issues/{issue_number}/comments", None)
+    verified: list[dict[str, Any]] = []
+
+    def validate_replacement(evidence: dict[str, Any], _record: dict[str, Any]) -> bool:
+        try:
+            verified.append(_verify_declared_ci(
+                repository, evidence, pr_number, head_oid, head_branch,
+                allow_empty_pr_association=True,
+            ))
+            return True
+        except (OSError, ValueError):
+            return False
+
+    result = PROCESS_EXCEPTIONS.resolve_process_exception(
+        comments,
+        repository=repository,
+        issue_number=issue_number,
+        task_uid=task_uid,
+        action="current_pr_validation",
+        head_oid=head_oid,
+        scope="required-gate",
+        live_admin_by_login=lambda login: _is_admin(repository, login),
+        replacement_validator=validate_replacement,
+        process_check_waivable=True,
+    )
+    if result.get("applicable") is True and verified:
+        result["verified_replacement_ci"] = verified[-1]
+    return result
 
 
 def read_current_pr_projection(root: pathlib.Path, task: dict[str, Any]) -> tuple[dict[str, Any], list[dict[str, Any]]]:
@@ -660,23 +774,45 @@ def read_current_pr_projection(root: pathlib.Path, task: dict[str, Any]) -> tupl
         pr = _gh_json(f"repos/{repository}/pulls/{pr_number}")
         body = str(pr.get("body") or "") if isinstance(pr, dict) else ""
         head_oid = ((pr.get("head") or {}).get("sha")) if isinstance(pr, dict) else None
+        task_uid = str(task.get("task_uid") or "")
+        exact_task = bool(re.search(rf"(?m)^Task: {re.escape(task_uid)}$", body))
+        exact_issue = bool(re.search(rf"(?m)^Refs #{issue_number}$", body))
         if (not isinstance(pr, dict) or pr.get("number") != pr_number
-                or f"Task: {task.get('task_uid')}" not in body
-                or f"Refs #{issue_number}" not in body
+                or not exact_task or not exact_issue
                 or not isinstance(head_oid, str) or not re.fullmatch(r"[0-9a-f]{40,64}", head_oid)):
             raise ValueError("live PR identity/head does not match task mapping")
         projection["remote_pr_head_oid"] = head_oid
+        if local_head and head_oid != local_head:
+            blocked, allowed, next_kind = BLOCKER_POLICY["SOURCE_NOT_PUBLISHED"]
+            blockers.append(_action_blocker(
+                "SOURCE_NOT_PUBLISHED",
+                "the local candidate head differs from the live PR head; current validation applies only to the remote head",
+                blocks_actions=list(blocked), allowed_actions=list(allowed), next_action_kind=next_kind,
+            ))
         checks = _pages(f"repos/{repository}/commits/{head_oid}/check-runs", "check_runs")
-        matching = [row for row in checks if isinstance(row, dict)
-                    and row.get("name") == "required-gate"
-                    and (row.get("app") or {}).get("id") == REQUIRED_GATE_APP_ID
-                    and any(isinstance(link, dict) and link.get("number") == pr_number
-                            for link in (row.get("pull_requests") or []))]
+        matching = []
+        for row in checks:
+            if (not isinstance(row, dict) or row.get("name") != "required-gate"
+                    or (row.get("app") or {}).get("id") != REQUIRED_GATE_APP_ID
+                    or row.get("head_sha") != head_oid):
+                continue
+            try:
+                associations = _associated_pr_numbers(row.get("pull_requests"), repository)
+            except ValueError:
+                continue
+            if associations and all(number == pr_number for number in associations):
+                matching.append(row)
         if not matching:
-            raise ValueError("current remote head has no required-gate check")
+            exception = _current_pr_process_waiver(repository, task, pr_number, head_oid,
+                                                  str(((pr.get("head") or {}).get("ref")) or ""))
+            if exception.get("applicable") is not True:
+                raise ValueError("current remote head has no unambiguous required-gate check associated with this PR")
+            projection["process_exception"] = exception
+            projection["replacement_ci_identity"] = exception["verified_replacement_ci"]
+            return projection, blockers
         check = max(matching, key=lambda row: row.get("id") if type(row.get("id")) is int else 0)
         details = str(check.get("details_url") or "")
-        match = re.fullmatch(rf"https://github\.com/{re.escape(repository)}/actions/runs/([1-9][0-9]*)/job/[1-9][0-9]*", details)
+        match = re.fullmatch(rf"https://github\.com/{re.escape(repository)}/actions/runs/([1-9][0-9]*)/job/([1-9][0-9]*)", details)
         if not match:
             raise ValueError("required-gate check run locator is malformed")
         run_id = int(match.group(1))
@@ -684,13 +820,32 @@ def read_current_pr_projection(root: pathlib.Path, task: dict[str, Any]) -> tupl
         attempt = run.get("run_attempt") if isinstance(run, dict) else None
         if (check.get("head_sha") != head_oid or not isinstance(run, dict)
                 or run.get("id") != run_id or run.get("head_sha") != head_oid
+                or run.get("head_branch") != ((pr.get("head") or {}).get("ref"))
                 or run.get("path") != ".github/workflows/rust.yml"
                 or run.get("event") != "pull_request"
                 or type(attempt) is not int or attempt < 1):
             raise ValueError("required-gate workflow run identity is uncertain")
+        run_association_rows = run.get("pull_requests")
+        if not isinstance(run_association_rows, list):
+            raise ValueError("required-gate workflow run PR association is malformed")
+        run_associations = _associated_pr_numbers(run_association_rows, repository) if run_association_rows else []
+        association_exception = None
+        if run_associations and any(number != pr_number for number in run_associations):
+            raise ValueError("required-gate workflow run has conflicting PR association")
+        if not run_associations:
+            association_exception = _current_pr_process_waiver(
+                repository, task, pr_number, head_oid,
+                str(((pr.get("head") or {}).get("ref")) or ""),
+            )
+            if association_exception.get("applicable") is not True:
+                raise ValueError("required-gate workflow run has empty or conflicting PR association")
+            projection["process_exception"] = association_exception
+            projection["replacement_ci_identity"] = association_exception["verified_replacement_ci"]
         jobs = _pages(f"repos/{repository}/actions/runs/{run_id}/jobs", "jobs")
         required_check_url = f"https://api.github.com/repos/{repository}/check-runs/{check.get('id')}"
+        expected_job_id = int(match.group(2))
         matching_jobs = [job for job in jobs if isinstance(job, dict)
+                         and job.get("id") == expected_job_id
                          and job.get("name") == "required-gate"
                          and job.get("run_attempt") == attempt
                          and job.get("check_run_url") == required_check_url]
@@ -712,23 +867,22 @@ def read_current_pr_projection(root: pathlib.Path, task: dict[str, Any]) -> tupl
             "job_status": job.get("status"),
             "job_conclusion": job.get("conclusion"),
         }
-        if (local_head and head_oid != local_head):
-            blocked, allowed, next_kind = BLOCKER_POLICY["SOURCE_NOT_PUBLISHED"]
-            blockers.append(_action_blocker(
-                "SOURCE_NOT_PUBLISHED",
-                "the local candidate head differs from the live PR head; current validation applies only to the remote head",
-                blocks_actions=list(blocked), allowed_actions=list(allowed), next_action_kind=next_kind,
-            ))
         if (check.get("status") != "completed"
                 or str(check.get("conclusion") or "").lower() != "success"
                 or job.get("status") != "completed"
                 or str(job.get("conclusion") or "").lower() != "success"):
-            blocked, allowed, next_kind = BLOCKER_POLICY["CURRENT_CHECK_FAILED"]
-            blockers.append(_action_blocker(
-                "CURRENT_CHECK_FAILED",
-                "the latest required-gate check on the live PR head is pending or unsuccessful",
-                blocks_actions=list(blocked), allowed_actions=list(allowed), next_action_kind=next_kind,
-            ))
+            exception = _current_pr_process_waiver(repository, task, pr_number, head_oid,
+                                                  str(((pr.get("head") or {}).get("ref")) or ""))
+            if exception.get("applicable") is True:
+                projection["process_exception"] = exception
+                projection["replacement_ci_identity"] = exception["verified_replacement_ci"]
+            else:
+                blocked, allowed, next_kind = BLOCKER_POLICY["CURRENT_CHECK_FAILED"]
+                blockers.append(_action_blocker(
+                    "CURRENT_CHECK_FAILED",
+                    "the latest required-gate check on the live PR head is pending or unsuccessful",
+                    blocks_actions=list(blocked), allowed_actions=list(allowed), next_action_kind=next_kind,
+                ))
             failures = [item for item in jobs if isinstance(item, dict)
                         and str(item.get("conclusion") or "").lower() not in {"", "success", "skipped"}]
             if failures:
@@ -753,19 +907,18 @@ def read_current_pr_projection(root: pathlib.Path, task: dict[str, Any]) -> tupl
 
 
 def workflow_projection(root: pathlib.Path, task: dict[str, Any], legacy_blockers: list[str]) -> dict[str, Any]:
-    """Build the additive B projection without changing legacy lifecycle gates."""
+    """Build the additive delivery projection without changing legacy lifecycle gates."""
     uid = str(task.get("task_uid") or "")
     delivery = derive_delivery_readiness(uid, {})
-    if uid == DOWNSTREAM_UID:
-        try:
-            delivery = derive_delivery_readiness(uid, read_explicit_edge(root, uid))
-        except (OSError, ValueError) as exc:
-            delivery = derive_delivery_readiness(uid, {})
-            delivery["delivery_ready"] = False
-            delivery["cleanup_state"] = "not_applicable"
-            delivery["action_blockers"] = project_action_blockers(
-                [f"stale identity: delivery edge readback failed ({exc})"]
-            )
+    try:
+        delivery = derive_delivery_readiness(uid, read_explicit_edge(root, task))
+    except (OSError, ValueError) as exc:
+        delivery = derive_delivery_readiness(uid, {})
+        delivery["delivery_ready"] = False
+        delivery["cleanup_state"] = "not_applicable"
+        delivery["action_blockers"] = project_action_blockers(
+            [f"stale identity: delivery edge readback failed ({exc})"]
+        )
 
     pull_request, pr_blockers = read_current_pr_projection(root, task)
     action_blockers = [*project_action_blockers(legacy_blockers),
@@ -777,5 +930,7 @@ def workflow_projection(root: pathlib.Path, task: dict[str, Any], legacy_blocker
         "candidate_head_oid": pull_request.get("local_candidate_head_oid"),
         "remote_pr_head_oid": pull_request.get("remote_pr_head_oid"),
         "ci_identity": pull_request.get("required_ci"),
+        "process_exception": pull_request.get("process_exception"),
+        "replacement_ci_identity": pull_request.get("replacement_ci_identity"),
         "failure_phase": pull_request.get("failure_phase"),
     }

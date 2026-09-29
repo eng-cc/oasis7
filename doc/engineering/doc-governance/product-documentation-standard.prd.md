@@ -8,7 +8,7 @@
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
 - 结构与检查协作：`repository_health_engineer`
-- 当前任务：GitHub Issue [#3650](https://github.com/eng-cc/oasis7/issues/3650)
+- 当前治理任务真值：由 GitHub Project-backed task mapping 与 live Task Issue evidence 提供。
 
 本文把产品文档的内容质量约定落到现有四模块产品树和专业权威边界中。它规定产品作者要表达什么、如何验收和如何追踪；不创建第五个产品模块、第二套任务台账或新的发布门禁。
 

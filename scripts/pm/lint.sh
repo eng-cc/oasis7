@@ -96,13 +96,7 @@ require_dir() {
 require_dir ".pm"
 require_file ".pm/README.md"
 require_file ".pm/registry/roles.yaml"
-require_file ".pm/registry/codex-sessions.yaml"
 require_dir ".pm/inbox"
-require_dir ".pm/github-project-sync"
-require_file ".pm/github-project-sync/task-archive.jsonl"
-require_dir ".pm/working_memory"
-require_file ".pm/stage/current.yaml"
-require_file ".pm/stage/gate.yaml"
 require_file ".pm/shared/memory/active.yaml"
 require_file ".pm/shared/memory/superseded.yaml"
 
@@ -130,12 +124,6 @@ require_file "scripts/pm/move-task.sh"
 require_file "scripts/pm/new-task.sh"
 require_file "scripts/pm/task-closeout.sh"
 require_file "scripts/pm/workflow-report.sh"
-
-if [[ "${PM_ALLOW_RETIRED_TASK_FILES:-0}" != "1" ]]; then
-  while IFS= read -r path; do
-    fail "retired .pm task file present after GitHub Project Step 3: $path"
-  done < <(find .pm/tasks -type f \( -name 'task_*.yaml' -o -name '*.execution.md' \) 2>/dev/null | sort)
-fi
 
 require_file "scripts/pm/memory-lint.sh"
 require_file "scripts/pm/memory-report.sh"
@@ -174,37 +162,12 @@ while IFS= read -r path; do
   [[ -f "$path" ]] || fail "registry path missing: $path"
 done < <(sed -n 's/^    [a-z_]*_path: //p; s/^  active_path: //p; s/^  superseded_path: //p' .pm/registry/roles.yaml)
 
-python3 - <<'PY' || failures=$((failures + 1))
-import json
-import pathlib
-import sys
-
-mapping_path = pathlib.Path(".pm/github-project-sync/tasks.json")
-archive_path = pathlib.Path(".pm/github-project-sync/task-archive.jsonl")
-archive_records = [json.loads(line) for line in archive_path.read_text(encoding="utf-8").splitlines() if line.strip()]
-if mapping_path.is_file():
-    mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
-    tasks = mapping.get("tasks") or {}
-    missing = [
-        uid
-        for uid, record in tasks.items()
-        if not record.get("issue_url") or not record.get("issue_number") or not record.get("project_item_id")
-    ]
-    if missing:
-        print(f"pm-lint: FAIL: {len(missing)} mapping records missing issue/project handles")
-        sys.exit(1)
-PY
-
 if (( failures > 0 )); then
   exit 1
 fi
 
 ./scripts/pm/memory-lint.sh >/dev/null
-./scripts/pm/working-memory-lint.sh >/dev/null
-./scripts/pm/stage-lint.sh >/dev/null
 ./scripts/pm/memory-report.sh --json >/dev/null
-./scripts/pm/working-memory-report.sh --json >/dev/null
-./scripts/pm/reflection-report.sh --json >/dev/null
 PYTHONPYCACHEPREFIX="$PM_LINT_TMP_DIR/pycache" python3 -m py_compile \
   "$SCRIPT_DIR/github-project-task.py" \
   "$SCRIPT_DIR/github-project-sync.py" \

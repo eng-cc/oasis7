@@ -112,7 +112,7 @@ Lifecycle: mixed durable contract and dated inventory snapshot. The local/test/p
 3. hosted-login 的 test/prod 两套已经分开部署，但仍建议补完整 `login/complete` 自动 smoke，以便把 OTP 收件箱验证也纳入日常 gate。
 
 ### 7.1 当前 public_testnet operator 节点清单
-Last Verified: 2026-06-23 Asia/Shanghai, task `task_bdb48338fac544849d8c681e9a7dd441`.
+Last Verified: 2026-06-23 Asia/Shanghai. The underlying verification evidence is held with its GitHub Project-backed task.
 
 当前受管 `public_testnet` 部署是五节点 fleet：两台 ECS validator、两台文档列出的 observer 机器、加本机 macOS observer。旧 `.tmp/testnet-local-node-bootstrap` 和 `.tmp/testnet-fourth-node-bootstrap` 这类 bootstrap staging 目录若没有 runtime binary、`CURRENT_VERSION` 与 service definition，不计为当前受管节点。
 

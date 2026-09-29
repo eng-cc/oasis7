@@ -74,7 +74,7 @@ class UnicodeHistoryContractTests(unittest.TestCase):
         self.assertEqual(self.expected_title, selected["display_title"])
         self.assertTrue(selected["display_title"].isascii())
 
-    def test_long_unicode_near_candidates_remain_blocking(self):
+    def test_long_unicode_near_candidates_do_not_replace_exact_action(self):
         validation_id = self.authority.validation_id
         prefix = self.expected_title[: -len(validation_id)]
         long_tail = "🌱" * 1100
@@ -94,13 +94,13 @@ class UnicodeHistoryContractTests(unittest.TestCase):
                 self.assertGreater(len(near["display_title"]), 1024)
                 self.assertGreater(len(near["display_title"].encode("utf-8")), 4096)
                 with self.assertRaisesRegex(
-                    contract.ContractError, "another or malformed",
+                    contract.ContractError, "does not resolve",
                 ):
                     contract.select_unique_run([near], self.authority)
-                with self.assertRaisesRegex(
-                    contract.ContractError, "unique workflow run ID",
-                ):
-                    contract.select_unique_run([self.fixture["run_api"], near], self.authority)
+                selected = contract.select_unique_run(
+                    [self.fixture["run_api"], near], self.authority,
+                )
+                self.assertEqual(self.fixture["run"]["id"], selected["id"])
 
     def test_unicode_near_candidates_are_not_ignored_or_normalized(self):
         validation_id = self.authority.validation_id
@@ -117,13 +117,13 @@ class UnicodeHistoryContractTests(unittest.TestCase):
         for near in (near_prefix, near_suffix):
             with self.subTest(title=near["display_title"]):
                 with self.assertRaisesRegex(
-                    contract.ContractError, "unique workflow run ID|another or malformed",
+                    contract.ContractError, "does not resolve",
                 ):
                     contract.select_unique_run([near], self.authority)
-                with self.assertRaisesRegex(
-                    contract.ContractError, "unique workflow run ID",
-                ):
-                    contract.select_unique_run([self.fixture["run_api"], near], self.authority)
+                selected = contract.select_unique_run(
+                    [self.fixture["run_api"], near], self.authority,
+                )
+                self.assertEqual(self.fixture["run"]["id"], selected["id"])
 
         confusable_prefix = {
             "id": 703,
@@ -140,7 +140,7 @@ class UnicodeHistoryContractTests(unittest.TestCase):
         self.assertEqual(self.fixture["run"]["id"], selected["id"])
         for confusable in (confusable_prefix, confusable_suffix):
             with self.subTest(title=confusable["display_title"]):
-                with self.assertRaisesRegex(contract.ContractError, "unique workflow run ID"):
+                with self.assertRaisesRegex(contract.ContractError, "does not resolve"):
                     contract.select_unique_run([confusable], self.authority)
 
     def test_missing_nonstring_and_malformed_utf8_titles_fail_closed(self):
@@ -190,7 +190,7 @@ class UnicodeHistoryReadbackTests(unittest.TestCase):
             "_trusted_inventory",
             return_value=(self.fixture["context"], "6" * 40, "7" * 40),
         ):
-            return readback.read_validation(api)
+            return readback.read_validation(self.fixture["context"].task_uid, api)
 
     def test_initial_and_final_full_enumerations_accept_unrelated_unicode_history(self):
         class API(readback_tests.FakeReadbackAPI):
@@ -244,7 +244,7 @@ class UnicodeHistoryReadbackTests(unittest.TestCase):
         self.assertEqual(2, api.run_direct_count)
         self.assertEqual(0, api.write_calls)
 
-    def test_final_enumeration_blocks_unicode_prefix_near_candidate(self):
+    def test_final_enumeration_ignores_unicode_prefix_near_candidate(self):
         class API(readback_tests.FakeReadbackAPI):
             def workflow_run_pages(self, workflow_id, repository_id):
                 pages = super().workflow_run_pages(workflow_id, repository_id)
@@ -261,10 +261,10 @@ class UnicodeHistoryReadbackTests(unittest.TestCase):
                 return pages
 
         api = API(self.fixture)
-        with self.assertRaisesRegex(contract.ContractError, "unique workflow run ID"):
-            self._readback(api)
+        envelope = self._readback(api)
+        self.assertEqual(self.fixture["run"]["id"], envelope["run_id"])
         self.assertEqual(2, api.run_listing_count)
-        self.assertEqual(1, api.run_direct_count)
+        self.assertEqual(2, api.run_direct_count)
         self.assertEqual(0, api.write_calls)
 
     def test_latest_attempt_advance_still_blocks_after_unicode_history_acceptance(self):

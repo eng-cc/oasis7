@@ -1,6 +1,6 @@
-# task_0123456789abcdef0123456789abcdef Execution Log
+# <TASK-UID> Execution Log
 
-- task_uid: task_0123456789abcdef0123456789abcdef
+- task_uid: <TASK-UID>
 - title: REPLACE_ME
 - owner_role: producer_system_designer
 - worktree_hint: null
