@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import re
 import sys
+from types import SimpleNamespace
 from unittest.mock import patch
 import unittest
 from pathlib import Path
@@ -64,6 +65,39 @@ class DispatchInputTests(unittest.TestCase):
 
 
 class LiveIdentityTests(unittest.TestCase):
+    def test_successor_requester_must_be_live_admin(self):
+        authority = SimpleNamespace(
+            authorized_actor="approval-admin", pin_actor="pin-admin",
+            request_actor="request-admin",
+        )
+
+        class API:
+            def __init__(self, permissions):
+                self.permissions = permissions
+                self.checked = []
+
+            def get_json(self, endpoint):
+                login = endpoint.split("/collaborators/", 1)[1].split("/", 1)[0]
+                self.checked.append(login)
+                return {"user": {"login": login}, "permission": self.permissions[login]}
+
+        with patch.object(producer.contract, "is_successor_authority", return_value=True):
+            valid = API({
+                "approval-admin": "admin", "pin-admin": "admin", "request-admin": "admin",
+            })
+            self.assertEqual(
+                {"approval-admin", "pin-admin", "request-admin"},
+                set(producer._live_admin_permissions(valid, authority)),
+            )
+            self.assertEqual({"approval-admin", "pin-admin", "request-admin"}, set(valid.checked))
+
+            nonadmin = API({
+                "approval-admin": "admin", "pin-admin": "admin", "request-admin": "write",
+            })
+            with self.assertRaises(producer.ProducerError):
+                producer._live_admin_permissions(nonadmin, authority)
+            self.assertEqual({"approval-admin", "pin-admin", "request-admin"}, set(nonadmin.checked))
+
     def test_task_lookup_uses_complete_rest_issue_pages_then_derived_issue_and_pr(self):
         task_uid = "task_" + "a" * 32
         issue_number = 87

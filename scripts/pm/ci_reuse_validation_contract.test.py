@@ -131,6 +131,9 @@ def validation_fixture():
 def successor_fixture():
     """Build a V2 successor over an immutable V1 failure and a new live W."""
     context, old_request, _, _, comments, permissions, old_authority = validation_fixture()
+    permissions["request-admin"] = {
+        "login": "request-admin", "permission": "admin",
+    }
     old_workflow = contract.normalize_workflow_identity(
         "main", ".github/workflows/rust.yml@main",
     )
@@ -247,7 +250,7 @@ def successor_fixture():
     successor_comments = [
         {"id": 40, "body": authorization_body, "user": {"login": "approval-admin"},
          "created_at": "2026-01-01T00:11:00Z", "updated_at": "2026-01-01T00:11:00Z"},
-        {"id": 50, "body": request_body, "user": {"login": "requester"},
+        {"id": 50, "body": request_body, "user": {"login": "request-admin"},
          "created_at": "2026-01-01T00:12:00Z", "updated_at": "2026-01-01T00:12:00Z"},
         {"id": 60, "body": marked(contract.SUCCESSOR_PIN_MARKER, pin), "user": {"login": "pin-admin"},
          "created_at": "2026-01-01T00:13:00Z", "updated_at": "2026-01-01T00:13:00Z"},
@@ -618,6 +621,15 @@ class SuccessorAuthorityTests(unittest.TestCase):
                 fixture["comments"], fixture["identity"], bad_permissions,
                 fixture["predecessor"],
             )
+        read_permissions = dict(fixture["permissions"])
+        read_permissions["request-admin"] = {
+            "login": "request-admin", "permission": "read",
+        }
+        with self.assertRaises(contract.ContractError):
+            contract.resolve_successor_records(
+                fixture["comments"], fixture["identity"], read_permissions,
+                fixture["predecessor"],
+            )
 
     def test_successor_authority_payload_and_readback_preserve_full_predecessor(self):
         fixture = successor_fixture()
@@ -662,6 +674,8 @@ class SuccessorAuthorityTests(unittest.TestCase):
         self.assertEqual(contract.SUCCESSOR_AUTHORITY_SCHEMA, record["schema"])
         self.assertEqual(fixture["predecessor"], record["predecessor"])
         self.assertEqual(fixture["successor_workflow"], record["successor_workflow"])
+        self.assertEqual("request-admin", record["request_actor"])
+        self.assertEqual("admin", record["request_permission"])
         self.assertEqual(
             "oasis7-ci-reuse-validation-v2-" + issued.validation_id + "-r701-a1",
             contract.artifact_name(issued.validation_id, 701, 1, successor=True),
@@ -721,6 +735,8 @@ class SuccessorAuthorityTests(unittest.TestCase):
             "predecessor_digest": issued.request["predecessor_digest"],
             "successor_workflow": fixture["successor_workflow"],
             "successor_workflow_digest": issued.request["successor_workflow_digest"],
+            "request_actor": issued.request_actor,
+            "request_permission": issued.request_permission,
         }
         contract.verify_readback(
             envelope, issued, run, check, artifact, payload_bytes, artifact_bytes,

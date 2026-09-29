@@ -127,7 +127,7 @@ def _successor_artifacts(context, old_request, comments, permissions, old_author
          "created_at": "2026-01-01T00:04:00Z", "updated_at": "2026-01-01T00:04:00Z"},
         {"id": 50, "body": contract.SUCCESSOR_REQUEST_MARKER + "\n"
          + contract.canonical_json_bytes(request).decode("ascii"),
-         "user": {"login": "requester"}, "created_at": "2026-01-01T00:05:00Z",
+         "user": {"login": "request-admin"}, "created_at": "2026-01-01T00:05:00Z",
          "updated_at": "2026-01-01T00:05:00Z"},
         {"id": 60, "body": contract.SUCCESSOR_PIN_MARKER + "\n"
          + contract.canonical_json_bytes(pin).decode("ascii"),
@@ -141,8 +141,12 @@ def _successor_artifacts(context, old_request, comments, permissions, old_author
         "head_oid": request["head_oid"],
         "integration_base_oid": request["integration_base_oid"],
     }
+    successor_permissions = {
+        **permissions,
+        "request-admin": {"login": "request-admin", "permission": "admin"},
+    }
     authority = contract.resolve_successor_records(
-        [*comments, *successor_comments], identity, permissions, predecessor,
+        [*comments, *successor_comments], identity, successor_permissions, predecessor,
     )
     context = contract.TrustedRequestContext(
         task_uid=context.task_uid,
@@ -223,7 +227,8 @@ def _successor_artifacts(context, old_request, comments, permissions, old_author
         "payload_digest": contract.body_digest(payload_bytes),
         **{key: record[key] for key in (
             "successor_sequence", "reason", "predecessor", "predecessor_digest",
-            "successor_workflow", "successor_workflow_digest",
+            "successor_workflow", "successor_workflow_digest", "request_actor",
+            "request_permission",
         )},
     }
     contract.verify_readback(

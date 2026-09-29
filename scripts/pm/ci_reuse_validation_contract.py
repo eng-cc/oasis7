@@ -135,15 +135,18 @@ _READBACK_FIELDS = {
 }
 _SUCCESSOR_AUTHORITY_FIELDS = _AUTHORITY_RECORD_FIELDS | {
     "successor_sequence", "reason", "predecessor", "predecessor_digest",
-    "successor_workflow", "successor_workflow_digest",
+    "successor_workflow", "successor_workflow_digest", "request_actor",
+    "request_permission",
 }
 _SUCCESSOR_PAYLOAD_FIELDS = _PAYLOAD_FIELDS | {
     "successor_sequence", "reason", "predecessor", "predecessor_digest",
-    "successor_workflow", "successor_workflow_digest",
+    "successor_workflow", "successor_workflow_digest", "request_actor",
+    "request_permission",
 }
 _SUCCESSOR_READBACK_FIELDS = _READBACK_FIELDS | {
     "successor_sequence", "reason", "predecessor", "predecessor_digest",
-    "successor_workflow", "successor_workflow_digest",
+    "successor_workflow", "successor_workflow_digest", "request_actor",
+    "request_permission",
 }
 _UNIT_RE = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}\Z")
 _TASK_UID_RE = re.compile(r"task_[0-9a-f]{32}\Z")
@@ -210,7 +213,7 @@ class ValidationAuthority:
         "request", "authorization", "pin", "request_comment_id",
         "authorization_comment_id", "pin_comment_id", "request_body_digest",
         "authorization_body_digest", "pin_body_digest", "authorized_actor",
-        "pin_actor", "approval_permission", "pin_permission",
+        "request_actor", "request_permission", "pin_actor", "approval_permission", "pin_permission",
         "permission_snapshot_bound", "validation_id", "planner_unit_obligations",
         "context_bound", "comment_timestamps", "_factory_token",
     )
@@ -225,6 +228,8 @@ class ValidationAuthority:
     authorization_body_digest: str
     pin_body_digest: str
     authorized_actor: str
+    request_actor: str
+    request_permission: str
     pin_actor: str
     approval_permission: str
     pin_permission: str
@@ -846,6 +851,7 @@ def _resolve_comment_records(
 
     authorized_actor = _login(request["authorized_actor"], "request.authorized_actor")
     approval_actor = _comment_author(authorization_comment, "authorization")
+    request_actor = _comment_author(request_comment, "request")
     pin_actor = _comment_author(pin_comment, "pin")
     if approval_actor != authorized_actor:
         raise ContractError("request authorized_actor differs from server-authenticated approver")
@@ -880,7 +886,8 @@ def _resolve_comment_records(
         request_comment_id=request_id, authorization_comment_id=authorization_id,
         pin_comment_id=pin_id, request_body_digest=request_body_digest,
         authorization_body_digest=authorization_body_digest, pin_body_digest=pin_body_digest,
-        authorized_actor=authorized_actor, pin_actor=pin_actor,
+        authorized_actor=authorized_actor, request_actor=request_actor,
+        request_permission="", pin_actor=pin_actor,
         approval_permission=approval_permission, pin_permission=pin_permission,
         permission_snapshot_bound=admin_permissions is not None,
         validation_id=validation_id(request["request_digest"]),
@@ -1182,14 +1189,17 @@ def _resolve_successor_comment_records(
 
     authorized_actor = _login(request.get("authorized_actor"), "successor authorized_actor")
     approval_actor = _comment_author(authorization_comment, "successor authorization")
+    request_actor = _comment_author(request_comment, "successor request")
     pin_actor = _comment_author(pin_comment, "successor pin")
     if approval_actor != authorized_actor:
         raise ContractError("successor authorized_actor differs from server-authenticated approver")
     if admin_permissions is None:
         approval_permission = ""
+        request_permission = ""
         pin_permission = ""
     else:
         approval_permission = _permission(approval_actor, admin_permissions)
+        request_permission = _permission(request_actor, admin_permissions)
         pin_permission = _permission(pin_actor, admin_permissions)
 
     terminal_updated_at = _timestamp(
@@ -1217,7 +1227,8 @@ def _resolve_successor_comment_records(
         authorization_comment_id=authorization_id, pin_comment_id=pin_id,
         request_body_digest=body_digest(request_raw),
         authorization_body_digest=body_digest(authorization_raw), pin_body_digest=body_digest(pin_raw),
-        authorized_actor=authorized_actor, pin_actor=pin_actor,
+        authorized_actor=authorized_actor, request_actor=request_actor,
+        request_permission=request_permission, pin_actor=pin_actor,
         approval_permission=approval_permission, pin_permission=pin_permission,
         permission_snapshot_bound=admin_permissions is not None,
         validation_id=successor_validation_id(supplied_digest),
@@ -1305,6 +1316,8 @@ def bind_recorded_admin_snapshot(
             "predecessor_digest": request["predecessor_digest"],
             "successor_workflow": request_plain["successor_workflow"],
             "successor_workflow_digest": request["successor_workflow_digest"],
+            "request_actor": authority.request_actor,
+            "request_permission": "admin",
         })
     for field, value in expected.items():
         if record.get(field) != value or type(record.get(field)) is not type(value):
@@ -1619,6 +1632,8 @@ def build_authority_record(authority: ValidationAuthority, run: Mapping[str, Any
             "predecessor_digest": request["predecessor_digest"],
             "successor_workflow": _json_plain(request["successor_workflow"]),
             "successor_workflow_digest": request["successor_workflow_digest"],
+            "request_actor": authority.request_actor,
+            "request_permission": authority.request_permission,
         })
     _closed_object(record, _SUCCESSOR_AUTHORITY_FIELDS if successor else _AUTHORITY_RECORD_FIELDS,
                    "authority record")
@@ -1799,6 +1814,8 @@ def verify_readback(
             "predecessor_digest": request["predecessor_digest"],
             "successor_workflow": _json_plain(request["successor_workflow"]),
             "successor_workflow_digest": request["successor_workflow_digest"],
+            "request_actor": authority.request_actor,
+            "request_permission": authority.request_permission,
         })
     for key, expected_value in expected.items():
         if value.get(key) != expected_value or type(value.get(key)) is not type(expected_value):

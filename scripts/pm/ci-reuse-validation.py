@@ -323,9 +323,14 @@ def _check_live_pr(
 
 
 def _live_admin_permissions(api: Any, authority: Any) -> dict[str, dict[str, str]]:
-    actors = sorted({authority.authorized_actor, authority.pin_actor})
+    actors = {authority.authorized_actor, authority.pin_actor}
+    if contract.is_successor_authority(authority):
+        request_actor = getattr(authority, "request_actor", None)
+        if type(request_actor) is not str or not request_actor:
+            raise ProducerError("successor request commenter identity is unavailable")
+        actors.add(request_actor)
     result: dict[str, dict[str, str]] = {}
-    for login in actors:
+    for login in sorted(actors):
         endpoint = f"repos/{REPOSITORY}/collaborators/{quote(login, safe='')}/permission"
         observation = api.get_json(endpoint)
         user = observation.get("user") if isinstance(observation, Mapping) else None

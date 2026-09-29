@@ -1061,7 +1061,7 @@ def _compare_issue_authority(left: Any, right: Any) -> None:
     fields = (
         "validation_id", "request_comment_id", "authorization_comment_id", "pin_comment_id",
         "request_body_digest", "authorization_body_digest", "pin_body_digest",
-        "authorized_actor", "pin_actor", "comment_timestamps",
+        "authorized_actor", "request_actor", "pin_actor", "comment_timestamps",
     )
     for field in fields:
         if getattr(left, field, None) != getattr(right, field, None):
@@ -1073,7 +1073,10 @@ def _compare_issue_authority(left: Any, right: Any) -> None:
 
 def _compare_authority(left: Any, right: Any) -> None:
     _compare_issue_authority(left, right)
-    for field in ("approval_permission", "pin_permission", "permission_snapshot_bound"):
+    for field in (
+        "approval_permission", "request_permission", "pin_permission",
+        "permission_snapshot_bound",
+    ):
         if getattr(left, field, None) != getattr(right, field, None):
             raise ReadbackError(f"recorded permission snapshot changed at {field}")
 
@@ -1182,7 +1185,8 @@ def _envelope(authority: Any, run: Mapping[str, Any], check: Mapping[str, Any],
     if successor:
         for key in (
             "successor_sequence", "reason", "predecessor", "predecessor_digest",
-            "successor_workflow", "successor_workflow_digest",
+            "successor_workflow", "successor_workflow_digest", "request_actor",
+            "request_permission",
         ):
             envelope[key] = record[key]
     return envelope
