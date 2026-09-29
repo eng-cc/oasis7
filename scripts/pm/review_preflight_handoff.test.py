@@ -15,6 +15,8 @@ import unittest
 HERE = Path(__file__).resolve().parent
 BATCH_SCRIPT = HERE / "review-batch-epoch.py"
 HANDOFF_SCRIPT = HERE / "review_preflight_handoff.py"
+PROJECTION_SCRIPT = HERE / "workflow-impact-projection.py"
+PROJECT_ROOT = HERE.parent.parent
 TASK = "task_" + "1" * 32
 TASK_ISSUE = 4137
 DISPATCH_COMMENT_ID = 3934017999
@@ -50,7 +52,16 @@ def load_handoff_module():
     return module
 
 
+def load_projection_module():
+    spec = importlib.util.spec_from_file_location("workflow_impact_projection_under_test", PROJECTION_SCRIPT)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 HANDOFF = load_handoff_module()
+IMPACT_PROJECTION = load_projection_module()
 
 
 class ReviewPreflightHandoffTests(unittest.TestCase):
@@ -232,6 +243,29 @@ class ReviewPreflightHandoffTests(unittest.TestCase):
 
     def make_fixture(self, *, create_handoff: bool = True) -> dict[str, object]:
         expected_slices = [{"role": ROLE, "slice_id": SLICE}]
+        impact_projection = IMPACT_PROJECTION.build_projection(
+            PROJECT_ROOT,
+            {
+                "task_uid": TASK,
+                "source_head_oid": HEAD,
+                "scope_base_oid": SCOPE_OID,
+                "changed_paths": ["scripts/pm/review_preflight_handoff.test.py"],
+                "change_class": "unknown",
+                "manual_roles": [ROLE],
+                "domain_role": None,
+                "test_profile": "required",
+                "declared_tests": ["review-preflight-handoff"],
+                "consumed_contracts": [],
+                "public_semantics": [],
+                "affected_consumers": [],
+                "closure_status": {
+                    "status": "unknown",
+                    "reason": "fixture impact remains open",
+                    "evidence": [],
+                },
+                "verification_affected": True,
+            },
+        )
         source_identity = {
             "task_uid": TASK,
             "bootstrap_epoch": 1,
@@ -239,11 +273,11 @@ class ReviewPreflightHandoffTests(unittest.TestCase):
             "pr_number": 1,
             "source_head_oid": HEAD,
             "source_scope_oid": SCOPE_OID,
-            "changed_paths_digest": "b" * 64,
-            "ordered_role_ids": [ROLE],
+            "changed_paths_digest": impact_projection["changed_paths_digest"].removeprefix("sha256:"),
+            "ordered_role_ids": impact_projection["ordered_role_ids"],
             "role_contract_digest": "d" * 64,
             "review_policy_digest": "e" * 64,
-            "input_contract_digest": "f" * 64,
+            "input_contract_digest": impact_projection["projection_digest"].removeprefix("sha256:"),
         }
         source_digest = digest(source_identity)
         batch_path = self.task_root / "review-batches" / "batch.json"
@@ -312,6 +346,12 @@ class ReviewPreflightHandoffTests(unittest.TestCase):
                 "identity_digest": digest(applicability_identity),
                 "verified": True,
             },
+            "impact_projection": impact_projection,
+            "impact_projection_schema": impact_projection["schema"],
+            "impact_projection_digest": impact_projection["projection_digest"],
+            "impact_projection_test_profile": impact_projection["test_profile"],
+            "impact_projection_declared_tests": impact_projection["declared_tests"],
+            "impact_projection_planner_digest": impact_projection["planner_digest"],
             "epoch": epoch,
             "batch_path": str(batch_path),
             "collection_path": str(batch_path.with_name("batch.collection.json")),
@@ -438,6 +478,36 @@ class ReviewPreflightHandoffTests(unittest.TestCase):
                           "return_sha256", "findings_digest"}, set(row))
         self.assertEqual(fixture["dispatch_result"]["rows"][0]["packet_path"], row["packet_path"])
         self.assertEqual(fixture["dispatch_result"]["rows"][0]["packet_digest"], row["packet_digest"])
+
+    def test_v2_plan_without_impact_projection_is_rejected_without_side_effects(self) -> None:
+        fixture = self.make_fixture(create_handoff=False)
+        plan = dict(fixture["plan"])
+        valid_plan_raw = canonical(plan) + b"\n"
+        validated, _, _ = HANDOFF.validate_plan(plan, valid_plan_raw)
+        self.assertEqual(plan, validated)
+
+        plan.pop("impact_projection")
+        missing_projection_raw = canonical(plan) + b"\n"
+        plan_path = Path(str(fixture["plan_path"]))
+        plan_path.write_bytes(missing_projection_raw)
+        ledger_path = Path(str(fixture["ledger_path"]))
+        collection_path = Path(str(fixture["collection_path"]))
+        handoff_path = Path(str(fixture["handoff_path"]))
+        ledger_before = ledger_path.read_bytes()
+        self.assertFalse(collection_path.exists())
+        self.assertFalse(handoff_path.exists())
+
+        rejection = None
+        try:
+            HANDOFF.validate_plan(plan, missing_projection_raw)
+        except HANDOFF.ContractError as error:
+            rejection = error
+
+        self.assertEqual(ledger_before, ledger_path.read_bytes())
+        self.assertFalse(collection_path.exists())
+        self.assertFalse(handoff_path.exists())
+        self.assertIsNotNone(rejection, "v2 plan without impact_projection was accepted")
+        self.assertRegex(str(rejection), "impact projection")
 
     def test_rejects_missing_admitted_packet_digest_after_return_and_handoff_rehash(self) -> None:
         fixture = self.make_fixture()

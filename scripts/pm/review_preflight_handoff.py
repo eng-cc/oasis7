@@ -383,13 +383,14 @@ def validate_plan(plan_value: object, raw: bytes) -> tuple[dict[str, object], di
     if (applicability_identity != expected_applicability or applicability.get("verified") is not True
             or applicability.get("identity_digest") != canonical_digest(applicability_identity)):
         raise ContractError("plan applicability identity digest or source binding mismatch")
-    if "impact_projection" in plan:
-        projection = plan["impact_projection"]
-        if not isinstance(projection, dict):
-            raise ContractError("plan impact projection is invalid")
-        for field in ("schema", "projection_digest", "test_profile", "declared_tests", "planner_digest"):
-            if plan.get(f"impact_projection_{field.removeprefix('projection_')}") != projection.get(field):
-                raise ContractError(f"plan impact projection {field} binding mismatch")
+    if "impact_projection" not in plan:
+        raise ContractError("plan impact projection is required")
+    projection = plan["impact_projection"]
+    if not isinstance(projection, dict):
+        raise ContractError("plan impact projection is invalid")
+    for field in ("schema", "projection_digest", "test_profile", "declared_tests", "planner_digest"):
+        if plan.get(f"impact_projection_{field.removeprefix('projection_')}") != projection.get(field):
+            raise ContractError(f"plan impact projection {field} binding mismatch")
     return plan, source_identity, source_digest
 
 
