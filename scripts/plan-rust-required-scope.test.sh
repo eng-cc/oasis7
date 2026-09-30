@@ -186,8 +186,10 @@ static_governance_output="$(plan_for_paths \
   scripts/testing-manual-active-contract.test.sh \
   scripts/unified-world-code-terminology-scan.test.sh)"
 assert_key_equals "$static_governance_output" scope targeted
-assert_key_equals "$static_governance_output" selected_capabilities doc_checker_contracts
+assert_key_equals "$static_governance_output" selected_capabilities 'doc_checker_contracts;workflow_governance'
 assert_key_equals "$static_governance_output" run_doc_checker_contracts true
+assert_key_equals "$static_governance_output" run_workflow_governance_contracts true
+assert_key_equals "$static_governance_output" required_test_units 'doc_checker_contracts;required_gate_baseline;workflow_governance'
 assert_key_equals "$static_governance_output" run_rust_baseline false
 assert_key_equals "$static_governance_output" needs_rust_toolchain false
 assert_key_equals "$static_governance_output" needs_node false
@@ -919,8 +921,10 @@ doc_checker_output="$(plan_for_paths \
   scripts/product_doc_markdown.py \
   scripts/doc-governance-requirements.txt)"
 assert_key_equals "$doc_checker_output" scope targeted
-assert_key_equals "$doc_checker_output" selected_capabilities doc_checker_contracts
+assert_key_equals "$doc_checker_output" selected_capabilities 'doc_checker_contracts;workflow_governance'
 assert_key_equals "$doc_checker_output" run_doc_checker_contracts true
+assert_key_equals "$doc_checker_output" run_workflow_governance_contracts true
+assert_key_equals "$doc_checker_output" required_test_units 'doc_checker_contracts;required_gate_baseline;workflow_governance'
 assert_key_equals "$doc_checker_output" run_cargo_tooling_contracts false
 assert_key_equals "$doc_checker_output" run_rust_baseline false
 assert_key_equals "$doc_checker_output" needs_rust_toolchain false
