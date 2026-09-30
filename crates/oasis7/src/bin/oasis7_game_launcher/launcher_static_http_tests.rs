@@ -2,10 +2,7 @@ use std::fs;
 use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::Path;
-use std::sync::Mutex;
 use std::thread;
-
-static HOSTED_TEST_LOGIN_ENV_LOCK: Mutex<()> = Mutex::new(());
 
 use super::super::{content_type_for_path, resolve_static_asset_path};
 use super::super::{
@@ -14,6 +11,16 @@ use super::super::{
 };
 use super::{DeploymentMode, make_temp_dir};
 use crate::static_http;
+
+// Declared after the environment fixture, so unwind stops all readers before
+// the fixture restores process-global values and unlocks.
+struct HostedTestHttpServer(crate::StaticHttpServer);
+
+impl Drop for HostedTestHttpServer {
+    fn drop(&mut self) {
+        stop_static_http_server(&mut self.0);
+    }
+}
 
 #[test]
 fn hosted_test_login_host_gate_accepts_only_loopback_addresses() {
@@ -196,16 +203,21 @@ fn hosted_public_unauthenticated_get_cannot_issue_player_session() {
 
 #[test]
 fn hosted_test_login_requires_opt_in_and_returns_server_issued_grant() {
-    let _guard = HOSTED_TEST_LOGIN_ENV_LOCK
-        .lock()
-        .expect("test login env lock");
-    unsafe {
-        std::env::remove_var("OASIS7_HOSTED_TEST_LOGIN_ENABLED");
-        std::env::set_var(
-            oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV,
-            hex::encode([71_u8; 32]),
-        );
-    }
+    let issuer_key = hex::encode([71_u8; 32]);
+    let disabled_values = [(
+        crate::hosted_test_env::ISSUER,
+        std::ffi::OsStr::new(&issuer_key),
+    )];
+    let enabled_values = [
+        disabled_values[0],
+        (crate::hosted_test_env::LOGIN, std::ffi::OsStr::new("1")),
+    ];
+    let Some(scenario) = crate::hosted_test_env::run_scenarios(&[
+        ("disabled", &disabled_values),
+        ("enabled", &enabled_values),
+    ]) else {
+        return;
+    };
     let temp_dir = make_temp_dir("hosted_test_login");
     fs::write(temp_dir.join("index.html"), b"ok").expect("write index");
     let probe = TcpListener::bind(("127.0.0.1", 0)).expect("bind port probe");
@@ -219,6 +231,7 @@ fn hosted_test_login_requires_opt_in_and_returns_server_issued_grant() {
         temp_dir.as_path(),
         None,
     )
+    .map(HostedTestHttpServer)
     .expect("start static HTTP server");
     let body =
         r#"{"public_key":"4848484848484848484848484848484848484848484848484848484848484848"}"#;
@@ -241,18 +254,18 @@ fn hosted_test_login_requires_opt_in_and_returns_server_issued_grant() {
         }
         response
     };
-    let disabled = send();
-    assert!(
-        String::from_utf8_lossy(&disabled).starts_with("HTTP/1.1 404 Not Found"),
-        "test login must stay unavailable until explicitly enabled"
-    );
-    unsafe { std::env::set_var("OASIS7_HOSTED_TEST_LOGIN_ENABLED", "1") };
-    let enabled = send();
-    stop_static_http_server(&mut server);
-    unsafe {
-        std::env::remove_var("OASIS7_HOSTED_TEST_LOGIN_ENABLED");
-        std::env::remove_var(oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV);
+    if scenario == 0 {
+        let disabled = send();
+        stop_static_http_server(&mut server.0);
+        assert!(
+            String::from_utf8_lossy(&disabled).starts_with("HTTP/1.1 404 Not Found"),
+            "test login must stay unavailable until explicitly enabled"
+        );
+        let _ = fs::remove_dir_all(temp_dir);
+        return;
     }
+    let enabled = send();
+    stop_static_http_server(&mut server.0);
     let enabled_text = String::from_utf8_lossy(&enabled);
     assert!(
         enabled_text.starts_with("HTTP/1.1 200 OK"),
@@ -270,6 +283,28 @@ fn hosted_test_login_requires_opt_in_and_returns_server_issued_grant() {
         !enabled_text.contains("private"),
         "issuer private material must not cross the endpoint"
     );
+    let (_, response_body) = enabled_text.split_once("\r\n\r\n").expect("HTTP body");
+    let response: serde_json::Value = serde_json::from_str(response_body).expect("login JSON");
+    let grant = &response["grant"];
+    let token = grant["registration_grant"]
+        .as_str()
+        .expect("signed registration grant");
+    let parts: Vec<_> = token.split('.').collect();
+    assert_eq!(parts.len(), 3);
+    assert_eq!(parts[0], "v1");
+    let payload = hex::decode(parts[1]).expect("registration payload");
+    let signature = ed25519_dalek::Signature::from_slice(
+        &hex::decode(parts[2]).expect("registration signature bytes"),
+    )
+    .expect("registration signature");
+    ed25519_dalek::SigningKey::from_bytes(&[71; 32])
+        .verifying_key()
+        .verify_strict(&payload, &signature)
+        .expect("real login issuer signature");
+    let payload: serde_json::Value = serde_json::from_slice(&payload).expect("grant payload JSON");
+    assert_eq!(payload["player_id"], grant["player_id"]);
+    assert_eq!(payload["public_key"], hex::encode([72; 32]));
+    assert_eq!(payload["device_session_id"], grant["device_session_id"]);
 
     let wildcard_probe = TcpListener::bind(("127.0.0.1", 0)).expect("bind wildcard port probe");
     let wildcard_port = wildcard_probe
@@ -285,8 +320,8 @@ fn hosted_test_login_requires_opt_in_and_returns_server_issued_grant() {
         temp_dir.as_path(),
         None,
     )
+    .map(HostedTestHttpServer)
     .expect("start wildcard static HTTP server");
-    unsafe { std::env::set_var("OASIS7_HOSTED_TEST_LOGIN_ENABLED", "1") };
     let mut wildcard_response = Vec::new();
     for _ in 0..50 {
         match TcpStream::connect(("127.0.0.1", wildcard_port)) {
@@ -302,12 +337,11 @@ fn hosted_test_login_requires_opt_in_and_returns_server_issued_grant() {
             Err(_) => thread::sleep(std::time::Duration::from_millis(20)),
         }
     }
-    stop_static_http_server(&mut wildcard_server);
+    stop_static_http_server(&mut wildcard_server.0);
     assert!(
         String::from_utf8_lossy(&wildcard_response).starts_with("HTTP/1.1 404 Not Found"),
         "wildcard viewer HTTP bind must keep test login unavailable"
     );
-    unsafe { std::env::remove_var("OASIS7_HOSTED_TEST_LOGIN_ENABLED") };
     let _ = fs::remove_dir_all(temp_dir);
 }
 
