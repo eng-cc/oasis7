@@ -205,7 +205,7 @@ class ReuseAcceptanceQATests(unittest.TestCase):
                 self.assertTrue(log_path.stat().st_size > 0)
                 print(
                     "exact-M local executor passed: "
-                    f"W={head} B={base} H={head} M={composed['tested_commit_oid']} "
+                    f"W={base} B={base} H={head} M={composed['tested_commit_oid']} "
                     f"T={composed['tested_tree_oid']} "
                     f"selected={','.join(selected_units)} output_digest={digest} "
                     "claim=local-only"
