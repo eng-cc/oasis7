@@ -28,8 +28,6 @@ contract = readback.contract
 
 
 REPOSITORY = contract.REPOSITORY
-TASK_ISSUE_NUMBER = contract.TASK_ISSUE_NUMBER
-PR_NUMBER = contract.PR_NUMBER
 WORKFLOW_FILE = contract.WORKFLOW_FILE
 WORKFLOW_PATH = contract.WORKFLOW_PATH
 WORKFLOW_REF = contract.WORKFLOW_REF
@@ -238,21 +236,74 @@ def _flatten_issue_pages(pages: tuple[Any, ...]) -> tuple[Mapping[str, Any], ...
     return tuple(comments)
 
 
-def _live_task_uid(issue: Mapping[str, Any]) -> str:
-    if issue.get("number") != TASK_ISSUE_NUMBER or type(issue.get("body")) is not str:
-        raise ProducerError("live Task Issue identity is unavailable")
-    matches = re.findall(r"(?m)^task_uid: (task_[0-9a-f]{32})\s*$", issue["body"])
-    if len(matches) != 1:
-        raise ProducerError("live Task Issue does not have one canonical Task UID")
-    return matches[0]
+def _resolve_task_issue_from_pages(pages: Any, task_uid: str) -> Mapping[str, Any]:
+    if type(pages) not in {tuple, list} or not pages:
+        raise ProducerError("complete canonical Task Issue REST pagination is unavailable")
+    candidates: list[Mapping[str, Any]] = []
+    seen_ids: set[int] = set()
+    seen_numbers: set[int] = set()
+    for page in pages:
+        if type(page) is not list:
+            raise ProducerError("canonical Task Issue REST pagination is malformed")
+        for row in page:
+            if not isinstance(row, Mapping):
+                raise ProducerError("canonical Task Issue REST page contains a malformed row")
+            issue_id = row.get("id")
+            issue_number = row.get("number")
+            if (type(issue_id) is not int or issue_id <= 0
+                    or type(issue_number) is not int or issue_number <= 0
+                    or issue_id in seen_ids or issue_number in seen_numbers):
+                raise ProducerError("canonical Task Issue REST pages contain invalid or duplicate identities")
+            seen_ids.add(issue_id)
+            seen_numbers.add(issue_number)
+            if "pull_request" in row:
+                continue
+            body = row.get("body")
+            if (type(body) is str and body.startswith("<!-- oasis7-pm-task -->\n")
+                    and task_uid in readback._TASK_UID_LINE_RE.findall(body)):
+                if readback._live_task_uid(row, issue_number) != task_uid:
+                    raise ProducerError("canonical Task Issue marker conflicts with the selected UID")
+                candidates.append(row)
+    if len(candidates) != 1:
+        raise ProducerError("Task UID does not resolve to exactly one complete REST Issue result")
+    return candidates[0]
 
 
-def _check_live_pr(pr: Mapping[str, Any], task_uid: str) -> tuple[str, str]:
+def _resolve_live_task(
+    api: Any, task_uid: str,
+) -> tuple[Mapping[str, Any], int, int, str]:
+    """Resolve a UID through complete canonical-repository REST Issue pagination."""
+    if type(task_uid) is not str or not re.fullmatch(r"task_[0-9a-f]{32}", task_uid):
+        raise ProducerError("workflow_dispatch Task UID selector is malformed")
+    pages = api.task_issue_pages()
+    selected = _resolve_task_issue_from_pages(pages, task_uid)
+    if not isinstance(selected, Mapping):
+        raise ProducerError("canonical REST Task Issue lookup is malformed")
+    issue_number = selected.get("number")
+    if type(issue_number) is not int or issue_number <= 0:
+        raise ProducerError("canonical REST Task Issue number is malformed")
+    if readback._live_task_uid(selected, issue_number) != task_uid:
+        raise ProducerError("canonical Task Issue does not bind the selected Task UID")
+    pr_number, pr_url = readback._live_task_pr(selected, task_uid)
+    issue = api.get_json(f"repos/{REPOSITORY}/issues/{issue_number}")
+    if (not isinstance(issue, Mapping) or issue.get("id") != selected.get("id")
+            or issue.get("number") != issue_number
+            or issue.get("html_url") != selected.get("html_url")
+            or issue.get("body") != selected.get("body")
+            or readback._live_task_uid(issue, issue_number) != task_uid
+            or readback._live_task_pr(issue, task_uid) != (pr_number, pr_url)):
+        raise ProducerError("live Task Issue REST identity differs from complete Issue pagination")
+    return issue, issue_number, pr_number, pr_url
+
+
+def _check_live_pr(
+    pr: Mapping[str, Any], task_uid: str, task_issue_number: int, pr_number: int,
+) -> tuple[str, str]:
     base = pr.get("base")
     head = pr.get("head")
     base_repo = base.get("repo") if isinstance(base, Mapping) else None
     head_repo = head.get("repo") if isinstance(head, Mapping) else None
-    if (pr.get("number") != PR_NUMBER or pr.get("state") != "open" or pr.get("merged") is not False
+    if (pr.get("number") != pr_number or pr.get("state") != "open" or pr.get("merged") is not False
             or not isinstance(base, Mapping) or not isinstance(head, Mapping)
             or not isinstance(base_repo, Mapping) or not isinstance(head_repo, Mapping)
             or base_repo.get("full_name") != REPOSITORY
@@ -266,15 +317,20 @@ def _check_live_pr(pr: Mapping[str, Any], task_uid: str) -> tuple[str, str]:
         raise ProducerError("live reciprocal PR H/B identities are malformed")
     body = pr.get("body")
     if (type(body) is not str or body.count(f"Task: {task_uid}") != 1
-            or body.count(f"Refs #{TASK_ISSUE_NUMBER}") != 1):
+            or body.count(f"Refs #{task_issue_number}") != 1):
         raise ProducerError("live reciprocal PR does not bind the canonical Task and Issue")
     return head_oid, base_oid
 
 
 def _live_admin_permissions(api: Any, authority: Any) -> dict[str, dict[str, str]]:
-    actors = sorted({authority.authorized_actor, authority.pin_actor})
+    actors = {authority.authorized_actor, authority.pin_actor}
+    if contract.is_successor_authority(authority):
+        request_actor = getattr(authority, "request_actor", None)
+        if type(request_actor) is not str or not request_actor:
+            raise ProducerError("successor request commenter identity is unavailable")
+        actors.add(request_actor)
     result: dict[str, dict[str, str]] = {}
-    for login in actors:
+    for login in sorted(actors):
         endpoint = f"repos/{REPOSITORY}/collaborators/{quote(login, safe='')}/permission"
         observation = api.get_json(endpoint)
         user = observation.get("user") if isinstance(observation, Mapping) else None
@@ -288,14 +344,19 @@ def _live_admin_permissions(api: Any, authority: Any) -> dict[str, dict[str, str
 def _live_workflow(api: Any) -> tuple[int, str]:
     repository = api.get_json(f"repos/{REPOSITORY}")
     if (not isinstance(repository, Mapping) or repository.get("full_name") != REPOSITORY
-            or repository.get("default_branch") != "main"):
+            or type(repository.get("default_branch")) is not str):
         raise ProducerError("canonical repository default-branch identity is unavailable")
+    default_branch = repository["default_branch"]
     workflow = api.get_json(f"repos/{REPOSITORY}/actions/workflows/rust.yml")
     if (not isinstance(workflow, Mapping) or workflow.get("path") != WORKFLOW_FILE
             or workflow.get("state") != "active" or type(workflow.get("id")) is not int
             or workflow["id"] <= 0):
         raise ProducerError("canonical active rust.yml workflow identity is unavailable")
-    return workflow["id"], repository["default_branch"]
+    try:
+        contract.normalize_workflow_identity(default_branch, workflow.get("path"))
+    except contract.ContractError as exc:
+        raise ProducerError("live repository default branch is not a canonical ref") from exc
+    return workflow["id"], default_branch
 
 
 def _check_dispatch_run(api: Any, run_id: int, workflow_id: int, default_branch: str,
@@ -308,10 +369,15 @@ def _check_dispatch_run(api: Any, run_id: int, workflow_id: int, default_branch:
     attempt = row.get("run_attempt")
     repository = row.get("repository")
     head_repository = row.get("head_repository")
+    try:
+        workflow_identity = contract.normalize_workflow_identity(
+            default_branch, row.get("path"),
+        )
+    except contract.ContractError as exc:
+        raise ProducerError("raw REST workflow path differs from exact live workflow identity") from exc
     if (type(attempt) is not int or attempt <= 0 or type(head_sha) is not str
             or not _OID_RE.fullmatch(head_sha)
             or type(row.get("workflow_id")) is not int or row.get("workflow_id") != workflow_id
-            or row.get("path") != WORKFLOW_PATH
             or row.get("event") != "workflow_dispatch"
             or row.get("head_branch") != default_branch
             or row.get("display_title") != expected_title
@@ -322,15 +388,14 @@ def _check_dispatch_run(api: Any, run_id: int, workflow_id: int, default_branch:
     workflow_sha = environment.get("GITHUB_WORKFLOW_SHA")
     if (type(workflow_sha) is not str or not _OID_RE.fullmatch(workflow_sha)
             or head_sha != workflow_sha or environment.get("GITHUB_SHA") != workflow_sha
-            or environment.get("GITHUB_REF") != f"refs/heads/{default_branch}"
-            or environment.get("GITHUB_WORKFLOW_REF") != WORKFLOW_REF):
+            or environment.get("GITHUB_REF") != workflow_identity["event_ref"]
+            or environment.get("GITHUB_WORKFLOW_REF") != workflow_identity["workflow_ref"]):
         raise ProducerError("actual workflow W differs from live default-branch run identity")
     return {
         "repository": REPOSITORY,
         "id": run_id,
         "workflow_id": workflow_id,
-        "workflow_path": row["path"],
-        "workflow_ref": WORKFLOW_REF,
+        **workflow_identity,
         "workflow_sha": workflow_sha,
         "event": row["event"],
         "display_title": row["display_title"],
@@ -413,7 +478,8 @@ def _latest_validation_check(api: Any, run: Mapping[str, Any]) -> dict[str, Any]
 
 
 def _resolve_projection_digest(
-    root: Path, pr: Mapping[str, Any], task_uid: str, head_oid: str, source_scope_oid: str,
+    root: Path, pr: Mapping[str, Any], task_uid: str, pr_number: int,
+    head_oid: str, source_scope_oid: str,
     issue_comments: tuple[Mapping[str, Any], ...],
 ) -> str:
     publication_marker = "<!-- oasis7-ci-publication/v1 -->"
@@ -434,12 +500,12 @@ def _resolve_projection_digest(
         result = resolver.resolve(
             pr.get("body"), task_uid=task_uid, source_head_oid=head_oid,
             scope_base_oid=source_scope_oid, publication=publication, binding=binding,
-            repository=REPOSITORY, pr_number=PR_NUMBER,
+            repository=REPOSITORY, pr_number=pr_number,
             planner_config_sha256=publication["planner_config_sha256"],
             required_protocol="v2",
             live={
                 "repository": REPOSITORY,
-                "pr_number": PR_NUMBER,
+                "pr_number": pr_number,
                 "repository_id": pr.get("base", {}).get("repo", {}).get("id"),
                 "source_repository_id": pr.get("head", {}).get("repo", {}).get("id"),
                 "head_oid": pr.get("head", {}).get("sha"),
@@ -478,7 +544,7 @@ def _prepare_inventory(
     try:
         subprocess.run([
             "git", "-C", str(root), "fetch", "--no-tags", "origin",
-            f"+refs/pull/{PR_NUMBER}/head:refs/remotes/origin/pr-{PR_NUMBER}",
+            f"+refs/pull/{request['pr_number']}/head:refs/remotes/origin/pr-{request['pr_number']}",
         ], check=True, capture_output=True, text=True)
     except (OSError, subprocess.CalledProcessError) as exc:
         raise ProducerError("exact live H cannot be fetched into trusted W") from exc
@@ -490,7 +556,7 @@ def _prepare_inventory(
     if merge_bases != [scope_oid]:
         raise ProducerError("live B/H does not have exactly the frozen source scope S")
     projection_digest = _resolve_projection_digest(
-        root, pr, task_uid, head_oid, scope_oid, issue_comments,
+        root, pr, task_uid, request["pr_number"], head_oid, scope_oid, issue_comments,
     )
     if projection_digest != request["projection_digest"]:
         raise ProducerError("live v2 PR projection digest differs from frozen request")
@@ -532,7 +598,7 @@ def _prepare_inventory(
     try:
         inventory = inventory_module.build_required_inventory(
             root, m_root, merge_oid, planner_output,
-            repository=REPOSITORY, workflow_ref=WORKFLOW_REF,
+            repository=REPOSITORY, workflow_ref=run["workflow_ref"],
             planner_authority_oid=workflow_sha, event_name="workflow_dispatch",
             run_mode="legacy", changed_paths=changed_paths,
             base_ref=base_oid, head_ref=head_oid, task_uid=task_uid,
@@ -575,7 +641,8 @@ def _prepare_inventory(
             or inventory.get("product_corpus", {}).get("status") != "complete"):
         raise ProducerError("exact-W required inventory closure or full unit list is malformed")
     context = contract.TrustedRequestContext(
-        task_uid=task_uid, head_oid=head_oid, source_scope_oid=scope_oid,
+        task_uid=task_uid, task_issue_number=request["task_issue_number"],
+        pr_number=request["pr_number"], head_oid=head_oid, source_scope_oid=scope_oid,
         projection_digest=projection_digest,
         planner_unit_ids=tuple(inventory_ids), planner_unit_obligations=obligations,
     )
@@ -602,10 +669,6 @@ def _stream_required_tier(
         "OASIS7_CARGO_SCOPE_BASE": request["source_scope_oid"],
         "OASIS7_CARGO_SCOPE_HEAD": request["head_oid"],
         "OASIS7_CARGO_SCOPE_INTEGRATION_BASE": request["integration_base_oid"],
-        "OASIS7_CARGO_STAGE_CHECK_HEAD": request["head_oid"],
-        "OASIS7_CARGO_STAGE_PR_NUMBER": "",
-        "OASIS7_CARGO_STAGE_TASK_UID": "",
-        "OASIS7_CARGO_STAGE_RECEIPT": "",
     })
     digest = hashlib.sha256()
     try:
@@ -647,7 +710,8 @@ def _payload(authority: Any, run: Mapping[str, Any], check: Mapping[str, Any],
     record = contract.build_authority_record(authority, run)
     payload = {
         **{key: value for key, value in record.items() if key != "schema"},
-        "schema": contract.PAYLOAD_SCHEMA,
+        "schema": (contract.SUCCESSOR_PAYLOAD_SCHEMA
+                   if contract.is_successor_authority(authority) else contract.PAYLOAD_SCHEMA),
         "authority_digest": contract.authority_digest(record),
         "capability_under_test": contract.CAPABILITY,
         "tested_merge_oid": merge_oid,
@@ -682,9 +746,16 @@ def produce_validation(
     if (environment.get("GITHUB_REPOSITORY") != REPOSITORY
             or environment.get("GITHUB_EVENT_NAME") != "workflow_dispatch"):
         raise ProducerError("validation-only producer requires the canonical manual dispatch")
-    if (environment.get("GITHUB_WORKFLOW_REF") != WORKFLOW_REF
-            or environment.get("GITHUB_REF") != "refs/heads/main"):
-        raise ProducerError("validation-only producer is not executing on trusted main rust.yml")
+    workflow_id, default_branch = _live_workflow(api)
+    try:
+        workflow_identity = contract.normalize_workflow_identity(
+            default_branch, WORKFLOW_FILE,
+        )
+    except contract.ContractError as exc:
+        raise ProducerError("live default-branch workflow identity is malformed") from exc
+    if (environment.get("GITHUB_WORKFLOW_REF") != workflow_identity["workflow_ref"]
+            or environment.get("GITHUB_REF") != workflow_identity["event_ref"]):
+        raise ProducerError("validation-only producer is not executing on trusted live-default rust.yml")
 
     try:
         event = _json_without_duplicate_keys(event_file.read_bytes(), "GitHub workflow event")
@@ -693,42 +764,58 @@ def produce_validation(
     if not isinstance(event, Mapping) or not isinstance(event.get("inputs"), Mapping):
         raise ProducerError("workflow_dispatch has no typed inputs object")
 
-    task_issue = api.get_json(f"repos/{REPOSITORY}/issues/{TASK_ISSUE_NUMBER}")
-    if not isinstance(task_issue, Mapping):
-        raise ProducerError("canonical Task Issue live read is malformed")
-    task_uid = _live_task_uid(task_issue)
-    pr = api.get_json(f"repos/{REPOSITORY}/pulls/{PR_NUMBER}")
+    inputs = event["inputs"]
+    task_uid = inputs.get("task_uid")
+    if type(task_uid) is not str or not re.fullmatch(r"task_[0-9a-f]{32}", task_uid):
+        raise ProducerError("workflow_dispatch Task UID lookup key is malformed")
+    task_issue, task_issue_number, pr_number, _pr_url = _resolve_live_task(api, task_uid)
+    pr = api.get_json(f"repos/{REPOSITORY}/pulls/{pr_number}")
     if not isinstance(pr, Mapping):
         raise ProducerError("reciprocal PR live read is malformed")
-    head_oid, base_oid = _check_live_pr(pr, task_uid)
+    head_oid, base_oid = _check_live_pr(pr, task_uid, task_issue_number, pr_number)
 
-    comments = _flatten_issue_pages(api.issue_comment_pages())
-    provisional = contract.resolve_records_for_readback(comments)
+    comments = _flatten_issue_pages(api.issue_comment_pages(task_issue_number))
+    expected_identity = {
+        "task_uid": task_uid, "task_issue_number": task_issue_number,
+        "pr_number": pr_number, "head_oid": head_oid,
+        "integration_base_oid": base_oid,
+    }
+    provisional, predecessor_observation = readback._resolve_records_with_predecessor(
+        api, comments, expected_identity, workflow_id, default_branch, None,
+    )
     if (provisional.request["task_uid"] != task_uid
+            or provisional.request["task_issue_number"] != task_issue_number
+            or provisional.request["pr_number"] != pr_number
             or provisional.request["head_oid"] != head_oid
             or provisional.request["integration_base_oid"] != base_oid):
         raise ProducerError("frozen request differs from live Task UID or PR H/B")
     permissions = _live_admin_permissions(api, provisional)
-    authority = contract.resolve_records(comments, permissions)
-    workflow_id, default_branch = _live_workflow(api)
-
+    if predecessor_observation is None:
+        authority = contract.resolve_records(
+            comments, permissions, expected_identity=expected_identity,
+        )
+    else:
+        authority = contract.resolve_successor_records(
+            comments, expected_identity, permissions, predecessor_observation,
+        )
     expected_inputs = contract.expected_event_inputs(authority)
     validate_dispatch_inputs(event["inputs"], expected_inputs)
     expected_title = contract.expected_run_title(authority)
-    workflow_pages = api.workflow_run_pages(workflow_id)
-    complete_runs = contract.collect_workflow_runs(workflow_pages)
-    try:
-        selected = contract.select_unique_run(complete_runs, authority)
-    except contract.ContractError as exc:
-        raise ProducerError("request does not resolve to exactly one canonical W run") from exc
-
     run_id = environment.get("GITHUB_RUN_ID")
     attempt = environment.get("GITHUB_RUN_ATTEMPT")
     if (type(run_id) is not str or not run_id.isdigit() or int(run_id) <= 0
-            or type(attempt) is not str or not attempt.isdigit() or int(attempt) <= 0
-            or selected.get("id") != int(run_id)):
-        raise ProducerError("current R/A is not the sole uniquely selected validation dispatch")
-    run = _check_dispatch_run(api, int(run_id), workflow_id, default_branch, expected_title, environment)
+            or type(attempt) is not str or not attempt.isdigit() or int(attempt) <= 0):
+        raise ProducerError("current workflow run or attempt identity is malformed")
+    current_run_id = int(run_id)
+    workflow_pages = api.workflow_run_pages(workflow_id)
+    complete_runs = contract.collect_workflow_runs(workflow_pages)
+    try:
+        selected = contract.select_unique_run(
+            complete_runs, authority, current_run_id=current_run_id,
+        )
+    except contract.ContractError as exc:
+        raise ProducerError("current R does not resolve within its complete canonical history") from exc
+    run = _check_dispatch_run(api, current_run_id, workflow_id, default_branch, expected_title, environment)
     if run["run_attempt"] != int(attempt):
         raise ProducerError("current live run attempt differs from GITHUB_RUN_ATTEMPT")
     contract.validate_authority_precedes_run(authority, run["created_at"])
@@ -759,7 +846,9 @@ def produce_validation(
         # an attempt advance cannot inherit this attempt's successful output.
         final_pages = api.workflow_run_pages(workflow_id)
         final_runs = contract.collect_workflow_runs(final_pages)
-        final_selected = contract.select_unique_run(final_runs, authority)
+        final_selected = contract.select_unique_run(
+            final_runs, authority, current_run_id=run["id"],
+        )
         if final_selected.get("id") != run["id"] or final_selected.get("display_title") != expected_title:
             raise ProducerError("final full run history differs from the unique pre-test R")
         final_run = _check_dispatch_run(
@@ -797,6 +886,7 @@ def main() -> None:
     if output_path:
         artifact = contract.artifact_name(
             payload["validation_id"], payload["run_id"], payload["run_attempt"],
+            successor=contract.is_successor_authority(authority),
         )
         with Path(output_path).open("a", encoding="utf-8") as stream:
             stream.write("artifact_name=" + artifact + "\n")

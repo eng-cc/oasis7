@@ -15,7 +15,7 @@
     },
     {
       "path": "doc/.governance/document-semantic-review-overrides.json",
-      "content_sha256": "a0d6ccab5fa2b88dd8f666d7eb4b12688371895273cface602c284f928b0053c"
+      "content_sha256": "8d3dfff4d4b2efb10c8f82ad05f7779ce9ef83b1d5cc95f53712bc1a73700ccd"
     },
     {
       "path": "doc/testing/evidence/inventory.json",
@@ -245,7 +245,7 @@
     },
     {
       "path": "doc/engineering/doc-governance/cross-layer-requirements-traceability.design.md",
-      "content_sha256": "77f64710ca0700892edb6562266c786f3a06d7a6f01993b88bf70904dd9a76e2",
+      "content_sha256": "2b9033c63e0c2bdc51edbc608170356480980b780417f1d4fa73c4a87a73a1b6",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -315,7 +315,7 @@
     },
     {
       "path": "doc/engineering/doc-governance/product-documentation-standard.design.md",
-      "content_sha256": "ec6e7f1f11217da6e7cf879ff46f713c5a68edcb557ee70b0121734247261832",
+      "content_sha256": "1bd27b92cc26a0151d12968db12492548a72ad6091140ce867e20c1e8ea34306",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -329,7 +329,7 @@
     },
     {
       "path": "doc/engineering/doc-governance/product-documentation-standard.prd.md",
-      "content_sha256": "0572d24f581086b05aa97ec298f232a7e1126145d9bd440fad2dc40cb9a3991e",
+      "content_sha256": "f94a25025f66761383a5b5c3218c6eddc51275f0d9c4bcec8eec68e1fd4cc81e",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -357,7 +357,7 @@
     },
     {
       "path": "doc/engineering/doc-governance/project-management-record-standard.design.md",
-      "content_sha256": "659fddda341209d144caa5a0a56a95a881e569ad2ee5f4ba0c2c00290f35c7d2",
+      "content_sha256": "06f375d75f7decadf93bc0ab8835a75b5b95586efa995944659d2f723c73c485",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -413,7 +413,7 @@
     },
     {
       "path": "doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md",
-      "content_sha256": "27769a299de2091a44aedc628afbcb8da5be9c1cf66e949764d2da62ccfe0633",
+      "content_sha256": "f932f1c3cfb33cf262d84bd069e653abcf8d9dd4fda7c91ec151c01c2012b6ad",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -497,7 +497,7 @@
     },
     {
       "path": "doc/engineering/workflow/ci-parallel-evidence-reuse.design.md",
-      "content_sha256": "4e71fce00255e097b9ae01efc51766cb02a49b16a1d4593fbf7bf0788ca50008",
+      "content_sha256": "2267eb7b8bc19bee8ec5124d6d61ea99e4b62eb1d9307c58d5de226fa16c28e6",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -511,7 +511,7 @@
     },
     {
       "path": "doc/engineering/workflow/ci-projection-publication.design.md",
-      "content_sha256": "21d55a17508fb4b9aeb8c2dc170201fae0c434f797192d1c98534d7fa2df777c",
+      "content_sha256": "9e76192e1fa1826c7693f59feaaa0188716b5f82ab7bfbe4423f663d645ff155",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -525,7 +525,7 @@
     },
     {
       "path": "doc/engineering/workflow/ci-required-gate-p0-on-demand.design.md",
-      "content_sha256": "ad0bd0458f6b2fd33c9323ae67e831f787f45f9ab316da0544b219d5360a180e",
+      "content_sha256": "e7d4a75bf750c2e7a4aa99ce78aa5135c1ef0e77364201e830537477f5a438fb",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -567,7 +567,7 @@
     },
     {
       "path": "doc/engineering/workflow/source-of-truth.md",
-      "content_sha256": "7b308c2e7acfc19e3cfe35767183e5ff349b18023a0c2a84f544fc09acd021d6",
+      "content_sha256": "ab2ea22d686dc93fd079954371ff12e1a9c1c0cfb6245d9d5abca3887e45ccda",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -581,7 +581,7 @@
     },
     {
       "path": "doc/engineering/workflow/three-loop-completion-and-dependency.design.md",
-      "content_sha256": "fc7d968700c8694956cb852bb7734631ac0545a3242ccd694a11f8918c5d966b",
+      "content_sha256": "dc4795e6e56cf1bdcda1bea3b64d396d2c167fe7d916fe95e9326af3c8064a21",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -595,7 +595,7 @@
     },
     {
       "path": "doc/engineering/workflow/three-loop-role-adaptation.design.md",
-      "content_sha256": "de6982ac642fc3b5e1b19daca1e80b7b4eaec758626a59be8ec2162757f454c8",
+      "content_sha256": "d3c9769cea5f80d6d41b1bbef1615b3be47fa8a7be8c07e534a952c6e2bc888f",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -1449,7 +1449,7 @@
     },
     {
       "path": "doc/p2p/consensus/consensus-code-consolidation-to-oasis7-consensus.design.md",
-      "content_sha256": "138befa9c33d40d83475938c9af10f3b547d47e806189eade6d6bbad304587d8",
+      "content_sha256": "1b028c4323dd70233ec4eb86951bf392088efc5efdfae1ac911d5f8540b0b674",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1463,7 +1463,7 @@
     },
     {
       "path": "doc/p2p/consensus/consensus-code-consolidation-to-oasis7-consensus.prd.md",
-      "content_sha256": "f093572a50d66420b699b66568db46fc882a8c985ad8672eedd152eca8173a27",
+      "content_sha256": "6947fc754a33784d47caa3ca2b58f899494b735184bba957ae61d46801298efd",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1477,7 +1477,7 @@
     },
     {
       "path": "doc/p2p/design.md",
-      "content_sha256": "7016ea2d1e20369ed782fec96921952597fd394651e4246cc03f465aa9739110",
+      "content_sha256": "64771a8a5834eb7536e6c089f2b83751d07336848ada9e49cdbadaa5996f839f",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1505,7 +1505,7 @@
     },
     {
       "path": "doc/p2p/distfs/distfs-distributed-resilience.design.md",
-      "content_sha256": "1da9aada83dfc12cf659adbed0d6175aae6bcbd5b2b3d8c274dc10dacd05e042",
+      "content_sha256": "fa52ab88601a422c6ebc675d39a6dd7d7661ab661709673372b65035b0312c68",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1519,7 +1519,7 @@
     },
     {
       "path": "doc/p2p/distfs/distfs-distributed-resilience.prd.md",
-      "content_sha256": "27baa331cbc7d7e4d992000b8a33574f51968f47c5073af7a583e451aa1bcc7f",
+      "content_sha256": "93bdf4bd64254d3957bf03abbffaf4aea0cadfed42dd0a26c2a3e230e739bf4f",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1561,7 +1561,7 @@
     },
     {
       "path": "doc/p2p/distfs/distfs-production-hardening.design.md",
-      "content_sha256": "3af8ecd6905e0a43016ea7ccb9953803afd2de34a0ec4c7eeb49cd7f06975a9f",
+      "content_sha256": "12ef636b4fe6820aeceaf75d6624031072c60f884bc95bbbf19f31e95b22a2f5",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1575,7 +1575,7 @@
     },
     {
       "path": "doc/p2p/distfs/distfs-production-hardening.prd.md",
-      "content_sha256": "01f291deb82747482b46c89b754973ed71b968129094cf9b2510fbb06e89b08e",
+      "content_sha256": "67954f2eea410487c0e686f4008a21aacd12b187fe45fa25161b0b0a7b3c4962",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1729,7 +1729,7 @@
     },
     {
       "path": "doc/p2p/node/node-identity-replication-contract.design.md",
-      "content_sha256": "6bbf55020046332711649c560341cd01ca931bd70aa2411e218b220bbb1a0f4b",
+      "content_sha256": "7bdab3c011a3282a8dab79f75990e481b5bebb13df82c32b09725c95953c9590",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1743,7 +1743,7 @@
     },
     {
       "path": "doc/p2p/node/node-identity-replication-contract.prd.md",
-      "content_sha256": "6a72ae229c4cca7c78f9a36b324dd3166ec3d4422305fa2959e0b6d36c6b0837",
+      "content_sha256": "094c62f261c6fe7514a61e58c801e5caf0dd33aae789b55b785210f642136ddc",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1911,7 +1911,7 @@
     },
     {
       "path": "doc/p2p/prd.md",
-      "content_sha256": "2810f8ca028acfecf085c8fdc15654f1b2c809be115b729752d866db82e994e2",
+      "content_sha256": "c6cbf1ce0f6b962e8531ce3768464a67667dc7b85765ad5093dc7f29b58b1c84",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",

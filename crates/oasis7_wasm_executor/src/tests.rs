@@ -79,6 +79,47 @@ fn invalid_cbor_output_wasm() -> Vec<u8> {
 }
 
 #[cfg(feature = "wasmtime")]
+fn call_ref_fuel_exhaustion_wasm() -> Vec<u8> {
+    let data = trivial_output_bytes();
+    let escaped = data
+        .iter()
+        .map(|byte| format!("\\{:02x}", byte))
+        .collect::<String>();
+    let wat = format!(
+        r#"(module
+             (type $burn_type (func (param i32) (result i32)))
+             (memory (export "memory") 1)
+             (data (i32.const 16) "{escaped}")
+             (elem declare func $burn)
+             (func $burn (type $burn_type) (param $iterations i32) (result i32)
+               (local $i i32)
+               (block $break
+                 (loop $loop
+                   local.get $i
+                   local.get $iterations
+                   i32.ge_u
+                   br_if $break
+                   local.get $i
+                   i32.const 1
+                   i32.add
+                   local.set $i
+                   br $loop))
+               local.get $i)
+             (func (export "alloc") (param i32) (result i32)
+               i32.const 1024)
+             (func (export "call") (param i32 i32) (result i32 i32)
+               i32.const 10000
+               ref.func $burn
+               call_ref $burn_type
+               drop
+               i32.const 16
+               i32.const {len}))"#,
+        len = data.len(),
+    );
+    wat::parse_str(wat).expect("compile call_ref fuel exhaustion wat")
+}
+
+#[cfg(feature = "wasmtime")]
 fn sha256_hex_for_test(bytes: &[u8]) -> String {
     let digest = <sha2::Sha256 as sha2::Digest>::digest(bytes);
     let mut out = String::with_capacity(digest.len() * 2);
@@ -281,6 +322,39 @@ fn wasm_executor_maps_out_of_fuel_trap_to_out_of_fuel() {
 
     let err = executor.map_wasmtime_error(&request, wasmtime::Trap::OutOfFuel.into());
     assert_eq!(err.code, ModuleCallErrorCode::OutOfFuel);
+}
+
+#[cfg(feature = "wasmtime")]
+#[test]
+fn wasm_executor_charges_fuel_for_call_ref_callee() {
+    let mut executor = test_executor(WasmExecutorConfig {
+        max_fuel: 1_024,
+        max_call_ms: 2_000,
+        ..WasmExecutorConfig::default()
+    });
+    let wasm = call_ref_fuel_exhaustion_wasm();
+    let wasm_hash = sha256_hex_for_test(&wasm);
+    let request = ModuleCallRequest {
+        module_id: "m.call-ref-fuel".to_string(),
+        wasm_hash,
+        trace_id: "trace-call-ref-fuel".to_string(),
+        entrypoint: "call".to_string(),
+        input: Vec::new(),
+        limits: ModuleLimits {
+            max_mem_bytes: executor.config().max_mem_bytes,
+            max_gas: executor.config().max_fuel,
+            max_call_rate: 0,
+            max_output_bytes: executor.config().max_output_bytes,
+            max_effects: 0,
+            max_emits: 0,
+        },
+        wasm_bytes: Arc::<[u8]>::from(wasm),
+    };
+
+    let err = executor
+        .call(&request)
+        .expect_err("call_ref callee work must consume the guest fuel budget");
+    assert_eq!(err.code, ModuleCallErrorCode::OutOfFuel, "{err:?}");
 }
 
 #[cfg(feature = "wasmtime")]

@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import re
 import sys
+from types import SimpleNamespace
 from unittest.mock import patch
 import unittest
 from pathlib import Path
@@ -25,7 +26,7 @@ class DispatchInputTests(unittest.TestCase):
         expected = {
             "run_mode": "v1_reuse_validation_only",
             "task_uid": "task_" + "a" * 32,
-            "pr_number": "4060",
+            "pr_number": "143",
             "integration_base": "1" * 40,
             "expected_head": "2" * 40,
             "source_scope_oid": "3" * 40,
@@ -64,17 +65,167 @@ class DispatchInputTests(unittest.TestCase):
 
 
 class LiveIdentityTests(unittest.TestCase):
+    def test_successor_requester_must_be_live_admin(self):
+        authority = SimpleNamespace(
+            authorized_actor="approval-admin", pin_actor="pin-admin",
+            request_actor="request-admin",
+        )
+
+        class API:
+            def __init__(self, permissions):
+                self.permissions = permissions
+                self.checked = []
+
+            def get_json(self, endpoint):
+                login = endpoint.split("/collaborators/", 1)[1].split("/", 1)[0]
+                self.checked.append(login)
+                return {"user": {"login": login}, "permission": self.permissions[login]}
+
+        with patch.object(producer.contract, "is_successor_authority", return_value=True):
+            valid = API({
+                "approval-admin": "admin", "pin-admin": "admin", "request-admin": "admin",
+            })
+            self.assertEqual(
+                {"approval-admin", "pin-admin", "request-admin"},
+                set(producer._live_admin_permissions(valid, authority)),
+            )
+            self.assertEqual({"approval-admin", "pin-admin", "request-admin"}, set(valid.checked))
+
+            nonadmin = API({
+                "approval-admin": "admin", "pin-admin": "admin", "request-admin": "write",
+            })
+            with self.assertRaises(producer.ProducerError):
+                producer._live_admin_permissions(nonadmin, authority)
+            self.assertEqual({"approval-admin", "pin-admin", "request-admin"}, set(nonadmin.checked))
+
+    def test_task_lookup_uses_complete_rest_issue_pages_then_derived_issue_and_pr(self):
+        task_uid = "task_" + "a" * 32
+        issue_number = 87
+        pr_number = 143
+        body = (
+            "<!-- oasis7-pm-task -->\n"
+            f"task_uid: {task_uid}\n"
+            f"- pr_number: `{pr_number}`\n"
+            f"- pr_url: `https://github.com/eng-cc/oasis7/pull/{pr_number}`\n"
+        )
+        task_issue = {
+            "id": 9001, "number": issue_number,
+            "html_url": f"https://github.com/eng-cc/oasis7/issues/{issue_number}",
+            "body": body,
+        }
+        live_issue = {
+            "id": task_issue["id"], "number": issue_number,
+            "html_url": task_issue["html_url"], "body": body,
+        }
+
+        class API:
+            def __init__(self):
+                self.pages_read = 0
+                self.endpoints = []
+
+            def task_issue_pages(self):
+                self.pages_read += 1
+                unrelated = {
+                    "id": 8999, "number": 86,
+                    "html_url": "https://github.com/eng-cc/oasis7/issues/86",
+                    "body": "ordinary issue that does not contain a canonical Task marker",
+                }
+                return ([unrelated, task_issue],)
+
+            def get_json(self, endpoint):
+                self.endpoints.append(endpoint)
+                return live_issue
+
+        api = API()
+        issue, resolved_issue_number, resolved_pr_number, pr_url = producer._resolve_live_task(api, task_uid)
+        self.assertEqual(1, api.pages_read)
+        self.assertEqual(live_issue, issue)
+        self.assertEqual(issue_number, resolved_issue_number)
+        self.assertEqual(pr_number, resolved_pr_number)
+        self.assertEqual(f"https://github.com/eng-cc/oasis7/pull/{pr_number}", pr_url)
+        self.assertEqual([f"repos/eng-cc/oasis7/issues/{issue_number}"], api.endpoints)
+
+    def test_duplicate_task_uid_issue_matches_fail_closed_without_issue_or_pr_fallback(self):
+        task_uid = "task_" + "a" * 32
+        body = (
+            "<!-- oasis7-pm-task -->\n"
+            f"task_uid: {task_uid}\n"
+            "- pr_number: `143`\n"
+            "- pr_url: `https://github.com/eng-cc/oasis7/pull/143`\n"
+        )
+
+        class API:
+            def task_issue_pages(self):
+                return ([
+                    {"id": 9001, "number": 87, "html_url": "https://github.com/eng-cc/oasis7/issues/87", "body": body},
+                    {"id": 9002, "number": 88, "html_url": "https://github.com/eng-cc/oasis7/issues/88", "body": body},
+                ],)
+
+            def get_json(self, endpoint):
+                raise AssertionError("ambiguous UID must fail before direct issue/PR reads")
+
+        with self.assertRaisesRegex(producer.ProducerError, "exactly one"):
+            producer._resolve_live_task(API(), task_uid)
+
+    def test_task_issue_and_direct_rest_disagreement_fails_closed(self):
+        task_uid = "task_" + "a" * 32
+        body = (
+            "<!-- oasis7-pm-task -->\n"
+            f"task_uid: {task_uid}\n"
+            "- pr_number: `143`\n"
+            "- pr_url: `https://github.com/eng-cc/oasis7/pull/143`\n"
+        )
+        selected = {
+            "id": 9001, "number": 87,
+            "html_url": "https://github.com/eng-cc/oasis7/issues/87", "body": body,
+        }
+
+        class API:
+            def __init__(self, live_issue):
+                self.live_issue = live_issue
+
+            def task_issue_pages(self):
+                return ([selected],)
+
+            def get_json(self, _endpoint):
+                return self.live_issue
+
+        changed_body = body.replace("pull/143", "pull/144").replace("`143`", "`144`")
+        with self.assertRaises(producer.ProducerError):
+            producer._resolve_live_task(API({
+                "id": selected["id"], "number": 87,
+                "html_url": selected["html_url"], "body": changed_body,
+            }), task_uid)
+
+    def test_missing_or_malformed_rest_issue_pages_fail_closed(self):
+        task_uid = "task_" + "a" * 32
+
+        class API:
+            def __init__(self, pages):
+                self.pages = pages
+
+            def task_issue_pages(self):
+                return self.pages
+
+            def get_json(self, _endpoint):
+                raise AssertionError("incomplete history must fail before fallback reads")
+
+        for pages in ((), (None,), ([{"number": 87}],)):
+            with self.subTest(pages=pages), self.assertRaises(producer.ProducerError):
+                producer._resolve_live_task(API(pages), task_uid)
+
     def test_reciprocal_pr_requires_well_typed_same_repository_refs(self):
         pr = {
-            "number": 4060,
+            "number": 143,
             "state": "open",
             "merged": False,
-            "body": "Task: task_" + "a" * 32 + "\nRefs #4059",
+            "body": "Task: task_" + "a" * 32 + "\nRefs #87",
             "base": {"ref": "main", "sha": "1" * 40,
                      "repo": {"full_name": "eng-cc/oasis7"}},
             "head": {"sha": "2" * 40, "repo": {"full_name": "eng-cc/oasis7"}},
         }
-        self.assertEqual(("2" * 40, "1" * 40), producer._check_live_pr(pr, "task_" + "a" * 32))
+        self.assertEqual(("2" * 40, "1" * 40),
+                         producer._check_live_pr(pr, "task_" + "a" * 32, 87, 143))
 
         for changed in (
             {**pr, "head": {"sha": "2" * 40, "repo": None}},
@@ -82,7 +233,15 @@ class LiveIdentityTests(unittest.TestCase):
             {**pr, "head": {**pr["head"], "repo": {"full_name": "fork/project"}}},
         ):
             with self.subTest(changed=changed), self.assertRaises(producer.ProducerError):
-                producer._check_live_pr(changed, "task_" + "a" * 32)
+                producer._check_live_pr(changed, "task_" + "a" * 32, 87, 143)
+
+        for changed in (
+            {**pr, "number": 144},
+            {**pr, "body": pr["body"].replace("#87", "#88")},
+            {**pr, "body": pr["body"].replace("task_" + "a" * 32, "task_" + "b" * 32)},
+        ):
+            with self.subTest(changed=changed), self.assertRaises(producer.ProducerError):
+                producer._check_live_pr(changed, "task_" + "a" * 32, 87, 143)
 
     def test_current_run_must_be_exact_default_branch_workflow_w_and_title(self):
         oid = "a" * 40
@@ -90,7 +249,7 @@ class LiveIdentityTests(unittest.TestCase):
         row = {
             "id": 700,
             "workflow_id": 800,
-            "path": producer.WORKFLOW_PATH,
+            "path": producer.WORKFLOW_FILE,
             "event": "workflow_dispatch",
             "head_branch": "main",
             "display_title": expected_title,
@@ -120,6 +279,8 @@ class LiveIdentityTests(unittest.TestCase):
         self.assertEqual("repos/eng-cc/oasis7/actions/runs/700", api.endpoint)
         self.assertEqual(2, result["run_attempt"])
         self.assertEqual(oid, result["workflow_sha"])
+        self.assertEqual(producer.WORKFLOW_FILE, result["workflow_api_path"])
+        self.assertEqual(producer.WORKFLOW_PATH, result["workflow_path"])
 
         for field, value in (
             ("event", "push"),
@@ -135,12 +296,51 @@ class LiveIdentityTests(unittest.TestCase):
             changed[field] = value
             with self.subTest(field=field), self.assertRaises(producer.ProducerError):
                 producer._check_dispatch_run(API(changed), 700, 800, "main", expected_title, environment)
-
         bad_environment = dict(environment)
         bad_environment["GITHUB_WORKFLOW_SHA"] = "b" * 40
         with self.assertRaises(producer.ProducerError):
             producer._check_dispatch_run(API(row), 700, 800, "main", expected_title, bad_environment)
 
+    def test_run_identity_uses_live_default_branch_and_exact_raw_path_forms(self):
+        oid = "a" * 40
+        title = "oasis7-ci|workflow_dispatch|validation-id"
+        row = {
+            "id": 701, "workflow_id": 801, "path": producer.WORKFLOW_FILE,
+            "event": "workflow_dispatch", "head_branch": "release/ready",
+            "display_title": title, "head_sha": oid, "run_attempt": 1,
+            "repository": {"full_name": producer.REPOSITORY},
+            "head_repository": {"full_name": producer.REPOSITORY},
+        }
+        environment = {
+            "GITHUB_WORKFLOW_SHA": oid, "GITHUB_SHA": oid,
+            "GITHUB_REF": "refs/heads/release/ready",
+            "GITHUB_WORKFLOW_REF": (
+                f"{producer.REPOSITORY}/{producer.WORKFLOW_FILE}@refs/heads/release/ready"
+            ),
+        }
+
+        class API:
+            def __init__(self, value):
+                self.value = value
+
+            def get_json(self, endpoint):
+                return self.value
+
+        result = producer._check_dispatch_run(
+            API(row), 701, 801, "release/ready", title, environment,
+        )
+        self.assertEqual(producer.WORKFLOW_FILE, result["workflow_api_path"])
+        self.assertEqual(f"{producer.WORKFLOW_FILE}@release/ready", result["workflow_path"])
+        self.assertEqual("refs/heads/release/ready", result["event_ref"])
+        for path in (
+            f"{producer.WORKFLOW_FILE}@main",
+            f"{producer.WORKFLOW_FILE}@refs/heads/release/ready",
+            ".github/workflows/other.yml",
+        ):
+            with self.subTest(path=path), self.assertRaises(producer.ProducerError):
+                producer._check_dispatch_run(
+                    API({**row, "path": path}), 701, 801, "release/ready", title, environment,
+                )
 
 class CompleteCollectionTests(unittest.TestCase):
     def test_collection_requires_stable_total_unique_ids_and_complete_pagination(self):
@@ -175,6 +375,7 @@ class WorkflowIsolationTests(unittest.TestCase):
         job = job_match.group(1)
         self.assertIn("name: v1-reuse-validation-only", job)
         self.assertIn("inputs.run_mode == 'v1_reuse_validation_only'", job)
+        self.assertIn("inputs.run_mode == 'v2_reuse_validation_successor_only'", job)
         self.assertIn("github.ref == 'refs/heads/main'", job)
         self.assertIn("GH_TOKEN: ${{ github.token }}", job)
         self.assertIn("python3 -I scripts/pm/ci-reuse-validation.py", job)
@@ -186,9 +387,20 @@ class WorkflowIsolationTests(unittest.TestCase):
         required_gate = re.search(r"(?ms)^  required-gate:\n(.*?)(?=^  [a-z0-9_-]+:|\Z)", workflow)
         self.assertIsNotNone(required_gate)
         self.assertNotIn("v1_reuse_validation_only", required_gate.group(1))
+        self.assertNotIn("v2_reuse_validation_successor_only", required_gate.group(1))
         required_result = re.search(r"(?ms)^  required-result-v2:\n(.*?)(?=^  full-regression:)", workflow)
         self.assertIsNotNone(required_result)
         self.assertNotIn("v1_reuse_validation_only", required_result.group(1))
+        self.assertNotIn("v2_reuse_validation_successor_only", required_result.group(1))
+
+        jobs_section = workflow.split("jobs:\n", 1)[1]
+        job_blocks = re.findall(
+            r"(?ms)^  ([a-z0-9_-]+):\n(.*?)(?=^  [a-z0-9_-]+:|\Z)", jobs_section,
+        )
+        for name, body in job_blocks:
+            if name != "v1-reuse-validation-only":
+                with self.subTest(job=name):
+                    self.assertNotIn("v2_reuse_validation_successor_only", body)
 
 
 class ExecutionPlanTests(unittest.TestCase):

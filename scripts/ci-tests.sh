@@ -376,9 +376,10 @@ run_workflow_governance_baseline_contract_tests() {
   run ./scripts/plan-rust-required-scope.test.sh
   run_workflow_impact_projection_contract_tests
   run python3 ./scripts/pm/check-cargo-package-scope.test.py
-  run python3 ./scripts/pm/cargo-checker-stage-admission.test.py
-  echo "DISPATCH:run_checker_stage_changed_path_contract_tests"
-  run_checker_stage_changed_path_contract_tests
+  run python3 ./scripts/pm/cargo-checker-route-retirement.test.py
+  run python3 ./scripts/pm/cargo-package-profile-planner.test.py
+  run python3 ./scripts/pm/cargo-package-profile-driver.test.py
+  run python3 ./scripts/workflow-process-identity-check.test.py
   run ./scripts/rust-required-gate-compile-command-contract.test.sh
   run bash ./scripts/rust-full-tier-trunk-prerequisite-contract.test.sh
   run bash ./scripts/ci-required-baseline-routing.test.sh
@@ -387,12 +388,21 @@ run_workflow_governance_baseline_contract_tests() {
 }
 
 run_workflow_governance_operational_contract_tests() {
+  run bash ./scripts/pm/lint.test.sh
+  run bash ./scripts/pm/github-project-workflow.test.sh
   run ./scripts/ci-required-scope-audit-contract.test.sh
+  run python3 ./scripts/pm/workflow-process-exception.test.py
+  run python3 ./scripts/pm/workflow-delivery-readiness.test.py
   run python3 ./scripts/pm/aggregate-task-completion.test.py
   run python3 ./scripts/pm/ordered-aggregate-closeout.test.py
   run python3 ./scripts/pm/terminal-task-audit-aggregate.test.py
   run python3 ./scripts/pm/terminal-task-audit-project-semantics.test.py
   run python3 ./scripts/pm/ci-ready-receipt.test.py
+  run python3 ./scripts/pm/ci_reuse_validation_readback.test.py
+  run python3 ./scripts/pm/ci_reuse_validation_readback_pagination_adversarial.test.py
+  run python3 ./scripts/pm/ci-reuse-validation.test.py
+  run python3 ./scripts/pm/ci_reuse_validation_contract.test.py
+  run python3 ./scripts/pm/ci_reuse_validation_unicode_history_adversarial.test.py
   run python3 ./scripts/pm/review-plan.test.py
   run python3 ./scripts/pm/subagent-task-packet.test.py
   run python3 ./scripts/pm/bootstrap-task-snapshot.test.py
@@ -712,8 +722,6 @@ run_cargo_package_scope_check() {
   local checker="${OASIS7_CARGO_SCOPE_CHECKER:-./scripts/pm/check-cargo-package-scope}"
   local policy="./.pm/cargo-package-scope-policy.json"
   local primary_package="${OASIS7_CARGO_PRIMARY_PACKAGE:-auto}"
-  local integration_base="${OASIS7_CARGO_SCOPE_INTEGRATION_BASE:-$base_oid}"
-  local stage_pr_number="${OASIS7_CARGO_STAGE_PR_NUMBER:-}"
   if [[ -z "$base_oid" || -z "$head_oid" ]]; then
     echo "skip: Cargo package scope audit reason=trusted_base_head_not_provided claim_boundary=contract_suite_only"
     return 0
@@ -726,16 +734,6 @@ run_cargo_package_scope_check() {
     echo "skip: Cargo package scope audit reason=trusted_base_policy_unavailable claim_boundary=contract_suite_only"
     return 0
   fi
-  if [[ -n "${OASIS7_CARGO_STAGE_TASK_UID:-}" && -z "$stage_pr_number" ]]; then
-    echo "error: checker-stage task identity provided without checker-stage PR" >&2
-    return 1
-  fi
-  if [[ -n "$stage_pr_number" ]]; then
-    [[ -n "${OASIS7_CARGO_STAGE_TASK_UID:-}" && -n "$integration_base" ]] || {
-      echo "error: checker-stage test route identity is incomplete" >&2
-      return 1
-    }
-  fi
   local checker_result=0
   run python3 "$checker" \
     --repo-root "$repo_root" \
@@ -747,190 +745,6 @@ run_cargo_package_scope_check() {
   if (( checker_result != 0 )); then
     return "$checker_result"
   fi
-}
-
-run_checker_stage_changed_path_contract_tests() {
-  local fixture
-  fixture="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-checker-stage-paths.XXXXXX")"
-  (
-    set -euo pipefail
-    cd "$fixture"
-    git init -q
-    git config user.email checker-stage-contract@example.invalid
-    git config user.name checker-stage-contract
-    printf 'baseline\n' >README
-    printf 'ordinary source\n' >ordinary-source.txt
-    printf 'ordinary delete\n' >ordinary-delete.txt
-    git add README ordinary-source.txt ordinary-delete.txt
-    git commit -qm baseline
-    local base ordinary_head ordinary_delete_head ordinary_rename_head ordinary_copy_head
-    local partial_head mixed_head checker_base exact_head rename_head copy_head checker_copy_head checker_delete_head
-    base="$(git rev-parse HEAD)"
-
-    checker_stage_route() {
-      local base_oid="${1:-}"
-      local head_oid="${2:-}"
-      [[ -n "$base_oid" && -n "$head_oid" ]] || return 1
-      local status_file status first_path second_path checker_non_modification=false
-      status_file="$(mktemp)"
-      if ! git diff --name-status --find-renames --find-copies --find-copies-harder "$base_oid" "$head_oid" >"$status_file"; then
-        rm -f "$status_file"
-        return 1
-      fi
-      local -a changed_paths=()
-      local parse_error=false
-      while IFS=$'\t' read -r status first_path second_path; do
-        [[ -n "$status" ]] || continue
-        case "$status" in
-          R*|C*)
-            if [[ -z "$first_path" || -z "$second_path" ]]; then
-              parse_error=true
-              break
-            fi
-            changed_paths+=("$first_path" "$second_path")
-            checker_non_modification=true
-            ;;
-          M)
-            if [[ -z "$first_path" || -n "$second_path" ]]; then
-              parse_error=true
-              break
-            fi
-            changed_paths+=("$first_path")
-            ;;
-          *)
-            if [[ -z "$first_path" || -n "$second_path" ]]; then
-              parse_error=true
-              break
-            fi
-            changed_paths+=("$first_path")
-            checker_non_modification=true
-            ;;
-        esac
-      done <"$status_file"
-      rm -f "$status_file"
-      [[ "$parse_error" != true ]] || return 1
-      local checker_touched=false path
-      for path in "${changed_paths[@]}"; do
-        if [[ "$path" == scripts/pm/check-cargo-package-scope ||
-              "$path" == scripts/pm/check-cargo-package-scope.test.py ]]; then
-          checker_touched=true
-        fi
-      done
-      if [[ "$checker_touched" != true ]]; then
-        printf 'ordinary\n'
-        return 0
-      fi
-      [[ "$checker_non_modification" != true ]] || return 1
-      (( ${#changed_paths[@]} == 2 )) || return 1
-      for path in "${changed_paths[@]}"; do
-        [[ "$path" == scripts/pm/check-cargo-package-scope ||
-           "$path" == scripts/pm/check-cargo-package-scope.test.py ]] || return 1
-      done
-      printf 'checker\n'
-    }
-
-    expect_route() {
-      local expected="$1" base_oid="$2" head_oid="$3" actual
-      actual="$(checker_stage_route "$base_oid" "$head_oid" 2>/dev/null || true)"
-      [[ -n "$actual" ]] || actual=reject
-      [[ "$actual" == "$expected" ]] || {
-        echo "checker-stage path contract expected $expected, got $actual" >&2
-        return 1
-      }
-    }
-
-    git checkout -q "$base"
-    printf 'ordinary\n' >ordinary.txt
-    git add ordinary.txt
-    git commit -qm ordinary
-    ordinary_head="$(git rev-parse HEAD)"
-    expect_route ordinary "$base" "$ordinary_head"
-
-    git checkout -q "$base"
-    git rm -q ordinary-delete.txt
-    git commit -qm ordinary-delete
-    ordinary_delete_head="$(git rev-parse HEAD)"
-    expect_route ordinary "$base" "$ordinary_delete_head"
-
-    git checkout -q "$base"
-    git mv ordinary-source.txt ordinary-renamed.txt
-    git commit -qm ordinary-rename
-    ordinary_rename_head="$(git rev-parse HEAD)"
-    expect_route ordinary "$base" "$ordinary_rename_head"
-
-    git checkout -q "$base"
-    cp ordinary-source.txt ordinary-copy.txt
-    git add ordinary-copy.txt
-    git commit -qm ordinary-copy
-    ordinary_copy_head="$(git rev-parse HEAD)"
-    expect_route ordinary "$base" "$ordinary_copy_head"
-
-    git checkout -q "$base"
-    mkdir -p scripts/pm
-    printf 'checker\n' >scripts/pm/check-cargo-package-scope
-    git add scripts/pm/check-cargo-package-scope
-    git commit -qm partial
-    partial_head="$(git rev-parse HEAD)"
-    expect_route reject "$base" "$partial_head"
-
-    git checkout -q "$base"
-    mkdir -p scripts/pm
-    printf 'checker\n' >scripts/pm/check-cargo-package-scope
-    printf 'mixed\n' >mixed.txt
-    git add scripts/pm/check-cargo-package-scope mixed.txt
-    git commit -qm mixed
-    mixed_head="$(git rev-parse HEAD)"
-    expect_route reject "$base" "$mixed_head"
-
-    git checkout -q "$base"
-    mkdir -p scripts/pm
-    printf 'checker\n' >scripts/pm/check-cargo-package-scope
-    printf 'test\n' >scripts/pm/check-cargo-package-scope.test.py
-    git add scripts/pm
-    git commit -qm checker-base
-    checker_base="$(git rev-parse HEAD)"
-
-    git checkout -q "$checker_base"
-    printf 'updated\n' >>scripts/pm/check-cargo-package-scope
-    printf 'updated\n' >>scripts/pm/check-cargo-package-scope.test.py
-    git add scripts/pm
-    git commit -qm checker
-    exact_head="$(git rev-parse HEAD)"
-    expect_route checker "$checker_base" "$exact_head"
-
-    git checkout -q "$checker_base"
-    git mv scripts/pm/check-cargo-package-scope scripts/pm/renamed-checker
-    git commit -qm rename
-    rename_head="$(git rev-parse HEAD)"
-    expect_route reject "$checker_base" "$rename_head"
-
-    git checkout -q "$checker_base"
-    cp scripts/pm/check-cargo-package-scope scripts/pm/checker-copy
-    git add scripts/pm/checker-copy
-    git commit -qm checker-copy
-    checker_copy_head="$(git rev-parse HEAD)"
-    expect_route reject "$checker_base" "$checker_copy_head"
-
-    git checkout -q "$checker_base"
-    git rm -q scripts/pm/check-cargo-package-scope
-    git commit -qm checker-delete
-    checker_delete_head="$(git rev-parse HEAD)"
-    expect_route reject "$checker_base" "$checker_delete_head"
-
-    git checkout -q "$checker_base"
-    cp scripts/pm/check-cargo-package-scope scripts/pm/copied-checker
-    printf 'updated\n' >>scripts/pm/check-cargo-package-scope
-    git add scripts/pm/check-cargo-package-scope scripts/pm/copied-checker
-    git commit -qm copy
-    copy_head="$(git rev-parse HEAD)"
-    expect_route reject "$checker_base" "$copy_head"
-
-    expect_route reject '' "$ordinary_head"
-    expect_route reject "$base" "0000000000000000000000000000000000000000"
-  )
-  local result=$?
-  rm -rf "$fixture"
-  return "$result"
 }
 
 run_cargo_package_profile_completion_check() {

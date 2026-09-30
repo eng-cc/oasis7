@@ -15,8 +15,19 @@ members = ["crates/oasis7_client_api",
     "crates/oasis7_wasm_sdk",
     "crates/oasis7_wasm_router",
     "crates/oasis7_wasm_store",
+    "tools/wasm_build_suite",
+    "tools/wasm_module_observe",
 ]
 resolver = "2"
+
+[workspace.dependencies]
+hex = "0.4"
+serde = { version = "1", features = ["derive"] }
+serde_cbor = "0.11"
+serde_json = "1"
+sha2 = "0.11"
+wasm-encoder = "0.256"
+wasmparser = "0.256"
 
 [profile.packaging]
 # Keep native distribution artifacts small without applying native-oriented

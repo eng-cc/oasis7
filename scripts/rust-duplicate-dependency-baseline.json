@@ -3,31 +3,8 @@
   "owner": "repository_health_engineer",
   "reviewed_at": "2026-08-14",
   "expires": "2026-09-30",
-  "rationale": "Freeze the current duplicate-dependency report budget and crate identity set so dependency graph growth or crate swaps are explicit while existing duplicate-version debt is burned down in focused tasks. Tree output line count remains report-only because cargo tree text formatting can vary across toolchains. Task #3235 approves only the 11 crypto-family identities listed in approved_duplicate_provenance: each is an unavoidable old/new transitive closure while libp2p/aliyun-tablestore/Wasmtime/tungstenite and the first-party crypto majors resolve concurrently; no aggregate maxima increase is justified.",
-  "update_policy": "Only raise a maximum or approve a new duplicate crate with repository-health review evidence, a task execution-log entry, and a follow-up burn-down rationale. Every approved exception must carry approved_duplicate_provenance with task UID, evidence command/report, owner, expiry, affected crate identities, and a concrete burn-down trigger. Lower maxima and remove stale crate entries when dependency cleanup removes duplicates.",
-  "approved_duplicate_provenance": {
-    "task_uid": "task_8b7a7667d4e3495b8a41080cc3271d7e",
-    "issue": "https://github.com/eng-cc/oasis7/issues/3235",
-    "owner": "repository_health_engineer",
-    "reviewed_at": "2026-08-14",
-    "expires": "2026-09-30",
-    "evidence_command": "./scripts/ci-rust-governance-report.sh --out-dir /tmp/oasis7-crypto-governance-final",
-    "evidence_report": "https://github.com/eng-cc/oasis7/issues/3235#issuecomment-5291435711",
-    "burn_down_trigger": "Re-run the governance report at expiry or after a libp2p, aliyun-tablestore-rs, Wasmtime, tungstenite, or first-party crypto-major upgrade; remove each exception as soon as its old/new transitive closure converges.",
-    "affected_crates": [
-      "block-buffer",
-      "crypto-common",
-      "curve25519-dalek",
-      "digest",
-      "ed25519",
-      "ed25519-dalek",
-      "fiat-crypto",
-      "hmac",
-      "sha1",
-      "sha2",
-      "signature"
-    ]
-  },
+  "rationale": "Freeze the duplicate-dependency report budget and crate allowance set so dependency graph growth or crate swaps are explicit while existing duplicate-version debt is reduced. Tree output line count remains report-only because cargo tree text formatting can vary across toolchains. The current crypto-family crate allowances describe the observed dependency closure; no aggregate maxima increase is justified.",
+  "update_policy": "Only raise a maximum or approve a new duplicate crate with repository-health review and a concrete burn-down rationale. Lower maxima and remove stale crate entries when dependency cleanup removes duplicates.",
   "maxima": {
     "duplicate_dependency_cluster_count": 75,
     "duplicate_dependency_unique_crates": 75,

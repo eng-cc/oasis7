@@ -140,9 +140,7 @@ def load_archived_tasks(root: pathlib.Path, statuses: set[str]) -> list[OrderedD
 
 
 def load_mapping(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists():
-        return {"version": 1, "tasks": {}}
-    return json.loads(path.read_text(encoding="utf-8"))
+    return durable_store.read_mapping(path, {"version": 1, "tasks": {}})
 
 
 _store_path = pathlib.Path(__file__).with_name("workflow-durable-store.py")
@@ -150,6 +148,33 @@ if not _store_path.exists(): _store_path = pathlib.Path.cwd()/"scripts/pm/workfl
 _store_spec = importlib.util.spec_from_file_location("workflow_durable_store", _store_path)
 assert _store_spec and _store_spec.loader
 durable_store = importlib.util.module_from_spec(_store_spec); _store_spec.loader.exec_module(durable_store)
+
+
+def guard_missing_mapping_candidates(
+    task_uids: list[str], repository: str, project_owner: str, project_number: int, *, skip_recover: bool,
+) -> None:
+    """Load the shared admission guard only when a candidate identity is absent."""
+    guard_path = pathlib.Path(__file__).with_name("closed_duplicate_candidate_guard.py")
+    spec = importlib.util.spec_from_file_location("closed_duplicate_candidate_guard_sync", guard_path)
+    if spec is None or spec.loader is None:
+        die(f"github-project-sync: shared candidate admission guard is unavailable at {guard_path}")
+    guard = importlib.util.module_from_spec(spec)
+    try:
+        spec.loader.exec_module(guard)
+    except Exception as exc:
+        die(f"github-project-sync: shared candidate admission guard could not be loaded: {exc}")
+    try:
+        guard.guard_missing_mapping_candidates(
+            task_uids,
+            repository,
+            project_owner,
+            project_number,
+            skip_recover=skip_recover,
+        )
+    except guard.CandidateAdmissionError as exc:
+        die(f"github-project-sync: {exc}")
+
+
 def persist_mapping(path: pathlib.Path, snapshot: dict[str, Any]) -> None:
     """Persist explicit per-task patches through the shared field-policy CAS."""
     for task_uid, patch in (snapshot.get("tasks") or {}).items():
@@ -170,6 +195,41 @@ def run_json(cmd: list[str]) -> dict[str, Any]:
 def run_text(cmd: list[str]) -> str:
     result = run_subprocess_with_retry(cmd)
     return result.stdout.strip()
+
+
+def reject_unretired_closed_duplicate(root: pathlib.Path, mapping: dict[str, Any], task_uid: str) -> None:
+    """Stop refresh before a poisoned cached candidate identity is consumed."""
+    row = (mapping.get("tasks") or {}).get(task_uid)
+    if not isinstance(row, dict) or str(row.get("status") or "") != "candidate":
+        return
+    repository = str((mapping.get("project") or {}).get("repo") or row.get("repository") or "")
+    issue_number = int(row.get("issue_number") or 0)
+    if not repository or issue_number <= 0:
+        die(f"github-project-sync: candidate {task_uid} has incomplete Issue identity")
+    issue = run_json(["gh", "api", f"repos/{repository}/issues/{issue_number}"])
+    if str(issue.get("state") or "").lower() != "closed" or str(issue.get("state_reason") or "").lower() != "duplicate":
+        return
+    body = str(issue.get("body") or "")
+    uid_fields = re.findall(r"(?m)^task_uid:\s*(task_[0-9a-f]{32})\s*$", body)
+    if uid_fields != [task_uid]:
+        die(f"github-project-sync: closed duplicate Issue #{issue_number} has ambiguous task UID; cached identity was not used")
+    comments = run_json(["gh", "api", f"repos/{repository}/issues/{issue_number}/comments?per_page=100", "--paginate", "--slurp"])
+    pages = comments if isinstance(comments, list) else [comments]
+    flattened = []
+    for page in pages:
+        if isinstance(page, list): flattened.extend(item for item in page if isinstance(item, dict))
+        elif isinstance(page, dict): flattened.append(page)
+        else: die(f"github-project-sync: closed duplicate Issue #{issue_number} comment pagination is malformed")
+    marker = "<!-- oasis7.duplicate-candidate-disposition/v1 -->"
+    marked = [item for item in flattened if str(item.get("body") or "").startswith(marker)]
+    if len(marked) != 1 or not int(marked[0].get("id") or 0):
+        die(f"github-project-sync: closed duplicate candidate {task_uid} needs one server disposition comment before retirement")
+    launcher = pathlib.Path(__file__).with_name("retire-closed-duplicate-candidate.sh").resolve()
+    command = (
+        f"{launcher} --mapping-root {root} --task-uid {task_uid} "
+        f"--disposition-comment-id {int(marked[0]['id'])} --preflight"
+    )
+    die(f"github-project-sync: closed duplicate candidate mapping must be reconciled before refresh; run: {command}")
 
 
 def run_subprocess_with_retry(cmd: list[str], *, retries: int = 4) -> subprocess.CompletedProcess[str]:
@@ -719,7 +779,7 @@ def read_project_item_field_values(project_id: str, item_id: str) -> dict[str, s
     """Read back the authoritative Project fields for one item after mutation."""
     token = github_token()
     query = """
-    query($project: ID!, $item: ID!) {
+    query($item: ID!) {
       node(id: $item) {
         ... on ProjectV2Item {
           project { id }
@@ -731,8 +791,8 @@ def read_project_item_field_values(project_id: str, item_id: str) -> dict[str, s
       }
     }
     """
-    payload = graphql_request(token, query, {"project": project_id, "item": item_id})
-    node = ((payload.get("data") or {}).get("node") or {})
+    payload = graphql_request(token, query, {"item": item_id})
+    node = payload.get("node") or {}
     if str(((node.get("project") or {}).get("id") or "")) != project_id:
         raise RuntimeError("Project item belongs to a different Project")
     values: dict[str, str] = {}
@@ -807,7 +867,51 @@ def main(argv: list[str] | None = None) -> int:
     if not mapping_path.is_absolute():
         mapping_path = root / mapping_path
     mapping = load_mapping(mapping_path)
+    if args.task_uid and durable_store.retired_task(mapping, args.task_uid) is not None:
+        result = {"status": "retired", "task_uid": args.task_uid, "mapping_path": str(mapping_path)}
+        if args.json:
+            print(json.dumps(result, indent=2, sort_keys=True))
+        else:
+            print(f"github-project-sync: {args.task_uid} is retired by a validated duplicate-candidate tombstone")
+        return 0
+    if not args.task_uid:
+        for task in tasks:
+            task_uid = str(task.get("task_uid") or "")
+            try:
+                retired = durable_store.retired_task(mapping, task_uid)
+            except ValueError as exc:
+                die(f"github-project-sync: retirement ledger is invalid: {exc}")
+            if retired is not None:
+                die(
+                    "github-project-sync: global maintenance selected a retired Task UID from .pm/tasks; "
+                    f"remove or reconcile the stale source entry before recovery or apply: {task_uid}"
+                )
+    mapping_tasks = mapping.get("tasks")
+    if not isinstance(mapping_tasks, dict):
+        die("github-project-sync: task mapping is malformed")
+    missing_candidate_uids = []
+    for task in tasks:
+        if str(task.get("status") or "") != "candidate":
+            continue
+        task_uid = str(task.get("task_uid") or "")
+        record = mapping_tasks.get(task_uid)
+        has_complete_identity = isinstance(record, dict) and all(
+            record.get(key) not in (None, "")
+            for key in ("issue_url", "issue_number", "project_item_id")
+        )
+        if not has_complete_identity:
+            missing_candidate_uids.append(task_uid)
+    if missing_candidate_uids:
+        guard_missing_mapping_candidates(
+            missing_candidate_uids,
+            args.repo,
+            args.project_owner,
+            args.project_number,
+            skip_recover=args.skip_recover,
+        )
     mapping.setdefault("tasks", {})
+    for task in tasks:
+        reject_unretired_closed_duplicate(root, mapping, str(task.get("task_uid") or ""))
     only_fields = set(args.field) if args.field else None
     if args.missing_only:
         filtered_tasks = []

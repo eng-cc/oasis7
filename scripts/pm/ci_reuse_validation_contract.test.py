@@ -9,6 +9,8 @@ import unittest
 from pathlib import Path
 
 HERE = Path(__file__).parent
+FIXTURE_ISSUE_NUMBER = 87
+FIXTURE_PR_NUMBER = 143
 SPEC = importlib.util.spec_from_file_location(
     "ci_reuse_validation_contract", HERE / "ci_reuse_validation_contract.py",
 )
@@ -38,6 +40,8 @@ def validation_fixture():
     )
     context = contract.TrustedRequestContext(
         task_uid="task_" + "a" * 32,
+        task_issue_number=FIXTURE_ISSUE_NUMBER,
+        pr_number=FIXTURE_PR_NUMBER,
         head_oid="1" * 40,
         source_scope_oid="2" * 40,
         projection_digest="sha256:" + "3" * 64,
@@ -62,8 +66,8 @@ def validation_fixture():
         "schema": contract.AUTHORIZATION_SCHEMA,
         "repository": "eng-cc/oasis7",
         "task_uid": context.task_uid,
-        "task_issue_number": 4059,
-        "pr_number": 4060,
+        "task_issue_number": FIXTURE_ISSUE_NUMBER,
+        "pr_number": FIXTURE_PR_NUMBER,
         "head_oid": context.head_oid,
         "integration_base_oid": "4" * 40,
         "source_scope_oid": context.source_scope_oid,
@@ -78,8 +82,8 @@ def validation_fixture():
         "schema": contract.REQUEST_SCHEMA,
         "repository": "eng-cc/oasis7",
         "task_uid": context.task_uid,
-        "task_issue_number": 4059,
-        "pr_number": 4060,
+        "task_issue_number": FIXTURE_ISSUE_NUMBER,
+        "pr_number": FIXTURE_PR_NUMBER,
         "head_oid": context.head_oid,
         "integration_base_oid": authorization["integration_base_oid"],
         "source_scope_oid": context.source_scope_oid,
@@ -88,7 +92,7 @@ def validation_fixture():
         "purpose": "v1_pre_activation_validation",
         "authorization_decision": "authorize_validation_only",
         "authorization_source": {
-            "issue_number": 4059,
+            "issue_number": FIXTURE_ISSUE_NUMBER,
             "comment_id": 10,
             "body_digest": authorization_digest,
         },
@@ -100,8 +104,8 @@ def validation_fixture():
         "schema": contract.PIN_SCHEMA,
         "repository": "eng-cc/oasis7",
         "task_uid": context.task_uid,
-        "task_issue_number": 4059,
-        "pr_number": 4060,
+        "task_issue_number": FIXTURE_ISSUE_NUMBER,
+        "pr_number": FIXTURE_PR_NUMBER,
         "request_comment_id": 20,
         "request_body_digest": contract.body_digest(request_body),
         "request_digest": request["request_digest"],
@@ -124,6 +128,142 @@ def validation_fixture():
     return context, request, authorization, pin, comments, permissions, authority
 
 
+def successor_fixture():
+    """Build a V2 successor over an immutable V1 failure and a new live W."""
+    context, old_request, _, _, comments, permissions, old_authority = validation_fixture()
+    permissions["request-admin"] = {
+        "login": "request-admin", "permission": "admin",
+    }
+    old_workflow = contract.normalize_workflow_identity(
+        "main", ".github/workflows/rust.yml@main",
+    )
+    predecessor = {
+        "schema": contract.PREDECESSOR_OBSERVATION_SCHEMA,
+        "repository": contract.REPOSITORY,
+        "task_uid": context.task_uid,
+        "task_issue_number": context.task_issue_number,
+        "pr_number": context.pr_number,
+        "head_oid": old_request["head_oid"],
+        "integration_base_oid": old_request["integration_base_oid"],
+        "request_comment_id": old_authority.request_comment_id,
+        "request_body_digest": old_authority.request_body_digest,
+        "request_digest": old_authority.request["request_digest"],
+        "authorization_comment_id": old_authority.authorization_comment_id,
+        "authorization_body_digest": old_authority.authorization_body_digest,
+        "pin_comment_id": old_authority.pin_comment_id,
+        "pin_body_digest": old_authority.pin_body_digest,
+        "validation_id": old_authority.validation_id,
+        "workflow_id": 900,
+        **old_workflow,
+        "event": "workflow_dispatch",
+        "display_title": contract.expected_run_title(old_authority),
+        "dispatched_head_sha": "5" * 40,
+        "run_id": 700,
+        "run_attempt": 2,
+        "run_status": "completed",
+        "run_conclusion": "failure",
+        "run_head_sha": "5" * 40,
+        "run_terminal_updated_at": "2026-01-01T00:10:00Z",
+        "workflow_blob_oid": "a" * 40,
+        "workflow_blob_digest": "sha256:" + "b" * 64,
+    }
+    expected_identity = {
+        "task_uid": context.task_uid,
+        "task_issue_number": context.task_issue_number,
+        "pr_number": context.pr_number,
+        "head_oid": "8" * 40,
+        "integration_base_oid": "9" * 40,
+    }
+    successor_workflow_identity = contract.normalize_workflow_identity(
+        "release/next", ".github/workflows/rust.yml@release/next",
+    )
+    successor_workflow = {
+        "workflow_id": 901,
+        **successor_workflow_identity,
+        "workflow_sha": "c" * 40,
+    }
+    predecessor_digest = contract.body_digest(contract.canonical_json_bytes(predecessor))
+    successor_workflow_digest = contract.body_digest(
+        contract.canonical_json_bytes(successor_workflow),
+    )
+    authorization = {
+        "schema": contract.SUCCESSOR_AUTHORIZATION_SCHEMA,
+        "repository": contract.REPOSITORY,
+        "task_uid": context.task_uid,
+        "task_issue_number": context.task_issue_number,
+        "pr_number": context.pr_number,
+        "head_oid": expected_identity["head_oid"],
+        "integration_base_oid": expected_identity["integration_base_oid"],
+        "source_scope_oid": context.source_scope_oid,
+        "projection_digest": context.projection_digest,
+        "validation_units": list(old_request["validation_units"]),
+        "purpose": contract.SUCCESSOR_PURPOSE,
+        "decision": contract.SUCCESSOR_REQUEST_DECISION,
+        "successor_sequence": 1,
+        "reason": "validate the new workflow after fixing the failed check",
+        "predecessor_digest": predecessor_digest,
+        "successor_workflow_digest": successor_workflow_digest,
+    }
+    authorization_body = marked(contract.SUCCESSOR_AUTHORIZATION_MARKER, authorization)
+    request = {
+        "schema": contract.SUCCESSOR_REQUEST_SCHEMA,
+        "repository": contract.REPOSITORY,
+        "task_uid": context.task_uid,
+        "task_issue_number": context.task_issue_number,
+        "pr_number": context.pr_number,
+        "head_oid": expected_identity["head_oid"],
+        "integration_base_oid": expected_identity["integration_base_oid"],
+        "source_scope_oid": context.source_scope_oid,
+        "projection_digest": context.projection_digest,
+        "validation_units": list(old_request["validation_units"]),
+        "purpose": contract.SUCCESSOR_PURPOSE,
+        "authorization_decision": contract.SUCCESSOR_REQUEST_DECISION,
+        "authorization_source": {
+            "issue_number": context.task_issue_number,
+            "comment_id": 40,
+            "body_digest": contract.body_digest(authorization_body),
+        },
+        "authorized_actor": "approval-admin",
+        "successor_sequence": 1,
+        "reason": authorization["reason"],
+        "predecessor": predecessor,
+        "predecessor_digest": predecessor_digest,
+        "successor_workflow": successor_workflow,
+        "successor_workflow_digest": successor_workflow_digest,
+    }
+    request["request_digest"] = contract.request_digest(request)
+    request_body = marked(contract.SUCCESSOR_REQUEST_MARKER, request)
+    pin = {
+        "schema": contract.SUCCESSOR_PIN_SCHEMA,
+        "repository": contract.REPOSITORY,
+        "task_uid": context.task_uid,
+        "task_issue_number": context.task_issue_number,
+        "pr_number": context.pr_number,
+        "request_comment_id": 50,
+        "request_body_digest": contract.body_digest(request_body),
+        "request_digest": request["request_digest"],
+        "purpose": contract.SUCCESSOR_PIN_PURPOSE,
+        "successor_sequence": 1,
+        "predecessor_digest": predecessor_digest,
+        "successor_workflow_digest": successor_workflow_digest,
+    }
+    successor_comments = [
+        {"id": 40, "body": authorization_body, "user": {"login": "approval-admin"},
+         "created_at": "2026-01-01T00:11:00Z", "updated_at": "2026-01-01T00:11:00Z"},
+        {"id": 50, "body": request_body, "user": {"login": "request-admin"},
+         "created_at": "2026-01-01T00:12:00Z", "updated_at": "2026-01-01T00:12:00Z"},
+        {"id": 60, "body": marked(contract.SUCCESSOR_PIN_MARKER, pin), "user": {"login": "pin-admin"},
+         "created_at": "2026-01-01T00:13:00Z", "updated_at": "2026-01-01T00:13:00Z"},
+    ]
+    return {
+        "context": context, "permissions": permissions,
+        "comments": comments + successor_comments,
+        "predecessor": predecessor, "identity": expected_identity,
+        "request": request, "authorization": authorization, "pin": pin,
+        "successor_workflow": successor_workflow,
+    }
+
+
 def live_run(authority=None):
     if authority is None:
         *_, authority = validation_fixture()
@@ -131,8 +271,11 @@ def live_run(authority=None):
         "repository": "eng-cc/oasis7",
         "id": 700,
         "workflow_id": 900,
+        "workflow_api_path": ".github/workflows/rust.yml@main",
+        "workflow_default_branch": "main",
         "workflow_path": ".github/workflows/rust.yml@main",
         "workflow_ref": "eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main",
+        "event_ref": "refs/heads/main",
         "workflow_sha": "5" * 40,
         "event": "workflow_dispatch",
         "display_title": contract.expected_run_title(authority),
@@ -162,7 +305,10 @@ def payload_fixture(authority=None, run=None):
     record = contract.build_authority_record(authority, run)
     payload = {
         **record,
-        "schema": contract.PAYLOAD_SCHEMA,
+        "schema": (
+            contract.SUCCESSOR_PAYLOAD_SCHEMA
+            if contract.is_successor_authority(authority) else contract.PAYLOAD_SCHEMA
+        ),
         "run_attempt": run["run_attempt"],
         "check_name": check["name"],
         "check_run_id": check["id"],
@@ -210,8 +356,8 @@ class CanonicalAuthorityTests(unittest.TestCase):
         self.assertIn(unit_id, context.planner_unit_ids)
         self.assertEqual((obligation,), context.planner_unit_obligations[unit_id])
         validated_context = contract._validate_context(context)
-        self.assertIn(unit_id, validated_context[4])
-        self.assertEqual((obligation,), validated_context[5][unit_id])
+        self.assertIn(unit_id, validated_context[6])
+        self.assertEqual((obligation,), validated_context[7][unit_id])
         self.assertEqual(set(request["validation_units"]), set(authority.planner_unit_obligations))
         self.assertEqual(
             ["required_gate_baseline", "workflow_governance"],
@@ -271,12 +417,29 @@ class CanonicalAuthorityTests(unittest.TestCase):
         self.assertEqual(authority.planner_unit_obligations, bound.planner_unit_obligations)
         wrong_context = contract.TrustedRequestContext(
             task_uid=context.task_uid, head_oid="8" * 40,
+            task_issue_number=context.task_issue_number, pr_number=context.pr_number,
             source_scope_oid=context.source_scope_oid, projection_digest=context.projection_digest,
             planner_unit_ids=context.planner_unit_ids,
             planner_unit_obligations=context.planner_unit_obligations,
         )
         with self.assertRaises(contract.ContractError):
             contract.bind_authority_context(provisional, wrong_context)
+
+    def test_live_task_and_pr_numbers_are_dynamic_but_exactly_bound(self):
+        context, _, _, _, comments, permissions, _ = validation_fixture()
+        self.assertFalse(hasattr(contract, "TASK_ISSUE_NUMBER"))
+        self.assertFalse(hasattr(contract, "PR_NUMBER"))
+        changed_context = contract.TrustedRequestContext(
+            task_uid=context.task_uid, task_issue_number=context.task_issue_number + 1,
+            pr_number=context.pr_number, head_oid=context.head_oid,
+            source_scope_oid=context.source_scope_oid,
+            projection_digest=context.projection_digest,
+            planner_unit_ids=context.planner_unit_ids,
+            planner_unit_obligations=context.planner_unit_obligations,
+        )
+        provisional = contract.resolve_records(comments, permissions)
+        with self.assertRaisesRegex(contract.ContractError, "trusted live Task/H/S identity"):
+            contract.bind_authority_context(provisional, changed_context)
 
     def test_readback_uses_issued_admin_snapshot_without_live_permission_lookup(self):
         context, _, _, _, comments, _, issued = validation_fixture()
@@ -302,6 +465,55 @@ class CanonicalAuthorityTests(unittest.TestCase):
         changed = contract.resolve_records_for_readback(changed_comments)
         with self.assertRaisesRegex(contract.ContractError, "pin_actor"):
             contract.bind_recorded_admin_snapshot(changed, issued_record)
+
+    def test_readback_selects_latest_complete_chain_for_live_task_pr_and_head(self):
+        context, request, authorization, pin, comments, _, issued = validation_fixture()
+        later_authorization_body = marked(contract.AUTHORIZATION_MARKER, dict(authorization))
+        later_request = dict(request)
+        later_request["authorization_source"] = {
+            "issue_number": context.task_issue_number,
+            "comment_id": 40,
+            "body_digest": contract.body_digest(later_authorization_body),
+        }
+        later_request["request_digest"] = contract.request_digest({
+            key: value for key, value in later_request.items() if key != "request_digest"
+        })
+        later_request_body = marked(contract.REQUEST_MARKER, later_request)
+        later_pin = {
+            **pin,
+            "request_comment_id": 50,
+            "request_body_digest": contract.body_digest(later_request_body),
+            "request_digest": later_request["request_digest"],
+        }
+        later_pin_body = marked(contract.PIN_MARKER, later_pin)
+        comments = [
+            *comments,
+            {"id": 40, "body": later_authorization_body,
+             "user": {"login": "approval-admin"},
+             "created_at": "2026-01-01T00:03:00Z", "updated_at": "2026-01-01T00:03:00Z"},
+            {"id": 50, "body": later_request_body,
+             "user": {"login": "requester"},
+             "created_at": "2026-01-01T00:04:00Z", "updated_at": "2026-01-01T00:04:00Z"},
+            {"id": 60, "body": later_pin_body,
+             "user": {"login": "pin-admin"},
+             "created_at": "2026-01-01T00:05:00Z", "updated_at": "2026-01-01T00:05:00Z"},
+        ]
+        expected_identity = {
+            "task_uid": context.task_uid,
+            "task_issue_number": context.task_issue_number,
+            "pr_number": context.pr_number,
+            "head_oid": request["head_oid"],
+            "integration_base_oid": request["integration_base_oid"],
+        }
+
+        current = contract.resolve_records_for_readback(
+            comments, expected_identity=expected_identity,
+        )
+
+        self.assertEqual(50, current.request_comment_id)
+        self.assertEqual(40, current.authorization_comment_id)
+        self.assertEqual(60, current.pin_comment_id)
+        self.assertNotEqual(issued.validation_id, current.validation_id)
 
     def test_duplicate_keys_noncanonical_body_extra_fields_and_marker_duplicates_fail(self):
         _, request, _, _, comments, permissions, _ = validation_fixture()
@@ -360,7 +572,312 @@ class CanonicalAuthorityTests(unittest.TestCase):
             contract.artifact_name(expected, 0, 1)
 
 
+class SuccessorAuthorityTests(unittest.TestCase):
+    def test_dynamic_default_branch_identity_is_retained_and_derived_exactly(self):
+        identity = contract.normalize_workflow_identity(
+            "release/next", ".github/workflows/rust.yml@release/next",
+        )
+        self.assertEqual(".github/workflows/rust.yml@release/next", identity["workflow_api_path"])
+        self.assertEqual("release/next", identity["workflow_default_branch"])
+        self.assertEqual("eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/release/next",
+                         identity["workflow_ref"])
+        self.assertEqual("refs/heads/release/next", identity["event_ref"])
+        for branch, raw_path in (
+            ("release/next", ".github/workflows/rust.yml@main"),
+            ("release/next", ".github/workflows/rust.yml@release/next/other"),
+            ("release/next", ".github/workflows/other.yml@release/next"),
+        ):
+            with self.subTest(raw_path=raw_path), self.assertRaises(contract.ContractError):
+                contract.normalize_workflow_identity(branch, raw_path)
+
+    def test_v2_resolvers_bind_same_task_failed_v1_and_current_admins(self):
+        fixture = successor_fixture()
+        provisional = contract.resolve_successor_records_for_readback(
+            fixture["comments"], fixture["identity"], fixture["predecessor"],
+        )
+        self.assertFalse(provisional.permission_snapshot_bound)
+        self.assertTrue(contract.is_successor_authority(provisional))
+        self.assertEqual(contract.SUCCESSOR_RUN_MODE,
+                         contract.expected_event_inputs(provisional)["run_mode"])
+        self.assertEqual(
+            contract.successor_validation_id(fixture["request"]["request_digest"]),
+            provisional.validation_id,
+        )
+        self.assertNotEqual(fixture["predecessor"]["head_oid"], fixture["identity"]["head_oid"])
+        authority = contract.resolve_successor_records(
+            fixture["comments"], fixture["identity"], fixture["permissions"],
+            fixture["predecessor"],
+        )
+        self.assertTrue(authority.permission_snapshot_bound)
+        self.assertEqual(40, authority.authorization_comment_id)
+        self.assertEqual(50, authority.request_comment_id)
+        self.assertEqual(60, authority.pin_comment_id)
+        bad_permissions = dict(fixture["permissions"])
+        bad_permissions["approval-admin"] = {
+            "login": "approval-admin", "permission": "maintain",
+        }
+        with self.assertRaises(contract.ContractError):
+            contract.resolve_successor_records(
+                fixture["comments"], fixture["identity"], bad_permissions,
+                fixture["predecessor"],
+            )
+        read_permissions = dict(fixture["permissions"])
+        read_permissions["request-admin"] = {
+            "login": "request-admin", "permission": "read",
+        }
+        with self.assertRaises(contract.ContractError):
+            contract.resolve_successor_records(
+                fixture["comments"], fixture["identity"], read_permissions,
+                fixture["predecessor"],
+            )
+
+    def test_successor_authority_payload_and_readback_preserve_full_predecessor(self):
+        fixture = successor_fixture()
+        provisional = contract.resolve_successor_records_for_readback(
+            fixture["comments"], fixture["identity"], fixture["predecessor"],
+        )
+        current_context = contract.TrustedRequestContext(
+            task_uid=fixture["context"].task_uid,
+            task_issue_number=fixture["context"].task_issue_number,
+            pr_number=fixture["context"].pr_number,
+            head_oid=fixture["identity"]["head_oid"],
+            source_scope_oid=fixture["context"].source_scope_oid,
+            projection_digest=fixture["context"].projection_digest,
+            planner_unit_ids=fixture["context"].planner_unit_ids,
+            planner_unit_obligations=fixture["context"].planner_unit_obligations,
+        )
+        run = {
+            "repository": contract.REPOSITORY,
+            "id": 701,
+            "workflow_id": fixture["successor_workflow"]["workflow_id"],
+            **contract.normalize_workflow_identity("release/next", ".github/workflows/rust.yml@release/next"),
+            "workflow_sha": fixture["successor_workflow"]["workflow_sha"],
+            "event": "workflow_dispatch",
+            "display_title": contract.expected_run_title(provisional),
+            "dispatched_head_sha": fixture["successor_workflow"]["workflow_sha"],
+            "run_attempt": 1,
+            "status": "completed",
+            "conclusion": "success",
+            "tested_merge_oid": "d" * 40,
+            "tested_tree_oid": "e" * 40,
+        }
+        # The V2 authority can bind the same current planner context after the
+        # producer has recorded its own live admin and workflow observations.
+        issued = contract.resolve_successor_records(
+            fixture["comments"], fixture["identity"], fixture["permissions"],
+            fixture["predecessor"],
+        )
+        issued = contract.bind_authority_context(issued, current_context)
+        record = contract.build_authority_record(issued, run)
+        snapshot_bound = contract.bind_recorded_admin_snapshot(provisional, record)
+        snapshot_bound = contract.bind_authority_context(snapshot_bound, current_context)
+        rebuilt_record = contract.build_authority_record(snapshot_bound, run)
+        self.assertEqual(record, rebuilt_record)
+        self.assertEqual(contract.authority_digest(record), contract.authority_digest(rebuilt_record))
+        self.assertEqual(contract.SUCCESSOR_AUTHORITY_SCHEMA, record["schema"])
+        self.assertEqual(fixture["predecessor"], record["predecessor"])
+        self.assertEqual(fixture["successor_workflow"], record["successor_workflow"])
+        self.assertEqual("request-admin", record["request_actor"])
+        self.assertEqual("admin", record["request_permission"])
+        self.assertEqual(
+            "oasis7-ci-reuse-validation-v2-" + issued.validation_id + "-r701-a1",
+            contract.artifact_name(issued.validation_id, 701, 1, successor=True),
+        )
+        check = {
+            "name": contract.CHECK_NAME, "id": 801,
+            "app_id": contract.GITHUB_ACTIONS_APP_ID,
+            "head_sha": run["dispatched_head_sha"], "run_id": run["id"],
+            "run_attempt": run["run_attempt"], "status": "completed", "conclusion": "success",
+        }
+        payload = {
+            **record,
+            "schema": contract.SUCCESSOR_PAYLOAD_SCHEMA,
+            "authority_digest": contract.authority_digest(record),
+            "capability_under_test": contract.CAPABILITY,
+            "tested_merge_oid": run["tested_merge_oid"],
+            "tested_tree_oid": run["tested_tree_oid"],
+            "run_attempt": run["run_attempt"],
+            "event_inputs": contract.expected_event_inputs(issued),
+            "check_name": check["name"], "check_run_id": check["id"],
+            "check_app_id": check["app_id"],
+            "selected_obligations": {
+                unit: list(issued.planner_unit_obligations[unit])
+                for unit in issued.request["validation_units"]
+            },
+            "result_digests": {
+                unit: "sha256:" + "f" * 64 for unit in issued.request["validation_units"]
+            },
+        }
+        verified = contract.verify_payload(payload, snapshot_bound, run, check)
+        self.assertEqual(contract.SUCCESSOR_PAYLOAD_SCHEMA, verified["schema"])
+        payload_bytes = contract.canonical_json_bytes(payload)
+        artifact_bytes = b"successor archive"
+        artifact = {
+            "id": 902,
+            "name": contract.artifact_name(issued.validation_id, 701, 1, successor=True),
+        }
+        envelope = {
+            "schema": contract.SUCCESSOR_READBACK_SCHEMA,
+            "authority_digest": contract.authority_digest(record),
+            "validation_id": issued.validation_id,
+            "run_id": 701, "run_attempt": 1,
+            "workflow_id": run["workflow_id"],
+            **{key: run[key] for key in (
+                "workflow_api_path", "workflow_default_branch", "workflow_path",
+                "workflow_ref", "event_ref", "workflow_sha", "event",
+                "display_title", "dispatched_head_sha",
+            )},
+            "check_name": check["name"], "check_run_id": check["id"],
+            "check_app_id": check["app_id"], "artifact_id": artifact["id"],
+            "artifact_name": artifact["name"],
+            "artifact_content_digest": contract.body_digest(artifact_bytes),
+            "payload_digest": contract.body_digest(payload_bytes),
+            "successor_sequence": 1,
+            "reason": issued.request["reason"],
+            "predecessor": fixture["predecessor"],
+            "predecessor_digest": issued.request["predecessor_digest"],
+            "successor_workflow": fixture["successor_workflow"],
+            "successor_workflow_digest": issued.request["successor_workflow_digest"],
+            "request_actor": issued.request_actor,
+            "request_permission": issued.request_permission,
+        }
+        contract.verify_readback(
+            envelope, issued, run, check, artifact, payload_bytes, artifact_bytes,
+        )
+        wrong_predecessor = dict(envelope)
+        wrong_predecessor["predecessor_digest"] = "sha256:" + "0" * 64
+        with self.assertRaises(contract.ContractError):
+            contract.verify_readback(
+                wrong_predecessor, issued, run, check, artifact, payload_bytes, artifact_bytes,
+            )
+        self.assertTrue(snapshot_bound.permission_snapshot_bound)
+
+    def test_successor_proof_rejects_changed_predecessor_and_nonfailed_or_stale_authority(self):
+        fixture = successor_fixture()
+        for field, value in (
+            ("request_comment_id", 999),
+            ("request_digest", "sha256:" + "0" * 64),
+            ("workflow_blob_digest", "sha256:" + "0" * 64),
+            ("run_conclusion", "success"),
+            ("run_terminal_updated_at", "2026-01-01T00:14:00Z"),
+        ):
+            observation = dict(fixture["predecessor"], **{field: value})
+            with self.subTest(field=field), self.assertRaises(contract.ContractError):
+                contract.resolve_successor_records_for_readback(
+                    fixture["comments"], fixture["identity"], observation,
+                )
+        stale = list(fixture["comments"])
+        stale[3] = {**stale[3], "created_at": "2026-01-01T00:09:00Z",
+                    "updated_at": "2026-01-01T00:09:00Z"}
+        with self.assertRaises(contract.ContractError):
+            contract.resolve_successor_records_for_readback(
+                stale, fixture["identity"], fixture["predecessor"],
+            )
+
+    def test_newer_malformed_successor_intent_blocks_prior_complete_chain(self):
+        fixture = successor_fixture()
+        newer = {
+            **fixture["identity"],
+            "schema": contract.SUCCESSOR_REQUEST_SCHEMA,
+        }
+        comments = fixture["comments"] + [{
+            "id": 70,
+            "body": marked(contract.SUCCESSOR_REQUEST_MARKER, newer),
+            "user": {"login": "requester"},
+            "created_at": "2026-01-01T00:14:00Z",
+            "updated_at": "2026-01-01T00:14:00Z",
+        }]
+        with self.assertRaises(contract.ContractError):
+            contract.resolve_successor_records_for_readback(
+                comments, fixture["identity"], fixture["predecessor"],
+            )
+
+
 class WorkflowDiscoveryTests(unittest.TestCase):
+    def test_complete_history_accepts_bounded_unicode_beside_exact_ascii_candidate(self):
+        *_, authority = validation_fixture()
+        historical = {"id": 699, "display_title": "nightly 日本語 🌱 — прошлый запуск"}
+        target = live_run(authority)
+        pages = [{"total_count": 2, "runs": [historical, target], "has_next": False}]
+
+        complete = contract.collect_workflow_runs(pages)
+        selected = contract.select_unique_run(complete, authority)
+
+        self.assertEqual(historical["display_title"], complete[0]["display_title"])
+        self.assertEqual(target["id"], selected["id"])
+        self.assertEqual(contract.expected_run_title(authority), selected["display_title"])
+        self.assertTrue(selected["display_title"].isascii())
+
+    def test_malformed_or_superseded_action_titles_do_not_poison_current_request(self):
+        *_, authority = validation_fixture()
+        target = live_run(authority)
+        expected = contract.expected_run_title(authority)
+        validation_id = authority.validation_id
+        prefix_candidate = {
+            "id": 701,
+            "display_title": expected[:-len(validation_id)] + "wrong-key-🌱",
+        }
+        suffix_candidate = {
+            "id": 702,
+            "display_title": "unrelated history—日本語|" + validation_id,
+        }
+
+        for candidate in (prefix_candidate, suffix_candidate):
+            with self.subTest(run_id=candidate["id"]):
+                with self.assertRaises(contract.ContractError):
+                    contract.select_unique_run([candidate], authority)
+                self.assertEqual(target["id"], contract.select_unique_run([target, candidate], authority)["id"])
+
+    def test_failed_cancelled_and_superseded_runs_do_not_poison_successful_retry(self):
+        *_, authority = validation_fixture()
+        successful = live_run(authority)
+        failed = {**successful, "id": 701, "status": "completed", "conclusion": "failure"}
+        cancelled = {**successful, "id": 702, "status": "completed", "conclusion": "cancelled"}
+        superseded = {**successful, "id": 703, "status": "completed", "conclusion": "timed_out"}
+
+        selected = contract.select_unique_run([failed, cancelled, superseded, successful], authority)
+
+        self.assertEqual(successful["id"], selected["id"])
+
+    def test_current_dispatch_selects_current_run_and_rejects_competing_live_attempt(self):
+        *_, authority = validation_fixture()
+        current = {**live_run(authority), "id": 704, "status": "in_progress", "conclusion": None}
+        failed = {**current, "id": 705, "status": "completed", "conclusion": "failure"}
+        selected = contract.select_unique_run([failed, current], authority, current_run_id=704)
+        self.assertEqual(current["id"], selected["id"])
+
+        competing = {**current, "id": 706, "status": "in_progress", "conclusion": None}
+        with self.assertRaisesRegex(contract.ContractError, "competing"):
+            contract.select_unique_run([failed, current, competing], authority, current_run_id=704)
+
+    def test_history_titles_accept_long_well_formed_unicode_without_normalization(self):
+        *_, authority = validation_fixture()
+        historical = {"id": 698, "display_title": "🌱" * 1025}
+        target = live_run(authority)
+
+        complete = contract.collect_workflow_runs([
+            {"total_count": 2, "runs": [historical, target], "has_next": False},
+        ])
+        selected = contract.select_unique_run(complete, authority)
+
+        self.assertEqual(historical["display_title"], complete[0]["display_title"])
+        self.assertEqual(target["id"], selected["id"])
+        self.assertEqual(contract.expected_run_title(authority), selected["display_title"])
+        self.assertTrue(selected["display_title"].isascii())
+
+    def test_history_titles_must_be_well_formed_utf8_strings(self):
+        malformed_titles = ("", "unpaired surrogate \ud800", "nul\x00", "carriage\rreturn", "line\nfeed")
+        for index, title in enumerate(malformed_titles, start=710):
+            with self.subTest(title_kind=index):
+                page = [{"total_count": 1, "runs": [{"id": index, "display_title": title}], "has_next": False}]
+                with self.assertRaises(contract.ContractError):
+                    contract.collect_workflow_runs(page)
+        for row in ({"id": 720}, {"id": 721, "display_title": None}, {"id": 722, "display_title": 42}):
+            with self.subTest(row=row):
+                page = [{"total_count": 1, "runs": [row], "has_next": False}]
+                with self.assertRaises(contract.ContractError):
+                    contract.collect_workflow_runs(page)
+
     def test_unfiltered_history_exhaustion_accepts_more_than_one_thousand_runs(self):
         pages = []
         next_id = 10000
@@ -386,13 +903,13 @@ class WorkflowDiscoveryTests(unittest.TestCase):
             with self.subTest(pages=pages), self.assertRaises(contract.ContractError):
                 contract.collect_workflow_runs(pages)
 
-    def test_candidate_union_rejects_second_run_even_if_only_prefix_matches(self):
+    def test_other_request_key_for_same_task_head_is_not_a_current_action_candidate(self):
         *_, authority = validation_fixture()
         target = live_run(authority)
         malformed = {**target, "id": 701, "display_title": target["display_title"].rsplit("|", 1)[0] + "|wrong-key"}
+        self.assertEqual(target["id"], contract.select_unique_run([target, malformed], authority)["id"])
         with self.assertRaises(contract.ContractError):
-            contract.select_unique_run([target, malformed], authority)
-        self.assertEqual(target["id"], contract.select_unique_run([target], authority)["id"])
+            contract.select_unique_run([malformed], authority)
 
 
 class PayloadReadbackTests(unittest.TestCase):
@@ -408,8 +925,10 @@ class PayloadReadbackTests(unittest.TestCase):
             "authority_digest": payload["authority_digest"],
             "validation_id": authority.validation_id,
             "run_id": run["id"], "run_attempt": 1,
-            "workflow_id": run["workflow_id"], "workflow_path": run["workflow_path"],
-            "workflow_ref": run["workflow_ref"], "workflow_sha": run["workflow_sha"],
+            "workflow_id": run["workflow_id"], "workflow_api_path": run["workflow_api_path"],
+            "workflow_default_branch": run["workflow_default_branch"],
+            "workflow_path": run["workflow_path"], "workflow_ref": run["workflow_ref"],
+            "event_ref": run["event_ref"], "workflow_sha": run["workflow_sha"],
             "event": run["event"], "display_title": run["display_title"],
             "dispatched_head_sha": run["dispatched_head_sha"],
             "check_name": check["name"], "check_run_id": check["id"],
@@ -453,8 +972,10 @@ class PayloadReadbackTests(unittest.TestCase):
         envelope = {
             "schema": contract.READBACK_SCHEMA, "authority_digest": contract.authority_digest(record),
             "validation_id": authority.validation_id, "run_id": run["id"], "run_attempt": 1,
-            "workflow_id": run["workflow_id"], "workflow_path": run["workflow_path"],
-            "workflow_ref": run["workflow_ref"], "workflow_sha": run["workflow_sha"],
+            "workflow_id": run["workflow_id"], "workflow_api_path": run["workflow_api_path"],
+            "workflow_default_branch": run["workflow_default_branch"],
+            "workflow_path": run["workflow_path"], "workflow_ref": run["workflow_ref"],
+            "event_ref": run["event_ref"], "workflow_sha": run["workflow_sha"],
             "event": run["event"], "display_title": run["display_title"],
             "dispatched_head_sha": run["dispatched_head_sha"], "check_name": check["name"],
             "check_run_id": check["id"], "check_app_id": check["app_id"],

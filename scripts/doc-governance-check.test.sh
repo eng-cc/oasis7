@@ -38,6 +38,7 @@ if [[ ! -x "$REAL_PYTHON" ]] || ! "$REAL_PYTHON" -c 'import ast; print("ready")'
 fi
 cp "$ROOT_DIR/scripts/doc-governance-check.sh" "$FIXTURE/scripts/doc-governance-check.sh"
 cp "$ROOT_DIR/scripts/pm/find-python-with-module.sh" "$FIXTURE/scripts/pm/find-python-with-module.sh"
+cp "$ROOT_DIR/scripts/workflow-process-identity-check.py" "$FIXTURE/scripts/workflow-process-identity-check.py"
 cat >"$FIXTURE/scripts/product-doc-governance-check.py" <<'PY'
 #!/usr/bin/env python3
 raise SystemExit(0)
