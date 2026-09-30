@@ -123,7 +123,7 @@ Physical closed JSON receiver 是 [actual target schema](../../testing/schemas/w
 ## 12. 决策、长期风险与未决问题
 
 ### SR2 runtime 十组目标 fixture allocation
-每行是目标 fixture contract；required 为同候选 deterministic test，full 为同候选真实 canonical/proof/consumer readback。尚未运行；现有 narrow tests 仅 partial locator，全部结果必须写 Task4102 的 actual evidence，不伪造未来 task IDs。
+每行是目标 fixture contract；required 为同候选 deterministic test，full 为同候选真实 canonical/proof/consumer readback。尚未运行；现有 narrow tests 仅 partial locator，全部结果必须写 candidate-bound 的 actual evidence，不伪造未来 task IDs。
 
 | Group | 注入与步骤 | 必须断言 | receiver / tier / current locator |
 | --- | --- | --- | --- |

@@ -1,7 +1,7 @@
 # oasis7 Runtime：WASM Docker 确定性构建与工件治理管线
 
 - 专业 owner：`wasm_platform_engineer`；状态：active professional authority（目标合同不等于已实现）。
-- 内容审读基线：`eng-cc/oasis7`，源提交 `9c41d57b4436f71f0cf9b481043d882cfdc551ed`；本次文档采纳任务：[Issue 4102](https://github.com/eng-cc/oasis7/issues/4102)，Task UID `task_9f4c3a6c2daa40a0ae3e2c86bdf35e02`；内容整理日期：2026-09-26。
+- 内容审读基线：`eng-cc/oasis7`，源提交 `9c41d57b4436f71f0cf9b481043d882cfdc551ed`；内容整理日期：2026-09-26。
 - 独立审读与实际实现/测试候选证据由该 task evidence 记录；此处不预报审读通过、runtime capability、发布或 full proof。下方既有条款仍有效；仅显式日期/历史基线条款按其证据范围解释。
 
 <a id="sr2-acceptance"></a>
@@ -26,7 +26,7 @@
 输入：node-side missing/forged proof、production host compile、materializer fallback。断言：独立policy/trust receiver拒绝；不以source compile-off代fallback proof。目标字段、算法和恢复条件由 [BUILD-03精确设计](wasm-deterministic-build-pipeline.design.md#sr2-build-contract) 承接；跨域 proof/publication obligation 由 [BUILD-03外部接收器](../module/online-module-release-legality-closure-2026-03-08.design.md#sr2-release-trust) 承接。required codec/deterministic fixture 与 full actual finality/candidate artifacts 是不同层，本次未运行。
 
 
-既有所有成功标准、验收、limits、公式、historical identities和能力限制保留；下表逐项承接到 [精确target设计](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)，而非以任务链接代替设计。Issue4102只承担文档合同采纳；现行实现partial与未来所需runtime/proof验证保持独立。typed字段共用 [interface types](wasm-interface.md#sr2-types)；build/signature/SDK/metrics局部结果均不证明canonical世界效果。
+既有所有成功标准、验收、limits、公式、historical identities和能力限制保留；下表逐项承接到 [精确target设计](wasm-deterministic-build-pipeline.design.md#sr2-build-contract)，而非以任务链接代替设计。本次文档变更只承担文档合同采纳；现行实现partial与未来所需runtime/proof验证保持独立。typed字段共用 [interface types](wasm-interface.md#sr2-types)；build/signature/SDK/metrics局部结果均不证明canonical世界效果。
 
 | 原 obligation identity（下方完整原文） | 具体承接结果 / 适用条件 | 精确设计 receiver | 验证范围 / evidence |
 | --- | --- | --- | --- |
