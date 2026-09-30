@@ -1,4 +1,7 @@
 use std::io::{Read, Write};
+use std::sync::mpsc::{self, RecvTimeoutError};
+use std::thread;
+use std::time::Duration;
 
 use crate::error::SignerError;
 use crate::protocol::{
@@ -6,6 +9,10 @@ use crate::protocol::{
     read_request_frame, write_response_frame,
 };
 use crate::store::SignerStore;
+
+// Leave time before the caller's existing 20-second process-wait deadline
+// for sudo and the parent to observe worker exit and drain its pipes.
+const WORKER_DEADLINE: Duration = Duration::from_secs(18);
 
 /// Process exactly one framed request and emit exactly one framed response.
 ///
@@ -73,15 +80,37 @@ pub fn run_worker() -> i32 {
         eprintln!("worker does not accept command-line arguments");
         return 2;
     }
+    run_worker_with_deadline(WORKER_DEADLINE)
+}
+
+fn run_worker_with_deadline(timeout: Duration) -> i32 {
+    let (completed_tx, completed_rx) = mpsc::sync_channel(1);
+    let watchdog = thread::spawn(move || match completed_rx.recv_timeout(timeout) {
+        Ok(()) => {}
+        Err(RecvTimeoutError::Timeout | RecvTimeoutError::Disconnected) => {
+            eprintln!("worker request exceeded its execution deadline");
+            // The request thread may be blocked in an attacker-controlled
+            // stdin read. Terminating the process releases that read and all
+            // signer-UID locks instead of leaving a detached worker behind.
+            std::process::exit(12);
+        }
+    });
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
-    serve_one(&mut stdin.lock(), &mut stdout.lock())
+    let exit_code = serve_one(&mut stdin.lock(), &mut stdout.lock());
+    let _ = completed_tx.send(());
+    if watchdog.join().is_err() {
+        return 12;
+    }
+    exit_code
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::protocol::{IPC_SCHEMA, RollbackProtocolContext, SignContext};
+    use std::process::{Command, Stdio};
+    use std::time::Instant;
 
     fn sign_request() -> IpcRequest {
         IpcRequest::Sign {
@@ -121,5 +150,54 @@ mod tests {
         assert!(result.signature_base64.0.is_none());
         assert!(result.provider_attestation.0.is_none());
         assert!(result.audit_digest.0.is_none());
+    }
+
+    #[test]
+    fn deadline_child_entry() {
+        if std::env::var_os("OASIS7_SIGNER_WORKER_DEADLINE_CHILD").is_none() {
+            return;
+        }
+        let _ = run_worker_with_deadline(Duration::from_millis(250));
+        panic!("worker deadline must terminate the child process");
+    }
+
+    #[test]
+    fn direct_worker_process_exits_for_open_incomplete_frames() {
+        for (case, bytes) in [
+            ("no-input", &[][..]),
+            ("partial-header", &[0, 0][..]),
+            ("partial-body", &[0, 0, 0, 8, b'{', b'}'][..]),
+        ] {
+            let mut child = Command::new(std::env::current_exe().expect("test executable"))
+                .args([
+                    "--exact",
+                    "worker::tests::deadline_child_entry",
+                    "--nocapture",
+                ])
+                .env("OASIS7_SIGNER_WORKER_DEADLINE_CHILD", case)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::null())
+                .stderr(Stdio::null())
+                .spawn()
+                .expect("spawn direct worker test process");
+            let mut stdin = child.stdin.take().expect("child stdin pipe");
+            stdin
+                .write_all(bytes)
+                .expect("write incomplete frame prefix");
+            // Keep stdin open: EOF must not be what releases the worker.
+            let started = Instant::now();
+            let status = loop {
+                if let Some(status) = child.try_wait().expect("poll child process") {
+                    break status;
+                }
+                assert!(
+                    started.elapsed() < Duration::from_secs(3),
+                    "{case} worker process did not honor its deadline"
+                );
+                thread::sleep(Duration::from_millis(10));
+            };
+            drop(stdin);
+            assert_eq!(status.code(), Some(12), "{case} process exit status");
+        }
     }
 }
