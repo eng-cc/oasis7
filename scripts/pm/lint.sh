@@ -7,6 +7,7 @@ cd "$ROOT_DIR"
 SOURCE_ROOT="$ROOT_DIR"
 
 PM_LINT_TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-pm-lint.XXXXXX")"
+export PYTHONPYCACHEPREFIX="$PM_LINT_TMP_DIR/pycache"
 cleanup() {
   rm -rf "$PM_LINT_TMP_DIR"
 }

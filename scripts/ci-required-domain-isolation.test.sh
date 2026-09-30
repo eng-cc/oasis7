@@ -39,6 +39,7 @@ ci_fixture_assert_inventory_selection_dispatched cargo_tooling_contracts
 ci_fixture_run required strict OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS=true
 ci_fixture_assert_has 'pm/ci-ready-receipt.test.py'
 ci_fixture_assert_has 'ci-tests-argument-contract.test.sh'
+ci_fixture_assert_has 'pm/workflow-next.test.py'
 ci_fixture_assert_lacks 'product-doc-governance-check.test.py'
 ci_fixture_assert_lacks 'native-packaging-contract.test.sh'
 ci_fixture_assert_lacks 'p2p-public-testnet-identity-v2-signing-tool.test.py'
@@ -50,6 +51,7 @@ ci_fixture_assert_has 'testnet-packages-macos-arm64-contract.test.sh'
 ci_fixture_assert_lacks 'pm/ci-ready-receipt.test.py'
 ci_fixture_assert_lacks 'p2p-public-testnet-package-node-upgrade-health.test.sh'
 ci_fixture_assert_lacks 'p2p-public-testnet-identity-v2-signing-tool.test.py'
+ci_fixture_assert_lacks 'pm/workflow-next.test.py'
 ci_fixture_assert_inventory_selection_dispatched packaging_contracts
 
 ci_fixture_run required strict OASIS7_CI_RUN_OPERATIONAL_CONTRACTS=true
@@ -59,6 +61,7 @@ ci_fixture_assert_has 'p2p-public-testnet-package-node-upgrade-health.test.sh'
 ci_fixture_assert_lacks 'pm/ci-ready-receipt.test.py'
 ci_fixture_assert_lacks 'native-packaging-contract.test.sh'
 ci_fixture_assert_lacks 'testnet-packages-macos-arm64-contract.test.sh'
+ci_fixture_assert_lacks 'pm/workflow-next.test.py'
 ci_fixture_assert_lacks 'TOOL:cargo:'
 ci_fixture_assert_lacks 'TOOL:rustup:'
 ci_fixture_assert_lacks 'TOOL:curl:'

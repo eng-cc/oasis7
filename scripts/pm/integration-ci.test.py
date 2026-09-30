@@ -19,7 +19,7 @@ import textwrap
 HERE=Path(__file__).parent
 
 
-def required_test_tier_command(repo):
+def required_test_tier_command(repo, scope_oid='b'*40):
  workflow=(repo/'.github/workflows/rust.yml').read_text()
  step=workflow.split('      - name: Run required test tier\n',1)[1].split('\n      - name:',1)[0]
  run=step.split('        run:',1)[1]
@@ -27,7 +27,9 @@ def required_test_tier_command(repo):
  # GitHub substitutes these trusted workflow expressions before Bash runs.
  # Keep the extracted script executable in this local shell fixture.
  substitutions={
-  '${{ steps.scope.outputs.integration_base_oid }}':'b'*40,
+  '${{ steps.scope.outputs.source_scope_base }}':scope_oid,
+  '${{ steps.scope.outputs.head_oid }}':scope_oid,
+  '${{ steps.scope.outputs.integration_base_oid }}':scope_oid,
   '${{ github.token }}':'fixture-token',
   '${{ inputs.task_uid }}':'task_'+'1'*32,
   '${{ inputs.pr_number }}':'7',
@@ -226,6 +228,46 @@ class IntegrationTests(unittest.TestCase):
      temp=Path(tmp);candidate=temp/'candidate';scripts=candidate/'scripts';scripts.mkdir(parents=True)
      frozen=temp/'integration-planner';frozen.mkdir()
      repo=HERE.parents[1]
+     fixture_bin=temp/'bin';fixture_bin.mkdir()
+     profile_oid=''
+     if event=='workflow_dispatch':
+      (candidate/'.pm').mkdir()
+      (candidate/'scripts/pm').mkdir()
+      for relative in (
+       '.pm/cargo-package-scope-policy.json',
+       'scripts/pm/check-cargo-package-scope',
+       'scripts/pm/workflow-impact-projection.py',
+       'scripts/pm/cargo_package_profile_planner.py',
+       'scripts/pm/cargo_package_profile_driver.py',
+      ):
+       destination=candidate/relative
+       destination.parent.mkdir(parents=True,exist_ok=True)
+       shutil.copy2(repo/relative,destination)
+      (candidate/'Cargo.toml').write_text(
+       '[package]\nname = "workflow-fixture"\nversion = "0.1.0"\nedition = "2021"\n',
+       encoding='utf-8',
+      )
+      (candidate/'src').mkdir()
+      (candidate/'src/lib.rs').write_text('',encoding='utf-8')
+      subprocess.run(['git','init','-q','-b','main'],cwd=candidate,check=True)
+      subprocess.run(['git','config','user.name','Integration Fixture'],cwd=candidate,check=True)
+      subprocess.run(['git','config','user.email','integration-fixture@example.invalid'],cwd=candidate,check=True)
+      subprocess.run(['git','add','.pm','scripts/pm','Cargo.toml','src/lib.rs'],cwd=candidate,check=True)
+      subprocess.run(['git','commit','-qm','trusted profile authority fixture'],cwd=candidate,check=True)
+      profile_oid=subprocess.check_output(['git','rev-parse','HEAD'],cwd=candidate,text=True).strip()
+      expected_api=f'repos/fixture/oasis7/commits/{profile_oid}/check-runs?per_page=100'
+      check_url='https://github.com/fixture/oasis7/actions/runs/12345/jobs/1'
+      gh=fixture_bin/'gh'
+      gh.write_text(
+       '#!/usr/bin/env python3\n'
+       'import json, sys\n'
+       f'expected = {expected_api!r}\n'
+       f'check_url = {check_url!r}\n'
+       "if sys.argv[1:] != ['api', expected]: raise SystemExit('unexpected GitHub API read')\n"
+       "print(json.dumps({'check_runs': [{'name': 'required-gate', 'details_url': check_url, 'id': 678, 'app': {'id': 901}}]}))\n",
+       encoding='utf-8',
+      )
+      gh.chmod(0o755)
      for name in ('ci-tests.sh','viewer-dependency-preflight.sh'):
       shutil.copy2(repo/'scripts'/name,frozen/name)
      marker=temp/'observed'
@@ -235,64 +277,24 @@ class IntegrationTests(unittest.TestCase):
      (scripts/'viewer-dependency-preflight.sh').write_text(candidate_preflight)
      (scripts/'doc-governance-check.sh').write_text('#!/bin/bash\npwd > "$OBSERVED"\nexit 37\n')
      (scripts/'doc-governance-check.sh').chmod(0o755)
-     command=required_test_tier_command(repo)
-     trusted_pm=scripts/'pm';trusted_pm.mkdir()
-     checker=trusted_pm/'check-cargo-package-scope'
-     checker.write_text('#!/usr/bin/env bash\nexit 0\n')
-     checker.chmod(0o755)
-     (trusted_pm/'workflow-impact-projection.py').write_text('# trusted fixture dependency\n')
-     planner=trusted_pm/'cargo_package_profile_planner.py'
-     planner.write_text('''#!/usr/bin/env python3
-import json, sys
-args=sys.argv[1:]
-output=args[args.index('--output')+1]
-plan={'items': [], 'integration_base': args[args.index('--integration-base')+1],
-      'source_head': args[args.index('--source-head')+1], 'tested_tree': 'c'*40,
-      'trusted_authority': {'toolchain': 'fixture-toolchain'}}
-with open(output, 'w', encoding='utf-8') as stream:
- json.dump(plan, stream)
-''')
-     driver=trusted_pm/'cargo_package_profile_driver.py'
-     driver.write_text('''#!/usr/bin/env python3
-print('{"fixture":true}')
-''')
-     git=['git','-C',str(candidate)]
-     subprocess.run([*git,'init','-q'],check=True)
-     subprocess.run([*git,'config','user.name','Integration test'],check=True)
-     subprocess.run([*git,'config','user.email','integration@example.invalid'],check=True)
-     subprocess.run([*git,'add','scripts/pm'],check=True)
-     subprocess.run([*git,'commit','-qm','trusted profile authority fixture'],check=True)
-     scope_base=subprocess.check_output([*git,'rev-parse','HEAD'],text=True).strip()
-     profile_bin=temp/'profile-bin';profile_bin.mkdir()
-     gh=profile_bin/'gh'
-     gh.write_text('''#!/usr/bin/env python3
-import json, os
-print(json.dumps({'check_runs': [{'name': 'required-gate',
-  'details_url': 'https://github.com/%s/actions/runs/%s/job/1' %
-    (os.environ['GITHUB_REPOSITORY'], os.environ['GITHUB_RUN_ID']),
-  'id': 987654, 'app': {'id': 15368}}]}))
-''')
-     gh.chmod(0o755)
-     for path in (planner, driver):
-      path.chmod(0o755)
+     command=required_test_tier_command(repo,profile_oid or 'b'*40)
      env={**os.environ,'RUNNER_TEMP':str(temp),'GITHUB_WORKSPACE':str(candidate),
           'GITHUB_EVENT_NAME':event,'INTEGRATION_MODE':'integration_revalidation','OBSERVED':str(marker),
-          # Model the workflow's trusted-base read with a tiny committed fixture.
-          # Its planner emits no Cargo commands, so this only exercises dispatch
-          # authority setup and frozen-driver/candidate-root routing.
-          'PATH':str(profile_bin)+os.pathsep+os.environ.get('PATH',''),
-          'OASIS7_CARGO_SCOPE_BASE':scope_base,'OASIS7_CARGO_SCOPE_HEAD':'d'*40,
-          'OASIS7_CARGO_PROFILE_PLANNER':'','OASIS7_CARGO_PROFILE_DRIVER':'',
-          'GITHUB_REPOSITORY':'eng-cc/oasis7','GITHUB_SHA':'e'*40,
-          'GITHUB_RUN_ID':'42','GITHUB_RUN_ATTEMPT':'1',
-          'GITHUB_WORKFLOW_REF':'eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main',
-          'GITHUB_WORKFLOW_SHA':'f'*40,
-          'OASIS7_CI_EXECUTION_CONTRACT':'',
-          'OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS':'',
-          'OASIS7_CI_RUN_PACKAGING_CONTRACTS':'',
-          'OASIS7_CI_RUN_DOC_CHECKER_CONTRACTS':'',
-          'OASIS7_CI_RUN_CARGO_TOOLING_CONTRACTS':'',
-          'OASIS7_CI_NEEDS_PYTHON':'','OASIS7_CI_NEEDS_MARKDOWN':''}
+          'INTEGRATION_WORKTREE':'',
+          # This contract isolates frozen driver/preflight routing. Required CI
+          # receives a self-contained trusted Git fixture for dispatch so the
+          # workflow authority check and real planner/driver still execute.
+          'OASIS7_CARGO_SCOPE_BASE':profile_oid,'OASIS7_CARGO_SCOPE_HEAD':profile_oid,
+          'OASIS7_CARGO_SCOPE_INTEGRATION_BASE':profile_oid,
+          'OASIS7_PRODUCT_DOC_BASE':profile_oid,'OASIS7_PRODUCT_DOC_HEAD':profile_oid,
+          'OASIS7_CARGO_PROFILE_PLANNER':'','OASIS7_CARGO_PROFILE_DRIVER':''}
+     if event=='workflow_dispatch':
+      env.update({
+       'PATH':str(fixture_bin)+os.pathsep+env.get('PATH',''),
+       'GITHUB_REPOSITORY':'fixture/oasis7','GITHUB_SHA':profile_oid,
+       'GITHUB_WORKFLOW_REF':'fixture/oasis7/.github/workflows/rust.yml@refs/heads/main',
+       'GITHUB_WORKFLOW_SHA':profile_oid,'GITHUB_RUN_ID':'12345','GITHUB_RUN_ATTEMPT':'1',
+      })
      result=subprocess.run(['bash','-euo','pipefail','-c',command],cwd=candidate,env=env,text=True,capture_output=True)
      if event=='workflow_dispatch':
       self.assertEqual(result.returncode,37,result.stdout+result.stderr)
