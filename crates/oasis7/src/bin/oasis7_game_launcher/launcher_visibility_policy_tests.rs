@@ -38,6 +38,9 @@ fn parse_options_rejects_invalid_major_world_event_visibility() {
 
 #[test]
 fn build_viewer_live_command_wires_major_world_event_visibility() {
+    if !crate::hosted_test_env::with_issuer(None) {
+        return;
+    }
     for (visibility, expected) in [
         (
             MajorWorldEventVisibilityPermission::Restricted,

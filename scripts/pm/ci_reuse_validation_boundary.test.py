@@ -220,7 +220,12 @@ class ExactWBoundaryTests(unittest.TestCase):
             "repository_id": 1234,
             "source_repository_id": 1234,
         }
-        cls.run_identity = {"id": 9001, "run_attempt": 1}
+        cls.workflow_identity = contract.normalize_workflow_identity(
+            "main", contract.WORKFLOW_FILE,
+        )
+        cls.run_identity = {
+            "id": 9001, "run_attempt": 1, **cls.workflow_identity,
+        }
         cls.check = {"id": 9002, "app_id": contract.GITHUB_ACTIONS_APP_ID}
 
     @classmethod
@@ -291,8 +296,7 @@ class ExactWBoundaryTests(unittest.TestCase):
         run = {
             "repository": contract.REPOSITORY,
             "id": self.run_identity["id"], "workflow_id": 9003,
-            "workflow_path": contract.WORKFLOW_PATH,
-            "workflow_ref": contract.WORKFLOW_REF,
+            **self.workflow_identity,
             "workflow_sha": self.workflow_sha,
             "event": "workflow_dispatch",
             "display_title": contract.expected_run_title(authority),
