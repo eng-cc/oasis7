@@ -9,6 +9,7 @@
     "quick-xml": [],
     "ttf-parser": [],
     "serde_cbor": [
+      "Cargo.toml",
       "crates/oasis7/Cargo.toml",
       "crates/oasis7_builtin_wasm_modules/m1_body_core/Cargo.toml",
       "crates/oasis7_builtin_wasm_modules/m1_memory_core/Cargo.toml",
