@@ -206,6 +206,46 @@ class IntegrationTests(unittest.TestCase):
      temp=Path(tmp);candidate=temp/'candidate';scripts=candidate/'scripts';scripts.mkdir(parents=True)
      frozen=temp/'integration-planner';frozen.mkdir()
      repo=HERE.parents[1]
+     fixture_bin=temp/'bin';fixture_bin.mkdir()
+     profile_oid=''
+     if event=='workflow_dispatch':
+      (candidate/'.pm').mkdir()
+      (candidate/'scripts/pm').mkdir()
+      for relative in (
+       '.pm/cargo-package-scope-policy.json',
+       'scripts/pm/check-cargo-package-scope',
+       'scripts/pm/workflow-impact-projection.py',
+       'scripts/pm/cargo_package_profile_planner.py',
+       'scripts/pm/cargo_package_profile_driver.py',
+      ):
+       destination=candidate/relative
+       destination.parent.mkdir(parents=True,exist_ok=True)
+       shutil.copy2(repo/relative,destination)
+      (candidate/'Cargo.toml').write_text(
+       '[package]\nname = "workflow-fixture"\nversion = "0.1.0"\nedition = "2021"\n',
+       encoding='utf-8',
+      )
+      (candidate/'src').mkdir()
+      (candidate/'src/lib.rs').write_text('',encoding='utf-8')
+      subprocess.run(['git','init','-q','-b','main'],cwd=candidate,check=True)
+      subprocess.run(['git','config','user.name','Integration Fixture'],cwd=candidate,check=True)
+      subprocess.run(['git','config','user.email','integration-fixture@example.invalid'],cwd=candidate,check=True)
+      subprocess.run(['git','add','.pm','scripts/pm','Cargo.toml','src/lib.rs'],cwd=candidate,check=True)
+      subprocess.run(['git','commit','-qm','trusted profile authority fixture'],cwd=candidate,check=True)
+      profile_oid=subprocess.check_output(['git','rev-parse','HEAD'],cwd=candidate,text=True).strip()
+      expected_api=f'repos/fixture/oasis7/commits/{profile_oid}/check-runs?per_page=100'
+      check_url='https://github.com/fixture/oasis7/actions/runs/12345/jobs/1'
+      gh=fixture_bin/'gh'
+      gh.write_text(
+       '#!/usr/bin/env python3\n'
+       'import json, sys\n'
+       f'expected = {expected_api!r}\n'
+       f'check_url = {check_url!r}\n'
+       "if sys.argv[1:] != ['api', expected]: raise SystemExit('unexpected GitHub API read')\n"
+       "print(json.dumps({'check_runs': [{'name': 'required-gate', 'details_url': check_url, 'id': 678, 'app': {'id': 901}}]}))\n",
+       encoding='utf-8',
+      )
+      gh.chmod(0o755)
      for name in ('ci-tests.sh','viewer-dependency-preflight.sh'):
       shutil.copy2(repo/'scripts'/name,frozen/name)
      marker=temp/'observed'
@@ -219,13 +259,33 @@ class IntegrationTests(unittest.TestCase):
      step=workflow.split('      - name: Run required test tier\n',1)[1].split('\n      - name:',1)[0]
      run=step.split('        run:',1)[1]
      command=textwrap.dedent(run.split('\n',1)[1]) if run.startswith(' |') else run.strip()
+     if event=='workflow_dispatch':
+      for expression in (
+       '${{ steps.scope.outputs.source_scope_base }}',
+       '${{ steps.scope.outputs.head_oid }}',
+       '${{ steps.scope.outputs.integration_base_oid }}',
+      ):
+       command=command.replace(expression,profile_oid)
+      command=command.replace('${{ github.token }}','fixture-token')
+      command=command.replace('${{ inputs.task_uid }}','task_'+'1'*32)
+      command=command.replace('${{ inputs.pr_number }}','7')
      env={**os.environ,'RUNNER_TEMP':str(temp),'GITHUB_WORKSPACE':str(candidate),
           'GITHUB_EVENT_NAME':event,'INTEGRATION_MODE':'integration_revalidation','OBSERVED':str(marker),
+          'INTEGRATION_WORKTREE':'',
           # This contract isolates frozen driver/preflight routing.  Required CI
-          # itself exports package-profile activation identity; do not leak that
-          # unrelated outer workflow state into this intentionally non-Git fixture.
-          'OASIS7_CARGO_SCOPE_BASE':'','OASIS7_CARGO_SCOPE_HEAD':'',
+          # receives a self-contained trusted Git fixture for dispatch so the
+          # workflow authority check and real planner/driver still execute.
+          'OASIS7_CARGO_SCOPE_BASE':profile_oid,'OASIS7_CARGO_SCOPE_HEAD':profile_oid,
+          'OASIS7_CARGO_SCOPE_INTEGRATION_BASE':profile_oid,
+          'OASIS7_PRODUCT_DOC_BASE':profile_oid,'OASIS7_PRODUCT_DOC_HEAD':profile_oid,
           'OASIS7_CARGO_PROFILE_PLANNER':'','OASIS7_CARGO_PROFILE_DRIVER':''}
+     if event=='workflow_dispatch':
+      env.update({
+       'PATH':str(fixture_bin)+os.pathsep+env.get('PATH',''),
+       'GITHUB_REPOSITORY':'fixture/oasis7','GITHUB_SHA':profile_oid,
+       'GITHUB_WORKFLOW_REF':'fixture/oasis7/.github/workflows/rust.yml@refs/heads/main',
+       'GITHUB_WORKFLOW_SHA':profile_oid,'GITHUB_RUN_ID':'12345','GITHUB_RUN_ATTEMPT':'1',
+      })
      result=subprocess.run(['bash','-euo','pipefail','-c',command],cwd=candidate,env=env,text=True,capture_output=True)
      if event=='workflow_dispatch':
       self.assertEqual(result.returncode,37,result.stdout+result.stderr)
