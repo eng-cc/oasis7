@@ -47,6 +47,7 @@ Options:
   --create                Push branch if needed and run `gh pr create`; legacy task-bound `--create` is rejected
   --draft                 Add `--draft` when creating a PR
   --draft-candidate       Create/resume the frozen-head draft candidate before CI/review
+  --existing-ready-update Update the same admitted ready PR without changing its lifecycle state
   --promote-draft <receipt> Promote the draft only after a trusted ci_ready_receipt
   --title <text>          Explicit PR title (default: use gh --fill)
   --body-file <path>      Pass an explicit PR body file to `gh pr create`
@@ -107,6 +108,7 @@ REMOTE_NAME="origin"
 CREATE_PR=0
 DRAFT_PR=0
 DRAFT_CANDIDATE=0
+EXISTING_READY_UPDATE=0
 PROMOTE_DRAFT_RECEIPT=""
 OUTPUT_JSON=0
 PR_TITLE=""
@@ -139,6 +141,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --draft-candidate) CREATE_PR=1; DRAFT_PR=1; DRAFT_CANDIDATE=1; shift ;;
+    --existing-ready-update) CREATE_PR=1; DRAFT_CANDIDATE=1; EXISTING_READY_UPDATE=1; shift ;;
     --promote-draft) PROMOTE_DRAFT_RECEIPT="${2:-}"; shift 2 ;;
     --title)
       PR_TITLE="${2:-}"
@@ -172,6 +175,10 @@ done
 if [[ "${#POSITIONAL[@]}" -gt 1 ]]; then
   die "expected at most one optional [source-branch]"
 fi
+if [[ "$EXISTING_READY_UPDATE" == "1" \
+  && ( "$LEGACY_REVIEW_V1" == "1" || -z "$IMPACT_PROJECTION" ) ]]; then
+  die "existing-ready-update requires --impact-projection and cannot use --legacy-review-v1"
+fi
 if [[ -n "$IMPACT_PROJECTION" && -z "$REVIEW_CHANGE_CLASS" ]]; then
   die "--impact-projection requires --review-change-class so role identity can be verified"
 fi
@@ -200,6 +207,9 @@ fi
 [[ -n "$BASE_BRANCH" ]] || die "--base cannot be empty"
 [[ -n "$REMOTE_NAME" ]] || die "--remote cannot be empty"
 [[ "$SOURCE_BRANCH" != "$BASE_BRANCH" ]] || die "source and base branches must differ"
+if [[ "$EXISTING_READY_UPDATE" == "1" ]]; then
+  [[ "$DRAFT_PR" == "0" && -z "$PROMOTE_DRAFT_RECEIPT" ]] || die "existing ready update is mutually exclusive with draft creation/promotion"
+fi
 
 if [[ -n "$BODY_FILE" && ! -f "$BODY_FILE" ]]; then
   die "--body-file not found: $BODY_FILE"
@@ -2172,6 +2182,10 @@ if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" == "1" && -n "$LOCAL_ROLE_REVIEW
   if [[ -n "$PR_TITLE" ]]; then
     C1_PUBLISH_ARGS+=(--title "$PR_TITLE")
   fi
+  if [[ "$EXISTING_READY_UPDATE" == "1" ]]; then
+    [[ "$DRAFT_PR" == "0" && -z "$PROMOTE_DRAFT_RECEIPT" ]] || die "existing ready update cannot create/promote a draft"
+    C1_PUBLISH_ARGS+=(--existing-ready-update)
+  fi
   if ! C1_PUBLISH_OUTPUT="$(python3 "$ROOT_DIR/scripts/pm/pr_projection_publish.py" "${C1_PUBLISH_ARGS[@]}" 2>&1)"; then
     [[ "$C1_REMOVE_BODY" == "1" ]] && rm -f "$C1_BODY_PATH"
     die "ordered C1 PR publication failed; rerun the same prepare-task-pr command to reconcile its journal: $C1_PUBLISH_OUTPUT"
@@ -2182,6 +2196,8 @@ if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" == "1" && -n "$LOCAL_ROLE_REVIEW
   CREATE_PR=0
 fi
 if [[ "$CREATE_PR" == "1" ]]; then
+  [[ "$EXISTING_READY_UPDATE" != "1" ]] \
+    || die "existing-ready-update cannot use the generic CREATE_PR fallback"
   command -v gh >/dev/null 2>&1 || die '`gh` not found in PATH'
   if [[ -z "$REMOTE_SOURCE_REF" ]]; then
     git -C "$SOURCE_WORKTREE" push -u "$REMOTE_NAME" "$SOURCE_BRANCH"

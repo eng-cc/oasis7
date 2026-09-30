@@ -11,7 +11,7 @@ import json
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import zipfile
 
 
@@ -48,6 +48,73 @@ def patch_live_workflow_metadata(api, *, repository_id=1148737145, workflow_id=2
         return responses[endpoint]
 
     return patch.object(api, "get_json", side_effect=get_json)
+
+
+class SuccessorAdapterTests(unittest.TestCase):
+    def test_v1_records_stay_on_existing_readback_resolver(self):
+        api = Mock()
+        comments = ({"id": 1, "body": "ordinary V1 records"},)
+        identity = {
+            "task_uid": "task_" + "1" * 32, "task_issue_number": 87,
+            "pr_number": 143, "head_oid": "a" * 40, "integration_base_oid": "b" * 40,
+        }
+        authority = object()
+        with patch.object(readback.contract, "resolve_records_for_readback", return_value=authority) as resolve:
+            actual, predecessor = readback._resolve_records_with_predecessor(
+                api, comments, identity, 17, "main", 18,
+            )
+        self.assertIs(actual, authority)
+        self.assertIsNone(predecessor)
+        resolve.assert_called_once_with(comments, expected_identity=identity)
+
+    def test_v2_marker_requires_predecessor_observation_and_successor_resolver(self):
+        api = Mock()
+        identity = {
+            "task_uid": "task_" + "1" * 32, "task_issue_number": 87,
+            "pr_number": 143, "head_oid": "a" * 40, "integration_base_oid": "b" * 40,
+        }
+        comments = ({"id": 1, "body": readback.contract.SUCCESSOR_REQUEST_MARKER},)
+        predecessor = {"run_id": 101, "run_terminal_updated_at": "2026-01-01T00:00:00Z"}
+        authority = object()
+        with patch.object(readback, "_predecessor_observation", return_value=predecessor) as observe, patch.object(
+            readback.contract, "resolve_successor_records_for_readback", return_value=authority,
+        ) as resolve:
+            actual, actual_predecessor = readback._resolve_records_with_predecessor(
+                api, comments, identity, 17, "main", 18,
+            )
+        self.assertIs(actual, authority)
+        self.assertIs(actual_predecessor, predecessor)
+        observe.assert_called_once_with(
+            api, comments,
+            {"task_uid": identity["task_uid"], "task_issue_number": 87, "pr_number": 143},
+            17, "main", 18,
+        )
+        resolve.assert_called_once_with(comments, identity, predecessor)
+
+    def test_predecessor_workflow_blob_is_hashed_at_exact_run_head(self):
+        api = Mock()
+        content = (
+            "run-name: oasis7-ci|${{ github.event_name }}|${{ inputs.run_mode }}|"
+            "${{ inputs.task_uid }}|${{ inputs.pr_number }}|${{ inputs.integration_base }}|"
+            "${{ inputs.expected_head }}${{ inputs.request_key != '' && format('|{0}', inputs.request_key) || '' }}\n"
+        ).encode()
+        oid = readback.hashlib.sha1(
+            b"blob " + str(len(content)).encode() + b"\0" + content,
+        ).hexdigest()
+        response = {
+            "path": readback.WORKFLOW_FILE, "encoding": "base64",
+            "content": readback.base64.b64encode(content).decode(), "sha": oid,
+        }
+        with patch.object(api, "get_json", return_value=response) as get_json:
+            self.assertEqual((oid, readback.contract.body_digest(content)),
+                             readback._workflow_blob_at(api, "c" * 40))
+        get_json.assert_called_once_with(
+            f"repos/{readback.REPOSITORY}/contents/{readback.WORKFLOW_FILE}?ref={'c' * 40}",
+        )
+        response["sha"] = "d" * 40
+        with patch.object(api, "get_json", return_value=response):
+            with self.assertRaises(readback.ReadbackError):
+                readback._workflow_blob_at(api, "c" * 40)
 
 
 class GitHubPaginationTests(unittest.TestCase):
@@ -158,6 +225,15 @@ class GitHubPaginationTests(unittest.TestCase):
             "repos/eng-cc/oasis7/actions/workflows/rust.yml",
         ], [call.args[0] for call in get.call_args_list])
 
+        api = readback.GitHubReadOnly()
+        with patch.object(api, "get_json", side_effect=[
+            {"id": 1148737145, "name": "oasis7", "full_name": "eng-cc/oasis7",
+             "owner": {"login": "eng-cc"}, "default_branch": "release/ready"},
+            {"id": 230018940, "path": readback.WORKFLOW_FILE, "state": "active"},
+        ]):
+            self.assertEqual((230018940, "release/ready", 1148737145),
+                             readback._live_workflow(api))
+
     def test_live_workflow_rejects_wrong_repository_or_workflow_identity(self):
         bad_repositories = [
             {"id": 1148737146, "name": "oasis7", "full_name": "other/oasis7",
@@ -165,7 +241,7 @@ class GitHubPaginationTests(unittest.TestCase):
             {"id": True, "name": "oasis7", "full_name": "eng-cc/oasis7",
              "owner": {"login": "eng-cc"}, "default_branch": "main"},
             {"id": 1148737145, "name": "oasis7", "full_name": "eng-cc/oasis7",
-             "owner": {"login": "eng-cc"}, "default_branch": "develop"},
+             "owner": {"login": "eng-cc"}, "default_branch": ""},
         ]
         for repository in bad_repositories:
             with self.subTest(repository=repository):
@@ -174,7 +250,7 @@ class GitHubPaginationTests(unittest.TestCase):
                     repository,
                     {"id": 230018940, "path": readback.WORKFLOW_FILE, "state": "active"},
                 ]):
-                    with self.assertRaisesRegex(readback.ReadbackError, "canonical repository"):
+                    with self.assertRaisesRegex(readback.ReadbackError, "canonical repository|default branch"):
                         readback._live_workflow(api)
 
         bad_workflows = [
@@ -194,6 +270,28 @@ class GitHubPaginationTests(unittest.TestCase):
                 ]):
                     with self.assertRaisesRegex(readback.ReadbackError, "canonical rust.yml workflow"):
                         readback._live_workflow(api)
+
+    def test_live_default_branch_is_dynamic_and_raw_path_is_retained(self):
+        oid = "a" * 40
+        row = {
+            "id": 5, "workflow_id": 230018940,
+            "path": readback.WORKFLOW_FILE, "head_branch": "release/ready",
+            "head_sha": oid, "run_attempt": 1,
+            "repository": {"full_name": readback.REPOSITORY},
+            "head_repository": {"full_name": readback.REPOSITORY},
+        }
+        identity = readback._run_identity(row, 230018940, "release/ready")
+        self.assertEqual(readback.WORKFLOW_FILE, identity["workflow_api_path"])
+        self.assertEqual(f"{readback.WORKFLOW_FILE}@release/ready", identity["workflow_path"])
+        self.assertEqual(
+            f"{readback.REPOSITORY}/{readback.WORKFLOW_FILE}@refs/heads/release/ready",
+            identity["workflow_ref"],
+        )
+        self.assertEqual("refs/heads/release/ready", identity["event_ref"])
+        for raw_path in (".github/workflows/rust.yml@main", ".github/workflows/other.yml",
+                         ".github/workflows/rust.yml@refs/heads/release/ready"):
+            with self.subTest(raw_path=raw_path), self.assertRaises(readback.ReadbackError):
+                readback._run_identity({**row, "path": raw_path}, 230018940, "release/ready")
 
     def test_run_pages_accept_authenticated_slug_to_numeric_repository_alias(self):
         workflow_id = 230018940
@@ -526,7 +624,9 @@ def readback_fixture():
     issued = c.bind_authority_context(issued, request_context)
     run = {
         "repository": c.REPOSITORY, "id": 700, "workflow_id": 900,
+        "workflow_api_path": c.WORKFLOW_PATH, "workflow_default_branch": "main",
         "workflow_path": c.WORKFLOW_PATH, "workflow_ref": c.WORKFLOW_REF,
+        "event_ref": "refs/heads/main",
         "workflow_sha": "5" * 40, "event": "workflow_dispatch",
         "display_title": c.expected_run_title(issued),
         "dispatched_head_sha": "5" * 40, "run_attempt": 1,
@@ -797,7 +897,7 @@ class IndependentReadbackTests(unittest.TestCase):
     def test_final_live_run_rejects_latest_attempt_advance(self):
         api = FakeReadbackAPI(self.fixture)
         api.advance_second_attempt = True
-        with self.assertRaisesRegex(readback.ReadbackError, "latest R/A"):
+        with self.assertRaisesRegex(readback.ReadbackError, "latest R/A|run_attempt changed"):
             self._run(api)
 
     def test_final_issue_read_rejects_changed_pinned_comment(self):
