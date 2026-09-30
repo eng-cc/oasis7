@@ -1,195 +1,204 @@
-//! Shared environment fixture for hosted issuer readers and writers in this binary.
+//! Child-startup environment scenarios for launcher tests; no process-global writes.
 use std::ffi::{OsStr, OsString};
-use std::sync::{Mutex, MutexGuard};
-
-const ISSUER: &str = oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV;
-const LOGIN: &str = "OASIS7_HOSTED_TEST_LOGIN_ENABLED";
-static ENV_LOCK: Mutex<()> = Mutex::new(());
-
-struct SavedEnvironment([(&'static str, Option<OsString>); 2]);
-
-impl SavedEnvironment {
-    fn capture() -> Self {
-        Self([
-            (ISSUER, std::env::var_os(ISSUER)),
-            (LOGIN, std::env::var_os(LOGIN)),
-        ])
-    }
-}
-
-impl Drop for SavedEnvironment {
-    fn drop(&mut self) {
-        for (key, value) in &self.0 {
-            set_value(key, value.as_deref());
+use std::process::Command;
+pub(crate) const ISSUER: &str = oasis7::viewer::HOSTED_REGISTRATION_ISSUER_PRIVATE_KEY_ENV;
+pub(crate) const LOGIN: &str = "OASIS7_HOSTED_TEST_LOGIN_ENABLED";
+const CHILD_MARKER: &str = "OASIS7_LAUNCHER_TEST_ENV_SCENARIO";
+const CHILD_ARGUMENT: &str = "__oasis7_child_environment__";
+const TRACKED: [&str; 7] = [
+    ISSUER,
+    LOGIN,
+    "OASIS7_HOSTED_STRONG_AUTH_PUBLIC_KEY",
+    "OASIS7_HOSTED_STRONG_AUTH_PRIVATE_KEY",
+    "OASIS7_HOSTED_STRONG_AUTH_APPROVAL_CODE",
+    "OASIS7_RUNTIME_AGENT_CHAT_ECHO",
+    CHILD_MARKER,
+];
+type Scenario<'a> = (&'a str, &'a [(&'a str, &'a OsStr)]);
+/// Configure each exact test child before startup and preserve parent values.
+/// A private --skip argument distinguishes children from inherited markers.
+pub(crate) fn run_scenarios(scenarios: &[Scenario<'_>]) -> Option<usize> {
+    assert!(!scenarios.is_empty());
+    let thread = std::thread::current();
+    let test = thread.name().expect("named libtest scenario thread");
+    for (index, (name, values)) in scenarios.iter().enumerate() {
+        assert!(!scenarios[..index].iter().any(|(prior, _)| prior == name));
+        for (offset, (key, _)) in values.iter().enumerate() {
+            assert!(TRACKED.contains(key) && *key != CHILD_MARKER);
+            assert!(!values[..offset].iter().any(|(prior, _)| prior == key));
         }
     }
-}
-
-fn set_value(key: &str, value: Option<&OsStr>) {
-    // SAFETY: hosted fixtures coordinate these keys through ENV_LOCK and keep
-    // their HTTP workers stopped before releasing the fixture.
-    unsafe {
-        match value {
-            Some(value) => std::env::set_var(key, value),
-            None => std::env::remove_var(key),
+    let args: Vec<_> = std::env::args_os().collect();
+    let is_child = args
+        .windows(2)
+        .any(|pair| pair[0] == "--skip" && pair[1] == CHILD_ARGUMENT);
+    if is_child {
+        let marker = std::env::var_os(CHILD_MARKER).expect("child scenario marker missing");
+        let index = scenarios
+            .iter()
+            .position(|(name, _)| marker == OsString::from(format!("{test}:{name}")))
+            .expect("unknown child scenario marker; refusing recursive spawn");
+        for key in TRACKED.into_iter().filter(|key| *key != CHILD_MARKER) {
+            let expected = scenarios[index]
+                .1
+                .iter()
+                .find_map(|(name, value)| (*name == key).then_some(*value));
+            assert_eq!(
+                std::env::var_os(key).as_deref(),
+                expected,
+                "child startup {key}"
+            );
         }
+        return Some(index);
     }
-}
-
-pub(crate) struct HostedTestEnvironment {
-    // Field drop order restores values before releasing the shared lock.
-    _saved: SavedEnvironment,
-    _lock: MutexGuard<'static, ()>,
-}
-
-impl HostedTestEnvironment {
-    pub(crate) fn acquire() -> Self {
-        let lock = ENV_LOCK
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner());
-        Self {
-            _saved: SavedEnvironment::capture(),
-            _lock: lock,
+    for (name, values) in scenarios {
+        let before: Vec<_> = TRACKED.iter().map(|key| std::env::var_os(key)).collect();
+        let mut command = Command::new(std::env::current_exe().expect("current test executable"));
+        command.args(["--exact", test, "--nocapture", "--skip", CHILD_ARGUMENT]);
+        for key in TRACKED {
+            command.env_remove(key);
         }
+        command.env(CHILD_MARKER, format!("{test}:{name}"));
+        for (key, value) in *values {
+            command.env(key, value);
+        }
+        let output = command.output().expect("spawn isolated test scenario");
+        let after: Vec<_> = TRACKED.iter().map(|key| std::env::var_os(key)).collect();
+        assert_eq!(
+            after, before,
+            "parent environment changed after {test}:{name}"
+        );
+        assert!(
+            output.status.success(),
+            "child {test}:{name} failed: {}\n{}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            String::from_utf8_lossy(&output.stdout).contains("running 1 test"),
+            "exact scenario must execute one test: {}",
+            String::from_utf8_lossy(&output.stdout)
+        );
     }
-
-    pub(crate) fn set_issuer(&self, value: Option<&OsStr>) {
-        set_value(ISSUER, value);
-    }
-
-    pub(crate) fn set_login_enabled(&self, enabled: bool) {
-        set_value(LOGIN, enabled.then_some(OsStr::new("1")));
+    None
+}
+pub(crate) fn run(values: &[(&str, &OsStr)]) -> bool {
+    run_scenarios(&[("isolated", values)]).is_some()
+}
+pub(crate) fn with_issuer(seed: Option<u8>) -> bool {
+    match seed {
+        Some(seed) => run(&[(ISSUER, OsStr::new(&hex::encode([seed; 32])))]),
+        None => run(&[]),
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::panic::{AssertUnwindSafe, catch_unwind};
-    use std::sync::mpsc;
-
     #[test]
-    fn hosted_env_restores_absent_and_present_values() {
-        let env = HostedTestEnvironment::acquire();
-        for prior in [None, Some(OsStr::new("prior issuer"))] {
-            env.set_issuer(prior);
-            env.set_login_enabled(false);
-            {
-                let _saved = SavedEnvironment::capture();
-                env.set_issuer(Some(OsStr::new("replacement")));
-                env.set_login_enabled(true);
+    fn launcher_environment_mutators_are_child_scoped() {
+        // Inspect source only: executing the old writers to demonstrate a race
+        // would itself violate the process-environment safety precondition.
+        let sources = [
+            (
+                "oasis7_game_launcher.rs",
+                include_str!("../oasis7_game_launcher.rs"),
+            ),
+            (
+                "hosted_player_session_tests.rs",
+                include_str!("hosted_player_session_tests.rs"),
+            ),
+            ("hosted_test_env.rs", include_str!("hosted_test_env.rs")),
+            (
+                "launcher_hosted_public_join_tests.rs",
+                include_str!("launcher_hosted_public_join_tests.rs"),
+            ),
+            (
+                "launcher_static_http_tests.rs",
+                include_str!("launcher_static_http_tests.rs"),
+            ),
+            (
+                "launcher_visibility_policy_tests.rs",
+                include_str!("launcher_visibility_policy_tests.rs"),
+            ),
+            (
+                "oasis7_game_launcher_tests.rs",
+                include_str!("oasis7_game_launcher_tests.rs"),
+            ),
+            (
+                "provider_lineage_tests.rs",
+                include_str!("provider_lineage_tests.rs"),
+            ),
+            (
+                "hosted_strong_auth.rs",
+                include_str!("hosted_strong_auth.rs"),
+            ),
+            ("hosted_access.rs", include_str!("../../hosted_access.rs")),
+        ];
+        // Fragments avoid matching the guard's own source literals. Whitespace
+        // is ignored so splitting a qualified call across lines cannot hide it.
+        let prefixes = ["std::env", "env", "oasis7::env_mut"];
+        let writers = ["set_var", "remove_var"];
+        let mut violations = std::collections::BTreeSet::new();
+        for (path, source) in sources {
+            let mut compact = String::new();
+            let mut locations = Vec::new();
+            for (line, text) in source.lines().enumerate() {
+                for (column, character) in text.char_indices() {
+                    if !character.is_whitespace() {
+                        compact.push(character);
+                        locations.extend(std::iter::repeat_n(
+                            (line + 1, column + 1),
+                            character.len_utf8(),
+                        ));
+                    }
+                }
             }
-            assert_eq!(std::env::var_os(ISSUER).as_deref(), prior);
-            assert_eq!(std::env::var_os(LOGIN), None);
+            for prefix in prefixes {
+                for writer in writers {
+                    let pattern = format!("{prefix}::{writer}(");
+                    for (offset, _) in compact.match_indices(&pattern) {
+                        // Do not also report the env suffix of std::env.
+                        if offset > 0 {
+                            let previous = compact.as_bytes()[offset - 1];
+                            if previous == b':'
+                                || previous == b'_'
+                                || previous.is_ascii_alphanumeric()
+                            {
+                                continue;
+                            }
+                        }
+                        let (line, column) = locations[offset];
+                        violations.insert(format!("{path}:{line}:{column}: {prefix}::{writer}"));
+                    }
+                }
+            }
         }
-        env.set_login_enabled(true);
-        {
-            let _saved = SavedEnvironment::capture();
-            env.set_login_enabled(false);
-        }
-        assert_eq!(std::env::var_os(LOGIN), Some(OsString::from("1")));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn hosted_env_restores_non_unicode_value() {
-        use std::os::unix::ffi::OsStringExt;
-        let env = HostedTestEnvironment::acquire();
-        let prior = OsString::from_vec(vec![0xff, b'x']);
-        env.set_issuer(Some(&prior));
-        {
-            let _saved = SavedEnvironment::capture();
-            env.set_issuer(None);
-        }
-        assert_eq!(std::env::var_os(ISSUER), Some(prior));
-    }
-
-    #[test]
-    fn hosted_env_restores_after_unwind_and_recovers_poisoned_lock() {
-        // Hold the outer lock while checking unwind restoration so another
-        // fixture cannot race the assertions. Then separately poison this lock.
-        {
-            let env = HostedTestEnvironment::acquire();
-            env.set_issuer(Some(OsStr::new("before unwind")));
-            env.set_login_enabled(false);
-            assert!(
-                catch_unwind(AssertUnwindSafe(|| {
-                    let _saved = SavedEnvironment::capture();
-                    env.set_issuer(None);
-                    env.set_login_enabled(true);
-                    panic!("fixture panic");
-                }))
-                .is_err()
-            );
-            assert_eq!(
-                std::env::var_os(ISSUER),
-                Some(OsString::from("before unwind"))
-            );
-            assert_eq!(std::env::var_os(LOGIN), None);
-        }
-        let mut prior = None;
         assert!(
-            catch_unwind(AssertUnwindSafe(|| {
-                let env = HostedTestEnvironment::acquire();
-                prior = Some((std::env::var_os(ISSUER), std::env::var_os(LOGIN)));
-                env.set_issuer(Some(OsStr::new("changed before panic")));
-                env.set_login_enabled(true);
-                panic!("poison fixture lock");
-            }))
-            .is_err()
+            violations.is_empty(),
+            "launcher scenario environment must be configured on child Commands; process-global writers:\n{}",
+            violations.into_iter().collect::<Vec<_>>().join("\n")
         );
-        let env = HostedTestEnvironment::acquire();
-        let (issuer, login) = prior.unwrap();
-        assert_eq!(std::env::var_os(ISSUER), issuer);
-        assert_eq!(std::env::var_os(LOGIN), login);
-        env.set_issuer(Some(OsStr::new("usable after poison")));
+    }
+
+    #[test]
+    fn child_startup_preserves_absent_and_present_parent_values() {
+        if !with_issuer(Some(71)) {
+            return;
+        }
         assert_eq!(
             std::env::var_os(ISSUER),
-            Some(OsString::from("usable after poison"))
+            Some(OsString::from(hex::encode([71; 32])))
         );
+        assert_eq!(std::env::var_os(LOGIN), None);
     }
-
+    #[cfg(unix)]
     #[test]
-    fn hosted_env_contenders_cannot_replace_the_current_issuer() {
-        let env = HostedTestEnvironment::acquire();
-        let owner_key = hex::encode([71_u8; 32]);
-        let contender_key = hex::encode([81_u8; 32]);
-        let prior = std::env::var_os(ISSUER);
-        env.set_issuer(Some(OsStr::new(&owner_key)));
-        let (attempted_tx, attempted_rx) = mpsc::channel();
-        let (acquired_tx, acquired_rx) = mpsc::channel();
-        let contender = std::thread::spawn(move || {
-            assert!(matches!(
-                ENV_LOCK.try_lock(),
-                Err(std::sync::TryLockError::WouldBlock)
-            ));
-            attempted_tx.send(()).unwrap();
-            let env = HostedTestEnvironment::acquire();
-            env.set_issuer(Some(OsStr::new(&contender_key)));
-            let public = oasis7::viewer::derive_hosted_registration_issuer_public_key(
-                &std::env::var(ISSUER).unwrap(),
-            )
-            .unwrap();
-            assert_eq!(
-                public,
-                hex::encode(
-                    ed25519_dalek::SigningKey::from_bytes(&[81; 32])
-                        .verifying_key()
-                        .to_bytes()
-                )
-            );
-            acquired_tx.send(()).unwrap();
-        });
-        attempted_rx.recv().unwrap();
-        assert!(matches!(
-            acquired_rx.try_recv(),
-            Err(mpsc::TryRecvError::Empty)
-        ));
-        assert_eq!(std::env::var(ISSUER).unwrap(), owner_key);
-        drop(env);
-        acquired_rx.recv().unwrap();
-        contender.join().unwrap();
-        let _env = HostedTestEnvironment::acquire();
-        assert_eq!(std::env::var_os(ISSUER), prior);
+    fn child_startup_preserves_non_unicode_value() {
+        use std::os::unix::ffi::OsStringExt;
+        let prior = OsString::from_vec(vec![0xff, b'x']);
+        if !run(&[(ISSUER, &prior)]) {
+            return;
+        }
+        assert_eq!(std::env::var_os(ISSUER), Some(prior));
     }
 }

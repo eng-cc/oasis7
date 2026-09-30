@@ -203,9 +203,21 @@ fn hosted_public_unauthenticated_get_cannot_issue_player_session() {
 
 #[test]
 fn hosted_test_login_requires_opt_in_and_returns_server_issued_grant() {
-    let env = crate::hosted_test_env::HostedTestEnvironment::acquire();
-    env.set_login_enabled(false);
-    env.set_issuer(Some(std::ffi::OsStr::new(&hex::encode([71_u8; 32]))));
+    let issuer_key = hex::encode([71_u8; 32]);
+    let disabled_values = [(
+        crate::hosted_test_env::ISSUER,
+        std::ffi::OsStr::new(&issuer_key),
+    )];
+    let enabled_values = [
+        disabled_values[0],
+        (crate::hosted_test_env::LOGIN, std::ffi::OsStr::new("1")),
+    ];
+    let Some(scenario) = crate::hosted_test_env::run_scenarios(&[
+        ("disabled", &disabled_values),
+        ("enabled", &enabled_values),
+    ]) else {
+        return;
+    };
     let temp_dir = make_temp_dir("hosted_test_login");
     fs::write(temp_dir.join("index.html"), b"ok").expect("write index");
     let probe = TcpListener::bind(("127.0.0.1", 0)).expect("bind port probe");
@@ -242,12 +254,16 @@ fn hosted_test_login_requires_opt_in_and_returns_server_issued_grant() {
         }
         response
     };
-    let disabled = send();
-    assert!(
-        String::from_utf8_lossy(&disabled).starts_with("HTTP/1.1 404 Not Found"),
-        "test login must stay unavailable until explicitly enabled"
-    );
-    env.set_login_enabled(true);
+    if scenario == 0 {
+        let disabled = send();
+        stop_static_http_server(&mut server.0);
+        assert!(
+            String::from_utf8_lossy(&disabled).starts_with("HTTP/1.1 404 Not Found"),
+            "test login must stay unavailable until explicitly enabled"
+        );
+        let _ = fs::remove_dir_all(temp_dir);
+        return;
+    }
     let enabled = send();
     stop_static_http_server(&mut server.0);
     let enabled_text = String::from_utf8_lossy(&enabled);
@@ -267,6 +283,28 @@ fn hosted_test_login_requires_opt_in_and_returns_server_issued_grant() {
         !enabled_text.contains("private"),
         "issuer private material must not cross the endpoint"
     );
+    let (_, response_body) = enabled_text.split_once("\r\n\r\n").expect("HTTP body");
+    let response: serde_json::Value = serde_json::from_str(response_body).expect("login JSON");
+    let grant = &response["grant"];
+    let token = grant["registration_grant"]
+        .as_str()
+        .expect("signed registration grant");
+    let parts: Vec<_> = token.split('.').collect();
+    assert_eq!(parts.len(), 3);
+    assert_eq!(parts[0], "v1");
+    let payload = hex::decode(parts[1]).expect("registration payload");
+    let signature = ed25519_dalek::Signature::from_slice(
+        &hex::decode(parts[2]).expect("registration signature bytes"),
+    )
+    .expect("registration signature");
+    ed25519_dalek::SigningKey::from_bytes(&[71; 32])
+        .verifying_key()
+        .verify_strict(&payload, &signature)
+        .expect("real login issuer signature");
+    let payload: serde_json::Value = serde_json::from_slice(&payload).expect("grant payload JSON");
+    assert_eq!(payload["player_id"], grant["player_id"]);
+    assert_eq!(payload["public_key"], hex::encode([72; 32]));
+    assert_eq!(payload["device_session_id"], grant["device_session_id"]);
 
     let wildcard_probe = TcpListener::bind(("127.0.0.1", 0)).expect("bind wildcard port probe");
     let wildcard_port = wildcard_probe
@@ -284,7 +322,6 @@ fn hosted_test_login_requires_opt_in_and_returns_server_issued_grant() {
     )
     .map(HostedTestHttpServer)
     .expect("start wildcard static HTTP server");
-    env.set_login_enabled(true);
     let mut wildcard_response = Vec::new();
     for _ in 0..50 {
         match TcpStream::connect(("127.0.0.1", wildcard_port)) {

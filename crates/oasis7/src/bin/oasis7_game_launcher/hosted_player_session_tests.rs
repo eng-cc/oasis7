@@ -49,8 +49,9 @@ fn hosted_player_session_issue_returns_structured_grant() {
 
 #[test]
 fn hosted_player_session_test_login_issues_identity_and_registration_grant_for_browser_key() {
-    let env = crate::hosted_test_env::HostedTestEnvironment::acquire();
-    env.set_issuer(Some(std::ffi::OsStr::new(&hex::encode([71_u8; 32]))));
+    if !crate::hosted_test_env::with_issuer(Some(71)) {
+        return;
+    }
     let browser_key = hex::encode([72_u8; 32]);
     let mut issuer = HostedPlayerSessionIssuer::default();
     let response = issuer.issue_with_key(DeploymentMode::HostedPublicJoin, &browser_key);
@@ -78,8 +79,9 @@ fn hosted_player_session_test_login_issues_identity_and_registration_grant_for_b
 
 #[test]
 fn hosted_player_session_test_login_without_issuer_fails_closed() {
-    let env = crate::hosted_test_env::HostedTestEnvironment::acquire();
-    env.set_issuer(None);
+    if !crate::hosted_test_env::with_issuer(None) {
+        return;
+    }
     let mut issuer = HostedPlayerSessionIssuer::default();
     let response =
         issuer.issue_with_key(DeploymentMode::HostedPublicJoin, &hex::encode([72_u8; 32]));
@@ -334,10 +336,10 @@ fn hosted_player_session_refresh_keeps_slot_alive() {
 
 #[test]
 fn hosted_player_session_refresh_rotates_registration_grant_for_new_browser_key() {
-    let issuer_private_key = [71_u8; 32];
     let browser_key = ed25519_dalek::SigningKey::from_bytes(&[72_u8; 32]);
-    let env = crate::hosted_test_env::HostedTestEnvironment::acquire();
-    env.set_issuer(Some(std::ffi::OsStr::new(&hex::encode(issuer_private_key))));
+    if !crate::hosted_test_env::with_issuer(Some(71)) {
+        return;
+    }
     let mut issuer = HostedPlayerSessionIssuer::default();
     let grant = issuer
         .issue_for_player(

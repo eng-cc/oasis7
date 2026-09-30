@@ -23,7 +23,9 @@ fn parse_options_accepts_provider_lineage_store() {
     reason = "Test fixture construction intentionally starts from canonical defaults before overriding scenario-specific fields."
 )]
 fn build_viewer_live_command_wires_provider_lineage_store() {
-    let _env = crate::hosted_test_env::HostedTestEnvironment::acquire();
+    if !crate::hosted_test_env::with_issuer(None) {
+        return;
+    }
     let mut options = CliOptions::default();
     options.provider_lineage_store = "/var/lib/oasis7/provider-lineage.json".to_string();
     let command = build_oasis7_viewer_live_command(Path::new("/bin/echo"), &options, false, false);
@@ -109,7 +111,9 @@ fn build_oasis7_chain_runtime_args_omits_provider_authority_paths_when_chain_dis
 
 #[test]
 fn build_viewer_live_command_forwards_provider_authority_paths_for_hosted_join() {
-    let _env = crate::hosted_test_env::HostedTestEnvironment::acquire();
+    if !crate::hosted_test_env::with_issuer(None) {
+        return;
+    }
     let options = CliOptions {
         chain_enabled: false,
         deployment_mode: "hosted_public_join".to_string(),

@@ -25,6 +25,13 @@ const PROMPT_CONTROL_ACTION_IDS: &[&str] = &[
 ];
 
 #[cfg(test)]
+#[path = "bin/oasis7_game_launcher/hosted_test_env.rs"]
+mod hosted_test_env;
+
+// Retain the shared test API for existing web-launcher consumers. Launcher
+// environment scenarios use child startup configuration instead of this lock.
+#[cfg(test)]
+#[allow(dead_code)] // Shared source: only the web-launcher tests call this API.
 pub(super) fn hosted_strong_auth_test_env_lock() -> &'static Mutex<()> {
     static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
     LOCK.get_or_init(|| Mutex::new(()))
@@ -355,19 +362,6 @@ pub(super) fn web_launcher_private_endpoints() -> &'static [&'static str] {
 mod tests {
     use super::*;
 
-    fn clear_env() {
-        for name in [
-            HOSTED_STRONG_AUTH_PUBLIC_KEY_ENV,
-            HOSTED_STRONG_AUTH_PRIVATE_KEY_ENV,
-            HOSTED_STRONG_AUTH_APPROVAL_CODE_ENV,
-        ] {
-            // SAFETY: This test/setup code mutates process environment in a controlled scope.
-            unsafe {
-                oasis7::env_mut::remove_var(name);
-            }
-        }
-    }
-
     fn prompt_control_apply_policy(mode: DeploymentMode) -> HostedActionAccessPolicy {
         hosted_viewer_access_hint(mode)
             .action_matrix
@@ -386,39 +380,46 @@ mod tests {
 
     #[test]
     fn hosted_access_verdict_tracks_deployment_mode_and_backend_grant_readiness() {
-        let _guard = hosted_strong_auth_test_env_lock().lock().expect("env lock");
-        clear_env();
+        let ready = [
+            (
+                HOSTED_STRONG_AUTH_PUBLIC_KEY_ENV,
+                std::ffi::OsStr::new("public-key"),
+            ),
+            (
+                HOSTED_STRONG_AUTH_PRIVATE_KEY_ENV,
+                std::ffi::OsStr::new("private-key"),
+            ),
+            (
+                HOSTED_STRONG_AUTH_APPROVAL_CODE_ENV,
+                std::ffi::OsStr::new("approval"),
+            ),
+        ];
+        let Some(scenario) = hosted_test_env::run_scenarios(&[("absent", &[]), ("ready", &ready)])
+        else {
+            return;
+        };
         assert_eq!(
             hosted_viewer_access_hint(DeploymentMode::TrustedLocalOnly).verdict,
             "trusted_local_only_preview"
         );
-        assert_eq!(
-            hosted_viewer_access_hint(DeploymentMode::HostedPublicJoin).verdict,
-            "hosted_public_join_blocked_until_strong_auth"
-        );
-        // SAFETY: This test/setup code mutates process environment in a controlled scope.
-        unsafe {
-            oasis7::env_mut::set_var(HOSTED_STRONG_AUTH_PUBLIC_KEY_ENV, "public-key");
-        }
-        // SAFETY: This test/setup code mutates process environment in a controlled scope.
-        unsafe {
-            oasis7::env_mut::set_var(HOSTED_STRONG_AUTH_PRIVATE_KEY_ENV, "private-key");
-        }
-        // SAFETY: This test/setup code mutates process environment in a controlled scope.
-        unsafe {
-            oasis7::env_mut::set_var(HOSTED_STRONG_AUTH_APPROVAL_CODE_ENV, "approval");
+        if scenario == 0 {
+            assert_eq!(
+                hosted_viewer_access_hint(DeploymentMode::HostedPublicJoin).verdict,
+                "hosted_public_join_blocked_until_strong_auth"
+            );
+            return;
         }
         assert_eq!(
             hosted_viewer_access_hint(DeploymentMode::HostedPublicJoin).verdict,
             "hosted_public_join_strong_auth_preview"
         );
-        clear_env();
     }
 
     #[test]
     fn hosted_public_join_prompt_control_stays_blocked_without_backend_grant_env() {
-        let _guard = hosted_strong_auth_test_env_lock().lock().expect("env lock");
-        clear_env();
+        if !hosted_test_env::run(&[]) {
+            return;
+        }
         let policy = prompt_control_apply_policy(DeploymentMode::HostedPublicJoin);
         assert_eq!(policy.required_auth, "strong_auth");
         assert_eq!(policy.availability, "blocked_until_strong_auth");
@@ -426,25 +427,25 @@ mod tests {
 
     #[test]
     fn hosted_public_join_prompt_control_exposes_backend_reauth_preview_when_env_ready() {
-        let _guard = hosted_strong_auth_test_env_lock().lock().expect("env lock");
-        clear_env();
-        // SAFETY: This test/setup code mutates process environment in a controlled scope.
-        unsafe {
-            oasis7::env_mut::set_var(
+        if !hosted_test_env::run(&[
+            (
                 HOSTED_STRONG_AUTH_PUBLIC_KEY_ENV,
-                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            );
-        }
-        // SAFETY: This test/setup code mutates process environment in a controlled scope.
-        unsafe {
-            oasis7::env_mut::set_var(
+                std::ffi::OsStr::new(
+                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                ),
+            ),
+            (
                 HOSTED_STRONG_AUTH_PRIVATE_KEY_ENV,
-                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            );
-        }
-        // SAFETY: This test/setup code mutates process environment in a controlled scope.
-        unsafe {
-            oasis7::env_mut::set_var(HOSTED_STRONG_AUTH_APPROVAL_CODE_ENV, "preview-code");
+                std::ffi::OsStr::new(
+                    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                ),
+            ),
+            (
+                HOSTED_STRONG_AUTH_APPROVAL_CODE_ENV,
+                std::ffi::OsStr::new("preview-code"),
+            ),
+        ]) {
+            return;
         }
         let policy = prompt_control_apply_policy(DeploymentMode::HostedPublicJoin);
         assert_eq!(
@@ -452,36 +453,34 @@ mod tests {
             "public_player_plane_with_backend_reauth_preview"
         );
         assert!(policy.reason.contains("backend strong-auth grant"));
-        clear_env();
     }
 
     #[test]
     fn hosted_public_join_main_token_transfer_stays_blocked_even_when_prompt_reauth_env_ready() {
-        let _guard = hosted_strong_auth_test_env_lock().lock().expect("env lock");
-        clear_env();
-        // SAFETY: This test/setup code mutates process environment in a controlled scope.
-        unsafe {
-            oasis7::env_mut::set_var(
+        if !hosted_test_env::run(&[
+            (
                 HOSTED_STRONG_AUTH_PUBLIC_KEY_ENV,
-                "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            );
-        }
-        // SAFETY: This test/setup code mutates process environment in a controlled scope.
-        unsafe {
-            oasis7::env_mut::set_var(
+                std::ffi::OsStr::new(
+                    "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+                ),
+            ),
+            (
                 HOSTED_STRONG_AUTH_PRIVATE_KEY_ENV,
-                "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
-            );
-        }
-        // SAFETY: This test/setup code mutates process environment in a controlled scope.
-        unsafe {
-            oasis7::env_mut::set_var(HOSTED_STRONG_AUTH_APPROVAL_CODE_ENV, "preview-code");
+                std::ffi::OsStr::new(
+                    "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+                ),
+            ),
+            (
+                HOSTED_STRONG_AUTH_APPROVAL_CODE_ENV,
+                std::ffi::OsStr::new("preview-code"),
+            ),
+        ]) {
+            return;
         }
         let policy = main_token_transfer_policy(DeploymentMode::HostedPublicJoin);
         assert_eq!(policy.required_auth, "strong_auth");
         assert_eq!(policy.availability, "blocked_until_strong_auth");
         assert!(policy.reason.contains("dedicated proof lane"));
-        clear_env();
     }
 
     #[test]
