@@ -34,15 +34,20 @@ class PacketTest(unittest.TestCase):
         shutil.copy2(SOURCE, self.repo / "scripts/pm/subagent-task-packet.py")
         shutil.copy2(SOURCE.with_name("ci_ready_receipt_identity.py"), self.repo / "scripts/pm/ci_ready_receipt_identity.py")
         shutil.copy2(SOURCE.with_name("workflow-durable-store.py"), self.repo / "scripts/pm/workflow-durable-store.py")
+        shutil.copy2(SOURCE.with_name("github-project-workflow.py"), self.repo / "scripts/pm/github-project-workflow.py")
         shutil.copy2(SOURCE.with_name("closed_duplicate_candidate_guard.py"), self.repo / "scripts/pm/closed_duplicate_candidate_guard.py")
         for helper in ('loop_gate.py', 'loop.py', 'loop_recovery.py'):
             shutil.copy2(SOURCE.with_name(helper), self.repo / 'scripts/pm' / helper)
         fakebin = Path(self.tmp.name) / 'fakebin'
         fakebin.mkdir()
+        self.project_response_path = Path(self.tmp.name) / 'project-response.json'
         gh = fakebin / 'gh'
-        gh.write_text('#!/usr/bin/env python3\nimport json,sys\nprint(json.dumps([] if any("/comments" in arg for arg in sys.argv) else {"body": "task_uid: ' + TASK_UID + '"}))\n')
+        gh.write_text('#!/usr/bin/env python3\nimport json,os,pathlib,sys\nif "graphql" in sys.argv:\n raw=pathlib.Path(os.environ["OASIS7_PM_TEST_PROJECT_READBACK"]).read_text()\n if raw == "FAIL": sys.exit(1)\n print(raw)\nelse:\n print(json.dumps([] if any("/comments" in arg for arg in sys.argv) else {"body": "task_uid: ' + TASK_UID + '"}))\n')
         gh.chmod(0o755)
-        environment = patch.dict(os.environ, {'PATH': str(fakebin) + os.pathsep + os.environ['PATH']})
+        environment = patch.dict(os.environ, {
+            'PATH': str(fakebin) + os.pathsep + os.environ['PATH'],
+            'OASIS7_PM_TEST_PROJECT_READBACK': str(self.project_response_path),
+        })
         environment.start()
         self.addCleanup(environment.stop)
         shutil.copy2(SNAPSHOT_HELPER, self.repo / "scripts/pm/bootstrap-task-snapshot.py")
@@ -52,21 +57,50 @@ class PacketTest(unittest.TestCase):
         subprocess.run(["git", "-C", str(self.repo), "commit", "-m", "base"], check=True, capture_output=True)
         subprocess.run(["git", "-C", str(self.repo), "switch", "-c", "task/packet"], check=True, capture_output=True)
         self.write_mapping()
+        self.write_live_project()
 
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
     def write_mapping(self, **changes: object) -> None:
-        task = {"task_uid": TASK_UID, "canonical_worktree": str(self.repo.resolve()), "task_branch": "task/packet", "default_branch": "main", "owner_role": "qa_engineer", "issue_number": 1, "issue_url": "https://example.invalid/issues/1", "repository": "example/repo", "project_item_id": "PVTI_test", "status": "committed", "title": "review dispatch admission", "acceptance": ["reject stale review admission"], "primary_package": "oasis7"}
+        task = {"task_uid": TASK_UID, "canonical_worktree": str(self.repo.resolve()), "task_branch": "task/packet", "default_branch": "main", "owner_role": "qa_engineer", "issue_number": 1, "issue_url": "https://github.com/example/repo/issues/1", "repository": "example/repo", "project_item_id": "PVTI_test", "status": "committed", "title": "review dispatch admission", "acceptance": ["reject stale review admission"], "primary_package": "oasis7"}
         task.update(changes)
         path = self.repo / ".pm/github-project-sync/tasks.json"
-        path.write_text(json.dumps({"version": 1, "project": {"owner": "example", "number": 1}, "tasks": {TASK_UID: task}}), encoding="utf-8")
+        path.write_text(json.dumps({"version": 1, "project": {"id": "PVT_test", "owner": "example", "number": 1, "repo": "example/repo"}, "tasks": {TASK_UID: task}}), encoding="utf-8")
+
+    def write_live_project(self, *, pm_status: str = "committed", workflow_phase: str = "verification",
+                           status: str = "In Progress", has_next_page: bool = False,
+                           item_id: str = "PVTI_test", project_id: str = "PVT_test",
+                           task_uid: str = TASK_UID) -> None:
+        field_values = [
+            ("Task UID", task_uid, "text"),
+            ("Status", status, "name"),
+            ("PM Status", pm_status, "name"),
+            ("Workflow Phase", workflow_phase, "name"),
+        ]
+        node = {
+            "id": item_id,
+            "project": {"id": project_id, "number": 1, "owner": {"login": "example"}},
+            "content": {
+                "body": f"task_uid: {TASK_UID}\n",
+                "number": 1,
+                "url": "https://github.com/example/repo/issues/1",
+            },
+            "fieldValues": {
+                "pageInfo": {"hasNextPage": has_next_page},
+                "nodes": [
+                    {"field": {"name": name}, value_key: value}
+                    for name, value, value_key in field_values
+                ],
+            },
+        }
+        self.project_response_path.write_text(json.dumps({"data": {"nodes": [node]}}), encoding="utf-8")
 
     def command(self, *extra: str) -> list[str]:
         return ["python3", "scripts/pm/subagent-task-packet.py", *extra]
 
     def create_args(self, *, slice_id: str = "qa-review", slice_type: str = "review") -> list[str]:
-        return ["create", "--task-uid", TASK_UID, "--slice-id", slice_id, "--role", "qa_engineer", "--slice-type", slice_type, "--owner-role", "qa_engineer", "--integration-owner", "tpm", "--integration-order", "1/1", "--packet-producer", "tpm", "--primary-package", "oasis7", "--context-delivery-mode", "minimal_head_bound_task_packet", "--intended-model-configuration", "inherit current parent selection", "--actual-dispatched-model-reasoning", "inherited/unverified", "--actual-runtime-evidence-reason", "dispatch surface does not report inherited runtime", "--role-activation", "message_assigned_adapter_inactive", "--base", "main", "--user-intent", "review packet behavior", "--work-item", "validate the bounded helper", "--non-goals", "no product changes", "--acceptance-target", "focused tests pass", "--governance-ref", "AGENTS.md", "--governance-ref", "doc/engineering/workflow/source-of-truth.md", "--governance-ref", ".agents/roles/qa_engineer.md", "--scoped-ref", "scope.txt", "--evidence-summary", "scope.txt is the only task surface", "--collaboration-boundary", "read only except assigned files", "--write-scope", "scripts/pm/**", "--return-contract", "patch and test evidence", "--validation-command", "python3 scripts/pm/subagent-task-packet.test.py", "--formal-sink", "https://example.invalid/issues/1"]
+        return ["create", "--task-uid", TASK_UID, "--slice-id", slice_id, "--role", "qa_engineer", "--slice-type", slice_type, "--owner-role", "qa_engineer", "--integration-owner", "tpm", "--integration-order", "1/1", "--packet-producer", "tpm", "--primary-package", "oasis7", "--context-delivery-mode", "minimal_head_bound_task_packet", "--intended-model-configuration", "inherit current parent selection", "--actual-dispatched-model-reasoning", "inherited/unverified", "--actual-runtime-evidence-reason", "dispatch surface does not report inherited runtime", "--role-activation", "message_assigned_adapter_inactive", "--base", "main", "--user-intent", "review packet behavior", "--work-item", "validate the bounded helper", "--non-goals", "no product changes", "--acceptance-target", "focused tests pass", "--governance-ref", "AGENTS.md", "--governance-ref", "doc/engineering/workflow/source-of-truth.md", "--governance-ref", ".agents/roles/qa_engineer.md", "--scoped-ref", "scope.txt", "--evidence-summary", "scope.txt is the only task surface", "--collaboration-boundary", "read only except assigned files", "--write-scope", "scripts/pm/**", "--return-contract", "patch and test evidence", "--validation-command", "python3 scripts/pm/subagent-task-packet.test.py", "--formal-sink", "https://github.com/example/repo/issues/1"]
 
     def invoke(self, args: list[str], ok: bool = True) -> subprocess.CompletedProcess[str]:
         result = subprocess.run(self.command(*args), cwd=self.repo, text=True, capture_output=True)
@@ -553,6 +587,38 @@ class PacketTest(unittest.TestCase):
         self.assertEqual("admitted", json.loads(admitted.stdout)["status"])
         self.assertEqual(original_bytes, (self.repo / packet).read_bytes())
         self.assertEqual("ready", json.loads(original_bytes)["identity"]["task_status"])
+
+    def test_review_admission_uses_live_project_state_for_ready_packet(self) -> None:
+        snapshot = self.create_snapshot()
+        self.write_mapping(status="ready", workflow_phase="pre_pr_ready")
+        packet = self.invoke(self.create_args(slice_id="live-state", slice_type="professional_review")).stdout.splitlines()[0]
+        plan = self.create_review_plan(packet, slice_id="live-state")
+        self.write_mapping(status="committed", workflow_phase="verification")
+
+        for pm_status, phase, status in (
+            ("ready", "pre_pr_ready", "Ready / PR"),
+            ("committed", "execution", "In Progress"),
+        ):
+            with self.subTest(pm_status=pm_status, phase=phase):
+                self.write_live_project(pm_status=pm_status, workflow_phase=phase, status=status)
+                rejected = self.review_admission(packet, plan, snapshot, ok=False)
+                self.assertRegex(rejected.stderr.lower(), r"live project|readback|status|phase")
+
+        self.write_live_project(has_next_page=True)
+        self.review_admission(packet, plan, snapshot, ok=False)
+        self.write_live_project(project_id="PVT_wrong")
+        self.review_admission(packet, plan, snapshot, ok=False)
+        self.write_live_project(item_id="PVTI_wrong")
+        self.review_admission(packet, plan, snapshot, ok=False)
+        self.write_live_project(task_uid="task_22222222222222222222222222222222")
+        self.review_admission(packet, plan, snapshot, ok=False)
+        self.project_response_path.write_text("FAIL", encoding="utf-8")
+        failed_read = self.review_admission(packet, plan, snapshot, ok=False)
+        self.assertIn("live project review-admission read failed", failed_read.stderr.lower())
+
+        self.write_live_project()
+        admitted = self.review_admission(packet, plan, snapshot)
+        self.assertEqual("admitted", json.loads(admitted.stdout)["status"])
 
     def test_v2_review_admission_binds_plan_epoch_to_bootstrap_snapshot(self) -> None:
         packet = self.invoke(self.create_args()).stdout.splitlines()[0]
