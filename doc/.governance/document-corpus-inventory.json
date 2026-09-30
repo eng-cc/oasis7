@@ -15,7 +15,7 @@
     },
     {
       "path": "doc/.governance/document-semantic-review-overrides.json",
-      "content_sha256": "a9ab580471a34c74f34bcc9aaa134ada9e648d5b7aaa6b5f76f0848f276420b4"
+      "content_sha256": "a46e488df3c54e0dc6ad6309417b0ca3dad2929a0388b4aa719c6b589006527c"
     },
     {
       "path": "doc/testing/evidence/inventory.json",
@@ -2653,7 +2653,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/prd.md",
-      "content_sha256": "adcec6c62b84c42500cd538d9cc5d601f8daf064be55d00a80ed03a3b715c4dd",
+      "content_sha256": "ff01adf02c849a7c5704622a728b87a6c4a9ae4d324237abb8ccd620cda7aaa9",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -4151,7 +4151,7 @@
     },
     {
       "path": "doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md",
-      "content_sha256": "108c3fb5e271826438d88522c5cc3410012b2b67747ab6189422a55a0d2e585b",
+      "content_sha256": "acf325f9129f86955f87aaa061564796ef0e03e50e0d3b408eeb0a59433cf397",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -4425,6 +4425,20 @@
       "semantic_decision_owner": "qa_engineer",
       "object_kind": "markdown_record",
       "lifecycle_candidate": "historical_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "testing-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/testing/schemas/world-execution-state-sync-attachment.schema.json",
+      "content_sha256": "e3aa6f6e341894bb2612a6f4a9fa2a3ea96eedf9227ce74a6735b948d6cac496",
+      "registry_type": "professional_domain",
+      "structural_owner": "qa_engineer",
+      "authority_entry": "doc/testing/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "qa_engineer",
+      "object_kind": "supporting_artifact",
+      "lifecycle_candidate": "review_required",
       "inventory_disposition": "retain_for_owner_review",
       "routing_batch": "testing-corpus-review",
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
@@ -5285,7 +5299,7 @@
     },
     {
       "path": "doc/world-runtime/module/module-lifecycle.md",
-      "content_sha256": "02811053b1414c8676772728535c5bd76820cd1f6fece63ea2593f09d177261c",
+      "content_sha256": "e77c557b1da058fde017122e2a1ffdd6b6b80e0d2ec09d22301896973e1e3ad7",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5327,7 +5341,7 @@
     },
     {
       "path": "doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md",
-      "content_sha256": "ed2d3b811706570159ea048e60d34e3c15859be9fb0733ec962a1203f123e8be",
+      "content_sha256": "ce60bde273558ce58927392c3432416c9d1ee73a6a16740645a711a1abbcd4f4",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5341,7 +5355,7 @@
     },
     {
       "path": "doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md",
-      "content_sha256": "3b5ac42f31d4d0e826e48a4d77254502d298a32f3145486b155130b71e01f011",
+      "content_sha256": "23d184d6cc08f6b19bbff1cfb3156472b4b03f5a62b92a0fe870d7f6ebe8fdd6",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5649,7 +5663,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-deterministic-build-pipeline.design.md",
-      "content_sha256": "1637fe7eb738f60a3d1aa843066237eed898900b1dbe58e5ae37492409f298db",
+      "content_sha256": "7b6e49eae532c4e2d73e2eb6e5fe69336885bfede8c058ddd4d98af3e984cc68",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5663,7 +5677,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md",
-      "content_sha256": "0004fd987f6176e99e5a2f94f65dab5c44971a55091766f9724a7722b1cb75eb",
+      "content_sha256": "9ac008a7261053dcd856e63d0f32d79fe83e877e3a96035958f4dc453e612a87",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5677,7 +5691,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-executor.design.md",
-      "content_sha256": "31f6e01a87df29abf20f0f4dff618b783e66f306f6f0f926eff8c575148ec15b",
+      "content_sha256": "9be9fadabc058409577e8afca3697029bed36f22fe2c4ff164269a2b1f869c9b",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5691,7 +5705,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-executor.prd.md",
-      "content_sha256": "08f729f87177f77431389a4902fe301d6ff4dc5796a654402abd9aeb9f6c35d9",
+      "content_sha256": "3a7b898987abb46db1c3776241cdd5b7d2a912a0b55f9c9bce2acd8eeeec70f1",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5705,7 +5719,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-interface.md",
-      "content_sha256": "66cb9c87a46ba6ba8faea69d4cb828ca0a4bc01a38a0b230b03b949ec3e4710d",
+      "content_sha256": "a86dfa1152eb5b991ac3b8fc2261a61340241c53d8a28ef4eb196e35374ae542",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5719,7 +5733,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-observability-timing-metrics.design.md",
-      "content_sha256": "43cc319c515fd2037aab5a9dc6c979ac20a60cf42890c4e4042fe66a171847b2",
+      "content_sha256": "e7a9c0d94ee0443d9a5a269d8e1cfcf56fb5dcc7b3c04af8c5d4351c1d2a7196",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5733,7 +5747,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md",
-      "content_sha256": "9a57f4073c2b6ff44810e2958bae9712efeed5c4468d3f97a21c476cf9d438d6",
+      "content_sha256": "e254f26a181baaf22214e5f26de357c703c09b1a6907a29ef1975f3c06170dbe",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5747,7 +5761,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-sdk.design.md",
-      "content_sha256": "8a46e5c74fb4b03ddfff6f1d530c25b2cb62a9fd094b0a6d2c83dc42500850c4",
+      "content_sha256": "4e7faef9c44944e8fe4e6180102e5b0bd7f23c8282825fcfa3e30cf2bf9c7fce",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5761,7 +5775,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-sdk.prd.md",
-      "content_sha256": "a357547acee796c8f23e7721a1bf45e13fa4c40ab4c5156bc0c7c3362f2ce69a",
+      "content_sha256": "e91667aec59ddcb1ab69aebc2cef47b49c99d8656aaeb77bffccedbf013411cc",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
