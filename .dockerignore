@@ -20,3 +20,5 @@ crates/**/target
 crates/**/target/**
 tools/wasm_build_suite/target
 tools/wasm_build_suite/templates/minimal_module/target
+tools/**/target
+tools/**/target/**
