@@ -7,13 +7,13 @@ TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-pm-lint-test.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
 ignored_before="$(find "$ROOT_DIR/scripts/pm" \( -type d -name __pycache__ -o -type f -name '*.pyc' \) -print | sort)"
 
-python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" snapshot \
+PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" snapshot \
   --root "$ROOT_DIR" --state "$TMP_DIR/state" --pathspec .pm
 
 output="$($ROOT_DIR/scripts/pm/lint.sh)"
 grep -Fx "pm-lint: OK" <<<"$output" >/dev/null
 
-python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" check \
+PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" check \
   --root "$ROOT_DIR" --state "$TMP_DIR/state" --pathspec .pm >/dev/null
 
 CACHE_FIXTURE="$TMP_DIR/no-process-cache-fixture"
@@ -88,7 +88,7 @@ shopt -u dotglob nullglob
 git -C "$FIXTURE" init -q
 git -C "$FIXTURE" add .pm
 
-python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" snapshot \
+PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" snapshot \
   --root "$FIXTURE" --state "$TMP_DIR/concurrent-state" --pathspec .pm
 
 READY="$TMP_DIR/snapshot-ready"
@@ -114,7 +114,7 @@ printf '\n# concurrent source epoch mutation\n' >>"$FIXTURE/.pm/README.md"
 wait "$lint_pid"
 grep -Fx "pm-lint: OK" "$TMP_DIR/concurrent-lint.out" >/dev/null
 
-if python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" check \
+if PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" check \
   --root "$FIXTURE" --state "$TMP_DIR/concurrent-state" --pathspec .pm \
   >"$TMP_DIR/concurrent-guard.out" 2>"$TMP_DIR/concurrent-guard.err"; then
   echo "pm-lint.test: expected full-.pm guard to detect non-role source mutation" >&2
@@ -126,6 +126,14 @@ grep -F "tracked projection drift: .pm/README.md" \
 COPY_FIXTURE="$TMP_DIR/during-copy-fixture"
 mkdir -p "$COPY_FIXTURE"
 cp -R "$ROOT_DIR/.pm" "$COPY_FIXTURE/.pm"
+mkdir -p "$COPY_FIXTURE/.pm/stage"
+printf 'version: 1\ngate_id: null\nstatus: draft\nlane_status: []\nblocking_tasks: []\nupdated_from: []\n' \
+  >"$COPY_FIXTURE/.pm/stage/gate.yaml"
+chmod -x "$COPY_FIXTURE/.pm/stage/gate.yaml"
+if [[ ! -f "$COPY_FIXTURE/.pm/stage/gate.yaml" || -x "$COPY_FIXTURE/.pm/stage/gate.yaml" ]]; then
+  echo "pm-lint.test: during-copy gate fixture must start as a non-executable file" >&2
+  exit 1
+fi
 shopt -s dotglob nullglob
 for path in "$ROOT_DIR"/*; do
   name="$(basename "$path")"
