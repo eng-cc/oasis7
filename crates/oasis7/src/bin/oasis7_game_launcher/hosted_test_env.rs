@@ -52,7 +52,7 @@ pub(crate) fn run_scenarios(scenarios: &[Scenario<'_>]) -> Option<usize> {
         return Some(index);
     }
     for (name, values) in scenarios {
-        let before: Vec<_> = TRACKED.iter().map(|key| std::env::var_os(key)).collect();
+        let before: Vec<_> = TRACKED.iter().map(std::env::var_os).collect();
         let mut command = Command::new(std::env::current_exe().expect("current test executable"));
         command.args(["--exact", test, "--nocapture", "--skip", CHILD_ARGUMENT]);
         for key in TRACKED {
@@ -63,7 +63,7 @@ pub(crate) fn run_scenarios(scenarios: &[Scenario<'_>]) -> Option<usize> {
             command.env(key, value);
         }
         let output = command.output().expect("spawn isolated test scenario");
-        let after: Vec<_> = TRACKED.iter().map(|key| std::env::var_os(key)).collect();
+        let after: Vec<_> = TRACKED.iter().map(std::env::var_os).collect();
         assert_eq!(
             after, before,
             "parent environment changed after {test}:{name}"

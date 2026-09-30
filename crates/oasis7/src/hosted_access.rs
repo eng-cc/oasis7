@@ -26,7 +26,7 @@ const PROMPT_CONTROL_ACTION_IDS: &[&str] = &[
 
 #[cfg(test)]
 #[path = "bin/oasis7_game_launcher/hosted_test_env.rs"]
-mod hosted_test_env;
+pub(super) mod hosted_test_env;
 
 // Retain the shared test API for existing web-launcher consumers. Launcher
 // environment scenarios use child startup configuration instead of this lock.
