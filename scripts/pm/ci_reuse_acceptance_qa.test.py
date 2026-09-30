@@ -6,6 +6,7 @@ import contextlib
 import importlib.util
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import tempfile
@@ -146,7 +147,16 @@ class ReuseAcceptanceQATests(unittest.TestCase):
     def test_exact_m_runs_selected_local_required_executor(self):
         """Exercise W's real required runner against the exact local M worktree."""
         head = git(ROOT, "rev-parse", "HEAD")
-        base = git(ROOT, "rev-parse", f"{head}^")
+        base = os.environ.get("OASIS7_CI_REUSE_LOCAL_BASE_OID") or git(
+            ROOT, "rev-parse", f"{head}^",
+        )
+        if not re.fullmatch(r"[0-9a-f]{40,64}", base):
+            self.fail("exact-M fixture base must be a full lowercase commit OID")
+        self.assertEqual(base, git(ROOT, "rev-parse", "--verify", "--end-of-options", f"{base}^{{commit}}"))
+        subprocess.run(
+            [GIT, "-C", str(ROOT), "merge-base", "--is-ancestor", base, head],
+            check=True, capture_output=True, text=True,
+        )
         with tempfile.TemporaryDirectory(prefix="oasis7-ci-reuse-exact-m-") as temporary:
             temp = Path(temporary)
             trusted_w = temp / "W"
@@ -154,9 +164,10 @@ class ReuseAcceptanceQATests(unittest.TestCase):
             log_path = temp / "required-tier.log"
             subprocess.run(
                 [GIT, "-C", str(ROOT), "worktree", "add", "--quiet", "--detach",
-                 str(trusted_w), head], check=True, capture_output=True, text=True,
+                 str(trusted_w), base], check=True, capture_output=True, text=True,
             )
             try:
+                self.assertEqual(base, git(trusted_w, "rev-parse", "HEAD"))
                 integration = load_from_root(trusted_w, "integration_ci")
                 composed = integration.compose(trusted_w, base, head, worktree_path=target_m)
                 self.assertEqual(base, composed["base_oid"])
