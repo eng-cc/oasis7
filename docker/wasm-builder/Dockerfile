@@ -37,8 +37,11 @@ RUN rustup toolchain install "${WASM_TOOLCHAIN}" --profile minimal --component r
     && rustup target add "${WASM_TARGET}" --toolchain "${WASM_TOOLCHAIN}"
 
 WORKDIR /opt/oasis7
+COPY Cargo.toml Cargo.lock /opt/oasis7/
+COPY vendor-egui-winit-0.33.3 /opt/oasis7/vendor-egui-winit-0.33.3
+COPY crates /opt/oasis7/crates
 COPY tools/wasm_build_suite /opt/oasis7/tools/wasm_build_suite
-COPY crates/oasis7_wasm_build /opt/oasis7/crates/oasis7_wasm_build
+COPY tools/wasm_module_observe /opt/oasis7/tools/wasm_module_observe
 COPY scripts/build-wasm-module.sh /opt/oasis7/scripts/build-wasm-module.sh
 
 RUN chmod +x /opt/oasis7/scripts/build-wasm-module.sh \
