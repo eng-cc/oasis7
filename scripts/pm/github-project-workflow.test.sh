@@ -114,6 +114,30 @@ legacy_trace = module.normalized_issue_traceability(
 )
 assert legacy_trace["non_pr_completion_evidence"] == "legacy evidence", legacy_trace
 assert "non_pr_completion_evidence_sha256" not in legacy_trace, legacy_trace
+item = {
+    "id": "ITEM_ID",
+    "project": {"id": "PROJECT_ID", "number": 1, "owner": {"login": "eng-cc"}},
+    "content": {"body": "task_uid: task_11111111111111111111111111111111", "number": 101,
+                "url": "https://github.com/eng-cc/oasis7/issues/101"},
+    "fieldValues": {"pageInfo": {"hasNextPage": False}, "nodes": []},
+}
+original_run_json = module.run_json
+try:
+    module.run_json = lambda _cmd: {"data": {"nodes": [item]}, "errors": [{"message": "partial response"}]}
+    try:
+        module.fetch_project_items_by_ids(["ITEM_ID"])
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("GraphQL data accompanied by errors must be rejected")
+    module.run_json = lambda _cmd: {"data": {"nodes": [item]}}
+    assert module.fetch_project_items_by_ids(["ITEM_ID"])["ITEM_ID"]["id"] == "ITEM_ID"
+    module.run_json = lambda _cmd: {"data": {"nodes": [item]}, "errors": []}
+    assert module.fetch_project_items_by_ids(["ITEM_ID"])["ITEM_ID"]["id"] == "ITEM_ID"
+    module.run_json = lambda _cmd: {"data": {"nodes": []}}
+    assert module.fetch_project_items_by_ids(["ITEM_ID"]) == {}
+finally:
+    module.run_json = original_run_json
 PY
 
 AUDIT_JSON="$TMPDIR/audit.json"
