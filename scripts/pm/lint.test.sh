@@ -6,6 +6,8 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-pm-lint-test.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
 ignored_before="$(find "$ROOT_DIR/scripts/pm" \( -type d -name __pycache__ -o -type f -name '*.pyc' \) -print | sort)"
+# Keep every Python child launched by this test under its disposable cache root.
+export PYTHONPYCACHEPREFIX="$TMP_DIR/pycache"
 
 python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" snapshot \
   --root "$ROOT_DIR" --state "$TMP_DIR/state" --pathspec .pm
