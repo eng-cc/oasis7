@@ -392,6 +392,7 @@ run_workflow_governance_operational_contract_tests() {
   run bash ./scripts/pm/github-project-workflow.test.sh
   run ./scripts/ci-required-scope-audit-contract.test.sh
   run python3 ./scripts/pm/workflow-process-exception.test.py
+  run python3 ./scripts/pm/workflow-next.test.py
   run python3 ./scripts/pm/workflow-delivery-readiness.test.py
   run python3 ./scripts/pm/aggregate-task-completion.test.py
   run python3 ./scripts/pm/ordered-aggregate-closeout.test.py

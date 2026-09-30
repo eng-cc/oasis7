@@ -12,6 +12,7 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from urllib.parse import urlsplit
 
 
 SCHEMA = "oasis7-subagent-task-packet/v1"
@@ -82,6 +83,71 @@ def load_task(root: Path, task_uid: str) -> dict[str, object]:
     if not isinstance(task, dict) or task.get("task_uid") != task_uid:
         fail(f"mapping record does not match task UID: {task_uid}")
     return task
+
+
+def validate_live_project_review_admission(root: Path, task: dict[str, object],
+                                           task_uid: str) -> None:
+    mapping_path = root / ".pm/github-project-sync/tasks.json"
+    try:
+        mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+        mapped_task = mapping["tasks"][task_uid]
+        project = mapping["project"]
+        if mapped_task != task or not isinstance(project, dict):
+            fail("task mapping changed or lacks Project identity during review admission")
+        project_id = project.get("id")
+        project_owner = project.get("owner")
+        project_number = project.get("number")
+        project_repo = project.get("repo")
+        item_id = task.get("project_item_id")
+        repository = task.get("repository")
+        issue_number = task.get("issue_number")
+        issue_url = task.get("issue_url")
+        if (not all(isinstance(value, str) and value for value in
+                    (project_id, project_owner, project_repo, item_id, repository, issue_url))
+                or type(project_number) is not int or project_number < 1
+                or project_repo != repository
+                or type(issue_number) is not int or issue_number < 1):
+            fail("task mapping lacks exact Project or Issue identity for review admission")
+        parsed_url = urlsplit(issue_url)
+        if (parsed_url.scheme != "https" or not parsed_url.netloc or parsed_url.query or parsed_url.fragment
+                or parsed_url.path != f"/{repository}/issues/{issue_number}"):
+            fail("task Issue URL does not match its repository and number")
+        helper_path = Path(__file__).with_name("github-project-workflow.py")
+        spec = importlib.util.spec_from_file_location("github_project_workflow_readback", helper_path)
+        if spec is None or spec.loader is None:
+            fail("live Project review-admission reader is unavailable")
+        helper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(helper)
+        item = helper.fetch_project_items_by_ids([item_id]).get(item_id)
+    except PacketError:
+        raise
+    except Exception as exc:
+        fail(f"live Project review-admission read failed: {exc}")
+    if not isinstance(item, dict) or item.get("id") != item_id:
+        fail("live Project review-admission read did not return the mapped item")
+    if (item.get("_project_id") != project_id
+            or item.get("_project_owner") != project_owner
+            or type(item.get("_project_number")) is not int
+            or item.get("_project_number") != project_number):
+        fail("live Project identity does not match the task mapping")
+    if item.get("_field_values_has_next_page") is not False:
+        fail("live Project review-admission fields are incomplete")
+    content = item.get("content")
+    if (not isinstance(content, dict) or type(content.get("number")) is not int
+            or content.get("number") != issue_number or content.get("url") != issue_url):
+        fail("live Project item Issue identity does not match the task mapping")
+    body = str(content.get("body") or "")
+    body_task_uids = re.findall(r"task_[0-9a-f]{32}", body)
+    project_task_uid = helper.field_value(item, "Task UID")
+    if (not body_task_uids or set(body_task_uids) != {task_uid}
+            or project_task_uid not in ("", task_uid) or helper.item_task_uid(item) != task_uid):
+        fail("live Project item Task UID does not match the task mapping")
+    live_status = helper.field_value(item, "PM Status")
+    live_phase = helper.field_value(item, "Workflow Phase")
+    live_lane = helper.field_value(item, "Status")
+    if (live_status != "committed" or live_phase != "verification"
+            or live_lane != "In Progress"):
+        fail("live Project state does not confirm committed/verification review admission")
 
 
 def current_facts(root: Path, task: dict[str, object], base: str,
@@ -495,7 +561,8 @@ def validate_incremental_context(root: Path, context: dict[str, object], task_ui
 
 
 def validate_packet(root: Path, packet: dict[str, object],
-                    enforce_incremental_semantics: bool = True) -> None:
+                    enforce_incremental_semantics: bool = True,
+                    allow_ready_review_commit: bool = False) -> None:
     if packet.get("schema") != SCHEMA:
         fail(f"unsupported packet schema: {packet.get('schema')}")
     identity = packet.get("identity")
@@ -534,7 +601,17 @@ def validate_packet(root: Path, packet: dict[str, object],
     for field in ("repository", "project_item_id", "task_status"):
         mapping_field = "status" if field == "task_status" else field
         if identity.get(field) != task.get(mapping_field):
-            fail(f"packet {field} does not match task mapping")
+            ready_review_commit = (
+                allow_ready_review_commit and field == "task_status"
+                and identity.get("task_status") == "ready"
+                and task.get("status") == "committed"
+                and task.get("workflow_phase") == "verification"
+                and slice_contract.get("slice_type") == "professional_review"
+            )
+            if ready_review_commit:
+                validate_live_project_review_admission(root, task, task_uid)
+            else:
+                fail(f"packet {field} does not match task mapping")
     bounded(str(identity.get("packet_producer") or ""), "identity.packet_producer")
     for field in ("slice_id", "role", "slice_type", "owner_role", "integration_owner", "integration_order", "context_delivery_mode", "intended_model_configuration", "actual_dispatched_model_reasoning", "actual_runtime_evidence_reason", "role_activation", "write_scope", "return_contract", "validation_command", "formal_sink"):
         bounded(str(slice_contract.get(field) or ""), f"slice.{field}")
@@ -601,7 +678,7 @@ def validate_bootstrap_snapshot(root: Path, snapshot: Path, task_uid: str) -> di
 def review_admission(root: Path, packet_path: Path, plan_path: Path,
                      snapshot_path: Path) -> dict[str, object]:
     packet = load_object(packet_path, "packet")
-    validate_packet(root, packet)
+    validate_packet(root, packet, allow_ready_review_commit=True)
     identity = packet["identity"]
     slice_contract = packet["slice"]
     assert isinstance(identity, dict) and isinstance(slice_contract, dict)

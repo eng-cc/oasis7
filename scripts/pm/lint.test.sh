@@ -13,6 +13,36 @@ PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" 
 output="$($ROOT_DIR/scripts/pm/lint.sh)"
 grep -Fx "pm-lint: OK" <<<"$output" >/dev/null
 
+COLD_CACHE_FIXTURE="$TMP_DIR/cold-cache-fixture"
+mkdir -p "$COLD_CACHE_FIXTURE/.agents" "$COLD_CACHE_FIXTURE/scripts"
+cp -R "$ROOT_DIR/.pm" "$COLD_CACHE_FIXTURE/.pm"
+cp -R "$ROOT_DIR/.agents/roles" "$COLD_CACHE_FIXTURE/.agents/roles"
+cp -R "$ROOT_DIR/scripts/pm" "$COLD_CACHE_FIXTURE/scripts/pm"
+shopt -s dotglob nullglob
+for path in "$ROOT_DIR"/*; do
+  name="$(basename "$path")"
+  [[ "$name" == ".pm" || "$name" == ".git" || "$name" == ".agents" || "$name" == "scripts" ]] && continue
+  ln -s "$path" "$COLD_CACHE_FIXTURE/$name"
+done
+shopt -u dotglob nullglob
+find "$COLD_CACHE_FIXTURE/scripts/pm" \( -type d -name __pycache__ -o -type f -name '*.pyc' \) -prune -exec rm -rf {} +
+if env -u PYTHONDONTWRITEBYTECODE \
+  PYTHONPYCACHEPREFIX="$COLD_CACHE_FIXTURE/inherited-pycache" \
+  PM_ROOT_DIR="$COLD_CACHE_FIXTURE" "$COLD_CACHE_FIXTURE/scripts/pm/lint.sh" \
+  >"$TMP_DIR/cold-cache-lint.out"; then
+  cold_cache_artifacts="$(find "$COLD_CACHE_FIXTURE" \( -type d -name __pycache__ -o -type f -name '*.pyc' \) -print)"
+  if [[ -n "$cold_cache_artifacts" ]]; then
+    echo "pm-lint.test: lint wrote Python artifacts into a cold physical source fixture" >&2
+    printf '%s\n' "$cold_cache_artifacts" >&2
+    exit 1
+  fi
+  grep -Fx "pm-lint: OK" "$TMP_DIR/cold-cache-lint.out" >/dev/null
+else
+  echo "pm-lint.test: cold physical source fixture unexpectedly failed lint" >&2
+  cat "$TMP_DIR/cold-cache-lint.out" >&2
+  exit 1
+fi
+
 PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" check \
   --root "$ROOT_DIR" --state "$TMP_DIR/state" --pathspec .pm >/dev/null
 
