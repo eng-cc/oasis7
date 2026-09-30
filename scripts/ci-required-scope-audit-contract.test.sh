@@ -7,7 +7,7 @@ ci_tests="$repo_root/scripts/ci-tests.sh"
 versioned_config="$repo_root/scripts/fixtures/ci-required-scope.versioned-test.json"
 legacy_config="$repo_root/scripts/fixtures/ci-required-scope.legacy-test.json"
 legacy_config_sha256="sha256:d656841b3c9fcf66fcd5ea1c37b43d9628e61d13ea48be8bda54e71511d505b4"
-versioned_config_sha256="sha256:2d4228e5d7446c393ea3811084183860b5f8b4bb0e3b673957a3a020ab172dec"
+versioned_config_sha256="sha256:918dc0c88bd1060ca94b4fd20d91f567dfb64ee2edbbae5f35b37237a50470b1"
 
 value_for_key() {
   local output="$1"
@@ -161,7 +161,7 @@ versioned_packaging_plan="$("$planner" --event-name pull_request --config "$vers
   --changed-path scripts/native-packaging-contract.test.sh \
   --changed-path scripts/package-workflow-cache-reuse-contract.test.sh)"
 require_key "$versioned_packaging_plan" execution_contract required-domain-split/v1
-require_key "$versioned_packaging_plan" planner_config_sha256 sha256:2d4228e5d7446c393ea3811084183860b5f8b4bb0e3b673957a3a020ab172dec
+require_key "$versioned_packaging_plan" planner_config_sha256 sha256:918dc0c88bd1060ca94b4fd20d91f567dfb64ee2edbbae5f35b37237a50470b1
 require_key "$versioned_packaging_plan" scope targeted
 require_key "$versioned_packaging_plan" selected_capabilities packaging_contracts
 require_key "$versioned_packaging_plan" run_packaging_contracts true

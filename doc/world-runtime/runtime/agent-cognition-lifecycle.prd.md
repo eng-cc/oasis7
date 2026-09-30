@@ -11,7 +11,7 @@
 
 ## 1. 目标与边界
 
-当前 runtime 可以执行确定性 world tick、持久化 world journal、snapshot/replay，并且 AgentIntentV2 已有 authority、request digest 与幂等 transition 基础。但 cognition 仍可能在 world tick 调用栈内同步等待 provider，普通 ActionEnvelope 也没有把决策绑定到产生它的 world 版本。本 PRD 把两条时间线明确分开：
+当前 runtime 可以执行确定性 world tick、持久化 world journal、snapshot/replay，并且 AgentIntentV2 已有 authority、request digest 与幂等 transition 基础。同步 simulator/兼容 runner 仍可能在 tick 调用栈内等待 provider；native runtime-live 的 Builtin 与 ProviderBacked 则都接入 AsyncAgentRunner，由 worker 调用决策并非阻塞地轮询结果。普通 ActionEnvelope 仍没有把决策绑定到产生它的 world 版本；native 接线也不证明完整 durable scheduler、远端恢复或全量非阻塞验收。本 PRD 把两条时间线明确分开：
 
 1. world timeline 只由 runtime scheduler 与 deterministic execution pipeline 推进；
 2. cognition timeline 可以等待、重试或恢复外部 provider，但绝不能阻塞或直接写 canonical world。
@@ -20,10 +20,10 @@
 
 | 能力面 | current | partial | target | proven 判据 |
 | --- | --- | --- | --- | --- |
-| World tick 与 cognition | AgentRunner::tick、tick_decide_only 和 ProviderBackedAgentBehavior::decide 存在同步调用；runtime_live 在决策返回后再调用 world.step。 | Builtin/ProviderBacked 已有分支和部分 shadow-kernel 同步，但没有统一 actor/scheduler 生命周期。 | World::step 不等待 provider；AgentActor 在 runtime worker 外运行；结果通过 envelope 回到提交边界。 | 注入任意 provider 延迟或永久阻塞时，world tick 仍按 bounded deterministic work 完成，且 replay 不调用 provider。 |
+| World tick 与 cognition | simulator/兼容 AgentRunner::tick、tick_decide_only 和 ProviderBackedAgentBehavior::decide 保留同步调用；native runtime-live 的 Builtin/ProviderBacked 共用 AsyncAgentRunner worker 与非阻塞 mailbox/result polling，kernel action application 仍同步且权威。 | 已有 native actor 与 shadow-kernel adapter 接线；完整 scheduler、envelope、paired recovery/remote 生命周期及全部阻塞故障验收尚未由这些接线证明。runner logical-tick fixture 不等于实际 World tick/commit 证明；run_one_turn 是刻意等待的 tests/CLI helper。 | World::step 不等待 provider；AgentActor 在 runtime worker 外运行；结果通过 envelope 回到提交边界。 | 注入任意 provider 延迟或永久阻塞时，world tick 仍按 bounded deterministic work 完成，且 replay 不调用 provider。 |
 | Action identity 与 MVCC | runtime ActionEnvelope 只有 action id 与 action；规则校验针对当前状态。 | AgentIntentV2 具备 intent_tick、world、authority_scope、request_digest，但它不是普通 cognition action 的 MVCC envelope。 | 每个 cognition result 都有 turn/request identity、base state、capability digest、有效期与 preconditions；过期或冲突结果 fail closed。 | 相同 fixture 下 fresh/stale/duplicate/conflict 四种提交产生稳定 disposition、事件与 state root。 |
 | Cognition journal | WorldJournal、snapshot 与 runtime journal 能恢复 world state/event；decision trace 是诊断数据。 | DecisionRequest 有可选 replay_id，sidecar mailbox、runner、pending action 和 provider cache 仍是进程内状态。 | 独立、append-only、可 checkpoint 的 CognitionJournal 记录 turn lifecycle、canonical request/response、submit/receipt 与 recovery status。 | crash injection 覆盖每个边界；恢复后的 state/event/receipt digest 与无 crash 执行相同，已记录 response 不再次调用 provider。 |
-| Continuation | execute-until continuation 在 LlmAgentBehavior 内存中执行。 | 有 wake 条件、剩余 tick 和 action result 计算，但无 scheduler ownership、snapshot 或 restart contract。 | continuation 由 AgentScheduler 持久化、按 logical tick/event/receipt 唤醒并以 wake identity 去重。 | snapshot/restart/乱序 wake 只产生一次等价 continuation outcome。 |
+| Continuation | legacy execute-until continuation 在 LlmAgentBehavior 内存中执行；WaitTicks 保留本地 timer。native 普通 Wait 经 Harness proposal/current-context 校验、Runtime admission 与 projection/readback，选取 Runtime wake 后以当前 context resume 并与 Harness reconcile；admission failure 不冒充成功等待。 | 已有 native 普通 Wait 的 admission/wake/resume seam 及有界 fixtures；它不证明完整 durable scheduler、WASM/browser 服务、远端 restart/reconnect/rebind/reorg 或全量 exactly-once 恢复，且不能与 WaitTicks timer 合并为同一持久化证明。 | continuation 由 AgentScheduler 持久化、按 logical tick/event/receipt 唤醒并以 wake identity 去重。 | snapshot/restart/乱序 wake 只产生一次等价 continuation outcome。 |
 | Authority/capability | 仅在既有显式 DecisionRequest capability catalog/context、ProviderBacked capability-context 与 AgentIntentV2 paths 生成/校验；并非每个 turn 已自动 wiring。 | provider chat 已有 intent identity，普通 decision path 仍缺完整 turn identity。 | scheduler 为每个 turn 自动捕获并注入 capability snapshot；host 在 submit 时重新验证 authority、capability、policy 和 action 规则。 | provider 伪造或过期 capability、intent、actor、world、reorg 字段均被拒绝且不产生 world effect。 |
 
 本文件新增的是 target contract；除上述 current/proven 局部能力外，不把 target 描述成已实现。
@@ -668,9 +668,9 @@ invocation count、feedback/receipt disposition 与 state root。
 
 当前实现证据锚点包括：
 
-- simulator/runner.rs：tick 与 tick_decide_only 的同步 AgentBehavior::decide；
-- simulator/decision_provider.rs：同步 DecisionProvider::decide、DecisionRequest、ProviderBackedAgentBehavior；
-- viewer/runtime_live.rs 与 viewer/runtime_live/llm_sidecar.rs：决策返回后推进 world、内存 mailbox/runner/shadow kernel；
+- simulator/runner.rs:470、573–607：simulator/兼容 tick 与 tick_decide_only 的同步 AgentBehavior::decide；simulator/decision_provider.rs 的同步 DecisionProvider::decide、DecisionRequest、ProviderBackedAgentBehavior 是决策接口，不能据此推断 native world thread 同步等待；
+- viewer/runtime_live/llm_sidecar_runner.rs:211–229：native Builtin/ProviderBacked 均构造 AsyncAgentRunner；simulator/async_agent_runner.rs:258–277、360–383：worker 调用 decide、try_send/try_recv 与不在 world thread join provider。:792 的 logical-tick helper、:806 的 kernel-step adapter 和 :825 的等待式 run_one_turn 各有独立边界；native 接线不证明 browser runtime-live 服务；
+- viewer/runtime_live/llm_sidecar_async.rs:490–529、llm_sidecar_cognition_wait.rs:419–592、llm_sidecar_cognition.rs:339–442、757：普通 Wait 的当前 context/Harness proposal、Runtime admission、projection/readback、wake selection/resume/reconcile；WaitTicks 走本地 schedule_provider_wait。simulator/tests/agent_cognition_live_actor.rs:60、76、377 与 viewer/runtime_live/tests/auth_actions_provider_context.rs:786–886 是有界 actor/native mock fixtures，未执行于本次文档修正，不能代替真实 provider、distributed finality 或全量 durable recovery 证据；
 - runtime/events.rs 与 runtime/world/actions.rs：仅有 action id + action 的 ActionEnvelope；
 - runtime/agent_cell.rs、runtime/world/agent_intent.rs、runtime/events/domain_event.rs：AgentIntentV2 authority、digest 与 durable transition；
 - world-runtime/runtime/runtime-integration.md：LLM 是外部效应，replay 不再次调用 LLM；Scheduler::tick 为目标接口。
