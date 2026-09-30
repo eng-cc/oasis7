@@ -138,6 +138,25 @@ PY
 
 rm -rf "$TMPDIR/.pm/tasks"
 
+STEP3_JSON="$TMPDIR/step3-missing-history.json"
+set +e
+python3 "$TMPDIR/github-project-workflow.py" "$TMPDIR" \
+  --repo eng-cc/oasis7 \
+  --project-owner eng-cc \
+  --project-number 1 \
+  --mapping "$TMPDIR/.pm/github-project-sync/tasks.json" \
+  --json \
+  step3-gate > "$STEP3_JSON"
+STEP3_EXIT=$?
+set -e
+[[ "$STEP3_EXIT" == "1" ]]
+python3 - "$STEP3_JSON" <<'PY'
+import json, pathlib, sys
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
+assert payload["status"] == "failed", payload
+assert any("historical coverage requires complete GitHub" in item for item in payload["errors"]), payload
+PY
+
 python3 "$TMPDIR/github-project-workflow.py" "$TMPDIR" \
   --repo eng-cc/oasis7 \
   --project-owner eng-cc \
@@ -257,6 +276,8 @@ esac
 SH
 chmod +x "$TMPDIR/bin/gh"
 
+printf '%s\n' '{"task_uid":"task_11111111111111111111111111111111","task":{"task_uid":"task_11111111111111111111111111111111","status":"committed"}}' \
+  > "$TMPDIR/.pm/github-project-sync/task-archive.jsonl"
 STEP3_JSON="$TMPDIR/step3.json"
 python3 "$TMPDIR/github-project-workflow.py" "$TMPDIR" \
   --repo eng-cc/oasis7 \

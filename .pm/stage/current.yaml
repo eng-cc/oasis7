@@ -1,8 +1,0 @@
-version: 1
-current_stage: internal_playable_alpha_late
-candidate_stage: null
-claim_envelope: internal_only
-decision_date: 2026-04-06
-updated_from:
-  - .pm/tasks/task_41236b37e7a0493fa4f20424cc465eeb.execution.md
-blocking_tasks: []

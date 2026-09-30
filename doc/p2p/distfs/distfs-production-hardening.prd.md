@@ -1,5 +1,38 @@
 # DistFS 生产化硬化
 
+## DistFS 本地硬化专业接受与设计分配
+
+Owner role：runtime_engineer；canonical repository：eng-cc/oasis7；审读 source baseline：f9d5a552d9af04c1b1398262808198a58e560230（2026-09-26）。本文的 current 指冻结源所记专业合同；本次未独立验证实现、部署或测试通过。target 是规范目标，historical 是 MIG/CCG/TASK 与 dated evidence provenance。GitHub Issue/Project 维护实际任务与候选证据。新增稳定条款是原义务的细化入口；原章节/常量/命令/失败边界仍有效。
+
+<a id="dh-local-index"></a>
+### Local index integrity
+
+拒绝空/absolute/..路径；CAS→atomic files_index；delete可回收unreferenced且unpinned；if-match只在同进程当前hash匹配时操作，None兼容无precondition。不是分布式锁/跨进程线性化。audit缺blob/dangling pin/orphan集合保留。
+
+配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
+
+<a id="dh-manifest"></a>
+### Local manifest
+
+规范化排序/canonical CBOR/CAS ref；导入完整验证后atomic替换本地index；受控调用方处理覆盖风险。不是全世界snapshot/replay proof。
+
+配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
+
+<a id="dh-local-probe"></a>
+### Local challenge continuity
+
+local CAS request/receipt/validation/aggregate；cursor轮转防同轮重复；reward-runtime-distfs-probe-state.json atomic写。缺文件default，不可读/malformed warning+default；best-effort scheduler而非权威恢复，不阻settlement/consensus/replication/tick。
+
+配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
+
+<a id="dh-backoff-report"></a>
+### Budget, compatibility and report
+
+chain-runtime config/CLI严格范围；budget/base/max backoff与hash mismatch/missing sample/timeout/read I/O/signature invalid/unknown multiplier；旧state新增字段default。epoch仅aggregate checks/failures/ratio，详细cursor/config/backoff是local state。不改challenge算法/reward公式/network。
+
+配对设计必须用该条款的独立条件建立承接/验证关系；本条不把文档合并解释为运行能力或组合通过。
+
+
 > 历史整合说明：本专题整合 `distfs-production-hardening-phase1` 至 `phase9`（PRD-P2P-MIG-067..075）的已完成阶段。它是这些阶段的稳定专业权威与追溯入口；历史完成不构成部署、恢复、公开网络或 release readiness 结论。
 
 - 对应设计文档：`doc/p2p/distfs/distfs-production-hardening.design.md`

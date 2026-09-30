@@ -149,6 +149,108 @@ class ValidationRequestTests(unittest.TestCase):
         self.assertEqual(first["intent_order"], retry["intent_order"])
         self.assertEqual(2, second["intent_order"])
 
+    def test_new_key_reservation_recovers_one_untouched_dangling_intent(self):
+        identities = [
+            request_identity(),
+            request_identity(source_projection_digest="sha256:" + "9" * 64),
+            request_identity(source_projection_digest="sha256:" + "8" * 64),
+        ]
+        keys = [contract.validation_request_key(identity) for identity in identities]
+        with tempfile.TemporaryDirectory() as directory:
+            contract.reserve_validation_request(directory, keys[0], identities[0], "1" * 40)
+            state_path = Path(directory) / ".validation-intent-order"
+            before_second = json.loads(state_path.read_text(encoding="utf-8"))
+            contract.reserve_validation_request(directory, keys[1], identities[1], "2" * 40)
+            # A crash after the durable request row but before its sidecar update.
+            state_path.write_text(json.dumps(before_second), encoding="utf-8")
+
+            third, created = contract.reserve_validation_request(
+                directory, keys[2], identities[2], "3" * 40,
+            )
+            recovered = contract._read_request_record(
+                contract._request_path(Path(directory), keys[1]), keys[1],
+            )
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+
+        self.assertTrue(created)
+        self.assertEqual(2, recovered["intent_order"])
+        self.assertEqual(3, third["intent_order"])
+        self.assertEqual(4, state["next_order"])
+        self.assertEqual({
+            keys[0].removeprefix("sha256:"): 1,
+            keys[1].removeprefix("sha256:"): 2,
+            keys[2].removeprefix("sha256:"): 3,
+        }, state["orders"])
+
+    def test_same_key_retry_recovers_its_untouched_dangling_intent(self):
+        first_identity = request_identity()
+        identity = request_identity(source_projection_digest="sha256:" + "9" * 64)
+        first_key = contract.validation_request_key(first_identity)
+        key = contract.validation_request_key(identity)
+        with tempfile.TemporaryDirectory() as directory:
+            contract.reserve_validation_request(directory, first_key, first_identity, "1" * 40)
+            state_path = Path(directory) / ".validation-intent-order"
+            before = json.loads(state_path.read_text(encoding="utf-8"))
+            contract.reserve_validation_request(directory, key, identity, "2" * 40)
+            # Restore the actual crash state: the request row exists, its order
+            # is the next value, and the sidecar has not recorded that row.
+            state_path.write_text(json.dumps(before), encoding="utf-8")
+
+            retry, created = contract.reserve_validation_request(
+                directory, key, identity, "3" * 40,
+            )
+            next_order = contract.validate_validation_intent_order_state(directory)
+
+        self.assertFalse(created)
+        self.assertEqual(2, retry["intent_order"])
+        self.assertEqual(3, next_order)
+
+    def test_pending_order_recovery_rejects_ambiguous_or_changed_rows(self):
+        for change in ("multiple pending", "wrong order", "already dispatched"):
+            with self.subTest(change=change), tempfile.TemporaryDirectory() as directory:
+                identities = [
+                    request_identity(),
+                    request_identity(source_projection_digest="sha256:" + "9" * 64),
+                    request_identity(source_projection_digest="sha256:" + "8" * 64),
+                    request_identity(source_projection_digest="sha256:" + "7" * 64),
+                ]
+                keys = [contract.validation_request_key(identity) for identity in identities]
+                contract.reserve_validation_request(directory, keys[0], identities[0], "1" * 40)
+                state_path = Path(directory) / ".validation-intent-order"
+                before_pending = json.loads(state_path.read_text(encoding="utf-8"))
+                contract.reserve_validation_request(directory, keys[1], identities[1], "2" * 40)
+                if change == "multiple pending":
+                    contract.reserve_validation_request(directory, keys[2], identities[2], "3" * 40)
+                    attempted_key, attempted_identity = keys[3], identities[3]
+                else:
+                    pending_path = contract._request_path(Path(directory), keys[1])
+                    pending = json.loads(pending_path.read_text(encoding="utf-8"))
+                    if change == "wrong order":
+                        pending["intent_order"] = 99
+                    else:
+                        pending.update(status="dispatch_uncertain", dispatch_attempts=1)
+                    pending_path.write_text(json.dumps(pending), encoding="utf-8")
+                    attempted_key, attempted_identity = keys[2], identities[2]
+                state_path.write_text(json.dumps(before_pending), encoding="utf-8")
+
+                with self.assertRaisesRegex(ValueError, "sequence is inconsistent"):
+                    contract.reserve_validation_request(
+                        directory, attempted_key, attempted_identity, "4" * 40,
+                    )
+                self.assertFalse(contract._request_path(Path(directory), attempted_key).exists())
+
+    def test_intent_order_state_with_a_gap_fails_closed(self):
+        identity = request_identity()
+        key = contract.validation_request_key(identity)
+        with tempfile.TemporaryDirectory() as directory:
+            contract.reserve_validation_request(directory, key, identity, "1" * 40)
+            state_path = Path(directory) / ".validation-intent-order"
+            state = json.loads(state_path.read_text(encoding="utf-8"))
+            state["next_order"] = 3
+            state_path.write_text(json.dumps(state), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "sequence is inconsistent"):
+                contract.validate_validation_intent_order_state(directory)
+
     def test_intent_order_counter_corruption_or_disappearance_fails_closed(self):
         identity = request_identity()
         key = contract.validation_request_key(identity)

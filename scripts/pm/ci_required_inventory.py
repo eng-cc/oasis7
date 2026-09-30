@@ -33,6 +33,7 @@ INVENTORY_SCHEMA = "oasis7-trusted-planner-inventory/v1"
 BASELINE_OBLIGATIONS = (
     "product-doc-changed-range",
     "product-doc-full-corpus",
+    "workflow-process-identity",
     "lint-skills",
     "windows-paths",
     "script-executable-bits",
@@ -45,6 +46,7 @@ BASELINE_OBLIGATIONS = (
 BASELINE_CHECKER_PATHS = (
     "scripts/ci-tests.sh",
     "scripts/doc-governance-check.sh",
+    "scripts/workflow-process-identity-check.py",
     "scripts/product-doc-governance-check.py",
     "scripts/product-doc-content-check.py",
     "scripts/lint-skills.sh",
@@ -75,6 +77,9 @@ ROOT_CARGO_INPUTS = (
     ".cargo/config.toml",
     ".cargo/config",
 )
+STATIC_INPUT_PATHS: dict[str, tuple[str, ...]] = {
+    "site_quality": ("README.md",),
+}
 
 CAPABILITY_RUNNERS: dict[str, tuple[str, ...]] = {
     "required_gate_baseline": ("run_required_gate_checks",),
@@ -147,7 +152,7 @@ STATIC_MEMBER_ROOTS: dict[str, tuple[str, ...]] = {
     "workflow_governance": ("scripts", ".agents", ".codex", ".github", "doc/engineering"),
     "codex_agent_config_validation": ("scripts", ".agents", ".codex"),
     "compile_metrics": ("scripts", ".github/workflows", ".cargo"),
-    "site_quality": ("scripts", "site", "doc", "README.md"),
+    "site_quality": ("scripts", "site", "doc"),
     "doc_checker_contracts": ("scripts", ".agents", "doc/engineering", "doc/product"),
     "cargo_tooling_contracts": ("scripts", ".cargo", "crates/oasis7_client_launcher"),
 }
@@ -290,6 +295,7 @@ def required_test_unit_registry(
             "commands": commands,
             "obligations": list(commands),
             "package_names": list(RUST_PACKAGES.get(capability, ())),
+            "input_paths": list(STATIC_INPUT_PATHS.get(capability, ())),
             "member_roots": list(STATIC_MEMBER_ROOTS.get(capability, ())),
             "selector_env": SELECTOR_ENV.get(capability),
         }
@@ -608,8 +614,6 @@ def _product_environment_contract(
         line.strip() for line in trusted_requirements.decode("utf-8", errors="replace").splitlines()
         if line.strip() and not line.lstrip().startswith("#")
     ]
-    source_attempt_digest = None
-    source_gate_job_digest = None
     source_environment_eligible = True
     if trusted_source_product_environment is None:
         runtime_packages: dict[str, str] = {}
@@ -631,13 +635,9 @@ def _product_environment_contract(
             and python_cache_tag == "cpython-312"
         )
         runner_matches=runner["matches_trusted_W"]
-        environment_source="observed-required-gate-runtime"
     else:
-        observed, source_attempt_digest = _trusted_source_product_environment(
+        observed, _ = _trusted_source_product_environment(
             trusted_source_product_environment,
-        )
-        source_gate_job_digest = _canonical_digest(
-            trusted_source_product_environment["required_gate_job"],
         )
         runner=observed["runner_identity"]
         runtime_packages=observed["runtime_packages"]
@@ -652,7 +652,6 @@ def _product_environment_contract(
             and observed["markdown_parser_matches_trusted_W"]
             and observed["markdown_requirements_match_trusted_W"]
         )
-        environment_source="authenticated-source-attempt"
     dependencies_match = (
         requirement_lines == ["markdown-it-py==3.0.0"]
         and runtime_packages == _TRUSTED_MARKDOWN_PACKAGES
@@ -679,11 +678,6 @@ def _product_environment_contract(
             else "unverified-runner-python-markdown-runtime-or-target-parser",
         "reuse_eligible": reuse_eligible,
     }
-    if source_attempt_digest is not None:
-        result["source_attempt_digest"] = source_attempt_digest
-        result["source_gate_job_digest"] = source_gate_job_digest
-        result["source_environment_eligible"] = source_environment_eligible
-        result["environment_source"] = environment_source
     return result
 
 
@@ -1012,6 +1006,15 @@ def _target_root_inputs(
     return sorted(paths)
 
 
+def _target_input_paths(
+    capability: str, spec: dict[str, Any], target_repo_root: Path, c2: Any, target_oid: str,
+) -> list[str]:
+    """Combine canonical file inputs with dynamic root-level workspace inputs."""
+    return sorted(set(spec["input_paths"]) | set(
+        _target_root_inputs(capability, target_repo_root, c2, target_oid)
+    ))
+
+
 def _unit_spec(
     capability: str, spec: dict[str, Any], planner: Any, planner_facts: dict[str, Any],
     planner_root: Path, target_repo_root: Path, target_oid: str, c2: Any,
@@ -1084,7 +1087,9 @@ def _unit_spec(
         "unit_contract": contract,
         "obligation_set": [f"{capability}:{index:03d}:{item}" for index, item in enumerate(commands)],
         "command_checker_paths": sorted(command_paths),
-        "input_paths": _target_root_inputs(capability, target_repo_root, c2, target_oid),
+        "input_paths": _target_input_paths(
+            capability, spec, target_repo_root, c2, target_oid,
+        ),
         "member_roots": _target_member_roots(
             capability, {capability: spec}, metadata, target_repo_root, c2, target_oid,
         ),
