@@ -10,8 +10,8 @@
 
 | 状态 | 本设计口径 |
 | --- | --- |
-| `current` | 当前源码可观察到同步 `AgentBehavior::decide`、Builtin/ProviderBacked 分支、builtin-only in-memory continuation、诊断 trace 与 provider DTO。 |
-| `partial` | 存在 `DecisionProvider`、loopback、capability context、`MemoryWriteIntent`、sidecar pending/mailbox 等可复用 seam，但 identity、反馈隔离、provider convergence 和生产 consumer 尚不完整。 |
+| `current` | simulator/兼容 `AgentBehavior::decide` 仍同步，legacy builtin execute-until continuation 保留内存语义；native runtime-live 的 Builtin/ProviderBacked 均使用 `AsyncAgentRunner` worker 与非阻塞 mailbox/result polling，另有诊断 trace 与 provider DTO。 |
+| `partial` | native 普通 `Wait` 已有当前 context/Harness proposal、Runtime admission、projection/readback、Runtime wake selection/resume 和 Harness reconcile seam；admission failure 不冒充成功等待，`WaitTicks` 仍走本地 timer。`DecisionProvider`、loopback、capability context、`MemoryWriteIntent` 等接线与有界 fixtures 不证明完整 identity/反馈隔离/provider convergence、durable production scheduler、WASM/browser 服务、远端 restart/rebind/reorg、全量恢复或真实 provider parity。 |
 | `target` | 本文的 Session/Turn/request identity、canonical digest、single in-flight、共同 adapter lifecycle、feedback/memory policy 和 bounded goal/continuation 合同。 |
 | `proven` | 仅当 PRD verification matrix 的 required/full/rollout artifact 证明对应成功与负例，才可标记；本文不预先标记任何 target 为 proven。 |
 
@@ -39,7 +39,14 @@
 
 Harness owns cognition state and protocol safety. Runtime owns live truth and every authoritative side effect. Adapter owns transport, model selection, provider-specific transcript and bounded retry mechanics, but not identity authority or action execution.
 
-The current `RuntimeDecisionRunner::{Builtin, ProviderBacked}` split is treated as a migration shape. A target implementation may keep these Rust types internally, but both arms must enter the same Harness lifecycle rather than silently defining separate memory, continuation or error semantics.
+Native `RuntimeDecisionRunner::{Builtin, ProviderBacked}` already shares the async runner and ordinary-`Wait` admission/wake/resume seam; simulator compatibility and wasm32 `AgentRunner` retain their separate synchronous qualification. This observed wiring does not prove complete target identity, feedback, memory or recovery convergence. Both arms must satisfy the same target Harness lifecycle and verified memory, continuation and error contracts. The paired [Runtime current/partial qualification](../../world-runtime/runtime/agent-cognition-lifecycle.prd.md#1-目标与边界) retains world/journal/scheduler authority. Source locators are `viewer/runtime_live/llm_sidecar_runner.rs:211–229`, `llm_sidecar_async.rs:490–529`, and `llm_sidecar_cognition_wait.rs:419–592`; located code and bounded fixtures are not execution evidence.
+
+### 2.1 需求承接与分配表
+
+| 上游 requirement / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| [Harness infrastructure acceptance](continuous-agent-harness.prd.md#harness-infrastructure-consumer-matrix) | Correlate same-world canonical receipt, pending/no-effect, memory/goal feedback, exclusive lineage and all SC9 Agent projections. | [Infrastructure evidence join](continuous-agent-harness.design.md#harness-infrastructure-evidence-join) | Runtime world/journal; gameplay quantities/W/window; Ops outage classification; QA verdict. | No new memory/goal policy, scheduler, MVCC, digest or world authority. |
+| [QA tier boundary](../../testing/prd.md#qa-infrastructure-tier-boundaries) | Record actual provider/lane provenance; required active-provider API and full real-provider headed desktop+narrow plus Agent parity stay independent. | [Infrastructure evidence join](continuous-agent-harness.design.md#harness-infrastructure-evidence-join) | QA scene/tier; Agent/Viewer actual surface evidence; provider/Ops environment. | Mock/current seam/historic samples do not prove actual provider, full or release readiness. |
 
 ## 3. Canonical data model
 
@@ -752,7 +759,29 @@ P1 将两个 provider runner 接入同一 Harness lifecycle，并把 continuatio
 
 P2 在 P0/P1 proof 后执行一个低频、低破坏性 NPC/未知 governed command fixture，再进行固定 epoch 的多样本评测。Cognition economy、GoalGraph、belief memory 和共享/玩家可见 memory 均需额外 authority 与 gates；未通过单场景负例或成本/稳定性门槛时保持 experimental。
 
+### 11.1 验证映射表
+
+| 上游 requirement / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source、scenario/layer、candidate/environment | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [Harness infrastructure acceptance](continuous-agent-harness.prd.md#harness-infrastructure-consumer-matrix) | [Infrastructure evidence join](continuous-agent-harness.design.md#harness-infrastructure-evidence-join) | Same-candidate receipt/no-effect/world-scope/lineage and all SC9 Agent feedback joins. | [S9A GWSC QA receiver](../../../testing-manual.md#s9a-gwsc-qa-receiver): planned deterministic assertions consume existing 17/10/8 inventory and before/outage/fresh/recovery/retry/replay specimens; actual run must bind candidate/tree/world/window and professional oracles. | Future correlated request/receipt/snapshot/memory-disposition/goal-feedback artifacts, count0/1 and exact bytes/digest/locator. | Method only; no runtime/fixture execution, durable recovery or semantic/full pass. |
+| [QA tier boundary](../../testing/prd.md#qa-infrastructure-tier-boundaries) | [Infrastructure evidence join](continuous-agent-harness.design.md#harness-infrastructure-evidence-join) | Active-provider API and full real-provider Agent/Viewer parity use actual provenance and applicable environment. | [S6 QA receiver](../../../testing-manual.md#testing-s6-qa-receiver): select actual lane/provider and same candidate; full requires external headed desktop+narrow captures plus provider-backed Agent parity, independently of deterministic fixtures. | Future provider four fields, model/profile/adapter/protocol, redacted route/config, request/feedback lineage and joined consumer captures. | No provider/browser execution or claimed required/full/parity result; historical and mock evidence remains scoped. |
+
 ## 12. Verification matrix 与 observability
+
+<a id="harness-infrastructure-evidence-join"></a>
+### Infrastructure consumer evidence join
+
+Harness consumes the [PRD consumer matrix](continuous-agent-harness.prd.md#harness-infrastructure-consumer-matrix) through the frozen [QA evidence method](../../testing/design.md#qa-infrastructure-evidence-method). Freeze source OID/clause, tested candidate/tree, world/manifest, provider/lane and capture window; select the [QA scene family](../../testing/prd.md#qa-infrastructure-scene-families) and its domain-owned oracle before comparing any consumer output.
+
+| Join step | Harness evidence and decision |
+| --- | --- |
+| Freeze and correlate | Bind session/turn/request/response, ordered intent, root/revision/child/direct-parent receipt and world identity to the same candidate. Keep original/withdraw/replace lineage; provider reply, queued status and transport ACK are observations, not authoritative effects. |
+| Compare dispositions | Join before/outage/fresh/recovery/retry/replay Runtime snapshot/journal/receipt to Agent context, memory-intent disposition, goal feedback and next action/recheck. Pending/rejected/stale/expired input cannot produce completion or authoritative memory/world effect; retain private observation/diagnostic bookkeeping separately. Runtime owns publication, gameplay owns quantities/W/window, and Harness consumes their correlated result. |
+| Compare outage cells | Consume all [eight SC9 cells](../../testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md#sr2-sc9-eight-cells), retaining both root-absent pre-finality and root-present post-commit/pre-child specimens within each authority cell. Read-outage recovery reconciles actual truth without world/W/history mutation; retry/replay cannot duplicate root, hold release, sink, credit, receipt or reward. |
+| Check provenance and environment | Record `agent_decision_source`, `agent_provider_backend`, `agent_provider_contract`, `agent_provider_transport`, actual model/profile/adapter/protocol and safe route/config identity. Follow [required/full boundaries](../../testing/prd.md#qa-infrastructure-tier-boundaries) and [external headed capture](../../testing/manual/web-ui-playwright-closure-manual.design.md#playwright-source-capture-method); mock or legacy fixtures cannot replace active-provider API or full real-provider Agent evidence. |
+| Classify and archive | Missing mandatory identity/phase/cell/proof/environment/consumer/archive material is blocked/unverified; an observed invariant violation is failed. Archive exact receipt/proof bytes, digest/length/locator, comparison and terminal disposition under the [QA evaluation method](../../testing/prd.md#qa-infrastructure-source-scene-method). Shape-only pass is not semantic/full/proven proof. |
+
+The merged GWSC semantic validator already requires unequal migration versions; the [planned equal-version negative receiver](../../testing/prd.md#qa-infrastructure-equal-version-negative) supplies shape-valid `1→1` rejection/no-effect/state-preservation acceptance, not an executed result. This join does not change digest/schema algorithms, MVCC, journal, scheduling, GoalGraph, durable memory, economy or real-model quality gates.
 
 | 证据层 | 主要断言 | 关键 artifact | 禁止外推 |
 | --- | --- | --- | --- |

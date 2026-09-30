@@ -15,7 +15,7 @@
     },
     {
       "path": "doc/.governance/document-semantic-review-overrides.json",
-      "content_sha256": "974fd1042c814dc8b4ca0ae359c082db051cea9683e83aa2795d1921bedf9434"
+      "content_sha256": "68ff74ee4fdb1ece2d82d3d86312ce68624d7e98b4810ab741f7a0144b0d988a"
     },
     {
       "path": "doc/testing/evidence/inventory.json",
@@ -2625,7 +2625,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/deterministic-world-execution.prd.md",
-      "content_sha256": "c630fbb5122402719be894711b0efb82223c36e7453cdc3f9367f7716102ebe0",
+      "content_sha256": "5dd0899e2570d032880bd2762e161c02d177847e73bb548a716094bbee3211d7",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2639,7 +2639,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/distributed-consensus-and-state-availability.prd.md",
-      "content_sha256": "a727100d3cc2275f0f8dbb47cf28d33e23018864a4fcbe7040017d90f4d7e54e",
+      "content_sha256": "37d350474efc2e473cbf640bece11239d4c08733af049a729db3307590648afe",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2653,7 +2653,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/prd.md",
-      "content_sha256": "ff01adf02c849a7c5704622a728b87a6c4a9ae4d324237abb8ccd620cda7aaa9",
+      "content_sha256": "5511c9ee8f53ddd4f5f50e38ad2732ca03a9ba7c4868931fb576daad382f5a2e",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -3997,7 +3997,7 @@
     },
     {
       "path": "doc/testing/design.md",
-      "content_sha256": "54686512ffb54aa4c58e9a104cca4a6f14dbbff4f862064da9d1f9b4a270bb09",
+      "content_sha256": "403478648c77dbf734574e3c4c0f9d4dfba5da62aa3902a142e9aa0e02bf3719",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -4165,7 +4165,7 @@
     },
     {
       "path": "doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md",
-      "content_sha256": "fad0bc64b10dc805599f9f898f45c087bb779685028a49385eda9464e46bf1cf",
+      "content_sha256": "e22b7b0669aa7db6ab6578f8f20aa0c2396b8a9fad5416c5c351c0e605718da0",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -4291,7 +4291,7 @@
     },
     {
       "path": "doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md",
-      "content_sha256": "93abeda2c0e2610d9eebafc9d0843d21a21e0d58a025f57d2c32b30b418b66ec",
+      "content_sha256": "0761cda406caf380cd7a54c27b820665180cdea35972e74e96d5f76bd423356a",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -4319,7 +4319,7 @@
     },
     {
       "path": "doc/testing/manual/web-ui-playwright-closure-manual.design.md",
-      "content_sha256": "152ee7254d5bf5058ffc48bba1c2d9dbbd9f6a49325df89979788d63d376c3fb",
+      "content_sha256": "0025d89aa83cfde4222799894edd5fdf37236da0a745e1ce603211f22104c933",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -4333,7 +4333,7 @@
     },
     {
       "path": "doc/testing/manual/web-ui-playwright-closure-manual.manual.md",
-      "content_sha256": "e0c8f480e8cf9afcf1dd4cfd25efee7577070df092cc1b20b7688f25225bc3bf",
+      "content_sha256": "33afd2aa5bdfdd030b2ff7d6af9852ca55af618154504b175243c2e8e2768a7b",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -4403,7 +4403,7 @@
     },
     {
       "path": "doc/testing/prd.md",
-      "content_sha256": "75d880d5d212b73f2abca162567cc6be140a8aaba3924c17b1b11c853649a593",
+      "content_sha256": "19503466b4d23011e9b4a1fee2e8cbcd09e849a90bcd6e5d9993b755feacdc07",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -6055,7 +6055,7 @@
     },
     {
       "path": "doc/world-simulator/llm/continuous-agent-harness.design.md",
-      "content_sha256": "8d4732c61cd94e613435e8dd96b9481c4f2c73cf9faac536a4119436d800f71f",
+      "content_sha256": "11d7dba7f4b52fdbad0f8892c8ccc0a7e86347f21c9ca757d336a6019d1988a2",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6069,7 +6069,7 @@
     },
     {
       "path": "doc/world-simulator/llm/continuous-agent-harness.prd.md",
-      "content_sha256": "b00e29c3d9a97b908bf0dddde93bd400c6a2e5d703681122fd937acb6cf7963e",
+      "content_sha256": "c1179f073abc2769a60926a49b6fb92326ec29df3f4cb413ced3ede6ac7208c5",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6713,7 +6713,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-control-plane-split-live-playback.design.md",
-      "content_sha256": "f58b9de2569834b81fd7f8e53fa6930edcfbbc0cb8aef84bd16ede3c41cf9725",
+      "content_sha256": "80490b476ad40841d249f0bcc31825d11760d6bb0bfd8a2e56756222b2d7a767",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6727,7 +6727,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md",
-      "content_sha256": "918c60f5e7a7c05bf5b13c4525888db29e48559c3b3d37e7e154abab3ab7cbfe",
+      "content_sha256": "43ffcc94d6687cbf9b07b3d25aa406dba666f74e4f7b59fc200800b3cbc5b956",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6853,7 +6853,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-manual.manual.md",
-      "content_sha256": "4da321111f5a00e019d8180762efa3537e67c1543298f03328b3ee1c54e04838",
+      "content_sha256": "35b2f5f5a7a0a7f63f56cc528a441397a2c8abe4949bd3990e492975f712fbeb",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
