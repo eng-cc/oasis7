@@ -19,6 +19,26 @@ import textwrap
 HERE=Path(__file__).parent
 
 
+def required_test_tier_command(repo):
+ workflow=(repo/'.github/workflows/rust.yml').read_text()
+ step=workflow.split('      - name: Run required test tier\n',1)[1].split('\n      - name:',1)[0]
+ run=step.split('        run:',1)[1]
+ command=textwrap.dedent(run.split('\n',1)[1]) if run.startswith(' |') else run.strip()
+ # GitHub substitutes these trusted workflow expressions before Bash runs.
+ # Keep the extracted script executable in this local shell fixture.
+ substitutions={
+  '${{ steps.scope.outputs.integration_base_oid }}':'b'*40,
+  '${{ github.token }}':'fixture-token',
+  '${{ inputs.task_uid }}':'task_'+'1'*32,
+  '${{ inputs.pr_number }}':'7',
+ }
+ for source,target in substitutions.items():
+  command=command.replace(source,target)
+ if '${{' in command:
+  raise AssertionError('unexpanded GitHub expression remains in required-tier fixture')
+ return command
+
+
 class TargetedProjectionPromotionTests(unittest.TestCase):
  def setUp(self):
   self.temp=tempfile.TemporaryDirectory()
@@ -350,7 +370,6 @@ class IntegrationTests(unittest.TestCase):
       self.assertEqual(command.count(expression),1,f'expected one workflow interpolation for {expression}')
       command=command.replace(expression,replacement)
      self.assertNotIn('${{',command)
-
      if event=='workflow_dispatch':
       missing_authority_env=env.copy()
       missing_authority_env.update({
@@ -418,6 +437,24 @@ class IntegrationTests(unittest.TestCase):
       self.assertEqual(result.returncode,0,result.stdout+result.stderr)
       self.assertEqual(marker.read_text(encoding='utf-8'),'candidate')
       self.assertFalse(profile_output.exists())
+
+ def test_integration_dispatch_fails_closed_without_trusted_profile_authority(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   temp=Path(tmp);candidate=temp/'candidate';scripts=candidate/'scripts';scripts.mkdir(parents=True)
+   command=required_test_tier_command(HERE.parents[1])
+   observed=temp/'unexpected-side-effect'
+   (scripts/'doc-governance-check.sh').write_text('#!/usr/bin/env bash\nprintf invoked > "$OBSERVED"\n')
+   (scripts/'doc-governance-check.sh').chmod(0o755)
+   env={**os.environ,'RUNNER_TEMP':str(temp),'GITHUB_WORKSPACE':str(candidate),
+        'GITHUB_EVENT_NAME':'workflow_dispatch','INTEGRATION_MODE':'integration_revalidation',
+        'OBSERVED':str(observed),
+        'OASIS7_CARGO_SCOPE_BASE':'','OASIS7_CARGO_SCOPE_HEAD':'',
+        'OASIS7_CARGO_PROFILE_PLANNER':'','OASIS7_CARGO_PROFILE_DRIVER':''}
+   result=subprocess.run(['bash','-euo','pipefail','-c',command],cwd=candidate,env=env,text=True,capture_output=True)
+   self.assertEqual(result.returncode,1,result.stdout+result.stderr)
+   self.assertIn('trusted Cargo package profile authority is unavailable',result.stderr)
+   self.assertFalse((candidate/'output/cargo-package-profile').exists())
+   self.assertFalse(observed.exists())
 
  def test_integration_freezes_sourced_preflight_before_checkout(self):
   workflow=(HERE.parents[1]/'.github/workflows/rust.yml').read_text()

@@ -55,6 +55,8 @@ if [[ "${PM_LINT_TEST_PYCACHE_ISOLATION_ONLY:-0}" == "1" ]]; then
 fi
 
 ignored_before="$(find "$ROOT_DIR/scripts/pm" \( -type d -name __pycache__ -o -type f -name '*.pyc' \) -print | sort)"
+# Keep every Python child launched by this test under its disposable cache root.
+export PYTHONPYCACHEPREFIX="$TMP_DIR/pycache"
 
 python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" snapshot \
   --root "$ROOT_DIR" --state "$TMP_DIR/state" --pathspec .pm
@@ -175,8 +177,12 @@ grep -F "tracked projection drift: .pm/README.md" \
 COPY_FIXTURE="$TMP_DIR/during-copy-fixture"
 mkdir -p "$COPY_FIXTURE"
 cp -R "$ROOT_DIR/.pm" "$COPY_FIXTURE/.pm"
+# The ignored runtime gate is absent in a clean checkout; seed the race fixture
+# from the tracked template so the chmod transition is deterministic.
 mkdir -p "$COPY_FIXTURE/.pm/stage"
-printf 'gate fixture\n' >"$COPY_FIXTURE/.pm/stage/gate.yaml"
+cp "$ROOT_DIR/.pm/templates/stage-gate.yaml" \
+  "$COPY_FIXTURE/.pm/stage/gate.yaml"
+chmod 0644 "$COPY_FIXTURE/.pm/stage/gate.yaml"
 shopt -s dotglob nullglob
 for path in "$ROOT_DIR"/*; do
   name="$(basename "$path")"

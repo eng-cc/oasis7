@@ -29,7 +29,7 @@ SHA_RE = re.compile(r"[0-9a-f]{40}\Z")
 FIXTURE = "scripts/fixtures/ci-required-scope.versioned-test.json"
 LEGACY_FIXTURE = "scripts/fixtures/ci-required-scope.legacy-test.json"
 EFFECTIVE_CONFIG = "scripts/ci-required-scope.v2.json"
-EXPECTED_FIXTURE_SHA256 = "2d4228e5d7446c393ea3811084183860b5f8b4bb0e3b673957a3a020ab172dec"
+EXPECTED_FIXTURE_SHA256 = "918dc0c88bd1060ca94b4fd20d91f567dfb64ee2edbbae5f35b37237a50470b1"
 EXPECTED_LEGACY_CONFIG_SHA256 = "d656841b3c9fcf66fcd5ea1c37b43d9628e61d13ea48be8bda54e71511d505b4"
 SCENARIOS = {
     "ordinary_document": {
