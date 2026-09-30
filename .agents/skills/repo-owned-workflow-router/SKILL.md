@@ -17,6 +17,8 @@ Use after bootstrap has bound canonical task truth and the next workflow phase i
 
 Read-only/chat-only requests enter this router after `default-workflow-bootstrap` has established task truth.
 
+If a bound audit or task surfaces a proposed workflow-policy change, keep diagnosis within its authorized scope and apply the [canonical prior-approval rule](../../../doc/engineering/workflow/source-of-truth.md#workflow-change-approval) before creating or expanding implementation scope. A failure, review finding, or request to continue/optimize is not that approval.
+
 1. A classified non-merge outcome, including `not_planned` during bootstrap,
    planning, or execution -> `finishing-a-development-branch` and its canonical
    non-merge terminal route; this special terminal route takes priority over

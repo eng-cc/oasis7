@@ -11,6 +11,8 @@ Canonical lifecycle and authority: [capability](../../../doc/engineering/workflo
 
 Use for every request, including read-only/chat-only work. Do not repeat bootstrap for a micro-loop already bound to the same task; record the minimal `Learning Intake / Loop Closeout` entry defined by the canonical source.
 
+Before bootstrapping a task to change developer workflow, CI routing/gates, review/merge policy, or workflow helpers—or before capturing a reflection, creating/promoting task truth, or expanding an existing task to do so—apply the [canonical prior-approval rule](../../../doc/engineering/workflow/source-of-truth.md#workflow-change-approval). This stop precedes task binding and workspace creation. A direct scoped user request counts. Read-only audits/diagnosis use ordinary bootstrap but do not authorize policy changes; CI failures and review findings do not count as approval. Alternate intake or reflection paths do not bypass the stop.
+
 ## Procedure
 
 1. Classify only enough to select isolation:
