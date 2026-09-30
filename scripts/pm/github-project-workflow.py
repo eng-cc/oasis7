@@ -551,6 +551,8 @@ def fetch_project_items_by_ids(project_item_ids: list[str]) -> dict[str, dict[st
     for project_item_id in project_item_ids:
         cmd.extend(["-f", f"ids[]={project_item_id}"])
     payload = run_json(cmd)
+    if payload.get("errors"):
+        raise RuntimeError("GitHub GraphQL Project item read returned errors")
     items: dict[str, dict[str, Any]] = {}
     for node in (payload.get("data") or {}).get("nodes") or []:
         if not node:

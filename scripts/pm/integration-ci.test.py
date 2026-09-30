@@ -19,7 +19,7 @@ import textwrap
 HERE=Path(__file__).parent
 
 
-def required_test_tier_command(repo):
+def required_test_tier_command(repo, scope_oid='b'*40):
  workflow=(repo/'.github/workflows/rust.yml').read_text()
  step=workflow.split('      - name: Run required test tier\n',1)[1].split('\n      - name:',1)[0]
  run=step.split('        run:',1)[1]
@@ -27,7 +27,9 @@ def required_test_tier_command(repo):
  # GitHub substitutes these trusted workflow expressions before Bash runs.
  # Keep the extracted script executable in this local shell fixture.
  substitutions={
-  '${{ steps.scope.outputs.integration_base_oid }}':'b'*40,
+  '${{ steps.scope.outputs.source_scope_base }}':scope_oid,
+  '${{ steps.scope.outputs.head_oid }}':scope_oid,
+  '${{ steps.scope.outputs.integration_base_oid }}':scope_oid,
   '${{ github.token }}':'fixture-token',
   '${{ inputs.task_uid }}':'task_'+'1'*32,
   '${{ inputs.pr_number }}':'7',
@@ -447,7 +449,7 @@ class IntegrationTests(unittest.TestCase):
    (scripts/'doc-governance-check.sh').chmod(0o755)
    env={**os.environ,'RUNNER_TEMP':str(temp),'GITHUB_WORKSPACE':str(candidate),
         'GITHUB_EVENT_NAME':'workflow_dispatch','INTEGRATION_MODE':'integration_revalidation',
-        'OBSERVED':str(observed),
+        'OBSERVED':str(observed),'INTEGRATION_WORKTREE':'',
         'OASIS7_CARGO_SCOPE_BASE':'','OASIS7_CARGO_SCOPE_HEAD':'',
         'OASIS7_CARGO_PROFILE_PLANNER':'','OASIS7_CARGO_PROFILE_DRIVER':''}
    result=subprocess.run(['bash','-euo','pipefail','-c',command],cwd=candidate,env=env,text=True,capture_output=True)

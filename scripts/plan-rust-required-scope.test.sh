@@ -76,14 +76,12 @@ assert_key_matches() {
   fi
 }
 
-# The checked-in W policy is the policy used for production planning, so keep
-# its domain-split contract live instead of testing only the versioned fixture.
-if ! cmp -s "$ROOT_DIR/scripts/ci-required-scope.v2.json" "$VERSIONED_TEST_CONFIG"; then
-  echo "trusted W policy drifted from the versioned contract fixture" >&2
-  exit 1
-fi
+# The active policy is independently versioned from frozen fixtures. Bind
+# planner output to its exact checked-in bytes and verify active routing.
+trusted_policy_sha256="sha256:$(sha256sum "$ROOT_DIR/scripts/ci-required-scope.v2.json" | awk '{print $1}')"
 trusted_policy_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh \
   --event-name pull_request --changed-path doc/product/example.prd.md)"
+assert_key_equals "$trusted_policy_output" planner_config_sha256 "$trusted_policy_sha256"
 assert_key_equals "$trusted_policy_output" execution_contract required-domain-split/v1
 assert_key_equals "$trusted_policy_output" run_required_gate_baseline true
 assert_key_equals "$trusted_policy_output" run_rust_baseline false
@@ -95,6 +93,30 @@ trusted_doc_checker_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh \
 assert_key_equals "$trusted_doc_checker_output" run_doc_checker_contracts true
 assert_key_equals "$trusted_doc_checker_output" run_cargo_tooling_contracts false
 assert_key_equals "$trusted_doc_checker_output" needs_rust_toolchain false
+
+trusted_pm_identity_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh \
+  --event-name pull_request --changed-path .pm/example.json)"
+assert_key_equals "$trusted_pm_identity_output" run_workflow_governance_contracts true
+assert_key_equals "$trusted_pm_identity_output" run_operational_contracts false
+assert_key_equals "$trusted_pm_identity_output" selected_capabilities workflow_governance
+assert_key_equals "$trusted_pm_identity_output" needs_rust_toolchain false
+assert_reason_contains "$trusted_pm_identity_output" "pm_process_identity_surfaces:.pm/example.json"
+
+trusted_process_identity_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh \
+  --event-name pull_request --changed-path scripts/workflow-process-identity-check.py)"
+assert_key_equals "$trusted_process_identity_output" run_workflow_governance_contracts true
+assert_key_equals "$trusted_process_identity_output" run_operational_contracts false
+assert_key_equals "$trusted_process_identity_output" selected_capabilities workflow_governance
+assert_key_equals "$trusted_process_identity_output" needs_rust_toolchain false
+assert_reason_contains "$trusted_process_identity_output" "workflow_process_identity_guard:scripts/workflow-process-identity-check.py"
+
+trusted_process_identity_test_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh \
+  --event-name pull_request --changed-path scripts/workflow-process-identity-check.test.py)"
+assert_key_equals "$trusted_process_identity_test_output" run_workflow_governance_contracts true
+assert_key_equals "$trusted_process_identity_test_output" run_operational_contracts false
+assert_key_equals "$trusted_process_identity_test_output" selected_capabilities workflow_governance
+assert_key_equals "$trusted_process_identity_test_output" needs_rust_toolchain false
+assert_reason_contains "$trusted_process_identity_test_output" "workflow_process_identity_guard:scripts/workflow-process-identity-check.test.py"
 
 trusted_cargo_tooling_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh \
   --event-name pull_request --changed-path scripts/cargo-dev-lib.test.sh)"
@@ -190,6 +212,8 @@ assert_key_equals "$static_governance_output" selected_capabilities \
   'doc_checker_contracts;workflow_governance'
 assert_key_equals "$static_governance_output" run_doc_checker_contracts true
 assert_key_equals "$static_governance_output" run_workflow_governance_contracts true
+assert_key_equals "$static_governance_output" required_test_units \
+  'doc_checker_contracts;required_gate_baseline;workflow_governance'
 assert_key_equals "$static_governance_output" run_rust_baseline false
 assert_key_equals "$static_governance_output" needs_rust_toolchain false
 assert_key_equals "$static_governance_output" needs_node false
@@ -925,6 +949,8 @@ assert_key_equals "$doc_checker_output" selected_capabilities \
   'doc_checker_contracts;workflow_governance'
 assert_key_equals "$doc_checker_output" run_doc_checker_contracts true
 assert_key_equals "$doc_checker_output" run_workflow_governance_contracts true
+assert_key_equals "$doc_checker_output" required_test_units \
+  'doc_checker_contracts;required_gate_baseline;workflow_governance'
 assert_key_equals "$doc_checker_output" run_cargo_tooling_contracts false
 assert_key_equals "$doc_checker_output" run_rust_baseline false
 assert_key_equals "$doc_checker_output" needs_rust_toolchain false

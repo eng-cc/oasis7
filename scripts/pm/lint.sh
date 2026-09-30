@@ -167,8 +167,8 @@ if (( failures > 0 )); then
   exit 1
 fi
 
-./scripts/pm/memory-lint.sh >/dev/null
-./scripts/pm/memory-report.sh --json >/dev/null
+PYTHONPYCACHEPREFIX="$PM_LINT_TMP_DIR/pycache" ./scripts/pm/memory-lint.sh >/dev/null
+PYTHONPYCACHEPREFIX="$PM_LINT_TMP_DIR/pycache" ./scripts/pm/memory-report.sh --json >/dev/null
 PYTHONPYCACHEPREFIX="$PM_LINT_TMP_DIR/pycache" python3 -m py_compile \
   "$SCRIPT_DIR/github-project-task.py" \
   "$SCRIPT_DIR/github-project-sync.py" \

@@ -652,3 +652,93 @@ while installation remains unrouted and replay shares the same raw reducer seman
 ## 设计风险
 - 若专题级设计未及时补齐，模块级 `design.md` 可能承载过多导航职责。
 - 若 legacy redirect 未明确标注为兼容跳转，读者可能误判历史入口为当前执行入口。
+
+## 基础设施设计承接与验证视图
+
+本视图补充既有 §§3–6/9，保留其全部边界、阶段、接口、错误优先级、兼容与原子/非原子区别。owner runtime_engineer；eng-cc/oasis7 输入审读基线 f9d5a552d9af04c1b1398262808198a58e560230。这里只固定目标设计和验证要求；现有实现仍由 §5/§6.2.4 的 partial 和具体入口限定。它不定义 BFT 算法、外部 DTO、工业 schema、成本/容量数值、UX 或 release authority。外部 P2P 的未合并草案不是本设计输入。
+
+<a id="runtime-deterministic-design"></a>
+### 确定性执行与证书绑定
+输入 producer 是已认证的 canonical committed context：world/parent/ordered action、action root、governing manifest 与适用 proof；proposer output 仅候选。runtime 从同 parent 准备执行结果并绑定 execution hash/state root/receipt-journal，P2P 验证同 world/validator epoch/threshold/round certificate。每个 active validator 在 attestation 前重执行并比较，缺 proof/artifact、root mismatch、越权、超限或输出 fault 不能 vote/commit 或本地修补越过。§6.2.1 buffer 统一暂存业务状态；§6.2.2 rejected/faulted 不冒充成功或业务可继续。in-process 和未来 IPC 使用相同 conformance/replay 输入，transport 不授予额外权威。已有 bridge/local tests 仅证明各自有界场景，完整所有活动验证者及 BFT 是 target。
+
+<a id="runtime-pending-design"></a>
+### 待决持久化与恢复重审
+提交接收与 canonical execution 是两个状态边界。无 finality 的 signed intent 必须由 runtime/P2P 批准的持久化 owner 保留 identity、原 payload、关联和 truthful no-effect disposition；字段/schema 尚待专业合同批准，不能用 effect queue/cognition journal 冒充通用实现。入队/重连/status read 不扣资源、不授予资格、不推进工业/W 或后续依赖。恢复必须先通过服务闸门，再从 fresh canonical snapshot 读取当前权限、资源、期限、manifest 和前置条件，在 canonical 顺序重审，原子产生生效 receipt 或无效果拒绝/过期/重规划处置。crash 前后不能静默丢失、结算或改变原请求；pending 持久状态、winner 和 receipt 应落在 §6.2.3 同一完整 generation/历史边界，不能拼接混合 generations。消费者读取 committed receipt 与 truthful pending，无完成时间或退款新承诺；withdrawal/replacement 不获单方面取消权。
+
+<a id="runtime-lineage-design"></a>
+### 互斥胜者与原子处置
+专业域负责标记同 lineage 的互斥成员及允许的 withdrawal/replacement；runtime 不从相同 payload、ActionId 或 retry 推断互斥。canonical ordering 后在一个 root transaction 内检查尚无 effect-bearing winner、当前成员有效，暂存业务效果、winner、其 receipt 和其余成员终止处置，全部 prepare 成功后统一 publish；没有 inner commit 或业务效果先行的 loser repair。若首个成员仅被 rejected/expired，终止它自身，不占 effect winner，不取消其他/独立请求。失败/commit uncertainty 服从 §6.2.2；retry/replay 读取原 winner/disposition，不产生新 effect/receipt。持久重启必须恢复一致 winner+effect+loser 状态，否则 fail closed。既有单操作 idempotency/签名验证是必要子能力，不能代替此目标仲裁；具体标记/schema/排序依赖 P2P、domain owner 与 QA 评审。
+
+<a id="runtime-version-design"></a>
+### Manifest activation 与历史回放
+治理负责 canonical activation boundary，P2P 提供 finalized block/activation proof，WASM 提供 admissible ABI/artifact/schema。节点预置兼容工件后只证明可用性。首次已 committed/finality-verified execution block 按 boundary 前/at/after 决定 governing version；candidate 或 client compatibility declaration 仅非权威兼容输入，不绑定世界规则。执行按该版本当前权限/资源/前置条件重新 preflight 和 prepare；激活前 pending 在新版本下不能继承旧 quote/资格，不能静默翻译 payload、先应用旧部分再套新规则。不兼容原子拒绝/过期，主体可明确重规划新兼容请求；linked replacement 仍走互斥 winner，独立未关联请求需要专业确认。
+执行与 receipt 的历史 binding 必须可回读其 block manifest/artifact；保留高度的依赖由 storage pin/replay 合同保护。历史 replay 永远按原 binding，不用当前 manifest/price 改写旧成本、权限、资源、责任；缺失/冲突 activation proof、artifact 或 compatibility 同时阻断执行与恢复。§6.3 instance history 与 §6.2.3 replay/generation 是承载边界，完整 activation ledger/readiness/rollback 仍未证明。四条 release lane 保持独立，协议/不兼容 host ABI 变动要协调升级/fork 与迁移证据。
+
+<a id="runtime-recovery-design"></a>
+### 同世界恢复与服务闸门
+恢复输入链逐环验证 immutable identity/genesis、同 world finalized checkpoint 与 active registry、hash snapshot、canonical log/replay、root。snapshot/DistFS/CAS 是材料，不能独立赋 finality。错误 world、缺失或矛盾材料保留原历史供诊断，进入 unavailable/isolation，无新权威效果；不得换 endpoint/缓存/local 世界伪造连续恢复或静默处理未 final 请求。
+历史链通过仅足以进入 verified readonly 的候选。开放 serving 必须同窗口证明 append/finality/versioned execution compatibility/monotonic head continuity 全部成立；stale/catching-up 或 unavailable 不开放写入。每个闸门失败时的新 intent 原子拒绝或无效果 pending，committed receipt=0；开放后按当前条件和 canonical 顺序重审既有 pending，不继承停机期限/优先级，每个被接受新 intent receipt≤1 且无第二效果。提交/恢复过程中任一 guard 回退则停止新世界效果、回 readonly/isolation，已 confirmed receipt/root 不撤销/重放/改写。Agent/Viewer/API 投影等级、主要 blocker、下一步；scope/状态 DTO 依赖消费者 authority。
+验证采用 [state-sync 执行 lane](../testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md) 与 [现有证据 envelope](../testing/templates/state-sync-closure-evidence-packet-template.md)。同候选/同窗口 ops topology/inventory/health/status/peer-head/state-sync/restore 事实必须与 runtime guard、QA 判定关联；覆盖状态转换、manifest/head 负例、逐 intent receipt0/1、blocker/next step 的结构化 attachment/schema 尚须 owner 批准并提供，缺失阻断完整服务验收，本设计不伪造该 schema。
+
+<a id="runtime-industrial-design"></a>
+### 工业因果、容量与背压
+代表性流水线的 immutable root/revision/parent/child/stage/edge/batch 与目的地身份在每个首个不可逆 sink 前从 fresh authority 校验；错误/缺失不扣 input、不建立非法 hold/child。accepted 是 intent admission，reservation 必须另经 domain capacity/资源条件，在同事务中绑定有界独占 hold；每条中间 edge/destination buffer 满载，只保留未消费 input、接收仍有容量的已结算 output 或原子拒绝/延期新的承诺。runtime 不选择无限缓存、丢弃、瞬移、隐式改道或伪造 terminal。
+同一 release/arrival event+hold 的 release 与 fresh-snapshot recheck 各一次；重复 arrival/retry 读原 disposition；后续不同 event 只重审仍有效的 unmet residual。input join、output branch 和 production-versus-delivery settlement 按 M4/domain contract；因果改变才建立 parent-linked revision/child root，checkpoint/retry 不新建 root。hold/consumption/receipt/remaining 必须持久并进入 replay/root 比较，不能只在 UI/log。§工业矩阵当前尚无通用 root/join/window/bundle identity，具体字段/算法未获批准；现有 path reservations 和 job replay 是 partial 子能力。domain owner 拥有容量、lease/window、W reset；runtime 执行原子处置，消费者显示 earliest blocker、held/consumed/unmet/residual 与 recheck。
+
+<a id="runtime-industrial-outage-design"></a>
+### 四边界成对 outage 处置
+每个 cell 固定同 world/root/revision/child/stage/edge/batch，requested/committed/executed/held/consumed/unmet/residual quantities、canonical bucket、window/lease、receipt、W/progression、next action/recheck。以下八格独立判定，不能以一条 outage 测试合并：
+| 边界 | 权威 finality/append/execution/industrial service outage | 非权威 Viewer/API/hosting/read outage |
+| --- | --- | --- |
+| stage_finish | A-SF：pre-finality 零新效果；已 committed root 保留 stage/input/WIP；fresh snapshot 后单处置 | B-SF：世界继续，读取 stale/unknown 后仅对账实际 stage result |
+| transit | A-TR：零新 transit credit；已 debit/WIP/in-transit/arrived/receipt 保留，禁止第二 child/到达 | B-TR：不改运输量/root/receipt；重连读取实际 committed 到达 |
+| buffer_admission | A-BA：无非法 hold/credit，已 hold/remaining 保留，fresh recheck 服从容量 | B-BA：不改 buffer/reservation，显示 stale 后对账权威 bucket |
+| terminal_settlement | A-TS：无新 terminal/reward；已 committed receipt/milestone 保留，恢复至多一次 settlement | B-TS：不 reset W/renew lease/重复 reward；呈现 outage 期间实际完成结果 |
+A 每格都测提交前无新 root/hold/sink/WIP/credit/output/qualification/W；已 committed root 至下一 child 前保留 root/window/lease/input/WIP/transit-arrived/receipt，不新 child/credit/隐式续租/优先级刷新/reward。恢复仅一次 fresh-snapshot continuation/hold/defer/reject/expire/compensation；只有 gameplay canonical interruption 允许当前未完成 candidate 的 W reset 一次，历史 milestones/receipts 不变，因果改变才 child revision。B 每格 injection 自身不改任何 world/root/quantity/window/lease/W/receipt/progression，也不制造 outage disposition；若权威已完成，只 reconcile 真实结果。duplicate arrival/submit、retry/reconnect/restore/replay 不重复 hold release/sink/credit/receipt/W/reward。
+每格 Agent/Viewer/pure API 比较 state class/blocker、lineage/quantities、receipt/effect、W/progression/next action/recheck。required 是八格 deterministic protocol matrix + active-LLM/provider-backed pure API parity；full 另需真实本地 stack/provider、external headed S6/Playwright desktop+narrow screenshot/console 与 provider-backed Agent parity，记录 decision source/backend/contract/transport。provider_local_mock 仅 plumbing/fixture；现有历史 parity evidence 不关闭新八格同候选验收。
+
+<a id="runtime-world-scope-design"></a>
+### 跨世界提交与 receipt/replay 边界
+admission 前验证 target world 身份，receipt 与 parent/history/result 保持该 world，local/development 与 global 使用 distinct identity。缺失或不匹配 fail closed；local receipt reuse、错误世界 restore/replay 不创建 global effect，consumer 也不得呈现为 global。消费者在提交前表明 scope，表达形态由 consumer owner；替代世界/迁移另行产品决策。现有 bridge 错 world restore 是局部入口，未证明全部 consumer scope。
+
+### 状态、事务与持久化的独立边界
+语义状态包括 no-effect pending、有效 effect winner/terminal disposition、版本历史 binding 及 readonly/serving/isolation；这是接受语义而非新增 wire enum。事务边界复用 §6.2.1 root buffer/prepare/infallible install/无 inner commit，将业务效果及适用 winner/receipt/loser 一次发布；当前 cloned step、raw event/specialized command、旁路字段及单独失败 audit 的限定保持原文，不从目标推导全部当前 atomic。
+持久化边界复用 §6.2.3 generation pointer commit，完整 journal/module/receipt/outbox/history 一致恢复，GC 在业务 commit 外；canonical replay 只消费历史、不调用 LLM/sandbox/dispatcher，不再发送外部效果。现有 ingest_receipt DTO 缺完整 receipt-domain descriptor ledger，at-least-once external dispatch 不声称物理 exactly-once。字段、schema/migration 未批准时保留 target gap，不能从状态图推导实现。
+
+### 接口、容量、可观测与演进
+接口输入仍是 §3 的版本化请求/context 与既有 API，输出为绑定 execution/root/journal/receipt 的 accepted/rejected/faulted；新增 pending/lineage/service 外部 DTO 尚待 owner。Kernel 校验权限、资源预算、capability/output/schema/artifact，WASM owns ABI；工业 buffer/hold 和 queue 以现有 domain/limit authority 作界，不复制数值。status/metrics 只投影真实 committed/pending/blocked/partial，read 不推进；高基数/敏感 payload 保持原有限制。incremental migration、savepoint、failure injection、serde/legacy replay、retain-more rollback 服从 §6.2.4/§6.3/§9，不能把当前 snapshot shape 强改成 target-v2。
+风险是 generic pending/lineage/version/service/industrial schemas 和跨域执行证据尚缺。解除条件为 runtime/P2P/WASM/domain/consumer/QA 同候选审读及真实证据；SN1 后续变更必须消费精确已批准 delta 重验证；没有相关算法/字段/消费者批准时不开放目标能力。
+
+### 2.1 需求承接与分配表
+
+输入身份 eng-cc/oasis7@f9d5a552d9af04c1b1398262808198a58e560230；新增 local anchors 是本文技术接受关系，非机器 schema。每行范围独立，外部未决保留。
+
+| 上游 requirement / acceptance | 具体 obligation 与条件 | 本设计条款 | 外部 owner / dependency | 排除或未覆盖 |
+| --- | --- | --- | --- | --- |
+| [条款](../product/world-infrastructure/deterministic-world-execution.prd.md#ac-dwe-001) | 同 version/ordered inputs/parent，全 active validator re-execute，missing/mismatch/越权零部分效果 | [设计](#runtime-deterministic-design) | P2P finality/集合/round；WASM artifact；QA 同候选 full | 单节点不代签 SC-1/4 |
+| [条款](../product/world-infrastructure/deterministic-world-execution.prd.md#ac-dwe-002) | 无 finality durable no-effect pending，恢复 fresh 当前权限/资源/期限/canonical order，只有 committed receipt 更新结论 | [设计](#runtime-pending-design) | P2P pending/order；Agent/Viewer/API 可读状态 | effect/cognition queue 不代签通用 signed pending |
+| [条款](../product/world-infrastructure/deterministic-world-execution.prd.md#ac-dwe-003) | effect-bearing 首 winner+业务+loser termination 原子；reject/expire 自身，independent intent 并发 | [设计](#runtime-lineage-design) | domain 标记互斥/安全替代；P2P order；consumer association | 单操作 retry/签名不等于 lineage 仲裁 |
+| [条款](../product/world-infrastructure/deterministic-world-execution.prd.md#ac-dwe-004) | 首次 finalized canonical block 相对 boundary 选版，current rejudge、linked replacement、历史原版本、缺证阻断 | [设计](#runtime-version-design) | P2P activation proof；WASM ABI/artifact；consumer replan | local release/signature 不证明 activation history |
+| [条款](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-002) | same-world identity/checkpoint/hash/log/root 各环，wrong/missing/conflict isolate、不迁移 pending/receipt | [设计](#runtime-recovery-design) | P2P/ops registry/checkpoint/window；QA/Viewer restore verdict | bridge CAS/root 非 BFT/disaster proof |
+| [条款](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-005) | readonly/serving/isolated与一次 gate regression，append/finality/version/head全通过，failed gate receipt0、serving≤1 | [设计](#runtime-recovery-design) | P2P/ops 同窗口；consumer blocker/next；QA attachment | 结构化 attachment/schema 未提供仍阻断完整验收 |
+| [条款](../product/world-infrastructure/prd.md#工业流水线的跨域执行边界) | SC-8 root/revision/parent pre-sink，有界exclusive hold，满buffer背压，release+fresh recheck一次、因果child、retry零第二effect | [设计](#runtime-industrial-design) | M4/gameplay容量/quantities/window；Agent/Viewer/API；QA整链 | 现ActionId/path/job仅partial，root/join/window/bundle字段尚缺 |
+| [条款](../product/world-infrastructure/prd.md#工业流水线的跨域执行边界) | SC-9 A-SF/A-TR/A-BA/A-TS及B-SF/B-TR/B-BA/B-TS全部独立 baseline/progression/一次处置 | [设计](#runtime-industrial-outage-design) | gameplay W；runtime effect；Agent/Viewer/API parity；QA real provider/S6 | historical/provider_local_mock 不代签八格 |
+| [条款](../product/world-infrastructure/prd.md#基础不变量) | SC-10 submit前global/local identity，intent/receipt/result同world，wrong/missing/reuse/replay零global | [设计](#runtime-world-scope-design) | Agent/Viewer/API scope表达；QA required | local restore test未覆盖所有consumer |
+| [条款](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-003) | SC-2非权威role不获finality/write；pruning可重建/hash/root/冗余archive | [设计](#runtime-deterministic-design) | P2P role/store/archive；ops exposure；QA full | runtime只贡献执行绑定/材料，不关闭role/DA |
+
+### 11.1 验证映射表
+
+所有下列行为验证在本次文档编辑中未运行。定义/计划与当前实现、实际执行、发布分别成立；执行须另固定 source/integration/tested tree、config/world/entry/environment/window、exit/result/artifacts，并回 GitHub task evidence。target场景尚无完整runner时明确保持待证明，现有test/manual只是有界接收入口，不能伪称已实现或通过。
+
+| 上游 requirement / acceptance | 本设计条款 | 独立 obligation / 条件 | 验证 source / ID、层级及候选环境 | 证据目标 | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [条款](../product/world-infrastructure/deterministic-world-execution.prd.md#ac-dwe-001) | [设计](#runtime-deterministic-design) | 同 version/ordered inputs/parent，全 active validator re-execute，missing/mismatch/越权零部分效果 | [现有 test/manual](../../crates/oasis7/src/runtime/tests/execution_transaction_regressions.rs)；required 局部 failed_step/committed_context/snapshot-replay 定义；target full 同候选全 validator+transport conformance，compare roots/receipt 与零副作用 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 单节点不代签 SC-1/4 |
+| [条款](../product/world-infrastructure/deterministic-world-execution.prd.md#ac-dwe-002) | [设计](#runtime-pending-design) | 无 finality durable no-effect pending，恢复 fresh 当前权限/资源/期限/canonical order，只有 committed receipt 更新结论 | [现有 test/manual](../../crates/oasis7/src/runtime/tests/execution_transaction_regressions.rs)；required 局部 queue/receipt publication 定义；target pending outage+restart+权限/资源/期限变化，观察零资格/效果及执行/拒绝/过期/replan 真实状态 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | effect/cognition queue 不代签通用 signed pending |
+| [条款](../product/world-infrastructure/deterministic-world-execution.prd.md#ac-dwe-003) | [设计](#runtime-lineage-design) | effect-bearing 首 winner+业务+loser termination 原子；reject/expire 自身，independent intent 并发 | [现有 test/manual](../../crates/oasis7/src/runtime/tests/effects.rs)；required 局部 anchor/receipt 定义；target original/withdraw/replacement race、rejected-first、independent、crash/retry/replay，winner effect≤1、loser0 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 单操作 retry/签名不等于 lineage 仲裁 |
+| [条款](../product/world-infrastructure/deterministic-world-execution.prd.md#ac-dwe-004) | [设计](#runtime-version-design) | 首次 finalized canonical block 相对 boundary 选版，current rejudge、linked replacement、历史原版本、缺证阻断 | [现有 test/manual](../../crates/oasis7/src/runtime/tests/module_action_loop_release_controls.rs)；full target pre/at/post activation，candidate/client/time 非权威、无静默translation/旧quote/mixed effects，old manifest replay与missing/conflict；局部 release controls 是测试定义 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | local release/signature 不证明 activation history |
+| [条款](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-002) | [设计](#runtime-recovery-design) | same-world identity/checkpoint/hash/log/root 各环，wrong/missing/conflict isolate、不迁移 pending/receipt | [现有 test/manual](../../crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/driver_authoritative_recovery.rs)；full target bootstrap/snapshot/replay/state-sync/prune/disaster 各例；局部 restart_fails_closed_when_authoritative_cas_is_missing/rejects_stale_restore_from_other_world 定义 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | bridge CAS/root 非 BFT/disaster proof |
+| [条款](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-005) | [设计](#runtime-recovery-design) | readonly/serving/isolated与一次 gate regression，append/finality/version/head全通过，failed gate receipt0、serving≤1 | [现行 manual](../../testing-manual.md)；精确局部 source ../testing/templates/state-sync-closure-evidence-packet-template.md（定义/入口，非执行证据）；full target 同 candidate/window 三恢复类+提交/恢复回退，manifest/head negatives、新intent0/1、pending无期限/优先级继承；template仅envelope | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 结构化 attachment/schema 未提供仍阻断完整验收 |
+| [条款](../product/world-infrastructure/prd.md#工业流水线的跨域执行边界) | [设计](#runtime-industrial-design) | SC-8 root/revision/parent pre-sink，有界exclusive hold，满buffer背压，release+fresh recheck一次、因果child、retry零第二effect | [现有 test/manual](../../crates/oasis7/src/runtime/tests/economy_priority_logistics_network_tests.rs)；full target代表性整链+fan-in/out、wrong-root、full edge/dest、duplicate/later release事件、remaining、terminal-late/replay；局部whole-path reservation是定义 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | 现ActionId/path/job仅partial，root/join/window/bundle字段尚缺 |
+| [条款](../product/world-infrastructure/prd.md#工业流水线的跨域执行边界) | [设计](#runtime-industrial-outage-design) | SC-9 A-SF/A-TR/A-BA/A-TS及B-SF/B-TR/B-BA/B-TS全部独立 baseline/progression/一次处置 | [现有 test/manual](../../testing-manual.md)；required 八格deterministic+active-provider pure API；full real local/provider external headed desktop+narrow screenshots/console+provider-backed Agent；每格对量/root/receipt/W/next，target/unrun | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | historical/provider_local_mock 不代签八格 |
+| [条款](../product/world-infrastructure/prd.md#基础不变量) | [设计](#runtime-world-scope-design) | SC-10 submit前global/local identity，intent/receipt/result同world，wrong/missing/reuse/replay零global | [现有 test/manual](../../crates/oasis7/src/bin/oasis7_chain_runtime/execution_bridge/tests/driver_authoritative_recovery.rs)；required target distinct global/local submit/replay/receipt reuse+consumer scope，missing/mismatchfail closed；局部other-world restore test定义 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | local restore test未覆盖所有consumer |
+| [条款](../product/world-infrastructure/distributed-consensus-and-state-availability.prd.md#ac-dcs-003) | [设计](#runtime-deterministic-design) | SC-2非权威role不获finality/write；pruning可重建/hash/root/冗余archive | [现行 manual](../../testing-manual.md)；精确局部 source ../testing/templates/state-sync-closure-evidence-packet-template.md（定义/入口，非执行证据）；full target role权限负例及pruning/reconstruction/archive same-window；仅envelope，无运行事实 | 未运行；未来同候选 log/root/receipt/metrics或consumer artifact入task evidence，QA判定 | runtime只贡献执行绑定/材料，不关闭role/DA |

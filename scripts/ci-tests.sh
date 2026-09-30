@@ -392,6 +392,7 @@ run_workflow_governance_operational_contract_tests() {
   run bash ./scripts/pm/github-project-workflow.test.sh
   run ./scripts/ci-required-scope-audit-contract.test.sh
   run python3 ./scripts/pm/workflow-process-exception.test.py
+  run python3 ./scripts/pm/workflow-next.test.py
   run python3 ./scripts/pm/workflow-delivery-readiness.test.py
   run python3 ./scripts/pm/aggregate-task-completion.test.py
   run python3 ./scripts/pm/ordered-aggregate-closeout.test.py
@@ -403,6 +404,7 @@ run_workflow_governance_operational_contract_tests() {
   run python3 ./scripts/pm/ci-reuse-validation.test.py
   run python3 ./scripts/pm/ci_reuse_validation_contract.test.py
   run python3 ./scripts/pm/ci_reuse_validation_unicode_history_adversarial.test.py
+  run python3 ./scripts/pm/ci_reuse_acceptance_qa.test.py
   run python3 ./scripts/pm/review-plan.test.py
   run python3 ./scripts/pm/subagent-task-packet.test.py
   run python3 ./scripts/pm/bootstrap-task-snapshot.test.py
