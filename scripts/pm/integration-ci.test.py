@@ -19,6 +19,26 @@ import textwrap
 HERE=Path(__file__).parent
 
 
+def required_test_tier_command(repo):
+ workflow=(repo/'.github/workflows/rust.yml').read_text()
+ step=workflow.split('      - name: Run required test tier\n',1)[1].split('\n      - name:',1)[0]
+ run=step.split('        run:',1)[1]
+ command=textwrap.dedent(run.split('\n',1)[1]) if run.startswith(' |') else run.strip()
+ # GitHub substitutes these trusted workflow expressions before Bash runs.
+ # Keep the extracted script executable in this local shell fixture.
+ substitutions={
+  '${{ steps.scope.outputs.integration_base_oid }}':'b'*40,
+  '${{ github.token }}':'fixture-token',
+  '${{ inputs.task_uid }}':'task_'+'1'*32,
+  '${{ inputs.pr_number }}':'7',
+ }
+ for source,target in substitutions.items():
+  command=command.replace(source,target)
+ if '${{' in command:
+  raise AssertionError('unexpanded GitHub expression remains in required-tier fixture')
+ return command
+
+
 class TargetedProjectionPromotionTests(unittest.TestCase):
  def setUp(self):
   self.temp=tempfile.TemporaryDirectory()
@@ -215,17 +235,65 @@ class IntegrationTests(unittest.TestCase):
      (scripts/'viewer-dependency-preflight.sh').write_text(candidate_preflight)
      (scripts/'doc-governance-check.sh').write_text('#!/bin/bash\npwd > "$OBSERVED"\nexit 37\n')
      (scripts/'doc-governance-check.sh').chmod(0o755)
-     workflow=(repo/'.github/workflows/rust.yml').read_text()
-     step=workflow.split('      - name: Run required test tier\n',1)[1].split('\n      - name:',1)[0]
-     run=step.split('        run:',1)[1]
-     command=textwrap.dedent(run.split('\n',1)[1]) if run.startswith(' |') else run.strip()
+     command=required_test_tier_command(repo)
+     trusted_pm=scripts/'pm';trusted_pm.mkdir()
+     checker=trusted_pm/'check-cargo-package-scope'
+     checker.write_text('#!/usr/bin/env bash\nexit 0\n')
+     checker.chmod(0o755)
+     (trusted_pm/'workflow-impact-projection.py').write_text('# trusted fixture dependency\n')
+     planner=trusted_pm/'cargo_package_profile_planner.py'
+     planner.write_text('''#!/usr/bin/env python3
+import json, sys
+args=sys.argv[1:]
+output=args[args.index('--output')+1]
+plan={'items': [], 'integration_base': args[args.index('--integration-base')+1],
+      'source_head': args[args.index('--source-head')+1], 'tested_tree': 'c'*40,
+      'trusted_authority': {'toolchain': 'fixture-toolchain'}}
+with open(output, 'w', encoding='utf-8') as stream:
+ json.dump(plan, stream)
+''')
+     driver=trusted_pm/'cargo_package_profile_driver.py'
+     driver.write_text('''#!/usr/bin/env python3
+print('{"fixture":true}')
+''')
+     git=['git','-C',str(candidate)]
+     subprocess.run([*git,'init','-q'],check=True)
+     subprocess.run([*git,'config','user.name','Integration test'],check=True)
+     subprocess.run([*git,'config','user.email','integration@example.invalid'],check=True)
+     subprocess.run([*git,'add','scripts/pm'],check=True)
+     subprocess.run([*git,'commit','-qm','trusted profile authority fixture'],check=True)
+     scope_base=subprocess.check_output([*git,'rev-parse','HEAD'],text=True).strip()
+     profile_bin=temp/'profile-bin';profile_bin.mkdir()
+     gh=profile_bin/'gh'
+     gh.write_text('''#!/usr/bin/env python3
+import json, os
+print(json.dumps({'check_runs': [{'name': 'required-gate',
+  'details_url': 'https://github.com/%s/actions/runs/%s/job/1' %
+    (os.environ['GITHUB_REPOSITORY'], os.environ['GITHUB_RUN_ID']),
+  'id': 987654, 'app': {'id': 15368}}]}))
+''')
+     gh.chmod(0o755)
+     for path in (planner, driver):
+      path.chmod(0o755)
      env={**os.environ,'RUNNER_TEMP':str(temp),'GITHUB_WORKSPACE':str(candidate),
           'GITHUB_EVENT_NAME':event,'INTEGRATION_MODE':'integration_revalidation','OBSERVED':str(marker),
-          # This contract isolates frozen driver/preflight routing.  Required CI
-          # itself exports package-profile activation identity; do not leak that
-          # unrelated outer workflow state into this intentionally non-Git fixture.
-          'OASIS7_CARGO_SCOPE_BASE':'','OASIS7_CARGO_SCOPE_HEAD':'',
-          'OASIS7_CARGO_PROFILE_PLANNER':'','OASIS7_CARGO_PROFILE_DRIVER':''}
+          'INTEGRATION_WORKTREE':'',
+          # Model the workflow's trusted-base read with a tiny committed fixture.
+          # Its planner emits no Cargo commands, so this only exercises dispatch
+          # authority setup and frozen-driver/candidate-root routing.
+          'PATH':str(profile_bin)+os.pathsep+os.environ.get('PATH',''),
+          'OASIS7_CARGO_SCOPE_BASE':scope_base,'OASIS7_CARGO_SCOPE_HEAD':'d'*40,
+          'OASIS7_CARGO_PROFILE_PLANNER':'','OASIS7_CARGO_PROFILE_DRIVER':'',
+          'GITHUB_REPOSITORY':'eng-cc/oasis7','GITHUB_SHA':'e'*40,
+          'GITHUB_RUN_ID':'42','GITHUB_RUN_ATTEMPT':'1',
+          'GITHUB_WORKFLOW_REF':'eng-cc/oasis7/.github/workflows/rust.yml@refs/heads/main',
+          'GITHUB_WORKFLOW_SHA':'f'*40,
+          'OASIS7_CI_EXECUTION_CONTRACT':'',
+          'OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS':'',
+          'OASIS7_CI_RUN_PACKAGING_CONTRACTS':'',
+          'OASIS7_CI_RUN_DOC_CHECKER_CONTRACTS':'',
+          'OASIS7_CI_RUN_CARGO_TOOLING_CONTRACTS':'',
+          'OASIS7_CI_NEEDS_PYTHON':'','OASIS7_CI_NEEDS_MARKDOWN':''}
      result=subprocess.run(['bash','-euo','pipefail','-c',command],cwd=candidate,env=env,text=True,capture_output=True)
      if event=='workflow_dispatch':
       self.assertEqual(result.returncode,37,result.stdout+result.stderr)
@@ -233,6 +301,24 @@ class IntegrationTests(unittest.TestCase):
      else:
       self.assertEqual(result.returncode,0,result.stdout+result.stderr)
       self.assertEqual(marker.read_text(),'candidate')
+
+ def test_integration_dispatch_fails_closed_without_trusted_profile_authority(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   temp=Path(tmp);candidate=temp/'candidate';scripts=candidate/'scripts';scripts.mkdir(parents=True)
+   command=required_test_tier_command(HERE.parents[1])
+   observed=temp/'unexpected-side-effect'
+   (scripts/'doc-governance-check.sh').write_text('#!/usr/bin/env bash\nprintf invoked > "$OBSERVED"\n')
+   (scripts/'doc-governance-check.sh').chmod(0o755)
+   env={**os.environ,'RUNNER_TEMP':str(temp),'GITHUB_WORKSPACE':str(candidate),
+        'GITHUB_EVENT_NAME':'workflow_dispatch','INTEGRATION_MODE':'integration_revalidation',
+        'OBSERVED':str(observed),'INTEGRATION_WORKTREE':'',
+        'OASIS7_CARGO_SCOPE_BASE':'','OASIS7_CARGO_SCOPE_HEAD':'',
+        'OASIS7_CARGO_PROFILE_PLANNER':'','OASIS7_CARGO_PROFILE_DRIVER':''}
+   result=subprocess.run(['bash','-euo','pipefail','-c',command],cwd=candidate,env=env,text=True,capture_output=True)
+   self.assertEqual(result.returncode,1,result.stdout+result.stderr)
+   self.assertIn('trusted Cargo package profile authority is unavailable',result.stderr)
+   self.assertFalse((candidate/'output/cargo-package-profile').exists())
+   self.assertFalse(observed.exists())
 
  def test_integration_freezes_sourced_preflight_before_checkout(self):
   workflow=(HERE.parents[1]/'.github/workflows/rust.yml').read_text()

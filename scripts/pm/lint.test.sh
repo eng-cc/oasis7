@@ -126,10 +126,12 @@ grep -F "tracked projection drift: .pm/README.md" \
 COPY_FIXTURE="$TMP_DIR/during-copy-fixture"
 mkdir -p "$COPY_FIXTURE"
 cp -R "$ROOT_DIR/.pm" "$COPY_FIXTURE/.pm"
+# The ignored runtime gate is absent in a clean checkout; seed the race fixture
+# from the tracked template so the chmod transition is deterministic.
 mkdir -p "$COPY_FIXTURE/.pm/stage"
-printf 'version: 1\ngate_id: null\nstatus: draft\nlane_status: []\nblocking_tasks: []\nupdated_from: []\n' \
-  >"$COPY_FIXTURE/.pm/stage/gate.yaml"
-chmod -x "$COPY_FIXTURE/.pm/stage/gate.yaml"
+cp "$ROOT_DIR/.pm/templates/stage-gate.yaml" \
+  "$COPY_FIXTURE/.pm/stage/gate.yaml"
+chmod 0644 "$COPY_FIXTURE/.pm/stage/gate.yaml"
 if [[ ! -f "$COPY_FIXTURE/.pm/stage/gate.yaml" || -x "$COPY_FIXTURE/.pm/stage/gate.yaml" ]]; then
   echo "pm-lint.test: during-copy gate fixture must start as a non-executable file" >&2
   exit 1
