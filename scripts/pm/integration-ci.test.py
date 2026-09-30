@@ -312,7 +312,7 @@ class IntegrationTests(unittest.TestCase):
    (scripts/'doc-governance-check.sh').chmod(0o755)
    env={**os.environ,'RUNNER_TEMP':str(temp),'GITHUB_WORKSPACE':str(candidate),
         'GITHUB_EVENT_NAME':'workflow_dispatch','INTEGRATION_MODE':'integration_revalidation',
-        'OBSERVED':str(observed),
+        'OBSERVED':str(observed),'INTEGRATION_WORKTREE':'',
         'OASIS7_CARGO_SCOPE_BASE':'','OASIS7_CARGO_SCOPE_HEAD':'',
         'OASIS7_CARGO_PROFILE_PLANNER':'','OASIS7_CARGO_PROFILE_DRIVER':''}
    result=subprocess.run(['bash','-euo','pipefail','-c',command],cwd=candidate,env=env,text=True,capture_output=True)

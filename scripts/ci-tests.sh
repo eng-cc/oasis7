@@ -404,6 +404,7 @@ run_workflow_governance_operational_contract_tests() {
   run python3 ./scripts/pm/ci-reuse-validation.test.py
   run python3 ./scripts/pm/ci_reuse_validation_contract.test.py
   run python3 ./scripts/pm/ci_reuse_validation_unicode_history_adversarial.test.py
+  run python3 ./scripts/pm/ci_reuse_acceptance_qa.test.py
   run python3 ./scripts/pm/review-plan.test.py
   run python3 ./scripts/pm/subagent-task-packet.test.py
   run python3 ./scripts/pm/bootstrap-task-snapshot.test.py
