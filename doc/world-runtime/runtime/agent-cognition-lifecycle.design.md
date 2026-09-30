@@ -32,7 +32,18 @@ World execution owns the only canonical state transition. AgentActor may run on 
 
 The existing synchronous runner can remain as a compatibility adapter during migration. The adapter must wrap its result in the same envelope and validation path; it must not be treated as proof that synchronous cognition is the target architecture.
 
+Current source distinguishes that simulator compatibility lane from native runtime-live: `llm_sidecar_runner.rs:211–229` constructs `AsyncAgentRunner` for both Builtin and ProviderBacked; `async_agent_runner.rs:258–277,360–383,806–819` executes decisions on workers and polls without waiting while kernel action application stays synchronous and authoritative. Native ordinary Wait uses current-context Harness proposal validation, Runtime admission and projection/readback, then Runtime wake selection/resume and Harness reconciliation (`llm_sidecar_async.rs:490–529`, `llm_sidecar_cognition_wait.rs:419–592`, `llm_sidecar_cognition.rs:339–442,757`); WaitTicks retains a local timer. Source wiring and bounded mock fixtures do not prove complete durable scheduler/journal, remote restart/reconnect/rebind/reorg, browser service or full nonblocking acceptance. The logical-tick helper is narrower than a World commit; `run_one_turn` intentionally waits for tests/CLI. This note qualifies current lanes without changing the target records, algorithms or P0/P1 evidence gates below.
+
 ## 2. Logical records
+
+### 2.1 需求承接与分配表
+
+These two relations qualify the affected current lanes only; the original logical records and lifecycle targets below remain authoritative.
+
+| 上游条款 | 专业义务 | 本设计承接 | Owner / dependency | 排除与未证明范围 |
+| --- | --- | --- | --- | --- |
+| [PRD §1](agent-cognition-lifecycle.prd.md#1-目标与边界) | Distinguish synchronous simulator compatibility from native Builtin/ProviderBacked shared AsyncAgentRunner worker and nonblocking polling; current wiring is narrower than the target scheduler. | [Boundary map](agent-cognition-lifecycle.design.md#1-boundary-map) | Runtime owns world execution/admission/journal; Agent owns cognition/memory/goal/provider policy; QA qualifies proof and fixture applicability. | No new envelope/schema/hash/MVCC/journal/scheduler/restart implementation; no full remote/browser/finality or universal nonblocking proof. |
+| [PRD §9](agent-cognition-lifecycle.prd.md#9-证据锚点与专业跟进) | Qualify native ordinary Wait current-context proposal/admission/projection/readback/wake/resume/reconcile separately from WaitTicks timer; failed admission is not successful durable waiting. | [Boundary map](agent-cognition-lifecycle.design.md#1-boundary-map) | Runtime owns admission/world facts/wake/readback; Agent owns continuation proposal/policy; QA separates located mock fixtures from executed real-provider proof. | No change to record/digest/MVCC or durable recovery algorithms; no complete exactly-once scheduler, remote restart/reconnect/rebind/reorg, browser or finality certification. |
 
 ### 2.1 Turn and request
 
@@ -809,3 +820,12 @@ for checkpoint/GC safety. Integration also uses
 `./scripts/ci-tests.sh full`. These focused filters are required implementation deliverables. Until
 they exist and emit immutable inputs, digests, journal/provider-call counts, dispositions, receipt
 and state roots, the corresponding capability remains target rather than proven.
+
+### 11.1 验证映射表
+
+The method below is a persistent validation plan with source-inspection evidence for this documentary correction. Fixture references identify existing bounded tests, not executed results or substitutes for the original §9 deliverables.
+
+| 上游条款 | 本设计承接 | 接受边界 / environment | 验证方法与精确入口 | 证据目标与当前结果 | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [PRD §1](agent-cognition-lifecycle.prd.md#1-目标与边界) | [Boundary map](agent-cognition-lifecycle.design.md#1-boundary-map) | Pinned source 9410adcb443e09d4b56ff559d3a48cec402441b9, native runtime-live Builtin/ProviderBacked; synchronous simulator compatibility remains separately applicable, not native target proof. | Inspect llm_sidecar_runner.rs:211–229 and async_agent_runner.rs:258–277,360–383,792–825 against runner.rs:470,573–607. Locate [actor fixture](../../../crates/oasis7/src/simulator/tests/agent_cognition_live_actor.rs), world_tick_does_not_wait_for_an_outstanding_provider:60: blocking provider plus logical counter progress; distinguish that oracle from the actual kernel-step adapter and waiting run_one_turn helper. | Issue #4116 source-author evidence records immutable source/diff hashes, locators, preservation and governance output. Wiring and fixture assertion read; fixture not executed in this documentation correction. | No arbitrary-fault bounded World commit, replay/provider prohibition, full durable scheduler or remote/browser proof from logical-counter/mock evidence. |
+| [PRD §9](agent-cognition-lifecycle.prd.md#9-证据锚点与专业跟进) | [Boundary map](agent-cognition-lifecycle.design.md#1-boundary-map) | Same pinned 941 native lane; ordinary Wait admission/current-context readback is distinct from legacy execute-until and WaitTicks timer. | Inspect llm_sidecar_async.rs:490–529, llm_sidecar_cognition_wait.rs:419–592 and llm_sidecar_cognition.rs:339–442,757. Locate [native Wait fixture](../../../crates/oasis7/src/viewer/runtime_live/tests/auth_actions_provider_context.rs), runtime_builtin_wait_enters_the_shared_harness_lifecycle:786: mock HTTP and injected binding/capability fixture assert shared admission; inspect admission failure branch separately rather than treating a Wait decision as success. | Issue #4116 evidence records pinned source and fixture hashes, ordinary Wait versus timer locators and unexecuted qualification. Current seam/source inspected; mock fixture not executed and not an independently verified finality certificate. | No actual real-provider paired artifacts, complete crash/snapshot-tail recovery, remote restart/reconnect/rebind/reorg, full exactly-once or browser service proof. |
