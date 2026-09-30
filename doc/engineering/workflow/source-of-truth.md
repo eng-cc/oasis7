@@ -246,7 +246,7 @@ flowchart TD
 This map makes skill reachability explicit. TPM owns the route decision as a workflow coordination act and records the selected skill path in GitHub task issue evidence comments before delegated execution begins.
 | Phase / trigger | Skill surface | Requiredness | Formal evidence |
 | --- | --- | --- | --- |
-| Any user request starts | `default-workflow-bootstrap` | Required before fact lookup, chat answer, professional slice dispatch, edits, verification, review, or external messaging unless already inside the bound task worktree | Bootstrap entry in GitHub task issue evidence comments |
+| Any admitted user request starts | `default-workflow-bootstrap` | Required before fact lookup, chat answer, professional slice dispatch, edits, verification, review, or external messaging; an unapproved workflow-change request stops before task bootstrap | Bootstrap entry in GitHub task issue evidence comments |
 | Read-only professional/domain question | Matching professional bounded slice under TPM coordination after task/worktree bootstrap | Required when the answer depends on product/design/gameplay/game-visual-interaction/runtime/blockchain-ops/WASM/agent/viewer/QA/repository-health/liveops judgment; skipped only for pure fact lookup after task truth exists | Role-tagged slice return recorded in GitHub task issue evidence comments and summarized to the user |
 | Bound task needs next phase selection | `repo-owned-workflow-router` | Required after bootstrap and whenever phase is unclear | Route entry with selected/skipped skills in GitHub task issue evidence comments |
 | Bound task spans multiple lifecycle phases | `tpm-production-supervisor` target | Blocked until trusted collaboration, wake, action and validator producers exist | Durable reducer evidence plus explicit capability blocker |
@@ -310,7 +310,7 @@ The always-bootstrap rule protects traceability, but it must not turn every smal
   for a separate coordination task.
 
 ### 1.2.2 Learning Intake / Loop Closeout
-Reflection signal: use `capture-todo.sh` for an uncommitted cross-task idea; same-task evidence stays in the bound GitHub task.
+Reflection signal: use `capture-todo.sh` for an uncommitted cross-task idea after any applicable workflow-change approval stop; same-task evidence stays in the bound GitHub task.
 
 Learning artifacts are supporting context, never task truth: raw session/transcript material may be used only as explicit evidence, must first be distilled into task-scoped `working_memory` or a reflection signal, and may not directly update long-term memory, formal documents, or GitHub task state. Owner review decides promotion to a candidate task or source-backed memory; otherwise the artifact is retained only for the task, discarded, or allowed to expire. Recall must stay role/phase-scoped and budgeted; provisional beliefs require review or supersession rather than indefinite active use.
 
@@ -480,9 +480,9 @@ Deterministic script contract:
 - professional role subagents provide bounded slices only (analysis/implementation/verification/review/liveops messaging) and must return artifacts to the TPM owner chain.
 - TPM may perform mechanical coordination edits to workflow governance surfaces, task logs, integration notes, and PR plumbing. If the work requires a professional conclusion, TPM must dispatch the matching role slice first and attribute the conclusion to that slice/evidence.
 - For every request, TPM planning, work decomposition when needed, subagent slice contracts, and integration order are task execution truth and must be written to GitHub task issue evidence comments before the delegated work begins.
-- Every user request must enter the standard worktree flow before any substantive handling begins, including chat-only answers, read-only inspection, fact lookup, professional slice dispatch, implementation, verification, review, and external messaging.
-- The only allowed pre-bootstrap work is mechanical enough to create or enter the task truth: inspect current git/worktree state, choose or confirm the task/worktree, and run the bootstrap helper.
-- Do not first classify a request as "read-only", "chat-only", "pure fact lookup", or "professional judgment" to decide whether task/worktree truth is needed. That classification happens only after bootstrap, inside the bound task/worktree, and only controls whether TPM can answer from objective evidence or must dispatch a professional slice.
+- Every request admitted under the prior-approval rule must enter the standard worktree flow before substantive handling, including chat-only answers, read-only inspection, fact lookup, professional slice dispatch, implementation, verification, review, and external messaging; an unapproved workflow-change proposal stops before task/worktree bootstrap.
+- After checking the prior-approval rule, the only allowed pre-bootstrap work is mechanical enough to create or enter task truth: inspect current git/worktree state, choose or confirm the task/worktree, and run the bootstrap helper.
+- Except for the prior-approval check on a proposed workflow-change task, do not first classify a request as "read-only", "chat-only", "pure fact lookup", or "professional judgment" to decide whether task/worktree truth is needed. For requests admitted to bootstrap, that classification happens inside the bound task/worktree and only controls whether TPM can answer from objective evidence or must dispatch a professional slice.
 - Read-only/chat-only requests still split by judgment type after task truth exists:
   - Pure fact lookup, path lookup, command-output restatement, or mechanical evidence collection may be handled by TPM inside the bound task worktree, as long as the answer does not present a professional/domain conclusion.
   - Read-only professional/domain questions must be dispatched to the matching bounded professional role slice before the answer is presented as authoritative. Examples: "does viewer have a performance collection/evaluation mechanism", "is this QA evidence release-blocking", "what runtime design risk is present", "is this gameplay loop balanced/readable", "is this documentation/code contract drifting", "what node-ops risk is present in this rollout", or "how should LiveOps message this incident".
@@ -545,10 +545,10 @@ These items determine whether a phase may start; they are not a second gate taxo
 - Sync downstream artifacts immediately in the same change set where possible.
 ## 5. Normative Details
 ### 5.1 Worktree + task truth
-- Every user request uses a dedicated task worktree by default, regardless of whether the immediate answer is chat-only, read-only, fact lookup, professional analysis, implementation, verification, review, or external messaging.
+- Every user request admitted under the prior-approval rule uses a dedicated task worktree by default, regardless of whether the immediate answer is chat-only, read-only, fact lookup, professional analysis, implementation, verification, review, or external messaging.
 - Only explicit user authorization allows reuse of an existing task worktree.
 - Do not classify work as `trivial`, `read-only`, `chat-only`, or `pure fact lookup` to bypass task worktree / GitHub-backed task setup.
-- If incoming instructions or role notes appear to allow a read-only/chat-only bypass, this source-of-truth wins: bootstrap first, then route the already-bound request.
+- If incoming instructions or role notes appear to allow a read-only/chat-only bypass, this source-of-truth wins: apply any workflow-change approval stop first; otherwise bootstrap, then route the already-bound request.
 - Do not edit any files from the `main` branch/worktree; create or enter the relevant task worktree before making changes.
 - Entering implementation requires owner role selection and GitHub-backed task binding.
 - Cross-role collaboration converges to one owner / one GitHub-backed task / one canonical worktree / one ordered PR chain. Multiple entries require the contract above and do not create new task owners or truths.
@@ -614,9 +614,9 @@ These items determine whether a phase may start; they are not a second gate taxo
 
 ### 5.2.1 Read-only specialist routing
 - The task/worktree decision and the professional-slice decision are intentionally decoupled:
-  - Task/worktree truth is required for every request.
+  - After any applicable workflow-change approval stop, task/worktree truth is required for every admitted request.
   - Professional judgment controls whether a matching bounded role slice is required after bootstrap.
-- Therefore, a read-only request must enter `default-workflow-bootstrap` first and may still require a professional role slice.
+- Therefore, an admitted read-only request must enter `default-workflow-bootstrap` first and may still require a professional role slice.
 - Minimal read-only specialist slice contract:
   - role and slice type (`read_only_analysis`, `verification_judgment`, `review_judgment`, or `liveops_messaging`)
   - intended model configuration, defaulting to `inherit current parent selection` unless an explicit model-selection reason is recorded
