@@ -884,9 +884,16 @@ def main() -> None:
     }, sort_keys=True, separators=(",", ":")))
     output_path = os.environ.get("GITHUB_OUTPUT")
     if output_path:
+        payload_schema = payload.get("schema")
+        if payload_schema == contract.PAYLOAD_SCHEMA:
+            successor = False
+        elif payload_schema == contract.SUCCESSOR_PAYLOAD_SCHEMA:
+            successor = True
+        else:
+            raise SystemExit("ci-reuse-validation: validation payload schema is unsupported")
         artifact = contract.artifact_name(
             payload["validation_id"], payload["run_id"], payload["run_attempt"],
-            successor=contract.is_successor_authority(authority),
+            successor=successor,
         )
         with Path(output_path).open("a", encoding="utf-8") as stream:
             stream.write("artifact_name=" + artifact + "\n")
