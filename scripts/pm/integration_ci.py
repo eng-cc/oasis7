@@ -71,6 +71,16 @@ def current_request(repository,uid,number,base,head,branch,request_key=None):
                 raise ValueError('integration current request identity unavailable before outcome')
             _,_,mode,request_uid,request_pr,request_base,request_head,*request_keys=parts
             if mode in ('full_escalation','newapi_bridge_package'): continue
+            if mode=='v1_reuse_validation_only':
+                if (not re.fullmatch(r'task_[0-9a-f]{32}',request_uid) or not re.fullmatch(r'[1-9][0-9]*',request_pr)
+                        or not OID.fullmatch(request_base) or not OID.fullmatch(request_head)):
+                    raise ValueError('integration current request identity malformed')
+                if len(request_keys)!=1 or not re.fullmatch(r'[0-9a-f]{64}',request_keys[0]):
+                    raise ValueError('integration request key malformed')
+                if (request_uid==uid)!=(int(request_pr)==int(number)):
+                    raise ValueError('integration request task/PR identity conflicts')
+                # Validation-only runs can never satisfy the v2 integration proof.
+                continue
             if mode!='integration_revalidation' or not re.fullmatch(r'task_[0-9a-f]{32}',request_uid) or not request_pr.isdigit() or not OID.fullmatch(request_base) or not OID.fullmatch(request_head):
                 raise ValueError('integration current request identity malformed')
             if request_base!=base or request_head!=head: continue

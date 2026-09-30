@@ -1,15 +1,19 @@
 #!/usr/bin/env python3
 """Independent read-only GitHub readback for V1 reuse validation.
 
-No issue, comment, run, job, check, or artifact IDs are accepted as command
-arguments. The live GitHub record set and the fixed Task/PR/workflow route are
-the only source of those identities. This module never dispatches or reruns a
-workflow and never changes production capability selection.
+No Issue, PR, comment, run, job, check, or artifact number is accepted as a
+command argument. A Task UID is only a lookup key: the selected Task Issue and
+its Project item are resolved from live GitHub, and its reciprocal PR number
+is read from the live Task Issue and pinned Issue evidence. This module never
+dispatches or reruns a workflow and never changes production capability
+selection.
 """
 
 from __future__ import annotations
 
 import importlib.util
+import base64
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -23,8 +27,8 @@ from typing import Any, Mapping
 
 
 REPOSITORY = "eng-cc/oasis7"
-TASK_ISSUE_NUMBER = 4059
-PR_NUMBER = 4060
+PROJECT_OWNER = "eng-cc"
+PROJECT_NUMBER = 1
 WORKFLOW_FILE = ".github/workflows/rust.yml"
 WORKFLOW_PATH = WORKFLOW_FILE + "@main"
 WORKFLOW_REF = f"{REPOSITORY}/{WORKFLOW_FILE}@refs/heads/main"
@@ -34,6 +38,49 @@ MAX_ARCHIVE_BYTES = 16 * 1024 * 1024
 MAX_PAYLOAD_BYTES = 1024 * 1024
 _TASK_UID_RE = re.compile(r"task_[0-9a-f]{32}\Z")
 _OID_RE = re.compile(r"[0-9a-f]{40}\Z")
+_TASK_UID_LINE_RE = re.compile(r"(?m)^task_uid: (task_[0-9a-f]{32})\s*$")
+_TASK_PR_NUMBER_RE = re.compile(r"(?m)^- pr_number: `([1-9][0-9]*)`\s*$")
+_TASK_PR_URL_RE = re.compile(r"(?m)^- pr_url: `(https://github\.com/[^`]+)`\s*$")
+_PROJECT_TASK_LOOKUP = """
+query($search: String!) {
+  search(query: $search, type: ISSUE, first: 2) {
+    issueCount
+    pageInfo { hasNextPage }
+    nodes {
+      ... on Issue {
+        number
+        url
+        body
+        projectItems(first: 100) {
+          pageInfo { hasNextPage }
+          nodes {
+            id
+            project {
+              number
+              owner {
+                ... on Organization { login }
+                ... on User { login }
+              }
+            }
+            content { ... on Issue { number url } }
+            fieldValues(first: 100) {
+              pageInfo { hasNextPage }
+              nodes {
+                ... on ProjectV2ItemFieldTextValue {
+                  text field { ... on ProjectV2FieldCommon { name } }
+                }
+                ... on ProjectV2ItemFieldSingleSelectValue {
+                  name field { ... on ProjectV2FieldCommon { name } }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"""
 
 
 class ReadbackError(ValueError):
@@ -117,20 +164,35 @@ def _next_link(
         current_params = parse_qs(current.query, keep_blank_values=True, strict_parsing=True)
     except ValueError as exc:
         raise ReadbackError("GitHub pagination query is malformed") from exc
-    if (set(params) != {"per_page", "page"}
-            or params.get("per_page") != [str(PAGE_SIZE)]
-            or len(params.get("page", [])) != 1
-            or not re.fullmatch(r"[1-9][0-9]*", params["page"][0])):
-        raise ReadbackError("GitHub pagination next link changes the unfiltered page query")
+    if any(len(values) != 1 for values in (*params.values(), *current_params.values())):
+        raise ReadbackError("GitHub pagination requires an unfiltered page query without duplicate parameters")
     old_pages = current_params.get("page", ["1"])
-    if (set(current_params) not in ({"per_page"}, {"per_page", "page"})
-            or current_params.get("per_page") != [str(PAGE_SIZE)]
-            or len(old_pages) != 1
+    issue_collection = current.path.endswith("/issues") and current.path in allowed_paths
+    current_cursor_values = current_params.get("after", [])
+    next_cursor_values = params.get("after", [])
+    if ((current_cursor_values or next_cursor_values) and not issue_collection
+            or (issue_collection and not next_cursor_values)
+            or (next_cursor_values and (not next_cursor_values[0]
+                                        or next_cursor_values == current_cursor_values))):
+        raise ReadbackError("GitHub pagination requires an advancing opaque cursor only for Issue listings")
+    base_params = {
+        key: value for key, value in current_params.items() if key not in {"page", "after"}
+    }
+    allowed_base_keys = {"per_page"} | ({"state"} if base_params.get("state") == ["all"] else set())
+    if (set(base_params) != allowed_base_keys
+            or base_params.get("per_page") != [str(PAGE_SIZE)]
             or not re.fullmatch(r"[1-9][0-9]*", old_pages[0])):
         raise ReadbackError("GitHub pagination current page is malformed")
     expected_page = int(old_pages[0]) + 1
-    if (int(params["page"][0]) != expected_page
-            or parsed.query != f"per_page={PAGE_SIZE}&page={expected_page}"):
+    expected_params = {**base_params, "page": [str(expected_page)]}
+    if next_cursor_values:
+        expected_params["after"] = next_cursor_values
+    next_base_params = {
+        key: value for key, value in params.items() if key not in {"page", "after"}
+    }
+    if next_base_params != base_params:
+        raise ReadbackError("GitHub pagination next link must preserve the unfiltered page query")
+    if params != expected_params:
         raise ReadbackError("GitHub pagination next link is not the following page")
     return parsed.path + "?" + parsed.query
 
@@ -153,6 +215,95 @@ class GitHubReadOnly:
     def get_json(self, endpoint: str) -> Any:
         _, value = self._included_json(endpoint)
         return value
+
+    def graphql(self, query: str, variables: Mapping[str, str]) -> Any:
+        if type(query) is not str or not query or not isinstance(variables, Mapping):
+            raise ReadbackError("GitHub Project query is malformed")
+        command = ["gh", "api", "graphql", "-f", "query=" + query]
+        for key, value in variables.items():
+            if (type(key) is not str or not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", key)
+                    or type(value) is not str):
+                raise ReadbackError("GitHub Project query variables are malformed")
+            command.extend(("-f", key + "=" + value))
+        try:
+            raw = subprocess.check_output(command)
+        except (OSError, subprocess.CalledProcessError) as exc:
+            raise ReadbackError(
+                "GitHub Project-backed Task Issue lookup failed or lacks read permission",
+            ) from exc
+        try:
+            value = json.loads(raw.decode("utf-8", "strict"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise ReadbackError("GitHub Project lookup response is malformed") from exc
+        if not isinstance(value, Mapping) or value.get("errors"):
+            raise ReadbackError("GitHub Project lookup is incomplete or reports GraphQL errors")
+        return value
+
+    def resolve_project_task_issue(self, task_uid: str) -> Mapping[str, Any]:
+        if type(task_uid) is not str or not _TASK_UID_RE.fullmatch(task_uid):
+            raise ReadbackError("Task UID selector is malformed")
+        search = f"repo:{REPOSITORY} is:issue {task_uid} in:body"
+        payload = self.graphql(_PROJECT_TASK_LOOKUP, {"search": search})
+        data = payload.get("data")
+        result = data.get("search") if isinstance(data, Mapping) else None
+        if not isinstance(result, Mapping):
+            raise ReadbackError("complete Project-backed Task Issue search is unavailable")
+        nodes = result.get("nodes")
+        page_info = result.get("pageInfo")
+        if (type(nodes) is not list or type(result.get("issueCount")) is not int
+                or not isinstance(page_info, Mapping) or page_info.get("hasNextPage") is not False
+                or result["issueCount"] != len(nodes) or len(nodes) != 1):
+            raise ReadbackError("Task UID does not resolve to exactly one complete Issue search result")
+        issue = nodes[0]
+        if not isinstance(issue, Mapping):
+            raise ReadbackError("Project-backed Task Issue search result is malformed")
+        try:
+            number = _positive_int(issue.get("number"), "Project-backed Task Issue number")
+        except ReadbackError as exc:
+            raise ReadbackError("Project-backed Task Issue number is malformed") from exc
+        if type(issue.get("body")) is not str or type(issue.get("url")) is not str:
+            raise ReadbackError("Project-backed Task Issue body or URL is unavailable")
+        if _live_task_uid(issue, number) != task_uid:
+            raise ReadbackError("Project-backed Task Issue does not bind the selected Task UID")
+
+        project_items = issue.get("projectItems")
+        project_page = project_items.get("pageInfo") if isinstance(project_items, Mapping) else None
+        project_nodes = project_items.get("nodes") if isinstance(project_items, Mapping) else None
+        if (not isinstance(project_items, Mapping) or not isinstance(project_page, Mapping)
+                or project_page.get("hasNextPage") is not False or type(project_nodes) is not list):
+            raise ReadbackError("Task Issue Project item listing is incomplete")
+        matches: list[Mapping[str, Any]] = []
+        for item in project_nodes:
+            if not isinstance(item, Mapping):
+                raise ReadbackError("Task Issue Project item listing is malformed")
+            project = item.get("project")
+            owner = project.get("owner") if isinstance(project, Mapping) else None
+            if (not isinstance(project, Mapping) or not isinstance(owner, Mapping)
+                    or project.get("number") != PROJECT_NUMBER
+                    or owner.get("login") != PROJECT_OWNER):
+                continue
+            content = item.get("content")
+            values = item.get("fieldValues")
+            value_page = values.get("pageInfo") if isinstance(values, Mapping) else None
+            value_nodes = values.get("nodes") if isinstance(values, Mapping) else None
+            if (not isinstance(content, Mapping) or content.get("number") != number
+                    or content.get("url") != issue["url"]
+                    or not isinstance(value_page, Mapping)
+                    or value_page.get("hasNextPage") is not False or type(value_nodes) is not list):
+                raise ReadbackError("canonical Project item identity or field listing is incomplete")
+            task_uid_values = []
+            for field_value in value_nodes:
+                field = field_value.get("field") if isinstance(field_value, Mapping) else None
+                if isinstance(field, Mapping) and field.get("name") == "Task UID":
+                    task_uid_values.append(field_value.get("text"))
+            if task_uid_values != [task_uid]:
+                raise ReadbackError("canonical Project item does not contain the exact Task UID field")
+            matches.append(item)
+        if len(matches) != 1:
+            raise ReadbackError("Task UID does not resolve to exactly one canonical Project item")
+        result_issue = dict(issue)
+        result_issue["project_item_id"] = matches[0].get("id")
+        return result_issue
 
     def get_bytes(self, endpoint: str) -> bytes:
         try:
@@ -197,9 +348,12 @@ class GitHubReadOnly:
             current_endpoint = following.lstrip("/")
             current_url = API_ORIGIN + following
 
-    def paginated_pages(self, endpoint: str, *, collection_key: str | None) -> tuple[Any, ...]:
+    def paginated_pages(
+        self, endpoint: str, *, collection_key: str | None,
+        allowed_paths: frozenset[str] | None = None,
+    ) -> tuple[Any, ...]:
         return tuple(value for value, _ in self._paginated_observations(
-            endpoint, collection_key=collection_key,
+            endpoint, collection_key=collection_key, allowed_paths=allowed_paths,
         ))
 
     def paginated_collections(self, endpoint: str, *, collection_key: str) -> tuple[dict[str, Any], ...]:
@@ -212,10 +366,32 @@ class GitHubReadOnly:
                            collection_key: value[collection_key], "has_next": has_next})
         return tuple(result)
 
-    def issue_comment_pages(self) -> tuple[Any, ...]:
+    def issue_comment_pages(self, issue_number: int) -> tuple[Any, ...]:
+        if type(issue_number) is not int or issue_number <= 0:
+            raise ReadbackError("Task Issue number is invalid")
         return self.paginated_pages(
-            f"repos/{REPOSITORY}/issues/{TASK_ISSUE_NUMBER}/comments?per_page={PAGE_SIZE}",
+            f"repos/{REPOSITORY}/issues/{issue_number}/comments?per_page={PAGE_SIZE}",
             collection_key=None,
+        )
+
+    def task_issue_pages(self) -> tuple[Any, ...]:
+        """Read every repository Issue page; the caller resolves UID markers uniquely."""
+        repository = self.get_json(f"repos/{REPOSITORY}")
+        owner = repository.get("owner") if isinstance(repository, Mapping) else None
+        repository_id = repository.get("id") if isinstance(repository, Mapping) else None
+        if (not isinstance(repository, Mapping) or repository.get("full_name") != REPOSITORY
+                or repository.get("name") != "oasis7" or not isinstance(owner, Mapping)
+                or owner.get("login") != "eng-cc" or type(repository_id) is not int
+                or repository_id <= 0):
+            raise ReadbackError("canonical repository identity is invalid for Task Issue pagination")
+        issue_paths = frozenset({
+            f"/repos/{REPOSITORY}/issues",
+            f"/repositories/{repository_id}/issues",
+        })
+        return self.paginated_pages(
+            f"repos/{REPOSITORY}/issues?state=all&per_page={PAGE_SIZE}",
+            collection_key=None,
+            allowed_paths=issue_paths,
         )
 
     def workflow_run_pages(
@@ -313,17 +489,45 @@ def _collection_rows(pages: tuple[Any, ...], key: str, label: str) -> tuple[Mapp
     return tuple(rows)
 
 
-def _live_task_uid(issue: Mapping[str, Any]) -> str:
-    if issue.get("number") != TASK_ISSUE_NUMBER or type(issue.get("body")) is not str:
-        raise ReadbackError("live validation Task Issue identity is unavailable")
-    matches = re.findall(r"(?m)^task_uid: (task_[0-9a-f]{32})\s*$", issue["body"])
+def _positive_int(value: Any, field: str) -> int:
+    if type(value) is not int or value <= 0:
+        raise ReadbackError(f"{field} is not a positive integer")
+    return value
+
+
+def _live_task_uid(issue: Mapping[str, Any], expected_number: int) -> str:
+    if issue.get("number") != expected_number or type(issue.get("body")) is not str:
+        raise ReadbackError("live Project-backed Task Issue identity is unavailable")
+    body = issue["body"]
+    if not body.startswith("<!-- oasis7-pm-task -->\n"):
+        raise ReadbackError("live Task Issue does not have the canonical PM marker")
+    matches = _TASK_UID_LINE_RE.findall(body)
     if len(matches) != 1 or not _TASK_UID_RE.fullmatch(matches[0]):
         raise ReadbackError("Task Issue does not contain one canonical Task UID")
     return matches[0]
 
 
-def _check_live_pr(pr: Mapping[str, Any], task_uid: str) -> tuple[str, str]:
-    if (pr.get("number") != PR_NUMBER or pr.get("state") != "open" or pr.get("merged") is not False
+def _live_task_pr(issue: Mapping[str, Any], task_uid: str) -> tuple[int, str]:
+    body = issue.get("body")
+    if type(body) is not str:
+        raise ReadbackError("live Task Issue body is unavailable")
+    issue_number = _positive_int(issue.get("number"), "Task Issue number")
+    if _live_task_uid(issue, issue_number) != task_uid:
+        raise ReadbackError("live Task Issue PR mapping belongs to another Task UID")
+    numbers = _TASK_PR_NUMBER_RE.findall(body)
+    urls = _TASK_PR_URL_RE.findall(body)
+    if len(numbers) != 1 or len(urls) != 1:
+        raise ReadbackError("Task Issue does not contain one canonical PR number and URL")
+    pr_number = int(numbers[0])
+    if urls[0] != f"https://github.com/{REPOSITORY}/pull/{pr_number}":
+        raise ReadbackError("Task Issue PR URL does not identify its exact PR number")
+    return pr_number, urls[0]
+
+
+def _check_live_pr(
+    pr: Mapping[str, Any], task_uid: str, task_issue_number: int, pr_number: int,
+) -> tuple[str, str]:
+    if (pr.get("number") != pr_number or pr.get("state") != "open" or pr.get("merged") is not False
             or pr.get("base", {}).get("repo", {}).get("full_name") != REPOSITORY
             or pr.get("head", {}).get("repo", {}).get("full_name") != REPOSITORY
             or pr.get("base", {}).get("ref") != "main"):
@@ -335,15 +539,48 @@ def _check_live_pr(pr: Mapping[str, Any], task_uid: str) -> tuple[str, str]:
     body = pr.get("body")
     if type(body) is not str or body.count(f"Task: {task_uid}") != 1:
         raise ReadbackError("live PR does not reciprocally bind the canonical Task UID")
-    if body.count(f"Refs #{TASK_ISSUE_NUMBER}") != 1:
-        raise ReadbackError("live PR does not reciprocally reference the fixed Task Issue")
+    if body.count(f"Refs #{task_issue_number}") != 1:
+        raise ReadbackError("live PR does not reciprocally reference the selected Task Issue")
     return head, base
 
 
-def _resolve_records(comment_pages: tuple[Any, ...]):
+def _resolve_records(
+    comment_pages: tuple[Any, ...], expected_identity: Mapping[str, Any] | None = None,
+):
     comments = _flatten_array_pages(comment_pages, "Issue comment")
-    authority = contract.resolve_records_for_readback(comments)
+    authority = contract.resolve_records_for_readback(
+        comments, expected_identity=expected_identity,
+    )
     return comments, authority
+
+
+def _resolve_records_with_predecessor(
+    api: GitHubReadOnly, comments: tuple[Mapping[str, Any], ...],
+    expected_identity: Mapping[str, Any], workflow_id: int,
+    default_branch: str, repository_id: int | None,
+) -> tuple[Any, dict[str, Any] | None]:
+    """Resolve V1 normally or V2 against a server-observed failed predecessor."""
+    successor_markers = (
+        contract.SUCCESSOR_REQUEST_MARKER,
+        contract.SUCCESSOR_AUTHORIZATION_MARKER,
+        contract.SUCCESSOR_PIN_MARKER,
+    )
+    if not any(marker in str(comment.get("body", ""))
+               for comment in comments for marker in successor_markers):
+        return contract.resolve_records_for_readback(
+            comments, expected_identity=expected_identity,
+        ), None
+    predecessor_identity = {
+        key: expected_identity[key]
+        for key in ("task_uid", "task_issue_number", "pr_number")
+    }
+    predecessor = _predecessor_observation(
+        api, comments, predecessor_identity, workflow_id, default_branch, repository_id,
+    )
+    authority = contract.resolve_successor_records_for_readback(
+        comments, expected_identity, predecessor,
+    )
+    return authority, predecessor
 
 
 def _live_workflow(api: GitHubReadOnly) -> tuple[int, str, int]:
@@ -353,7 +590,7 @@ def _live_workflow(api: GitHubReadOnly) -> tuple[int, str, int]:
     if (not isinstance(repo, Mapping) or repo.get("full_name") != REPOSITORY
             or repo.get("name") != "oasis7" or not isinstance(owner, Mapping)
             or owner.get("login") != "eng-cc" or type(repository_id) is not int
-            or repository_id <= 0 or repo.get("default_branch") != "main"):
+            or repository_id <= 0 or type(repo.get("default_branch")) is not str):
         raise ReadbackError("canonical repository identity or default branch is invalid")
     workflow = api.get_json(f"repos/{REPOSITORY}/actions/workflows/rust.yml")
     if (not isinstance(workflow, Mapping) or workflow.get("path") != WORKFLOW_FILE
@@ -361,6 +598,10 @@ def _live_workflow(api: GitHubReadOnly) -> tuple[int, str, int]:
         raise ReadbackError("canonical rust.yml workflow ID is missing or ambiguous")
     if workflow.get("state") != "active":
         raise ReadbackError("canonical rust.yml workflow is not active")
+    try:
+        contract.normalize_workflow_identity(repo["default_branch"], workflow.get("path"))
+    except contract.ContractError as exc:
+        raise ReadbackError("live repository default branch is not a canonical ref") from exc
     return workflow["id"], repo["default_branch"], repository_id
 
 
@@ -368,13 +609,17 @@ def _run_identity(row: Mapping[str, Any], workflow_id: int, default_branch: str)
     run_id = row.get("id")
     attempt = row.get("run_attempt")
     sha = row.get("head_sha")
-    path = row.get("path")
+    raw_path = row.get("path")
     branch = row.get("head_branch")
     head_repo = row.get("head_repository")
     repository = row.get("repository")
+    try:
+        workflow_identity = contract.normalize_workflow_identity(default_branch, raw_path)
+    except contract.ContractError as exc:
+        raise ReadbackError("raw REST workflow path differs from exact live workflow identity") from exc
     if (type(run_id) is not int or run_id <= 0 or type(attempt) is not int or attempt <= 0
             or type(sha) is not str or not _OID_RE.fullmatch(sha)
-            or path != WORKFLOW_PATH or branch != default_branch
+            or branch != default_branch
             or not isinstance(head_repo, Mapping) or head_repo.get("full_name") != REPOSITORY
             or not isinstance(repository, Mapping) or repository.get("full_name") != REPOSITORY
             or row.get("workflow_id") != workflow_id):
@@ -383,14 +628,14 @@ def _run_identity(row: Mapping[str, Any], workflow_id: int, default_branch: str)
         "repository": REPOSITORY,
         "id": run_id,
         "workflow_id": workflow_id,
-        "workflow_path": path,
-        "workflow_ref": f"{REPOSITORY}/{WORKFLOW_FILE}@refs/heads/{default_branch}",
+        **workflow_identity,
         "workflow_sha": sha,
         "event": row.get("event"),
         "display_title": row.get("display_title"),
         "dispatched_head_sha": sha,
         "run_attempt": attempt,
         "created_at": row.get("created_at"),
+        "updated_at": row.get("updated_at"),
         "head_branch": branch,
         "head_repository": head_repo,
         "status": row.get("status"),
@@ -406,10 +651,115 @@ def _read_live_run(api: GitHubReadOnly, row: Mapping[str, Any], workflow_id: int
     response = api.get_json(f"repos/{REPOSITORY}/actions/runs/{run_id}")
     if not isinstance(response, Mapping) or response.get("id") != run_id:
         raise ReadbackError("selected workflow run live readback has another identity")
+    if response.get("run_attempt") != row.get("run_attempt"):
+        raise ReadbackError("selected workflow run latest R/A changed between discovery and direct read")
+    for field in ("path", "workflow_id", "head_sha", "head_branch", "event",
+                  "created_at", "updated_at", "status", "conclusion"):
+        if response.get(field) != row.get(field):
+            raise ReadbackError(f"selected workflow run {field} changed between discovery and direct read")
     current = _run_identity(response, workflow_id, default_branch)
     if response.get("display_title") != row.get("display_title"):
         raise ReadbackError("selected workflow run title changed between discovery and direct read")
     return current
+
+
+def _workflow_blob_at(api: GitHubReadOnly, head_sha: str) -> tuple[str, str]:
+    """Read the exact immutable workflow file at an authenticated run head SHA."""
+    if type(head_sha) is not str or not _OID_RE.fullmatch(head_sha):
+        raise ReadbackError("predecessor server head SHA is malformed")
+    endpoint = f"repos/{REPOSITORY}/contents/{WORKFLOW_FILE}?ref={head_sha}"
+    observation = api.get_json(endpoint)
+    if (not isinstance(observation, Mapping) or observation.get("path") != WORKFLOW_FILE
+            or observation.get("encoding") != "base64" or type(observation.get("content")) is not str
+            or type(observation.get("sha")) is not str or not _OID_RE.fullmatch(observation["sha"])):
+        raise ReadbackError("predecessor workflow source blob readback is incomplete")
+    try:
+        encoded = "".join(observation["content"].split())
+        content = base64.b64decode(encoded, validate=True)
+    except (ValueError, base64.binascii.Error) as exc:
+        raise ReadbackError("predecessor workflow source blob content is malformed") from exc
+    git_blob_oid = hashlib.sha1(b"blob " + str(len(content)).encode("ascii") + b"\0" + content).hexdigest()
+    if git_blob_oid != observation["sha"]:
+        raise ReadbackError("predecessor workflow content does not match its immutable Git blob OID")
+    try:
+        text = content.decode("utf-8", "strict")
+    except UnicodeDecodeError as exc:
+        raise ReadbackError("predecessor workflow source is not UTF-8 text") from exc
+    expected_run_name = (
+        "run-name: oasis7-ci|${{ github.event_name }}|${{ inputs.run_mode }}|"
+        "${{ inputs.task_uid }}|${{ inputs.pr_number }}|${{ inputs.integration_base }}|"
+        "${{ inputs.expected_head }}${{ inputs.request_key != '' && format('|{0}', inputs.request_key) || '' }}"
+    )
+    if expected_run_name not in text.splitlines():
+        raise ReadbackError("predecessor source does not bind dispatch inputs through canonical run-name")
+    return git_blob_oid, contract.body_digest(content)
+
+
+def _predecessor_observation(
+    api: GitHubReadOnly, comments: tuple[Mapping[str, Any], ...],
+    expected_identity: Mapping[str, Any], workflow_id: int, default_branch: str,
+    repository_id: int | None = None,
+) -> dict[str, Any]:
+    """Prove the unique failed V1 predecessor from comments and live server identity."""
+    try:
+        predecessor = contract.resolve_predecessor_v1_records(comments, expected_identity)
+        pages = api.workflow_run_pages(workflow_id, repository_id)
+        complete_runs = contract.collect_workflow_runs(pages)
+        selected = contract.select_unique_run(complete_runs, predecessor)
+    except (contract.ContractError, ReadbackError) as exc:
+        raise ReadbackError("same-task V1 predecessor records or full run history are ambiguous") from exc
+    run = _read_live_run(api, selected, workflow_id, default_branch)
+    if (run["display_title"] != contract.expected_run_title(predecessor)
+            or run["event"] != "workflow_dispatch"
+            or run["event_ref"] != f"refs/heads/{default_branch}"
+            or run["workflow_default_branch"] != default_branch
+            or run["status"] != "completed" or run["conclusion"] != "failure"):
+        raise ReadbackError("same-task predecessor is not the unique terminal failed default-branch run")
+    try:
+        contract.validate_authority_precedes_run(predecessor, run["created_at"])
+    except contract.ContractError as exc:
+        raise ReadbackError("predecessor request/auth/pin does not precede its failed run") from exc
+    if run["display_title"] != contract.expected_run_title(predecessor):
+        raise ReadbackError("predecessor display title does not bind its exact V1 request")
+    blob_oid, blob_digest = _workflow_blob_at(api, run["dispatched_head_sha"])
+    return {
+        "schema": contract.PREDECESSOR_OBSERVATION_SCHEMA,
+        "repository": REPOSITORY,
+        "task_uid": predecessor.request["task_uid"],
+        "task_issue_number": predecessor.request["task_issue_number"],
+        "pr_number": predecessor.request["pr_number"],
+        "head_oid": predecessor.request["head_oid"],
+        "integration_base_oid": predecessor.request["integration_base_oid"],
+        "request_comment_id": predecessor.request_comment_id,
+        "request_body_digest": predecessor.request_body_digest,
+        "request_digest": predecessor.request["request_digest"],
+        "authorization_comment_id": predecessor.authorization_comment_id,
+        "authorization_body_digest": predecessor.authorization_body_digest,
+        "pin_comment_id": predecessor.pin_comment_id,
+        "pin_body_digest": predecessor.pin_body_digest,
+        "validation_id": predecessor.validation_id,
+        "workflow_id": run["workflow_id"],
+        "workflow_api_path": run["workflow_api_path"],
+        "workflow_default_branch": run["workflow_default_branch"],
+        "workflow_path": run["workflow_path"],
+        "workflow_ref": run["workflow_ref"],
+        "event_ref": run["event_ref"],
+        "event": run["event"],
+        # Workflow-runs REST does not expose historical workflow_dispatch
+        # inputs. The exact server-rendered title and immutable workflow blob
+        # bind the predecessor request commitment; they do not prove the old
+        # scope was executed.
+        "display_title": run["display_title"],
+        "dispatched_head_sha": run["dispatched_head_sha"],
+        "run_id": run["id"],
+        "run_attempt": run["run_attempt"],
+        "run_status": run["status"],
+        "run_conclusion": run["conclusion"],
+        "run_head_sha": run["dispatched_head_sha"],
+        "run_terminal_updated_at": run["updated_at"],
+        "workflow_blob_oid": blob_oid,
+        "workflow_blob_digest": blob_digest,
+    }
 
 
 def _latest_validation_check(api: GitHubReadOnly, run: Mapping[str, Any]) -> dict[str, Any]:
@@ -454,8 +804,12 @@ def _latest_validation_check(api: GitHubReadOnly, run: Mapping[str, Any]) -> dic
 
 def _exact_artifact(api: GitHubReadOnly, run: Mapping[str, Any], authority: Any) -> Mapping[str, Any]:
     rows = _collection_rows(api.artifact_pages(run["id"]), "artifacts", "run artifacts")
-    expected_name = contract.artifact_name(authority.validation_id, run["id"], run["run_attempt"])
-    attempt_prefix = f"oasis7-ci-reuse-validation-v1-{authority.validation_id}-r{run['id']}-a"
+    successor = contract.is_successor_authority(authority)
+    expected_name = contract.artifact_name(
+        authority.validation_id, run["id"], run["run_attempt"], successor=successor,
+    )
+    version = 2 if successor else 1
+    attempt_prefix = f"oasis7-ci-reuse-validation-v{version}-{authority.validation_id}-r{run['id']}-a"
     candidates: list[Mapping[str, Any]] = []
     for item in rows:
         name = item.get("name")
@@ -529,10 +883,10 @@ def _projection_digest_from_v2(body: str, expected: Mapping[str, Any], pr: Mappi
         result = resolver.resolve(
             body, task_uid=expected["task_uid"], source_head_oid=expected["head_oid"],
             scope_base_oid=expected["source_scope_oid"], publication=publication,
-            binding=binding, repository=REPOSITORY, pr_number=PR_NUMBER,
+            binding=binding, repository=REPOSITORY, pr_number=expected["pr_number"],
             planner_config_sha256=publication["planner_config_sha256"],
             required_protocol="v2",
-            live={"repository": REPOSITORY, "pr_number": PR_NUMBER,
+            live={"repository": REPOSITORY, "pr_number": expected["pr_number"],
                   "repository_id": pr.get("base", {}).get("repo", {}).get("id"),
                   "source_repository_id": pr.get("head", {}).get("repo", {}).get("id"),
                   "head_oid": pr.get("head", {}).get("sha"),
@@ -583,6 +937,8 @@ def _trusted_inventory(context: Mapping[str, Any], run: Mapping[str, Any], check
                        workflow_sha: str, default_branch: str) -> tuple[Any, str, str]:
     """Recompute exact-W M/T and the complete dispatch inventory, without tests."""
     task_uid = context["task_uid"]
+    task_issue_number = context["task_issue_number"]
+    pr_number = context["pr_number"]
     base, head = context["integration_base_oid"], context["head_oid"]
     source_scope, projection_digest = context["source_scope_oid"], context["projection_digest"]
     try:
@@ -594,7 +950,7 @@ def _trusted_inventory(context: Mapping[str, Any], run: Mapping[str, Any], check
                 subprocess.run([
                     "git", "-C", str(repo_root), "fetch", "--no-tags", "origin",
                     f"+refs/heads/{default_branch}:refs/remotes/origin/{default_branch}",
-                    f"+refs/pull/{PR_NUMBER}/head:refs/remotes/origin/pr-{PR_NUMBER}",
+                    f"+refs/pull/{pr_number}/head:refs/remotes/origin/pr-{pr_number}",
                 ], check=True, capture_output=True, text=True)
             except (OSError, subprocess.CalledProcessError) as exc:
                 raise ReadbackError("exact W/B/H objects cannot be fetched to a disposable repository") from exc
@@ -662,7 +1018,7 @@ def _trusted_inventory(context: Mapping[str, Any], run: Mapping[str, Any], check
             try:
                 result = inventory.build_required_inventory(
                     w_root, m_root, merge_oid, planner_output,
-                    repository=REPOSITORY, workflow_ref=WORKFLOW_REF,
+                    repository=REPOSITORY, workflow_ref=run["workflow_ref"],
                     planner_authority_oid=workflow_sha, event_name="workflow_dispatch",
                     run_mode="legacy", changed_paths=changed_paths,
                     base_ref=base, head_ref=head, task_uid=task_uid,
@@ -689,7 +1045,8 @@ def _trusted_inventory(context: Mapping[str, Any], run: Mapping[str, Any], check
             if set(obligations) != set(ids):
                 raise ReadbackError("exact-W obligation sets do not cover the complete inventory")
             trusted = contract.TrustedRequestContext(
-                task_uid=task_uid, head_oid=head, source_scope_oid=source_scope,
+                task_uid=task_uid, task_issue_number=task_issue_number,
+                pr_number=pr_number, head_oid=head, source_scope_oid=source_scope,
                 projection_digest=projection_digest, planner_unit_ids=tuple(ids),
                 planner_unit_obligations=obligations,
             )
@@ -704,7 +1061,7 @@ def _compare_issue_authority(left: Any, right: Any) -> None:
     fields = (
         "validation_id", "request_comment_id", "authorization_comment_id", "pin_comment_id",
         "request_body_digest", "authorization_body_digest", "pin_body_digest",
-        "authorized_actor", "pin_actor", "comment_timestamps",
+        "authorized_actor", "request_actor", "pin_actor", "comment_timestamps",
     )
     for field in fields:
         if getattr(left, field, None) != getattr(right, field, None):
@@ -716,7 +1073,10 @@ def _compare_issue_authority(left: Any, right: Any) -> None:
 
 def _compare_authority(left: Any, right: Any) -> None:
     _compare_issue_authority(left, right)
-    for field in ("approval_permission", "pin_permission", "permission_snapshot_bound"):
+    for field in (
+        "approval_permission", "request_permission", "pin_permission",
+        "permission_snapshot_bound",
+    ):
         if getattr(left, field, None) != getattr(right, field, None):
             raise ReadbackError(f"recorded permission snapshot changed at {field}")
 
@@ -728,7 +1088,8 @@ _AUTHORITY_RECORD_FIELDS = (
     "request_comment_id", "request_body_digest", "request_digest",
     "authorization_comment_id", "authorization_body_digest", "pin_comment_id",
     "pin_body_digest", "authorized_actor", "pin_actor", "approval_permission",
-    "pin_permission", "run_id", "workflow_id", "workflow_path", "workflow_ref",
+    "pin_permission", "run_id", "workflow_id", "workflow_api_path",
+    "workflow_default_branch", "workflow_path", "workflow_ref", "event_ref",
     "workflow_sha", "event", "display_title", "dispatched_head_sha",
 )
 
@@ -736,11 +1097,18 @@ _AUTHORITY_RECORD_FIELDS = (
 def _authority_record_from_payload(payload: Mapping[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, Mapping):
         raise ReadbackError("downloaded validation payload is not an object")
+    successor = payload.get("schema") == contract.SUCCESSOR_PAYLOAD_SCHEMA
+    if payload.get("schema") not in {contract.PAYLOAD_SCHEMA, contract.SUCCESSOR_PAYLOAD_SCHEMA}:
+        raise ReadbackError("downloaded payload schema is unsupported")
+    fields = set(contract._AUTHORITY_RECORD_FIELDS)
+    if successor:
+        fields = set(contract._SUCCESSOR_AUTHORITY_FIELDS)
     try:
-        record = {key: payload[key] for key in _AUTHORITY_RECORD_FIELDS}
+        record = {key: payload[key] for key in fields if key != "schema"}
     except KeyError as exc:
         raise ReadbackError("downloaded payload lacks its complete authority record") from exc
-    record["schema"] = contract.AUTHORITY_SCHEMA
+    record["schema"] = (contract.SUCCESSOR_AUTHORITY_SCHEMA
+                        if successor else contract.AUTHORITY_SCHEMA)
     return record
 
 
@@ -767,9 +1135,21 @@ def _parse_payload_bytes(payload_bytes: bytes) -> dict[str, Any]:
 
 
 def _recheck_comments(api: GitHubReadOnly, initial: Any, context: Any,
-                      authority_record: Mapping[str, Any], run_created_at: str) -> Any:
-    pages = api.issue_comment_pages()
-    _, provisional = _resolve_records(pages)
+                      authority_record: Mapping[str, Any], run_created_at: str,
+                      workflow_id: int, default_branch: str,
+                      repository_id: int | None) -> Any:
+    pages = api.issue_comment_pages(context.task_issue_number)
+    comments = _flatten_array_pages(pages, "Issue comment")
+    expected_identity = {
+        "task_uid": context.task_uid,
+        "task_issue_number": context.task_issue_number,
+        "pr_number": context.pr_number,
+        "head_oid": context.head_oid,
+        "integration_base_oid": initial.request["integration_base_oid"],
+    }
+    provisional, _predecessor = _resolve_records_with_predecessor(
+        api, comments, expected_identity, workflow_id, default_branch, repository_id,
+    )
     _compare_issue_authority(initial, provisional)
     contract.validate_authority_precedes_run(provisional, run_created_at)
     authority = contract.bind_recorded_admin_snapshot(provisional, authority_record)
@@ -781,13 +1161,19 @@ def _recheck_comments(api: GitHubReadOnly, initial: Any, context: Any,
 def _envelope(authority: Any, run: Mapping[str, Any], check: Mapping[str, Any],
               artifact: Mapping[str, Any], payload_bytes: bytes, archive_bytes: bytes) -> dict[str, Any]:
     record = contract.build_authority_record(authority, run)
-    return {
-        "schema": contract.READBACK_SCHEMA,
+    successor = contract.is_successor_authority(authority)
+    envelope = {
+        "schema": (contract.SUCCESSOR_READBACK_SCHEMA
+                   if successor else contract.READBACK_SCHEMA),
         "authority_digest": contract.authority_digest(record),
         "validation_id": authority.validation_id,
         "run_id": run["id"], "run_attempt": run["run_attempt"],
-        "workflow_id": run["workflow_id"], "workflow_path": run["workflow_path"],
-        "workflow_ref": run["workflow_ref"], "workflow_sha": run["workflow_sha"],
+        "workflow_id": run["workflow_id"],
+        "workflow_api_path": run["workflow_api_path"],
+        "workflow_default_branch": run["workflow_default_branch"],
+        "workflow_path": run["workflow_path"],
+        "workflow_ref": run["workflow_ref"], "event_ref": run["event_ref"],
+        "workflow_sha": run["workflow_sha"],
         "event": run["event"], "display_title": run["display_title"],
         "dispatched_head_sha": run["dispatched_head_sha"],
         "check_name": check["name"], "check_run_id": check["id"],
@@ -796,25 +1182,56 @@ def _envelope(authority: Any, run: Mapping[str, Any], check: Mapping[str, Any],
         "artifact_content_digest": contract.body_digest(archive_bytes),
         "payload_digest": contract.body_digest(payload_bytes),
     }
+    if successor:
+        for key in (
+            "successor_sequence", "reason", "predecessor", "predecessor_digest",
+            "successor_workflow", "successor_workflow_digest", "request_actor",
+            "request_permission",
+        ):
+            envelope[key] = record[key]
+    return envelope
 
 
-def read_validation(api: GitHubReadOnly | None = None) -> dict[str, Any]:
-    """Perform one bounded readback pass; never dispatches, reruns, or writes."""
+def read_validation(task_uid: str, api: GitHubReadOnly | None = None) -> dict[str, Any]:
+    """Read back the unique Project-backed Task selected by its UID."""
     api = api or GitHubReadOnly()
-    issue = api.get_json(f"repos/{REPOSITORY}/issues/{TASK_ISSUE_NUMBER}")
-    if not isinstance(issue, Mapping):
-        raise ReadbackError("live Task Issue response is malformed")
-    task_uid = _live_task_uid(issue)
-    pr = api.get_json(f"repos/{REPOSITORY}/pulls/{PR_NUMBER}")
+    if type(task_uid) is not str or not _TASK_UID_RE.fullmatch(task_uid):
+        raise ReadbackError("Task UID selector is malformed")
+    selected_issue = api.resolve_project_task_issue(task_uid)
+    task_issue_number = _positive_int(selected_issue.get("number"), "Task Issue number")
+    if _live_task_uid(selected_issue, task_issue_number) != task_uid:
+        raise ReadbackError("live Project-backed Task Issue changed its Task UID")
+    pr_number, pr_url = _live_task_pr(selected_issue, task_uid)
+    issue = api.get_json(f"repos/{REPOSITORY}/issues/{task_issue_number}")
+    if (not isinstance(issue, Mapping) or issue.get("html_url") != selected_issue.get("url")
+            or issue.get("body") != selected_issue.get("body")
+            or _live_task_uid(issue, task_issue_number) != task_uid):
+        raise ReadbackError("live Task Issue REST identity differs from its Project-backed record")
+    live_pr_number, live_pr_url = _live_task_pr(issue, task_uid)
+    if (live_pr_number != pr_number or live_pr_url != pr_url):
+        raise ReadbackError("live Task Issue PR mapping changed during resolution")
+    pr = api.get_json(f"repos/{REPOSITORY}/pulls/{pr_number}")
     if not isinstance(pr, Mapping):
         raise ReadbackError("live reciprocal PR response is malformed")
-    pr_head, _ = _check_live_pr(pr, task_uid)
-    initial_comments, provisional = _resolve_records(api.issue_comment_pages())
-    request = provisional.request
-    if (request["task_uid"] != task_uid or request["head_oid"] != pr_head
-            or request["integration_base_oid"] != pr.get("base", {}).get("sha")):
-        raise ReadbackError("frozen request differs from live Task UID or PR head")
+    pr_head, _ = _check_live_pr(pr, task_uid, task_issue_number, pr_number)
+    expected_identity = {
+        "task_uid": task_uid, "task_issue_number": task_issue_number,
+        "pr_number": pr_number, "head_oid": pr_head,
+        "integration_base_oid": pr.get("base", {}).get("sha"),
+    }
     workflow_id, default_branch, repository_id = _live_workflow(api)
+    initial_comments = _flatten_array_pages(
+        api.issue_comment_pages(task_issue_number), "Issue comment",
+    )
+    provisional, predecessor_observation = _resolve_records_with_predecessor(
+        api, initial_comments, expected_identity, workflow_id, default_branch, repository_id,
+    )
+    request = provisional.request
+    if (request["task_uid"] != task_uid
+            or request["task_issue_number"] != task_issue_number
+            or request["pr_number"] != pr_number or request["head_oid"] != pr_head
+            or request["integration_base_oid"] != pr.get("base", {}).get("sha")):
+        raise ReadbackError("frozen request differs from Project-backed Task UID/Issue or reciprocal PR")
     pages = api.workflow_run_pages(workflow_id, repository_id)
     complete_runs = contract.collect_workflow_runs(pages)
     selected = contract.select_unique_run(complete_runs, provisional)
@@ -822,7 +1239,9 @@ def read_validation(api: GitHubReadOnly | None = None) -> dict[str, Any]:
     if run["display_title"] != contract.expected_run_title(provisional):
         raise ReadbackError("live selected run title differs from frozen request")
     contract.validate_authority_precedes_run(provisional, run["created_at"])
-    if run["workflow_ref"] != WORKFLOW_REF or run["event"] != "workflow_dispatch":
+    if (run["workflow_ref"] != f"{REPOSITORY}/{WORKFLOW_FILE}@refs/heads/{default_branch}"
+            or run["event_ref"] != f"refs/heads/{default_branch}"
+            or run["event"] != "workflow_dispatch"):
         raise ReadbackError("selected run is not from the canonical default-branch dispatch")
     if run["workflow_sha"] != run["dispatched_head_sha"]:
         raise ReadbackError("run workflow SHA differs from dispatched workflow head")
@@ -834,12 +1253,17 @@ def read_validation(api: GitHubReadOnly | None = None) -> dict[str, Any]:
     authority_record = _authority_record_from_payload(payload)
     context_data = {
         "task_uid": task_uid,
+        "task_issue_number": task_issue_number,
+        "pr_number": pr_number,
         "head_oid": request["head_oid"],
         "integration_base_oid": request["integration_base_oid"],
         "source_scope_oid": request["source_scope_oid"],
         "projection_digest": request["projection_digest"],
         "repository_id": pr.get("base", {}).get("repo", {}).get("id"),
         "source_repository_id": pr.get("head", {}).get("repo", {}).get("id"),
+        "workflow_id": workflow_id,
+        "workflow_default_branch": default_branch,
+        "repository_id": repository_id,
     }
     # The exact W projection resolver and inventory replay verify H/S/D against
     # the live PR before an authorization context is built.
@@ -858,8 +1282,20 @@ def read_validation(api: GitHubReadOnly | None = None) -> dict[str, Any]:
     # only after run/check/artifact provenance and canonical payload bytes.
     final_authority = _recheck_comments(
         api, authority, trusted_context, authority_record, run["created_at"],
+        workflow_id, default_branch, repository_id,
     )
     _compare_authority(authority, final_authority)
+    final_project_issue = api.resolve_project_task_issue(task_uid)
+    if (final_project_issue.get("number") != task_issue_number
+            or final_project_issue.get("body") != issue.get("body")
+            or final_project_issue.get("url") != issue.get("html_url")
+            or final_project_issue.get("project_item_id") != selected_issue.get("project_item_id")):
+        raise ReadbackError("final Project-backed Task Issue identity differs from initial read")
+    final_issue = api.get_json(f"repos/{REPOSITORY}/issues/{task_issue_number}")
+    if (not isinstance(final_issue, Mapping) or final_issue.get("body") != issue.get("body")
+            or _live_task_uid(final_issue, task_issue_number) != task_uid
+            or _live_task_pr(final_issue, task_uid) != (pr_number, pr_url)):
+        raise ReadbackError("final Task Issue body or PR mapping changed during readback")
     final_pages = api.workflow_run_pages(workflow_id, repository_id)
     final_runs = contract.collect_workflow_runs(final_pages)
     final_selected = contract.select_unique_run(final_runs, final_authority)
@@ -869,8 +1305,11 @@ def read_validation(api: GitHubReadOnly | None = None) -> dict[str, Any]:
     if (final_run["id"] != run["id"] or final_run["run_attempt"] != run["run_attempt"]
             or final_run["status"] != "completed" or final_run["conclusion"] != "success"
             or final_run["workflow_id"] != run["workflow_id"]
+            or final_run["workflow_api_path"] != run["workflow_api_path"]
+            or final_run["workflow_default_branch"] != run["workflow_default_branch"]
             or final_run["workflow_path"] != run["workflow_path"]
             or final_run["workflow_ref"] != run["workflow_ref"]
+            or final_run["event_ref"] != run["event_ref"]
             or final_run["event"] != run["event"]
             or final_run["display_title"] != run["display_title"]
             or final_run["workflow_sha"] != run["workflow_sha"]
@@ -885,10 +1324,10 @@ def read_validation(api: GitHubReadOnly | None = None) -> dict[str, Any]:
 
 
 def main() -> None:
-    if len(sys.argv) != 1:
-        raise SystemExit("ci-reuse-validation-readback accepts no arguments")
+    if len(sys.argv) != 3 or sys.argv[1] != "--task-uid":
+        raise SystemExit("ci-reuse-validation-readback requires --task-uid <TASK-UID>")
     try:
-        value = read_validation()
+        value = read_validation(sys.argv[2])
     except (ReadbackError, contract.ContractError) as exc:
         raise SystemExit(f"ci-reuse-validation-readback: {exc}") from exc
     print(json.dumps(value, sort_keys=True, separators=(",", ":")))

@@ -126,6 +126,7 @@ LIVEOPS_EVIDENCE="n/a; no external/player/community messaging surface"
 COMPARISON_REF="refs/remotes/origin/main"
 COMPARISON_OID=""
 REVIEW_PLAN=""
+REVIEW_PLAN_BATCH=""
 REVIEW_EVIDENCE_DIGEST=""
 REVIEW_PLAN_SCHEMA=""
 SOURCE_REVIEW_DIGEST=""
@@ -174,7 +175,6 @@ done
 [[ -n "$REVIEW_VERDICTS" ]] || die "--review-verdicts is required"
 [[ -n "$FINDING_DISPOSITION_EVIDENCE" ]] || die "--finding-disposition-evidence is required"
 [[ -n "$VERIFICATION" ]] || die "--verification is required"
-[[ -n "$RESIDUAL_RISK" ]] || die "--residual-risk is required"
 
 if [[ -n "$(git status --porcelain)" ]]; then
   if [[ "$ALLOW_DIRTY" != "1" || -z "$REVIEWED_PATHS" || -z "$SOURCE_HEAD" ]]; then
@@ -264,6 +264,7 @@ print(preflight["ledger_path"])
 print(schema)
 print(plan.get("source_review_digest", ""))
 print(plan.get("integration_ci_digest", ""))
+print(plan["batch_path"])
 PY
 )" || exit 1
   ROLES="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '1p')"
@@ -276,6 +277,7 @@ PY
   REVIEW_PLAN_SCHEMA="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '8p')"
   SOURCE_REVIEW_DIGEST="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '9p')"
   INTEGRATION_CI_DIGEST="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '10p')"
+  REVIEW_PLAN_BATCH="$(printf '%s\n' "$PLAN_FIELDS" | sed -n '11p')"
 fi
 if [[ -z "$REVIEW_PLAN" ]]; then
   [[ -n "$ROLES" ]] || die "--roles is required when --review-plan is not supplied"
@@ -297,6 +299,170 @@ fi
 REVIEW_PLAN_DISPLAY="$(sanitize_evidence_path_field "Review Plan" "$REVIEW_PLAN")"
 if [[ -n "$REVIEW_PLAN" ]]; then
   REVIEW_PLAN_LEDGER="$(resolve_repo_owned_path "Review Plan preflight ledger" "$REVIEW_PLAN_LEDGER")" || exit 1
+  python3 - "$ROOT_DIR" "$REVIEW_PLAN" "$TASK_UID" "$SOURCE_HEAD" \
+    "$REVIEW_PLAN_EPOCH" "$REVIEW_EVIDENCE_DIGEST" "$ROLES" "$REVIEW_PLAN_LEDGER" \
+    "$SCRIPT_DIR/review-batch-epoch.py" <<'PY' || exit 1
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+import shlex
+import sys
+import uuid
+from pathlib import Path
+
+root, plan_path, task_uid, frozen_head, supplied_epoch, evidence_digest, roles_csv, ledger_path, helper_path = sys.argv[1:]
+root_path = Path(root).resolve(strict=True)
+plan_file = Path(plan_path).resolve(strict=True)
+
+def reject_duplicates(pairs):
+    value = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError(f"duplicate JSON key: {key}")
+        value[key] = item
+    return value
+
+try:
+    plan = json.loads(plan_file.read_text(encoding="utf-8"), object_pairs_hook=reject_duplicates)
+except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+    raise SystemExit(f"error: cannot validate review-plan batch identity: {exc}")
+if not isinstance(plan, dict):
+    raise SystemExit("error: review-plan batch identity is not an object")
+
+schema = plan.get("schema")
+if schema not in {"oasis7-review-plan/v1", "oasis7-review-plan/v2"}:
+    raise SystemExit("error: review-plan batch identity has an unsupported schema")
+if plan.get("task_uid") != task_uid or plan.get("frozen_head") != frozen_head:
+    raise SystemExit("error: review-plan batch task or frozen-head identity mismatch")
+if plan.get("epoch") != supplied_epoch:
+    raise SystemExit("error: review-plan batch epoch does not match validated plan fields")
+plan_roles = plan.get("roles")
+expected_slices = plan.get("expected_slices")
+roles = roles_csv.split(",") if roles_csv else []
+if (not isinstance(plan_roles, list) or not plan_roles
+        or any(not isinstance(role, str) or not role for role in plan_roles)
+        or plan_roles != roles):
+    raise SystemExit("error: review-plan batch roles do not match validated review roles")
+if (not isinstance(expected_slices, list) or len(expected_slices) != len(plan_roles)
+        or [item.get("role") if isinstance(item, dict) else None for item in expected_slices] != plan_roles):
+    raise SystemExit("error: review-plan batch expected slices do not match validated roles")
+
+role_pattern = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]*\Z")
+task_pattern = re.compile(r"task_[0-9a-f]{32}\Z")
+head_pattern = re.compile(r"[0-9a-f]{40,64}\Z")
+sha_pattern = re.compile(r"[0-9a-f]{64}\Z")
+if not task_pattern.fullmatch(task_uid) or not head_pattern.fullmatch(frozen_head):
+    raise SystemExit("error: review-plan batch task or head identity is malformed")
+if schema == "oasis7-review-plan/v1":
+    evidence = plan.get("relevant_evidence_digest")
+else:
+    evidence = plan.get("source_review_digest")
+    if plan.get("relevant_evidence_digest") != evidence:
+        raise SystemExit("error: v2 review-plan batch evidence identity is inconsistent")
+if not isinstance(evidence, str) or not sha_pattern.fullmatch(evidence) or evidence != evidence_digest:
+    raise SystemExit("error: review-plan batch evidence digest is invalid")
+
+seen_roles: set[str] = set()
+seen_ids: set[str] = set()
+normalized_slices: list[dict[str, str]] = []
+for item in expected_slices:
+    if not isinstance(item, dict) or set(item) != {"role", "slice_id"}:
+        raise SystemExit("error: review-plan batch expected slice shape is invalid")
+    role = item.get("role")
+    slice_id = item.get("slice_id")
+    if not isinstance(role, str) or not role_pattern.fullmatch(role):
+        raise SystemExit("error: review-plan batch role is invalid")
+    if not isinstance(slice_id, str):
+        raise SystemExit("error: review-plan batch slice ID is invalid")
+    try:
+        parsed_id = uuid.UUID(slice_id)
+    except ValueError:
+        raise SystemExit("error: review-plan batch slice ID is invalid")
+    if str(parsed_id) != slice_id.lower():
+        raise SystemExit("error: review-plan batch slice ID is not a canonical UUID")
+    if role in seen_roles or slice_id in seen_ids:
+        raise SystemExit("error: review-plan batch has duplicate role or slice identity")
+    seen_roles.add(role)
+    seen_ids.add(slice_id)
+    normalized_slices.append({"role": role, "slice_id": slice_id})
+
+batch_identity = {
+    "task_uid": task_uid,
+    "frozen_head": frozen_head,
+    "relevant_evidence_digest": evidence,
+    "expected_slices": sorted(normalized_slices, key=lambda item: (item["role"], item["slice_id"])),
+}
+expected_epoch = hashlib.sha256(json.dumps(
+    batch_identity, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+).encode()).hexdigest()
+if supplied_epoch != expected_epoch:
+    raise SystemExit("error: review-plan batch epoch does not match its immutable identity")
+
+expected_batch = (root_path / ".pm" / "scratch" / task_uid / "review-batches" / f"{expected_epoch}.json").resolve(strict=False)
+batch_raw = plan.get("batch_path")
+if not isinstance(batch_raw, str) or not batch_raw.strip():
+    raise SystemExit("error: review-plan batch path is missing or invalid")
+raw_batch = Path(batch_raw).expanduser()
+batch_path = (raw_batch if raw_batch.is_absolute() else root_path / raw_batch).resolve(strict=False)
+try:
+    batch_path.relative_to(root_path)
+except ValueError:
+    raise SystemExit("error: review-plan batch path escapes repository root")
+if "collection_path" in plan:
+    raw_collection = Path(str(plan["collection_path"])).expanduser()
+    collection_path = (raw_collection if raw_collection.is_absolute() else root_path / raw_collection).resolve(strict=False)
+    planned_collection = batch_path.with_name(f"{batch_path.stem}.collection.json")
+    if collection_path != planned_collection:
+        raise SystemExit("error: review-plan collection path does not match its batch path")
+preflight = plan.get("preflight")
+if not isinstance(preflight, dict) or not isinstance(preflight.get("ledger_path"), str):
+    raise SystemExit("error: review-plan preflight ledger path is invalid")
+plan_ledger_raw = Path(preflight["ledger_path"]).expanduser()
+plan_ledger = (plan_ledger_raw if plan_ledger_raw.is_absolute() else root_path / plan_ledger_raw).resolve(strict=True)
+if Path(ledger_path).resolve(strict=True) != plan_ledger:
+    raise SystemExit("error: review-plan preflight ledger path changed during validation")
+
+# Existing repository-owned batch paths keep the established recorder path.
+# For a missing batch, only suggest the helper command when the planned path is
+# exactly the helper's default epoch path; custom paths require --out and cannot
+# be reconstructed under the approved create-once recovery contract.
+if batch_path.exists():
+    resolved_batch = batch_path.resolve(strict=True)
+    try:
+        resolved_batch.relative_to(root_path)
+    except ValueError:
+        raise SystemExit("error: review-plan batch path escapes repository root")
+    if not resolved_batch.is_file():
+        raise SystemExit("error: review-plan batch path is not a file")
+    sys.exit(0)
+
+if raw_batch.is_symlink():
+    raise SystemExit("error: review-plan batch path is a symlink; refusing recovery hint")
+if batch_path != expected_batch:
+    raise SystemExit("error: no_safe_repair; new_review_epoch_required: missing custom plan batch path; regenerate plan for a new epoch")
+collections = {
+    batch_path.with_name(f"{batch_path.stem}.collection.json"),
+    expected_batch.with_name(f"{expected_epoch}.collection.json"),
+}
+if any(collection.exists() or collection.is_symlink() for collection in collections):
+    raise SystemExit("error: immutable review batch is missing but its collection exists; refusing regeneration")
+for parent in batch_path.parents:
+    if parent == root_path.parent:
+        break
+    if parent.exists() and not parent.is_dir():
+        raise SystemExit(f"error: cannot regenerate review batch because a parent is not a directory: {parent}")
+
+command = ["python3", str(Path(helper_path).resolve(strict=True)), "--root", str(root_path), "create",
+           "--task-uid", task_uid, "--head", frozen_head, "--evidence-digest", evidence]
+for item in batch_identity["expected_slices"]:
+    command.extend(("--slice", f"{item['role']}={item['slice_id']}"))
+print("error: immutable review-plan batch is missing; this recovery command was not executed:", file=sys.stderr)
+print("  " + shlex.join(command), file=sys.stderr)
+raise SystemExit(1)
+PY
+  REVIEW_PLAN_BATCH="$(resolve_repo_owned_path "Review Plan batch" "$REVIEW_PLAN_BATCH")" || exit 1
   if [[ "$SLICE_LEDGER" == n/a* ]]; then
     SLICE_LEDGER="$REVIEW_PLAN_LEDGER"
   else
@@ -306,11 +472,33 @@ if [[ -n "$REVIEW_PLAN" ]]; then
     SLICE_LEDGER="$SUPPLIED_SLICE_LEDGER"
   fi
 fi
+PROMOTION_COLLECTED=0
+PROMOTION_RESULT=""
 if [[ -n "$FINDING_RESOLUTION" ]]; then
   if [[ -n "$REPO" && "$REPO" != "eng-cc/oasis7" ]]; then
     die "--repo must match canonical repository eng-cc/oasis7 when --finding-resolution is used"
   fi
   FINDING_RESOLUTION="$(resolve_repo_owned_path "Finding Resolution" "$FINDING_RESOLUTION")" || exit 1
+  MANIFEST_SCHEMA="$(python3 - "$FINDING_RESOLUTION" <<'PY'
+import json, pathlib, sys
+
+def reject_duplicates(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise SystemExit(f"error: duplicate key in finding resolution manifest: {key}")
+        result[key] = value
+    return result
+
+try:
+    value = json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"), object_pairs_hook=reject_duplicates)
+except (OSError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"error: finding resolution manifest is invalid: {exc}")
+if not isinstance(value, dict):
+    raise SystemExit("error: finding resolution manifest is not an object")
+print(value.get("schema", ""))
+PY
+)" || exit 1
   RESOLUTION_COMMAND=(python3 "$SCRIPT_DIR/review-findings-resolution.py" validate
     --root "$ROOT_DIR" --task-uid "$TASK_UID" --head "$SOURCE_HEAD"
     --ledger "$SLICE_LEDGER" --manifest "$FINDING_RESOLUTION")
@@ -334,6 +522,97 @@ PY
   fi
   RESOLUTION_RESULT="$("${RESOLUTION_COMMAND[@]}")" \
     || die "finding-resolution validation failed"
+  if [[ "$MANIFEST_SCHEMA" == "oasis7-review-resolution/v2" ]]; then
+    PROMOTION_CAPTURE="$(
+      python3 "$SCRIPT_DIR/review_preflight_handoff.py" promote \
+        --root "$ROOT_DIR" --plan "$REVIEW_PLAN" --manifest "$FINDING_RESOLUTION" \
+        --task-uid "$TASK_UID" --head "$SOURCE_HEAD" --epoch "$REVIEW_PLAN_EPOCH"
+      child_status=$?
+      printf '\036'
+      exit "$child_status"
+    )" || die "v2 handoff promotion transaction failed"
+    [[ "$PROMOTION_CAPTURE" == *$'\036' ]] || die "v2 handoff promotion returned no complete response"
+    PROMOTION_RESULT="${PROMOTION_CAPTURE%$'\036'}"
+    [[ "$PROMOTION_RESULT" == *$'\n' ]] || die "v2 handoff promotion response is not one line"
+    PROMOTION_RESULT="${PROMOTION_RESULT%$'\n'}"
+    [[ "$PROMOTION_RESULT" != *$'\n'* && "$PROMOTION_RESULT" != *$'\r'* ]] \
+      || die "v2 handoff promotion returned extra stdout"
+    RESOLUTION_RESULT="$(python3 - "$ROOT_DIR" "$PROMOTION_RESULT" "$TASK_UID" "$SOURCE_HEAD" \
+      "$REVIEW_PLAN_EPOCH" "$FINDING_RESOLUTION" "$SLICE_LEDGER" "$REVIEW_PLAN_BATCH" "$ROLES" <<'PY'
+import hashlib, json, pathlib, sys
+
+root, raw, task_uid, head, epoch, manifest_path, ledger_path, batch_path, roles_csv = sys.argv[1:]
+
+def reject_duplicates(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+try:
+    response = json.loads(raw, object_pairs_hook=reject_duplicates)
+except (ValueError, json.JSONDecodeError) as exc:
+    raise SystemExit(f"error: v2 handoff promotion response is not a single strict JSON object: {exc}")
+if not isinstance(response, dict) or set(response) != {
+    "status", "promotion", "task_uid", "head", "epoch", "resolution", "collection", "ledger_path", "reservation_path"
+}:
+    raise SystemExit("error: v2 handoff promotion response shape is invalid")
+if response.get("status") != "passed" or (response.get("task_uid"), response.get("head"), response.get("epoch")) != (task_uid, head, epoch):
+    raise SystemExit("error: v2 handoff promotion response identity mismatch")
+if response.get("promotion") not in {"applied", "applied_after_uncertain_error", "already_promoted"}:
+    raise SystemExit("error: v2 handoff promotion outcome is unsupported")
+root_path = pathlib.Path(root).resolve(strict=True)
+manifest_file = pathlib.Path(manifest_path).resolve(strict=True)
+ledger_file = pathlib.Path(ledger_path).resolve(strict=True)
+batch_file = pathlib.Path(batch_path).resolve(strict=True)
+try:
+    manifest = json.loads(manifest_file.read_text(encoding="utf-8"), object_pairs_hook=reject_duplicates)
+except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError) as exc:
+    raise SystemExit(f"error: validated v2 manifest cannot be reread: {exc}")
+if not isinstance(manifest, dict) or manifest.get("schema") != "oasis7-review-resolution/v2":
+    raise SystemExit("error: v2 manifest identity changed during promotion")
+resolution = response.get("resolution")
+if not isinstance(resolution, dict) or set(resolution) != {
+    "status", "aggregate", "task_uid", "head", "epoch", "manifest_digest", "resolver",
+    "repository", "issue_number", "comment_id", "readback"
+}:
+    raise SystemExit("error: v2 resolution result shape is invalid")
+if (resolution.get("status") != "passed" or resolution.get("task_uid") != task_uid
+        or resolution.get("head") != head or resolution.get("epoch") != epoch
+        or resolution.get("manifest_digest") != manifest.get("manifest_digest")
+        or resolution.get("aggregate") not in {"addressed", "no_findings"}
+        or resolution.get("repository") != "eng-cc/oasis7"
+        or not isinstance(resolution.get("resolver"), str) or not resolution["resolver"].strip()
+        or type(resolution.get("issue_number")) is not int or resolution["issue_number"] < 1
+        or type(resolution.get("comment_id")) is not int or resolution["comment_id"] < 1):
+    raise SystemExit("error: v2 resolution result identity or authorization binding mismatch")
+expected_readback = manifest_file.with_name(f"{manifest_file.stem}.readback.json").resolve(strict=True)
+if resolution.get("readback") != str(expected_readback):
+    raise SystemExit("error: v2 resolution result readback path mismatch")
+collection = response.get("collection")
+if not isinstance(collection, dict) or set(collection) != {
+    "schema", "status", "epoch", "task_uid", "frozen_head", "ledger_digest", "roles", "transport_retry", "collection_path"
+}:
+    raise SystemExit("error: v2 collection result shape is invalid")
+expected_roles = sorted(role for role in roles_csv.split(",") if role)
+collection_file = batch_file.with_name(f"{batch_file.stem}.collection.json").resolve(strict=True)
+ledger_digest = hashlib.sha256(ledger_file.read_bytes()).hexdigest()
+if (collection.get("schema") != "oasis7-review-collection/v1" or collection.get("status") != "passed"
+        or collection.get("epoch") != epoch or collection.get("task_uid") != task_uid
+        or collection.get("frozen_head") != head or collection.get("ledger_digest") != ledger_digest
+        or collection.get("roles") != expected_roles or type(collection.get("transport_retry")) is not bool
+        or collection.get("collection_path") != str(collection_file)):
+    raise SystemExit("error: v2 collection result identity or ledger digest mismatch")
+expected_reservation = root_path / ".pm" / "scratch" / task_uid / "review-reservations" / f"{epoch}.lock"
+if response.get("ledger_path") != str(ledger_file) or response.get("reservation_path") != str(expected_reservation):
+    raise SystemExit("error: v2 promotion ledger or reservation path mismatch")
+print(json.dumps(resolution, ensure_ascii=False, sort_keys=True, separators=(",", ":")))
+PY
+)" || die "v2 handoff promotion response validation failed"
+    PROMOTION_COLLECTED=1
+  fi
 else
   RESOLUTION_RESULT=""
 fi
@@ -483,6 +762,44 @@ if [[ -n "$RESOLUTION_RESULT" ]]; then
   FINDING_DISPOSITION_EVIDENCE="admin-authorized exact-head/finding resolution read back by $(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["resolver"])' "$RESOLUTION_RESULT")"
 else
   FINDING_DISPOSITION="no_findings"
+fi
+if [[ "$PROMOTION_COLLECTED" == "1" ]]; then
+  SUMMARY_FIELDS="$(python3 - "$SLICE_LEDGER" "$ROLES" "$RESIDUAL_RISK" "$RESOLUTION_RESULT" <<'PY'
+import json, pathlib, sys
+
+ledger_path, roles_csv, extra_risk, resolution_raw = sys.argv[1:]
+rows = [json.loads(line) for line in pathlib.Path(ledger_path).read_text(encoding="utf-8").splitlines() if line.strip()]
+roles = [role for role in roles_csv.split(",") if role]
+by_role = {row.get("role"): row for row in rows}
+if not rows or len(by_role) != len(rows) or set(by_role) != set(roles):
+    raise SystemExit("error: promoted role ledger does not match immutable plan roles")
+rows = [by_role[role] for role in roles]
+if any(row.get("status") != "completed" for row in rows):
+    raise SystemExit("error: promotion result left an incomplete role return")
+unresolved = [f'{row["role"]}: {row.get("findings")}' for row in rows if row.get("findings") != "no_findings"]
+resolution = json.loads(resolution_raw)
+if unresolved and (not resolution or resolution.get("aggregate") != "addressed"):
+    raise SystemExit("error: unresolved role findings block packet publication")
+if not unresolved and resolution.get("aggregate") != "no_findings":
+    raise SystemExit("error: no-findings ledger and v2 resolution aggregate mismatch")
+evidence = "; ".join(f'{row["role"]}: {row["findings"]}' for row in rows)
+verdicts = "; ".join(f'{row["role"]} scope={row["scope_verdict"]} risk={row["risk_verdict"]}' for row in rows)
+disposition = ("addressed via admin-authorized exact-head resolution" if resolution.get("aggregate") == "addressed"
+               else "; ".join(f'{row["role"]}: {row["findings"]}' for row in rows))
+evidence += f'; resolution manifest {resolution["manifest_digest"]} read back by {resolution["resolver"]}'
+risks = [f'{row["role"]}: {row["residual_risk"]}' for row in rows]
+if extra_risk.strip():
+    risks.append(extra_risk)
+print(",".join(roles)); print(evidence); print(verdicts); print(disposition); print("; ".join(risks))
+PY
+)" || die "v2 role summary derivation failed"
+  ROLES="$(printf '%s\n' "$SUMMARY_FIELDS" | sed -n '1p')"
+  REVIEW_EVIDENCE="$(printf '%s\n' "$SUMMARY_FIELDS" | sed -n '2p')"
+  REVIEW_VERDICTS="$(printf '%s\n' "$SUMMARY_FIELDS" | sed -n '3p')"
+  FINDING_DISPOSITION_EVIDENCE="$(printf '%s\n' "$SUMMARY_FIELDS" | sed -n '4p')"
+  RESIDUAL_RISK="$(printf '%s\n' "$SUMMARY_FIELDS" | sed -n '5p')"
+else
+  [[ -n "$RESIDUAL_RISK" ]] || die "--residual-risk is required"
 fi
 if [[ -z "$ISSUE_NUMBER" || -z "$REPO" ]]; then
   eval "$(python3 - "$TASK_UID" <<'PY'

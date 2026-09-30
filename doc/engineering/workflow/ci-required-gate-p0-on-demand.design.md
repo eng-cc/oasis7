@@ -1,14 +1,12 @@
 # 合入前门禁 P0：公共基线瘦身、能力独立执行与影响闭包解耦
 
 **设计 ID：OASIS7-CI-P0-SCOPE-1**<br>
-**版本：1.0.0**<br>
+**版本：1.0.1**<br>
 **状态：S0 候选规范已写入 canonical source，等待 review/merge；实施、验证与启用待完成**<br>
 **Owner：repository_health_engineer；独立验证：qa_engineer；协调：tpm**<br>
 **模块：engineering/workflow、testing/ci**<br>
 **审读日期：2026-09-24（Asia/Singapore）**<br>
-**固定源码基线：`eng-cc/oasis7@9d404f6ea863e0ec11aed0e8c6beb759189ce5fe`**<br>
-**诊断样本基线：`55e59b0b68a2843b873ab6c0a626ab2e0a88394f` 及相应 PR source head**<br>
-**S0 bootstrap HEAD：`a7bdf5ff5e934e04e5261e2a9518297ba475fb03`（前序规范 v1.20.0；代码事实仍固定于上方基线）**<br>
+**审读源码、诊断样本与规范输入的精确版本仅记录于对应 GitHub task evidence。**<br>
 **建议落位：`doc/engineering/workflow/ci-required-gate-p0-on-demand.design.md`**
 
 本文承接用户要求“把 P0 项，做成设计文档给我”，其中 P0 是上一轮诊断明确提出的三项：拆除公共基线中的无条件重自测；拆开 workflow、packaging、operational 三类能力的执行开关；分离影响范围闭包与 CI/复审就绪状态。本文不宣称这些改动已经发生，也不创建、绑定或修改任何 GitHub Task/PR。
@@ -23,7 +21,7 @@ P0-R1–R5 的规范性验收以 [required-gate capability-selection contract](.
 
 当前规划层与执行层不一致。`scripts/ci-tests.sh` 的 `run_required_gate_checks()` 直接执行文档校验器自测、测试网 clean-room／identity 工具自测、Cargo worktree 自测等；部分调用在 capability 开关之前。另一方面，planner 把 `workflow_governance`、`packaging_contracts` 和 `operational_contracts` 都映射成 `run_operational_contracts`。[S2][S3]
 
-所以，`scope=minimal` 并不代表只执行轻量普适检查；`scope=targeted` 也不代表只执行命中的专业域。PR #3955 的 Run `35979151984`、attempt 2 中，`required-gate` 为 21 分 26 秒，其中 `Run required test tier` 为 21 分 01 秒；工具链、Node、Trunk 和系统依赖的安装步骤都被跳过。这个样本主要慢在实际执行的测试集合，而不是安装或排队。[E1]
+所以，`scope=minimal` 并不代表只执行轻量普适检查；`scope=targeted` 也不代表只执行命中的专业域。一个已记录在对应 GitHub task evidence 的历史样本中，`required-gate` 为 21 分 26 秒，其中 `Run required test tier` 为 21 分 01 秒；工具链、Node、Trunk 和系统依赖的安装步骤都被跳过。这个样本主要慢在实际执行的测试集合，而不是安装或排队。[E1]
 
 另一个问题是：`closure_status` 被部分输入用于表达“CI/复审还在等待”，而投影构建器会将未完成的闭包升级为 full。这里需要纠正输入语义及其生产链路，而不能直接删除安全兜底。[S4]
 
@@ -82,7 +80,7 @@ P0-R1–R5 的规范性验收以 [required-gate capability-selection contract](.
 | receipt | `RUN_FIELDS` 固定列出当前开关并纳入 canonical planner。[S6] | 新增开关及新解释版本完整参与验收和摘要。 | 只改 YAML 会留下证据丢字段风险。 |
 | 资源准备 | 当前 Rust 需求推导包含“capabilities 减非 Rust 集合”的逻辑。[S3] | 新的文档自测能力不得误触发 Rust；Cargo fixture 依赖必须显式。 | 新增 capability 会影响工具链判定。 |
 
-现状与目标不能互相替代。代码事实仍固定读取 `9d404f6ea863e0ec11aed0e8c6beb759189ce5fe`；#3967 在 `a7bdf5ff5e934e04e5261e2a9518297ba475fb03` 上启动，source-of-truth 为 v1.20.0。对 planner、runner、workflow、local renderer 与 receipt/projection consumer 的路径级比较未发现这些代码文件在两提交间变化；后续代码任务仍须按其冻结 source head 重新核对并绑定 S0 合入后的规范 commit，不能把旧设计快照当作默示实施基线。
+现状与目标不能互相替代。设计阶段的历史源码快照、Task 身份和版本信息保存在对应 GitHub Project-backed task evidence 中，不在本流程文档中充当固定基线。该阶段的 planner、runner、workflow、local renderer 与 receipt/projection consumer 路径比较只作历史诊断；后续代码任务必须从当前受信源读取并重新核对实现，绑定 S0 合入后的规范 commit，不能把旧设计快照当作默示实施基线。
 
 ## 4. 边界与结构
 
@@ -107,7 +105,7 @@ PR body、任务作者输入、环境变量均不能独立成为减跑 authority
 
 继续保留 `run_product_doc_governance_check()` 的有效行为：产品 changed-range、产品 full-corpus、系统设计 changed-scope。继续执行 `lint-skills.sh`、`check-windows-paths.sh`、`check-script-executable-bits.sh`、`check-rust-file-size.sh` 等普适实际校验，以及有效投影消费验证、可信 Cargo 范围准入和已激活 profile 的完成检查。
 
-“只保留实际校验”不表示省略 checker-stage 的强制 admission；checker-stage 被选中时，其前置测试和 receipt 顺序仍须保留。只是把通用 checker 自测从每个文档 PR 的无条件路径移走。
+“只保留实际校验”不表示可通过 checker 专属 admission 或 receipt shortcut 减少准入。Checker、planner 或 scope-policy 改动按通用 `full_escalation` 执行全部 required tests；通用 checker 自测仍按其能力触发条件选择。
 
 公共基线不得无条件调用测试网／身份工具自测、Cargo fixture、打包自测或整个 PM 回归包。搬移清单必须逐项记录原入口、原调用、归属能力、触发依赖和 full 归属；未完成归属的调用不得直接删除。
 
@@ -118,7 +116,7 @@ PR body、任务作者输入、环境变量均不能独立成为减跑 authority
 | `required_gate_baseline` | 上述实际文档与普适校验、身份与准入检查；不放领域回归包 | 普通 required 恒定执行。 |
 | 新增 `doc_checker_contracts` | `product-doc-governance-check.test.py`、`product-doc-content-check.test.py`、`system-design-traceability-check.test.py`、`product-doc-content-callers.test.sh`、`doc-governance-check.test.sh` | 校验器、规则、Markdown parser、相关 fixture、调用接口或影响其行为的规范改变时运行。 |
 | 新增 `cargo_tooling_contracts` | `cargo-dev-windows-toolchain.test.sh`、`cargo-dev-worktree-isolation.test.sh`、`pm/new-task-worktree-cargo-cache-migration.test.sh`、`cargo-dev-lib.test.sh`、相关 Rust 工具检查器自测 | Cargo 开发包装器、worktree 缓存、相关 toolchain／配置／fixture 变化时运行；不是每个文档或 Rust 源文件变更都运行。 |
-| `workflow_governance` | 从 operational 提取现有 PM／loop／CI receipt 回归；迁入 planner、projection、checker-stage、CI 调用合同、skills 治理等相关自测 | PM 代码、执行指令、scope 规则、对应规范／fixture 变化。 |
+| `workflow_governance` | 从 operational 提取现有 PM／loop／CI receipt 回归；迁入 planner、projection、generic `full_escalation`、CI 调用合同、skills 治理等相关自测 | PM 代码、执行指令、scope 规则、对应规范／fixture 变化。 |
 | `packaging_contracts` | 现有 `run_packaging_contract_tests()`、发布 Trunk 缓存合同、归属于产物交付的其他自测 | 包结构、打包／交付脚本及其声明依赖变化。 |
 | `operational_contracts` | clean-room、clean-room-adapter、identity signing、CLI bridge、evidence aggregate、peer registry；现有部署／升级／回滚／离线 provider 合同测试 | 运维、身份／信任格式及其真实共享输入变化。 |
 | 既有 viewer／compile metrics 等能力 | 保持相应业务和工具合同；将其无条件调用放回所属能力 | 不扩大本次 P0 为全部套件重新分类。 |
@@ -405,16 +403,16 @@ P0 完成条件是 P0-R1–R5 均有独立验证，且必要用例、hosted 组�
 
 代码来源均固定到本文审读基线。它们支持“现状事实”；目标接口、版本名、新增能力、测试 ID 和性能门槛是本设计提出的改造，不能反向引用源码当作已经存在。
 
-- [S0] [main 基线对应提交](https://github.com/eng-cc/oasis7/commit/9d404f6ea863e0ec11aed0e8c6beb759189ce5fe)。
-- [S1] [Engineering Workflow Source of Truth（S0 前序版本 v1.20.0）](https://github.com/eng-cc/oasis7/blob/a7bdf5ff5e934e04e5261e2a9518297ba475fb03/doc/engineering/workflow/source-of-truth.md)：规范先行、文档实际校验、手动 loop／身份／授权边界及 ownership 分类。代码任务必须改为绑定 S0 合入后的准确 source commit。
-- [S2] [ci-tests.sh](https://github.com/eng-cc/oasis7/blob/9d404f6ea863e0ec11aed0e8c6beb759189ce5fe/scripts/ci-tests.sh)：`run_required_gate_checks()`、`run_product_doc_governance_check()` 和各 tier 的调用。
-- [S3] [plan-rust-required-scope.py](https://github.com/eng-cc/oasis7/blob/9d404f6ea863e0ec11aed0e8c6beb759189ce5fe/scripts/plan-rust-required-scope.py)：三能力同一 FIELDS 输出、selector inventory、minimal 抑制、Rust 需求推导和闭包 full 验证。
-- [S4] [workflow-impact-projection.py](https://github.com/eng-cc/oasis7/blob/9d404f6ea863e0ec11aed0e8c6beb759189ce5fe/scripts/pm/workflow-impact-projection.py)：v2 严格字段、closure evidence、scope planner 和 `build_projection()` 的升级行为。
-- [S5] [ci-tests.sh 的 operational／packaging 入口](https://github.com/eng-cc/oasis7/blob/9d404f6ea863e0ec11aed0e8c6beb759189ce5fe/scripts/ci-tests.sh)：operational 内部嵌套 packaging 及 PM／loop 回归。
-- [S6] [ci-ready-receipt.py](https://github.com/eng-cc/oasis7/blob/9d404f6ea863e0ec11aed0e8c6beb759189ce5fe/scripts/pm/ci-ready-receipt.py) 和 [ci_ready_receipt_identity.py](https://github.com/eng-cc/oasis7/blob/9d404f6ea863e0ec11aed0e8c6beb759189ce5fe/scripts/pm/ci_ready_receipt_identity.py)：planner 字段、摘要和 source／integration 身份。
-- [S7] [系统设计写作规范](https://github.com/eng-cc/oasis7/blob/9d404f6ea863e0ec11aed0e8c6beb759189ce5fe/doc/engineering/doc-governance/system-design-writing-standard.design.md)：十二段结构、需求承接、候选／证据及兼容迁移要求。
-- [S8] [workflow-behavior-eval.sh](https://github.com/eng-cc/oasis7/blob/9d404f6ea863e0ec11aed0e8c6beb759189ce5fe/scripts/pm/workflow-behavior-eval.sh)：既有 `pr-lifecycle-gate.test.sh` 和 `pr-lifecycle-trust.test.sh` 回归入口。
-- [E1] [PR #3955 的 required-gate（Run 35979151984，attempt 2，Job 107568561707）](https://github.com/eng-cc/oasis7/actions/runs/35979151984/job/107568561707)：运行时间与日志样本。该样本是历史诊断依据，不是 P0 改造后的验收证据。
-- [S9] [Required-gate capability-selection contract](./source-of-truth.md#required-gate-capability-split)：本 S0 更新的规范锚点。Issue #3967 的 S0 交付通过后，代码任务必须从合入后的 source commit 读取该 clause；候选 source 或本设计本身不授权运行行为。
+- [S0] Main-source snapshot used for the analysis is identified only in the originating GitHub task evidence; this design does not freeze a repository revision.
+- [S1] [Engineering Workflow Source of Truth](../../../doc/engineering/workflow/source-of-truth.md)：规范先行、文档实际校验、手动 loop／身份／授权边界及 ownership 分类。消耗的具体 source revision 记录在 GitHub task evidence。
+- [S2] [ci-tests.sh](../../../scripts/ci-tests.sh)：`run_required_gate_checks()`、`run_product_doc_governance_check()` 和各 tier 的调用。
+- [S3] [plan-rust-required-scope.py](../../../scripts/plan-rust-required-scope.py)：三能力同一 FIELDS 输出、selector inventory、minimal 抑制、Rust 需求推导和闭包 full 验证。
+- [S4] [workflow-impact-projection.py](../../../scripts/pm/workflow-impact-projection.py)：v2 严格字段、closure evidence、scope planner 和 `build_projection()` 的升级行为。
+- [S5] [ci-tests.sh 的 operational／packaging 入口](../../../scripts/ci-tests.sh)：operational 内部嵌套 packaging 及 PM／loop 回归。
+- [S6] [ci-ready-receipt.py](../../../scripts/pm/ci-ready-receipt.py) 和 [ci_ready_receipt_identity.py](../../../scripts/pm/ci_ready_receipt_identity.py)：planner 字段、摘要和 source／integration 身份。
+- [S7] [系统设计写作规范](../../../doc/engineering/doc-governance/system-design-writing-standard.design.md)：十二段结构、需求承接、候选／证据及兼容迁移要求。
+- [S8] [workflow-behavior-eval.sh](../../../scripts/pm/workflow-behavior-eval.sh)：既有 `pr-lifecycle-gate.test.sh` 和 `pr-lifecycle-trust.test.sh` 回归入口。
+- [E1] Historical `required-gate` run/job timing and log sample are recorded in the originating GitHub Project-backed task evidence. This is diagnostic context, not acceptance evidence for the P0 change.
+- [S9] [Required-gate capability-selection contract](./source-of-truth.md#required-gate-capability-split): the normative anchor updated by S0. After the S0 delivery is accepted, code tasks must read the clause from the merged source commit; candidate source or this design does not authorize runtime behavior.
 
 本文没有运行仓库测试、没有执行 hosted 对照实验、没有验证所有动态依赖，也没有修改远端仓库。实际实现、精确生产者 inventory、独立复审及第11节运行证据必须由后续授权任务完成。

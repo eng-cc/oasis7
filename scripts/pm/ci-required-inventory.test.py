@@ -3,8 +3,9 @@
 
 from __future__ import annotations
 
-import importlib.util
+import copy
 import hashlib
+import importlib.util
 import json
 import os
 import shutil
@@ -707,27 +708,71 @@ class RequiredInventoryTests(unittest.TestCase):
             self.assertTrue(product_units)
             self.assertTrue(all(not item["applicable_policy"]["reuse_eligible"] for item in product_units))
 
-    def test_local_target_uses_authenticated_source_environment_not_operator_host(self):
+    def test_source_attempt_identity_does_not_change_semantic_inventory_fingerprint(self):
         with tempfile.TemporaryDirectory(prefix="ci-required-inventory-local-host-drift-") as temp:
             trusted, target, plan = self.make_fixture(Path(temp))
             source_environment = self.trusted_source_product_environment()
+            changed_attempt = copy.deepcopy(source_environment)
+            attempt = changed_attempt["trusted_source_attempt"]
+            attempt.update(
+                workflow_run_id=18, run_attempt=2, check_run_id=29, job_id=30,
+                plan_artifact_id=31,
+                plan_artifact_name="oasis7-required-plan-v2-18-a2",
+                request_key="sha256:" + "2" * 64,
+            )
+            for index, row in enumerate(attempt["result_artifacts"]):
+                row["artifact_id"] = 32 + index
+                row["name"] = "oasis7-required-result-v2-18-a2-" + hashlib.sha256(
+                    row["unit_id"].encode("utf-8"),
+                ).hexdigest()
+            changed_attempt["required_gate_job"].update(
+                workflow_run_id=18, run_attempt=2, check_run_id=29, job_id=30,
+            )
             with self.observed_product_runtime(
                 runner_image="macos-14", python_version="3.13.0", mdurl_version="0.1.3",
             ):
-                result = self.build_fixture_inventory(
+                source = self.build_fixture_inventory(
                     trusted, target, plan,
                     trusted_source_product_environment=source_environment,
                 )
+                result = self.build_fixture_inventory(
+                    trusted, target, plan,
+                    trusted_source_product_environment=changed_attempt,
+                )
+            source_product_units = [item for item in source["unit_specs"]
+                                    if item["unit_id"].startswith("product-")]
             product_units = [item for item in result["unit_specs"]
                              if item["unit_id"].startswith("product-")]
             self.assertTrue(product_units)
             self.assertTrue(all(item["applicable_policy"]["reuse_eligible"] for item in product_units))
-            self.assertTrue(all(
-                item["environment_contract"].get("source_attempt_digest")
-                and item["environment_contract"].get("source_gate_job_digest")
-                and item["environment_contract"].get("source_environment_eligible") is True
-                for item in product_units
-            ))
+            source_by_id = {item["unit_id"]: item for item in source_product_units}
+            for item in product_units:
+                with self.subTest(unit_id=item["unit_id"]):
+                    self.assertEqual(
+                        source_by_id[item["unit_id"]]["environment_contract"],
+                        item["environment_contract"],
+                    )
+                    self.assertEqual(
+                        source["input_scope"]["input_fingerprints"][item["unit_id"]],
+                        result["input_scope"]["input_fingerprints"][item["unit_id"]],
+                    )
+                    self.assertNotIn("source_attempt_digest", item["environment_contract"])
+                    self.assertNotIn("source_gate_job_digest", item["environment_contract"])
+                    self.assertNotIn("environment_source", item["environment_contract"])
+            source_digest = self.inventory._trusted_source_product_environment(source_environment)[1]
+            changed_digest = self.inventory._trusted_source_product_environment(changed_attempt)[1]
+            self.assertNotEqual(source_digest, changed_digest)
+
+    def test_source_job_mismatch_still_fails_authoritative_provenance_validation(self):
+        with tempfile.TemporaryDirectory(prefix="ci-required-inventory-source-provenance-") as temp:
+            trusted, target, plan = self.make_fixture(Path(temp))
+            source_environment = self.trusted_source_product_environment()
+            source_environment["required_gate_job"]["job_id"] += 1
+            with self.assertRaisesRegex(self.inventory.InventoryError, "required-gate job"):
+                self.build_fixture_inventory(
+                    trusted, target, plan,
+                    trusted_source_product_environment=source_environment,
+                )
 
     def test_actual_source_runtime_drift_keeps_product_units_ineligible(self):
         changed_source_parser = self.trusted_source_product_environment()

@@ -11,11 +11,13 @@ import json
 from pathlib import Path
 import sys
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import zipfile
 
 
 MODULE_PATH = Path(__file__).with_name("ci_reuse_validation_readback.py")
+FIXTURE_ISSUE_NUMBER = 87
+FIXTURE_PR_NUMBER = 143
 SPEC = importlib.util.spec_from_file_location("ci_reuse_validation_readback", MODULE_PATH)
 readback = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
@@ -48,7 +50,140 @@ def patch_live_workflow_metadata(api, *, repository_id=1148737145, workflow_id=2
     return patch.object(api, "get_json", side_effect=get_json)
 
 
+class SuccessorAdapterTests(unittest.TestCase):
+    def test_v1_records_stay_on_existing_readback_resolver(self):
+        api = Mock()
+        comments = ({"id": 1, "body": "ordinary V1 records"},)
+        identity = {
+            "task_uid": "task_" + "1" * 32, "task_issue_number": 87,
+            "pr_number": 143, "head_oid": "a" * 40, "integration_base_oid": "b" * 40,
+        }
+        authority = object()
+        with patch.object(readback.contract, "resolve_records_for_readback", return_value=authority) as resolve:
+            actual, predecessor = readback._resolve_records_with_predecessor(
+                api, comments, identity, 17, "main", 18,
+            )
+        self.assertIs(actual, authority)
+        self.assertIsNone(predecessor)
+        resolve.assert_called_once_with(comments, expected_identity=identity)
+
+    def test_v2_marker_requires_predecessor_observation_and_successor_resolver(self):
+        api = Mock()
+        identity = {
+            "task_uid": "task_" + "1" * 32, "task_issue_number": 87,
+            "pr_number": 143, "head_oid": "a" * 40, "integration_base_oid": "b" * 40,
+        }
+        comments = ({"id": 1, "body": readback.contract.SUCCESSOR_REQUEST_MARKER},)
+        predecessor = {"run_id": 101, "run_terminal_updated_at": "2026-01-01T00:00:00Z"}
+        authority = object()
+        with patch.object(readback, "_predecessor_observation", return_value=predecessor) as observe, patch.object(
+            readback.contract, "resolve_successor_records_for_readback", return_value=authority,
+        ) as resolve:
+            actual, actual_predecessor = readback._resolve_records_with_predecessor(
+                api, comments, identity, 17, "main", 18,
+            )
+        self.assertIs(actual, authority)
+        self.assertIs(actual_predecessor, predecessor)
+        observe.assert_called_once_with(
+            api, comments,
+            {"task_uid": identity["task_uid"], "task_issue_number": 87, "pr_number": 143},
+            17, "main", 18,
+        )
+        resolve.assert_called_once_with(comments, identity, predecessor)
+
+    def test_predecessor_workflow_blob_is_hashed_at_exact_run_head(self):
+        api = Mock()
+        content = (
+            "run-name: oasis7-ci|${{ github.event_name }}|${{ inputs.run_mode }}|"
+            "${{ inputs.task_uid }}|${{ inputs.pr_number }}|${{ inputs.integration_base }}|"
+            "${{ inputs.expected_head }}${{ inputs.request_key != '' && format('|{0}', inputs.request_key) || '' }}\n"
+        ).encode()
+        oid = readback.hashlib.sha1(
+            b"blob " + str(len(content)).encode() + b"\0" + content,
+        ).hexdigest()
+        response = {
+            "path": readback.WORKFLOW_FILE, "encoding": "base64",
+            "content": readback.base64.b64encode(content).decode(), "sha": oid,
+        }
+        with patch.object(api, "get_json", return_value=response) as get_json:
+            self.assertEqual((oid, readback.contract.body_digest(content)),
+                             readback._workflow_blob_at(api, "c" * 40))
+        get_json.assert_called_once_with(
+            f"repos/{readback.REPOSITORY}/contents/{readback.WORKFLOW_FILE}?ref={'c' * 40}",
+        )
+        response["sha"] = "d" * 40
+        with patch.object(api, "get_json", return_value=response):
+            with self.assertRaises(readback.ReadbackError):
+                readback._workflow_blob_at(api, "c" * 40)
+
+
 class GitHubPaginationTests(unittest.TestCase):
+    def test_task_issue_discovery_follows_every_state_all_rest_page(self):
+        first_issue = {"id": 9001, "number": 87, "body": "task issue one"}
+        second_issue = {"id": 9002, "number": 88, "body": "task issue two"}
+        first = readback.json.dumps([first_issue], separators=(",", ":")).encode("utf-8")
+        second = readback.json.dumps([second_issue], separators=(",", ":")).encode("utf-8")
+        next_link = (
+            "<https://api.github.com/repositories/1148737145/issues?per_page=100&page=2&state=all&after=cursor-one>; rel=\"next\""
+        )
+        repository = {
+            "id": 1148737145, "name": "oasis7", "full_name": "eng-cc/oasis7",
+            "owner": {"login": "eng-cc"},
+        }
+        api = readback.GitHubReadOnly()
+        with patch.object(api, "get_json", return_value=repository) as repo_read, patch.object(
+            readback.subprocess, "check_output", side_effect=[
+                http_response(first, link=next_link), http_response(second),
+            ],
+        ) as call:
+            pages = api.task_issue_pages()
+
+        self.assertEqual([[first_issue], [second_issue]], list(pages))
+        self.assertEqual([
+            "repos/eng-cc/oasis7/issues?state=all&per_page=100",
+            "repositories/1148737145/issues?per_page=100&page=2&state=all&after=cursor-one",
+        ], [item.args[0][-1] for item in call.call_args_list])
+        repo_read.assert_called_once_with("repos/eng-cc/oasis7")
+
+    def test_task_issue_pagination_rejects_a_repeated_opaque_cursor(self):
+        repository = {
+            "id": 1148737145, "name": "oasis7", "full_name": "eng-cc/oasis7",
+            "owner": {"login": "eng-cc"},
+        }
+        body = readback.json.dumps([], separators=(",", ":")).encode("utf-8")
+        first_link = (
+            "<https://api.github.com/repositories/1148737145/issues?state=all&per_page=100&after=cursor-one&page=2>; rel=\"next\""
+        )
+        repeated_link = (
+            "<https://api.github.com/repositories/1148737145/issues?state=all&per_page=100&after=cursor-one&page=3>; rel=\"next\""
+        )
+        api = readback.GitHubReadOnly()
+        with patch.object(api, "get_json", return_value=repository), patch.object(
+            readback.subprocess, "check_output", side_effect=[
+                http_response(body, link=first_link), http_response(body, link=repeated_link),
+            ],
+        ) as request:
+            with self.assertRaisesRegex(readback.ReadbackError, "advancing opaque cursor"):
+                api.task_issue_pages()
+        self.assertEqual(2, request.call_count)
+
+    def test_task_issue_pagination_rejects_another_repository_numeric_alias(self):
+        repository = {
+            "id": 1148737145, "name": "oasis7", "full_name": "eng-cc/oasis7",
+            "owner": {"login": "eng-cc"},
+        }
+        body = readback.json.dumps([], separators=(",", ":")).encode("utf-8")
+        next_link = (
+            "<https://api.github.com/repositories/1148737146/issues?state=all&per_page=100&page=2>; rel=\"next\""
+        )
+        api = readback.GitHubReadOnly()
+        with patch.object(api, "get_json", return_value=repository), patch.object(
+            readback.subprocess, "check_output", return_value=http_response(body, link=next_link),
+        ) as request:
+            with self.assertRaisesRegex(readback.ReadbackError, "canonical API endpoint"):
+                api.task_issue_pages()
+        request.assert_called_once()
+
     def test_producer_run_discovery_calls_the_compatible_one_argument_api(self):
         producer_path = Path(__file__).with_name("ci-reuse-validation.py")
         producer_tree = ast.parse(producer_path.read_text(encoding="utf-8"))
@@ -90,6 +225,15 @@ class GitHubPaginationTests(unittest.TestCase):
             "repos/eng-cc/oasis7/actions/workflows/rust.yml",
         ], [call.args[0] for call in get.call_args_list])
 
+        api = readback.GitHubReadOnly()
+        with patch.object(api, "get_json", side_effect=[
+            {"id": 1148737145, "name": "oasis7", "full_name": "eng-cc/oasis7",
+             "owner": {"login": "eng-cc"}, "default_branch": "release/ready"},
+            {"id": 230018940, "path": readback.WORKFLOW_FILE, "state": "active"},
+        ]):
+            self.assertEqual((230018940, "release/ready", 1148737145),
+                             readback._live_workflow(api))
+
     def test_live_workflow_rejects_wrong_repository_or_workflow_identity(self):
         bad_repositories = [
             {"id": 1148737146, "name": "oasis7", "full_name": "other/oasis7",
@@ -97,7 +241,7 @@ class GitHubPaginationTests(unittest.TestCase):
             {"id": True, "name": "oasis7", "full_name": "eng-cc/oasis7",
              "owner": {"login": "eng-cc"}, "default_branch": "main"},
             {"id": 1148737145, "name": "oasis7", "full_name": "eng-cc/oasis7",
-             "owner": {"login": "eng-cc"}, "default_branch": "develop"},
+             "owner": {"login": "eng-cc"}, "default_branch": ""},
         ]
         for repository in bad_repositories:
             with self.subTest(repository=repository):
@@ -106,7 +250,7 @@ class GitHubPaginationTests(unittest.TestCase):
                     repository,
                     {"id": 230018940, "path": readback.WORKFLOW_FILE, "state": "active"},
                 ]):
-                    with self.assertRaisesRegex(readback.ReadbackError, "canonical repository"):
+                    with self.assertRaisesRegex(readback.ReadbackError, "canonical repository|default branch"):
                         readback._live_workflow(api)
 
         bad_workflows = [
@@ -126,6 +270,28 @@ class GitHubPaginationTests(unittest.TestCase):
                 ]):
                     with self.assertRaisesRegex(readback.ReadbackError, "canonical rust.yml workflow"):
                         readback._live_workflow(api)
+
+    def test_live_default_branch_is_dynamic_and_raw_path_is_retained(self):
+        oid = "a" * 40
+        row = {
+            "id": 5, "workflow_id": 230018940,
+            "path": readback.WORKFLOW_FILE, "head_branch": "release/ready",
+            "head_sha": oid, "run_attempt": 1,
+            "repository": {"full_name": readback.REPOSITORY},
+            "head_repository": {"full_name": readback.REPOSITORY},
+        }
+        identity = readback._run_identity(row, 230018940, "release/ready")
+        self.assertEqual(readback.WORKFLOW_FILE, identity["workflow_api_path"])
+        self.assertEqual(f"{readback.WORKFLOW_FILE}@release/ready", identity["workflow_path"])
+        self.assertEqual(
+            f"{readback.REPOSITORY}/{readback.WORKFLOW_FILE}@refs/heads/release/ready",
+            identity["workflow_ref"],
+        )
+        self.assertEqual("refs/heads/release/ready", identity["event_ref"])
+        for raw_path in (".github/workflows/rust.yml@main", ".github/workflows/other.yml",
+                         ".github/workflows/rust.yml@refs/heads/release/ready"):
+            with self.subTest(raw_path=raw_path), self.assertRaises(readback.ReadbackError):
+                readback._run_identity({**row, "path": raw_path}, 230018940, "release/ready")
 
     def test_run_pages_accept_authenticated_slug_to_numeric_repository_alias(self):
         workflow_id = 230018940
@@ -304,11 +470,13 @@ class GitHubPaginationTests(unittest.TestCase):
         fixture = readback_fixture()
         authority = readback.contract.resolve_records_for_readback(fixture["comments"])
         title = readback.contract.expected_run_title(authority)
-        duplicate = {"id": 1002, "display_title": title + "|different-key"}
+        target = {
+            "id": 1001, "display_title": title,
+            "status": "completed", "conclusion": "success",
+        }
+        different_action = {"id": 1002, "display_title": title + "|different-key"}
         rows = [{"id": index, "display_title": f"unrelated-{index}"}
-                for index in range(1, 1001)] + [
-                    {"id": 1001, "display_title": title}, duplicate,
-                ]
+                for index in range(1, 1001)] + [target, different_action]
         pages = [rows[offset:offset + 100] for offset in range(0, len(rows), 100)]
         responses = []
         for index, batch in enumerate(pages, start=1):
@@ -330,8 +498,9 @@ class GitHubPaginationTests(unittest.TestCase):
             pages = api.workflow_run_pages(workflow_id, 1148737145)
         complete = readback.contract.collect_workflow_runs(pages)
         self.assertEqual(1002, len(complete))
-        with self.assertRaisesRegex(readback.contract.ContractError, "unique"):
-            readback.contract.select_unique_run(complete, authority)
+        self.assertEqual(
+            target["id"], readback.contract.select_unique_run(complete, authority)["id"],
+        )
 
     def test_pagination_cycle_fails_closed(self):
         workflow_id = 230018940
@@ -378,9 +547,12 @@ class GitHubPaginationTests(unittest.TestCase):
                 "jobs", "jobs",
             )
 
-    def test_reader_cli_rejects_caller_supplied_ids(self):
+    def test_reader_cli_accepts_only_the_task_uid_lookup_key(self):
         with patch.object(readback.sys, "argv", ["reader.py", "--run-id", "700"]):
-            with self.assertRaisesRegex(SystemExit, "accepts no arguments"):
+            with self.assertRaisesRegex(SystemExit, "requires --task-uid"):
+                readback.main()
+        with patch.object(readback.sys, "argv", ["reader.py", "--issue-number", "87"]):
+            with self.assertRaisesRegex(SystemExit, "requires --task-uid"):
                 readback.main()
 
 
@@ -393,7 +565,8 @@ def readback_fixture():
     c = readback.contract
     task_uid = "task_" + "a" * 32
     request_context = c.TrustedRequestContext(
-        task_uid=task_uid, head_oid="1" * 40, source_scope_oid="2" * 40,
+        task_uid=task_uid, task_issue_number=FIXTURE_ISSUE_NUMBER,
+        pr_number=FIXTURE_PR_NUMBER, head_oid="1" * 40, source_scope_oid="2" * 40,
         projection_digest="sha256:" + "3" * 64,
         planner_unit_ids=("required_gate_baseline", "workflow_governance"),
         planner_unit_obligations={
@@ -403,8 +576,8 @@ def readback_fixture():
     )
     authorization = {
         "schema": c.AUTHORIZATION_SCHEMA, "repository": c.REPOSITORY,
-        "task_uid": task_uid, "task_issue_number": c.TASK_ISSUE_NUMBER,
-        "pr_number": c.PR_NUMBER, "head_oid": request_context.head_oid,
+        "task_uid": task_uid, "task_issue_number": FIXTURE_ISSUE_NUMBER,
+        "pr_number": FIXTURE_PR_NUMBER, "head_oid": request_context.head_oid,
         "integration_base_oid": "4" * 40, "source_scope_oid": request_context.source_scope_oid,
         "projection_digest": request_context.projection_digest,
         "validation_units": list(request_context.planner_unit_ids),
@@ -413,15 +586,15 @@ def readback_fixture():
     authorization_body = _marked(c.AUTHORIZATION_MARKER, authorization)
     request = {
         "schema": c.REQUEST_SCHEMA, "repository": c.REPOSITORY,
-        "task_uid": task_uid, "task_issue_number": c.TASK_ISSUE_NUMBER,
-        "pr_number": c.PR_NUMBER, "head_oid": request_context.head_oid,
+        "task_uid": task_uid, "task_issue_number": FIXTURE_ISSUE_NUMBER,
+        "pr_number": FIXTURE_PR_NUMBER, "head_oid": request_context.head_oid,
         "integration_base_oid": authorization["integration_base_oid"],
         "source_scope_oid": request_context.source_scope_oid,
         "projection_digest": request_context.projection_digest,
         "validation_units": list(request_context.planner_unit_ids),
         "purpose": c.PURPOSE, "authorization_decision": c.REQUEST_DECISION,
         "authorization_source": {
-            "issue_number": c.TASK_ISSUE_NUMBER, "comment_id": 10,
+            "issue_number": FIXTURE_ISSUE_NUMBER, "comment_id": 10,
             "body_digest": c.body_digest(authorization_body),
         },
         "authorized_actor": "approval-admin",
@@ -430,7 +603,7 @@ def readback_fixture():
     request_body = _marked(c.REQUEST_MARKER, request)
     pin = {
         "schema": c.PIN_SCHEMA, "repository": c.REPOSITORY, "task_uid": task_uid,
-        "task_issue_number": c.TASK_ISSUE_NUMBER, "pr_number": c.PR_NUMBER,
+        "task_issue_number": FIXTURE_ISSUE_NUMBER, "pr_number": FIXTURE_PR_NUMBER,
         "request_comment_id": 20, "request_body_digest": c.body_digest(request_body),
         "request_digest": request["request_digest"], "purpose": c.PIN_PURPOSE,
     }
@@ -451,7 +624,9 @@ def readback_fixture():
     issued = c.bind_authority_context(issued, request_context)
     run = {
         "repository": c.REPOSITORY, "id": 700, "workflow_id": 900,
+        "workflow_api_path": c.WORKFLOW_PATH, "workflow_default_branch": "main",
         "workflow_path": c.WORKFLOW_PATH, "workflow_ref": c.WORKFLOW_REF,
+        "event_ref": "refs/heads/main",
         "workflow_sha": "5" * 40, "event": "workflow_dispatch",
         "display_title": c.expected_run_title(issued),
         "dispatched_head_sha": "5" * 40, "run_attempt": 1,
@@ -497,22 +672,100 @@ def readback_fixture():
         "expired": False,
         "workflow_run": {"id": run["id"], "head_sha": run["dispatched_head_sha"]},
     }
-    task_body = "<!-- oasis7-pm-task -->\ntask_uid: " + task_uid + "\n"
+    task_body = (
+        "<!-- oasis7-pm-task -->\n"
+        f"task_uid: {task_uid}\n"
+        f"- pr_url: `https://github.com/{c.REPOSITORY}/pull/{FIXTURE_PR_NUMBER}`\n"
+        f"- pr_number: `{FIXTURE_PR_NUMBER}`\n"
+    )
+    issue_url = f"https://github.com/{c.REPOSITORY}/issues/{FIXTURE_ISSUE_NUMBER}"
     pr = {
-        "number": c.PR_NUMBER, "state": "open", "merged": False,
-        "body": f"Task: {task_uid}\nRefs #{c.TASK_ISSUE_NUMBER}\n",
+        "number": FIXTURE_PR_NUMBER, "state": "open", "merged": False,
+        "body": f"Task: {task_uid}\nRefs #{FIXTURE_ISSUE_NUMBER}\n",
         "head": {"sha": request_context.head_oid,
                  "repo": {"full_name": c.REPOSITORY, "id": 1148737145}},
         "base": {"sha": request["integration_base_oid"], "ref": "main",
                  "repo": {"full_name": c.REPOSITORY, "id": 1148737145}},
     }
-    issue = {"number": c.TASK_ISSUE_NUMBER, "body": task_body}
+    issue = {"number": FIXTURE_ISSUE_NUMBER, "body": task_body, "html_url": issue_url}
+    project_issue = {"number": FIXTURE_ISSUE_NUMBER, "body": task_body,
+                     "url": issue_url, "project_item_id": "PVTI_fixture"}
     return {
         "context": request_context, "request": request, "comments": comments,
         "run": run, "run_api": run_api, "check": check, "payload": payload,
         "payload_bytes": payload_bytes, "archive_bytes": archive_bytes,
-        "artifact": artifact, "issue": issue, "pr": pr,
+        "artifact": artifact, "issue": issue, "project_issue": project_issue,
+        "pr": pr,
     }
+
+
+class ProjectTaskResolutionTests(unittest.TestCase):
+    def _payload(self, *, issue_body: str | None = None, uid_field: str | None = None,
+                 page_more: bool = False, issue_count: int = 1,
+                 project_items: list[dict] | None = None) -> dict:
+        uid = "task_" + "a" * 32
+        issue_number = FIXTURE_ISSUE_NUMBER
+        issue_url = f"https://github.com/{readback.REPOSITORY}/issues/{issue_number}"
+        body = issue_body or (
+            "<!-- oasis7-pm-task -->\n" + f"task_uid: {uid}\n"
+            + f"- pr_url: `https://github.com/{readback.REPOSITORY}/pull/{FIXTURE_PR_NUMBER}`\n"
+            + f"- pr_number: `{FIXTURE_PR_NUMBER}`\n"
+        )
+        item = {
+            "id": "PVTI_fixture",
+            "project": {"number": readback.PROJECT_NUMBER,
+                        "owner": {"login": readback.PROJECT_OWNER}},
+            "content": {"number": issue_number, "url": issue_url},
+            "fieldValues": {
+                "pageInfo": {"hasNextPage": False},
+                "nodes": [{"text": uid_field or uid,
+                           "field": {"name": "Task UID"}}],
+            },
+        }
+        return {
+            "data": {"search": {
+                "issueCount": issue_count,
+                "pageInfo": {"hasNextPage": page_more},
+                "nodes": [{"number": issue_number, "url": issue_url, "body": body,
+                           "projectItems": {"pageInfo": {"hasNextPage": False},
+                                            "nodes": project_items if project_items is not None else [item]}}],
+            }},
+        }
+
+    def test_project_task_resolution_requires_exact_complete_uid_and_issue(self):
+        api = readback.GitHubReadOnly()
+        uid = "task_" + "a" * 32
+        with patch.object(api, "graphql", return_value=self._payload()):
+            issue = api.resolve_project_task_issue(uid)
+        self.assertEqual(FIXTURE_ISSUE_NUMBER, issue["number"])
+        self.assertEqual("PVTI_fixture", issue["project_item_id"])
+
+    def test_project_task_resolution_fails_closed_on_incomplete_or_ambiguous_mapping(self):
+        uid = "task_" + "a" * 32
+        invalid_payloads = [
+            self._payload(issue_count=2),
+            self._payload(page_more=True),
+            self._payload(project_items=[]),
+            self._payload(uid_field="task_" + "b" * 32),
+            self._payload(project_items=[
+                self._payload()["data"]["search"]["nodes"][0]["projectItems"]["nodes"][0],
+                self._payload()["data"]["search"]["nodes"][0]["projectItems"]["nodes"][0],
+            ]),
+        ]
+        for payload in invalid_payloads:
+            api = readback.GitHubReadOnly()
+            with self.subTest(payload=payload), patch.object(api, "graphql", return_value=payload):
+                with self.assertRaises(readback.ReadbackError):
+                    api.resolve_project_task_issue(uid)
+
+    def test_project_read_permission_failure_is_not_replaced_by_issue_or_pr_inputs(self):
+        api = readback.GitHubReadOnly()
+        with patch.object(
+            readback.subprocess, "check_output",
+            side_effect=readback.subprocess.CalledProcessError(1, ["gh"]),
+        ):
+            with self.assertRaisesRegex(readback.ReadbackError, "lacks read permission"):
+                api.resolve_project_task_issue("task_" + "a" * 32)
 
 
 class FakeReadbackAPI:
@@ -521,6 +774,8 @@ class FakeReadbackAPI:
         self.run_listing_count = 0
         self.run_direct_count = 0
         self.comment_listing_count = 0
+        self.project_lookup_count = 0
+        self.change_project_on_final_read = False
         self.duplicate_second_run = False
         self.advance_second_attempt = False
         self.mutate_final_comment = False
@@ -528,9 +783,9 @@ class FakeReadbackAPI:
         self.write_calls = 0
 
     def get_json(self, endpoint):
-        if endpoint == f"repos/eng-cc/oasis7/issues/{readback.TASK_ISSUE_NUMBER}":
+        if endpoint == f"repos/eng-cc/oasis7/issues/{FIXTURE_ISSUE_NUMBER}":
             return self.fixture["issue"]
-        if endpoint == f"repos/eng-cc/oasis7/pulls/{readback.PR_NUMBER}":
+        if endpoint == f"repos/eng-cc/oasis7/pulls/{FIXTURE_PR_NUMBER}":
             return self.fixture["pr"]
         if endpoint == "repos/eng-cc/oasis7":
             return {
@@ -553,7 +808,18 @@ class FakeReadbackAPI:
                     "status": check["status"], "conclusion": check["conclusion"]}
         raise AssertionError(f"unexpected GitHub read: {endpoint}")
 
-    def issue_comment_pages(self):
+    def resolve_project_task_issue(self, task_uid):
+        self.project_lookup_count += 1
+        if task_uid != self.fixture["context"].task_uid:
+            raise readback.ReadbackError("Task UID is not bound to this Project item")
+        value = dict(self.fixture["project_issue"])
+        if self.change_project_on_final_read and self.project_lookup_count >= 2:
+            value["project_item_id"] = "PVTI_changed"
+        return value
+
+    def issue_comment_pages(self, issue_number):
+        if issue_number != FIXTURE_ISSUE_NUMBER:
+            raise AssertionError("comment read used an unbound Task Issue number")
         self.comment_listing_count += 1
         comments = [dict(item) for item in self.fixture["comments"]]
         if self.mutate_final_comment and self.comment_listing_count >= 2:
@@ -570,7 +836,6 @@ class FakeReadbackAPI:
         if self.duplicate_second_run and self.run_listing_count >= 2:
             duplicate = dict(rows[0])
             duplicate["id"] += 1
-            duplicate["display_title"] += "|other"
             rows.append(duplicate)
         return ({"total_count": len(rows), "runs": rows, "has_next": False},)
 
@@ -607,7 +872,7 @@ class IndependentReadbackTests(unittest.TestCase):
             readback, "_trusted_inventory",
             return_value=(self.fixture["context"], "6" * 40, "7" * 40),
         ):
-            return readback.read_validation(api)
+            return readback.read_validation(self.fixture["context"].task_uid, api)
 
     def setUp(self):
         self.fixture = readback_fixture()
@@ -618,6 +883,7 @@ class IndependentReadbackTests(unittest.TestCase):
         self.assertEqual(readback.contract.READBACK_SCHEMA, envelope["schema"])
         self.assertEqual(self.fixture["run"]["id"], envelope["run_id"])
         self.assertEqual(2, api.comment_listing_count)
+        self.assertEqual(2, api.project_lookup_count)
         self.assertEqual(2, api.run_listing_count)
         self.assertEqual(2, api.run_direct_count)
         self.assertEqual(0, api.write_calls)
@@ -631,7 +897,7 @@ class IndependentReadbackTests(unittest.TestCase):
     def test_final_live_run_rejects_latest_attempt_advance(self):
         api = FakeReadbackAPI(self.fixture)
         api.advance_second_attempt = True
-        with self.assertRaisesRegex(readback.ReadbackError, "latest R/A"):
+        with self.assertRaisesRegex(readback.ReadbackError, "latest R/A|run_attempt changed"):
             self._run(api)
 
     def test_final_issue_read_rejects_changed_pinned_comment(self):
@@ -639,6 +905,16 @@ class IndependentReadbackTests(unittest.TestCase):
         api.mutate_final_comment = True
         with self.assertRaises(readback.contract.ContractError):
             self._run(api)
+
+    def test_final_project_task_identity_must_remain_unchanged(self):
+        api = FakeReadbackAPI(self.fixture)
+        api.change_project_on_final_read = True
+        with patch.object(
+            readback, "_trusted_inventory",
+            return_value=(self.fixture["context"], "6" * 40, "7" * 40),
+        ):
+            with self.assertRaisesRegex(readback.ReadbackError, "Project-backed Task Issue identity"):
+                readback.read_validation(self.fixture["context"].task_uid, api)
 
     def test_exact_attempt_rejects_a_second_artifact_alias(self):
         api = FakeReadbackAPI(self.fixture)
@@ -648,7 +924,7 @@ class IndependentReadbackTests(unittest.TestCase):
             return_value=(self.fixture["context"], "6" * 40, "7" * 40),
         ):
             with self.assertRaisesRegex(readback.ReadbackError, "artifact"):
-                readback.read_validation(api)
+                readback.read_validation(self.fixture["context"].task_uid, api)
 
     def test_exact_latest_attempt_ignores_an_artifact_from_an_older_attempt(self):
         c = readback.contract
