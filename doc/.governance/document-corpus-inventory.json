@@ -15,7 +15,7 @@
     },
     {
       "path": "doc/.governance/document-semantic-review-overrides.json",
-      "content_sha256": "68ff74ee4fdb1ece2d82d3d86312ce68624d7e98b4810ab741f7a0144b0d988a"
+      "content_sha256": "dd4f0d5a524d65c210f4609756620fc5db3688d0a6cc6323fd6eaca722a06c0e"
     },
     {
       "path": "doc/testing/evidence/inventory.json",
@@ -4403,7 +4403,7 @@
     },
     {
       "path": "doc/testing/prd.md",
-      "content_sha256": "19503466b4d23011e9b4a1fee2e8cbcd09e849a90bcd6e5d9993b755feacdc07",
+      "content_sha256": "0792dcda956d551ff66a397f0cc4e53ddf9d727f79b70e3fa4105851b244add0",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
