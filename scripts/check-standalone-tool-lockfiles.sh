@@ -14,13 +14,42 @@ case "$rust_baseline_selector" in
     ;;
 esac
 
+root_workspace_member_manifest_paths="$(
+  env -u RUSTC_WRAPPER cargo metadata \
+    --manifest-path "$repo_root/Cargo.toml" \
+    --no-deps \
+    --format-version 1 \
+    | python3 -c '
+import json
+import sys
+
+metadata = json.load(sys.stdin)
+member_ids = set(metadata["workspace_members"])
+for package in metadata["packages"]:
+    if package["id"] in member_ids:
+        print(package["manifest_path"])
+'
+)"
+root_workspace_member_manifest_set=$'\n'"$root_workspace_member_manifest_paths"$'\n'
+
+is_root_workspace_member_manifest() {
+  local manifest="$1"
+  local manifest_path
+  manifest_path="$(cd "$(dirname "$manifest")" && pwd)/$(basename "$manifest")"
+  [[ "$root_workspace_member_manifest_set" == *$'\n'"$manifest_path"$'\n'* ]]
+}
+
 tracked_standalone_file_set=$'\n'
 manifests=()
 lockfiles=()
 while IFS= read -r tracked_file; do
   tracked_standalone_file_set+="$tracked_file"$'\n'
   case "$tracked_file" in
-    */Cargo.toml) manifests+=("$tracked_file") ;;
+    */Cargo.toml)
+      if ! is_root_workspace_member_manifest "$tracked_file"; then
+        manifests+=("$tracked_file")
+      fi
+      ;;
     */Cargo.lock) lockfiles+=("$tracked_file") ;;
   esac
 done < <(git ls-files \
@@ -35,7 +64,7 @@ is_tracked_standalone_file() {
 }
 
 if [[ "${#manifests[@]}" -eq 0 ]]; then
-  echo "error: no tracked standalone Cargo manifests found" >&2
+  echo "error: no tracked standalone Cargo manifests outside the root workspace found" >&2
   exit 1
 fi
 
@@ -73,5 +102,5 @@ done
 
 echo "ok: standalone lockfiles are locked and manifest-consistent ($checked manifests)"
 if [[ "$validate_lockfile_metadata" == false ]]; then
-  echo "ok: standalone lockfiles structurally checked; Cargo metadata validation skipped because Rust baseline is disabled"
+  echo "ok: standalone lockfiles structurally checked; standalone Cargo metadata validation skipped because Rust baseline is disabled"
 fi

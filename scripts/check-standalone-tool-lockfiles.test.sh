@@ -15,6 +15,25 @@ git init -q
 git config user.email "test@example.invalid"
 git config user.name "Test User"
 
+mkdir -p tools/workspace_member/src
+cat >Cargo.toml <<'TOML'
+[workspace]
+members = ["tools/workspace_member"]
+resolver = "2"
+TOML
+cat >tools/workspace_member/Cargo.toml <<'TOML'
+[package]
+name = "workspace_member"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+TOML
+cat >tools/workspace_member/src/main.rs <<'RS'
+fn main() {}
+RS
+env -u RUSTC_WRAPPER cargo generate-lockfile --manifest-path Cargo.toml
+
 cat >tools/valid_tool/Cargo.toml <<'TOML'
 [package]
 name = "valid_tool"
@@ -22,6 +41,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
+
+[workspace]
 TOML
 cat >tools/valid_tool/src/main.rs <<'RS'
 fn main() {}
@@ -42,7 +63,9 @@ pub fn valid() {}
 RS
 env -u RUSTC_WRAPPER cargo generate-lockfile \
   --manifest-path crates/oasis7_builtin_wasm_modules/valid_module/Cargo.toml
-git add tools/valid_tool/Cargo.toml tools/valid_tool/Cargo.lock tools/valid_tool/src/main.rs \
+git add Cargo.toml Cargo.lock \
+  tools/workspace_member/Cargo.toml tools/workspace_member/src/main.rs \
+  tools/valid_tool/Cargo.toml tools/valid_tool/Cargo.lock tools/valid_tool/src/main.rs \
   crates/oasis7_builtin_wasm_modules/valid_module/Cargo.toml \
   crates/oasis7_builtin_wasm_modules/valid_module/Cargo.lock \
   crates/oasis7_builtin_wasm_modules/valid_module/src/lib.rs
@@ -67,31 +90,43 @@ OASIS7_STANDALONE_TOOL_REPO_ROOT="$fixture_repo" \
   PATH="$fake_bin:$PATH" \
   "$script_path" >"$valid_out"
 grep -q "ok: standalone lockfiles are locked and manifest-consistent (2 manifests)" "$valid_out"
+grep -q "checking standalone lockfile: tools/valid_tool/Cargo.toml" "$valid_out"
+grep -q "checking standalone lockfile: crates/oasis7_builtin_wasm_modules/valid_module/Cargo.toml" "$valid_out"
+if grep -q "checking standalone lockfile: tools/workspace_member/Cargo.toml" "$valid_out"; then
+  echo "root workspace member without a standalone lockfile was checked as standalone" >&2
+  exit 1
+fi
 test "$(grep -c "^git ls-files " "$tmp_dir/git-calls.log")" -eq 1
 
 cargo_call_log="$tmp_dir/cargo-calls.log"
 cat >"$fake_bin/cargo" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ " $* " != *" --no-deps "* ]]; then
+  echo "unexpected standalone Cargo metadata invocation with Rust baseline disabled: $*" >&2
+  exit 1
+fi
 printf '%s\n' "$*" >>"$OASIS7_CARGO_CALL_LOG"
+exec "$OASIS7_REAL_CARGO" "$@"
 SH
 chmod +x "$fake_bin/cargo"
 : >"$cargo_call_log"
-no_cargo_out="$tmp_dir/no-cargo.out"
+structural_out="$tmp_dir/structural.out"
 if ! OASIS7_STANDALONE_TOOL_REPO_ROOT="$fixture_repo" \
   OASIS7_REAL_GIT="$real_git" \
   OASIS7_GIT_CALL_LOG="$tmp_dir/git-calls-no-cargo.log" \
+  OASIS7_REAL_CARGO="$(command -v cargo)" \
   OASIS7_CARGO_CALL_LOG="$cargo_call_log" \
   OASIS7_CI_RUN_RUST_BASELINE=false \
   PATH="$fake_bin:$PATH" \
-  "$script_path" >"$no_cargo_out"; then
+  "$script_path" >"$structural_out"; then
   echo "expected structural standalone lockfile checks to pass with Rust baseline disabled" >&2
-  cat "$no_cargo_out" >&2
+  cat "$structural_out" >&2
   exit 1
 fi
-grep -q "ok: standalone lockfiles are locked and manifest-consistent (2 manifests)" "$no_cargo_out"
-if [[ -s "$cargo_call_log" ]]; then
-  echo "standalone lockfile structural checks invoked Cargo with Rust baseline disabled" >&2
+grep -q "ok: standalone lockfiles are locked and manifest-consistent (2 manifests)" "$structural_out"
+if [[ "$(wc -l <"$cargo_call_log")" -ne 1 ]] || ! grep -q -- "--no-deps" "$cargo_call_log"; then
+  echo "standalone lockfile structural checks invoked Cargo beyond root workspace membership discovery" >&2
   cat "$cargo_call_log" >&2
   exit 1
 fi

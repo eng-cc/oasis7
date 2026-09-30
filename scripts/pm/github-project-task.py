@@ -726,12 +726,24 @@ def github_pull_request(repo: str, pr_number: int) -> dict[str, Any]:
     return payload
 
 
+def has_exact_task_pr_linkage(body: Any, task_uid: str, issue_number: int) -> bool:
+    """Require one canonical whole-line Task marker and non-closing Refs line."""
+    if not isinstance(body, str):
+        return False
+    lines = body.splitlines()
+    task_lines = [line for line in lines if line.startswith("Task:")]
+    refs_lines = [line for line in lines if line.startswith("Refs")]
+    return task_lines == [f"Task: {task_uid}"] and refs_lines == [f"Refs #{issue_number}"]
+
+
 def validate_record_pr_live_identity(
     args: argparse.Namespace,
     record: dict[str, Any],
     pr_number: int,
     *,
     allow_exact_publication_poststate: bool = False,
+    publication_intent: dict[str, Any] | None = None,
+    publication_module: Any | None = None,
 ) -> dict[str, Any]:
     """Bind record-pr to the live task Issue, registered worktree and live PR head."""
     try:
@@ -746,6 +758,8 @@ def validate_record_pr_live_identity(
         die("record-pr: live task Issue is not OPEN")
     expected_status = "committed" if bool(getattr(args, "draft_candidate", False)) else "pr_watch"
     expected_phase = "verification" if bool(getattr(args, "draft_candidate", False)) else "pr_watch"
+    if bool(getattr(args, "existing_ready_update", False)):
+        expected_status, expected_phase = record.get("status"), record.get("workflow_phase")
     expected_url = f"https://github.com/{args.repo}/pull/{pr_number}"
     exact_publication_poststate = allow_exact_publication_poststate and all(
         live_issue.get(key) == value
@@ -801,6 +815,18 @@ def validate_record_pr_live_identity(
         die(f"record-pr: canonical task HEAD readback failed: {exc}")
     if not re.fullmatch(r"[0-9a-fA-F]{40,64}", canonical_head):
         die("record-pr: canonical task HEAD identity is malformed")
+    if bool(getattr(args, "existing_ready_update", False)) and publication_intent is not None:
+        if publication_module is None:
+            die("record-pr: existing ready update requires validated C1 publication evidence")
+        if (
+            publication_intent.get("repository") != args.repo
+            or publication_intent.get("task_uid") != args.task_uid
+            or publication_intent.get("source_repository_id") != publication_intent.get("repository_id")
+            or publication_intent.get("source_ref") != identity["task_branch"]
+            or publication_intent.get("target_ref") != identity["default_branch"]
+            or str(publication_intent.get("source_head_oid") or "").casefold() != canonical_head.casefold()
+        ):
+            die("record-pr: C1 publication intent differs from current canonical task identity")
 
     try:
         live_pr = github_pull_request(args.repo, pr_number)
@@ -833,6 +859,25 @@ def validate_record_pr_live_identity(
         die("record-pr: live PR head does not match canonical task HEAD")
     if type(live_pr.get("draft")) is not bool or live_pr.get("draft") != bool(getattr(args, "draft_candidate", False)):
         die("record-pr: live PR draft state does not match requested task transition")
+    if bool(getattr(args, "existing_ready_update", False)):
+        if not isinstance(publication_intent, dict) or publication_module is None:
+            die("record-pr: existing ready update requires validated C1 publication evidence")
+        if not has_exact_task_pr_linkage(
+            live_pr.get("body"), args.task_uid, int(record.get("issue_number") or 0),
+        ):
+            die("record-pr: live ready-update PR lacks exact unique Task/Refs identity")
+        try:
+            live_projection = publication_module.decode_marker(live_pr.get("body"))
+        except (TypeError, ValueError) as exc:
+            die(f"record-pr: live ready-update PR projection marker is invalid: {exc}")
+        if (
+            live_projection.get("task_uid") != publication_intent.get("task_uid")
+            or str(live_projection.get("source_head_oid") or "").casefold()
+                != str(publication_intent.get("source_head_oid") or "").casefold()
+            or live_projection.get("scope_base_oid") != publication_intent.get("source_scope_oid")
+            or live_projection.get("projection_digest") != publication_intent.get("projection_digest")
+        ):
+            die("record-pr: live ready-update PR projection differs from C1 publication intent")
     return live_issue
 
 
@@ -3242,6 +3287,9 @@ def command_record_pr(args: argparse.Namespace) -> int:
     previous = str(record.get("status") or "")
     previous_phase = str(record.get("workflow_phase") or "")
     is_draft_candidate = bool(getattr(args, "draft_candidate", False))
+    is_ready_update = bool(getattr(args, "existing_ready_update", False))
+    if is_ready_update and is_draft_candidate:
+        die("record-pr: existing ready update and draft candidate are mutually exclusive")
     if not re.fullmatch(
         rf"https://github\.com/{re.escape(args.repo)}/pull/[1-9][0-9]*(?:[?#].*)?",
         args.pr_url,
@@ -3259,22 +3307,28 @@ def command_record_pr(args: argparse.Namespace) -> int:
         die(
             "record-pr: terminal task cannot be reclassified; use its canonical finalizer or terminal runbook"
         )
-    if not is_draft_candidate and (previous, previous_phase) != ("ready", "pre_pr_ready"):
+    if is_ready_update:
+        if ((previous, previous_phase) not in {("pr_watch", "pr_watch"), ("ready", "pre_pr_ready")}
+                or not existing_pr_number or not existing_pr_urls):
+            die("record-pr: existing ready update requires the exact already-bound ready/pr_watch PR")
+    elif not is_draft_candidate and (previous, previous_phase) != ("ready", "pre_pr_ready"):
         die(
             "record-pr: non-draft pr_watch transition requires task truth at ready/pre_pr_ready; "
             "use prepare-task-pr.sh --promote-draft with canonical CI/review evidence"
         )
     if requested_pr_number is None:
         die("record-pr: PR number is missing or malformed")
+    publication_binding_path = getattr(args, "publication_binding_json", None)
     publication_binding = None
+    publication_intent = None
     publication_module = None
     binding_comment_exists = False
     comments: list[dict[str, Any]] = []
-    if getattr(args, "publication_binding_json", None):
+    if publication_binding_path:
         publication_module = load_pr_projection_publication_module()
         try:
             publication_binding = json.loads(
-                pathlib.Path(args.publication_binding_json).read_text(encoding="utf-8")
+                pathlib.Path(publication_binding_path).read_text(encoding="utf-8")
             )
             publication_binding = publication_module.validate_publication_binding(publication_binding)
         except (OSError, json.JSONDecodeError, ValueError) as exc:
@@ -3305,6 +3359,7 @@ def command_record_pr(args: argparse.Namespace) -> int:
         if len(matching_publications) != 1:
             die("record-pr: exact unique CI publication intent is not present on Task Issue")
         intent = matching_publications[0]
+        publication_intent = intent
         conflicting_same_head = [
             item for item in publication_records
             if (item.get("task_uid") == intent["task_uid"]
@@ -3333,13 +3388,15 @@ def command_record_pr(args: argparse.Namespace) -> int:
         record,
         requested_pr_number,
         allow_exact_publication_poststate=(publication_binding is not None and is_draft_candidate),
+        publication_intent=publication_intent if is_ready_update else None,
+        publication_module=publication_module if is_ready_update else None,
     )
     record["pr_url"] = args.pr_url
     number = pr_number_from_url(args.pr_url)
     if number is not None:
         record["pr_number"] = number
-    target_status = "committed" if is_draft_candidate else "pr_watch"
-    target_phase = "verification" if is_draft_candidate else "pr_watch"
+    target_status = previous if is_ready_update else ("committed" if is_draft_candidate else "pr_watch")
+    target_phase = previous_phase if is_ready_update else ("verification" if is_draft_candidate else "pr_watch")
     record["status"] = target_status
     record["workflow_phase"] = target_phase
     record.setdefault("merge_hold", {
@@ -3375,13 +3432,13 @@ def command_record_pr(args: argparse.Namespace) -> int:
         args.role,
         target_phase,
         {
-            "Completed": "Draft Candidate Action recorded without advancing PR watch." if is_draft_candidate else "PR created and task moved to PR watch.",
+            "Completed": "Existing ready PR source binding updated without changing lifecycle state." if is_ready_update else ("Draft Candidate Action recorded without advancing PR watch." if is_draft_candidate else "PR created and task moved to PR watch."),
             "Pending": "Wait for same-head CI receipt." if is_draft_candidate else "Watch required checks, mergeability, comments, and review threads.",
             "Action": "record-pr",
             "Validation Command": args.validation_command,
             "Expected Result": f"Task phase is {target_phase} and PR URL is mapped.",
             "Actual Result": args.pr_url,
-            "Blocker / Next Action": "Obtain the same-head CI receipt, complete role review and ready closeout, then promote the draft." if is_draft_candidate else "Continue normal PR watch/fix/merge unless manual packaging hold is explicitly recorded.",
+            "Blocker / Next Action": "Obtain new-head required CI and all required-role review, applicable current-target strict evidence and fresh merge gate; old-head approvals are historical." if is_ready_update else ("Obtain the same-head CI receipt, complete role review and ready closeout, then promote the draft." if is_draft_candidate else "Continue normal PR watch/fix/merge unless manual packaging hold is explicitly recorded."),
         },
     )
     comment_url = None
@@ -3641,6 +3698,7 @@ def build_parser() -> argparse.ArgumentParser:
     record_pr.add_argument("--role", default="tpm")
     record_pr.add_argument("--validation-command", default="./scripts/prepare-task-pr.sh --create")
     record_pr.add_argument("--draft-candidate", action="store_true")
+    record_pr.add_argument("--existing-ready-update", action="store_true")
     record_pr.add_argument("--publication-binding-json")
     record_pr.add_argument("--json", action="store_true")
     record_pr.set_defaults(func=command_record_pr)

@@ -323,9 +323,14 @@ def _check_live_pr(
 
 
 def _live_admin_permissions(api: Any, authority: Any) -> dict[str, dict[str, str]]:
-    actors = sorted({authority.authorized_actor, authority.pin_actor})
+    actors = {authority.authorized_actor, authority.pin_actor}
+    if contract.is_successor_authority(authority):
+        request_actor = getattr(authority, "request_actor", None)
+        if type(request_actor) is not str or not request_actor:
+            raise ProducerError("successor request commenter identity is unavailable")
+        actors.add(request_actor)
     result: dict[str, dict[str, str]] = {}
-    for login in actors:
+    for login in sorted(actors):
         endpoint = f"repos/{REPOSITORY}/collaborators/{quote(login, safe='')}/permission"
         observation = api.get_json(endpoint)
         user = observation.get("user") if isinstance(observation, Mapping) else None
@@ -339,14 +344,19 @@ def _live_admin_permissions(api: Any, authority: Any) -> dict[str, dict[str, str
 def _live_workflow(api: Any) -> tuple[int, str]:
     repository = api.get_json(f"repos/{REPOSITORY}")
     if (not isinstance(repository, Mapping) or repository.get("full_name") != REPOSITORY
-            or repository.get("default_branch") != "main"):
+            or type(repository.get("default_branch")) is not str):
         raise ProducerError("canonical repository default-branch identity is unavailable")
+    default_branch = repository["default_branch"]
     workflow = api.get_json(f"repos/{REPOSITORY}/actions/workflows/rust.yml")
     if (not isinstance(workflow, Mapping) or workflow.get("path") != WORKFLOW_FILE
             or workflow.get("state") != "active" or type(workflow.get("id")) is not int
             or workflow["id"] <= 0):
         raise ProducerError("canonical active rust.yml workflow identity is unavailable")
-    return workflow["id"], repository["default_branch"]
+    try:
+        contract.normalize_workflow_identity(default_branch, workflow.get("path"))
+    except contract.ContractError as exc:
+        raise ProducerError("live repository default branch is not a canonical ref") from exc
+    return workflow["id"], default_branch
 
 
 def _check_dispatch_run(api: Any, run_id: int, workflow_id: int, default_branch: str,
@@ -359,10 +369,15 @@ def _check_dispatch_run(api: Any, run_id: int, workflow_id: int, default_branch:
     attempt = row.get("run_attempt")
     repository = row.get("repository")
     head_repository = row.get("head_repository")
+    try:
+        workflow_identity = contract.normalize_workflow_identity(
+            default_branch, row.get("path"),
+        )
+    except contract.ContractError as exc:
+        raise ProducerError("raw REST workflow path differs from exact live workflow identity") from exc
     if (type(attempt) is not int or attempt <= 0 or type(head_sha) is not str
             or not _OID_RE.fullmatch(head_sha)
             or type(row.get("workflow_id")) is not int or row.get("workflow_id") != workflow_id
-            or row.get("path") != WORKFLOW_PATH
             or row.get("event") != "workflow_dispatch"
             or row.get("head_branch") != default_branch
             or row.get("display_title") != expected_title
@@ -373,15 +388,14 @@ def _check_dispatch_run(api: Any, run_id: int, workflow_id: int, default_branch:
     workflow_sha = environment.get("GITHUB_WORKFLOW_SHA")
     if (type(workflow_sha) is not str or not _OID_RE.fullmatch(workflow_sha)
             or head_sha != workflow_sha or environment.get("GITHUB_SHA") != workflow_sha
-            or environment.get("GITHUB_REF") != f"refs/heads/{default_branch}"
-            or environment.get("GITHUB_WORKFLOW_REF") != WORKFLOW_REF):
+            or environment.get("GITHUB_REF") != workflow_identity["event_ref"]
+            or environment.get("GITHUB_WORKFLOW_REF") != workflow_identity["workflow_ref"]):
         raise ProducerError("actual workflow W differs from live default-branch run identity")
     return {
         "repository": REPOSITORY,
         "id": run_id,
         "workflow_id": workflow_id,
-        "workflow_path": row["path"],
-        "workflow_ref": WORKFLOW_REF,
+        **workflow_identity,
         "workflow_sha": workflow_sha,
         "event": row["event"],
         "display_title": row["display_title"],
@@ -584,7 +598,7 @@ def _prepare_inventory(
     try:
         inventory = inventory_module.build_required_inventory(
             root, m_root, merge_oid, planner_output,
-            repository=REPOSITORY, workflow_ref=WORKFLOW_REF,
+            repository=REPOSITORY, workflow_ref=run["workflow_ref"],
             planner_authority_oid=workflow_sha, event_name="workflow_dispatch",
             run_mode="legacy", changed_paths=changed_paths,
             base_ref=base_oid, head_ref=head_oid, task_uid=task_uid,
@@ -696,7 +710,8 @@ def _payload(authority: Any, run: Mapping[str, Any], check: Mapping[str, Any],
     record = contract.build_authority_record(authority, run)
     payload = {
         **{key: value for key, value in record.items() if key != "schema"},
-        "schema": contract.PAYLOAD_SCHEMA,
+        "schema": (contract.SUCCESSOR_PAYLOAD_SCHEMA
+                   if contract.is_successor_authority(authority) else contract.PAYLOAD_SCHEMA),
         "authority_digest": contract.authority_digest(record),
         "capability_under_test": contract.CAPABILITY,
         "tested_merge_oid": merge_oid,
@@ -731,9 +746,16 @@ def produce_validation(
     if (environment.get("GITHUB_REPOSITORY") != REPOSITORY
             or environment.get("GITHUB_EVENT_NAME") != "workflow_dispatch"):
         raise ProducerError("validation-only producer requires the canonical manual dispatch")
-    if (environment.get("GITHUB_WORKFLOW_REF") != WORKFLOW_REF
-            or environment.get("GITHUB_REF") != "refs/heads/main"):
-        raise ProducerError("validation-only producer is not executing on trusted main rust.yml")
+    workflow_id, default_branch = _live_workflow(api)
+    try:
+        workflow_identity = contract.normalize_workflow_identity(
+            default_branch, WORKFLOW_FILE,
+        )
+    except contract.ContractError as exc:
+        raise ProducerError("live default-branch workflow identity is malformed") from exc
+    if (environment.get("GITHUB_WORKFLOW_REF") != workflow_identity["workflow_ref"]
+            or environment.get("GITHUB_REF") != workflow_identity["event_ref"]):
+        raise ProducerError("validation-only producer is not executing on trusted live-default rust.yml")
 
     try:
         event = _json_without_duplicate_keys(event_file.read_bytes(), "GitHub workflow event")
@@ -758,8 +780,8 @@ def produce_validation(
         "pr_number": pr_number, "head_oid": head_oid,
         "integration_base_oid": base_oid,
     }
-    provisional = contract.resolve_records_for_readback(
-        comments, expected_identity=expected_identity,
+    provisional, predecessor_observation = readback._resolve_records_with_predecessor(
+        api, comments, expected_identity, workflow_id, default_branch, None,
     )
     if (provisional.request["task_uid"] != task_uid
             or provisional.request["task_issue_number"] != task_issue_number
@@ -768,11 +790,14 @@ def produce_validation(
             or provisional.request["integration_base_oid"] != base_oid):
         raise ProducerError("frozen request differs from live Task UID or PR H/B")
     permissions = _live_admin_permissions(api, provisional)
-    authority = contract.resolve_records(
-        comments, permissions, expected_identity=expected_identity,
-    )
-    workflow_id, default_branch = _live_workflow(api)
-
+    if predecessor_observation is None:
+        authority = contract.resolve_records(
+            comments, permissions, expected_identity=expected_identity,
+        )
+    else:
+        authority = contract.resolve_successor_records(
+            comments, expected_identity, permissions, predecessor_observation,
+        )
     expected_inputs = contract.expected_event_inputs(authority)
     validate_dispatch_inputs(event["inputs"], expected_inputs)
     expected_title = contract.expected_run_title(authority)
@@ -861,6 +886,7 @@ def main() -> None:
     if output_path:
         artifact = contract.artifact_name(
             payload["validation_id"], payload["run_id"], payload["run_attempt"],
+            successor=contract.is_successor_authority(authority),
         )
         with Path(output_path).open("a", encoding="utf-8") as stream:
             stream.write("artifact_name=" + artifact + "\n")

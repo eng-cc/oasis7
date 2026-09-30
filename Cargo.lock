@@ -9343,6 +9343,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "wasm_build_suite"
+version = "0.1.0"
+dependencies = [
+ "hex",
+ "oasis7_wasm_build",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "wasm-encoder 0.256.0",
+ "wasmparser 0.256.0",
+]
+
+[[package]]
+name = "wasm_module_observe"
+version = "0.1.0"
+dependencies = [
+ "oasis7_wasm_abi",
+ "oasis7_wasm_executor",
+ "oasis7_wasm_router",
+ "serde",
+ "serde_cbor",
+ "serde_json",
+ "wasm_build_suite",
+]
+
+[[package]]
 name = "wasmparser"
 version = "0.254.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -9362,8 +9388,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "60bd825ffedc6cba8a642924ba7ae424afbc47811cffbcb7b92031ec24e59b4c"
 dependencies = [
  "bitflags 2.13.1",
+ "hashbrown 0.17.1",
  "indexmap",
  "semver",
+ "serde",
 ]
 
 [[package]]
