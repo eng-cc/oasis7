@@ -19,12 +19,17 @@ ARTIFACT_DEPENDENCY_SCHEMA = "oasis7-artifact-dependency/v1"
 ARTIFACT_PATH_RE = re.compile(r"^[A-Za-z0-9._/-]+$")
 OID_RE = re.compile(r"^[0-9a-f]{40,64}$")
 TASK_UID_RE = re.compile(r"^task_[0-9a-f]{32}$")
+ADMIN_PERMISSION_VALUES = {"admin", "maintain", "write", "triage", "read", "push", "pull", "none"}
 _EXCEPTION_PATH = pathlib.Path(__file__).with_name("workflow-process-exception.py")
 _EXCEPTION_SPEC = importlib.util.spec_from_file_location("workflow_process_exception", _EXCEPTION_PATH)
 if _EXCEPTION_SPEC is None or _EXCEPTION_SPEC.loader is None:
     raise RuntimeError(f"cannot load process-exception validator at {_EXCEPTION_PATH}")
 PROCESS_EXCEPTIONS = importlib.util.module_from_spec(_EXCEPTION_SPEC)
 _EXCEPTION_SPEC.loader.exec_module(PROCESS_EXCEPTIONS)
+
+
+class _TaskBindingConflict(ValueError):
+    """A live record proves that the selected task, PR, or check is misbound."""
 
 
 def _action_blocker(
@@ -61,10 +66,20 @@ BLOCKER_POLICY: dict[str, tuple[list[str], list[str], str]] = {
         ["inspect", "repair_within_authorized_scope", "resolve_with_evidence"],
         "resolve_current_review_finding",
     ),
+    "CURRENT_CHECK_PENDING": (
+        ["merge", "complete"],
+        ["inspect", "wait_for_current_check"],
+        "wait_for_current_required_check",
+    ),
     "CURRENT_CHECK_FAILED": (
         ["merge", "complete"],
         ["inspect", "diagnose", "repair_within_authorized_scope", "rerun_applicable_check"],
         "rerun_current_required_check",
+    ),
+    "CURRENT_CHECK_UNAVAILABLE": (
+        ["merge", "complete"],
+        ["inspect", "restore_read_access", "retry_evidence_read"],
+        "restore_current_check_readback",
     ),
     "SOURCE_NOT_PUBLISHED": (
         ["validate", "merge"],
@@ -90,7 +105,9 @@ BLOCKER_POLICY: dict[str, tuple[list[str], list[str], str]] = {
 
 DELIVERY_BLOCKS_ACTIONS: dict[str, list[str]] = {
     "REVIEW_FINDING_BLOCKING": ["merge", "complete", "consume_artifact"],
+    "CURRENT_CHECK_PENDING": ["merge", "complete", "consume_artifact"],
     "CURRENT_CHECK_FAILED": ["merge", "complete", "consume_artifact"],
+    "CURRENT_CHECK_UNAVAILABLE": ["merge", "complete", "consume_artifact"],
     "SOURCE_NOT_PUBLISHED": ["validate", "merge", "consume_artifact"],
 }
 
@@ -140,6 +157,47 @@ def _ci_ok(value: Any, *, head_oid: str | None = None) -> bool:
         and type(value.get("run_id")) is int and value["run_id"] > 0
         and type(value.get("run_attempt")) is int and value["run_attempt"] > 0
     )
+
+
+def _current_required_check_state(check: dict[str, Any], job: dict[str, Any]) -> str:
+    valid_pending_statuses = {"queued", "in_progress"}
+    valid_conclusions = {
+        "success", "failure", "cancelled", "timed_out", "action_required",
+        "neutral", "skipped", "stale", "startup_failure",
+    }
+    statuses = (check.get("status"), job.get("status"))
+    conclusions = (check.get("conclusion"), job.get("conclusion"))
+    if any(not isinstance(status, str)
+           or status not in valid_pending_statuses | {"completed"} for status in statuses):
+        return "unavailable"
+    if any(status in valid_pending_statuses for status in statuses):
+        return "pending"
+    if any(not isinstance(value, str) for value in conclusions):
+        return "unavailable"
+    normalized = tuple(value.lower() for value in conclusions)
+    if any(value not in valid_conclusions for value in normalized):
+        return "unavailable"
+    return "success" if all(value == "success" for value in normalized) else "failed"
+
+
+def _no_findings_review_is_complete(review: dict[str, Any]) -> bool:
+    roles = review.get("roles")
+    evidence = review.get("finding_disposition_evidence")
+    if (not isinstance(roles, list) or not roles
+            or any(not isinstance(role, str) or not re.fullmatch(r"[A-Za-z0-9_-]+", role) for role in roles)
+            or len(roles) != len(set(roles))
+            or not isinstance(evidence, str)):
+        return False
+    entries = evidence.split(";")
+    if len(entries) != len(roles):
+        return False
+    seen: list[str] = []
+    for entry in entries:
+        match = re.fullmatch(r"[ \t]*([A-Za-z0-9_-]+): no_findings[ \t]*", entry)
+        if not match:
+            return False
+        seen.append(match.group(1))
+    return len(seen) == len(set(seen)) and set(seen) == set(roles)
 
 
 def derive_delivery_readiness(task_uid: str, proof: dict[str, Any]) -> dict[str, Any]:
@@ -207,14 +265,19 @@ def derive_delivery_readiness(task_uid: str, proof: dict[str, Any]) -> dict[str,
         and OID_RE.fullmatch(pr["head_oid"])
     ):
         reasons.append(("TASK_BINDING_CONFLICT", "the uniquely reciprocal live merged PR does not match the declared upstream task"))
-    if not isinstance(review, dict) or not (
+    review_identity_ok = isinstance(review, dict) and (
         review.get("task_uid") == upstream_uid
         and pr_head_oid is not None and review.get("source_head_oid") == pr_head_oid
         and review.get("passed") is True
         and review.get("admin_author") is True
-        and review.get("findings_disposition") == "addressed"
         and isinstance(review.get("roles"), list) and bool(review["roles"])
-    ):
+    )
+    review_disposition_ok = isinstance(review, dict) and (
+        review.get("findings_disposition") == "addressed"
+        or (review.get("findings_disposition") == "no_findings"
+            and _no_findings_review_is_complete(review))
+    )
+    if not review_identity_ok or not review_disposition_ok:
         reasons.append(("REVIEW_FINDING_BLOCKING", "current source-head review is missing, stale, incomplete or unresolved"))
     if not isinstance(source_ci, dict) or not (
         isinstance(locator, dict)
@@ -346,31 +409,133 @@ def _is_admin(repository: str, login: str) -> bool:
     user = value.get("user") if isinstance(value, dict) else None
     if not isinstance(user, dict) or user.get("login") != login:
         raise ValueError("GitHub permission response user does not match the comment author")
-    return value.get("permission") == "admin"
+    permission = value.get("permission")
+    if not isinstance(permission, str) or permission not in ADMIN_PERMISSION_VALUES:
+        raise ValueError("GitHub permission response has an unknown permission")
+    return permission == "admin"
 
 
-def _typed_record(comments: list[Any], marker: str, schema: str, issue_url: str) -> tuple[dict[str, Any], dict[str, Any]] | None:
-    candidates = [item for item in comments if isinstance(item, dict)
-                  and isinstance(item.get("body"), str) and marker in item["body"]]
-    if not candidates:
-        return None
-    if len(candidates) != 1:
-        raise ValueError("Task Issue contains duplicate typed evidence records")
-    comment = candidates[0]
-    body = comment.get("body")
-    if comment.get("issue_url") != issue_url or not body.startswith(marker + "\n") or body.count(marker) != 1:
-        raise ValueError("typed evidence marker framing or Task Issue identity is invalid")
-    raw = body[len(marker) + 1:]
-    try:
-        record = json.loads(raw)
-    except json.JSONDecodeError as exc:
-        raise ValueError("typed evidence is malformed JSON") from exc
-    if (not isinstance(record, dict)
-            or json.dumps(record, ensure_ascii=True, sort_keys=True, separators=(",", ":")) != raw
-            or record.get("schema") != schema
-            or type(comment.get("id")) is not int):
-        raise ValueError("typed evidence is noncanonical or has an unsupported schema")
-    return comment, record
+def _typed_record(
+    comments: list[Any], marker: str, schema: str, issue_url: str, *,
+    repository: str, task_uid: str, issue_number: int,
+) -> tuple[dict[str, Any], dict[str, Any]] | None:
+    """Select one authenticated declaration after excluding other types/bindings."""
+    authorized: list[tuple[dict[str, Any], dict[str, Any]]] = []
+    for item in comments:
+        if not isinstance(item, dict) or not isinstance(item.get("body"), str):
+            continue
+        body = item["body"]
+        if marker not in body or not body.startswith(marker):
+            continue
+        if isinstance(item.get("issue_url"), str) and item["issue_url"] != issue_url:
+            continue
+        user = item.get("user")
+        author = user.get("login") if isinstance(user, dict) else None
+        if not isinstance(author, str):
+            raise ValueError("typed evidence author identity is unavailable")
+        raw = body[len(marker) + 1:] if body.startswith(marker + "\n") else None
+        record: Any = None
+        parse_error: str | None = None
+        if raw is None or body.count(marker) != 1:
+            parse_error = "typed evidence marker framing is invalid"
+        else:
+            try:
+                record = json.loads(raw)
+            except json.JSONDecodeError:
+                parse_error = "typed evidence is malformed JSON"
+
+        if parse_error is None and isinstance(record, dict):
+            if record.get("schema") != schema:
+                continue
+            candidate_uid = record.get("task_uid")
+            candidate_issue = record.get("task_issue_number")
+            candidate_repository = record.get("repository")
+            if isinstance(candidate_uid, str) and candidate_uid != task_uid:
+                continue
+            if type(candidate_issue) is int and candidate_issue != issue_number:
+                continue
+            if isinstance(candidate_repository, str) and candidate_repository != repository:
+                continue
+            if (candidate_uid != task_uid or type(candidate_issue) is not int
+                    or candidate_issue != issue_number or candidate_repository != repository):
+                parse_error = "typed evidence binding is incomplete or malformed"
+        elif parse_error is None:
+            parse_error = "typed evidence must be a JSON object"
+
+        # Malformed or possibly bound candidates are authenticated before their
+        # content can block selection; a known non-admin author is never authority.
+        if not _is_admin(repository, author):
+            continue
+        if parse_error is not None:
+            raise ValueError(parse_error)
+        assert isinstance(record, dict) and raw is not None
+        if (item.get("issue_url") != issue_url
+                or json.dumps(record, ensure_ascii=True, sort_keys=True, separators=(",", ":")) != raw
+                or type(item.get("id")) is not int):
+            raise ValueError("authorized typed evidence is noncanonical or bound to the wrong Task Issue")
+        authorized.append((item, record))
+
+    if len(authorized) > 1:
+        raise ValueError("Task Issue contains duplicate authorized typed evidence records")
+    return authorized[0] if authorized else None
+
+
+def _has_exact_body_field(body: str, field: str, value: str) -> bool:
+    pattern = rf"(?m)^-[ \t]+{re.escape(field)}:[ \t]*(?:`{re.escape(value)}`|{re.escape(value)})[ \t]*$"
+    return re.search(pattern, body) is not None
+
+
+def _latest_authenticated_review(
+    comments: list[Any], repository: str, task_uid: str, head_oid: str, issue_number: int,
+) -> dict[str, Any]:
+    """Return the latest exact-task/head review after filtering known non-admin authors."""
+    issue_url = f"https://api.github.com/repos/{repository}/issues/{issue_number}"
+    authorized: list[dict[str, Any]] = []
+    for item in comments:
+        if not isinstance(item, dict) or not isinstance(item.get("body"), str):
+            continue
+        body = item["body"]
+        if (not _has_exact_body_field(body, "Task UID", task_uid)
+                or not _has_exact_body_field(body, "Source Head", head_oid)):
+            continue
+        if isinstance(item.get("issue_url"), str) and item["issue_url"] != issue_url:
+            continue
+        review_shape = any(
+            line.startswith(("- Pre-PR Local Role Review:", "- Review Roles:"))
+            for line in body.splitlines()
+        )
+        if not review_shape:
+            continue
+        user = item.get("user")
+        author = user.get("login") if isinstance(user, dict) else None
+        if not isinstance(author, str):
+            raise ValueError("source review author identity is unavailable")
+        if not _is_admin(repository, author):
+            continue
+        roles_value = _body_field(body, "Review Roles")
+        role_line = [line for line in body.splitlines() if line.startswith("- Review Roles:")]
+        disposition_lines = [line for line in body.splitlines()
+                             if line.startswith("- Pre-PR Local Role Review:")]
+        roles = [role.strip() for role in roles_value.split(",")] if roles_value is not None else []
+        if (item.get("issue_url") != issue_url or type(item.get("id")) is not int
+                or _body_field(body, "Task UID") != task_uid
+                or _body_field(body, "Source Head") != head_oid
+                or len(role_line) != 1 or not roles or any(not role for role in roles)
+                or len(disposition_lines) != 1
+                or disposition_lines[0] not in {
+                    "- Pre-PR Local Role Review: passed",
+                    "- Pre-PR Local Role Review: failed",
+                }):
+            raise ValueError("authorized source review packet is malformed or bound to the wrong Task Issue")
+        authorized.append(item)
+
+    if not authorized:
+        raise ValueError("source Task Issue lacks an authenticated exact source-head review packet")
+    authorized.sort(key=lambda item: (
+        str(item.get("updated_at") or item.get("created_at") or ""),
+        int(item["id"]),
+    ))
+    return authorized[-1]
 
 
 def _associated_pr_numbers(value: Any, repository: str) -> list[int]:
@@ -524,7 +689,10 @@ def read_explicit_edge(root: pathlib.Path, task: dict[str, Any]) -> dict[str, An
             or _canonical_uid(body) != task_uid):
         raise ValueError("bound Task Issue live UID/number identity is invalid")
     comments = _pages(f"repos/{repository}/issues/{issue_number}/comments", None)
-    typed = _typed_record(comments, ARTIFACT_DEPENDENCY_MARKER, ARTIFACT_DEPENDENCY_SCHEMA, issue_url)
+    typed = _typed_record(
+        comments, ARTIFACT_DEPENDENCY_MARKER, ARTIFACT_DEPENDENCY_SCHEMA, issue_url,
+        repository=repository, task_uid=task_uid, issue_number=issue_number,
+    )
     if typed is None:
         return {}
     issue = _resolve_project_task_issue(task_uid, issue_number)
@@ -580,21 +748,9 @@ def read_explicit_edge(root: pathlib.Path, task: dict[str, Any]) -> dict[str, An
         allow_empty_pr_association=True,
     )
     source_comments = _pages(f"repos/{repository}/issues/{upstream_number}/comments", None)
-    reviews = []
-    for comment in source_comments:
-        text = comment.get("body") if isinstance(comment, dict) else None
-        if not isinstance(text, str):
-            continue
-        if (_body_field(text, "Task UID") == declaration["upstream_task_uid"]
-                and _body_field(text, "Source Head") == head_oid
-                and _body_field(text, "Review Roles") is not None
-                and any(line.startswith("- Pre-PR Local Role Review:") for line in text.splitlines())):
-            reviews.append(comment)
-    if not reviews:
-        raise ValueError("source Task Issue lacks an exact source-head review packet")
-    reviews.sort(key=lambda item: (str(item.get("updated_at") or item.get("created_at") or ""),
-                                   int(item.get("id") or 0)))
-    review_comment = reviews[-1]
+    review_comment = _latest_authenticated_review(
+        source_comments, repository, declaration["upstream_task_uid"], head_oid, upstream_number,
+    )
     review_author = (review_comment.get("user") or {}).get("login")
     review_text = str(review_comment.get("body") or "")
     role_line = next((line for line in review_text.splitlines() if line.startswith("- Review Roles: ")), "")
@@ -604,10 +760,9 @@ def read_explicit_edge(root: pathlib.Path, task: dict[str, Any]) -> dict[str, An
         "source_head_oid": _body_field(review_text, "Source Head"),
         "passed": "- Pre-PR Local Role Review: passed" in review_text,
         "roles": roles, "findings_disposition": _body_field(review_text, "Review Findings Disposition"),
-        "admin_author": isinstance(review_author, str) and _is_admin(repository, review_author),
+        "finding_disposition_evidence": _body_field(review_text, "Finding Disposition Evidence"),
+        "admin_author": isinstance(review_author, str),
     }
-    if review_comment.get("issue_url") != f"https://api.github.com/repos/{repository}/issues/{upstream_number}":
-        raise ValueError("source review packet is published on the wrong Task Issue")
 
     changed_files = _pages(f"repos/{repository}/pulls/{pr_number}/files", None)
     artifact_ok, file_digests = _artifact_matches(root, merge_oid, declaration["artifacts"], changed_files)
@@ -775,12 +930,12 @@ def read_current_pr_projection(root: pathlib.Path, task: dict[str, Any]) -> tupl
         body = str(pr.get("body") or "") if isinstance(pr, dict) else ""
         head_oid = ((pr.get("head") or {}).get("sha")) if isinstance(pr, dict) else None
         task_uid = str(task.get("task_uid") or "")
-        exact_task = bool(re.search(rf"(?m)^Task: {re.escape(task_uid)}$", body))
-        exact_issue = bool(re.search(rf"(?m)^Refs #{issue_number}$", body))
+        task_refs = re.findall(rf"(?m)^Task: {re.escape(task_uid)}$", body)
+        issue_refs = re.findall(rf"(?m)^Refs #{issue_number}$", body)
         if (not isinstance(pr, dict) or pr.get("number") != pr_number
-                or not exact_task or not exact_issue
+                or len(task_refs) != 1 or len(issue_refs) != 1
                 or not isinstance(head_oid, str) or not re.fullmatch(r"[0-9a-f]{40,64}", head_oid)):
-            raise ValueError("live PR identity/head does not match task mapping")
+            raise _TaskBindingConflict("live PR identity/head does not match task mapping")
         projection["remote_pr_head_oid"] = head_oid
         if local_head and head_oid != local_head:
             blocked, allowed, next_kind = BLOCKER_POLICY["SOURCE_NOT_PUBLISHED"]
@@ -791,18 +946,30 @@ def read_current_pr_projection(root: pathlib.Path, task: dict[str, Any]) -> tupl
             ))
         checks = _pages(f"repos/{repository}/commits/{head_oid}/check-runs", "check_runs")
         matching = []
+        conflicting_check_association = False
+        malformed_check_association = False
         for row in checks:
             if (not isinstance(row, dict) or row.get("name") != "required-gate"
                     or (row.get("app") or {}).get("id") != REQUIRED_GATE_APP_ID
                     or row.get("head_sha") != head_oid):
                 continue
-            try:
-                associations = _associated_pr_numbers(row.get("pull_requests"), repository)
-            except ValueError:
+            association_rows = row.get("pull_requests")
+            if isinstance(association_rows, list) and not association_rows:
                 continue
-            if associations and all(number == pr_number for number in associations):
+            try:
+                associations = _associated_pr_numbers(association_rows, repository)
+            except ValueError:
+                malformed_check_association = True
+                continue
+            if any(number != pr_number for number in associations):
+                conflicting_check_association = True
+            else:
                 matching.append(row)
         if not matching:
+            if conflicting_check_association:
+                raise _TaskBindingConflict("current required-gate check is associated with a different PR")
+            if malformed_check_association:
+                raise ValueError("current required-gate check PR association is malformed or unavailable")
             exception = _current_pr_process_waiver(repository, task, pr_number, head_oid,
                                                   str(((pr.get("head") or {}).get("ref")) or ""))
             if exception.get("applicable") is not True:
@@ -818,20 +985,25 @@ def read_current_pr_projection(root: pathlib.Path, task: dict[str, Any]) -> tupl
         run_id = int(match.group(1))
         run = _gh_json(f"repos/{repository}/actions/runs/{run_id}")
         attempt = run.get("run_attempt") if isinstance(run, dict) else None
-        if (check.get("head_sha") != head_oid or not isinstance(run, dict)
-                or run.get("id") != run_id or run.get("head_sha") != head_oid
+        check_id = check.get("id")
+        if (type(check_id) is not int or check_id < 1
+                or not isinstance(run, dict) or run.get("id") != run_id
                 or run.get("head_branch") != ((pr.get("head") or {}).get("ref"))
                 or run.get("path") != ".github/workflows/rust.yml"
                 or run.get("event") != "pull_request"
                 or type(attempt) is not int or attempt < 1):
             raise ValueError("required-gate workflow run identity is uncertain")
+        run_head = run.get("head_sha")
+        if (not isinstance(run_head, str) or not re.fullmatch(r"[0-9a-f]{40,64}", run_head)
+                or run_head != head_oid or check.get("head_sha") != head_oid):
+            raise _TaskBindingConflict("required-gate check and workflow run are bound to a different PR head")
         run_association_rows = run.get("pull_requests")
         if not isinstance(run_association_rows, list):
             raise ValueError("required-gate workflow run PR association is malformed")
         run_associations = _associated_pr_numbers(run_association_rows, repository) if run_association_rows else []
         association_exception = None
         if run_associations and any(number != pr_number for number in run_associations):
-            raise ValueError("required-gate workflow run has conflicting PR association")
+            raise _TaskBindingConflict("required-gate workflow run has conflicting PR association")
         if not run_associations:
             association_exception = _current_pr_process_waiver(
                 repository, task, pr_number, head_oid,
@@ -860,6 +1032,7 @@ def read_current_pr_projection(root: pathlib.Path, task: dict[str, Any]) -> tupl
             "run_attempt": attempt,
             "event": run.get("event"),
             "workflow_path": run.get("path"),
+            "workflow_run_status": run.get("status"),
             "head_oid": check.get("head_sha"),
             "status": check.get("status"),
             "conclusion": check.get("conclusion"),
@@ -867,10 +1040,17 @@ def read_current_pr_projection(root: pathlib.Path, task: dict[str, Any]) -> tupl
             "job_status": job.get("status"),
             "job_conclusion": job.get("conclusion"),
         }
-        if (check.get("status") != "completed"
-                or str(check.get("conclusion") or "").lower() != "success"
-                or job.get("status") != "completed"
-                or str(job.get("conclusion") or "").lower() != "success"):
+        ci_state = _current_required_check_state(check, job)
+        if ci_state == "pending":
+            blocked, allowed, next_kind = BLOCKER_POLICY["CURRENT_CHECK_PENDING"]
+            blockers.append(_action_blocker(
+                "CURRENT_CHECK_PENDING",
+                "the bound required-gate check or job is still running; wait for it to complete",
+                blocks_actions=list(blocked), allowed_actions=list(allowed), next_action_kind=next_kind,
+            ))
+        elif ci_state == "unavailable":
+            raise ValueError("current required-gate check or job status is malformed or unavailable")
+        elif ci_state == "failed":
             exception = _current_pr_process_waiver(repository, task, pr_number, head_oid,
                                                   str(((pr.get("head") or {}).get("ref")) or ""))
             if exception.get("applicable") is True:
@@ -880,7 +1060,7 @@ def read_current_pr_projection(root: pathlib.Path, task: dict[str, Any]) -> tupl
                 blocked, allowed, next_kind = BLOCKER_POLICY["CURRENT_CHECK_FAILED"]
                 blockers.append(_action_blocker(
                     "CURRENT_CHECK_FAILED",
-                    "the latest required-gate check on the live PR head is pending or unsuccessful",
+                    "the bound required-gate check or job completed without success",
                     blocks_actions=list(blocked), allowed_actions=list(allowed), next_action_kind=next_kind,
                 ))
             failures = [item for item in jobs if isinstance(item, dict)
@@ -894,13 +1074,22 @@ def read_current_pr_projection(root: pathlib.Path, task: dict[str, Any]) -> tupl
                     "job": failed.get("name"),
                     "step": failed_steps[0].get("name") if failed_steps else None,
                 }
+    except _TaskBindingConflict as exc:
+        projection["read_status"] = "conflict"
+        projection["read_error"] = str(exc)
+        blocked, allowed, next_kind = BLOCKER_POLICY["TASK_BINDING_CONFLICT"]
+        blockers.append(_action_blocker(
+            "TASK_BINDING_CONFLICT",
+            f"live PR/check identity conflicts with the bound task: {exc}",
+            blocks_actions=list(blocked), allowed_actions=list(allowed), next_action_kind=next_kind,
+        ))
     except (OSError, ValueError) as exc:
         projection["read_status"] = "uncertain"
         projection["read_error"] = str(exc)
-        blocked, allowed, next_kind = BLOCKER_POLICY["CURRENT_CHECK_FAILED"]
+        blocked, allowed, next_kind = BLOCKER_POLICY["CURRENT_CHECK_UNAVAILABLE"]
         blockers.append(_action_blocker(
-            "CURRENT_CHECK_FAILED",
-            f"live PR/check identity could not be verified: {exc}",
+            "CURRENT_CHECK_UNAVAILABLE",
+            f"live required-check evidence could not be verified: {exc}",
             blocks_actions=list(blocked), allowed_actions=list(allowed), next_action_kind=next_kind,
         ))
     return projection, blockers
