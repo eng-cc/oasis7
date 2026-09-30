@@ -5,6 +5,7 @@ from __future__ import annotations
 import importlib.util
 import json
 from types import SimpleNamespace
+from typing import Any
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -488,6 +489,22 @@ class AuthoritativeEvidenceSelectionTest(unittest.TestCase):
             "user": {"login": login}, "body": body,
         }
 
+    def duplicate_key_declaration_comment(self, comment_id: int, login: str,
+                                          key: str, second_value: Any) -> dict:
+        comment = self.declaration_comment(comment_id, login)
+        record = json.loads(comment["body"].split("\n", 1)[1])
+        pairs = []
+        for name in sorted(record):
+            pairs.append((name, record[name]))
+            if name == key:
+                pairs.append((name, second_value))
+        raw = ",".join(
+            f"{json.dumps(name, ensure_ascii=True)}:{json.dumps(value, ensure_ascii=True)}"
+            for name, value in pairs
+        )
+        comment["body"] = self.declaration_marker + "\n{" + raw + "}"
+        return comment
+
     def review_comment(self, comment_id: int, login: str, updated_at: str, *,
                        task_uid: str = UPSTREAM_UID, head_oid: str = HEAD) -> dict:
         body = "\n".join((
@@ -520,6 +537,9 @@ class AuthoritativeEvidenceSelectionTest(unittest.TestCase):
                        separators=(",", ":"))
         )
         nonadmin = self.declaration_comment(2, "synthetic-public")
+        duplicate_nonadmin = self.duplicate_key_declaration_comment(
+            9, "synthetic-public", "schema", "oasis7.other-typed-evidence/v1",
+        )
         malformed_nonadmin = self.declaration_comment(
             3, "synthetic-public", body_override=self.declaration_marker + "\n{bad-json",
         )
@@ -544,7 +564,7 @@ class AuthoritativeEvidenceSelectionTest(unittest.TestCase):
             side_effect=lambda _repo, login: login == "synthetic-admin",
         ):
             selected = DELIVERY._typed_record(
-                [unrelated, wrong_issue, another_type, nonadmin, malformed_nonadmin,
+                [unrelated, wrong_issue, another_type, nonadmin, duplicate_nonadmin, malformed_nonadmin,
                  misframed_nonadmin, incomplete_nonadmin, authorized], self.declaration_marker,
                 self.declaration_schema, self.consuming_issue_url,
                 repository=REPO, task_uid=TASK_UID, issue_number=900,
@@ -553,6 +573,38 @@ class AuthoritativeEvidenceSelectionTest(unittest.TestCase):
         self.assertIsNotNone(selected)
         assert selected is not None
         self.assertEqual(selected[0]["id"], 6)
+
+    def test_duplicate_schema_and_task_binding_keys_block_admin_declarations(self) -> None:
+        cases = {
+            "schema": "oasis7.other-typed-evidence/v1",
+            "task_uid": "task_" + "e" * 32,
+            "task_issue_number": 999,
+            "repository": "other/repository",
+        }
+        for key, second_value in cases.items():
+            with self.subTest(key=key):
+                comment = self.duplicate_key_declaration_comment(
+                    30, "synthetic-admin", key, second_value,
+                )
+                with patch.object(DELIVERY, "_is_admin", return_value=True):
+                    with self.assertRaisesRegex(ValueError, "duplicate|JSON|malformed"):
+                        DELIVERY._typed_record(
+                            [comment], self.declaration_marker, self.declaration_schema,
+                            self.consuming_issue_url, repository=REPO,
+                            task_uid=TASK_UID, issue_number=900,
+                        )
+
+    def test_duplicate_declaration_keys_with_unknown_permission_fail_closed(self) -> None:
+        comment = self.duplicate_key_declaration_comment(
+            31, "synthetic-uncertain", "schema", "oasis7.other-typed-evidence/v1",
+        )
+        with patch.object(DELIVERY, "_is_admin", side_effect=ValueError("permission unavailable")):
+            with self.assertRaisesRegex(ValueError, "permission|unavailable"):
+                DELIVERY._typed_record(
+                    [comment], self.declaration_marker, self.declaration_schema,
+                    self.consuming_issue_url, repository=REPO,
+                    task_uid=TASK_UID, issue_number=900,
+                )
 
     def test_duplicate_authorized_declarations_are_ambiguous(self) -> None:
         comments = [

@@ -6,8 +6,10 @@ planner="$repo_root/scripts/plan-rust-required-scope.sh"
 ci_tests="$repo_root/scripts/ci-tests.sh"
 versioned_config="$repo_root/scripts/fixtures/ci-required-scope.versioned-test.json"
 legacy_config="$repo_root/scripts/fixtures/ci-required-scope.legacy-test.json"
+active_config="$repo_root/scripts/ci-required-scope.v2.json"
 legacy_config_sha256="sha256:d656841b3c9fcf66fcd5ea1c37b43d9628e61d13ea48be8bda54e71511d505b4"
 versioned_config_sha256="sha256:2d4228e5d7446c393ea3811084183860b5f8b4bb0e3b673957a3a020ab172dec"
+active_config_sha256="sha256:$(sha256sum "$active_config" | awk '{print $1}')"
 
 value_for_key() {
   local output="$1"
@@ -94,16 +96,12 @@ effective_execution_contract="$(value_for_key "$minimal_plan" execution_contract
 effective_config_sha256="$(value_for_key "$minimal_plan" planner_config_sha256)"
 if [[ -z "$effective_execution_contract" && "$effective_config_sha256" == "$legacy_config_sha256" ]]; then
   effective_policy_mode=legacy
-  cmp -s "$repo_root/scripts/ci-required-scope.v2.json" "$legacy_config" || {
+  cmp -s "$active_config" "$legacy_config" || {
     echo "legacy effective required-scope config differs from its pinned compatibility fixture" >&2
     exit 1
   }
-elif [[ "$effective_execution_contract" == required-domain-split/v1 && "$effective_config_sha256" == "$versioned_config_sha256" ]]; then
+elif [[ "$effective_execution_contract" == required-domain-split/v1 && "$effective_config_sha256" == "$active_config_sha256" ]]; then
   effective_policy_mode=versioned
-  cmp -s "$repo_root/scripts/ci-required-scope.v2.json" "$versioned_config" || {
-    echo "versioned effective required-scope config differs from its pinned fixture" >&2
-    exit 1
-  }
   require_key "$minimal_plan" run_packaging_contracts false
   require_key "$minimal_plan" run_workflow_governance_contracts false
   require_key "$minimal_plan" run_doc_checker_contracts false
@@ -127,7 +125,7 @@ if [[ "$effective_policy_mode" == legacy ]]; then
   require_key "$packaging_plan" run_operational_contracts true
 else
   require_key "$packaging_plan" execution_contract required-domain-split/v1
-  require_key "$packaging_plan" planner_config_sha256 "$versioned_config_sha256"
+  require_key "$packaging_plan" planner_config_sha256 "$active_config_sha256"
   require_key "$packaging_plan" run_packaging_contracts true
   require_key "$packaging_plan" run_operational_contracts false
   require_key "$packaging_plan" needs_python true
@@ -172,6 +170,15 @@ require_key "$versioned_packaging_plan" needs_python true
 require_key "$versioned_packaging_plan" needs_markdown true
 require_reason_contains "$versioned_packaging_plan" "packaging_contracts:scripts/package-native-installer.sh"
 
+legacy_fixture_plan="$("$planner" --event-name pull_request --config "$legacy_config" \
+  --changed-path doc/testing/prd.md)"
+require_key "$legacy_fixture_plan" planner_config_sha256 "$legacy_config_sha256"
+require_key "$legacy_fixture_plan" run_required_gate_baseline true
+if [[ -n "$(value_for_key "$legacy_fixture_plan" execution_contract)" ]]; then
+  echo "legacy fixture unexpectedly declares a versioned execution contract" >&2
+  exit 1
+fi
+
 release_packaging_plan="$($planner --event-name pull_request \
   --changed-path .github/workflows/release-packages.yml \
   --changed-path scripts/build-game-launcher-bundle.sh)"
@@ -184,7 +191,7 @@ require_key "$operational_plan" run_required_gate_baseline true
 require_key "$operational_plan" run_operational_contracts true
 if [[ "$effective_policy_mode" == versioned ]]; then
   require_key "$operational_plan" execution_contract required-domain-split/v1
-  require_key "$operational_plan" planner_config_sha256 "$versioned_config_sha256"
+  require_key "$operational_plan" planner_config_sha256 "$active_config_sha256"
   require_key "$operational_plan" run_packaging_contracts false
 fi
 require_key "$operational_plan" run_rust_baseline false
@@ -201,6 +208,10 @@ require_key "$site_plan" selected_capabilities site_quality
 require_reason_contains "$site_plan" site_quality:site/index.html
 
 workflow_governance_operational_source="$(sed -n '/^run_workflow_governance_operational_contract_tests() {/,/^}/p' "$ci_tests")"
+if ! grep -Fqx '  run python3 ./scripts/pm/workflow-next.test.py' <<<"$workflow_governance_operational_source"; then
+  echo "workflow-next behavior regression is not wired into workflow-governance operational tests" >&2
+  exit 1
+fi
 if ! grep -Fqx '  run python3 ./scripts/pm/ci-ready-receipt.test.py' <<<"$workflow_governance_operational_source"; then
   echo "workflow-governance receipt contract is not wired into run_workflow_governance_operational_contract_tests" >&2
   exit 1

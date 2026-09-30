@@ -32,6 +32,19 @@ class _TaskBindingConflict(ValueError):
     """A live record proves that the selected task, PR, or check is misbound."""
 
 
+class _DuplicateJSONKey(ValueError):
+    """A JSON object repeats a key, making its binding ambiguous."""
+
+
+def _unique_json_object(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise _DuplicateJSONKey(f"duplicate JSON key: {key}")
+        result[key] = value
+    return result
+
+
 def _action_blocker(
     code: str,
     reason: str,
@@ -440,7 +453,9 @@ def _typed_record(
             parse_error = "typed evidence marker framing is invalid"
         else:
             try:
-                record = json.loads(raw)
+                record = json.loads(raw, object_pairs_hook=_unique_json_object)
+            except _DuplicateJSONKey as exc:
+                parse_error = str(exc)
             except json.JSONDecodeError:
                 parse_error = "typed evidence is malformed JSON"
 
