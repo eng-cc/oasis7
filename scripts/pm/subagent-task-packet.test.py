@@ -65,8 +65,8 @@ class PacketTest(unittest.TestCase):
     def command(self, *extra: str) -> list[str]:
         return ["python3", "scripts/pm/subagent-task-packet.py", *extra]
 
-    def create_args(self) -> list[str]:
-        return ["create", "--task-uid", TASK_UID, "--slice-id", "qa-review", "--role", "qa_engineer", "--slice-type", "review", "--owner-role", "qa_engineer", "--integration-owner", "tpm", "--integration-order", "1/1", "--packet-producer", "tpm", "--primary-package", "oasis7", "--context-delivery-mode", "minimal_head_bound_task_packet", "--intended-model-configuration", "inherit current parent selection", "--actual-dispatched-model-reasoning", "inherited/unverified", "--actual-runtime-evidence-reason", "dispatch surface does not report inherited runtime", "--role-activation", "message_assigned_adapter_inactive", "--base", "main", "--user-intent", "review packet behavior", "--work-item", "validate the bounded helper", "--non-goals", "no product changes", "--acceptance-target", "focused tests pass", "--governance-ref", "AGENTS.md", "--governance-ref", "doc/engineering/workflow/source-of-truth.md", "--governance-ref", ".agents/roles/qa_engineer.md", "--scoped-ref", "scope.txt", "--evidence-summary", "scope.txt is the only task surface", "--collaboration-boundary", "read only except assigned files", "--write-scope", "scripts/pm/**", "--return-contract", "patch and test evidence", "--validation-command", "python3 scripts/pm/subagent-task-packet.test.py", "--formal-sink", "https://example.invalid/issues/1"]
+    def create_args(self, *, slice_id: str = "qa-review", slice_type: str = "review") -> list[str]:
+        return ["create", "--task-uid", TASK_UID, "--slice-id", slice_id, "--role", "qa_engineer", "--slice-type", slice_type, "--owner-role", "qa_engineer", "--integration-owner", "tpm", "--integration-order", "1/1", "--packet-producer", "tpm", "--primary-package", "oasis7", "--context-delivery-mode", "minimal_head_bound_task_packet", "--intended-model-configuration", "inherit current parent selection", "--actual-dispatched-model-reasoning", "inherited/unverified", "--actual-runtime-evidence-reason", "dispatch surface does not report inherited runtime", "--role-activation", "message_assigned_adapter_inactive", "--base", "main", "--user-intent", "review packet behavior", "--work-item", "validate the bounded helper", "--non-goals", "no product changes", "--acceptance-target", "focused tests pass", "--governance-ref", "AGENTS.md", "--governance-ref", "doc/engineering/workflow/source-of-truth.md", "--governance-ref", ".agents/roles/qa_engineer.md", "--scoped-ref", "scope.txt", "--evidence-summary", "scope.txt is the only task surface", "--collaboration-boundary", "read only except assigned files", "--write-scope", "scripts/pm/**", "--return-contract", "patch and test evidence", "--validation-command", "python3 scripts/pm/subagent-task-packet.test.py", "--formal-sink", "https://example.invalid/issues/1"]
 
     def invoke(self, args: list[str], ok: bool = True) -> subprocess.CompletedProcess[str]:
         result = subprocess.run(self.command(*args), cwd=self.repo, text=True, capture_output=True)
@@ -149,13 +149,13 @@ class PacketTest(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         return snapshot
 
-    def create_review_plan(self, packet_path: str, **changes: object) -> Path:
+    def create_review_plan(self, packet_path: str, *, slice_id: str = "qa-review", **changes: object) -> Path:
         base_sha = self.git("rev-parse", "main")
         head = self.git("rev-parse", "HEAD")
         evidence_digest = "b" * 64
         expected_slices = sorted([
             {"role": "repository_health_engineer", "slice_id": "repository-health-review"},
-            {"role": "qa_engineer", "slice_id": "qa-review"},
+            {"role": "qa_engineer", "slice_id": slice_id},
         ], key=lambda item: (item["role"], item["slice_id"]))
         batch_identity = {
             "task_uid": TASK_UID, "frozen_head": head,
@@ -180,7 +180,7 @@ class PacketTest(unittest.TestCase):
             "packet_refs": [
                 {"role": "repository_health_engineer", "slice_id": "repository-health-review",
                  "packet_ref": f".pm/scratch/{TASK_UID}/slice-packets/repository-health-review.json"},
-                {"role": "qa_engineer", "slice_id": "qa-review", "packet_ref": packet_path},
+                {"role": "qa_engineer", "slice_id": slice_id, "packet_ref": packet_path},
             ],
         }
         plan.update(changes)
@@ -512,6 +512,47 @@ class PacketTest(unittest.TestCase):
         payload["producer"] = "tampered"
         snapshot.write_text(json.dumps(payload), encoding="utf-8")
         self.review_admission(packet, plan, snapshot, ok=False)
+
+    def test_review_admission_only_allows_ready_packet_after_commit_verification_transition(self) -> None:
+        snapshot = self.create_snapshot()
+
+        def packet_plan(slice_id: str, *, status: str, phase: str, slice_type: str = "professional_review") -> tuple[str, Path, Path]:
+            self.write_mapping(status=status, workflow_phase=phase)
+            packet = self.invoke(self.create_args(slice_id=slice_id, slice_type=slice_type)).stdout.splitlines()[0]
+            return packet, self.create_review_plan(packet, slice_id=slice_id), snapshot
+
+        # The exception must not admit wrong phases, reverse movement, other slice types,
+        # terminal/unknown states, or a changed task identity.
+        packet, plan, snapshot = packet_plan("wrong-phase", status="ready", phase="pre_pr_ready")
+        self.write_mapping(status="committed", workflow_phase="execution")
+        self.review_admission(packet, plan, snapshot, ok=False)
+
+        packet, plan, snapshot = packet_plan("reverse", status="committed", phase="verification")
+        self.write_mapping(status="ready", workflow_phase="pre_pr_ready")
+        self.review_admission(packet, plan, snapshot, ok=False)
+
+        packet, plan, snapshot = packet_plan("non-review", status="ready", phase="pre_pr_ready", slice_type="review")
+        self.write_mapping(status="committed", workflow_phase="verification")
+        self.review_admission(packet, plan, snapshot, ok=False)
+
+        packet, plan, snapshot = packet_plan("terminal", status="ready", phase="pre_pr_ready")
+        for status, phase in (("done", "task_done"), ("unknown", "verification")):
+            with self.subTest(status=status):
+                self.write_mapping(status=status, workflow_phase=phase)
+                self.review_admission(packet, plan, snapshot, ok=False)
+
+        packet, plan, snapshot = packet_plan("identity", status="ready", phase="pre_pr_ready")
+        self.write_mapping(status="committed", workflow_phase="verification", project_item_id="PVTI_replaced")
+        self.review_admission(packet, plan, snapshot, ok=False)
+
+        packet, plan, snapshot = packet_plan("ready-commit", status="ready", phase="pre_pr_ready")
+        original_bytes = (self.repo / packet).read_bytes()
+        self.write_mapping(status="committed", workflow_phase="verification")
+        self.assertIn("task_status", self.invoke(["validate", packet], ok=False).stderr)
+        admitted = self.review_admission(packet, plan, snapshot)
+        self.assertEqual("admitted", json.loads(admitted.stdout)["status"])
+        self.assertEqual(original_bytes, (self.repo / packet).read_bytes())
+        self.assertEqual("ready", json.loads(original_bytes)["identity"]["task_status"])
 
     def test_v2_review_admission_binds_plan_epoch_to_bootstrap_snapshot(self) -> None:
         packet = self.invoke(self.create_args()).stdout.splitlines()[0]

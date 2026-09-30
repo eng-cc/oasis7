@@ -495,7 +495,8 @@ def validate_incremental_context(root: Path, context: dict[str, object], task_ui
 
 
 def validate_packet(root: Path, packet: dict[str, object],
-                    enforce_incremental_semantics: bool = True) -> None:
+                    enforce_incremental_semantics: bool = True,
+                    allow_ready_review_commit: bool = False) -> None:
     if packet.get("schema") != SCHEMA:
         fail(f"unsupported packet schema: {packet.get('schema')}")
     identity = packet.get("identity")
@@ -534,7 +535,15 @@ def validate_packet(root: Path, packet: dict[str, object],
     for field in ("repository", "project_item_id", "task_status"):
         mapping_field = "status" if field == "task_status" else field
         if identity.get(field) != task.get(mapping_field):
-            fail(f"packet {field} does not match task mapping")
+            ready_review_commit = (
+                allow_ready_review_commit and field == "task_status"
+                and identity.get("task_status") == "ready"
+                and task.get("status") == "committed"
+                and task.get("workflow_phase") == "verification"
+                and slice_contract.get("slice_type") == "professional_review"
+            )
+            if not ready_review_commit:
+                fail(f"packet {field} does not match task mapping")
     bounded(str(identity.get("packet_producer") or ""), "identity.packet_producer")
     for field in ("slice_id", "role", "slice_type", "owner_role", "integration_owner", "integration_order", "context_delivery_mode", "intended_model_configuration", "actual_dispatched_model_reasoning", "actual_runtime_evidence_reason", "role_activation", "write_scope", "return_contract", "validation_command", "formal_sink"):
         bounded(str(slice_contract.get(field) or ""), f"slice.{field}")
@@ -601,7 +610,7 @@ def validate_bootstrap_snapshot(root: Path, snapshot: Path, task_uid: str) -> di
 def review_admission(root: Path, packet_path: Path, plan_path: Path,
                      snapshot_path: Path) -> dict[str, object]:
     packet = load_object(packet_path, "packet")
-    validate_packet(root, packet)
+    validate_packet(root, packet, allow_ready_review_commit=True)
     identity = packet["identity"]
     slice_contract = packet["slice"]
     assert isinstance(identity, dict) and isinstance(slice_contract, dict)
