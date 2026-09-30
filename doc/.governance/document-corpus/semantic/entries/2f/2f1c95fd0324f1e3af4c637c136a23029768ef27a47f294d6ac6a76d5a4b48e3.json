@@ -1,10 +1,10 @@
 {
   "record": {
-    "content_sha256": "bbea4b6c83c5225f125ebfa5c34a70870e485a3932f3f22b7a0d5c8d25c0ae60",
+    "content_sha256": "79659612342d07eee0c85b043d5a255caa4c78438939145bd938834ef17f0322",
     "current_authority": "doc/world-runtime/prd.md",
     "decision_owner": "runtime_engineer",
-    "disposition": "retain_historical_governance_decision",
-    "note": "completed decision trace; not current finality trust or release-hardening evidence",
+    "disposition": "retain_current_target_contract",
+    "note": "retained active current/target hardening contract; dated roadmap, migration decision and migration-check record remain historical provenance; current bounded implementation, target acceptance and unrun security/finality/release proof remain distinct",
     "path": "doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.prd.md"
   },
   "schema": "oasis7.document-semantic-entry/v1"

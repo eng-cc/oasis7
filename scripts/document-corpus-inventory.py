@@ -136,7 +136,8 @@ def command_locate(args: argparse.Namespace) -> int:
         locations = [item for item in locations if item.kind.startswith("semantic-")]
     elif args.kind == "evidence":
         locations = [item for item in locations if item.kind.startswith("evidence-")]
-    _emit({"snapshot": view.snapshot_id, "source_path": args.path, "locations": [item.__dict__ for item in locations]})
+    _emit({**dc.snapshot_info(view), "snapshot": view.snapshot_id, "source_path": args.path,
+           "locations": [item.__dict__ for item in locations]})
     return 0
 
 
@@ -468,7 +469,7 @@ def command_export(args: argparse.Namespace) -> int:
     view = _view(args)
     model = dc.load_corpus(view)
     data = dc.normalize_current(model)
-    report = {"snapshot": view.snapshot_id, **data}
+    report = {**dc.snapshot_info(view), "snapshot": view.snapshot_id, **data}
     if args.output:
         path = _write_report(Path(args.repo_root).resolve(), args.output, report)
         _emit({"output": path, "sha256": _hash(dc.canonical_json(report)), "counts": {key: len(value) for key, value in data.items()}})
@@ -561,7 +562,7 @@ def command_export_legacy(args: argparse.Namespace) -> int:
     prefix = directory.as_posix().rstrip("/")
     if not prefix.startswith(".cache/doc-governance/"):
         raise dc.CorpusError(dc.Diagnostic("report-path", detail="legacy export must be under .cache/doc-governance/"))
-    manifest = {"schema": "oasis7.document-corpus-v3-legacy-export/v1", "snapshot": view.snapshot_id,
+    manifest = {"schema": "oasis7.document-corpus-v3-legacy-export/v1", **dc.snapshot_info(view), "snapshot": view.snapshot_id,
                 "files": [{"path": name, "sha256": _hash(content), "bytes": len(content)} for name, content in sorted(outputs.items())],
                 "restore_targets": [dc.CORPUS_ROOT, dc.LEGACY_SEMANTIC_ROOT, dc.EVIDENCE_ROOT],
                 "remove_before_validation": sorted(path for path in view.list_doc_paths() if path.startswith("doc/.governance/document-corpus/") or path in {dc.CORPUS_ROOT, dc.EVIDENCE_ROOT})}
@@ -591,7 +592,9 @@ def command_migrate(args: argparse.Namespace) -> int:
     repo_root = Path(args.repo_root).resolve()
     started = time.perf_counter()
     source_view = dc.GitCorpusView(repo_root, args.source_revision)
-    source_oid = source_view.snapshot_id or args.source_revision
+    if source_view.snapshot_kind != "commit" or source_view.commit_id is None:
+        raise dc.CorpusError(dc.Diagnostic("revision-invalid", detail="migrate-v2 requires an immutable commit source revision"))
+    source_oid = source_view.commit_id
     legacy_corpus, legacy_semantic, legacy_evidence, fixture_files = _legacy_fixture_files(source_view, source_oid)
     try:
         legacy_normalized = dc.normalize_legacy(legacy_corpus, legacy_semantic, legacy_evidence)
@@ -712,6 +715,8 @@ def command_migrate(args: argparse.Namespace) -> int:
             "schema": "oasis7.document-corpus-v3-migration-report/v1",
             "tool_version": dc.TOOL_VERSION,
             "source_revision": source_oid,
+            "source_kind": source_view.snapshot_kind,
+            "source_commit": source_view.commit_id,
             "source_tree": source_view.tree_id,
             "legacy_counts": {key: len(value) for key, value in converted.items()},
             "target_counts": {"objects": len(current_objects), "semantic_entries": len(converted["semantic_entries"]), "semantic_bundles": len(converted["semantic_bundles"]), "evidence_entries": len(converted["evidence_entries"])},
@@ -774,6 +779,8 @@ def command_import_delta(args: argparse.Namespace) -> int:
     base_view = dc.GitCorpusView(repo_root, args.base)
     head_view = dc.GitCorpusView(repo_root, args.legacy_head)
     target_view = dc.GitCorpusView(repo_root, args.target)
+    if base_view.snapshot_kind != "commit" or head_view.snapshot_kind != "commit":
+        raise dc.CorpusError(dc.Diagnostic("revision-invalid", detail="import-legacy-delta base and legacy head must be immutable commits"))
     base = _legacy_model(base_view)
     head = _legacy_model(head_view)
     target = dc.normalize_current(dc.load_corpus(target_view))
@@ -782,7 +789,10 @@ def command_import_delta(args: argparse.Namespace) -> int:
         code = "legacy-delta-source-drift" if any(item.startswith("legacy-delta-source-drift:") for item in conflicts) else "legacy-delta-conflict"
         raise dc.CorpusError(dc.Diagnostic(code, detail="; ".join(conflicts)))
     output = _write_report(repo_root, args.output, proposal)
-    _emit({"proposal": output, "mutations": len(proposal["mutations"]), "base": base_view.snapshot_id, "legacy_head": head_view.snapshot_id, "target": target_view.snapshot_id})
+    _emit({"proposal": output, "mutations": len(proposal["mutations"]), "base": base_view.snapshot_id,
+           "legacy_head": head_view.snapshot_id, "target": target_view.snapshot_id,
+           "base_snapshot": dc.snapshot_info(base_view), "legacy_head_snapshot": dc.snapshot_info(head_view),
+           "target_snapshot": dc.snapshot_info(target_view)})
     return 0
 
 

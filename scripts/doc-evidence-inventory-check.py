@@ -65,6 +65,8 @@ def main() -> int:
             print(json.dumps(item.as_dict(), ensure_ascii=False, sort_keys=True), file=sys.stderr)
         return 1
     print("doc-evidence-inventory-check: OK")
+    snapshot_view: dc.CorpusView = dc.GitCorpusView(args.repo_root.resolve(), args.revision) if args.revision else dc.WorktreeCorpusView(args.repo_root.resolve())
+    print(json.dumps({"mode": "revision" if args.revision else "worktree", **dc.snapshot_info(snapshot_view)}, sort_keys=True))
     return 0
 
 

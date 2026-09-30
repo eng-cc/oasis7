@@ -153,6 +153,9 @@ class CorpusView(Protocol):
     """Immutable Git snapshot or explicitly selected working tree."""
 
     snapshot_id: str | None
+    snapshot_kind: str
+    tree_id: str | None
+    commit_id: str | None
 
     def list_doc_paths(self) -> Sequence[str]: ...
     def read_bytes(self, path: str) -> bytes: ...
@@ -164,8 +167,18 @@ class GitCorpusView:
         self.repo_root = Path(repo_root).resolve()
         if not revision or revision.startswith("-") or not re.fullmatch(r"[0-9a-fA-F]{7,64}", revision):
             raise CorpusError(Diagnostic("revision-invalid", detail=f"invalid immutable revision: {revision!r}"))
-        self.snapshot_id = self._git(["rev-parse", "--verify", f"{revision}^{{commit}}"], text=True).strip()
-        self.tree_id = self._git(["rev-parse", "--verify", f"{self.snapshot_id}^{{tree}}"], text=True).strip()
+        try:
+            object_id = self._git(["rev-parse", "--verify", f"{revision}^{{object}}"], text=True).strip()
+            object_kind = self._git(["cat-file", "-t", object_id], text=True).strip()
+        except CorpusError as exc:
+            raise CorpusError(Diagnostic("revision-invalid", detail=f"revision does not identify a Git commit or tree: {revision!r}")) from exc
+        if object_kind not in {"commit", "tree"}:
+            raise CorpusError(Diagnostic("revision-invalid", detail=f"revision identifies {object_kind}, expected commit or tree"))
+        self.snapshot_id = object_id
+        self.snapshot_kind = object_kind
+        self.commit_id = object_id if object_kind == "commit" else None
+        self.tree_id = (self._git(["rev-parse", "--verify", f"{object_id}^{{tree}}"], text=True).strip()
+                        if object_kind == "commit" else object_id)
         self._files: dict[str, tuple[str, str]] = {}
         self._reads: dict[str, bytes] = {}
         raw = self._git(["ls-tree", "-r", "-z", "--full-tree", self.tree_id])
@@ -209,6 +222,9 @@ class WorktreeCorpusView:
     def __init__(self, repo_root: str | Path) -> None:
         self.repo_root = Path(repo_root).resolve()
         self.snapshot_id = None
+        self.snapshot_kind = "worktree"
+        self.tree_id = None
+        self.commit_id = None
         self._paths: tuple[str, ...] | None = None
         self._reads: dict[str, bytes] = {}
 
@@ -299,6 +315,9 @@ class OverlayCorpusView:
         self.base = base
         self.writes = writes
         self.snapshot_id = base.snapshot_id
+        self.snapshot_kind = base.snapshot_kind
+        self.tree_id = base.tree_id
+        self.commit_id = base.commit_id
 
     def list_doc_paths(self) -> Sequence[str]:
         paths = set(self.base.list_doc_paths())
@@ -323,6 +342,12 @@ class OverlayCorpusView:
         if path in self.writes:
             return "000000" if self.writes[path] is None else "100644"
         return self.base.file_mode(path)
+
+
+def snapshot_info(view: CorpusView) -> dict[str, str | None]:
+    """Report the selected snapshot without implying that a tree has a commit."""
+    return {"snapshot_id": view.snapshot_id, "snapshot_kind": view.snapshot_kind,
+            "tree_id": view.tree_id, "commit_id": view.commit_id}
 
 
 def validate_repo_path(path: str) -> str:

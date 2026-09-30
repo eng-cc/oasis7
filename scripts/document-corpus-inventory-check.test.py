@@ -748,8 +748,57 @@ def test_t22_readers_and_export_do_not_change_source_or_index() -> None:
         index_before = index_path.read_bytes()
         payload_before = repository_payload_snapshot(root)
         source = "doc/product/agents-world-simulation/README.md"
-        for result in (checker(root), checked_run([sys.executable, str(EVIDENCE_CHECK), "--repo-root", str(root)])):
+        for result in (checker(root), checker(root, evidence=True)):
             assert result.returncode == 0, result.stdout + result.stderr
+            worktree_report = json.loads(result.stdout.splitlines()[-1])
+            assert worktree_report == {
+                "mode": "worktree",
+                "snapshot_id": None,
+                "snapshot_kind": "worktree",
+                "tree_id": None,
+                "commit_id": None,
+            }, worktree_report
+        revision_commit = git(root, "rev-parse", "HEAD").stdout.strip()
+        revision_tree = git(root, "rev-parse", f"{revision_commit}^{{tree}}").stdout.strip()
+        source_path = root / source
+        committed_source = source_path.read_bytes()
+        source_path.write_bytes(committed_source + b"worktree-only drift\n")
+        try:
+            for revision, expected_kind, expected_commit in (
+                (revision_commit, "commit", revision_commit),
+                (revision_tree, "tree", None),
+            ):
+                committed = checker(root, revision=revision)
+                assert committed.returncode == 0, f"immutable revision {revision} failed:\n{committed.stdout}{committed.stderr}"
+                expected_checker_report = {
+                    "mode": "revision",
+                    "snapshot_id": revision,
+                    "snapshot_kind": expected_kind,
+                    "tree_id": revision_tree,
+                    "commit_id": expected_commit,
+                }
+                assert json.loads(committed.stdout.splitlines()[-1]) == expected_checker_report, committed.stdout
+                evidence = checker(root, evidence=True, revision=revision)
+                assert evidence.returncode == 0, f"evidence checker rejected immutable revision {revision}:\n{evidence.stdout}{evidence.stderr}"
+                assert json.loads(evidence.stdout.splitlines()[-1]) == expected_checker_report, evidence.stdout
+                expected_snapshot = {
+                    "snapshot": revision,
+                    "snapshot_id": revision,
+                    "snapshot_kind": expected_kind,
+                    "tree_id": revision_tree,
+                    "commit_id": expected_commit,
+                }
+                located_revision = cli(root, "locate", "--kind", "object", "--path", source, "--revision", revision)
+                assert located_revision.returncode == 0, located_revision.stdout + located_revision.stderr
+                locate_report = json.loads(located_revision.stdout)
+                assert all(locate_report.get(key) == value for key, value in expected_snapshot.items()), locate_report
+                exported_revision = cli(root, "export", "--revision", revision)
+                assert exported_revision.returncode == 0, exported_revision.stdout + exported_revision.stderr
+                export_report = json.loads(exported_revision.stdout)
+                assert all(export_report.get(key) == value for key, value in expected_snapshot.items()), export_report
+            expect_code(checker(root), "object-content-drift", 1)
+        finally:
+            source_path.write_bytes(committed_source)
         located = cli(root, "locate", "--kind", "object", "--path", source)
         assert located.returncode == 0, located.stdout + located.stderr
         exported = cli(root, "export", "--output", ".cache/doc-governance/export.json")
