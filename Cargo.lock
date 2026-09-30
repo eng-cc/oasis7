@@ -6201,6 +6201,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "oasis7_local_signer"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "ed25519-dalek 3.0.0",
+ "getrandom 0.4.3",
+ "hex",
+ "libc",
+ "nix 0.30.1",
+ "serde",
+ "serde_json",
+ "sha2 0.11.0",
+ "zeroize",
+]
+
+[[package]]
 name = "oasis7_net"
 version = "0.1.0"
 dependencies = [
