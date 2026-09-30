@@ -173,23 +173,32 @@ def _ci_ok(value: Any, *, head_oid: str | None = None) -> bool:
 
 
 def _current_required_check_state(check: dict[str, Any], job: dict[str, Any]) -> str:
-    valid_pending_statuses = {"queued", "in_progress"}
+    check_pending_statuses = {"queued", "in_progress", "requested", "waiting", "pending"}
+    job_pending_statuses = {"queued", "in_progress"}
     valid_conclusions = {
         "success", "failure", "cancelled", "timed_out", "action_required",
         "neutral", "skipped", "stale", "startup_failure",
     }
-    statuses = (check.get("status"), job.get("status"))
+    check_status = check.get("status")
+    job_status = job.get("status")
+    if (not isinstance(check_status, str)
+            or check_status not in check_pending_statuses | {"completed"}
+            or not isinstance(job_status, str)
+            or job_status not in job_pending_statuses | {"completed"}):
+        return "unavailable"
+    statuses = (check_status, job_status)
     conclusions = (check.get("conclusion"), job.get("conclusion"))
-    if any(not isinstance(status, str)
-           or status not in valid_pending_statuses | {"completed"} for status in statuses):
+    pending_statuses = (check_pending_statuses, job_pending_statuses)
+    if any(
+        (status == "completed"
+         and (not isinstance(conclusion, str) or conclusion.lower() not in valid_conclusions))
+        or (status != "completed" and conclusion is not None)
+        for status, conclusion in zip(statuses, conclusions)
+    ):
         return "unavailable"
-    if any(status in valid_pending_statuses for status in statuses):
+    if any(status in pending for status, pending in zip(statuses, pending_statuses)):
         return "pending"
-    if any(not isinstance(value, str) for value in conclusions):
-        return "unavailable"
     normalized = tuple(value.lower() for value in conclusions)
-    if any(value not in valid_conclusions for value in normalized):
-        return "unavailable"
     return "success" if all(value == "success" for value in normalized) else "failed"
 
 

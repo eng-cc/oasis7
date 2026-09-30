@@ -283,15 +283,19 @@ class CurrentPrProjectionTest(unittest.TestCase):
 
     def test_nonterminal_check_run_or_job_waits_without_rerun_advice(self) -> None:
         cases = [
-            ("check", check_row(status="in_progress", conclusion=None), {}, {}, {}),
-            ("job", check_row(), {}, {}, {RUN: "in_progress"}),
+            ("check", check_row(status="in_progress", conclusion=None), {}, {}, {}, {RUN: "success"}),
+            ("check-requested", check_row(status="requested", conclusion=None), {}, {}, {}, {RUN: "success"}),
+            ("check-waiting", check_row(status="waiting", conclusion=None), {}, {}, {}, {RUN: "success"}),
+            ("check-pending", check_row(status="pending", conclusion=None), {}, {}, {}, {RUN: "success"}),
+            ("job-queued", check_row(), {}, {}, {RUN: "queued"}, {RUN: None}),
+            ("job", check_row(), {}, {}, {RUN: "in_progress"}, {RUN: None}),
         ]
-        for state, check, run_statuses, run_conclusions, job_statuses in cases:
+        for state, check, run_statuses, run_conclusions, job_statuses, job_conclusions in cases:
             with self.subTest(state=state):
                 projection, blockers = self.project(
                     [check], run_statuses=run_statuses,
                     run_conclusions=run_conclusions, job_statuses=job_statuses,
-                    job_conclusions={RUN: None} if state == "job" else {},
+                    job_conclusions=job_conclusions,
                 )
                 current = next(row for row in blockers if row["code"].startswith("CURRENT_CHECK_"))
                 self.assertEqual(current["code"], "CURRENT_CHECK_PENDING", current)
@@ -300,6 +304,28 @@ class CurrentPrProjectionTest(unittest.TestCase):
                 self.assertIn("complete", current["blocks_actions"], current)
                 self.assertNotIn("consume_artifact", current["blocks_actions"], current)
                 self.assertNotIn("rerun_applicable_check", current["allowed_actions"], current)
+                self.assertIsNone(projection["failure_phase"], projection)
+
+    def test_unknown_or_missing_required_check_status_is_unavailable(self) -> None:
+        cases = [
+            ("unknown-check", check_row(status="not-a-check-status", conclusion=None), {}, {}),
+            ("missing-check", check_row(status=None, conclusion=None), {}, {}),
+            ("pending-check-with-conclusion", check_row(status="waiting", conclusion="success"), {}, {}),
+            ("unknown-job", check_row(), {RUN: "waiting"}, {RUN: None}),
+            ("missing-job", check_row(), {RUN: None}, {RUN: None}),
+            ("pending-job-with-conclusion", check_row(), {RUN: "queued"}, {RUN: "success"}),
+        ]
+        for name, check, job_statuses, job_conclusions in cases:
+            with self.subTest(name=name):
+                projection, blockers = self.project(
+                    [check], job_statuses=job_statuses,
+                    job_conclusions=job_conclusions,
+                )
+                current = next(row for row in blockers if row["code"].startswith("CURRENT_CHECK_"))
+                self.assertEqual(current["code"], "CURRENT_CHECK_UNAVAILABLE", current)
+                self.assertEqual(current["next_action_kind"], "restore_current_check_readback", current)
+                self.assertNotIn("rerun_applicable_check", current["allowed_actions"], current)
+                self.assertEqual(projection["read_status"], "uncertain", projection)
                 self.assertIsNone(projection["failure_phase"], projection)
 
     def test_nonterminal_workflow_run_after_successful_required_gate_does_not_block(self) -> None:
