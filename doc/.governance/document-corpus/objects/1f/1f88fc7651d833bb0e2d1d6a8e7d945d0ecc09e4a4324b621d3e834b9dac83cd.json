@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/testing/README.md",
+    "authority_layer": "professional_domain",
+    "content_sha256": "fad0bc64b10dc805599f9f898f45c087bb779685028a49385eda9464e46bf1cf",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "historical_candidate",
+    "object_kind": "prd",
+    "path": "doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md",
+    "registry_type": "professional_domain",
+    "routing_batch": "testing-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "qa_engineer",
+    "structural_owner": "qa_engineer"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "a86dfa1152eb5b991ac3b8fc2261a61340241c53d8a28ef4eb196e35374ae542",
+    "current_authority": "doc/world-runtime/prd.md",
+    "decision_owner": "wasm_platform_engineer",
+    "disposition": "retain_current_interface_authority",
+    "note": "current WASM ABI host capability permission resource and compatibility authority",
+    "path": "doc/world-runtime/wasm/wasm-interface.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

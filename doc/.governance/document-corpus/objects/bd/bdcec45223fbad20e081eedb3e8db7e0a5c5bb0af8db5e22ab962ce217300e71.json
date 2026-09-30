@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/product/README.md",
+    "authority_layer": "product_overlay",
+    "content_sha256": "94602368ee27199b8872c89484fb6e7ffc118fab18a84727ab7cc3ae54888ba3",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "active_candidate",
+    "object_kind": "prd",
+    "path": "doc/product/world-rules-core-gameplay/chartered-conflict-soft-seasons-and-recovery.prd.md",
+    "registry_type": "product_overlay",
+    "routing_batch": "product-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "producer_system_designer",
+    "structural_owner": "producer_system_designer"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

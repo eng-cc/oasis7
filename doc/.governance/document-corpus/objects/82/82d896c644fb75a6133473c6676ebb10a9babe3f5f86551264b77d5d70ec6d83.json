@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/site/README.md",
+    "authority_layer": "professional_domain",
+    "content_sha256": "247e9c6c9db79eb5e0b71975c9e6f7ca0060cea08974ad3e6fb6f6dc6d2dde21",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "historical_candidate",
+    "object_kind": "design",
+    "path": "doc/site/deck/html-roadshow-deck-page-2026-06-19.design.md",
+    "registry_type": "professional_domain",
+    "routing_batch": "site-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "liveops_community",
+    "structural_owner": "liveops_community"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

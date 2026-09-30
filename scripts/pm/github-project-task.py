@@ -1256,43 +1256,75 @@ def loop_lineage_path(root: pathlib.Path, task_uid: str) -> pathlib.Path:
 def validate_loop_inputs(root: pathlib.Path, binding: dict[str, Any], repository: str, purpose: str) -> None:
     """Admission of selected manual inputs; never scan unrelated tasks."""
     tool_root = pathlib.Path(__file__).resolve().parents[2]
+    trusted_import_files = (
+        "scripts/document_corpus.py",
+        "scripts/product-doc-content-check.py",
+        "scripts/product_doc_markdown.py",
+    )
     commit = binding.get("policy_commit", "")
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         die("manual admission requires immutable policy commit")
     if run_text(["git", "-C", str(tool_root), "rev-parse", "HEAD"]) != commit:
         die("manual admission helper is not running from pinned effective policy")
-    run_text(["git", "-C", str(tool_root), "diff", "--no-ext-diff", "--no-textconv", "--exit-code", commit, "--", "scripts/pm"])
-    shadows = run_text(["git", "-C", str(tool_root), "ls-files", "--others", "--", "scripts/pm"])
+    run_text(["git", "-C", str(tool_root), "diff", "--no-ext-diff", "--no-textconv", "--exit-code", commit, "--", "scripts/pm", *trusted_import_files])
+    shadows = run_text(["git", "-C", str(tool_root), "ls-files", "--others", "--", "scripts/pm", *trusted_import_files, ":(exclude)**/__pycache__/**"])
     if any(path.endswith((".py", ".sh", ".json")) for path in shadows.splitlines()):
         die("untracked executable authority in manual helper root")
-    sys.path.insert(0, str(pathlib.Path(__file__).parent))
-    try:
-        import loop_policy
-        import loop_contracts
-        for result in (loop_policy.validate_tool_root(tool_root, root, binding),
-                       loop_contracts.validate_contracts(tool_root, root, binding, purpose=purpose)):
-            if result.get("status") != "passed":
-                die("manual input admission blocked: " + str(result.get("blockers")))
-        bindings = {binding["task_uid"]: binding}
-        pending = list(binding["dependencies"])
-        while pending:
-            uid = pending.pop()
-            if uid in bindings:
-                continue
-            if len(bindings) >= 64:
-                die("selected dependency closure exceeds 64 tasks; narrow the dependency contract")
-            live = github_issue_record(repository, uid)
-            require_loop_dependency_ready(live or {}, uid, repository, root)
-            dependency = (live or {}).get("loop_binding")
-            if not isinstance(dependency, dict):
-                die("selected dependency binding unavailable: " + uid)
-            bindings[uid] = validate_loop_binding(dependency)
-            pending.extend(dependency["dependencies"])
-        result = loop_policy.validate_dependencies(binding, bindings)
+    if run_text(["git", "-C", str(tool_root), "rev-parse", "--path-format=absolute", "--git-common-dir"]) != run_text(["git", "-C", str(root), "rev-parse", "--path-format=absolute", "--git-common-dir"]):
+        die("manual helper root belongs to another repository")
+
+    def load_pinned_module(name: str):
+        relative = f"scripts/pm/{name}.py"
+        entries = run_text(["git", "-C", str(tool_root), "ls-tree", commit, "--", relative]).splitlines()
+        if len(entries) != 1 or "\t" not in entries[0]:
+            die("effective helper module missing or ambiguous: " + relative)
+        metadata, recorded_path = entries[0].split("\t", 1)
+        mode, object_type, _oid = metadata.split()
+        path = tool_root / relative
+        if (recorded_path != relative or mode != "100644" or object_type != "blob"
+                or path.is_symlink() or not path.resolve().is_relative_to(tool_root.resolve())
+                or path.read_bytes() != subprocess.check_output(["git", "-C", str(tool_root), "show", commit + ":" + relative])):
+            die("effective helper bytes or mode differ: " + relative)
+        if run_text(["git", "-C", str(tool_root), "ls-files", "--others", "--", relative]):
+            die("untracked effective helper shadow: " + relative)
+        spec = importlib.util.spec_from_file_location(name, path)
+        if spec is None or spec.loader is None:
+            die("effective helper module unavailable: " + relative)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+        return module
+
+    sys.dont_write_bytecode = True
+    # loop_policy imports loop_contracts by name; replace any preloaded module
+    # with the exact pinned helper before executing the policy bytes.
+    loop_contracts = load_pinned_module("loop_contracts")
+    loop_policy = load_pinned_module("loop_policy")
+    for result in (loop_policy.validate_tool_root(tool_root, root, binding),
+                   loop_contracts.validate_contracts(tool_root, root, binding, purpose=purpose)):
         if result.get("status") != "passed":
-            die("manual dependency admission blocked: " + str(result.get("blockers")))
-    finally:
-        sys.path.pop(0)
+            die("manual input admission blocked: " + str(result.get("blockers")))
+    bindings = {binding["task_uid"]: binding}
+    pending = list(binding["dependencies"])
+    while pending:
+        uid = pending.pop()
+        if uid in bindings:
+            continue
+        if len(bindings) >= 64:
+            die("selected dependency closure exceeds 64 tasks; narrow the dependency contract")
+        live = github_issue_record(repository, uid)
+        require_loop_dependency_ready(live or {}, uid, repository, root)
+        dependency = (live or {}).get("loop_binding")
+        if not isinstance(dependency, dict):
+            die("selected dependency binding unavailable: " + uid)
+        binding_result = loop_policy.validate_binding(dependency)
+        if binding_result.get("status") != "passed":
+            die("invalid selected dependency binding: " + str(binding_result.get("blockers")))
+        bindings[uid] = dependency
+        pending.extend(dependency["dependencies"])
+    result = loop_policy.validate_dependencies(binding, bindings)
+    if result.get("status") != "passed":
+        die("manual dependency admission blocked: " + str(result.get("blockers")))
 
 
 def require_loop_dependency_ready(live: dict[str, Any], task_uid: str, repository: str = DEFAULT_REPO,

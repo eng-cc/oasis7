@@ -17,8 +17,10 @@ class GateTests(unittest.TestCase):
 
     def test_missing_effective_helper_blocks_loop(self):
         binding = {'loop': 'code'}
-        with self.assertRaisesRegex(ValueError, 'trusted'):
-            admission(Path('.'), {'loop_binding': binding}, 'base', 'head', reader=lambda _: binding)
+        with patch('loop_gate.importlib.util.spec_from_file_location') as load_candidate:
+            with self.assertRaisesRegex(ValueError, 'trusted'):
+                admission(Path('.'), {'loop_binding': binding}, 'base', 'head', reader=lambda _: binding)
+            load_candidate.assert_not_called()
 
 
     def test_legacy_live_identity_requires_one_exact_canonical_field(self):

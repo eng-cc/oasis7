@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/product/README.md",
+    "authority_layer": "product_overlay",
+    "content_sha256": "a727100d3cc2275f0f8dbb47cf28d33e23018864a4fcbe7040017d90f4d7e54e",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "active_candidate",
+    "object_kind": "prd",
+    "path": "doc/product/world-infrastructure/distributed-consensus-and-state-availability.prd.md",
+    "registry_type": "product_overlay",
+    "routing_batch": "product-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "producer_system_designer",
+    "structural_owner": "producer_system_designer"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

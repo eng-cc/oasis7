@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "99b9e8a2e81320d6f623db19957b87c249fd346a3d88bcefc5c66d8170f7316d",
+    "current_authority": "doc/site/manual/site-manual-static-docs.prd.md",
+    "decision_owner": "viewer_engineer",
+    "disposition": "retain_current_authority",
+    "note": "current mirror design",
+    "path": "doc/site/manual/site-manual-static-docs.design.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

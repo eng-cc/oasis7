@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/core/README.md",
+    "authority_layer": "professional_domain",
+    "content_sha256": "fe52398667c9073c639101ad7f863e0ec3062da39ae61baea950a3ac07e98ff6",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "review_required",
+    "object_kind": "markdown_record",
+    "path": "doc/core/templates/stage-closure-go-no-go-template.md",
+    "registry_type": "professional_domain",
+    "routing_batch": "core-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "producer_system_designer",
+    "structural_owner": "producer_system_designer"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

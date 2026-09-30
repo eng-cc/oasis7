@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/product/README.md",
+    "authority_layer": "product_overlay",
+    "content_sha256": "303eaed48345c594ec3e648a33e95f065822a3b1ad12b52e325cb4639e4ea725",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "active_candidate",
+    "object_kind": "prd",
+    "path": "doc/product/agents-world-simulation/provider-agent-experience-continuity.prd.md",
+    "registry_type": "product_overlay",
+    "routing_batch": "product-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "producer_system_designer",
+    "structural_owner": "producer_system_designer"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

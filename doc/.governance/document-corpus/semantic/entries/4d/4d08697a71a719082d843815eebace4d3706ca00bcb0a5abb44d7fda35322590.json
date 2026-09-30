@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "41d023cf73a3e3496de3ef7f146629f301de15a34ef02b966939b6e70874d1cf",
+    "current_authority": "doc/engineering/prd.md",
+    "decision_owner": "qa_engineer",
+    "disposition": "retain_dated_window_evidence",
+    "note": "small dated directional baseline; never current repository health or release stability",
+    "path": "doc/engineering/evidence/engineering-governance-trend-baseline-2026-03-11.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

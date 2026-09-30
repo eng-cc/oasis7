@@ -48,8 +48,8 @@ run() {
 }
 GITHUB_EVENT_PATH="$tmp_dir/pull_request.json" GITHUB_EVENT_NAME=pull_request GITHUB_SHA="$head_oid" \
   run_product_doc_governance_check
-grep -Fqx './scripts/doc-governance-check.sh' "$tmp_dir/governance-calls.out"
 grep -Fqx './scripts/doc-governance-check.sh --full-corpus' "$tmp_dir/governance-calls.out"
+[[ "$(wc -l <"$tmp_dir/governance-calls.out" | tr -d ' ')" == 1 ]]
 
 printf '{}\n' >"$tmp_dir/empty.json"
 if (unset OASIS7_PRODUCT_DOC_BASE OASIS7_PRODUCT_DOC_HEAD; GITHUB_EVENT_PATH="$tmp_dir/empty.json" GITHUB_EVENT_NAME=unknown GITHUB_SHA="$head_oid" product_doc_range) >"$tmp_dir/event.out" 2>&1; then

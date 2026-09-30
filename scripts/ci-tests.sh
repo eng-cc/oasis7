@@ -346,6 +346,8 @@ run_provider_remote_https_smoke() {
 }
 
 run_doc_checker_contract_tests() {
+  run python3 ./scripts/document-corpus-inventory-check.test.py
+  run python3 ./scripts/doc-evidence-inventory-check.test.py
   run python3 ./scripts/product-doc-governance-check.test.py
   run python3 ./scripts/product-doc-content-check.test.py
   run_system_design_traceability_tests
@@ -388,6 +390,7 @@ run_workflow_governance_baseline_contract_tests() {
 }
 
 run_workflow_governance_operational_contract_tests() {
+  run python3 ./scripts/document-corpus-inventory-workflow.test.py
   run bash ./scripts/pm/lint.test.sh
   run bash ./scripts/pm/github-project-workflow.test.sh
   run ./scripts/ci-required-scope-audit-contract.test.sh
@@ -705,11 +708,10 @@ run_product_doc_governance_check() {
       return 1
     }
     OASIS7_PRODUCT_DOC_BASE="$base_oid" OASIS7_PRODUCT_DOC_HEAD="$head_oid" \
-      run ./scripts/doc-governance-check.sh
+      run ./scripts/doc-governance-check.sh --full-corpus
   else
-    run ./scripts/doc-governance-check.sh
+    run ./scripts/doc-governance-check.sh --full-corpus
   fi
-  run ./scripts/doc-governance-check.sh --full-corpus
 }
 
 run_standalone_tool_lockfiles_checks() {

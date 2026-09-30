@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "e77c557b1da058fde017122e2a1ffdd6b6b80e0d2ec09d22301896973e1e3ad7",
+    "current_authority": "doc/world-runtime/prd.md",
+    "decision_owner": "runtime_engineer",
+    "disposition": "retain_current_design_companion",
+    "note": "current draft module lifecycle companion; not implemented production capability evidence",
+    "path": "doc/world-runtime/module/module-lifecycle.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/readme/README.md",
+    "authority_layer": "professional_domain",
+    "content_sha256": "b96ef1f7513349f7451eeeceec3b1eeec48c052b0d1ac19784c32967bb40a88a",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "active_candidate",
+    "object_kind": "design",
+    "path": "doc/readme/gap/readme-gap-distributed-prod-hardening-gap12345.design.md",
+    "registry_type": "professional_domain",
+    "routing_batch": "readme-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "liveops_community",
+    "structural_owner": "liveops_community"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

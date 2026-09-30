@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/site/README.md",
+    "authority_layer": "professional_domain",
+    "content_sha256": "ec504129c1d753dc3360c26c3b4f5ef0cb1d0d5d7288b5793a6b7ab339f5f036",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "historical_candidate",
+    "object_kind": "design",
+    "path": "doc/site/github-pages/github-pages-cinematic-consequence-refresh-2026-07-19.design.md",
+    "registry_type": "professional_domain",
+    "routing_batch": "site-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "liveops_community",
+    "structural_owner": "liveops_community"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

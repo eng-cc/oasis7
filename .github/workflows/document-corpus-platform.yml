@@ -1,0 +1,62 @@
+name: Document corpus platform regressions
+
+on:
+  pull_request:
+    paths:
+      - .gitattributes
+      - .gitignore
+      - .github/workflows/document-corpus-platform.yml
+      - doc/.governance/document-corpus-inventory.json
+      - doc/.governance/document-corpus/**
+      - doc/testing/evidence/inventory.json
+      - scripts/ci-required-capability-test-inventory.tsv
+      - scripts/ci-required-scope.v2.json
+      - scripts/document-corpus-inventory*
+      - scripts/document_corpus.py
+      - scripts/document_evidence_policy.py
+      - scripts/doc-evidence-inventory-check*
+      - scripts/fixtures/document-corpus-v3/**
+  push:
+    branches:
+      - main
+    paths:
+      - .gitattributes
+      - .gitignore
+      - .github/workflows/document-corpus-platform.yml
+      - doc/.governance/document-corpus-inventory.json
+      - doc/.governance/document-corpus/**
+      - doc/testing/evidence/inventory.json
+      - scripts/ci-required-capability-test-inventory.tsv
+      - scripts/ci-required-scope.v2.json
+      - scripts/document-corpus-inventory*
+      - scripts/document_corpus.py
+      - scripts/document_evidence_policy.py
+      - scripts/doc-evidence-inventory-check*
+      - scripts/fixtures/document-corpus-v3/**
+
+permissions:
+  contents: read
+
+jobs:
+  document-corpus-platform:
+    name: Document corpus and evidence (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - macos-latest
+          - windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12.3"
+      - name: Run corpus and evidence regressions, including platform lock/path cases
+        run: |
+          python scripts/document-corpus-inventory-check.test.py
+          python scripts/doc-evidence-inventory-check.test.py
+      - name: Run workflow admission regressions
+        if: matrix.os == 'ubuntu-24.04'
+        run: python scripts/document-corpus-inventory-workflow.test.py

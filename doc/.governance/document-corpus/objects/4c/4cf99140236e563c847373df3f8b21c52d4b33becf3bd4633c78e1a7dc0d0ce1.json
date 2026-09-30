@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/testing/README.md",
+    "authority_layer": "professional_domain",
+    "content_sha256": "9c0ec807a5817cc246042fd1e7a23a9fd5c164c1e7dbbe946b459444c92b5e91",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "active_candidate",
+    "object_kind": "prd",
+    "path": "doc/testing/longrun/s10-five-node-real-game-soak.prd.md",
+    "registry_type": "professional_domain",
+    "routing_batch": "testing-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "qa_engineer",
+    "structural_owner": "qa_engineer"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

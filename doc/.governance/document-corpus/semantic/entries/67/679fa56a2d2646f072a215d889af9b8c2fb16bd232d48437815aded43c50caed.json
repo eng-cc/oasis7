@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "f6fde455ef85e9243d1b9abdf854e6215c588b213bb7ca0c5a89de0b52c750f4",
+    "current_authority": "doc/product/world-infrastructure/prd.md",
+    "decision_owner": "runtime_engineer",
+    "disposition": "retain_current_authority",
+    "note": "current world-runtime requirements authority",
+    "path": "doc/world-runtime/prd.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

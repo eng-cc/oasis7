@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "b416d52ebade447a0e2ba34a0315cb02b326f6ad2a97f6527bbe0478d9c313d1",
+    "current_authority": "doc/world-runtime/prd.md",
+    "decision_owner": "runtime_engineer",
+    "disposition": "retain_current_procedure",
+    "note": "current HTTPS provider bridge procedure; no provider or release readiness claim",
+    "path": "doc/world-runtime/runtime/provider-remote-https-bridge-operator-runbook.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

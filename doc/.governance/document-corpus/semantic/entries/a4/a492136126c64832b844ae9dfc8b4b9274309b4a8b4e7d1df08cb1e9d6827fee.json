@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "b763b2cd4128f94187d538cd9579cd50f8e6ad802fe39f201635be5255358432",
+    "current_authority": "testing-manual.md",
+    "decision_owner": "qa_engineer",
+    "disposition": "retain_current_procedure",
+    "note": "current bundle-first procedure; no release claim",
+    "path": "doc/testing/launcher/launcher-bundle-first-playtest-entry-2026-03-12.prd.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

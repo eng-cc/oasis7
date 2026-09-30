@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "caf948e8cf20342be45e933d8ed14a2e4eb028e491e392ea2dbc1e69fdbbeff1",
+    "current_authority": "doc/readme/prd.md",
+    "decision_owner": "repository_health_engineer",
+    "disposition": "retain_current_authority",
+    "note": "current quarterly claim-review control",
+    "path": "doc/readme/governance/readme-quarterly-review-cycle-2026-03-11.prd.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

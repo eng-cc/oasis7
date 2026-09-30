@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "8485d5c4d8ca19fd00c23694de5b0e39996fd0e2d4e0dcbe47dd28d5cc55ff53",
+    "current_authority": "doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.prd.md",
+    "decision_owner": "runtime_engineer",
+    "disposition": "retain_historical_governance_decision",
+    "note": "completed design decision trace",
+    "path": "doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.design.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

@@ -1,0 +1,12 @@
+{
+  "record": {
+    "content_sha256": "02d5265133ce8ab64469c1f9773884ed10ab558354078f576666228cc840c92f",
+    "current_authority": "doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md",
+    "decision_owner": "game_visual_interaction_designer",
+    "disposition": "retain_non_authoritative_ideation",
+    "note": "bounded brainstorm only; no approved gameplay runtime compatibility quality or release claim",
+    "path": "doc/world-simulator/viewer/viewer-pixel-world-player-leverage-production-readability-2026-05-28.brainstorm.md",
+    "retirement_gate": "absorb ideas or redirect active gameplay callers, preserve provenance, then visual and repository-health review"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "00c298722497e7dfde6465da9fa4cd757c73256a67e5fd21327cb504c0918a9a",
+    "current_authority": "doc/game/gameplay/gameplay-top-level-design.prd.md",
+    "decision_owner": "gameplay_designer",
+    "disposition": "retain_repeatable_procedure",
+    "note": "conditional regression procedure; not a current pass",
+    "path": "doc/playability_test_result/topics/industrial-onboarding-required-tier-cards-2026-03-15.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}
