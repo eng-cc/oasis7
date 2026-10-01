@@ -44,6 +44,7 @@
   - AC-3: `integration_required` 必须使用真实游戏 world state 或 seed snapshot，验证 action 到 API/viewer projection 的完整链路。
   - AC-4: `release_full` 必须使用 real-env/public_testnet readiness evidence，且证据必须同窗口。
   - AC-5: release gate 中的 `insufficient_data` 不得当作 pass；跳过 S9/S10 后不得写成完整 release coverage。
+  - AC-6: 组合验证计划必须独立保留 GWSC 设计中的 17 QA negative cases、10 runtime scenario groups 和 8 SC-9 cells；每个执行结论按 [testing QA receiver](../prd.md#qa-infrastructure-receiver) 绑定当前 source/candidate、environment、oracle、raw evidence 和 tier。结构/schema通过不能代替语义断言或实际执行。
 - Non-Goals:
   - 不把本方案改造成所有 PR 默认必跑的重型 gate。
   - 不用单模块、单节点或 dry-run 结果声明真实多节点 ready。
@@ -136,6 +137,7 @@ env -u RUSTC_WRAPPER cargo test -p oasis7_distfs --lib
 | PRD-TESTING-LONGRUN-GWSC-001 | GWSC-1/2 | `module_required` | S1/S4 + mixed-topology required | commit/state-sync 基础合同 |
 | PRD-TESTING-LONGRUN-GWSC-002 | GWSC-2/3 | `module_full` | mixed-topology full + triad longrun + state-sync closure | 多节点追高和恢复 |
 | PRD-TESTING-LONGRUN-GWSC-003 | GWSC-3/4/5 | `integration_required` / `release_full` | S10 + real-env readiness + API/viewer projection | 真实游戏世界状态提交与投影 |
+| PRD-TESTING-LONGRUN-GWSC-004 | GWSC verification receivers | `module_required` / `integration_required` / `release_full` | Keep all 17 QA cases, 10 runtime groups and eight SC-9 cells separately traceable; record structural validation separately from semantic oracle results and execution state using [QA method](../design.md#qa-infrastructure-evidence-method) and [QA tier boundary](../prd.md#qa-infrastructure-tier-boundaries). | Same-candidate state-sync, execution, consumer and full-environment evidence; missing required cells remain blocked/unverified. |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

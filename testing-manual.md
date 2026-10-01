@@ -411,6 +411,7 @@ env -u RUSTC_WRAPPER cargo check -p pixel_world_bridge --target wasm32-unknown-u
   - 这是 Viewer/Bevy 或 pixel-world wasm build 改动的 scoped required 稳定性筛网，并且是 UI 闭环前的稳定性前置；
   - raster、真实浏览器与性能证据不由本套件替代，按 S6 的 JS-browser / JS-full 升级。
 
+<a id="testing-s6-qa-receiver"></a>
 ### S6：Web UI 闭环 smoke 套件（L4A）
 - JS-required（结构/反馈/Vitest/freshness/build）：触达 `crates/oasis7_viewer/**` 的 source、生成物边界或 bundle 时，执行 `npm --prefix crates/oasis7_viewer run test:frontend-structure`、`npm --prefix crates/oasis7_viewer run test:feedback-contract`、`npm --prefix crates/oasis7_viewer run test:ui`、`./scripts/agent-browser-viewer-dist-freshness-test.sh` 与 `./scripts/build-viewer-software-safe.sh`。
 - JS-browser（真实浏览器）：WASM bundle ready 后，以真实 browser 验证关键交互、console、desktop 与 narrow viewport；任何 player-visible 改动必须通过此层，不能只以 JS-required 替代。
@@ -422,6 +423,7 @@ env -u RUSTC_WRAPPER cargo check -p pixel_world_bridge --target wasm32-unknown-u
   - `doc/testing/manual/model-visual-review-sop-2026-05-29.manual.md`（截图加模型视觉评审，用于替代 routine 人工视觉 review）
   - `doc/testing/launcher/launcher-manual-test-checklist-2026-03-10.prd.md`（发布前人工体验与异常恢复检查清单）
 - 本手册仅保留分层与触发矩阵，执行时按上述文档操作。
+- S6 的跨层结果按 [QA receiver tier boundary](doc/testing/prd.md#qa-infrastructure-tier-boundaries) 记录。截图、console 与 `__AW_TEST__` 只构成 surface observation；提交/receipt/root 与 world effect 仍须用同候选权威 source/journal/API oracle 核对。`test_tier_full` 还需要真实 provider-backed Agent parity 与 external headed desktop+narrow evidence，未执行的 PWT 计划项保持 planned。
 - S6 选择器：
   - UI 结构 / 文案 / DOM anchor：优先 `npm --prefix crates/oasis7_viewer run test:ui` 或对应 contract test。
   - 可见视觉 / 布局 / 遮挡 / 响应式：先采 desktop/mobile 截图，再执行模型视觉评审卡。
@@ -639,9 +641,11 @@ env -u RUSTC_WRAPPER cargo test -p oasis7 --features test_tier_required runtime_
   - Viewer 缺少签名信封返回 `rollback_approval_required`；篡改、过期、目标不匹配或重放信封返回 `rollback_authorization_invalid`，且两类失败均不得改变 world、journal、batch 或 reorg epoch。
 - 参考文档：`doc/testing/longrun/p2p-longrun-soak-and-chaos.prd.md`、`doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md`。
 
+<a id="s9a-gwsc-qa-receiver"></a>
 ### S9A：链上大世界状态底座自闭环
 - 目标语义：本节的闭环对象不是单独的 libp2p/P2P transport，而是 `链上大世界状态底座`：P2P transport、分布式存储/blob closure、replication/gap sync/state sync、consensus/finality、execution record/receipt、observer/validator/storage ops，以及 API/viewer 对同一 world state 的投影。
 - Claim boundary / 状态提交闭环首读入口：`doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md`。涉及 world state sync、commit closure、state-sync bundle、observer catch-up 或 API/viewer projection 的结论，先按 GWSC 口径定档，再下钻 S9/S10 执行套件。
+- GWSC 的 [QA infrastructure receiver](doc/testing/prd.md#qa-infrastructure-receiver) 固定 source/candidate 与 evidence join；完整 17 QA cases、10 runtime groups、8 SC-9 cells 的目标映射见 [GWSC design](doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md)。设计/fixture/schema存在不等于实现或执行，required 与 full 环境差异按 [tier boundary](doc/testing/prd.md#qa-infrastructure-tier-boundaries) 判定。
 - 可声明结论：
   - `module_required` 通过：底座本地合同可集成。
   - `module_full` 通过：底座在当前可执行 proxy/triad 拓扑下能持续推进和恢复。
