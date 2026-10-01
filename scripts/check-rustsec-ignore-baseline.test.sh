@@ -28,7 +28,7 @@ cp scripts/rustsec-ignore-direct-dependency-baseline.json "$direct_baseline"
 run_check() {
   OASIS7_RUSTSEC_DENY_TOML="$1" \
     OASIS7_RUSTSEC_DIRECT_DEP_BASELINE="${2:-$direct_baseline}" \
-    OASIS7_RUSTSEC_TODAY="2026-06-24" \
+    OASIS7_RUSTSEC_TODAY="2026-10-01" \
     ./scripts/check-rustsec-ignore-baseline.sh
 }
 
@@ -92,6 +92,10 @@ for line in source:
     if '"RUSTSEC-2024-0436"' in line:
         out.append("  # rustsec-ignore: owner=repository_health_engineer; scope=test; reason=test; expiry=2026-08-31; validation=test")
         out.append('  "RUSTSEC-2099-0001", # test-only unapproved advisory')
+        out.append("  # rustsec-ignore: owner=repository_health_engineer; scope=test; reason=retired advisory must stay unapproved; expiry=2026-10-31; validation=cargo tree --locked -i quick-xml")
+        out.append('  "RUSTSEC-2026-0194", # test-only retired quick-xml advisory')
+        out.append("  # rustsec-ignore: owner=repository_health_engineer; scope=test; reason=retired advisory must stay unapproved; expiry=2026-10-31; validation=cargo tree --locked -i quick-xml")
+        out.append('  "RUSTSEC-2026-0195", # test-only retired quick-xml advisory')
 Path(sys.argv[2]).write_text("\n".join(out) + "\n", encoding="utf-8")
 PY
 if run_check "$extra_id" >"$tmp_dir/extra.out" 2>&1; then
@@ -99,6 +103,8 @@ if run_check "$extra_id" >"$tmp_dir/extra.out" 2>&1; then
   exit 1
 fi
 grep -q "unapproved RustSec ignore id" "$tmp_dir/extra.out"
+grep -q "RUSTSEC-2026-0194" "$tmp_dir/extra.out"
+grep -q "RUSTSEC-2026-0195" "$tmp_dir/extra.out"
 
 expired="$tmp_dir/expired.toml"
 python3 - deny.toml "$expired" <<'PY'
@@ -106,13 +112,29 @@ from pathlib import Path
 import sys
 
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
-Path(sys.argv[2]).write_text(text.replace("expiry=2026-09-30", "expiry=2026-01-01"), encoding="utf-8")
+Path(sys.argv[2]).write_text(text.replace("expiry=2026-10-31", "expiry=2026-09-30"), encoding="utf-8")
 PY
 if run_check "$expired" >"$tmp_dir/expired.out" 2>&1; then
   echo "expected expired metadata case to fail" >&2
   exit 1
 fi
 grep -q "metadata expired" "$tmp_dir/expired.out"
+
+direct_expired="$tmp_dir/direct-expired.json"
+python3 - "$direct_baseline" "$direct_expired" <<'PY'
+from pathlib import Path
+import json
+import sys
+
+payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+payload["expires"] = "2026-09-30"
+Path(sys.argv[2]).write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+PY
+if run_check deny.toml "$direct_expired" >"$tmp_dir/direct-expired.out" 2>&1; then
+  echo "expected expired direct dependency baseline case to fail" >&2
+  exit 1
+fi
+grep -q "direct dependency baseline expired on 2026-09-30" "$tmp_dir/direct-expired.out"
 
 bad_validation="$tmp_dir/bad-validation.toml"
 python3 - deny.toml "$bad_validation" <<'PY'
@@ -121,7 +143,10 @@ import sys
 
 text = Path(sys.argv[1]).read_text(encoding="utf-8")
 Path(sys.argv[2]).write_text(
-    text.replace("validation=cargo tree --all-features -i serde_cbor", "validation=echo not-a-scope-check"),
+    text.replace(
+        "validation=cargo tree --locked --all-features --target all -i serde_cbor",
+        "validation=echo not-a-scope-check",
+    ),
     encoding="utf-8",
 )
 PY
@@ -218,6 +243,10 @@ text = text.replace(
     "local_crates=oasis7,oasis7_client_launcher,oasis7_net,oasis7_node",
     "local_crates=oasis7,oasis7_client_launcher,oasis7_net,oasis7_node,wasm_build_suite,wasm_module_observe",
 )
+# These mutation fixtures add a real manifest dependency without updating the
+# checked-in lockfile. Let only the temporary checker copy resolve that fixture
+# so it can reach the direct-manifest ratchet assertion.
+text = text.replace("validation=cargo tree --locked", "validation=cargo tree")
 Path(sys.argv[2]).write_text(text, encoding="utf-8")
 PY
 
@@ -242,7 +271,11 @@ if run_check "$paste_scope_deny" >"$tmp_dir/paste-direct.out" 2>&1; then
   echo "expected direct paste manifest case to fail" >&2
   exit 1
 fi
-grep -q '`paste` direct dependency manifest scope grew beyond RustSec baseline' "$tmp_dir/paste-direct.out"
+if ! grep -q '`paste` direct dependency manifest scope grew beyond RustSec baseline' "$tmp_dir/paste-direct.out"; then
+  echo "expected direct paste manifest scope-growth error" >&2
+  cat "$tmp_dir/paste-direct.out" >&2
+  exit 1
+fi
 cp "$launcher_backup" "$launcher_manifest"
 
 python3 - "$launcher_manifest" <<'PY'
@@ -322,11 +355,24 @@ else:
     text = "\n".join(out) + "\n"
 path.write_text(text, encoding="utf-8")
 PY
-if run_check deny.toml >"$tmp_dir/paste-root-direct.out" 2>&1; then
+paste_root_scope_deny="$tmp_dir/paste-root-scope-deny.toml"
+python3 - deny.toml "$paste_root_scope_deny" <<'PY'
+from pathlib import Path
+import sys
+
+text = Path(sys.argv[1]).read_text(encoding="utf-8")
+text = text.replace("validation=cargo tree --locked", "validation=cargo tree")
+Path(sys.argv[2]).write_text(text, encoding="utf-8")
+PY
+if run_check "$paste_root_scope_deny" >"$tmp_dir/paste-root-direct.out" 2>&1; then
   echo "expected root workspace direct paste manifest case to fail" >&2
   exit 1
 fi
-grep -q '`paste` direct dependency manifest scope grew beyond RustSec baseline: Cargo.toml' "$tmp_dir/paste-root-direct.out"
+if ! grep -q '`paste` direct dependency manifest scope grew beyond RustSec baseline: Cargo.toml' "$tmp_dir/paste-root-direct.out"; then
+  echo "expected root paste workspace dependency scope-growth error" >&2
+  cat "$tmp_dir/paste-root-direct.out" >&2
+  exit 1
+fi
 cp "$root_backup" "$root_manifest"
 
 echo "check-rustsec-ignore-baseline.test: OK"
