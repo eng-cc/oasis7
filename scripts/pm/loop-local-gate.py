@@ -52,35 +52,38 @@ def main():
             if len(matches) != 1: raise ValueError('malformed live loop binding')
             binding = json.loads(base64.b64decode(matches[0] + '=' * (-len(matches[0]) % 4), altchars=b'-_', validate=True))
             if binding != task.get('loop_binding'): raise ValueError('live binding differs from task cache')
-            tool = (args.tool_root or Path(os.environ.get('OASIS7_LOOP_TOOL_ROOT', Path(__file__).resolve().parents[2]))).resolve()
-            commit = binding.get('policy_commit', '')
-            if not re.fullmatch(r'[0-9a-f]{40}', commit): raise ValueError('missing effective policy commit')
-            subprocess.run(['git', '-C', str(root), 'fetch', '--no-tags', 'origin', 'main:refs/remotes/origin/main'], check=True, capture_output=True)
-            subprocess.run(['git', '-C', str(root), 'merge-base', '--is-ancestor', commit, 'refs/remotes/origin/main'], check=True, capture_output=True)
-            if run('git', '-C', str(tool), 'rev-parse', 'HEAD') != commit: raise ValueError('effective tool HEAD mismatch')
-            if run('git', '-C', str(root), 'rev-parse', '--path-format=absolute', '--git-common-dir') != run('git', '-C', str(tool), 'rev-parse', '--path-format=absolute', '--git-common-dir'): raise ValueError('effective tool repository mismatch')
-            names = run('git', '-C', str(tool), 'ls-tree', '-r', '--name-only', commit, '--', 'scripts/pm').splitlines()
-            for name in names:
-                if (tool / name).is_symlink() or (tool / name).read_bytes() != subprocess.check_output(['git', '-C', str(tool), 'show', commit + ':' + name]): raise ValueError('effective helper bytes mismatch')
-            if run('git', '-C', str(tool), 'ls-files', '--others', '--', 'scripts/pm', ':(exclude)**/__pycache__/**'): raise ValueError('untracked effective helper shadow')
-            sys.path.insert(0, str(tool / 'scripts/pm'))
-            spec = importlib.util.spec_from_file_location('effective_loop', tool / 'scripts/pm/loop.py')
+            helper_root = Path(__file__).resolve().parents[2]
+            sys.path.insert(0, str(helper_root / 'scripts/pm'))
+            spec = importlib.util.spec_from_file_location('trusted_loop_facade', helper_root / 'scripts/pm/loop.py')
             module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
-            from loop_policy import scope_context
-            context = scope_context(root, args.base, args.head)
+            active, policy_context = module.resolve_effective_binding(root, task, return_context=True)
+            if not isinstance(active, dict): raise ValueError('effective loop binding is unavailable')
+            trusted_default_oid = ((policy_context or {}).get('trusted_current_policy') or {}).get('default_branch_oid')
+            tool = module.existing_policy_tool_root(
+                root, active,
+                args.tool_root or os.environ.get('OASIS7_LOOP_TOOL_ROOT') or helper_root,
+            )
+            commit = active.get('policy_commit', '')
+            if not re.fullmatch(r'[0-9a-f]{40}', commit): raise ValueError('missing effective policy commit')
+            policy = module._trusted_module_for_binding(
+                tool, root, active, 'loop_policy', trusted_default_oid,
+            )
+            context = policy.scope_context(root, args.base, args.head)
             def validated_admission():
                 return module.validate_task(
                     root, {**task, 'repository': repository}, tool,
                     context['scope_base_oid'], args.head,
+                    effective_binding=active,
+                    trusted_default_oid=trusted_default_oid,
                 )
             result = module.pre_mutation_admission(
                 'promotion',
-                binding=binding,
+                binding=active,
                 target_root=root,
                 effective_tool_root=tool,
                 source_commit=commit,
                 effective_tool_commit=commit,
-                record_source_commit=(binding.get('coordination_ref') or {}).get('source_commit'),
+                record_source_commit=(active.get('coordination_ref') or {}).get('source_commit'),
                 mutation=validated_admission,
             )
             result['scope_context'] = context

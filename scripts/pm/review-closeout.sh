@@ -18,6 +18,7 @@ Options:
   --role-returns <jsonl>    Preflight slice ledger whose artifacts contain completed returns
   --finding-resolution <json>  Admin-authorized exact-head finding resolution manifest
   --review-resolution <json>   Alias for --finding-resolution
+  --complete                Complete the unchanged plan-bound epoch through v2 handoff/resolution
   --verification <text>     Verification matrix summary (default: derived from immutable plan)
   --residual-risk <text>    Optional additional residual-risk context
   --print-only              Print the packet instead of posting it to the task issue
@@ -51,13 +52,14 @@ if not resolved.is_file():
 print(resolved)
 PY
 }
-TASK_UID="" REVIEW_PLAN="" ROLE_RETURNS="" FINDING_RESOLUTION="" VERIFICATION="" EXTRA_RISK="" PRINT_ONLY=0 OUTPUT_JSON=0
+TASK_UID="" REVIEW_PLAN="" ROLE_RETURNS="" FINDING_RESOLUTION="" VERIFICATION="" EXTRA_RISK="" PRINT_ONLY=0 OUTPUT_JSON=0 COMPLETE=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --task-uid) TASK_UID="${2:-}"; shift 2 ;;
     --review-plan) REVIEW_PLAN="${2:-}"; shift 2 ;;
     --role-returns) ROLE_RETURNS="${2:-}"; shift 2 ;;
     --finding-resolution|--review-resolution) FINDING_RESOLUTION="${2:-}"; shift 2 ;;
+    --complete) COMPLETE=1; shift ;;
     --verification) VERIFICATION="${2:-}"; shift 2 ;;
     --residual-risk) EXTRA_RISK="${2:-}"; shift 2 ;;
     --print-only) PRINT_ONLY=1; shift ;;
@@ -252,6 +254,13 @@ else:
     raise SystemExit("review-closeout: role-return ledger mixes or has unsupported statuses")
 PY
 )" || exit 1
+
+if [[ "$COMPLETE" == 1 && -z "$FINDING_RESOLUTION" ]]; then
+  CANONICAL_RESOLUTION="$ROOT_DIR/.pm/scratch/$TASK_UID/review-resolutions/$PLAN_EPOCH.json"
+  if [[ -f "$CANONICAL_RESOLUTION" ]]; then
+    FINDING_RESOLUTION="$CANONICAL_RESOLUTION"
+  fi
+fi
 if [[ "$COLLECTION_STATE" == "existing" && "$LEDGER_STATE" == "incomplete" ]]; then
   die "an existing collection cannot authorize an incomplete plan-owned preflight ledger"
 fi
@@ -349,6 +358,71 @@ PY
   RESOLUTION_RESULT=""
 fi
 
+# --complete composes only the existing plan-bound v2 handoff and resolution
+# contracts. It never invents dispatch evidence: the exact dispatch marker
+# must already be uniquely present and live before a missing handoff is made.
+if [[ "$COMPLETE" == 1 ]]; then
+  if [[ -n "$FINDING_RESOLUTION" && "$RESOLUTION_SCHEMA" != "oasis7-review-resolution/v2" ]]; then
+    die "--complete requires an immutable v2 finding-resolution manifest"
+  fi
+  HANDOFF_PATH="$ROOT_DIR/.pm/scratch/$TASK_UID/review-handoffs/$PLAN_EPOCH.json"
+  if [[ -f "$HANDOFF_PATH" ]]; then
+    python3 - "$ROOT_DIR" "$REVIEW_PLAN" "$HANDOFF_PATH" <<'PY' || die "existing review handoff does not validate against the exact plan"
+import pathlib, sys
+root, plan, artifact = map(pathlib.Path, sys.argv[1:])
+sys.path.insert(0, str(root / "scripts" / "pm"))
+import review_preflight_handoff as handoff
+validated = handoff.validate_handoff(root, artifact, expected_plan_path=plan)
+if validated["handoff"].get("schema") != "oasis7-review-return-handoff/v2":
+    raise SystemExit("review-closeout: --complete requires a v2 handoff")
+PY
+  else
+    DISPATCH_COMMENT_ID="$(python3 - "$ROOT_DIR" "$REVIEW_PLAN" <<'PY'
+import pathlib, sys
+root, plan_path = map(pathlib.Path, sys.argv[1:])
+sys.path.insert(0, str(root / "scripts" / "pm"))
+import review_preflight_handoff as handoff
+plan, _identity, resolved_plan, _batch, _ledger, _slices, *_ = handoff.validate_plan_inputs(root, plan_path)
+payload = handoff.dispatch_payload_for_plan(root, resolved_plan)
+issue_number = int(payload["issue_number"])
+handoff.validate_live_task_issue(issue_number, str(payload["task_uid"]), int(payload["pr_number"]))
+comments = handoff.paginated_task_issue_comments(issue_number)
+matches = handoff.matching_dispatch_comments(comments, payload)
+if len(matches) != 1:
+    raise SystemExit("review-closeout: --complete requires exactly one already-published matching dispatch marker")
+comment_id = matches[0].get("id")
+if not isinstance(comment_id, int) or isinstance(comment_id, bool) or comment_id <= 0:
+    raise SystemExit("review-closeout: existing dispatch comment ID is invalid")
+handoff.live_dispatch_readback(root, payload, comment_id)
+print(comment_id)
+PY
+)" || die "cannot establish the exact existing review dispatch readback"
+    if ! python3 "$SCRIPT_DIR/review-batch-epoch.py" --root "$ROOT_DIR" handoff \
+        --plan "$REVIEW_PLAN" --dispatch-comment-id "$DISPATCH_COMMENT_ID" >/dev/null; then
+      [[ -f "$HANDOFF_PATH" ]] || die "cannot create the exact plan-bound v2 review handoff"
+      python3 - "$ROOT_DIR" "$REVIEW_PLAN" "$HANDOFF_PATH" <<'PY' || die "concurrent handoff creation left conflicting bytes"
+import pathlib, sys
+root, plan, artifact = map(pathlib.Path, sys.argv[1:])
+sys.path.insert(0, str(root / "scripts" / "pm"))
+import review_preflight_handoff as handoff
+validated = handoff.validate_handoff(root, artifact, expected_plan_path=plan)
+if validated["handoff"].get("schema") != "oasis7-review-return-handoff/v2":
+    raise SystemExit("review-closeout: concurrent handoff is not v2")
+PY
+    fi
+  fi
+
+  COMPLETE_RESOLUTION_ARGS=(complete-v2 --root "$ROOT_DIR" --task-uid "$TASK_UID"
+    --head "$FROZEN_HEAD" --epoch "$PLAN_EPOCH" --ledger "$ROLE_RETURNS")
+  [[ -z "$FINDING_RESOLUTION" ]] || COMPLETE_RESOLUTION_ARGS+=(--manifest "$FINDING_RESOLUTION")
+  RESOLUTION_RESULT="$(python3 "$SCRIPT_DIR/review-findings-resolution.py" "${COMPLETE_RESOLUTION_ARGS[@]}")" \
+    || die "v2 review completion is pending or blocked; preserve artifacts and retry only after exact readback"
+  if [[ -z "$FINDING_RESOLUTION" ]]; then
+    FINDING_RESOLUTION="$ROOT_DIR/.pm/scratch/$TASK_UID/review-resolutions/$PLAN_EPOCH.json"
+  fi
+  RESOLUTION_SCHEMA="oasis7-review-resolution/v2"
+fi
+
 # Plan-owned v2 promotion and packet generation are one recorder-owned
 # transaction.  Delegating before this facade's own live validation avoids a
 # post-CAS recorder read while retaining wave one and the reserved wave two
@@ -361,6 +435,7 @@ if [[ "$COLLECTION_STATE" == "absent" && "$RESOLUTION_SCHEMA" == "oasis7-review-
     --finding-disposition-evidence "derived from validated v2 handoff"
     --verification "$VERIFICATION" --residual-risk "$EXTRA_RISK"
     --slice-ledger "$ROLE_RETURNS" --finding-resolution "$FINDING_RESOLUTION")
+  [[ "$COMPLETE" == 0 ]] || ARGS+=(--idempotent-publish)
   [[ "$PRINT_ONLY" == 0 ]] || ARGS+=(--print-only)
   PACKET="$("$SCRIPT_DIR/record-pre-pr-review.sh" "${ARGS[@]}")"
   if [[ "$OUTPUT_JSON" == 1 ]]; then
@@ -420,14 +495,22 @@ if [[ "$PROMOTION_COLLECTED" == 0 ]]; then
     --batch "$BATCH_PATH" --ledger "$ROLE_RETURNS" >/dev/null
 fi
 [[ -n "$VERIFICATION" ]] || VERIFICATION="immutable review plan evidence digest $(printf '%s\n' "$PLAN_FIELDS" | sed -n '6p')"
+RECORDER_RESIDUAL_RISK="$(printf '%s\n' "$SUMMARIES" | sed -n '5p')"
+if [[ "$COMPLETE" == 1 ]]; then
+  # The recorder re-derives role risk from the v2 slice ledger on every
+  # idempotent promotion/readback. Pass only caller-supplied extra risk here;
+  # passing the already-expanded summary would duplicate ledger risk on retry.
+  RECORDER_RESIDUAL_RISK="$EXTRA_RISK"
+fi
 ARGS=(--task-uid "$TASK_UID" --review-plan "$REVIEW_PLAN" --roles "$(printf '%s\n' "$SUMMARIES" | sed -n '1p')"
   --review-evidence "$(printf '%s\n' "$SUMMARIES" | sed -n '2p')" --review-verdicts "$(printf '%s\n' "$SUMMARIES" | sed -n '3p')"
   --finding-disposition-evidence "$(printf '%s\n' "$SUMMARIES" | sed -n '4p')" --verification "$VERIFICATION"
-  --residual-risk "$(printf '%s\n' "$SUMMARIES" | sed -n '5p')" --slice-ledger "$ROLE_RETURNS")
+  --residual-risk "$RECORDER_RESIDUAL_RISK" --slice-ledger "$ROLE_RETURNS")
 if [[ -n "$FINDING_RESOLUTION" ]]; then
   ARGS+=(--finding-resolution "$FINDING_RESOLUTION" --finding-disposition addressed)
 fi
 [[ "$PRINT_ONLY" == 0 ]] || ARGS+=(--print-only)
+[[ "$COMPLETE" == 0 ]] || ARGS+=(--idempotent-publish)
 PACKET="$("$SCRIPT_DIR/record-pre-pr-review.sh" "${ARGS[@]}")"
 if [[ "$OUTPUT_JSON" == 1 ]]; then
   python3 - "$TASK_UID" "$REVIEW_PLAN" "$ROLE_RETURNS" "$PACKET" <<'PY'

@@ -50,6 +50,10 @@ def command_output(args: list[str], *, timeout: float = LOCAL_COMMAND_TIMEOUT_SE
         return subprocess.run(args, check=True, text=True, encoding="utf-8",
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                               timeout=timeout).stdout.strip()
+    except subprocess.CalledProcessError as exc:
+        detail = str(exc.stderr or "").strip()
+        suffix = f": {detail[:500]}" if detail else f": {exc}"
+        raise PublishInputError(f"command failed: {args[0]}{suffix}") from exc
     except (OSError, subprocess.SubprocessError) as exc:
         raise PublishInputError(f"command failed: {args[0]}: {exc}") from exc
 
@@ -196,6 +200,9 @@ class GitHubPublicationAdapter:
                                     encoding="utf-8", stdout=subprocess.PIPE,
                                     stderr=subprocess.PIPE, timeout=timeout)
             return result.stdout.strip()
+        except subprocess.CalledProcessError as exc:
+            detail = str(exc.stderr or "").strip()
+            raise RuntimeError(f"GitHub request failed: {detail[:500] if detail else exc}") from exc
         except (OSError, subprocess.SubprocessError) as exc:
             raise RuntimeError(f"GitHub request failed: {exc}") from exc
 
@@ -348,6 +355,12 @@ class GitHubPublicationAdapter:
         uids = re.findall(r"^task_uid:\s*(task_[0-9a-f]{32})$", body, re.MULTILINE)
         if uids != [task_uid]:
             raise RuntimeError("Task issue UID readback mismatch")
+        hold_active = re.findall(r"^- merge_hold_active:\s*`([^`]+)`$", body, re.MULTILINE)
+        if (len(hold_active) > 1
+                or (hold_active and hold_active[0].lower() not in {"true", "false"})):
+            raise RuntimeError("Task merge hold readback is ambiguous")
+        if hold_active == ["true"]:
+            raise RuntimeError("active Task hold blocks PR publication")
         if getattr(self.args, "existing_ready_update", False):
             record = mapping_identity(self.root, task_uid, self.args.repo, self.issue_number,
                                       self.args.source_ref, self.args.target_ref)
@@ -404,6 +417,18 @@ class GitHubPublicationAdapter:
                 "--existing-ready-update" if getattr(self.args, "existing_ready_update", False) else "--draft-candidate",
                 "--publication-binding-json", str(path), "--json",
             ], timeout=60)
+        except PublishInputError as exc:
+            detail = str(exc)
+            if "record-pr identity/vector conflict:" in detail:
+                raise publication.PublicationError(
+                    "TASK_IDENTITY_CONFLICT", "record-pr rejected the live Issue/Project vector",
+                ) from exc
+            if "record-pr publication-pending:" in detail:
+                reason = detail.split("record-pr publication-pending:", 1)[1].strip()
+                raise publication.PublicationError(
+                    "NETWORK_UNCERTAIN", reason[:400] or "record-pr transition remains pending",
+                ) from exc
+            raise
         finally:
             path.unlink(missing_ok=True)
         self.pr_number = number

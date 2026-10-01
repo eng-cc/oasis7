@@ -14,6 +14,10 @@ trap cleanup EXIT
 mkdir -p "$TMPDIR/.pm/github-project-sync" "$TMPDIR/bin"
 cp "$ROOT_DIR/scripts/pm/github-project-task.py" "$TMPDIR/github-project-task.py"
 cp "$ROOT_DIR/scripts/pm/github-project-sync.py" "$TMPDIR/github-project-sync.py"
+cp "$ROOT_DIR/scripts/pm/workflow-durable-store.py" "$TMPDIR/workflow-durable-store.py"
+cp "$ROOT_DIR/scripts/pm/loop_leaf_result.py" "$TMPDIR/loop_leaf_result.py"
+cp "$ROOT_DIR/scripts/pm/closed_duplicate_candidate_guard.py" "$TMPDIR/closed_duplicate_candidate_guard.py"
+cp "$ROOT_DIR/scripts/pm/retire-closed-duplicate-candidate.py" "$TMPDIR/retire-closed-duplicate-candidate.py"
 cp "$ROOT_DIR/scripts/pm/portable_file_lock.py" "$TMPDIR/portable_file_lock.py"
 cp "$ROOT_DIR/scripts/pm/claim-ready.sh" "$TMPDIR/claim-ready.sh"
 
@@ -110,7 +114,7 @@ PY
       printf '[{"number":2001,"state":"OPEN","title":"[PM] GitHub-backed lifecycle smoke","url":"https://github.com/eng-cc/oasis7/issues/2001"}]\n'
     fi
     ;;
-  "issue view 2001 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason")
+  "issue view 2001 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason"*)
     python3 - "$GH_ISSUE_BODY_STATE_FILE" <<'PY'
 import json, pathlib, sys
 body = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
@@ -121,6 +125,7 @@ print(json.dumps({
     "url": "https://github.com/eng-cc/oasis7/issues/2001",
     "state": "OPEN",
     "stateReason": None,
+    "updatedAt": "2026-10-01T00:00:00Z",
 }))
 PY
     ;;
@@ -161,7 +166,7 @@ PY
   "issue list -R eng-cc/oasis7 --search task_99999999999999999999999999999999 in:body --json number,url,title,state --limit 5")
     printf '[{"number":2003,"state":"OPEN","title":"[PM] No-cache task","url":"https://github.com/eng-cc/oasis7/issues/2003"}]\n'
     ;;
-  "issue view 2003 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason")
+  "issue view 2003 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason"*)
     python3 - "$GH_CANONICAL_WORKTREE_HINT" <<'PY'
 import json, sys
 worktree = sys.argv[1]
@@ -184,13 +189,15 @@ print(json.dumps({
     "url": "https://github.com/eng-cc/oasis7/issues/2003",
     "state": "OPEN",
     "stateReason": None,
+    "updatedAt": "2026-10-01T00:00:00Z",
 }))
 PY
     ;;
-  issue\ view\ 20[0-9][0-9]\ -R\ eng-cc/oasis7\ --json\ body,number,title,url,state,stateReason)
+  issue\ view\ 20[0-9][0-9]\ -R\ eng-cc/oasis7\ --json\ body,number,title,url,state,stateReason*)
     python3 - "$TMPDIR/github-project-task.py" "$GH_MAPPING_PATH" "${3}" <<'PY'
 import importlib.util, json, pathlib, sys
 script, mapping_path, number = sys.argv[1:]
+sys.path.insert(0, str(pathlib.Path(script).parent))
 spec = importlib.util.spec_from_file_location("fixture_github_project_task", script)
 assert spec and spec.loader
 module = importlib.util.module_from_spec(spec)
@@ -199,6 +206,18 @@ mapping = json.loads(pathlib.Path(mapping_path).read_text(encoding="utf-8"))
 record = next((value for value in mapping.get("tasks", {}).values()
                if int(value.get("issue_number") or 0) == int(number)), None)
 if record is None:
+    if int(number) == 2003:
+        uid = "task_99999999999999999999999999999999"
+        print(json.dumps({
+            "body": f"task_uid: {uid}\n- status: `committed`\n- workflow_phase: `execution`\n",
+            "number": 2003,
+            "title": "[PM] No-cache task",
+            "url": "https://github.com/eng-cc/oasis7/issues/2003",
+            "state": "OPEN",
+            "stateReason": None,
+            "updatedAt": "2026-10-01T00:00:00Z",
+        }))
+        raise SystemExit(0)
     raise SystemExit("fixture has no selected Issue mapping")
 uid = str(record.get("task_uid") or "")
 body = module.issue_body(module.task_from_record(uid, record))
@@ -423,6 +442,7 @@ PRIMARY_GH_MAPPING_PATH="$GH_MAPPING_PATH"
 python3 - "$TMPDIR/github-project-task.py" "$MOVE_PHASE_ROOT/.pm/github-project-sync/tasks.json" "$GH_ISSUE_BODY_STATE_FILE" <<'PY'
 import importlib.util, json, pathlib, sys
 script, mapping_path, issue_path = sys.argv[1:]
+sys.path.insert(0, str(pathlib.Path(script).parent))
 spec = importlib.util.spec_from_file_location("fixture_github_project_task", script)
 assert spec and spec.loader
 module = importlib.util.module_from_spec(spec)
@@ -470,6 +490,7 @@ printf 'execution\n' >"$GH_PROJECT_PHASE_STATE_FILE"
 python3 - "$TMPDIR/github-project-task.py" "$GH_MAPPING_PATH" "$GH_ISSUE_BODY_STATE_FILE" "$GH_PROJECT_PHASE_STATE_FILE" <<'PY'
 import importlib.util, json, pathlib, sys
 script, mapping_path, issue_path, phase_path = sys.argv[1:]
+sys.path.insert(0, str(pathlib.Path(script).parent))
 spec = importlib.util.spec_from_file_location("fixture_github_project_task", script)
 assert spec and spec.loader
 module = importlib.util.module_from_spec(spec)
@@ -830,7 +851,10 @@ python3 "$TMPDIR/github-project-task.py" move-task "$NO_CACHE_ROOT" \
 NO_CACHE_MOVE_STATUS=$?
 set -e
 [[ "$NO_CACHE_MOVE_STATUS" != "0" ]]
-grep -Fq "canonical task-closeout.sh" "$TMPDIR/no-cache-move.err"
+grep -Fq "canonical task-closeout.sh" "$TMPDIR/no-cache-move.err" || {
+  cat "$TMPDIR/no-cache-move.err" >&2
+  exit 1
+}
 
 NO_CACHE_RECORD_CALLS_BEFORE="$(wc -l < "$GH_CALL_LOG")"
 set +e
@@ -1073,6 +1097,7 @@ import sys
 import tempfile
 from argparse import Namespace
 
+sys.path.insert(0, str(pathlib.Path(sys.argv[1]).parent))
 spec = importlib.util.spec_from_file_location("task_impl", sys.argv[1])
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
@@ -1294,7 +1319,8 @@ mkdir -p "$CONCURRENT_ROOT"
 printf '{"version":1,"tasks":{}}\n' >"$CONCURRENT_ROOT/tasks.json"
 for uid in task_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa task_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb; do
   python3 - "$TMPDIR/github-project-task.py" "$CONCURRENT_ROOT/tasks.json" "$uid" <<'PY' &
-import importlib.util, sys
+import importlib.util, pathlib, sys
+sys.path.insert(0, str(pathlib.Path(sys.argv[1]).parent))
 spec=importlib.util.spec_from_file_location("task_impl",sys.argv[1])
 module=importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
 module.merge_task_mapping(module.pathlib.Path(sys.argv[2]), sys.argv[3], {"task_uid":sys.argv[3],"status":"ready"})

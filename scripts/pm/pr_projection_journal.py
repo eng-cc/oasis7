@@ -85,8 +85,34 @@ class PublicationJournal:
             self._read_or_create()
             yield self
         finally:
+            current = self._lock
             self._lock = None
-            handle.close()
+            if current is not None and not current.closed:
+                current.close()
+
+    @contextmanager
+    def release_for_child_writer(self) -> Iterator[None]:
+        """Yield the same branch lock to a child CLI, then reacquire it.
+
+        The caller must hold this journal's branch lock. This is deliberately
+        narrow: the parent does no journal mutation while the child runs, and
+        the child's independently derived journal identity must match before
+        it can write. The lock is reacquired even when the child fails.
+        """
+        self._assert_locked()
+        current = self._lock
+        self._lock = None
+        fcntl.flock(current.fileno(), fcntl.LOCK_UN)
+        current.close()
+        try:
+            yield
+        finally:
+            self.lock_path.parent.mkdir(parents=True, exist_ok=True)
+            replacement = self.lock_path.open("a+b")
+            ensure_lock_byte(replacement)
+            fcntl.flock(replacement.fileno(), fcntl.LOCK_EX)
+            self._lock = replacement
+            self._read_or_create()
 
     def _assert_locked(self) -> None:
         if self._lock is None:

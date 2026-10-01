@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import hashlib
+import importlib.util
 import os
 import subprocess
 import sys
@@ -51,8 +52,19 @@ class WorkflowNextTest(unittest.TestCase):
         gh_stub = self.bin / "gh"
         gh_stub.write_text(
             "#!/usr/bin/env python3\n"
-            "import json, sys\n"
-            "if len(sys.argv) == 3 and sys.argv[1] == 'api' and '/issues/' in sys.argv[2]:\n"
+            "import json, os, sys\n"
+            "path = sys.argv[2] if len(sys.argv) >= 3 and sys.argv[1] == 'api' else ''\n"
+            "fixture = os.environ.get('WORKFLOW_NEXT_GH_FIXTURE')\n"
+            "if fixture:\n"
+            "    payload = json.load(open(fixture, encoding='utf-8'))\n"
+            "    if path in payload:\n"
+            "        print(json.dumps(payload[path]))\n"
+            "    elif '/issues/' in path and '/comments' in path:\n"
+            "        print('[]')\n"
+            "    else:\n"
+            "        print('unexpected gh fixture path: ' + path, file=sys.stderr)\n"
+            "        sys.exit(2)\n"
+            "elif len(sys.argv) == 3 and sys.argv[1] == 'api' and '/issues/' in sys.argv[2]:\n"
             "    number = int(sys.argv[2].rsplit('/', 1)[1])\n"
             f"    print(json.dumps({{'number': number, 'body': 'task_uid: {UID}', 'state': 'OPEN'}}))\n"
             "else:\n"
@@ -358,6 +370,87 @@ class WorkflowNextTest(unittest.TestCase):
         payload = json.loads(result.stdout)
         return result.returncode, payload
 
+    def valid_binding(self) -> dict[str, object]:
+        policy = ROOT / "scripts/pm/loop-policy.v1.json"
+        return {
+            "schema": "oasis7.loop-task/v1", "task_uid": UID, "change_id": "fixture-change",
+            "loop": "code", "owner_role": "repository_health_engineer", "bootstrap_epoch": 1,
+            "manual_request_ref": "manual-fixture", "request_key": "fixture-request",
+            "write_scope": ["README"], "out_of_scope": [], "input_contracts": [],
+            "acceptance_refs": ["fixture acceptance"], "dependencies": [],
+            "target_delivery": "pilot", "policy_commit": subprocess.check_output(
+                ["git", "-C", str(self.root), "rev-parse", "HEAD"], text=True,
+            ).strip(),
+            "policy_digest": "sha256:" + hashlib.sha256(policy.read_bytes()).hexdigest(),
+        }
+
+    def set_gh_fixture(self, values: dict[str, object]) -> None:
+        path = self.root.parent / "gh-fixture.json"
+        path.write_text(json.dumps(values))
+        self.env["WORKFLOW_NEXT_GH_FIXTURE"] = str(path)
+
+    def install_trusted_policy_reader(
+        self, binding: dict[str, object], *, live_binding: dict[str, object] | None = None,
+    ) -> tuple[dict[str, object], str, str]:
+        """Install a trusted current-tip CLI fixture; return active binding and OIDs."""
+        helper = self.default_root / "scripts/pm/github-project-task.py"
+        helper.parent.mkdir(parents=True, exist_ok=True)
+        (self.default_root / "README").write_text("adopted policy epoch\n")
+        subprocess.run(["git", "-C", str(self.default_root), "add", "README"], check=True)
+        subprocess.run(["git", "-C", str(self.default_root), "commit", "-qm", "adopted policy epoch"], check=True)
+        adopted_oid = subprocess.check_output(
+            ["git", "-C", str(self.default_root), "rev-parse", "HEAD"], text=True,
+        ).strip()
+        active_binding = dict(binding)
+        active_binding["policy_commit"] = adopted_oid
+        active_binding["policy_digest"] = "sha256:" + "6" * 64
+        payload = {
+            "schema": "oasis7.workflow-policy-live-context/v1", "status": "passed",
+            "complete": True, "task_uid": UID, "repository": "fixture/repo",
+            "issue_number": 11, "task_issue_state": "CLOSED",
+            "live_task_identity": {"task_uid": UID, "repository": "fixture/repo"},
+            "binding": live_binding if live_binding is not None else binding,
+            "project": None, "caller": None, "pr": None,
+            "effective_policy": {
+                "status": "passed", "policy_commit": active_binding["policy_commit"],
+                "policy_digest": active_binding["policy_digest"],
+                "pin_source": "task_issue_adoption_chain", "adoption_chain_tip": "sha256:" + "9" * 64,
+                "binding": active_binding,
+            },
+            "trusted_current_policy": {
+                "default_branch": "main", "default_branch_oid": "0" * 40,
+                "policy_commit": "0" * 40, "policy_digest": "sha256:" + "8" * 64,
+                "workflow_source_digest": "sha256:" + "7" * 64,
+            },
+        }
+        helper.write_text(
+            "import json, subprocess, sys\n"
+            f"payload = json.loads({json.dumps(json.dumps(payload))})\n"
+            "payload['trusted_current_policy']['default_branch_oid'] = subprocess.check_output(\n"
+            "    ['git', '-C', sys.argv[2], 'rev-parse', 'HEAD'], text=True).strip()\n"
+            "payload['trusted_current_policy']['policy_commit'] = payload['trusted_current_policy']['default_branch_oid']\n"
+            "print(json.dumps(payload, sort_keys=True))\n"
+        )
+        subprocess.run(["git", "-C", str(self.default_root), "add", "scripts/pm/github-project-task.py"], check=True)
+        subprocess.run(["git", "-C", str(self.default_root), "commit", "-qm", "trusted policy reader"], check=True)
+        (self.default_root / "README").write_text("default advanced after adoption\n")
+        subprocess.run(["git", "-C", str(self.default_root), "add", "README"], check=True)
+        subprocess.run(["git", "-C", str(self.default_root), "commit", "-qm", "later default advance"], check=True)
+        current_oid = subprocess.check_output(
+            ["git", "-C", str(self.default_root), "rev-parse", "HEAD"], text=True,
+        ).strip()
+        self.set_gh_fixture({
+            "repos/fixture/repo": {"full_name": "fixture/repo", "default_branch": "main"},
+            "repos/fixture/repo/branches/main": {
+                "name": "main", "protected": True, "commit": {"sha": current_oid},
+            },
+            "repos/fixture/repo/issues/11": {
+                "number": 11, "html_url": "https://github.com/fixture/repo/issues/11",
+                "body": f"task_uid: {UID}\n", "state": "open",
+            },
+        })
+        return active_binding, adopted_oid, current_oid
+
     def test_phase_commands_and_terminal_classification(self) -> None:
         cases = [
             ({"status": "candidate", "workflow_phase": ""}, "bootstrap", "bootstrap-task-snapshot.py"),
@@ -403,6 +496,67 @@ class WorkflowNextTest(unittest.TestCase):
         self.assertIsNone(payload["remote_pr_head_oid"], payload)
         self.assertIsNone(payload["ci_identity"], payload)
         self.assertIsNone(payload["failure_phase"], payload)
+
+    def test_final_binding_failure_is_reported_with_exact_workflow_step(self) -> None:
+        self.write_mapping(
+            status="pr_watch", workflow_phase="pr_watch",
+            pr_number=7, pr_url="https://github.com/fixture/repo/pull/7",
+            repository="eng-cc/oasis7",
+            issue_url="https://github.com/eng-cc/oasis7/issues/11",
+        )
+        head = subprocess.check_output(
+            ["git", "-C", str(self.root), "rev-parse", "HEAD"], text=True,
+        ).strip()
+        check_id, run_id, job_id = 55, 77, 66
+        paths = {
+            "repos/eng-cc/oasis7/pulls/7": {
+                "number": 7, "state": "open", "merged_at": None,
+                "body": f"Task: {UID}\nRefs #11",
+                "head": {"sha": head, "ref": "task/fixture"},
+            },
+            f"repos/eng-cc/oasis7/commits/{head}/check-runs?per_page=100&page=1": {
+                "check_runs": [{
+                    "id": check_id, "name": "required-gate",
+                    "app": {"id": 15368},
+                    "pull_requests": [{"number": 7}],
+                    "details_url": f"https://github.com/eng-cc/oasis7/actions/runs/{run_id}/job/{job_id}",
+                    "head_sha": head, "status": "completed", "conclusion": "failure",
+                }],
+            },
+            f"repos/eng-cc/oasis7/actions/runs/{run_id}": {
+                "id": run_id, "run_attempt": 1, "head_sha": head,
+                "head_branch": "task/fixture", "path": ".github/workflows/rust.yml",
+                "event": "pull_request", "pull_requests": [{"number": 7}],
+                "status": "completed", "conclusion": "failure",
+            },
+            f"repos/eng-cc/oasis7/actions/runs/{run_id}/jobs?per_page=100&page=1": {
+                "jobs": [{
+                    "id": job_id, "name": "required-gate", "run_attempt": 1,
+                    "check_run_url": f"https://api.github.com/repos/eng-cc/oasis7/check-runs/{check_id}",
+                    "status": "completed", "conclusion": "failure",
+                    "steps": [
+                        {"name": "Run required test tier", "conclusion": "success"},
+                        {"name": "Verify final task and PR binding before required-gate success", "conclusion": "failure"},
+                    ],
+                }],
+            },
+            "repos/eng-cc/oasis7/issues/11": {
+                "number": 11, "state": "open", "body": f"task_uid: {UID}",
+            },
+        }
+        fixture = self.root.parent / "workflow-next-gh.json"
+        fixture.write_text(json.dumps(paths), encoding="utf-8")
+        self.env["WORKFLOW_NEXT_GH_FIXTURE"] = str(fixture)
+        code, payload = self.run_query()
+        self.assertEqual(code, 1, payload)
+        self.assertEqual(payload["next_command"], [], payload)
+        self.assertEqual(payload["failure_phase"], {
+            "job": "required-gate",
+            "step": "Verify final task and PR binding before required-gate success",
+        }, payload)
+        failure = next(row for row in payload["action_blockers"] if row["code"] == "CURRENT_CHECK_FAILED")
+        self.assertIn("rerun_applicable_check", failure["allowed_actions"], failure)
+        self.assertIn("merge", failure["blocks_actions"], failure)
 
     def test_stale_identity_and_ambiguous_phase_fail_closed(self) -> None:
         self.write_mapping(status="committed", workflow_phase="execution")
@@ -968,6 +1122,64 @@ class WorkflowNextTest(unittest.TestCase):
         self.assertEqual(code, 0, payload)
         self.assertEqual(payload["command_cwd"], str(self.root.resolve()), payload)
 
+    def test_policy_adoption_unavailable_is_derived_pending_action_blocker(self) -> None:
+        binding = self.valid_binding()
+        self.write_mapping(
+            status="committed", workflow_phase="execution", bootstrap_epoch=1,
+            loop_binding=binding,
+        )
+        default_oid = subprocess.check_output(
+            ["git", "-C", str(self.default_root), "rev-parse", "HEAD"], text=True,
+        ).strip()
+        self.set_gh_fixture({
+            "repos/fixture/repo": {"full_name": "fixture/repo", "default_branch": "main"},
+            "repos/fixture/repo/branches/main": {
+                "name": "main", "protected": True, "commit": {"sha": default_oid},
+            },
+            "repos/fixture/repo/issues/11": {
+                "number": 11, "html_url": "https://github.com/fixture/repo/issues/11",
+                "body": f"task_uid: {UID}\n", "state": "open",
+            },
+            "repos/fixture/repo/issues/11/comments?per_page=100": [[{
+                "id": 91, "body": "<!-- oasis7.workflow-policy-adoption/v1 -->\nmalformed record",
+            }]],
+        })
+        code, payload = self.run_query()
+        self.assertNotEqual(code, 0, payload)
+        self.assertEqual(payload["workflow_phase"], "execution", payload)
+        self.assertEqual(payload["status"], "committed", payload)
+        self.assertEqual(payload["next_command"], [], payload)
+        self.assertIsNone(payload.get("effective_policy"), payload)
+        self.assertTrue(any("workflow policy pending" in item for item in payload["blockers"]), payload)
+        policy_blockers = [item for item in payload["action_blockers"]
+                           if item.get("code") == "WORKFLOW_POLICY_PENDING"]
+        self.assertEqual(len(policy_blockers), 1, payload)
+        self.assertIn("merge", policy_blockers[0]["blocks_actions"])
+        self.assertEqual(policy_blockers[0]["next_command"], None)
+        self.assertIsNotNone(payload["candidate_head_oid"], payload)
+        self.assertIsNone(payload["remote_pr_head_oid"], payload)
+        self.assertIsNone(payload["ci_identity"], payload)
+
+    def test_policy_identity_drift_is_derived_conflict_without_status_mutation(self) -> None:
+        binding = self.valid_binding()
+        conflicting_live = dict(binding, write_scope=["*"])
+        self.install_trusted_policy_reader(
+            binding, live_binding=conflicting_live,
+        )
+        self.write_mapping(
+            status="committed", workflow_phase="execution", bootstrap_epoch=1,
+            loop_binding=binding,
+        )
+        code, payload = self.run_query()
+        self.assertNotEqual(code, 0, payload)
+        self.assertEqual(payload["status"], "committed", payload)
+        self.assertEqual(payload["workflow_phase"], "execution", payload)
+        self.assertEqual(payload["next_command"], [], payload)
+        self.assertIsNone(payload.get("effective_policy"), payload)
+        policy_blockers = [item for item in payload["action_blockers"]
+                           if item.get("code") == "WORKFLOW_POLICY_CONFLICT"]
+        self.assertEqual(len(policy_blockers), 1, payload)
+
     def test_terminal_command_targets_canonical_default_worktree(self) -> None:
         self.write_mapping(
             status="done",
@@ -1033,10 +1245,13 @@ class WorkflowNextTest(unittest.TestCase):
         subprocess.run([
             "git", "-C", str(self.root), "worktree", "add", "-qb", "task/retired", str(task_worktree),
         ], check=True)
+        binding = self.valid_binding()
+        active_binding, adopted_oid, current_oid = self.install_trusted_policy_reader(binding)
         self.write_mapping(
             status="done", workflow_phase="post_merge_done",
             canonical_worktree=str(task_worktree), task_branch="task/retired",
             pr_url="https://github.com/fixture/repo/pull/7", pr_number=7,
+            bootstrap_epoch=1, loop_binding=binding,
         )
         self.install_terminal_proof("post_merge_done")
         default_mapping = self.default_root / ".pm/github-project-sync/tasks.json"
@@ -1050,6 +1265,12 @@ class WorkflowNextTest(unittest.TestCase):
         self.assertEqual(payload["next_action"], "completed", payload)
         self.assertEqual(payload["next_command"], [], payload)
         self.assertEqual(payload["blockers"], [], payload)
+        self.assertFalse(task_worktree.exists(), "terminal lookup must not recreate the retired Task worktree")
+        self.assertEqual(payload["loop_binding"]["policy_commit"], binding["policy_commit"], payload)
+        self.assertEqual(payload["effective_policy"]["policy_commit"], adopted_oid, payload)
+        self.assertEqual(payload["effective_policy"]["pin_source"], "task_issue_adoption_chain", payload)
+        self.assertNotEqual(adopted_oid, current_oid, "the adopted pin remains stable across a later default advance")
+        self.assertEqual(active_binding["policy_commit"], adopted_oid)
 
     def test_producer_shaped_merge_receipt_without_task_uid_is_accepted(self) -> None:
         self.write_mapping(
@@ -1123,6 +1344,182 @@ class WorkflowNextTest(unittest.TestCase):
         self.assertNotEqual(code, 0, payload)
         self.assertTrue(any("main-sync receipt task/repository identity drift" in item
                             for item in payload["blockers"]), payload)
+
+
+class AdoptedPinTerminalIntegrationTests(unittest.TestCase):
+    def test_real_adoption_chain_survives_merged_terminal_lookup(self) -> None:
+        """Compose C's live adoption writer/reader with the real terminal query."""
+        adoption_path = ROOT / "scripts/pm/github-project-task-policy-adoption.integration.test.py"
+        spec = importlib.util.spec_from_file_location("workflow_next_policy_adoption_fixture", adoption_path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        adoption = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(adoption)
+
+        old_identity = (adoption.REPO, adoption.UID, adoption.PR_URL)
+        adoption.REPO = "fixture/repo"
+        adoption.UID = UID
+        adoption.PR_URL = f"https://github.com/{adoption.REPO}/pull/{adoption.PR}"
+        self.addCleanup(
+            lambda: (
+                setattr(adoption, "REPO", old_identity[0]),
+                setattr(adoption, "UID", old_identity[1]),
+                setattr(adoption, "PR_URL", old_identity[2]),
+            )
+        )
+        fixture = adoption.PolicyAdoptionCLITests(
+            "test_adopted_pin_survives_unrelated_default_branch_advance"
+        )
+        fixture.setUp()
+        self.addCleanup(fixture.doCleanups)
+        # The D selector requires the canonical repository name from the live
+        # repository endpoint; C's focused fake only needs the branch field.
+        fake_gh = Path(fixture.env["PATH"].split(os.pathsep, 1)[0]) / "gh"
+        fake_source = fake_gh.read_text(encoding="utf-8")
+        self.assertIn('return {"default_branch": "main"}', fake_source)
+        fake_gh.write_text(
+            fake_source.replace(
+                'return {"default_branch": "main"}',
+                'return {"default_branch": "main", "full_name": state["repository"]}',
+            ),
+            encoding="utf-8",
+        )
+
+        adopted = fixture.invoke("adopt-workflow-policy")
+        adopted_payload = fixture.output_json(adopted)
+        self.assertEqual(adopted.returncode, 0, adopted.stdout + adopted.stderr)
+        self.assertEqual(adopted_payload["status"], "adopted", adopted_payload)
+        self.assertEqual(adopted_payload["mutation_count"], 1, adopted_payload)
+        adopted_oid = adopted_payload["policy_commit"]
+        state = fixture.state()
+        adoption_comments = [
+            comment for comment in state["comments"]
+            if "<!-- oasis7.workflow-policy-adoption/v1 -->" in comment.get("body", "")
+        ]
+        self.assertEqual(len(adoption_comments), 1, state)
+
+        fixture.write("doc/engineering/unrelated.txt", "later terminal test default advance\n")
+        fixture.git("add", "doc/engineering/unrelated.txt")
+        fixture.git("commit", "-qm", "unrelated trusted default advance after adoption")
+        current_oid = fixture.git("rev-parse", "HEAD")
+        fixture.git("update-ref", "refs/remotes/origin/main", current_oid)
+
+        task = fixture._task()
+        task["status"] = "done"
+        task["workflow_phase"] = "post_merge_done"
+        task_body = adoption.task_api.issue_body(
+            adoption.task_api.task_from_record(UID, task)
+        )
+        state = fixture.state()
+        state["default_oid"] = current_oid
+        state["issue"]["state"] = "closed"
+        state["issue"]["body"] = task_body
+        state["issue"]["updated_at"] = "2026-10-02T03:00:00Z"
+        state["pr"].update({
+            "state": "closed", "merged": True,
+            "merged_at": "2026-10-02T02:30:00Z", "draft": False,
+            "updated_at": "2026-10-02T02:30:00Z",
+        })
+        fixture.save_state(state)
+
+        task_record = {
+            "task_uid": UID,
+            "title": "Workflow next adopted terminal fixture",
+            "owner_role": "repository_health_engineer",
+            "module": "engineering",
+            "repository": adoption.REPO,
+            "issue_number": adoption.ISSUE,
+            "issue_url": f"https://github.com/{adoption.REPO}/issues/{adoption.ISSUE}",
+            "project_item_id": adoption.PROJECT_ITEM,
+            "canonical_worktree": str(fixture.task_root),
+            "task_branch": "task/" + UID[-8:],
+            "default_branch": "main",
+            "status": "done",
+            "workflow_phase": "post_merge_done",
+            "priority": "P1",
+            "cache_refreshed_at": "2026-10-02T03:00:00Z",
+            "worktree_hint": str(fixture.task_root),
+            "loop_binding": fixture.binding,
+            "pr_number": adoption.PR,
+            "pr_url": adoption.PR_URL,
+            "merge_hold": {"kind": "normal_pr_ci_watch", "active": False},
+            "updated_at": "2026-10-02T03:00:00Z",
+            "acceptance": ["A merged adopted Task stays terminal and read-only."],
+        }
+        mapping_path = fixture.root / ".pm/github-project-sync/tasks.json"
+        mapping = {
+            "version": 1,
+            "project": {
+                "id": adoption.PROJECT_ID,
+                "owner": "eng-cc",
+                "number": adoption.PROJECT_NUMBER,
+                "repo": adoption.REPO,
+            },
+            "tasks": {UID: task_record},
+        }
+        mapping_path.write_text(json.dumps(mapping, sort_keys=True), encoding="utf-8")
+
+        terminal_helper = WorkflowNextTest.__new__(WorkflowNextTest)
+        terminal_helper.root = fixture.root
+        terminal_helper.mapping = mapping_path
+        terminal_helper.install_terminal_proof("post_merge_done")
+
+        fixture.git("worktree", "unlock", str(fixture.task_root))
+        fixture.git("worktree", "remove", "--force", str(fixture.task_root))
+        self.assertFalse(fixture.task_root.exists())
+        terminal_live_read = fixture.invoke("read-live-policy-context", hosted=True)
+        terminal_live_context = fixture.output_json(terminal_live_read)
+        self.assertEqual(terminal_live_read.returncode, 0, terminal_live_read.stdout + terminal_live_read.stderr)
+        self.assertEqual(terminal_live_context["effective_policy"]["policy_commit"], adopted_oid)
+        from unittest.mock import patch
+        import loop as loop_facade
+        with patch.dict(os.environ, fixture.env):
+            effective_binding, effective_context = loop_facade.resolve_effective_binding(
+                fixture.root, task_record, return_context=True,
+            )
+        self.assertEqual(effective_binding["policy_commit"], adopted_oid)
+        self.assertEqual(effective_context["effective_policy"]["pin_source"], "task_issue_adoption_chain")
+        terminal_mapping = mapping_path.read_bytes()
+        task_issue_body = fixture.state()["issue"]["body"]
+        main_head_before = fixture.git("rev-parse", "HEAD")
+        remote_tip_before = fixture.git("rev-parse", "refs/remotes/origin/main")
+        worktrees_before = fixture.git("worktree", "list", "--porcelain")
+        state_before = fixture.state()
+
+        result = subprocess.run(
+            [sys.executable, str(SCRIPT), "--repo-root", str(fixture.root),
+             "--task-uid", UID, "--json"],
+            text=True, capture_output=True, env=fixture.env,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        payload = json.loads(result.stdout)
+        self.assertEqual(payload["identity_status"], "bound", payload)
+        self.assertEqual(payload["workflow_phase"], "post_merge_done", payload)
+        self.assertEqual(payload["next_action"], "completed", payload)
+        self.assertEqual(payload["next_command"], [], payload)
+        self.assertEqual(payload["blockers"], [], payload)
+        self.assertEqual(payload["loop_binding"]["policy_commit"], fixture.binding_oid, payload)
+        self.assertEqual(payload["effective_policy"]["policy_commit"], adopted_oid, payload)
+        self.assertEqual(payload["effective_policy"]["pin_source"], "task_issue_adoption_chain", payload)
+        self.assertNotEqual(adopted_oid, current_oid, "later default advancement must preserve the adopted pin")
+        self.assertFalse(fixture.task_root.exists(), "terminal lookup must not recreate the removed Task worktree")
+        self.assertEqual(mapping_path.read_bytes(), terminal_mapping, "read-only lookup must preserve the mapping")
+        self.assertEqual(fixture.state()["issue"]["body"], task_issue_body, "terminal lookup must not reopen or rewrite the Issue")
+        self.assertEqual(fixture.git("rev-parse", "HEAD"), main_head_before)
+        self.assertEqual(fixture.git("rev-parse", "refs/remotes/origin/main"), remote_tip_before)
+        self.assertEqual(fixture.git("worktree", "list", "--porcelain"), worktrees_before)
+        state_after = fixture.state()
+        self.assertEqual(state_after["post_effects"], state_before["post_effects"])
+        self.assertEqual(state_after["post_attempts"], state_before["post_attempts"])
+        self.assertEqual(
+            [comment["id"] for comment in state_after["comments"]],
+            [comment["id"] for comment in state_before["comments"]],
+        )
+        self.assertFalse(any(
+            args and args[0] in {"issue", "project"} and len(args) > 1
+            and args[1] in {"comment", "edit", "item-edit"}
+            for args in state_after["calls"][len(state_before["calls"]):]
+        ), state_after["calls"])
 
 
 if __name__ == "__main__":

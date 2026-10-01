@@ -7,9 +7,11 @@ import shutil
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from loop_ci_content import validate_ci_content
 from loop_contracts import MARKER, contract_digest
+import loop_policy
 
 
 class ContentTests(unittest.TestCase):
@@ -19,7 +21,9 @@ class ContentTests(unittest.TestCase):
         shutil.copytree(Path(__file__).parent, self.root / 'scripts/pm', ignore=shutil.ignore_patterns('__pycache__'))
         (self.root / '.gitignore').write_text('__pycache__/\n')
         self.spec = self.root / 'doc/engineering/spec.md'; self.spec.parent.mkdir(parents=True); self.spec.write_text('<a id="a"></a>\napproved')
+        source = self.root / 'doc/engineering/workflow/source-of-truth.md'; source.parent.mkdir(parents=True); source.write_text('trusted workflow source fixture')
         self.git('init', '-q'); self.git('config', 'user.name', 'Fixture'); self.git('config', 'user.email', 'fixture@example.invalid')
+        self.git('remote', 'add', 'origin', 'https://github.com/eng-cc/oasis7.git')
         self.git('add', '.'); self.git('commit', '-qm', 'effective')
         self.base = self.git('rev-parse', 'HEAD'); self.git('update-ref', 'refs/remotes/origin/main', self.base)
         self.spec_digest = 'sha256:'+hashlib.sha256(self.spec.read_bytes()).hexdigest()
@@ -39,8 +43,23 @@ class ContentTests(unittest.TestCase):
             return {'number':2,'merged':True,'head':{'sha':self.base},'merge_commit_sha':self.base,'base':{'repo':{'full_name':repo}}}
         self.fail('unexpected non-repository read: '+path)
 
-    def check(self):
-        return validate_ci_content(self.root,self.root,self.binding,self.base,self.base,'eng-cc/oasis7',self.reader)
+    def check(self, tool_root=None, base=None, head=None, reader=None):
+        effective_base = base or self.base
+        policy_bytes = (self.root/'scripts/pm/loop-policy.v1.json').read_bytes()
+        source_bytes = (self.root/'doc/engineering/workflow/source-of-truth.md').read_bytes()
+        proof = {
+            'default_branch': 'main',
+            'default_branch_oid': effective_base,
+            'policy_commit': effective_base,
+            'policy_digest': 'sha256:'+hashlib.sha256(policy_bytes).hexdigest(),
+            'workflow_source_digest': 'sha256:'+hashlib.sha256(source_bytes).hexdigest(),
+        }
+        with patch.object(loop_policy, 'current_effective_policy_identity', return_value=proof):
+            return validate_ci_content(
+                tool_root or self.root, self.root, self.binding,
+                effective_base, head or effective_base, 'eng-cc/oasis7',
+                reader or self.reader,
+            )
 
     def test_content_pass_is_explicitly_not_live_eligibility_admission(self):
         result=self.check()
@@ -62,7 +81,7 @@ class ContentTests(unittest.TestCase):
         integration=self.git('rev-parse','HEAD')
         self.git('update-ref','refs/remotes/origin/main',integration)
         self.git('switch','task')
-        result=validate_ci_content(tools,self.root,self.binding,integration,head,'eng-cc/oasis7',self.reader)
+        result=self.check(tool_root=tools, base=integration, head=head)
         self.assertEqual(result['status'],'passed',result)
         self.assertEqual(result['scope_context']['scope_base_oid'],self.base)
         self.assertEqual(result['scope_context']['integration_base_oid'],integration)
@@ -88,7 +107,7 @@ class ContentTests(unittest.TestCase):
                 return {'id':int(path.rsplit('/',1)[1]),'issue_url':'https://api.github.com/repos/eng-cc/oasis7/issues/1',
                         'body':json.dumps({'marker':MARKER,'contract_digest':contract_digest(contract),'contract':contract})}
             return self.reader(repo,path)
-        result = validate_ci_content(self.root,self.root,self.binding,self.base,self.base,'eng-cc/oasis7',reader)
+        result = self.check(reader=reader)
         self.assertEqual(result['status'],'blocked',result)
 
     def test_malformed_upstream_publication_ref_blocks_without_traceback(self):
@@ -104,7 +123,7 @@ class ContentTests(unittest.TestCase):
             if path=='issues/comments/4':
                 return dict(self.reader(repo,'issues/comments/3'),id=4)
             return self.reader(repo,path)
-        result = validate_ci_content(self.root,self.root,self.binding,self.base,self.base,'eng-cc/oasis7',reader)
+        result = self.check(reader=reader)
         self.assertEqual(result['status'],'passed',result)
 
     def test_equivalent_revision_rechecks_second_publication_target(self):
@@ -113,7 +132,7 @@ class ContentTests(unittest.TestCase):
             if path=='issues/comments/4':
                 return dict(self.reader(repo,'issues/comments/3'),id=4,issue_url='https://api.github.com/repos/eng-cc/oasis7/issues/99')
             return self.reader(repo,path)
-        result = validate_ci_content(self.root,self.root,self.binding,self.base,self.base,'eng-cc/oasis7',reader)
+        result = self.check(reader=reader)
         self.assertEqual(result['status'],'blocked',result)
 
     def qualified_reference(self, **overrides):

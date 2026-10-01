@@ -7,16 +7,16 @@ Canonical workflow: [capability](doc/engineering/workflow/source-of-truth.md#cap
 ## Non-Negotiable Entry Rules
 
 1. `tpm` is the main Agent and workflow coordinator/integrator. TPM performs coordination, task truth, dispatch, integration, and the PR mainline; it does not substitute its own judgment for professional analysis, implementation, verification, review, or external messaging.
-2. 其他专业角色必须以 subagent slice 形式参与。项目已授权 TPM 直接派发 workflow 所需的 bounded slices。
+2. 需要专业结论或专业审查时，由匹配角色以 bounded subagent slice 参与；纯事实查询无需强制派工。项目已授权 TPM 直接派发 workflow 所需 slices。
 3. 每个需求只有一个 owner role、一个 GitHub Project-backed task truth、一个 canonical worktree、一个有序 PR 主链；同一 Task UID 的多 PR 只有在 canonical source 的 ordered multi-PR contract 已激活时可用。当前 PM helpers 仍是单 PR projection，第二个 PR 必须 fail closed；兼容期可用 coordinating Issue + 有序 linked delivery tasks，并且协调任务须等待全部 required delivery 合并后才能完成。
-4. 普通及只读请求按 `default-workflow-bootstrap` 绑定 task truth；拟启动 workflow-change task 时，canonical prior-approval stop 必须先于 bootstrap/task binding、反思捕获、Issue/Project/worktree 创建或 scope promotion。用户请求的只读审计/诊断仍可正常 bootstrap，且不授权改 policy。
-5. 只读专业判断分流：产品、系统、玩法、视觉交互、runtime、blockchain ops、WASM、agent、viewer、QA、repository health、LiveOps/community 结论必须来自匹配角色 slice。纯文件存在性、路径查找、命令输出复述可由 TPM 在已绑定任务中直接完成。
+4. 有写入副作用的请求按 `default-workflow-bootstrap` 绑定 task truth；无外部或持久副作用的只读请求可直接回答或做匹配角色分析，无需创建 task/worktree。拟启动 workflow-change task 时，canonical prior-approval stop 必须先于 task binding、反思捕获、Issue/Project/worktree 创建或 scope promotion。只读审计/诊断不授权改 policy。
+5. 专业判断分流：产品、系统、玩法、视觉交互、runtime、blockchain ops、WASM、agent、viewer、QA、repository health、LiveOps/community 结论必须来自匹配角色 slice；TPM 可直接回答客观事实。只读结论不是正式 review、ready 或 task-complete 证据。
 6. 禁止在 `main` 或主 worktree 修改文件；`third_party/` 只读。
 7. 流程变更先改 canonical source，再同步脚本、skills 和入口文档。
 
 ## Dispatch Contract
 
-默认协作口径：`tpm` 主 Agent + 专业角色 subagents。TPM 的 TODO decomposition、subagent slice contracts、mandatory context checklist 和 integration order 必须先写入 GitHub task issue evidence comments；其他 formal sink 只能补充，不能替代正式 task evidence sink。
+默认协作口径：`tpm` 主 Agent + 按需专业角色 subagents。授权写入任务的 TODO decomposition、subagent slice contracts、mandatory context checklist 和 integration order 必须在派工前写入 GitHub task issue evidence comments；只读请求不创建任务证据。其他 formal sink 只能补充，不能替代写入任务的正式 task evidence sink。
 
 每个 slice 记录 role、slice type、write scope、return contract、integration order，以及 mandatory context checklist（identity/authority、governance、task truth、user intent、repo scope、collaboration boundary）。默认使用绑定 task UID 与当前/frozen HEAD 的最小 task packet；full-history fork 仅用于已记录具体原因的升级。
 

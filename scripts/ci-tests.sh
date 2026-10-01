@@ -388,6 +388,12 @@ run_workflow_governance_baseline_contract_tests() {
 }
 
 run_workflow_governance_operational_contract_tests() {
+  run python3 ./scripts/security/codeql-plan.test.py
+  run python3 ./scripts/security/codeql-workflow.test.py
+  run python3 ./scripts/security/codeql-health.test.py
+  run python3 ./scripts/security/codeql-acceptance.test.py
+  run python3 ./scripts/pm/codeql-advisory.test.py
+  run bash ./scripts/pm/pr-lifecycle-gate.test.sh
   run bash ./scripts/pm/lint.test.sh
   run bash ./scripts/pm/github-project-workflow.test.sh
   run ./scripts/ci-required-scope-audit-contract.test.sh
@@ -412,6 +418,13 @@ run_workflow_governance_operational_contract_tests() {
   run python3 ./scripts/pm/integration-selection-regression.test.py
   run python3 ./scripts/pm/workflow-bootstrap-fallback.test.py
   run python3 ./scripts/pm/loop-policy.test.py
+  run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/github-project-task-policy-adoption.integration.test.py
+  run python3 ./scripts/pm/pr_projection_publication.test.py
+  run python3 ./scripts/pm/pr-projection-record-pr.test.py
+  run python3 ./scripts/pm/pr-projection-transition.test.py
+  run python3 ./scripts/pm/review_closeout_publication.test.py
+  run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/pr-projection-publish-cli.integration.test.py
+  run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/pr-projection-publish-concurrency.integration.test.py
   run python3 ./scripts/pm/loop-contracts.test.py
   run python3 ./scripts/pm/loop-traceability.test.py
   run python3 ./scripts/pm/loop_terminal.test.py
@@ -427,6 +440,7 @@ run_workflow_governance_operational_contract_tests() {
   run python3 ./scripts/pm/github-project-admission.test.py
   run python3 ./scripts/pm/loop-bootstrap.test.py
   run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/loop-bootstrap.integration.test.py
+  run python3 ./scripts/pm/workflow-simplification.test.py
 }
 
 run_workflow_governance_contract_tests() {

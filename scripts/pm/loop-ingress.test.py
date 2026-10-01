@@ -1,11 +1,112 @@
 """Effective ingress regression: candidate wrappers cannot replace base checks."""
 from pathlib import Path
+import json
+import os
+import shlex
 import subprocess
+import sys
 import tempfile
 import unittest
 
 
 class IngressTests(unittest.TestCase):
+    @staticmethod
+    def workflow_run_body(workflow: str, step_marker: str, end_marker: str) -> str:
+        start = workflow.index(step_marker)
+        run = workflow.index("        run: |\n", start) + len("        run: |\n")
+        end = workflow.index(end_marker, run)
+        lines = workflow[run:end].splitlines()
+        return "\n".join(line[10:] if line.startswith("          ") else line for line in lines)
+
+    def run_trusted_helper_route(self, phase_helper: bool, *, final: bool = False):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / '.github/workflows/rust.yml').read_text()
+        if final:
+            script = self.workflow_run_body(
+                workflow,
+                '      - name: Verify final task and PR binding before required-gate success',
+                '      - name: Upload Cargo package profile plan',
+            )
+        else:
+            script = self.workflow_run_body(
+                workflow,
+                '      - id: loop-ci-admission',
+                '      - name: Report planned scope',
+            )
+        with tempfile.TemporaryDirectory() as tmp:
+            fixture = Path(tmp)
+            repo = fixture / 'repo'
+            repo.mkdir()
+            git = lambda *args: subprocess.check_output(
+                ['git', '-C', str(repo), *args], text=True,
+            ).strip()
+            git('init', '-q', '-b', 'main')
+            git('config', 'user.name', 'Fixture')
+            git('config', 'user.email', 'fixture@example.invalid')
+            helper = repo / 'scripts/pm/loop-ci.py'
+            helper.parent.mkdir(parents=True)
+            trusted = '# TRUSTED_PHASE_HELPER\n' if phase_helper else '# TRUSTED_LEGACY_HELPER\n'
+            helper.write_text(trusted, encoding='utf-8')
+            git('add', '.')
+            git('commit', '-qm', 'trusted base helper')
+            base = git('rev-parse', 'HEAD')
+            helper.write_text('# CANDIDATE_UNTRUSTED_PHASE_HELPER\n', encoding='utf-8')
+
+            log = fixture / 'python-args.jsonl'
+            bin_dir = fixture / 'bin'
+            bin_dir.mkdir()
+            python_shim = bin_dir / 'python3'
+            shim_code = (
+                "import json,os,pathlib,sys\n"
+                "args=sys.argv[1:]\n"
+                "if args and args[0]=='-I': args=args[1:]\n"
+                "script=pathlib.Path(args[0])\n"
+                "body=script.read_text(encoding='utf-8')\n"
+                "if '--help' in args[1:]:\n"
+                " print('usage loop-ci.py' + (' --phase' if 'TRUSTED_PHASE_HELPER' in body else ''))\n"
+                " raise SystemExit(0)\n"
+                "with open(os.environ['WORKFLOW_SHIM_LOG'],'a',encoding='utf-8') as out:\n"
+                " out.write(json.dumps({'argv':args,'candidate': 'CANDIDATE_UNTRUSTED' in body})+'\\n')\n"
+                "raise SystemExit(0)\n"
+            )
+            python_shim.write_text(
+                '#!/bin/sh\nexec ' + shlex.quote(sys.executable) + ' -I -c '
+                + shlex.quote(shim_code) + ' "$@"\n', encoding='utf-8',
+            )
+            python_shim.chmod(0o755)
+            replacements = {
+                '${{ github.event.pull_request.base.sha || inputs.integration_base }}': base,
+                '${{ github.event.pull_request.head.sha || inputs.expected_head }}': 'b' * 40,
+                '${{ github.repository }}': 'fixture/repo',
+                '${{ github.event.pull_request.number || inputs.pr_number }}': '2',
+                '${{ steps.loop-ci-admission.outputs.start_only }}': 'true',
+                '${{ steps.scope.outputs.source_scope_base }}': base,
+                '${{ steps.scope.outputs.planner_config_sha256 }}': 'sha256:' + '0' * 64,
+                '${{ steps.scope.outputs.planner_digest }}': 'sha256:' + '1' * 64,
+                '${{ steps.scope.outputs.impact_projection_digest }}': 'sha256:' + '2' * 64,
+            }
+            for needle, value in replacements.items():
+                script = script.replace(needle, value)
+            environment = dict(os.environ)
+            environment.update({
+                'PATH': str(bin_dir) + os.pathsep + environment.get('PATH', ''),
+                'RUNNER_TEMP': str(fixture / 'runner'),
+                'GITHUB_OUTPUT': str(fixture / 'github-output'),
+                'GITHUB_EVENT_NAME': 'pull_request',
+                'GITHUB_SHA': 'b' * 40,
+                'WORKFLOW_SHIM_LOG': str(log),
+            })
+            (fixture / 'runner').mkdir()
+            completed = subprocess.run(
+                ['bash', '-euo', 'pipefail', '-c', script], cwd=repo,
+                env=environment, text=True, capture_output=True,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr + completed.stdout)
+            invocations = [json.loads(line) for line in log.read_text().splitlines()]
+            self.assertEqual(len(invocations), 1, invocations)
+            self.assertTrue(all(not item['candidate'] for item in invocations), invocations)
+            return [item['argv'][1:] for item in invocations]
+
     def test_workflow_selects_base_script_and_candidate_stub_is_ignored(self):
         root = Path(__file__).resolve().parents[2]
         workflow = (root / '.github/workflows/rust.yml').read_text()
@@ -27,6 +128,53 @@ class IngressTests(unittest.TestCase):
             selected = repo / 'effective.py'
             selected.write_text(git('show', base + ':scripts/pm/loop-ci.py'))
             self.assertEqual(subprocess.run(['python3', str(selected)]).returncode, 2)
+
+    def test_final_binding_is_a_required_gate_barrier_before_artifact_uploads(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / '.github/workflows/rust.yml').read_text()
+        validation = workflow.index('      - id: loop-ci-admission')
+        tests = workflow.index('      - name: Run required test tier')
+        final = workflow.index('      - name: Verify final task and PR binding before required-gate success')
+        uploads = workflow.index('      - name: Upload Cargo package profile plan')
+        self.assertLess(validation, tests)
+        self.assertLess(tests, final)
+        self.assertLess(final, uploads)
+        final_step = workflow[final:uploads]
+        self.assertIn('git show "${base_ref}:scripts/pm/loop-ci.py"', final_step)
+        self.assertIn('--phase final --tests-passed', final_step)
+        self.assertIn("if python3 -I \"${RUNNER_TEMP}/oasis7-loop-ci-final.py\" --help 2>&1 | grep -Fq -- '--phase'; then", final_step)
+        self.assertNotIn('continue-on-error', final_step)
+        self.assertNotIn('always()', final_step)
+
+    def test_same_pr_uses_old_trusted_helper_until_base_exposes_phase_api(self):
+        root = Path(__file__).resolve().parents[2]
+        workflow = (root / '.github/workflows/rust.yml').read_text()
+        validation = workflow[workflow.index('      - id: loop-ci-admission'):]
+        validation = validation[:validation.index('      - name: Report planned scope')]
+        self.assertIn('git show "${base_ref}:scripts/pm/loop-ci.py"', validation)
+        self.assertIn("if python3 -I \"${RUNNER_TEMP}/oasis7-loop-ci.py\" --help 2>&1 | grep -Fq -- '--phase'; then", validation)
+        self.assertIn('python3 -I "${RUNNER_TEMP}/oasis7-loop-ci.py" --phase start', validation)
+        self.assertNotIn('python3 scripts/pm/loop-ci.py', validation)
+
+    def test_old_trusted_helper_gets_legacy_args_even_with_phase_candidate(self):
+        before = self.run_trusted_helper_route(phase_helper=False)
+        after = self.run_trusted_helper_route(phase_helper=False, final=True)
+        self.assertEqual(before[0], ['--repository', 'fixture/repo', '--pr-number', '2', '--base', self._oid_from_args(before[0]), '--head', 'b' * 40])
+        self.assertEqual(after[0][:2], ['--repository', 'fixture/repo'])
+        self.assertNotIn('--phase', before[0] + after[0])
+        self.assertNotIn('--tests-passed', after[0])
+        self.assertNotIn('--start-only', after[0])
+
+    def test_phase_args_are_enabled_only_by_the_trusted_helper_capability(self):
+        before = self.run_trusted_helper_route(phase_helper=True)
+        after = self.run_trusted_helper_route(phase_helper=True, final=True)
+        self.assertEqual(before[0][:2], ['--phase', 'start'])
+        self.assertEqual(after[0][:3], ['--phase', 'final', '--tests-passed'])
+        self.assertIn('--start-only', after[0])
+
+    @staticmethod
+    def _oid_from_args(arguments):
+        return arguments[arguments.index('--base') + 1]
 
     def test_prepare_does_not_import_candidate_gate(self):
         script = (Path(__file__).resolve().parents[1] / 'prepare-task-pr.sh').read_text()

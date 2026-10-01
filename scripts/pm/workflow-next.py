@@ -106,6 +106,25 @@ def add_blocker(blockers: list[str], message: str) -> None:
         blockers.append(message)
 
 
+def policy_action_blocker(code: str, reason: str) -> dict[str, Any]:
+    if code == "WORKFLOW_POLICY_PENDING":
+        blocked = ["validate", "publish", "merge", "state_write", "consume_artifact", "complete"]
+        allowed = ["inspect", "retry_evidence_read"]
+        next_kind = "retry_workflow_policy_readback"
+    else:
+        blocked = ["validate", "publish", "merge", "state_write", "consume_artifact", "complete"]
+        allowed = ["inspect", "repair_within_authorized_scope"]
+        next_kind = "reconcile_workflow_policy_binding"
+    return {
+        "code": code,
+        "blocks_actions": blocked,
+        "allowed_actions": allowed,
+        "next_action_kind": next_kind,
+        "next_command": None,
+        "reason": reason,
+    }
+
+
 def git_value(path: pathlib.Path, *args: str) -> str:
     try:
         return subprocess.check_output(
@@ -969,6 +988,38 @@ def command_for(
     return []
 
 
+def resolve_task_effective_policy(root: pathlib.Path, task: dict[str, Any]) -> tuple[dict[str, Any] | None, dict[str, Any] | None, tuple[str, str] | None]:
+    """Resolve a bound task through D's adapter and C's trusted hosted reader."""
+    try:
+        import loop as loop_facade
+    except (ImportError, OSError, SyntaxError) as exc:
+        return None, None, ("WORKFLOW_POLICY_PENDING", f"active policy adapter is unavailable: {exc}")
+    try:
+        binding, context = loop_facade.resolve_effective_binding(root, task, return_context=True)
+        if not isinstance(binding, dict):
+            raise ValueError("effective policy resolver returned no binding")
+        immutable = dict(task["loop_binding"])
+        immutable["policy_commit"] = binding.get("policy_commit")
+        immutable["policy_digest"] = binding.get("policy_digest")
+        if immutable != binding:
+            raise ValueError("effective policy resolver changed immutable Task binding fields")
+        resolved = (context or {}).get("effective_policy")
+        if resolved is not None and (not isinstance(resolved, dict) or resolved.get("status") != "passed"):
+            raise ValueError("trusted active-policy result did not pass")
+        if resolved is None:
+            resolved = {
+                "policy_commit": binding.get("policy_commit"),
+                "policy_digest": binding.get("policy_digest"),
+                "pin_source": "immutable_binding",
+                "adoption_chain_tip": None,
+            }
+        return binding, resolved, None
+    except (loop_facade.PolicyReaderPending, OSError, subprocess.CalledProcessError) as exc:
+        return None, None, ("WORKFLOW_POLICY_PENDING", str(exc))
+    except (ValueError, KeyError, TypeError) as exc:
+        return None, None, ("WORKFLOW_POLICY_CONFLICT", str(exc))
+
+
 def main() -> int:
     args = parse_args()
     root = pathlib.Path(args.repo_root).resolve()
@@ -1026,6 +1077,7 @@ def main() -> int:
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 1
     task = dict(task)
+    policy_blocker: tuple[str, str] | None = None
     try:
         ADMISSION_GUARD.guard_candidate_issue(mapping, mapping_path, args.task_uid, task)
     except ADMISSION_GUARD.CandidateAdmissionError as exc:
@@ -1045,6 +1097,14 @@ def main() -> int:
                     add_blocker(blockers, f"stale identity: loop binding {key} drift")
         payload["loop_binding"] = binding
         payload["continuation_mode"] = "manual_request_only"
+        effective_binding, resolved_policy, policy_blocker = resolve_task_effective_policy(root, task)
+        if policy_blocker is None and isinstance(resolved_policy, dict):
+            payload["effective_policy"] = {
+                key: resolved_policy.get(key)
+                for key in ("policy_commit", "policy_digest", "pin_source", "adoption_chain_tip")
+            }
+        elif policy_blocker is not None:
+            add_blocker(blockers, f"workflow policy {policy_blocker[0].removeprefix('WORKFLOW_POLICY_').lower()}: {policy_blocker[1]}")
     allow_retired_terminal = str(task.get("workflow_phase") or "") in {
         "closed_without_merge", "post_merge_done",
     }
@@ -1131,6 +1191,9 @@ def main() -> int:
     if payload["next_command"]:
         payload["command_cwd"] = str(default_root if phase in {"task_done", "main_sync"} else root)
     payload.update(DELIVERY_READINESS.workflow_projection(root, task, blockers))
+    if policy_blocker is not None:
+        action_blocker = policy_action_blocker(*policy_blocker)
+        payload["action_blockers"] = [action_blocker, *payload["action_blockers"]]
     print(json.dumps(payload, indent=2, sort_keys=True))
     return 1 if blockers else 0
 

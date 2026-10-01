@@ -1,6 +1,6 @@
 # GitHub Project-Backed PM Operations
 
-Canonical workflow: [capability](../doc/engineering/workflow/source-of-truth.md#capability-status), [ownership](../doc/engineering/workflow/source-of-truth.md#lifecycle-ownership), [state machine](../doc/engineering/workflow/source-of-truth.md#canonical-state-machine), [states](../doc/engineering/workflow/source-of-truth.md#workflow-states), [gates](../doc/engineering/workflow/source-of-truth.md#ready-and-done), [review packet](../doc/engineering/workflow/source-of-truth.md#pre-pr-review-packet).
+Canonical workflow: [capability](../doc/engineering/workflow/source-of-truth.md#capability-status), [ownership](../doc/engineering/workflow/source-of-truth.md#lifecycle-ownership), [state machine](../doc/engineering/workflow/source-of-truth.md#canonical-state-machine), [states](../doc/engineering/workflow/source-of-truth.md#workflow-states), [gates](../doc/engineering/workflow/source-of-truth.md#ready-and-done), [review packet](../doc/engineering/workflow/source-of-truth.md#pre-pr-review-packet). The [workflow simplification design](../doc/engineering/workflow/workflow-simplification.design.md) maps the approved requirements to implementation and tests.
 
 This file is an operator command index, not a second workflow specification.
 
@@ -13,7 +13,7 @@ PM 内容规范：[项目管理记录规范](../doc/engineering/doc-governance/p
 - `.pm/github-project-sync/tasks.json` is the generated task-to-Issue/Project mapping cache; it may be regenerated and is not task truth. Do not edit it manually.
 - Task-scoped records, working memory, signals, sessions, stage/gate state, and migration archives are ignored local caches; they are not process truth and must not be committed. Ordinary repository lint must work when these caches are absent.
 - Historical operations that need evidence unavailable from complete live GitHub Issue/Project readback must fail closed; a local archive cannot replace GitHub evidence.
-- Task issue evidence comments are the formal evidence sink. Fallback evidence is temporary until replayed.
+- GitHub task issue evidence comments are the formal sink for authorized write-task truth and formal review. Read-only answers and analyses do not create task evidence. Fallback evidence is temporary until replayed.
 
 ## Start and Inspect
 
@@ -64,6 +64,15 @@ If its legacy archive is absent, only this diagnostic fails closed; ordinary rep
 
 Task-bound legacy `--create` is rejected; promotion requires the fresh receipt and live draft-state checks above.
 The canonical links define all lifecycle gates, review attestation, and merge authority. These helpers enforce those definitions; this README does not restate them.
+
+After every planned reviewer has returned, the mechanical v2 review closeout entry is:
+
+```bash
+./scripts/pm/review-closeout.sh --task-uid <TASK-UID> --review-plan <plan.json> \
+  --role-returns <preflight-ledger.jsonl> --complete
+```
+
+It reuses exact handoff/resolution evidence for the unchanged epoch. Finding dispositions must already be explicit; the helper never converts a blocker to `non_actionable`.
 
 For classified non-merge outcomes, follow the [canonical terminal runbook](../doc/engineering/workflow/source-of-truth.md#terminal-runbook).
 

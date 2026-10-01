@@ -220,6 +220,14 @@ if ! grep -Fqx '  run ./scripts/ci-required-scope-audit-contract.test.sh' <<<"$w
   echo "required scope audit contract is not wired into run_workflow_governance_operational_contract_tests" >&2
   exit 1
 fi
+if ! grep -Fqx '  run python3 ./scripts/pm/workflow-simplification.test.py' <<<"$workflow_governance_operational_source"; then
+  echo "workflow simplification acceptance aggregate is not wired into run_workflow_governance_operational_contract_tests" >&2
+  exit 1
+fi
+if ! awk -F '\t' '$1 == "run_operational_contract_tests" && $2 ~ /(^|,)scripts\/pm\/workflow-simplification\.test\.py(,|$)/ { found = 1 } END { exit !found }' "$repo_root/scripts/ci-required-capability-test-inventory.tsv"; then
+  echo "workflow simplification acceptance aggregate is missing from required capability inventory" >&2
+  exit 1
+fi
 
 if ! grep -Fqx '    run_required_component "site quality contracts" "${OASIS7_CI_RUN_SITE_CONTRACT_TESTS:-}" "disabled_by_scope_planner" run_site_contract_tests' "$ci_tests"; then
   echo "site quality contracts are not wired to the planner selector in ci-tests" >&2

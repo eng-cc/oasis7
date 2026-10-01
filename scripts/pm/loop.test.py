@@ -104,7 +104,10 @@ class LoopTests(unittest.TestCase):
 
     def dependency_command(self, command, bodies, *, search=None, terminal_pass=True):
         uid, dependency_uid = 'task_' + 'a' * 32, 'task_' + 'b' * 32
-        task = {'task_uid': uid, 'repository': 'fixture/repo', 'loop_binding': {'task_uid': uid, 'dependencies': [dependency_uid]}}
+        task = {'task_uid': uid, 'repository': 'fixture/repo', 'loop_binding': {
+            'task_uid': uid, 'dependencies': [dependency_uid], 'policy_commit': 'a' * 40,
+            'policy_digest': 'sha256:' + '1' * 64,
+        }}
         policy = SimpleNamespace(validate_binding=lambda _: {'blockers': []}, validate_tool_root=lambda *a: {'blockers': []}, validate_dependencies=lambda *a: {'blockers': []})
         def terminal_delivery(repository, selected_uid, number, **kwargs):
             url = f'https://github.com/{repository}/issues/{number}'
@@ -150,7 +153,7 @@ class LoopTests(unittest.TestCase):
             return json.dumps({'number': number, 'html_url': f'https://github.com/fixture/repo/issues/{number}', 'body': body})
         modules = {'loop_policy': policy, 'loop_terminal': terminal, 'loop_contracts': contracts}
         output = io.StringIO()
-        with patch.object(sys, 'argv', ['loop.py', command, '--task-uid', uid, '--tool-root', '.', '--manual-request-ref', 'current']), patch.object(module, 'load_task', return_value=task), patch.object(module, '_trusted_module', side_effect=lambda *a: modules[a[-1]]), patch.object(module.subprocess, 'check_output', side_effect=gh), patch.object(module.subprocess, 'run', return_value=SimpleNamespace(returncode=0, stdout='{"status":"can_continue"}')), patch.object(module, 'live_binding', return_value={'task_uid': dependency_uid, 'dependencies': []}), patch.object(module, 'common_dir', return_value=Path('/unused')), patch.object(module, 'Reservation'), patch.object(module, 'recovery_status', return_value={'pending_actions': []}), redirect_stdout(output):
+        with patch.object(sys, 'argv', ['loop.py', command, '--task-uid', uid, '--tool-root', '.', '--manual-request-ref', 'current']), patch.object(module, 'load_task', return_value=task), patch.object(module, '_trusted_module', side_effect=lambda *a: modules[a[-1]]), patch.object(module, 'existing_policy_tool_root', return_value=Path('/trusted')), patch.object(module.subprocess, 'check_output', side_effect=gh), patch.object(module.subprocess, 'run', return_value=SimpleNamespace(returncode=0, stdout='{"status":"can_continue"}')), patch.object(module, 'live_binding', return_value={'task_uid': dependency_uid, 'dependencies': []}), patch.object(module, 'resolve_effective_binding', side_effect=lambda _root, selected, **_kwargs: (selected.get('loop_binding'), None) if _kwargs.get('return_context') else selected.get('loop_binding')), patch.object(module, 'common_dir', return_value=Path('/unused')), patch.object(module, 'Reservation'), patch.object(module, 'recovery_status', return_value={'pending_actions': []}), redirect_stdout(output):
             code = module.main()
         return code, json.loads(output.getvalue())
 
@@ -220,14 +223,37 @@ class LoopTests(unittest.TestCase):
         contracts = SimpleNamespace(validate_contracts=lambda *args, purpose: {'blockers': ['new_tasks disabled'] if purpose == 'new_tasks' else []})
         task = {'task_uid': 'task_' + 'a' * 32, 'owner_role': 'qa_engineer', 'bootstrap_epoch': 1}
         task['loop_binding'] = dict(task)
-        with patch.object(module, '_trusted_module', side_effect=lambda *args: policy if args[-1] == 'loop_policy' else contracts):
+        with patch.object(module, 'resolve_effective_binding', side_effect=lambda _root, selected, **_kwargs: selected.get('loop_binding')), patch.object(module, 'existing_policy_tool_root', side_effect=lambda _root, _binding, preferred: Path(preferred)), patch.object(module, '_trusted_module', side_effect=lambda *args: policy if args[-1] == 'loop_policy' else contracts):
             self.assertEqual(module.validate_task(Path('.'), task, Path('.'), purpose='new_tasks')['status'], 'blocked')
             self.assertEqual(module.validate_task(Path('.'), task, Path('.'), purpose='in_flight')['status'], 'passed')
+
+    def test_legacy_pin_keeps_old_validator_fast_path(self):
+        pin = {'policy_commit': 'a' * 40, 'policy_digest': 'sha256:' + '1' * 64}
+        policy = SimpleNamespace(validate_tool_root=lambda *_args: {'status': 'passed', 'blockers': []})
+        with patch.object(module, '_validate_with_current_trusted_policy') as current:
+            result, oid = module._validate_pinned_tool_root(policy, Path('/old'), Path('/task'), pin)
+        self.assertEqual(result['status'], 'passed')
+        self.assertIsNone(oid)
+        current.assert_not_called()
+
+    def test_stale_ref_uses_current_trusted_validator_without_changing_semantic_pin(self):
+        pin = {'policy_commit': 'a' * 40, 'policy_digest': 'sha256:' + '1' * 64}
+        stale = {'status': 'blocked', 'blockers': [
+            'pinned policy is not ancestor of refs/remotes/origin/main',
+        ]}
+        live = {'validation': {'status': 'passed', 'blockers': []},
+                'trusted_default_oid': 'b' * 40}
+        policy = SimpleNamespace(validate_tool_root=lambda *_args: stale)
+        with patch.object(module, '_validate_with_current_trusted_policy', return_value=live) as current:
+            result, oid = module._validate_pinned_tool_root(policy, Path('/old'), Path('/task'), pin)
+        current.assert_called_once_with(Path('/old'), Path('/task'), pin)
+        self.assertEqual(result['status'], 'passed')
+        self.assertEqual(oid, 'b' * 40)
 
     def test_missing_live_dependency_blocks_admission(self):
         policy = SimpleNamespace(validate_binding=lambda _: {'blockers': []}, validate_tool_root=lambda *args: {'blockers': []})
         binding = {'task_uid': 'task_' + 'a' * 32, 'dependencies': ['task_' + 'b' * 32]}
-        with patch.object(module, '_trusted_module', return_value=policy), patch.object(module.subprocess, 'check_output', return_value='[]'):
+        with patch.object(module, 'resolve_effective_binding', side_effect=lambda _root, selected, **_kwargs: selected.get('loop_binding')), patch.object(module, 'existing_policy_tool_root', side_effect=lambda _root, _binding, preferred: Path(preferred)), patch.object(module, '_trusted_module', return_value=policy), patch.object(module.subprocess, 'check_output', return_value='[]'):
             result = module.validate_task(Path('.'), {'loop_binding': binding, 'repository': 'fixture/repo'}, Path('.'))
         self.assertEqual(result['status'], 'blocked')
         self.assertIn('dependency task missing', result['blockers'][0])
@@ -236,7 +262,7 @@ class LoopTests(unittest.TestCase):
         policy = SimpleNamespace(validate_binding=lambda _: {'blockers': []}, validate_tool_root=lambda *args: {'blockers': []})
         terminal = SimpleNamespace(validate_terminal_delivery=lambda *args, **kwargs: {'status': 'blocked', 'blockers': ['Project has not finalized dependency']})
         binding = {'task_uid': 'task_' + 'a' * 32, 'dependencies': ['task_' + 'b' * 32]}
-        with patch.object(module, '_trusted_module', side_effect=lambda *args: terminal if args[-1] == 'loop_terminal' else policy), patch.object(module.subprocess, 'check_output', side_effect=['[{"number":1}]', json.dumps({'number': 1, 'html_url': 'https://github.com/fixture/repo/issues/1', 'body': 'task_uid: ' + binding['dependencies'][0]})]):
+        with patch.object(module, 'resolve_effective_binding', side_effect=lambda _root, selected, **_kwargs: selected.get('loop_binding')), patch.object(module, 'existing_policy_tool_root', side_effect=lambda _root, _binding, preferred: Path(preferred)), patch.object(module, '_trusted_module', side_effect=lambda *args: terminal if args[-1] == 'loop_terminal' else policy), patch.object(module.subprocess, 'check_output', side_effect=['[{"number":1}]', json.dumps({'number': 1, 'html_url': 'https://github.com/fixture/repo/issues/1', 'body': 'task_uid: ' + binding['dependencies'][0]})]):
             result = module.validate_task(Path('.'), {'loop_binding': binding, 'repository': 'fixture/repo'}, Path('.'))
         self.assertEqual(result['status'], 'blocked')
         self.assertIn('not successfully completed', result['blockers'][0])
@@ -248,7 +274,7 @@ class LoopTests(unittest.TestCase):
         uid, dependency_uid = 'task_' + 'a' * 32, 'task_' + 'b' * 32
         binding = {'task_uid': uid, 'dependencies': [dependency_uid]}
         modules = {'loop_policy': policy, 'loop_terminal': terminal, 'loop_contracts': contracts}
-        with patch.object(module, '_trusted_module', side_effect=lambda *args: modules[args[-1]]), patch.object(module.subprocess, 'check_output', side_effect=['[{"number":1}]', json.dumps({'number': 1, 'html_url': 'https://github.com/fixture/repo/issues/1', 'body': 'task_uid: ' + dependency_uid})]), patch.object(module, 'live_binding', return_value={'task_uid': dependency_uid, 'dependencies': []}):
+        with patch.object(module, 'resolve_effective_binding', side_effect=lambda _root, selected, **_kwargs: selected.get('loop_binding')), patch.object(module, 'existing_policy_tool_root', side_effect=lambda _root, _binding, preferred: Path(preferred)), patch.object(module, '_trusted_module', side_effect=lambda *args: modules[args[-1]]), patch.object(module.subprocess, 'check_output', side_effect=['[{"number":1}]', json.dumps({'number': 1, 'html_url': 'https://github.com/fixture/repo/issues/1', 'body': 'task_uid: ' + dependency_uid})]), patch.object(module, 'live_binding', return_value={'task_uid': dependency_uid, 'dependencies': []}):
             result = module.validate_task(Path('.'), {'task_uid': uid, 'loop_binding': binding, 'repository': 'fixture/repo'}, Path('.'))
         self.assertEqual(result['status'], 'passed', result)
 
@@ -278,11 +304,100 @@ class LoopTests(unittest.TestCase):
             git('commit', '-qm', 'candidate')
             uid = 'task_' + 'a' * 32
             binding = dict(schema='oasis7.loop-task/v1', task_uid=uid, change_id='c', loop='product', owner_role='gameplay_designer', bootstrap_epoch=1, manual_request_ref='user-1', request_key='r', write_scope=['doc/product/**'], out_of_scope=[], input_contracts=[], acceptance_refs=['a'], dependencies=[], target_delivery='pilot', policy_commit=base, policy_digest='sha256:' + hashlib.sha256((helpers / 'loop-policy.v1.json').read_bytes()).hexdigest())
-            task = dict(task_uid=uid, owner_role='gameplay_designer', bootstrap_epoch=1, loop_binding=binding)
-            result = module.validate_task(root, task, trusted, base, git('rev-parse', 'HEAD'))
+            task = dict(task_uid=uid, owner_role='gameplay_designer', bootstrap_epoch=1, repository='fixture/repo', issue_number=1, loop_binding=binding)
+            with patch.object(module, 'resolve_effective_binding', side_effect=lambda _root, selected, **_kwargs: selected.get('loop_binding')), patch.object(module, '_validate_pinned_tool_root', return_value=({'status': 'passed', 'blockers': []}, None)):
+                result = module.validate_task(root, task, trusted, base, git('rev-parse', 'HEAD'))
             self.assertEqual(result['status'], 'passed', result)
             (trusted / 'scripts/pm/loop_policy.py').write_text('raise Exception("tampered")')
-            result = module.validate_task(root, task, trusted, base, git('rev-parse', 'HEAD'))
+            with patch.object(module, 'resolve_effective_binding', side_effect=lambda _root, selected, **_kwargs: selected.get('loop_binding')), patch.object(module, '_validate_pinned_tool_root', return_value=({'status': 'passed', 'blockers': []}, None)):
+                result = module.validate_task(root, task, trusted, base, git('rev-parse', 'HEAD'))
             self.assertEqual(result['status'], 'blocked', result)
+
+    def test_missing_trusted_default_checkout_is_read_only_pending(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / 'repo'
+            root.mkdir()
+            def git(*args):
+                return subprocess.check_output(['git', '-C', str(root), *args], text=True).strip()
+            git('init', '-q', '-b', 'task/fixture')
+            git('config', 'user.name', 'Fixture')
+            git('config', 'user.email', 'fixture@example.invalid')
+            (root / 'README').write_text('fixture\n')
+            git('add', 'README')
+            git('commit', '-qm', 'fixture')
+            before_worktrees = git('worktree', 'list', '--porcelain')
+            before_refs = git('for-each-ref', '--format=%(refname) %(objectname)')
+            default_oid = 'b' * 40
+            with patch.object(module, '_gh_json', side_effect=[
+                {'full_name': 'fixture/repo', 'default_branch': 'main'},
+                {'name': 'main', 'protected': True, 'commit': {'sha': default_oid}},
+            ]):
+                with self.assertRaisesRegex(module.PolicyReaderPending, 'no existing clean helper checkout'):
+                    module.read_effective_policy_context(root, 'fixture/repo', 'task_' + 'a' * 32)
+            self.assertEqual(git('worktree', 'list', '--porcelain'), before_worktrees)
+            self.assertEqual(git('for-each-ref', '--format=%(refname) %(objectname)'), before_refs)
+
+    def test_legacy_pin_fallback_requires_complete_no_marker_read(self):
+        uid = 'task_' + 'a' * 32
+        binding = {'task_uid': uid, 'bootstrap_epoch': 1, 'policy_commit': 'a' * 40,
+                   'policy_digest': 'sha256:' + '1' * 64, 'write_scope': ['doc/product/**']}
+        task = {'task_uid': uid, 'repository': 'fixture/repo', 'issue_number': 17,
+                'loop_binding': binding}
+        issue = {'number': 17, 'html_url': 'https://github.com/fixture/repo/issues/17',
+                 'body': 'task_uid: ' + uid, 'state': 'closed'}
+        with patch.object(module, 'read_effective_policy_context', side_effect=module.PolicyReaderPending('reader unavailable')), \
+             patch.object(module.subprocess, 'check_output', side_effect=[json.dumps(issue), '[[]]']):
+            self.assertEqual(module.resolve_effective_binding(Path('/task'), task), binding)
+        comment = {'id': 51, 'body': '<!-- oasis7.workflow-policy-adoption/v1 -->\nmalformed'}
+        with patch.object(module, 'read_effective_policy_context', side_effect=module.PolicyReaderPending('reader unavailable')), \
+             patch.object(module.subprocess, 'check_output', side_effect=[json.dumps(issue), json.dumps([[comment]])]):
+            with self.assertRaisesRegex(module.PolicyReaderPending, 'adoption evidence exists'):
+                module.resolve_effective_binding(Path('/task'), task)
+        with patch.object(module, 'read_effective_policy_context', side_effect=module.PolicyReaderPending('reader unavailable')), \
+             patch.object(module.subprocess, 'check_output', side_effect=[json.dumps(issue), '[]']):
+            with self.assertRaisesRegex(module.PolicyReaderPending, 'pagination is unavailable'):
+                module.resolve_effective_binding(Path('/task'), task)
+
+    def test_terminal_no_pr_uses_trusted_hosted_resolver_without_local_project(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / 'trusted-default'
+            root.mkdir()
+            def git(*args):
+                return subprocess.check_output(['git', '-C', str(root), *args], text=True).strip()
+            git('init', '-q', '-b', 'main')
+            git('config', 'user.name', 'Fixture')
+            git('config', 'user.email', 'fixture@example.invalid')
+            helpers = root / 'scripts/pm'
+            helpers.mkdir(parents=True)
+            uid = 'task_' + 'a' * 32
+            binding = {'task_uid': uid, 'bootstrap_epoch': 1, 'policy_commit': 'c' * 40,
+                       'policy_digest': 'sha256:' + '2' * 64, 'write_scope': ['doc/product/**']}
+            effective = {'status': 'passed', 'policy_commit': binding['policy_commit'],
+                         'policy_digest': binding['policy_digest'], 'pin_source': 'immutable_binding',
+                         'adoption_chain_tip': None, 'binding': binding}
+            payload = {
+                'schema': 'oasis7.workflow-policy-live-context/v1', 'status': 'passed', 'complete': True,
+                'task_uid': uid, 'repository': 'fixture/repo', 'issue_number': 17,
+                'task_issue_state': 'closed', 'live_task_identity': {'task_uid': uid, 'repository': 'fixture/repo'},
+                'binding': binding, 'project': None, 'caller': None, 'pr': None,
+                'effective_policy': effective,
+            }
+            cli = helpers / 'github-project-task.py'
+            cli.write_text('import json\nprint(' + repr(json.dumps(payload)) + ')\n')
+            git('add', '.')
+            git('commit', '-qm', 'trusted helper')
+            tip = git('rev-parse', 'HEAD')
+            task = {'task_uid': uid, 'repository': 'fixture/repo', 'issue_number': 17,
+                    'loop_binding': binding}
+            with patch.object(module, '_gh_json', side_effect=[
+                {'full_name': 'fixture/repo', 'default_branch': 'main'},
+                {'name': 'main', 'protected': True, 'commit': {'sha': tip}},
+            ]):
+                resolved, context = module.resolve_effective_binding(root, task, return_context=True)
+            self.assertEqual(resolved, binding)
+            self.assertIsNone(context['project'])
+            self.assertIsNone(context['pr'])
+            self.assertEqual(context['task_issue_state'], 'closed')
+            self.assertEqual(context['effective_policy']['pin_source'], 'immutable_binding')
 
 if __name__ == '__main__': unittest.main()

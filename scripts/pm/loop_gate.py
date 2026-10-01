@@ -42,8 +42,6 @@ def admission(root, task, base, head, tool_root=None, reader=None):
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     configured = tool_root or os.environ.get('OASIS7_LOOP_TOOL_ROOT')
-    if configured:
-        subprocess.run(['git', '-C', str(root), 'fetch', '--no-tags', 'origin', 'main:refs/remotes/origin/main'], check=True, capture_output=True)
     result = module.validate_task(Path(root), task, Path(configured) if configured else None, base, head)
     if result['status'] != 'passed': raise ValueError('loop admission: ' + '; '.join(result['blockers']))
     return result
