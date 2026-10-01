@@ -254,6 +254,24 @@ class BoundedRecoveryCLITests(unittest.TestCase):
     def test_merged_pr_rejected_before_metadata_writes(self):
         self.run_case("guard_pr_merged")
 
+    def test_raw_hash_equal_observed_pr_payload_must_be_exact(self):
+        self.run_case("guard_observed_payload_raw_hash_equal")
+
+    def test_raw_hash_equal_reciprocal_binding_payload_must_be_exact(self):
+        self.run_case("guard_binding_shape_raw_hash_equal")
+
+    def test_live_scope_comment_drift_rejected_before_metadata_writes(self):
+        self.run_case("guard_scope_comment_drift")
+
+    def test_noncanonical_observed_journal_rejected_before_writes(self):
+        self.run_case("guard_noncanonical_observed_journal")
+
+    def test_raw_hash_equal_current_action_requires_allowed_phase_and_disposition(self):
+        for case in ("guard_invalid_global_phase_raw_hash_equal",
+                     "guard_invalid_global_disposition_raw_hash_equal"):
+            with self.subTest(case=case):
+                self.run_case(case)
+
 
 class PublicationMatrixTests(unittest.TestCase):
     def read_live_task_binding(self, body, repository="eng-cc/oasis7"):

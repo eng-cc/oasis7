@@ -102,12 +102,28 @@ print(json.dumps({"data":data}))
 PY
     ;;
   "api repos/eng-cc/oasis7/issues/2001/comments --paginate --slurp"|"api repos/eng-cc/oasis7/issues/2001/comments?per_page=100 --paginate --slurp")
-    python3 - "$GH_COMMENT_DIR" <<'PY'
+    python3 - "$GH_COMMENT_DIR" "${OASIS7_REC_CASE:-}" <<'PY'
 import json, pathlib, sys
+directory = pathlib.Path(sys.argv[1])
+case = sys.argv[2]
+if case == "guard_scope_comment_drift" and (directory / "7103").is_file():
+    counter = directory.parent / "gh-comment-read-count.txt"
+    reads = int(counter.read_text()) if counter.exists() else 0
+    reads += 1
+    counter.write_text(str(reads))
+    if reads == 2:
+        scope_comment = directory / "7103"
+        original = scope_comment.read_text()
+        changed = original.replace(
+            "scripts/pm/github-project-task.py; scripts/pm/pr_projection_publish.py",
+            "scripts/pm/github-project-task.py; scripts/pm/pr_projection_publish.py; scripts/pm/unapproved-helper.py",
+        )
+        assert changed != original, "scope drift fixture did not find its approved helper-path row"
+        scope_comment.write_text(changed)
 print(json.dumps([[{"id": int(p.name), "body": p.read_text(), "user": {"login": "eng-cc"}, "author_association": "OWNER",
                    "issue_url":"https://api.github.com/repos/eng-cc/oasis7/issues/2001",
                    "html_url": "https://github.com/eng-cc/oasis7/issues/2001#issuecomment-" + p.name}
-                  for p in sorted(pathlib.Path(sys.argv[1]).iterdir())]]))
+                  for p in sorted(directory.iterdir()) if p.name.isdecimal()]]))
 PY
     ;;
   "api repos/eng-cc/oasis7/issues/2001")
@@ -963,8 +979,69 @@ if case == "guard_helper_closure_digest": admission["helper_review"]["helper_clo
 if case == "guard_old_raw_journal_hash": admission["predecessor"]["journal_sha256"]="f" * 64
 if case == "guard_current_raw_journal_hash": admission["current_action"]["journal_sha256"]="f" * 64
 if case == "guard_role_return_digest": admission["helper_review"]["role_returns"][0]["return_sha256"]="f" * 64
+if case in {"guard_observed_payload_raw_hash_equal", "guard_binding_shape_raw_hash_equal",
+            "guard_invalid_global_phase_raw_hash_equal", "guard_invalid_global_disposition_raw_hash_equal"}:
+    import hashlib
+    current_path=pathlib.Path((root / "current-journal-path.md").read_text())
+    journal=json.loads(current_path.read_text())
+    action=next(a for a in journal["actions"] if a["action_id"] == admission["current_action"]["action_id"])
+    if case in {"guard_invalid_global_phase_raw_hash_equal", "guard_invalid_global_disposition_raw_hash_equal"}:
+        binding_id="reciprocal-binding:" + admission["current_action"]["publication_id"]
+        assert not any(a.get("action_id") == binding_id for a in journal["actions"]), "fixture unexpectedly has a reciprocal binding action"
+        action["state"]="intent" if case == "guard_invalid_global_phase_raw_hash_equal" else "uncertain"
+        action.pop("observed", None)
+        if case == "guard_invalid_global_phase_raw_hash_equal":
+            journal["phase"]="CONFLICT"
+            journal["disposition"]=None
+        else:
+            journal["phase"]="PREPARED"
+            journal["disposition"]="CONFLICT"
+    elif case == "guard_observed_payload_raw_hash_equal":
+        action["state"]="observed"
+        action["observed"]={"pr_number":9999}
+    else:
+        action["state"]="observed"
+        action["observed"]={"pr_number":2001}
+        binding=json.loads((root / "recovery-binding.json").read_text())
+        journal["actions"].append({
+            "action_id":"reciprocal-binding:"+binding["publication_id"],
+            "kind":"publish_reciprocal_binding",
+            "state":"observed",
+            "expected":{"publication_id":binding["publication_id"],
+                "pr_number":binding["pr_number"],"binding_digest":binding["binding_digest"]},
+            "observed":{"binding_digest":binding["binding_digest"],"extra":"malformed"}})
+        journal["phase"]="METADATA_CONFIRMED"
+        journal["disposition"]=None
+    current_path.write_text(json.dumps(journal,sort_keys=True,separators=(",",":")))
+    current_raw=current_path.read_bytes()
+    admission["current_action"]["journal_sha256"]=hashlib.sha256(current_raw).hexdigest()
+if case == "guard_noncanonical_observed_journal":
+    import hashlib
+    current_path=pathlib.Path((root / "current-journal-path.md").read_text())
+    original=current_path.read_bytes()
+    assert hashlib.sha256(original).hexdigest() == admission["current_action"]["journal_sha256"]
+    journal=json.loads(original)
+    action=next(a for a in journal["actions"] if a["action_id"] == admission["current_action"]["action_id"])
+    action["state"]="observed"
+    action["observed"]={"pr_number":2001}
+    journal["phase"]="METADATA_CONFIRMED"
+    journal["disposition"]=None
+    canonical=(json.dumps(journal,sort_keys=True,separators=(",",":"))+"\n").encode()
+    rewritten=(json.dumps(journal,indent=2)+"\n").encode()
+    assert rewritten != canonical and json.loads(rewritten) == json.loads(canonical)
+    current_path.write_bytes(rewritten)
 admission_path.write_text(json.dumps(admission,sort_keys=True,separators=(",",":")))
 (root / "gh-comments/9001").write_text("<!-- oasis7-publication-recovery-admission/v1 -->\n```json\n"+json.dumps(admission,sort_keys=True,separators=(",",":"))+"\n```\n")
+if case in {"guard_observed_payload_raw_hash_equal", "guard_binding_shape_raw_hash_equal",
+            "guard_invalid_global_phase_raw_hash_equal", "guard_invalid_global_disposition_raw_hash_equal"}:
+    current_path=pathlib.Path((root / "current-journal-path.md").read_text())
+    current_raw=current_path.read_bytes()
+    assert admission["current_action"]["journal_sha256"] == hashlib.sha256(current_raw).hexdigest(), "fixture admission does not bind exact malformed journal bytes"
+if case in {"guard_observed_payload_raw_hash_equal", "guard_binding_shape_raw_hash_equal",
+            "guard_invalid_global_phase_raw_hash_equal", "guard_invalid_global_disposition_raw_hash_equal",
+            "guard_scope_comment_drift", "guard_noncanonical_observed_journal"}:
+    current_path=pathlib.Path((root / "current-journal-path.md").read_text())
+    (root / "current-journal-before.json").write_bytes(current_path.read_bytes())
 PY
   if [[ "$REC_CASE" == "pending_final_readback" || "$REC_CASE" == "pending_project_content_drift" || "$REC_CASE" == "idempotent_repeat" ]]; then
     if [[ "$REC_CASE" == "pending_final_readback" ]]; then export GH_REC_FAIL_FINAL_ISSUE=1; fi
@@ -1022,6 +1099,19 @@ PY
   REC_STATUS=$?
   set -e
   tail -n +$((REC_CALLS_BEFORE + 1)) "$GH_CALL_LOG" >"$TMPDIR/rec-calls.log"
+  if [[ "$REC_CASE" == "guard_scope_comment_drift" ]]; then
+    python3 - "$TMPDIR" <<'PY'
+import hashlib, json, pathlib, sys
+root=pathlib.Path(sys.argv[1]); comments=root / "gh-comments"
+reads=int((root / "gh-comment-read-count.txt").read_text())
+admission=json.loads((root / "recovery-admission.json").read_text())
+ref=next(item for item in admission["scope_evidence"] if item["comment_id"] == 7103)
+body=(comments / "7103").read_bytes()
+assert reads >= 2, f"fixture did not reach a fresh comment read: {reads}"
+assert hashlib.sha256(body).hexdigest() != ref["body_sha256"], "fixture did not drift bound scope comment 7103"
+assert b"scripts/pm/unapproved-helper.py" in body, "fixture drift lacks the unauthorized path"
+PY
+  fi
   if [[ "$REC_CASE" == guard_* ]]; then
     if [[ "$REC_STATUS" == "0" ]]; then
       echo "FAIL test_rec_$REC_CASE: invalid recovery was accepted" >&2
@@ -1041,6 +1131,11 @@ if case == "guard_missing_old_journal":
     assert not old.exists(), "rejected recovery recreated historical journal"
 else:
     assert old.read_bytes() == (root / "old-journal-before.json").read_bytes(), "rejected recovery changed historical journal"
+if case in {"guard_observed_payload_raw_hash_equal", "guard_binding_shape_raw_hash_equal",
+            "guard_invalid_global_phase_raw_hash_equal", "guard_invalid_global_disposition_raw_hash_equal",
+            "guard_scope_comment_drift", "guard_noncanonical_observed_journal"}:
+    current=pathlib.Path((root / "current-journal-path.md").read_text())
+    assert current.read_bytes() == (root / "current-journal-before.json").read_bytes(), "rejected recovery changed current journal"
 PY
     echo "PASS test_rec_$REC_CASE rejected before writes"
     exit 0

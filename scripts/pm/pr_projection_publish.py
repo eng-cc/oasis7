@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import base64
 import hashlib
+import importlib.util
 import json
 from pathlib import Path
 import re
@@ -396,14 +397,41 @@ class GitHubPublicationAdapter:
             json.dump(binding, handle, ensure_ascii=False, sort_keys=True)
             path = Path(handle.name)
         try:
-            command_output([
+            command = [
             sys.executable, str(self.task_helper), "record-pr", str(self.root),
                 "--repo", self.args.repo,
                 "--task-uid", task_uid, "--pr-url", url, "--role", "tpm",
                 "--validation-command", "C1 ordered CI projection publication",
                 "--existing-ready-update" if getattr(self.args, "existing_ready_update", False) else "--draft-candidate",
                 "--publication-binding-json", str(path), "--json",
-            ], timeout=60)
+            ]
+            # The publisher derives recovery authority from live authenticated
+            # comments and pure reads of the existing journals. It transports
+            # no caller permission grant; record-pr recomputes it independently.
+            recovery = None
+            # An unavailable helper cannot execute recovery. Leave its normal
+            # command failure intact before making discovery network requests.
+            comments = self._issue_comments() if self.task_helper.is_file() else []
+            marker = "<!-- oasis7-publication-recovery-admission/v1 -->"
+            if any(marker in c["body"] for c in comments):
+                if self.task_helper != (self.root / "scripts/pm/github-project-task.py").resolve():
+                    raise RuntimeError("recovery requires the canonical reviewed task helper")
+                spec = importlib.util.spec_from_file_location("publication_task_recovery_impl", self.task_helper)
+                if spec is None or spec.loader is None:
+                    raise RuntimeError("canonical task recovery helper unavailable")
+                helper = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(helper)
+                selected_args = helper.build_parser().parse_args(command[2:])
+                record = mapping_identity(self.root.resolve(), task_uid, self.args.repo, self.issue_number,
+                                          self.args.source_ref, self.args.target_ref)
+                recovery = helper.PublicationRecoveryAuthority(selected_args, record, binding,
+                                                               self.publication, publication, comments)
+            command_output(command, timeout=60)
+            if recovery is not None:
+                # CLI success alone is not publication observation authority.
+                # The core may observe H1 only after this separate four-surface
+                # exact readback, including unique reciprocal binding content.
+                recovery.check(final=True)
         finally:
             path.unlink(missing_ok=True)
         self.pr_number = number
