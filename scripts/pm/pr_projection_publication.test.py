@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -136,6 +137,86 @@ class FakeClock:
     def sleep(self, duration):
         self.sleeps.append(duration)
         self.now += duration
+
+
+class BoundedRecoveryCLITests(unittest.TestCase):
+    """Use the real record-pr CLI; only the shell fixture replaces GitHub IO.
+
+    Journals, ancestor/current Git commits and publication comments are built
+    by production code in each disposable fixture. No FakeAdapter.record_pr
+    implementation stands in for the recovery boundary.
+    """
+
+    def run_case(self, case):
+        environment = dict(os.environ, OASIS7_REC_RED_ONLY="1", OASIS7_REC_CASE=case)
+        result = subprocess.run(
+            ["bash", str(ROOT / "github-project-task.test.sh")],
+            cwd=ROOT.parents[1], env=environment, capture_output=True,
+            text=True, timeout=30,
+        )
+        self.assertEqual(0, result.returncode,
+                         f"REC actual CLI case={case} exit={result.returncode}\n"
+                         + result.stdout + result.stderr)
+
+    def test_project_post_issue_pre_cache_post_reconciles(self):
+        self.run_case("project_post_issue_pre")
+
+    def test_project_pre_issue_post_reconciles(self):
+        self.run_case("project_pre_issue_post")
+
+    def test_all_pre_reconciles_with_final_readback(self):
+        self.run_case("all_pre")
+
+    def test_all_post_reconciles_with_final_readback(self):
+        self.run_case("all_post")
+
+    def test_each_issue_field_can_independently_be_pre_or_post(self):
+        self.run_case("fieldwise_issue_mixed")
+
+    def test_pre_cache_cannot_replace_final_authoritative_readback(self):
+        self.run_case("cache_pre_project_post")
+
+    def test_missing_old_journal_rejected_without_writes(self):
+        self.run_case("guard_missing_old_journal")
+
+    def test_old_observed_action_is_not_uncertain_lineage(self):
+        self.run_case("guard_old_not_uncertain")
+
+    def test_duplicate_current_intent_rejected_without_writes(self):
+        self.run_case("guard_duplicate_current_intent")
+
+    def test_missing_current_intent_rejected_without_writes(self):
+        self.run_case("guard_missing_current_intent")
+
+    def test_unrelated_issue_drift_rejected_without_writes(self):
+        self.run_case("guard_unrelated_issue_drift")
+
+    def test_unrelated_project_drift_rejected_without_writes(self):
+        self.run_case("guard_unrelated_project_drift")
+
+    def test_live_pr_head_drift_rejected_without_writes(self):
+        self.run_case("guard_pr_head_drift")
+
+    def test_live_pr_task_refs_drift_rejected_without_writes(self):
+        self.run_case("guard_pr_task_refs_drift")
+
+    def test_final_issue_read_failure_retains_current_pending_action(self):
+        self.run_case("pending_final_readback")
+
+    def test_repeated_actual_publisher_converges_idempotently(self):
+        self.run_case("idempotent_repeat")
+
+    def test_final_project_content_drift_retains_current_pending_action(self):
+        self.run_case("pending_project_content_drift")
+
+    def test_old_action_pr_tuple_mismatch_rejected_without_writes(self):
+        self.run_case("guard_old_action_tuple")
+
+    def test_current_journal_identity_digest_mismatch_rejected_without_writes(self):
+        self.run_case("guard_current_journal_identity")
+
+    def test_authentic_old_publication_nonancestor_rejected_without_writes(self):
+        self.run_case("guard_old_nonancestor")
 
 
 class PublicationMatrixTests(unittest.TestCase):

@@ -4,6 +4,9 @@ export OASIS7_TEST_ALLOW_UNATTESTED_DISPATCH_RECEIPTS=1
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="${PM_ROOT_DIR:-$(cd "$SCRIPT_DIR/../.." && pwd)}"
+if [[ "${OASIS7_REC_RED_ONLY:-0}" == "1" ]]; then
+  export PYTHONPATH="$ROOT_DIR/scripts/pm${PYTHONPATH:+:$PYTHONPATH}"
+fi
 
 TMPDIR="$(mktemp -d)"
 cleanup() {
@@ -39,7 +42,8 @@ pm_status=read_state("GH_PROJECT_STATE_FILE", pm_status)
 status=read_state("GH_PROJECT_STATUS_STATE_FILE", {"committed":"In Progress","ready":"Ready / PR","pr_watch":"PR Watch","done":"In Progress"}.get(pm_status,"Todo"))
 phase=read_state("GH_PROJECT_PHASE_STATE_FILE", next_record.get("workflow_phase") or {"committed":"execution","ready":"pre_pr_ready","pr_watch":"pr_watch","done":"done"}.get(pm_status,"execution"))
 field_nodes=[{"name":status,"field":{"name":"Status"}},{"text":uid,"field":{"name":"Task UID"}},{"name":next_record["owner_role"],"field":{"name":"Owner Role"}},{"name":next_record["module"],"field":{"name":"Module"}},{"name":pm_status,"field":{"name":"PM Status"}},{"name":phase,"field":{"name":"Workflow Phase"}},{"name":next_record["priority"],"field":{"name":"Priority"}},{"text":next_record["worktree_hint"],"field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]
-if next_record.get("pr_url"): field_nodes.append({"text":next_record["pr_url"],"field":{"name":"PR"}})
+project_pr=read_state("GH_PROJECT_PR_STATE_FILE", next_record.get("pr_url") or "")
+if project_pr: field_nodes.append({"text":project_pr,"field":{"name":"PR"}})
 project_item={"id":next_record.get("project_item_id") or "ITEM_ID","project":{"id":"PROJECT_ID","number":1,"owner":{"login":"eng-cc"}},"fieldValues":{"pageInfo":{"hasNextPage":False},"nodes":field_nodes}}
 issue={"number":next_record["issue_number"],"url":next_record["issue_url"],"body":f"task_uid: {uid}","projectItems":{"nodes":[project_item]}}
 # Keep both GraphQL response shapes used by the bounded workflow commands:
@@ -59,12 +63,31 @@ project_item["content"]={"body":"\n".join(trace_lines)+"\n","number":next_record
 print(json.dumps({"data":{"nodes":[project_item],"s0":{"nodes":[issue]}}}))
 PY
     ;;
+  "api repos/eng-cc/oasis7/issues/2001/comments --paginate --slurp"|"api repos/eng-cc/oasis7/issues/2001/comments?per_page=100 --paginate --slurp")
+    python3 - "$GH_COMMENT_DIR" <<'PY'
+import json, pathlib, sys
+print(json.dumps([[{"id": int(p.name), "body": p.read_text(), "user": {"login": "eng-cc"}, "author_association": "OWNER",
+                   "html_url": "https://github.com/eng-cc/oasis7/issues/2001#issuecomment-" + p.name}
+                  for p in sorted(pathlib.Path(sys.argv[1]).iterdir())]]))
+PY
+    ;;
+  "api repos/eng-cc/oasis7/issues/2001")
+    if [[ "${GH_REC_FAIL_FINAL_ISSUE:-0}" == "1" ]] && grep -Fq -- '- pr_number: `2001`' "$GH_ISSUE_BODY_STATE_FILE"; then
+      echo 'injected final authoritative Issue readback failure' >&2
+      exit 78
+    fi
+    python3 - "$GH_ISSUE_BODY_STATE_FILE" <<'PY'
+import json, pathlib, sys
+print(json.dumps({"number":2001,"state":"open","body":pathlib.Path(sys.argv[1]).read_text()}))
+PY
+    ;;
   api\ repos/eng-cc/oasis7/pulls/2001)
     reads=0
     [[ ! -f "$GH_PR_READ_COUNT_FILE" ]] || reads="$(cat "$GH_PR_READ_COUNT_FILE")"
     reads=$((reads + 1))
     printf '%s\n' "$reads" >"$GH_PR_READ_COUNT_FILE"
     draft=false
+    if [[ "${OASIS7_REC_RED_ONLY:-0}" == "1" ]]; then draft=true; fi
     [[ "$reads" != "1" ]] || draft=true
     python3 - "$GH_PR_HEAD_SHA" "$GH_PR_TASK_BRANCH" "$GH_PR_BASE_BRANCH" "$draft" <<'PY'
 import json, sys
@@ -77,6 +100,8 @@ print(json.dumps({
     "draft": draft == "true",
     "head": {"repo": {"full_name": "eng-cc/oasis7"}, "ref": task_branch, "sha": sha},
     "base": {"repo": {"full_name": "eng-cc/oasis7"}, "ref": base_branch},
+    "body": __import__("pathlib").Path(__import__("os").environ["GH_REC_PR_BODY_FILE"]).read_text()
+        if __import__("os").environ.get("GH_REC_PR_BODY_FILE") else "",
 }))
 PY
     ;;
@@ -110,7 +135,7 @@ PY
       printf '[{"number":2001,"state":"OPEN","title":"[PM] GitHub-backed lifecycle smoke","url":"https://github.com/eng-cc/oasis7/issues/2001"}]\n'
     fi
     ;;
-  "issue view 2001 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason")
+  "issue view 2001 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason"*)
     python3 - "$GH_ISSUE_BODY_STATE_FILE" <<'PY'
 import json, pathlib, sys
 body = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
@@ -128,6 +153,9 @@ PY
     n=$(( $(wc -l < "$GH_COMMENT_LOG") + 1 ))
     mkdir -p "$GH_COMMENT_DIR"
     cat "${@: -1}" > "$GH_COMMENT_DIR/$n"
+    if [[ "${OASIS7_REC_CASE:-}" == "pending_project_content_drift" ]] && grep -Fq 'oasis7-ci-publication-binding/v1' "${@: -1}"; then
+      printf 'blocked\n' >"$GH_PROJECT_PHASE_STATE_FILE"
+    fi
     printf 'comment-%s\n' "$n" >> "$GH_COMMENT_LOG"
     printf 'https://github.com/eng-cc/oasis7/issues/2001#issuecomment-%s\n' "$n"
     ;;
@@ -287,6 +315,13 @@ JSON
 JSON
     ;;
   project\ item-edit*)
+    if [[ "$*" == *"--field-id FIELD_PR "* ]] && [[ -n "${GH_PROJECT_PR_STATE_FILE:-}" ]]; then
+      python3 - "$GH_PROJECT_PR_STATE_FILE" "$@" <<'PY'
+import pathlib, sys
+arguments=sys.argv[2:]
+pathlib.Path(sys.argv[1]).write_text(arguments[arguments.index("--text")+1])
+PY
+    fi
     if [[ "$*" == *"--field-id FIELD_STATUS"* ]]; then
       case "$*" in
         *OPT_TODO*) printf 'Todo\n' >"$GH_PROJECT_STATUS_STATE_FILE" ;;
@@ -381,6 +416,7 @@ python3 "$TMPDIR/github-project-task.py" new-task "$TMPDIR" \
 
 TASK_UID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["task_uid"])' "$NEW_JSON")"
 
+if [[ "${OASIS7_REC_RED_ONLY:-0}" != "1" ]]; then
 # RED: public move-task must derive Workflow Phase from the new PM Status. A
 # stale execution phase would otherwise publish the invalid Done/deferred/
 # execution combination instead of the canonical Done/deferred/blocked pair.
@@ -571,6 +607,236 @@ python3 "$TMPDIR/github-project-task.py" move-task "$TMPDIR" \
   --task-uid "$TASK_UID" \
   --to-status committed \
   --json > "$TMPDIR/move-committed.json"
+fi
+
+# Focused REC entrypoint: actual record-pr, genuine ancestor/current journals,
+# and independently persisted Project-post / Issue-pre GitHub IO.
+if [[ "${OASIS7_REC_RED_ONLY:-0}" == "1" ]]; then
+  python3 - "$GH_MAPPING_PATH" "$TASK_UID" "$GH_ISSUE_BODY_STATE_FILE" <<'PY'
+import importlib.util, json, pathlib, sys
+spec = importlib.util.spec_from_file_location("task_helper", pathlib.Path(sys.argv[1]).parents[2] / "github-project-task.py")
+helper = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(helper)
+path = pathlib.Path(sys.argv[1]); mapping = json.loads(path.read_text())
+record = mapping["tasks"][sys.argv[2]]
+record.update(status="committed", workflow_phase="execution")
+pathlib.Path(sys.argv[3]).write_text(helper.issue_body(helper.task_from_record(sys.argv[2], record)))
+# Real interrupted publication was refreshed from Project before recovery;
+# the cache consequently contains Project's poststate, not Issue's prestate.
+record.update(workflow_phase="verification")
+path.write_text(json.dumps(mapping))
+PY
+  cp "$ROOT_DIR/scripts/pm/"{pr_projection_publication.py,pr_projection_journal.py,projection_publication_contract.py} "$TMPDIR/"
+  REC_OLD_HEAD="$(git -C "$TMPDIR" rev-parse HEAD)"
+  REC_PUBLICATION_OLD_HEAD="$REC_OLD_HEAD"
+  if [[ "${OASIS7_REC_CASE:-}" == "guard_old_nonancestor" ]]; then
+    REC_PUBLICATION_OLD_HEAD="$(git -C "$TMPDIR" commit-tree "HEAD^{tree}" -m unrelated-publication-source)"
+  fi
+  git -C "$TMPDIR" commit --allow-empty -qm current-recovery-source
+  export GH_PR_HEAD_SHA="$(git -C "$TMPDIR" rev-parse HEAD)"
+  PYTHONPATH="$TMPDIR" python3 - "$TMPDIR" "$TASK_UID" "$REC_OLD_HEAD" "$GH_PR_HEAD_SHA" "$GH_PR_TASK_BRANCH" "$REC_PUBLICATION_OLD_HEAD" <<'PY'
+import json, pathlib, sys
+import pr_projection_publication as publication
+import pr_projection_journal as journal
+from projection_publication_contract import digest
+root, uid, old_head, current_head, branch, old_publication_head = sys.argv[1:]
+root = pathlib.Path(root)
+for index, head in enumerate((old_publication_head, current_head), 1):
+    value = publication.build_task_publication(
+        repository="eng-cc/oasis7", repository_id=7, task_uid=uid,
+        bootstrap_epoch=1, source_repository_id=7, source_ref=branch,
+        target_ref=branch, source_head_oid=head, source_scope_oid=old_head,
+        planner_authority_oid=old_head, planner_config_sha256="sha256:" + "c" * 64,
+        policy_digest=digest({"policy": "fixture"}), projection_digest=digest({"head": head}))
+    local = journal.open_journal(root / ".git", value["repository"], branch,
+        value["publication_id"], task_uid=uid, source_head_oid=head,
+        scope_base_oid=old_head, projection_digest=value["projection_digest"])
+    with local.locked():
+        action = "record-pr:" + value["publication_id"]
+        local.intent(action, "record_pr", {"publication_id": value["publication_id"],
+            "task_uid": uid, "pr_number": 2001})
+        local.uncertain(action, "NETWORK_UNCERTAIN")
+    (root / "gh-comments" / str(1000 + index)).write_text(publication.publication_comment(value))
+    if index == 1:
+        (root / "old-journal-before.json").write_bytes(local.path.read_bytes())
+        (root / "old-journal-path.md").write_text(str(local.path))
+    else:
+        (root / "recovery-publication.json").write_text(json.dumps(value))
+        binding = publication.build_publication_binding(value, 2001,
+            "https://github.com/eng-cc/oasis7/pull/2001")
+        (root / "recovery-binding.json").write_text(json.dumps(binding))
+        (root / "current-journal-path.md").write_text(str(local.path))
+        _, marker = publication.prepare(task_uid=uid, source_head_oid=head,
+            scope_base_oid=old_head, projection_digest=value["projection_digest"])
+        (root / "recovery-pr-body.md").write_text(f"Task: {uid}\nRefs #2001\n\n" + marker)
+PY
+  export GH_REC_PR_BODY_FILE="$TMPDIR/recovery-pr-body.md"
+  export GH_PROJECT_PR_STATE_FILE="$TMPDIR/project-pr.md"
+  printf 'https://github.com/eng-cc/oasis7/pull/2001\n' >"$GH_PROJECT_PR_STATE_FILE"
+  printf 'committed\n' >"$GH_PROJECT_STATE_FILE"
+  printf 'In Progress\n' >"$GH_PROJECT_STATUS_STATE_FILE"
+  printf 'verification\n' >"$GH_PROJECT_PHASE_STATE_FILE"
+  REC_CASE="${OASIS7_REC_CASE:-project_post_issue_pre}"
+  python3 - "$TMPDIR" "$TASK_UID" "$REC_CASE" <<'PY'
+import importlib.util, json, pathlib, sys
+root, uid, case = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+spec = importlib.util.spec_from_file_location("rec_task", root / "github-project-task.py")
+helper = importlib.util.module_from_spec(spec); spec.loader.exec_module(helper)
+path = root / ".pm/github-project-sync/tasks.json"; mapping = json.loads(path.read_text())
+record = mapping["tasks"][uid]
+if case in {"all_pre", "cache_pre_project_post", "pending_final_readback", "pending_project_content_drift", "idempotent_repeat"}:
+    record.update(workflow_phase="execution")
+    path.write_text(json.dumps(mapping))
+if case in {"all_post", "project_pre_issue_post"} or case.startswith("guard_"):
+    issue = dict(record, workflow_phase="verification", pr_number=2001,
+                 pr_url="https://github.com/eng-cc/oasis7/pull/2001")
+    (root / "issue-live-body.md").write_text(helper.issue_body(helper.task_from_record(uid, issue)))
+if case in {"all_pre", "project_pre_issue_post"}:
+    (root / "project-live-phase").write_text("execution\n")
+    (root / "project-pr.md").write_text("")
+if case == "fieldwise_issue_mixed":
+    issue = dict(record, workflow_phase="verification")
+    (root / "issue-live-body.md").write_text(helper.issue_body(helper.task_from_record(uid, issue)))
+if case == "guard_missing_old_journal":
+    pathlib.Path((root / "old-journal-path.md").read_text()).unlink()
+if case == "guard_old_not_uncertain":
+    old = pathlib.Path((root / "old-journal-path.md").read_text())
+    value = json.loads(old.read_text()); value["actions"][0]["state"] = "observed"
+    old.write_text(json.dumps(value)); (root / "old-journal-before.json").write_bytes(old.read_bytes())
+if case in {"guard_old_action_tuple", "guard_current_journal_identity"}:
+    locator = "old-journal-path.md" if case == "guard_old_action_tuple" else "current-journal-path.md"
+    local = pathlib.Path((root / locator).read_text()); value = json.loads(local.read_text())
+    if case == "guard_old_action_tuple":
+        value["actions"][0]["expected"]["pr_number"] = 9999
+    else:
+        value["identity"]["projection_digest"] = "sha256:" + "f" * 64
+    local.write_text(json.dumps(value))
+    if case == "guard_old_action_tuple":
+        (root / "old-journal-before.json").write_bytes(local.read_bytes())
+if case == "guard_duplicate_current_intent":
+    (root / "gh-comments/1003").write_bytes((root / "gh-comments/1002").read_bytes())
+if case == "guard_missing_current_intent":
+    (root / "gh-comments/1002").unlink()
+if case == "guard_unrelated_issue_drift":
+    body = (root / "issue-live-body.md").read_text().replace("- priority: `P2`", "- priority: `P1`")
+    (root / "issue-live-body.md").write_text(body)
+if case == "guard_unrelated_project_drift":
+    (root / "project-live-status").write_text("Done\n")
+if case == "guard_pr_task_refs_drift":
+    (root / "recovery-pr-body.md").write_text("Task: task_" + "9" * 32 + "\nRefs #9999\n")
+PY
+  if [[ "$REC_CASE" == "pending_final_readback" || "$REC_CASE" == "pending_project_content_drift" || "$REC_CASE" == "idempotent_repeat" ]]; then
+    if [[ "$REC_CASE" == "pending_final_readback" ]]; then export GH_REC_FAIL_FINAL_ISSUE=1; fi
+    python3 - "$TMPDIR" "$TASK_UID" "$REC_CASE" <<'PY'
+import argparse, json, pathlib, sys
+import pr_projection_journal as journal
+import pr_projection_publication as publication
+import pr_projection_publish as publisher
+root, uid, case = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+value = json.loads((root / "recovery-publication.json").read_text())
+args = argparse.Namespace(repo=value["repository"], issue_number=2001, task_uid=uid,
+    task_helper=str(root / "github-project-task.py"), existing_ready_update=False,
+    source_ref=value["source_ref"], target_ref=value["target_ref"])
+adapter = publisher.GitHubPublicationAdapter(root, args, value)
+local = journal.open_journal(root / ".git", value["repository"], value["source_ref"],
+    value["publication_id"], task_uid=uid, source_head_oid=value["source_head_oid"],
+    scope_base_oid=value["source_scope_oid"], projection_digest=value["projection_digest"])
+with local.locked():
+    pr = adapter.read_pr(value["repository"], 2001)
+    if case in {"pending_final_readback", "pending_project_content_drift"}:
+        try:
+            publication._record_and_bind(adapter, local, value, pr)
+        except publication.PublicationError as error:
+            assert error.code == "NETWORK_UNCERTAIN", error
+        else:
+            raise AssertionError("missing or mismatched final authoritative readback must retain pending state")
+        action = next(a for a in local.read()["actions"] if a["kind"] == "record_pr")
+        assert action["state"] == "uncertain", action
+        assert '- pr_number: `2001`' in (root / "issue-live-body.md").read_text(), "failure occurred before metadata publication"
+        assert "injected final authoritative Issue readback failure" in (root / "gh-calls.log").read_text() or any(
+            "oasis7-ci-publication-binding/v1" in p.read_text() for p in (root / "gh-comments").iterdir()), "no final-read boundary reached"
+    else:
+        publication._record_and_bind(adapter, local, value, pr)
+        before = local.path.read_bytes()
+        comments_before = sorted(p.read_bytes() for p in (root / "gh-comments").iterdir())
+        publication._record_and_bind(adapter, local, value, pr)
+        current = next(a for a in local.read()["actions"] if a["kind"] == "record_pr")
+        assert current["state"] == "observed", current
+        assert before == local.path.read_bytes(), "repeat changed confirmed journal"
+        assert comments_before == sorted(p.read_bytes() for p in (root / "gh-comments").iterdir()), "repeat duplicated publication evidence"
+assert pathlib.Path((root / "old-journal-path.md").read_text()).read_bytes() == (root / "old-journal-before.json").read_bytes()
+print("PASS test_rec_" + case)
+PY
+    exit 0
+  fi
+  if [[ "$REC_CASE" == "guard_pr_head_drift" ]]; then export GH_PR_HEAD_SHA="$REC_OLD_HEAD"; fi
+  REC_CALLS_BEFORE="$(wc -l < "$GH_CALL_LOG")"
+  set +e
+  python3 "$TMPDIR/github-project-task.py" record-pr "$TMPDIR" \
+    --repo eng-cc/oasis7 --project-owner eng-cc --project-number 1 \
+    --task-uid "$TASK_UID" --pr-url "https://github.com/eng-cc/oasis7/pull/2001" \
+    --draft-candidate --publication-binding-json "$TMPDIR/recovery-binding.json" --json \
+    >"$TMPDIR/rec-record.json" 2>"$TMPDIR/rec-record.err"
+  REC_STATUS=$?
+  set -e
+  tail -n +$((REC_CALLS_BEFORE + 1)) "$GH_CALL_LOG" >"$TMPDIR/rec-calls.log"
+  if [[ "$REC_CASE" == guard_* ]]; then
+    if [[ "$REC_STATUS" == "0" ]]; then
+      echo "FAIL test_rec_$REC_CASE: invalid recovery was accepted" >&2
+      exit 1
+    fi
+    if grep -Eq '^issue (edit|comment) |^project item-edit ' "$TMPDIR/rec-calls.log"; then
+      echo "FAIL test_rec_$REC_CASE: rejected recovery wrote metadata" >&2
+      cat "$TMPDIR/rec-calls.log" >&2
+      exit 1
+    fi
+    echo "PASS test_rec_$REC_CASE rejected before writes"
+    exit 0
+  fi
+  if [[ "$REC_STATUS" != "0" ]]; then
+    echo "FAIL test_rec_${REC_CASE}_reconciles_current_action: record-pr exit=$REC_STATUS" >&2
+    cat "$TMPDIR/rec-record.err" >&2
+    exit 1
+  fi
+  python3 - "$TMPDIR" "$TASK_UID" <<'PY'
+import json, pathlib, sys
+root = pathlib.Path(sys.argv[1])
+r = json.loads((root / ".pm/github-project-sync/tasks.json").read_text())["tasks"][sys.argv[2]]
+assert (r["status"], r["workflow_phase"], r["pr_number"]) == ("committed", "verification", 2001), r
+assert pathlib.Path((root / "old-journal-path.md").read_text()).read_bytes() == (root / "old-journal-before.json").read_bytes()
+issue_body = (root / "issue-live-body.md").read_text()
+for field in ('- status: `committed`', '- workflow_phase: `verification`',
+              '- pr_number: `2001`', '- pr_url: `https://github.com/eng-cc/oasis7/pull/2001`'):
+    assert field in issue_body, (field, issue_body)
+for name, expected in {"project-live-state":"committed", "project-live-status":"In Progress",
+                       "project-live-phase":"verification", "project-pr.md":"https://github.com/eng-cc/oasis7/pull/2001"}.items():
+    assert (root / name).read_text().strip() == expected, (name, (root / name).read_text())
+import pr_projection_publication as publication
+expected_binding = json.loads((root / "recovery-binding.json").read_text())
+bindings = [publication.parse_publication_binding_comment(p.read_text())
+            for p in (root / "gh-comments").iterdir()
+            if "<!-- oasis7-ci-publication-binding/v1 -->" in p.read_text()]
+assert [b for b in bindings if b["publication_id"] == expected_binding["publication_id"]] == [expected_binding], bindings
+# A successful CLI result must prove all remote poststates after the final
+# metadata effect. Pre-write admission reads cannot confirm publication.
+calls = (root / "rec-calls.log").read_text().splitlines()
+last_write = max(i for i, call in enumerate(calls)
+                 if call.startswith(("issue edit ", "issue comment ", "project item-edit ")))
+final_reads = calls[last_write + 1:]
+required = {
+    "Issue": "issue view 2001 ",
+    "Project": "api graphql ",
+    "PR": "api repos/eng-cc/oasis7/pulls/2001",
+    "unique binding": "api repos/eng-cc/oasis7/issues/2001/comments ",
+}
+missing = [surface for surface, prefix in required.items()
+           if not any(call.startswith(prefix) for call in final_reads)]
+assert not missing, ("FAIL test_rec_project_post_issue_pre_final_authoritative_readback: "
+                     f"record-pr succeeded without final {missing}; final_reads={final_reads!r}")
+PY
+  echo "PASS test_rec_project_post_issue_pre_reconciles_current_action"
+  exit 0
+fi
 
 python3 "$TMPDIR/github-project-task.py" record-pr "$TMPDIR" \
   --repo eng-cc/oasis7 \
