@@ -253,6 +253,7 @@ fixture_url="http://127.0.0.1:${http_port}/software_safe.html?ws=ws://127.0.0.1:
 ./scripts/viewer-software-safe-step-regression.sh \
   --url "$fixture_url" \
   --out-dir "$out_root" \
+  --agent-id agent-0 \
   --progress-timeout-ms 5000
 
 summary_json=$(find "$out_root" -type f -name 'software-safe-step-summary.json' | sort | tail -n 1)
