@@ -1,0 +1,31 @@
+[package]
+name = "oasis7_local_signer"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "oasis7_local_signer_worker"
+path = "src/bin/oasis7_local_signer_worker.rs"
+
+[dependencies]
+base64 = "0.22"
+ed25519-dalek = "3"
+getrandom = "0.4"
+hex = "0.4"
+libc = "0.2"
+nix = { version = "0.30", features = ["fs", "poll", "user"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.11"
+zeroize = "1"
+
+[lints.rust]
+unsafe_code = "warn"
+
+[lints.clippy]
+all = "warn"
