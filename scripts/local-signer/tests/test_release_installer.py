@@ -824,3 +824,135 @@ class ProductionInlineBootstrapContract(BootstrapACLFixtureMixin, unittest.TestC
         self.assertEqual(status, 9)
         self.assertEqual(events, [], "direct root path entry must stop before candidate modules or installer admission")
         self.assertEqual(json.loads(output.getvalue())["code"], "TRUSTED_BOOTSTRAP_REQUIRED")
+
+
+class NativeBootstrapACLContract(unittest.TestCase):
+    """Exercise the shipped ACL parser's native branch without host ACL calls."""
+
+    @classmethod
+    def setUpClass(cls):
+        import ast
+        cls.bootstrap = next(
+            ast.literal_eval(node.value)
+            for node in ast.parse((SOURCE / "install-release.py").read_text(encoding="utf-8")).body
+            if isinstance(node, ast.Assign)
+            and any(isinstance(name, ast.Name) and name.id == "TRUSTED_BOOTSTRAP" for name in node.targets)
+        )
+        bootstrap_tree = ast.parse(cls.bootstrap)
+        cls.acl_empty_node = next(
+            node for node in bootstrap_tree.body
+            if isinstance(node, ast.FunctionDef) and node.name == "acl_empty"
+        )
+
+    @staticmethod
+    def u32(value):
+        import sys
+        return int(value).to_bytes(4, sys.byteorder)
+
+    @classmethod
+    def volume_reply(cls, valid=0x400, capability=0x400):
+        values = (0, capability, 0, 0, 0, valid, 0, 0)
+        return cls.u32(36) + b"".join(cls.u32(value) for value in values)
+
+    @classmethod
+    def absent_acl_reply(cls):
+        # total, five returned-attribute groups, and an all-zero attrreference
+        return cls.u32(32) + cls.u32(0x80000000) + bytes(16) + bytes(8)
+
+    @classmethod
+    def filesec_reply(cls, count=0xFFFFFFFF, flags=0, aces=b""):
+        import struct
+        filesec = cls.u32(0x012CC16D) + bytes(32) + cls.u32(count) + cls.u32(flags) + aces
+        total = 4 + 20 + 8 + len(filesec)
+        return (
+            cls.u32(total)
+            + cls.u32(0x80400000) + bytes(16)
+            + struct.pack("=iI", 8, len(filesec))
+            + filesec
+        )
+
+    class FakeFunction:
+        def __init__(self, replies):
+            self.replies = list(replies)
+            self.calls = []
+            self.argtypes = None
+            self.restype = None
+
+        def __call__(self, fd, request_ptr, output, capacity, options):
+            import ctypes
+            import struct
+            request = ctypes.string_at(request_ptr, 24)
+            bitmapcount, reserved = struct.unpack_from("=HH", request)
+            groups = struct.unpack_from("=5I", request, 4)
+            self.calls.append((fd, bitmapcount, reserved, *groups, capacity, options))
+            if not self.replies:
+                raise AssertionError("unexpected native ACL query")
+            reply = self.replies.pop(0)
+            if isinstance(reply, tuple):
+                ctypes.set_errno(reply[1])
+                return reply[0]
+            if len(reply) > capacity:
+                raise AssertionError("native ACL fixture exceeds output capacity")
+            ctypes.memmove(output, reply, len(reply))
+            return 0
+
+    class FakeLibrary:
+        def __init__(self, replies):
+            self.fgetattrlist = NativeBootstrapACLContract.FakeFunction(replies)
+
+    @classmethod
+    def execute_native_acl_query(cls, replies, fd=123):
+        import ast
+        import ctypes
+        import errno
+        import sys
+        from types import SimpleNamespace
+        from unittest.mock import patch
+
+        namespace = {"ctypes": ctypes, "errno": errno, "sys": SimpleNamespace(platform="darwin", byteorder=sys.byteorder)}
+        exec(compile(ast.Module(body=[cls.acl_empty_node], type_ignores=[]), str(SOURCE / "install-release.py"), "exec"), namespace)
+        library = cls.FakeLibrary(replies)
+        with patch.object(ctypes, "CDLL", return_value=library) as load_native_library:
+            namespace["acl_empty"](fd, seams=False)
+        load_native_library.assert_called_once_with("/usr/lib/libSystem.B.dylib", use_errno=True)
+        return library.fgetattrlist.calls
+
+    @staticmethod
+    def expected_calls(fd=123):
+        return (
+            (fd, 5, 0, 0, 0x80020000, 0, 0, 0, 64, 4),
+            (fd, 5, 0, 0x80400000, 0, 0, 0, 0, 8192, 4),
+        )
+
+    def test_native_acl_absent_and_noacl_sentinel_use_exact_requests(self):
+        for security_reply in (self.absent_acl_reply(), self.filesec_reply()):
+            with self.subTest(security_reply=security_reply[4:8]):
+                calls = self.execute_native_acl_query((self.volume_reply(), security_reply))
+                self.assertEqual(tuple(calls), self.expected_calls())
+
+    def test_native_acl_query_errors_fail_closed_even_with_zero_errno(self):
+        import errno
+
+        for error in (errno.EIO, 0):
+            with self.subTest(query="volume", errno=error):
+                with self.assertRaises(OSError):
+                    self.execute_native_acl_query(((-1, error),))
+            with self.subTest(query="security", errno=error):
+                with self.assertRaises(OSError):
+                    self.execute_native_acl_query((self.volume_reply(), (-1, error)))
+
+    def test_native_acl_requires_capability_and_complete_security_framing(self):
+        for valid, capability in ((0, 0x400), (0x400, 0)):
+            with self.subTest(valid=valid, capability=capability):
+                with self.assertRaisesRegex(ValueError, "does not prove extended-security support"):
+                    self.execute_native_acl_query((self.volume_reply(valid, capability), self.absent_acl_reply()))
+        with self.assertRaisesRegex(ValueError, "extended-security response is truncated"):
+            self.execute_native_acl_query((self.volume_reply(), self.u32(20) + bytes(16)))
+
+    def test_native_acl_rejects_present_empty_and_populated_filesec(self):
+        import sys
+
+        for security_reply in (self.filesec_reply(count=0), self.filesec_reply(count=1, aces=bytes(24))):
+            with self.subTest(filesec_count=int.from_bytes(security_reply[68:72], sys.byteorder)):
+                with self.assertRaisesRegex(ValueError, "contains an ACL"):
+                    self.execute_native_acl_query((self.volume_reply(), security_reply))
