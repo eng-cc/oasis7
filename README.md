@@ -1,32 +1,32 @@
 # oasis7
 
-> 一个由 LLM 驱动、支持可编程社会结构与去中心化共识的持久多主体文明模拟游戏。
+> 在小行星带，给 AI 文明一个方向。
 
-oasis7 是一个由 LLM 驱动的持久多主体文明模拟游戏框架。在这个游戏世界中，自主智能体在资源约束、空间约束与制度演化的规则下持续运行。
+oasis7 是一款正在开发的 AI Agent 文明模拟游戏。玩家从世界之外设定目标，Agent 在资源与规则约束下作出选择，行动在同一个世界中留下可追溯的后果。
 
-本项目探索以下方向：
+我们希望探索：当能源有限、能力可以编程、合作需要付出代价时，智能体会如何建立自己的生存方式与社会秩序？
 
-- 多主体 LLM 系统
-- 可编程社会结构（基于 WASM）
-- 持久化世界运行时
-- 基于区块链的世界状态共识
-- 由资源约束驱动的涌现行为
+当前项目处于 **受限可玩技术预览（limited playable technical preview）** 阶段，适合愿意配置环境、探索预览链路的玩家、研究者和开发者。长期自治与文明涌现仍是需要持续验证的目标，当前版本不是面向大众的正式发布。
 
----
+## 从哪里开始
+
+- **了解项目：**先读下面的核心亮点与玩家模型，再查看[世界规则与玩法](./doc/product/world-rules-core-gameplay/prd.md)。
+- **尝试本地预览：**阅读 [Viewer 使用手册](./doc/world-simulator/viewer/viewer-manual.manual.md)；真实 LLM 试玩需要 provider 配置、构建产物和可用服务，不是零配置演示。
+- **参与开发：**从[文档总入口](./doc/README.md)和[测试手册](./testing-manual.md)选择对应领域与验证路径。
+
+## 核心亮点
+
+- **资源有代价。** 电力订单、撮合和资源校验为 Agent 的行动施加约束，选择需要承担成本。参见[交易规则实现](./crates/oasis7/src/simulator/kernel/actions_resolution.rs)。
+- **世界有历史。** 事件、快照与 Agent 记忆的持久化和恢复实现，让结果可以追查；记忆恢复本身不等于已经验证长期学习。参见[记忆实现](./crates/oasis7/src/simulator/memory.rs)与[持久化测试源码](./crates/oasis7/src/simulator/tests/persist.rs)。
+- **能力可编程。** WASM 模块提供扩展路径，部署、交易和升级受资源、权限及治理约束。参见[模块生命周期回归测试源码](./crates/oasis7/src/runtime/world/governed_module_lifecycle_transaction_regressions.rs)。
+
+这些链接说明实现与测试入口，不代替当前版本的运行验收。
 
 ## 项目概述
 
-在 oasis7 中：
+Agent 与地点、资源、设施和模块共同构成世界。LLM 为 Agent 提供决策能力；世界运行时负责校验动作、执行规则和记录变化。
 
-- 每个实体都是一个 AI Agent
-- Agent 由 LLM 驱动决策
-- Agent 拥有长期记忆
-- Agent 在能源与算力约束下运行
-- Agent 可以编写并部署 WASM 模块扩展能力
-
-游戏系统只提供最小化基础规则。
-
-市场、组织、协议等结构由 Agent 自主构建。
+项目提供资源、交易与治理的基础规则，并探索 Agent 在这些约束上形成更复杂的协作与组织。制度涌现是研究与玩法方向，不表示所有市场或社会规则都已经由 Agent 自主生成。
 
 ---
 
@@ -45,7 +45,7 @@ oasis7 是一个由 LLM 驱动的持久多主体文明模拟游戏框架。在�
 ### 3. Persistent
 
 世界状态可落盘与恢复。  
-单个玩家离线不影响世界持续运行。
+玩家客户端离线与世界服务停止是不同情况：持续推进仍要求相应节点、运行服务和决策提供方可用。持久化与恢复能力不代表无人值守的长期自治已经验收。
 
 ### 4. Auditable
 
@@ -74,7 +74,7 @@ oasis7 是一个由 LLM 驱动的持久多主体文明模拟游戏框架。在�
 - 修改底层世界规则
 - 绕过共识层修改状态
 
-控制是间接的，Agent 保持自主性。
+控制是间接的，Agent 保持自主性。玩家通过观察结果、调整目标和提示词参与下一次决策；更完整的干预、纠正与恢复体验以[产品规格](./doc/product/world-rules-core-gameplay/prd.md)及对应实现证据为准，不能把设计目标视为当前全部可用。
 
 ---
 
@@ -107,12 +107,13 @@ oasis7 是一个由 LLM 驱动的持久多主体文明模拟游戏框架。在�
 
 ## 可编程层
 
-Agent 可以：
+模块开发路径包括编写 Rust 逻辑、编译为 WASM、部署及安装。不同运行模式的权限与构建方式不同：
 
-1. 使用 Rust 编写逻辑
-2. 编译为 WASM
-3. 部署至世界运行时
-4. 安装至自身或基础设施
+- 开发模式提供运行时源码编译动作，是否允许由策略控制。
+- 正式加固策略禁止运行时源码编译，发布路径使用外部构建产物及验证回执。
+- 部署、安装、升级仍受权限、资源与治理规则约束，不是 Agent 在任意环境下都能自由执行的动作。
+
+参见[发布安全策略](./crates/oasis7/src/runtime/world/mod.rs)与[发布动作实现](./crates/oasis7/src/runtime/world/module_actions/release_actions.rs)。
 
 WASM 模块：
 
@@ -122,21 +123,17 @@ WASM 模块：
 - 可审计
 - 作为游戏内实体存在
 
-社会结构不是预设，而是可编程产物。
+模块让世界能力可以扩展；更复杂的社会结构如何形成，仍需在基础规则与治理边界内探索。
 
 ---
 
 ## 高层架构
 
-LLM Agents
-↓
-WASM Modules
-↓
-World Runtime
-↓
-Consensus Layer (Blockchain)
-↓
-Distributed Storage & Networking
+玩家意图 → Agent 决策 → 动作请求 → World Runtime 校验与提交
+
+- WASM Modules：可编程扩展路径，并非所有原生动作的必经层。
+- Consensus Layer：参与维护权威状态与提交结果。
+- Distributed Storage & Networking：提供对应的数据与节点通信能力。
 
 
 世界状态通过去中心化共识维护。  
@@ -169,7 +166,7 @@ Web 端默认定位为 Viewer/间接控制客户端，通过 `oasis7_viewer_live
 - 当前公开说明状态：正式公告仍在准备中；GitHub Releases 与站点下载区当前主要承载开发预览构建说明。
 - 推荐入口：先查看站点首页与文档总入口，再决定是否进入完整构建与深度文档。
 
-相关入口：[`site/index.html`](./site/index.html) · [`doc/README.md`](./doc/README.md) · [`testing-manual.md`](./testing-manual.md)
+相关入口：[项目概述](#项目概述) · [`doc/README.md`](./doc/README.md) · [`testing-manual.md`](./testing-manual.md)
 
 欢迎讨论与贡献。
 
@@ -179,7 +176,7 @@ Web 端默认定位为 Viewer/间接控制客户端，通过 `oasis7_viewer_live
 
 | 你的目标 | 先读 | 再读 |
 | --- | --- | --- |
-| 想确认项目现在公开到了什么程度 | [`site/index.html`](./site/index.html) | [`site/doc/cn/index.html`](./site/doc/cn/index.html) |
+| 想确认项目现在公开到了什么程度 | [项目状态](#项目状态) | [玩家访问与发行说明](./doc/product/player-entry-distribution/prd.md) |
 | 想先用一份白皮书式总览理解项目 | [`doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md`](./doc/readme/governance/readme-project-overview-whitepaper-2026-04-25.md) | [`doc/core/prd.md`](./doc/core/prd.md) |
 | 想本地验证 Viewer / Web / API 链路 | [`testing-manual.md`](./testing-manual.md) | [`doc/world-simulator/viewer/viewer-manual.manual.md`](./doc/world-simulator/viewer/viewer-manual.manual.md) |
 | 想理解世界规则、玩法和玩家边界 | [`doc/product/world-rules-core-gameplay/prd.md`](./doc/product/world-rules-core-gameplay/prd.md) | [`doc/game/gameplay/gameplay-top-level-design.prd.md`](./doc/game/gameplay/gameplay-top-level-design.prd.md) |
@@ -200,5 +197,4 @@ Web 端默认定位为 Viewer/间接控制客户端，通过 `oasis7_viewer_live
 - 玩家访问模式与技术预览边界：[`doc/product/player-entry-distribution/prd.md`](./doc/product/player-entry-distribution/prd.md)
 - Viewer / Web / 运行使用说明：[`doc/world-simulator/viewer/viewer-manual.manual.md`](./doc/world-simulator/viewer/viewer-manual.manual.md)
 - 闭环测试与套件矩阵：[`testing-manual.md`](./testing-manual.md)
-- 游戏玩法顶层设计：[`doc/game/gameplay/gameplay-top-level-design.prd.md`](./doc/game/gameplay/gameplay-top-level-design.prd.md)
 - 游戏玩法顶层设计：[`doc/game/gameplay/gameplay-top-level-design.prd.md`](./doc/game/gameplay/gameplay-top-level-design.prd.md)
