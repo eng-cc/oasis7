@@ -413,8 +413,14 @@ Deterministic script contract:
   success commands are not lifecycle proof. `done` requires a recorded merged
   PR for the single-PR route, or a classified `non_pr_task`, plus verified `task_complete` evidence. Ordered multi-PR completion requires an activated adapter to prove every required entry and aggregate `task_complete`; the singular helper must fail closed. It
   persists the trusted receipt and advances only to PM `done` / `task_done`;
-  the issue stays open and follows the [terminal runbook](#terminal-runbook); use
-  `non-merge-finalize.py --reason <reason> --evidence-file <path>` for classified non-merge outcomes.
+  the issue stays open and follows the [terminal runbook](#terminal-runbook); use its copyable non-merge finalizer command for classified non-merge outcomes.
+  A non-PR task is classified through the live task adapter, which records its
+  non-empty evidence on the open Task Issue:
+  ```bash
+  python3 ./scripts/pm/github-project-task.py classify-non-pr-task \
+    <canonical-task-worktree> --task-uid <TASK-UID> \
+    --evidence "<evidence>" --json
+  ```
   `non_pr_completed` additionally requires the existing verified `task_complete`
   closeout and `task_done` phase; cancellation reasons do not manufacture
   completion evidence. The bounded evidence file is persisted in the terminal
@@ -680,12 +686,24 @@ Follow the [canonical gates](#ready-and-done) and [terminal order](#canonical-st
 #### Terminal readiness preflight
 Before merge, run mutation-free finalizer preflight against the bound task and current PR. It reports delivery blockers separately from cleanup blockers; only delivery blockers prevent delivery finalization. Identity drift fails closed. A stale task-worktree helper may be invoked explicitly with the canonical default worktree as its repository root, but it must resolve the same Project-backed task and PR. Preflight creates no receipt, cleanup intent, or lifecycle state. After merge, resume from workflow-next in the canonical worktree. Keep receipts and cleanup evidence under the repository common directory so they survive task-worktree removal.
 ```bash
+./scripts/pm/finalize-task.sh --repo-root <canonical-default-worktree> \
+  --task-uid <TASK-UID> --pr <PR-NUMBER> --preflight --json
+```
+A ready v2 result has `status=ready`, `identity_status=bound`, empty `blockers` and `delivery_blockers`, and the exact executable `next_command`; inspect `cleanup_blockers` separately. For v2, cleanup blockers do not prevent delivery finalization. Follow the returned `next_command` verbatim rather than reconstructing it.
+```bash
 cd <canonical-default-worktree>
 RECEIPT_ROOT="$(python3 scripts/pm/canonical-receipt-root.py \
   --default-worktree <canonical-default-worktree> \
   --task-uid <TASK-UID> --create)"
 ```
 Normal operation is `./scripts/pm/finalize-task.sh --repo-root <canonical-default-worktree> --task-uid <TASK-UID> --pr <PR-NUMBER> --resume --json`. It validates and records delivery, reads back post_merge_done, then makes one safe cleanup attempt. Use `--cleanup=defer` to skip this invocation's cleanup attempt, or `--cleanup-only` to retry resources after a previously read-back delivery. Cleanup-only cannot create or change delivery proof or Issue/Project terminal state. Delivery failures return nonzero; normal finalization reports each cleanup outcome and may return success after post_merge_done even when cleanup is deferred or failed. Cleanup-only succeeds only when each requested resource is removed or confirmed absent; retention and uncertainty return distinct nonzero outcomes. Never swallow cleanup errors. A classified non-merge outcome continues through non-merge-finalize.py and the existing closed_without_merge receipt/tombstone contract. Resume state comes from workflow-next in the canonical worktree.
+
+For a classified non-merge outcome, use the repository-owned finalizer; `--reason` accepts `superseded`, `duplicate`, `not_planned`, or `non_pr_completed`:
+```bash
+python3 ./scripts/pm/non-merge-finalize.py \
+  --repo-root <canonical-default-worktree> --task-uid <TASK-UID> \
+  --reason <reason> --evidence-file <path> --json
+```
 1. Merge receipt — require live readback; retry this command with the same PR.
 ```bash
 cd <canonical-task-worktree>

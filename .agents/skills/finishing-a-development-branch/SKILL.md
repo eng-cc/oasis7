@@ -11,8 +11,7 @@ TPM is the coordinator/integrator for this sequence. Gate meanings, retry/dispos
 
 ## When to Use
 
-Use after verified implementation or a classified non-merge outcome; `not_planned` may enter this route from bootstrap, planning, or execution without implementation
-verification.
+Use after verified implementation or a classified non-merge outcome; `not_planned` may enter this route from bootstrap, planning, or execution without implementation verification.
 
 Read the bound task's compact resume state from the canonical worktree; follow only `next_command`, and stop on unbound identity or any blocker:
 
@@ -71,8 +70,7 @@ Pre-PR local role review packet recorded after immutable verification, after fro
 ./scripts/pr-review-thread-closeout.sh --unresolved-only
 ```
 
-For a stable long-running required check or `required-gate` wait, follow the
-[canonical stable-wait rule](../../../doc/engineering/workflow/source-of-truth.md#stable-required-gate-wait).
+For a stable long-running required check or `required-gate` wait, follow the [canonical stable-wait rule](../../../doc/engineering/workflow/source-of-truth.md#stable-required-gate-wait).
 
 On a non-Codex surface, use the finite fallback:
 
@@ -118,8 +116,7 @@ python3 ./scripts/pm/non-merge-finalize.py \
 - frozen comparison range and fresh verification
 - canonical review and gate evidence links
 - PR URL and merged receipt; for ordered deliveries, report the milestone without terminal closeout until the canonical multi-PR adapter is active, using linked delivery tasks under the source-of-truth compatibility bridge meanwhile; or report a blocker with resume instruction
-- selected terminal proof and protocol version; protocol v1 includes main-sync
-  and cleanup in its historical closeout chain, while protocol v2 records
+- selected terminal proof and protocol version; protocol v1 includes main-sync and cleanup in its historical closeout chain, while protocol v2 records
   delivery finalization separately from optional cleanup
 - cleanup result and any task-declared resource wait on a named artifact use
 
