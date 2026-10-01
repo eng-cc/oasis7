@@ -89,7 +89,9 @@ fn fixture() -> (
         signer_gid: gid,
         callers: vec![CallerBinding {
             uid: caller_uid,
-            work_subdir: format!("caller-{caller_uid}"),
+            work_dir: format!("/caller-jobs-{caller_uid}"),
+            work_device_id: 1,
+            work_inode: 2,
         }],
         release_id: "release-01".to_owned(),
         worker_executable: "/usr/local/libexec/oasis7/test-worker".to_owned(),
@@ -232,6 +234,101 @@ fn write_control_fixture(path: &Path, bytes: &[u8]) {
     write_private_new(path, bytes).expect("write fixture control file");
     fs::set_permissions(path, fs::Permissions::from_mode(0o640))
         .expect("set fixture control permissions");
+}
+
+/// Importer-only installer boundary evidence. Production has no fixture selector.
+/// Ownership is deliberately projected to this nonprivileged test UID/GID;
+/// the inventory checks below verify the intended privileged identities.
+#[test]
+#[ignore = "requires emitted installer-boundary.json fixture via OASIS7_INSTALLER_BOUNDARY_FIXTURE"]
+fn emitted_installer_binding_is_v3_and_policyless_doctor_is_unready() {
+    let path = std::env::var_os("OASIS7_INSTALLER_BOUNDARY_FIXTURE")
+        .expect("explicit installer fixture path required");
+    let report: serde_json::Value = serde_json::from_slice(&fs::read(path).unwrap()).unwrap();
+    let installation: InstallationConfig =
+        serde_json::from_value(report["installation_config"].clone()).unwrap();
+    installation.validate().expect("actual emitted v3 binding");
+    assert_eq!(installation.schema_version, INSTALLATION_SCHEMA);
+    assert!(report["initial_files"].as_array().unwrap().is_empty());
+    let inventory = report["inventory"].as_array().unwrap();
+    let expected = [
+        (".", 0, 0, 0o711),
+        ("control", 0, installation.signer_gid, 0o750),
+        ("control/grants", 0, installation.signer_gid, 0o750),
+        ("control/revoked-grants", 0, installation.signer_gid, 0o750),
+        (
+            "keys",
+            installation.signer_uid,
+            installation.signer_gid,
+            0o700,
+        ),
+        (
+            "state",
+            installation.signer_uid,
+            installation.signer_gid,
+            0o700,
+        ),
+        (
+            "state/records",
+            installation.signer_uid,
+            installation.signer_gid,
+            0o700,
+        ),
+        ("work", 0, 0, 0o711),
+        (
+            "backup-staging",
+            installation.signer_uid,
+            installation.signer_gid,
+            0o700,
+        ),
+    ];
+    assert_eq!(inventory.len(), expected.len());
+    let scratch = Scratch::new();
+    for (relative, uid, gid, mode) in expected {
+        let entry = inventory
+            .iter()
+            .find(|entry| entry["relative"] == relative)
+            .expect("mandatory directory inventory");
+        assert_eq!(entry["owner_uid"].as_u64(), Some(u64::from(uid)));
+        assert_eq!(entry["owner_gid"].as_u64(), Some(u64::from(gid)));
+        assert_eq!(entry["mode"].as_u64(), Some(mode));
+        let path = scratch.path().join(relative);
+        fs::create_dir_all(&path).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(mode as u32)).unwrap();
+        let metadata = fs::metadata(path).unwrap();
+        assert_eq!(
+            metadata.uid(),
+            current_uid(),
+            "honest synthetic owner projection"
+        );
+        assert_eq!(metadata.mode() & 0o7777, mode as u32);
+    }
+    assert!(!scratch.path().join(POLICY_FILE).exists());
+    assert_eq!(
+        fs::read_dir(scratch.path().join("keys")).unwrap().count(),
+        0
+    );
+    assert_eq!(
+        fs::read_dir(scratch.path().join(GRANTS_DIR))
+            .unwrap()
+            .count(),
+        0
+    );
+    let caller_uid = installation.callers[0].uid;
+    let store = SignerStore {
+        installation,
+        root: scratch.path().to_owned(),
+        caller_uid,
+        signer_uid: current_uid(),
+        control_owner_uid: current_uid(),
+        control_group_gid: current_egid(),
+        test_fault: Cell::new(None),
+    };
+    let IpcResponse::Doctor(response) = store.doctor().unwrap() else {
+        panic!("doctor response");
+    };
+    assert!(!response.ready);
+    assert_eq!(response.status_code, "AUTHORIZATION_DENIED");
 }
 
 #[test]
