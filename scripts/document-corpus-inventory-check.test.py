@@ -14,9 +14,15 @@ import sys
 import tempfile
 import time
 from typing import Any
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parent.parent
+SCRIPTS_DIR = ROOT / "scripts"
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+import document_corpus as dc
+
 CLI = ROOT / "scripts/document-corpus-inventory.py"
 CORPUS_CHECK = ROOT / "scripts/document-corpus-inventory-check.py"
 EVIDENCE_CHECK = ROOT / "scripts/doc-evidence-inventory-check.py"
@@ -846,6 +852,33 @@ def test_t23_replace_fault_never_reports_success_and_scoped_retry_recovers() -> 
         shutil.rmtree(injector, ignore_errors=True)
 
 
+def test_safe_write_falls_back_without_fchmod_and_cleans_failed_temp() -> None:
+    with tempfile.TemporaryDirectory(prefix="oasis7-safe-write-fallback-") as temp:
+        root = Path(temp)
+        success_path = "nested/success.bin"
+        payload = b"portable write fallback\x00\xff"
+        with patch.object(dc.os, "fchmod", None, create=True):
+            dc._safe_write(root, success_path, payload)
+        success_file = root / success_path
+        assert success_file.read_bytes() == payload
+        assert dc.WorktreeCorpusView(root).file_mode(success_path) == "100644"
+
+        failed_path = "nested/failed.bin"
+        failed_file = root / failed_path
+        temp_parent = failed_file.parent
+        with patch.object(dc.os, "fchmod", None, create=True), patch.object(
+            dc.os, "chmod", side_effect=PermissionError("injected chmod failure")
+        ):
+            try:
+                dc._safe_write(root, failed_path, b"must not be installed")
+            except dc.CorpusError as exc:
+                assert exc.diagnostic.code == "write-failed", exc.diagnostic.as_dict()
+            else:
+                raise AssertionError("forced chmod failure was reported as a successful write")
+        assert not failed_file.exists(), "failed chmod left a target file"
+        assert not list(temp_parent.glob(f".{failed_file.name}.*.tmp")), "failed chmod left a temporary file"
+
+
 def test_t24_lock_is_worktree_local_and_contention_returns_three() -> None:
     root = make_fixture()
     other = root.parent / f"{root.name}-other-worktree"
@@ -1325,6 +1358,7 @@ def main() -> None:
         test_t21_auto_merged_same_source_still_conflicts_on_its_object,
         test_t22_readers_and_export_do_not_change_source_or_index,
         test_t23_replace_fault_never_reports_success_and_scoped_retry_recovers,
+        test_safe_write_falls_back_without_fchmod_and_cleans_failed_temp,
         test_t24_lock_is_worktree_local_and_contention_returns_three,
         test_t25_space_unicode_crlf_and_case_alias_safety,
         test_t26_t27_full_migration_roundtrip_and_repeated_preconditions,

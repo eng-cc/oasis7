@@ -172,6 +172,29 @@ import textwrap
 root = pathlib.Path(sys.argv[1])
 workflow_path = pathlib.Path(sys.argv[2])
 workflow_text = workflow_path.read_text(encoding="utf-8")
+transport_env = "SCOPE_OUTPUTS_PATH: ${{ runner.temp }}/required-scope-outputs.json"
+if workflow_text.count(transport_env) != 3:
+    raise SystemExit("scope outputs must use one bounded runner-temp file in the report, keyed-plan and artifact steps")
+if "PLAN_JSON: ${{ toJSON(steps.scope.outputs) }}" in workflow_text or 'os.environ["PLAN_JSON"]' in workflow_text:
+    raise SystemExit("scope outputs must not be copied into an oversized PLAN_JSON environment variable")
+if workflow_text.count('pathlib.Path(os.environ["SCOPE_OUTPUTS_PATH"]).read_text(encoding="utf-8")') != 3:
+    raise SystemExit("all required-planner consumers must read the complete scope output file")
+report_step = workflow_text.split("      - name: Report planned scope\n", 1)[1].split(
+    "\n      - name: Install pinned Markdown runtime", 1
+)[0]
+if "${{ steps.scope.outputs." in report_step:
+    raise SystemExit("planned-scope report must print file-backed values without shell interpolation")
+scope_step = workflow_text.split("      - id: scope\n", 1)[1].split(
+    "\n      - name: Report planned scope", 1
+)[0]
+transport_marker = 'python3 - "${GITHUB_OUTPUT}" "${RUNNER_TEMP}/required-scope-outputs.json" <<\'PY\'\n'
+if transport_marker not in scope_step or "required-scope output" not in scope_step:
+    raise SystemExit("scope step must materialize the original GITHUB_OUTPUT values into a JSON file")
+transport_code = textwrap.dedent(scope_step.split(transport_marker, 1)[1].split("\n          PY", 1)[0])
+report_marker = "python3 -I - <<'PY'\n"
+if report_marker not in report_step:
+    raise SystemExit("planned-scope report must parse the file-backed scope outputs")
+report_code = textwrap.dedent(report_step.split(report_marker, 1)[1].split("\n          PY", 1)[0])
 step = workflow_text.split("      - name: Write required planner artifact\n", 1)[1].split(
     "\n      - name: Upload required planner artifact", 1
 )[0]
@@ -196,17 +219,110 @@ planner_result = subprocess.run(
 planner = dict(line.split("=", 1) for line in planner_result.stdout.splitlines() if "=" in line)
 if planner.get("execution_contract") != "required-domain-split/v1":
     raise SystemExit("versioned artifact-preflight vector did not use the versioned test fixture")
-planner.update(head_oid="a" * 40, base_oid="b" * 40, integration_base_oid="b" * 40)
+planner.update(
+    head_oid="a" * 40,
+    base_oid="b" * 40,
+    integration_base_oid="b" * 40,
+    source_scope_base="b" * 40,
+    integration_base="b" * 40,
+    source_head="a" * 40,
+    task_uid="task_11111111111111111111111111111111",
+)
 
 with tempfile.TemporaryDirectory(prefix="oasis7-workflow-preflight-") as temp:
     work = pathlib.Path(temp)
     (work / "output/required-plan").mkdir(parents=True)
     script = work / "artifact-preflight.py"
     script.write_text(artifact_code, encoding="utf-8")
+    report_script = work / "scope-report.py"
+    report_script.write_text(report_code, encoding="utf-8")
+
+    paths = []
+    for index in range(782):
+        prefix = f"doc/testing/evidence/large-scope/{index:04d}/"
+        target_path_bytes = 110 if index < 736 else 109
+        paths.append(prefix + "x" * (target_path_bytes - len(prefix)))
+    large = dict(planner)
+    large["changed_path_count"] = str(len(paths))
+    large["changed_paths"] = ";".join(paths)
+    large["reason_summary"] = ";".join(f"evidence:{path}" for path in paths)
+    marker = work / "shell-escape-was-executed"
+    injection = f"$(touch {marker})"
+    large["reason_summary"] += ";" + injection
+    changed_paths_bytes = len(large["changed_paths"].encode("utf-8"))
+    if changed_paths_bytes != 86755:
+        raise SystemExit(f"782-path transport fixture changed its frozen path payload size: {changed_paths_bytes}")
+    target_payload_bytes = 188608
+    current_payload_bytes = len(json.dumps(large, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    padding_bytes = target_payload_bytes - current_payload_bytes
+    if padding_bytes < 0:
+        raise SystemExit(f"782-path transport fixture exceeds the frozen planner payload size: {current_payload_bytes}")
+    large["reason_summary"] += "r" * padding_bytes
+    large_payload_bytes = len(json.dumps(large, ensure_ascii=False, separators=(",", ":")).encode("utf-8"))
+    if large_payload_bytes != target_payload_bytes or large_payload_bytes <= 131072:
+        raise SystemExit(f"scope transport fixture must match the 188608-byte Linux boundary regression: {large_payload_bytes}")
+
+    github_output = work / "GITHUB_OUTPUT"
+    transport_path = work / "required-scope-outputs.json"
+    output_values = dict(large)
+    output_lines = [f"{key}={value}" for key, value in output_values.items()]
+    output_lines.extend((
+        f"base_oid={output_values['base_oid']}",
+        f"integration_base_oid={output_values['integration_base_oid']}",
+        f"head_oid={output_values['head_oid']}",
+        f"source_scope_base={output_values['source_scope_base']}",
+        f"integration_base={output_values['integration_base']}",
+        f"source_head={output_values['source_head']}",
+        f"task_uid={output_values['task_uid']}",
+    ))
+    github_output.write_text("\n".join(output_lines) + "\n", encoding="utf-8")
+    materialized = subprocess.run(
+        [sys.executable, "-I", "-", str(github_output), str(transport_path)],
+        input=transport_code,
+        text=True,
+        capture_output=True,
+    )
+    if materialized.returncode:
+        raise SystemExit(f"large scope output materialization failed: {materialized.stderr}")
+    transported = json.loads(transport_path.read_text(encoding="utf-8"))
+    if transported != output_values:
+        raise SystemExit("file transport changed or dropped required-planner output content")
+    report_env = os.environ.copy()
+    report_env.pop("PLAN_JSON", None)
+    report_env["SCOPE_OUTPUTS_PATH"] = str(transport_path)
+    reported = subprocess.run(
+        [sys.executable, "-I", str(report_script)], cwd=work, env=report_env, text=True, capture_output=True
+    )
+    expected_report_summary = f"reason_summary={large['reason_summary']}"
+    report_summary = next((line for line in reported.stdout.splitlines() if line.startswith("reason_summary=")), "<missing>")
+    expected_text_present = report_summary == expected_report_summary
+    if reported.returncode or not expected_text_present or marker.exists():
+        raise SystemExit(
+            "scope report shell-interpreted or altered planner-provided text: "
+            f"status={reported.returncode}, marker={marker.exists()}, stderr={reported.stderr!r}, "
+            f"expected_text_present={expected_text_present}, summary_bytes={len(report_summary.encode('utf-8'))}, "
+            f"summary_prefix={report_summary[:120]!r}"
+        )
+    bad_output = work / "conflicting-GITHUB_OUTPUT"
+    bad_target = work / "conflicting-plan.json"
+    bad_output.write_text("changed_paths=first\nchanged_paths=second\n", encoding="utf-8")
+    conflict = subprocess.run(
+        [sys.executable, "-I", "-", str(bad_output), str(bad_target)],
+        input=transport_code,
+        text=True,
+        capture_output=True,
+    )
+    if conflict.returncode == 0 or bad_target.exists():
+        raise SystemExit("conflicting duplicate planner outputs must fail before publishing the transport file")
 
     def invoke(value):
+        plan_path = work / "scope-outputs.json"
+        plan_path.write_text(json.dumps(value, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
         env = os.environ.copy()
-        env.update(PLAN_JSON=json.dumps(value), REPOSITORY="eng-cc/oasis7", WORKFLOW_RUN_ID="1")
+        env.pop("PLAN_JSON", None)
+        env.update(SCOPE_OUTPUTS_PATH=str(plan_path), REPOSITORY="eng-cc/oasis7", WORKFLOW_RUN_ID="1")
+        if len(env["SCOPE_OUTPUTS_PATH"].encode("utf-8")) >= 131072:
+            raise SystemExit("scope file path unexpectedly exceeds the per-environment-string limit")
         return subprocess.run(
             [sys.executable, "-I", str(script)], cwd=work, env=env, text=True, capture_output=True
         )
@@ -214,6 +330,13 @@ with tempfile.TemporaryDirectory(prefix="oasis7-workflow-preflight-") as temp:
     versioned = invoke(planner)
     if versioned.returncode:
         raise SystemExit(f"valid versioned planner failed artifact preflight: {versioned.stderr}")
+
+    large_result = invoke(large)
+    if large_result.returncode:
+        raise SystemExit(f"large file-backed planner failed artifact preflight: {large_result.stderr}")
+    large_artifact = json.loads((work / "output/required-plan/oasis7-required-plan-v1.json").read_text(encoding="utf-8"))
+    if large_artifact["planner"].get("reason_summary") != large["reason_summary"] or marker.exists():
+        raise SystemExit("large artifact changed planner content or evaluated shell-like text")
 
     legacy = dict(planner)
     for field in (

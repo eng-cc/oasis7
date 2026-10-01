@@ -1058,7 +1058,13 @@ def _safe_write(repo_root: Path, path: str, data: bytes | None) -> None:
             return
         fd, tmp_name = tempfile.mkstemp(prefix=f".{target.name}.", suffix=".tmp", dir=target.parent)
         with os.fdopen(fd, "wb") as handle:
-            os.fchmod(handle.fileno(), 0o644)
+            # Windows does not expose fchmod; keep the same non-executable
+            # mode contract by applying it to the temporary path there.
+            fchmod = getattr(os, "fchmod", None)
+            if fchmod is None:
+                os.chmod(tmp_name, 0o644)
+            else:
+                fchmod(handle.fileno(), 0o644)
             handle.write(data)
             handle.flush()
             os.fsync(handle.fileno())
