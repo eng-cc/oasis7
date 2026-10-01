@@ -1,0 +1,11 @@
+{
+  "schema": "oasis7-codeql-policy/v1",
+  "units": [
+    {"unit": "actions-repo", "language": "actions"},
+    {"unit": "python-repo", "language": "python"},
+    {"unit": "javascript-repo", "language": "javascript-typescript"},
+    {"unit": "rust-repo", "language": "rust"}
+  ],
+  "excluded_prefixes": ["third_party/", "target/", "node_modules/", "dist/", ".pm/"],
+  "coverage_note": "Stable whole-repository language contexts; inventory is routing evidence, not proof of extractor coverage. Rust standalone manifests, features, targets, macros and build scripts require hosted extraction diagnostics."
+}
