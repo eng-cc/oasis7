@@ -41,8 +41,8 @@ Agent-owned session/turn/provider/context/memory/goal 合同见
 
 - **LLM 驱动**：Agent 决策由 LLM 执行，推理服务采用 OpenAI 兼容 API（endpoint/model/auth/超时/重试/预算可配置）。
 - **确定性与回放**：LLM 调用视为外部效应；运行时需记录输入/输出或最终决策事件以保证回放一致性（回放时不再次调用 LLM）。
-- **Memory Module**：Agent 记忆策略封装为独立 WASM 模块 + 受限存储配额；由 Agent runtime 触发调用，负责写入 observation/event/action_result 并生成上下文摘要。
-- **可演化**：Memory module 与其它内部模块遵循同一治理/升级流程，可由 Agent 自主更新记忆策略。
+- **记忆边界**：默认 WASM `m1.memory.core` 是 Runtime 的有界领域事件索引；Agent 的 retrieval snapshot 与 provider `MemoryWriteIntent` 由 [Continuous Agent Harness](../../world-simulator/llm/continuous-agent-harness.prd.md) 合同定义，与该 WASM 模块职责不同。Memory Core 的职责与容量见 [Agent 默认模块体系](../module/agent-default-modules.prd.md)。
+- **记忆写入与权限**：provider 可提出受 Harness policy 约束的 memory-write intent；ProviderBacked 写入仅在匹配 Runtime committed receipt lineage 后进入投影。本节不定义或授予 Agent 自行修改 memory policy 或 WASM module 的权限；相关语义分别遵循 Agent Harness 与 [Runtime module-governance authority](../module/module-lifecycle.md)。
 
 ## Capability/Policy 绑定（草案）
 

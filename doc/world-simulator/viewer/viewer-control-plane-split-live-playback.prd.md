@@ -126,6 +126,14 @@ operation_digest = h_v1(
 
 ## 验证与边界
 
+<a id="viewer-infrastructure-readback-contract"></a>
+### Infrastructure result readback receiver
+
+- 基础设施结果由既有 authority 提供；Viewer 只消费同 candidate、world identity、root/revision、child/direct-parent receipt 与 disposition 的授权只读投影。按 [QA source/scene method](../../testing/prd.md#qa-infrastructure-source-scene-method) 和 [Harness consumer matrix](../llm/continuous-agent-harness.prd.md#harness-infrastructure-consumer-matrix) 核对，连接成功、ACK、queued/accepted、本地 snapshot 或 debug 样本不能替代 finality、completion 或世界效果。
+- freshness 必须关联同证据窗口的权威 logical position/source/readback；browser polling、`logicalTime`/`eventSeq` 单独不能证明 fresh result。pending、read outage、rejected、stale、timeout/expiry 保持 no-new-effect；错误与恢复入口仅呈现已授权 disposition，不暴露私有 prompt/trace。fresh recovery、retry/replay 须与原 history/receipt 关联，不能隐藏重提交或增加第二次 effect。
+- SC9 投影须消费 [QA scene families](../../testing/prd.md#qa-infrastructure-scene-families) 的全部八格及 authority 格内 root-absent pre-finality/root-present post-root-pre-child 两个 specimens；quantities/buckets/window/lease/W/progression/next_action/next_recheck 与 Runtime/API/Agent 的同源 oracle 一致。read outage 只改变观察，不能重置 W/history；canonical gameplay interruption 才按其规则改变它们。
+- 此 receiver 不扩大 PromptControl `runtime_instance/none/none`，不定义新 UI、DTO、API 或控制能力。验证按 [QA tier boundaries](../../testing/prd.md#qa-infrastructure-tier-boundaries) 与 [capture method](../../testing/manual/web-ui-playwright-closure-manual.design.md#playwright-source-capture-method) 关联 authority oracle；missing proof 保持 blocked/unverified，实际 invariant violation 为 failed。shape/source presence 与历史截图不证明 semantic/full success；[equal-version negative](../../testing/prd.md#qa-infrastructure-equal-version-negative) 保持 planned/unexecuted。
+
 - 不得把 live seek 的发送前拒绝或 legacy handler 的记录并忽略误报为断链、发送成功或世界回退；若未来引入 profile-specific dispatch 结果，必须同时实现并测试所有保留的 live 请求路径。
 - 断链、被 gameplay gate 阻断、无可观察进展和不支持的 profile action 是不同状态；实现与 automation 不得将其中任一状态折叠为 fabricated event 或连接成功。
 - 定向验证必须覆盖“空 mailbox 不输出、不推进观测值”以及“其后的有效触发仍能继续 drive”；Viewer 的 event drive 不拥有 node/consensus tick。
