@@ -524,6 +524,64 @@ path = "src/lib.rs"
         repo, base = self._standalone_fixture()
         self._assert_allowed(repo, base, "alpha", self._add_standalone_lock_for_normal_path_edge)
 
+    def test_registered_auxiliary_change_with_valid_standalone_lock_change_is_allowed(self) -> None:
+        repo, _ = self._standalone_fixture()
+        self._write(
+            repo,
+            ".pm/cargo-package-auxiliary-files.json",
+            json.dumps(
+                {
+                    "schema": "oasis7-cargo-package-auxiliary-files/v1",
+                    "auxiliary_files": [
+                        {"path": "scripts/local-signer/helper.py", "package": "alpha"}
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+        )
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "register trusted signer auxiliary path")
+        base = self._git(repo, "rev-parse", "HEAD")
+
+        def mutate(root: Path) -> None:
+            self._add_standalone_lock_for_normal_path_edge(root)
+            self._write(root, "scripts/local-signer/helper.py", "print('registered')\n")
+
+        self._assert_allowed(repo, base, "alpha", mutate)
+
+    def test_registered_auxiliary_change_does_not_allow_unrelated_standalone_lock_change(self) -> None:
+        repo, _ = self._standalone_fixture()
+        self._write(
+            repo,
+            ".pm/cargo-package-auxiliary-files.json",
+            json.dumps(
+                {
+                    "schema": "oasis7-cargo-package-auxiliary-files/v1",
+                    "auxiliary_files": [
+                        {"path": "scripts/local-signer/helper.py", "package": "alpha"}
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+        )
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "register trusted signer auxiliary path")
+        base = self._git(repo, "rev-parse", "HEAD")
+
+        def mutate(root: Path) -> None:
+            self._add_standalone_lock_for_normal_path_edge(root)
+            self._write(root, "scripts/local-signer/helper.py", "print('registered')\n")
+            lock = root / "tools/runner/Cargo.lock"
+            lock.write_text(
+                lock.read_text(encoding="utf-8")
+                + '\n[[package]]\nname = "unrelated"\nversion = "9.9.9"\n',
+                encoding="utf-8",
+            )
+
+        self._assert_rejected(repo, base, "alpha", mutate, "unattributable_lock_change")
+
     def test_standalone_lock_reachable_transitive_identity_mismatch_is_rejected(self) -> None:
         repo, base = self._standalone_transitive_fixture()
         self._assert_allowed(
