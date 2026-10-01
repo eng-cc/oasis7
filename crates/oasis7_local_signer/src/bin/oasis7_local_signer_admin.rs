@@ -87,10 +87,10 @@ fn execute(args: &[String]) -> Result<serde_json::Value, CliError> {
     let command = parse_command(args)?;
     match command {
         Command::InstallDryRun => Err(CliError::unavailable(
-            "initial host installation is not implemented; use the read-only installer preflight",
+            "use the independently approved packaged install-release.py plan/apply entrypoint",
         )),
         Command::InstallApply => Err(CliError::unavailable(
-            "initial host installation is gated until the macOS ownership/ACL/sudo/Codex evidence adapter is verified; no host changes were made",
+            "use the independently approved packaged install-release.py plan/apply entrypoint; no host changes were made",
         )),
         Command::BackupPrepare => Err(CliError::recovery(
             "backup is not implemented; no snapshot was created",
@@ -379,10 +379,8 @@ fn read_candidate(path: &Path, installation: &InstallationConfig) -> Result<Vec<
 
 fn candidate_owner_uid(path: &Path, installation: &InstallationConfig) -> Result<u32, CliError> {
     let mut matching = installation.callers.iter().filter_map(|caller| {
-        let caller_root = Path::new(&installation.store_dir)
-            .join("work")
-            .join(&caller.work_subdir);
-        let relative = path.strip_prefix(&caller_root).ok()?;
+        let caller_root = Path::new(&caller.work_dir);
+        let relative = path.strip_prefix(caller_root).ok()?;
         let mut components = relative.components();
         let Some(Component::Normal(job_id)) = components.next() else {
             return None;
@@ -450,7 +448,7 @@ mod tests {
 
     fn installation(callers: Vec<CallerBinding>) -> InstallationConfig {
         InstallationConfig {
-            schema_version: "oasis7.local_signer_installation.v2".to_owned(),
+            schema_version: "oasis7.local_signer_installation.v3".to_owned(),
             installation_id: "installation-01".to_owned(),
             deployment_id: "deployment-01".to_owned(),
             store_dir: "/var/lib/oasis7-local-signer".to_owned(),
@@ -470,39 +468,42 @@ mod tests {
     fn candidate_reads_are_bound_to_exactly_one_caller_work_root() {
         let configured = installation(vec![CallerBinding {
             uid: 501,
-            work_subdir: "caller-501".to_owned(),
+            work_dir: "/caller-jobs/caller-501".to_owned(),
+            work_device_id: 1,
+            work_inode: 2,
         }]);
-        let candidate =
-            Path::new("/var/lib/oasis7-local-signer/work/caller-501/job-01/policy.json");
+        let candidate = Path::new("/caller-jobs/caller-501/job-01/policy.json");
         assert_eq!(
             super::candidate_owner_uid(candidate, &configured)
                 .expect("configured caller work root"),
             501
         );
 
-        let outside =
-            Path::new("/var/lib/oasis7-local-signer/work/caller-501-evil/job-01/policy.json");
+        let outside = Path::new("/caller-jobs/caller-501-evil/job-01/policy.json");
         assert_eq!(
             super::candidate_owner_uid(outside, &configured)
                 .expect_err("prefix collision is outside the caller root")
                 .code,
             "AUTHORIZATION_DENIED"
         );
-        let missing_job = Path::new("/var/lib/oasis7-local-signer/work/caller-501/policy.json");
+        let missing_job = Path::new("/caller-jobs/caller-501/policy.json");
         assert!(super::candidate_owner_uid(missing_job, &configured).is_err());
 
         let ambiguous = installation(vec![
             CallerBinding {
                 uid: 501,
-                work_subdir: "caller-shared".to_owned(),
+                work_dir: "/caller-jobs/caller-shared".to_owned(),
+                work_device_id: 1,
+                work_inode: 2,
             },
             CallerBinding {
                 uid: 502,
-                work_subdir: "caller-shared".to_owned(),
+                work_dir: "/caller-jobs/caller-shared".to_owned(),
+                work_device_id: 1,
+                work_inode: 2,
             },
         ]);
-        let shared_path =
-            Path::new("/var/lib/oasis7-local-signer/work/caller-shared/job-01/policy.json");
+        let shared_path = Path::new("/caller-jobs/caller-shared/job-01/policy.json");
         assert_eq!(
             super::candidate_owner_uid(shared_path, &ambiguous)
                 .expect_err("ambiguous caller root fails closed")

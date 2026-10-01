@@ -10,7 +10,8 @@
 - 模块标准执行入口：`doc/scripts/prd.md`
 - governance 归并说明：`doc/scripts/governance/README.md`
 - pre-commit 专题路由：`doc/scripts/precommit/README.md`
-- WASM 历史专题路由：`doc/scripts/wasm/README.md`
+- WASM 发布级 pipeline：`doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md`
+- WASM 历史追溯：`doc/world-runtime/wasm/evidence.md#historical-nightly-build-std-provenance`
 
 | 专题 PRD | 专题设计文档 | 专题项目文档 |
 | --- | --- | --- |
@@ -22,6 +23,4 @@
 - 专题稳定语义使用 `*.prd.md`、`*.design.md` 与 evidence/runbook；不再创建或要求 GitHub task issue evidence comments 配对。
 - 首次选择 pre-commit 的当前门禁契约或失败修复流程时，先读
   `doc/scripts/precommit/README.md`；本页保留精确文件检索。
-- 首次进入 WASM 专题时，先读 `doc/scripts/wasm/README.md`；它会把 absorbed historical
-  build-std 记录与 world-runtime 的发布级 canonical pipeline 分开。历史记录位于
-  `doc/world-runtime/wasm/evidence.md#historical-nightly-build-std-provenance`。
+- WASM 当前发布要求由 world-runtime canonical pipeline 承接；已吸收的 nightly/build-std 参数、CI 约束与 hash 漂移背景只在上述 evidence historical provenance 中追溯，不定义 Docker-only publishable build、receipt、single canonical token 或 cross-host evidence。

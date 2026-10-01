@@ -15,7 +15,7 @@
     },
     {
       "path": "doc/.governance/document-semantic-review-overrides.json",
-      "content_sha256": "97f45457e226d3eda4805d3f062a6da8d1b00da07515fae2a69844fbcb5b9356"
+      "content_sha256": "0fdf06b932fe116159341f57f7fde874c0b97187b31c3531a9c345dd5a3c6179"
     },
     {
       "path": "doc/testing/evidence/inventory.json",
@@ -567,7 +567,7 @@
     },
     {
       "path": "doc/engineering/workflow/source-of-truth.md",
-      "content_sha256": "0347f520030d45302ecccbee2fc1f5f8c4c3666dbd6513b8ca97b4c469e584cc",
+      "content_sha256": "1662e463adad6ecd2c1caedbc068e169188324c8ee9ce77e9315c92c12ea1a43",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -1043,7 +1043,7 @@
     },
     {
       "path": "doc/headless-runtime/README.md",
-      "content_sha256": "5ecbeb60696511701826698d165e6a83c93067e09944beff74dff0efaff02351",
+      "content_sha256": "bc5c4e0c75f18ae9f4e409a491643b6e34cad572b12bb1c3d1e060836f15a80c",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/headless-runtime/README.md",
@@ -1071,7 +1071,7 @@
     },
     {
       "path": "doc/headless-runtime/design.md",
-      "content_sha256": "80279ab6c53b52ef7fa18b1c6f7c604012808fe2b4120211534be791f5036903",
+      "content_sha256": "1b8e20e16fdd61b7f67425a84738f57d2ca229cfe5d3da1b4b0a917ddcfae1a0",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/headless-runtime/README.md",
@@ -1084,22 +1084,8 @@
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
     },
     {
-      "path": "doc/headless-runtime/nonviewer/README.md",
-      "content_sha256": "5af938440a13d558c4e36251373dc3180119332d27f35cd90d948528e6286a52",
-      "registry_type": "professional_domain",
-      "structural_owner": "runtime_engineer",
-      "authority_entry": "doc/headless-runtime/README.md",
-      "authority_layer": "professional_domain",
-      "semantic_decision_owner": "runtime_engineer",
-      "object_kind": "landing",
-      "lifecycle_candidate": "active_candidate",
-      "inventory_disposition": "retain_for_owner_review",
-      "routing_batch": "headless-runtime-corpus-review",
-      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
-    },
-    {
       "path": "doc/headless-runtime/prd.index.md",
-      "content_sha256": "f68f5f974e800d91689c4bff4378453cbce0916c26bc8c2bfa56ff44d9deea32",
+      "content_sha256": "0ea09f38b36986bc2780acd496402a600814f87606fcd7b0cedf74d244fa024b",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/headless-runtime/README.md",
@@ -1897,7 +1883,7 @@
     },
     {
       "path": "doc/p2p/prd.index.md",
-      "content_sha256": "5454a10a427f3be5d86404f74695be4288976e724c67eb0befdbd5d8ac48c890",
+      "content_sha256": "3165e23b3f86c8503e956ee0cf9018e0cd520825b05b0491c9e8a6bc8f36f64d",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1911,7 +1897,7 @@
     },
     {
       "path": "doc/p2p/prd.md",
-      "content_sha256": "c6cbf1ce0f6b962e8531ce3768464a67667dc7b85765ad5093dc7f29b58b1c84",
+      "content_sha256": "e679858b7fefcad26b06b5aff30cb9d6537a60b1cc9fd81320b2987dfefe2f44",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -2359,7 +2345,7 @@
     },
     {
       "path": "doc/playability_test_result/topics/industrial-onboarding-required-tier-cards-2026-03-15.md",
-      "content_sha256": "00c298722497e7dfde6465da9fa4cd757c73256a67e5fd21327cb504c0918a9a",
+      "content_sha256": "e6406ecdbb8ee3bcc5ae13876257e40f067b75c72cfb3482ba90fa7eceec4a3c",
       "registry_type": "evidence_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/playability_test_result/README.md",
@@ -2401,7 +2387,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/agent-conversation-and-prompt-control.design.md",
-      "content_sha256": "8268a3c308c1aafb3beeb0b35348a0ee61ebdc889413bf76c52137166ef4001c",
+      "content_sha256": "303f2d58e05af3abfd6faf8aec939b2addfb58fbf25d99574eff88d213df5c0f",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2415,7 +2401,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/agent-conversation-and-prompt-control.prd.md",
-      "content_sha256": "d850a26543b028940ae5d7d43d8d5919077e591245a5b0d627f64a6bd6295a6b",
+      "content_sha256": "fc3b2772d40ff53020400d32e6cfab9f8b921cb8ef5d547450b2ccb6d0dae8b7",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2471,7 +2457,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/player-readable-world-stage.prd.md",
-      "content_sha256": "f7eb1238299df179b0ff33aa1dadff4b32e4335952671546fcf02a558a3078c6",
+      "content_sha256": "1c815761cc57bd927381add8cb20f9d6a5ca2d69c9e451f70ed7236d9477debd",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2919,7 +2905,7 @@
     },
     {
       "path": "doc/readme/gap/README.md",
-      "content_sha256": "9d46d9463a911109735ab48d0f27a419f74505f589ac7cd59e1bc71077429747",
+      "content_sha256": "fb7e54535a07f74ba5e0a7aeb13fc23a2b181baee26f02e55853ef139e65749f",
       "registry_type": "professional_domain",
       "structural_owner": "liveops_community",
       "authority_entry": "doc/readme/README.md",
@@ -3437,7 +3423,7 @@
     },
     {
       "path": "doc/scripts/README.md",
-      "content_sha256": "53410d7d0d9b9758393dbeb1f9beddf44c2edf8c999d21f282f730dba4bf0de1",
+      "content_sha256": "a3817a534c5569f2ec7a9f4c3e2d960f7b5009b73cdcca7d89d5e9dd7dbd0c2d",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/scripts/README.md",
@@ -3493,7 +3479,7 @@
     },
     {
       "path": "doc/scripts/prd.index.md",
-      "content_sha256": "e2a00f99866ceb915fb63b286469e904b169fa9d1c904b3a44baef8f6fec9cb7",
+      "content_sha256": "b0a1c085417f2d2bd57cd7bf25c4c87e1050328e06b2a9854981e2315fd3159e",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/scripts/README.md",
@@ -3507,7 +3493,7 @@
     },
     {
       "path": "doc/scripts/prd.md",
-      "content_sha256": "1b3a90550af6f1fd7f31c0243536f8dc990096d582e2366728a737bf9ce2d0a3",
+      "content_sha256": "55035d342693fffcf09053e5f806b9ab9ee85e565c60d3a589967ef72251b83e",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/scripts/README.md",
@@ -3542,20 +3528,6 @@
       "authority_layer": "professional_domain",
       "semantic_decision_owner": "repository_health_engineer",
       "object_kind": "prd",
-      "lifecycle_candidate": "active_candidate",
-      "inventory_disposition": "retain_for_owner_review",
-      "routing_batch": "scripts-corpus-review",
-      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
-    },
-    {
-      "path": "doc/scripts/wasm/README.md",
-      "content_sha256": "79fb071b32ce6c5cd7fd35817191ceaa9e601084ea8c34391b3f1759f475c676",
-      "registry_type": "professional_domain",
-      "structural_owner": "repository_health_engineer",
-      "authority_entry": "doc/scripts/README.md",
-      "authority_layer": "professional_domain",
-      "semantic_decision_owner": "repository_health_engineer",
-      "object_kind": "landing",
       "lifecycle_candidate": "active_candidate",
       "inventory_disposition": "retain_for_owner_review",
       "routing_batch": "scripts-corpus-review",
@@ -4005,6 +3977,20 @@
       "semantic_decision_owner": "qa_engineer",
       "object_kind": "design",
       "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "testing-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/testing/ci/codeql-operations.md",
+      "content_sha256": "09cff2bc78a483d9d4dfc40327428f3216e77fd088d5252fcb011fe084616524",
+      "registry_type": "professional_domain",
+      "structural_owner": "qa_engineer",
+      "authority_entry": "doc/testing/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "qa_engineer",
+      "object_kind": "markdown_record",
+      "lifecycle_candidate": "review_required",
       "inventory_disposition": "retain_for_owner_review",
       "routing_batch": "testing-corpus-review",
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
@@ -5747,7 +5733,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-observability-timing-metrics.design.md",
-      "content_sha256": "e7a9c0d94ee0443d9a5a269d8e1cfcf56fb5dcc7b3c04af8c5d4351c1d2a7196",
+      "content_sha256": "20db1c4b11fef950a4955343c95790b46e42585d9cf13ca3b849487ca6f91798",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -6419,7 +6405,7 @@
     },
     {
       "path": "doc/world-simulator/prd.index.md",
-      "content_sha256": "ede64ccefa4827b4d4972681a3b7113a392867e9da031d35981bf2d1dcca14ec",
+      "content_sha256": "392361885a067770cf42bc5f6cd8ee9ea4f05d975f06dc970de04dba7fd95246",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6629,7 +6615,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/README.md",
-      "content_sha256": "88b9b47f43ba79b0179c4b028144d3a66c99f7598ff1921f16c12b77adaf33c9",
+      "content_sha256": "12e2f795af5fa8a3c9a7f4f5de7bc613bcba3231b89e80b004a9f38900091106",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6670,62 +6656,6 @@
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
     },
     {
-      "path": "doc/world-simulator/viewer/viewer-chat-ime-egui-bridge.design.md",
-      "content_sha256": "74b8a8006da91c4db821899ed68ac5e1499fc1c794884f2c8d483a4b72e11038",
-      "registry_type": "professional_domain",
-      "structural_owner": "runtime_engineer",
-      "authority_entry": "doc/world-simulator/README.md",
-      "authority_layer": "professional_domain",
-      "semantic_decision_owner": "runtime_engineer",
-      "object_kind": "design",
-      "lifecycle_candidate": "active_candidate",
-      "inventory_disposition": "retain_for_owner_review",
-      "routing_batch": "world-simulator-corpus-review",
-      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
-    },
-    {
-      "path": "doc/world-simulator/viewer/viewer-chat-ime-egui-bridge.prd.md",
-      "content_sha256": "f46f1efcec6bd11d3b2f2e1e94a5b645537567f1212f1f195563ff4381a1a920",
-      "registry_type": "professional_domain",
-      "structural_owner": "runtime_engineer",
-      "authority_entry": "doc/world-simulator/README.md",
-      "authority_layer": "professional_domain",
-      "semantic_decision_owner": "runtime_engineer",
-      "object_kind": "prd",
-      "lifecycle_candidate": "active_candidate",
-      "inventory_disposition": "retain_for_owner_review",
-      "routing_batch": "world-simulator-corpus-review",
-      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
-    },
-    {
-      "path": "doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.design.md",
-      "content_sha256": "530c62850b193dbdf33a01d26bfe326d1106792910b2c26e5a618ce9d08878cc",
-      "registry_type": "professional_domain",
-      "structural_owner": "runtime_engineer",
-      "authority_entry": "doc/world-simulator/README.md",
-      "authority_layer": "professional_domain",
-      "semantic_decision_owner": "runtime_engineer",
-      "object_kind": "design",
-      "lifecycle_candidate": "active_candidate",
-      "inventory_disposition": "retain_for_owner_review",
-      "routing_batch": "world-simulator-corpus-review",
-      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
-    },
-    {
-      "path": "doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.prd.md",
-      "content_sha256": "464eb449742454d32cb6e57d895ba48d9ffbdcec679bf92392aa5f69a23e64f3",
-      "registry_type": "professional_domain",
-      "structural_owner": "runtime_engineer",
-      "authority_entry": "doc/world-simulator/README.md",
-      "authority_layer": "professional_domain",
-      "semantic_decision_owner": "runtime_engineer",
-      "object_kind": "prd",
-      "lifecycle_candidate": "active_candidate",
-      "inventory_disposition": "retain_for_owner_review",
-      "routing_batch": "world-simulator-corpus-review",
-      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
-    },
-    {
       "path": "doc/world-simulator/viewer/viewer-control-plane-split-live-playback.design.md",
       "content_sha256": "80490b476ad40841d249f0bcc31825d11760d6bb0bfd8a2e56756222b2d7a767",
       "registry_type": "professional_domain",
@@ -6742,34 +6672,6 @@
     {
       "path": "doc/world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md",
       "content_sha256": "43ffcc94d6687cbf9b07b3d25aa406dba666f74e4f7b59fc200800b3cbc5b956",
-      "registry_type": "professional_domain",
-      "structural_owner": "runtime_engineer",
-      "authority_entry": "doc/world-simulator/README.md",
-      "authority_layer": "professional_domain",
-      "semantic_decision_owner": "runtime_engineer",
-      "object_kind": "prd",
-      "lifecycle_candidate": "active_candidate",
-      "inventory_disposition": "retain_for_owner_review",
-      "routing_batch": "world-simulator-corpus-review",
-      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
-    },
-    {
-      "path": "doc/world-simulator/viewer/viewer-egui-right-panel.design.md",
-      "content_sha256": "f9ef01ae57c054e7d5c3ca3e3b2b1d7d30fc8aa3dab754f9c2f7e7f6341c40dc",
-      "registry_type": "professional_domain",
-      "structural_owner": "runtime_engineer",
-      "authority_entry": "doc/world-simulator/README.md",
-      "authority_layer": "professional_domain",
-      "semantic_decision_owner": "runtime_engineer",
-      "object_kind": "design",
-      "lifecycle_candidate": "active_candidate",
-      "inventory_disposition": "retain_for_owner_review",
-      "routing_batch": "world-simulator-corpus-review",
-      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
-    },
-    {
-      "path": "doc/world-simulator/viewer/viewer-egui-right-panel.prd.md",
-      "content_sha256": "6439319a4badf765fe908b3b077ed84e0cfe6b781dee0c3c29a9bbfd977922b7",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6838,36 +6740,8 @@
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
     },
     {
-      "path": "doc/world-simulator/viewer/viewer-industry-graph-semantic-zoom.design.md",
-      "content_sha256": "fbccee8319f2390910d72e4cf20852232f9071b8961963d3c41af4d891681b08",
-      "registry_type": "professional_domain",
-      "structural_owner": "runtime_engineer",
-      "authority_entry": "doc/world-simulator/README.md",
-      "authority_layer": "professional_domain",
-      "semantic_decision_owner": "runtime_engineer",
-      "object_kind": "design",
-      "lifecycle_candidate": "active_candidate",
-      "inventory_disposition": "retain_for_owner_review",
-      "routing_batch": "world-simulator-corpus-review",
-      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
-    },
-    {
-      "path": "doc/world-simulator/viewer/viewer-industry-graph-semantic-zoom.prd.md",
-      "content_sha256": "1c7e96e4190a8d9522c0126e61e18eb818e0bd3fa57c7f7ffe622ebecc8da0ac",
-      "registry_type": "professional_domain",
-      "structural_owner": "runtime_engineer",
-      "authority_entry": "doc/world-simulator/README.md",
-      "authority_layer": "professional_domain",
-      "semantic_decision_owner": "runtime_engineer",
-      "object_kind": "prd",
-      "lifecycle_candidate": "active_candidate",
-      "inventory_disposition": "retain_for_owner_review",
-      "routing_batch": "world-simulator-corpus-review",
-      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
-    },
-    {
       "path": "doc/world-simulator/viewer/viewer-manual.manual.md",
-      "content_sha256": "35b2f5f5a7a0a7f63f56cc528a441397a2c8abe4949bd3990e492975f712fbeb",
+      "content_sha256": "24ba49b6255c96ac4e670e3073d7cf87dc645232797029fcaa729cbf02e8bd10",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -7021,7 +6895,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.design.md",
-      "content_sha256": "8ee4861cc1e73c1c7c949dbf4242c0a52f684287f78a292bb5b92a13b516137a",
+      "content_sha256": "e0bf09dd975bcf4bc1c7144a7dc5a410c2705834772d57a98eddea5085779290",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -7035,7 +6909,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md",
-      "content_sha256": "d1bdf025ee537bc9eb0e6ba1e11b2bf562ae8a23c801f37c3ef844a012542286",
+      "content_sha256": "6727c2aa2fdea281ddbc66aece823fa332e0f5b59a7ab66e70cf75a05b38c067",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -7105,7 +6979,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-web-build-truth.prd.md",
-      "content_sha256": "1fb3485deef50d27d6139f63c362fe931882111cd192a600c8e98963aeb57caf",
+      "content_sha256": "7c5b9054c99739f6648a432497f0e547f3218cac589805d23339011f0ed0ca5b",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -7161,7 +7035,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-web-semantic-test-api.prd.md",
-      "content_sha256": "d782e01d989880f5160bfd72645cf528b4b96858fefc170542895c23e757480a",
+      "content_sha256": "72df8bea0ae58d6e6b441af9ba165b10425b8393f632c4fcb957163338dfebfb",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",

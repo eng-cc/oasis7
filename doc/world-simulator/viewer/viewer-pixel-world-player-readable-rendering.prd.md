@@ -40,6 +40,15 @@
 - 不把 action button 直接搬进像素地图；命令面仍在现有 Command surface。
 - 不把 Fragment block 设为 hover/select target。
 
+<a id="industry-detail-requirements"></a>
+### 产业图谱与空间信息层级：目标合同
+
+- 受支持的产业 projection 应统一工厂/配方/产品/物流节点、物料/电力/数据流向、层级/阶段/状态和 location/Agent/module 定位目标；吞吐、损耗、瓶颈、拥塞与告警仅展示权威数据。
+- 当权威数据支持 P3 分层档案时，符号应可辨 R1~R5 层级及 bootstrap/scale/governance 阶段，并独立表达瓶颈/拥塞/告警；不得仅凭 id/tag 推断而包装为确认事实。
+- World/Region/Node 层级分别保留热区/主干流、区域关系、配方/库存；文本与舞台消费一致事实，符号保持可读，密度裁剪优先保留目标、相关路线和 blocker，限制节点/边负载。
+- 根因推断不得伪装为确认原因，缺失数据明确未知；只从受支持 snapshot/event 派生，不猜测字段，不把环境活动当作玩家进展。
+- 本节为吸收的持续目标。当前 agents/links/hotspots/commercial HUD 不等于完整产业图谱、吞吐流、R1~R5/阶段符号或三档 semantic zoom；完整实现及 external headed 验收仍有缺口。
+
 ## 3. User Stories
 - As a player, I want the pixel-world stage to show my current objective and next move before renderer diagnostics, so that the screen feels like a game surface instead of an operator console.
 - As a producer, I want the stage to separate player leverage from ambient world activity, so that a lively simulation is not mistaken for meaningful play.
