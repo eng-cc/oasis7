@@ -5,6 +5,14 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DURABLE_STORE="$SCRIPT_DIR/workflow-durable-store.py"
 journal_write() { python3 "$DURABLE_STORE" write-journal --path "$1" --json "$2"; }
 
+# The UID-bound v2 path accepts no caller-selected resource identities. Keep
+# the existing direct arguments below as the historical-v1 adapter.
+for cleanup_arg in "$@"; do
+  if [[ "$cleanup_arg" == "--delivery" ]]; then
+    exec python3 "$SCRIPT_DIR/resource-cleanup-executor.py" "$@"
+  fi
+done
+
 record_remote_branch_blocker() {
   local observed_tip="$1" blocker_json
   [[ -f "$INTENT_JOURNAL" ]] || die "cannot persist remote branch blocker without cleanup intent"
@@ -105,6 +113,73 @@ worktree_is_registered() {
   return 1
 }
 
+legacy_worktree_operation() {
+  local mode="$1" result
+  result="$(python3 - "$SCRIPT_DIR" "$REPO_ROOT" "$MAPPING" "$TASK_UID" "$WORKTREE" "$BRANCH" "$BRANCH_TIP" "$mode" <<'PY'
+import importlib.util,json,pathlib,sys
+script_dir,repo,mapping,uid,path,branch,tip,mode=sys.argv[1:]
+sys.path.insert(0,script_dir)
+spec=importlib.util.spec_from_file_location('resource_cleanup_executor',pathlib.Path(script_dir)/'resource-cleanup-executor.py')
+if spec is None or spec.loader is None: raise SystemExit('resource cleanup safety helper is unavailable')
+module=importlib.util.module_from_spec(spec); sys.modules[spec.name]=module; spec.loader.exec_module(module)
+mapping_path=pathlib.Path(mapping); repo_path=pathlib.Path(repo).resolve(); target=pathlib.Path(path).resolve()
+records=(json.loads(mapping_path.read_text(encoding='utf-8')).get('tasks') or {})
+record=records.get(uid) or {}; registration=record.get('worktree_registration')
+if not isinstance(registration,dict) or set(registration)!={'common_dir','admin_dir','instance_id'}:
+ raise SystemExit('task worktree has no trusted registration-instance binding; retaining legacy worktree')
+if pathlib.Path(record.get('canonical_worktree','')).resolve()!=target:
+ raise SystemExit('task worktree path changed; retaining legacy worktree')
+resource_id={'path':str(target),'common_dir':registration.get('common_dir'),
+             'admin_dir':registration.get('admin_dir'),'instance_id':registration.get('instance_id'),
+             'expected_head_oid':tip}
+row=module._worktree_state(repo_path,mapping_path,uid,resource_id,branch,mutate=(mode=='remove'))
+allowed=('removed','already_absent') if mode=='remove' else ('ready','already_absent')
+if row.get('state') not in allowed:
+ raise SystemExit(f"{row.get('reason','cleanup blocked')}: {row.get('state')}")
+print(json.dumps(row,sort_keys=True))
+PY
+)" || die "legacy worktree safety check failed: $result"
+  printf '%s\n' "$result"
+}
+
+legacy_local_branch_check() {
+  local result
+  result="$(python3 - "$SCRIPT_DIR" "$REPO_ROOT" "$MAPPING" "$TASK_UID" "refs/heads/$BRANCH" "$BRANCH_TIP" <<'PY'
+import importlib.util,json,pathlib,sys
+script_dir,repo,mapping,uid,full_ref,expected=sys.argv[1:]
+sys.path.insert(0,script_dir)
+spec=importlib.util.spec_from_file_location('resource_cleanup_executor',pathlib.Path(script_dir)/'resource-cleanup-executor.py')
+if spec is None or spec.loader is None: raise SystemExit('resource cleanup safety helper is unavailable')
+module=importlib.util.module_from_spec(spec); sys.modules[spec.name]=module; spec.loader.exec_module(module)
+repo_path=pathlib.Path(repo).resolve(); resource={'full_ref':full_ref,'expected_oid':expected}
+row=module._local_branch_state(repo_path,resource,module._worktree_rows(repo_path),mutate=False)
+if row.get('state')!='ready': raise SystemExit(f"{row.get('reason','branch cleanup blocked')}: {row.get('state')}")
+print(json.dumps(row,sort_keys=True))
+PY
+  )" || die "legacy local branch safety check failed: $result"
+  printf '%s\n' "$result"
+}
+
+update_intent_flag() {
+  local field="$1" value="$2" update
+  [[ -f "$INTENT_JOURNAL" ]] || die "cannot update cleanup intent before it is durable"
+  update="$(python3 - "$INTENT_JOURNAL" "$TASK_UID" "$RECORDED_REPOSITORY" "$WORKTREE" "$BRANCH" "$field" "$value" <<'PY'
+import json,pathlib,sys
+p=pathlib.Path(sys.argv[1]); uid,repository,worktree,branch,field,value=sys.argv[2:]
+data=json.loads(p.read_text(encoding='utf-8'))
+expected={'receipt_type':'oasis7_cleanup_intent','task_uid':uid,'repository':repository,'worktree':worktree,'branch':branch}
+for key,want in expected.items():
+ if data.get(key)!=want: raise SystemExit(f'post-merge-cleanup: cleanup intent {key} mismatch')
+old=data.get(field)
+if old is True and value!='true': raise SystemExit(f'post-merge-cleanup: cleanup intent {field} cannot be reversed')
+data[field]=(value=='true')
+data['revision']=int(data.get('revision',0))+1
+print(json.dumps(data))
+PY
+)" || die "cleanup intent update failed: $field"
+  journal_write "$INTENT_JOURNAL" "$update" || die "cleanup intent update failed: $field"
+}
+
 die() { echo "post-merge-cleanup: $*" >&2; exit 1; }
 usage() {
   echo "Usage: $0 --repo-root <path> --worktree <path> --branch <name> --main-ref <ref> --task-uid <uid> --pr-receipt <json> --main-sync-receipt <json> --terminal-receipt-output <json> [--patch-equivalence-receipt <json>] [--dry-run]"
@@ -200,7 +275,7 @@ REPO_COMMON_DIR="$(cd "$REPO_ROOT" && cd "$(git rev-parse --git-common-dir)" && 
   || die "canonical repository common-dir cannot be resolved"
 
 INTENT_JOURNAL="$(dirname "$TERMINAL_RECEIPT_OUTPUT")/cleanup-intent.json"
-INTENT_STATE="0 0 0"
+INTENT_STATE="0 0 0 0 0 0 0 0"
 if [[ -f "$INTENT_JOURNAL" ]]; then
   INTENT_STATE="$(python3 - "$INTENT_JOURNAL" "$TASK_UID" "$RECORDED_REPOSITORY" "$WORKTREE" "$BRANCH" <<'PY'
 import json,sys
@@ -208,7 +283,10 @@ r=json.load(open(sys.argv[1],encoding='utf-8'))
 expected={'receipt_type':'oasis7_cleanup_intent','task_uid':sys.argv[2],'repository':sys.argv[3],'worktree':sys.argv[4],'branch':sys.argv[5]}
 for key,value in expected.items():
  if r.get(key)!=value: raise SystemExit(f'post-merge-cleanup: cleanup intent mismatch on retry: {key}')
-print(int(bool(r.get('worktree_removed'))),int(bool(r.get('branch_deleted'))),int(bool(r.get('terminal_receipt_committed'))))
+print(int(bool(r.get('worktree_removed'))),int(bool(r.get('branch_deleted'))),int(bool(r.get('terminal_receipt_committed'))),
+      int(bool(r.get('worktree_remove_started'))),int(bool(r.get('local_branch_delete_started'))),
+      int(bool(r.get('remote_branch_delete_started'))),int(bool(r.get('remote_branch_released'))),
+      int(bool(r.get('remote_branch_absent_observed'))))
 PY
 )" || die "cleanup intent validation failed"
   JOURNAL_WORKTREE_COMMON_DIR="$(python3 - "$INTENT_JOURNAL" <<'PY'
@@ -228,6 +306,11 @@ fi
 WORKTREE_REMOVED="$(printf '%s' "$INTENT_STATE" | awk '{print $1}')"
 BRANCH_DELETED="$(printf '%s' "$INTENT_STATE" | awk '{print $2}')"
 TERMINAL_COMMITTED="$(printf '%s' "$INTENT_STATE" | awk '{print $3}')"
+WORKTREE_REMOVE_STARTED="$(printf '%s' "$INTENT_STATE" | awk '{print $4}')"
+LOCAL_BRANCH_DELETE_STARTED="$(printf '%s' "$INTENT_STATE" | awk '{print $5}')"
+REMOTE_BRANCH_DELETE_STARTED="$(printf '%s' "$INTENT_STATE" | awk '{print $6}')"
+REMOTE_BRANCH_RELEASED="$(printf '%s' "$INTENT_STATE" | awk '{print $7}')"
+REMOTE_BRANCH_ABSENT_OBSERVED="$(printf '%s' "$INTENT_STATE" | awk '{print $8}')"
 WORKTREE_REAPPEARED=0
 WORKTREE_EFFECT_RECOVERED=0
 BRANCH_EFFECT_RECOVERED=0
@@ -239,6 +322,23 @@ if [[ "$WORKTREE_REMOVED" != 1 && ! -e "$WORKTREE" && -f "$INTENT_JOURNAL" ]]; t
   WORKTREE_REMOVED=1
   WORKTREE_EFFECT_RECOVERED=1
 fi
+if [[ "$WORKTREE_REMOVE_STARTED" == 1 && "$WORKTREE_REMOVED" != 1 && -e "$WORKTREE" ]]; then
+  die "path_reused_or_recreated: prior cleanup attempt may have removed this legacy worktree instance"
+fi
+if [[ "$LOCAL_BRANCH_DELETE_STARTED" == 1 && "$BRANCH_DELETED" != 1 ]] \
+    && git -C "$REPO_ROOT" show-ref --verify --quiet "refs/heads/$BRANCH"; then
+  die "local_branch_recreated_after_uncertain_delete: prior cleanup intent cannot authorize deleting this ref"
+fi
+if [[ "$REMOTE_BRANCH_RELEASED" == 1 || "$REMOTE_BRANCH_DELETE_STARTED" == 1 || "$REMOTE_BRANCH_ABSENT_OBSERVED" == 1 ]]; then
+  REMOTE_BRANCH_LINE="$(git -C "$REPO_ROOT" ls-remote --heads origin "refs/heads/$BRANCH")" \
+    || die "remote task branch readback failed during cleanup resume"
+  if [[ -n "$REMOTE_BRANCH_LINE" ]]; then
+    die "remote_branch_recreated_after_cleanup_intent: refusing to delete a possibly reused ref"
+  elif [[ "$REMOTE_BRANCH_DELETE_STARTED" == 1 && "$REMOTE_BRANCH_RELEASED" != 1 ]]; then
+    update_intent_flag remote_branch_released true
+    REMOTE_BRANCH_RELEASED=1
+  fi
+fi
 if [[ "$WORKTREE_REMOVED" == 1 && "$BRANCH_DELETED" != 1 ]] \
     && ! git -C "$REPO_ROOT" show-ref --verify --quiet "refs/heads/$BRANCH"; then
   [[ -f "$INTENT_JOURNAL" && -n "$JOURNAL_BRANCH_TIP" ]] \
@@ -248,24 +348,9 @@ if [[ "$WORKTREE_REMOVED" == 1 && "$BRANCH_DELETED" != 1 ]] \
 fi
 if [[ "$WORKTREE_REMOVED" == 1 ]]; then
   if [[ -e "$WORKTREE" ]]; then
-    # A crash/retry race may recreate the exact canonical worktree.  Reconcile
-    # it by live identity rather than treating the journal bit as permission
-    # to trust an arbitrary path.
-    WORKTREE_REAPPEARED=1
-    worktree_is_registered "$REPO_ROOT" "$WORKTREE" \
-      || die "cleanup journal says worktree_removed but path is not registered"
-    git -C "$WORKTREE" rev-parse --is-inside-work-tree >/dev/null 2>&1 \
-      || die "reappeared cleanup worktree is not a git worktree"
-    WORKTREE_COMMON_DIR="$(cd "$WORKTREE" && cd "$(git rev-parse --git-common-dir)" && pwd -P)" \
-      || die "reappeared cleanup worktree common-dir cannot be resolved"
-    [[ "$WORKTREE_COMMON_DIR" == "$REPO_COMMON_DIR" ]] \
-      || die "reappeared cleanup worktree common-dir mismatch against canonical repository"
-    [[ -z "$(git -C "$WORKTREE" status --porcelain --untracked-files=all)" ]] \
-      || die "reappeared cleanup worktree is dirty"
-    ACTUAL_BRANCH="$(git -C "$WORKTREE" symbolic-ref --quiet --short HEAD)" \
-      || die "reappeared cleanup worktree must be on a named branch"
-    BRANCH_TIP="$(git -C "$WORKTREE" rev-parse HEAD)" \
-      || die "reappeared cleanup worktree tip cannot be resolved"
+    # A v1 intent predates trusted registration-instance identity. Its old
+    # removal bit cannot authorize deleting a resource recreated at that path.
+    die "path_reused_or_recreated: historical cleanup intent cannot authorize deleting this worktree instance"
   else
     ! worktree_is_registered "$REPO_ROOT" "$WORKTREE" \
       || die "cleanup journal says worktree_removed but git still registers it"
@@ -305,10 +390,8 @@ if [[ -n "$JOURNAL_BRANCH_TIP" ]]; then
     || die "cleanup journal branch tip identity mismatch"
 fi
 if [[ "$BRANCH_DELETED" == 1 ]]; then
-  if [[ "$WORKTREE_REAPPEARED" != 1 ]]; then
-    ! git -C "$REPO_ROOT" show-ref --verify --quiet "refs/heads/$BRANCH" \
-      || die "cleanup journal says branch_deleted but branch still exists"
-  fi
+  ! git -C "$REPO_ROOT" show-ref --verify --quiet "refs/heads/$BRANCH" \
+    || die "cleanup journal says branch_deleted but the ref name has been reused"
 elif [[ "$WORKTREE_REMOVED" == 1 ]]; then
   git -C "$REPO_ROOT" show-ref --verify --quiet "refs/heads/$BRANCH" \
     || die "cleanup journal does not prove branch deletion and branch is already missing"
@@ -442,20 +525,27 @@ fi
 
 printf 'git -C %q worktree remove %q\n' "$REPO_ROOT" "$WORKTREE"
 if [[ "$PATCH_EQUIVALENCE_PROVEN" == 1 ]]; then
-  printf 'git -C %q branch -D %q # patch-equivalence proof\n' "$REPO_ROOT" "$BRANCH"
+  printf 'git -C %q update-ref -d %q %q # exact-OID compare-and-delete\n' "$REPO_ROOT" "refs/heads/$BRANCH" "$BRANCH_TIP"
 else
-  printf 'git -C %q branch -d %q\n' "$REPO_ROOT" "$BRANCH"
+  printf 'git -C %q update-ref -d %q %q # exact-OID compare-and-delete\n' "$REPO_ROOT" "refs/heads/$BRANCH" "$BRANCH_TIP"
 fi
 if [[ "$DRY_RUN" == "0" ]]; then
+  if [[ "$WORKTREE_REMOVED" != 1 ]]; then
+    legacy_worktree_operation check >/dev/null
+  fi
   INTENT_JOURNAL="$(dirname "$TERMINAL_RECEIPT_OUTPUT")/cleanup-intent.json"
   # A removed task path cannot be re-read; its linked-worktree identity is the
   # live canonical repository common-dir already checked above.
   JOURNAL_BACKFILL_COMMON_DIR="${WORKTREE_COMMON_DIR:-$REPO_COMMON_DIR}"
-  JOURNAL_JSON="$(python3 - "$INTENT_JOURNAL" "$TASK_UID" "$RECORDED_REPOSITORY" "$WORKTREE" "$BRANCH" "$JOURNAL_BACKFILL_COMMON_DIR" "$BRANCH_TIP" "$WORKTREE_EFFECT_RECOVERED" "$BRANCH_EFFECT_RECOVERED" <<'PY'
+  JOURNAL_JSON="$(python3 - "$INTENT_JOURNAL" "$TASK_UID" "$RECORDED_REPOSITORY" "$WORKTREE" "$BRANCH" "$JOURNAL_BACKFILL_COMMON_DIR" "$BRANCH_TIP" "$WORKTREE_EFFECT_RECOVERED" "$BRANCH_EFFECT_RECOVERED" "$MAPPING" <<'PY'
 import json,pathlib,sys
-p=pathlib.Path(sys.argv[1]); identity={"receipt_type":"oasis7_cleanup_intent","task_uid":sys.argv[2],
+mapping=pathlib.Path(sys.argv[10]); p=pathlib.Path(sys.argv[1]); identity={"receipt_type":"oasis7_cleanup_intent","task_uid":sys.argv[2],
  "repository":sys.argv[3],"worktree":sys.argv[4],"branch":sys.argv[5]}
 derived={"worktree_common_dir":sys.argv[6],"branch_tip":sys.argv[7]}
+record=(json.loads(mapping.read_text(encoding='utf-8')).get('tasks') or {}).get(sys.argv[2]) or {}
+registration=record.get('worktree_registration') or {}
+instance_id=registration.get('instance_id') if isinstance(registration,dict) else None
+if instance_id: derived['worktree_instance_id']=instance_id
 expected=dict(identity)
 if p.exists():
  old=json.loads(p.read_text());
@@ -475,9 +565,20 @@ if p.exists():
   elif value:
    expected[key]=value
  expected.update({k:bool(old.get(k)) for k in ('worktree_removed','branch_deleted','terminal_receipt_committed')})
+ for key in ('worktree_remove_started','local_branch_delete_started','remote_branch_delete_started',
+             'remote_branch_released','remote_branch_absent_observed'):
+  if key in old and not isinstance(old[key],bool): raise SystemExit(f'post-merge-cleanup: cleanup intent {key} is malformed')
+  expected[key]=bool(old.get(key))
 else:
  expected.update(derived)
- expected.update(worktree_removed=False,branch_deleted=False,terminal_receipt_committed=False)
+ expected.update(worktree_removed=False,branch_deleted=False,terminal_receipt_committed=False,
+                 worktree_remove_started=False,local_branch_delete_started=False,
+                 remote_branch_delete_started=False,remote_branch_released=False,
+                 remote_branch_absent_observed=False)
+ if p.exists():
+  for key,value in derived.items():
+   if key in old and old[key]!=value: raise SystemExit(f'post-merge-cleanup: cleanup intent mismatch on retry: {key}')
+   if key not in old and value: expected[key]=value
 expected['worktree_removed']=expected['worktree_removed'] or sys.argv[8]=='1'
 expected['branch_deleted']=expected['branch_deleted'] or sys.argv[9]=='1'
 expected['revision']=int((json.loads(p.read_text()).get('revision',0) if p.exists() else 0))+1
@@ -485,25 +586,21 @@ print(json.dumps(expected))
 PY
   )"; journal_write "$INTENT_JOURNAL" "$JOURNAL_JSON"
   if [[ "$WORKTREE_REMOVED" != 1 ]]; then
-    git -C "$REPO_ROOT" worktree remove "$WORKTREE"
+    update_intent_flag worktree_remove_started true
+    legacy_worktree_operation remove >/dev/null
     JOURNAL_JSON="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); d["worktree_removed"]=True; d["revision"]+=1; print(json.dumps(d))' "$INTENT_JOURNAL")"; journal_write "$INTENT_JOURNAL" "$JOURNAL_JSON"
-  elif [[ "$WORKTREE_REAPPEARED" == 1 ]]; then
-    # The journal proves a prior removal, not this newly registered instance;
-    # remove the reconciled canonical worktree before deleting its branch.
-    git -C "$REPO_ROOT" worktree remove "$WORKTREE"
   fi
-  if [[ "$BRANCH_DELETED" != 1 || "$WORKTREE_REAPPEARED" == 1 ]]; then
-    if [[ "$PATCH_EQUIVALENCE_PROVEN" == 1 ]]; then
-      # -D is safe only after the repository-generated patch proof above has
-      # bound this exact branch tip to the integration tree.
-      CURRENT_BRANCH_TIP="$(git -C "$REPO_ROOT" rev-parse --verify "refs/heads/$BRANCH^{commit}")" \
-        || die "patch-equivalence branch tip cannot be revalidated before deletion"
-      [[ "$CURRENT_BRANCH_TIP" == "$BRANCH_TIP" ]] \
-        || die "patch-equivalence branch tip changed before deletion"
-      git -C "$REPO_ROOT" branch -D "$BRANCH"
-    else
-      git -C "$REPO_ROOT" branch -d "$BRANCH"
-    fi
+  if [[ "$BRANCH_DELETED" != 1 ]]; then
+    legacy_local_branch_check >/dev/null
+    CURRENT_BRANCH_TIP="$(git -C "$REPO_ROOT" rev-parse --verify "refs/heads/$BRANCH^{commit}")" \
+      || die "task branch tip cannot be revalidated before deletion"
+    [[ "$CURRENT_BRANCH_TIP" == "$BRANCH_TIP" ]] \
+      || die "task branch tip changed before deletion"
+    update_intent_flag local_branch_delete_started true
+    git -C "$REPO_ROOT" update-ref -d "refs/heads/$BRANCH" "$BRANCH_TIP" \
+      || die "task branch exact-OID compare-and-delete failed"
+    ! git -C "$REPO_ROOT" show-ref --verify --quiet "refs/heads/$BRANCH" \
+      || die "task branch deletion readback found a reappeared ref"
     JOURNAL_JSON="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); d["branch_deleted"]=True; d["revision"]+=1; print(json.dumps(d))' "$INTENT_JOURNAL")"; journal_write "$INTENT_JOURNAL" "$JOURNAL_JSON"
   fi
   # The merged PR binds the exact head. Delete a same-head remote task branch
@@ -517,6 +614,7 @@ PY
         record_remote_branch_blocker "$REMOTE_BRANCH_TIP"
         die "durable cleanup blocker: remote task branch tip disagrees with merged PR head; inspect cleanup-intent.json before resuming"
       fi
+      update_intent_flag remote_branch_delete_started true
       if ! git -C "$REPO_ROOT" push --force-with-lease="refs/heads/$BRANCH:$REMOTE_BRANCH_TIP" \
         origin ":refs/heads/$BRANCH" >/dev/null; then
         REMOTE_BRANCH_LINE="$(git -C "$REPO_ROOT" ls-remote --heads origin "refs/heads/$BRANCH")" \
@@ -538,8 +636,10 @@ PY
         fi
         die "remote task branch deletion readback failed"
       fi
+      update_intent_flag remote_branch_released true
       resolve_remote_branch_blocker "matching_tip_deleted" "$BRANCH_TIP"
     else
+      update_intent_flag remote_branch_absent_observed true
       resolve_remote_branch_blocker "remote_ref_absent" ""
     fi
   fi

@@ -395,6 +395,8 @@ run_workflow_governance_operational_contract_tests() {
   run python3 ./scripts/pm/workflow-next.test.py
   run python3 ./scripts/pm/workflow-delivery-readiness.test.py
   run python3 ./scripts/pm/aggregate-task-completion.test.py
+  run python3 ./scripts/pm/terminal-delivery-protocol.test.py
+  run python3 ./scripts/pm/resource-cleanup-safety.test.py
   run python3 ./scripts/pm/ordered-aggregate-closeout.test.py
   run python3 ./scripts/pm/terminal-task-audit-aggregate.test.py
   run python3 ./scripts/pm/terminal-task-audit-project-semantics.test.py

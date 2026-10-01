@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
 """Finalize one receipt-proven terminal workflow transition idempotently."""
 from __future__ import annotations
-import argparse, hashlib, importlib.util, json, os, pathlib, re, subprocess, sys, tempfile, urllib.parse
+import argparse, datetime as dt, hashlib, importlib.util, json, os, pathlib, re, subprocess, sys, tempfile, urllib.parse
 from portable_file_lock import ensure_lock_byte, fcntl
-from terminal_proof import receipt_chain_digest
+from loop_terminal import read_comments, read_issue, read_project, read_pull_request
+from task_complete_claim import select_historical_task_complete_claim
+from terminal_proof import (DELIVERY_RECEIPT_FIELDS, read_live_repository, read_terminal_proof,
+                            receipt_chain_digest, terminal_delivery_comment_body,
+                            validate_live_repository)
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 CANONICAL_ROOT_HELPER = SCRIPT_DIR/"canonical-receipt-root.py"
@@ -339,10 +343,601 @@ def _write_terminal(root: pathlib.Path, task_uid: str, terminal_receipt_path: pa
     finally:
         finalizer_lock_handle.close()
 
+
+def _delivery_receipt_root(root: pathlib.Path, task_uid: str, *, create: bool) -> pathlib.Path:
+    command=[sys.executable,str(CANONICAL_ROOT_HELPER),"--default-worktree",str(root),
+             "--task-uid",task_uid,"--json"]
+    if create: command.append("--create")
+    try:
+        payload=json.loads(subprocess.check_output(command,text=True,stderr=subprocess.PIPE))
+        return pathlib.Path(payload["receipt_root"])
+    except (OSError,subprocess.SubprocessError,KeyError,TypeError,json.JSONDecodeError) as exc:
+        raise ValueError("canonical delivery receipt root unavailable") from exc
+
+
+def _load_json_object(path: pathlib.Path, label: str) -> tuple[bytes,dict]:
+    raw=path.read_bytes()
+    def unique(pairs):
+        result={}
+        for key,value in pairs:
+            if key in result: raise ValueError(f"{label} contains duplicate JSON keys")
+            result[key]=value
+        return result
+    value=json.loads(raw.decode("utf-8"),object_pairs_hook=unique)
+    if not isinstance(value,dict): raise ValueError(f"{label} is not a JSON object")
+    return raw,value
+
+
+def _delivery_project_item(repository: str, issue_number: int, task_uid: str,
+                           record: dict) -> tuple[dict,dict]:
+    project=read_project(repository,issue_number)
+    if (not project.get("id") or project.get("owner")!=repository.split("/",1)[0]
+            or project.get("number")!=1 or project.get("page_complete") is not True):
+        raise ValueError("canonical terminal Project identity/pagination unavailable")
+    issue_url=f"https://github.com/{repository}/issues/{issue_number}"
+    matches=[]
+    for item in project.get("items",[]):
+        context=item.get("project") or {}; content=item.get("content") or {}
+        if (context.get("id")==project["id"] and content.get("number")==issue_number
+                and content.get("url")==issue_url
+                and re.findall(r"^task_uid:\s*([^\n]+)$",str(content.get("body") or "").replace("\r\n","\n"),re.MULTILINE)==[task_uid]):
+            matches.append(item)
+    if len(matches)!=1 or str(matches[0].get("id") or "")!=str(record.get("project_item_id") or ""):
+        raise ValueError("bound Project task item is missing or ambiguous")
+    return project,matches[0]
+
+
+def _delivery_issue_binding(issue: dict, repository: str, task_uid: str,
+                            issue_number: int, pr_number: int, pr_url: str,
+                            *, terminal: bool, recovery: bool = False) -> None:
+    issue_url=f"https://github.com/{repository}/issues/{issue_number}"
+    body=str(issue.get("body") or "").replace("\r\n","\n")
+    if (issue.get("number")!=issue_number or issue.get("html_url",issue.get("url"))!=issue_url
+            or re.findall(r"^task_uid:\s*([^\n]+)$",body,re.MULTILINE)!=[task_uid]):
+        raise ValueError("terminal delivery live Issue identity mismatch")
+    for field,value in (("pr_number",str(pr_number)),("pr_url",pr_url)):
+        matches=re.findall(rf"^- {re.escape(field)}: `([^`]+)`$",body,re.MULTILINE)
+        if matches!=[value]: raise ValueError("terminal delivery live Issue PR binding mismatch")
+    state=str(issue.get("state") or "").upper()
+    reason=str(issue.get("state_reason",issue.get("stateReason","")) or "").lower()
+    if terminal:
+        if state!="CLOSED" or reason!="completed":
+            raise ValueError("terminal delivery Issue is not closed as completed")
+    elif recovery:
+        if state not in {"OPEN", "CLOSED"} or (state=="CLOSED" and reason!="completed"):
+            raise ValueError("terminal delivery Issue recovery state is not open or completed")
+    elif state!="OPEN":
+        raise ValueError("task_done delivery preflight requires the live Issue to be open")
+
+
+def _delivery_pr_binding(pr: dict, repository: str, task_uid: str,
+                         issue_number: int, pr_number: int, pr_url: str) -> tuple[str,str,str]:
+    body=str(pr.get("body") or "").replace("\r\n","\n")
+    base=pr.get("base") or {}; head=pr.get("head") or {}
+    if (pr.get("number")!=pr_number or pr.get("html_url")!=pr_url
+            or ((base.get("repo") or {}).get("full_name"))!=repository
+            or ((head.get("repo") or {}).get("full_name"))!=repository):
+        raise ValueError("terminal delivery PR reciprocal identity mismatch")
+    if (re.findall(r"^Task: [^\n]+$",body,re.MULTILINE)!=[f"Task: {task_uid}"]
+            or re.findall(r"^Refs #[1-9][0-9]*$",body,re.MULTILINE)!=[f"Refs #{issue_number}"]):
+        raise ValueError("terminal delivery PR Task/Issue binding mismatch")
+    if (str(pr.get("state") or "").upper()!="CLOSED" or pr.get("merged") is not True
+            or not pr.get("merged_at")):
+        raise ValueError("terminal delivery PR is not verified merged")
+    head_oid=str(head.get("sha") or ""); merge_oid=str(pr.get("merge_commit_sha") or "")
+    if not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})",head_oid) or not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})",merge_oid):
+        raise ValueError("terminal delivery PR source or merge OID is invalid")
+    return head_oid,merge_oid,str(base.get("ref") or "")
+
+
+def _delivery_mapping_receipt(record: dict, root: pathlib.Path,
+                              repository: str, pr_number: int, pr_url: str,
+                              head_oid: str, merge_oid: str,
+                              default_branch: str) -> tuple[bytes,dict,str]:
+    path=root/"merge-receipt.json"
+    try: raw,receipt=_load_json_object(path,"canonical merge receipt")
+    except (OSError,UnicodeDecodeError,json.JSONDecodeError,ValueError) as exc:
+        raise ValueError(f"canonical merge receipt is unavailable or invalid: {exc}") from exc
+    digest=hashlib.sha256(raw).hexdigest()
+    expected={"receipt_type":"oasis7_pr_merge","issuer":"github_live_query",
+              "evidence_mode":"production","repository":repository,
+              "pr_number":pr_number,"pr_url":pr_url,"state":"MERGED",
+              "head_oid":head_oid,"default_branch":default_branch,"base_ref":default_branch}
+    if any(receipt.get(key)!=value for key,value in expected.items()) or not receipt.get("merged_at") or not receipt.get("observed_at"):
+        raise ValueError("canonical merge receipt disagrees with live merged PR")
+    if receipt.get("merge_commit_oid") not in (None,merge_oid):
+        raise ValueError("canonical merge receipt merge commit disagrees with live merged PR")
+    if record.get("merge_receipt")!=receipt or record.get("merge_receipt_sha256")!=digest:
+        raise ValueError("task mapping merge receipt does not bind canonical receipt bytes")
+    return raw,receipt,digest
+
+
+def _delivery_live_context(root: pathlib.Path, task_uid: str) -> dict:
+    root=pathlib.Path(root).resolve()
+    mapping_path=root/".pm/github-project-sync/tasks.json"
+    mapping=durable_store.recover_atomic_journal(mapping_path)
+    record=(mapping.get("tasks") or {}).get(task_uid) or {}
+    if not isinstance(record,dict) or record.get("task_uid") not in (None,task_uid):
+        raise ValueError("canonical task mapping is missing or has a conflicting UID")
+    if (record.get("status")!="done" or record.get("workflow_phase") not in {"task_done","main_sync","post_merge_done"}
+            or record.get("completion_mode") not in (None,"single_pr")):
+        raise ValueError("delivery finalization requires the canonical single-PR task_done mapping")
+    repository=str(record.get("repository") or "")
+    issue_number=record.get("issue_number"); pr_number=record.get("pr_number")
+    pr_url=str(record.get("pr_url") or "")
+    if (not re.fullmatch(r"[^/\s]+/[^/\s]+",repository) or type(issue_number) is not int or issue_number<=0
+            or type(pr_number) is not int or pr_number<=0
+            or pr_url!=f"https://github.com/{repository}/pull/{pr_number}"):
+        raise ValueError("canonical task/Issue/PR mapping identity is invalid")
+    if not record.get("project_item_id") or not record.get("canonical_worktree") or not record.get("task_branch"):
+        raise ValueError("canonical task Project/worktree/branch identity is incomplete")
+
+    receipt_root=_delivery_receipt_root(root,task_uid,create=False)
+    issue=read_issue(repository,issue_number)
+    pr=read_pull_request(repository,pr_number)
+    comments=read_comments(repository,issue_number)
+    project,project_item=_delivery_project_item(repository,issue_number,task_uid,record)
+    head_oid,merge_oid,base_ref=_delivery_pr_binding(pr,repository,task_uid,issue_number,pr_number,pr_url)
+    existing_path=receipt_root/"terminal-delivery-receipt.json"
+    existing=None
+    if existing_path.exists():
+        try: _,existing=_load_json_object(existing_path,"terminal delivery receipt")
+        except (OSError,UnicodeDecodeError,json.JSONDecodeError,ValueError) as exc:
+            raise ValueError(f"existing terminal delivery receipt is invalid: {exc}") from exc
+    prior_target=existing.get("observed_target_oid") if isinstance(existing,dict) else None
+    live_repository=read_live_repository(repository,merge_oid,prior_target)
+    repo_data=live_repository.get("repository") or {}
+    ref=live_repository.get("ref") or {}
+    default_branch=str(repo_data.get("default_branch") or "")
+    target_oid=str((ref.get("object") or {}).get("sha") or "")
+    if (not default_branch or base_ref!=default_branch
+            or record.get("default_branch") not in (None,default_branch)):
+        raise ValueError("terminal delivery live default branch disagrees with merged PR or task mapping")
+    if not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})",target_oid):
+        raise ValueError("terminal delivery live target OID is invalid")
+    validate_live_repository(live_repository,repository,merge_oid,
+                             default_branch=default_branch,
+                             observed_target_oid=prior_target or target_oid)
+    _,merge_receipt,merge_digest=_delivery_mapping_receipt(record,receipt_root,repository,
+                                                            pr_number,pr_url,head_oid,merge_oid,default_branch)
+    selector=(record.get("phase_receipt_type") or {}).get("post_merge_done")
+    mapped_v1=(record.get("phase_receipts") or {}).get("post_merge_done",{}).get("receipt_type")=="oasis7_terminal_cleanup"
+    _delivery_issue_binding(issue,repository,task_uid,issue_number,pr_number,pr_url,
+                            terminal=(record.get("workflow_phase")=="post_merge_done" and mapped_v1),
+                            recovery=(selector=="oasis7_terminal_delivery"))
+    fields={}
+    values=(project_item.get("fieldValues") or {})
+    if (values.get("pageInfo") or {}).get("hasNextPage") is not False:
+        raise ValueError("bound Project item fieldValues pagination is incomplete")
+    for entry in values.get("nodes") or []:
+        name=((entry.get("field") or {}).get("name"))
+        if not isinstance(name,str) or name in fields:
+            raise ValueError("bound Project item fields are missing or duplicated")
+        fields[name]=str(entry.get("name",entry.get("text","")) or "")
+    if any(fields.get(key)!=value for key,value in {"Status":"Done","PM Status":"done","Workflow Phase":"done"}.items()):
+        raise ValueError("task_done Project projection is incomplete")
+    if record.get("workflow_phase")=="post_merge_done":
+        if (record.get("phase_receipt_type") or {}).get("post_merge_done")=="oasis7_terminal_delivery":
+            pass
+        elif (record.get("phase_receipts") or {}).get("post_merge_done",{}).get("receipt_type")=="oasis7_terminal_cleanup":
+            # The caller will validate a complete v1 proof and return it without migration.
+            pass
+        else:
+            raise ValueError("terminal task has an unknown or mixed post_merge_done protocol")
+    elif record.get("workflow_phase") not in {"task_done","main_sync"}:
+        raise ValueError("delivery finalization phase is invalid")
+    legacy_v1 = (record.get("workflow_phase") == "post_merge_done"
+                 and (record.get("phase_receipts") or {}).get("post_merge_done", {}).get("receipt_type") == "oasis7_terminal_cleanup")
+    if legacy_v1:
+        claim,claim_digest = None,None
+    else:
+        claim,claim_digest,_claim_comment=select_historical_task_complete_claim(
+            repository,task_uid,record,issue,comments,accepted_head=head_oid)
+    return {"root":root,"mapping_path":mapping_path,"mapping":mapping,"record":record,
+            "task_uid":task_uid,
+            "receipt_root":receipt_root,"issue":issue,"project":project,"project_item":project_item,
+            "pr":pr,"comments":comments,"live_repository":live_repository,
+            "repository":repository,"issue_number":issue_number,"pr_number":pr_number,"pr_url":pr_url,
+            "head_oid":head_oid,"merge_commit_oid":merge_oid,"default_branch":default_branch,
+            "observed_target_oid":prior_target or target_oid,"target_oid":target_oid,
+            "merge_receipt":merge_receipt,"merge_receipt_sha256":merge_digest,
+            "claim":claim,"task_complete_claim_sha256":claim_digest,"existing_delivery":existing}
+
+
+def _delivery_record(context: dict) -> dict:
+    existing=context.get("existing_delivery")
+    record={
+        "receipt_type":"oasis7_terminal_delivery","schema_version":2,
+        "issuer":"post-merge-finalize","evidence_mode":"production",
+        "task_uid":context["task_uid"],
+        "repository":context["repository"],"issue_number":context["issue_number"],
+        "pr_number":context["pr_number"],"pr_url":context["pr_url"],
+        "head_oid":context["head_oid"],"merge_commit_oid":context["merge_commit_oid"],
+        "default_branch":context["default_branch"],"observed_target_oid":context["observed_target_oid"],
+        "merge_receipt_sha256":context["merge_receipt_sha256"],
+        "task_complete_claim_sha256":context["task_complete_claim_sha256"],
+        "worktree":str(pathlib.Path(str(context["record"].get("canonical_worktree"))).expanduser().resolve()),
+        "branch":str(context["record"].get("task_branch")),"completion_semantics":"delivery_only",
+        "observed_at":dt.datetime.now(dt.timezone.utc).isoformat(),
+    }
+    if existing is not None:
+        # A receipt written before a lost local/remote response is immutable.
+        # Reuse it only when every authority field still matches, and let the
+        # live compare bundle prove its observed target remains on current main.
+        for key,value in record.items():
+            if key!="observed_at" and existing.get(key)!=value:
+                raise ValueError(f"existing delivery receipt conflicts with current live {key}")
+        record=existing
+    return record
+
+def _delivery_partial_legacy_effects(context: dict) -> None:
+    """Do not migrate a v1 comment effect whose response may have been lost."""
+    record=context["record"]
+    if record.get("workflow_phase")=="post_merge_done":
+        if (record.get("phase_receipt_type") or {}).get("post_merge_done")=="oasis7_terminal_delivery":
+            return
+        if (record.get("phase_receipts") or {}).get("post_merge_done",{}).get("receipt_type")=="oasis7_terminal_cleanup":
+            return
+    ledger_path=context["receipt_root"]/"finalizer-ledger.json"
+    v2_expected_body=None
+    if context.get("existing_delivery") is not None:
+        _,receipt_bytes=_load_json_object(context["receipt_root"]/"terminal-delivery-receipt.json","terminal delivery receipt")
+        # The exact extant receipt is validated against current authorities
+        # before its comment can be used as recovery evidence.
+        expected_receipt=_delivery_record(context)
+        if any(receipt_bytes.get(k)!=v for k,v in expected_receipt.items() if k!="observed_at"):
+            raise ValueError("existing delivery receipt conflicts with the live accepted authority")
+        raw=(context["receipt_root"]/"terminal-delivery-receipt.json").read_bytes()
+        v2_expected_body=terminal_delivery_comment_body(receipt_bytes,hashlib.sha256(raw).hexdigest())
+    ledger_exists=ledger_path.exists()
+    if ledger_exists:
+        try:
+            _,ledger=_load_json_object(ledger_path,"finalizer ledger")
+        except (OSError,UnicodeDecodeError,json.JSONDecodeError,ValueError) as exc:
+            raise ValueError(f"existing finalizer ledger is invalid: {exc}") from exc
+        if ledger.get("task_uid") not in (None,context["task_uid"]):
+            raise ValueError("existing finalizer ledger task identity mismatch")
+        operations=ledger.get("operations") or {}
+        effect=operations.get("evidence_comment") or {}
+        issue_close=operations.get("issue_close") or {}
+        if v2_expected_body is not None:
+            comment=_delivery_comment_readback(context,v2_expected_body)
+            if (effect.get("result") and not isinstance(effect.get("result"),dict)):
+                raise ValueError("legacy finalizer comment result requires v1 reconciliation; v2 migration is blocked")
+            if (effect.get("action") or effect.get("committed")) and comment is None:
+                raise ValueError("v2 comment action is uncertain and no exact comment is visible; manual reconciliation is required")
+            if comment is not None and not (effect.get("action") or effect.get("committed")):
+                raise ValueError("v2 comment exists without a recorded finalizer action")
+            if issue_close.get("action") or issue_close.get("committed"):
+                raise ValueError("partial legacy Issue-close effect requires v1 reconciliation; v2 migration is blocked")
+        elif effect.get("action") or effect.get("committed") or issue_close.get("action") or issue_close.get("committed"):
+            raise ValueError("partial legacy finalizer effect requires v1 reconciliation; v2 migration is blocked")
+    elif v2_expected_body is not None and _delivery_comment_readback(context,v2_expected_body) is not None:
+        raise ValueError("v2 terminal evidence comment exists without a finalizer ledger action")
+    operation_id=hashlib.sha256(f"{context['task_uid']}:post_merge_done:evidence_comment".encode()).hexdigest()
+    for comment in context["comments"]:
+        body=str(comment.get("body") or "")
+        if ("<!-- oasis7-pm-evidence -->" in body
+                and f"Operation-ID: {operation_id}" in body
+                and f"Task UID: {context['task_uid']}" in body
+                and "Evidence Phase: post_merge_done" in body):
+            raise ValueError("legacy v1 terminal evidence comment exists without a selected v1 proof; reconcile it before v2 migration")
+
+
+def _delivery_status(context: dict) -> dict:
+    record=context["record"]
+    if record.get("workflow_phase")=="post_merge_done":
+        selector=(record.get("phase_receipt_type") or {}).get("post_merge_done")
+        if selector=="oasis7_terminal_delivery":
+            try:
+                proof=read_terminal_proof(
+                    context["root"],context["task_uid"],record,
+                    live_issue=context["issue"],live_project_item=context["project_item"],
+                    live_pr=context["pr"],live_repository=context["live_repository"],
+                    comments=context["comments"],
+                )
+            except ValueError:
+                _validate_resumable_v2(context)
+                return {"status":"ready","protocol_version":2,"task_uid":context["task_uid"],
+                        "resume":True}
+            return {"status":"already_finalized","protocol_version":proof["protocol_version"],
+                    "task_uid":context["task_uid"],"proof":proof}
+        proof=read_terminal_proof(
+            context["root"],context["task_uid"],record,
+            live_issue=context["issue"],live_project_item=context["project_item"],
+            live_pr=context["pr"],live_repository=context["live_repository"],
+            comments=context["comments"],
+        )
+        return {"status":"already_finalized","protocol_version":proof["protocol_version"],
+                "task_uid":context["task_uid"],"proof":proof}
+    _delivery_partial_legacy_effects(context)
+    return {"status":"ready","protocol_version":2,"task_uid":context["task_uid"],
+            "head_oid":context["head_oid"],"merge_commit_oid":context["merge_commit_oid"],
+            "default_branch":context["default_branch"],
+            "observed_target_oid":context["observed_target_oid"],
+            "merge_receipt_sha256":context["merge_receipt_sha256"],
+            "task_complete_claim_sha256":context["task_complete_claim_sha256"]}
+
+
+def _validate_resumable_v2(context: dict) -> None:
+    """Prove that a selected v2 protocol is at a recoverable local boundary."""
+    record=context["record"]; task_uid=context["task_uid"]
+    receipt_path=context["receipt_root"]/"terminal-delivery-receipt.json"
+    try:
+        raw,receipt=_load_json_object(receipt_path,"terminal delivery receipt")
+    except (OSError,UnicodeDecodeError,json.JSONDecodeError,ValueError) as exc:
+        raise ValueError(f"selected v2 terminal delivery is not resumable: {exc}") from exc
+    digest=hashlib.sha256(raw).hexdigest()
+    if (set(receipt)!=DELIVERY_RECEIPT_FIELDS
+            or (record.get("phase_receipt_type") or {}).get("post_merge_done")!="oasis7_terminal_delivery"
+            or (record.get("phase_receipt_sha256") or {}).get("post_merge_done")!=digest
+            or (record.get("phase_receipts") or {}).get("post_merge_done")!=receipt):
+        raise ValueError("selected v2 terminal delivery mapping/receipt is not resumable")
+    expected=_delivery_record(context)
+    if any(receipt.get(key)!=value for key,value in expected.items() if key!="observed_at"):
+        raise ValueError("selected v2 terminal delivery authority changed before recovery")
+    body=terminal_delivery_comment_body(receipt,digest)
+    comment=_delivery_comment_readback(context,body)
+    comment_digest=hashlib.sha256(body.encode("utf-8")).hexdigest()
+    if (comment is None
+            or (record.get("phase_receipt_comment_id") or {}).get("post_merge_done")!=comment.get("id")
+            or (record.get("phase_receipt_comment_sha256") or {}).get("post_merge_done")!=comment_digest):
+        raise ValueError("selected v2 terminal delivery comment is not resumable")
+    ledger_path=context["receipt_root"]/"finalizer-ledger.json"
+    try:
+        _,ledger=_load_json_object(ledger_path,"finalizer ledger")
+    except (OSError,UnicodeDecodeError,json.JSONDecodeError,ValueError) as exc:
+        raise ValueError(f"selected v2 finalizer ledger is not resumable: {exc}") from exc
+    if ledger.get("schema")!="oasis7_finalizer_ledger_v1" or ledger.get("task_uid")!=task_uid:
+        raise ValueError("selected v2 finalizer ledger identity is not resumable")
+    operations=ledger.get("operations") or {}
+    for effect in ("project_update","evidence_comment"):
+        item=operations.get(effect) or {}
+        op_id=hashlib.sha256(f"{task_uid}:post_merge_done:{effect}".encode()).hexdigest()
+        if (item.get("operation_id")!=op_id or item.get("effect")!=effect or item.get("committed") is not True):
+            raise ValueError(f"selected v2 finalizer {effect} is not resumable")
+    project_result=(operations.get("project_update") or {}).get("result") or {}
+    if any(project_result.get(k)!=v for k,v in {"Status":"Done","PM Status":"done","Workflow Phase":"done"}.items()):
+        raise ValueError("selected v2 finalizer Project readback is not resumable")
+    comment_result=(operations.get("evidence_comment") or {}).get("result") or {}
+    if (comment_result.get("comment_id")!=comment.get("id")
+            or comment_result.get("comment_sha256")!=comment_digest):
+        raise ValueError("selected v2 finalizer comment readback is not resumable")
+    issue_entry=operations.get("issue_close") or {}
+    expected_issue_op=hashlib.sha256(f"{task_uid}:post_merge_done:issue_close".encode()).hexdigest()
+    if issue_entry and (issue_entry.get("operation_id")!=expected_issue_op or issue_entry.get("effect")!="issue_close"):
+        raise ValueError("selected v2 finalizer Issue close operation identity is not resumable")
+    issue_state=str(context["issue"].get("state") or "").upper()
+    issue_reason=str(context["issue"].get("state_reason",context["issue"].get("stateReason","")) or "").lower()
+    if issue_state not in {"OPEN","CLOSED"} or (issue_state=="CLOSED" and issue_reason!="completed"):
+        raise ValueError("selected v2 live Issue state is not resumable")
+    if issue_entry.get("committed"):
+        result=issue_entry.get("result") or {}
+        if str(result.get("state") or "").upper()!="CLOSED" or str(result.get("state_reason",result.get("stateReason","")) or "").lower()!="completed":
+            raise ValueError("selected v2 Issue close readback is not resumable")
+    tombstone=context["receipt_root"]/"terminal-tombstone.json"
+    if tombstone.exists():
+        _,value=_load_json_object(tombstone,"terminal tombstone")
+        expected_tombstone={"schema":"oasis7_terminal_tombstone_v1","task_uid":task_uid,
+            "repository":context["repository"],"issue_number":context["issue_number"],
+            "pr_number":context["pr_number"],"canonical_worktree":receipt["worktree"],
+            "task_branch":receipt["branch"],"workflow_phase":"post_merge_done",
+            "terminal_receipt_sha256":digest,"checkout_recreation_forbidden":True}
+        if value!=expected_tombstone:
+            raise ValueError("selected v2 terminal tombstone conflicts with receipt")
+
+
+def _delivery_project_update(context: dict, ledger_path: pathlib.Path) -> None:
+    terminal_mapping=dict(context["mapping"])
+    terminal_record=dict(context["record"])
+    terminal_record["workflow_phase"]="post_merge_done"
+    terminal_mapping["tasks"]=dict(terminal_mapping.get("tasks") or {})
+    terminal_mapping["tasks"][context["task_uid"]]=terminal_record
+    _ensure_terminal_project(terminal_mapping,terminal_record,ledger_path,context["task_uid"])
+
+
+def _delivery_comment_readback(context: dict, body: str) -> dict | None:
+    issue_url=f"https://github.com/{context['repository']}/issues/{context['issue_number']}"
+    marker="<!-- oasis7-pm-evidence/v2 -->"
+    markers=[]; exact=[]
+    for comment in context["comments"]:
+        comment_body=str(comment.get("body") or "")
+        if marker in comment_body:
+            markers.append(comment)
+        if (comment_body==body and type(comment.get("id")) is int and comment["id"]>0
+                and comment.get("html_url")==f"{issue_url}#issuecomment-{comment['id']}"):
+            exact.append(comment)
+    if len(markers)>1 or (markers and (len(exact)!=1 or markers[0] is not exact[0])):
+        raise ValueError("terminal delivery comment readback mismatch: marker is duplicate or has a noncanonical body")
+    if len(exact)>1:
+        raise ValueError("terminal delivery comment readback mismatch: exact body is duplicated")
+    return exact[0] if exact else None
+
+
+def _delivery_create_comment(context: dict, body: str, ledger_path: pathlib.Path) -> dict:
+    task_uid=context["task_uid"]
+    entry=_ledger_entry(ledger_path,"evidence_comment")
+    comment=_delivery_comment_readback(context,body)
+    if entry.get("committed"):
+        result=entry.get("result") or {}
+        if (comment is None or result.get("comment_id")!=comment.get("id")
+                or result.get("comment_sha256")!=hashlib.sha256(body.encode("utf-8")).hexdigest()):
+            raise ValueError("terminal delivery finalizer ledger comment binding conflicts with live readback")
+        return comment
+    if entry.get("action"):
+        if comment is None:
+            # A lost response cannot be distinguished from a delayed GitHub
+            # write. Never post a second v2 marker under that uncertainty.
+            raise ValueError("terminal delivery comment action is uncertain and no exact comment is visible; manual reconciliation is required")
+        return comment
+    if comment is not None:
+        raise ValueError("terminal delivery comment exists without a recorded finalizer action")
+    _ledger_transition(ledger_path,task_uid,"evidence_comment","intent")
+    _ledger_transition(ledger_path,task_uid,"evidence_comment","action")
+    with tempfile.NamedTemporaryFile("w",encoding="utf-8",newline="",delete=False,dir="/tmp") as evidence:
+        evidence.write(body); evidence_path=evidence.name
+    try:
+        subprocess.check_output(["gh","issue","comment",str(context["issue_number"]),
+                                 "-R",context["repository"],"--body-file",evidence_path],text=True)
+    finally:
+        pathlib.Path(evidence_path).unlink(missing_ok=True)
+    # Requery every page. The create response is not evidence.
+    context["comments"]=read_comments(context["repository"],context["issue_number"])
+    comment=_delivery_comment_readback(context,body)
+    if comment is None:
+        raise ValueError("terminal delivery comment write has no unique live readback")
+    return comment
+
+
+def _delivery_commit_mapping(context: dict, receipt: dict, receipt_digest: str,
+                             comment: dict, comment_digest: str) -> None:
+    path=context["mapping_path"]; task_uid=context["task_uid"]
+    def commit(latest: dict) -> None:
+        current=(latest.get("tasks") or {}).get(task_uid)
+        if not isinstance(current,dict):
+            raise ValueError("canonical task disappeared during terminal delivery")
+        for key in ("repository","issue_number","pr_number","pr_url","canonical_worktree","task_branch","merge_receipt_sha256"):
+            if str(current.get(key))!=str(context["record"].get(key)):
+                raise ValueError(f"canonical task identity drifted during delivery: {key}")
+        if current.get("workflow_phase")=="post_merge_done":
+            selected=(current.get("phase_receipt_type") or {}).get("post_merge_done")
+            if selected!="oasis7_terminal_delivery":
+                raise ValueError("canonical task already selected another terminal protocol")
+            if ((current.get("phase_receipt_sha256") or {}).get("post_merge_done")!=receipt_digest
+                    or (current.get("phase_receipts") or {}).get("post_merge_done")!=receipt):
+                raise ValueError("canonical task terminal delivery selector conflicts with receipt")
+        elif current.get("workflow_phase") not in {"task_done","main_sync"}:
+            raise ValueError("canonical workflow phase drifted before delivery selector commit")
+        current["workflow_phase"]="post_merge_done"
+        current.setdefault("phase_receipts",{})["post_merge_done"]=receipt
+        current.setdefault("phase_receipt_type",{})["post_merge_done"]="oasis7_terminal_delivery"
+        current.setdefault("phase_receipt_sha256",{})["post_merge_done"]=receipt_digest
+        current.setdefault("phase_receipt_comment_id",{})["post_merge_done"]=comment["id"]
+        current.setdefault("phase_receipt_comment_sha256",{})["post_merge_done"]=comment_digest
+        current.setdefault("evidence_comments",[])
+        url=comment.get("html_url")
+        if url and url not in current["evidence_comments"]:
+            current["evidence_comments"].append(url)
+        latest.setdefault("tasks",{})[task_uid]=current
+    durable_store.transact_json(path,commit)
+
+
+def _write_delivery_tombstone(context: dict, receipt_digest: str) -> pathlib.Path:
+    path=context["receipt_root"]/"terminal-tombstone.json"
+    _,delivery=_load_json_object(context["receipt_root"]/"terminal-delivery-receipt.json","terminal delivery receipt")
+    expected={
+        "schema":"oasis7_terminal_tombstone_v1","task_uid":context["task_uid"],
+        "repository":context["repository"],"issue_number":context["issue_number"],
+        "pr_number":context["pr_number"],"canonical_worktree":delivery["worktree"],
+        "task_branch":delivery["branch"],"workflow_phase":"post_merge_done",
+        "terminal_receipt_sha256":receipt_digest,"checkout_recreation_forbidden":True,
+    }
+    if path.exists():
+        _,existing=_load_json_object(path,"terminal tombstone")
+        if existing!=expected:
+            raise ValueError("existing terminal delivery tombstone conflicts with receipt")
+    else:
+        durable_store.replace_json(path,expected)
+    return path
+
+
+def _write_delivery_locked(root: pathlib.Path, task_uid: str) -> dict:
+    context=_delivery_live_context(root,task_uid)
+    state=_delivery_status(context)
+    if state["status"]=="already_finalized":
+        print(json.dumps({k:v for k,v in state.items() if k!="proof"},sort_keys=True)); return state
+    # Canonical-root identity creation is an effect, so it follows read-only
+    # preflight and occurs only on the actual producer path.
+    context["receipt_root"]=_delivery_receipt_root(pathlib.Path(root).resolve(),task_uid,create=True)
+    receipt=_delivery_record(context)
+    receipt_path=context["receipt_root"]/"terminal-delivery-receipt.json"
+    if not receipt_path.exists():
+        durable_store.replace_json(receipt_path,receipt)
+    raw,stored_receipt=_load_json_object(receipt_path,"terminal delivery receipt")
+    if stored_receipt!=receipt:
+        raise ValueError("canonical terminal delivery receipt changed during finalization")
+    receipt_digest=hashlib.sha256(raw).hexdigest()
+    ledger_path=context["receipt_root"]/"finalizer-ledger.json"
+    _delivery_project_update(context,ledger_path)
+    # Refresh comments after the Project write and before the comment action.
+    context["comments"]=read_comments(context["repository"],context["issue_number"])
+    body=terminal_delivery_comment_body(receipt,receipt_digest)
+    comment=_delivery_create_comment(context,body,ledger_path)
+    comment_digest=hashlib.sha256(str(comment["body"]).encode("utf-8")).hexdigest()
+    _ledger_transition(ledger_path,task_uid,"evidence_comment","readback",
+                       {"comment_id":comment["id"],"comment_sha256":comment_digest})
+    _ledger_transition(ledger_path,task_uid,"evidence_comment","committed")
+    _delivery_commit_mapping(context,receipt,receipt_digest,comment,comment_digest)
+
+    issue=read_issue(context["repository"],context["issue_number"])
+    _ledger_transition(ledger_path,task_uid,"issue_close","intent")
+    issue_state=str(issue.get("state") or "").upper()
+    issue_reason=str(issue.get("state_reason",issue.get("stateReason","")) or "").lower()
+    if issue_state=="OPEN":
+        _ledger_transition(ledger_path,task_uid,"issue_close","action")
+        subprocess.run(["gh","issue","close",str(context["issue_number"]),"-R",context["repository"],"--reason","completed"],check=True)
+        issue=read_issue(context["repository"],context["issue_number"])
+        issue_state=str(issue.get("state") or "").upper()
+        issue_reason=str(issue.get("state_reason",issue.get("stateReason","")) or "").lower()
+    if issue_state!="CLOSED" or issue_reason!="completed":
+        raise ValueError("terminal delivery Issue close readback mismatch")
+    _ledger_transition(ledger_path,task_uid,"issue_close","readback",issue)
+    _ledger_transition(ledger_path,task_uid,"issue_close","committed")
+    _write_delivery_tombstone(context,receipt_digest)
+
+    latest=durable_store.recover_atomic_journal(context["mapping_path"])
+    latest_record=(latest.get("tasks") or {}).get(task_uid)
+    if not isinstance(latest_record,dict):
+        raise ValueError("canonical task mapping disappeared after terminal delivery")
+    project,project_item=_delivery_project_item(context["repository"],context["issue_number"],task_uid,latest_record)
+    pr=read_pull_request(context["repository"],context["pr_number"])
+    comments=read_comments(context["repository"],context["issue_number"])
+    live_repository=read_live_repository(context["repository"],context["merge_commit_oid"],receipt["observed_target_oid"])
+    proof=read_terminal_proof(root,task_uid,latest_record,live_issue=issue,
+        live_project_item=project_item,live_pr=pr,live_repository=live_repository,comments=comments)
+    if proof.get("protocol_version")!=2 or proof.get("status")!="passed":
+        raise ValueError("terminal delivery finalizer readback did not select v2 proof")
+    result={"status":"finalized","protocol_version":2,"task_uid":task_uid,
+            "terminal_receipt_sha256":receipt_digest,"comment_id":comment["id"]}
+    print(json.dumps(result,sort_keys=True)); return result
+
+
+def _write_delivery(root: pathlib.Path, task_uid: str) -> dict:
+    root=pathlib.Path(root).resolve()
+    mapping_path=root/".pm/github-project-sync/tasks.json"
+    lock=mapping_path.with_name(f"{mapping_path.name}.{task_uid}.finalizer-lock")
+    lock.parent.mkdir(parents=True,exist_ok=True)
+    with lock.open("a+b") as handle:
+        ensure_lock_byte(handle)
+        fcntl.flock(handle.fileno(),fcntl.LOCK_EX)
+        return _write_delivery_locked(root,task_uid)
+
+
+def _preflight_delivery(root: pathlib.Path, task_uid: str) -> dict:
+    context=_delivery_live_context(root,task_uid)
+    state=_delivery_status(context)
+    result={k:v for k,v in state.items() if k!="proof"}
+    result["preflight"]=True
+    print(json.dumps(result,sort_keys=True))
+    return result
+
+
 def main() -> int:
     p=argparse.ArgumentParser()
     p.add_argument("--repo-root",required=True); p.add_argument("--task-uid",required=True)
-    p.add_argument("--terminal-receipt",required=True); a=p.parse_args()
+    p.add_argument("--terminal-receipt"); p.add_argument("--delivery",action="store_true")
+    p.add_argument("--preflight",action="store_true"); p.add_argument("--json",action="store_true")
+    a=p.parse_args()
+    if a.delivery:
+        if a.terminal_receipt:
+            fail("--delivery cannot be combined with --terminal-receipt")
+        try:
+            _preflight_delivery(pathlib.Path(a.repo_root),a.task_uid) if a.preflight else _write_delivery(pathlib.Path(a.repo_root),a.task_uid)
+        except (OSError,subprocess.SubprocessError,ValueError,KeyError,TypeError,json.JSONDecodeError) as exc:
+            fail(str(exc))
+        return 0
+    if a.preflight or a.json or not a.terminal_receipt:
+        p.error("legacy finalization requires --terminal-receipt; --preflight/--json require --delivery")
     return _write_terminal(pathlib.Path(a.repo_root),a.task_uid,pathlib.Path(a.terminal_receipt))
 
 if __name__=="__main__": raise SystemExit(main())

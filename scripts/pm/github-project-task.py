@@ -9,7 +9,6 @@ import json
 import os
 import pathlib
 import re
-import shlex
 import subprocess
 import sys
 import tempfile
@@ -18,7 +17,7 @@ from collections import OrderedDict
 from datetime import datetime
 from typing import Any
 
-from loop_leaf_result import verification_projection_errors
+from task_complete_claim import validate_task_complete_claim_for_closeout
 
 
 ALL_STATUSES = ("candidate", "committed", "blocked", "ready", "pr_watch", "done", "deferred")
@@ -1754,6 +1753,45 @@ def require_live_issue_route_matches_cache(repo: str, task_uid: str, record: dic
     return live
 
 
+def _read_task_complete_issue_comments(repo: str, issue_number: int) -> list[dict[str, Any]]:
+    try:
+        pages = json.loads(run_text([
+            "gh", "api", f"repos/{repo}/issues/{issue_number}/comments", "--paginate", "--slurp",
+        ]))
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError, RuntimeError, subprocess.TimeoutExpired) as exc:
+        die(f"closeout-task: task_complete comment readback failed closed: {exc}")
+    if not isinstance(pages, list):
+        die("closeout-task: task_complete comment pagination is malformed")
+    comments = []
+    for page in pages:
+        if isinstance(page, list):
+            comments.extend(item for item in page if isinstance(item, dict))
+        elif isinstance(page, dict):
+            comments.append(page)
+        else:
+            die("closeout-task: task_complete comment page is malformed")
+    return comments
+
+
+def _validate_task_complete_claim_for_closeout(
+    repo: str, task_uid: str, claim: Any, live_issue: dict[str, Any],
+) -> str:
+    issue_number = live_issue.get("issue_number")
+    if type(issue_number) is not int:
+        die("closeout-task: task_complete Issue identity is invalid")
+    try:
+        return validate_task_complete_claim_for_closeout(
+            repo, task_uid, claim,
+            issue_number=issue_number,
+            issue_state=str(live_issue.get("issue_state") or ""),
+            issue_url=str(live_issue.get("issue_url") or ""),
+            issue_updated_at=live_issue.get("updated_at"),
+            comments=_read_task_complete_issue_comments(repo, issue_number),
+        )
+    except ValueError as exc:
+        die(f"closeout-task: {exc}")
+
+
 def validate_aggregate_task_complete_claim(
     repo: str,
     root: pathlib.Path,
@@ -1767,55 +1805,9 @@ def validate_aggregate_task_complete_claim(
     identity. It does not claim trusted runtime attestation; that is outside the
     current human-operated closeout contract.
     """
-    if not isinstance(claim, dict):
-        die("closeout-task: aggregate completion requires canonical task_complete claim evidence")
-    if (claim.get("claim_type") != "task_complete" or claim.get("status") != "verified"
-            or claim.get("allowed_to_claim") is not True
-            or type(claim.get("verification_exit_code")) is not int
-            or claim.get("verification_exit_code") != 0
-            or claim.get("task_uid") != task_uid):
-        die("closeout-task: aggregate task_complete claim identity or result is invalid")
-
-    profile = claim.get("verification_profile")
-    if not isinstance(profile, str) or profile == "fixture_repository_state":
-        die("closeout-task: aggregate task_complete claim requires a production verification profile")
-    profile_commands = {
-        # Keep these command identities aligned with claim-ready.sh's
-        # repository-owned verification-profile switch. Profile/mode support
-        # itself is shared with loop_leaf_result.py.
-        "codex_subagent_role_fit": (
-            "./scripts/pm/verify-codex-subagent-role-fit.sh --task-uid " + shlex.quote(task_uid)
-        ),
-        "workflow_behavior": "./scripts/pm/workflow-behavior-eval.sh",
-        "repository_required": "true",
-    }
-    if profile not in profile_commands or claim.get("verify_command") != profile_commands[profile]:
-        die("closeout-task: aggregate task_complete claim profile/command is not repository-owned")
-
-    verification = {
-        "profile": profile,
-        "mode": claim.get("verification_mode"),
-        "frozen_source_head": claim.get("frozen_source_head"),
-        "frozen_source_tree": claim.get("frozen_source_tree"),
-        "repository_fingerprint_before": claim.get("repository_fingerprint_before"),
-        "repository_fingerprint_after": claim.get("repository_fingerprint_after"),
-        "verification_epoch_stable": claim.get("verification_epoch_stable"),
-        "verification_exit_code": claim.get("verification_exit_code"),
-    }
-    if verification_projection_errors(verification):
-        die("closeout-task: aggregate task_complete verification projection is incomplete or unsupported")
+    _validate_task_complete_claim_for_closeout(repo, task_uid, claim, live_issue)
     if claim.get("verification_mode") != "detached_frozen_tree":
         die("closeout-task: aggregate task_complete claim must use detached frozen-tree verification")
-
-    try:
-        verified_at = datetime.fromisoformat(str(claim.get("verified_at") or "").replace("Z", "+00:00"))
-        current_time = datetime.now().astimezone()
-    except (TypeError, ValueError):
-        die("closeout-task: aggregate task_complete claim timestamp is invalid")
-    if verified_at.tzinfo is None or verified_at > current_time:
-        die("closeout-task: aggregate task_complete claim timestamp is not a valid current-round time")
-
-    validate_latest_task_complete_comment(repo, live_issue, task_uid, claim, profile_commands[profile], verified_at)
 
     root = root.resolve()
     fingerprint_tool = root / "scripts/pm/repo-state-fingerprint.py"
@@ -1844,65 +1836,6 @@ def validate_aggregate_task_complete_claim(
             or claim.get("repository_fingerprint_before") != fingerprint.get("sha256")
             or claim.get("repository_fingerprint_after") != fingerprint.get("sha256")):
         die("closeout-task: aggregate task_complete claim does not bind current HEAD/tree/index/fingerprint")
-
-
-def validate_latest_task_complete_comment(
-    repo: str,
-    live_issue: dict[str, Any],
-    task_uid: str,
-    claim: dict[str, Any],
-    verify_command: str,
-    verified_at: datetime,
-) -> None:
-    """Require the latest Issue update to be the exact claim-ready readback."""
-    issue_number = live_issue.get("issue_number")
-    issue_url = f"https://github.com/{repo}/issues/{issue_number}"
-    if (type(issue_number) is not int or issue_number <= 0
-            or live_issue.get("issue_url") != issue_url
-            or str(live_issue.get("issue_state") or "").upper() != "OPEN"):
-        die("closeout-task: aggregate claim verification requires the exact open task Issue")
-    try:
-        comments = json.loads(run_text([
-            "gh", "api",
-            f"repos/{repo}/issues/{issue_number}/comments?per_page=1&sort=created&direction=desc",
-        ]))
-    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError, RuntimeError, subprocess.TimeoutExpired) as exc:
-        die(f"closeout-task: latest task claim comment readback failed closed: {exc}")
-    if not isinstance(comments, list) or len(comments) != 1 or not isinstance(comments[0], dict):
-        die("closeout-task: latest task claim comment readback is missing or malformed")
-    comment = comments[0]
-    expected_body = "\n".join((
-        "<!-- oasis7-pm-claim-verification -->",
-        f"Task UID: {task_uid}",
-        f"Claim Type: {claim['claim_type']}",
-        f"Verified At: {claim['verified_at']}",
-        f"Verification Exit Code: {claim['verification_exit_code']}",
-        f"Verification Status: {claim['status']}",
-        f"Verify Command: {verify_command}",
-        f"Claim Message: {claim.get('claim_message') or ''}",
-        "",
-    ))
-    comment_id = comment.get("id")
-    expected_comment_url = (
-        f"https://github.com/{repo}/issues/{issue_number}#issuecomment-{comment_id}"
-    )
-    expected_api_issue_url = f"https://api.github.com/repos/{repo}/issues/{issue_number}"
-    if (comment.get("body") != expected_body
-            or type(comment_id) is not int or comment_id <= 0
-            or comment.get("html_url") != expected_comment_url
-            or comment.get("issue_url") != expected_api_issue_url):
-        die("closeout-task: latest task comment does not exactly bind the task_complete claim")
-    try:
-        created_at = datetime.fromisoformat(str(comment.get("created_at") or "").replace("Z", "+00:00"))
-        comment_updated_at = datetime.fromisoformat(str(comment.get("updated_at") or "").replace("Z", "+00:00"))
-        issue_updated_at = datetime.fromisoformat(str(live_issue.get("updated_at") or "").replace("Z", "+00:00"))
-        current_time = datetime.now().astimezone()
-    except (TypeError, ValueError):
-        die("closeout-task: latest task claim comment timestamps are invalid")
-    if (created_at.tzinfo is None or comment_updated_at.tzinfo is None or issue_updated_at.tzinfo is None
-            or created_at < verified_at or created_at > current_time
-            or comment_updated_at != created_at or issue_updated_at != comment_updated_at):
-        die("closeout-task: task claim comment is stale, edited, or superseded on the live Issue")
 
 
 def validate_live_aggregate_lifecycle(
@@ -2380,6 +2313,8 @@ def command_closeout_task(args: argparse.Namespace) -> int:
     if args.to_status != "deferred":
         if claim.get("status") != "verified" or not claim.get("allowed_to_claim"):
             die("closeout-task: verified immutable claim evidence is required")
+    if args.to_status == "done" and claim.get("claim_type") != "task_complete":
+        die("closeout-task: done requires canonical task_complete claim evidence")
     if args.aggregate_receipt:
         if args.to_status != "done" or args.pr_receipt:
             die("closeout-task: aggregate receipt is done-only and excludes singular PR receipt")
@@ -2398,6 +2333,10 @@ def command_closeout_task(args: argparse.Namespace) -> int:
         ], text=True, capture_output=True)
         if validation.returncode:
             die("closeout-task: aggregate receipt live validation failed: " + (validation.stderr.strip() or validation.stdout.strip()))
+    elif args.to_status == "done":
+        _validate_task_complete_claim_for_closeout(
+            getattr(args, "repo", DEFAULT_REPO), args.task_uid, claim, live_issue or {},
+        )
     record = json.loads(json.dumps(original))
     closed_at = now()
     record.setdefault("claim_verifications", []).append(claim)

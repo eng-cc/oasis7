@@ -16,6 +16,8 @@ Options:
   --pr <number>                     Bound merged pull request
   --repo-root <path>                Canonical default worktree (default: current repository root)
   --preflight                       Validate terminal identity without mutating state
+  --cleanup=defer                   Complete delivery and defer this invocation's cleanup attempt
+  --cleanup-only                    Retry resources after v2 delivery was read back
   --patch-equivalence-receipt <p>  Reuse an existing canonical squash/rebase proof
   --resume                          Resume the same durable task/PR identity (default behavior)
   --json                            Print a machine-readable result
@@ -24,7 +26,7 @@ EOF
 }
 
 fail() { echo "finalize-task: $*" >&2; exit 1; }
-task_uid="" pr_number="" repo_root="$ROOT_DIR" supplied_patch="" resume=0 preflight=0 output_json=0
+task_uid="" pr_number="" repo_root="$ROOT_DIR" supplied_patch="" resume=0 preflight=0 output_json=0 cleanup_defer=0 cleanup_only=0
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --task-uid) task_uid="${2:-}"; shift 2 ;;
@@ -32,6 +34,8 @@ while [[ $# -gt 0 ]]; do
     --repo-root) repo_root="${2:-}"; shift 2 ;;
     --patch-equivalence-receipt) supplied_patch="${2:-}"; shift 2 ;;
     --preflight) preflight=1; shift ;;
+    --cleanup=defer) cleanup_defer=1; shift ;;
+    --cleanup-only) cleanup_only=1; shift ;;
     --resume) resume=1; shift ;;
     --json) output_json=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -40,21 +44,38 @@ while [[ $# -gt 0 ]]; do
 done
 [[ "$task_uid" =~ ^task_[0-9a-f]{32}$ ]] || fail "invalid --task-uid"
 [[ "$pr_number" =~ ^[1-9][0-9]*$ ]] || fail "invalid --pr"
+[[ "$cleanup_defer" == 0 || "$cleanup_only" == 0 ]] || fail "--cleanup=defer and --cleanup-only are mutually exclusive"
+[[ "$preflight" == 0 || "$cleanup_only" == 0 ]] || fail "--preflight cannot be combined with --cleanup-only"
 repo_root="$(git -C "$repo_root" rev-parse --show-toplevel)" || fail "invalid --repo-root"
 SCRIPT_DIR="$repo_root/scripts/pm"
 [[ -x "$SCRIPT_DIR/finalize-task.sh" ]] || fail "--repo-root does not contain the terminal orchestrator"
 mapping="$repo_root/.pm/github-project-sync/tasks.json"
 [[ -f "$mapping" ]] || fail "canonical task mapping is unavailable"
 receipt_root_args=(--default-worktree "$repo_root" --task-uid "$task_uid")
-[[ "$preflight" == 0 ]] && receipt_root_args+=(--create)
+[[ "$preflight" == 0 && "$cleanup_only" == 0 ]] && receipt_root_args+=(--create)
 receipt_root="$(python3 "$SCRIPT_DIR/canonical-receipt-root.py" "${receipt_root_args[@]}")" \
   || fail "cannot resolve canonical receipt root"
 merge_receipt="$receipt_root/merge-receipt.json"
-main_sync_receipt="$receipt_root/main-sync-receipt.json"
 terminal_receipt="$receipt_root/terminal-cleanup-receipt.json"
-patch_equivalence="$receipt_root/patch-equivalence-receipt.json"
+protocol_selector="$(python3 - "$mapping" "$task_uid" <<'PY'
+import hashlib,json,pathlib,re,sys
+record=(json.loads(pathlib.Path(sys.argv[1]).read_text(encoding='utf-8')).get('tasks') or {}).get(sys.argv[2]) or {}
+types=record.get('phase_receipt_type') or {}; digests=record.get('phase_receipt_sha256') or {}
+v2_type=types.get('post_merge_done')
+digest=digests.get('post_merge_done')
+if v2_type=='oasis7_terminal_delivery':
+    print('v2' if isinstance(digest,str) and re.fullmatch(r'[0-9a-f]{64}',digest) else 'conflict')
+    raise SystemExit(0)
+legacy=((record.get('phase_receipts') or {}).get('post_merge_done') or {})
+if legacy.get('receipt_type')=='oasis7_terminal_cleanup':
+    print('v1' if isinstance(digest,str) and re.fullmatch(r'[0-9a-f]{64}',digest) else 'conflict')
+else:
+    print('new')
+PY
+)" || fail "cannot read terminal protocol selector"
+[[ "$protocol_selector" != conflict ]] || fail "terminal protocol selector is malformed"
 allow_missing_task_worktree=0
-[[ "$preflight" == 0 && -f "$terminal_receipt" ]] && allow_missing_task_worktree=1
+[[ "$protocol_selector" == v1 || "$protocol_selector" == v2 || "$cleanup_only" == 1 ]] && allow_missing_task_worktree=1
 identity_json="$(python3 - "$repo_root" "$mapping" "$task_uid" "$pr_number" "$allow_missing_task_worktree" <<'PY'
 import json
 import pathlib
@@ -197,115 +218,118 @@ PY
 )"
 identity_status="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["status"])' <<<"$identity_json")"
 if [[ "$identity_status" != "ready" ]]; then
-  if [[ "$preflight" == 1 ]]; then
-    if [[ "$output_json" == 1 ]]; then
-      python3 -m json.tool <<<"$identity_json"
-    else
-      python3 -c 'import json,sys; print("finalize-task preflight: " + "; ".join(json.load(sys.stdin)["blockers"]))' <<<"$identity_json" >&2
-    fi
+  if [[ "$output_json" == 1 ]]; then
+    python3 - "$identity_json" <<'PY'
+import json,sys
+p=json.loads(sys.argv[1]); blockers=p.get('blockers',[])
+print(json.dumps({**p,"delivery_blockers":blockers,"cleanup_blockers":[]},sort_keys=True))
+PY
   else
-    python3 -c 'import json,sys; print("; ".join(json.load(sys.stdin)["blockers"]))' <<<"$identity_json" >&2
+    python3 -c 'import json,sys; print("finalize-task: " + "; ".join(json.load(sys.stdin)["blockers"]))' <<<"$identity_json" >&2
   fi
   exit 1
 fi
+
+task_worktree="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["canonical_worktree"])' <<<"$identity_json")"
+task_branch="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["task_branch"])' <<<"$identity_json")"
+owner_role="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["owner_role"])' <<<"$identity_json")"
+
 if [[ "$preflight" == 1 ]]; then
+  cleanup_blockers='[]'
+  if [[ "$protocol_selector" == v2 ]]; then
+    cleanup_preflight="$($SCRIPT_DIR/post-merge-cleanup.sh --repo-root "$repo_root" --task-uid "$task_uid" --delivery --preflight --json)" || true
+    if [[ -n "$cleanup_preflight" ]]; then
+      cleanup_blockers="$(python3 -c 'import json,sys; p=json.loads(sys.stdin.read()); print(json.dumps(p.get("cleanup_blockers",[])))' <<<"$cleanup_preflight")"
+    fi
+  fi
   if [[ "$output_json" == 1 ]]; then
-    python3 -m json.tool <<<"$identity_json"
+    python3 - "$identity_json" "$cleanup_blockers" <<'PY'
+import json,sys
+p=json.loads(sys.argv[1]); cleanup=json.loads(sys.argv[2])
+print(json.dumps({**p,"status":"ready","identity_status":"bound",
+                  "delivery_blockers":[],"cleanup_blockers":cleanup},sort_keys=True))
+PY
   else
     echo "finalize-task preflight: ready $task_uid PR #$pr_number"
   fi
   exit 0
 fi
-task_worktree="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["canonical_worktree"])' <<<"$identity_json")"
-task_branch="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["task_branch"])' <<<"$identity_json")"
-main_ref="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["default_branch"])' <<<"$identity_json")"
-owner_role="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["owner_role"])' <<<"$identity_json")"
-# already_finalized retries remain live-readback operations, never a second identity.
-if [[ -f "$terminal_receipt" ]]; then
-  ledger_existed=0
-  [[ -f "$receipt_root/finalizer-ledger.json" ]] && ledger_existed=1
-  # A terminal Codex task may have its exact checkout recreated after the first
-  # cleanup. Re-run the receipt-bound cleanup before finalizer readback so
-  # --resume reconciles that drift instead of accepting a stale receipt alone.
-  cleanup_needed=0
-  [[ -e "$task_worktree" ]] && cleanup_needed=1
-  git -C "$repo_root" show-ref --verify --quiet "refs/heads/$task_branch" && cleanup_needed=1
-  remote_branch="$(git -C "$repo_root" ls-remote --heads origin "refs/heads/$task_branch")" \
-    || fail "cannot read remote task branch during terminal reconciliation"
-  [[ -n "$remote_branch" ]] && cleanup_needed=1
-  if [[ "$cleanup_needed" == 1 ]]; then
-    cleanup_args=(--repo-root "$repo_root" --worktree "$task_worktree" --branch "$task_branch"
-      --main-ref "$main_ref" --task-uid "$task_uid" --pr-receipt "$merge_receipt"
-      --main-sync-receipt "$main_sync_receipt" --terminal-receipt-output "$terminal_receipt")
-    if [[ -f "$patch_equivalence" ]]; then
-      cleanup_args+=(--patch-equivalence-receipt "$patch_equivalence")
-    fi
-    "$SCRIPT_DIR/post-merge-cleanup.sh" "${cleanup_args[@]}"
-  fi
-  python3 "$SCRIPT_DIR/post-merge-finalize.py" --repo-root "$repo_root" --task-uid "$task_uid" --terminal-receipt "$terminal_receipt" >/dev/null
-  status="$([[ "$ledger_existed" == 1 ]] && printf already_finalized || printf finalized)"
-else
-  [[ -d "$task_worktree" ]] || fail "canonical task worktree is missing before task_done; identity mismatch cannot be repaired here"
-  (cd "$task_worktree" && python3 "$SCRIPT_DIR/pr-merge-receipt.py" "$pr_number" --json >"$merge_receipt")
-  (cd "$task_worktree" && "$SCRIPT_DIR/task-closeout.sh" --role "$owner_role" --task-uid "$task_uid" \
-    --to-status "done" --verification-profile repository_required --pr-receipt "$merge_receipt" >/dev/null)
-  "$SCRIPT_DIR/refresh-task-cache.sh" --task-uid "$task_uid" --json >/dev/null
 
-  patch_receipt_arg=""
-  # Resolve the current remote default branch before choosing the integration
-  # lane. A stale origin/<main> tracking ref must not turn an ordinary
-  # fast-forward merge into an unnecessary patch-equivalence recovery path.
-  git -C "$repo_root" fetch origin "$main_ref" >/dev/null \
-    || fail "failed to refresh origin default branch before integration decision"
-  if [[ -n "$supplied_patch" ]]; then
-    [[ "$(cd "$(dirname "$supplied_patch")" && pwd -P)/$(basename "$supplied_patch")" == "$patch_equivalence" ]] \
-      || fail "supplied patch-equivalence receipt path mismatch"
-    patch_receipt_arg="$patch_equivalence"
-  # Ordinary integration is selected by ancestry; squash/rebase requires
-  # patch_equivalence against an exact first-parent integration commit.
-  elif ! git -C "$repo_root" merge-base --is-ancestor "$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["head_oid"])' "$merge_receipt")" "origin/$main_ref"; then
-    # Squash/rebase integration: find the exact first-parent integration commit
-    # whose tree equals the repository-generated branch projection.
-    branch_tip="$(python3 -c 'import json,sys;print(json.load(open(sys.argv[1]))["head_oid"])' "$merge_receipt")"
-    found=0
-    while read -r integration_commit; do
-      integration_parent="$(git -C "$repo_root" rev-parse "$integration_commit^")" || continue
-      candidate="$receipt_root/.patch-equivalence.candidate.json"
-      if "$SCRIPT_DIR/patch-equivalence-receipt.sh" --root "$repo_root" --branch-tip "$branch_tip" \
-          --main-commit "$integration_commit" --main-parent "$integration_parent" >"$candidate" 2>/dev/null; then
-        mv "$candidate" "$patch_equivalence"
-        found=1
-        break
-      fi
-      rm -f "$candidate"
-    done < <(git -C "$repo_root" rev-list --first-parent --max-count=200 "origin/$main_ref")
-    [[ "$found" == 1 ]] || fail "squash/rebase patch_equivalence proof could not be derived"
-    patch_receipt_arg="$patch_equivalence"
+run_cleanup() {
+  local cleanup_rc=0 cleanup_json
+  cleanup_json="$("$SCRIPT_DIR/post-merge-cleanup.sh" --repo-root "$repo_root" --task-uid "$task_uid" --delivery --json)" || cleanup_rc=$?
+  if [[ -z "$cleanup_json" ]]; then
+    cleanup_json='{"status":"blocked","cleanup_blockers":["cleanup helper returned no result"]}'
+    [[ "$cleanup_rc" != 0 ]] || cleanup_rc=1
   fi
+  printf '%s\n' "$cleanup_json"
+  return "$cleanup_rc"
+}
 
-  if [[ -n "$patch_receipt_arg" ]]; then
-    "$SCRIPT_DIR/post-merge-main-sync.sh" --repo-root "$repo_root" --main-ref "$main_ref" --task-uid "$task_uid" \
-      --pr-receipt "$merge_receipt" --receipt-output "$main_sync_receipt" --patch-equivalence-receipt "$patch_receipt_arg"
-    "$SCRIPT_DIR/post-merge-cleanup.sh" --repo-root "$repo_root" --worktree "$task_worktree" --branch "$task_branch" \
-      --main-ref "$main_ref" --task-uid "$task_uid" --pr-receipt "$merge_receipt" \
-      --main-sync-receipt "$main_sync_receipt" --terminal-receipt-output "$terminal_receipt" \
-      --patch-equivalence-receipt "$patch_receipt_arg"
+if [[ "$cleanup_only" == 1 ]]; then
+  [[ "$protocol_selector" == v2 ]] || fail "--cleanup-only requires a mapped v2 delivery receipt"
+  [[ -z "$supplied_patch" ]] || fail "--cleanup-only does not accept patch-equivalence input"
+  python3 "$SCRIPT_DIR/post-merge-finalize.py" --repo-root "$repo_root" --task-uid "$task_uid" --delivery --preflight --json >/dev/null \
+    || fail "delivery proof must be read back before cleanup-only"
+  cleanup_rc=0
+  cleanup_json="$(run_cleanup)" || cleanup_rc=$?
+  if [[ "$output_json" == 1 ]]; then
+    python3 - "$cleanup_json" "$task_uid" "$pr_number" "$receipt_root" <<'PY'
+import json,sys
+c=json.loads(sys.argv[1]); print(json.dumps({"status":c.get("status"),"task_uid":sys.argv[2],
+"pr_number":int(sys.argv[3]),"receipt_root":sys.argv[4],"delivery":{"state":"complete","protocol_version":2},
+"cleanup_state":c.get("cleanup_state"),"cleanup":c.get("cleanup"),"cleanup_blockers":c.get("cleanup_blockers",[])},sort_keys=True))
+PY
   else
-    "$SCRIPT_DIR/post-merge-main-sync.sh" --repo-root "$repo_root" --main-ref "$main_ref" --task-uid "$task_uid" \
-      --pr-receipt "$merge_receipt" --receipt-output "$main_sync_receipt"
-    "$SCRIPT_DIR/post-merge-cleanup.sh" --repo-root "$repo_root" --worktree "$task_worktree" --branch "$task_branch" \
-      --main-ref "$main_ref" --task-uid "$task_uid" --pr-receipt "$merge_receipt" \
-      --main-sync-receipt "$main_sync_receipt" --terminal-receipt-output "$terminal_receipt"
+    echo "finalize-task: cleanup-only $task_uid PR #$pr_number"
   fi
-  python3 "$SCRIPT_DIR/post-merge-finalize.py" --repo-root "$repo_root" --task-uid "$task_uid" --terminal-receipt "$terminal_receipt" >/dev/null
-  status="finalized"
+  exit "$cleanup_rc"
+fi
+
+if [[ "$protocol_selector" == v1 ]]; then
+  [[ "$cleanup_only" == 0 ]] || fail "legacy v1 cleanup cannot safely identify a recreated resource instance"
+  python3 "$SCRIPT_DIR/post-merge-finalize.py" --repo-root "$repo_root" --task-uid "$task_uid" \
+    --terminal-receipt "$terminal_receipt" >/dev/null \
+    || fail "legacy v1 terminal receipt live readback failed"
+  status="already_finalized"
+  delivery_state="complete_v1"
+  cleanup_state="legacy_v1_unchanged"
+  cleanup_json='{}'
+else
+  [[ -z "$supplied_patch" ]] || fail "patch-equivalence input is not part of v2 delivery finalization"
+  if [[ "$protocol_selector" != v2 ]]; then
+    [[ -d "$task_worktree" ]] || fail "canonical task worktree is missing before task_done; identity mismatch cannot be repaired here"
+    (cd "$task_worktree" && python3 "$SCRIPT_DIR/pr-merge-receipt.py" "$pr_number" --json >"$merge_receipt")
+    (cd "$task_worktree" && "$SCRIPT_DIR/task-closeout.sh" --role "$owner_role" --task-uid "$task_uid" \
+      --to-status "done" --verification-profile repository_required --pr-receipt "$merge_receipt" >/dev/null)
+    "$SCRIPT_DIR/refresh-task-cache.sh" --task-uid "$task_uid" --json >/dev/null
+  fi
+  delivery_json="$(python3 "$SCRIPT_DIR/post-merge-finalize.py" --repo-root "$repo_root" --task-uid "$task_uid" --delivery --json)" \
+    || fail "terminal delivery could not be finalized and read back"
+  delivery_state="$(python3 -c 'import json,sys; p=json.loads(sys.stdin.read()); d=p.get("delivery") or {}; print("complete" if d.get("state")=="complete" and d.get("protocol_version")==2 else "blocked")' <<<"$delivery_json")"
+  [[ "$delivery_state" == complete ]] || fail "producer did not return a complete v2 delivery proof"
+  if [[ "$cleanup_defer" == 1 ]]; then
+    status="finalized"
+    cleanup_state="cleanup_deferred"
+    cleanup_json='{"status":"cleanup_deferred","cleanup_state":"cleanup_deferred","cleanup":{},"cleanup_blockers":["cleanup deferred by caller"]}'
+  else
+    cleanup_rc=0
+    cleanup_json="$(run_cleanup)" || cleanup_rc=$?
+    status="finalized"
+    cleanup_state="$(python3 -c 'import json,sys; print(json.loads(sys.stdin.read()).get("cleanup_state","cleanup_deferred"))' <<<"$cleanup_json")"
+  fi
 fi
 
 if [[ "$output_json" == 1 ]]; then
-  python3 - "$status" "$task_uid" "$pr_number" "$receipt_root" "$resume" <<'PY'
+  python3 - "$status" "$task_uid" "$pr_number" "$receipt_root" "$resume" "$delivery_state" "$cleanup_state" "$cleanup_json" <<'PY'
 import json,sys
-print(json.dumps({"status":sys.argv[1],"task_uid":sys.argv[2],"pr_number":int(sys.argv[3]),"receipt_root":sys.argv[4],"resume":sys.argv[5]=="1"}))
+cleanup=json.loads(sys.argv[8]) if sys.argv[8] else {}
+delivery={"state":"complete","protocol_version":1 if sys.argv[6]=="complete_v1" else 2}
+print(json.dumps({"status":sys.argv[1],"task_uid":sys.argv[2],"pr_number":int(sys.argv[3]),
+                  "receipt_root":sys.argv[4],"resume":sys.argv[5]=="1","delivery":delivery,
+                  "cleanup_state":sys.argv[7],"cleanup":cleanup.get("cleanup",{}),
+                  "cleanup_blockers":cleanup.get("cleanup_blockers",[])},sort_keys=True))
 PY
 else
-  echo "finalize-task: $status $task_uid PR #$pr_number"
+  echo "finalize-task: $status $task_uid PR #$pr_number ($cleanup_state)"
 fi

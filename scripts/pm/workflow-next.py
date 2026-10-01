@@ -481,6 +481,29 @@ def verify_terminal_proof(
     if receipt_root is None:
         return
 
+    if phase == "post_merge_done" and any(key in task for key in (
+        "phase_receipt_type", "phase_receipt_comment_id", "phase_receipt_comment_sha256",
+    )):
+        # V2 selection and all v1/v2 interpretation live in one reader. This
+        # branch deliberately does not require main-sync or cleanup receipts.
+        try:
+            from loop_terminal import read_shared_terminal_proof
+            proof = read_shared_terminal_proof(
+                str(task.get("repository") or ""), str(task.get("task_uid") or ""),
+                repo_root=root, record=task,
+            )
+            if proof.get("status") != "passed":
+                raise ValueError("shared terminal reader did not pass")
+            for filename in ("merge-receipt.json", "terminal-delivery-receipt.json",
+                             "finalizer-ledger.json", "terminal-tombstone.json"):
+                path = receipt_root / filename
+                if path.exists():
+                    sources.append(str(path))
+            return
+        except (OSError, ValueError, KeyError, TypeError, subprocess.SubprocessError) as exc:
+            add_blocker(blockers, f"stale identity: shared terminal proof is unavailable ({exc})")
+            return
+
     phase_receipts = task.get("phase_receipts")
     phase_receipts = phase_receipts if isinstance(phase_receipts, dict) else {}
     phase_digests = task.get("phase_receipt_sha256")
