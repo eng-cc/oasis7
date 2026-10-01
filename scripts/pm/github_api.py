@@ -6,6 +6,7 @@ import argparse
 import hashlib
 import importlib.util
 import json
+import math
 import os
 import pathlib
 import random
@@ -17,12 +18,14 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import uuid
 from datetime import datetime, timezone
 from typing import Any
 
 
 API_ROOT = "https://api.github.com"
 GRAPHQL_URL = f"{API_ROOT}/graphql"
+BUDGET_SCHEMA = "oasis7.github-api-budget/v1"
 MAX_QUERY_ATTEMPTS = 3
 TELEMETRY_RETENTION_DAYS = 7
 TELEMETRY_MAX_BYTES = 50 * 1024 * 1024
@@ -354,7 +357,8 @@ class GitHubAPIClient:
                                is_query=not is_mutation, context=context, graphql=True)
         data = result.get("data")
         if not isinstance(data, dict):
-            raise APIError("GraphQL response has no object data", kind="malformed_response")
+            raise APIError("GraphQL response has no object data", kind="malformed_response",
+                           uncertain=is_mutation, mutation_started=is_mutation)
         return data
 
     def rest(self, method: str, path: str, payload: Any = None, *, operation: str,
@@ -436,12 +440,19 @@ class GitHubAPIClient:
                                       request_fingerprint=request_fingerprint)
                     self._finish_probe(recovery_probe, success=False)
                     raise APIError("GitHub API returned malformed JSON", kind="malformed_response",
-                                   status_code=response.status)
+                                   status_code=response.status, uncertain=not is_query,
+                                   mutation_started=not is_query)
+
+                if 200 <= response.status < 300 and graphql and not isinstance(decoded, dict):
+                    self._log_attempt(op, safe_context, attempt, response.status, elapsed_ms, cost,
+                                      remaining, reset_at, "malformed_response", None, graphql=True,
+                                      request_fingerprint=request_fingerprint)
+                    self._finish_probe(recovery_probe, success=False)
+                    raise APIError("GraphQL response is not a JSON object", kind="malformed_response",
+                                   status_code=response.status, uncertain=not is_query,
+                                   mutation_started=not is_query)
 
                 if 200 <= response.status < 300 and (isinstance(decoded, (dict, list)) or not raw):
-                    if graphql and not isinstance(decoded, dict):
-                        raise APIError("GraphQL response is not a JSON object", kind="malformed_response",
-                                       status_code=response.status)
                     errors = decoded.get("errors") if graphql else None
                     if graphql and "errors" in decoded and not isinstance(errors, list):
                         self._log_attempt(op, safe_context, attempt, response.status, elapsed_ms, cost,
@@ -462,7 +473,7 @@ class GitHubAPIClient:
                         self._log_attempt(op, safe_context, attempt, response.status, elapsed_ms, cost,
                                           remaining, reset_at, "graphql_error", None, graphql=True,
                                           request_fingerprint=request_fingerprint)
-                        self._finish_probe(recovery_probe, success=remaining != 0)
+                        self._finish_probe(recovery_probe, success=False)
                         partial_mutation = not is_query
                         raise APIError("GitHub GraphQL returned errors: " + ",".join(codes[:3]),
                                        kind="graphql_error", status_code=response.status,
@@ -470,6 +481,14 @@ class GitHubAPIClient:
                                        mutation_started=partial_mutation,
                                        details={"error_codes": codes[:3],
                                                 "partial_data": isinstance(decoded.get("data"), dict)})
+                    if graphql and not isinstance(decoded.get("data"), dict):
+                        self._log_attempt(op, safe_context, attempt, response.status, elapsed_ms, cost,
+                                          remaining, reset_at, "malformed_response", None, graphql=True,
+                                          request_fingerprint=request_fingerprint)
+                        self._finish_probe(recovery_probe, success=False)
+                        raise APIError("GraphQL response has no object data", kind="malformed_response",
+                                       status_code=response.status, uncertain=not is_query,
+                                       mutation_started=not is_query)
                     if graphql:
                         self._confirm_account_identity(decoded.get("data"))
                     self._record_success(remaining, used, limit, reset_at, cost, now,
@@ -528,29 +547,72 @@ class GitHubAPIClient:
         self.write_state("budget", self._account_identity_map_key(),
                          {"account_scope_state_key": key}, critical=False)
 
+    def _validated_budget_state(self, state: Any, *, strict: bool) -> dict[str, Any] | None:
+        if state is None:
+            return None
+        valid = isinstance(state, dict) and state.get("schema") == BUDGET_SCHEMA
+        if valid:
+            nullable_integer_fields = ("remaining", "used", "limit", "cost", "rest_remaining")
+            integer_fields = ("pause_until", "probe_until")
+            temporal_fields = ("observed_at_epoch", "pause_until_epoch", "probe_until_epoch")
+            text_fields = ("observed_at", "resetAt", "pause_resetAt", "rest_resetAt",
+                           "pause_reason", "probe_owner")
+            for key in (*nullable_integer_fields, *integer_fields):
+                value = state.get(key)
+                if key in state and (
+                    (key in integer_fields and (type(value) is not int or value < 0))
+                    or (key in nullable_integer_fields and value is not None
+                        and (type(value) is not int or value < 0))
+                ):
+                    valid = False
+                    break
+            if valid:
+                for key in temporal_fields:
+                    value = state.get(key)
+                    if (key in state and (type(value) not in {int, float}
+                                          or not math.isfinite(value) or value < 0)):
+                        valid = False
+                        break
+            if valid:
+                for key in text_fields:
+                    value = state.get(key)
+                    nullable = key in {"resetAt", "pause_resetAt", "rest_resetAt",
+                                       "pause_reason", "probe_owner"}
+                    if (key in state and ((value is None and not nullable)
+                                          or (value is not None and not isinstance(value, str)))):
+                        valid = False
+                        break
+            if valid and "shared_persistence" in state and type(state["shared_persistence"]) is not bool:
+                valid = False
+        if not valid:
+            if strict:
+                raise APIError("shared GitHub API budget state is invalid",
+                               kind="shared_state_unavailable")
+            return None
+        return dict(state)
+
     def _load_budget_state(self, *, strict: bool = False) -> dict[str, Any] | None:
-        state = _PROCESS_PAUSES.get(self._rate_state_key)
+        missing = object()
+        cached = _PROCESS_PAUSES.get(self._rate_state_key)
+        current = self.read_state("budget", self._rate_state_key, default=missing, strict=strict)
+        if strict and current is None:
+            raise APIError("shared GitHub API budget state is invalid", kind="shared_state_unavailable")
+        raw_state = cached if current is missing else current
+        state = self._validated_budget_state(raw_state, strict=strict)
         if state is not None:
-            current = self.read_state("budget", self._rate_state_key, default=None, strict=strict)
-            if current is not None:
-                state = current
-                _PROCESS_PAUSES[self._rate_state_key] = current
-        else:
-            state = self.read_state("budget", self._rate_state_key, default=None, strict=strict)
-        if isinstance(state, dict):
             _PROCESS_PAUSES[self._rate_state_key] = state
         if self._account_scope_state_key is None:
-            return dict(state) if isinstance(state, dict) else None
+            return dict(state) if state is not None else None
         account_cache_key = self._account_scope_state_key
-        account_state = _PROCESS_PAUSES.get(account_cache_key)
-        try:
-            current_account = self.read_state("budget", self._account_scope_state_key,
-                                              default=None, strict=strict)
-        except APIError:
-            raise
-        if current_account is not None:
-            account_state = current_account
-            _PROCESS_PAUSES[account_cache_key] = current_account
+        account_cached = _PROCESS_PAUSES.get(account_cache_key)
+        current_account = self.read_state("budget", self._account_scope_state_key,
+                                          default=missing, strict=strict)
+        if strict and current_account is None:
+            raise APIError("shared GitHub API budget state is invalid", kind="shared_state_unavailable")
+        raw_account = account_cached if current_account is missing else current_account
+        account_state = self._validated_budget_state(raw_account, strict=strict)
+        if account_state is not None:
+            _PROCESS_PAUSES[account_cache_key] = account_state
         own = state if isinstance(state, dict) else None
         shared = account_state if isinstance(account_state, dict) else None
         if own is None:
@@ -570,15 +632,21 @@ class GitHubAPIClient:
                 chosen = shared if float(shared.get("observed_at_epoch") or 0) >= float(own.get("observed_at_epoch") or 0) else own
         return dict(chosen) if isinstance(chosen, dict) else None
 
-    def _before_request(self, *, is_query: bool, graphql: bool) -> bool:
+    def _before_request(self, *, is_query: bool, graphql: bool) -> str | None:
         state = self._load_budget_state(strict=True)
         if not state:
-            return False
+            return None
         now = _epoch(self.clock)
         pause_until = float(state.get("pause_until_epoch") or 0)
         if pause_until > now:
             raise self._wait_error(state, now)
+        probe_until = float(state.get("probe_until_epoch") or 0)
+        if probe_until > now:
+            raise APIError("another process owns the bounded rate-limit probe",
+                           kind="rate_limit_probe_pending",
+                           retry_after_seconds=max(1, int(probe_until - now + 0.999)))
         remaining = state.get("remaining")
+        expired_pause = pause_until > 0
         if isinstance(remaining, int) and remaining <= 0:
             derived_until = _zero_budget_pause_until(state, now)
             if derived_until > now:
@@ -587,8 +655,9 @@ class GitHubAPIClient:
                                       "pause_reason": "primary_rate_limit",
                                       "pause_resetAt": state.get("resetAt")})
                 raise self._wait_error(waiting_state, now)
-        if not pause_until and not (isinstance(remaining, int) and remaining <= 0):
-            return False
+        needs_probe = expired_pause or (isinstance(remaining, int) and remaining <= 0)
+        if not needs_probe:
+            return None
         if not is_query or not graphql:
             raise APIError("a GraphQL read-only recovery probe is required before resuming API traffic",
                            kind="rate_limit_probe_pending", retry_after_seconds=0,
@@ -605,10 +674,17 @@ class GitHubAPIClient:
                     raise APIError("another process owns the bounded rate-limit probe",
                                    kind="rate_limit_probe_pending",
                                    retry_after_seconds=max(1, int(probe_until - now + 0.999)))
+                remaining = state.get("remaining")
+                needs_probe = pause_until > 0 or (isinstance(remaining, int) and remaining <= 0)
+                if not needs_probe:
+                    return None
+                owner = uuid.uuid4().hex
                 state["probe_until_epoch"] = now + 30
                 state["probe_until"] = int(now + 30)
+                state["probe_owner"] = owner
+                state["schema"] = BUDGET_SCHEMA
                 self._write_budget_locked(state)
-                return True
+                return owner
         except TimeoutError as exc:
             raise APIError("another process is checking the shared rate-limit window",
                            kind="rate_limit_probe_pending", retry_after_seconds=2) from exc
@@ -619,64 +695,90 @@ class GitHubAPIClient:
         retry = max(60, int(retry_seconds or 0)) if kind == "secondary_rate_limit" else int(retry_seconds or 0)
         if kind == "primary_rate_limit" and not retry:
             retry = 60
-        state = self._load_budget_state(strict=False) or {}
-        state.update({
-            "schema": "oasis7.github-api-budget/v1",
-            "observed_at": _now_utc(),
-            "observed_at_epoch": now,
-            "pause_reason": kind,
-            "pause_until_epoch": now + retry,
-            "pause_until": int(now + retry),
-            "pause_resetAt": reset_at,
-            "probe_until_epoch": 0,
-            "probe_until": 0,
-        })
-        if graphql:
-            state.update({"remaining": remaining, "used": used, "limit": limit,
-                          "cost": cost, "resetAt": reset_at})
-        else:
-            state.update({"rest_remaining": remaining, "rest_resetAt": reset_at})
-        _PROCESS_PAUSES[self._rate_state_key] = state
+        state: dict[str, Any] = {}
         try:
             with self.file_lock(self._budget_lock_key(), timeout=2.0):
+                state = self._load_budget_state(strict=True) or {}
+                state["schema"] = BUDGET_SCHEMA
+                current_until = float(state.get("pause_until_epoch") or 0)
+                proposed_until = now + retry
+                if proposed_until >= current_until:
+                    state.update({
+                        "pause_reason": kind,
+                        "pause_until_epoch": proposed_until,
+                        "pause_until": int(proposed_until),
+                        "pause_resetAt": reset_at,
+                    })
+                if now >= float(state.get("observed_at_epoch") or 0):
+                    state.update({"observed_at": _now_utc(), "observed_at_epoch": now})
+                    if graphql:
+                        state.update({"remaining": remaining, "used": used, "limit": limit,
+                                      "cost": cost, "resetAt": reset_at})
+                    else:
+                        state.update({"rest_remaining": remaining, "rest_resetAt": reset_at})
+                # A newer rate-limit response invalidates any earlier probe owner;
+                # an in-flight success can no longer clear this pause.
+                state.update({"probe_until_epoch": 0, "probe_until": 0, "probe_owner": None})
                 self._write_budget_locked(state)
         except (OSError, TimeoutError, APIError):
             # Keep the current process safe, but never claim cross-process state.
+            state = self._load_budget_state(strict=False) or {}
+            proposed_until = now + retry
+            current_until = float(state.get("pause_until_epoch") or 0)
+            state["schema"] = BUDGET_SCHEMA
+            if proposed_until >= current_until:
+                state.update({"pause_reason": kind, "pause_until_epoch": proposed_until,
+                              "pause_until": int(proposed_until), "pause_resetAt": reset_at})
+            if now >= float(state.get("observed_at_epoch") or 0):
+                state.update({"observed_at": _now_utc(), "observed_at_epoch": now})
+                if graphql:
+                    state.update({"remaining": remaining, "used": used, "limit": limit,
+                                  "cost": cost, "resetAt": reset_at})
+                else:
+                    state.update({"rest_remaining": remaining, "rest_resetAt": reset_at})
+            state.update({"probe_until_epoch": 0, "probe_until": 0, "probe_owner": None})
             state["shared_persistence"] = False
             _PROCESS_PAUSES[self._rate_state_key] = state
 
     def _record_success(self, remaining: int | None, used: int | None, limit: int | None,
                         reset_at: str | None, cost: int | None, now: float, *,
-                        recovery_probe: bool, response_ok: bool = True, graphql: bool) -> None:
-        state = self._load_budget_state(strict=False) or {}
-        if graphql and remaining is not None:
-            state.update({"remaining": remaining, "used": used, "limit": limit,
-                          "cost": cost, "resetAt": reset_at,
-                          "observed_at": _now_utc(), "observed_at_epoch": now})
-            if remaining <= 0:
-                pause_until = _zero_budget_pause_until(state, now)
-                state.update({"pause_reason": "primary_rate_limit",
-                              "pause_until_epoch": pause_until,
-                              "pause_until": int(pause_until),
-                              "pause_resetAt": reset_at,
-                              "probe_until_epoch": 0, "probe_until": 0})
-        elif recovery_probe and response_ok:
-            state.update({"remaining": None, "used": None, "cost": cost,
-                          "observed_at": _now_utc(), "observed_at_epoch": now})
-        exhausted = graphql and isinstance(remaining, int) and remaining <= 0
-        if recovery_probe and response_ok and not exhausted:
-            state.update({"pause_until_epoch": 0, "pause_until": 0, "pause_reason": None,
-                          "probe_until_epoch": 0, "probe_until": 0})
-        elif recovery_probe:
-            state["probe_until_epoch"] = now + 10
-            state["probe_until"] = int(now + 10)
-        if not state:
-            return
-        _PROCESS_PAUSES[self._rate_state_key] = state
+                        recovery_probe: str | None, response_ok: bool = True, graphql: bool) -> None:
+        state: dict[str, Any] = {}
         try:
             with self.file_lock(self._budget_lock_key(), timeout=2.0):
+                state = self._load_budget_state(strict=True) or {}
+                state["schema"] = BUDGET_SCHEMA
+                previous_observed = float(state.get("observed_at_epoch") or 0)
+                is_newer = now >= previous_observed
+                if graphql and remaining is not None and is_newer:
+                    state.update({"remaining": remaining, "used": used, "limit": limit,
+                                  "cost": cost, "resetAt": reset_at,
+                                  "observed_at": _now_utc(), "observed_at_epoch": now})
+                    if remaining <= 0:
+                        pause_until = _zero_budget_pause_until(state, now)
+                        current_until = float(state.get("pause_until_epoch") or 0)
+                        if pause_until >= current_until:
+                            state.update({"pause_reason": "primary_rate_limit",
+                                          "pause_until_epoch": pause_until,
+                                          "pause_until": int(pause_until),
+                                          "pause_resetAt": reset_at})
+                elif not graphql and now >= previous_observed:
+                    state.update({"observed_at": _now_utc(), "observed_at_epoch": now})
+                owns_probe = bool(recovery_probe and state.get("probe_owner") == recovery_probe)
+                if owns_probe:
+                    if response_ok and graphql and is_newer and isinstance(remaining, int) and remaining > 0:
+                        state.update({"pause_until_epoch": 0, "pause_until": 0,
+                                      "pause_reason": None, "pause_resetAt": None,
+                                      "probe_until_epoch": 0, "probe_until": 0,
+                                      "probe_owner": None})
+                    else:
+                        cooldown = max(float(state.get("probe_until_epoch") or 0), now + 10)
+                        state.update({"probe_until_epoch": cooldown, "probe_until": int(cooldown),
+                                      "probe_owner": None})
                 self._write_budget_locked(state)
         except (OSError, TimeoutError, APIError):
+            state = self._load_budget_state(strict=False) or {}
+            state["schema"] = BUDGET_SCHEMA
             state["shared_persistence"] = False
             _PROCESS_PAUSES[self._rate_state_key] = state
 
@@ -687,20 +789,23 @@ class GitHubAPIClient:
             _atomic_json(self.state_path("budget", self._account_scope_state_key), state)
             _PROCESS_PAUSES[self._account_scope_state_key] = state
 
-    def _finish_probe(self, recovery_probe: bool, *, success: bool) -> None:
+    def _finish_probe(self, recovery_probe: str | None, *, success: bool) -> None:
         if not recovery_probe:
             return
-        state = self._load_budget_state(strict=False) or {}
-        now = _epoch(self.clock)
-        state["probe_until_epoch"] = 0 if success else now + 10
-        state["probe_until"] = int(state["probe_until_epoch"])
-        _PROCESS_PAUSES[self._rate_state_key] = state
         try:
             with self.file_lock(self._budget_lock_key(), timeout=2.0):
+                state = self._load_budget_state(strict=True) or {}
+                if state.get("probe_owner") != recovery_probe:
+                    return
+                now = _epoch(self.clock)
+                # Success is finalized only in _record_success after validated
+                # GraphQL data and positive remaining budget are available.
+                until = 0 if success else max(float(state.get("probe_until_epoch") or 0), now + 10)
+                state.update({"schema": BUDGET_SCHEMA, "probe_until_epoch": until,
+                              "probe_until": int(until), "probe_owner": None})
                 self._write_budget_locked(state)
         except (OSError, TimeoutError, APIError):
-            state["shared_persistence"] = False
-            _PROCESS_PAUSES[self._rate_state_key] = state
+            pass
 
     def _wait_error(self, state: dict[str, Any], now: float) -> APIError:
         pause_until = float(state.get("pause_until_epoch") or now)
@@ -992,7 +1097,7 @@ def _stats(client: GitHubAPIClient, since_seconds: float) -> dict[str, Any]:
 
 
 def _status(client: GitHubAPIClient) -> dict[str, Any]:
-    state = client._load_budget_state(strict=False)
+    state = client._load_budget_state(strict=True)
     if not state:
         return {"status": "unknown", "shared_state": client.state_root is not None,
                 "coverage": "instrumented_paths_only"}
@@ -1015,8 +1120,17 @@ def main(argv: list[str] | None = None) -> int:
     status = sub.add_parser("status")
     status.add_argument("--json", action="store_true")
     args = parser.parse_args(argv)
-    client = GitHubAPIClient()
-    result = _stats(client, args.since) if args.command == "stats" else _status(client)
+    if args.command == "status":
+        try:
+            client = GitHubAPIClient.from_gh()
+            result = _status(client)
+        except APIError as exc:
+            result = exc.as_dict()
+            print(json.dumps(result, sort_keys=True, ensure_ascii=False))
+            return exc.exit_code
+    else:
+        client = GitHubAPIClient()
+        result = _stats(client, args.since)
     print(json.dumps(result, sort_keys=True, ensure_ascii=False))
     return 0
 

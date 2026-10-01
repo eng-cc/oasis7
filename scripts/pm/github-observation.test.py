@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import copy
 import importlib.util
 import json
 import pathlib
@@ -25,6 +26,7 @@ def load_module(name: str, path: pathlib.Path):
 
 API = load_module("github_api_for_observation_test", ROOT / "scripts/pm/github_api.py")
 OBS = load_module("github_observation_under_test", ROOT / "scripts/pm/github_observation.py")
+GATE = load_module("pr_gate_for_observation_test", ROOT / "scripts/pm/pr-lifecycle-gate.py")
 
 
 class FakeClock:
@@ -134,6 +136,52 @@ class ObservationTests(unittest.TestCase):
         self.assertFalse(changed_policy["cache_hit"])
         self.assertFalse(changed_task["cache_hit"])
         self.assertEqual(len(self.transport.calls), 3)
+
+    def test_observation_uses_latest_review_and_keeps_current_blockers(self):
+        task_uid = "task_0123456789abcdef0123456789abcdef"
+        task = {"merge_hold": {"kind": "normal_pr_ci_watch", "active": False}}
+        evaluate = lambda data: GATE._observation_candidate(data, task, task_uid)
+
+        superseded = self.snapshot(body=f"Task: {task_uid}")
+        superseded["comments"] = [{"id": "IC_OK", "body": "looks good"}]
+        superseded["reviews"] = [
+            {"id": "R_old", "state": "CHANGES_REQUESTED", "body": "", "author": {"login": "alice"},
+             "submittedAt": "2026-09-29T10:00:00Z"},
+            {"id": "R_new", "state": "APPROVED", "body": "", "author": {"login": "alice"},
+             "submittedAt": "2026-09-30T10:00:00Z"},
+        ]
+        self.data = superseded
+        candidate = OBS.observe_once(
+            self.client, "owner/repo", 42, self.fetch, evaluate, task_uid=task_uid,
+            context={"review_history": "superseded_changes_requested"},
+        )
+        self.assertTrue(candidate["candidate_ready"])
+        self.assertFalse(candidate["ready_for_merge"])
+        self.assertTrue(candidate["requires_live_gate"])
+        self.assertNotIn("readiness_receipt", candidate)
+
+        current_request = copy.deepcopy(superseded)
+        current_request["reviews"] = [
+            {"id": "R_current", "state": "CHANGES_REQUESTED", "body": "", "author": {"login": "alice"},
+             "submittedAt": "2026-10-01T10:00:00Z"},
+        ]
+        self.data = current_request
+        blocked_review = OBS.observe_once(
+            self.client, "owner/repo", 42, self.fetch, evaluate, task_uid=task_uid,
+            context={"review_history": "current_changes_requested"},
+        )
+        self.assertFalse(blocked_review["candidate_ready"])
+        self.assertFalse(blocked_review["ready_for_merge"])
+
+        unresolved = copy.deepcopy(superseded)
+        unresolved["threads"] = [{"id": "T_current", "isResolved": False}]
+        self.data = unresolved
+        blocked_thread = OBS.observe_once(
+            self.client, "owner/repo", 42, self.fetch, evaluate, task_uid=task_uid,
+            context={"review_history": "unresolved_thread"},
+        )
+        self.assertFalse(blocked_thread["candidate_ready"])
+        self.assertFalse(blocked_thread["ready_for_merge"])
 
     def test_business_change_resets_interval_and_volatile_rate_fields_do_not_change_digest(self):
         result1 = OBS.observe_once(self.client, "owner/repo", 42, self.fetch, self.evaluate)
@@ -285,6 +333,65 @@ print(json.dumps(result, sort_keys=True))
         self.assertEqual(result["reason"], "stable_pr_watch_unchanged_budget_exhausted")
         self.assertFalse(result["ready_for_merge"])
         self.assertEqual(len(self.transport.calls), 2)
+
+    def test_watch_returns_on_meaningful_business_change_before_sleeping_through_repeat(self):
+        task_uid = "task_0123456789abcdef0123456789abcdef"
+        old = self.snapshot(body=f"Task: {task_uid}")
+        old["comments"] = [{"id": "C_1", "body": "status: waiting", "author": {"login": "bot"}}]
+        changed = copy.deepcopy(old)
+        changed["comments"][0]["body"] = "status: resolved"
+        snapshots = [old, changed, changed]
+
+        def fetch_sequence():
+            self.data = snapshots[min(self.fetch_count, len(snapshots) - 1)]
+            return self.fetch()
+
+        result = OBS.watch(
+            self.client, "owner/repo", 42, fetch_sequence, lambda _data: False,
+            task_uid=task_uid, min_interval=1, max_interval=4, max_polls=4,
+            max_unchanged_polls=1, sleeper=self.clock.sleep,
+        )
+        self.assertEqual(result["status"], "observed")
+        self.assertTrue(result["changed"])
+        self.assertFalse(result["candidate_ready"])
+        self.assertFalse(result["ready_for_merge"])
+        self.assertTrue(result["requires_live_gate"])
+        self.assertNotIn("readiness_receipt", result)
+        self.assertEqual(self.fetch_count, 2)
+        self.assertEqual(len(self.transport.calls), 2)
+
+    def test_watch_returns_on_hold_context_change_with_same_pr_projection(self):
+        task_uid = "task_0123456789abcdef0123456789abcdef"
+        task = {"merge_hold": {"kind": "user_requested_merge_hold", "active": True}}
+        context = {"merge_hold": copy.deepcopy(task["merge_hold"])}
+        sleeps = []
+        fetches = []
+
+        def fetch_same_pr():
+            fetches.append(True)
+            data = self.snapshot(body=f"Task: {task_uid}")
+            return data
+
+        def sleep_and_change_hold(seconds):
+            sleeps.append(seconds)
+            task["merge_hold"] = {"kind": "manual_packaging_ci_hold", "active": True}
+            context["merge_hold"] = copy.deepcopy(task["merge_hold"])
+
+        result = OBS.watch(
+            self.client, "owner/repo", 42, fetch_same_pr,
+            lambda data: GATE._observation_candidate(data, task, task_uid),
+            task_uid=task_uid, context=context, min_interval=1, max_interval=4,
+            max_polls=4, max_unchanged_polls=3, sleeper=sleep_and_change_hold,
+        )
+        self.assertEqual(result["status"], "observed")
+        self.assertTrue(result["changed"])
+        self.assertFalse(result["candidate_ready"])
+        self.assertFalse(result["ready_for_merge"])
+        self.assertTrue(result["requires_live_gate"])
+        self.assertNotIn("readiness_receipt", result)
+        self.assertEqual(len(fetches), 2)
+        self.assertEqual(len(self.transport.calls), 0)
+        self.assertEqual(len(sleeps), 1)
 
 
 if __name__ == "__main__":

@@ -263,7 +263,7 @@ def _query(include_comment_bodies: bool) -> str:
     review_body_field = "body" if include_comment_bodies else ""
     return f"""
     query GitHubPRSnapshot($owner: String!, $repo: String!, $number: Int!) {{
-      viewer {{ login }}
+      viewer {{ id login }}
       rateLimit {{ cost remaining used resetAt limit }}
       repository(owner: $owner, name: $repo) {{
         nameWithOwner
@@ -294,7 +294,7 @@ def _query(include_comment_bodies: bool) -> str:
 def _identity_query() -> str:
     return """
     query GitHubPRIdentity($owner: String!, $repo: String!, $number: Int!) {
-      viewer { login }
+      viewer { id login }
       rateLimit { cost remaining used resetAt limit }
       repository(owner: $owner, name: $repo) {
         nameWithOwner

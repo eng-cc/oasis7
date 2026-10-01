@@ -148,6 +148,22 @@ def _rest_pages(client, path: str, *, operation: str, context: dict[str, Any] | 
     raise ValueError(f"{operation} exceeded the bounded 100-page read")
 
 
+def _policy_external_wait(exc: BaseException, source: str) -> dict[str, Any] | None:
+    serializer = getattr(exc, "as_dict", None)
+    if not callable(serializer):
+        return None
+    try:
+        payload = serializer()
+    except Exception:
+        return None
+    if not isinstance(payload, dict) or payload.get("status") != "external_wait":
+        return None
+    result = dict(payload)
+    result.update({"source": source, "required_status_checks": [], "ready_for_merge": False})
+    result.pop("readiness_receipt", None)
+    return result
+
+
 def discover_required_policy(repo: str, branch: str, *, client=None,
                              context: dict[str, Any] | None = None) -> dict[str, Any]:
     from urllib.parse import quote
@@ -181,6 +197,9 @@ def discover_required_policy(repo: str, branch: str, *, client=None,
         if getattr(exc, "status_code", None) == 404:
             classic_error = "404 Not Found"
         else:
+            wait = _policy_external_wait(exc, "classic_branch_protection")
+            if wait is not None:
+                return wait
             return {"status":"capability_blocked","source":"classic_branch_protection",
                     "reason":"policy_read_error","resume":"restore classic branch protection read access and rerun",
                     "required_status_checks":[],"error":str(exc)}
@@ -191,6 +210,9 @@ def discover_required_policy(repo: str, branch: str, *, client=None,
         rulesets = _rest_pages(api_client, f"repos/{repo}/rulesets", operation="repository_rulesets",
                                context={**context, "operation_name": "RepositoryRulesets"})
     except Exception as exc:
+        wait = _policy_external_wait(exc, "repository_rulesets")
+        if wait is not None:
+            return wait
         return {"status": "capability_blocked", "source": "repository_rulesets", "reason": "permission_or_transport_failure", "resume": "restore GitHub ruleset read access and rerun", "required_status_checks": [], "error": str(exc)}
     checks = checks if not classic_error else []
     expanded_rulesets = []
@@ -204,6 +226,9 @@ def discover_required_policy(repo: str, branch: str, *, client=None,
                 context={**context, "operation_name": "RulesetDetail"},
             ))
         except Exception as exc:
+            wait = _policy_external_wait(exc, "repository_rulesets")
+            if wait is not None:
+                return wait
             return {"status": "capability_blocked", "source": "repository_rulesets", "reason": "ruleset_detail_unavailable", "resume": "restore GitHub ruleset detail access and rerun", "required_status_checks": [], "error": str(exc)}
     needs_default = any("~DEFAULT_BRANCH" in (((x.get("conditions") or {}).get("ref_name") or {}).get("include") or []) for x in expanded_rulesets)
     try:
@@ -212,6 +237,9 @@ def discover_required_policy(repo: str, branch: str, *, client=None,
             context={**context, "operation_name": "RepositoryMetadata"},
         ).get("default_branch") or "") if needs_default else ""
     except Exception as exc:
+        wait = _policy_external_wait(exc, "repository_metadata")
+        if wait is not None:
+            return wait
         return {"status":"capability_blocked","source":"repository_metadata","reason":"default_branch_read_error","resume":"restore repository metadata read access and rerun","required_status_checks":[],"error":str(exc)}
     if needs_default and not default_branch:
         return {"status":"capability_blocked","source":"repository_metadata","reason":"default_branch_read_error","resume":"repository default_branch was empty; repair metadata access and rerun","required_status_checks":[]}
@@ -1752,7 +1780,7 @@ def _observation_candidate(data: dict[str, Any], task: dict[str, Any], task_uid:
     if str(data.get("reviewDecision") or "").upper() == "CHANGES_REQUESTED":
         return False
     if any(str(review.get("state") or "").upper() == "CHANGES_REQUESTED"
-           for review in data.get("reviews") or [] if isinstance(review, dict)):
+           for review in latest_reviews(data.get("reviews") or [])):
         return False
     if any(not bool(thread.get("isResolved", thread.get("is_resolved", False)))
            for thread in data.get("threads") or [] if isinstance(thread, dict)):
@@ -1928,6 +1956,18 @@ def main() -> int:
                 number_hint=record["pr_number"], effective_root=effective,
                 task_uid=args.task_uid,
             )
+            policy_wait = data.get("policy_discovery")
+            if isinstance(policy_wait, dict) and policy_wait.get("status") == "external_wait":
+                result = dict(policy_wait)
+                result.update({"ready_for_merge": False, "mutation_started": False,
+                               "uncertain": False})
+                result.pop("readiness_receipt", None)
+                if args.json:
+                    print(json.dumps(result, indent=2, sort_keys=True))
+                else:
+                    print(str(result.get("error") or result.get("reason") or "GitHub API rate limit is active"),
+                          file=sys.stderr)
+                return 75
             if branch_assertion is not None and str(data.get("headRefName") or "") != branch_assertion:
                 raise ValueError("PR head branch does not match the selected branch")
             rebuilt = rebuild_issue_evidence(

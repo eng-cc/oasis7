@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import contextlib
 import importlib.util
 import json
 import pathlib
@@ -44,6 +45,183 @@ PROCESS_CODE = "\n".join([
 
 
 class GitHubAPIConcurrencyTests(unittest.TestCase):
+    def test_stale_success_write_preserves_pause_written_before_lock(self):
+        with tempfile.TemporaryDirectory() as temp:
+            state_root = pathlib.Path(temp) / "state"
+            client = API.GitHubAPIClient("success-race-token", transport=lambda *_: None,
+                                         state_root=state_root)
+            now = time.time()
+            pause = {
+                "schema": "oasis7.github-api-budget/v1", "remaining": 380,
+                "used": 120, "limit": 500, "cost": 1,
+                "resetAt": "2030-01-01T00:00:00Z", "observed_at": "concurrent-limit",
+                "observed_at_epoch": now, "pause_reason": "secondary_rate_limit",
+                "pause_until": int(now + 120), "pause_until_epoch": now + 120,
+                "probe_until": 0, "probe_until_epoch": 0,
+            }
+            original_lock = client.file_lock
+
+            @contextlib.contextmanager
+            def write_external_pause_then_lock(key, *, timeout=2.0):
+                # Model another process committing its throttle state after the
+                # success response was read but before this writer takes lock.
+                API._atomic_json(client._budget_path(), pause)
+                with original_lock(key, timeout=timeout):
+                    yield
+
+            API._PROCESS_PAUSES.clear()
+            client.file_lock = write_external_pause_then_lock
+            client._record_success(410, 90, 500, "2030-01-01T00:00:00Z", 1, now,
+                                   recovery_probe=False, graphql=True)
+
+            observed = client.rate_limit_snapshot()
+            self.assertEqual(observed["status"], "external_wait")
+            self.assertEqual(observed["reason"], "secondary_rate_limit")
+            self.assertGreaterEqual(observed["retry_after_seconds"], 119)
+
+    def test_stale_success_does_not_replace_newer_observation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            state_root = pathlib.Path(temp) / "state"
+            client = API.GitHubAPIClient("stale-observation-token", transport=lambda *_: None,
+                                         state_root=state_root)
+            now = time.time()
+            client.write_state("budget", client._rate_state_key, {
+                "schema": "oasis7.github-api-budget/v1", "remaining": 380,
+                "used": 120, "limit": 500, "cost": 1,
+                "resetAt": "2030-01-01T00:00:00Z", "observed_at": "newer",
+                "observed_at_epoch": now, "pause_reason": None,
+                "pause_until": 0, "pause_until_epoch": 0,
+                "probe_until": 0, "probe_until_epoch": 0,
+            })
+            API._PROCESS_PAUSES.clear()
+            client._record_success(410, 90, 500, "2030-01-01T00:00:00Z", 1, now - 1,
+                                   recovery_probe=False, graphql=True)
+
+            state = client._load_budget_state(strict=True)
+            self.assertEqual(state["remaining"], 380)
+            self.assertEqual(state["observed_at"], "newer")
+
+    def test_rate_limit_merge_keeps_the_longer_existing_pause(self):
+        with tempfile.TemporaryDirectory() as temp:
+            state_root = pathlib.Path(temp) / "state"
+            client = API.GitHubAPIClient("rate-limit-merge-token", transport=lambda *_: None,
+                                         state_root=state_root)
+            now = time.time()
+            client.write_state("budget", client._rate_state_key, {
+                "schema": "oasis7.github-api-budget/v1", "remaining": 380,
+                "used": 120, "limit": 500, "cost": 1,
+                "resetAt": "2030-01-01T00:00:00Z", "observed_at": "older",
+                "observed_at_epoch": now - 1, "pause_reason": "secondary_rate_limit",
+                "pause_until": int(now + 180), "pause_until_epoch": now + 180,
+                "probe_until": 0, "probe_until_epoch": 0,
+            })
+            API._PROCESS_PAUSES.clear()
+            client._record_rate_limit("primary_rate_limit", 60, None, 0, 500, 500, 1,
+                                      now, graphql=True)
+
+            state = client._load_budget_state(strict=True)
+            self.assertEqual(state["pause_reason"], "secondary_rate_limit")
+            self.assertGreaterEqual(state["pause_until_epoch"], now + 179)
+            self.assertEqual(state["remaining"], 0)
+
+    def test_local_rate_limit_fallback_keeps_longer_pause_without_claiming_shared_state(self):
+        with tempfile.TemporaryDirectory() as temp:
+            state_root = pathlib.Path(temp) / "state"
+            client = API.GitHubAPIClient("rate-limit-fallback-token", transport=lambda *_: None,
+                                         state_root=state_root)
+            now = time.time()
+            client.write_state("budget", client._rate_state_key, {
+                "schema": "oasis7.github-api-budget/v1", "remaining": 380,
+                "used": 120, "limit": 500, "cost": 1,
+                "resetAt": "2030-01-01T00:00:00Z", "observed_at": "older",
+                "observed_at_epoch": now - 1, "pause_reason": "secondary_rate_limit",
+                "pause_until": int(now + 180), "pause_until_epoch": now + 180,
+                "probe_until": 0, "probe_until_epoch": 0,
+            })
+            API._PROCESS_PAUSES.clear()
+
+            @contextlib.contextmanager
+            def unavailable_lock(_key, *, timeout=2.0):
+                raise TimeoutError("fixture lock timeout")
+                yield
+
+            client.file_lock = unavailable_lock
+            client._record_rate_limit("primary_rate_limit", 60, None, 0, 500, 500, 1,
+                                      now, graphql=True)
+            state = API._PROCESS_PAUSES[client._rate_state_key]
+            self.assertEqual(state["pause_reason"], "secondary_rate_limit")
+            self.assertGreaterEqual(state["pause_until_epoch"], now + 179)
+            self.assertIs(state["shared_persistence"], False)
+
+    def test_stale_probe_success_cannot_clear_newer_pause_or_owner(self):
+        with tempfile.TemporaryDirectory() as temp:
+            state_root = pathlib.Path(temp) / "state"
+            client = API.GitHubAPIClient("probe-owner-token", transport=lambda *_: None,
+                                         state_root=state_root)
+            now = time.time()
+            client.write_state("budget", client._rate_state_key, {
+                "schema": "oasis7.github-api-budget/v1", "remaining": 450,
+                "used": 50, "limit": 500, "cost": 1,
+                "observed_at": "current", "observed_at_epoch": now,
+                "pause_reason": "secondary_rate_limit", "pause_until": int(now + 120),
+                "pause_until_epoch": now + 120, "probe_until": int(now + 30),
+                "probe_until_epoch": now + 30, "probe_owner": "current-owner",
+            })
+            API._PROCESS_PAUSES.clear()
+            client._record_success(440, 60, 500, "2030-01-01T00:00:00Z", 1, now + 1,
+                                   recovery_probe="stale-owner", graphql=True)
+
+            state = client._load_budget_state(strict=True)
+            self.assertEqual(state["pause_reason"], "secondary_rate_limit")
+            self.assertGreaterEqual(state["pause_until_epoch"], now + 119)
+            self.assertEqual(state["probe_owner"], "current-owner")
+
+    def test_probe_finish_only_releases_matching_owner_and_preserves_pause(self):
+        with tempfile.TemporaryDirectory() as temp:
+            state_root = pathlib.Path(temp) / "state"
+            client = API.GitHubAPIClient("probe-finish-token", transport=lambda *_: None,
+                                         state_root=state_root)
+            now = time.time()
+            client.write_state("budget", client._rate_state_key, {
+                "schema": "oasis7.github-api-budget/v1", "remaining": 450,
+                "used": 50, "limit": 500, "cost": 1,
+                "observed_at": "current", "observed_at_epoch": now,
+                "pause_reason": "secondary_rate_limit", "pause_until": int(now + 120),
+                "pause_until_epoch": now + 120, "probe_until": int(now + 30),
+                "probe_until_epoch": now + 30, "probe_owner": "current-owner",
+            })
+            API._PROCESS_PAUSES.clear()
+            client._finish_probe("stale-owner", success=False)
+            stale_state = client._load_budget_state(strict=True)
+            self.assertEqual(stale_state["probe_owner"], "current-owner")
+
+            client._finish_probe("current-owner", success=False)
+            state = client._load_budget_state(strict=True)
+            self.assertIsNone(state["probe_owner"])
+            self.assertGreater(state["probe_until_epoch"], now)
+            self.assertEqual(state["pause_reason"], "secondary_rate_limit")
+            self.assertGreaterEqual(state["pause_until_epoch"], now + 119)
+
+    def test_active_probe_blocks_even_with_fresh_positive_budget(self):
+        with tempfile.TemporaryDirectory() as temp:
+            state_root = pathlib.Path(temp) / "state"
+            client = API.GitHubAPIClient("probe-block-token", transport=lambda *_: None,
+                                         state_root=state_root)
+            now = time.time()
+            client.write_state("budget", client._rate_state_key, {
+                "schema": "oasis7.github-api-budget/v1", "remaining": 450,
+                "used": 50, "limit": 500, "cost": 1,
+                "observed_at": "current", "observed_at_epoch": now,
+                "pause_until": 0, "pause_until_epoch": 0,
+                "probe_until": int(now + 30), "probe_until_epoch": now + 30,
+                "probe_owner": "current-owner",
+            })
+            API._PROCESS_PAUSES.clear()
+            with self.assertRaises(API.APIError) as caught:
+                client.graphql("query Read { viewer { login } }", operation="read")
+            self.assertEqual(caught.exception.kind, "rate_limit_probe_pending")
+
+
     def test_eight_processes_release_exactly_one_recovery_probe(self):
         with tempfile.TemporaryDirectory() as temp:
             root = pathlib.Path(temp)

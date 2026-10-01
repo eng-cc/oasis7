@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
 import json
 import os
 import pathlib
@@ -206,6 +208,55 @@ class GitHubAPITests(unittest.TestCase):
             self.client(transport).graphql("query Strict { viewer { login } }", operation="strict")
         self.assertEqual(caught.exception.kind, "malformed_response")
 
+    def test_malformed_successful_mutations_remain_uncertain_and_single_shot(self):
+        cases = [
+            (API.HTTPResponse(200, {}, b"not-json"), "invalid JSON"),
+            (response(payload=[]), "non-object envelope"),
+            (response(payload={}), "missing data"),
+            (response(payload={"data": None}), "null data"),
+        ]
+        for index, (reply, label) in enumerate(cases):
+            with self.subTest(shape=label):
+                transport = FakeTransport([reply])
+                client = self.client(transport, f"malformed-mutation-{index}")
+                with self.assertRaises(API.APIError) as caught:
+                    client.graphql("mutation Change { change { id } }", operation="change")
+                self.assertEqual(caught.exception.kind, "malformed_response")
+                self.assertTrue(caught.exception.mutation_started)
+                self.assertTrue(caught.exception.uncertain)
+                self.assertEqual(caught.exception.workflow_status, "uncertain")
+                self.assertEqual(len(transport.calls), 1)
+
+    def test_parseable_invalid_critical_budget_state_blocks_before_transport(self):
+        malformed_states = [
+            ([], "array"),
+            (42, "number"),
+            (None, "JSON null is not a missing file"),
+            ({"schema": "oasis7.github-api-budget/v0", "remaining": 500}, "wrong schema"),
+            ({"schema": "oasis7.github-api-budget/v1", "remaining": True}, "boolean budget"),
+            ({"schema": "oasis7.github-api-budget/v1", "pause_until_epoch": None},
+             "null temporal value"),
+            ({"schema": "oasis7.github-api-budget/v1", "observed_at_epoch": True},
+             "boolean observation time"),
+            ({"schema": "oasis7.github-api-budget/v1", "probe_until_epoch": "later"},
+             "string probe deadline"),
+            ({"schema": "oasis7.github-api-budget/v1", "used": -1}, "negative budget counter"),
+            ({"schema": "oasis7.github-api-budget/v1", "pause_until": "2030"},
+             "string pause deadline"),
+        ]
+        for index, (state, label) in enumerate(malformed_states):
+            with self.subTest(shape=label):
+                API._PROCESS_PAUSES.clear()
+                transport = FakeTransport([response(payload={"data": {"viewer": {"login": "ok"}}})])
+                client = self.client(transport, f"invalid-budget-state-{index}")
+                path = client.state_path("budget", client._rate_state_key)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(state), encoding="utf-8")
+                with self.assertRaises(API.APIError) as caught:
+                    client.graphql("query Read { viewer { login } }", operation="read")
+                self.assertEqual(caught.exception.kind, "shared_state_unavailable")
+                self.assertEqual(len(transport.calls), 0)
+
     def test_rate_limit_guard_shares_one_measured_budget_probe(self):
         transport = FakeTransport([response(payload={"data": {"rateLimit": {
             "cost": 1, "remaining": 480, "used": 20, "limit": 500,
@@ -334,6 +385,62 @@ class GitHubAPITests(unittest.TestCase):
         self.assertEqual(API._stats(client, 3600)["groups"], [])
         self.assertEqual(API._status(client)["status"], "unknown")
         self.assertEqual(len(transport.calls), 0)
+
+    def test_status_cli_resolves_environment_credential_and_reads_pause_without_http(self):
+        token = "ghs_status_secret_from_environment"
+        common = self.state_root / "git-common"
+        api_state = common / "oasis7" / "github-api-v1"
+        seeded = API.GitHubAPIClient(token, state_root=api_state, clock=self.clock)
+        seeded.write_state("budget", seeded._rate_state_key, {
+            "schema": "oasis7.github-api-budget/v1", "remaining": 400, "used": 100,
+            "limit": 500, "cost": 1, "resetAt": "2030-01-01T00:00:00Z",
+            "observed_at": "now", "observed_at_epoch": self.clock.now,
+            "pause_reason": "secondary_rate_limit",
+            "pause_until_epoch": self.clock.now + 120,
+            "pause_until": int(self.clock.now + 120),
+        })
+        API._PROCESS_PAUSES.clear()
+        output = io.StringIO()
+        with mock.patch.dict(os.environ, {"GH_TOKEN": token}, clear=True), \
+                mock.patch.object(API, "_git_common_dir", return_value=common), \
+                mock.patch.object(API, "_default_transport", side_effect=AssertionError("status sent HTTP")), \
+                mock.patch.object(API.subprocess, "run", side_effect=AssertionError("env token must win")), \
+                contextlib.redirect_stdout(output):
+            exit_code = API.main(["status", "--json"])
+        result = json.loads(output.getvalue())
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(result["status"], "external_wait")
+        self.assertEqual(result["reason"], "secondary_rate_limit")
+        self.assertNotIn(token, output.getvalue())
+
+    def test_status_cli_resolves_mocked_gh_credential_without_http_or_secret_output(self):
+        token = "ghs_status_secret_from_gh"
+        common = self.state_root / "git-common-gh"
+        api_state = common / "oasis7" / "github-api-v1"
+        seeded = API.GitHubAPIClient(token, state_root=api_state, clock=self.clock)
+        seeded.write_state("budget", seeded._rate_state_key, {
+            "schema": "oasis7.github-api-budget/v1", "remaining": 400, "used": 100,
+            "limit": 500, "cost": 1, "resetAt": "2030-01-01T00:00:00Z",
+            "observed_at": "now", "observed_at_epoch": self.clock.now,
+            "pause_reason": "secondary_rate_limit",
+            "pause_until_epoch": self.clock.now + 120,
+            "pause_until": int(self.clock.now + 120),
+        })
+        API._PROCESS_PAUSES.clear()
+        output = io.StringIO()
+        gh_result = subprocess.CompletedProcess(["gh", "auth", "token"], 0, token + "\n", "")
+        with mock.patch.dict(os.environ, {}, clear=True), \
+                mock.patch.object(API, "_git_common_dir", return_value=common), \
+                mock.patch.object(API, "_default_transport", side_effect=AssertionError("status sent HTTP")), \
+                mock.patch.object(API.subprocess, "run", return_value=gh_result) as run_gh, \
+                contextlib.redirect_stdout(output):
+            exit_code = API.main(["status", "--json"])
+        result = json.loads(output.getvalue())
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(result["status"], "external_wait")
+        self.assertEqual(result["reason"], "secondary_rate_limit")
+        self.assertNotIn(token, output.getvalue())
+        run_gh.assert_called_once()
 
     def test_corrupt_shared_throttle_state_fails_closed(self):
         client = self.client(FakeTransport([]), "corrupt-state-token")

@@ -19,6 +19,10 @@ SPEC = importlib.util.spec_from_file_location("pr_gate", ROOT / "scripts/pm/pr-l
 assert SPEC and SPEC.loader
 gate = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(gate)
+API_SPEC = importlib.util.spec_from_file_location("github_api_for_policy_test", ROOT / "scripts/pm/github_api.py")
+assert API_SPEC and API_SPEC.loader
+api = importlib.util.module_from_spec(API_SPEC)
+API_SPEC.loader.exec_module(api)
 
 
 class PolicyHTTPFailure(RuntimeError):
@@ -397,6 +401,20 @@ class FinalTrustRed(unittest.TestCase):
         self.assertEqual(1, len(client.calls), "only classic 404 may fall back to rulesets")
         self.assertEqual("capability_blocked", result["status"])
         self.assertEqual("policy_read_error", result["reason"])
+
+    def test_classic_policy_rate_limit_preserves_external_wait_and_retry_after(self) -> None:
+        limited = api.APIError(
+            "GitHub API rate limit is active", kind="secondary_rate_limit",
+            status_code=429, retry_after_seconds=120,
+        )
+        result = gate.discover_required_policy(
+            "eng-cc/oasis7", "main", client=PolicyClient([limited]),
+        )
+        self.assertEqual("external_wait", result["status"])
+        self.assertEqual("secondary_rate_limit", result["reason"])
+        self.assertEqual(429, result["status_code"])
+        self.assertEqual(120, result["retry_after_seconds"])
+        self.assertFalse(result["ready_for_merge"])
 
     def test_writer_review_kind_and_readback_timestamp_roundtrip(self) -> None:
         writer_path = ROOT / "scripts/pm/record-pr-disposition.sh"

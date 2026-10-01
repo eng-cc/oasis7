@@ -4,6 +4,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import pathlib
+import re
 import tempfile
 import time
 import unittest
@@ -18,6 +19,12 @@ assert SPEC and SPEC.loader
 SNAPSHOT = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(SNAPSHOT)
 API = SNAPSHOT._github_api_module()
+OBS_SPEC = importlib.util.spec_from_file_location(
+    "github_observation_for_snapshot_test", ROOT / "scripts/pm/github_observation.py"
+)
+assert OBS_SPEC and OBS_SPEC.loader
+OBS = importlib.util.module_from_spec(OBS_SPEC)
+OBS_SPEC.loader.exec_module(OBS)
 
 
 REPOSITORY = "eng-cc/oasis7"
@@ -89,8 +96,15 @@ class SnapshotTransport:
         }
         self.calls = []
         self.force_uncertain_thread = None
+        self.force_malformed_thread = None
+        self.rest_responses = []
 
     def __call__(self, method, url, headers, body, timeout):
+        if url != API.GRAPHQL_URL:
+            self.calls.append((method, url, {}))
+            if not self.rest_responses:
+                raise AssertionError("unexpected REST request")
+            return self.rest_responses.pop(0)
         payload = json.loads(body or b"{}")
         query = payload.get("query", "")
         self.calls.append((method, url, payload))
@@ -101,6 +115,8 @@ class SnapshotTransport:
                     thread["isResolved"] = True
             if self.force_uncertain_thread == thread_id:
                 return API.HTTPResponse(503, {}, json.dumps({"message": "fixture timeout after apply"}))
+            if self.force_malformed_thread == thread_id:
+                return API.HTTPResponse(200, {}, b"[]")
             data = {"resolveReviewThread": {"thread": {"id": thread_id, "isResolved": True}}}
         elif "PRReviewThreadReadback" in query:
             data = {"repository": {"nameWithOwner": REPOSITORY,
@@ -118,6 +134,12 @@ class SnapshotTransport:
             data["repository"]["pullRequest"].pop("commits")
         else:
             data = fixture_data(self.threads)
+        if isinstance(data.get("viewer"), dict):
+            viewer_selection = re.search(r"viewer\s*\{([^}]*)\}", query)
+            if viewer_selection and re.search(r"\bid\b", viewer_selection.group(1)):
+                data["viewer"]["id"] = "MDQ6VXNlcjEyMw=="
+            else:
+                data["viewer"].pop("id", None)
         if "GitHubPRSnapshot" in query and "body" not in query:
             pr = data["repository"]["pullRequest"]
             pr.pop("body", None)
@@ -136,10 +158,10 @@ class SnapshotTransport:
             "X-RateLimit-Reset": str(int(time.time()) + 3600),
         }, json.dumps(result))
 
-    def client(self, state_root):
+    def client(self, state_root, token="fixture-token"):
         clock = FakeClock()
         return API.GitHubAPIClient(
-            "fixture-token", transport=self, state_root=state_root,
+            token, transport=self, state_root=state_root,
             clock=clock, sleeper=clock.sleep, random_value=lambda: 0,
         )
 
@@ -266,6 +288,20 @@ class GitHubPRSnapshotTests(unittest.TestCase):
         self.assertEqual(sum("PRReviewThreadReadback" in query for query in queries), 1)
         self.assertEqual(len(transport.calls), 4)
 
+    def test_malformed_successful_mutation_is_read_back_once_and_never_replayed(self):
+        threads = fixture_data()["repository"]["pullRequest"]["reviewThreads"]["nodes"]
+        transport = SnapshotTransport(threads=threads)
+        transport.force_malformed_thread = "PRRT_1"
+        result, selected = SNAPSHOT.closeout_review_threads(
+            transport.client(self.state_root), REPOSITORY, NUMBER, thread_ids=["PRRT_1"]
+        )
+        self.assertEqual(selected, ["PRRT_1"])
+        self.assertTrue(result["threads"][0]["isResolved"])
+        queries = [call[2]["query"] for call in transport.calls if call[2]]
+        self.assertEqual(sum("mutation ResolvePRReviewThread" in query for query in queries), 1)
+        self.assertEqual(sum("PRReviewThreadReadback" in query for query in queries), 1)
+        self.assertEqual(len(transport.calls), 4)
+
     def test_identity_read_is_a_distinct_uncached_request(self):
         transport = SnapshotTransport()
         client = transport.client(self.state_root)
@@ -275,6 +311,39 @@ class GitHubPRSnapshotTests(unittest.TestCase):
         self.assertEqual(len(transport.calls), 2)
         self.assertIn("GitHubPRSnapshot", transport.calls[0][2]["query"])
         self.assertIn("GitHubPRIdentity", transport.calls[1][2]["query"])
+
+    def test_actual_snapshot_identity_confirms_shared_account_pause(self):
+        API._PROCESS_PAUSES.clear()
+        token_a_transport = SnapshotTransport()
+        token_b_transport = SnapshotTransport()
+        token_a = token_a_transport.client(self.state_root, "credential-a")
+        token_b = token_b_transport.client(self.state_root, "credential-b")
+
+        snapshot = SNAPSHOT.fetch_pr_snapshot(token_a, REPOSITORY, NUMBER)
+        identity = SNAPSHOT.fetch_pr_identity(token_b, REPOSITORY, NUMBER)
+        self.assertEqual(snapshot["viewer"].get("id"), "MDQ6VXNlcjEyMw==")
+        self.assertEqual(identity["identity_metadata"]["viewer"].get("id"), "MDQ6VXNlcjEyMw==")
+        self.assertEqual(token_a._account_scope_state_key, token_b._account_scope_state_key)
+        self.assertNotEqual(token_a.credential_scope_digest, token_b.credential_scope_digest)
+        cache_context = {"effective_policy": "frozen"}
+        self.assertNotEqual(
+            OBS.observation_key(token_a, REPOSITORY, NUMBER, task_uid="fixture-task",
+                                context=cache_context),
+            OBS.observation_key(token_b, REPOSITORY, NUMBER, task_uid="fixture-task",
+                                context=cache_context),
+        )
+
+        token_a_transport.rest_responses.append(API.HTTPResponse(
+            429, {"Retry-After": "120"}, json.dumps({"message": "secondary rate limit"}),
+        ))
+        with self.assertRaises(API.APIError) as limited:
+            token_a.rest("GET", "repos/owner/repo", operation="trigger_secondary_limit")
+        self.assertEqual(limited.exception.workflow_status, "external_wait")
+        token_b_calls_before = len(token_b_transport.calls)
+        with self.assertRaises(API.APIError) as shared_pause:
+            token_b.rest("GET", "repos/owner/repo", operation="same_account_pause")
+        self.assertEqual(shared_pause.exception.workflow_status, "external_wait")
+        self.assertEqual(len(token_b_transport.calls), token_b_calls_before)
 
 
 if __name__ == "__main__":

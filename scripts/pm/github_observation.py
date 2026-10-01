@@ -249,6 +249,13 @@ def watch(client, repository: str, number: int, fetch_snapshot: Callable[[], dic
             result["formal_gate_command"] = f"python3 scripts/pm/pr-lifecycle-gate.py {number} --task-uid {task_uid or '<task_uid>'} --json"
             return result
         digest = result.get("snapshot_digest")
+        if previous_digest is not None and digest != previous_digest:
+            # A business change deserves prompt caller handling; the returned
+            # candidate remains derived-only and still requires a live gate.
+            result.update({"status": "observed", "changed": True,
+                           "ready_for_merge": False, "requires_live_gate": True})
+            result.pop("readiness_receipt", None)
+            return result
         if previous_digest is not None and digest == previous_digest:
             unchanged_polls += 1
         else:
