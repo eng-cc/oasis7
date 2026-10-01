@@ -93,6 +93,8 @@ def plan(args):
     embedded = set()
     build_scripts = False
     dynamic_includes = False
+    action_consumers = any(p.startswith('.github/workflows/') or pathlib.PurePosixPath(p).name in ('action.yml', 'action.yaml')
+                           for p in base_files + head_files if not p.startswith(tuple(exclusions)))
     for oid, files in [(ids['merge_base'], base_files), (ids['source_head'], head_files)]:
         build_scripts |= any(pathlib.PurePosixPath(p).name == 'build.rs' and not p.startswith('third_party/') for p in files)
         matches = subprocess.run(['git', '-C', str(root), 'grep', '-I', '-l', '-z', '-E',
@@ -125,8 +127,16 @@ def plan(args):
             add('actions-repo', path)
         elif suffix not in ('.md', '.rst', '.txt', '.adoc', '.sh'):
             all_units('unknown input: ' + path)
-        if path in embedded or dynamic_includes or (build_scripts and suffix not in ('.rs', '.py', '.sh', '.md', '.rst', '.txt', '.adoc') and not path.startswith('.github/')):
+        # build.rs can read arbitrary repository data or invoke generators. No
+        # suffix proves non-consumption, including documents and scripts. Keep
+        # old-side consumers when the build script itself has been removed.
+        if path in embedded or dynamic_includes or build_scripts:
             add('rust-repo', 'embedded or possible build input: ' + path)
+        # Shell is not a CodeQL language. A script can still change a workflow
+        # boundary; dynamic commands prevent a complete literal consumer graph.
+        # With any old/new workflow or local action, conservatively select Actions.
+        if suffix == '.sh' and action_consumers:
+            add('actions-repo', 'workflow or possible action input: ' + path)
     if args.full:
         all_units('full maintenance scan')
     enabled = args.mode != 'off'

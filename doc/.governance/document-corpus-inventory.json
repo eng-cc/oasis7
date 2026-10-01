@@ -4011,7 +4011,7 @@
     },
     {
       "path": "doc/testing/ci/codeql-operations.md",
-      "content_sha256": "e23408dedcf1ce7269e6758c2b61e03c5816680f6f934ecf75e556d407e5e988",
+      "content_sha256": "09cff2bc78a483d9d4dfc40327428f3216e77fd088d5252fcb011fe084616524",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",

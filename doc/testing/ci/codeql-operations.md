@@ -56,13 +56,17 @@ python3 scripts/security/codeql-health.py --fixture "$FIXTURE_PATH" \
 | execution failed / timed_out | 查看 extraction/query 步骤日志、实际 checkout、语言版本与覆盖诊断；保留失败，不使用 continue-on-error 假绿。 |
 | cancelled / queued / waiting | 核对同 PR supersession、共享槽位、平台队列与 runner 资源；取消不是完成，也不证明零告警。 |
 | execution success、upload failed/unknown | 查询已执行但结果未被确认接收；查 SARIF upload 日志、权限、ref/SHA/category 和处理错误。不得上传空报告补绿。 |
-| upload accepted | 只证明精确 ref/SHA/category 的 analysis 接收无 error；另读 Security findings 与 coverage。 |
+| upload accepted | 须同时有最新 job 的 `run_id` / `run_attempt`、成功上传步骤与唯一匹配的 SARIF association：该 job 的 `upload_sarif_id` 对应 analysis 的 `sarif_id`，且 analysis 接收无 error。精确 ref/SHA/category 或相近时间本身不足以关联本次上传；另读 Security findings 与 coverage。 |
 | finding `open` | 精确身份上观察到 open findings，交工程 owner 判断影响与修复；扫描接入不捆绑自动修复任务。 |
 | finding `unknown` | API 不完整、未找到 analysis 或没有完整 alert instances；不能转成零 findings。live reader 的 most_recent_instance 不构成完整历史证明。 |
-| `healthy` | 八个 unit/profile 都在 24 小时内且 execution success、upload accepted；不要求 findings 为零，也不证明 manifest coverage 或完整接入验收。 |
+| `healthy` | 八个 unit/profile 各自最新 run/attempt 均有明确关联的 analysis，在 24 小时内且 execution success、upload accepted；旧 attempt 的成功不能补足新 attempt。不同 profile 可来自不同运行。不要求 findings 为零，也不证明 manifest coverage 或完整接入验收。 |
 | `incomplete_or_stale` / `unknown` | 分别是完成/新鲜度不足与身份/API 错误。检查每单元 freshness、missing_manifests、coverage_status、errors；缺失 coverage 为 unknown。 |
 
 API 每个 endpoint 的读取有分页预算，精确身份的相关 runs 也有预算；超限或权限/响应错误保留 unknown，不无限枚举或丢弃错误。finding trend 当前为 unknown，不能用相邻报告的零值作趋势结论。
+
+live reader 使用精确 run attempt 的 jobs API；该 API 不提供 action 的上传输出，因此 `upload_step_status: success` 仍可与 `upload_status: unknown`、`analysis_association: unknown` 同时出现。不要由时间、同 SHA 或 job success 推造 SARIF association。查看 `run_id` / `run_attempt` 判断当前尝试，查看 `analysis_id` / `coverage_age_hours` / `fresh` 判断已关联的结果；缺乏 association 时这些结果不能借用历史记录。
+
+`previous_analysis_id` 与 `previous_analysis_age_hours` 只是精确 ref/SHA/category 下最近可见 analysis 的历史参考，不保证属于当前 attempt，也不能证明 latest upload 成功或覆盖新鲜。新 attempt 排队、取消、超时或上传失败时，保留该 attempt 的真实状态；旧 analysis 即使仍新鲜也不使报告 healthy。当前 live API 路径缺少上传关联证据时，须保留 unknown 并交验收 owner 核查，不能据此宣布 hosted 验收通过。
 
 现有 lifecycle consumers 共用 `scripts/pm/codeql_advisory.py`：只有当前 SHA/ref 的精确 Actions job/run/workflow provenance、完整保护发现、required checks 已满足且其他失败均已解释，才可能把单独的 CodeQL 异常解释为 advisory。fixture 已覆盖 Actions 来源逻辑，但 native platform code-scanning provider 映射仍缺少 hosted association 证明，会 fail closed。名字带 CodeQL、bot 身份或 non-required 都不是豁免依据。required CodeQL、活动 code-scanning 规则、未知来源、其他失败、review/threads/holds 和冲突仍受现有保护。解释 advisory `UNSTABLE` 不把它改写成 CLEAN，不增加 admin bypass；pending advisory scans 不新增等待，也不刷新普通 CI/review/integration receipts。
 

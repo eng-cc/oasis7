@@ -41,11 +41,20 @@ def report(data, now, max_age_hours=24):
                        a.get("category") == category and a.get("ref") == ref and
                        a.get("commit_sha") == sha and a.get("tool", {}).get("name") == "CodeQL"]
             matches.sort(key=lambda a: a.get("created_at", ""), reverse=True)
-            analysis = matches[0] if matches else None
+            previous_analysis = matches[0] if matches else None
             job_matches = [j for j in (jobs or []) if j.get("name") == f"CodeQL / {unit} / {profile}"
                            and j.get("head_sha") == sha and j.get("ref") == ref]
-            job_matches.sort(key=lambda j: j.get("started_at", ""), reverse=True)
+            job_matches.sort(key=lambda j: (j.get("run_started_at") or j.get("started_at") or "",
+                                           j.get("run_id", 0), j.get("run_attempt", 0)), reverse=True)
             job = job_matches[0] if job_matches else None
+            # SHA/ref/category alone also match older reruns. Accept only an explicit
+            # SARIF link to this exact run attempt; API records without that link
+            # remain unknown rather than borrowing a previous attempt's success.
+            attempt_bound = job and all(isinstance(job.get(k), int) and not isinstance(job.get(k), bool)
+                                        and job[k] > 0 for k in ("run_id", "run_attempt"))
+            associated = [a for a in matches if attempt_bound and job.get("upload_sarif_id")
+                          and a.get("sarif_id") == job["upload_sarif_id"]]
+            analysis = associated[0] if len(associated) == 1 else None
             execution = "unknown"
             if job:
                 state, conclusion = job.get("status"), job.get("conclusion")
@@ -53,11 +62,20 @@ def report(data, now, max_age_hours=24):
                 execution = (steps[0].get("conclusion") or "unknown") if len(steps) == 1 else (
                     conclusion if conclusion in ("cancelled", "timed_out") else
                     state if state in ("queued", "in_progress", "waiting", "pending") else "unknown")
-            upload = "accepted" if analysis and not analysis.get("error") else "failed" if analysis else "unknown"
-            if not analysis and job:
+            upload = "unknown"
+            upload_step_status = "unknown"
+            if job:
                 upload_steps = [s for s in job.get("steps", []) if s.get("name") == "CodeQL SARIF upload"]
-                if len(upload_steps) == 1 and upload_steps[0].get("conclusion") == "failure":
-                    upload = "failed"
+                if len(upload_steps) == 1:
+                    upload_step_status = upload_steps[0].get("conclusion") or upload_steps[0].get("status") or "unknown"
+                if upload_step_status in ("failure", "cancelled", "timed_out", "skipped"):
+                    upload = "failed" if upload_step_status == "failure" else upload_step_status
+                elif upload_step_status == "success" and analysis:
+                    upload = "failed" if analysis.get("error") else "accepted"
+                elif job.get("status") in ("queued", "in_progress", "waiting", "pending"):
+                    upload = job["status"]
+                elif job.get("conclusion") in ("cancelled", "timed_out"):
+                    upload = job["conclusion"]
             # Job success includes upload and does not prove a clean finding result.
             relevant_alerts = [a for a in (alerts or []) if any(
                 i.get("category") == category and i.get("commit_sha") == sha and i.get("ref") == ref
@@ -66,9 +84,17 @@ def report(data, now, max_age_hours=24):
                         "no_open_findings" if data.get("alert_instances_complete") is True else "unknown")
             completed = timestamp(analysis.get("created_at")) if analysis else None
             age = (now - completed).total_seconds() / 3600 if completed else None
+            previous_completed = timestamp(previous_analysis.get("created_at")) if previous_analysis else None
+            previous_age = (now - previous_completed).total_seconds() / 3600 if previous_completed else None
             coverage = data.get("coverage", {}).get(category)
             units.append({"unit": unit, "language": language, "profile": profile, "category": category,
                           "execution_status": execution, "upload_status": upload, "finding_status": findings,
+                          "upload_step_status": upload_step_status,
+                          "run_id": job.get("run_id") if job else None,
+                          "run_attempt": job.get("run_attempt") if job else None,
+                          "analysis_association": "sarif_id" if analysis else "unknown",
+                          "previous_analysis_id": previous_analysis.get("id") if previous_analysis else None,
+                          "previous_analysis_age_hours": previous_age,
                           "job_status": job.get("conclusion") or job.get("status") if job else "unknown",
                           "open_findings": len(relevant_alerts) if findings != "unknown" else None,
                           "coverage_age_hours": age, "fresh": age is not None and 0 <= age <= max_age_hours,
@@ -122,8 +148,13 @@ def live(repo, ref, sha):
     else:
         for run in relevant_runs:
             try:
-                for job in read_pages(repo, f"actions/runs/{run['id']}/jobs"):
+                attempt = run.get("run_attempt")
+                if not isinstance(attempt, int) or isinstance(attempt, bool) or attempt < 1:
+                    raise RuntimeError("run attempt identity unavailable")
+                for job in read_pages(repo, f"actions/runs/{run['id']}/attempts/{attempt}/jobs"):
                     job["head_sha"], job["ref"] = run["head_sha"], ref
+                    job["run_id"], job["run_attempt"] = run["id"], attempt
+                    job["run_started_at"] = run.get("run_started_at") or run.get("created_at")
                     start, end = timestamp(job.get("started_at")), timestamp(job.get("completed_at"))
                     job["duration_seconds"] = (end - start).total_seconds() if start and end else None
                     jobs.append(job)

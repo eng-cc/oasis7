@@ -60,6 +60,20 @@ class AcceptanceTests(unittest.TestCase):
         f.write('web/index.html', '<script>after()</script>'); f.commit()
         self.assertEqual(f.run_plan()['selected_units'], ['javascript-repo', 'rust-repo'])
 
+    def test_CQ_T13_build_script_consumed_markdown(self):
+        f = self.planner()
+        f.write('build.rs', 'fn main() { std::fs::read_to_string("docs/guide.md").unwrap(); }')
+        f.base = f.commit()
+        f.write('docs/guide.md', 'changed build input'); f.commit()
+        self.assertEqual(f.run_plan()['selected_units'], ['rust-repo'])
+
+    def test_CQ_T05_workflow_consumed_shell(self):
+        f = self.planner()
+        f.write('.github/workflows/test.yml', 'jobs:\n  check:\n    steps:\n      - run: ./scripts/check.sh\n')
+        f.write('scripts/check.sh', 'echo before'); f.base = f.commit()
+        f.write('scripts/check.sh', 'echo after'); f.commit()
+        self.assertEqual(f.run_plan()['selected_units'], ['actions-repo'])
+
     def test_CQ_T12_bootstrap_executes_no_candidate_command(self):
         outputs, calls = workflow_tests.WorkflowTests().plan(trusted=False)
         self.assertEqual(len(__import__('json').loads(outputs['matrix'])['include']), 4)

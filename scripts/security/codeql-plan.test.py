@@ -108,6 +108,37 @@ class PlannerTests(unittest.TestCase):
         self.write('web/data.json', '{}'); self.commit()
         self.assertEqual(len(self.run_plan()['selected_units']), 4)
 
+    def test_CQ_T13_build_script_text_and_unknown_inputs(self):
+        self.write('build.rs', 'fn main() { std::fs::read_to_string("docs/generated.txt").unwrap(); }')
+        self.write('docs/generated.txt', 'before'); self.base = self.commit()
+        for path in ('docs/generated.txt', 'docs/guide.md', 'docs/input.rst', 'docs/input.adoc', 'tools/input.py', 'tools/input.sh'):
+            with self.subTest(path=path):
+                self.base = self.git('rev-parse', 'HEAD')
+                self.write(path, 'changed'); self.commit()
+                self.assertIn('rust-repo', self.run_plan()['selected_units'])
+
+    def test_CQ_T13_deleted_build_script_old_side_consumer(self):
+        self.write('build.rs', 'fn main() { std::fs::read_to_string("docs/guide.md").unwrap(); }')
+        self.base = self.commit()
+        (self.root / 'build.rs').unlink()
+        self.write('docs/guide.md', 'changed'); self.commit()
+        self.assertIn('embedded or possible build input: docs/guide.md', self.run_plan()['reasons']['rust-repo'])
+
+    def test_CQ_T05_workflow_shell_boundary_and_independent_shell(self):
+        self.write('scripts/independent.sh', 'echo standalone'); self.commit()
+        self.assertEqual(self.run_plan()['selected_units'], [])
+        self.write('.github/workflows/test.yml', 'jobs:\n  check:\n    steps:\n      - run: ./scripts/check.sh\n')
+        self.write('scripts/check.sh', 'echo before'); self.base = self.commit()
+        self.write('scripts/check.sh', 'echo after'); self.commit()
+        self.assertEqual(self.run_plan()['selected_units'], ['actions-repo'])
+
+    def test_CQ_T05_unknown_action_shell_linkage_old_side(self):
+        self.write('local/action.yml', 'runs:\n  using: composite\n  steps:\n    - shell: bash\n      run: $SCRIPT_PATH\n')
+        self.write('scripts/check.sh', 'echo before'); self.base = self.commit()
+        (self.root / 'local/action.yml').unlink()
+        self.write('scripts/check.sh', 'echo after'); self.commit()
+        self.assertIn('workflow or possible action input: scripts/check.sh', self.run_plan()['reasons']['actions-repo'])
+
     def test_CQ_T14_vendor_and_exclusions(self):
         self.write('third_party/a.rs'); self.write('target/out.rs'); self.commit()
         self.assertEqual(self.run_plan()['selected_units'], [])

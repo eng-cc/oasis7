@@ -25,9 +25,35 @@ def add_analysis(data, unit="rust-repo", profile="default", **extra):
     return row
 
 
+def associated_job(data, **extra):
+    data["analyses"][-1]["sarif_id"] = "fixture-sarif"
+    row = {"name": "CodeQL / rust-repo / default", "head_sha": SHA, "ref": "refs/heads/main",
+           "run_id": 20, "run_attempt": 2, "upload_sarif_id": "fixture-sarif",
+           "status": "completed", "conclusion": "success", "started_at": "2026-09-30T22:00:00Z",
+           "steps": [{"name": "CodeQL extraction and queries", "conclusion": "success"},
+                     {"name": "CodeQL SARIF upload", "conclusion": "success"}]}
+    row.update(extra)
+    data["jobs"].append(row)
+    return row
+
+
 class HealthTests(unittest.TestCase):
     def rust(self, data):
         return next(u for u in health.report(data, NOW)["units"] if u["unit"] == "rust-repo" and u["profile"] == "default")
+
+    def test_old_accepted_analysis_cannot_mask_latest_failed_upload(self):
+        data = fixture()
+        for profile in ("default", "extended"):
+            for unit in health.UNITS:
+                add_analysis(data, unit, profile, created_at="2026-09-30T20:00:00Z")
+                data["jobs"].append({"name": f"CodeQL / {unit} / {profile}", "head_sha": SHA,
+                    "ref": "refs/heads/main", "run_id": 20, "run_attempt": 2,
+                    "started_at": "2026-09-30T23:00:00Z", "status": "completed", "conclusion": "failure",
+                    "steps": [{"name": "CodeQL extraction and queries", "conclusion": "success"},
+                              {"name": "CodeQL SARIF upload", "conclusion": "failure"}]})
+        result = health.report(data, NOW)
+        self.assertNotEqual(result["status"], "healthy")
+        self.assertTrue(all(u["upload_status"] == "failed" for u in result["units"]))
 
     def test_unknown_api_errors_are_not_no_findings(self):
         data = fixture()
@@ -40,15 +66,16 @@ class HealthTests(unittest.TestCase):
         data = fixture()
         add_analysis(data)
         row = self.rust(data)
-        self.assertEqual((row["execution_status"], row["upload_status"], row["finding_status"]), ("unknown", "accepted", "unknown"))
+        self.assertEqual((row["execution_status"], row["upload_status"], row["finding_status"]), ("unknown", "unknown", "unknown"))
         data["jobs"] = [{"name": "CodeQL / rust-repo / default", "head_sha": SHA, "ref": "refs/heads/main", "status": "completed", "conclusion": "failure",
                          "steps": [{"name": "CodeQL extraction and queries", "conclusion": "failure"}]}]
         self.assertEqual(self.rust(data)["execution_status"], "failure")
-        self.assertEqual(self.rust(data)["upload_status"], "accepted")
+        self.assertEqual(self.rust(data)["upload_status"], "unknown")
 
     def test_complete_fixture_zero_is_explicit(self):
         data = fixture()
         add_analysis(data)
+        associated_job(data)
         data["alert_instances_complete"] = True
         self.assertEqual(self.rust(data)["finding_status"], "no_open_findings")
         data["alerts"] = [{"instances": [{"category": "oasis7/rust-repo/default", "commit_sha": SHA, "ref": "refs/heads/main"}]}]
@@ -76,7 +103,7 @@ class HealthTests(unittest.TestCase):
             data["jobs"] = [{"name": "CodeQL / rust-repo / default", "head_sha": SHA, "ref": "refs/heads/main", "status": state, "conclusion": conclusion}]
             row = self.rust(data)
             self.assertEqual(row["execution_status"], expected)
-            self.assertEqual(row["upload_status"], "unknown")
+            self.assertEqual(row["upload_status"], expected)
 
     def test_invalid_identity_no_health(self):
         data = fixture()
@@ -104,6 +131,53 @@ class HealthTests(unittest.TestCase):
             data = health.live("fixture/repo", "refs/heads/main", SHA)
         self.assertEqual(health.report(data, NOW)["status"], "unknown")
         self.assertTrue(all(call.args[0][:2] == ["gh", "api"] and "--method" not in call.args[0] for call in command.call_args_list))
+
+    def test_success_same_identity_timestamp_without_sarif_link_is_unknown(self):
+        data = fixture()
+        add_analysis(data)
+        job = associated_job(data)
+        del job["upload_sarif_id"]
+        row = self.rust(data)
+        self.assertEqual(row["upload_step_status"], "success")
+        self.assertEqual(row["upload_status"], "unknown")
+        self.assertFalse(row["fresh"])
+        self.assertEqual(row["previous_analysis_id"], 1)
+
+    def test_exact_sarif_link_needs_run_and_attempt(self):
+        for field in ("run_id", "run_attempt", "upload_sarif_id"):
+            data = fixture()
+            add_analysis(data)
+            job = associated_job(data)
+            row = self.rust(data)
+            self.assertEqual(row["upload_status"], "accepted")
+            self.assertEqual(row["analysis_association"], "sarif_id")
+            del job[field]
+            self.assertEqual(self.rust(data)["upload_status"], "unknown")
+
+    def test_queued_cancelled_latest_attempt_preserves_old_analysis_separately(self):
+        for state, conclusion, expected in (("queued", None, "queued"), ("completed", "cancelled", "cancelled"), ("completed", "timed_out", "timed_out")):
+            data = fixture()
+            add_analysis(data)
+            associated_job(data)
+            data["jobs"].append({"name": "CodeQL / rust-repo / default", "head_sha": SHA, "ref": "refs/heads/main",
+                "run_id": 20, "run_attempt": 3, "run_started_at": "2026-09-30T23:00:00Z",
+                "status": state, "conclusion": conclusion})
+            row = self.rust(data)
+            self.assertEqual(row["upload_status"], expected)
+            self.assertEqual(row["run_attempt"], 3)
+            self.assertIsNone(row["analysis_id"])
+            self.assertEqual(row["previous_analysis_id"], 1)
+
+    def test_live_reads_exact_run_attempt_endpoint_without_inventing_sarif_link(self):
+        run = {"id": 20, "run_attempt": 3, "head_sha": SHA, "head_branch": "main",
+               "path": ".github/workflows/codeql.yml", "run_started_at": "2026-09-30T23:00:00Z"}
+        job = {"name": "CodeQL / rust-repo / default", "status": "completed", "conclusion": "success",
+               "steps": [{"name": "CodeQL SARIF upload", "conclusion": "success"}]}
+        with patch.object(health, "read_pages", side_effect=[[], [run], [], [job]]) as pages:
+            data = health.live("fixture/repo", "refs/heads/main", SHA)
+        self.assertEqual(pages.call_args_list[-1].args[1], "actions/runs/20/attempts/3/jobs")
+        self.assertEqual(data["jobs"][0]["run_attempt"], 3)
+        self.assertNotIn("upload_sarif_id", data["jobs"][0])
 
 
 if __name__ == "__main__":
