@@ -42,7 +42,8 @@ cases("T05", suites=("scripts/pm/loop-policy.test.py", "scripts/pm/loop-ci-conte
 cases("T06", suites=("scripts/pm/loop.test.py", "scripts/pm/loop-ci.test.py"))
 cases("T07 T08 T09", suites=("scripts/pm/loop-ci.test.py", "scripts/pm/loop-publication.integration.test.py"))
 cases("T10 T11 T12", out_of_band="independent review of frozen diff, red-green ownership, and user-steered pause evidence")
-cases("T13 T14 T15 T16 T17 T18", suites=("scripts/pm/review-plan.test.py", "scripts/pm/subagent-task-packet.test.py", "scripts/pm/ci-ready-receipt.test.py"))
+cases("T13 T14", suites=("scripts/pm/review-plan.test.py", "scripts/pm/subagent-task-packet.test.py", "scripts/pm/ci-ready-receipt.test.py"))
+cases("T15 T16 T17 T18", suites=("scripts/pm/review-plan.test.py", "scripts/pm/subagent-task-packet.test.py", "scripts/pm/ci-ready-receipt.test.py", "scripts/pm/review-closeout-facade.test.sh"))
 cases("T19 T20 T21 T22 T23 T24 T25 T26 T27 T28", suites=("scripts/pm/loop-publication.integration.test.py", "scripts/pm/loop-recovery.test.py", "scripts/pm/loop-bootstrap.integration.test.py"))
 cases("T29 T30 T31 T32 T33 T34 T35", suites=("scripts/pm/loop-ci.test.py", "scripts/pm/loop-ingress.test.py", "scripts/pm/loop.test.py", "scripts/pm/pr-lifecycle-loop.test.py", "scripts/pm/workflow-next.test.py"))
 cases("T36 T37 T38 T39", suites=("scripts/pm/loop-policy.test.py", "scripts/pm/loop-contracts.test.py", "scripts/pm/github-project-task-policy-adoption.integration.test.py"))
@@ -77,8 +78,21 @@ class WorkflowSimplificationCoverageTests(unittest.TestCase):
         for suite in suites:
             with self.subTest(suite=suite):
                 self.assertTrue((ROOT / suite).is_file(), f"missing acceptance suite {suite}")
-                command = re.compile(rf"^\s*run (?:python3|env PYTHONDONTWRITEBYTECODE=1 python3) \./{re.escape(suite)}\s*$", re.M)
+                if suite.endswith(".sh"):
+                    command = re.compile(rf"^\s*run bash \./{re.escape(suite)}\s*$", re.M)
+                else:
+                    command = re.compile(rf"^\s*run (?:python3|env PYTHONDONTWRITEBYTECODE=1 python3) \./{re.escape(suite)}\s*$", re.M)
                 self.assertRegex(self.operational_runner, command)
+
+    def test_t15_through_t18_map_to_required_closeout_facade_behavior(self) -> None:
+        facade_suite = "scripts/pm/review-closeout-facade.test.sh"
+        for case_id in ("T15", "T16", "T17", "T18"):
+            with self.subTest(case_id=case_id):
+                self.assertIn(
+                    facade_suite,
+                    CASES[case_id]["suites"],
+                    f"{case_id} must map to the documented closeout facade behavior suite",
+                )
 
     def test_governance_aggregate_remains_reachable_from_required_and_full_entries(self) -> None:
         contract_runner = re.search(

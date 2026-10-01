@@ -4,6 +4,7 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 planner="$repo_root/scripts/plan-rust-required-scope.sh"
 ci_tests="$repo_root/scripts/ci-tests.sh"
+inventory="$repo_root/scripts/ci-required-capability-test-inventory.tsv"
 versioned_config="$repo_root/scripts/fixtures/ci-required-scope.versioned-test.json"
 legacy_config="$repo_root/scripts/fixtures/ci-required-scope.legacy-test.json"
 active_config="$repo_root/scripts/ci-required-scope.v2.json"
@@ -47,6 +48,28 @@ require_ci_tests_line() {
     exit 1
   fi
 }
+
+workflow_governance_runner="$(sed -n '/^run_workflow_governance_operational_contract_tests() {/,/^}/p' "$ci_tests")"
+missing_closeout_facade_route=0
+if ! grep -Fqx '  run bash ./scripts/pm/review-closeout-facade.test.sh' <<<"$workflow_governance_runner"; then
+  echo "workflow-governance operational runner omits scripts/pm/review-closeout-facade.test.sh" >&2
+  missing_closeout_facade_route=1
+fi
+if ! awk -F '\t' -v suite='scripts/pm/review-closeout-facade.test.sh' '
+  $1 == "run_operational_contract_tests" {
+    count = split($2, paths, ",")
+    for (i = 1; i <= count; i++) {
+      if (paths[i] == suite) found = 1
+    }
+  }
+  END { exit found ? 0 : 1 }
+' "$inventory"; then
+  echo "workflow-governance operational inventory omits scripts/pm/review-closeout-facade.test.sh" >&2
+  missing_closeout_facade_route=1
+fi
+if [[ "$missing_closeout_facade_route" -ne 0 ]]; then
+  exit 1
+fi
 
 required_component_impl="$(
   sed -n '/^should_run_ci_required_component() {/,/^}/p' "$ci_tests"

@@ -85,6 +85,24 @@ def parse_publication_comment(body: str) -> dict[str, Any]:
     return validate_ci_publication(value)
 
 
+def comment_timestamps_are_unchanged(comment: Any) -> bool:
+    """Require an unedited GitHub comment with valid server timestamps."""
+    if not isinstance(comment, dict):
+        return False
+    created_raw = comment.get("created_at")
+    updated_raw = comment.get("updated_at")
+    if (not isinstance(created_raw, str) or not created_raw
+            or not isinstance(updated_raw, str) or not updated_raw
+            or created_raw != updated_raw):
+        return False
+    try:
+        created = datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
+        updated = datetime.fromisoformat(updated_raw.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return created.tzinfo is not None and updated.tzinfo is not None and created == updated
+
+
 def resolve_task_publication(comments_read: dict[str, Any], expected_identity: dict[str, Any], *,
                              live_task_author: dict[str, Any],
                              permissions: dict[str, Any] | None = None,
@@ -199,11 +217,14 @@ def resolve_task_publication(comments_read: dict[str, Any], expected_identity: d
         association = comment.get("author_association")
         if (type(comment.get("id")) is not int or comment["id"] < 1
                 or not isinstance(comment.get("created_at"), str)
+                or not isinstance(comment.get("updated_at"), str)
                 or not isinstance(user, dict) or not isinstance(user.get("login"), str)
                 or not user.get("login") or user.get("type") != "User"
                 or not isinstance(association, str)
                 or not isinstance(association, str) or not association):
             blockers.append("C1 publication commenter provenance is malformed")
+        elif not comment_timestamps_are_unchanged(comment):
+            blockers.append("C1 publication server timestamps are missing, malformed, or indicate an edit")
         elif (not isinstance(live_task_author, dict)
               or user.get("login") != live_task_author.get("login")
               or (isinstance(pr_binding, dict)

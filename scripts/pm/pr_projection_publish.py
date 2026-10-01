@@ -248,6 +248,9 @@ class GitHubPublicationAdapter:
         readback = json.loads(self.gh("api", f"repos/{self.args.repo}/issues/comments/{match.group(1)}"))
         if readback.get("body") != body:
             raise RuntimeError("Issue comment exact readback failed")
+        if (publication._TASK_PUBLICATION_MARKER in body
+                and not publication.comment_timestamps_are_unchanged(readback)):
+            raise RuntimeError("C1 Issue comment timestamps are missing, malformed, or indicate an edit")
 
     def find_task_publications(self, publication_id: str) -> dict[str, Any]:
         self._assert_task_identity()
@@ -261,6 +264,9 @@ class GitHubPublicationAdapter:
             if (value["task_uid"] == target["task_uid"]
                     and value["source_head_oid"] == target["source_head_oid"]
                     and value["source_scope_oid"] == target["source_scope_oid"]):
+                if (value["publication_id"] == publication_id
+                        and not publication.comment_timestamps_are_unchanged(comment)):
+                    raise RuntimeError("existing C1 Issue comment timestamps are missing, malformed, or indicate an edit")
                 matches.append(value)
         return {"complete": True, "publications": matches}
 

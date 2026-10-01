@@ -4069,14 +4069,9 @@ def _matching_adoption_authorization(policy: Any, comments: list[dict[str, Any]]
     if (type(comment.get("id")) is not int or comment["id"] < 1
             or user.get("type") != "User" or not isinstance(user.get("login"), str)
             or comment.get("author_association") not in {"OWNER", "MEMBER", "COLLABORATOR"}
-            or not isinstance(comment.get("created_at"), str)):
+            or not isinstance(comment.get("created_at"), str)
+            or not policy.comment_timestamps_are_unchanged(comment)):
         raise ValueError("adoption authorization is not trusted human Task evidence")
-    try:
-        created_at = datetime.fromisoformat(comment["created_at"].replace("Z", "+00:00"))
-    except ValueError as exc:
-        raise ValueError("adoption authorization timestamp is malformed") from exc
-    if created_at.tzinfo is None:
-        raise ValueError("adoption authorization timestamp has no timezone")
     return comment
 
 
@@ -4339,6 +4334,7 @@ def command_adopt_workflow_policy(args: argparse.Namespace) -> int:
                        if item.get("body") == body]
             if (len(matches) != 1 or matches[0].get("id") != comment_id
                     or (matches[0].get("user") or {}).get("login") != caller_login
+                    or not policy.comment_timestamps_are_unchanged(matches[0])
                     or final["effective_policy"].get("policy_commit") != target["policy_commit"]
                     or final["effective_policy"].get("policy_digest") != target["policy_digest"]
                     or final["effective_policy"].get("adoption_chain_tip") != record["record_digest"]):
@@ -4738,7 +4734,8 @@ def command_record_pr_c1_draft(
             or not isinstance(publisher.get("login"), str)
             or publisher.get("login") != issue_author.get("login")
             or publisher.get("login") != pr_author.get("login")
-            or publication_comment.get("author_association") in (None, "", "NONE")):
+            or publication_comment.get("author_association") in (None, "", "NONE")
+            or not publication_module.comment_timestamps_are_unchanged(publication_comment)):
         die("record-pr: C1 publisher differs from live Task author and same-repository PR author")
     expected_pr_url = f"https://github.com/{args.repo}/pull/{pr_number}"
     try:

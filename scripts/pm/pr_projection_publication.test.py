@@ -167,6 +167,7 @@ class PublicationMatrixTests(unittest.TestCase):
         comment = {
             "id": index, "body": publication_module.publication_comment(value),
             "created_at": "2026-09-30T12:00:00Z",
+            "updated_at": "2026-09-30T12:00:00Z",
             "user": {"login": "task-author", "type": "User"},
             "author_association": "MEMBER",
         }
@@ -255,6 +256,25 @@ class PublicationMatrixTests(unittest.TestCase):
             pr_binding={**pr, "task_status": "ready", "task_phase": "pre_pr_ready"},
         )
         self.assertEqual("blocked", wrong_phase["status"])
+
+    def test_c1_live_resolver_rejects_missing_invalid_or_edited_server_timestamps(self):
+        value, comment, read, pr = self.c1_resolution_inputs(9915)
+        expected = {key: value[key] for key in publication_module._TASK_PUBLICATION_FIELDS}
+        author = {"login": "task-author", "type": "User"}
+        cases = {
+            "updated_at edited": dict(comment, updated_at="2026-09-30T12:00:01Z"),
+            "updated_at missing": {key: value for key, value in comment.items() if key != "updated_at"},
+            "updated_at invalid": dict(comment, updated_at="not-a-server-timestamp"),
+            "created_at missing": {key: value for key, value in comment.items() if key != "created_at"},
+            "created_at invalid": dict(comment, created_at="not-a-server-timestamp"),
+        }
+        for label, candidate in cases.items():
+            with self.subTest(timestamp_case=label):
+                result = publication_module.resolve_task_publication(
+                    {**read, "comments": [candidate]}, expected,
+                    live_task_author=author, pr_binding=pr,
+                )
+                self.assertIn(result["status"], {"blocked", "pending"}, result)
 
     def test_c1_start_window_allows_only_both_task_pr_binding_fields_absent(self):
         value, _comment, read, pr = self.c1_resolution_inputs(9914)
@@ -881,7 +901,11 @@ class PublicationMatrixTests(unittest.TestCase):
                 if command[:2] == (
                     "api", f"repos/{publication['repository']}/issues/comments/7006",
                 ):
-                    return json.dumps({"id": 7006, "body": expected_body})
+                    return json.dumps({
+                        "id": 7006, "body": expected_body,
+                        "created_at": "2026-09-30T12:00:00Z",
+                        "updated_at": "2026-09-30T12:00:00Z",
+                    })
                 raise AssertionError(f"unexpected mocked GitHub call: {command!r}")
 
             with patch.object(adapter, "gh", side_effect=exact_readback):
@@ -924,6 +948,8 @@ class PublicationMatrixTests(unittest.TestCase):
         second_page = [{
             "id": 11,
             "body": publication_module.publication_comment(publication),
+            "created_at": "2026-09-30T12:00:00Z",
+            "updated_at": "2026-09-30T12:00:00Z",
         }]
 
         with tempfile.TemporaryDirectory() as temp:

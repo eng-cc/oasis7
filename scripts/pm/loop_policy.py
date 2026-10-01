@@ -10,6 +10,7 @@ import fnmatch
 import base64
 import hashlib
 import json
+from datetime import datetime
 from pathlib import Path, PurePosixPath
 import re
 import subprocess
@@ -402,6 +403,24 @@ def parse_policy_adoption_comment(body):
     )
 
 
+def comment_timestamps_are_unchanged(comment):
+    """Require an unedited GitHub comment with valid server timestamps."""
+    if not isinstance(comment, dict):
+        return False
+    created_raw = comment.get("created_at")
+    updated_raw = comment.get("updated_at")
+    if (not isinstance(created_raw, str) or not created_raw
+            or not isinstance(updated_raw, str) or not updated_raw
+            or created_raw != updated_raw):
+        return False
+    try:
+        created = datetime.fromisoformat(created_raw.replace("Z", "+00:00"))
+        updated = datetime.fromisoformat(updated_raw.replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    return created.tzinfo is not None and updated.tzinfo is not None and created == updated
+
+
 def _trusted_policy_identity(value):
     _validate_target_proof(value)
     return value
@@ -562,6 +581,9 @@ def resolve_effective_policy(repo_root, binding, live_comment_read,
             errors.append("Task Issue comment body is malformed")
             continue
         if ADOPTION_AUTH_MARKER in body:
+            if not comment_timestamps_are_unchanged(comment):
+                malformed_auth = True
+                continue
             try:
                 auth = parse_policy_adoption_authorization(body)
             except (TypeError, ValueError, json.JSONDecodeError):
@@ -569,6 +591,9 @@ def resolve_effective_policy(repo_root, binding, live_comment_read,
                 continue
             auth_by_id.setdefault(comment["id"], []).append((comment, auth))
         if ADOPTION_MARKER in body:
+            if not comment_timestamps_are_unchanged(comment):
+                malformed_adoption = True
+                continue
             try:
                 record_value = parse_policy_adoption_comment(body)
             except (TypeError, ValueError, json.JSONDecodeError):

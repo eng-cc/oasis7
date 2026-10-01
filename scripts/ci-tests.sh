@@ -423,6 +423,7 @@ run_workflow_governance_operational_contract_tests() {
   run python3 ./scripts/pm/pr-projection-record-pr.test.py
   run python3 ./scripts/pm/pr-projection-transition.test.py
   run python3 ./scripts/pm/review_closeout_publication.test.py
+  run bash ./scripts/pm/review-closeout-facade.test.sh
   run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/pr-projection-publish-cli.integration.test.py
   run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/pr-projection-publish-concurrency.integration.test.py
   run python3 ./scripts/pm/loop-contracts.test.py

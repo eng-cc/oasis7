@@ -368,6 +368,34 @@ class PolicyTests(unittest.TestCase):
             )
             self.assertIn(result["status"], {"blocked", "pending"}, result)
 
+    def test_adoption_chain_rejects_missing_invalid_or_edited_comment_updates(self):
+        identity = self.adoption_identity()
+        auth = self.authorization_comment(identity, self.base)
+        adoption = self.adoption_record(identity, auth, self.base, None)
+        current = self.current_policy_identity(self.base)
+        timestamp_cases = {
+            "edited": lambda comment: dict(comment, updated_at="2026-10-01T00:02:00Z"),
+            "missing": lambda comment: {key: value for key, value in comment.items() if key != "updated_at"},
+            "invalid": lambda comment: dict(comment, updated_at="not-a-server-timestamp"),
+        }
+        for kind in ("authorization", "adoption"):
+            for label, mutate in timestamp_cases.items():
+                with self.subTest(comment_kind=kind, timestamp_case=label):
+                    if kind == "authorization":
+                        candidate_auth = mutate(auth)
+                        candidate_adoption = self.adoption_record(
+                            identity, candidate_auth, self.base, None,
+                        )
+                        comments = [candidate_auth, candidate_adoption]
+                    else:
+                        comments = [auth, mutate(adoption)]
+                    read = {"complete": True, "repository": "eng-cc/oasis7",
+                            "issue_number": 123, "comments": comments}
+                    result = self.api.resolve_effective_policy(
+                        self.root, self.binding, read, identity, current,
+                    )
+                    self.assertIn(result["status"], {"blocked", "pending"}, result)
+
     def adoption_identity(self):
         return {
             "repository": "eng-cc/oasis7", "issue_number": 123,
@@ -391,6 +419,7 @@ class PolicyTests(unittest.TestCase):
             "target_policy_digest": self.binding["policy_digest"],
         })
         return {"id": 124, "body": body, "created_at": "2026-10-01T00:00:00Z",
+                "updated_at": "2026-10-01T00:00:00Z",
                 "user": {"login": "human-author", "type": "User"},
                 "author_association": "MEMBER"}
 
@@ -405,6 +434,7 @@ class PolicyTests(unittest.TestCase):
         )
         return {"id": comment_id, "body": self.api.policy_adoption_comment(value),
                 "created_at": "2026-10-01T00:00:01Z",
+                "updated_at": "2026-10-01T00:00:01Z",
                 "user": {"login": "repo-writer", "type": "User"},
                 "author_association": "MEMBER"}
 

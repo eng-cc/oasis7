@@ -152,6 +152,12 @@ if args[0] == "issue" and args[1] == "comment":
                "author_association": "MEMBER"}
     state["comments"].append(comment)
     state["post_effects"] = state.get("post_effects", 0) + 1
+    if fault == "edited":
+        comment["updated_at"] = "2026-10-02T02:00:01Z"
+    elif fault == "missing-updated-at":
+        comment.pop("updated_at", None)
+    elif fault == "invalid-updated-at":
+        comment["updated_at"] = "not-a-server-timestamp"
     save()
     if fault == "after":
         emit("fixture lost response after effect", 1)
@@ -469,6 +475,33 @@ class PolicyAdoptionCLITests(unittest.TestCase):
         self.assertIn("trusted human Task evidence", payload["blockers"][0])
         self.assertEqual(self.state()["post_effects"], 0)
 
+    def assert_bad_authorization_timestamp_is_zero_write(self, mutate):
+        state = self.state()
+        mutate(state["comments"][1])
+        self.save_state(state)
+        result = self.invoke("adopt-workflow-policy")
+        payload = self.output_json(result)
+        self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn(payload["status"], {"blocked", "pending"}, payload)
+        after = self.state()
+        self.assertEqual(0, after["post_attempts"])
+        self.assertEqual(0, after["post_effects"])
+
+    def test_edited_authorization_comment_is_zero_write(self):
+        self.assert_bad_authorization_timestamp_is_zero_write(
+            lambda comment: comment.update(updated_at="2026-10-01T00:02:00Z"),
+        )
+
+    def test_missing_authorization_updated_at_is_zero_write(self):
+        self.assert_bad_authorization_timestamp_is_zero_write(
+            lambda comment: comment.pop("updated_at"),
+        )
+
+    def test_invalid_authorization_updated_at_is_zero_write(self):
+        self.assert_bad_authorization_timestamp_is_zero_write(
+            lambda comment: comment.update(updated_at="not-a-server-timestamp"),
+        )
+
     def test_authorization_for_superseded_tip_is_rejected(self):
         self.write("doc/engineering/unrelated.txt", "supersede the authorized target\n")
         self.git("add", "doc/engineering/unrelated.txt")
@@ -531,6 +564,33 @@ class PolicyAdoptionCLITests(unittest.TestCase):
         self.assertEqual(again.returncode, 0, again.stdout + again.stderr)
         self.assertEqual(again_payload["status"], "unchanged", again_payload)
         self.assertEqual(self.state()["post_effects"], 1)
+
+    def test_edited_adoption_post_readback_stays_pending_without_duplicate(self):
+        state = self.state()
+        state["post_fault"] = "edited"
+        self.save_state(state)
+        first = self.invoke("adopt-workflow-policy")
+        first_payload = self.output_json(first)
+        self.assertNotEqual(0, first.returncode, first.stdout + first.stderr)
+        self.assertIn(first_payload["status"], {"blocked", "pending"}, first_payload)
+        state = self.state()
+        adoption_comments = [comment for comment in state["comments"]
+                             if "oasis7.workflow-policy-adoption/v1" in comment["body"]]
+        self.assertEqual(1, len(adoption_comments))
+        self.assertNotEqual(adoption_comments[0]["created_at"], adoption_comments[0]["updated_at"])
+        self.assertEqual(1, state["post_attempts"])
+        self.assertEqual(1, state["post_effects"])
+
+        retry = self.invoke("adopt-workflow-policy")
+        retry_payload = self.output_json(retry)
+        self.assertNotEqual(0, retry.returncode, retry.stdout + retry.stderr)
+        self.assertIn(retry_payload["status"], {"blocked", "pending"}, retry_payload)
+        state = self.state()
+        adoption_comments = [comment for comment in state["comments"]
+                             if "oasis7.workflow-policy-adoption/v1" in comment["body"]]
+        self.assertEqual(1, len(adoption_comments), "an edited adoption record must not be appended again")
+        self.assertEqual(1, state["post_attempts"])
+        self.assertEqual(1, state["post_effects"])
 
     def test_adopted_pin_survives_unrelated_default_branch_advance(self):
         result = self.invoke("adopt-workflow-policy")

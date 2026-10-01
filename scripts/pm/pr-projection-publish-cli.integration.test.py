@@ -121,6 +121,13 @@ def append_comment(body):
     state["comments"].append(comment)
     kind = ("C1" if "<!-- oasis7-ci-publication/v1 -->" in body else
             "binding" if "<!-- oasis7-ci-publication-binding/v1 -->" in body else "evidence")
+    timestamp_fault = state.setdefault("faults", {}).pop("comment:" + kind + ":timestamp", None)
+    if kind == "C1" and timestamp_fault == "edited":
+        comment["updated_at"] = "2026-10-02T02:00:01Z"
+    elif kind == "C1" and timestamp_fault == "missing":
+        comment.pop("updated_at", None)
+    elif kind == "C1" and timestamp_fault == "invalid":
+        comment["updated_at"] = "not-a-server-timestamp"
     state.setdefault("mutations", []).append({"kind": "comment:" + kind, "effect": True})
     return comment
 
@@ -885,6 +892,29 @@ class PublisherProcessTests(unittest.TestCase):
         self._assert_complete(state)
         self.assertEqual(1, state["post_attempts"]["C1"])
         self.assertEqual(1, len(self._effects("pr:create", state)))
+
+    def test_edited_c1_readback_timestamp_stays_pending_without_pr_or_repost(self):
+        self.state["faults"]["comment:C1:timestamp"] = "edited"
+        self._save_state()
+        first = self.run_publisher()
+        self.assertNotEqual(0, first.returncode, first.stderr)
+        state = self._load_state()
+        c1 = [item for item in state["comments"]
+              if "<!-- oasis7-ci-publication/v1 -->" in item["body"]]
+        self.assertEqual(1, len(c1))
+        self.assertNotEqual(c1[0]["created_at"], c1[0]["updated_at"])
+        self.assertIsNone(state["pr"])
+        self.assertEqual(1, state["post_attempts"]["C1"])
+        self.assertEqual([], self._effects("pr:create", state))
+
+        retry = self.run_publisher()
+        self.assertNotEqual(0, retry.returncode, retry.stderr)
+        state = self._load_state()
+        c1 = [item for item in state["comments"]
+              if "<!-- oasis7-ci-publication/v1 -->" in item["body"]]
+        self.assertEqual(1, len(c1), "an edited immutable publication must not be reposted")
+        self.assertEqual(1, state["post_attempts"]["C1"])
+        self.assertIsNone(state["pr"])
 
     def test_uncertain_pr_create_is_reconciled_to_the_unique_live_draft(self):
         self.state["faults"]["pr:create"] = "after"
