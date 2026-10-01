@@ -567,7 +567,7 @@
     },
     {
       "path": "doc/engineering/workflow/source-of-truth.md",
-      "content_sha256": "e3e3b282077dd49197f5baa023a7a13fd6b7caf7ecabacd10df15c2316b2c7cf",
+      "content_sha256": "0347f520030d45302ecccbee2fc1f5f8c4c3666dbd6513b8ca97b4c469e584cc",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -3969,7 +3969,7 @@
     },
     {
       "path": "doc/testing/ci/ci-tiered-execution.design.md",
-      "content_sha256": "e60e9401e640ac1c9eebef4a23ddfb9072d7df96759f8bcb24718652a373d31b",
+      "content_sha256": "7c3cea9b4e9f0fffffebafb64d8ed4277e588310299399915419341916063e71",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -3990,6 +3990,20 @@
       "authority_layer": "professional_domain",
       "semantic_decision_owner": "qa_engineer",
       "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "testing-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/testing/ci/codeql-integration.design.md",
+      "content_sha256": "86fd318d5501e86d9bc18e31fb5548b8e71cd8a5d3340f1968bd4b80124b1b40",
+      "registry_type": "professional_domain",
+      "structural_owner": "qa_engineer",
+      "authority_entry": "doc/testing/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "qa_engineer",
+      "object_kind": "design",
       "lifecycle_candidate": "active_candidate",
       "inventory_disposition": "retain_for_owner_review",
       "routing_batch": "testing-corpus-review",
