@@ -59,12 +59,40 @@ project_item["content"]={"body":"\n".join(trace_lines)+"\n","number":next_record
 print(json.dumps({"data":{"nodes":[project_item],"s0":{"nodes":[issue]}}}))
 PY
     ;;
+  api\ repos/eng-cc/oasis7/pulls/2001)
+    reads=0
+    [[ ! -f "$GH_PR_READ_COUNT_FILE" ]] || reads="$(cat "$GH_PR_READ_COUNT_FILE")"
+    reads=$((reads + 1))
+    printf '%s\n' "$reads" >"$GH_PR_READ_COUNT_FILE"
+    draft=false
+    [[ "$reads" != "1" ]] || draft=true
+    python3 - "$GH_PR_HEAD_SHA" "$GH_PR_TASK_BRANCH" "$GH_PR_BASE_BRANCH" "$draft" <<'PY'
+import json, sys
+sha, task_branch, base_branch, draft = sys.argv[1:]
+print(json.dumps({
+    "number": 2001,
+    "html_url": "https://github.com/eng-cc/oasis7/pull/2001",
+    "state": "open",
+    "merged_at": None,
+    "draft": draft == "true",
+    "head": {"repo": {"full_name": "eng-cc/oasis7"}, "ref": task_branch, "sha": sha},
+    "base": {"repo": {"full_name": "eng-cc/oasis7"}, "ref": base_branch},
+}))
+PY
+    ;;
   "issue create -R eng-cc/oasis7 --title "*)
+    cp "${@: -1}" "$GH_ISSUE_BODY_STATE_FILE"
     printf 'https://github.com/eng-cc/oasis7/issues/2001\n'
     ;;
   issue\ list\ -R\ eng-cc/oasis7\ --state\ all\ --search\ task_*\ in:body\ --json\ number,url,title,state\ --limit\ 5)
     if [[ "$*" == *"task_99999999999999999999999999999999"* ]]; then
       printf '[{"number":2003,"state":"OPEN","title":"[PM] No-cache task","url":"https://github.com/eng-cc/oasis7/issues/2003"}]\n'
+    elif [[ "$*" == *"task_44444444444444444444444444444444"* ]]; then
+      printf '[{"number":2004,"state":"OPEN","title":"[PM] Partial cache done closeout","url":"https://github.com/eng-cc/oasis7/issues/2004"}]\n'
+    elif [[ "$*" == *"task_55555555555555555555555555555555"* ]]; then
+      printf '[{"number":2005,"state":"OPEN","title":"[PM] No-op Project field update","url":"https://github.com/eng-cc/oasis7/issues/2005"}]\n'
+    elif [[ "$*" == *"task_66666666666666666666666666666666"* ]]; then
+      printf '[{"number":2006,"state":"OPEN","title":"[PM] Missing Done option","url":"https://github.com/eng-cc/oasis7/issues/2006"}]\n'
     else
       printf '[{"number":2001,"state":"OPEN","title":"[PM] GitHub-backed lifecycle smoke","url":"https://github.com/eng-cc/oasis7/issues/2001"}]\n'
     fi
@@ -72,13 +100,29 @@ PY
   issue\ list\ -R\ eng-cc/oasis7\ --search\ task_*\ in:body\ --json\ number,url,title,state\ --limit\ 5)
     if [[ "$*" == *"task_99999999999999999999999999999999"* ]]; then
       printf '[{"number":2003,"state":"OPEN","title":"[PM] No-cache task","url":"https://github.com/eng-cc/oasis7/issues/2003"}]\n'
+    elif [[ "$*" == *"task_44444444444444444444444444444444"* ]]; then
+      printf '[{"number":2004,"state":"OPEN","title":"[PM] Partial cache done closeout","url":"https://github.com/eng-cc/oasis7/issues/2004"}]\n'
+    elif [[ "$*" == *"task_55555555555555555555555555555555"* ]]; then
+      printf '[{"number":2005,"state":"OPEN","title":"[PM] No-op Project field update","url":"https://github.com/eng-cc/oasis7/issues/2005"}]\n'
+    elif [[ "$*" == *"task_66666666666666666666666666666666"* ]]; then
+      printf '[{"number":2006,"state":"OPEN","title":"[PM] Missing Done option","url":"https://github.com/eng-cc/oasis7/issues/2006"}]\n'
     else
       printf '[{"number":2001,"state":"OPEN","title":"[PM] GitHub-backed lifecycle smoke","url":"https://github.com/eng-cc/oasis7/issues/2001"}]\n'
     fi
     ;;
   "issue view 2001 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason")
-    uid="$(python3 -c 'import json,os; print(next(iter(json.load(open(os.environ["GH_MAPPING_PATH"]))["tasks"])))')"
-    printf '{"body":"task_uid: %s\\nTask metadata:\\n- owner_role: `tpm`\\n- module: `engineering`\\n- status: `candidate`\\n- workflow_phase: `bootstrap`\\n- priority: `P2`\\n- worktree_hint: `%s/worktree`\\nAcceptance:\\n","number":2001,"title":"[PM] GitHub-backed lifecycle smoke","url":"https://github.com/eng-cc/oasis7/issues/2001","state":"OPEN","stateReason":null}\n' "$uid" "$(dirname "$(dirname "$(dirname "$GH_MAPPING_PATH")")")"
+    python3 - "$GH_ISSUE_BODY_STATE_FILE" <<'PY'
+import json, pathlib, sys
+body = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+print(json.dumps({
+    "body": body,
+    "number": 2001,
+    "title": "[PM] GitHub-backed lifecycle smoke",
+    "url": "https://github.com/eng-cc/oasis7/issues/2001",
+    "state": "OPEN",
+    "stateReason": None,
+}))
+PY
     ;;
   "issue comment 2001 -R eng-cc/oasis7 --body-file "*)
     n=$(( $(wc -l < "$GH_COMMENT_LOG") + 1 ))
@@ -108,6 +152,7 @@ PY
       echo "injected second-stage issue edit failure" >&2
       exit 77
     fi
+    cp "${@: -1}" "$GH_ISSUE_BODY_STATE_FILE"
     printf '%s\n' '--- issue edit body ---' >> "$GH_EDIT_BODY_LOG"
     cat "${@: -1}" >> "$GH_EDIT_BODY_LOG"
     printf '\n' >> "$GH_EDIT_BODY_LOG"
@@ -117,9 +162,55 @@ PY
     printf '[{"number":2003,"state":"OPEN","title":"[PM] No-cache task","url":"https://github.com/eng-cc/oasis7/issues/2003"}]\n'
     ;;
   "issue view 2003 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason")
-    cat <<'JSON'
-{"body":"<!-- oasis7-pm-task -->\ntask_uid: task_99999999999999999999999999999999\n\nGitHub-backed oasis7 PM task.\n\nTask metadata:\n- owner_role: `tpm`\n- module: `engineering`\n- status: `ready`\n- workflow_phase: `pre_pr_ready`\n- priority: `P2`\n- worktree_hint: `/tmp/no-cache-worktree`\n","number":2003,"title":"[PM] No-cache task","url":"https://github.com/eng-cc/oasis7/issues/2003","state":"OPEN","stateReason":null}
-JSON
+    python3 - "$GH_CANONICAL_WORKTREE_HINT" <<'PY'
+import json, sys
+worktree = sys.argv[1]
+body = """<!-- oasis7-pm-task -->
+task_uid: task_99999999999999999999999999999999
+
+GitHub-backed oasis7 PM task.
+
+Task metadata:
+- owner_role: `tpm`
+- module: `engineering`
+- status: `ready`
+- workflow_phase: `pre_pr_ready`
+- priority: `P2`
+- worktree_hint: `""" + "`" + worktree + "`\n"
+print(json.dumps({
+    "body": body,
+    "number": 2003,
+    "title": "[PM] No-cache task",
+    "url": "https://github.com/eng-cc/oasis7/issues/2003",
+    "state": "OPEN",
+    "stateReason": None,
+}))
+PY
+    ;;
+  issue\ view\ 20[0-9][0-9]\ -R\ eng-cc/oasis7\ --json\ body,number,title,url,state,stateReason)
+    python3 - "$TMPDIR/github-project-task.py" "$GH_MAPPING_PATH" "${3}" <<'PY'
+import importlib.util, json, pathlib, sys
+script, mapping_path, number = sys.argv[1:]
+spec = importlib.util.spec_from_file_location("fixture_github_project_task", script)
+assert spec and spec.loader
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+mapping = json.loads(pathlib.Path(mapping_path).read_text(encoding="utf-8"))
+record = next((value for value in mapping.get("tasks", {}).values()
+               if int(value.get("issue_number") or 0) == int(number)), None)
+if record is None:
+    raise SystemExit("fixture has no selected Issue mapping")
+uid = str(record.get("task_uid") or "")
+body = module.issue_body(module.task_from_record(uid, record))
+print(json.dumps({
+    "body": body,
+    "number": int(number),
+    "title": "[PM] " + str(record.get("title") or ""),
+    "url": str(record.get("issue_url") or ""),
+    "state": "OPEN",
+    "stateReason": None,
+}))
+PY
     ;;
   "issue edit 2003 -R eng-cc/oasis7 --body-file "*)
     printf '%s\n' '--- issue edit body 2003 ---' >> "$GH_EDIT_BODY_LOG"
@@ -241,12 +332,15 @@ rm -f "$TMPDIR/xcrun_db"
 # The fixture's closeout interruption path can leave mktemp's Darwin `tmp*`
 # scratch file in the fixture repository.  This is confined to the disposable
 # fixture; the production freeze check still reports every other untracked path.
-printf '*.json\n*.log\n*.md\n*.err\n.pm/\nworktree/\ngh-comments/\nproject-live-state\nproject-live-status\nproject-live-phase\nxcrun_db\ntmp*\n' > "$TMPDIR/.gitignore"
+printf '*.json\n*.log\n*.md\n*.err\n.pm/\nworktree/\ngh-comments/\nproject-live-state\nproject-live-status\nproject-live-phase\npr-read-count\nxcrun_db\ntmp*\n' > "$TMPDIR/.gitignore"
 git -C "$TMPDIR" init -q
 git -C "$TMPDIR" config user.email test@example.com
 git -C "$TMPDIR" config user.name Test
 git -C "$TMPDIR" add .
 git -C "$TMPDIR" commit -qm initial
+# The temporary repository itself is the fixture's canonical worktree. Its
+# root is registered and owns the task cache/evidence files used by the test.
+CANONICAL_WORKTREE_HINT="$(cd "$TMPDIR" && pwd -P)"
 export PATH="$TMPDIR/bin:$PATH"
 export GH_CALL_LOG="$TMPDIR/gh-calls.log"
 export GH_MAPPING_PATH="$TMPDIR/.pm/github-project-sync/tasks.json"
@@ -259,6 +353,12 @@ printf 'execution\n' >"$GH_PROJECT_PHASE_STATE_FILE"
 export GH_COMMENT_LOG="$TMPDIR/gh-comments.log"
 export GH_COMMENT_DIR="$TMPDIR/gh-comments"
 export GH_EDIT_BODY_LOG="$TMPDIR/issue-body-edited.md"
+export GH_ISSUE_BODY_STATE_FILE="$TMPDIR/issue-live-body.md"
+export GH_CANONICAL_WORKTREE_HINT="$CANONICAL_WORKTREE_HINT"
+export GH_PR_READ_COUNT_FILE="$TMPDIR/pr-read-count"
+export GH_PR_HEAD_SHA="$(git -C "$TMPDIR" rev-parse HEAD)"
+export GH_PR_TASK_BRANCH="$(git -C "$TMPDIR" branch --show-current)"
+export GH_PR_BASE_BRANCH="$GH_PR_TASK_BRANCH"
 export OASIS7_ALLOW_FIXTURE_VERIFICATION_PROFILE=1
 : > "$GH_CALL_LOG"
 : > "$GH_COMMENT_LOG"
@@ -276,7 +376,7 @@ python3 "$TMPDIR/github-project-task.py" new-task "$TMPDIR" \
   --priority P2 \
   --primary-package oasis7 \
   --source-ref doc/engineering/workflow/source-of-truth.md \
-  --worktree-hint "$TMPDIR/worktree" \
+  --worktree-hint "$CANONICAL_WORKTREE_HINT" \
   --json > "$NEW_JSON"
 
 TASK_UID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["task_uid"])' "$NEW_JSON")"
@@ -318,6 +418,21 @@ printf 'committed\n' >"$GH_PROJECT_STATE_FILE"
 printf 'In Progress\n' >"$GH_PROJECT_STATUS_STATE_FILE"
 printf 'execution\n' >"$GH_PROJECT_PHASE_STATE_FILE"
 PRIMARY_GH_MAPPING_PATH="$GH_MAPPING_PATH"
+# This focused fixture also reuses Issue #2001; seed its live body from the
+# selected mapping before exercising that mapping's independent lifecycle.
+python3 - "$TMPDIR/github-project-task.py" "$MOVE_PHASE_ROOT/.pm/github-project-sync/tasks.json" "$GH_ISSUE_BODY_STATE_FILE" <<'PY'
+import importlib.util, json, pathlib, sys
+script, mapping_path, issue_path = sys.argv[1:]
+spec = importlib.util.spec_from_file_location("fixture_github_project_task", script)
+assert spec and spec.loader
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+mapping = json.loads(pathlib.Path(mapping_path).read_text(encoding="utf-8"))
+uid, record = next(iter(mapping["tasks"].items()))
+pathlib.Path(issue_path).write_text(
+    module.issue_body(module.task_from_record(uid, record)), encoding="utf-8"
+)
+PY
 export GH_MAPPING_PATH="$MOVE_PHASE_ROOT/.pm/github-project-sync/tasks.json"
 set +e
 python3 "$TMPDIR/github-project-task.py" move-task "$MOVE_PHASE_ROOT" \
@@ -349,6 +464,23 @@ PY
 printf 'candidate\n' >"$GH_PROJECT_STATE_FILE"
 printf 'Todo\n' >"$GH_PROJECT_STATUS_STATE_FILE"
 printf 'execution\n' >"$GH_PROJECT_PHASE_STATE_FILE"
+# The focused move-phase fixture reuses Issue #2001. Restore the primary
+# fixture's authoritative Issue body explicitly when switching mappings back;
+# issue view below always returns this persisted live state.
+python3 - "$TMPDIR/github-project-task.py" "$GH_MAPPING_PATH" "$GH_ISSUE_BODY_STATE_FILE" "$GH_PROJECT_PHASE_STATE_FILE" <<'PY'
+import importlib.util, json, pathlib, sys
+script, mapping_path, issue_path, phase_path = sys.argv[1:]
+spec = importlib.util.spec_from_file_location("fixture_github_project_task", script)
+assert spec and spec.loader
+module = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(module)
+mapping = json.loads(pathlib.Path(mapping_path).read_text(encoding="utf-8"))
+uid, record = next(iter(mapping["tasks"].items()))
+task = module.task_from_record(uid, record)
+if not task.get("workflow_phase"):
+    task["workflow_phase"] = pathlib.Path(phase_path).read_text(encoding="utf-8").strip()
+pathlib.Path(issue_path).write_text(module.issue_body(task), encoding="utf-8")
+PY
 
 # RED: non-PR classification must reject a live Project lifecycle that drifts
 # from the authoritative Issue before editing the Issue or local cache.
@@ -700,35 +832,26 @@ set -e
 [[ "$NO_CACHE_MOVE_STATUS" != "0" ]]
 grep -Fq "canonical task-closeout.sh" "$TMPDIR/no-cache-move.err"
 
+NO_CACHE_RECORD_CALLS_BEFORE="$(wc -l < "$GH_CALL_LOG")"
+set +e
 python3 "$TMPDIR/github-project-task.py" record-pr "$NO_CACHE_ROOT" \
   --repo eng-cc/oasis7 \
   --project-owner eng-cc \
   --project-number 1 \
   --task-uid "$NO_CACHE_UID" \
   --pr-url "https://github.com/eng-cc/oasis7/pull/2003" \
-  --json > "$TMPDIR/no-cache-record-pr.json"
-
-python3 - "$NO_CACHE_ROOT/.pm/github-project-sync/tasks.json" "$TMPDIR/no-cache-record-pr.json" "$TMPDIR/issue-body-edited.md" <<'PY'
-from __future__ import annotations
-
-import json
-import pathlib
-import sys
-
-mapping_path = pathlib.Path(sys.argv[1])
-payload = json.loads(pathlib.Path(sys.argv[2]).read_text(encoding="utf-8"))
-edited_body = pathlib.Path(sys.argv[3]).read_text(encoding="utf-8")
-assert mapping_path.exists(), "record-pr must recover the target mapping cache under lock"
-mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
-assert mapping["tasks"]["task_99999999999999999999999999999999"]["status"] == "pr_watch", mapping
-assert mapping["tasks"]["task_99999999999999999999999999999999"]["workflow_phase"] == "pr_watch", mapping
-assert payload["status"] == "pr_watch", payload
-assert payload["pr_number"] == 2003, payload
-assert payload["updated_field_values"] == 0, payload
-assert "- pr_url: `https://github.com/eng-cc/oasis7/pull/2003`" in edited_body, edited_body
-assert "- pr_number: `2003`" in edited_body, edited_body
-assert "- status: `pr_watch`" in edited_body, edited_body
-PY
+  --json > "$TMPDIR/no-cache-record-pr.json" 2> "$TMPDIR/no-cache-record-pr.err"
+NO_CACHE_RECORD_PR_STATUS=$?
+set -e
+[[ "$NO_CACHE_RECORD_PR_STATUS" != "0" ]]
+grep -Fq "record-pr: cached task repository identity is missing or mismatched" "$TMPDIR/no-cache-record-pr.err"
+[[ ! -e "$NO_CACHE_ROOT/.pm/github-project-sync/tasks.json" ]]
+tail -n +$((NO_CACHE_RECORD_CALLS_BEFORE + 1)) "$GH_CALL_LOG" > "$TMPDIR/no-cache-record-pr-calls.log"
+if grep -Eq 'issue (edit|comment)|project item-edit|api repos/eng-cc/oasis7/pulls/' "$TMPDIR/no-cache-record-pr-calls.log"; then
+  echo "github-project-task.test: record-pr must not mutate Issue/Project/PR state without recoverable canonical task identity" >&2
+  cat "$TMPDIR/no-cache-record-pr-calls.log" >&2
+  exit 1
+fi
 
 PARTIAL_ROOT="$TMPDIR/partial-cache"
 PARTIAL_UID="task_44444444444444444444444444444444"
@@ -742,6 +865,7 @@ cat > "$PARTIAL_ROOT/.pm/github-project-sync/tasks.json" <<JSON
       "owner_role": "tpm",
       "module": "engineering",
       "status": "pr_watch",
+      "workflow_phase": "pr_watch",
       "priority": "P2",
       "worktree_hint": "/tmp/partial-cache-worktree",
       "issue_url": "https://github.com/eng-cc/oasis7/issues/2004",
@@ -806,6 +930,7 @@ cat > "$NOOP_PROJECT_ROOT/.pm/github-project-sync/tasks.json" <<JSON
       "owner_role": "tpm",
       "module": "engineering",
       "status": "pr_watch",
+      "workflow_phase": "pr_watch",
       "priority": "P2",
       "worktree_hint": "/tmp/noop-project-worktree",
       "issue_url": "https://github.com/eng-cc/oasis7/issues/2005",
@@ -864,6 +989,7 @@ cat > "$MISSING_OPTION_ROOT/.pm/github-project-sync/tasks.json" <<JSON
       "owner_role": "tpm",
       "module": "engineering",
       "status": "pr_watch",
+      "workflow_phase": "pr_watch",
       "priority": "P2",
       "worktree_hint": "/tmp/missing-option-worktree",
       "issue_url": "https://github.com/eng-cc/oasis7/issues/2006",

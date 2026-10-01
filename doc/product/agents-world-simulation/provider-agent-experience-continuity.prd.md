@@ -7,7 +7,8 @@
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
 - 专业域权威：[Local Provider 与内置 Agent 体验等价（parity）验收方案](../../world-simulator/llm/provider-agent-experience-parity.prd.md)
-- Last reviewed：2026-09-13
+- 配套专业系统设计：[Provider Switch Intent Continuity](../../world-simulator/llm/provider-switch-intent-continuity.design.md#des-psw-001)（DES-PSW-001..004：provider/lane 切换、候选与在途意图连续性及重连不重放）
+- Last reviewed：2026-09-25
 
 本文是长期产品分册，定义 Agent/provider 切换时玩家体验连续性的产品承诺。它不声明任何 provider 当前受支持、可用、默认或已就绪；具体 provider 组合的场景范围、评估、技术合同和结论仅由专业域权威文档维护。
 
@@ -15,7 +16,7 @@
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
 - 设计判定 task issue：#3680。
-- 设计适用性理由：本 PRD 的 provider 场景边界、切换和在途意图规则已由产品要求与专业 authority 直接表达；独立 design 会重复跨 provider 的产品合同。
+- 设计适用性理由：本 PRD 的 provider 场景边界、切换和在途意图规则已由产品要求与专业 authority 直接表达；独立产品 design 会重复跨 provider 的产品合同。配套专业系统设计承接 provider/lane 调用绑定与候选、在途意图的技术边界，不改变本 PRD 的 `PRD-only-sufficient` 产品设计判定，也不取得产品交互 authority。
 - 当前 GitHub task evidence：本次分类见 [Issue #3680 C4 设计判定](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652452993)，本次闭合要求见 [Issue #3680 accepted repair](https://github.com/eng-cc/oasis7/issues/3680#issuecomment-5652870280)。
 ## 1. 产品目标
 
@@ -73,7 +74,7 @@
 | REQ / AC 关系 | 专业 owner 与真实边界 | 专业域 PRD-ID | 专业权威（可导航） | 验证证据（应提供，不预示当前结果） | 测试层级 |
 | --- | --- | --- | --- | --- | --- |
 | [REQ-AGENT-PARITY-001](#req-agent-parity-001) / [AC-AGENT-PARITY-001](#ac-agent-parity-001) | `producer_system_designer`：场景范围、窄承诺和 readiness 边界；`agent_engineer`：provider/Agent 行为与失败反馈；`viewer_engineer`：受限、退化和下一步的真实表达；`qa_engineer`：适用组合的 parity 证据；专业角色各自不把技术接通或局部样本提升为产品准入。 | `PRD-WORLD_SIMULATOR-038` / `PRD-WORLD_SIMULATOR-016` / `PRD-TESTING-003` | [`provider parity authority`](../../world-simulator/llm/provider-agent-experience-parity.prd.md#1-executive-summary); [`world-simulator PRD`](../../world-simulator/prd.md); [`testing PRD`](../../testing/prd.md) | 未来 full-tier 的已声明 provider 组合/场景样例，以及超出范围或证据不足的负例；对比目标、等待、诊断和恢复语义，并确认 blocked/limited 表达不被包装成等价体验或当前支持。 | `test_tier_full` |
-| [REQ-AGENT-PARITY-002](#req-agent-parity-002) / [AC-AGENT-PARITY-002](#ac-agent-parity-002) | `producer_system_designer`：切换窗口的产品边界；`agent_engineer`：意图 lineage、provider failure 和重试语义；`runtime_engineer`：接受/结算、去重和单一世界效果；`viewer_engineer`：候选、待决、已结算和拒绝状态可读性；`qa_engineer`：切换/重连/退化组合对账。 | `PRD-WORLD_SIMULATOR-038` / `PRD-WORLD_RUNTIME-001/031/033` / `PRD-TESTING-003` | [`provider parity authority`](../../world-simulator/llm/provider-agent-experience-parity.prd.md#1-executive-summary); [`world-simulator PRD`](../../world-simulator/prd.md); [`world-runtime PRD`](../../world-runtime/prd.md); [`testing PRD`](../../testing/prd.md) | 未来 full-tier 切换窗口覆盖候选不重放、待决请求真实结算/拒绝/过期、重连与退化不产生第二次提交，以及撤回/替换仅走专业支持路径；只有 committed receipt 表达世界后果。 | `test_tier_full` |
+| [REQ-AGENT-PARITY-002](#req-agent-parity-002) / [AC-AGENT-PARITY-002](#ac-agent-parity-002) | `producer_system_designer`：切换窗口的产品边界；`agent_engineer`：意图 lineage、provider failure 和重试语义；`runtime_engineer`：接受/结算、去重和单一世界效果；`viewer_engineer`：候选、待决、已结算和拒绝状态可读性；`qa_engineer`：切换/重连/退化组合对账。 | `PRD-WORLD_SIMULATOR-038` / `PRD-WORLD_RUNTIME-001/031/033` / `PRD-TESTING-003` | [`provider parity authority`](../../world-simulator/llm/provider-agent-experience-parity.prd.md#1-executive-summary); [`provider switch system design DES-PSW-001`](../../world-simulator/llm/provider-switch-intent-continuity.design.md#des-psw-001); [`DES-PSW-002`](../../world-simulator/llm/provider-switch-intent-continuity.design.md#des-psw-002); [`DES-PSW-003`](../../world-simulator/llm/provider-switch-intent-continuity.design.md#des-psw-003); [`DES-PSW-004`](../../world-simulator/llm/provider-switch-intent-continuity.design.md#des-psw-004); [`world-simulator PRD`](../../world-simulator/prd.md); [`world-runtime PRD`](../../world-runtime/prd.md); [`testing PRD`](../../testing/prd.md) | 未来 full-tier 切换窗口覆盖候选不重放、待决请求真实结算/拒绝/过期、重连与退化不产生第二次提交，以及撤回/替换仅走专业支持路径；只有 committed receipt 表达世界后果。 | `test_tier_full` |
 
 ## 3. 产品验收
 

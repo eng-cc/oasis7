@@ -13,6 +13,12 @@
 
 本文定义 oasis7 区块链/分布式系统底层向上层确定性世界执行提供的产品级保证。它不定义共识消息、密码学、网络协议、节点配置、存储格式或运行步骤；这些由 P2P、共识和运维专业权威拥有。运维证据的采集与解释由 `blockchain_ops_engineer` 负责，不能单独把模块证据解释为 release、public testnet 或 mainnet readiness。
 
+### 使用者情境与术语
+
+玩家与 Agent 需要判断当前观察是否可信、行动是否可以提交；节点运营者需要判断副本是否能 serving（提供可信状态）或 voting（参与权威投票）。正常读取、提交与等待结果的路径见 §4.1，失败时的可用性和恢复选择见 §4；这些是目标合同，不是当前节点已经支持全部路径的说明。
+
+`canonical history` 是同一世界的唯一权威历史；`commit certificate` 是用于验证最终性提交的证书，节点可达或接口成功不能替代它；`checkpoint` 是恢复所依据的历史检查点，`snapshot` 是状态快照，`replay` 是按权威日志重放历史，`hash-bound` 是材料与哈希承诺绑定。`freshness` 指材料的新鲜度可证明，不能从本地时间或页面刷新推导。`light companion` 是验证所需最终化头及证明的轻量伴随节点；它与 full/state-sync/archive 服务节点均不因提供材料而取得共识权威。`manifest`、`intent`、`receipt` 与 `fail closed` 的产品含义见[根 PRD 的阅读术语](prd.md#阅读术语)，具体字段仍由专业域定义。
+
 ## 设计适用性与生命周期闭合
 
 - 设计判定：`simple-topic-exemption`（`PRD-only-sufficient`）。
@@ -118,6 +124,8 @@ Compatibility declaration 只证明客户端能理解当前 manifest，不能选
 
 验证者集合及其轮换保有受治理的共识权威；sentry、relay、full/state-sync/archive、RPC/proof gateway 等非权威服务只能提供传播、存储或证明材料，不能通过暴露面、缓存或服务被攻破取得最终写入权。
 
+目标态参与边界：公网 IP 不是受治理 validator 或 permissionless full/storage/observer service role 参与网络的通用前置条件；治理 admission/activation 仅适用于 validators，full/storage/observer 等服务角色按本地 role policy 和技术可达性参与。该产品目标对应 [P2P reachability PRD §2 的首项验收标准](../../p2p/network/mainnet-private-reachability-architecture.prd.md#2-user-experience-functionality)，不表示当前软件支持、已有部署能力，也不证明 mainnet 或 release readiness。
+
 - 对应验收：[AC-DCS-003](#ac-dcs-003)。
 - 专业域权威：[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)、[`node triad 运维与可观测性`](../../p2p/node/node-triad-operations-observability.prd.md#权威边界)、[`public-testnet governed bootstrap runbook`](../../p2p/blockchain/public-testnet-governed-bootstrap.runbook.md#stable-authority-and-evidence-boundary)。
 
@@ -176,12 +184,28 @@ BFT 实现样例证明符合产品最终性条件的 commit certificate 才能�
 - 不定义 deterministic world runtime 的规则解释；该上层基础子层由本模块的执行专题和 `doc/world-runtime/` 专业权威承载。
 - 不定义共识/存储/网络实现或当前运维、发布与公开状态。
 
+## 未决问题与追踪解释
+
+准确专业设计及 QA 场景回链见下表；[文档接收任务 #4180](https://github.com/eng-cc/oasis7/issues/4180)记录本次三层接收与文档检查，不能代替实现、semantic verdict 或 full 执行证明。设计/接收可定位的问题可据此复核，仍缺的当前能力、同候选证据与真实环境保持未证明；专业 owner 与 QA 的判定权不变。
+
+当前追踪表提供产品条款到专业 authority 的导航；重复的模块入口、泛化的“可导航追踪证据”和产品 owner 不能证明准确的专业接受、系统设计与验证场景已经全部闭合。产品 owner 拥有产品结果，P2P 拥有最终性、权限与 freshness，runtime 拥有 manifest/head、服务闸门和 receipt，运维拥有同窗口事实，消费者 owner 拥有投影，QA 拥有组合 verdict。准确承接及当前能力事实仍须分别核对。
+
+| 未决问题 / 影响 | 决策 role 与所需信息 | 解决触发与临时边界 |
+| --- | --- | --- |
+| DCS-001/004 的最终性、证书和 round，以及 DCS-002/003 的恢复链、存储与角色隔离由哪些真实设计条款承接？ | P2P 技术 owner、runtime、运维与 QA；需要每项义务的接受条款、设计条件及场景定位 | 专业设计条款获批准后回链；此前不把整份 PRD 导航或目标描述当作完整设计覆盖 |
+| DCS-005/DC-5 的转换、manifest/head 负例、receipt 0/1 和消费者反馈由哪个结构化附件合同判定？ | runtime/P2P、运维、消费者 owner 与 QA；需要同候选字段、证据窗口和明确 verdict | 验证设计与附件可定位后复核；此前 state-sync 模板、health 或重连成功均不构成通过证据 |
+| DCS-001/004 表中的 required 局部检查与根 SC-1/SC-2 等 full 组合证据如何分工？ | P2P/runtime 与 QA；需要独立义务覆盖和适用环境说明 | 验证设计明确两层范围后确认；局部结果不降低根组合条件，DCS-003/005 仍按正文 full 验收 |
+
+问题由[文档迁移协调任务 #3935](https://github.com/eng-cc/oasis7/issues/3935)接收，任务依赖和执行状态由 GitHub task truth 维护，不在长期正文复制进度；解决前不新增未来路径或虚构任务。下面的“验证证据”栏尚包含导航描述，除非有同候选的实际执行证据，不能解释为测试已存在或已通过。
+
 ## 全量语义追踪
+
+DC-1..5 与各 REQ/AC 分别保留独立义务。恢复与服务 feedback 的消费者回链为 [`Agent 消费`](../../world-simulator/llm/continuous-agent-harness.prd.md#harness-infrastructure-consumer-matrix)、[`Agent join`](../../world-simulator/llm/continuous-agent-harness.design.md#harness-infrastructure-evidence-join)、[`Viewer 读回`](../../world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md#viewer-infrastructure-readback-contract)、[`Viewer 捕获`](../../world-simulator/viewer/viewer-manual.manual.md#viewer-infrastructure-capture-receiver)、[`Viewer join`](../../world-simulator/viewer/viewer-control-plane-split-live-playback.design.md#viewer-infrastructure-evidence-join)；DC-5 attachment/schema shape 不代替 semantic、trust、domain 或环境检查。
 
 | REQ / AC | 专业 owner | 专业权威 | 验证证据 | 测试层级 |
 | --- | --- | --- | --- | --- |
-| [REQ-DCS-001](#req-dcs-001) / [AC-DCS-001](#ac-dcs-001) | `producer_system_designer` | [`doc/p2p/prd.md`](../../p2p/prd.md#目标)（共识最终性、证明与 freshness）、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)（版本化执行、manifest/head、pending、receipt 与去重）、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)（消费者/Viewer/入口状态反馈）、[`doc/testing/prd.md`](../../testing/prd.md)（组合验证与证据） | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
-| [REQ-DCS-002](#req-dcs-002) / [AC-DCS-002](#ac-dcs-002) | `producer_system_designer / blockchain_ops_engineer / runtime_engineer / viewer_engineer / qa_engineer` | [`doc/p2p/prd.md`](../../p2p/prd.md#目标)（共识最终性、证明与 freshness）、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)（版本化执行、manifest/head、pending、receipt 与去重）、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)（消费者/Viewer/入口状态反馈）、[`doc/testing/prd.md`](../../testing/prd.md)（组合验证与证据） | 根产品 SC-7 的恢复只读/可服务/受阻或隔离与闸门回退矩阵；历史链完整只允许只读，可服务须追加/最终性、版本化执行和 head 连续性证据同时成立；未满足时新 intent 的 committed receipt 为 0，pending 按当前条件重裁决且既有 receipt 不变；同一候选的 topology/state-sync/restore、replay/state-root 与消费者 blocker/下一步证据 | `test_tier_full` |
-| [REQ-DCS-003](#req-dcs-003) / [AC-DCS-003](#ac-dcs-003) | `producer_system_designer` | [`doc/p2p/prd.md`](../../p2p/prd.md#目标)（共识最终性、证明与 freshness）、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)（版本化执行、manifest/head、pending、receipt 与去重）、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)（消费者/Viewer/入口状态反馈）、[`doc/testing/prd.md`](../../testing/prd.md)（组合验证与证据） | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
-| [REQ-DCS-004](#req-dcs-004) / [AC-DCS-004](#ac-dcs-004) | `producer_system_designer` | [`doc/p2p/prd.md`](../../p2p/prd.md#目标)（共识最终性、证明与 freshness）、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)（版本化执行、manifest/head、pending、receipt 与去重）、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)（消费者/Viewer/入口状态反馈）、[`doc/testing/prd.md`](../../testing/prd.md)（组合验证与证据） | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
-| [REQ-DCS-005](#req-dcs-005) / [AC-DCS-005](#ac-dcs-005) | `producer_system_designer` | [`doc/p2p/prd.md`](../../p2p/prd.md#目标)（共识最终性、证明与 freshness）、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)（版本化执行、manifest/head、pending、receipt 与去重）、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)（消费者/Viewer/入口状态反馈）、[`doc/testing/prd.md`](../../testing/prd.md)（组合验证与证据） | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-DCS-001](#req-dcs-001) / [AC-DCS-001](#ac-dcs-001) | `producer_system_designer` |[`doc/p2p/prd.md`](../../p2p/prd.md#目标)（共识最终性、证明与 freshness）、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)（版本化执行、manifest/head、pending、receipt 与去重）、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)（消费者/Viewer/入口状态反馈）、[`doc/testing/prd.md`](../../testing/prd.md)（组合验证与证据）；[`P2P 设计`](../../p2p/design.md#des-p2p-ordered-commit)、[`P2P 设计`](../../p2p/design.md#des-p2p-receipt-finality)、[`runtime 设计`](../../world-runtime/design.md#runtime-deterministic-design)| [`QA 场景`](../../testing/prd.md#qa-infrastructure-scene-families)：`V-FINALITY`，独立承接 DC-1；[`QA 方法`](../../testing/design.md#qa-infrastructure-evidence-method) 与 [`环境与 verdict`](../../testing/prd.md#qa-infrastructure-tier-boundaries) 固定同候选 oracle/artifact/环境及未证明边界。原正文验收条件全部保留，链接不是执行证明 | `test_tier_required` |
+| [REQ-DCS-002](#req-dcs-002) / [AC-DCS-002](#ac-dcs-002) | `producer_system_designer / blockchain_ops_engineer / runtime_engineer / viewer_engineer / qa_engineer` |[`doc/p2p/prd.md`](../../p2p/prd.md#目标)（共识最终性、证明与 freshness）、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)（版本化执行、manifest/head、pending、receipt 与去重）、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)（消费者/Viewer/入口状态反馈）、[`doc/testing/prd.md`](../../testing/prd.md)（组合验证与证据）；[`P2P 设计`](../../p2p/design.md#des-p2p-target-recovery)、[`runtime 设计`](../../world-runtime/design.md#runtime-recovery-design)、[`GWSC 目标场景`](../../testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md#sr2-runtime-scenarios)| [`QA 场景`](../../testing/prd.md#qa-infrastructure-scene-families)：`V-RECOVERY`，独立承接 DC-2；SC-3/6/7；[`QA 方法`](../../testing/design.md#qa-infrastructure-evidence-method) 与 [`环境与 verdict`](../../testing/prd.md#qa-infrastructure-tier-boundaries) 固定同候选 oracle/artifact/环境及未证明边界。原正文验收条件全部保留，链接不是执行证明 | `test_tier_full` |
+| [REQ-DCS-003](#req-dcs-003) / [AC-DCS-003](#ac-dcs-003) | `producer_system_designer` |[`doc/p2p/prd.md`](../../p2p/prd.md#目标)（共识最终性、证明与 freshness）、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)（版本化执行、manifest/head、pending、receipt 与去重）、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)（消费者/Viewer/入口状态反馈）、[`doc/testing/prd.md`](../../testing/prd.md)（组合验证与证据）；[`P2P 设计`](../../p2p/design.md#des-p2p-layer-authority)、[`P2P 设计`](../../p2p/design.md#des-p2p-replication-scope)| [`QA 场景`](../../testing/prd.md#qa-infrastructure-scene-families)：`V-FINALITY`，独立承接 DC-3；[`QA 方法`](../../testing/design.md#qa-infrastructure-evidence-method) 与 [`环境与 verdict`](../../testing/prd.md#qa-infrastructure-tier-boundaries) 固定同候选 oracle/artifact/环境及未证明边界。原正文验收条件全部保留，链接不是执行证明 | `test_tier_full` |
+| [REQ-DCS-004](#req-dcs-004) / [AC-DCS-004](#ac-dcs-004) | `producer_system_designer` |[`doc/p2p/prd.md`](../../p2p/prd.md#目标)（共识最终性、证明与 freshness）、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)（版本化执行、manifest/head、pending、receipt 与去重）、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)（消费者/Viewer/入口状态反馈）、[`doc/testing/prd.md`](../../testing/prd.md)（组合验证与证据）；[`P2P 设计`](../../p2p/design.md#des-p2p-target-bft)、[`runtime 设计`](../../world-runtime/design.md#runtime-deterministic-design)| [`QA 场景`](../../testing/prd.md#qa-infrastructure-scene-families)：`V-FINALITY`，独立承接 DC-4；[`QA 方法`](../../testing/design.md#qa-infrastructure-evidence-method) 与 [`环境与 verdict`](../../testing/prd.md#qa-infrastructure-tier-boundaries) 固定同候选 oracle/artifact/环境及未证明边界。原正文验收条件全部保留，链接不是执行证明 | `test_tier_required` |
+| [REQ-DCS-005](#req-dcs-005) / [AC-DCS-005](#ac-dcs-005) | `producer_system_designer` |[`doc/p2p/prd.md`](../../p2p/prd.md#目标)（共识最终性、证明与 freshness）、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)（版本化执行、manifest/head、pending、receipt 与去重）、[`doc/world-simulator/prd.md`](../../world-simulator/prd.md)（消费者/Viewer/入口状态反馈）、[`doc/testing/prd.md`](../../testing/prd.md)（组合验证与证据）；[`P2P 设计`](../../p2p/design.md#des-p2p-target-service-gate)、[`runtime 设计`](../../world-runtime/design.md#runtime-recovery-design)、[`GWSC 目标场景`](../../testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md#sr2-dc5-semantic-validator)| [`QA 场景`](../../testing/prd.md#qa-infrastructure-scene-families)：`V-RECOVERY / V-CONSUMER`，独立承接 DC-5；[`QA 方法`](../../testing/design.md#qa-infrastructure-evidence-method) 与 [`环境与 verdict`](../../testing/prd.md#qa-infrastructure-tier-boundaries) 固定同候选 oracle/artifact/环境及未证明边界。原正文验收条件全部保留，链接不是执行证明 | `test_tier_full` |

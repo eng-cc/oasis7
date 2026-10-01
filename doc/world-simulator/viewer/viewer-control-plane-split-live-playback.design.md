@@ -36,6 +36,27 @@ authority 先解析 operation/request ID，再验证 proof、session/binding/epo
 
 该合同只覆盖 AC-PROMPT-004、AC-PROMPT-007、AC-PROMPT-009 与 AC-PROMPT-011 的系统边界。它不引入 durable Prompt recovery、cross-session replication、cross-entry sync、production-supervisor activation 或新的 race endpoint。实现与证据分别由 protocol/runtime、Agent/runner、Viewer、QA leaf 消费，并在 W2 trusted merge 后才可发布 system leaf。
 
+<a id="viewer-infrastructure-evidence-join"></a>
+### Infrastructure result visibility and evidence join
+
+既有 authority result 经授权 read projection 才形成 Viewer observation；基础设施 result/freshness/error/application boundary 消费 [PRD readback receiver](viewer-control-plane-split-live-playback.prd.md#viewer-infrastructure-readback-contract)、[QA evidence method](../../testing/design.md#qa-infrastructure-evidence-method) 与 [Harness evidence join](../llm/continuous-agent-harness.design.md#harness-infrastructure-evidence-join)。冻结同 candidate/world/root/revision/child/direct-parent receipt、provider/environment 和 evidence window，capture before/outage/fresh/recovery/retry/replay 的可见结果，再使用同候选 authority source/journal/API oracle 比较 disposition、freshness、no-effect、history/W 和 effect count，归档差异/artifact/hash，最后由 QA 评估 required/full。Viewer 不自造 receipt、freshness 或完成态。
+
+read outage 只改变可见性，不改变权威 W/history/effects；retry/replay 不能产生第二次 effect。SC9 保留八格、authority 格内 root-absent pre-finality 与 root-present post-root-pre-child specimens，并核对 Runtime/API/Agent 相同 quantities/buckets/window/lease/W/progression/next_action/next_recheck。错误/恢复只呈现授权 disposition，私有 trace 不进入 browser。PromptControl scope、profile/wire、race/privacy 与 no-live-seek 合同保持原状；此方法不新增 UI/DTO/API、持久化、同步或 runtime 算法。
+
+代码接点仍为下列既有 protocol/runtime/Viewer consumers；文档方法不证明它们已执行验证。[Playwright capture method](../../testing/manual/web-ui-playwright-closure-manual.design.md#playwright-source-capture-method) 提供 source/scene/environment/oracle/artifact 接点；[QA tier boundaries](../../testing/prd.md#qa-infrastructure-tier-boundaries) 保留 full 所需实际 provider-backed Agent parity/external headed desktop+narrow。missing proof 为 blocked/unverified，观察到 invariant violation 为 failed；[equal-version negative](../../testing/prd.md#qa-infrastructure-equal-version-negative) 仍 planned/unexecuted，shape-valid 不等于 semantic success。
+
+### 2.1 需求承接与分配表
+
+| 上游 requirement / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| [Viewer readback](viewer-control-plane-split-live-playback.prd.md#viewer-infrastructure-readback-contract) | 同世界 result/freshness/error/read projection 与同候选 authority join | [Evidence join](viewer-control-plane-split-live-playback.design.md#viewer-infrastructure-evidence-join) | Runtime world/journal；Agent cognition；QA verdict；gameplay W/window oracle | 不新增 UI/DTO/API，不扩大 PromptControl scope，不证明执行/full |
+
+### 11.1 验证映射表
+
+| 上游 requirement / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source、scenario/layer、candidate/environment | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [Viewer readback](viewer-control-plane-split-live-playback.prd.md#viewer-infrastructure-readback-contract) | [Evidence join](viewer-control-plane-split-live-playback.design.md#viewer-infrastructure-evidence-join) | 同 candidate/world/receipt result/freshness/error 与 no-effect/read projection | [Viewer capture receiver](viewer-manual.manual.md#viewer-infrastructure-capture-receiver)：before/outage/fresh/recovery/retry/replay capture，关联同候选 authority oracle，按实际 provider/environment 和 S6 desktop+narrow 要求归档 | Future screenshots/console/state、source/journal/API readback、receipt lineage、freshness、count0/1 与 artifact hashes | 文档方法；无 provider/browser/runtime 执行，无 semantic/required/full pass |
+
 ## 不变量
 
 - live 的世界推进单调，不提供回退或跳时控制。

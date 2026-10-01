@@ -1463,6 +1463,26 @@ class WorkflowDocumentationContract(unittest.TestCase):
             script,
         )
 
+    def test_impact_projection_preflight_uses_immutable_comparison_authority(self) -> None:
+        script = PREPARE_TASK_PR.read_text(encoding="utf-8")
+        planner_setup = script.index('if [[ -x "$PLANNER_SCRIPT" || -n "$IMPACT_PROJECTION" ]]; then')
+        planner_call = script.index('PLANNER_RUNNER=(python3 -I "$TRUSTED_REQUIRED_SCOPE_DIR/scripts/plan-rust-required-scope.py")', planner_setup)
+        planner_args = script.index('PLANNER_ARGS+=(--config "$TRUSTED_REQUIRED_SCOPE_DIR/scripts/ci-required-scope.v2.json")', planner_call)
+        for relative in (
+            "scripts/plan-rust-required-scope.py",
+            "scripts/ci-required-scope.v2.json",
+            "scripts/ci-tests.sh",
+            "scripts/pm/workflow-impact-projection.py",
+        ):
+            with self.subTest(relative=relative):
+                materialize = f'git -C "$SOURCE_WORKTREE" show "$COMPARISON_HEAD:{relative}"'
+            self.assertIn(materialize, script[planner_setup:planner_call])
+        self.assertGreater(planner_args, planner_call)
+        self.assertIn(
+            'die "trusted base required-scope planner rejected the impact projection"',
+            script[planner_call:],
+        )
+
     def test_task_pr_docs_order_draft_identity_review_closeout_and_promotion(self) -> None:
         readme = PM_README.read_text(encoding="utf-8")
         readme_section = re.search(

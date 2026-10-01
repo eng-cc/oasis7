@@ -1,5 +1,5 @@
 name: Rust
-run-name: oasis7-ci|${{ github.event_name }}|${{ inputs.run_mode }}|${{ inputs.task_uid }}|${{ inputs.pr_number }}|${{ inputs.integration_base }}|${{ inputs.expected_head }}
+run-name: oasis7-ci|${{ github.event_name }}|${{ inputs.run_mode }}|${{ inputs.task_uid }}|${{ inputs.pr_number }}|${{ inputs.integration_base }}|${{ inputs.expected_head }}${{ inputs.request_key != '' && format('|{0}', inputs.request_key) || '' }}
 
 on:
   push:
@@ -19,6 +19,8 @@ on:
           - integration_revalidation
           - full_escalation
           - newapi_bridge_package
+          - v1_reuse_validation_only
+          - v2_reuse_validation_successor_only
       newapi_bridge_build_profile:
         description: "Cargo profile when run_mode=newapi_bridge_package"
         required: true
@@ -40,7 +42,15 @@ on:
         required: false
         type: string
       integration_base:
-        description: "Exact current target OID for integration_revalidation"
+        description: "Frozen B OID for integration or validation-only runs"
+        required: false
+        type: string
+      source_scope_oid:
+        description: "Frozen S OID for validation-only request or successor"
+        required: false
+        type: string
+      projection_digest:
+        description: "Frozen trusted projection D for validation-only request or successor"
         required: false
         type: string
       escalation_reason:
@@ -53,6 +63,14 @@ on:
         type: string
       impact_projection_b64:
         description: "Required for integration_revalidation: base64 encoded verified workflow impact projection"
+        required: false
+        type: string
+      request_key:
+        description: "Keyed C4 identity or v1 validation_id assertion"
+        required: false
+        type: string
+      validation_request_b64:
+        description: "Optional canonical C3 validation request envelope; requires request_key"
         required: false
         type: string
 
@@ -79,7 +97,15 @@ jobs:
       issues: read
       pull-requests: read
     outputs:
+      execution_contract: ${{ steps.scope.outputs.execution_contract }}
+      required_plan_v2_artifact_id: ${{ steps.upload-plan-v2.outputs.artifact-id }}
+      required_plan_v2_artifact_name: ${{ steps.keyed-plan.outputs.plan_artifact_name }}
+      required_unit_matrix: ${{ steps.keyed-plan.outputs.unit_matrix }}
       run_operational_contracts: ${{ steps.scope.outputs.run_operational_contracts }}
+      run_workflow_governance_contracts: ${{ steps.scope.outputs.run_workflow_governance_contracts }}
+      run_packaging_contracts: ${{ steps.scope.outputs.run_packaging_contracts }}
+      run_doc_checker_contracts: ${{ steps.scope.outputs.run_doc_checker_contracts }}
+      run_cargo_tooling_contracts: ${{ steps.scope.outputs.run_cargo_tooling_contracts }}
       run_site_contract_tests: ${{ steps.scope.outputs.run_site_contract_tests }}
     steps:
       - uses: actions/checkout@v6
@@ -111,22 +137,51 @@ jobs:
           INTEGRATION_HEAD: ${{ inputs.expected_head }}
           INTEGRATION_UID: ${{ inputs.task_uid }}
           INTEGRATION_PR: ${{ inputs.pr_number }}
+          INTEGRATION_REQUEST_KEY: ${{ inputs.request_key }}
+          INTEGRATION_REQUEST_B64: ${{ inputs.validation_request_b64 }}
           GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
         shell: bash
         run: |
           mkdir -p "${RUNNER_TEMP}/integration-planner/pm"
           cp scripts/plan-rust-required-scope.py scripts/ci-required-scope.v2.json scripts/ci-tests.sh scripts/viewer-dependency-preflight.sh "${RUNNER_TEMP}/integration-planner/"
           cp scripts/pm/workflow-impact-projection.py "${RUNNER_TEMP}/integration-planner/pm/"
+          cp scripts/pm/integration_ci.py scripts/pm/integration_executor_contract.py scripts/pm/ci_ready_receipt_identity.py "${RUNNER_TEMP}/"
           [[ -n '${{ inputs.impact_projection_b64 }}' ]] || {
             echo "integration_revalidation requires impact_projection_b64" >&2
             exit 1
           }
           printf '%s' '${{ inputs.impact_projection_b64 }}' | base64 --decode >"${RUNNER_TEMP}/impact-projection.json"
-          cp scripts/pm/integration_ci.py "${RUNNER_TEMP}/integration_ci.py"
-          python3 -I "${RUNNER_TEMP}/integration_ci.py" prepare --repository "${{ github.repository }}" \
-            --task-uid "${INTEGRATION_UID}" --pr-number "${INTEGRATION_PR}" \
-            --base "${INTEGRATION_BASE}" --head "${INTEGRATION_HEAD}" --output "${RUNNER_TEMP}/integration.json"
+          prepare_args=(prepare --repository "${GITHUB_REPOSITORY}" --task-uid "${INTEGRATION_UID}" \
+            --pr-number "${INTEGRATION_PR}" --base "${INTEGRATION_BASE}" --head "${INTEGRATION_HEAD}" \
+            --output "${RUNNER_TEMP}/integration.json")
+          if [[ -n "${INTEGRATION_REQUEST_KEY}" || -n "${INTEGRATION_REQUEST_B64}" ]]; then
+            [[ -n "${INTEGRATION_REQUEST_KEY}" && -n "${INTEGRATION_REQUEST_B64}" ]] || {
+              echo "keyed integration requires both request_key and validation_request_b64" >&2
+              exit 1
+            }
+            [[ "${INTEGRATION_REQUEST_KEY}" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+              echo "request_key must be a canonical SHA-256 identity" >&2
+              exit 1
+            }
+            python3 -I scripts/pm/ci_reuse_policy.py trusted-context --root "${GITHUB_WORKSPACE}" \
+              --repository "${GITHUB_REPOSITORY}" --default-branch "${GITHUB_DEFAULT_BRANCH}" \
+              --workflow-ref "${GITHUB_WORKFLOW_REF}" --workflow-sha "${GITHUB_WORKFLOW_SHA}" \
+              --default-branch-sha "${GITHUB_SHA}" --output "${RUNNER_TEMP}/trusted-ci-policy.json"
+            prepare_args+=(--request-key "${INTEGRATION_REQUEST_KEY}" \
+              --validation-request-b64 "${INTEGRATION_REQUEST_B64}" \
+              --trusted-policy-json "${RUNNER_TEMP}/trusted-ci-policy.json" \
+              --integration-worktree "${RUNNER_TEMP}/integration-target")
+          fi
+          python3 -I "${RUNNER_TEMP}/integration_ci.py" "${prepare_args[@]}"
           echo "identity=$(cat "${RUNNER_TEMP}/integration.json")" >>"${GITHUB_OUTPUT}"
+          python3 -I - "${RUNNER_TEMP}/integration.json" "${GITHUB_OUTPUT}" <<'PY'
+          import json, pathlib, sys
+          identity=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+          with pathlib.Path(sys.argv[2]).open("a",encoding="utf-8") as output:
+              output.write("worktree="+identity.get("integration_worktree","")+"\n")
+          PY
       - name: Validate trusted loop repository scope and content
         if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')
         env:
@@ -195,109 +250,6 @@ jobs:
               ;;
           esac
 
-      - id: checker-stage
-        name: Classify trusted checker-stage route
-        if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')
-        env:
-          GH_TOKEN: ${{ github.token }}
-          CHECKER_BASE_SHA: ${{ github.event.pull_request.base.sha || inputs.integration_base }}
-          CHECKER_HEAD_SHA: ${{ github.event.pull_request.head.sha || inputs.expected_head }}
-          CHECKER_PR_NUMBER: ${{ github.event.pull_request.number || inputs.pr_number }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          checker_paths=(
-            "scripts/pm/check-cargo-package-scope"
-            "scripts/pm/check-cargo-package-scope.test.py"
-          )
-          if [[ -z "${CHECKER_BASE_SHA}" || -z "${CHECKER_HEAD_SHA}" ]]; then
-            echo "checker-stage changed-path range is incomplete" >&2
-            exit 1
-          fi
-          changed_status_file="$(mktemp)"
-          trap 'rm -f "${changed_status_file}"' EXIT
-          if ! git diff --name-status --find-renames --find-copies --find-copies-harder "${CHECKER_BASE_SHA}" "${CHECKER_HEAD_SHA}" >"${changed_status_file}"; then
-            echo "checker-stage changed-path readback failed for the supplied range" >&2
-            exit 1
-          fi
-          changed_paths=()
-          while IFS=$'\t' read -r status first_path second_path; do
-            [[ -n "${status}" ]] || continue
-            case "${status}" in
-              R*|C*)
-                [[ -n "${first_path}" && -n "${second_path}" ]] || {
-                  echo "checker-stage rename/copy record is malformed" >&2
-                  exit 1
-                }
-                changed_paths+=("${first_path}" "${second_path}")
-                ;;
-              *)
-                [[ -n "${first_path}" && -z "${second_path}" ]] || {
-                  echo "checker-stage changed-path record is malformed" >&2
-                  exit 1
-                }
-                changed_paths+=("${first_path}")
-                ;;
-            esac
-          done <"${changed_status_file}"
-          checker_path_touched=false
-          for path in "${changed_paths[@]}"; do
-            if [[ "${path}" == "${checker_paths[0]}" || "${path}" == "${checker_paths[1]}" ]]; then
-              checker_path_touched=true
-            fi
-          done
-          if [[ "${checker_path_touched}" != true ]]; then
-            {
-              echo "pr_number="
-              echo "task_uid="
-              echo "receipt="
-            } >>"${GITHUB_OUTPUT}"
-            echo "ordinary changed-path route: checker stage is not selected"
-            exit 0
-          fi
-          if (( ${#changed_paths[@]} != 2 )); then
-            echo "checker-stage path touched without the exact two-file checker scope" >&2
-            exit 1
-          fi
-          if [[ ( "${changed_paths[0]}" != "${checker_paths[0]}" && "${changed_paths[0]}" != "${checker_paths[1]}" ) ||
-                ( "${changed_paths[1]}" != "${checker_paths[0]}" && "${changed_paths[1]}" != "${checker_paths[1]}" ) ]]; then
-            echo "checker-stage path touched without the exact two-file checker scope" >&2
-            exit 1
-          fi
-          if [[ "${GITHUB_REPOSITORY}" != "eng-cc/oasis7" ]]; then
-            echo "checker-stage authority is unavailable outside the canonical repository" >&2
-            exit 1
-          fi
-          issue_body="$(gh api "repos/${GITHUB_REPOSITORY}/issues/3827" --jq .body)"
-          resolved_pr="$(ISSUE_BODY="${issue_body}" python3 -I - <<'PY'
-          import os
-          import re
-
-          task_uid = "task_be264ac2833044969d3c2c50b2b83cea"
-          body = os.environ.get("ISSUE_BODY", "").replace("\r\n", "\n")
-          if re.findall(r"^task_uid:[^\n]*$", body, re.M) != [f"task_uid: {task_uid}"]:
-              raise SystemExit("trusted checker Issue UID is missing or ambiguous")
-          issue_uids = re.findall(r"^task_uid: (task_[0-9a-f]{32})$", body, re.M)
-          if issue_uids != [task_uid]:
-              raise SystemExit("trusted checker Issue UID mismatch")
-          references = set(re.findall(r"/pull/(\d+)\b", body))
-          references.update(re.findall(r"^- pr_number: `?(\d+)`?$", body, re.M))
-          if len(references) != 1:
-              raise SystemExit("trusted checker Issue reciprocal PR is missing or ambiguous")
-          print(next(iter(references)))
-          PY
-          )"
-          if [[ "${resolved_pr}" != "${CHECKER_PR_NUMBER}" ]]; then
-            echo "trusted checker Issue reciprocal PR does not match the current PR" >&2
-            exit 1
-          fi
-          {
-            echo "pr_number=${CHECKER_PR_NUMBER}"
-            echo "task_uid=task_be264ac2833044969d3c2c50b2b83cea"
-            echo "receipt=${GITHUB_WORKSPACE}/output/cargo-checker-stage-admission/post-run-receipt.json"
-          } >>"${GITHUB_OUTPUT}"
-          echo "trusted checker-stage route selected for PR ${CHECKER_PR_NUMBER}"
-
       - id: scope
         name: Plan required gate scope
         env:
@@ -322,7 +274,7 @@ jobs:
           impact_args=()
           run_mode_args=()
           scope_base_oid="$(git merge-base "${base_ref}" "${head_ref}")"
-          if [[ "${GITHUB_EVENT_NAME}" == pull_request && -f "${RUNNER_TEMP}/impact-projection.json" ]]; then
+          if [[ "${GITHUB_EVENT_NAME}" == pull_request ]]; then
             authority_dir="${RUNNER_TEMP}/required-base-authority"
             mkdir -p "${authority_dir}/pm"
             git show "${base_ref}:scripts/plan-rust-required-scope.py" >"${authority_dir}/plan-rust-required-scope.py"
@@ -330,14 +282,16 @@ jobs:
             git show "${base_ref}:scripts/ci-tests.sh" >"${authority_dir}/ci-tests.sh"
             git show "${base_ref}:scripts/pm/workflow-impact-projection.py" >"${authority_dir}/pm/workflow-impact-projection.py"
             planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py")
-            task_uid="$(python3 - <<'PY'
+            if [[ -f "${RUNNER_TEMP}/impact-projection.json" ]]; then
+              task_uid="$(python3 - <<'PY'
           import os,re
           matches=re.findall(r'^Task: (task_[0-9a-f]{32})$',os.environ.get('PR_BODY',''),re.M)
           if len(matches)!=1: raise SystemExit('pull request requires exactly one canonical Task UID')
           print(matches[0])
           PY
-            )"
-            impact_args=(--impact-projection "${RUNNER_TEMP}/impact-projection.json" --task-uid "${task_uid}" --scope-base-oid "${scope_base_oid}")
+              )"
+              impact_args=(--impact-projection "${RUNNER_TEMP}/impact-projection.json" --task-uid "${task_uid}" --scope-base-oid "${scope_base_oid}")
+            fi
           elif [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]; then
             planner=(python3 -I "${RUNNER_TEMP}/integration-planner/plan-rust-required-scope.py")
             task_uid="${{ inputs.task_uid }}"
@@ -356,15 +310,18 @@ jobs:
             "${impact_args[@]}" \
             --github-output "${GITHUB_OUTPUT}"
           source_scope_base="$(git merge-base "${base_ref}" "${head_ref}")"
-          echo "base_oid=${base_ref}" >>"${GITHUB_OUTPUT}"
-          echo "integration_base_oid=${base_ref}" >>"${GITHUB_OUTPUT}"
-          echo "head_oid=${head_ref}" >>"${GITHUB_OUTPUT}"
-          echo "source_scope_base=${source_scope_base}" >>"${GITHUB_OUTPUT}"
-          echo "integration_base=${base_ref}" >>"${GITHUB_OUTPUT}"
-          echo "source_head=${head_ref}" >>"${GITHUB_OUTPUT}"
-          echo "task_uid=${task_uid}" >>"${GITHUB_OUTPUT}"
+          {
+            echo "base_oid=${base_ref}"
+            echo "integration_base_oid=${base_ref}"
+            echo "head_oid=${head_ref}"
+            echo "source_scope_base=${source_scope_base}"
+            echo "integration_base=${base_ref}"
+            echo "source_head=${head_ref}"
+            echo "task_uid=${task_uid}"
+          } >>"${GITHUB_OUTPUT}"
       - name: Report planned scope
         run: |
+          echo "execution_contract=${{ steps.scope.outputs.execution_contract }}"
           echo "scope=${{ steps.scope.outputs.scope }}"
           echo "selected_capabilities=${{ steps.scope.outputs.selected_capabilities }}"
           echo "reason_summary=${{ steps.scope.outputs.reason_summary }}"
@@ -384,16 +341,123 @@ jobs:
           echo "run_oasis7_workspace_support_crate_tests=${{ steps.scope.outputs.run_oasis7_workspace_support_crate_tests }}"
           echo "run_scenario_regression=${{ steps.scope.outputs.run_scenario_regression }}"
           echo "run_operational_contracts=${{ steps.scope.outputs.run_operational_contracts }}"
+          echo "run_workflow_governance_contracts=${{ steps.scope.outputs.run_workflow_governance_contracts }}"
+          echo "run_packaging_contracts=${{ steps.scope.outputs.run_packaging_contracts }}"
+          echo "run_doc_checker_contracts=${{ steps.scope.outputs.run_doc_checker_contracts }}"
+          echo "run_cargo_tooling_contracts=${{ steps.scope.outputs.run_cargo_tooling_contracts }}"
           echo "run_site_contract_tests=${{ steps.scope.outputs.run_site_contract_tests }}"
           echo "run_codex_agent_config_validation=${{ steps.scope.outputs.run_codex_agent_config_validation }}"
           echo "run_compile_metrics_contract_tests=${{ steps.scope.outputs.run_compile_metrics_contract_tests }}"
           echo "run_required_gate_baseline=${{ steps.scope.outputs.run_required_gate_baseline }}"
           echo "needs_node=${{ steps.scope.outputs.needs_node }}"
+          echo "needs_python=${{ steps.scope.outputs.needs_python }}"
+          echo "needs_markdown=${{ steps.scope.outputs.needs_markdown }}"
           echo "needs_system_deps=${{ steps.scope.outputs.needs_system_deps }}"
           echo "needs_trunk=${{ steps.scope.outputs.needs_trunk }}"
+          echo "needs_wasm_target=${{ steps.scope.outputs.needs_wasm_target }}"
           echo "run_rust_baseline=${{ steps.scope.outputs.run_rust_baseline }}"
           echo "needs_rust_toolchain=${{ steps.scope.outputs.needs_rust_toolchain }}"
           echo "planner_config_sha256=${{ steps.scope.outputs.planner_config_sha256 }}"
+      - name: Install pinned Markdown runtime for keyed inventory observation
+        if: ${{ inputs.request_key != '' }}
+        run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
+      - id: keyed-plan
+        name: Build attempt-scoped required-plan v2 from trusted W and M
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PLAN_JSON: ${{ toJSON(steps.scope.outputs) }}
+          INTEGRATION_JSON: ${{ steps.integration.outputs.identity }}
+          INTEGRATION_REQUEST_KEY: ${{ inputs.request_key }}
+          INTEGRATION_REQUEST_B64: ${{ inputs.validation_request_b64 }}
+          INTEGRATION_BASE: ${{ inputs.integration_base }}
+          INTEGRATION_HEAD: ${{ inputs.expected_head }}
+          INTEGRATION_UID: ${{ inputs.task_uid }}
+          INTEGRATION_PR: ${{ inputs.pr_number }}
+          INTEGRATION_WORKTREE: ${{ steps.integration.outputs.worktree }}
+          TRUSTED_POLICY_JSON: ${{ runner.temp }}/trusted-ci-policy.json
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${INTEGRATION_REQUEST_KEY}" ]]; then
+            echo 'unit_matrix=[]' >>"${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          [[ -n "${INTEGRATION_WORKTREE:-}" ]] || {
+            echo "keyed required-plan needs the exact W/M integration worktree" >&2
+            exit 1
+          }
+          [[ -s "${TRUSTED_POLICY_JSON}" ]] || {
+            echo "keyed required-plan needs trusted workflow policy context" >&2
+            exit 1
+          }
+          python3 -I - <<'PY'
+          import base64, importlib.util, json, os, pathlib, sys
+          workspace=pathlib.Path(os.environ["GITHUB_WORKSPACE"]).resolve()
+          scripts=workspace/"scripts"
+          sys.path.insert(0,str(scripts/"pm"))
+          sys.path.insert(0,str(scripts))
+          import ci_required_inventory as inventory_module
+          import ci_required_artifact_v2 as artifact_module
+          import integration_ci as integration_module
+          import integration_executor_contract as request_contract
+
+          plan_output=json.loads(os.environ["PLAN_JSON"])
+          integration=json.loads(os.environ["INTEGRATION_JSON"])
+          if not isinstance(integration,dict) or not integration.get("integration_worktree"):
+              raise SystemExit("exact keyed M worktree identity is unavailable")
+          policy=json.loads(pathlib.Path(os.environ["TRUSTED_POLICY_JSON"]).read_text(encoding="utf-8"))
+          try:
+              request_raw=base64.b64decode(os.environ["INTEGRATION_REQUEST_B64"],validate=True)
+              request_envelope=json.loads(request_raw.decode("utf-8"))
+          except (ValueError,UnicodeDecodeError,json.JSONDecodeError) as exc:
+              raise SystemExit("canonical validation request cannot be decoded") from exc
+          request=request_contract.validation_request_envelope(request_envelope)
+          if request_raw!=request_contract.canonical_bytes(request):
+              raise SystemExit("validation request envelope is noncanonical")
+          if request["request_key"]!=os.environ["INTEGRATION_REQUEST_KEY"]:
+              raise SystemExit("validation request key differs from workflow input")
+          run_id=int(os.environ["GITHUB_RUN_ID"])
+          attempt=int(os.environ["GITHUB_RUN_ATTEMPT"])
+          app_id=policy["effective_policy"]["check_app_id"]
+          gate_jobs=integration_module.attempt_execution_jobs(
+              os.environ["GITHUB_REPOSITORY"],run_id,attempt,
+              os.environ["GITHUB_WORKFLOW_SHA"],app_id,job_names={"required-gate"},
+          )
+          if len(gate_jobs)!=1:
+              raise SystemExit("exact in-progress required-gate check is unavailable")
+          changed_raw=plan_output.get("changed_paths","")
+          changed_paths=changed_raw.split(";") if changed_raw else []
+          inventory=inventory_module.build_required_inventory(
+              workspace,pathlib.Path(integration["integration_worktree"]),
+              integration["tested_commit_oid"],plan_output,
+              repository=os.environ["GITHUB_REPOSITORY"],
+              workflow_ref=os.environ["GITHUB_WORKFLOW_REF"],
+              planner_authority_oid=os.environ["GITHUB_WORKFLOW_SHA"],
+              event_name="workflow_dispatch",run_mode="integration_revalidation",
+              changed_paths=changed_paths,base_ref=os.environ["INTEGRATION_BASE"],
+              head_ref=os.environ["INTEGRATION_HEAD"],task_uid=os.environ["INTEGRATION_UID"],
+              scope_base_oid=plan_output["source_scope_base"],
+              impact_projection=str(pathlib.Path(os.environ["RUNNER_TEMP"])/"impact-projection.json"),
+              run_id=run_id,run_attempt=attempt,check_app_id=app_id,
+              check_run_id=gate_jobs[0]["check_run_id"],
+          )
+          payload=artifact_module.assemble_plan_payload(
+              inventory,request_identity=request["identity"],request_key=request["request_key"],
+              trusted_policy_context=policy,gate_job=gate_jobs[0],
+              workflow_ref=os.environ["GITHUB_WORKFLOW_REF"],
+              workflow_sha=os.environ["GITHUB_WORKFLOW_SHA"],
+              workflow_run_id=run_id,run_attempt=attempt,
+          )
+          output=pathlib.Path(os.environ["RUNNER_TEMP"])/artifact_module.PLAN_V2_MEMBER
+          output.write_bytes(artifact_module.canonical_bytes(payload)+b"\n")
+          artifact_name=artifact_module.plan_artifact_name(run_id,attempt)
+          unit_matrix=[{"unit_id":unit,"artifact_name":artifact_module.result_artifact_name(run_id,attempt,unit)}
+                       for unit in payload["required_test_units"]]
+          with pathlib.Path(os.environ["GITHUB_OUTPUT"]).open("a",encoding="utf-8") as stream:
+              stream.write("plan_artifact_name="+artifact_name+"\n")
+              stream.write("unit_matrix="+json.dumps(unit_matrix,sort_keys=True,separators=(",",":"))+"\n")
+          PY
       - name: Write required planner artifact
         env:
           PLAN_JSON: ${{ toJSON(steps.scope.outputs) }}
@@ -405,7 +469,7 @@ jobs:
           python3 -I - <<'PY'
           import json, os, pathlib
           source=json.loads(os.environ["PLAN_JSON"])
-          fields=(
+          legacy_fields=(
               "scope", "selected_capabilities", "reason_summary", "changed_path_count",
               "source_scope_base", "integration_base", "source_head",
               "run_oasis7_required_tests", "run_consensus_tests", "run_distfs_tests",
@@ -416,9 +480,91 @@ jobs:
               "run_scenario_regression", "run_operational_contracts", "run_site_contract_tests", "run_codex_agent_config_validation", "run_compile_metrics_contract_tests", "run_required_gate_baseline",
               "run_rust_baseline", "needs_rust_toolchain", "planner_config_sha256",
           )
+          execution_contract=source.get("execution_contract", "")
+          if execution_contract == "required-domain-split/v1":
+              split_fields=(
+                  "execution_contract", "run_workflow_governance_contracts", "run_packaging_contracts",
+                  "run_doc_checker_contracts", "run_cargo_tooling_contracts",
+                  "needs_python", "needs_markdown", "needs_node", "needs_system_deps", "needs_trunk", "needs_wasm_target",
+              )
+              fields=legacy_fields + split_fields
+              selector_fields=(
+                  "run_oasis7_required_tests", "run_consensus_tests", "run_distfs_tests",
+                  "run_oasis7_node_tests", "run_oasis7_net_tests", "run_oasis7_net_libp2p_tests",
+                  "run_viewer_contract_tests", "run_viewer_wasm_check", "run_viewer_perf_smoke",
+                  "run_pixel_world_bridge_lib_tests", "run_pixel_world_bridge_wasm_check",
+                  "run_launcher_web_build", "run_oasis7_workspace_support_crate_tests",
+                  "run_scenario_regression", "run_operational_contracts", "run_site_contract_tests",
+                  "run_codex_agent_config_validation", "run_compile_metrics_contract_tests", "run_rust_baseline",
+                  "run_workflow_governance_contracts", "run_packaging_contracts",
+                  "run_doc_checker_contracts", "run_cargo_tooling_contracts",
+              )
+              resource_fields=(
+                  "needs_python", "needs_markdown", "needs_rust_toolchain", "needs_node",
+                  "needs_system_deps", "needs_trunk", "needs_wasm_target",
+              )
+          elif execution_contract == "":
+              new_fields=(
+                  "run_workflow_governance_contracts", "run_packaging_contracts",
+                  "run_doc_checker_contracts", "run_cargo_tooling_contracts", "needs_python", "needs_markdown",
+              )
+              mixed=[field for field in new_fields if source.get(field) not in (None, "")]
+              if mixed:
+                  raise SystemExit(f"unversioned planner contains versioned fields: {', '.join(mixed)}")
+              fields=legacy_fields
+          else:
+              raise SystemExit(f"unsupported required-gate execution contract: {execution_contract}")
           missing=[field for field in fields if field not in source]
           if missing:
               raise SystemExit(f"missing required planner outputs: {', '.join(missing)}")
+          if execution_contract == "required-domain-split/v1":
+              for field in selector_fields + resource_fields:
+                  if source[field] not in ("true", "false"):
+                      raise SystemExit(f"{field} must be explicitly true or false for {execution_contract}")
+              if source["needs_python"] != "true" or source["needs_markdown"] != "true":
+                  raise SystemExit("required-gate baseline document checks require planned Python and Markdown resources")
+          if execution_contract == "required-domain-split/v1":
+              if source["run_cargo_tooling_contracts"] == "true" and source["needs_rust_toolchain"] != "true":
+                  raise SystemExit("Cargo tooling contracts require the planned Rust toolchain resource")
+              selector_resources={
+                  "run_oasis7_required_tests": ("needs_rust_toolchain", "needs_system_deps"),
+                  "run_consensus_tests": ("needs_rust_toolchain",),
+                  "run_distfs_tests": ("needs_rust_toolchain",),
+                  "run_oasis7_node_tests": ("needs_rust_toolchain",),
+                  "run_oasis7_net_tests": ("needs_rust_toolchain",),
+                  "run_oasis7_net_libp2p_tests": ("needs_rust_toolchain",),
+                  "run_viewer_contract_tests": ("needs_rust_toolchain", "needs_node", "needs_system_deps", "needs_wasm_target"),
+                  "run_viewer_wasm_check": ("needs_rust_toolchain", "needs_node", "needs_system_deps", "needs_wasm_target"),
+                  "run_viewer_perf_smoke": ("needs_node", "needs_system_deps"),
+                  "run_pixel_world_bridge_lib_tests": ("needs_rust_toolchain", "needs_system_deps", "needs_wasm_target"),
+                  "run_pixel_world_bridge_wasm_check": ("needs_rust_toolchain", "needs_system_deps", "needs_wasm_target"),
+                  "run_launcher_web_build": ("needs_rust_toolchain", "needs_node", "needs_system_deps", "needs_wasm_target", "needs_trunk"),
+                  "run_oasis7_workspace_support_crate_tests": ("needs_rust_toolchain", "needs_system_deps"),
+                  "run_scenario_regression": ("needs_rust_toolchain",),
+                  "run_operational_contracts": (),
+                  "run_workflow_governance_contracts": (),
+                  "run_packaging_contracts": (),
+                  "run_doc_checker_contracts": ("needs_python", "needs_markdown"),
+                  "run_cargo_tooling_contracts": ("needs_rust_toolchain",),
+                  "run_site_contract_tests": (),
+                  "run_codex_agent_config_validation": (),
+                  "run_compile_metrics_contract_tests": (),
+                  "run_rust_baseline": ("needs_rust_toolchain",),
+              }
+              for selector, required_resources in selector_resources.items():
+                  if source[selector] != "true":
+                      continue
+                  missing_resources=[name for name in required_resources if source[name] != "true"]
+                  if missing_resources:
+                      raise SystemExit(f"{selector} requires planned resources: {', '.join(missing_resources)}")
+              for derived, source_field in (
+                  ("run_oasis7_net_libp2p_tests", "run_oasis7_net_tests"),
+                  ("run_viewer_wasm_check", "run_viewer_contract_tests"),
+                  ("run_pixel_world_bridge_wasm_check", "run_pixel_world_bridge_lib_tests"),
+                  ("run_rust_baseline", "needs_rust_toolchain"),
+              ):
+                  if source[derived] != source[source_field]:
+                      raise SystemExit(f"{derived} must match planner-derived {source_field}")
           planner={field:source[field] for field in fields}
           if source.get("impact_projection_status") == "verified":
               projection_fields=("impact_projection_schema", "impact_projection_digest",
@@ -444,6 +590,16 @@ jobs:
               json.dumps(payload,sort_keys=True,separators=(",",":"))+"\n",encoding="utf-8"
           )
           PY
+      - id: upload-plan-v2
+        name: Upload exact-attempt required plan v2
+        if: ${{ inputs.request_key != '' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.keyed-plan.outputs.plan_artifact_name }}
+          path: ${{ runner.temp }}/oasis7-required-plan-v2.json
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: false
       - name: Upload required planner artifact
         uses: actions/upload-artifact@v7
         with:
@@ -471,16 +627,26 @@ jobs:
           node-version: '22'
       - name: Install viewer web dependencies
         if: ${{ steps.scope.outputs.needs_node == 'true' }}
-        run: npm ci --prefix crates/oasis7_viewer
+        env:
+          INTEGRATION_WORKTREE: ${{ steps.integration.outputs.worktree }}
+        run: npm ci --prefix "${INTEGRATION_WORKTREE:-${GITHUB_WORKSPACE}}/crates/oasis7_viewer"
       - uses: Swatinem/rust-cache@v2
-        if: ${{ steps.scope.outputs.run_oasis7_required_tests == 'true' || steps.scope.outputs.run_consensus_tests == 'true' || steps.scope.outputs.run_distfs_tests == 'true' || steps.scope.outputs.run_oasis7_node_tests == 'true' || steps.scope.outputs.run_oasis7_net_tests == 'true' || steps.scope.outputs.run_oasis7_net_libp2p_tests == 'true' || steps.scope.outputs.run_viewer_wasm_check == 'true' || steps.scope.outputs.run_viewer_contract_tests == 'true' || steps.scope.outputs.run_launcher_web_build == 'true' || steps.scope.outputs.run_oasis7_workspace_support_crate_tests == 'true' }}
+        if: ${{ steps.scope.outputs.run_oasis7_required_tests == 'true' || steps.scope.outputs.run_consensus_tests == 'true' || steps.scope.outputs.run_distfs_tests == 'true' || steps.scope.outputs.run_oasis7_node_tests == 'true' || steps.scope.outputs.run_oasis7_net_tests == 'true' || steps.scope.outputs.run_oasis7_net_libp2p_tests == 'true' || steps.scope.outputs.run_viewer_wasm_check == 'true' || steps.scope.outputs.run_viewer_contract_tests == 'true' || steps.scope.outputs.run_launcher_web_build == 'true' || steps.scope.outputs.run_oasis7_workspace_support_crate_tests == 'true' || steps.scope.outputs.run_cargo_tooling_contracts == 'true' }}
         with:
           shared-key: ci-required-gate-v1
       - name: Install trunk
         if: ${{ steps.scope.outputs.needs_trunk == 'true' }}
         run: cargo install trunk --locked
       - name: Install system deps
-        if: ${{ steps.scope.outputs.needs_system_deps == 'true' || steps.scope.outputs.run_oasis7_required_tests == 'true' || steps.scope.outputs.run_viewer_contract_tests == 'true' || steps.scope.outputs.run_viewer_wasm_check == 'true' || steps.scope.outputs.run_viewer_perf_smoke == 'true' || steps.scope.outputs.run_launcher_web_build == 'true' || steps.scope.outputs.run_oasis7_workspace_support_crate_tests == 'true' }}
+        if: >-
+          ${{ steps.scope.outputs.needs_system_deps == 'true' ||
+              (steps.scope.outputs.execution_contract != 'required-domain-split/v1' &&
+               (steps.scope.outputs.run_oasis7_required_tests == 'true' ||
+                steps.scope.outputs.run_viewer_contract_tests == 'true' ||
+                steps.scope.outputs.run_viewer_wasm_check == 'true' ||
+                steps.scope.outputs.run_viewer_perf_smoke == 'true' ||
+                steps.scope.outputs.run_launcher_web_build == 'true' ||
+                steps.scope.outputs.run_oasis7_workspace_support_crate_tests == 'true')) }}
         run: |
           apt_options=(
             -o Acquire::Retries=3
@@ -521,9 +687,12 @@ jobs:
       - name: Install product-document Markdown parser
         run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
       - name: Run required test tier
+        id: required-gate-tests
         env:
           GH_TOKEN: ${{ github.token }}
           INTEGRATION_MODE: ${{ inputs.run_mode }}
+          INTEGRATION_WORKTREE: ${{ steps.integration.outputs.worktree }}
+          OASIS7_CI_EXECUTION_CONTRACT: ${{ steps.scope.outputs.execution_contract }}
           OASIS7_PRODUCT_DOC_BASE: ${{ steps.scope.outputs.source_scope_base }}
           OASIS7_PRODUCT_DOC_HEAD: ${{ steps.scope.outputs.head_oid }}
           OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS: ${{ steps.scope.outputs.run_oasis7_required_tests }}
@@ -541,23 +710,31 @@ jobs:
           OASIS7_CI_RUN_WORKSPACE_SUPPORT_CRATE_TESTS: ${{ steps.scope.outputs.run_oasis7_workspace_support_crate_tests }}
           OASIS7_CI_RUN_SCENARIO_REGRESSION: ${{ steps.scope.outputs.run_scenario_regression }}
           OASIS7_CI_RUN_OPERATIONAL_CONTRACTS: ${{ steps.scope.outputs.run_operational_contracts }}
+          OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS: ${{ steps.scope.outputs.run_workflow_governance_contracts }}
+          OASIS7_CI_RUN_PACKAGING_CONTRACTS: ${{ steps.scope.outputs.run_packaging_contracts }}
+          OASIS7_CI_RUN_DOC_CHECKER_CONTRACTS: ${{ steps.scope.outputs.run_doc_checker_contracts }}
+          OASIS7_CI_RUN_CARGO_TOOLING_CONTRACTS: ${{ steps.scope.outputs.run_cargo_tooling_contracts }}
           OASIS7_CI_RUN_SITE_CONTRACT_TESTS: ${{ steps.scope.outputs.run_site_contract_tests }}
           OASIS7_CI_RUN_CODEX_AGENT_CONFIG_VALIDATION: ${{ steps.scope.outputs.run_codex_agent_config_validation }}
           OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS: ${{ steps.scope.outputs.run_compile_metrics_contract_tests }}
           OASIS7_CI_RUN_RUST_BASELINE: ${{ steps.scope.outputs.run_rust_baseline }}
+          OASIS7_CI_NEEDS_PYTHON: ${{ steps.scope.outputs.needs_python }}
+          OASIS7_CI_NEEDS_MARKDOWN: ${{ steps.scope.outputs.needs_markdown }}
+          OASIS7_CI_NEEDS_RUST_TOOLCHAIN: ${{ steps.scope.outputs.needs_rust_toolchain }}
+          OASIS7_CI_NEEDS_NODE: ${{ steps.scope.outputs.needs_node }}
+          OASIS7_CI_NEEDS_SYSTEM_DEPS: ${{ steps.scope.outputs.needs_system_deps }}
+          OASIS7_CI_NEEDS_TRUNK: ${{ steps.scope.outputs.needs_trunk }}
+          OASIS7_CI_NEEDS_WASM_TARGET: ${{ steps.scope.outputs.needs_wasm_target }}
+          OASIS7_CI_RUN_HOSTED_ACCOUNT_SMOKE: "false"
+          OASIS7_CI_RUN_PROVIDER_LIVE_GATE: "false"
           OASIS7_CARGO_SCOPE_BASE: ${{ steps.scope.outputs.source_scope_base }}
           OASIS7_CARGO_SCOPE_HEAD: ${{ steps.scope.outputs.head_oid }}
           OASIS7_CARGO_SCOPE_INTEGRATION_BASE: ${{ steps.scope.outputs.integration_base_oid }}
-          OASIS7_CARGO_STAGE_CHECK_HEAD: ${{ steps.scope.outputs.head_oid }}
-          OASIS7_CARGO_STAGE_PR_NUMBER: ${{ steps.checker-stage.outputs.pr_number }}
-          OASIS7_CARGO_STAGE_TASK_UID: ${{ steps.checker-stage.outputs.task_uid }}
-          OASIS7_CARGO_STAGE_RECEIPT: ${{ steps.checker-stage.outputs.receipt }}
         run: |
           trusted_checker="${RUNNER_TEMP}/trusted-check-cargo-package-scope"
           trusted_profile_authority="${RUNNER_TEMP}/trusted-cargo-profile-authority"
           trusted_profile_planner="${trusted_profile_authority}/cargo_package_profile_planner.py"
           trusted_profile_driver="${trusted_profile_authority}/cargo_package_profile_driver.py"
-          trusted_stage_adapter="${trusted_profile_authority}/cargo_checker_stage_admission.py"
           if [[ -n "${OASIS7_CARGO_SCOPE_BASE:-}" ]] && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
             git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/check-cargo-package-scope" >"${trusted_checker}"
             chmod +x "${trusted_checker}"
@@ -568,36 +745,29 @@ jobs:
                git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/cargo_package_profile_driver.py" >"${trusted_profile_driver}" 2>/dev/null; then
               export OASIS7_CARGO_PROFILE_PLANNER="${trusted_profile_planner}"
               export OASIS7_CARGO_PROFILE_DRIVER="${trusted_profile_driver}"
-              export OASIS7_CARGO_STAGE_PLANNER="${trusted_profile_planner}"
               export OASIS7_CARGO_PROFILE_INTEGRATION_BASE="${{ steps.scope.outputs.integration_base_oid }}"
               export OASIS7_CARGO_PROFILE_SOURCE_HEAD="${OASIS7_CARGO_SCOPE_HEAD}"
             fi
-            if git show "${OASIS7_CARGO_SCOPE_BASE}:scripts/pm/cargo_checker_stage_admission.py" >"${trusted_stage_adapter}" 2>/dev/null; then
-              chmod +x "${trusted_stage_adapter}"
-              export OASIS7_CARGO_STAGE_ADAPTER="${trusted_stage_adapter}"
-            fi
           fi
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${INTEGRATION_MODE}" == "integration_revalidation" ]]; then
-            if [[ -n "${OASIS7_CARGO_STAGE_PR_NUMBER:-}" ]]; then
-              echo "trusted checker-stage integration route: generic Cargo profile planner is bypassed"
-            elif [[ -n "${OASIS7_CARGO_SCOPE_BASE:-}" ]]; then
-              [[ -n "${OASIS7_CARGO_PROFILE_PLANNER:-}" && -n "${OASIS7_CARGO_PROFILE_DRIVER:-}" ]] || {
-                echo "trusted Cargo package profile authority is unavailable" >&2
-                exit 1
-              }
+            [[ -n "${OASIS7_CARGO_SCOPE_BASE:-}" && -n "${OASIS7_CARGO_PROFILE_PLANNER:-}" && -n "${OASIS7_CARGO_PROFILE_DRIVER:-}" ]] || {
+              echo "trusted Cargo package profile authority is unavailable" >&2
+              exit 1
+            }
             profile_output="${GITHUB_WORKSPACE}/output/cargo-package-profile"
             mkdir -p "${profile_output}"
             export OASIS7_CARGO_PROFILE_OPT_IN=true
             export OASIS7_CARGO_PROFILE_PLAN="${profile_output}/cargo-package-profile-plan.json"
             export OASIS7_CARGO_PROFILE_RESULTS="${profile_output}/cargo-package-profile-results.json"
             python3 "${OASIS7_CARGO_PROFILE_PLANNER}" \
-              --repo-root "${GITHUB_WORKSPACE}" \
+              --repo-root "${INTEGRATION_WORKTREE:-${GITHUB_WORKSPACE}}" \
               --integration-base "${OASIS7_CARGO_PROFILE_INTEGRATION_BASE}" \
               --source-head "${OASIS7_CARGO_PROFILE_SOURCE_HEAD}" \
               --policy .pm/cargo-package-scope-policy.json \
               --checker scripts/pm/check-cargo-package-scope \
               --profile native --output "${OASIS7_CARGO_PROFILE_PLAN}"
-            export OASIS7_CARGO_PROFILE_TESTED_TREE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tested_tree"])' "${OASIS7_CARGO_PROFILE_PLAN}")"
+            OASIS7_CARGO_PROFILE_TESTED_TREE="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["tested_tree"])' "${OASIS7_CARGO_PROFILE_PLAN}")"
+            export OASIS7_CARGO_PROFILE_TESTED_TREE
             # Receipt identity order: integration_base, source_head, tested_tree.
             python3 -I - "${OASIS7_CARGO_PROFILE_PLAN}" "${OASIS7_CARGO_PROFILE_RESULTS}" <<'PY'
           import json, os, pathlib, subprocess, sys
@@ -610,6 +780,10 @@ jobs:
                   raise SystemExit("trusted planner emitted an invalid command argv")
               environment = dict(os.environ)
               environment.pop("RUSTC_WRAPPER", None)
+              # Contract: doc/engineering/workflow/source-of-truth.md#required-gate-native-wasm-smoke.
+              # The planner's target selector is "native" for every host-native profile item.
+              if item["target"] == "native":
+                  environment["OASIS7_WASM_BUILD_STD"] = "0"
               completed = subprocess.run(command, env=environment, check=False)
               results.append({
                   "item_id": item["id"], "status": "passed" if completed.returncode == 0 else "failed",
@@ -662,44 +836,36 @@ jobs:
           }
           envelope_path.write_text(json.dumps(envelope, sort_keys=True, separators=(",", ":")) + "\n", encoding="utf-8")
           PY
-            fi
-            CI_VERBOSE=1 bash "${RUNNER_TEMP}/integration-planner/ci-tests.sh" required --repo-root "${GITHUB_WORKSPACE}" --impact-projection "${RUNNER_TEMP}/impact-projection.json"
+            target_root="${INTEGRATION_WORKTREE:-${GITHUB_WORKSPACE}}"
+            CI_VERBOSE=1 bash "${RUNNER_TEMP}/integration-planner/ci-tests.sh" required --repo-root "${target_root}" --impact-projection "${RUNNER_TEMP}/impact-projection.json"
           elif [[ "${GITHUB_EVENT_NAME}" == "pull_request" && -f "${RUNNER_TEMP}/impact-projection.json" ]]; then
             CI_VERBOSE=1 ./scripts/ci-tests.sh required --impact-projection "${RUNNER_TEMP}/impact-projection.json"
           else
             CI_VERBOSE=1 ./scripts/ci-tests.sh required
           fi
-      - name: Upload Cargo checker-stage admission receipt
-        if: ${{ always() && hashFiles('output/cargo-checker-stage-admission/post-run-receipt.json') != '' }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: cargo-checker-stage-admission-receipt-${{ github.run_id }}-${{ github.run_attempt }}
-          path: output/cargo-checker-stage-admission/post-run-receipt.json
-          if-no-files-found: error
-          retention-days: 7
       - name: Upload Cargo package profile plan
-        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation' && steps.checker-stage.outputs.pr_number == ''
+        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
         uses: actions/upload-artifact@v7
         with:
           name: cargo-package-profile-plan
           path: output/cargo-package-profile/cargo-package-profile-plan.json
           if-no-files-found: error
       - name: Upload Cargo package profile results
-        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation' && steps.checker-stage.outputs.pr_number == ''
+        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
         uses: actions/upload-artifact@v7
         with:
           name: cargo-package-profile-results
           path: output/cargo-package-profile/cargo-package-profile-results.json
           if-no-files-found: error
       - name: Upload Cargo package profile receipt
-        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation' && steps.checker-stage.outputs.pr_number == ''
+        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
         uses: actions/upload-artifact@v7
         with:
           name: cargo-package-profile-receipt
           path: output/cargo-package-profile/cargo-package-profile-receipt.json
           if-no-files-found: error
       - name: Upload Cargo package profile envelope
-        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation' && steps.checker-stage.outputs.pr_number == ''
+        if: github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation'
         uses: actions/upload-artifact@v7
         with:
           name: cargo-package-profile-envelope
@@ -715,10 +881,91 @@ jobs:
           retention-days: 7
       - name: Run execution bridge binary unit suite
         if: ${{ steps.scope.outputs.run_oasis7_required_tests == 'true' }}
-        run: >-
-          env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime
-          --features test_tier_required
-          execution_bridge_real_tests::real_execution_bridge::tests
+        env:
+          INTEGRATION_WORKTREE: ${{ steps.integration.outputs.worktree }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${INTEGRATION_WORKTREE}" ]]; then cd "${INTEGRATION_WORKTREE}"; fi
+          env -u RUSTC_WRAPPER cargo test -p oasis7 --bin oasis7_chain_runtime \
+            --features test_tier_required \
+            execution_bridge_real_tests::real_execution_bridge::tests
+
+  v1-reuse-validation-only:
+    name: v1-reuse-validation-only
+    if: >-
+      ${{ github.event_name == 'workflow_dispatch' &&
+          (inputs.run_mode == 'v1_reuse_validation_only' ||
+           inputs.run_mode == 'v2_reuse_validation_successor_only') &&
+          github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+      issues: read
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-python@v7
+        with:
+          python-version: '3.12.3'
+      - name: Install trusted Rust toolchains
+        run: |
+          rustup toolchain install "${RUST_TOOLCHAIN}" --profile minimal --component rustfmt --component clippy
+          rustup default "${RUST_TOOLCHAIN}"
+          rustup target add "${OASIS7_WASM_TARGET}" --toolchain "${RUST_TOOLCHAIN}"
+          rustup toolchain install "${OASIS7_WASM_TOOLCHAIN}" --profile minimal --component rust-src
+          rustup target add "${OASIS7_WASM_TARGET}" --toolchain "${OASIS7_WASM_TOOLCHAIN}"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ci-required-gate-v1
+      - name: Install cargo-deny
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-deny@0.19.9
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            pkg-config \
+            libwayland-dev \
+            wayland-protocols \
+            libxkbcommon-dev \
+            libx11-dev \
+            libxi-dev \
+            libxcursor-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libasound2-dev \
+            libudev-dev
+      - name: Install pinned Trunk
+        run: cargo install trunk --locked --version "${TRUNK_VERSION}"
+      - name: Verify pinned Trunk
+        shell: bash
+        run: trunk --version | grep -Fqx "trunk ${TRUNK_VERSION}"
+      - name: Install product-document Markdown parser
+        run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
+      - id: validation
+        name: Verify authority and execute validation-only units on exact M
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}
+        run: python3 -I scripts/pm/ci-reuse-validation.py
+      - name: Upload isolated validation-only payload
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.validation.outputs.artifact_name }}
+          path: output/ci-reuse-validation/oasis7-ci-reuse-validation.json
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: false
 
   windows-package-rollout-behavior:
     permissions:
@@ -742,21 +989,46 @@ jobs:
           INTEGRATION_UID: ${{ inputs.task_uid }}
           INTEGRATION_PR: ${{ inputs.pr_number }}
           GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          INTEGRATION_REQUEST_KEY: ${{ inputs.request_key }}
+          INTEGRATION_REQUEST_B64: ${{ inputs.validation_request_b64 }}
         shell: bash
         run: |
           mkdir -p "${RUNNER_TEMP}/integration-planner"
           cp scripts/plan-rust-required-scope.py scripts/ci-required-scope.v2.json scripts/ci-tests.sh "${RUNNER_TEMP}/integration-planner/"
           cp scripts/pm/integration_ci.py "${RUNNER_TEMP}/integration_ci.py"
-          python3 -I "${RUNNER_TEMP}/integration_ci.py" prepare --repository "${{ github.repository }}" \
+          prepare_args=(prepare --repository "${{ github.repository }}" \
             --task-uid "${INTEGRATION_UID}" --pr-number "${INTEGRATION_PR}" \
-            --base "${INTEGRATION_BASE}" --head "${INTEGRATION_HEAD}" --output "${RUNNER_TEMP}/integration.json"
+            --base "${INTEGRATION_BASE}" --head "${INTEGRATION_HEAD}" --output "${RUNNER_TEMP}/integration.json")
+          if [[ -n "${INTEGRATION_REQUEST_KEY}" || -n "${INTEGRATION_REQUEST_B64}" ]]; then
+            [[ -n "${INTEGRATION_REQUEST_KEY}" && -n "${INTEGRATION_REQUEST_B64}" ]] || exit 1
+            cp scripts/pm/integration_executor_contract.py scripts/pm/ci_ready_receipt_identity.py "${RUNNER_TEMP}/"
+            python3 -I scripts/pm/ci_reuse_policy.py trusted-context --root "${GITHUB_WORKSPACE}" \
+              --repository "${GITHUB_REPOSITORY}" --default-branch "${GITHUB_DEFAULT_BRANCH}" \
+              --workflow-ref "${GITHUB_WORKFLOW_REF}" --workflow-sha "${GITHUB_WORKFLOW_SHA}" \
+              --default-branch-sha "${GITHUB_SHA}" --output "${RUNNER_TEMP}/trusted-ci-policy.json"
+            prepare_args+=(--request-key "${INTEGRATION_REQUEST_KEY}" \
+              --validation-request-b64 "${INTEGRATION_REQUEST_B64}" \
+              --trusted-policy-json "${RUNNER_TEMP}/trusted-ci-policy.json" \
+              --integration-worktree "${RUNNER_TEMP}/integration-target")
+          fi
+          python3 -I "${RUNNER_TEMP}/integration_ci.py" "${prepare_args[@]}"
           echo "identity=$(cat "${RUNNER_TEMP}/integration.json")" >>"${GITHUB_OUTPUT}"
+          python3 -I - "${RUNNER_TEMP}/integration.json" "${GITHUB_OUTPUT}" <<'PY'
+          import json, pathlib, sys
+          identity=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+          with pathlib.Path(sys.argv[2]).open("a",encoding="utf-8") as output:
+              output.write("worktree="+identity.get("integration_worktree","")+"\n")
+          PY
       - name: Run disposable Windows PowerShell rollout behavior fixture
         shell: bash
         env:
           OASIS7_WINDOWS_POWERSHELL_BEHAVIOR_TEST: "1"
+          INTEGRATION_WORKTREE: ${{ steps.integration.outputs.worktree }}
         run: |
           set -euo pipefail
+          if [[ -n "${INTEGRATION_WORKTREE}" ]]; then cd "${INTEGRATION_WORKTREE}"; fi
           bash ./scripts/p2p-public-testnet-package-rollout.test.sh
 
   testnet-packages-macos-arm64-contract:
@@ -765,7 +1037,10 @@ jobs:
       issues: read
       pull-requests: read
     needs: required-gate
-    if: (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')) && needs.required-gate.outputs.run_operational_contracts == 'true'
+    if: >-
+      (github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')) &&
+      ((needs.required-gate.outputs.execution_contract == 'required-domain-split/v1' && needs.required-gate.outputs.run_packaging_contracts == 'true') ||
+       (needs.required-gate.outputs.execution_contract != 'required-domain-split/v1' && needs.required-gate.outputs.run_operational_contracts == 'true'))
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
@@ -781,18 +1056,46 @@ jobs:
           INTEGRATION_UID: ${{ inputs.task_uid }}
           INTEGRATION_PR: ${{ inputs.pr_number }}
           GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          INTEGRATION_REQUEST_KEY: ${{ inputs.request_key }}
+          INTEGRATION_REQUEST_B64: ${{ inputs.validation_request_b64 }}
         shell: bash
         run: |
           mkdir -p "${RUNNER_TEMP}/integration-planner"
           cp scripts/plan-rust-required-scope.py scripts/ci-required-scope.v2.json scripts/ci-tests.sh "${RUNNER_TEMP}/integration-planner/"
           cp scripts/pm/integration_ci.py "${RUNNER_TEMP}/integration_ci.py"
-          python3 -I "${RUNNER_TEMP}/integration_ci.py" prepare --repository "${{ github.repository }}" \
+          prepare_args=(prepare --repository "${{ github.repository }}" \
             --task-uid "${INTEGRATION_UID}" --pr-number "${INTEGRATION_PR}" \
-            --base "${INTEGRATION_BASE}" --head "${INTEGRATION_HEAD}" --output "${RUNNER_TEMP}/integration.json"
+            --base "${INTEGRATION_BASE}" --head "${INTEGRATION_HEAD}" --output "${RUNNER_TEMP}/integration.json")
+          if [[ -n "${INTEGRATION_REQUEST_KEY}" || -n "${INTEGRATION_REQUEST_B64}" ]]; then
+            [[ -n "${INTEGRATION_REQUEST_KEY}" && -n "${INTEGRATION_REQUEST_B64}" ]] || exit 1
+            cp scripts/pm/integration_executor_contract.py scripts/pm/ci_ready_receipt_identity.py "${RUNNER_TEMP}/"
+            python3 -I scripts/pm/ci_reuse_policy.py trusted-context --root "${GITHUB_WORKSPACE}" \
+              --repository "${GITHUB_REPOSITORY}" --default-branch "${GITHUB_DEFAULT_BRANCH}" \
+              --workflow-ref "${GITHUB_WORKFLOW_REF}" --workflow-sha "${GITHUB_WORKFLOW_SHA}" \
+              --default-branch-sha "${GITHUB_SHA}" --output "${RUNNER_TEMP}/trusted-ci-policy.json"
+            prepare_args+=(--request-key "${INTEGRATION_REQUEST_KEY}" \
+              --validation-request-b64 "${INTEGRATION_REQUEST_B64}" \
+              --trusted-policy-json "${RUNNER_TEMP}/trusted-ci-policy.json" \
+              --integration-worktree "${RUNNER_TEMP}/integration-target")
+          fi
+          python3 -I "${RUNNER_TEMP}/integration_ci.py" "${prepare_args[@]}"
           echo "identity=$(cat "${RUNNER_TEMP}/integration.json")" >>"${GITHUB_OUTPUT}"
+          python3 -I - "${RUNNER_TEMP}/integration.json" "${GITHUB_OUTPUT}" <<'PY'
+          import json, pathlib, sys
+          identity=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+          with pathlib.Path(sys.argv[2]).open("a",encoding="utf-8") as output:
+              output.write("worktree="+identity.get("integration_worktree","")+"\n")
+          PY
       - name: Verify additive macOS arm64 package contract
         shell: bash
-        run: bash ./scripts/testnet-packages-macos-arm64-contract.test.sh
+        env:
+          INTEGRATION_WORKTREE: ${{ steps.integration.outputs.worktree }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${INTEGRATION_WORKTREE}" ]]; then cd "${INTEGRATION_WORKTREE}"; fi
+          bash ./scripts/testnet-packages-macos-arm64-contract.test.sh
 
   public-testnet-fleet-health-contract:
     permissions:
@@ -820,17 +1123,125 @@ jobs:
           INTEGRATION_UID: ${{ inputs.task_uid }}
           INTEGRATION_PR: ${{ inputs.pr_number }}
           GITHUB_WORKFLOW_SHA: ${{ github.workflow_sha }}
+          GITHUB_WORKFLOW_REF: ${{ github.workflow_ref }}
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          INTEGRATION_REQUEST_KEY: ${{ inputs.request_key }}
+          INTEGRATION_REQUEST_B64: ${{ inputs.validation_request_b64 }}
         shell: bash
         run: |
           mkdir -p "${RUNNER_TEMP}/integration-planner"
           cp scripts/plan-rust-required-scope.py scripts/ci-required-scope.v2.json scripts/ci-tests.sh "${RUNNER_TEMP}/integration-planner/"
           cp scripts/pm/integration_ci.py "${RUNNER_TEMP}/integration_ci.py"
-          python3 -I "${RUNNER_TEMP}/integration_ci.py" prepare --repository "${{ github.repository }}" \
+          prepare_args=(prepare --repository "${{ github.repository }}" \
             --task-uid "${INTEGRATION_UID}" --pr-number "${INTEGRATION_PR}" \
-            --base "${INTEGRATION_BASE}" --head "${INTEGRATION_HEAD}" --output "${RUNNER_TEMP}/integration.json"
+            --base "${INTEGRATION_BASE}" --head "${INTEGRATION_HEAD}" --output "${RUNNER_TEMP}/integration.json")
+          if [[ -n "${INTEGRATION_REQUEST_KEY}" || -n "${INTEGRATION_REQUEST_B64}" ]]; then
+            [[ -n "${INTEGRATION_REQUEST_KEY}" && -n "${INTEGRATION_REQUEST_B64}" ]] || exit 1
+            cp scripts/pm/integration_executor_contract.py scripts/pm/ci_ready_receipt_identity.py "${RUNNER_TEMP}/"
+            python3 -I scripts/pm/ci_reuse_policy.py trusted-context --root "${GITHUB_WORKSPACE}" \
+              --repository "${GITHUB_REPOSITORY}" --default-branch "${GITHUB_DEFAULT_BRANCH}" \
+              --workflow-ref "${GITHUB_WORKFLOW_REF}" --workflow-sha "${GITHUB_WORKFLOW_SHA}" \
+              --default-branch-sha "${GITHUB_SHA}" --output "${RUNNER_TEMP}/trusted-ci-policy.json"
+            prepare_args+=(--request-key "${INTEGRATION_REQUEST_KEY}" \
+              --validation-request-b64 "${INTEGRATION_REQUEST_B64}" \
+              --trusted-policy-json "${RUNNER_TEMP}/trusted-ci-policy.json" \
+              --integration-worktree "${RUNNER_TEMP}/integration-target")
+          fi
+          python3 -I "${RUNNER_TEMP}/integration_ci.py" "${prepare_args[@]}"
           echo "identity=$(cat "${RUNNER_TEMP}/integration.json")" >>"${GITHUB_OUTPUT}"
+          python3 -I - "${RUNNER_TEMP}/integration.json" "${GITHUB_OUTPUT}" <<'PY'
+          import json, pathlib, sys
+          identity=json.loads(pathlib.Path(sys.argv[1]).read_text(encoding="utf-8"))
+          with pathlib.Path(sys.argv[2]).open("a",encoding="utf-8") as output:
+              output.write("worktree="+identity.get("integration_worktree","")+"\n")
+          PY
       - name: Verify fleet-health collection contract
-        run: python scripts/p2p-public-testnet-fleet-health.test.py
+        env:
+          INTEGRATION_WORKTREE: ${{ steps.integration.outputs.worktree }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${INTEGRATION_WORKTREE}" ]]; then cd "${INTEGRATION_WORKTREE}"; fi
+          python scripts/p2p-public-testnet-fleet-health.test.py
+
+  required-result-v2:
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+    needs:
+      - required-gate
+      - windows-package-rollout-behavior
+      - testnet-packages-macos-arm64-contract
+      - public-testnet-fleet-health-contract
+    if: ${{ always() && github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation' && inputs.request_key != '' }}
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        unit: ${{ fromJSON(needs.required-gate.outputs.required_unit_matrix || '[]') }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.workflow_sha }}
+          fetch-depth: 0
+      - name: Resolve trusted v2 producer policy for workflow W
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+        run: |
+          python3 -I scripts/pm/ci_reuse_policy.py trusted-context \
+            --root "${GITHUB_WORKSPACE}" --repository "${GITHUB_REPOSITORY}" \
+            --default-branch "${GITHUB_DEFAULT_BRANCH}" --workflow-ref "${GITHUB_WORKFLOW_REF}" \
+            --workflow-sha "${GITHUB_WORKFLOW_SHA}" --default-branch-sha "${GITHUB_WORKFLOW_SHA}" \
+            --output "${RUNNER_TEMP}/trusted-ci-policy.json"
+      - name: Download exact attempt required plan v2
+        uses: actions/download-artifact@v7
+        with:
+          name: ${{ needs.required-gate.outputs.required_plan_v2_artifact_name }}
+          path: ${{ runner.temp }}/required-plan-v2
+      - name: Resolve completed exact-attempt jobs and create unit result
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GITHUB_DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          RESULT_UNIT_ID: ${{ matrix.unit.unit_id }}
+          RESULT_PLAN_ARTIFACT_ID: ${{ needs.required-gate.outputs.required_plan_v2_artifact_id }}
+        run: |
+          set -euo pipefail
+          python3 -I - "${RUNNER_TEMP}/required-plan-v2/oasis7-required-plan-v2.json" \
+            "${RESULT_UNIT_ID}" "${GITHUB_REPOSITORY}" "${GITHUB_RUN_ID}" \
+            "${GITHUB_RUN_ATTEMPT}" "${GITHUB_WORKFLOW_SHA}" \
+            "${RUNNER_TEMP}/trusted-ci-policy.json" "${RUNNER_TEMP}/execution-jobs.json" <<'PY'
+          import json, pathlib, subprocess, sys
+          plan_path,unit_id,repository,run_id,attempt,workflow_sha,policy_path,output=sys.argv[1:]
+          plan=json.loads(pathlib.Path(plan_path).read_text(encoding="utf-8"))
+          policy=json.loads(pathlib.Path(policy_path).read_text(encoding="utf-8"))
+          if unit_id not in plan["required_test_units"]:
+              raise SystemExit("result unit is outside the required plan")
+          names=["required-gate",*plan["execution_job_requirements"][unit_id]]
+          command=[sys.executable,"-I","scripts/pm/integration_ci.py","attempt-jobs",
+                   "--repository",repository,"--run-id",run_id,"--run-attempt",attempt,
+                   "--workflow-sha",workflow_sha,"--check-app-id",
+                   str(policy["effective_policy"]["check_app_id"]),"--require-completed",
+                   "--output",output]
+          for name in names:
+              command.extend(("--job-name",name))
+          subprocess.run(command,check=True)
+          PY
+          python3 -I scripts/pm/ci_required_artifact_v2.py build-result \
+            --plan "${RUNNER_TEMP}/required-plan-v2/oasis7-required-plan-v2.json" \
+            --plan-artifact-id "${RESULT_PLAN_ARTIFACT_ID}" \
+            --execution-jobs "${RUNNER_TEMP}/execution-jobs.json" \
+            --unit-id "${RESULT_UNIT_ID}" \
+            --output "${RUNNER_TEMP}/oasis7-required-result-v2.json"
+      - name: Upload exact-attempt per-unit required result v2
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.unit.artifact_name }}
+          path: ${{ runner.temp }}/oasis7-required-result-v2.json
+          if-no-files-found: error
+          retention-days: 7
+          overwrite: false
 
   full-regression:
     if: github.event_name == 'schedule'

@@ -1,0 +1,1746 @@
+#!/usr/bin/env python3
+"""Focused fake-adapter coverage for C1 ordering, recovery, and resolution."""
+from __future__ import annotations
+
+import copy
+import hashlib
+import json
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+from unittest.mock import patch
+from urllib.parse import urlencode
+
+ROOT = Path(__file__).parent
+sys.path.insert(0, str(ROOT))
+
+import pr_projection_journal as journal_module
+import pr_projection_publication as publication_module
+import pr_projection_publish as publish_module
+import pr_projection_resolver as resolver_module
+from projection_publication_contract import digest, encode_marker
+
+UID = "task_" + "a" * 32
+CONFIG = "sha256:" + "c" * 64
+SCOPE = "b" * 40
+AUTHORITY = "d" * 40
+
+
+def make_publication(index: int, *, head: str | None = None, branch: str | None = None,
+                     repository: str = "eng-cc/oasis7"):
+    head = head or f"{index + 1:040x}"
+    branch = branch or f"feature/c1-{index}"
+    projection_digest = digest({"target": index})
+    publication = publication_module.build_task_publication(
+        repository=repository, repository_id=7, task_uid=UID,
+        bootstrap_epoch=1, source_repository_id=7, source_ref=branch,
+        target_ref="main", source_head_oid=head, source_scope_oid=SCOPE,
+        planner_authority_oid=AUTHORITY, planner_config_sha256=CONFIG,
+        policy_digest=digest({"policy": "test"}), projection_digest=projection_digest,
+    )
+    projection = {
+        "task_uid": UID, "source_head_oid": head, "scope_base_oid": SCOPE,
+        "planner_config_sha256": CONFIG, "projection_digest": projection_digest,
+        "consumed_contracts": [],
+    }
+    return publication, projection
+
+
+class FakeAdapter:
+    def __init__(self, publication, projection, *, initial_head=None, initial_pr=None):
+        self.publications = []
+        self.bindings = []
+        self.pr_binding = None
+        self.events = []
+        self.source_ref = initial_head
+        self.ready_update_admitted = False
+        self.projection = projection
+        self.prs = []
+        if initial_pr:
+            self.prs.append(copy.deepcopy(initial_pr))
+            self.pr_binding = {"task_uid": UID, "pr_number": initial_pr["number"]}
+
+    def find_task_publications(self, pub_id):
+        return {"complete": True, "publications": [p for p in self.publications if p["publication_id"] == pub_id]}
+
+    def publish_task_intent(self, value):
+        self.events.append("task-intent")
+        self.publications.append(copy.deepcopy(value))
+
+    def read_source_ref(self, ref):
+        self.events.append("read-source")
+        return self.source_ref
+
+    def push_source_ref(self, ref, new_oid, lease_oid):
+        self.events.append("push")
+        if self.source_ref != lease_oid:
+            raise RuntimeError("lease changed")
+        self.source_ref = new_oid
+        for pr in self.prs:
+            pr["head_oid"] = new_oid
+
+    def find_task_prs(self, task_uid, source_ref, target_ref):
+        self.events.append("discover-pr")
+        return {"complete": True, "pull_requests": [
+            pr for pr in self.prs
+            if pr["source_ref"] == source_ref and pr["target_ref"] == target_ref
+        ]}
+
+    def create_draft_pr(self, repository, source_ref, target_ref, body):
+        self.events.append("create-pr")
+        pr = {"repository": repository, "source_ref": source_ref, "target_ref": target_ref,
+              "head_oid": self.source_ref, "body": body, "state": "open", "merged": False,
+              "draft": True, "number": len(self.prs) + 1}
+        self.prs.append(pr)
+
+    def read_task_pr_binding(self, task_uid):
+        self.events.append("read-task-pr-binding")
+        binding = copy.deepcopy(self.pr_binding or {"task_uid": task_uid, "pr_number": None})
+        if self.ready_update_admitted:
+            binding["existing_ready_update"] = True
+        return binding
+
+    def record_pr(self, task_uid, number, publication_id):
+        self.events.append("record-pr")
+        self.pr_binding = {"task_uid": task_uid, "pr_number": number}
+
+    def find_task_publication_bindings(self, pub_id):
+        self.events.append("read-reciprocal")
+        return {"complete": True, "bindings": [
+            item for item in self.bindings if item["publication_id"] == pub_id
+        ]}
+
+    def publish_reciprocal_binding(self, value):
+        self.events.append("publish-reciprocal")
+        self.bindings.append(copy.deepcopy(value))
+
+    def read_pr(self, repository, number):
+        self.events.append("read-pr")
+        return copy.deepcopy(next(pr for pr in self.prs if pr["number"] == number))
+
+    def patch_pr_body(self, repository, number, body):
+        self.events.append("patch-pr")
+        next(pr for pr in self.prs if pr["number"] == number)["body"] = body
+
+
+class FakeClock:
+    def __init__(self):
+        self.now = 0.0
+        self.sleeps = []
+
+    def clock(self):
+        return self.now
+
+    def sleep(self, duration):
+        self.sleeps.append(duration)
+        self.now += duration
+
+
+class PublicationMatrixTests(unittest.TestCase):
+    def read_live_task_binding(self, body, repository="eng-cc/oasis7"):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            publication, _projection = make_publication(7010, repository=repository)
+            args = type("Args", (), {
+                "repo": repository, "issue_number": 123, "task_uid": UID,
+                "task_helper": str(root / "github-project-task.py"),
+            })()
+            adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+            issue = {"number": 123, "state": "open", "body": body}
+            with patch.object(adapter, "gh", return_value=json.dumps(issue)):
+                result = adapter.read_task_pr_binding(UID)
+            return result, adapter.pr_number
+
+    def journal(self, temp, publication):
+        return journal_module.open_journal(
+            temp, publication["repository"], publication["source_ref"],
+            publication["publication_id"], task_uid=publication["task_uid"],
+            source_head_oid=publication["source_head_oid"],
+            scope_base_oid=publication["source_scope_oid"],
+            projection_digest=publication["projection_digest"],
+        )
+
+    def run_publish_entrypoint(self, temp, publication, projection, adapter, journal,
+                               *, existing_ready_update=False, body=None):
+        root = Path(temp)
+        body_file = root / "body.md"
+        body_file.write_text(body if body is not None else f"Task: {UID}\nRefs #1\n", encoding="utf-8")
+        projection_file = root / "projection.json"
+        projection_file.write_text("{}\n", encoding="utf-8")
+        args = type("Args", (), {
+            "worktree": str(root), "task_uid": UID, "issue_number": 1,
+            "body_file": str(body_file), "projection": str(projection_file),
+            "existing_ready_update": existing_ready_update,
+        })()
+        with (
+            patch.object(publish_module, "task_publication", return_value=(publication, projection)),
+            patch.object(publish_module, "GitHubPublicationAdapter", return_value=adapter),
+            patch.object(publish_module, "repo_common_dir", return_value=root),
+            patch.object(publish_module.pr_projection_journal, "open_journal", return_value=journal),
+        ):
+            return publish_module.publish(args)
+
+    def assert_old_head_rejected_before_effects(self, attempt, adapter, journal,
+                                                *, prior_action_ids=()):
+        error = None
+        result = None
+        try:
+            result = attempt()
+        except Exception as exc:  # capture the real failure signature for this boundary
+            error = exc
+        with journal.locked():
+            actions = journal.read()["actions"]
+        action_ids = [item.get("action_id") for item in actions]
+        action_kinds = [item.get("kind") for item in actions]
+        writes = {
+            event: adapter.events.count(event)
+            for event in ("task-intent", "patch-pr", "push", "record-pr", "publish-reciprocal")
+        }
+        evidence = (
+            f"result={result!r} error={type(error).__name__ if error else None}: {error!r}; "
+            f"events={adapter.events!r}; journal_action_ids={action_ids!r}; "
+            f"journal_action_kinds={action_kinds!r}; write_counts={writes!r}"
+        )
+        self.assertIsInstance(
+            error, (publication_module.PublicationError, publish_module.PublishInputError),
+            "old H0 must fail closed before publication effects; " + evidence,
+        )
+        self.assertEqual(list(prior_action_ids), action_ids, evidence)
+        self.assertEqual({
+            "task-intent": 0, "patch-pr": 0, "push": 0,
+            "record-pr": 0, "publish-reciprocal": 0,
+        }, writes, evidence)
+
+    def test_invalid_caller_discovered_and_readback_h0_rejected_before_intent(self):
+        """Reject malformed H0 even when fake discovery and live readback agree."""
+        invalid_heads = (None, "", "not-an-oid", "a" * 39, "A" * 40)
+        for source in ("caller", "discovered-readback"):
+            for case, old_head in enumerate(invalid_heads):
+                with self.subTest(source=source, old_head=old_head):
+                    with tempfile.TemporaryDirectory() as temp:
+                        publication, projection = make_publication(1110 + case, head="d" * 40)
+                        pr_number = 201 + case
+                        body = f"Task: {UID}\nRefs #1\n"
+                        pr = {
+                            "repository": publication["repository"],
+                            "source_ref": publication["source_ref"],
+                            "target_ref": publication["target_ref"],
+                            "head_oid": old_head, "body": body,
+                            "state": "open", "merged": False, "draft": True,
+                            "number": pr_number,
+                        }
+                        adapter = FakeAdapter(
+                            publication, projection, initial_head=old_head, initial_pr=pr,
+                        )
+                        journal = self.journal(temp, publication)
+
+                        if source == "caller":
+                            attempt = lambda: publication_module.publish_update(
+                                adapter, journal, publication=publication,
+                                projection=projection, pr_number=pr_number,
+                                old_head_oid=old_head, body=body,
+                            )
+                        else:
+                            attempt = lambda: self.run_publish_entrypoint(
+                                temp, publication, projection, adapter, journal,
+                            )
+                        self.assert_old_head_rejected_before_effects(attempt, adapter, journal)
+
+    def test_null_discovered_head_and_absent_source_ref_rejected_before_intent(self):
+        """A missing PR head plus absent source ref must never acquire a null lease."""
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection = make_publication(1118, head="e" * 40)
+            pr = {
+                "repository": publication["repository"],
+                "source_ref": publication["source_ref"],
+                "target_ref": publication["target_ref"],
+                "head_oid": None, "body": f"Task: {UID}\nRefs #1\n",
+                "state": "open", "merged": False, "draft": True, "number": 219,
+            }
+            adapter = FakeAdapter(publication, projection, initial_head=None, initial_pr=pr)
+            journal = self.journal(temp, publication)
+            self.assertIsNone(adapter.source_ref, "fixture must model an absent source ref")
+            self.assert_old_head_rejected_before_effects(
+                lambda: self.run_publish_entrypoint(
+                    temp, publication, projection, adapter, journal,
+                ),
+                adapter, journal,
+            )
+
+    def test_malformed_journal_pinned_h0_rejected_before_task_or_pr_writes(self):
+        invalid_heads = (None, "", "not-an-oid", "b" * 39, "B" * 40)
+        for case, pinned_head in enumerate(invalid_heads):
+            with self.subTest(pinned_head=pinned_head):
+                with tempfile.TemporaryDirectory() as temp:
+                    publication, projection = make_publication(1120 + case, head="d" * 40)
+                    pr_number = 230 + case
+                    body = f"Task: {UID}\nRefs #1\n"
+                    pr = {
+                        "repository": publication["repository"],
+                        "source_ref": publication["source_ref"],
+                        "target_ref": publication["target_ref"],
+                        "head_oid": pinned_head, "body": body,
+                        "state": "open", "merged": False, "draft": True,
+                        "number": pr_number,
+                    }
+                    adapter = FakeAdapter(
+                        publication, projection, initial_head=pinned_head, initial_pr=pr,
+                    )
+                    journal = self.journal(temp, publication)
+                    state_id = "update-state:" + publication["publication_id"]
+                    with journal.locked():
+                        journal.intent(state_id, "pin_update_state", {
+                            "pr_number": pr_number, "expected_draft": True,
+                            "existing_ready_update": False, "old_head_oid": pinned_head,
+                        })
+                    self.assert_old_head_rejected_before_effects(
+                        lambda: publication_module.publish_update(
+                            adapter, journal, publication=publication,
+                            projection=projection, pr_number=pr_number,
+                            old_head_oid="c" * 40, body=body,
+                        ),
+                        adapter, journal, prior_action_ids=(state_id,),
+                    )
+
+    def test_malformed_recovery_patch_h0_rejected_before_new_intents_or_writes(self):
+        invalid_heads = (None, "", "not-an-oid", "c" * 39, "C" * 40)
+        for case, recovery_head in enumerate(invalid_heads):
+            with self.subTest(recovery_head=recovery_head):
+                with tempfile.TemporaryDirectory() as temp:
+                    publication, projection = make_publication(1130 + case, head="e" * 40)
+                    pr_number = 240 + case
+                    body = publication_module.replace_projection_marker(
+                        f"Task: {UID}\nRefs #1\n",
+                        publication_module.prepare(
+                            task_uid=UID,
+                            source_head_oid=publication["source_head_oid"],
+                            scope_base_oid=publication["source_scope_oid"],
+                            projection_digest=publication["projection_digest"],
+                        )[1],
+                    )
+                    pr = {
+                        "repository": publication["repository"],
+                        "source_ref": publication["source_ref"],
+                        "target_ref": publication["target_ref"],
+                        "head_oid": publication["source_head_oid"], "body": body,
+                        "state": "open", "merged": False, "draft": True,
+                        "number": pr_number,
+                    }
+                    adapter = FakeAdapter(
+                        publication, projection,
+                        initial_head=publication["source_head_oid"], initial_pr=pr,
+                    )
+                    journal = self.journal(temp, publication)
+                    patch_id = "patch-body:" + publication["publication_id"]
+                    body_hash = "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest()
+                    with journal.locked():
+                        journal.intent(patch_id, "patch_projection_body", {
+                            "pr_number": pr_number, "new_body_sha256": body_hash,
+                            "old_head_oid": recovery_head,
+                        })
+                    self.assert_old_head_rejected_before_effects(
+                        lambda: publication_module.publish_update(
+                            adapter, journal, publication=publication,
+                            projection=projection, pr_number=pr_number,
+                            old_head_oid="b" * 40, body=body,
+                        ),
+                        adapter, journal, prior_action_ids=(patch_id,),
+                    )
+
+    def test_record_pr_passes_canonical_repository_to_task_helper(self):
+        publication, _projection = make_publication(7000, repository="example/oasis7")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            args = type("Args", (), {
+                "repo": "example/oasis7", "issue_number": 123,
+                "task_uid": UID, "task_helper": str(root / "github-project-task.py"),
+            })()
+            adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+            with patch.object(publish_module, "command_output", return_value="") as command:
+                adapter.record_pr(UID, 999, publication["publication_id"])
+
+        argv = command.call_args.args[0]
+        self.assertIn("record-pr", argv)
+        self.assertIn("--repo", argv)
+        repo_index = argv.index("--repo")
+        self.assertEqual("example/oasis7", argv[repo_index + 1])
+        self.assertEqual("https://github.com/example/oasis7/pull/999",
+                         argv[argv.index("--pr-url") + 1])
+
+    def test_record_pr_forwards_explicit_ready_update_mode(self):
+        publication, _projection = make_publication(7000)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            args = type("Args", (), {
+                "repo": publication["repository"], "issue_number": 123,
+                "task_uid": UID, "task_helper": str(root / "github-project-task.py"),
+                "existing_ready_update": True,
+            })()
+            adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+            with patch.object(publish_module, "command_output", return_value="") as command:
+                adapter.record_pr(UID, 999, publication["publication_id"])
+
+        argv = command.call_args.args[0]
+        self.assertIn("--existing-ready-update", argv)
+        self.assertNotIn("--draft-candidate", argv)
+
+    def test_target_oid_cannot_be_substituted_for_projection_source_scope(self):
+        publication, projection = make_publication(7001)
+        target_oid = "e" * 40
+        self.assertNotEqual(publication["source_scope_oid"], target_oid)
+        projection["scope_base_oid"] = target_oid
+        with tempfile.TemporaryDirectory() as temp:
+            adapter = FakeAdapter(publication, projection)
+            journal = self.journal(temp, publication)
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "impact projection scope_base_oid",
+            ):
+                publication_module.publish_create(
+                    adapter, journal, publication=publication,
+                    projection=projection, body="Task: " + UID + "\nRefs #1",
+                )
+            self.assertEqual([], adapter.events)
+            with journal.locked():
+                self.assertEqual([], journal.read()["actions"])
+
+    def test_task_binding_readback_accepts_valid_and_absent_pr_url(self):
+        valid, remembered_number = self.read_live_task_binding(
+            f"task_uid: {UID}\n- pr_url: `https://github.com/eng-cc/oasis7/pull/3989`\n",
+        )
+        self.assertEqual({"task_uid": UID, "pr_number": 3989}, valid)
+        self.assertEqual(3989, remembered_number)
+
+        absent, remembered_number = self.read_live_task_binding(f"task_uid: {UID}\n")
+        self.assertEqual({"task_uid": UID, "pr_number": None}, absent)
+        self.assertIsNone(remembered_number)
+
+    def test_production_ready_admission_marker_requires_matching_task_and_nondraft_pr(self):
+        publication, _projection = make_publication(7005)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp).resolve()
+            pr_number = 115
+            pr_url = f"https://github.com/{publication['repository']}/pull/{pr_number}"
+            record = {
+                "task_uid": UID,
+                "repository": publication["repository"],
+                "issue_number": 123,
+                "task_branch": publication["source_ref"],
+                "default_branch": publication["target_ref"],
+                "canonical_worktree": str(root),
+                "status": "pr_watch",
+                "workflow_phase": "pr_watch",
+                "pr_number": pr_number,
+                "pr_url": pr_url,
+            }
+            mapping_path = root / ".pm/github-project-sync/tasks.json"
+            mapping_path.parent.mkdir(parents=True)
+            mapping_path.write_text(json.dumps({"version": 1, "tasks": {UID: record}}), encoding="utf-8")
+            issue = {
+                "number": 123,
+                "state": "open",
+                "body": "\n".join((
+                    f"task_uid: {UID}",
+                    "- status: `pr_watch`",
+                    "- workflow_phase: `pr_watch`",
+                    f"- worktree_hint: `{root}`",
+                    f"- pr_url: `{pr_url}`",
+                    f"- pr_number: `{pr_number}`",
+                )),
+            }
+            live_pr = {
+                "number": pr_number,
+                "html_url": pr_url,
+                "state": "open",
+                "merged_at": None,
+                "draft": False,
+                "head": {
+                    "ref": publication["source_ref"],
+                    "sha": publication["source_head_oid"],
+                    "repo": {"full_name": publication["repository"]},
+                },
+                "base": {
+                    "ref": publication["target_ref"],
+                    "repo": {"full_name": publication["repository"]},
+                },
+                "body": f"Task: {UID}\nRefs #123\n",
+            }
+            args = type("Args", (), {
+                "repo": publication["repository"], "issue_number": 123,
+                "task_uid": UID, "task_helper": str(root / "github-project-task.py"),
+                "source_ref": publication["source_ref"], "target_ref": publication["target_ref"],
+                "existing_ready_update": True,
+            })()
+            adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+
+            def fake_gh(*command, timeout=5.0, input_json=None):
+                if command == ("api", f"repos/{publication['repository']}/issues/123"):
+                    return json.dumps(issue)
+                if command == ("api", f"repos/{publication['repository']}/pulls/{pr_number}"):
+                    return json.dumps(live_pr)
+                raise AssertionError(f"unexpected live-adapter read: {command}")
+
+            with patch.object(adapter, "gh", side_effect=fake_gh):
+                admitted = adapter.read_task_pr_binding(UID)
+            self.assertEqual({
+                "task_uid": UID,
+                "pr_number": pr_number,
+                "existing_ready_update": True,
+            }, admitted)
+
+            live_pr["draft"] = True
+            with patch.object(adapter, "gh", side_effect=fake_gh):
+                with self.assertRaisesRegex(RuntimeError, "live PR repository/ref/head/state identity mismatch"):
+                    adapter.read_task_pr_binding(UID)
+
+    def test_ready_update_rejects_noncanonical_task_and_refs_lines_at_each_body_boundary(self):
+        wrong_uid = "task_" + "b" * 32
+        malformed_bodies = {
+            "wrong_task_uid": f"Task: {wrong_uid}\nRefs #1\n",
+            "task_uid_suffix": f"Task: {UID}-stale\nRefs #1\n",
+            "wrong_issue_number": f"Task: {UID}\nRefs #2\n",
+            "refs_number_suffix": f"Task: {UID}\nRefs #1-suffix\n",
+            "missing_task_line_with_prose_substring": f"prose says Task: {UID}\nRefs #1\n",
+            "missing_refs_line_with_prose_substring": f"Task: {UID}\nprose says Refs #1\n",
+            "duplicate_task_same_value": f"Task: {UID}\nTask: {UID}\nRefs #1\n",
+            "duplicate_task_conflicting_value": f"Task: {UID}\nTask: {wrong_uid}\nRefs #1\n",
+            "duplicate_refs_same_value": f"Task: {UID}\nRefs #1\nRefs #1\n",
+            "duplicate_refs_conflicting_value": f"Task: {UID}\nRefs #1\nRefs #2\n",
+        }
+        write_events = {"task-intent", "patch-pr", "push", "record-pr", "publish-reciprocal"}
+
+        for boundary in ("supplied", "discovered"):
+            for name, malformed_body in malformed_bodies.items():
+                with self.subTest(boundary=boundary, body=name), tempfile.TemporaryDirectory() as temp:
+                    old_head = "c" * 40
+                    new_head = "d" * 40
+                    publication, projection = make_publication(1200 + len(name), head=new_head)
+                    pr = {
+                        "repository": publication["repository"],
+                        "source_ref": publication["source_ref"],
+                        "target_ref": publication["target_ref"],
+                        "head_oid": old_head,
+                        "body": malformed_body if boundary == "discovered" else f"Task: {UID}\nRefs #1\n",
+                        "state": "open", "merged": False, "draft": False, "number": 120,
+                    }
+                    adapter = FakeAdapter(
+                        publication, projection, initial_head=old_head, initial_pr=pr,
+                    )
+                    adapter.ready_update_admitted = True
+                    journal = self.journal(temp, publication)
+                    supplied_body = malformed_body if boundary == "supplied" else f"Task: {UID}\nRefs #1\n"
+
+                    error = None
+                    try:
+                        self.run_publish_entrypoint(
+                            temp, publication, projection, adapter, journal,
+                            existing_ready_update=True, body=supplied_body,
+                        )
+                    except (publish_module.PublishInputError, publication_module.PublicationError) as exc:
+                        error = exc
+
+                    leaked = [event for event in adapter.events if event in write_events]
+                    self.assertIsNotNone(
+                        error,
+                        f"{boundary} body {name} was accepted; result events={adapter.events!r}",
+                    )
+                    self.assertEqual(
+                        [], leaked,
+                        f"{boundary} body {name} reached C1 writes before rejection: {adapter.events!r}",
+                    )
+
+    def test_ready_update_rejects_noncanonical_live_pr_task_and_refs_lines_before_writes(self):
+        wrong_uid = "task_" + "b" * 32
+        malformed_bodies = {
+            "wrong_task_uid": f"Task: {wrong_uid}\nRefs #123\n",
+            "task_uid_suffix": f"Task: {UID}-stale\nRefs #123\n",
+            "wrong_issue_number": f"Task: {UID}\nRefs #124\n",
+            "refs_number_suffix": f"Task: {UID}\nRefs #1234\n",
+            "missing_task_line_with_prose_substring": f"prose says Task: {UID}\nRefs #123\n",
+            "missing_refs_line_with_prose_substring": f"Task: {UID}\nprose says Refs #123\n",
+            "duplicate_task_same_value": f"Task: {UID}\nTask: {UID}\nRefs #123\n",
+            "duplicate_task_conflicting_value": f"Task: {UID}\nTask: {wrong_uid}\nRefs #123\n",
+            "duplicate_refs_same_value": f"Task: {UID}\nRefs #123\nRefs #123\n",
+            "duplicate_refs_conflicting_value": f"Task: {UID}\nRefs #123\nRefs #124\n",
+        }
+
+        for name, body in malformed_bodies.items():
+            with self.subTest(body=name), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp).resolve()
+                publication, _projection = make_publication(1300 + len(name))
+                source_ref = publication["source_ref"]
+                target_ref = publication["target_ref"]
+                record = {
+                    "task_uid": UID,
+                    "repository": publication["repository"],
+                    "issue_number": 123,
+                    "task_branch": source_ref,
+                    "default_branch": target_ref,
+                    "canonical_worktree": str(root),
+                    "worktree_hint": str(root),
+                    "status": "pr_watch",
+                    "workflow_phase": "pr_watch",
+                    "pr_number": 123,
+                    "pr_url": f"https://github.com/{publication['repository']}/pull/123",
+                }
+                mapping_path = root / ".pm/github-project-sync/tasks.json"
+                mapping_path.parent.mkdir(parents=True)
+                mapping_path.write_text(json.dumps({"version": 1, "tasks": {UID: record}}), encoding="utf-8")
+                args = type("Args", (), {
+                    "repo": publication["repository"], "issue_number": 123,
+                    "task_uid": UID, "task_helper": str(root / "github-project-task.py"),
+                    "source_ref": source_ref, "target_ref": target_ref,
+                    "existing_ready_update": True,
+                })()
+                issue = {
+                    "number": 123,
+                    "state": "open",
+                    "body": (
+                        f"task_uid: {UID}\n- status: `pr_watch`\n- workflow_phase: `pr_watch`\n"
+                        f"- worktree_hint: `{root}`\n- pr_url: `{record['pr_url']}`\n- pr_number: `123`\n"
+                    ),
+                }
+                live_pr = {
+                    "number": 123,
+                    "html_url": record["pr_url"],
+                    "state": "open",
+                    "merged_at": None,
+                    "draft": False,
+                    "head": {"ref": source_ref, "sha": publication["source_head_oid"],
+                             "repo": {"full_name": publication["repository"]}},
+                    "base": {"ref": target_ref, "repo": {"full_name": publication["repository"]}},
+                    "body": body,
+                }
+                adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+
+                def fake_gh(*command, timeout=5.0):
+                    if command == ("api", f"repos/{publication['repository']}/issues/123"):
+                        return json.dumps(issue)
+                    if command == ("api", f"repos/{publication['repository']}/pulls/123"):
+                        return json.dumps(live_pr)
+                    raise AssertionError(f"unexpected adapter read: {command}")
+
+                with patch.object(adapter, "gh", side_effect=fake_gh):
+                    try:
+                        adapter.read_task_pr_binding(UID)
+                    except RuntimeError:
+                        error = True
+                    else:
+                        error = False
+                self.assertTrue(error, f"live PR body {name} was accepted as reciprocal identity")
+
+    def test_task_binding_readback_rejects_wrong_repo_and_malformed_identity(self):
+        with self.assertRaisesRegex(publication_module.ContractError, "repository mismatch"):
+            self.read_live_task_binding(
+                f"task_uid: {UID}\n- pr_url: `https://github.com/other/oasis7/pull/3989`\n",
+            )
+        with self.assertRaisesRegex(publication_module.ContractError, "PR URL is malformed"):
+            self.read_live_task_binding(
+                f"task_uid: {UID}\n- pr_url: `https://github.com/eng-cc/oasis7/pull/not-a-number`\n",
+            )
+        with self.assertRaisesRegex(RuntimeError, "Task issue PR binding is malformed"):
+            self.read_live_task_binding(
+                f"task_uid: {UID}\n- pr_url: https://github.com/eng-cc/oasis7/pull/3989\n",
+            )
+        with self.assertRaisesRegex(RuntimeError, "Task issue PR binding is ambiguous"):
+            self.read_live_task_binding(
+                f"task_uid: {UID}\n"
+                "- pr_url: `https://github.com/eng-cc/oasis7/pull/3989`\n"
+                "- pr_url: `https://github.com/eng-cc/oasis7/pull/3990`\n",
+            )
+        with self.assertRaisesRegex(RuntimeError, "canonical Task issue UID mismatch"):
+            self.read_live_task_binding(
+                f"task_uid: {'task_' + 'b' * 32}\n"
+                "- pr_url: `https://github.com/eng-cc/oasis7/pull/3989`\n",
+            )
+
+    def test_issue_comments_paginates_100_items_and_rejects_incomplete_pages(self):
+        publication, _projection = make_publication(7005)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            args = type("Args", (), {
+                "repo": publication["repository"], "issue_number": 123,
+                "task_uid": UID, "task_helper": str(root / "github-project-task.py"),
+            })()
+            adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+            first_page = [
+                {"id": 10, "body": "older task evidence"},
+                {"id": 11, "body": "older task follow-up"},
+            ]
+            second_page = [{"id": 110, "body": "latest task decision"}]
+            with patch.object(
+                adapter, "gh", return_value=json.dumps([first_page, second_page]),
+            ) as gh:
+                comments = adapter._issue_comments()
+
+            self.assertEqual(first_page + second_page, comments)
+            gh.assert_called_once()
+            request_args = gh.call_args.args
+            self.assertEqual("api", request_args[0])
+            self.assertIn("repos/eng-cc/oasis7/issues/123/comments", request_args[1])
+            self.assertIn("--paginate", request_args)
+            self.assertIn("--slurp", request_args)
+            request_timeout = gh.call_args.kwargs["timeout"]
+            requests_100_comments = any(
+                "per_page=100" in str(argument) for argument in request_args
+            )
+
+            malformed_responses = {
+                "non-array second page": json.dumps([
+                    first_page, {"id": 110, "body": "not a slurped page"},
+                ]),
+                "missing comment body on later page": json.dumps([
+                    first_page, [{"id": 110}],
+                ]),
+                "malformed JSON": "[{not-json]",
+            }
+            for label, response in malformed_responses.items():
+                with self.subTest(response=label):
+                    with patch.object(adapter, "gh", return_value=response):
+                        with self.assertRaisesRegex(RuntimeError, "malformed"):
+                            adapter._issue_comments()
+
+            self.assertTrue(
+                requests_100_comments,
+                "Task comments pagination must request per_page=100",
+            )
+            self.assertEqual(
+                30.0, request_timeout,
+                "complete Task comments pagination must use the 30-second read budget",
+            )
+
+    def test_publish_task_intent_requires_exact_full_body_readback(self):
+        publication, _projection = make_publication(7006)
+        expected_body = publication_module.publication_comment(publication)
+        issue = {"number": 123, "state": "open", "body": f"task_uid: {UID}\n"}
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            args = type("Args", (), {
+                "repo": publication["repository"], "issue_number": 123,
+                "task_uid": UID, "task_helper": str(root / "github-project-task.py"),
+            })()
+            adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+
+            def exact_readback(*command, timeout=5.0, input_json=None):
+                if command[:2] == ("api", f"repos/{publication['repository']}/issues/123"):
+                    return json.dumps(issue)
+                if command[:2] == ("issue", "comment"):
+                    body_path = Path(command[command.index("--body-file") + 1])
+                    self.assertEqual(expected_body, body_path.read_text(encoding="utf-8"))
+                    return f"https://github.com/{publication['repository']}/issues/123#issuecomment-7006"
+                if command[:2] == (
+                    "api", f"repos/{publication['repository']}/issues/comments/7006",
+                ):
+                    return json.dumps({"id": 7006, "body": expected_body})
+                raise AssertionError(f"unexpected mocked GitHub call: {command!r}")
+
+            with patch.object(adapter, "gh", side_effect=exact_readback):
+                adapter.publish_task_intent(publication)
+
+    def test_publish_task_intent_rejects_altered_full_body_readback(self):
+        publication, _projection = make_publication(7007)
+        expected_body = publication_module.publication_comment(publication)
+        issue = {"number": 123, "state": "open", "body": f"task_uid: {UID}\n"}
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            args = type("Args", (), {
+                "repo": publication["repository"], "issue_number": 123,
+                "task_uid": UID, "task_helper": str(root / "github-project-task.py"),
+            })()
+            adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+
+            def altered_readback(*command, timeout=5.0, input_json=None):
+                if command[:2] == ("api", f"repos/{publication['repository']}/issues/123"):
+                    return json.dumps(issue)
+                if command[:2] == ("issue", "comment"):
+                    body_path = Path(command[command.index("--body-file") + 1])
+                    self.assertEqual(expected_body, body_path.read_text(encoding="utf-8"))
+                    return f"https://github.com/{publication['repository']}/issues/123#issuecomment-7007"
+                if command[:2] == (
+                    "api", f"repos/{publication['repository']}/issues/comments/7007",
+                ):
+                    return json.dumps({"id": 7007, "body": expected_body + "\nchanged"})
+                raise AssertionError(f"unexpected mocked GitHub call: {command!r}")
+
+            with patch.object(adapter, "gh", side_effect=altered_readback):
+                with self.assertRaisesRegex(RuntimeError, "Issue comment exact readback failed"):
+                    adapter.publish_task_intent(publication)
+
+    def test_find_task_publication_on_later_paginated_comment_page(self):
+        publication, _projection = make_publication(7008)
+        issue = {"number": 123, "state": "open", "body": f"task_uid: {UID}\n"}
+        first_page = [{"id": 10, "body": "older task evidence"}]
+        second_page = [{
+            "id": 11,
+            "body": publication_module.publication_comment(publication),
+        }]
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            args = type("Args", (), {
+                "repo": publication["repository"], "issue_number": 123,
+                "task_uid": UID, "task_helper": str(root / "github-project-task.py"),
+            })()
+            adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+
+            def paginated_readback(*command, timeout=5.0, input_json=None):
+                if command[:2] == ("api", f"repos/{publication['repository']}/issues/123"):
+                    return json.dumps(issue)
+                if command[:2] == (
+                    "api", f"repos/{publication['repository']}/issues/123/comments?per_page=100",
+                ):
+                    self.assertIn("--paginate", command)
+                    self.assertIn("--slurp", command)
+                    return json.dumps([first_page, second_page])
+                raise AssertionError(f"unexpected mocked GitHub call: {command!r}")
+
+            with patch.object(adapter, "gh", side_effect=paginated_readback):
+                result = adapter.find_task_publications(publication["publication_id"])
+
+        self.assertIs(result["complete"], True)
+        self.assertEqual([publication], result["publications"])
+
+    def test_pr_discovery_filters_large_history_server_side(self):
+        repository = "eng-cc/oasis7"
+        source_ref = "task/engineering-ci-parallel-reuse-c1"
+        target_ref = "main"
+        publication, _projection = make_publication(
+            7002, repository=repository, branch=source_ref,
+        )
+        matching = {
+            "number": 41, "html_url": f"https://github.com/{repository}/pull/41",
+            "body": "Task: " + UID, "state": "open", "draft": True,
+            "merged_at": None,
+            "head": {"ref": source_ref, "sha": publication["source_head_oid"],
+                     "repo": {"full_name": repository}},
+            "base": {"ref": target_ref, "repo": {"full_name": repository}},
+        }
+        fork_match = copy.deepcopy(matching)
+        fork_match["number"] = 42
+        fork_match["head"]["repo"]["full_name"] = "fork/oasis7"
+        large_history = [
+            {"head": {"ref": f"old/branch-{index}"},
+             "base": {"ref": "main"}}
+            for index in range(10_000)
+        ] + [matching, fork_match]
+        expected_query = urlencode({
+            "state": "all", "head": f"eng-cc:{source_ref}",
+            "base": target_ref, "per_page": 100,
+        })
+        expected_path = f"repos/{repository}/pulls?{expected_query}"
+        with tempfile.TemporaryDirectory() as temp:
+            args = type("Args", (), {
+                "repo": repository, "issue_number": 123,
+                "task_uid": UID, "task_helper": str(Path(temp) / "github-project-task.py"),
+            })()
+            adapter = publish_module.GitHubPublicationAdapter(Path(temp), args, publication)
+
+            def fake_gh(*command, timeout):
+                endpoint = command[1] if len(command) > 1 else ""
+                if endpoint != expected_path:
+                    raise TimeoutError("scanning the fake repository PR history exceeds timeout")
+                self.assertEqual(("api", expected_path, "--paginate", "--slurp"), command)
+                self.assertEqual(4.5, timeout)
+                filtered = [
+                    item for item in large_history
+                    if item.get("head", {}).get("ref") == source_ref
+                    and item.get("base", {}).get("ref") == target_ref
+                ]
+                return json.dumps([filtered])
+
+            with patch.object(adapter, "gh", side_effect=fake_gh) as gh:
+                result = adapter.find_task_prs(UID, source_ref, target_ref, timeout_seconds=4.5)
+
+        gh.assert_called_once()
+        self.assertEqual([41], [item["number"] for item in result["pull_requests"]])
+
+    def test_remote_source_ref_read_allows_slow_success_under_separate_budget(self):
+        publication, _projection = make_publication(7003)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            args = type("Args", (), {
+                "repo": publication["repository"], "issue_number": 123,
+                "task_uid": UID, "task_helper": str(root / "github-project-task.py"),
+                "remote": "origin",
+            })()
+            adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+            observed_timeouts = []
+
+            def simulated_remote_run(command, **kwargs):
+                timeout = kwargs["timeout"]
+                observed_timeouts.append(timeout)
+                if 11.0 > timeout:
+                    raise subprocess.TimeoutExpired(command, timeout)
+                return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+            with patch.object(publish_module.subprocess, "run", side_effect=simulated_remote_run):
+                self.assertIsNone(adapter.read_source_ref(publication["source_ref"]))
+
+        self.assertEqual([30.0], observed_timeouts)
+        self.assertGreater(publish_module.REMOTE_GIT_READ_TIMEOUT_SECONDS, 11.0)
+        self.assertEqual(15.0, publish_module.LOCAL_COMMAND_TIMEOUT_SECONDS)
+
+    def test_remote_source_ref_timeout_fails_closed(self):
+        publication, _projection = make_publication(7004)
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            args = type("Args", (), {
+                "repo": publication["repository"], "issue_number": 123,
+                "task_uid": UID, "task_helper": str(root / "github-project-task.py"),
+                "remote": "origin",
+            })()
+            adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+            observed_timeouts = []
+
+            def simulated_timeout(command, **kwargs):
+                observed_timeouts.append(kwargs["timeout"])
+                raise subprocess.TimeoutExpired(command, kwargs["timeout"])
+
+            with patch.object(publish_module.subprocess, "run", side_effect=simulated_timeout):
+                with self.assertRaisesRegex(publish_module.PublishInputError, "command failed: git"):
+                    adapter.read_source_ref(publication["source_ref"])
+
+        self.assertEqual([30.0], observed_timeouts)
+
+    def test_30_ordered_create_publications(self):
+        with tempfile.TemporaryDirectory() as temp:
+            for index in range(30):
+                publication, projection = make_publication(index)
+                adapter = FakeAdapter(publication, projection, initial_head=None)
+                result = publication_module.publish_create(
+                    adapter, self.journal(temp, publication), publication=publication,
+                    projection=projection, body=f"Refs #1\n\n",
+                )
+                self.assertEqual("published", result["status"])
+                self.assertEqual(1, result["pr_number"])
+                self.assertLess(adapter.events.index("task-intent"), adapter.events.index("push"))
+                self.assertLess(adapter.events.index("push"), adapter.events.index("create-pr"))
+                self.assertLess(adapter.events.index("create-pr"), adapter.events.index("record-pr"))
+                self.assertLess(adapter.events.index("record-pr"), adapter.events.index("publish-reciprocal"))
+
+    def test_create_rejects_task_bound_pr_missing_from_exact_discovery_before_writes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection = make_publication(490)
+            other_pr = {
+                "repository": publication["repository"], "source_ref": "task/older-branch",
+                "target_ref": publication["target_ref"], "head_oid": publication["source_head_oid"],
+                "body": "old body", "state": "open", "merged": False,
+                "draft": True, "number": 99,
+            }
+            adapter = FakeAdapter(publication, projection, initial_pr=other_pr)
+            adapter.pr_binding = {"task_uid": UID, "pr_number": 99}
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "TASK_IDENTITY_CONFLICT",
+            ):
+                publication_module.publish_create(
+                    adapter, self.journal(temp, publication), publication=publication,
+                    projection=projection, body=f"Task: {UID}\nRefs #1",
+                )
+            self.assertNotIn("task-intent", adapter.events)
+            self.assertNotIn("push", adapter.events)
+            self.assertNotIn("create-pr", adapter.events)
+            self.assertNotIn("record-pr", adapter.events)
+            self.assertNotIn("publish-reciprocal", adapter.events)
+
+    def test_create_reconciles_exact_existing_task_bound_pr_without_duplicate(self):
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection = make_publication(491)
+            _, marker = publication_module.prepare(
+                task_uid=UID, source_head_oid=publication["source_head_oid"],
+                scope_base_oid=SCOPE, projection_digest=publication["projection_digest"],
+            )
+            body = publication_module.replace_projection_marker(
+                f"Task: {UID}\nRefs #1", marker,
+            )
+            pr = {
+                "repository": publication["repository"], "source_ref": publication["source_ref"],
+                "target_ref": publication["target_ref"], "head_oid": publication["source_head_oid"],
+                "body": body, "state": "open", "merged": False,
+                "draft": True, "number": 17,
+            }
+            adapter = FakeAdapter(publication, projection,
+                                  initial_head=publication["source_head_oid"], initial_pr=pr)
+            result = publication_module.publish_create(
+                adapter, self.journal(temp, publication), publication=publication,
+                projection=projection, body=f"Task: {UID}\nRefs #1",
+            )
+            self.assertEqual(17, result["pr_number"])
+            self.assertEqual(1, len(adapter.prs))
+            self.assertNotIn("push", adapter.events)
+            self.assertNotIn("create-pr", adapter.events)
+            self.assertEqual(1, adapter.events.count("publish-reciprocal"))
+
+    def test_30_ordered_existing_pr_updates(self):
+        with tempfile.TemporaryDirectory() as temp:
+            for index in range(30):
+                old_head = f"{index + 100:040x}"
+                new_head = f"{index + 200:040x}"
+                publication, projection = make_publication(index + 1000, head=new_head,
+                                                           branch=f"feature/update-{index}")
+                old_contract, old_marker = publication_module.prepare(
+                    task_uid=UID, source_head_oid=old_head, scope_base_oid=SCOPE,
+                    projection_digest=digest({"old": index}),
+                )
+                pr = {"repository": publication["repository"], "source_ref": publication["source_ref"],
+                      "target_ref": publication["target_ref"], "head_oid": old_head,
+                      "body": "Refs #1\n\n" + old_marker, "state": "open", "merged": False,
+                      "draft": True, "number": index + 1}
+                adapter = FakeAdapter(publication, projection, initial_head=old_head, initial_pr=pr)
+                result = publication_module.publish_update(
+                    adapter, self.journal(temp, publication), publication=publication,
+                    projection=projection, pr_number=index + 1, old_head_oid=old_head,
+                    body=pr["body"],
+                )
+                self.assertEqual("published", result["status"])
+                self.assertLess(adapter.events.index("patch-pr"), adapter.events.index("push"))
+                self.assertEqual(new_head, adapter.prs[0]["head_oid"])
+                self.assertEqual(result["binding"]["binding_digest"], adapter.bindings[0]["binding_digest"])
+
+    def test_existing_ready_update_keeps_exact_bound_nondraft_pr(self):
+        """A ready update is the same-PR H1 path with a pinned false draft bit."""
+        with tempfile.TemporaryDirectory() as temp:
+            old_head = "c" * 40
+            new_head = "d" * 40
+            publication, projection = make_publication(1090, head=new_head)
+            _, old_marker = publication_module.prepare(
+                task_uid=UID, source_head_oid=old_head, scope_base_oid=SCOPE,
+                projection_digest=digest({"ready-update": "old"}),
+            )
+            pr = {
+                "repository": publication["repository"],
+                "source_ref": publication["source_ref"],
+                "target_ref": publication["target_ref"],
+                "head_oid": old_head,
+                "body": f"Manually retained summary\n\nTask: {UID}\nRefs #1\n\n{old_marker}",
+                "state": "open", "merged": False, "draft": False, "number": 109,
+            }
+            adapter = FakeAdapter(
+                publication, projection, initial_head=old_head, initial_pr=pr,
+            )
+            adapter.ready_update_admitted = True
+            journal = self.journal(temp, publication)
+
+            result = self.run_publish_entrypoint(
+                temp, publication, projection, adapter, journal,
+                existing_ready_update=True,
+            )
+
+            self.assertEqual("published", result["status"])
+            self.assertEqual(109, result["pr_number"])
+            self.assertEqual(1, len(adapter.prs), "ready update must reuse the exact existing PR")
+            self.assertFalse(adapter.prs[0]["draft"], "the ready PR must remain non-draft")
+            self.assertEqual(new_head, adapter.prs[0]["head_oid"])
+            self.assertTrue(adapter.prs[0]["body"].startswith("Manually retained summary\n\n"))
+            self.assertNotIn("create-pr", adapter.events)
+            self.assertLess(adapter.events.index("task-intent"), adapter.events.index("patch-pr"))
+            self.assertLess(adapter.events.index("patch-pr"), adapter.events.index("push"))
+            self.assertLess(adapter.events.index("push"), adapter.events.index("record-pr"))
+            self.assertLess(adapter.events.index("record-pr"), adapter.events.index("publish-reciprocal"))
+            with journal.locked():
+                actions = journal.read()["actions"]
+            pinned_state = next(item for item in actions if item["action_id"] == "update-state:" + publication["publication_id"])
+            push = next(item for item in actions if item["action_id"] == "push:" + publication["publication_id"])
+            self.assertEqual({
+                "pr_number": 109,
+                "expected_draft": False,
+                "existing_ready_update": True,
+                "old_head_oid": old_head,
+            }, pinned_state["expected"])
+            self.assertEqual(old_head, push["expected"]["lease_oid"])
+
+    def test_ready_update_preserves_original_lease_after_record_response_loss(self):
+        class LostReadyRecordAdapter(FakeAdapter):
+            def __init__(self, publication, projection, *, initial_head, initial_pr):
+                super().__init__(publication, projection, initial_head=initial_head, initial_pr=initial_pr)
+                self.ready_update_admitted = True
+                self.record_attempts = 0
+
+            def record_pr(self, task_uid, number, publication_id):
+                self.record_attempts += 1
+                if self.record_attempts == 1:
+                    self.events.append("record-pr")
+                    raise RuntimeError("simulated lost ready-update Task writer response")
+                super().record_pr(task_uid, number, publication_id)
+
+        with tempfile.TemporaryDirectory() as temp:
+            old_head = "5" * 40
+            new_head = "6" * 40
+            publication, projection = make_publication(1094, head=new_head)
+            _, old_marker = publication_module.prepare(
+                task_uid=UID, source_head_oid=old_head, scope_base_oid=SCOPE,
+                projection_digest=digest({"ready-retry": "old"}),
+            )
+            pr = {
+                "repository": publication["repository"], "source_ref": publication["source_ref"],
+                "target_ref": publication["target_ref"], "head_oid": old_head,
+                "body": f"Task: {UID}\nRefs #1\n\n{old_marker}",
+                "state": "open", "merged": False, "draft": False, "number": 112,
+            }
+            adapter = LostReadyRecordAdapter(
+                publication, projection, initial_head=old_head, initial_pr=pr,
+            )
+            journal = self.journal(temp, publication)
+
+            with self.assertRaisesRegex(publication_module.PublicationError, "record-pr transition did not confirm"):
+                self.run_publish_entrypoint(
+                    temp, publication, projection, adapter, journal,
+                    existing_ready_update=True,
+                )
+            self.assertEqual(new_head, adapter.prs[0]["head_oid"])
+            with journal.locked():
+                first_actions = journal.read()["actions"]
+            pinned = next(item for item in first_actions if item["action_id"] == "update-state:" + publication["publication_id"])
+            push = next(item for item in first_actions if item["action_id"] == "push:" + publication["publication_id"])
+            self.assertEqual(old_head, pinned["expected"]["old_head_oid"])
+            self.assertEqual(old_head, push["expected"]["lease_oid"])
+
+            adapter.events.clear()
+            result = self.run_publish_entrypoint(
+                temp, publication, projection, adapter, journal,
+                existing_ready_update=True,
+            )
+
+            self.assertEqual("published", result["status"])
+            self.assertEqual(2, adapter.record_attempts)
+            self.assertEqual(1, len(adapter.prs))
+            self.assertEqual(new_head, adapter.prs[0]["head_oid"])
+            self.assertNotIn("push", adapter.events, "H1 recovery must reuse the original lease without a second push")
+            self.assertNotIn("create-pr", adapter.events)
+            self.assertEqual(1, len(adapter.bindings))
+
+    def test_ready_update_h1_without_pinned_admission_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            new_head = "7" * 40
+            publication, projection = make_publication(1095, head=new_head)
+            pr = {
+                "repository": publication["repository"], "source_ref": publication["source_ref"],
+                "target_ref": publication["target_ref"], "head_oid": new_head,
+                "body": f"Task: {UID}\nRefs #1\n", "state": "open", "merged": False,
+                "draft": False, "number": 113,
+            }
+            adapter = FakeAdapter(publication, projection, initial_head=new_head, initial_pr=pr)
+            adapter.ready_update_admitted = True
+            journal = self.journal(temp, publication)
+
+            with self.assertRaisesRegex(publication_module.PublicationError, "H1 recovery lacks pinned update identity"):
+                publication_module.publish_update(
+                    adapter, journal, publication=publication, projection=projection,
+                    pr_number=113, old_head_oid=new_head, body=pr["body"],
+                    expected_draft=False, existing_ready_update=True,
+                )
+
+            self.assertNotIn("task-intent", adapter.events)
+            self.assertNotIn("patch-pr", adapter.events)
+            self.assertNotIn("push", adapter.events)
+            self.assertNotIn("record-pr", adapter.events)
+            self.assertNotIn("publish-reciprocal", adapter.events)
+
+    def test_ready_update_rechecks_false_draft_after_metadata_patch(self):
+        class DraftFlipAdapter(FakeAdapter):
+            def patch_pr_body(self, repository, number, body):
+                super().patch_pr_body(repository, number, body)
+                self.prs[0]["draft"] = True
+
+        with tempfile.TemporaryDirectory() as temp:
+            old_head = "8" * 40
+            publication, projection = make_publication(1096, head="9" * 40)
+            pr = {
+                "repository": publication["repository"], "source_ref": publication["source_ref"],
+                "target_ref": publication["target_ref"], "head_oid": old_head,
+                "body": f"Task: {UID}\nRefs #1\n", "state": "open", "merged": False,
+                "draft": False, "number": 114,
+            }
+            adapter = DraftFlipAdapter(publication, projection, initial_head=old_head, initial_pr=pr)
+            adapter.ready_update_admitted = True
+            journal = self.journal(temp, publication)
+
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "live PR repository/ref/head/state identity mismatch",
+            ):
+                publication_module.publish_update(
+                    adapter, journal, publication=publication, projection=projection,
+                    pr_number=114, old_head_oid=old_head, body=pr["body"],
+                    expected_draft=False, existing_ready_update=True,
+                )
+
+            self.assertIn("patch-pr", adapter.events)
+            self.assertNotIn("push", adapter.events)
+            self.assertNotIn("record-pr", adapter.events)
+            self.assertNotIn("publish-reciprocal", adapter.events)
+
+    def test_ready_update_rechecks_nondraft_pr_after_task_record(self):
+        class DraftFlipAfterRecordAdapter(FakeAdapter):
+            def __init__(self, publication, projection, *, initial_head, initial_pr):
+                super().__init__(publication, projection, initial_head=initial_head, initial_pr=initial_pr)
+                self.ready_update_admitted = True
+
+            def record_pr(self, task_uid, number, publication_id):
+                super().record_pr(task_uid, number, publication_id)
+                self.prs[0]["draft"] = True
+
+        with tempfile.TemporaryDirectory() as temp:
+            old_head = "a" * 40
+            publication, projection = make_publication(1097, head="b" * 40)
+            pr = {
+                "repository": publication["repository"], "source_ref": publication["source_ref"],
+                "target_ref": publication["target_ref"], "head_oid": old_head,
+                "body": f"Task: {UID}\nRefs #1\n", "state": "open", "merged": False,
+                "draft": False, "number": 116,
+            }
+            adapter = DraftFlipAfterRecordAdapter(
+                publication, projection, initial_head=old_head, initial_pr=pr,
+            )
+            journal = self.journal(temp, publication)
+
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "live PR repository/ref/head/state identity mismatch",
+            ):
+                self.run_publish_entrypoint(
+                    temp, publication, projection, adapter, journal,
+                    existing_ready_update=True,
+                )
+
+            self.assertIn("record-pr", adapter.events)
+            self.assertIn("read-pr", adapter.events, "record completion must be followed by PR state readback")
+            self.assertNotIn("publish-reciprocal", adapter.events)
+
+    def test_existing_ready_update_without_existing_pr_fails_before_create(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_head = "e" * 40
+            publication, projection = make_publication(1091, head="f" * 40)
+            adapter = FakeAdapter(publication, projection, initial_head=old_head)
+            journal = self.journal(temp, publication)
+
+            rejected = False
+            try:
+                self.run_publish_entrypoint(
+                    temp, publication, projection, adapter, journal,
+                    existing_ready_update=True,
+                )
+            except publish_module.PublishInputError as exc:
+                rejected = True
+                self.assertRegex(str(exc), "existing-ready-update.*existing PR")
+
+            self.assertNotIn("task-intent", adapter.events)
+            self.assertNotIn("push", adapter.events)
+            self.assertNotIn("create-pr", adapter.events)
+            self.assertNotIn("record-pr", adapter.events)
+            self.assertNotIn("publish-reciprocal", adapter.events)
+            self.assertTrue(rejected, "ready-update mode must reject when exact existing PR discovery is empty")
+
+    def test_existing_ready_update_rejects_missing_live_admission_marker(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_head = "1" * 40
+            new_head = "2" * 40
+            publication, projection = make_publication(1092, head=new_head)
+            pr = {
+                "repository": publication["repository"],
+                "source_ref": publication["source_ref"],
+                "target_ref": publication["target_ref"],
+                "head_oid": old_head,
+                "body": f"Task: {UID}\nRefs #1\n",
+                "state": "open", "merged": False, "draft": False, "number": 110,
+            }
+            adapter = FakeAdapter(publication, projection, initial_head=old_head, initial_pr=pr)
+            journal = self.journal(temp, publication)
+
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "live existing-ready-update admission is missing",
+            ):
+                publication_module.publish_update(
+                    adapter, journal, publication=publication, projection=projection,
+                    pr_number=110, old_head_oid=old_head, body=pr["body"],
+                    expected_draft=False, existing_ready_update=True,
+                )
+
+            self.assertNotIn("task-intent", adapter.events)
+            self.assertNotIn("patch-pr", adapter.events)
+            self.assertNotIn("push", adapter.events)
+            self.assertNotIn("record-pr", adapter.events)
+            self.assertNotIn("publish-reciprocal", adapter.events)
+
+    def test_expected_nondraft_without_explicit_ready_mode_is_rejected_before_reads(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_head = "3" * 40
+            publication, projection = make_publication(1093, head="4" * 40)
+            pr = {
+                "repository": publication["repository"],
+                "source_ref": publication["source_ref"],
+                "target_ref": publication["target_ref"],
+                "head_oid": old_head,
+                "body": f"Task: {UID}\nRefs #1\n",
+                "state": "open", "merged": False, "draft": False, "number": 111,
+            }
+            adapter = FakeAdapter(publication, projection, initial_head=old_head, initial_pr=pr)
+            journal = self.journal(temp, publication)
+
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "explicit ready update and draft expectation disagree",
+            ):
+                publication_module.publish_update(
+                    adapter, journal, publication=publication, projection=projection,
+                    pr_number=111, old_head_oid=old_head, body=pr["body"],
+                    expected_draft=False,
+                )
+
+            self.assertEqual([], adapter.events, "unadmitted expected_draft=False must not read or write live state")
+
+    def test_lost_create_response_recovers_by_exact_readback_without_second_post(self):
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection = make_publication(500)
+            adapter = FakeAdapter(publication, projection)
+            original = adapter.create_draft_pr
+            def lose_response(*args):
+                original(*args)
+                raise OSError("lost response")
+            adapter.create_draft_pr = lose_response
+            result = publication_module.publish_create(
+                adapter, self.journal(temp, publication), publication=publication,
+                projection=projection, body="Refs #1",
+            )
+            self.assertEqual("published", result["status"])
+            self.assertEqual(1, len(adapter.prs))
+            self.assertEqual(1, adapter.events.count("create-pr"))
+
+    def test_entrypoint_retries_exact_published_pr_without_reusing_push_lease(self):
+        with tempfile.TemporaryDirectory() as temp:
+            lease_oid = "8" * 40
+            publication, projection = make_publication(506)
+            adapter = FakeAdapter(publication, projection, initial_head=lease_oid)
+            journal = self.journal(temp, publication)
+            initial = publication_module.publish_create(
+                adapter, journal, publication=publication, projection=projection,
+                body=f"Task: {UID}\nRefs #1", expected_remote_oid=lease_oid,
+            )
+            self.assertEqual("published", initial["status"])
+            self.assertEqual(1, len(adapter.prs))
+            self.assertEqual(1, adapter.pr_binding["pr_number"])
+            adapter.events.clear()
+
+            result = self.run_publish_entrypoint(
+                temp, publication, projection, adapter, journal,
+            )
+
+            self.assertEqual("published", result["status"])
+            self.assertEqual(1, result["pr_number"])
+            self.assertEqual(1, len(adapter.prs))
+            self.assertNotIn("push", adapter.events)
+            self.assertNotIn("create-pr", adapter.events)
+            self.assertEqual(1, adapter.events.count("record-pr"))
+            self.assertEqual(1, len(adapter.bindings), "exact reciprocal comment is reused")
+
+    def test_observed_record_pr_retry_rejects_drift_with_matching_issue_url(self):
+        class LifecycleDriftAdapter(FakeAdapter):
+            def __init__(self, publication, projection, *, initial_head):
+                super().__init__(publication, projection, initial_head=initial_head)
+                self.lifecycle_state = "committed/verification"
+
+            def record_pr(self, task_uid, number, publication_id):
+                if self.lifecycle_state != "committed/verification":
+                    self.events.append("record-pr")
+                    raise RuntimeError("canonical helper rejected live Task lifecycle drift")
+                super().record_pr(task_uid, number, publication_id)
+
+        with tempfile.TemporaryDirectory() as temp:
+            lease_oid = "9" * 40
+            publication, projection = make_publication(508)
+            adapter = LifecycleDriftAdapter(
+                publication, projection, initial_head=lease_oid,
+            )
+            journal = self.journal(temp, publication)
+            initial = publication_module.publish_create(
+                adapter, journal, publication=publication, projection=projection,
+                body=f"Task: {UID}\nRefs #1", expected_remote_oid=lease_oid,
+            )
+            self.assertEqual("published", initial["status"])
+            self.assertEqual({"task_uid": UID, "pr_number": 1}, adapter.pr_binding)
+            self.assertEqual(1, len(adapter.bindings))
+
+            # The Issue URL still resolves to the exact PR, but lifecycle truth
+            # drifted after the journal had recorded successful record-pr.
+            adapter.lifecycle_state = "execution"
+            adapter.events.clear()
+            with self.assertRaisesRegex(
+                publication_module.PublicationError,
+                "NETWORK_UNCERTAIN: record-pr transition did not confirm",
+            ):
+                publication_module.publish_create(
+                    adapter, journal, publication=publication, projection=projection,
+                    body=f"Task: {UID}\nRefs #1",
+                )
+
+            self.assertEqual({"task_uid": UID, "pr_number": 1}, adapter.pr_binding)
+            self.assertEqual(1, adapter.events.count("record-pr"))
+            self.assertNotIn("push", adapter.events)
+            self.assertNotIn("create-pr", adapter.events)
+            self.assertEqual(1, len(adapter.prs))
+            self.assertEqual(1, len(adapter.bindings), "retry does not duplicate reciprocal comment")
+
+    def test_entrypoint_recovers_exact_created_pr_before_task_url_write(self):
+        class FirstRecordPrFailureAdapter(FakeAdapter):
+            def __init__(self, publication, projection, *, initial_head):
+                super().__init__(publication, projection, initial_head=initial_head)
+                self.record_attempts = 0
+
+            def record_pr(self, task_uid, number, publication_id):
+                self.record_attempts += 1
+                if self.record_attempts == 1:
+                    self.events.append("record-pr")
+                    raise RuntimeError("simulated interruption before Task URL write")
+                super().record_pr(task_uid, number, publication_id)
+
+        with tempfile.TemporaryDirectory() as temp:
+            lease_oid = "7" * 40
+            publication, projection = make_publication(507)
+            adapter = FirstRecordPrFailureAdapter(
+                publication, projection, initial_head=lease_oid,
+            )
+            journal = self.journal(temp, publication)
+            with self.assertRaisesRegex(publication_module.PublicationError, "NETWORK_UNCERTAIN"):
+                publication_module.publish_create(
+                    adapter, journal, publication=publication, projection=projection,
+                    body=f"Task: {UID}\nRefs #1", expected_remote_oid=lease_oid,
+                )
+            self.assertEqual(1, len(adapter.prs))
+            self.assertIsNone(adapter.pr_binding)
+            adapter.events.clear()
+
+            result = self.run_publish_entrypoint(
+                temp, publication, projection, adapter, journal,
+            )
+
+            self.assertEqual("published", result["status"])
+            self.assertEqual(1, result["pr_number"])
+            self.assertEqual(1, len(adapter.prs))
+            self.assertEqual(1, adapter.pr_binding["pr_number"])
+            self.assertEqual(2, adapter.record_attempts)
+            self.assertNotIn("push", adapter.events)
+            self.assertNotIn("create-pr", adapter.events)
+
+    def test_uncertain_record_pr_retries_full_transition_when_issue_binding_is_visible(self):
+        class PostWriteReadbackFailureAdapter(FakeAdapter):
+            def __init__(self, publication, projection):
+                super().__init__(publication, projection)
+                self.binding_reads = 0
+
+            def read_task_pr_binding(self, task_uid):
+                self.events.append("read-task-pr-binding")
+                self.binding_reads += 1
+                if self.binding_reads in (1, 2):
+                    return {"task_uid": task_uid, "pr_number": None}
+                if self.binding_reads == 3:
+                    raise RuntimeError("simulated Task PR binding readback failure")
+                return {"task_uid": task_uid, "pr_number": 1}
+
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection = make_publication(504)
+            adapter = PostWriteReadbackFailureAdapter(publication, projection)
+            journal = self.journal(temp, publication)
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "NETWORK_UNCERTAIN",
+            ):
+                publication_module.publish_create(
+                    adapter, journal, publication=publication,
+                    projection=projection, body="Task: " + UID + "\nRefs #1",
+                )
+
+            result = publication_module.publish_create(
+                adapter, journal, publication=publication,
+                projection=projection, body="Task: " + UID + "\nRefs #1",
+            )
+            self.assertEqual("published", result["status"])
+            self.assertEqual(1, len(adapter.prs))
+            self.assertEqual(1, adapter.events.count("create-pr"))
+            self.assertEqual(2, adapter.events.count("record-pr"))
+            self.assertEqual(1, adapter.events.count("publish-reciprocal"))
+
+    def test_partial_record_pr_failure_cannot_be_confirmed_by_issue_url_alone(self):
+        class PartialRecordPrAdapter(FakeAdapter):
+            def __init__(self, publication, projection):
+                super().__init__(publication, projection)
+                self.mapping_complete = False
+
+            def record_pr(self, task_uid, number, publication_id):
+                super().record_pr(task_uid, number, publication_id)
+                if self.events.count("record-pr") == 1:
+                    raise RuntimeError("simulated failure after Issue body write, before task mapping")
+                self.mapping_complete = True
+
+            def publish_reciprocal_binding(self, value):
+                if not self.mapping_complete:
+                    raise AssertionError("publication advanced before complete record-pr recovery")
+                super().publish_reciprocal_binding(value)
+
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection = make_publication(505)
+            adapter = PartialRecordPrAdapter(publication, projection)
+            journal = self.journal(temp, publication)
+            with self.assertRaisesRegex(publication_module.PublicationError, "NETWORK_UNCERTAIN"):
+                publication_module.publish_create(
+                    adapter, journal, publication=publication,
+                    projection=projection, body="Task: " + UID + "\nRefs #1",
+                )
+            self.assertEqual(1, adapter.prs[0]["number"])
+            self.assertEqual(1, adapter.pr_binding["pr_number"])
+            self.assertEqual([], adapter.bindings)
+            self.assertFalse(adapter.mapping_complete)
+
+            result = publication_module.publish_create(
+                adapter, journal, publication=publication,
+                projection=projection, body="Task: " + UID + "\nRefs #1",
+            )
+            self.assertEqual("published", result["status"])
+            self.assertTrue(adapter.mapping_complete)
+            self.assertEqual(2, adapter.events.count("record-pr"))
+            self.assertEqual(1, adapter.events.count("publish-reciprocal"))
+
+    def test_restart_after_create_effect_reuses_the_single_matching_pr(self):
+        class SimulatedCrash(BaseException):
+            pass
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection = make_publication(503)
+            adapter = FakeAdapter(publication, projection)
+            original = adapter.create_draft_pr
+            def crash_after_create(*args):
+                original(*args)
+                raise SimulatedCrash()
+            adapter.create_draft_pr = crash_after_create
+            journal = self.journal(temp, publication)
+            with self.assertRaises(SimulatedCrash):
+                publication_module.publish_create(
+                    adapter, journal, publication=publication,
+                    projection=projection, body="Task: " + UID + "\nRefs #1",
+                )
+            adapter.create_draft_pr = original
+            result = publication_module.publish_create(
+                adapter, journal, publication=publication,
+                projection=projection, body="Task: " + UID + "\nRefs #1",
+            )
+            self.assertEqual("published", result["status"])
+            self.assertEqual(1, len(adapter.prs))
+            self.assertEqual(1, adapter.events.count("create-pr"))
+
+    def test_delayed_pr_number_uses_bounded_visibility_wait(self):
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection = make_publication(502)
+            adapter = FakeAdapter(publication, projection)
+            original = adapter.find_task_prs
+            reads = []
+            def delayed(*args, **kwargs):
+                reads.append(args)
+                if len(reads) <= 2:
+                    return {"complete": True, "pull_requests": []}
+                return original(*args, **kwargs)
+            adapter.find_task_prs = delayed
+            clock = FakeClock()
+            result = publication_module.publish_create(
+                adapter, self.journal(temp, publication), publication=publication,
+                projection=projection, body="Refs #1", clock=clock.clock, sleep=clock.sleep,
+            )
+            self.assertEqual("published", result["status"])
+            self.assertEqual(1, result["pr_number"])
+            self.assertEqual([2.0], clock.sleeps)
+
+    def test_h2_conflict_stops_update_before_patch(self):
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection = make_publication(501, head="e" * 40)
+            pr = {"repository": publication["repository"], "source_ref": publication["source_ref"],
+                  "target_ref": publication["target_ref"], "head_oid": "f" * 40,
+                  "body": "old", "state": "open", "merged": False, "draft": True, "number": 1}
+            adapter = FakeAdapter(publication, projection, initial_head="f" * 40, initial_pr=pr)
+            with self.assertRaisesRegex(publication_module.PublicationError, "SOURCE_SUPERSEDED"):
+                publication_module.publish_update(
+                    adapter, self.journal(temp, publication), publication=publication,
+                    projection=projection, pr_number=1, old_head_oid="d" * 40, body="new",
+                )
+            self.assertNotIn("patch-pr", adapter.events)
+            self.assertNotIn("push", adapter.events)
+
+    def test_update_rejects_different_task_bound_pr_before_writes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_head = "a" * 40
+            publication, projection = make_publication(492, head="b" * 40)
+            pr = {
+                "repository": publication["repository"], "source_ref": publication["source_ref"],
+                "target_ref": publication["target_ref"], "head_oid": old_head,
+                "body": f"Task: {UID}\nRefs #1", "state": "open", "merged": False,
+                "draft": True, "number": 1,
+            }
+            adapter = FakeAdapter(publication, projection, initial_head=old_head, initial_pr=pr)
+            adapter.pr_binding = {"task_uid": UID, "pr_number": 99}
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "TASK_IDENTITY_CONFLICT",
+            ):
+                publication_module.publish_update(
+                    adapter, self.journal(temp, publication), publication=publication,
+                    projection=projection, pr_number=1, old_head_oid=old_head, body=pr["body"],
+                )
+            self.assertEqual(["read-task-pr-binding"], adapter.events)
+
+    def test_update_preserves_live_manual_pr_body(self):
+        with tempfile.TemporaryDirectory() as temp:
+            old_head = "c" * 40
+            new_head = "d" * 40
+            publication, projection = make_publication(493, head=new_head)
+            _, old_marker = publication_module.prepare(
+                task_uid=UID, source_head_oid=old_head, scope_base_oid=SCOPE,
+                projection_digest=digest({"old": "projection"}),
+            )
+            manual_prefix = f"Manually edited PR summary\n\nTask: {UID}\nRefs #1"
+            pr = {
+                "repository": publication["repository"], "source_ref": publication["source_ref"],
+                "target_ref": publication["target_ref"], "head_oid": old_head,
+                "body": manual_prefix + "\n\n" + old_marker,
+                "state": "open", "merged": False, "draft": True, "number": 1,
+            }
+            adapter = FakeAdapter(publication, projection, initial_head=old_head, initial_pr=pr)
+            adapter.pr_binding = {"task_uid": UID, "pr_number": 1}
+            publication_module.publish_update(
+                adapter, self.journal(temp, publication), publication=publication,
+                projection=projection, pr_number=1, old_head_oid=old_head,
+                body=f"Generated replacement summary\n\nTask: {UID}\nRefs #1",
+            )
+            self.assertTrue(adapter.prs[0]["body"].startswith(manual_prefix))
+            self.assertNotIn("Generated replacement summary", adapter.prs[0]["body"])
+            self.assertEqual(1, adapter.prs[0]["body"].count("oasis7-ci-impact-publication:v2"))
+
+    def test_h1_with_stale_body_repairs_metadata_without_moving_head(self):
+        with tempfile.TemporaryDirectory() as temp:
+            head = "9" * 40
+            publication, projection = make_publication(5020, head=head)
+            _old, old_marker = publication_module.prepare(
+                task_uid=UID, source_head_oid="8" * 40, scope_base_oid=SCOPE,
+                projection_digest=digest({"old": "projection"}),
+            )
+            pr = {"repository": publication["repository"], "source_ref": publication["source_ref"],
+                  "target_ref": publication["target_ref"], "head_oid": head,
+                  "body": "Task: " + UID + "\nRefs #1\n\n" + old_marker,
+                  "state": "open", "merged": False, "draft": True, "number": 1}
+            adapter = FakeAdapter(publication, projection, initial_head=head, initial_pr=pr)
+            result = publication_module.publish_update(
+                adapter, self.journal(temp, publication), publication=publication,
+                projection=projection, pr_number=1, old_head_oid=head,
+                body=pr["body"],
+            )
+            self.assertEqual("published", result["status"])
+            self.assertIn("patch-pr", adapter.events)
+            self.assertNotIn("push", adapter.events)
+            self.assertEqual(head, adapter.prs[0]["head_oid"])
+
+    def test_100_stable_target_snapshots_resolve_reciprocal_binding(self):
+        clock = FakeClock()
+        for index in range(100):
+            publication, projection = make_publication(index + 2000)
+            pr_number = index + 1
+            url = f"https://github.com/{publication['repository']}/pull/{pr_number}"
+            binding = publication_module.build_publication_binding(publication, pr_number, url)
+            _value, body = publication_module.prepare(
+                task_uid=UID, source_head_oid=publication["source_head_oid"],
+                scope_base_oid=SCOPE, projection_digest=publication["projection_digest"],
+            )
+            snapshot = {"complete": True, "publication": publication, "binding": binding,
+                        "body": body, "repository": publication["repository"],
+                        "repository_id": publication["repository_id"],
+                        "source_repository_id": publication["source_repository_id"],
+                        "source_ref": publication["source_ref"], "target_ref": publication["target_ref"],
+                        "head_oid": publication["source_head_oid"], "state": "open",
+                        "merged": False, "pr_number": pr_number}
+            timeouts = []
+            result = resolver_module.wait_for_binding(
+                lambda timeout, snapshot=snapshot: (timeouts.append(timeout) or snapshot),
+                task_uid=UID, source_head_oid=publication["source_head_oid"],
+                scope_base_oid=SCOPE, repository=publication["repository"],
+                pr_number=pr_number, planner_config_sha256=CONFIG,
+                clock=clock.clock, sleep=clock.sleep,
+            )
+            self.assertEqual(projection["projection_digest"], result["projection_digest"])
+            self.assertEqual([5.0, 5.0], timeouts)
+        self.assertEqual([], clock.sleeps)
+
+    def test_complete_snapshot_requires_publication_and_reciprocal_binding(self):
+        publication, _projection = make_publication(2500)
+        _, body = publication_module.prepare(
+            task_uid=UID, source_head_oid=publication["source_head_oid"],
+            scope_base_oid=SCOPE, projection_digest=publication["projection_digest"],
+        )
+        binding = publication_module.build_publication_binding(
+            publication, 1, f"https://github.com/{publication['repository']}/pull/1",
+        )
+        complete = {
+            "complete": True, "publication": publication, "binding": binding,
+            "body": body, "repository": publication["repository"],
+            "repository_id": publication["repository_id"],
+            "source_repository_id": publication["source_repository_id"],
+            "source_ref": publication["source_ref"], "target_ref": publication["target_ref"],
+            "head_oid": publication["source_head_oid"], "state": "open",
+            "merged": False, "pr_number": 1,
+        }
+        for missing in ("publication", "binding"):
+            snapshot = dict(complete)
+            snapshot.pop(missing)
+            with self.subTest(missing=missing):
+                with self.assertRaises(resolver_module.ResolverError):
+                    resolver_module.wait_for_binding(
+                        lambda _timeout, snapshot=snapshot: snapshot,
+                        task_uid=UID, source_head_oid=publication["source_head_oid"],
+                        scope_base_oid=SCOPE, repository=publication["repository"],
+                        pr_number=1, planner_config_sha256=CONFIG,
+                        clock=FakeClock().clock, sleep=lambda _duration: None,
+                    )
+
+    def test_unstable_snapshots_use_bounded_three_round_schedule(self):
+        clock = FakeClock()
+        calls = []
+        snapshots = [{"complete": False}] * 6
+        def read(timeout):
+            calls.append(timeout)
+            return snapshots[len(calls) - 1]
+        with self.assertRaisesRegex(resolver_module.ResolverError, "NETWORK_UNCERTAIN"):
+            resolver_module.wait_for_binding(
+                read, task_uid=UID, source_head_oid="a" * 40, scope_base_oid=SCOPE,
+                repository="eng-cc/oasis7", pr_number=1, planner_config_sha256=CONFIG,
+                clock=clock.clock, sleep=clock.sleep,
+            )
+        self.assertEqual([5.0] * 6, calls)
+        self.assertEqual([2.0, 5.0], clock.sleeps)
+
+    def test_task_or_binding_identity_mismatch_is_rejected(self):
+        publication, _projection = make_publication(600)
+        _value, body = publication_module.prepare(
+            task_uid=UID, source_head_oid=publication["source_head_oid"],
+            scope_base_oid=SCOPE, projection_digest=publication["projection_digest"],
+        )
+        binding = publication_module.build_publication_binding(
+            publication, 1, f"https://github.com/{publication['repository']}/pull/1",
+        )
+        binding["pr_number"] = 2
+        with self.assertRaises(resolver_module.ResolverError):
+            resolver_module.resolve(
+                body, task_uid=UID, source_head_oid=publication["source_head_oid"],
+                scope_base_oid=SCOPE, publication=publication, binding=binding,
+                repository=publication["repository"], pr_number=1,
+                planner_config_sha256=CONFIG,
+            )
+
+    def test_verified_legacy_b64_projection_is_replaced_by_one_v2_marker(self):
+        _contract, marker = publication_module.prepare(
+            task_uid=UID, source_head_oid="a" * 40, scope_base_oid=SCOPE,
+            projection_digest=digest({"projection": "fixture"}),
+        )
+        old = "Task: " + UID + "\nRefs #1\n\n<!-- oasis7-impact-projection-b64: abc123== -->"
+        updated = publication_module.replace_projection_marker(
+            old, marker, legacy_projection_b64="abc123==",
+        )
+        self.assertNotIn("oasis7-impact-projection-b64", updated)
+        self.assertEqual(1, updated.count("oasis7-ci-impact-publication:v2"))
+        with self.assertRaises(publication_module.PublicationError):
+            publication_module.replace_projection_marker(
+                old, marker, legacy_projection_b64="different",
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()

@@ -6,7 +6,7 @@
 - 上位产品 PRD：[`prd.md`](prd.md)
 - 生命周期：`active`
 - Owner role：`producer_system_designer`
-- Last reviewed：2026-09-13
+- Last reviewed：2026-09-26
 - 专业域权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md)
 
 本文是长期产品分册，定义沟通、合同、争端、情境声誉与研究开发归因的产品边界。它不定义聊天/Agent UI、合同字段、抵押数值、争端随机算法、证据格式、仲裁规则、声誉分数、身份技术、专利/法律结论、版税比例或当前实现/readiness。
@@ -52,6 +52,7 @@
 
 - 声誉分别属于玩家、Agent、组织和角色/岗位，并限定在相关地点、服务、合同、时间和受影响群体的情境中。它不能被压缩为全球万能分数，也不能从一次成功、付费、名望或组织规模自动推出所有场景的信任与权力。
 - 声誉记录具有新近性、到期、可补充更新与申诉路径；严重或重复事实可以在适用情境内持续可见，但不存在不可纠正的永久 blacklist。任何限制都应说明来源、范围、期限、更新/恢复条件和可用复核。
+- 在玩家发布或质疑社会事实、或声明关系前，必须提供只读的后果预览，列明可能受影响的主体，以及相关合作、治理、claim 表面和争端/质押风险，帮助玩家决定继续或暂缓。预览只呈现情境内的可能影响，不代表事实已确认或质押已处理；它本身不改变事实、关系、声誉、资格、权限或其他世界状态，也不保证合作、访问、排名、治理权重或奖励。相关记录继续遵守本节已有的情境范围、到期、更新和申诉边界，不扩展为全局分数、永久 blacklist 或 credential 自动转移。
 - Agent、设施、合同或组织控制权转让时，相关世界历史、风险和已确认 receipt 仍需披露；但玩家的个人、政治或社会 credential 不随资产/控制权自动转移、出售或继承。新的 owner 只能在自己的授权、关系和情境记录下重新建立资格。
 - 当情境声誉被成熟世界用于未来机会或候选资格时，本分册只主责主体/情境归属、来源、期限、更新与申诉的可追溯记录；成长、独立基线、容量竞争、待决/hold/receipt 和单次机会效果由[`成熟世界成长与区域参与`](mature-world-progression.prd.md#req-wr-mw-004)主责。它不把声誉记录扩成区域分配、pioneer priority、治理权或 Agent delegation authority。
 
@@ -94,25 +95,25 @@
 - 则：receipt 区分已完成和未完成范围，只冻结直接相关的新高风险承诺；修复不重放已完成效果，争议不扩大为全面冻结，续期必须重新报价并明确接受。
 
 <a id="req-wr-cr-003"></a>
-### REQ-WR-CR-003：声誉与 R&D 归因必须局部可更新且可追溯
+### REQ-WR-CR-003：社交事实预览与声誉、R&D 归因必须保持情境边界
 
-- 要求：声誉按主体与情境记录并支持到期、更新和申诉；R&D 在工作前以 charter 声明贡献与份额，Agent provenance 持续可追溯，份额转移不得自动转移个人 credential 或一般声誉。当该记录被世界内机会消费时，仍由[`成熟世界成长与区域参与`](mature-world-progression.prd.md#req-wr-mw-004)约束机会的作用域、容量、待决、结算和恢复边界；入口组合边界见[`免费进入、世界内成长与有界认可`](../player-entry-distribution/free-entry-world-progression-and-recognition.prd.md#req-entry-free-002)；本要求不授予区域分配或优先级。
-- 专业权威：[`doc/game/prd.md`](../../game/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
+- 要求：玩家发布或质疑社会事实、或声明关系前，必须能查看只读预览，了解可能受影响的主体、合作/治理/claim 表面和争端/质押风险，并据此选择继续或暂缓；预览不判定事实、不处理质押、不改变资格或权限、不保证合作、访问、排名、治理权重或奖励。声誉按主体与情境记录，并支持到期、更新和有界申诉；R&D 在工作前以 charter 声明贡献与份额，Agent provenance 持续可追溯，份额转移不得自动转移个人 credential 或一般声誉。当该记录被世界内机会消费时，仍由[`成熟世界成长与区域参与`](mature-world-progression.prd.md#req-wr-mw-004)约束机会的作用域、容量、待决、结算和恢复边界；入口组合边界见[`免费进入、世界内成长与有界认可`](../player-entry-distribution/free-entry-world-progression-and-recognition.prd.md#req-entry-free-002)；本要求不授予区域分配或优先级，也不声称当前实现或 readiness。
+- 专业权威：[`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md)、[`social-fact-ledger-declarative-reputation.prd.md`](../../world-simulator/kernel/social-fact-ledger-declarative-reputation.prd.md)、[`social-fact-ledger-declarative-reputation.design.md`](../../world-simulator/kernel/social-fact-ledger-declarative-reputation.design.md)、[`doc/game/prd.md`](../../game/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)
 - 验收：[AC-WR-CR-003](#ac-wr-cr-003)
 
 <a id="ac-wr-cr-003"></a>
-### AC-WR-CR-003：转让、更新与申诉保持情境边界
+### AC-WR-CR-003：社交事实预览、转让、更新与申诉保持情境边界
 
 - 覆盖要求：REQ-WR-CR-003
-- 给定：一个主体在特定地点、服务和时间范围内产生声誉记录，并参与已声明 R&D charter 的工作。
-- 当：控制权或份额转让、声誉到期更新或主体提出复核。
-- 则：历史 receipt、贡献和 provenance 仍可追溯；新主体不会继承个人 credential 或全球信用，声誉可按情境更新/申诉，份额只有经显式合同转移。
+- 给定：玩家准备发布或质疑社会事实、声明关系；主体在特定地点、服务和时间范围内有情境声誉记录，并参与已声明 R&D charter 的工作。
+- 当：玩家在提交社交事实或关系动作前查看后果，或发生控制权/份额转让、声誉到期更新或主体提出复核。
+- 则：预览在提交前只读展示可能受影响的主体、合作/治理/claim 表面及争端/质押风险，足以让玩家决定继续或暂缓；它不确认事实、不处理质押、不授予资格或权力，也不承诺合作、访问、排名、治理权重或奖励。历史 receipt、贡献和 provenance 仍可追溯；新主体不会继承个人 credential 或全球信用，声誉可按情境到期、更新和有界申诉，份额只有经显式合同转移；不产生全局声誉分或不可纠正的永久 blacklist。
 
 ## 3. 权威与冲突处理
 
 | 产品层拥有 | 专业与执行权威 |
 | --- | --- |
-| 沟通与绑定合同的结果分层、atomic/持续服务区别、有限争端程序、情境声誉、转让披露边界与 R&D 归因/份额的组合产品语义 | `doc/game/prd.md` 拥有玩家行为、经济和玩法平衡；`doc/world-runtime/prd.md` 拥有合同/资产/receipt 的权威执行、确定性和恢复；`doc/p2p/prd.md` 拥有身份、签名、治理和安全技术边界；`doc/testing/prd.md` 拥有证据与当前 verdict |
+| 沟通与绑定合同的结果分层、atomic/持续服务区别、有限争端程序、情境声誉、社交事实决策预览、转让披露边界与 R&D 归因/份额的组合产品语义 | `doc/game/prd.md` 拥有玩家行为、经济和玩法平衡；[`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md) 拥有社交动作的玩法呈现边界；[`social-fact-ledger-declarative-reputation.prd.md`](../../world-simulator/kernel/social-fact-ledger-declarative-reputation.prd.md) 与配对 [`design`](../../world-simulator/kernel/social-fact-ledger-declarative-reputation.design.md) 拥有社交事实/关系声明的技术 schema、权限、证据/质押校验、生命周期、事件与回放；`doc/world-runtime/prd.md` 拥有合同/资产/receipt 的权威执行、确定性和恢复；`doc/p2p/prd.md` 拥有身份、签名、治理和安全技术边界；`doc/testing/prd.md` 拥有证据与当前 verdict |
 
 本分册不扩大当前社交事实 adjudication 或工业专业合同，也不定义合同/仲裁/声誉/R&D 的实现、数值或法律效果。与 Agent 授权、组织 charter、区域治理或安全保护冲突时，以更窄的授权、权利与安全边界为准，并由相关专业 owner 显式裁决。
 
@@ -129,7 +130,7 @@
 - CR-2：结算样例区分 hard atomic 交换与可违约持续服务；后者能说明 collateral、证据、补救、重新履行、解除或仲裁，而不产生隐藏部分结算。控制权转让、退休、解散或资不抵债样例会冻结新的风险承诺，并在履行、终止/结清或经明确同意的可审计继受前，不静默取消合同、自动转移责任或处置其相关托管资产。
 - CR-2A：持续服务样例让代表性玩家在接受前比较首个检查点价值、成本、持续义务、失败暴露、退出/修复和无合同替代路径；preview、offer 与接受待校验均不产生预留、债务、collateral、奖励、优先级或其他世界效果，只有经授权接受与权威校验后才进入 active。正常检查点以一个可审计 receipt 进入 fulfilled；部分履行、违约、终止或争议保留已确认结果并提供修复/重新履行、终止/结清、最小争议保全或显式继受路径。报价/授权漂移会原子拒绝或重新报价；retry、reconnect 与重复提交不会重复交付或扣款，续期必须重新报价、明确接受并生成新 receipt，控制权变化不会自动增加优先级/义务或转移责任；本样例不作为当前实现/readiness 声明。
 - CR-3：争端样例以 receipt 为首要事实，使用随机无冲突本地 panel 和有限程序性申诉；争端期间未争议且可安全履行的义务不会自动停摆，直接争议范围只能获得有理由、可审计、尽量可逆的最小保全，并清楚区分已确认、待审、保全和可执行下一步；声量、财富或组织地位不能替代事实、扩大重审或把保全变成单方控制、没收或无限冻结。
-- CR-4：声誉样例区分玩家、Agent、组织和角色/岗位的情境记录，支持到期、更新和申诉而无永久 blacklist；转让披露世界历史但不转移个人/政治 credential。
+- CR-4：发布/质疑社会事实及声明关系的样例在提交前预览可能受影响主体、合作/治理/claim 表面与争端/质押风险，并让玩家决定继续或暂缓；预览不授予权利、资格、权重或奖励，也不构成当前实现或 readiness 声明。声誉样例区分玩家、Agent、组织和角色/岗位的情境记录，支持到期、更新和有界申诉而无永久 blacklist；转让披露世界历史但不转移个人/政治 credential。
 - CR-5：R&D 样例以工作前 charter 追溯归因与适用 royalty，永久保留 Agent provenance，并只通过显式合同转让 share；现有社交事实或产业真值不被误报为已实现本专题。
 
 ### 5.1 验收追踪
@@ -139,7 +140,7 @@
 | CR-1 / CR-2 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / qa_engineer | PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 非绑定沟通、授权/接受、atomic/持续服务、collateral/evidence/remedy，以及控制权变化时冻结新风险、履行/终止/结清或明确同意继受、托管资产/责任/receipt 连续性的组合证据 | test_tier_full |
 | CR-2A | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / qa_engineer | PRD-GAME-012 / PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | preview/offer/接受待校验无世界效果、active 后检查点与 receipt、partial/default/terminate/dispute 恢复选择、报价与授权漂移、幂等 retry/reconnect，以及显式继受不重复效果或自动转移责任的组合证据 | test_tier_full |
 | CR-3 | producer_system_designer / gameplay_designer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | receipt-first、随机无冲突本地 panel、程序性申诉、未争议履行、最小可逆保全、保全范围/原因/下一步和结清/恢复/补救/解除的范围限制证据 | test_tier_full |
-| CR-4 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / qa_engineer | PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/testing/prd.md` | 分主体/情境声誉、到期/更新/申诉、无永久 blacklist 和转让 credential 负例 | test_tier_required |
+| CR-4 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / qa_engineer | PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-WORLD_SIMULATOR-008 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/game/gameplay/gameplay-top-level-design.prd.md`; `doc/world-runtime/prd.md`; `doc/world-simulator/kernel/social-fact-ledger-declarative-reputation.prd.md`; `doc/world-simulator/kernel/social-fact-ledger-declarative-reputation.design.md`; `doc/testing/prd.md` | 提交前预览受影响主体、合作/治理/claim 表面与争端/质押风险；预览不授予资格/权重/奖励，亦不构成当前实现或 readiness 声明；分主体/情境声誉、到期/更新/有界申诉、无永久 blacklist 和转让 credential 负例 | test_tier_required |
 | CR-5 | producer_system_designer / gameplay_designer / agent_engineer / runtime_engineer / blockchain_ops_engineer / qa_engineer | PRD-GAME-014 / PRD-WORLD_RUNTIME-001 / PRD-P2P-003 / PRD-TESTING-003 | `doc/game/prd.md`; `doc/world-runtime/prd.md`; `doc/p2p/prd.md`; `doc/testing/prd.md` | R&D charter、贡献归因/royalty、永久 Agent provenance、显式 share 转让与现状 claim 分离证据 | test_tier_full |
 
 ## 6. Non-Goals
@@ -156,4 +157,4 @@
 | --- | --- | --- | --- | --- |
 | [REQ-WR-CR-001](#req-wr-cr-001) / [AC-WR-CR-001](#ac-wr-cr-001) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
 | [REQ-WR-CR-002](#req-wr-cr-002) / [AC-WR-CR-002](#ac-wr-cr-002) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
-| [REQ-WR-CR-003](#req-wr-cr-003) / [AC-WR-CR-003](#ac-wr-cr-003) | `producer_system_designer` | [`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |
+| [REQ-WR-CR-003](#req-wr-cr-003) / [AC-WR-CR-003](#ac-wr-cr-003) | `producer_system_designer` | [`gameplay-top-level-design.prd.md`](../../game/gameplay/gameplay-top-level-design.prd.md)、[`social-fact-ledger-declarative-reputation.prd.md`](../../world-simulator/kernel/social-fact-ledger-declarative-reputation.prd.md)、[`social-fact-ledger-declarative-reputation.design.md`](../../world-simulator/kernel/social-fact-ledger-declarative-reputation.design.md)、[`doc/game/prd.md`](../../game/prd.md#3-player-facing-authority-boundary)、[`doc/world-runtime/prd.md`](../../world-runtime/prd.md)、[`doc/p2p/prd.md`](../../p2p/prd.md)、[`doc/testing/prd.md`](../../testing/prd.md) | 提交前 preview 的受影响主体/合作/治理/claim/争端/质押风险与无 entitlement/readiness 承诺；本专题对应要求、验收与专业 authority 的可导航追踪证据 | `test_tier_required` |

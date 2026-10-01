@@ -71,6 +71,10 @@ fail() {
   failures=$((failures + 1))
 }
 
+if ! "$PYTHON_BIN" "$repo_root/scripts/workflow-process-identity-check.py" --repo-root "$repo_root"; then
+  fail "workflow process identity contract"
+fi
+
 run_product_doc_content_check() {
   if ((full_corpus == 1)); then
     "$PYTHON_BIN" scripts/product-doc-content-check.py \

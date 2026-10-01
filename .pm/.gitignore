@@ -1,5 +1,13 @@
 /registry/tasks.yaml
+/registry/codex-sessions.yaml
 /roles/*/backlog/*.yaml
 /scratch/
+/tasks/
+/stage/*.yaml
+/working_memory/task_*.yaml
+/github-project-sync/tasks.json
+/github-project-sync/task-archive.jsonl
+/github-project-sync/signal-archive.jsonl
+/github-project-sync/task-retirement-summary.json
 /github-project-sync/intake-signals.json
 /github-project-sync/*.lock

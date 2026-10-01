@@ -26,8 +26,9 @@ class SelectionTests(unittest.TestCase):
   if '/contents/' in path:return {'type':'file','path':integration.WORKFLOW,'encoding':'base64','content':base64.b64encode(getattr(self,'workflow','no integration mode').encode()).decode()}
   raise AssertionError(path)
  def check(self,locator=None,allow_ready_pr=False,require_integration=False,require_dispatch=False):
-  def verify(repo,uid,number,base,head,n,app):
+  def verify(repo,uid,number,base,head,n,app,*,expected_attempt=None,**kwargs):
    r=next(r for r in self.runs if r['id']==n)
+   self.assertEqual(r['run_attempt'],expected_attempt)
    if getattr(self,'verification_error',False):raise OSError('artifact read uncertain')
    if getattr(self,'race',False):self.runs.insert(0,run(30,status='queued',conclusion=None))
    if getattr(self,'pr_race',None):self.pr=self.pr_race
@@ -96,6 +97,22 @@ class SelectionTests(unittest.TestCase):
  def test_unknown_request_on_capable_workflow_never_skips(self):
   self.workflow='integration_revalidation';self.runs[0]['display_title']='unknown'
   with self.assertRaisesRegex(SystemExit,'identity unavailable'):self.check()
+ def test_workflow_base_diverge_is_selected_by_exact_request_key(self):
+  key='sha256:'+'9'*64;workflow_sha='8'*40
+  selected=run(20);selected['head_sha']=workflow_sha
+  selected['display_title']+='|'+key
+  self.runs=[selected]
+  with patch.object(integration,'gh',side_effect=self.api):
+   result=integration.current_request('owner/repo',UID,12,BASE,HEAD,'main',request_key=key)
+   missing=integration.current_request('owner/repo',UID,12,BASE,HEAD,'main',request_key='sha256:'+'7'*64)
+  self.assertEqual(20,result['id'])
+  self.assertEqual(workflow_sha,result['workflow_run_head_sha'])
+  self.assertIsNone(missing)
+ def test_keyed_readback_rejects_legacy_tuple_match_before_outcome(self):
+  self.runs=[run(20)]
+  with patch.object(integration,'gh',side_effect=self.api):
+   with self.assertRaisesRegex(ValueError,'request key unavailable'):
+    integration.current_request('owner/repo',UID,12,BASE,HEAD,'main',request_key='sha256:'+'9'*64)
  def test_spoofed_title_without_workflow_provenance_blocks(self):
   self.runs[0]['path']='.github/workflows/other.yml'
   with self.assertRaisesRegex(SystemExit,'provenance uncertain'):self.check()
@@ -120,10 +137,49 @@ class SelectionTests(unittest.TestCase):
   pr={**self.pr,'base':{'sha':prior,'ref':'main','repo':{'full_name':'owner/repo'}},'head':{'sha':HEAD,'repo':{'full_name':'owner/repo'}}}
   def api(*args):
    return pr if '/pulls/' in args[-1] else {'default_branch':'main'}
-  with patch.object(integration,'gh',side_effect=api),patch.dict(integration.os.environ,{'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_REF':'refs/heads/main','GITHUB_SHA':BASE,'GITHUB_WORKFLOW_SHA':BASE}),patch.object(integration,'git') as git:
-   with self.assertRaisesRegex(ValueError,'immutable current default-branch authority'):
+  with patch.object(integration,'gh',side_effect=api),patch.dict(integration.os.environ,{'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_REF':'refs/heads/main','GITHUB_SHA':BASE,'GITHUB_WORKFLOW_SHA':BASE}),patch.object(integration,'git',return_value=BASE) as git:
+   with self.assertRaisesRegex(ValueError,'no approved executor contract'):
     integration.prepare(Path('/unused'), 'owner/repo',UID,12,prior,HEAD)
-   git.assert_not_called()
+   self.assertEqual([('rev-parse','HEAD')],[call.args[1:] for call in git.call_args_list])
+
+ def test_workflow_base_diverge_accepts_only_approved_executor_and_keeps_b_frozen(self):
+  approved='sha256:'+'8'*64
+  pr={**self.pr,'base':{'sha':BASE,'ref':'main','repo':{'full_name':'owner/repo'}},'head':{'sha':HEAD,'repo':{'full_name':'owner/repo'}}}
+  def api(*args):
+   return pr if '/pulls/' in args[-1] else {'default_branch':'main'}
+  run_head='6'*40;workflow_sha=run_head
+  with patch.object(integration,'gh',side_effect=api),patch.dict(integration.os.environ,{'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_REF':'refs/heads/main','GITHUB_SHA':run_head,'GITHUB_WORKFLOW_SHA':workflow_sha,'GITHUB_RUN_ATTEMPT':'1'}),patch.object(integration,'git',side_effect=[workflow_sha,'','']) as git,patch.object(integration,'_executor_contract',return_value=({},approved)) as executor,patch.object(integration,'compose',return_value={'base_oid':BASE,'head_oid':HEAD,'scope_base_oid':'d'*40,'tested_tree_oid':'e'*40,'tested_commit_oid':'f'*40}) as compose:
+   result=integration.prepare(Path('/unused'),'owner/repo',UID,12,BASE,HEAD,approved_executor_contract_digests=[approved],integration_worktree='/tmp/oasis7-integration')
+  self.assertEqual(BASE,result['base_oid'])
+  self.assertEqual(workflow_sha,result['workflow_sha'])
+  self.assertEqual(run_head,result['workflow_run_head_sha'])
+  self.assertEqual(1,result['workflow_run_attempt'])
+  self.assertEqual(approved,result['executor_contract_digest'])
+  self.assertEqual(('merge-base','--is-ancestor',BASE,run_head),git.call_args_list[2].args[1:])
+  executor.assert_called_once()
+  compose.assert_called_once_with(Path('/unused'),BASE,HEAD,worktree_path='/tmp/oasis7-integration')
+
+ def test_workflow_base_diverge_rejects_unverifiable_w_e_relation(self):
+  workflow_sha='9'*40;run_head='6'*40;approved='sha256:'+'8'*64
+  pr={**self.pr,'base':{'sha':BASE,'ref':'main','repo':{'full_name':'owner/repo'}},'head':{'sha':HEAD,'repo':{'full_name':'owner/repo'}}}
+  def api(*args):
+   return pr if '/pulls/' in args[-1] else {'default_branch':'main'}
+  with patch.object(integration,'gh',side_effect=api),patch.dict(integration.os.environ,{'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_REF':'refs/heads/main','GITHUB_SHA':run_head,'GITHUB_WORKFLOW_SHA':workflow_sha,'GITHUB_RUN_ATTEMPT':'1'}),patch.object(integration,'git',return_value=workflow_sha) as git,patch.object(integration,'_executor_contract') as executor,patch.object(integration,'compose') as compose:
+   with self.assertRaisesRegex(ValueError,'must match the workflow-dispatch run head'):
+    integration.prepare(Path('/unused'),'owner/repo',UID,12,BASE,HEAD,approved_executor_contract_digests=[approved],integration_worktree='/tmp/oasis7-integration')
+  git.assert_not_called()
+  executor.assert_not_called();compose.assert_not_called()
+
+ def test_workflow_base_diverge_with_unapproved_executor_fails_before_fetch(self):
+  workflow_sha='9'*40
+  pr={**self.pr,'base':{'sha':BASE,'ref':'main','repo':{'full_name':'owner/repo'}},'head':{'sha':HEAD,'repo':{'full_name':'owner/repo'}}}
+  def api(*args):
+   return pr if '/pulls/' in args[-1] else {'default_branch':'main'}
+  with patch.object(integration,'gh',side_effect=api),patch.dict(integration.os.environ,{'GITHUB_EVENT_NAME':'workflow_dispatch','GITHUB_REF':'refs/heads/main','GITHUB_SHA':workflow_sha,'GITHUB_WORKFLOW_SHA':workflow_sha}),patch.object(integration,'git',return_value=workflow_sha) as git,patch.object(integration,'compose') as compose:
+   with self.assertRaisesRegex(ValueError,'no approved executor contract'):
+    integration.prepare(Path('/unused'),'owner/repo',UID,12,BASE,HEAD)
+  self.assertEqual([('rev-parse','HEAD')],[call.args[1:] for call in git.call_args_list])
+  compose.assert_not_called()
  def test_other_task_stale_dispatch_does_not_block_normal_ci(self):
   self.runs=[self.stale('task_'+'d'*32)]
   self.assertEqual(self.check()[1]['id'],1)

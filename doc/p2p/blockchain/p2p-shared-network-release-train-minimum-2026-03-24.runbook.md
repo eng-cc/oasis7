@@ -23,7 +23,7 @@
 - 当前总 verdict 已更新为 `shared_devnet legacy rehearsal pass; formal public_testnet/mainnet still gated`。
 - 在 formal `public_testnet` live-candidate readiness 与后续 release/public claims gate 通过前，对外只允许：
   - `limited playable technical preview`
-  - `crypto-hardened preview`
+  - the current public-status wording and claim envelope in the root `README.md` (currently `limited playable technical preview`)
   - `shared_devnet rehearsal evidence is recorded as pass, but it is legacy/rehearsal evidence only`
   - `formal public_testnet/mainnet readiness remains separately gated`
 
@@ -160,7 +160,7 @@
   - `public large shared world is launched`
 - 外部追问统一回到：
   - `当前仍是 limited playable technical preview。`
-  - `安全与治理硬化在推进，但仍是 crypto-hardened preview。`
+  - `当前公开状态以根 README 为准：项目处于 limited playable technical preview 阶段；正式公告仍在准备中。`
   - `shared_devnet rehearsal evidence 已补到 pass，但它只作 legacy/rehearsal evidence。`
   - `formal public_testnet / mainnet / public large-world launch 仍需单独 gate。`
 

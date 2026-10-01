@@ -15,7 +15,7 @@
     },
     {
       "path": "doc/.governance/document-semantic-review-overrides.json",
-      "content_sha256": "13dd6c826503c93a755aa6d02cb857c4f308f6a306ea0e4f81605dabb362ab6d"
+      "content_sha256": "97f45457e226d3eda4805d3f062a6da8d1b00da07515fae2a69844fbcb5b9356"
     },
     {
       "path": "doc/testing/evidence/inventory.json",
@@ -147,7 +147,7 @@
     },
     {
       "path": "doc/core/prd.md",
-      "content_sha256": "348c7c6e734df32fe8d5ea26e78696b6a6dacbc888628bb4b7543f238aaa4e79",
+      "content_sha256": "87a94578ce22980ed15f9d016b4abbecc8c72da7e2d84903599dbfeb8e65edf9",
       "registry_type": "professional_domain",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/core/README.md",
@@ -245,7 +245,7 @@
     },
     {
       "path": "doc/engineering/doc-governance/cross-layer-requirements-traceability.design.md",
-      "content_sha256": "77f64710ca0700892edb6562266c786f3a06d7a6f01993b88bf70904dd9a76e2",
+      "content_sha256": "2b9033c63e0c2bdc51edbc608170356480980b780417f1d4fa73c4a87a73a1b6",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -315,7 +315,7 @@
     },
     {
       "path": "doc/engineering/doc-governance/product-documentation-standard.design.md",
-      "content_sha256": "ec6e7f1f11217da6e7cf879ff46f713c5a68edcb557ee70b0121734247261832",
+      "content_sha256": "1bd27b92cc26a0151d12968db12492548a72ad6091140ce867e20c1e8ea34306",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -329,7 +329,7 @@
     },
     {
       "path": "doc/engineering/doc-governance/product-documentation-standard.prd.md",
-      "content_sha256": "0572d24f581086b05aa97ec298f232a7e1126145d9bd440fad2dc40cb9a3991e",
+      "content_sha256": "f94a25025f66761383a5b5c3218c6eddc51275f0d9c4bcec8eec68e1fd4cc81e",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -357,7 +357,7 @@
     },
     {
       "path": "doc/engineering/doc-governance/project-management-record-standard.design.md",
-      "content_sha256": "659fddda341209d144caa5a0a56a95a881e569ad2ee5f4ba0c2c00290f35c7d2",
+      "content_sha256": "06f375d75f7decadf93bc0ab8835a75b5b95586efa995944659d2f723c73c485",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -413,7 +413,7 @@
     },
     {
       "path": "doc/engineering/governance/environment-lanes-and-inventory-2026-05-29.md",
-      "content_sha256": "27769a299de2091a44aedc628afbcb8da5be9c1cf66e949764d2da62ccfe0633",
+      "content_sha256": "f932f1c3cfb33cf262d84bd069e653abcf8d9dd4fda7c91ec151c01c2012b6ad",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -497,7 +497,7 @@
     },
     {
       "path": "doc/engineering/workflow/ci-parallel-evidence-reuse.design.md",
-      "content_sha256": "0f4c3cf5ff03a6984c62d186b41a2e51110814a8e752f24cae3bdf90d9f3eff9",
+      "content_sha256": "2267eb7b8bc19bee8ec5124d6d61ea99e4b62eb1d9307c58d5de226fa16c28e6",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -511,7 +511,21 @@
     },
     {
       "path": "doc/engineering/workflow/ci-projection-publication.design.md",
-      "content_sha256": "21d55a17508fb4b9aeb8c2dc170201fae0c434f797192d1c98534d7fa2df777c",
+      "content_sha256": "9e76192e1fa1826c7693f59feaaa0188716b5f82ab7bfbe4423f663d645ff155",
+      "registry_type": "professional_domain",
+      "structural_owner": "repository_health_engineer",
+      "authority_entry": "doc/engineering/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "repository_health_engineer",
+      "object_kind": "design",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "engineering-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/engineering/workflow/ci-required-gate-p0-on-demand.design.md",
+      "content_sha256": "e7d4a75bf750c2e7a4aa99ce78aa5135c1ef0e77364201e830537477f5a438fb",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -553,7 +567,7 @@
     },
     {
       "path": "doc/engineering/workflow/source-of-truth.md",
-      "content_sha256": "baa90c33de051cfd80b654a69f5086e781b2a4ce4ec82f23d0de46edcb18df16",
+      "content_sha256": "0347f520030d45302ecccbee2fc1f5f8c4c3666dbd6513b8ca97b4c469e584cc",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -567,7 +581,7 @@
     },
     {
       "path": "doc/engineering/workflow/three-loop-completion-and-dependency.design.md",
-      "content_sha256": "fc7d968700c8694956cb852bb7734631ac0545a3242ccd694a11f8918c5d966b",
+      "content_sha256": "dc4795e6e56cf1bdcda1bea3b64d396d2c167fe7d916fe95e9326af3c8064a21",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -581,7 +595,7 @@
     },
     {
       "path": "doc/engineering/workflow/three-loop-role-adaptation.design.md",
-      "content_sha256": "de6982ac642fc3b5e1b19daca1e80b7b4eaec758626a59be8ec2162757f454c8",
+      "content_sha256": "d3c9769cea5f80d6d41b1bbef1615b3be47fa8a7be8c07e534a952c6e2bc888f",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -1337,7 +1351,7 @@
     },
     {
       "path": "doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md",
-      "content_sha256": "251b5fa0af0a2ecfd37569e33ea585cecf2b9df17e03cde19b5f8fdea44cf042",
+      "content_sha256": "1a474c2c04f76f5f91e23d4f791dc2448c2cbda5d57d1587fe2747dc9f88a917",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1435,7 +1449,7 @@
     },
     {
       "path": "doc/p2p/consensus/consensus-code-consolidation-to-oasis7-consensus.design.md",
-      "content_sha256": "138befa9c33d40d83475938c9af10f3b547d47e806189eade6d6bbad304587d8",
+      "content_sha256": "1b028c4323dd70233ec4eb86951bf392088efc5efdfae1ac911d5f8540b0b674",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1449,7 +1463,7 @@
     },
     {
       "path": "doc/p2p/consensus/consensus-code-consolidation-to-oasis7-consensus.prd.md",
-      "content_sha256": "f093572a50d66420b699b66568db46fc882a8c985ad8672eedd152eca8173a27",
+      "content_sha256": "6947fc754a33784d47caa3ca2b58f899494b735184bba957ae61d46801298efd",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1463,7 +1477,7 @@
     },
     {
       "path": "doc/p2p/design.md",
-      "content_sha256": "7016ea2d1e20369ed782fec96921952597fd394651e4246cc03f465aa9739110",
+      "content_sha256": "64771a8a5834eb7536e6c089f2b83751d07336848ada9e49cdbadaa5996f839f",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1491,7 +1505,7 @@
     },
     {
       "path": "doc/p2p/distfs/distfs-distributed-resilience.design.md",
-      "content_sha256": "1da9aada83dfc12cf659adbed0d6175aae6bcbd5b2b3d8c274dc10dacd05e042",
+      "content_sha256": "fa52ab88601a422c6ebc675d39a6dd7d7661ab661709673372b65035b0312c68",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1505,7 +1519,7 @@
     },
     {
       "path": "doc/p2p/distfs/distfs-distributed-resilience.prd.md",
-      "content_sha256": "27baa331cbc7d7e4d992000b8a33574f51968f47c5073af7a583e451aa1bcc7f",
+      "content_sha256": "93bdf4bd64254d3957bf03abbffaf4aea0cadfed42dd0a26c2a3e230e739bf4f",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1547,7 +1561,7 @@
     },
     {
       "path": "doc/p2p/distfs/distfs-production-hardening.design.md",
-      "content_sha256": "3af8ecd6905e0a43016ea7ccb9953803afd2de34a0ec4c7eeb49cd7f06975a9f",
+      "content_sha256": "12ef636b4fe6820aeceaf75d6624031072c60f884bc95bbbf19f31e95b22a2f5",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1561,7 +1575,7 @@
     },
     {
       "path": "doc/p2p/distfs/distfs-production-hardening.prd.md",
-      "content_sha256": "01f291deb82747482b46c89b754973ed71b968129094cf9b2510fbb06e89b08e",
+      "content_sha256": "67954f2eea410487c0e686f4008a21aacd12b187fe45fa25161b0b0a7b3c4962",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1715,7 +1729,7 @@
     },
     {
       "path": "doc/p2p/node/node-identity-replication-contract.design.md",
-      "content_sha256": "6bbf55020046332711649c560341cd01ca931bd70aa2411e218b220bbb1a0f4b",
+      "content_sha256": "7bdab3c011a3282a8dab79f75990e481b5bebb13df82c32b09725c95953c9590",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1729,7 +1743,7 @@
     },
     {
       "path": "doc/p2p/node/node-identity-replication-contract.prd.md",
-      "content_sha256": "6a72ae229c4cca7c78f9a36b324dd3166ec3d4422305fa2959e0b6d36c6b0837",
+      "content_sha256": "094c62f261c6fe7514a61e58c801e5caf0dd33aae789b55b785210f642136ddc",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1827,7 +1841,7 @@
     },
     {
       "path": "doc/p2p/observer/observer-sync-mode-runtime-metrics.design.md",
-      "content_sha256": "880d60bb1edbf592d9468e6f44c1c736fd1c8937a8b13a2baa6960b2c6116255",
+      "content_sha256": "2c678ae432fce25d7e8b3d68590b2af915dc801a284b2516980cc1773af278d1",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1841,7 +1855,7 @@
     },
     {
       "path": "doc/p2p/observer/observer-sync-mode-runtime-metrics.prd.md",
-      "content_sha256": "1ecb983b6a3bf7e24a68bb40dd2e28229410357509ea71a9557a877bb939e078",
+      "content_sha256": "afa857fb683fa12c0a80b3646da29a6a5538e93e2314bf1293969e92d8998252",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1897,7 +1911,7 @@
     },
     {
       "path": "doc/p2p/prd.md",
-      "content_sha256": "2810f8ca028acfecf085c8fdc15654f1b2c809be115b729752d866db82e994e2",
+      "content_sha256": "c6cbf1ce0f6b962e8531ce3768464a67667dc7b85765ad5093dc7f29b58b1c84",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -1967,7 +1981,7 @@
     },
     {
       "path": "doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md",
-      "content_sha256": "66dd00d30b687bd09531c89b2734891719c0a176e074f24a96215549fcfb723b",
+      "content_sha256": "92000bbde5f734191f6fbeed9ec49b0bb1448eeba2151e46a0740776c378d356",
       "registry_type": "professional_domain",
       "structural_owner": "blockchain_ops_engineer",
       "authority_entry": "doc/p2p/README.md",
@@ -2485,7 +2499,7 @@
     },
     {
       "path": "doc/product/agents-world-simulation/provider-agent-experience-continuity.prd.md",
-      "content_sha256": "9fc9a8fcc47debd6a89b9af77be2997605fb8c66383b366135d1174bc965264a",
+      "content_sha256": "303eaed48345c594ec3e648a33e95f065822a3b1ad12b52e325cb4639e4ea725",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2611,7 +2625,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/deterministic-world-execution.prd.md",
-      "content_sha256": "a122af0077b252d67d32f2abeadf14c4a8a802412cc6f5a7bb13ba40be0e8037",
+      "content_sha256": "5dd0899e2570d032880bd2762e161c02d177847e73bb548a716094bbee3211d7",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2625,7 +2639,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/distributed-consensus-and-state-availability.prd.md",
-      "content_sha256": "5342a3e0090fdef38314dde27ec34210f89ed08cecb72cf5b756a9c59d81f508",
+      "content_sha256": "37d350474efc2e473cbf640bece11239d4c08733af049a729db3307590648afe",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2639,7 +2653,7 @@
     },
     {
       "path": "doc/product/world-infrastructure/prd.md",
-      "content_sha256": "6a2ad6afb2721512a6b7d90cf8d1185333da2d2d08a96b09893477c562c821b8",
+      "content_sha256": "5511c9ee8f53ddd4f5f50e38ad2732ca03a9ba7c4868931fb576daad382f5a2e",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2681,7 +2695,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/communication-contracts-reputation-and-rd-continuity.prd.md",
-      "content_sha256": "9419edff0b46181c2445f52b6bfc50220c6827b01360829da7e5748866d5fa49",
+      "content_sha256": "04d2889203e0b5be32884501cd6283c4e534ab99c95ae4d3ad7bb026afcba428",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -2863,7 +2877,7 @@
     },
     {
       "path": "doc/product/world-rules-core-gameplay/prd.md",
-      "content_sha256": "86c0b03866707f3ec5608f8e58e3544f3534ceb0944d7f8081392ed71d8dcd4d",
+      "content_sha256": "ec68ea985dd86674051dc7c585f6c122c6aa09a0faffb56aaeb93904dba60eb2",
       "registry_type": "product_overlay",
       "structural_owner": "producer_system_designer",
       "authority_entry": "doc/product/README.md",
@@ -3829,7 +3843,7 @@
     },
     {
       "path": "doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.design.md",
-      "content_sha256": "cac0ae0257bbff09ff4110d677449b85d794a3f8fad9c404f02d579b741eeea4",
+      "content_sha256": "c9c41c05e250ef49d978e631935311e74ac7b129c311a6282d92c57e37801438",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -3843,7 +3857,7 @@
     },
     {
       "path": "doc/testing/benchmarks/mainstream-public-chain-testing-benchmark.prd.md",
-      "content_sha256": "8c8162ed154e6f1487061167e79a647e870f328b15a84558b36126fd15fcd8ed",
+      "content_sha256": "b32a78a9185a9e62208d989a03a68d22ed064681eebe8be62f2d808d9e7d0cef",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -3885,7 +3899,7 @@
     },
     {
       "path": "doc/testing/ci/ci-builtin-wasm-docker-canonical-gate.prd.md",
-      "content_sha256": "0bfec5ba14b04b33743d98c91a86a1fd89355083326224cfc29f43e58016aa96",
+      "content_sha256": "9abb208f69f74dfc391be5974f2ad300edeeb61daea853dc5132c3cd76c30f64",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -3913,7 +3927,7 @@
     },
     {
       "path": "doc/testing/ci/ci-test-coverage.prd.md",
-      "content_sha256": "8917af4bc89c27c760480288788d5a12fcb4aa30832d741b3765b9ff76722064",
+      "content_sha256": "b6e1e5543481a80e8b78de051280e4aeb2c8308411bcd5bbc79eacd6a8fefed9",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -3955,7 +3969,7 @@
     },
     {
       "path": "doc/testing/ci/ci-tiered-execution.design.md",
-      "content_sha256": "7f79e99a26a5e8d1d07bbb92ba274e6b6cf90bd833afa07051fc4552fd7807da",
+      "content_sha256": "7c3cea9b4e9f0fffffebafb64d8ed4277e588310299399915419341916063e71",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -3982,8 +3996,22 @@
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
     },
     {
+      "path": "doc/testing/ci/codeql-integration.design.md",
+      "content_sha256": "86fd318d5501e86d9bc18e31fb5548b8e71cd8a5d3340f1968bd4b80124b1b40",
+      "registry_type": "professional_domain",
+      "structural_owner": "qa_engineer",
+      "authority_entry": "doc/testing/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "qa_engineer",
+      "object_kind": "design",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "testing-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
       "path": "doc/testing/design.md",
-      "content_sha256": "54686512ffb54aa4c58e9a104cca4a6f14dbbff4f862064da9d1f9b4a270bb09",
+      "content_sha256": "403478648c77dbf734574e3c4c0f9d4dfba5da62aa3902a142e9aa0e02bf3719",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -4137,7 +4165,7 @@
     },
     {
       "path": "doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md",
-      "content_sha256": "108c3fb5e271826438d88522c5cc3410012b2b67747ab6189422a55a0d2e585b",
+      "content_sha256": "acf325f9129f86955f87aaa061564796ef0e03e50e0d3b408eeb0a59433cf397",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -4151,7 +4179,7 @@
     },
     {
       "path": "doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md",
-      "content_sha256": "fad0bc64b10dc805599f9f898f45c087bb779685028a49385eda9464e46bf1cf",
+      "content_sha256": "e22b7b0669aa7db6ab6578f8f20aa0c2396b8a9fad5416c5c351c0e605718da0",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -4277,7 +4305,7 @@
     },
     {
       "path": "doc/testing/manual/web-ui-agent-browser-closure-manual.manual.md",
-      "content_sha256": "93abeda2c0e2610d9eebafc9d0843d21a21e0d58a025f57d2c32b30b418b66ec",
+      "content_sha256": "0761cda406caf380cd7a54c27b820665180cdea35972e74e96d5f76bd423356a",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -4305,7 +4333,7 @@
     },
     {
       "path": "doc/testing/manual/web-ui-playwright-closure-manual.design.md",
-      "content_sha256": "152ee7254d5bf5058ffc48bba1c2d9dbbd9f6a49325df89979788d63d376c3fb",
+      "content_sha256": "0025d89aa83cfde4222799894edd5fdf37236da0a745e1ce603211f22104c933",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -4319,7 +4347,7 @@
     },
     {
       "path": "doc/testing/manual/web-ui-playwright-closure-manual.manual.md",
-      "content_sha256": "e0c8f480e8cf9afcf1dd4cfd25efee7577070df092cc1b20b7688f25225bc3bf",
+      "content_sha256": "33afd2aa5bdfdd030b2ff7d6af9852ca55af618154504b175243c2e8e2768a7b",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -4333,7 +4361,7 @@
     },
     {
       "path": "doc/testing/performance/compile-metrics-v2-warm-check.design.md",
-      "content_sha256": "84f9bcdeef5c1dcd5161adc8af037ad3f9ceb7ba59f2a4042561923d4e57ed54",
+      "content_sha256": "eed4abfd223500e09fea4665d6a23c5ebaedd086cc890dd21f448c5f817fe7e0",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -4347,7 +4375,7 @@
     },
     {
       "path": "doc/testing/performance/performance-coverage-gap-matrix-2026-06-09.md",
-      "content_sha256": "fd61b0ae091bf91aef5eb0b3464332e31880bc6eb5fbc3fc7a5596fd529d85c2",
+      "content_sha256": "2f753f244af1a6ec0668b15ec1f6f5a21a19939943e833a29c6f353a6a047979",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -4389,7 +4417,7 @@
     },
     {
       "path": "doc/testing/prd.md",
-      "content_sha256": "75d880d5d212b73f2abca162567cc6be140a8aaba3924c17b1b11c853649a593",
+      "content_sha256": "0792dcda956d551ff66a397f0cc4e53ddf9d727f79b70e3fa4105851b244add0",
       "registry_type": "professional_domain",
       "structural_owner": "qa_engineer",
       "authority_entry": "doc/testing/README.md",
@@ -4411,6 +4439,20 @@
       "semantic_decision_owner": "qa_engineer",
       "object_kind": "markdown_record",
       "lifecycle_candidate": "historical_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "testing-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/testing/schemas/world-execution-state-sync-attachment.schema.json",
+      "content_sha256": "e3aa6f6e341894bb2612a6f4a9fa2a3ea96eedf9227ce74a6735b948d6cac496",
+      "registry_type": "professional_domain",
+      "structural_owner": "qa_engineer",
+      "authority_entry": "doc/testing/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "qa_engineer",
+      "object_kind": "supporting_artifact",
+      "lifecycle_candidate": "review_required",
       "inventory_disposition": "retain_for_owner_review",
       "routing_batch": "testing-corpus-review",
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
@@ -5033,7 +5075,7 @@
     },
     {
       "path": "doc/world-runtime/design.md",
-      "content_sha256": "b0da2507c63bfdec9c4c2272cf227d41aee333beae273ad2762dd783f2eddd97",
+      "content_sha256": "b1277581ef636f4ec6bea7d4dbf2e199916986fc6ac3a4d36c48f213d5aecd5f",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5201,7 +5243,7 @@
     },
     {
       "path": "doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.design.md",
-      "content_sha256": "8485d5c4d8ca19fd00c23694de5b0e39996fd0e2d4e0dcbe47dd28d5cc55ff53",
+      "content_sha256": "0fdcec0f1a886025a0038150cc52051d6357961d1cb7739de1cb02a94a1b229e",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5215,7 +5257,7 @@
     },
     {
       "path": "doc/world-runtime/governance/zero-trust-governance-receipt-hardening-2026-02-26.prd.md",
-      "content_sha256": "bbea4b6c83c5225f125ebfa5c34a70870e485a3932f3f22b7a0d5c8d25c0ae60",
+      "content_sha256": "79659612342d07eee0c85b043d5a255caa4c78438939145bd938834ef17f0322",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5271,7 +5313,7 @@
     },
     {
       "path": "doc/world-runtime/module/module-lifecycle.md",
-      "content_sha256": "02811053b1414c8676772728535c5bd76820cd1f6fece63ea2593f09d177261c",
+      "content_sha256": "e77c557b1da058fde017122e2a1ffdd6b6b80e0d2ec09d22301896973e1e3ad7",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5313,7 +5355,7 @@
     },
     {
       "path": "doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md",
-      "content_sha256": "ed2d3b811706570159ea048e60d34e3c15859be9fb0733ec962a1203f123e8be",
+      "content_sha256": "ce60bde273558ce58927392c3432416c9d1ee73a6a16740645a711a1abbcd4f4",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5327,7 +5369,7 @@
     },
     {
       "path": "doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md",
-      "content_sha256": "3b5ac42f31d4d0e826e48a4d77254502d298a32f3145486b155130b71e01f011",
+      "content_sha256": "23d184d6cc08f6b19bbff1cfb3156472b4b03f5a62b92a0fe870d7f6ebe8fdd6",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5383,7 +5425,7 @@
     },
     {
       "path": "doc/world-runtime/prd.md",
-      "content_sha256": "f6fde455ef85e9243d1b9abdf854e6215c588b213bb7ca0c5a89de0b52c750f4",
+      "content_sha256": "b7f3837ff53f0a1f1149b2e156764cc3162e5a6fc131f11747865a491f6970ce",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5397,7 +5439,7 @@
     },
     {
       "path": "doc/world-runtime/runtime/agent-cognition-lifecycle.design.md",
-      "content_sha256": "8f6e837c2dc27e4d97162bc3c20774dbd290ff6a86d71a85b54e69b244932290",
+      "content_sha256": "a5f458f402966a5439dcaf1c2c4f7b0eb5735f5f9d9983142436c60be77eca3b",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5411,7 +5453,7 @@
     },
     {
       "path": "doc/world-runtime/runtime/agent-cognition-lifecycle.prd.md",
-      "content_sha256": "e0dfc208ffff2ccd5a816f896de44ac9d482eb5dc397fa50a94307abdb80bf5a",
+      "content_sha256": "d6be3ef24d48af427912ffe39a48424d04a5adc4c077db472a1662a7a1079cc7",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5425,7 +5467,7 @@
     },
     {
       "path": "doc/world-runtime/runtime/chain-pos-control-plane.design.md",
-      "content_sha256": "287a5c1e6db22afe662202185ab6bad35030ad779fa12ad2e8076867a6bfb26b",
+      "content_sha256": "66593eead1003f1d720e782353e2b67381f324a78a7a9cbed6e8fb2f121c804e",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5439,7 +5481,7 @@
     },
     {
       "path": "doc/world-runtime/runtime/chain-pos-control-plane.prd.md",
-      "content_sha256": "9bbd18c4bca4b6164ea00e9f96d56fb03812b2d26d34bc75e0a6ee934b47ea19",
+      "content_sha256": "314141466870d7cc29f631ce321df4f7347ec5c87c7d53530bc2d9574ab72359",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5495,7 +5537,7 @@
     },
     {
       "path": "doc/world-runtime/runtime/runtime-integration.md",
-      "content_sha256": "4f3bb4998fe6c7dab802343b2a58e7f2ebb8c6d81813426265c600984f3c8804",
+      "content_sha256": "f2f496414b58e9465c0a7d7bc6be5614df0a5d59fe16ee966c3320a6818991e1",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5537,7 +5579,7 @@
     },
     {
       "path": "doc/world-runtime/runtime/runtime-storage-footprint-governance.design.md",
-      "content_sha256": "6b36ed51726d044107fc05a410bb669e48a0109fa06c7e9a876ea7a593dda45e",
+      "content_sha256": "e782c25042dc64350345edc76bc2281996bba703761e517ee6fa683a47c0724c",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5551,7 +5593,7 @@
     },
     {
       "path": "doc/world-runtime/runtime/runtime-storage-footprint-governance.prd.md",
-      "content_sha256": "c007a2c6dcd03e02f40f94b2354d5e7180b442db6bd3d273e94bdd0222c52729",
+      "content_sha256": "749cec30680780bcbd67a4d479fbc74d3906016a4a90c39cd3e49a65d5e97a3c",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5635,7 +5677,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-deterministic-build-pipeline.design.md",
-      "content_sha256": "1637fe7eb738f60a3d1aa843066237eed898900b1dbe58e5ae37492409f298db",
+      "content_sha256": "7b6e49eae532c4e2d73e2eb6e5fe69336885bfede8c058ddd4d98af3e984cc68",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5649,7 +5691,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md",
-      "content_sha256": "0004fd987f6176e99e5a2f94f65dab5c44971a55091766f9724a7722b1cb75eb",
+      "content_sha256": "9ac008a7261053dcd856e63d0f32d79fe83e877e3a96035958f4dc453e612a87",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5663,7 +5705,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-executor.design.md",
-      "content_sha256": "31f6e01a87df29abf20f0f4dff618b783e66f306f6f0f926eff8c575148ec15b",
+      "content_sha256": "9be9fadabc058409577e8afca3697029bed36f22fe2c4ff164269a2b1f869c9b",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5677,7 +5719,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-executor.prd.md",
-      "content_sha256": "08f729f87177f77431389a4902fe301d6ff4dc5796a654402abd9aeb9f6c35d9",
+      "content_sha256": "3a7b898987abb46db1c3776241cdd5b7d2a912a0b55f9c9bce2acd8eeeec70f1",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5691,7 +5733,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-interface.md",
-      "content_sha256": "66cb9c87a46ba6ba8faea69d4cb828ca0a4bc01a38a0b230b03b949ec3e4710d",
+      "content_sha256": "85fc0d196f89129059789111977ec244615ac524f78d97c7aa1b9c1475f6c04a",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5705,7 +5747,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-observability-timing-metrics.design.md",
-      "content_sha256": "43cc319c515fd2037aab5a9dc6c979ac20a60cf42890c4e4042fe66a171847b2",
+      "content_sha256": "e7a9c0d94ee0443d9a5a269d8e1cfcf56fb5dcc7b3c04af8c5d4351c1d2a7196",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5719,7 +5761,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-observability-timing-metrics.prd.md",
-      "content_sha256": "9a57f4073c2b6ff44810e2958bae9712efeed5c4468d3f97a21c476cf9d438d6",
+      "content_sha256": "e254f26a181baaf22214e5f26de357c703c09b1a6907a29ef1975f3c06170dbe",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5733,7 +5775,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-sdk.design.md",
-      "content_sha256": "8a46e5c74fb4b03ddfff6f1d530c25b2cb62a9fd094b0a6d2c83dc42500850c4",
+      "content_sha256": "4e7faef9c44944e8fe4e6180102e5b0bd7f23c8282825fcfa3e30cf2bf9c7fce",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5747,7 +5789,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-sdk.prd.md",
-      "content_sha256": "a357547acee796c8f23e7721a1bf45e13fa4c40ab4c5156bc0c7c3362f2ce69a",
+      "content_sha256": "e91667aec59ddcb1ab69aebc2cef47b49c99d8656aaeb77bffccedbf013411cc",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -6027,7 +6069,7 @@
     },
     {
       "path": "doc/world-simulator/llm/continuous-agent-harness.design.md",
-      "content_sha256": "8d4732c61cd94e613435e8dd96b9481c4f2c73cf9faac536a4119436d800f71f",
+      "content_sha256": "11d7dba7f4b52fdbad0f8892c8ccc0a7e86347f21c9ca757d336a6019d1988a2",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6041,7 +6083,7 @@
     },
     {
       "path": "doc/world-simulator/llm/continuous-agent-harness.prd.md",
-      "content_sha256": "b00e29c3d9a97b908bf0dddde93bd400c6a2e5d703681122fd937acb6cf7963e",
+      "content_sha256": "c1179f073abc2769a60926a49b6fb92326ec29df3f4cb413ced3ede6ac7208c5",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6230,6 +6272,20 @@
       "authority_layer": "professional_domain",
       "semantic_decision_owner": "runtime_engineer",
       "object_kind": "prd",
+      "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "world-simulator-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/world-simulator/llm/provider-switch-intent-continuity.design.md",
+      "content_sha256": "4b57c87ae0a34b4e4791952e793cbee6b6186d60f7c5180599b875a63dbdedf2",
+      "registry_type": "professional_domain",
+      "structural_owner": "runtime_engineer",
+      "authority_entry": "doc/world-simulator/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "runtime_engineer",
+      "object_kind": "design",
       "lifecycle_candidate": "active_candidate",
       "inventory_disposition": "retain_for_owner_review",
       "routing_batch": "world-simulator-corpus-review",
@@ -6671,7 +6727,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-control-plane-split-live-playback.design.md",
-      "content_sha256": "f58b9de2569834b81fd7f8e53fa6930edcfbbc0cb8aef84bd16ede3c41cf9725",
+      "content_sha256": "80490b476ad40841d249f0bcc31825d11760d6bb0bfd8a2e56756222b2d7a767",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6685,7 +6741,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md",
-      "content_sha256": "918c60f5e7a7c05bf5b13c4525888db29e48559c3b3d37e7e154abab3ab7cbfe",
+      "content_sha256": "43ffcc94d6687cbf9b07b3d25aa406dba666f74e4f7b59fc200800b3cbc5b956",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",
@@ -6811,7 +6867,7 @@
     },
     {
       "path": "doc/world-simulator/viewer/viewer-manual.manual.md",
-      "content_sha256": "4da321111f5a00e019d8180762efa3537e67c1543298f03328b3ee1c54e04838",
+      "content_sha256": "35b2f5f5a7a0a7f63f56cc528a441397a2c8abe4949bd3990e492975f712fbeb",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-simulator/README.md",

@@ -11,7 +11,8 @@ PM 内容规范：[项目管理记录规范](../doc/engineering/doc-governance/p
 - GitHub Issues + GitHub Project 是 authoritative project-management truth；GitHub Project 是 active work queue。
 - `Task UID` is stable identity. GitHub issue number / Project item id 只是外部对象句柄。
 - `.pm/github-project-sync/tasks.json` is the generated task-to-Issue/Project mapping cache; it may be regenerated and is not task truth. Do not edit it manually.
-- `.pm/github-project-sync/task-archive.jsonl` is the immutable repo-local archive for historical task metadata and evidence; it is not a planning queue or current-status source.
+- Task-scoped records, working memory, signals, sessions, stage/gate state, and migration archives are ignored local caches; they are not process truth and must not be committed. Ordinary repository lint must work when these caches are absent.
+- Historical operations that need evidence unavailable from complete live GitHub Issue/Project readback must fail closed; a local archive cannot replace GitHub evidence.
 - Task issue evidence comments are the formal evidence sink. Fallback evidence is temporary until replayed.
 
 ## Start and Inspect
@@ -21,10 +22,17 @@ PM 内容规范：[项目管理记录规范](../doc/engineering/doc-governance/p
 ./scripts/pm/workflow-report.sh --phase start|close|review --role <role>
 ./scripts/pm/github-project-workflow.sh --json sync
 ./scripts/pm/github-project-workflow.sh --json audit --task-uid <TASK-UID>
+```
+
+`sync` refreshes generated views. `audit` checks selected task/mapping consistency.
+
+`step3-gate` is an explicit historical diagnostic, not a routine lint, task, or PR gate:
+
+```bash
 ./scripts/pm/github-project-workflow.sh --json step3-gate
 ```
 
-`sync` refreshes generated views. `audit` checks selected task/mapping consistency. `step3-gate` performs the expensive full-history coverage check.
+If its legacy archive is absent, only this diagnostic fails closed; ordinary repository lint and current task/PR operations do not depend on it.
 
 ## Evidence and Execution
 

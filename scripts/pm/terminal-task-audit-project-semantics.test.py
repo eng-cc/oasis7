@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import shutil
 import subprocess
@@ -22,6 +23,8 @@ class TerminalTaskAuditProjectSemantics(unittest.TestCase):
         item: dict,
         issue_project_items: list[dict] | None = None,
         project_repo: str = "fixture/repo",
+        live_issue_body: str | None = None,
+        seed_single_pr_receipts: bool = False,
     ) -> dict:
         with tempfile.TemporaryDirectory() as directory:
             scratch = Path(directory)
@@ -53,15 +56,90 @@ class TerminalTaskAuditProjectSemantics(unittest.TestCase):
                     "repository": "fixture/repo",
                     "issue_number": 11,
                     "pr_number": 22,
+                    "pr_url": "https://github.com/fixture/repo/pull/22",
+                    "completion_mode": "pr_task",
                     "project_item_id": "ITEM1",
                     "canonical_worktree": str(scratch / "retired-task"),
                     "task_branch": "task/retired",
                 }},
             }) + "\n", encoding="utf-8")
-            subprocess.run([
+            receipt_root_result = subprocess.run([
                 "python3", str(ROOT / "scripts/pm/canonical-receipt-root.py"),
                 "--default-worktree", str(repo), "--task-uid", UID, "--create",
             ], check=True, text=True, capture_output=True)
+            receipt_root = Path(receipt_root_result.stdout.strip())
+            issue_body = live_issue_body or (
+                f"task_uid: {UID}\n"
+                "- status: `done`\n"
+                "- workflow_phase: `post_merge_done`\n"
+                "- completion_mode: `pr_task`\n"
+                "- pr_number: `22`\n"
+                "- pr_url: `https://github.com/fixture/repo/pull/22`\n"
+            )
+            if seed_single_pr_receipts:
+                worktree = str(scratch / "retired-task")
+                branch = "task/retired"
+                merge_receipt_sha = "a" * 64
+                main_sync_receipt_sha = "b" * 64
+                terminal = {
+                    "receipt_type": "oasis7_terminal_cleanup",
+                    "issuer": "post-merge-cleanup",
+                    "task_uid": UID,
+                    "repository": "fixture/repo",
+                    "issue_number": 11,
+                    "pr_number": 22,
+                    "worktree": worktree,
+                    "branch": branch,
+                    "merge_receipt_sha256": merge_receipt_sha,
+                    "main_sync_receipt_sha256": main_sync_receipt_sha,
+                }
+                terminal_path = receipt_root / "terminal-cleanup-receipt.json"
+                terminal_path.write_text(json.dumps(terminal), encoding="utf-8")
+                terminal_sha = hashlib.sha256(terminal_path.read_bytes()).hexdigest()
+                effects = ("issue_close", "project_update", "evidence_comment")
+                operations = {
+                    effect: {
+                        "operation_id": hashlib.sha256(
+                            f"{UID}:post_merge_done:{effect}".encode()
+                        ).hexdigest(),
+                        "effect": effect,
+                        "intent": True,
+                        "readback": True,
+                        "committed": True,
+                    }
+                    for effect in effects
+                }
+                (receipt_root / "finalizer-ledger.json").write_text(json.dumps({
+                    "schema": "oasis7_finalizer_ledger_v1",
+                    "task_uid": UID,
+                    "operations": operations,
+                }), encoding="utf-8")
+                (receipt_root / "terminal-tombstone.json").write_text(json.dumps({
+                    "schema": "oasis7_terminal_tombstone_v1",
+                    "task_uid": UID,
+                    "repository": "fixture/repo",
+                    "issue_number": 11,
+                    "pr_number": 22,
+                    "canonical_worktree": worktree,
+                    "task_branch": branch,
+                    "workflow_phase": "post_merge_done",
+                    "terminal_receipt_sha256": terminal_sha,
+                    "checkout_recreation_forbidden": True,
+                }), encoding="utf-8")
+                mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+                record = mapping["tasks"][UID]
+                record.update(
+                    merge_receipt_sha256=merge_receipt_sha,
+                    phase_receipts={
+                        "main_sync": {"receipt_type": "oasis7_main_sync"},
+                        "post_merge_done": terminal,
+                    },
+                    phase_receipt_sha256={
+                        "main_sync": main_sync_receipt_sha,
+                        "post_merge_done": terminal_sha,
+                    },
+                )
+                mapping_path.write_text(json.dumps(mapping), encoding="utf-8")
             payload = {"data": {"nodes": [{
                 "id": item.get("id", "ITEM1"),
                 "project": {
@@ -93,7 +171,11 @@ class TerminalTaskAuditProjectSemantics(unittest.TestCase):
                 "import json, os, sys\n"
                 "args = sys.argv[1:]\n"
                 "if args[:2] == ['issue', 'view']:\n"
-                " print(json.dumps({'state':'CLOSED','projectItems':json.loads(os.environ['ISSUE_PROJECT_ITEMS'])}))\n"
+                " fields = args[args.index('--json') + 1].split(',')\n"
+                " issue = {'number':11,'url':'https://github.com/fixture/repo/issues/11',\n"
+                "          'state':'CLOSED','body':os.environ['LIVE_ISSUE_BODY'],\n"
+                "          'projectItems':json.loads(os.environ['ISSUE_PROJECT_ITEMS'])}\n"
+                " print(json.dumps({key:issue[key] for key in fields}))\n"
                 "elif args[:2] == ['pr', 'view']:\n"
                 " print(json.dumps({'state':'MERGED','mergedAt':'2026-08-27T00:00:00Z','headRefName':'task/retired'}))\n"
                 "elif args[:2] == ['api', 'graphql']:\n"
@@ -108,13 +190,16 @@ class TerminalTaskAuditProjectSemantics(unittest.TestCase):
                 "PATH": f"{bindir}:{os.environ.get('PATH', '')}",
                 "PROJECT_PAYLOAD": json.dumps(payload),
                 "ISSUE_PROJECT_ITEMS": json.dumps(issue_project_items or []),
+                "LIVE_ISSUE_BODY": issue_body,
             }
             result = subprocess.run([
                 "python3", str(pm / "terminal-task-audit.py"), "--repo-root", str(repo),
                 "--task-uid", UID, "--json",
             ], env=environment, text=True, capture_output=True)
             self.assertIn(result.returncode, (0, 1), result.stderr)
-            return json.loads(result.stdout)
+            if result.stdout.strip():
+                return json.loads(result.stdout)
+            return {"status": "rejected", "error": result.stderr.strip()}
 
     def test_bound_item_wins_over_unrelated_done_item(self) -> None:
         result = self.run_audit(
@@ -157,6 +242,38 @@ class TerminalTaskAuditProjectSemantics(unittest.TestCase):
 
         result = self.run_audit(item={}, project_repo="other/repo")
         self.assertFalse(result["checks"]["project_item_identity"], result)
+
+    def test_canonical_live_single_pr_route_reconciles(self) -> None:
+        result = self.run_audit(
+            item={},
+            live_issue_body=(
+                f"task_uid: {UID}\n"
+                "- status: `done`\n"
+                "- workflow_phase: `post_merge_done`\n"
+                "- completion_mode: `pr_task`\n"
+                "- pr_number: `22`\n"
+                "- pr_url: `https://github.com/fixture/repo/pull/22`\n"
+            ),
+            seed_single_pr_receipts=True,
+        )
+        self.assertEqual("reconciled", result["status"], result)
+
+    def test_live_aggregate_issue_cannot_use_stale_single_pr_cache(self) -> None:
+        result = self.run_audit(
+            item={},
+            live_issue_body=(
+                f"task_uid: {UID}\n"
+                "- status: `done`\n"
+                "- workflow_phase: `task_done`\n"
+                "- completion_mode: `ordered_delivery_aggregate`\n"
+                "- aggregate_plan_comment_id: `701`\n"
+                "- aggregate_plan_sha256: `sha256:"
+                + "c" * 64
+                + "`\n"
+            ),
+            seed_single_pr_receipts=True,
+        )
+        self.assertNotEqual("reconciled", result["status"], result)
 
 
 if __name__ == "__main__":
