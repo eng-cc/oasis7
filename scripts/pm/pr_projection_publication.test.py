@@ -1453,6 +1453,62 @@ class PublicationMatrixTests(unittest.TestCase):
             self.assertEqual(1, len(adapter.prs))
             self.assertEqual(1, adapter.events.count("create-pr"))
 
+    def test_entrypoint_no_pr_retry_recovers_push_after_lost_readback(self):
+        for lease_oid in (None, "8" * 40):
+            with self.subTest(lease_oid=lease_oid), tempfile.TemporaryDirectory() as temp:
+                publication, projection = make_publication(507)
+                adapter = FakeAdapter(publication, projection, initial_head=lease_oid)
+                journal = self.journal(temp, publication)
+                original_read = adapter.read_source_ref
+
+                def lose_pushed_readback(ref):
+                    if "push" in adapter.events:
+                        raise OSError("lost push readback")
+                    return original_read(ref)
+
+                adapter.read_source_ref = lose_pushed_readback
+                with self.assertRaisesRegex(publication_module.PublicationError, "NETWORK_UNCERTAIN"):
+                    self.run_publish_entrypoint(temp, publication, projection, adapter, journal)
+                self.assertEqual(publication["source_head_oid"], adapter.source_ref)
+                self.assertEqual([], adapter.prs, "push readback failed before PR creation")
+                with journal.locked():
+                    push = next(item for item in journal.read()["actions"]
+                                if item["action_id"] == "push:" + publication["publication_id"])
+                self.assertEqual(lease_oid, push["expected"]["lease_oid"])
+                self.assertEqual("uncertain", push["state"])
+                adapter.read_source_ref = original_read
+                adapter.events.clear()
+
+                result = self.run_publish_entrypoint(temp, publication, projection, adapter, journal)
+
+                self.assertEqual("published", result["status"])
+                self.assertEqual(1, len(adapter.prs))
+                self.assertEqual(1, adapter.events.count("create-pr"))
+                self.assertNotIn("push", adapter.events)
+                self.assertIn("read-source", adapter.events)
+                with journal.locked():
+                    recovered = next(item for item in journal.read()["actions"]
+                                     if item["action_id"] == push["action_id"])
+                self.assertEqual(push["expected"], recovered["expected"])
+                self.assertEqual("observed", recovered["state"])
+
+    def test_entrypoint_no_pr_retry_rejects_remote_conflict(self):
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection = make_publication(508)
+            adapter = FakeAdapter(publication, projection, initial_head="9" * 40)
+            journal = self.journal(temp, publication)
+            with journal.locked():
+                journal.intent("push:" + publication["publication_id"], "push_source_ref", {
+                    "source_ref": publication["source_ref"],
+                    "new_oid": publication["source_head_oid"], "lease_oid": None,
+                })
+            with self.assertRaisesRegex(publication_module.PublicationError, "SOURCE_SUPERSEDED"):
+                self.run_publish_entrypoint(temp, publication, projection, adapter, journal)
+            self.assertNotIn("push", adapter.events)
+            self.assertNotIn("create-pr", adapter.events)
+            self.assertNotIn("record-pr", adapter.events)
+            self.assertNotIn("publish-reciprocal", adapter.events)
+
     def test_entrypoint_retries_exact_published_pr_without_reusing_push_lease(self):
         with tempfile.TemporaryDirectory() as temp:
             lease_oid = "8" * 40

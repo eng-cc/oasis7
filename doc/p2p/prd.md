@@ -340,7 +340,7 @@ world-state registry 的有效 membership/stake/signer 是 validator 投票真�
   - `doc/product/world-rules-core-gameplay/prd.md`
   - `doc/world-simulator/viewer/viewer-manual.manual.md`
   - `doc/world-simulator/launcher/game-client-launcher-runtime-session-continuity.prd.md`
-  - `oasis7_viewer_live.release.example.toml`
+  - `doc/world-simulator/launcher/README.md`（当前 Launcher 发布/分发配置入口；托管 chain runtime 边界见 `game-client-launcher-runtime-session-continuity.prd.md`，旧 Viewer release-config 样例只从固定提交 `25fbcd7cf590c5e1b1248119d407cc7c34e8e634` 追溯）
   - `doc/testing/longrun/p2p-longrun-soak-and-chaos.prd.md`
   - `doc/p2p/token/mainchain-token-allocation-mechanism.prd.md`
   - `testing-manual.md`

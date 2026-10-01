@@ -70,11 +70,15 @@ fn auth_fixture(store_dir: &Path) -> (InstallationConfig, Policy, BatchGrant, Ip
         callers: vec![
             CallerBinding {
                 uid: 100,
-                work_subdir: "caller-100".to_owned(),
+                work_dir: "/caller-jobs-100".to_owned(),
+                work_device_id: 1,
+                work_inode: 2,
             },
             CallerBinding {
                 uid: 200,
-                work_subdir: "caller-200".to_owned(),
+                work_dir: "/caller-jobs-200".to_owned(),
+                work_device_id: 1,
+                work_inode: 2,
             },
         ],
         release_id: "release-01".to_owned(),
@@ -280,6 +284,13 @@ mod job_path_tests {
 
     fn installation(store_dir: &std::path::Path, other_uid: u32) -> InstallationConfig {
         let caller_uid = oasis7_local_signer::installation::current_uid().max(100);
+        let current_root = store_dir.parent().unwrap().join("caller-current");
+        let other_root = store_dir.parent().unwrap().join("caller-other");
+        private_dir(&current_root);
+        private_dir(&other_root);
+        use std::os::unix::fs::MetadataExt;
+        let current = fs::metadata(&current_root).unwrap();
+        let other = fs::metadata(&other_root).unwrap();
         InstallationConfig {
             schema_version: INSTALLATION_SCHEMA.to_owned(),
             installation_id: "install-01".to_owned(),
@@ -292,11 +303,15 @@ mod job_path_tests {
             callers: vec![
                 CallerBinding {
                     uid: caller_uid,
-                    work_subdir: "caller-current".to_owned(),
+                    work_dir: current_root.display().to_string(),
+                    work_device_id: current.dev(),
+                    work_inode: current.ino(),
                 },
                 CallerBinding {
                     uid: other_uid,
-                    work_subdir: "caller-other".to_owned(),
+                    work_dir: other_root.display().to_string(),
+                    work_device_id: other.dev(),
+                    work_inode: other.ino(),
                 },
             ],
             release_id: "release-01".to_owned(),
@@ -329,9 +344,8 @@ mod job_path_tests {
         let caller_uid = oasis7_local_signer::installation::current_uid().max(100);
         let other_uid = caller_uid.saturating_add(1);
         let installation = installation(&store_dir, other_uid);
-        let work_root = store_dir.join("work");
-        let current_root = work_root.join("caller-current");
-        let other_root = work_root.join("caller-other");
+        let current_root = temp.0.join("caller-current");
+        let other_root = temp.0.join("caller-other");
         let target_job = current_root.join("owned-job");
         private_dir(&target_job);
 

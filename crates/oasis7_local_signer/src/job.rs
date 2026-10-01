@@ -1,4 +1,5 @@
 use std::fs;
+use std::os::unix::fs::MetadataExt;
 use std::path::{Path, PathBuf};
 
 use base64::Engine;
@@ -6,9 +7,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::error::SignerError;
 use crate::identity::sha256_hex;
-use crate::local_fs::{
-    create_private_dir, read_regular, reject_symlink_components, write_private_new,
-};
+use crate::local_fs::{Directory, read_regular, reject_symlink_components};
 use crate::protocol::{
     ExplicitNull, IpcRequest, MAX_METADATA_BYTES, MAX_ROLLBACK_PAYLOAD_BYTES, SignContext,
     validate_id,
@@ -75,10 +74,52 @@ pub fn resolve_work_dir(
     let caller = installation
         .caller(caller_uid)
         .ok_or(SignerError::AuthorizationDenied)?;
-    Ok(Path::new(&installation.store_dir)
-        .join("work")
-        .join(&caller.work_subdir)
-        .join(job_id))
+    Ok(Path::new(&caller.work_dir).join(job_id))
+}
+
+pub struct JobDirectory {
+    directory: Directory,
+    path: PathBuf,
+}
+
+impl JobDirectory {
+    pub fn open(
+        installation: &InstallationConfig,
+        caller_uid: u32,
+        job_id: &str,
+        create: bool,
+    ) -> Result<Self, SignerError> {
+        let path = resolve_work_dir(installation, caller_uid, job_id)?;
+        let caller = installation
+            .caller(caller_uid)
+            .ok_or(SignerError::AuthorizationDenied)?;
+        let root = Directory::open(Path::new(&caller.work_dir), false)?;
+        let metadata = root.metadata()?;
+        validate_caller_metadata(&metadata, caller_uid)?;
+        if metadata.dev() != caller.work_device_id || metadata.ino() != caller.work_inode {
+            return Err(SignerError::InstallationDrift);
+        }
+        let directory = root.child(job_id, create)?;
+        validate_caller_metadata(&directory.metadata()?, caller_uid)?;
+        Ok(Self { directory, path })
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+    pub fn present(&self, name: &str) -> Result<bool, SignerError> {
+        self.directory.exists(name)
+    }
+    pub fn prepare(&self) -> Result<PreparedJob, SignerError> {
+        prepare_open_job(&self.directory)
+    }
+    pub fn read_request(&self) -> Result<JobRequest, SignerError> {
+        let bytes = self.directory.read("request.json", MAX_METADATA_BYTES)?;
+        let request: JobRequest =
+            serde_json::from_slice(&bytes).map_err(|_| SignerError::RecoveryRequired)?;
+        validate_job_request(&request)?;
+        Ok(request)
+    }
 }
 
 pub fn prepare_job_dir(
@@ -89,16 +130,7 @@ pub fn prepare_job_dir(
     if crate::installation::current_uid() != caller_uid {
         return Err(SignerError::AuthorizationDenied);
     }
-    let job_dir = resolve_work_dir(installation, caller_uid, job_id)?;
-    let caller_root = job_dir.parent().ok_or(SignerError::InstallationDrift)?;
-    reject_symlink_components(caller_root)?;
-    validate_caller_work_root(caller_root, caller_uid)?;
-    if !work_dir_exists(&job_dir) {
-        create_private_dir(&job_dir)?;
-        crate::local_fs::sync_dir(caller_root)?;
-    }
-    validate_caller_work_root(&job_dir, caller_uid)?;
-    Ok(job_dir)
+    Ok(JobDirectory::open(installation, caller_uid, job_id, true)?.path)
 }
 
 /// Resolve a caller-owned job directory without creating it.
@@ -110,27 +142,25 @@ pub fn resolve_existing_work_dir(
     caller_uid: u32,
     job_id: &str,
 ) -> Result<PathBuf, SignerError> {
-    let job_dir = resolve_work_dir(installation, caller_uid, job_id)?;
-    let caller_root = job_dir.parent().ok_or(SignerError::InstallationDrift)?;
-    reject_symlink_components(&job_dir)?;
-    validate_caller_work_root(caller_root, caller_uid)?;
-    validate_caller_work_root(&job_dir, caller_uid)?;
-    Ok(job_dir)
+    Ok(JobDirectory::open(installation, caller_uid, job_id, false)?.path)
 }
 
 pub fn prepare_job(work_dir: &Path) -> Result<PreparedJob, SignerError> {
     reject_symlink_components(work_dir)?;
-    let input_path = work_dir.join("input.json");
-    let payload_path = work_dir.join("payload.bin");
-    let request_path = work_dir.join("request.json");
-    let payload_binding_path = work_dir.join("request.payload.sha256");
-    let input_bytes = read_regular(&input_path, MAX_METADATA_BYTES)?;
-    let payload = read_regular(&payload_path, MAX_ROLLBACK_PAYLOAD_BYTES)?;
+    prepare_open_job(&Directory::open(work_dir, false)?)
+}
+
+fn prepare_open_job(directory: &Directory) -> Result<PreparedJob, SignerError> {
+    let input_bytes = directory.read("input.json", MAX_METADATA_BYTES)?;
+    let payload = directory.read("payload.bin", MAX_ROLLBACK_PAYLOAD_BYTES)?;
     let input: JobInput = serde_json::from_slice(&input_bytes)
         .map_err(|_| SignerError::InvalidInput("job input schema is invalid".to_owned()))?;
     validate_job_input(&input)?;
     let payload_hash = sha256_hex(&payload);
-    let request = match (request_path.exists(), payload_binding_path.exists()) {
+    let request = match (
+        directory.exists("request.json")?,
+        directory.exists("request.payload.sha256")?,
+    ) {
         (false, false) => {
             let request = JobRequest {
                 schema_version: JOB_SCHEMA.to_owned(),
@@ -144,17 +174,17 @@ pub fn prepare_job(work_dir: &Path) -> Result<PreparedJob, SignerError> {
             };
             let request_bytes = serde_json::to_vec(&request)
                 .map_err(|_| SignerError::InvalidInput("job request is invalid".to_owned()))?;
-            write_private_new(&payload_binding_path, payload_hash.as_bytes())?;
-            write_private_new(&request_path, &request_bytes)?;
-            crate::local_fs::sync_dir(work_dir)?;
+            directory.write_new("request.payload.sha256", payload_hash.as_bytes())?;
+            directory.write_new("request.json", &request_bytes)?;
+            directory.sync()?;
             request
         }
         (true, true) => {
-            let request_bytes = read_regular(&request_path, MAX_METADATA_BYTES)?;
+            let request_bytes = directory.read("request.json", MAX_METADATA_BYTES)?;
             let request: JobRequest = serde_json::from_slice(&request_bytes)
                 .map_err(|_| SignerError::RecoveryRequired)?;
             validate_job_request(&request)?;
-            let previous_payload_hash = read_regular(&payload_binding_path, 64)?;
+            let previous_payload_hash = directory.read("request.payload.sha256", 64)?;
             if previous_payload_hash != payload_hash.as_bytes()
                 || !request_matches(&input, &request)
             {
@@ -270,15 +300,14 @@ pub fn work_dir_exists(work_dir: &Path) -> bool {
         .unwrap_or(false)
 }
 
-fn validate_caller_work_root(path: &Path, caller_uid: u32) -> Result<(), SignerError> {
-    let metadata = fs::symlink_metadata(path).map_err(|_| SignerError::InstallationDrift)?;
+fn validate_caller_metadata(metadata: &fs::Metadata, caller_uid: u32) -> Result<(), SignerError> {
     #[cfg(unix)]
     {
         use std::os::unix::fs::{MetadataExt, PermissionsExt};
         if !metadata.is_dir()
             || metadata.file_type().is_symlink()
             || metadata.uid() != caller_uid
-            || metadata.permissions().mode() & 0o077 != 0
+            || metadata.permissions().mode() & 0o7777 != 0o700
         {
             return Err(SignerError::InstallationDrift);
         }

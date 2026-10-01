@@ -18,6 +18,10 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+_advisory_spec = importlib.util.spec_from_file_location('codeql_advisory', Path(__file__).with_name('codeql_advisory.py'))
+codeql_advisory = importlib.util.module_from_spec(_advisory_spec)
+_advisory_spec.loader.exec_module(codeql_advisory)
+
 SUCCESS = {"SUCCESS", "NEUTRAL", "SKIPPED"}
 HOLDS = {"manual_packaging_ci_hold", "user_requested_merge_hold"}
 KEYED_Q_APPLICABILITY_SCHEMA = "oasis7-ci-keyed-q-applicability/v1"
@@ -132,7 +136,7 @@ def graphql_pages(repo: str, number: int, surface: str) -> list[dict[str, Any]]:
                 "repository(owner:$owner,name:$repo){pullRequest(number:$number){"
                 "commits(last:1){nodes{commit{statusCheckRollup{"
                 "contexts(first:100,after:$cursor){pageInfo{hasNextPage endCursor} nodes{"
-                "__typename ... on CheckRun{name conclusion status checkSuite{app{databaseId}}} "
+                "__typename ... on CheckRun{databaseId name conclusion status checkSuite{app{databaseId}}} "
                 "... on StatusContext{context state}"
                 "}}}}}}}}}"
             )
@@ -174,7 +178,7 @@ def graphql_pr_snapshot(repo: str, number: int) -> dict[str, list[dict[str, Any]
         reviews(first:100){pageInfo{hasNextPage} nodes{id body url submittedAt createdAt state author{login}}}
         reviewThreads(first:100){pageInfo{hasNextPage} nodes{id isResolved}}
         commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){pageInfo{hasNextPage} nodes{
-          __typename ... on CheckRun{name conclusion status checkSuite{app{databaseId}}}
+          __typename ... on CheckRun{databaseId name conclusion status checkSuite{app{databaseId}}}
           ... on StatusContext{context state}
         }}}}}}
       }}
@@ -299,7 +303,7 @@ def load_live(selector: str) -> dict[str, Any]:
     return payload
 
 
-def decision(data: dict[str, Any], admin_authorized: bool, *, evidence_mode: str = "production") -> dict[str, Any]:
+def decision(data: dict[str, Any], admin_authorized: bool, *, evidence_mode: str = "production", advisory_reader=None) -> dict[str, Any]:
     blockers: list[str] = []
     hold_truth = data.get("merge_hold")
     if not isinstance(hold_truth, dict) or not hold_truth.get("kind"):
@@ -372,6 +376,8 @@ def decision(data: dict[str, Any], admin_authorized: bool, *, evidence_mode: str
     if any(not bool(item.get("isResolved", item.get("is_resolved", False))) for item in data.get("threads") or []):
         blockers.append("unresolved review threads remain")
     merge_state = str(data.get("mergeStateStatus") or "").upper()
+    advisory = (codeql_advisory.explain_unstable(data, advisory_reader)
+                if merge_state == 'UNSTABLE' and advisory_reader is not None else None)
     allowed_admin_rule_types = {"required_status_checks", "required_pull_request_reviews", "required_conversation_resolution", "deletion", "non_fast_forward"}
     policy_rule_types = set((policy or {}).get("active_rule_types") or []) if isinstance(policy, dict) else set()
     policy_proves_approval_only = bool(
@@ -393,6 +399,11 @@ def decision(data: dict[str, Any], admin_authorized: bool, *, evidence_mode: str
     use_admin = approval_only and not blockers
     if merge_state == "BLOCKED" and not approval_only:
         blockers.append("BLOCKED is not a proven review-approval-only state")
+    elif merge_state == 'UNSTABLE' and advisory and advisory.get('explained') and not blockers:
+        # Explanation is not approval or admin authority. The old admin path
+        # only accepts BLOCKED/BEHIND, so REVIEW_REQUIRED cannot gain a bypass.
+        if str(data.get('reviewDecision') or '').upper() == 'REVIEW_REQUIRED':
+            blockers.append('UNSTABLE advisory explanation does not satisfy required review approval')
     elif merge_state in {"DIRTY", "UNKNOWN", "UNSTABLE"}:
         blockers.append(f"blocking merge state: {merge_state}")
     observed_at = dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
@@ -414,6 +425,8 @@ def decision(data: dict[str, Any], admin_authorized: bool, *, evidence_mode: str
         "pr_number": data.get("number"),
         "pr_url": data.get("url"),
         "policy_discovery": policy,
+        "mergeStateStatus": data.get('mergeStateStatus'),
+        "codeql_advisory_explanation": advisory,
     }
     if not blockers and evidence_mode == "production":
         result["readiness_receipt"] = {"receipt_type": "oasis7_pr_lifecycle_ready", "issuer": "oasis7_pr_lifecycle_gate/v1", "repository": epoch_input["repository"], "pr_number": data.get("number"), "head_oid": epoch_input["head_oid"], "observed_at": observed_at, "gate_epoch": gate_epoch}
@@ -1595,8 +1608,17 @@ print(json.dumps(proof))
 
 
 def production_decision(data, admin_authorized, root, uid, tool_root, integration_run_id=None):
+    # Endpoint cache lives for one decision only; healthy polls issue no
+    # provenance readbacks and advisory scan identity never enters CI digests.
+    advisory_cache = {}
+    def advisory_read(endpoint):
+        if endpoint not in advisory_cache:
+            advisory_cache[endpoint] = _run_json(['gh', 'api', endpoint])
+        return advisory_cache[endpoint]
+    advisory_options = ({'advisory_reader': advisory_read}
+                        if str(data.get('mergeStateStatus') or '').upper() == 'UNSTABLE' else {})
     # Never create a production receipt before fresh local authority admission.
-    result = decision(data, admin_authorized, evidence_mode='pending_live_loop')
+    result = decision(data, admin_authorized, evidence_mode='pending_live_loop', **advisory_options)
     if not result['ready_for_merge']: return result
     try:
         base, head = data.get('baseRefOid', ''), data.get('headRefOid', '')
@@ -1627,7 +1649,7 @@ def production_decision(data, admin_authorized, root, uid, tool_root, integratio
         result.update(ready_for_merge=False, status='blocked', use_admin_merge=False)
         result['blockers'].append('live loop admission: ' + str(exc))
         return result
-    result = decision({**data, 'integration_ci': integration}, admin_authorized, evidence_mode='production')
+    result = decision({**data, 'integration_ci': integration}, admin_authorized, evidence_mode='production', **advisory_options)
     if integration is not None:
         result['readiness_receipt']['integration_ci'] = integration
     return result
