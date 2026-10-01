@@ -22,254 +22,163 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$TMPDIR/bin"
+TEST_ROOT="$TMPDIR/repo"
+mkdir -p "$TEST_ROOT/scripts/pm" "$TEST_ROOT/bin"
+cp "$ROOT_DIR/scripts/pr-review-thread-closeout.sh" "$TEST_ROOT/scripts/pr-review-thread-closeout.sh"
+cp "$ROOT_DIR/scripts/pm/github_pr_snapshot.py" "$TEST_ROOT/scripts/pm/github_pr_snapshot.py"
+cp "$ROOT_DIR/scripts/pm/fixtures/github_api_test_adapter.py" "$TEST_ROOT/scripts/pm/github_api.py"
+cat > "$TEST_ROOT/scripts/worktree-harness-lib.sh" <<'SH'
+wh_require_git_worktree() {
+  git rev-parse --is-inside-work-tree >/dev/null 2>&1 || exit 1
+}
+SH
+git -C "$TEST_ROOT" init -q
+git -C "$TEST_ROOT" remote add origin https://github.com/eng-cc/oasis7.git
+
 cat > "$TMPDIR/state.json" <<'EOF'
 {
-  "reviewThreadsPageInfo": {
-    "hasNextPage": false,
-    "endCursor": null
-  },
+  "reviewThreadsPageInfo": {"hasNextPage": false, "endCursor": null},
   "threads": [
-    {
-      "id": "PRRT_1",
-      "isResolved": false,
-      "isOutdated": false,
-      "path": "doc/scripts/prd.md",
-      "line": 111,
-      "originalLine": 111,
-      "startLine": null,
-      "originalStartLine": null,
-      "comments": {
-        "pageInfo": {
-          "hasNextPage": false,
-          "endCursor": null
-        },
-        "nodes": [
-          {
-            "id": "C_1",
-            "body": "Need a helper for review-thread closeout.",
-            "createdAt": "2026-04-23T12:00:00Z",
-            "url": "https://example.test/thread/1",
-            "author": { "login": "reviewer-a" }
-          }
-        ]
-      }
-    },
-    {
-      "id": "PRRT_2",
-      "isResolved": false,
-      "isOutdated": true,
-      "path": "doc/scripts/project.md",
-      "line": 250,
-      "originalLine": 249,
-      "startLine": null,
-      "originalStartLine": null,
-      "comments": {
-        "pageInfo": {
-          "hasNextPage": false,
-          "endCursor": null
-        },
-        "nodes": [
-          {
-            "id": "C_2",
-            "body": "Please update the project row too.",
-            "createdAt": "2026-04-23T12:10:00Z",
-            "url": "https://example.test/thread/2",
-            "author": { "login": "reviewer-b" }
-          }
-        ]
-      }
-    },
-    {
-      "id": "PRRT_3",
-      "isResolved": true,
-      "isOutdated": false,
-      "path": "doc/engineering/project.md",
-      "line": 148,
-      "originalLine": 148,
-      "startLine": null,
-      "originalStartLine": null,
-      "comments": {
-        "pageInfo": {
-          "hasNextPage": false,
-          "endCursor": null
-        },
-        "nodes": [
-          {
-            "id": "C_3",
-            "body": "Fixed in latest push.",
-            "createdAt": "2026-04-23T12:20:00Z",
-            "url": "https://example.test/thread/3",
-            "author": { "login": "reviewer-c" }
-          }
-        ]
-      }
-    }
+    {"id":"PRRT_1","isResolved":false,"isOutdated":false,"path":"doc/scripts/prd.md","line":111,"originalLine":111,"startLine":null,"originalStartLine":null,"comments":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[{"id":"C_1","body":"Need a helper for review-thread closeout.","createdAt":"2026-04-23T12:00:00Z","url":"https://example.test/thread/1","author":{"login":"reviewer-a"}}]}},
+    {"id":"PRRT_2","isResolved":false,"isOutdated":true,"path":"doc/scripts/project.md","line":250,"originalLine":249,"startLine":null,"originalStartLine":null,"comments":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[{"id":"C_2","body":"Please update the project row too.","createdAt":"2026-04-23T12:10:00Z","url":"https://example.test/thread/2","author":{"login":"reviewer-b"}}]}},
+    {"id":"PRRT_3","isResolved":true,"isOutdated":false,"path":"doc/engineering/project.md","line":148,"originalLine":148,"startLine":null,"originalStartLine":null,"comments":{"pageInfo":{"hasNextPage":false,"endCursor":null},"nodes":[{"id":"C_3","body":"Fixed in latest push.","createdAt":"2026-04-23T12:20:00Z","url":"https://example.test/thread/3","author":{"login":"reviewer-c"}}]}}
   ]
 }
 EOF
 
-cat > "$TMPDIR/bin/gh" <<'EOF'
+cat > "$TEST_ROOT/bin/gh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
+STATE_FILE="$GH_FIXTURE_STATE"
+QUERY=""
+THREAD_ID=""
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    -f)
+      [[ "$2" == query=* ]] && QUERY="${2#query=}"
+      [[ "$2" == threadId=* ]] && THREAD_ID="${2#threadId=}"
+      shift 2
+      ;;
+    -F)
+      [[ "$2" == threadId=* ]] && THREAD_ID="${2#threadId=}"
+      shift 2
+      ;;
+    *) shift ;;
+  esac
+done
 
-STATE_FILE="$(dirname "$0")/../state.json"
-
-if [[ "$1" == "repo" && "$2" == "view" ]]; then
-  printf '{"name":"oasis7","owner":{"login":"eng-cc"}}\n'
-  exit 0
-fi
-
-if [[ "$1" == "pr" && "$2" == "view" ]]; then
-  printf '{"number":145,"url":"https://github.com/eng-cc/oasis7/pull/145","headRefName":"task/test","baseRefName":"main","reviewDecision":"REVIEW_REQUIRED","mergeStateStatus":"BLOCKED"}\n'
-  exit 0
-fi
-
-if [[ "$1" == "api" && "$2" == "graphql" ]]; then
-  shift 2
-  query=""
-  thread_id=""
-  while [[ $# -gt 0 ]]; do
-    case "$1" in
-      -f)
-        if [[ "$2" == query=* ]]; then
-          query="${2#query=}"
-          shift 2
-        else
-          shift 2
-        fi
-        ;;
-      -F)
-        case "$2" in
-          threadId=*)
-            thread_id="${2#threadId=}"
-            ;;
-        esac
-        shift 2
-        ;;
-      *)
-        shift
-        ;;
-    esac
-  done
-
-  if [[ "$query" == *"resolveReviewThread"* ]]; then
-    python3 - "$STATE_FILE" "$thread_id" <<'PY'
-from __future__ import annotations
-
-import json
-import sys
+if [[ "$QUERY" == *"resolveReviewThread"* ]]; then
+  echo mutation >> "$GH_FIXTURE_CALLS"
+  python3 - "$STATE_FILE" "$THREAD_ID" <<'PY'
+import json,sys
 from pathlib import Path
-
-state_path = Path(sys.argv[1])
-thread_id = sys.argv[2]
-payload = json.loads(state_path.read_text(encoding="utf-8"))
+path=Path(sys.argv[1]); thread_id=sys.argv[2]
+payload=json.loads(path.read_text())
 for thread in payload["threads"]:
     if thread["id"] == thread_id:
         thread["isResolved"] = True
         break
-state_path.write_text(json.dumps(payload), encoding="utf-8")
-print(json.dumps({"data": {"resolveReviewThread": {"thread": {"id": thread_id, "isResolved": True}}}}))
-PY
-    exit 0
-  fi
-
-  python3 - "$STATE_FILE" <<'PY'
-from __future__ import annotations
-
-import json
-import sys
-from pathlib import Path
-
-state_path = Path(sys.argv[1])
-payload = json.loads(state_path.read_text(encoding="utf-8"))
-print(json.dumps({"data": {"repository": {"pullRequest": {"reviewThreads": {"pageInfo": payload.get("reviewThreadsPageInfo", {"hasNextPage": False, "endCursor": None}), "nodes": payload["threads"]}}}}}))
+path.write_text(json.dumps(payload))
+print(json.dumps({"data":{"resolveReviewThread":{"thread":{"id":thread_id,"isResolved":True}}}}))
 PY
   exit 0
 fi
 
-echo "unexpected gh invocation: $*" >&2
-exit 1
-EOF
-chmod +x "$TMPDIR/bin/gh"
-
-python3 - "$TMPDIR/state.json" <<'PY'
-from __future__ import annotations
-
-import json
-import sys
+echo snapshot >> "$GH_FIXTURE_CALLS"
+python3 - "$STATE_FILE" "$QUERY" <<'PY'
+import json,sys
 from pathlib import Path
-
-state_path = Path(sys.argv[1])
-payload = json.loads(state_path.read_text(encoding="utf-8"))
-payload["threads"][0]["comments"]["nodes"][0]["body"] = "A" * 1_500_000
-payload["threads"][1]["comments"]["nodes"][0]["body"] = "B" * 1_500_000
-state_path.write_text(json.dumps(payload), encoding="utf-8")
+state=json.loads(Path(sys.argv[1]).read_text())
+threads=state["threads"]
+for thread in threads:
+    thread["comments"]["pageInfo"] = {"hasNextPage":False,"endCursor":None}
+data={"viewer":{"login":"fixture-user"},"rateLimit":{"cost":1,"remaining":4999,"used":1,"resetAt":"2026-04-23T13:00:00Z","limit":5000},"repository":{"nameWithOwner":"eng-cc/oasis7","pullRequest":{"number":145,"url":"https://github.com/eng-cc/oasis7/pull/145","state":"OPEN","isDraft":False,"body":"","mergeable":"MERGEABLE","mergeStateStatus":"BLOCKED","reviewDecision":"REVIEW_REQUIRED","headRefName":"task/test","headRefOid":"0123456789abcdef","baseRefName":"main","baseRefOid":"fedcba9876543210","comments":{"pageInfo":{"hasNextPage":False,"endCursor":None},"nodes":[]},"reviews":{"pageInfo":{"hasNextPage":False,"endCursor":None},"nodes":[]},"reviewThreads":{"pageInfo":state.get("reviewThreadsPageInfo",{"hasNextPage":False,"endCursor":None}),"nodes":threads},"commits":{"nodes":[{"commit":{"oid":"0123456789abcdef","statusCheckRollup":{"contexts":{"pageInfo":{"hasNextPage":False,"endCursor":None},"nodes":[]}}}}]}}}}
+print(json.dumps({"data":data}))
 PY
+SH
+chmod +x "$TEST_ROOT/bin/gh"
+
+export PATH="$TEST_ROOT/bin:$PATH"
+export GH_FIXTURE_STATE="$TMPDIR/state.json"
+export GH_FIXTURE_CALLS="$TMPDIR/calls.log"
+: > "$GH_FIXTURE_CALLS"
 
 REPORT_FILE="$TMPDIR/report.json"
-PATH="$TMPDIR/bin:$PATH" env -u TMPDIR "$ROOT_DIR/scripts/pr-review-thread-closeout.sh" 145 --json --unresolved-only > "$REPORT_FILE"
+"$TEST_ROOT/scripts/pr-review-thread-closeout.sh" 145 --json --unresolved-only > "$REPORT_FILE"
 python3 - "$REPORT_FILE" <<'PY'
-from __future__ import annotations
-
-import json
-import sys
+import json,sys
 from pathlib import Path
+payload=json.loads(Path(sys.argv[1]).read_text())
+assert payload["pr"]["number"] == 145
+assert payload["summary"]["total_threads"] == 3
+assert payload["summary"]["reported_threads"] == 2
+assert payload["summary"]["unresolved_threads"] == 2
+assert not payload["summary"]["partial_scan"]
+assert all(not thread["is_resolved"] for thread in payload["threads"])
+assert payload["threads"][0]["latest_comment"]["body"] == "Need a helper for review-thread closeout."
+PY
 
-payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-if payload["summary"]["total_threads"] != 3:
-    raise SystemExit("expected total_threads=3")
-if payload["summary"]["reported_threads"] != 2:
-    raise SystemExit("expected unresolved-only report to contain 2 threads")
-if payload["summary"]["unresolved_threads"] != 2:
-    raise SystemExit("expected unresolved_threads=2")
-if payload["summary"]["partial_scan"]:
-    raise SystemExit("expected complete review-thread scan")
-if any(thread["is_resolved"] for thread in payload["threads"]):
-    raise SystemExit("unresolved-only report should not contain resolved threads")
+SUMMARY_FILE="$TMPDIR/summary.json"
+"$TEST_ROOT/scripts/pr-review-thread-closeout.sh" 145 --json --summary > "$SUMMARY_FILE"
+python3 - "$SUMMARY_FILE" <<'PY'
+import json,sys
+from pathlib import Path
+path=Path(sys.argv[1]); payload=json.loads(path.read_text())
+assert payload["summary"]["summary"] is True
+assert payload["summary"]["reported_threads"] == 3
+assert all(thread["latest_comment"] is None for thread in payload["threads"])
+assert path.stat().st_size < 20_000
 PY
 
 RESOLVE_FILE="$TMPDIR/resolve.json"
-PATH="$TMPDIR/bin:$PATH" "$ROOT_DIR/scripts/pr-review-thread-closeout.sh" 145 --json --resolve-all-unresolved > "$RESOLVE_FILE"
-python3 - "$RESOLVE_FILE" <<'PY'
-from __future__ import annotations
-
-import json
-import sys
+"$TEST_ROOT/scripts/pr-review-thread-closeout.sh" 145 --json --resolve-all-unresolved > "$RESOLVE_FILE"
+python3 - "$RESOLVE_FILE" "$GH_FIXTURE_CALLS" <<'PY'
+import json,sys
 from pathlib import Path
-
-payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-if payload["resolved_now"]["count"] != 2:
-    raise SystemExit("expected resolve-all to resolve 2 threads")
-if payload["summary"]["unresolved_threads"] != 0:
-    raise SystemExit("expected unresolved_threads=0 after resolve-all")
-if payload["summary"]["resolved_threads"] != 3:
-    raise SystemExit("expected all 3 threads to be resolved after mutation")
+payload=json.loads(Path(sys.argv[1]).read_text())
+calls=Path(sys.argv[2]).read_text().splitlines()
+assert payload["resolved_now"]["count"] == 2
+assert payload["summary"]["unresolved_threads"] == 0
+assert payload["summary"]["resolved_threads"] == 3
+assert calls[-4:] == ["snapshot", "mutation", "mutation", "snapshot"], calls
 PY
 
 python3 - "$TMPDIR/state.json" <<'PY'
-from __future__ import annotations
-
-import json
-import sys
+import json,sys
 from pathlib import Path
-
-state_path = Path(sys.argv[1])
-payload = json.loads(state_path.read_text(encoding="utf-8"))
-payload["reviewThreadsPageInfo"] = {"hasNextPage": True, "endCursor": "cursor-1"}
-state_path.write_text(json.dumps(payload), encoding="utf-8")
+path=Path(sys.argv[1]); payload=json.loads(path.read_text())
+payload["reviewThreadsPageInfo"]={"hasNextPage":True,"endCursor":"cursor-1"}
+path.write_text(json.dumps(payload))
 PY
-
 PARTIAL_ERR="$TMPDIR/partial.err"
-if PATH="$TMPDIR/bin:$PATH" env -u TMPDIR "$ROOT_DIR/scripts/pr-review-thread-closeout.sh" 145 --json --unresolved-only > "$TMPDIR/partial.json" 2>"$PARTIAL_ERR"; then
+if "$TEST_ROOT/scripts/pr-review-thread-closeout.sh" 145 --json --unresolved-only > "$TMPDIR/partial.json" 2>"$PARTIAL_ERR"; then
   echo "expected partial review-thread scan to fail" >&2
   exit 1
 fi
-if ! grep -q "review thread scan is partial" "$PARTIAL_ERR"; then
-  echo "expected explicit partial scan error" >&2
-  cat "$PARTIAL_ERR" >&2
+python3 - "$PARTIAL_ERR" <<'PY'
+import json,sys
+from pathlib import Path
+payload=json.loads(Path(sys.argv[1]).read_text())
+assert payload["reason"] == "incomplete_snapshot", payload
+PY
+
+set +e
+GH_FIXTURE_EXTERNAL_WAIT=1 "$TEST_ROOT/scripts/pr-review-thread-closeout.sh" 145 --json \
+  >"$TMPDIR/external-wait.json" 2>"$TMPDIR/external-wait.err"
+EXTERNAL_WAIT_STATUS=$?
+set -e
+if [[ "$EXTERNAL_WAIT_STATUS" -ne 75 ]]; then
+  echo "expected external-wait exit 75, got $EXTERNAL_WAIT_STATUS" >&2
+  cat "$TMPDIR/external-wait.err" >&2
   exit 1
 fi
+python3 - "$TMPDIR/external-wait.err" <<'PY'
+import json,sys
+from pathlib import Path
+payload=json.loads(Path(sys.argv[1]).read_text())
+assert payload["status"] == "external_wait", payload
+assert payload["retry_after_seconds"] == 120, payload
+PY
 
 python3 - "$ROOT_DIR/scripts/pr-review-thread-closeout.sh" <<'PY'
 import pathlib,re,sys
@@ -279,5 +188,7 @@ assert 'MSYS*|MINGW*|CYGWIN*' in preamble,preamble
 assert 'export TMPDIR' in preamble,preamble
 assert not re.search(r'^\s*\*\)',preamble,re.M),preamble
 PY
+
+python3 "$ROOT_DIR/scripts/pm/github_pr_snapshot.test.py"
 
 echo "pr-review-thread-closeout.test: OK"

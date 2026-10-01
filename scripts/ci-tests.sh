@@ -393,7 +393,18 @@ run_workflow_governance_operational_contract_tests() {
   run python3 ./scripts/security/codeql-health.test.py
   run python3 ./scripts/security/codeql-acceptance.test.py
   run python3 ./scripts/pm/codeql-advisory.test.py
+  run python3 ./scripts/pm/github-api.test.py
+  run python3 ./scripts/pm/github-api-concurrency.test.py
+  run python3 ./scripts/pm/github-project-api-budget.test.py
+  run python3 ./scripts/pm/github-observation.test.py
+  run python3 ./scripts/pm/github_pr_snapshot.test.py
+  run python3 ./scripts/pm/portable-file-lock.test.py
+  run python3 ./scripts/pm/graphql-budget-red.test.py
+  run python3 ./scripts/pm/pr-graphql-call-budget.test.py
   run bash ./scripts/pm/pr-lifecycle-gate.test.sh
+  run bash ./scripts/pm/pr-lifecycle-trust.test.sh
+  run bash ./scripts/pm/pr-watch-loop.test.sh
+  run bash ./scripts/pr-review-thread-closeout.test.sh
   run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/pr_projection_publication.test.py
   run bash ./scripts/pm/lint.test.sh
   run bash ./scripts/pm/github-project-workflow.test.sh

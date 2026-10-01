@@ -31,6 +31,8 @@ INPUT_TREE = "f" * 40
 CONFIG_DIGEST = "sha256:" + "1" * 64
 INVENTORY_DIGEST = "sha256:" + "2" * 64
 REQUEST_KEY = "sha256:" + "3" * 64
+TEST_UNIT = "unit:rust:crate-a"
+RESULT_ARTIFACT_ID = 901
 POLICY_IDENTITY = {
     "schema": "oasis7-ci-effective-policy-identity/v1",
     "digest": "sha256:" + "4" * 64,
@@ -112,6 +114,20 @@ class KeyedLifecycleTests(unittest.TestCase):
         ), result)
 
     def reusable_proof(self):
+        source_attempt = {
+            "schema": "oasis7-ci-trusted-source-attempt/v1",
+            "request_key": REQUEST_KEY,
+            "workflow_run_id": 101,
+            "run_attempt": 2,
+            "check_app_id": 42,
+            "check_run_id": 201,
+            "job_id": 301,
+            "job_name": "required-gate",
+            "plan_artifact_id": 801,
+            "plan_artifact_name": "required-plan-v2.json",
+            "result_artifacts": [{"unit_id": TEST_UNIT, "artifact_id": RESULT_ARTIFACT_ID,
+                                  "name": "required-result-v2.json"}],
+        }
         decision = {
             "identity": {
                 "source_head_oid": HEAD,
@@ -125,8 +141,20 @@ class KeyedLifecycleTests(unittest.TestCase):
             "effective_policy_identity": POLICY_IDENTITY,
             "test_evidence": "reusable",
             "blockers": [],
-            "reused_units": ["unit:rust:crate-a"],
+            "reused_units": [TEST_UNIT],
             "required_test_units": [],
+            "evidence_locators": [{"kind": "trusted-source-attempt", "id": source_attempt}],
+            "item_decisions": [{
+                "kind": "test", "id": TEST_UNIT, "disposition": "reusable",
+                "evidence_locator": {"kind": "github-check-artifact", "id": {
+                    "unit_id": TEST_UNIT,
+                    "run_id": source_attempt["workflow_run_id"],
+                    "run_attempt": source_attempt["run_attempt"],
+                    "check_app_id": str(source_attempt["check_app_id"]),
+                    "check_run_id": source_attempt["check_run_id"],
+                    "artifact_id": RESULT_ARTIFACT_ID,
+                }},
+            }],
         }
         assessment = {
             "schema": GATE.KEYED_Q_APPLICABILITY_SCHEMA,
@@ -145,9 +173,10 @@ class KeyedLifecycleTests(unittest.TestCase):
             "planner_config_sha256": CONFIG_DIGEST,
             "effective_policy_identity": POLICY_IDENTITY,
             "inventory_digest": INVENTORY_DIGEST,
-            "required_test_units": ["unit:rust:crate-a"],
+            "required_test_units": [TEST_UNIT],
             "closure_status": "complete",
             "test_evidence": "reusable",
+            "trusted_source_attempt": source_attempt,
             "decision": decision,
         }
         assessment["decision_digest"] = GATE._canonical_digest(decision)
@@ -162,6 +191,7 @@ class KeyedLifecycleTests(unittest.TestCase):
         }
         proof = {
             "request_key": REQUEST_KEY,
+            "trusted_source_attempt": source_attempt,
             "workflow_run_id": 101,
             "run_attempt": 2,
             "check_app_id": 42,
@@ -253,6 +283,10 @@ class KeyedLifecycleTests(unittest.TestCase):
             "blockers": [],
             "reused_units": [],
             "required_test_units": [],
+            "evidence_locators": [{
+                "kind": "trusted-source-attempt",
+                "id": proof["trusted_source_attempt"],
+            }],
         }
         assessment["test_evidence"] = "disabled"
         assessment["decision"] = decision

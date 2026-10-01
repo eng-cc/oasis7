@@ -119,17 +119,9 @@ def list_issue_numbers(repo: str, limit: int) -> list[int]:
 
 
 def broad_rate_limit_guard() -> dict[str, Any]:
-    try:
-        payload=json.loads(run_text(["gh","api","graphql","-f","query=query { rateLimit { remaining resetAt } }"]))
-        rate=((payload.get("data") or {}).get("rateLimit") or {})
-    except Exception as exc:
-        return {"status":"capability_blocked","reason":"graphql_rate_limit_unavailable","error":str(exc),"resumable":True}
-    remaining,reset_at=rate.get("remaining"),str(rate.get("resetAt") or "")
-    if not isinstance(remaining,int) or not reset_at:
-        return {"status":"capability_blocked","reason":"graphql_rate_limit_unknown","resumable":True}
-    if remaining < 100:
-        return {"status":"capability_blocked","reason":"graphql_budget_insufficient","remaining":remaining,"resetAt":reset_at,"resumable":True}
-    return {"status":"ok","remaining":remaining,"resetAt":reset_at}
+    sync_mod = load_module(pathlib.Path(__file__).with_name("github-project-sync.py"),
+                           "github_project_sync_audit_budget")
+    return sync_mod.broad_rate_limit_guard()
 
 
 def pr_view(repo: str, number: int) -> dict[str, Any]:
@@ -379,7 +371,8 @@ def main() -> int:
     if args.global_maintenance:
         budget=broad_rate_limit_guard()
         if budget["status"] != "ok":
-            print(json.dumps(budget,indent=2,sort_keys=True)); return 2
+            print(json.dumps(budget,indent=2,sort_keys=True))
+            return 75 if budget.get("status") == "external_wait" else 2
 
     results = audit(args)
     payload = {"status": "ok", "close": args.close, "results": results}
@@ -396,4 +389,13 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        code = main()
+    except Exception as exc:
+        sync_mod = load_module(pathlib.Path(__file__).with_name("github-project-sync.py"),
+                               "github_project_sync_audit_error")
+        api_code = sync_mod.github_api_error_exit(exc, "audit-pr-watch-issues")
+        if api_code is None:
+            raise
+        raise SystemExit(api_code)
+    raise SystemExit(code)

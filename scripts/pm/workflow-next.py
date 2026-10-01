@@ -939,7 +939,25 @@ def command_for(
         if not pr or not pr.isdigit() or not pr_url:
             add_blocker(blockers, "ambiguous state: PR watch phase lacks bound PR identity")
             return []
-        return ["python3", "./scripts/pm/pr-lifecycle-gate.py", pr, "--task-uid", uid, "--json"]
+        pm_dir = root / "scripts/pm"
+        gate_path = pm_dir / "pr-lifecycle-gate.py"
+        supports_observation = False
+        try:
+            gate_source = gate_path.read_text(encoding="utf-8") if gate_path.is_file() and not gate_path.is_symlink() else ""
+            supports_observation = (
+                'parser.add_argument("--observe"' in gate_source
+                and 'parser.add_argument("--watch"' in gate_source
+                and all((pm_dir / name).is_file() and not (pm_dir / name).is_symlink()
+                        for name in ("github_api.py", "portable_file_lock.py", "github_observation.py",
+                                     "github_pr_snapshot.py"))
+            )
+        except OSError:
+            supports_observation = False
+        command = ["python3", "./scripts/pm/pr-lifecycle-gate.py", pr, "--task-uid", uid]
+        if supports_observation:
+            command.extend(["--observe", "--watch"])
+        command.append("--json")
+        return command
     if phase == "task_done":
         terminal_root = default_root or root
         if status == "done" and task.get("completion_mode") == "non_pr_task":

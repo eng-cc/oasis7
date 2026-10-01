@@ -2,13 +2,18 @@
 """Isolated provider readbacks; these fixtures are not hosted acceptance."""
 import copy
 import importlib.util
+import json
 from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import patch
 
 spec = importlib.util.spec_from_file_location('codeql_advisory', Path(__file__).with_name('codeql_advisory.py'))
 module = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(module)
+api_spec = importlib.util.spec_from_file_location('github_api_for_codeql_test', Path(__file__).with_name('github_api.py'))
+api = importlib.util.module_from_spec(api_spec)
+api_spec.loader.exec_module(api)
 
 
 class AdvisoryTests(unittest.TestCase):
@@ -112,6 +117,57 @@ class AdvisoryTests(unittest.TestCase):
         self.responses['repos/owner/repo/actions/runs/40/attempts/1/jobs?per_page=100']['total_count'] = 2
         self.assertTrue(module.explain_unstable(self.data, self.read)['explained'])
         self.assertEqual(len(self.calls), len(set(self.calls)))
+
+    def test_typed_api_failures_escape_advisory_provenance_fallback(self):
+        now = 2_000_000_000.0
+        cases = [
+            (429, {'Retry-After': '120'}, {'message': 'secondary rate limit'},
+             'secondary_rate_limit', 'external_wait', 120),
+            (403, {}, {'message': 'Resource not accessible by integration'},
+             'permission_denied', 'capability_blocked', None),
+            (200, {}, '{malformed', 'malformed_response', 'capability_blocked', None),
+        ]
+        for index, (status, headers, body, reason, workflow_status, retry_after) in enumerate(cases):
+            with self.subTest(reason=reason), tempfile.TemporaryDirectory() as temp:
+                class Transport:
+                    def __init__(self):
+                        self.calls = []
+
+                    def __call__(self, method, url, request_headers, request_body, timeout):
+                        self.calls.append((method, url, request_body))
+                        return api.HTTPResponse(status, headers, body if isinstance(body, str)
+                                                else json.dumps(body))
+
+                api._PROCESS_PAUSES.clear()
+                transport = Transport()
+                client = api.GitHubAPIClient(
+                    f'codeql-advisory-token-{index}', transport=transport,
+                    state_root=Path(temp) / 'state', clock=lambda: now,
+                    sleeper=lambda _seconds: None,
+                )
+
+                try:
+                    module.explain_unstable(
+                        self.data,
+                        lambda endpoint: client.rest(
+                            'GET', endpoint, operation='codeql_advisory',
+                        ),
+                    )
+                except api.APIError as exc:
+                    caught = exc
+                else:
+                    self.fail(
+                        f"typed API error was downgraded to a provenance result; "
+                        f"reason={reason}; calls={len(transport.calls)}"
+                    )
+
+                self.assertEqual(caught.kind, reason)
+                self.assertEqual(caught.workflow_status, workflow_status)
+                self.assertFalse(caught.mutation_started)
+                if retry_after is not None:
+                    self.assertEqual(caught.retry_after_seconds, retry_after)
+                self.assertEqual(len(transport.calls), 1)
+                self.assertEqual(transport.calls[0][0], 'GET')
 
     def test_CQ_T29_T31_lifecycle_protections_and_raw_state(self):
         spec = importlib.util.spec_from_file_location('gate', Path(__file__).with_name('pr-lifecycle-gate.py'))

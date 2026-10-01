@@ -46,12 +46,9 @@ class ProductionLoopTests(unittest.TestCase):
                  ('source', {'headRefName': 'codex/replaced'}, False)]
         for label, changes, ready in cases:
             fresh = {**data, **changes}
-            def read(command, **kwargs):
-                self.assertEqual(command[:3], ['gh', 'pr', 'view'])
-                return json.dumps({key: fresh[key] for key in command[command.index('--json') + 1].split(',')})
             with self.subTest(label=label), patch.object(gate, 'local_loop_admission', return_value={'status': 'legacy'}), \
                  patch.object(gate, 'live_integration_admission', return_value=None), \
-                 patch.object(gate.subprocess, 'check_output', side_effect=read):
+                 patch.object(gate, 'read_pr_identity', return_value=fresh):
                 result = gate.production_decision(data, False, Path('/canonical'), uid, None)
                 self.assertEqual(result['ready_for_merge'], ready, result)
                 self.assertEqual('readiness_receipt' in result, ready, result)
