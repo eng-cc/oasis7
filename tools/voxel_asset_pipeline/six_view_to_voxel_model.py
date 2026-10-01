@@ -166,11 +166,6 @@ def parse_args() -> argparse.Namespace:
         help="Try several view-vote thresholds and keep the one with best projection IoU.",
     )
     parser.add_argument(
-        "--disable-source-cleanup",
-        action="store_true",
-        help="Deprecated alias for --source-cleanup-policy off.",
-    )
-    parser.add_argument(
         "--source-cleanup-policy",
         choices=("robot", "off"),
         default="robot",
@@ -1750,11 +1745,9 @@ def main() -> int:
         cells,
         alpha_threshold=args.alpha_threshold,
         mask_threshold=args.mask_threshold,
-        cleanup_source=args.source_cleanup_policy != "off" and not args.disable_source_cleanup,
+        cleanup_source=args.source_cleanup_policy != "off",
     )
-    source_validation["source_cleanup_policy"] = (
-        "off" if args.disable_source_cleanup else args.source_cleanup_policy
-    )
+    source_validation["source_cleanup_policy"] = args.source_cleanup_policy
     color_views = build_color_views(cells, masks)
     if args.optimize_fit:
         grid, optimization = optimize_voxel_grid(
