@@ -92,7 +92,15 @@ if evidence is not None:
     encoded = base64.urlsafe_b64encode(str(evidence).encode("utf-8")).decode("ascii").rstrip("=")
     trace_lines.append(f"- non_pr_completion_evidence_b64: `{encoded}`")
 trace_lines.append("Acceptance:")
-project_item["content"]={"body":"\n".join(trace_lines)+"\n","number":next_record["issue_number"],"title":"[PM] "+next_record["title"],"url":next_record["issue_url"]}
+project_content={"__typename":"Issue","number":next_record["issue_number"],
+    "url":next_record["issue_url"],"repository":{"nameWithOwner":"eng-cc/oasis7"}}
+content_path=os.environ.get("GH_REC_PROJECT_ITEM_CONTENT_FILE")
+if content_path and os.path.exists(content_path):
+    project_content=json.load(open(content_path))
+# Match GraphQL's selected-field behavior: content is present only if requested.
+if "content" in sys.argv[2]:
+    if project_content is not None:
+        project_item["content"]=project_content
 data={"nodes":[project_item],"s0":{"nodes":[issue]}}
 if os.environ.get("GH_REC_AUTH_STATE_FILE"):
     auth=json.load(open(os.environ["GH_REC_AUTH_STATE_FILE"]))
@@ -424,6 +432,14 @@ PY
         *OPT_DONE_PHASE*) printf 'done\n' >"$GH_PROJECT_PHASE_STATE_FILE" ;;
       esac
     fi
+    if [[ "${OASIS7_REC_CASE:-}" == "guard_project_item_content_late_drift" \
+          && -e "${GH_REC_PROJECT_CONTENT_DRIFT_ARMED_FILE:-/no-such-oasis7-drift-arm}" \
+          && ! -e "${GH_REC_PROJECT_ITEM_CONTENT_FILE:-/no-such-oasis7-content}.drifted" ]]; then
+      cat > "$GH_REC_PROJECT_ITEM_CONTENT_FILE" <<'JSON'
+{"__typename":"Issue","number":2002,"url":"https://github.com/eng-cc/oasis7/issues/2002","repository":{"nameWithOwner":"eng-cc/oasis7"}}
+JSON
+      : > "${GH_REC_PROJECT_ITEM_CONTENT_FILE}.drifted"
+    fi
     printf '{}\n'
     ;;
   *)
@@ -750,6 +766,8 @@ PY
   printf 'In Progress\n' >"$GH_PROJECT_STATUS_STATE_FILE"
   printf 'verification\n' >"$GH_PROJECT_PHASE_STATE_FILE"
   export GH_REC_AUTH_STATE_FILE="$TMPDIR/recovery-auth-state.json"
+  export GH_REC_PROJECT_ITEM_CONTENT_FILE="$TMPDIR/project-item-content.json"
+  export GH_REC_PROJECT_CONTENT_DRIFT_ARMED_FILE="$TMPDIR/project-content-drift-armed"
   python3 - "$TMPDIR" "$TASK_UID" "$REC_OLD_HEAD" "$GH_PR_HEAD_SHA" "$GH_PR_TASK_BRANCH" <<'PY'
 import hashlib, importlib.util, json, os, pathlib, subprocess, sys
 root, uid, old_head, head, branch = pathlib.Path(sys.argv[1]).resolve(), *sys.argv[2:]
@@ -933,7 +951,7 @@ if case in {"all_post", "project_pre_issue_post"} or case.startswith("guard_"):
     issue = dict(record, workflow_phase="verification", pr_number=2001,
                  pr_url="https://github.com/eng-cc/oasis7/pull/2001")
     (root / "issue-live-body.md").write_text(helper.issue_body(helper.task_from_record(uid, issue)))
-if case in {"all_pre", "project_pre_issue_post"}:
+if case in {"all_pre", "project_pre_issue_post", "guard_project_item_content_late_drift"}:
     (root / "project-live-phase").write_text("execution\n")
     (root / "project-pr.md").write_text("")
 if case == "fieldwise_issue_mixed":
@@ -968,6 +986,20 @@ if case == "guard_repository_identity_drift":
     (root / "repository-field.json").write_text(json.dumps({"id":"R_different","nameWithOwner":"eng-cc/different"}))
 if case == "guard_repository_identity_malformed":
     (root / "repository-field.json").write_text(json.dumps({"id":"R_fixture_oasis7"}))
+if case == "guard_project_item_content_wrong":
+    (root / "project-item-content.json").write_text(json.dumps({
+        "__typename":"Issue","number":2002,
+        "url":"https://github.com/eng-cc/oasis7/issues/2002",
+        "repository":{"nameWithOwner":"eng-cc/oasis7"}}))
+if case == "guard_project_item_content_missing":
+    (root / "project-item-content.json").write_text("null")
+if case == "guard_project_item_content_nonissue":
+    (root / "project-item-content.json").write_text(json.dumps({"__typename":"PullRequest"}))
+if case == "guard_project_item_content_cross_repository":
+    (root / "project-item-content.json").write_text(json.dumps({
+        "__typename":"Issue","number":2001,
+        "url":"https://github.com/eng-cc/oasis7/issues/2001",
+        "repository":{"nameWithOwner":"eng-cc/other"}}))
 if case == "guard_pr_task_refs_drift":
     (root / "recovery-pr-body.md").write_text("Task: task_" + "9" * 32 + "\nRefs #9999\n")
 # Negative variants alter only fake live IO or its authenticated TPM binding;
@@ -1052,7 +1084,10 @@ if case in {"guard_observed_payload_raw_hash_equal", "guard_binding_shape_raw_ha
     assert admission["current_action"]["journal_sha256"] == hashlib.sha256(current_raw).hexdigest(), "fixture admission does not bind exact malformed journal bytes"
 if case in {"guard_observed_payload_raw_hash_equal", "guard_binding_shape_raw_hash_equal",
             "guard_invalid_global_phase_raw_hash_equal", "guard_invalid_global_disposition_raw_hash_equal",
-            "guard_scope_comment_drift", "guard_noncanonical_observed_journal"}:
+            "guard_scope_comment_drift", "guard_noncanonical_observed_journal",
+            "guard_project_item_content_wrong", "guard_project_item_content_missing",
+            "guard_project_item_content_nonissue", "guard_project_item_content_cross_repository",
+            "guard_project_item_content_late_drift"}:
     current_path=pathlib.Path((root / "current-journal-path.md").read_text())
     (root / "current-journal-before.json").write_bytes(current_path.read_bytes())
 PY
@@ -1101,6 +1136,7 @@ PY
     exit 0
   fi
   if [[ "$REC_CASE" == "guard_pr_head_drift" ]]; then export GH_PR_HEAD_SHA="$REC_OLD_HEAD"; fi
+  if [[ "$REC_CASE" == "guard_project_item_content_late_drift" ]]; then : >"$GH_REC_PROJECT_CONTENT_DRIFT_ARMED_FILE"; fi
   REC_CALLS_BEFORE="$(wc -l < "$GH_CALL_LOG")"
   cp "$GH_MAPPING_PATH" "$TMPDIR/rec-mapping-before.json"
   set +e
@@ -1112,6 +1148,38 @@ PY
   REC_STATUS=$?
   set -e
   tail -n +$((REC_CALLS_BEFORE + 1)) "$GH_CALL_LOG" >"$TMPDIR/rec-calls.log"
+  if [[ "$REC_CASE" == guard_project_item_content_* ]]; then
+    EXPECTED_CONTENT_ERROR="selected Project item content does not match canonical Task Issue"
+    if ! grep -Fq "$EXPECTED_CONTENT_ERROR" "$TMPDIR/rec-record.err"; then
+      echo "FAIL test_rec_$REC_CASE: Project content guard was not reached" >&2
+      cat "$TMPDIR/rec-record.err" >&2
+      exit 1
+    fi
+    sed 's/\\ / /g' "$TMPDIR/rec-calls.log" >"$TMPDIR/rec-calls-normalized.log"
+  fi
+  if [[ "$REC_CASE" == "guard_project_item_content_late_drift" ]]; then
+    if [[ "$REC_STATUS" == "0" ]]; then
+      echo "FAIL test_rec_$REC_CASE: content drift after a Project edit was accepted" >&2
+      exit 1
+    fi
+    PROJECT_WRITES="$(grep -Ec '^project item-edit ' "$TMPDIR/rec-calls-normalized.log" || true)"
+    if [[ "$PROJECT_WRITES" != "1" ]] || grep -Eq '^issue (edit|comment) ' "$TMPDIR/rec-calls-normalized.log"; then
+      echo "FAIL test_rec_$REC_CASE: unexpected metadata writes after fresh content drift" >&2
+      cat "$TMPDIR/rec-calls-normalized.log" >&2
+      exit 1
+    fi
+    python3 - "$TMPDIR" <<'PY'
+import pathlib, sys
+root=pathlib.Path(sys.argv[1])
+assert (root / ".pm/github-project-sync/tasks.json").read_bytes() == (root / "rec-mapping-before.json").read_bytes(), "late content drift changed mapping"
+old=pathlib.Path((root / "old-journal-path.md").read_text())
+assert old.read_bytes() == (root / "old-journal-before.json").read_bytes(), "late content drift changed historical journal"
+current=pathlib.Path((root / "current-journal-path.md").read_text())
+assert current.read_bytes() == (root / "current-journal-before.json").read_bytes(), "late content drift changed current journal"
+PY
+    echo "PASS test_rec_$REC_CASE rejected after first Project edit before later metadata writes"
+    exit 0
+  fi
   if [[ "$REC_CASE" == "guard_repository_identity_drift" || "$REC_CASE" == "guard_repository_identity_malformed" ]]; then
     EXPECTED_REPOSITORY_ERROR="unrelated Issue/Project snapshot drift"
     if [[ "$REC_CASE" == "guard_repository_identity_malformed" ]]; then
@@ -1141,9 +1209,11 @@ PY
       echo "FAIL test_rec_$REC_CASE: invalid recovery was accepted" >&2
       exit 1
     fi
-    if grep -Eq '^issue (edit|comment) |^project item-edit ' "$TMPDIR/rec-calls.log"; then
+    CALLS_TO_CHECK="$TMPDIR/rec-calls.log"
+    if [[ "$REC_CASE" == guard_project_item_content_* ]]; then CALLS_TO_CHECK="$TMPDIR/rec-calls-normalized.log"; fi
+    if grep -Eq '^issue (edit|comment) |^project item-edit ' "$CALLS_TO_CHECK"; then
       echo "FAIL test_rec_$REC_CASE: rejected recovery wrote metadata" >&2
-      cat "$TMPDIR/rec-calls.log" >&2
+      cat "$CALLS_TO_CHECK" >&2
       exit 1
     fi
     python3 - "$TMPDIR" "$REC_CASE" <<'PY'
@@ -1157,7 +1227,9 @@ else:
     assert old.read_bytes() == (root / "old-journal-before.json").read_bytes(), "rejected recovery changed historical journal"
 if case in {"guard_observed_payload_raw_hash_equal", "guard_binding_shape_raw_hash_equal",
             "guard_invalid_global_phase_raw_hash_equal", "guard_invalid_global_disposition_raw_hash_equal",
-            "guard_scope_comment_drift", "guard_noncanonical_observed_journal"}:
+            "guard_scope_comment_drift", "guard_noncanonical_observed_journal",
+            "guard_project_item_content_wrong", "guard_project_item_content_missing",
+            "guard_project_item_content_nonissue", "guard_project_item_content_cross_repository"}:
     current=pathlib.Path((root / "current-journal-path.md").read_text())
     assert current.read_bytes() == (root / "current-journal-before.json").read_bytes(), "rejected recovery changed current journal"
 PY

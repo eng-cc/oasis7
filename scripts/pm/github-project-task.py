@@ -3617,6 +3617,7 @@ class PublicationRecoveryAuthority:
         query = '''query($owner:String!,$repo:String!,$issue:Int!,$ids:[ID!]!) {
           repository(owner:$owner,name:$repo) { issue(number:$issue) { number url body state viewerCanUpdate } }
           nodes(ids:$ids) { ... on ProjectV2Item { id project { id number viewerCanUpdate owner { ... on User { login } ... on Organization { login } } }
+            content { __typename ... on Issue { number url repository { nameWithOwner } } }
             fieldValues(first:100) { pageInfo { hasNextPage } nodes {
               __typename
               ... on ProjectV2ItemFieldTextValue { text field { ... on ProjectV2FieldCommon { name } } }
@@ -3634,6 +3635,14 @@ class PublicationRecoveryAuthority:
             raise ValueError("selected Project item identity mismatch")
         node = nodes[0]
         refresh_project_identity(node, args.project_owner, args.project_number, self.record["project_id"])
+        content = node.get("content")
+        if (not isinstance(content, dict) or content.get("__typename") != "Issue"
+                or type(content.get("number")) is not int
+                or content["number"] != self.record["issue_number"]
+                or content.get("url") != self.record["issue_url"]
+                or not isinstance(content.get("repository"), dict)
+                or content["repository"].get("nameWithOwner") != args.repo):
+            raise ValueError("selected Project item content does not match canonical Task Issue")
         if (issue_permission.get("number") != self.record["issue_number"]
                 or issue_permission.get("url") != self.record["issue_url"]
                 or issue_permission.get("state") != "OPEN" or issue_permission.get("viewerCanUpdate") is not True

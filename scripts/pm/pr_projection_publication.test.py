@@ -225,6 +225,19 @@ publisher.command_output = deadline_probe
     def test_repository_field_malformed_identity_rejected_without_writes(self):
         self.run_case("guard_repository_identity_malformed")
 
+    def test_project_item_content_must_be_exact_task_issue_before_writes(self):
+        for case in (
+            "guard_project_item_content_wrong",
+            "guard_project_item_content_missing",
+            "guard_project_item_content_nonissue",
+            "guard_project_item_content_cross_repository",
+        ):
+            with self.subTest(case=case):
+                self.run_case(case)
+
+    def test_project_item_content_is_rechecked_after_each_project_write(self):
+        self.run_case("guard_project_item_content_late_drift")
+
     def test_unrelated_project_drift_rejected_without_writes(self):
         self.run_case("guard_unrelated_project_drift")
 
