@@ -97,6 +97,8 @@ for codeql_path in \
   scripts/security/codeql-plan.test.py \
   scripts/security/codeql-health.py \
   scripts/security/codeql-health.test.py \
+  scripts/security/codeql_upload_association.py \
+  scripts/security/codeql-upload-association.test.py \
   scripts/security/codeql-workflow.test.py \
   scripts/security/codeql-acceptance.test.py; do
   codeql_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh \
