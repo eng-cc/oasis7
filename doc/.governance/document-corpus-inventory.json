@@ -5747,7 +5747,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-observability-timing-metrics.design.md",
-      "content_sha256": "e7a9c0d94ee0443d9a5a269d8e1cfcf56fb5dcc7b3c04af8c5d4351c1d2a7196",
+      "content_sha256": "20db1c4b11fef950a4955343c95790b46e42585d9cf13ca3b849487ca6f91798",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
