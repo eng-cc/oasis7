@@ -218,6 +218,42 @@ class BoundedRecoveryCLITests(unittest.TestCase):
     def test_authentic_old_publication_nonancestor_rejected_without_writes(self):
         self.run_case("guard_old_nonancestor")
 
+    def test_current_issue_write_permission_required_before_writes(self):
+        self.run_case("guard_issue_permission")
+
+    def test_current_project_write_permission_required_before_writes(self):
+        self.run_case("guard_project_permission")
+
+    def test_current_actor_must_match_live_tpm_admission_author(self):
+        self.run_case("guard_actor_mismatch")
+
+    def test_authenticated_step_scope_cannot_add_an_unapproved_helper(self):
+        self.run_case("guard_step_scope")
+
+    def test_running_helper_source_must_equal_reviewed_immutable_source(self):
+        self.run_case("guard_helper_source")
+
+    def test_helper_closure_digest_must_match_actual_bounded_role_returns(self):
+        self.run_case("guard_helper_closure_digest")
+
+    def test_historical_raw_journal_digest_is_separately_verified(self):
+        self.run_case("guard_old_raw_journal_hash")
+
+    def test_current_raw_journal_digest_is_separately_verified(self):
+        self.run_case("guard_current_raw_journal_hash")
+
+    def test_actual_local_role_return_digest_is_verified(self):
+        self.run_case("guard_role_return_digest")
+
+    def test_closed_issue_rejected_before_metadata_writes(self):
+        self.run_case("guard_issue_closed")
+
+    def test_closed_pr_rejected_before_metadata_writes(self):
+        self.run_case("guard_pr_closed")
+
+    def test_merged_pr_rejected_before_metadata_writes(self):
+        self.run_case("guard_pr_merged")
+
 
 class PublicationMatrixTests(unittest.TestCase):
     def read_live_task_binding(self, body, repository="eng-cc/oasis7"):

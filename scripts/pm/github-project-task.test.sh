@@ -19,6 +19,18 @@ cp "$ROOT_DIR/scripts/pm/github-project-task.py" "$TMPDIR/github-project-task.py
 cp "$ROOT_DIR/scripts/pm/github-project-sync.py" "$TMPDIR/github-project-sync.py"
 cp "$ROOT_DIR/scripts/pm/portable_file_lock.py" "$TMPDIR/portable_file_lock.py"
 cp "$ROOT_DIR/scripts/pm/claim-ready.sh" "$TMPDIR/claim-ready.sh"
+if [[ "${OASIS7_REC_RED_ONLY:-0}" == "1" ]]; then
+  mkdir -p "$TMPDIR/scripts" "$TMPDIR/.agents/roles" "$TMPDIR/doc/engineering/workflow"
+  cp -R "$ROOT_DIR/scripts/pm" "$TMPDIR/scripts/pm"
+  python3 - "$TMPDIR/scripts/pm" <<'PY'
+import pathlib, shutil, sys
+for path in pathlib.Path(sys.argv[1]).rglob("__pycache__"):
+    shutil.rmtree(path)
+PY
+  cp "$ROOT_DIR/AGENTS.md" "$TMPDIR/AGENTS.md"
+  cp "$ROOT_DIR/doc/engineering/workflow/source-of-truth.md" "$TMPDIR/doc/engineering/workflow/source-of-truth.md"
+  cp "$ROOT_DIR/.agents/roles/"{runtime_engineer,repository_health_engineer,qa_engineer}.md "$TMPDIR/.agents/roles/"
+fi
 
 cat > "$TMPDIR/bin/gh" <<'SH'
 #!/usr/bin/env bash
@@ -26,6 +38,19 @@ set -euo pipefail
 printf '%q ' "$@" >> "$GH_CALL_LOG"
 printf '\n' >> "$GH_CALL_LOG"
 case "$*" in
+  "api user")
+    python3 - "$GH_REC_AUTH_STATE_FILE" <<'PY'
+import json, sys
+state=json.load(open(sys.argv[1])); print(json.dumps({"login":state["actor"],"id":7}))
+PY
+    ;;
+  "api repos/eng-cc/oasis7")
+    python3 - "$GH_REC_AUTH_STATE_FILE" "$GH_PR_BASE_BRANCH" <<'PY'
+import json, sys
+state=json.load(open(sys.argv[1])); print(json.dumps({"id":7,"full_name":"eng-cc/oasis7",
+    "default_branch":sys.argv[2],"permissions":{"push":state["repo_push"]}}))
+PY
+    ;;
   api\ graphql*)
     python3 - "$GH_MAPPING_PATH" <<'PY'
 import base64, json, os, sys
@@ -60,13 +85,27 @@ if evidence is not None:
     trace_lines.append(f"- non_pr_completion_evidence_b64: `{encoded}`")
 trace_lines.append("Acceptance:")
 project_item["content"]={"body":"\n".join(trace_lines)+"\n","number":next_record["issue_number"],"title":"[PM] "+next_record["title"],"url":next_record["issue_url"]}
-print(json.dumps({"data":{"nodes":[project_item],"s0":{"nodes":[issue]}}}))
+data={"nodes":[project_item],"s0":{"nodes":[issue]}}
+if os.environ.get("GH_REC_AUTH_STATE_FILE"):
+    auth=json.load(open(os.environ["GH_REC_AUTH_STATE_FILE"]))
+    live_body=open(os.environ["GH_ISSUE_BODY_STATE_FILE"]).read()
+    issue.update(id="ISSUE_ID",state=auth["issue_state"].upper(),body=live_body,
+                 viewerCanUpdate=auth["issue_can_update"])
+    project={"id":"PROJECT_ID","number":1,"title":"oasis7 Engineering PM",
+             "owner":{"login":"eng-cc"},"viewerCanUpdate":auth["project_can_update"],
+             "items":{"pageInfo":{"hasNextPage":False},"nodes":[project_item]}}
+    project_item["project"].update(viewerCanUpdate=auth["project_can_update"])
+    data.update(viewer={"login":auth["actor"]},node=project,project=project,
+                repository={"issue":issue,"projectV2":project},
+                organization={"projectV2":project},user={"projectV2":project})
+print(json.dumps({"data":data}))
 PY
     ;;
   "api repos/eng-cc/oasis7/issues/2001/comments --paginate --slurp"|"api repos/eng-cc/oasis7/issues/2001/comments?per_page=100 --paginate --slurp")
     python3 - "$GH_COMMENT_DIR" <<'PY'
 import json, pathlib, sys
 print(json.dumps([[{"id": int(p.name), "body": p.read_text(), "user": {"login": "eng-cc"}, "author_association": "OWNER",
+                   "issue_url":"https://api.github.com/repos/eng-cc/oasis7/issues/2001",
                    "html_url": "https://github.com/eng-cc/oasis7/issues/2001#issuecomment-" + p.name}
                   for p in sorted(pathlib.Path(sys.argv[1]).iterdir())]]))
 PY
@@ -77,8 +116,10 @@ PY
       exit 78
     fi
     python3 - "$GH_ISSUE_BODY_STATE_FILE" <<'PY'
-import json, pathlib, sys
-print(json.dumps({"number":2001,"state":"open","body":pathlib.Path(sys.argv[1]).read_text()}))
+import json, os, pathlib, sys
+auth=json.load(open(os.environ["GH_REC_AUTH_STATE_FILE"])) if os.environ.get("GH_REC_AUTH_STATE_FILE") else {}
+print(json.dumps({"id":7,"node_id":"ISSUE_ID","number":2001,"state":auth.get("issue_state","open"),
+    "html_url":"https://github.com/eng-cc/oasis7/issues/2001","body":pathlib.Path(sys.argv[1]).read_text()}))
 PY
     ;;
   api\ repos/eng-cc/oasis7/pulls/2001)
@@ -90,13 +131,14 @@ PY
     if [[ "${OASIS7_REC_RED_ONLY:-0}" == "1" ]]; then draft=true; fi
     [[ "$reads" != "1" ]] || draft=true
     python3 - "$GH_PR_HEAD_SHA" "$GH_PR_TASK_BRANCH" "$GH_PR_BASE_BRANCH" "$draft" <<'PY'
-import json, sys
+import json, os, sys
 sha, task_branch, base_branch, draft = sys.argv[1:]
+auth=json.load(open(os.environ["GH_REC_AUTH_STATE_FILE"])) if os.environ.get("GH_REC_AUTH_STATE_FILE") else {}
 print(json.dumps({
     "number": 2001,
     "html_url": "https://github.com/eng-cc/oasis7/pull/2001",
-    "state": "open",
-    "merged_at": None,
+    "state": auth.get("pr_state","open"),
+    "merged_at": "2026-10-01T00:00:00Z" if auth.get("pr_merged") else None,
     "draft": draft == "true",
     "head": {"repo": {"full_name": "eng-cc/oasis7"}, "ref": task_branch, "sha": sha},
     "base": {"repo": {"full_name": "eng-cc/oasis7"}, "ref": base_branch},
@@ -137,14 +179,15 @@ PY
     ;;
   "issue view 2001 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason"*)
     python3 - "$GH_ISSUE_BODY_STATE_FILE" <<'PY'
-import json, pathlib, sys
+import json, os, pathlib, sys
 body = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+auth=json.load(open(os.environ["GH_REC_AUTH_STATE_FILE"])) if os.environ.get("GH_REC_AUTH_STATE_FILE") else {}
 print(json.dumps({
     "body": body,
     "number": 2001,
     "title": "[PM] GitHub-backed lifecycle smoke",
     "url": "https://github.com/eng-cc/oasis7/issues/2001",
-    "state": "OPEN",
+    "state": auth.get("issue_state","OPEN").upper(),
     "stateReason": None,
 }))
 PY
@@ -164,7 +207,10 @@ PY
     comment_id="${comment_id##*/}"
     python3 - "$GH_COMMENT_DIR/$comment_id" <<'PY'
 import json, pathlib, sys
-print(json.dumps({"body": pathlib.Path(sys.argv[1]).read_text()}))
+path=pathlib.Path(sys.argv[1]); print(json.dumps({"id":int(path.name),"body":path.read_text(),
+    "user":{"login":"eng-cc"},"author_association":"OWNER",
+    "issue_url":"https://api.github.com/repos/eng-cc/oasis7/issues/2001",
+    "html_url":"https://github.com/eng-cc/oasis7/issues/2001#issuecomment-"+path.name}))
 PY
     ;;
   "issue close 2001 -R eng-cc/oasis7 --reason completed")
@@ -367,11 +413,14 @@ rm -f "$TMPDIR/xcrun_db"
 # The fixture's closeout interruption path can leave mktemp's Darwin `tmp*`
 # scratch file in the fixture repository.  This is confined to the disposable
 # fixture; the production freeze check still reports every other untracked path.
-printf '*.json\n*.log\n*.md\n*.err\n.pm/\nworktree/\ngh-comments/\nproject-live-state\nproject-live-status\nproject-live-phase\npr-read-count\nxcrun_db\ntmp*\n' > "$TMPDIR/.gitignore"
+printf '*.json\n*.log\n*.md\n*.err\n.pm/\n__pycache__/\nworktree/\ngh-comments/\nproject-live-state\nproject-live-status\nproject-live-phase\npr-read-count\nxcrun_db\ntmp*\n' > "$TMPDIR/.gitignore"
 git -C "$TMPDIR" init -q
 git -C "$TMPDIR" config user.email test@example.com
 git -C "$TMPDIR" config user.name Test
 git -C "$TMPDIR" add .
+if [[ "${OASIS7_REC_RED_ONLY:-0}" == "1" ]]; then
+  git -C "$TMPDIR" add -f scripts/pm AGENTS.md .agents/roles doc/engineering/workflow/source-of-truth.md
+fi
 git -C "$TMPDIR" commit -qm initial
 # The temporary repository itself is the fixture's canonical worktree. Its
 # root is registered and owns the task cache/evidence files used by the test.
@@ -612,6 +661,7 @@ fi
 # Focused REC entrypoint: actual record-pr, genuine ancestor/current journals,
 # and independently persisted Project-post / Issue-pre GitHub IO.
 if [[ "${OASIS7_REC_RED_ONLY:-0}" == "1" ]]; then
+  export PYTHONPATH="$TMPDIR/scripts/pm"
   python3 - "$GH_MAPPING_PATH" "$TASK_UID" "$GH_ISSUE_BODY_STATE_FILE" <<'PY'
 import importlib.util, json, pathlib, sys
 spec = importlib.util.spec_from_file_location("task_helper", pathlib.Path(sys.argv[1]).parents[2] / "github-project-task.py")
@@ -626,7 +676,6 @@ pathlib.Path(sys.argv[3]).write_text(helper.issue_body(helper.task_from_record(s
 record.update(workflow_phase="verification")
 path.write_text(json.dumps(mapping))
 PY
-  cp "$ROOT_DIR/scripts/pm/"{pr_projection_publication.py,pr_projection_journal.py,projection_publication_contract.py} "$TMPDIR/"
   REC_OLD_HEAD="$(git -C "$TMPDIR" rev-parse HEAD)"
   REC_PUBLICATION_OLD_HEAD="$REC_OLD_HEAD"
   if [[ "${OASIS7_REC_CASE:-}" == "guard_old_nonancestor" ]]; then
@@ -634,7 +683,7 @@ PY
   fi
   git -C "$TMPDIR" commit --allow-empty -qm current-recovery-source
   export GH_PR_HEAD_SHA="$(git -C "$TMPDIR" rev-parse HEAD)"
-  PYTHONPATH="$TMPDIR" python3 - "$TMPDIR" "$TASK_UID" "$REC_OLD_HEAD" "$GH_PR_HEAD_SHA" "$GH_PR_TASK_BRANCH" "$REC_PUBLICATION_OLD_HEAD" <<'PY'
+  python3 - "$TMPDIR" "$TASK_UID" "$REC_OLD_HEAD" "$GH_PR_HEAD_SHA" "$GH_PR_TASK_BRANCH" "$REC_PUBLICATION_OLD_HEAD" <<'PY'
 import json, pathlib, sys
 import pr_projection_publication as publication
 import pr_projection_journal as journal
@@ -676,6 +725,174 @@ PY
   printf 'committed\n' >"$GH_PROJECT_STATE_FILE"
   printf 'In Progress\n' >"$GH_PROJECT_STATUS_STATE_FILE"
   printf 'verification\n' >"$GH_PROJECT_PHASE_STATE_FILE"
+  export GH_REC_AUTH_STATE_FILE="$TMPDIR/recovery-auth-state.json"
+  python3 - "$TMPDIR" "$TASK_UID" "$REC_OLD_HEAD" "$GH_PR_HEAD_SHA" "$GH_PR_TASK_BRANCH" <<'PY'
+import hashlib, importlib.util, json, os, pathlib, subprocess, sys
+root, uid, old_head, head, branch = pathlib.Path(sys.argv[1]).resolve(), *sys.argv[2:]
+def canonical(value):
+    return json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode()
+def sha(raw):
+    return hashlib.sha256(raw).hexdigest()
+def git(*args):
+    return subprocess.check_output(["git", "-C", str(root), *args], text=True).strip()
+def run_validator(command):
+    environment=dict(os.environ); environment.pop("OASIS7_TEST_ALLOW_UNATTESTED_DISPATCH_RECEIPTS", None)
+    result=subprocess.run(command, cwd=root, env=environment, capture_output=True, text=True)
+    assert result.returncode == 0, (command, result.stdout, result.stderr)
+    return json.loads(result.stdout) if result.stdout.lstrip().startswith("{") else {"status":"passed","stdout":result.stdout}
+state={"actor":"eng-cc","repo_push":True,"issue_can_update":True,"project_can_update":True,
+       "issue_state":"open","pr_state":"open","pr_merged":False}
+(root / "recovery-auth-state.json").write_text(json.dumps(state))
+manifest=[]
+for row in git("ls-tree", "-r", head, "--", "scripts/pm").splitlines():
+    metadata, path=row.split("\t"); mode, kind, oid=metadata.split()
+    assert kind == "blob" and mode in {"100644","100755"}, row
+    assert git("hash-object", str(root / path)) == oid, path
+    manifest.append({"path":path,"mode":mode,"blob_oid":oid})
+assert manifest == sorted(manifest, key=lambda item:item["path"].encode("ascii"))
+closure_sha=sha(canonical(manifest))
+task=json.loads((root / ".pm/github-project-sync/tasks.json").read_text())["tasks"][uid]
+review=root / ".pm/scratch" / uid / "recovery-role-review"; review.mkdir(parents=True)
+roles=("runtime_engineer","repository_health_engineer","qa_engineer")
+returns=[]; ledger=[]
+packet_spec=importlib.util.spec_from_file_location("fixture_packet",root / "scripts/pm/subagent-task-packet.py")
+packet_module=importlib.util.module_from_spec(packet_spec); packet_spec.loader.exec_module(packet_module)
+for index, role in enumerate(roles, 1):
+    slice_id=f"00000000-0000-4000-8000-{index:012d}"
+    identity={"task_uid":uid,"repository":"eng-cc/oasis7","project_item_id":"ITEM_ID",
+        "task_status":"committed","issue_url":task["issue_url"],"worktree":str(root),
+        "branch":branch,"head":head,"base_ref":old_head,"base_sha":old_head,
+        "base_binding":"immutable_oid","packet_producer":"tpm","primary_package":task["primary_package"]}
+    contract={"slice_id":slice_id,"role":role,"slice_type":"professional_review","owner_role":task["owner_role"],
+        "integration_owner":"tpm","integration_order":"REC bounded review then exact action binding",
+        "context_delivery_mode":"minimal_head_bound_task_packet","intended_model_configuration":"inherit current parent selection",
+        "actual_dispatched_model_reasoning":"fixture unobserved","actual_runtime_evidence_reason":"fixture adapter inactive",
+        "role_activation":"message_assigned_adapter_inactive","write_scope":"scratch-only bounded helper review",
+        "return_contract":"exact immutable helper closure verdict","validation_command":"human-operated local provenance",
+        "formal_sink":task["issue_url"],"full_history_escalation_reason":""}
+    context={"user_intent":"existing approved same-PR metadata recovery","work_item":"REC bounded helper review",
+        "non_goals":"no CI/review/Ready authority","acceptance_target":"exact immutable helper closure",
+        "evidence_summary":"isolated authentic Git/helper/role artifact fixture","collaboration_boundary":"fixture scratch only",
+        "governance_refs":["AGENTS.md","doc/engineering/workflow/source-of-truth.md",f".agents/roles/{role}.md"],
+        "scoped_refs":["scripts/pm/github-project-task.py","scripts/pm/pr_projection_publish.py"]}
+    packet={"schema":"oasis7-subagent-task-packet/v1","identity":identity,"slice":contract,"context":context}
+    packet["packet_digest"]=packet_module.canonical_digest(packet)
+    packet_path=root / ".pm/scratch" / uid / "slice-packets" / f"{slice_id}.json"
+    packet_path.parent.mkdir(parents=True,exist_ok=True); packet_path.write_bytes(canonical(packet)+b"\n")
+    run_validator([sys.executable,str(root / "scripts/pm/subagent-task-packet.py"),"validate",str(packet_path)])
+    returned={"task_uid":uid,"role":role,"slice_id":slice_id,"head":head,"status":"completed",
+        "scope_verdict":"approved","risk_verdict":"approved","findings":"no_findings","residual_risk":"isolated fixture",
+        "helper_source_oid":head,"helper_closure_sha256":closure_sha,"activation":"message-assigned",
+        "context_delivery":"minimal_head_bound_task_packet","actual_runtime":"fixture inherited unobserved"}
+    return_path=review / f"{role}.return.json"; return_path.write_bytes(canonical(returned)+b"\n")
+    return_sha=sha(return_path.read_bytes())
+    ledger.append(dict(returned,artifact_digest=return_sha,artifacts=[str(return_path.relative_to(root))]))
+    returns.append({"role":role,"slice_id":slice_id,"packet_sha256":sha(packet_path.read_bytes()),
+        "source_head_oid":head,"return_path":str(return_path.relative_to(root)),"return_sha256":return_sha,"verdict":"approved"})
+ledger_path=review / "ledger.jsonl"; ledger_path.write_bytes(b"".join(canonical(row)+b"\n" for row in ledger))
+verdict=run_validator([sys.executable,str(root / "scripts/pm/validate-review-provenance.py"),
+    "--root",str(root),"--task-uid",uid,"--ledger",str(ledger_path),"--roles",",".join(roles),
+    "--source-head",head,"--mode","human-operated"])
+assert verdict["status"] == "passed" and verdict["mode"] == "human-operated", verdict
+(review / "validated-provenance.json").write_bytes(canonical(verdict)+b"\n")
+# Only synthetic instance identities belong in this isolated GitHub stub.
+# Model the existing user-evidence JSON framing and all eight Plan-Gap fields.
+def plan_row(step, acceptance, dependencies, command, evidence, writes, exclusions, role_slices):
+    return dict(step_id=step,acceptance_refs=acceptance,dependencies=dependencies,
+        verification_command=command,verification_evidence=evidence,write_scope=writes,
+        out_of_scope=exclusions,required_role_slices=role_slices)
+rows=[
+    plan_row("REC-SPEC","fixture Task original acceptance plus same-PR publication recovery",
+        "existing user approval; same fixture PR; immutable historical journal",
+        "workflow documentation contracts and runtime/QA API closure",
+        "source-only contract tests and bounded runtime/QA returns",
+        "doc/engineering/workflow/source-of-truth.md only by repository_health_engineer",
+        "gate waiver; activation; raw task/cache/Project patches; another PR",
+        "repository_health_engineer author; runtime_engineer and qa_engineer API review"),
+    plan_row("REC-RED","partial Issue/Project write recovery exact journal/UID/H/PR and complete poststate",
+        "REC-SPEC closure","focused genuine github-project-task/publication RED tests",
+        "immutable test patch digest and actual exit logs; independent QA",
+        "scripts/pm/github-project-task.test.sh and scripts/pm/pr_projection_publication.test.py by runtime_engineer",
+        "production helpers before admitted GREEN; loosened assertions",
+        "runtime_engineer test author; qa_engineer independent RED"),
+    plan_row("REC-GREEN","authentic journal-constrained partial-poststate reconciliation; reject drift and missing readback",
+        "actual RED confirmed plus TPM GREEN admission","focused REC cases and ordinary task/publication regressions",
+        "runtime and independent QA GREEN logs/digests; immutable reviewed helper closure",
+        "scripts/pm/github-project-task.py; scripts/pm/pr_projection_publish.py only if required for journal transport/recovery",
+        "other helpers; activation; forged authority; historical journal mutation",
+        "runtime_engineer implementation; qa_engineer independent; repository_health_engineer conformance"),
+    plan_row("REC-RESTORE","fresh current-H unique fixture PR reciprocal binding through canonical execution authority",
+        "REC-SPEC/RED/GREEN closure and executable-route confirmation",
+        "canonical selected-task refresh/audit/publication resume and live four-surface readback",
+        "complete exact poststate; unique reciprocal binding; current action observed only after final readback",
+        "canonical tasktruth/journal through approved helpers only",
+        "raw cache/body/Project patches; rollback; CI before binding; second PR",
+        "repository_health_engineer authority review; runtime_engineer route; TPM execution"),
+    plan_row("REC-DELIVER","fixture original acceptance and bounded recovery delivered in same Task/same PR",
+        "REC-RESTORE complete","fresh freeze, involved-role review, required CI and canonical merge/finalization",
+        "current source/base/scope/projection roles, CI, receipts and cleanup",
+        "sameTask samePR only; original two CLI paths retained, total seven approved paths max",
+        "second PR; historical receipt reuse; activation; unrelated delivery completion",
+        "runtime_engineer/repository_health_engineer/qa_engineer formal review; TPM integration")]
+row_keys={"step_id","acceptance_refs","dependencies","verification_command","verification_evidence",
+          "write_scope","out_of_scope","required_role_slices"}
+assert all(set(row)==row_keys and all(isinstance(value,str) and value for value in row.values()) for row in rows)
+assert [row["step_id"] for row in rows]==["REC-SPEC","REC-RED","REC-GREEN","REC-RESTORE","REC-DELIVER"]
+fixture_identity=f"Task UID {uid}; Issue https://github.com/eng-cc/oasis7/issues/2001; same PR https://github.com/eng-cc/oasis7/pull/2001"
+frozen_red_digest=sha(b"synthetic isolated frozen RED patch")
+scope_bodies={
+    7101:"WP2 bounded dormant CLI artifact output prerequisite\n"+fixture_identity+"\nPlan-Gap entries beforewrites:\n"
+         "CLI-RED acceptance_refs original artifact output acceptance; dependencies actual focused CLI RED; "
+         "verification_command focused main-output unittest; verification_evidence actual exit/log/test patch digest; "
+         "write_scope scripts/pm/ci-reuse-validation.test.py ONLY; out_of_scope production helpers/schema/activation; "
+         "required_role_slices runtime_engineer author and independent qa_engineer.\n"
+         "CLI-GREEN acceptance_refs verified payload mode to artifact output while disabled; dependencies immutable RED plus QA; "
+         "verification_command same focused cases and producer/contract/readback negatives; verification_evidence actual GREEN logs/diff; "
+         "write_scope scripts/pm/ci-reuse-validation.py ONLY; out_of_scope authority/schema/activation; "
+         "required_role_slices runtime_engineer implementation and independent qa_engineer.",
+    7102:"CLI-RED completed and independently confirmed. Frozen synthetic test digest "+frozen_red_digest+". "
+         "CLI-GREEN admission: runtime_engineer may modify ONLY scripts/pm/ci-reuse-validation.py; original tests remain immutable. "
+         "No other source, policy, schema, commits, dispatch or activation. "+fixture_identity,
+    7103:"User authority intake: explicit same-PR source-first recovery; existing original acceptance retained; "
+         "original two CLI paths from synthetic history retained; total seven approved paths max. No gate exceptions.\n"
+         +fixture_identity+"\nPlan-Gap Evidence:\n"+json.dumps(rows,indent=2),
+    7104:"REC-SPEC COMPLETE with bounded runtime_engineer and independent qa_engineer API closure. "
+         "REC-RED admission: ONLY scripts/pm/github-project-task.test.sh and scripts/pm/pr_projection_publication.test.py. "
+         "Frozen synthetic RED digest "+frozen_red_digest+"; no production helpers until a new TPM GREEN admission. "
+         "Preserve exact final readback, pending uncertainty and immutable historical journal; no activation. "+fixture_identity,
+    7105:"REC-RED COMPLETE / GREEN ADMITTED: frozen synthetic test patch "+frozen_red_digest+"; actual focused RED and independent QA confirmed. "
+         "Runtime may implement ONLY scripts/pm/github-project-task.py and scripts/pm/pr_projection_publish.py (publisher only when journal transport/recovery requires it). "
+         "Frozen tests immutable; exact independent final Issue/Project/PR/unique binding readback before current action observed; "
+         "retain pending state on uncertainty; no historical journal mutation, activation or other helper scope. "+fixture_identity}
+scope=[]
+for comment_id, body in scope_bodies.items():
+    (root / "gh-comments" / str(comment_id)).write_text(body)
+    scope.append({"comment_id":comment_id,"comment_url":f"https://github.com/eng-cc/oasis7/issues/2001#issuecomment-{comment_id}",
+                  "body_sha256":sha(body.encode()),"author_login":"eng-cc"})
+def action(locator, comment_id):
+    journal_path=pathlib.Path((root / locator).read_text())
+    value=json.loads(journal_path.read_text()); intent_body=(root / "gh-comments" / str(comment_id)).read_text()
+    import pr_projection_publication as publication
+    intent=publication.parse_publication_comment(intent_body)
+    return {"publication_id":intent["publication_id"],"action_id":value["actions"][0]["action_id"],
+        "journal_sha256":sha(journal_path.read_bytes()),"H":intent["source_head_oid"],"B":intent["planner_authority_oid"],
+        "S":intent["source_scope_oid"],"D":intent["projection_digest"],"intent_comment_id":comment_id,
+        "intent_body_sha256":sha(intent_body.encode())}
+unrelated_issue={key:task.get(key) for key in ("task_uid","owner_role","module","priority","worktree_hint","primary_package")}
+unrelated_project={"Task UID":uid,"Owner Role":task["owner_role"],"Module":task["module"],"Priority":task["priority"],
+                   "Canonical Worktree":task["worktree_hint"],"Test Tier Required":"n/a"}
+admission={"schema":"oasis7-publication-recovery-admission/v1","operation":"record_pr_publication_recovery",
+    "identity":{"repository":"eng-cc/oasis7","task_uid":uid,"issue_number":2001,"issue_url":task["issue_url"],
+        "pr_number":2001,"pr_url":"https://github.com/eng-cc/oasis7/pull/2001","project_id":"PROJECT_ID",
+        "project_item_id":"ITEM_ID","canonical_worktree":str(root),"source_ref":branch,"target_ref":branch},
+    "scope_evidence":scope,"current_action":action("current-journal-path.md",1002),"predecessor":action("old-journal-path.md",1001),
+    "helper_review":{"helper_source_oid":head,"helper_closure_sha256":closure_sha,"closure_manifest":manifest,
+        "ledger_path":str(ledger_path.relative_to(root)),"ledger_sha256":sha(ledger_path.read_bytes()),"role_returns":returns},
+    "unrelated_snapshot":{"issue_sha256":sha(canonical(unrelated_issue)),"project_sha256":sha(canonical(unrelated_project))}}
+(root / "recovery-admission.json").write_bytes(canonical(admission)+b"\n")
+(root / "gh-comments/9001").write_text("<!-- oasis7-publication-recovery-admission/v1 -->\n```json\n"+canonical(admission).decode()+"\n```\n")
+print("REC auth fixture: immutable Git closure and three local role packets/returns validated (human-operated)")
+PY
   REC_CASE="${OASIS7_REC_CASE:-project_post_issue_pre}"
   python3 - "$TMPDIR" "$TASK_UID" "$REC_CASE" <<'PY'
 import importlib.util, json, pathlib, sys
@@ -724,6 +941,30 @@ if case == "guard_unrelated_project_drift":
     (root / "project-live-status").write_text("Done\n")
 if case == "guard_pr_task_refs_drift":
     (root / "recovery-pr-body.md").write_text("Task: task_" + "9" * 32 + "\nRefs #9999\n")
+# Negative variants alter only fake live IO or its authenticated TPM binding;
+# production code receives no environment authority grant.
+auth_path=root / "recovery-auth-state.json"; auth=json.loads(auth_path.read_text())
+if case == "guard_issue_permission": auth["issue_can_update"]=False
+if case == "guard_project_permission": auth["project_can_update"]=False
+if case == "guard_actor_mismatch": auth["actor"]="different-actor"
+if case == "guard_issue_closed": auth["issue_state"]="closed"
+if case == "guard_pr_closed": auth["pr_state"]="closed"
+if case == "guard_pr_merged": auth["pr_merged"]=True
+auth_path.write_text(json.dumps(auth))
+admission_path=root / "recovery-admission.json"; admission=json.loads(admission_path.read_text())
+if case == "guard_step_scope":
+    scope_path=root / "gh-comments/7103"
+    body=scope_path.read_text().replace("scripts/pm/github-project-task.py; scripts/pm/pr_projection_publish.py", "scripts/pm/unapproved-helper.py")
+    scope_path.write_text(body)
+    import hashlib
+    next(item for item in admission["scope_evidence"] if item["comment_id"] == 7103)["body_sha256"]=hashlib.sha256(body.encode()).hexdigest()
+if case == "guard_helper_source": admission["helper_review"]["helper_source_oid"]="f" * 40
+if case == "guard_helper_closure_digest": admission["helper_review"]["helper_closure_sha256"]="f" * 64
+if case == "guard_old_raw_journal_hash": admission["predecessor"]["journal_sha256"]="f" * 64
+if case == "guard_current_raw_journal_hash": admission["current_action"]["journal_sha256"]="f" * 64
+if case == "guard_role_return_digest": admission["helper_review"]["role_returns"][0]["return_sha256"]="f" * 64
+admission_path.write_text(json.dumps(admission,sort_keys=True,separators=(",",":")))
+(root / "gh-comments/9001").write_text("<!-- oasis7-publication-recovery-admission/v1 -->\n```json\n"+json.dumps(admission,sort_keys=True,separators=(",",":"))+"\n```\n")
 PY
   if [[ "$REC_CASE" == "pending_final_readback" || "$REC_CASE" == "pending_project_content_drift" || "$REC_CASE" == "idempotent_repeat" ]]; then
     if [[ "$REC_CASE" == "pending_final_readback" ]]; then export GH_REC_FAIL_FINAL_ISSUE=1; fi
@@ -735,7 +976,7 @@ import pr_projection_publish as publisher
 root, uid, case = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 value = json.loads((root / "recovery-publication.json").read_text())
 args = argparse.Namespace(repo=value["repository"], issue_number=2001, task_uid=uid,
-    task_helper=str(root / "github-project-task.py"), existing_ready_update=False,
+    task_helper=str(root / "scripts/pm/github-project-task.py"), existing_ready_update=False,
     source_ref=value["source_ref"], target_ref=value["target_ref"])
 adapter = publisher.GitHubPublicationAdapter(root, args, value)
 local = journal.open_journal(root / ".git", value["repository"], value["source_ref"],
@@ -771,8 +1012,9 @@ PY
   fi
   if [[ "$REC_CASE" == "guard_pr_head_drift" ]]; then export GH_PR_HEAD_SHA="$REC_OLD_HEAD"; fi
   REC_CALLS_BEFORE="$(wc -l < "$GH_CALL_LOG")"
+  cp "$GH_MAPPING_PATH" "$TMPDIR/rec-mapping-before.json"
   set +e
-  python3 "$TMPDIR/github-project-task.py" record-pr "$TMPDIR" \
+  python3 "$TMPDIR/scripts/pm/github-project-task.py" record-pr "$TMPDIR" \
     --repo eng-cc/oasis7 --project-owner eng-cc --project-number 1 \
     --task-uid "$TASK_UID" --pr-url "https://github.com/eng-cc/oasis7/pull/2001" \
     --draft-candidate --publication-binding-json "$TMPDIR/recovery-binding.json" --json \
@@ -790,6 +1032,16 @@ PY
       cat "$TMPDIR/rec-calls.log" >&2
       exit 1
     fi
+    python3 - "$TMPDIR" "$REC_CASE" <<'PY'
+import pathlib, sys
+root=pathlib.Path(sys.argv[1]); case=sys.argv[2]
+assert (root / ".pm/github-project-sync/tasks.json").read_bytes() == (root / "rec-mapping-before.json").read_bytes(), "rejected recovery changed mapping"
+old=pathlib.Path((root / "old-journal-path.md").read_text())
+if case == "guard_missing_old_journal":
+    assert not old.exists(), "rejected recovery recreated historical journal"
+else:
+    assert old.read_bytes() == (root / "old-journal-before.json").read_bytes(), "rejected recovery changed historical journal"
+PY
     echo "PASS test_rec_$REC_CASE rejected before writes"
     exit 0
   fi
