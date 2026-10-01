@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
+from contextlib import redirect_stderr, redirect_stdout
 from unittest.mock import patch
 from urllib.parse import urlencode
 
@@ -29,19 +33,19 @@ AUTHORITY = "d" * 40
 
 
 def make_publication(index: int, *, head: str | None = None, branch: str | None = None,
-                     repository: str = "eng-cc/oasis7"):
+                     repository: str = "eng-cc/oasis7", task_uid: str = UID):
     head = head or f"{index + 1:040x}"
     branch = branch or f"feature/c1-{index}"
     projection_digest = digest({"target": index})
     publication = publication_module.build_task_publication(
-        repository=repository, repository_id=7, task_uid=UID,
+        repository=repository, repository_id=7, task_uid=task_uid,
         bootstrap_epoch=1, source_repository_id=7, source_ref=branch,
         target_ref="main", source_head_oid=head, source_scope_oid=SCOPE,
         planner_authority_oid=AUTHORITY, planner_config_sha256=CONFIG,
         policy_digest=digest({"policy": "test"}), projection_digest=projection_digest,
     )
     projection = {
-        "task_uid": UID, "source_head_oid": head, "scope_base_oid": SCOPE,
+        "task_uid": task_uid, "source_head_oid": head, "scope_base_oid": SCOPE,
         "planner_config_sha256": CONFIG, "projection_digest": projection_digest,
         "consumed_contracts": [],
     }
@@ -51,6 +55,9 @@ def make_publication(index: int, *, head: str | None = None, branch: str | None 
 class FakeAdapter:
     def __init__(self, publication, projection, *, initial_head=None, initial_pr=None):
         self.publications = []
+        self.publication_author_logins = {}
+        self.publisher_login = "oasis7-test-publisher"
+        self.issue_number = 1
         self.bindings = []
         self.pr_binding = None
         self.events = []
@@ -63,11 +70,32 @@ class FakeAdapter:
             self.pr_binding = {"task_uid": UID, "pr_number": initial_pr["number"]}
 
     def find_task_publications(self, pub_id):
-        return {"complete": True, "publications": [p for p in self.publications if p["publication_id"] == pub_id]}
+        publications = [p for p in self.publications if p["publication_id"] == pub_id]
+        return {
+            "complete": True,
+            "publications": publications,
+            "publication_authors": [
+                {"publication_id": item["publication_id"],
+                 "author_login": self.publication_author_logins.get(
+                     item["publication_id"], self.publisher_login,
+                 )}
+                for item in publications
+            ],
+            "publication_bodies": [
+                {"publication_id": item["publication_id"],
+                 "body": publication_module.publication_comment(item)}
+                for item in publications
+            ],
+        }
+
+    def resolve_publisher_login(self):
+        self.events.append("resolve-publisher")
+        return self.publisher_login
 
     def publish_task_intent(self, value):
         self.events.append("task-intent")
         self.publications.append(copy.deepcopy(value))
+        self.publication_author_logins[value["publication_id"]] = self.publisher_login
 
     def read_source_ref(self, ref):
         self.events.append("read-source")
@@ -125,6 +153,20 @@ class FakeAdapter:
         next(pr for pr in self.prs if pr["number"] == number)["body"] = body
 
 
+class FirstPublicationReadTimeoutAdapter(FakeAdapter):
+    def __init__(self, publication, projection, *, initial_head, initial_pr):
+        super().__init__(publication, projection, initial_head=initial_head, initial_pr=initial_pr)
+        self.pr_binding = None
+        self.publication_reads = 0
+
+    def find_task_publications(self, pub_id):
+        self.publication_reads += 1
+        self.events.append("read-task-publications")
+        if self.publication_reads == 1:
+            raise TimeoutError("simulated prepublication read timeout")
+        return super().find_task_publications(pub_id)
+
+
 class FakeClock:
     def __init__(self):
         self.now = 0.0
@@ -139,6 +181,136 @@ class FakeClock:
 
 
 class PublicationMatrixTests(unittest.TestCase):
+    def test_gh_comment_child_retains_publication_lock_after_parent_death(self):
+        if os.name == "nt":
+            self.skipTest("POSIX inherited file descriptors are required for this lease regression")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            scripts = ROOT.resolve()
+            common = root / "common"
+            fake_bin = root / "bin"
+            fake_bin.mkdir()
+            pid_file = root / "gh-child.pid"
+            release_file = root / "gh-child.release"
+            done_file = root / "gh-child.done"
+            acquired_file = root / "lock-acquired"
+            fake_gh = fake_bin / "gh"
+            fake_gh.write_text(
+                "#!/usr/bin/env python3\n"
+                "import os, time\n"
+                "from pathlib import Path\n"
+                "Path(os.environ['GH_CHILD_PID']).write_text(str(os.getpid()))\n"
+                "while not Path(os.environ['GH_CHILD_RELEASE']).exists(): time.sleep(.02)\n"
+                "Path(os.environ['GH_CHILD_DONE']).write_text('done')\n",
+                encoding="utf-8",
+            )
+            fake_gh.chmod(0o755)
+            publication_id = "sha256:" + "a" * 64
+            base_env = {
+                **os.environ,
+                "PATH": f"{fake_bin}:{os.environ.get('PATH', '')}",
+                "GH_CHILD_PID": str(pid_file),
+                "GH_CHILD_RELEASE": str(release_file),
+                "GH_CHILD_DONE": str(done_file),
+            }
+            publisher_code = "\n".join([
+                "import sys, argparse",
+                "from pathlib import Path",
+                "sys.path.insert(0, sys.argv[1])",
+                "import pr_projection_journal as j, pr_projection_publish as p",
+                "common = Path(sys.argv[2])",
+                "journal = j.open_journal(common, 'eng-cc/oasis7', 'feature/lease', "
+                f"'{publication_id}', task_uid='{UID}', source_head_oid='{SCOPE}', "
+                f"scope_base_oid='{SCOPE}', projection_digest='{CONFIG}', "
+                "canonical_worktree=common)",
+                "args = argparse.Namespace(issue_number=1, task_helper=common/'helper.py', "
+                "repo='eng-cc/oasis7')",
+                "adapter = p.GitHubPublicationAdapter(common, args, {})",
+                "with journal.locked():",
+                "    adapter.reservation_fd = journal.inherited_lock_fd()",
+                "    adapter.gh('issue', 'comment', '1', timeout=30.0)",
+            ])
+            publisher = subprocess.Popen(
+                [sys.executable, "-c", publisher_code, str(scripts), str(common)],
+                cwd=root, env=base_env, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+                text=True,
+            )
+            child_pid = None
+            contender = None
+            try:
+                for _ in range(300):
+                    if pid_file.exists():
+                        child_pid = int(pid_file.read_text(encoding="utf-8"))
+                        break
+                    if publisher.poll() is not None:
+                        _stdout, stderr = publisher.communicate()
+                        self.fail("publication parent exited before starting fake gh: "
+                                  + (stderr or "<no stderr>"))
+                    time.sleep(0.02)
+                self.assertIsNotNone(child_pid, "fake gh did not start")
+                publisher.kill()
+                publisher.wait(timeout=5)
+                os.kill(child_pid, 0)
+
+                contender_code = "\n".join([
+                    "import sys",
+                    "from pathlib import Path",
+                    "sys.path.insert(0, sys.argv[1])",
+                    "import pr_projection_journal as j",
+                    "common = Path(sys.argv[2])",
+                    "journal = j.open_journal(common, 'eng-cc/oasis7', 'feature/lease', "
+                    f"'{publication_id}', task_uid='{UID}', source_head_oid='{SCOPE}', "
+                    f"scope_base_oid='{SCOPE}', projection_digest='{CONFIG}', "
+                    "canonical_worktree=common)",
+                    "with journal.locked():",
+                    "    Path(sys.argv[3]).touch()",
+                ])
+                contender = subprocess.Popen(
+                    [sys.executable, "-c", contender_code, str(scripts), str(common),
+                     str(acquired_file)],
+                    cwd=root, env=base_env, stdout=subprocess.DEVNULL,
+                    stderr=subprocess.PIPE, text=True,
+                )
+                time.sleep(0.35)
+                self.assertFalse(
+                    acquired_file.exists(),
+                    "a surviving gh comment child must retain the branch reservation after its parent dies",
+                )
+
+                release_file.touch()
+                for _ in range(300):
+                    if acquired_file.exists():
+                        break
+                    if contender.poll() is not None:
+                        self.fail("lock contender exited before acquiring the released reservation")
+                    time.sleep(0.02)
+                self.assertTrue(done_file.exists(), "fake gh did not finish after release")
+                self.assertTrue(acquired_file.exists(), "lock was not released after gh exited")
+            finally:
+                release_file.touch()
+                if contender is not None and contender.poll() is None:
+                    try:
+                        contender.wait(timeout=5)
+                    except subprocess.TimeoutExpired:
+                        contender.kill()
+                        contender.wait(timeout=5)
+                if contender is not None:
+                    contender.stderr.close()
+                if publisher.poll() is not None and publisher.stderr is not None:
+                    publisher.stderr.close()
+                if child_pid is not None:
+                    for _ in range(100):
+                        try:
+                            os.kill(child_pid, 0)
+                        except ProcessLookupError:
+                            break
+                        time.sleep(0.02)
+                    else:
+                        try:
+                            os.kill(child_pid, 9)
+                        except ProcessLookupError:
+                            pass
+
     def read_live_task_binding(self, body, repository="eng-cc/oasis7"):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -163,17 +335,21 @@ class PublicationMatrixTests(unittest.TestCase):
         )
 
     def run_publish_entrypoint(self, temp, publication, projection, adapter, journal,
-                               *, existing_ready_update=False, body=None):
+                               *, existing_ready_update=False, body=None,
+                               resume_action_id=None):
         root = Path(temp)
         body_file = root / "body.md"
         body_file.write_text(body if body is not None else f"Task: {UID}\nRefs #1\n", encoding="utf-8")
         projection_file = root / "projection.json"
         projection_file.write_text("{}\n", encoding="utf-8")
-        args = type("Args", (), {
+        args_values = {
             "worktree": str(root), "task_uid": UID, "issue_number": 1,
             "body_file": str(body_file), "projection": str(projection_file),
             "existing_ready_update": existing_ready_update,
-        })()
+        }
+        if resume_action_id is not None:
+            args_values["resume_action_id"] = resume_action_id
+        args = type("Args", (), args_values)()
         with (
             patch.object(publish_module, "task_publication", return_value=(publication, projection)),
             patch.object(publish_module, "GitHubPublicationAdapter", return_value=adapter),
@@ -181,6 +357,22 @@ class PublicationMatrixTests(unittest.TestCase):
             patch.object(publish_module.pr_projection_journal, "open_journal", return_value=journal),
         ):
             return publish_module.publish(args)
+
+    def existing_update_case(self, temp, index, *, old_head, new_head,
+                             adapter_type=FakeAdapter):
+        publication, projection = make_publication(index, head=new_head)
+        pr = {
+            "repository": publication["repository"], "source_ref": publication["source_ref"],
+            "target_ref": publication["target_ref"], "head_oid": old_head,
+            "body": f"Task: {UID}\nRefs #1\n", "state": "open", "merged": False,
+            "draft": True, "number": index,
+        }
+        adapter = adapter_type(
+            publication, projection, initial_head=old_head, initial_pr=pr,
+        )
+        adapter.pr_binding = None
+        journal = self.journal(temp, publication)
+        return publication, projection, adapter, journal
 
     def assert_old_head_rejected_before_effects(self, attempt, adapter, journal,
                                                 *, prior_action_ids=()):
@@ -722,6 +914,7 @@ class PublicationMatrixTests(unittest.TestCase):
                 "task_uid": UID, "task_helper": str(root / "github-project-task.py"),
             })()
             adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+            adapter.authenticated_login = "publisher"
 
             def exact_readback(*command, timeout=5.0, input_json=None):
                 if command[:2] == ("api", f"repos/{publication['repository']}/issues/123"):
@@ -733,11 +926,598 @@ class PublicationMatrixTests(unittest.TestCase):
                 if command[:2] == (
                     "api", f"repos/{publication['repository']}/issues/comments/7006",
                 ):
-                    return json.dumps({"id": 7006, "body": expected_body})
+                    return json.dumps({"id": 7006, "body": expected_body,
+                                       "user": {"login": "publisher"}})
                 raise AssertionError(f"unexpected mocked GitHub call: {command!r}")
 
             with patch.object(adapter, "gh", side_effect=exact_readback):
                 adapter.publish_task_intent(publication)
+
+    def test_prepublication_read_timeout_creates_no_task_write_intent(self):
+        old_head = "8" * 40
+        new_head = "9" * 40
+        publication, projection = make_publication(7190, head=new_head)
+        pr = {
+            "repository": publication["repository"], "source_ref": publication["source_ref"],
+            "target_ref": publication["target_ref"], "head_oid": old_head,
+            "body": f"Task: {UID}\nRefs #1\n", "state": "open", "merged": False,
+            "draft": True, "number": 190,
+        }
+
+        with tempfile.TemporaryDirectory() as temp:
+            adapter = FirstPublicationReadTimeoutAdapter(
+                publication, projection, initial_head=old_head, initial_pr=pr,
+            )
+            journal = self.journal(temp, publication)
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "Task publication readback failed",
+            ):
+                self.run_publish_entrypoint(temp, publication, projection, adapter, journal)
+
+            action_id = "task-intent:" + publication["publication_id"]
+            with journal.locked():
+                state = journal.read()
+            encoded_state = json.dumps(state, sort_keys=True)
+            task_actions = [
+                action for action in state.get("actions", [])
+                if action.get("action_id") == action_id
+            ]
+            pending_task_writes = [
+                action for action in task_actions
+                if action.get("state") in {"intent", "uncertain"}
+            ]
+            self.assertEqual(1, adapter.publication_reads)
+            self.assertEqual(0, adapter.events.count("task-intent"))
+            self.assertNotIn("patch-pr", adapter.events)
+            self.assertNotIn("push", adapter.events)
+            self.assertNotIn('"WRITE_INTENT"', encoded_state)
+            self.assertNotIn('"POST_ATTEMPTED"', encoded_state)
+            self.assertEqual(
+                [], pending_task_writes,
+                "a failed prepublication read may leave read evidence, never a pending write intent",
+            )
+
+    def test_denied_or_incomplete_prepublication_read_never_posts(self):
+        class PreReadFailureAdapter(FakeAdapter):
+            def __init__(inner_self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                inner_self.failure_kind = "denied"
+
+            def find_task_publications(inner_self, publication_id):
+                inner_self.events.append("read-task-publications")
+                if inner_self.failure_kind == "denied":
+                    raise PermissionError("simulated comments-read denial")
+                return {"complete": False, "publications": []}
+
+        old_head, new_head = "9" * 40, "a" * 40
+        for failure_kind in ("denied", "incomplete"):
+            with self.subTest(failure_kind=failure_kind), tempfile.TemporaryDirectory() as temp:
+                publication, projection, adapter, journal = self.existing_update_case(
+                    temp, 7220 if failure_kind == "denied" else 7221,
+                    old_head=old_head, new_head=new_head,
+                    adapter_type=PreReadFailureAdapter,
+                )
+                adapter.failure_kind = failure_kind
+                with self.assertRaises(publication_module.PublicationError):
+                    self.run_publish_entrypoint(temp, publication, projection, adapter, journal)
+                action_id = "task-intent:" + publication["publication_id"]
+                with journal.locked():
+                    events = journal.read_task_events(action_id)
+                self.assertEqual("READ_FAILED", events[-1]["event"])
+                self.assertNotIn("WRITE_INTENT", [item["event"] for item in events])
+                self.assertNotIn("POST_ATTEMPTED", [item["event"] for item in events])
+                self.assertEqual(0, adapter.events.count("task-intent"))
+
+    def test_same_action_recovers_from_prepublication_read_timeout(self):
+        old_head = "a" * 40
+        new_head = "b" * 40
+        publication, projection = make_publication(7191, head=new_head)
+        pr = {
+            "repository": publication["repository"], "source_ref": publication["source_ref"],
+            "target_ref": publication["target_ref"], "head_oid": old_head,
+            "body": f"Task: {UID}\nRefs #1\n", "state": "open", "merged": False,
+            "draft": True, "number": 191,
+        }
+
+        with tempfile.TemporaryDirectory() as temp:
+            adapter = FirstPublicationReadTimeoutAdapter(
+                publication, projection, initial_head=old_head, initial_pr=pr,
+            )
+            journal = self.journal(temp, publication)
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "Task publication readback failed",
+            ):
+                self.run_publish_entrypoint(temp, publication, projection, adapter, journal)
+
+            action_id = "task-intent:" + publication["publication_id"]
+            with journal.locked():
+                before_recovery = journal.read()
+            self.assertIn(action_id, json.dumps(before_recovery, sort_keys=True))
+            original_event_bytes = journal.task_events_path.read_bytes()
+
+            adapter.events.clear()
+            result = self.run_publish_entrypoint(
+                temp, publication, projection, adapter, journal,
+                resume_action_id=action_id,
+            )
+
+            self.assertEqual("published", result["status"])
+            self.assertEqual(1, adapter.events.count("task-intent"))
+            self.assertEqual(3, adapter.publication_reads)
+            self.assertEqual(1, len(adapter.publications))
+            with journal.locked():
+                after_recovery = journal.read()
+            self.assertIn(action_id, json.dumps(after_recovery, sort_keys=True))
+            self.assertTrue(
+                journal.task_events_path.read_bytes().startswith(original_event_bytes),
+                "recovery must append evidence without rewriting prior event history",
+            )
+
+    def test_post_attempt_marker_is_durable_before_adapter_invocation(self):
+        old_head = "c" * 40
+        new_head = "d" * 40
+        publication, projection = make_publication(7192, head=new_head)
+        pr = {
+            "repository": publication["repository"], "source_ref": publication["source_ref"],
+            "target_ref": publication["target_ref"], "head_oid": old_head,
+            "body": f"Task: {UID}\nRefs #1\n", "state": "open", "merged": False,
+            "draft": True, "number": 192,
+        }
+
+        with tempfile.TemporaryDirectory() as temp:
+            journal = self.journal(temp, publication)
+
+            class MarkerCheckingAdapter(FakeAdapter):
+                def publish_task_intent(inner_self, value):
+                    events = journal.read().get("task_post_events", [])
+                    action_id = "task-intent:" + publication["publication_id"]
+                    action_events = [
+                        event for event in events if event.get("action_id") == action_id
+                    ]
+                    self.assertGreaterEqual(len(action_events), 2)
+                    self.assertEqual("WRITE_INTENT", action_events[-2].get("event"))
+                    self.assertEqual("POST_ATTEMPTED", action_events[-1].get("event"))
+                    super(MarkerCheckingAdapter, inner_self).publish_task_intent(value)
+
+            adapter = MarkerCheckingAdapter(
+                publication, projection, initial_head=old_head, initial_pr=pr,
+            )
+            adapter.pr_binding = None
+            result = self.run_publish_entrypoint(
+                temp, publication, projection, adapter, journal,
+            )
+
+            self.assertEqual("published", result["status"])
+            self.assertEqual(1, adapter.events.count("task-intent"))
+
+    def test_write_intent_without_attempt_marker_allows_one_recovery_post(self):
+        old_head, new_head = "e" * 40, "f" * 40
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection, adapter, journal = self.existing_update_case(
+                temp, 7193, old_head=old_head, new_head=new_head,
+            )
+            action_id = "task-intent:" + publication["publication_id"]
+            append_event = journal.append_task_event
+
+            def crash_after_durable_write_intent(action, event, identity, evidence=None):
+                record = append_event(action, event, identity, evidence)
+                if event == "WRITE_INTENT":
+                    raise RuntimeError("simulated crash before POST_ATTEMPTED")
+                return record
+
+            with patch.object(journal, "append_task_event", side_effect=crash_after_durable_write_intent):
+                with self.assertRaisesRegex(RuntimeError, "simulated crash"):
+                    self.run_publish_entrypoint(temp, publication, projection, adapter, journal)
+
+            with journal.locked():
+                events = journal.read_task_events(action_id)
+            self.assertEqual("WRITE_INTENT", events[-1]["event"])
+            self.assertNotIn("POST_ATTEMPTED", [item["event"] for item in events])
+            self.assertEqual(0, adapter.events.count("task-intent"))
+
+            result = self.run_publish_entrypoint(
+                temp, publication, projection, adapter, journal,
+                resume_action_id=action_id,
+            )
+            self.assertEqual("published", result["status"])
+            self.assertEqual(1, adapter.events.count("task-intent"))
+
+    def test_attempt_marker_crash_before_adapter_stays_pending_on_empty_read(self):
+        old_head, new_head = "1" * 40, "2" * 40
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection, adapter, journal = self.existing_update_case(
+                temp, 7194, old_head=old_head, new_head=new_head,
+            )
+            action_id = "task-intent:" + publication["publication_id"]
+            append_event = journal.append_task_event
+
+            def crash_after_durable_attempt(action, event, identity, evidence=None):
+                record = append_event(action, event, identity, evidence)
+                if event == "POST_ATTEMPTED":
+                    raise RuntimeError("simulated crash before adapter invocation")
+                return record
+
+            with patch.object(journal, "append_task_event", side_effect=crash_after_durable_attempt):
+                with self.assertRaisesRegex(RuntimeError, "simulated crash"):
+                    self.run_publish_entrypoint(temp, publication, projection, adapter, journal)
+            self.assertEqual(0, adapter.events.count("task-intent"))
+
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "empty readback remains pending",
+            ):
+                self.run_publish_entrypoint(
+                    temp, publication, projection, adapter, journal,
+                    resume_action_id=action_id,
+                )
+            self.assertEqual(0, adapter.events.count("task-intent"))
+
+    def test_lost_post_response_resolves_exact_comment_without_second_post(self):
+        class LostCommentResponseAdapter(FakeAdapter):
+            def __init__(inner_self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                inner_self.post_attempts = 0
+
+            def publish_task_intent(inner_self, value):
+                inner_self.post_attempts += 1
+                super().publish_task_intent(value)
+                raise RuntimeError("simulated lost Task-comment POST response")
+
+        old_head, new_head = "3" * 40, "4" * 40
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection, adapter, journal = self.existing_update_case(
+                temp, 7195, old_head=old_head, new_head=new_head,
+                adapter_type=LostCommentResponseAdapter,
+            )
+            action_id = "task-intent:" + publication["publication_id"]
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "Task intent response uncertain",
+            ):
+                self.run_publish_entrypoint(temp, publication, projection, adapter, journal)
+            self.assertEqual(1, adapter.post_attempts)
+
+            result = self.run_publish_entrypoint(
+                temp, publication, projection, adapter, journal,
+                resume_action_id=action_id,
+            )
+            self.assertEqual("published", result["status"])
+            self.assertEqual(1, adapter.post_attempts)
+            with journal.locked():
+                events = journal.read_task_events(action_id)
+            self.assertIn("POST_ATTEMPTED", [item["event"] for item in events])
+            self.assertEqual("RESOLVED", events[-1]["event"])
+
+    def test_denied_post_is_attempted_and_empty_retry_never_reposts(self):
+        class DeniedCommentAdapter(FakeAdapter):
+            def __init__(inner_self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                inner_self.post_attempts = 0
+
+            def publish_task_intent(inner_self, value):
+                inner_self.post_attempts += 1
+                inner_self.events.append("task-intent")
+                raise PermissionError("simulated GitHub comment-write denial")
+
+        old_head, new_head = "5" * 40, "6" * 40
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection, adapter, journal = self.existing_update_case(
+                temp, 7196, old_head=old_head, new_head=new_head,
+                adapter_type=DeniedCommentAdapter,
+            )
+            action_id = "task-intent:" + publication["publication_id"]
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "Task intent response uncertain",
+            ):
+                self.run_publish_entrypoint(temp, publication, projection, adapter, journal)
+            self.assertEqual(1, adapter.post_attempts)
+
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "empty readback remains pending",
+            ):
+                self.run_publish_entrypoint(
+                    temp, publication, projection, adapter, journal,
+                    resume_action_id=action_id,
+                )
+            self.assertEqual(1, adapter.post_attempts)
+
+    def test_wrong_server_author_after_post_remains_pending(self):
+        class WrongAuthorAdapter(FakeAdapter):
+            def publish_task_intent(inner_self, value):
+                super().publish_task_intent(value)
+                inner_self.publication_author_logins[value["publication_id"]] = "different-user"
+
+        old_head, new_head = "7" * 40, "8" * 40
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection, adapter, journal = self.existing_update_case(
+                temp, 7197, old_head=old_head, new_head=new_head,
+                adapter_type=WrongAuthorAdapter,
+            )
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "author or canonical content differs",
+            ):
+                self.run_publish_entrypoint(temp, publication, projection, adapter, journal)
+            self.assertEqual(1, adapter.events.count("task-intent"))
+            with journal.locked():
+                events = journal.read_task_events("task-intent:" + publication["publication_id"])
+            self.assertEqual("READ_CONFLICT", events[-1]["event"])
+            self.assertNotIn("RESOLVED", [item["event"] for item in events])
+
+    def test_duplicate_matching_comments_after_attempt_remain_pending(self):
+        class DuplicateAfterPostAdapter(FakeAdapter):
+            def __init__(inner_self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                inner_self.post_attempts = 0
+
+            def publish_task_intent(inner_self, value):
+                inner_self.post_attempts += 1
+                super().publish_task_intent(value)
+                inner_self.publications.append(copy.deepcopy(value))
+
+        old_head, new_head = "c" * 40, "d" * 40
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection, adapter, journal = self.existing_update_case(
+                temp, 7222, old_head=old_head, new_head=new_head,
+                adapter_type=DuplicateAfterPostAdapter,
+            )
+            action_id = "task-intent:" + publication["publication_id"]
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "lookup is ambiguous",
+            ):
+                self.run_publish_entrypoint(temp, publication, projection, adapter, journal)
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "lookup is ambiguous",
+            ):
+                self.run_publish_entrypoint(
+                    temp, publication, projection, adapter, journal,
+                    resume_action_id=action_id,
+                )
+            self.assertEqual(1, adapter.post_attempts)
+            with journal.locked():
+                events = journal.read_task_events(action_id)
+            self.assertEqual("READ_CONFLICT", events[-1]["event"])
+            self.assertNotIn("RESOLVED", [item["event"] for item in events])
+
+    def test_missing_duplicate_or_false_server_metadata_never_resolves(self):
+        class MetadataAdapter(FakeAdapter):
+            def __init__(inner_self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                inner_self.metadata_failure = None
+
+            def find_task_publications(inner_self, publication_id):
+                result = super().find_task_publications(publication_id)
+                if result["publications"]:
+                    mode = inner_self.metadata_failure
+                    if mode == "missing-author":
+                        result["publication_authors"] = []
+                    elif mode == "duplicate-author":
+                        result["publication_authors"] *= 2
+                    elif mode == "false-author":
+                        result["publication_authors"][0]["author_login"] = "other-user"
+                    elif mode == "missing-body":
+                        result["publication_bodies"] = []
+                    elif mode == "duplicate-body":
+                        result["publication_bodies"] *= 2
+                    elif mode == "false-body":
+                        result["publication_bodies"][0]["body"] += "\nchanged"
+                return result
+
+        old_head, new_head = "e" * 40, "f" * 40
+        modes = (
+            "missing-author", "duplicate-author", "false-author",
+            "missing-body", "duplicate-body", "false-body",
+        )
+        for index, mode in enumerate(modes):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as temp:
+                publication, projection, adapter, journal = self.existing_update_case(
+                    temp, 7230 + index, old_head=old_head, new_head=new_head,
+                    adapter_type=MetadataAdapter,
+                )
+                adapter.metadata_failure = mode
+                with self.assertRaisesRegex(
+                    publication_module.PublicationError,
+                    "author or canonical content differs",
+                ):
+                    self.run_publish_entrypoint(temp, publication, projection, adapter, journal)
+                action_id = "task-intent:" + publication["publication_id"]
+                with journal.locked():
+                    events = journal.read_task_events(action_id)
+                self.assertEqual("READ_CONFLICT", events[-1]["event"])
+                self.assertNotIn("RESOLVED", [item["event"] for item in events])
+                self.assertEqual(1, adapter.events.count("task-intent"))
+
+    def test_wrong_task_or_payload_action_cannot_resume_attempted_publication(self):
+        old_head, new_head = "0" * 40, "1" * 40
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection, adapter, journal = self.existing_update_case(
+                temp, 7238, old_head=old_head, new_head=new_head,
+            )
+            action_id = "task-intent:" + publication["publication_id"]
+            def deny_post(_value):
+                adapter.events.append("task-intent")
+                raise PermissionError("simulated denied POST after attempt marker")
+            adapter.publish_task_intent = deny_post
+            with self.assertRaises(publication_module.PublicationError):
+                self.run_publish_entrypoint(temp, publication, projection, adapter, journal)
+            self.assertEqual(1, adapter.events.count("task-intent"))
+
+            changed_task, changed_projection = make_publication(
+                7239, head="2" * 40, branch=publication["source_ref"],
+                task_uid="task_" + "b" * 32,
+            )
+            changed_pr = {
+                "repository": changed_task["repository"],
+                "source_ref": changed_task["source_ref"],
+                "target_ref": changed_task["target_ref"], "head_oid": old_head,
+                "body": f"Task: {UID}\nRefs #1\n", "state": "open",
+                "merged": False, "draft": True, "number": 7239,
+            }
+            changed_adapter = FakeAdapter(
+                changed_task, changed_projection, initial_head=old_head,
+                initial_pr=changed_pr,
+            )
+            changed_adapter.pr_binding = None
+            with self.assertRaisesRegex(
+                publication_module.PublicationError,
+                "recovery selector does not match the exact publication action",
+            ):
+                self.run_publish_entrypoint(
+                    temp, changed_task, changed_projection, changed_adapter, journal,
+                    resume_action_id=action_id,
+                )
+            self.assertEqual(0, changed_adapter.events.count("task-intent"))
+            with journal.locked():
+                old_events = journal.read_task_events(action_id)
+            self.assertIn("POST_ATTEMPTED", [item["event"] for item in old_events])
+            self.assertNotIn("RESOLVED", [item["event"] for item in old_events])
+
+    def test_publisher_identity_drift_blocks_exact_action_recovery(self):
+        old_head, new_head = "9" * 40, "a" * 40
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection, adapter, journal = self.existing_update_case(
+                temp, 7198, old_head=old_head, new_head=new_head,
+                adapter_type=FirstPublicationReadTimeoutAdapter,
+            )
+            action_id = "task-intent:" + publication["publication_id"]
+            with self.assertRaises(publication_module.PublicationError):
+                self.run_publish_entrypoint(temp, publication, projection, adapter, journal)
+            adapter.publisher_login = "changed-publisher"
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "action identity changed during recovery",
+            ):
+                self.run_publish_entrypoint(
+                    temp, publication, projection, adapter, journal,
+                    resume_action_id=action_id,
+                )
+            self.assertEqual(1, adapter.publication_reads)
+            self.assertEqual(0, adapter.events.count("task-intent"))
+
+    def test_task_pr_binding_drift_blocks_exact_action_through_publisher_ingress(self):
+        old_head, new_head = "f" * 40, "0" * 40
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection, adapter, journal = self.existing_update_case(
+                temp, 7202, old_head=old_head, new_head=new_head,
+                adapter_type=FirstPublicationReadTimeoutAdapter,
+            )
+            action_id = "task-intent:" + publication["publication_id"]
+            with self.assertRaises(publication_module.PublicationError):
+                self.run_publish_entrypoint(temp, publication, projection, adapter, journal)
+            adapter.pr_binding = {"task_uid": UID, "pr_number": 9999}
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "Task is bound to another PR",
+            ):
+                self.run_publish_entrypoint(
+                    temp, publication, projection, adapter, journal,
+                    resume_action_id=action_id,
+                )
+            self.assertEqual(0, adapter.events.count("task-intent"))
+
+    def test_publication_cli_accepts_only_exact_action_selector_not_force_or_proof(self):
+        required = [
+            "--worktree", "/tmp/worktree", "--repo", "eng-cc/oasis7",
+            "--issue-number", "1", "--task-uid", UID, "--remote", "origin",
+            "--source-ref", "feature/test", "--target-ref", "main",
+            "--source-head", "a" * 40, "--target-oid", "b" * 40,
+            "--projection", "/tmp/projection.json", "--body-file", "/tmp/body.md",
+            "--task-helper", "/tmp/task-helper.py",
+        ]
+        action_id = "task-intent:sha256:" + "c" * 64
+        with (
+            patch.object(publish_module, "publish", return_value={"pr_url": "https://example/pr/1"}) as publish,
+            patch.object(sys, "argv", ["pr-projection-publish", *required,
+                                       "--resume-action-id", action_id]),
+            redirect_stdout(io.StringIO()),
+        ):
+            self.assertEqual(0, publish_module.main())
+        self.assertEqual(action_id, publish.call_args.args[0].resume_action_id)
+
+        for forbidden in ("--force", "--reset", "--post-was-not-sent"):
+            with (
+                patch.object(sys, "argv", ["pr-projection-publish", *required, forbidden]),
+                redirect_stderr(io.StringIO()),
+            ):
+                with self.assertRaises(SystemExit):
+                    publish_module.main()
+
+    def test_unresolved_publisher_identity_fails_before_task_comment_lookup(self):
+        class UnresolvedLoginAdapter(FakeAdapter):
+            def resolve_publisher_login(self):
+                raise RuntimeError("simulated gh api user failure")
+
+        old_head, new_head = "b" * 40, "c" * 40
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection, adapter, journal = self.existing_update_case(
+                temp, 7199, old_head=old_head, new_head=new_head,
+                adapter_type=UnresolvedLoginAdapter,
+            )
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "authenticated GitHub login read failed",
+            ):
+                self.run_publish_entrypoint(temp, publication, projection, adapter, journal)
+            self.assertNotIn("task-intent", adapter.events)
+            with journal.locked():
+                self.assertEqual([], journal.read_task_events())
+
+    def test_legacy_or_truncated_task_post_history_never_authorizes_post(self):
+        old_head, new_head = "d" * 40, "e" * 40
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection, adapter, journal = self.existing_update_case(
+                temp, 7200, old_head=old_head, new_head=new_head,
+            )
+            action_id = "task-intent:" + publication["publication_id"]
+            with journal.locked():
+                journal.intent(action_id, "publish_task_intent", {
+                    "publication_id": publication["publication_id"], "task_uid": UID,
+                })
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "legacy Task publication history is UNKNOWN",
+            ):
+                self.run_publish_entrypoint(
+                    temp, publication, projection, adapter, journal,
+                    resume_action_id=action_id,
+                )
+            self.assertEqual(0, adapter.events.count("task-intent"))
+
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection, adapter, journal = self.existing_update_case(
+                temp, 7201, old_head=old_head, new_head=new_head,
+                adapter_type=FirstPublicationReadTimeoutAdapter,
+            )
+            action_id = "task-intent:" + publication["publication_id"]
+            with self.assertRaises(publication_module.PublicationError):
+                self.run_publish_entrypoint(temp, publication, projection, adapter, journal)
+            with journal.task_events_path.open("ab") as stream:
+                stream.write(b'{"partial":')
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "event journal is truncated",
+            ):
+                self.run_publish_entrypoint(
+                    temp, publication, projection, adapter, journal,
+                    resume_action_id=action_id,
+                )
+            self.assertEqual(0, adapter.events.count("task-intent"))
+
+    def test_duplicate_task_post_event_history_fails_closed(self):
+        old_head, new_head = "a" * 40, "b" * 40
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection, adapter, journal = self.existing_update_case(
+                temp, 7240, old_head=old_head, new_head=new_head,
+                adapter_type=FirstPublicationReadTimeoutAdapter,
+            )
+            action_id = "task-intent:" + publication["publication_id"]
+            with self.assertRaises(publication_module.PublicationError):
+                self.run_publish_entrypoint(temp, publication, projection, adapter, journal)
+            original = journal.task_events_path.read_bytes()
+            first_event = original.splitlines(keepends=True)[0]
+            with journal.task_events_path.open("ab") as stream:
+                stream.write(first_event)
+            with self.assertRaisesRegex(
+                publication_module.PublicationError,
+                "event identity or sequence is invalid",
+            ):
+                self.run_publish_entrypoint(
+                    temp, publication, projection, adapter, journal,
+                    resume_action_id=action_id,
+                )
+            self.assertEqual(0, adapter.events.count("task-intent"))
 
     def test_publish_task_intent_rejects_altered_full_body_readback(self):
         publication, _projection = make_publication(7007)
@@ -751,6 +1531,7 @@ class PublicationMatrixTests(unittest.TestCase):
                 "task_uid": UID, "task_helper": str(root / "github-project-task.py"),
             })()
             adapter = publish_module.GitHubPublicationAdapter(root, args, publication)
+            adapter.authenticated_login = "publisher"
 
             def altered_readback(*command, timeout=5.0, input_json=None):
                 if command[:2] == ("api", f"repos/{publication['repository']}/issues/123"):
@@ -762,11 +1543,12 @@ class PublicationMatrixTests(unittest.TestCase):
                 if command[:2] == (
                     "api", f"repos/{publication['repository']}/issues/comments/7007",
                 ):
-                    return json.dumps({"id": 7007, "body": expected_body + "\nchanged"})
+                    return json.dumps({"id": 7007, "body": expected_body + "\nchanged",
+                                       "user": {"login": "publisher"}})
                 raise AssertionError(f"unexpected mocked GitHub call: {command!r}")
 
             with patch.object(adapter, "gh", side_effect=altered_readback):
-                with self.assertRaisesRegex(RuntimeError, "Issue comment exact readback failed"):
+                with self.assertRaisesRegex(RuntimeError, "Issue comment exact author/content readback failed"):
                     adapter.publish_task_intent(publication)
 
     def test_find_task_publication_on_later_paginated_comment_page(self):
@@ -776,6 +1558,7 @@ class PublicationMatrixTests(unittest.TestCase):
         second_page = [{
             "id": 11,
             "body": publication_module.publication_comment(publication),
+            "user": {"login": "publisher"},
         }]
 
         with tempfile.TemporaryDirectory() as temp:
@@ -802,6 +1585,11 @@ class PublicationMatrixTests(unittest.TestCase):
 
         self.assertIs(result["complete"], True)
         self.assertEqual([publication], result["publications"])
+        self.assertEqual([{"publication_id": publication["publication_id"],
+                           "author_login": "publisher"}], result["publication_authors"])
+        self.assertEqual([{"publication_id": publication["publication_id"],
+                           "body": publication_module.publication_comment(publication)}],
+                         result["publication_bodies"])
 
     def test_pr_discovery_filters_large_history_server_side(self):
         repository = "eng-cc/oasis7"

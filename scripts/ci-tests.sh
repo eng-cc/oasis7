@@ -394,6 +394,7 @@ run_workflow_governance_operational_contract_tests() {
   run python3 ./scripts/security/codeql-acceptance.test.py
   run python3 ./scripts/pm/codeql-advisory.test.py
   run bash ./scripts/pm/pr-lifecycle-gate.test.sh
+  run env PYTHONDONTWRITEBYTECODE=1 python3 ./scripts/pm/pr_projection_publication.test.py
   run bash ./scripts/pm/lint.test.sh
   run bash ./scripts/pm/github-project-workflow.test.sh
   run ./scripts/ci-required-scope-audit-contract.test.sh

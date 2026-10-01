@@ -18,6 +18,12 @@ from typing import Any, Iterator
 from portable_file_lock import ensure_lock_byte, fcntl
 
 SCHEMA = "oasis7-pr-publication-journal/v1"
+TASK_POST_EVENT_SCHEMA = "oasis7-pr-task-post-event/v1"
+TASK_POST_EVENTS_FILE = "task-publication-events.jsonl"
+TASK_POST_EVENT_TYPES = frozenset({
+    "READ_FAILED", "READ_EMPTY", "READ_MATCH", "READ_CONFLICT",
+    "WRITE_INTENT", "POST_ATTEMPTED", "POST_RESPONSE_UNCERTAIN", "RESOLVED",
+})
 _PUB_ID = re.compile(r"sha256:[0-9a-f]{64}\Z")
 
 
@@ -65,13 +71,26 @@ def _atomic_json(path: Path, value: dict[str, Any]) -> None:
         Path(temp_name).unlink(missing_ok=True)
 
 
+def _canonical_digest(value: Any) -> str:
+    raw = json.dumps(value, ensure_ascii=False, sort_keys=True,
+                      separators=(",", ":")).encode("utf-8")
+    return "sha256:" + hashlib.sha256(raw).hexdigest()
+
+
 class PublicationJournal:
     """One publication journal guarded by a permanent branch-scoped lock."""
 
-    def __init__(self, path: Path, lock_path: Path, identity: dict[str, Any]):
+    def __init__(self, path: Path, lock_path: Path, identity: dict[str, Any], *,
+                 common_dir: Path | None = None,
+                 canonical_worktree: Path | None = None):
         self.path = path
         self.lock_path = lock_path
         self.identity = dict(identity)
+        self.common_dir = (common_dir or path.parent).resolve()
+        self.canonical_worktree = (
+            canonical_worktree.resolve() if canonical_worktree is not None else None
+        )
+        self.task_events_path = path.with_name(TASK_POST_EVENTS_FILE)
         self._lock = None
 
     @contextmanager
@@ -91,6 +110,11 @@ class PublicationJournal:
     def _assert_locked(self) -> None:
         if self._lock is None:
             raise JournalError("journal mutation requires the publication lock")
+
+    def inherited_lock_fd(self) -> int:
+        """Return the active reservation descriptor for a child writer lease."""
+        self._assert_locked()
+        return self._lock.fileno()
 
     def _read_or_create(self) -> dict[str, Any]:
         self._assert_locked()
@@ -116,7 +140,137 @@ class PublicationJournal:
 
     def read(self) -> dict[str, Any]:
         self._assert_locked()
-        return self._read_or_create()
+        value = self._read_or_create()
+        value["task_post_events"] = self.read_task_events()
+        return value
+
+    def read_task_events(self, action_id: str | None = None, *,
+                         identity: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+        """Read and validate the append-only Task-comment POST event stream."""
+        self._assert_locked()
+        if self.task_events_path.exists():
+            try:
+                raw = self.task_events_path.read_bytes()
+            except OSError as exc:
+                raise JournalError("Task publication event journal is unreadable") from exc
+            if not raw or not raw.endswith(b"\n"):
+                raise JournalError("Task publication event journal is truncated")
+            lines = raw.splitlines()
+        else:
+            lines = []
+        events: list[dict[str, Any]] = []
+        seen_identities: dict[str, dict[str, Any]] = {}
+        for expected_sequence, line in enumerate(lines, start=1):
+            try:
+                value = json.loads(line.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                raise JournalError("Task publication event journal is malformed") from exc
+            required = {
+                "schema", "sequence", "event", "action_id", "identity",
+                "identity_digest", "evidence",
+            }
+            if (not isinstance(value, dict) or set(value) != required
+                    or value.get("schema") != TASK_POST_EVENT_SCHEMA
+                    or type(value.get("sequence")) is not int
+                    or value.get("sequence") != expected_sequence
+                    or not isinstance(value.get("event"), str)
+                    or value.get("event") not in TASK_POST_EVENT_TYPES
+                    or not isinstance(value.get("action_id"), str)
+                    or not value["action_id"]
+                    or not isinstance(value.get("identity"), dict)
+                    or value.get("identity_digest") != _canonical_digest(value["identity"])
+                    or not isinstance(value.get("evidence"), dict)):
+                raise JournalError("Task publication event identity or sequence is invalid")
+            prior_identity = seen_identities.setdefault(value["action_id"], value["identity"])
+            if prior_identity != value["identity"]:
+                raise JournalError("Task publication action identity changed in event history")
+            events.append(value)
+        self._validate_task_event_sequences(events)
+        if action_id is not None:
+            events = [event for event in events if event["action_id"] == action_id]
+        if identity is not None and any(event["identity"] != identity for event in events):
+            raise JournalError("Task publication action does not match its original identity")
+        return events
+
+    @staticmethod
+    def _validate_task_event_sequences(events: list[dict[str, Any]]) -> None:
+        histories: dict[str, list[str]] = {}
+        for value in events:
+            history = histories.setdefault(value["action_id"], [])
+            event = value["event"]
+            if history and history[-1] == "RESOLVED":
+                raise JournalError("Task publication event follows terminal resolution")
+            if event == "WRITE_INTENT" and (not history or history[-1] != "READ_EMPTY"):
+                raise JournalError("Task write intent lacks fresh empty-read boundary")
+            if event == "POST_ATTEMPTED" and (not history or history[-1] != "WRITE_INTENT"):
+                raise JournalError("Task POST attempt lacks adjacent durable write intent")
+            if event == "POST_RESPONSE_UNCERTAIN" and "POST_ATTEMPTED" not in history:
+                raise JournalError("Task POST uncertainty lacks durable attempt marker")
+            if event == "RESOLVED" and (not history or history[-1] != "READ_MATCH"):
+                raise JournalError("Task publication resolution lacks exact readback")
+            if "POST_ATTEMPTED" in history and event in {"WRITE_INTENT", "POST_ATTEMPTED"}:
+                raise JournalError("Task publication history contains a repeated POST attempt")
+            history.append(event)
+
+    def append_task_event(self, action_id: str, event: str, identity: dict[str, Any],
+                          evidence: dict[str, Any] | None = None) -> dict[str, Any]:
+        """Append one immutable, fsynced Task-comment protocol event."""
+        self._assert_locked()
+        if (not isinstance(action_id, str) or not action_id
+                or event not in TASK_POST_EVENT_TYPES
+                or not isinstance(identity, dict)
+                or (evidence is not None and not isinstance(evidence, dict))):
+            raise JournalError("Task publication event is incomplete")
+        current = self.read_task_events()
+        matching = [item for item in current if item["action_id"] == action_id]
+        if any(item["identity"] != identity for item in matching):
+            raise JournalError("Task publication action identity conflicts with prior evidence")
+        action_events = [item["event"] for item in matching]
+        if event == "WRITE_INTENT" and (not action_events or action_events[-1] != "READ_EMPTY"):
+            raise JournalError("Task write intent requires fresh complete empty read evidence")
+        if event == "POST_ATTEMPTED" and (not action_events or action_events[-1] != "WRITE_INTENT"):
+            raise JournalError("Task POST attempt requires a durable write intent")
+        if event == "RESOLVED" and not any(
+                item in {"POST_ATTEMPTED", "READ_MATCH"} for item in action_events):
+            raise JournalError("Task publication resolution lacks exact readback evidence")
+        if "POST_ATTEMPTED" in action_events and event in {"WRITE_INTENT", "POST_ATTEMPTED"}:
+            raise JournalError("Task POST attempt is already pending or resolved")
+        record = {
+            "schema": TASK_POST_EVENT_SCHEMA,
+            "sequence": len(self._read_all_task_events()) + 1,
+            "event": event,
+            "action_id": action_id,
+            "identity": identity,
+            "identity_digest": _canonical_digest(identity),
+            "evidence": evidence or {},
+        }
+        self.task_events_path.parent.mkdir(parents=True, exist_ok=True)
+        existed = self.task_events_path.exists()
+        encoded = json.dumps(record, ensure_ascii=False, sort_keys=True,
+                             separators=(",", ":")).encode("utf-8") + b"\n"
+        try:
+            fd = os.open(self.task_events_path, os.O_WRONLY | os.O_APPEND | os.O_CREAT, 0o600)
+            try:
+                offset = 0
+                while offset < len(encoded):
+                    written = os.write(fd, encoded[offset:])
+                    if written <= 0:
+                        raise OSError("short Task publication event append")
+                    offset += written
+                os.fsync(fd)
+            finally:
+                os.close(fd)
+            if not existed:
+                _fsync_dir(self.task_events_path.parent)
+        except OSError as exc:
+            raise JournalError("Task publication event append was not confirmed durable") from exc
+        observed = self.read_task_events()
+        if not observed or observed[-1] != record:
+            raise JournalError("Task publication event append failed readback verification")
+        return record
+
+    def _read_all_task_events(self) -> list[dict[str, Any]]:
+        return self.read_task_events()
 
     def intent(self, action_id: str, kind: str, expected: dict[str, Any]) -> dict[str, Any]:
         self._assert_locked()
@@ -177,7 +331,8 @@ class PublicationJournal:
 def open_journal(common_dir: str | os.PathLike[str], repository: str,
                  branch: str, publication_id: str, *, task_uid: str,
                  source_head_oid: str, scope_base_oid: str,
-                 projection_digest: str) -> PublicationJournal:
+                 projection_digest: str,
+                 canonical_worktree: str | os.PathLike[str] | None = None) -> PublicationJournal:
     path, lock_path = publication_paths(common_dir, repository, branch, publication_id)
     identity = {
         "repository": repository,
@@ -188,4 +343,7 @@ def open_journal(common_dir: str | os.PathLike[str], repository: str,
         "scope_base_oid": scope_base_oid,
         "projection_digest": projection_digest,
     }
-    return PublicationJournal(path, lock_path, identity)
+    return PublicationJournal(
+        path, lock_path, identity, common_dir=Path(common_dir),
+        canonical_worktree=Path(canonical_worktree) if canonical_worktree is not None else None,
+    )

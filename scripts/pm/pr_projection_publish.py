@@ -6,6 +6,8 @@ import argparse
 import base64
 import hashlib
 import json
+import os
+from contextlib import contextmanager
 from pathlib import Path
 import re
 import subprocess
@@ -32,6 +34,29 @@ class PublishInputError(RuntimeError):
     pass
 
 
+@contextmanager
+def _inherited_reservation(reservation_fd: int | None):
+    """Keep the locked file handle open in a child that can outlive this process."""
+    if reservation_fd is None:
+        yield {}
+        return
+    if os.name == "nt":
+        import msvcrt
+
+        handle = msvcrt.get_osfhandle(reservation_fd)
+        os.set_handle_inheritable(handle, True)
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.lpAttributeList = {"handle_list": [handle]}
+        try:
+            yield {"close_fds": True, "startupinfo": startupinfo}
+        finally:
+            os.set_handle_inheritable(handle, False)
+        return
+    if os.name != "posix":
+        raise PublishInputError("child publication reservation inheritance is unsupported")
+    yield {"close_fds": True, "pass_fds": (reservation_fd,)}
+
+
 def has_exact_task_pr_linkage(body: Any, task_uid: str, issue_number: int) -> bool:
     """Require one canonical whole-line Task marker and non-closing Refs line."""
     if not isinstance(body, str):
@@ -45,11 +70,13 @@ def has_exact_task_pr_linkage(body: Any, task_uid: str, issue_number: int) -> bo
     )
 
 
-def command_output(args: list[str], *, timeout: float = LOCAL_COMMAND_TIMEOUT_SECONDS) -> str:
+def command_output(args: list[str], *, timeout: float = LOCAL_COMMAND_TIMEOUT_SECONDS,
+                   reservation_fd: int | None = None) -> str:
     try:
-        return subprocess.run(args, check=True, text=True, encoding="utf-8",
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                              timeout=timeout).stdout.strip()
+        with _inherited_reservation(reservation_fd) as inherited:
+            return subprocess.run(args, check=True, text=True, encoding="utf-8",
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                  timeout=timeout, **inherited).stdout.strip()
     except (OSError, subprocess.SubprocessError) as exc:
         raise PublishInputError(f"command failed: {args[0]}: {exc}") from exc
 
@@ -187,17 +214,33 @@ class GitHubPublicationAdapter:
         self.issue_number = args.issue_number
         self.task_helper = Path(args.task_helper).resolve()
         self.pr_number: int | None = None
+        self.authenticated_login: str | None = None
+        self.reservation_fd: int | None = None
 
     def gh(self, *args: str, timeout: float = 5.0,
            input_json: dict[str, Any] | None = None) -> str:
         input_text = json.dumps(input_json, ensure_ascii=False) if input_json is not None else None
         try:
-            result = subprocess.run(["gh", *args], input=input_text, check=True, text=True,
-                                    encoding="utf-8", stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE, timeout=timeout)
+            with _inherited_reservation(self.reservation_fd) as inherited:
+                result = subprocess.run(["gh", *args], input=input_text, check=True, text=True,
+                                        encoding="utf-8", stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE, timeout=timeout, **inherited)
             return result.stdout.strip()
         except (OSError, subprocess.SubprocessError) as exc:
             raise RuntimeError(f"GitHub request failed: {exc}") from exc
+
+    def resolve_publisher_login(self) -> str:
+        """Resolve the current authenticated GitHub identity without probing write permission."""
+        raw = self.gh("api", "user", timeout=5.0)
+        try:
+            user = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("authenticated GitHub user response is malformed") from exc
+        login = user.get("login") if isinstance(user, dict) else None
+        if not isinstance(login, str) or not login.strip() or any(ord(char) < 33 for char in login):
+            raise RuntimeError("authenticated GitHub login is unavailable")
+        self.authenticated_login = login
+        return login
 
     def _issue_comments(self) -> list[dict[str, Any]]:
         raw = self.gh("api", f"repos/{self.args.repo}/issues/{self.issue_number}/comments?per_page=100",
@@ -239,13 +282,19 @@ class GitHubPublicationAdapter:
         if not match:
             raise RuntimeError("Issue comment response has no comment identity")
         readback = json.loads(self.gh("api", f"repos/{self.args.repo}/issues/comments/{match.group(1)}"))
-        if readback.get("body") != body:
-            raise RuntimeError("Issue comment exact readback failed")
+        user = readback.get("user") if isinstance(readback, dict) else None
+        author = user.get("login") if isinstance(user, dict) else None
+        if (readback.get("body") != body
+                or not isinstance(self.authenticated_login, str)
+                or author != self.authenticated_login):
+            raise RuntimeError("Issue comment exact author/content readback failed")
 
     def find_task_publications(self, publication_id: str) -> dict[str, Any]:
         self._assert_task_identity()
         target = self.publication
         matches = []
+        authors = []
+        bodies = []
         for comment in self._issue_comments():
             body = comment["body"]
             if "<!-- oasis7-ci-publication/v1 -->" not in body:
@@ -255,10 +304,21 @@ class GitHubPublicationAdapter:
                     and value["source_head_oid"] == target["source_head_oid"]
                     and value["source_scope_oid"] == target["source_scope_oid"]):
                 matches.append(value)
-        return {"complete": True, "publications": matches}
+                user = comment.get("user") if isinstance(comment.get("user"), dict) else {}
+                authors.append({
+                    "publication_id": value["publication_id"],
+                    "author_login": user.get("login"),
+                })
+                bodies.append({"publication_id": value["publication_id"], "body": body})
+        return {
+            "complete": True, "publications": matches,
+            "publication_authors": authors, "publication_bodies": bodies,
+        }
 
     def publish_task_intent(self, value: dict[str, Any]) -> None:
         self._assert_task_identity()
+        if not isinstance(self.authenticated_login, str) or not self.authenticated_login:
+            raise RuntimeError("authenticated GitHub login was not resolved before POST")
         self._write_issue_comment(publication.publication_comment(value))
 
     def read_source_ref(self, source_ref: str) -> str | None:
@@ -285,7 +345,8 @@ class GitHubPublicationAdapter:
         else:
             lease = f"--force-with-lease=refs/heads/{source_ref}:"
         command_output(["git", "-C", str(self.root), "push", self.args.remote, lease,
-                        f"{new_oid}:refs/heads/{source_ref}"], timeout=60)
+                        f"{new_oid}:refs/heads/{source_ref}"], timeout=60,
+                       reservation_fd=self.reservation_fd)
 
     def find_task_prs(self, task_uid: str, source_ref: str, target_ref: str,
                       *, timeout_seconds: float = 5.0) -> dict[str, Any]:
@@ -335,7 +396,7 @@ class GitHubPublicationAdapter:
             else:
                 command.append("--fill")
             command.extend(["--body-file", str(path)])
-            command_output(command, timeout=60)
+            command_output(command, timeout=60, reservation_fd=self.reservation_fd)
         finally:
             path.unlink(missing_ok=True)
 
@@ -402,8 +463,8 @@ class GitHubPublicationAdapter:
                 "--task-uid", task_uid, "--pr-url", url, "--role", "tpm",
                 "--validation-command", "C1 ordered CI projection publication",
                 "--existing-ready-update" if getattr(self.args, "existing_ready_update", False) else "--draft-candidate",
-                "--publication-binding-json", str(path), "--json",
-            ], timeout=60)
+            "--publication-binding-json", str(path), "--json",
+            ], timeout=60, reservation_fd=self.reservation_fd)
         finally:
             path.unlink(missing_ok=True)
         self.pr_number = number
@@ -518,6 +579,7 @@ def publish(args: argparse.Namespace) -> dict[str, Any]:
         source_head_oid=candidate["source_head_oid"],
         scope_base_oid=candidate["source_scope_oid"],
         projection_digest=candidate["projection_digest"],
+        canonical_worktree=root,
     )
     body = Path(args.body_file).read_text(encoding="utf-8")
     ready_update = bool(getattr(args, "existing_ready_update", False))
@@ -549,6 +611,7 @@ def publish(args: argparse.Namespace) -> dict[str, Any]:
                 adapter, journal, publication=candidate, projection=projection_value,
                 body=pr["body"], expected_remote_oid=prior_lease,
                 legacy_projection_b64=legacy_projection_b64,
+                resume_action_id=getattr(args, "resume_action_id", None),
             )
         else:
             result = publication.publish_update(
@@ -556,6 +619,7 @@ def publish(args: argparse.Namespace) -> dict[str, Any]:
                 pr_number=pr["number"], old_head_oid=pr["head_oid"], body=body,
                 legacy_projection_b64=legacy_projection_b64,
                 expected_draft=not ready_update, existing_ready_update=ready_update,
+                resume_action_id=getattr(args, "resume_action_id", None),
             )
     else:
         remote_oid = adapter.read_source_ref(candidate["source_ref"])
@@ -563,6 +627,7 @@ def publish(args: argparse.Namespace) -> dict[str, Any]:
             adapter, journal, publication=candidate, projection=projection_value,
             body=body, expected_remote_oid=remote_oid,
             legacy_projection_b64=legacy_projection_b64,
+            resume_action_id=getattr(args, "resume_action_id", None),
         )
     result["pr_url"] = f"https://github.com/{candidate['repository']}/pull/{result['pr_number']}"
     return result
@@ -585,6 +650,8 @@ def main() -> int:
     parser.add_argument("--title", default="")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--existing-ready-update", action="store_true")
+    parser.add_argument("--resume-action-id", default=None,
+                        help="resume only the exact persisted Task publication action")
     args = parser.parse_args()
     try:
         result = publish(args)
