@@ -1136,6 +1136,12 @@ def check_cross_package_edges(
     # delimiter matched to its closing delimiter, including multiple hashes.
     literal = r'(?:"([^"\n]+)"|r(#{0,255})"([^"\n]+)"\2)'
     affected_packages = {owner_for(path, packages) for path in changed} - {None}
+    manifests = package_manifest_paths(packages)
+    manifest_rooted_literal = re.compile(
+        r'concat\s*!\s*\(\s*env\s*!\s*\(\s*"CARGO_MANIFEST_DIR"\s*\)\s*,\s*'
+        + literal
+        + r'\s*\)'
+    )
     for path in paths:
         owner = owner_for(path, packages)
         if not path.endswith(".rs"):
@@ -1148,17 +1154,33 @@ def check_cross_package_edges(
             (r"#\s*\[\s*path\s*=\s*", "]", "cross_package_path"),
         ):
             for reference in re.finditer(prefix, text):
-                match = re.match(literal, text[reference.end():])
-                if match is None or not text[reference.end() + match.end():].lstrip().startswith(terminator):
-                    if affected_packages:
-                        raise ScopeError("unresolved_rust_source_reference", f"{path} has non-literal {reason}")
-                    continue
-                target = match.group(1) or match.group(3)
+                argument = text[reference.end():]
+                match = re.match(literal, argument)
+                source_base = path
+                if match is not None and argument[match.end():].lstrip().startswith(terminator):
+                    target = match.group(1) or match.group(3)
+                else:
+                    # Rust code commonly anchors includes at its Cargo package
+                    # root. Resolve only this static concat/env form; computed
+                    # paths remain fail-closed when package scope is active.
+                    rooted = manifest_rooted_literal.match(argument) if terminator == ")" else None
+                    if rooted is None or not argument[rooted.end():].lstrip().startswith(")"):
+                        if affected_packages:
+                            raise ScopeError("unresolved_rust_source_reference", f"{path} has non-literal {reason}")
+                        continue
+                    target = rooted.group(1) or rooted.group(3)
+                    manifest = manifests.get(owner) if owner is not None else None
+                    if not target.startswith("/") or manifest is None:
+                        if affected_packages:
+                            raise ScopeError("unresolved_rust_source_reference", f"{path} has non-literal {reason}")
+                        continue
+                    source_base = manifest
+                    target = target[1:]
                 if "\\" in target:
                     if affected_packages:
                         raise ScopeError("unresolved_rust_source_reference", f"{path} has escaped {reason}")
                     continue
-                resolved = resolve_relative(path, target)
+                resolved = resolve_relative(source_base, target)
                 if resolved is None:
                     if affected_packages:
                         raise ScopeError("unresolved_rust_source_reference", f"{path} has out-of-repository {reason}")

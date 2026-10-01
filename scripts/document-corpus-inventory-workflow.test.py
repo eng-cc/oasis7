@@ -411,7 +411,8 @@ class CorpusScopeTests(unittest.TestCase):
                     "doc/.governance/document-corpus-inventory.json")
         self.assertEqual(code["scope"], "targeted")
         self.assertEqual(code["selected_capabilities"], "doc_checker_contracts;workflow_governance")
-        self.assertEqual(code["run_rust_baseline"], "false")
+        self.assertEqual(code["run_rust_baseline"], "true")
+        self.assertEqual(code["needs_rust_toolchain"], "true")
 
         data = plan("doc/.governance/document-corpus/semantic/aa/fixture.json")
         self.assertEqual(data["scope"], "minimal")

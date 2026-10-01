@@ -1033,6 +1033,39 @@ path = "src/lib.rs"
             ),
         )
 
+    def test_unaffected_package_manifest_rooted_include_is_allowed(self) -> None:
+        repo, _ = self._fixture()
+        self._write(repo, "crates/beta/src/lib.rs",
+            'const MESSAGE: &str = include_str!(concat!(\n'
+            '    env!("CARGO_MANIFEST_DIR"),\n'
+            '    "/src/shared.rs"\n'
+            '));\n'
+            'pub fn beta() {}\n',
+        )
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "base with manifest-rooted same-package include")
+        base = self._git(repo, "rev-parse", "HEAD")
+        self._assert_allowed(
+            repo, base, "alpha",
+            lambda root: self._write(root, "crates/alpha/src/lib.rs", "pub fn changed_alpha() {}\n"),
+        )
+
+    def test_manifest_rooted_include_into_changed_package_is_rejected(self) -> None:
+        repo, _ = self._fixture()
+        self._write(repo, "crates/alpha/src/shared.rs", "pub fn shared() {}\n")
+        self._write(repo, "crates/beta/src/lib.rs",
+            'include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../alpha/src/shared.rs"));\n'
+            'pub fn beta() {}\n',
+        )
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "base with manifest-rooted cross-package include")
+        base = self._git(repo, "rev-parse", "HEAD")
+        self._assert_rejected(
+            repo, base, "alpha",
+            lambda root: self._write(root, "crates/alpha/src/shared.rs", "pub fn changed() {}\n"),
+            "cross_package_include",
+        )
+
     def test_cross_package_path_attribute_is_rejected(self) -> None:
         repo, base = self._fixture()
 

@@ -520,8 +520,8 @@ assert_key_equals "$document_corpus_code_output" selected_capabilities \
   'doc_checker_contracts;workflow_governance'
 assert_key_equals "$document_corpus_code_output" run_doc_checker_contracts true
 assert_key_equals "$document_corpus_code_output" run_workflow_governance_contracts true
-assert_key_equals "$document_corpus_code_output" run_rust_baseline false
-assert_key_equals "$document_corpus_code_output" needs_rust_toolchain false
+assert_key_equals "$document_corpus_code_output" run_rust_baseline true
+assert_key_equals "$document_corpus_code_output" needs_rust_toolchain true
 assert_reason_absent "$document_corpus_code_output" "unclassified_or_unresolvable:"
 
 # Mutable shards are data-only under the general documentation rule; changing
