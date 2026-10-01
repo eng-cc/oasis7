@@ -750,8 +750,7 @@ run_cargo_package_scope_check() {
     --base "$base_oid" \
     --head "$head_oid" \
     --primary-package "$primary_package" \
-    --policy "$repo_root/$policy" \
-    --json || checker_result=$?
+    --policy "$repo_root/$policy" || checker_result=$?
   if (( checker_result != 0 )); then
     return "$checker_result"
   fi

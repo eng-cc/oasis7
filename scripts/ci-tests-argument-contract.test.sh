@@ -419,4 +419,119 @@ if ! grep -Fq "outputs.run_packaging_contracts == 'true'" <<<"$macos_package_job
   exit 1
 fi
 
+python3 - "$ROOT_DIR" "$SCRIPT" <<'PY'
+import os
+import pathlib
+import shlex
+import subprocess
+import sys
+import tempfile
+
+root = pathlib.Path(sys.argv[1])
+script_path = pathlib.Path(sys.argv[2])
+driver_source = script_path.read_text(encoding="utf-8")
+
+
+def function_source(name):
+    marker = f"{name}() {{"
+    start = driver_source.index(marker)
+    end = driver_source.index("\n}\n", start) + 3
+    return driver_source[start:end]
+
+
+scope_function = function_source("run_cargo_package_scope_check")
+if "--json" in scope_function:
+    raise SystemExit("status-only Cargo scope dispatcher must not emit its unbounded JSON report")
+
+checker_source = (root / "scripts/pm/check-cargo-package-scope").read_text(encoding="utf-8")
+for compact_status in (
+    'print(f"allowed: {args.primary_package}")',
+    'print(f"rejected: {exc.reason}: {exc.detail}", file=sys.stderr)',
+):
+    if compact_status not in checker_source:
+        raise SystemExit(f"Cargo scope checker human status output changed unexpectedly: {compact_status}")
+
+run_function = function_source("run")
+with tempfile.TemporaryDirectory(prefix="oasis7-ci-cargo-scope-wrapper-") as temp:
+    work = pathlib.Path(temp)
+    revision = subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True).strip()
+    checker = root / "scripts/pm/check-cargo-package-scope"
+    shim_bin = work / "bin"
+    shim_bin.mkdir()
+    python_shim = shim_bin / "python3"
+    python_shim.write_text(
+        "#!/bin/sh\n"
+        "printf '%s\\n' \"$@\" > \"$OASIS7_TEST_ARGV\"\n"
+        "if [ \"${OASIS7_TEST_CHECKER_EXIT:-0}\" != 0 ]; then\n"
+        "  printf 'rejected: fixture\\n' >&2\n"
+        "  exit \"$OASIS7_TEST_CHECKER_EXIT\"\n"
+        "fi\n"
+        "printf 'allowed: auto\\n'\n",
+        encoding="utf-8",
+    )
+    python_shim.chmod(0o755)
+
+    harness = "\n".join((
+        "set -euo pipefail",
+        f"repo_root={shlex.quote(str(root))}",
+        run_function,
+        scope_function,
+        "run_cargo_package_scope_check",
+    ))
+    argv_path = work / "checker-argv.txt"
+    env = dict(os.environ)
+    env.update({
+        "PATH": str(shim_bin) + os.pathsep + env.get("PATH", ""),
+        "OASIS7_CARGO_SCOPE_BASE": revision,
+        "OASIS7_CARGO_SCOPE_HEAD": revision,
+        "OASIS7_CARGO_SCOPE_CHECKER": str(checker),
+        "OASIS7_TEST_ARGV": str(argv_path),
+    })
+
+    def invoke(exit_code):
+        env["OASIS7_TEST_CHECKER_EXIT"] = str(exit_code)
+        return subprocess.run(
+            ["bash", "-euo", "pipefail", "-c", harness],
+            cwd=root,
+            env=env,
+            text=True,
+            capture_output=True,
+        )
+
+    success = invoke(0)
+    success_argv = argv_path.read_text(encoding="utf-8").splitlines()
+    expected_flags = {
+        "--repo-root": str(root),
+        "--base": revision,
+        "--head": revision,
+        "--primary-package": "auto",
+        "--policy": str(root / ".pm/cargo-package-scope-policy.json"),
+    }
+    if success.returncode or success.stderr or "allowed: auto" not in success.stdout:
+        raise SystemExit(f"successful Cargo scope checker did not pass through the compact status: {success.stderr}")
+    if len(success.stdout.encode("utf-8")) > 1024:
+        raise SystemExit(f"successful Cargo scope output is unexpectedly unbounded: {len(success.stdout.encode('utf-8'))} bytes")
+    for flag, value in expected_flags.items():
+        if flag not in success_argv:
+            raise SystemExit(f"Cargo scope caller omitted {flag}: {success_argv}")
+        index = success_argv.index(flag)
+        actual = pathlib.Path(success_argv[index + 1]) if flag == "--policy" and index + 1 < len(success_argv) else (
+            success_argv[index + 1] if index + 1 < len(success_argv) else None
+        )
+        expected = pathlib.Path(value) if flag == "--policy" else value
+        if actual != expected:
+            raise SystemExit(f"Cargo scope caller changed {flag} authority: {success_argv}")
+    if "--json" in success_argv:
+        raise SystemExit(f"Cargo scope caller still requests unbounded JSON output: {success_argv}")
+
+    failure = invoke(23)
+    failure_argv = argv_path.read_text(encoding="utf-8").splitlines()
+    if failure.returncode != 23 or "rejected: fixture" not in failure.stderr:
+        raise SystemExit(
+            f"rejected Cargo scope checker result did not fail the caller: exit={failure.returncode}, stderr={failure.stderr!r}"
+        )
+    if len(failure.stdout.encode("utf-8")) > 1024 or "--json" in failure_argv:
+        raise SystemExit("rejected Cargo scope output exceeded the status-only bound or requested JSON")
+
+PY
 echo "ci-tests-argument-contract.test: OK"
