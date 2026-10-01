@@ -646,38 +646,20 @@ For the current-PR required-gate projection, classify a structurally valid nonte
 - Atomic steps should be recorded with `Action / Validation Command / Expected Result / Actual Result`.
 - If blocked, also record `Blocker / Next Action`.
 - These fields are mandatory for GitHub task issue evidence entries.
-- Record evidence when it changes route, scope, status, claims, verification
-  interpretation, blocker state, review findings, or user-visible decisions.
-  Routine reads/searches that only support TPM routing can stay in the local
-  transcript unless they become part of a claim or handoff.
+- Record evidence when it changes route, scope, status, claims, verification interpretation, blocker state, review findings, or user-visible decisions. Routine reads/searches that only support TPM routing can stay in the local transcript unless they become part of a claim or handoff.
 
 ### 5.4 Claim and lifecycle transitions
 Follow the [canonical gates](#ready-and-done) and [terminal order](#canonical-state-machine); this section only names operational helpers.
 
-- Freeze a clean implementation commit. Verify an isolated snapshot of that
-  exact tree and run `git diff --check <comparison-ref>...<frozen-head>`.
-  A later relevant change starts a new evidence epoch.
-- Use `claim-ready.sh` for fresh claim evidence. Multi-surface claims use one
-  repository-owned composite verification command.
-- A stale CI receipt whose repository, task, PR, base/head, check app/run,
-  conclusion, and trusted planner all still match live authority may be refreshed
-  explicitly once during closeout. The refresh changes only `observed_at`, writes
-  a caller-owned temporary receipt, and never mutates the original. Any identity,
-  planner, or conclusion drift fails closed and starts a new evidence epoch.
+- Freeze a clean implementation commit. Verify an isolated snapshot of that exact tree and run `git diff --check <comparison-ref>...<frozen-head>`. A later relevant change starts a new evidence epoch.
+- Use `claim-ready.sh` for fresh claim evidence. Multi-surface claims use one repository-owned composite verification command.
+- A stale CI receipt whose repository, task, PR, base/head, check app/run, conclusion, and trusted planner all still match live authority may be refreshed explicitly once during closeout. The refresh changes only `observed_at`, writes a caller-owned temporary receipt, and never mutates the original. Any identity, planner, or conclusion drift fails closed and starts a new evidence epoch.
 - After the [Pre-PR review packet](#pre-pr-review-packet) passes, run
   `task-closeout.sh --role <owner-role> --task-uid <TASK-UID> --comparison-ref <ref> --verification-profile <profile>`. Profiles are repo-owned; caller-authored commands cannot authorize a transition.
 - `codex_subagent_role_fit` audits its required `--task-uid`; hard-coded identities are forbidden.
-- On partial remote mutation, run `refresh-task-cache.sh`, audit the selected
-  task, then retry. Never edit generated cache JSON.
-- Closeout uses two bounded selected-task audits: one immediately before the
-  transition and one postcondition readback immediately after it. The latter
-  must structurally identify `task_uid`, target PM status, and workflow phase
-  before success. Minimal `{status: ok}` audit fixtures are accepted only by
-  the explicit `fixture_repository_state` verification profile. Neither
-  audit performs a broad Project traversal.
-- The done transition resolves the recorded PR and requires a fresh
-  repository-generated merge receipt. An explicitly classified non-PR task uses
-  its repository-owned completion profile.
+- On partial remote mutation, run `refresh-task-cache.sh`, audit the selected task, then retry. Never edit generated cache JSON.
+- Closeout uses two bounded selected-task audits: one immediately before the transition and one postcondition readback immediately after it. The latter must structurally identify `task_uid`, target PM status, and workflow phase before success. Minimal `{status: ok}` audit fixtures are accepted only by the explicit `fixture_repository_state` verification profile. Neither audit performs a broad Project traversal.
+- The done transition resolves the recorded PR and requires a fresh repository-generated merge receipt. An explicitly classified non-PR task uses its repository-owned completion profile.
 
 <a id="terminal-runbook"></a>
 
@@ -724,11 +706,6 @@ cd <canonical-default-worktree>
 ```
 4. Main sync is optional and is not a delivery or cleanup precondition. `post-merge-main-sync.sh` remains available for an explicit local update and cannot move a completed v2 task back to an earlier phase.
 For squash/rebase deletion proof, require the existing conflict-free projection of the exact delivered branch tip onto its recorded first-parent integration base to equal the integration commit tree. Main sync remains an explicit developer convenience and a legacy-v1 input only. Safe cleanup validates the exact task-bound registered worktree and common directory, expected delivered tip, non-main identity, tracked/untracked/ignored content, and current use before mutation; a managed label creates no archive prerequisite.
-
-
-
-
-
 #### Independent resource cleanup
 The cleanup record is separate from the immutable delivery receipt and binds the task, repository, exact resource identity, operation, and readback. Worktree, local_branch, and remote_branch each report removed, already_absent, retained, or failed with a reason. Removed means the operation succeeded and readback confirms it; already_absent means absence was observed without claiming this operation removed it; retained means a safety or identity condition prevented deletion; failed means the operation failed or its result remains uncertain. One resource's outcome cannot erase another's result or revoke post_merge_done.
 
