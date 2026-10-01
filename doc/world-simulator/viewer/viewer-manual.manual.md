@@ -404,6 +404,14 @@ agent-browser --session "$AB_SESSION" screenshot output/playwright/viewer/viewer
 ```
 
 ## 最小通过标准
+
+<a id="viewer-infrastructure-capture-receiver"></a>
+### Infrastructure capture receiver
+
+基础设施 claim 使用 [Viewer readback contract](viewer-control-plane-split-live-playback.prd.md#viewer-infrastructure-readback-contract)、[QA receiver](../../testing/prd.md#qa-infrastructure-receiver) 与 [Harness evidence join](../llm/continuous-agent-harness.design.md#harness-infrastructure-evidence-join)。先冻结 candidate、world/root/revision/child/direct-parent receipt、实际 source freshness、provider 四字段与 evidence window，再按 [Playwright capture method](../../testing/manual/web-ui-playwright-closure-manual.design.md#playwright-source-capture-method) 捕获 before/outage/fresh/recovery/retry/replay 的可见 action/result、截图、console/state；以同候选只读 authority source/journal/API oracle 核对 disposition、no-effect、history/W 与 effect count，归档 artifact identity/hash 和差异。不能用 ACK、stale/debug 样本或 surface connection 替代 authoritative result。
+
+以下页面最低通过只证明 surface observation。required/full 由 [QA tier boundaries](../../testing/prd.md#qa-infrastructure-tier-boundaries) 和 [S6 receiver](../../../testing-manual.md#testing-s6-qa-receiver) 判定：required 包含 active-provider pure API，full 另需真实 provider-backed Agent parity 与实际 external headed desktop+narrow evidence。缺失 mandatory identity、phase、freshness、oracle join 或 artifact 保持 blocked/unverified；实际语义违反为 failed。PWT planned scenes 和 equal-version `1→1` semantic negative 保持 planned/unexecuted；历史证据、当前 technical-preview/GPU 限制与 Launcher/login/auth 合同保留，本段不升级任何现有状态。
+
 - 页面可加载，且 `window.__AW_TEST__` 可用。
 - `getState().renderMode=viewer`（兼容 alias 场景可回出 `software_safe` 但不再是 canonical 期望）。
 - `connectionStatus=connected`，或页面显式给出可追溯 blocker。

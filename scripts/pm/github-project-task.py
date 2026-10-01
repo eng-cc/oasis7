@@ -578,6 +578,10 @@ def issue_task_fields(body: str) -> dict[str, Any]:
             die(f"invalid traceability context: {exc}")
         fields.update(context)
     fields.update(strict_issue_scalar_fields(body, ISSUE_ROUTE_FIELDS))
+    if "pr_number" in fields:
+        if not re.fullmatch(r"[1-9][0-9]*", fields["pr_number"]):
+            die("task Issue pr_number field is malformed")
+        fields["pr_number"] = int(fields["pr_number"])
     for key in ("owner_role", "module", "priority", "worktree_hint", "source_signal", "source_type", "severity", "bootstrap_base_oid", "non_pr_completion_evidence_sha256", "last_closed_at"):
         match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
         if match:

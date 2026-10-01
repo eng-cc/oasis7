@@ -71,6 +71,7 @@ output/playwright/viewer-real-agent-chat/<run-id>/playwright/real-agent-chat.png
 output/playwright/viewer-real-agent-chat/<run-id>/playwright/browser-console.log
 ```
 
+<a id="pwt-planned-matrix"></a>
 ## 计划中的流程矩阵
 
 新增用例时使用 `PWT-###` 编号。每个条目都必须说明玩家动作、真实依赖、断言、产物和边界。
@@ -84,6 +85,17 @@ output/playwright/viewer-real-agent-chat/<run-id>/playwright/browser-console.log
 | PWT-005 | Pause / Play / Progress Feedback | planned | 覆盖玩家控制 runtime 推进、阻塞提示和恢复反馈 |
 | PWT-006 | Diagnostics And Recovery | planned | 覆盖连接异常、provider blocker、重试/刷新后的可理解报错 |
 | PWT-007 | Pure API / Viewer Parity Spot | planned | 用同一场景交叉验证 Viewer UI 操作和 pure API 观测一致性 |
+
+这四个接收用例继续保持 `planned`，直到同一候选有实际运行与留存证据；计划条目和 deterministic/local contract 不能升级成玩家流程通过。它们消费 [QA infrastructure receiver](../prd.md#qa-infrastructure-receiver) 的 source/scene/environment/oracle/artifact/tier 记录规则，场景语义与 SC/REQ/AC/DC/DE 映射见 [scene families](../prd.md#qa-infrastructure-scene-families)。
+
+| 用例 | Source/scene 接收 | 玩家可见动作与独立 oracle | 同候选产物及未证明范围 |
+| --- | --- | --- | --- |
+| PWT-003 | `V-INDUSTRIAL` / `V-CONSUMER`；按 gameplay clause 固定目标、窗口与当前状态 | 通过可见推荐动作提交一次；ack 只表示请求被接收，随后需分别核对 canonical receipt、同世界 state delta、数量/lineage 与下一步反馈 | 保存输入/候选和 world identity、UI截图、console、summary、API/journal/receipt refs 和 digest；无 canonical effect 时不得写成已推进 |
+| PWT-005 | `V-EXECUTION` / `V-CONSUMER`；使用当前 formal viewer profile 与明确的 runtime/provider lane | 可见地执行 pause/play/progress 控件；`queued`、`completed_advanced`、显式 blocker 与正向 world delta 分别判读，不能用按钮响应本身作为推进 oracle | 保存交互前后 state、feedback stage、同候选事件/receipt、截图和 console；headless/debug 观测不替代真实玩家 surface |
+| PWT-006 | `V-RECOVERY` / `V-CONSUMER`；记录真实故障依赖、窗口及恢复起点 | 经授权注入/观察 provider、连接或恢复 blocker；重试/刷新后比较 current status、旧历史、receipt 数量和下一步，不重放非幂等动作 | 保存故障阶段序列、原始错误、fresh readback、重试次数和失败截图；没有真实依赖时标 blocked/unverified，mock 只作 plumbing |
+| PWT-007 | `V-CONSUMER` / `V-WORLD-SCOPE`；viewer 与 pure API 必须锁定同一 world、branch、candidate 和 observation window | 先做一项可见动作，再从 active-provider pure API 读取同一 canonical 状态；比较语义状态、blocker、receipt/root 与 next action，不要求本地化文本相同 | 保存两侧原始字段、候选与窗口身份、provider四项身份及API/UI artifact refs；不同候选或 no-LLM observer/debug 仅为 blocked，不能记 parity pass |
+
+provider-backed evidence 必须分别记录 provider kind、model、endpoint route、preflight evidence/provenance；凭据只留在受控环境，artifact 只记安全 digest。`test_tier_full` 的完整 headed 环境要求真实 provider-backed path 与外部 browser 的 desktop 和 narrow 两种 viewport 截图/console，并包含 provider-backed Agent parity；S6 手册和当前 PWT-004 blocker 仍分别约束其适用性，不能把本表中的计划填充当作 full proof。
 
 ### PWT-004 当前状态（2026-09-17）
 
