@@ -561,6 +561,10 @@ def _validate_delivery_record(receipt: dict, files: dict[str, dict], task_uid: s
     if len(v2_comments) != 1 or len(matches) != 1:
         raise ValueError("terminal delivery comment readback mismatch: marker is missing, duplicate, or inconsistent")
     comment = matches[0]
+    author = comment.get("user") or {}
+    if (not isinstance(author, dict)
+            or author.get("login") != repository.split("/", 1)[0]):
+        raise ValueError("terminal v2 evidence comment author mismatch")
     comment_digest = hashlib.sha256(str(comment["body"]).encode("utf-8")).hexdigest()
     mapped_comment_id = (task_record.get("phase_receipt_comment_id") or {}).get("post_merge_done")
     mapped_comment_digest = (task_record.get("phase_receipt_comment_sha256") or {}).get("post_merge_done")

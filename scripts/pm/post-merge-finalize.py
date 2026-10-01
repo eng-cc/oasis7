@@ -184,14 +184,37 @@ def _write_terminal(root: pathlib.Path, task_uid: str, terminal_receipt_path: pa
             ledger_transition(ledger_path,"project_update","readback",live)
             ledger_transition(ledger_path,"project_update","committed")
 
-        def write_tombstone(terminal_path: pathlib.Path, record: dict, terminal_digest: str) -> pathlib.Path:
-            tombstone_path=terminal_path.with_name("terminal-tombstone.json")
-            tombstone={"schema":"oasis7_terminal_tombstone_v1","task_uid":record.get("task_uid"),
+        def tombstone_value(record: dict, terminal_digest: str) -> dict:
+            return {"schema":"oasis7_terminal_tombstone_v1","task_uid":record.get("task_uid"),
                 "repository":record.get("repository"),"issue_number":record.get("issue_number"),
                 "pr_number":record.get("pr_number"),"canonical_worktree":record.get("canonical_worktree"),
                 "task_branch":record.get("task_branch"),"workflow_phase":"post_merge_done",
                 "terminal_receipt_sha256":terminal_digest,"checkout_recreation_forbidden":True}
-            durable_store.replace_json(tombstone_path,tombstone)
+
+        def existing_tombstone_matches(tombstone_path: pathlib.Path, expected: dict) -> bool:
+            try:
+                raw=tombstone_path.read_bytes()
+            except FileNotFoundError:
+                return False
+            except OSError as exc:
+                fail(f"terminal tombstone is unreadable: {exc}")
+            try:
+                current=json.loads(raw)
+            except (UnicodeDecodeError,json.JSONDecodeError) as exc:
+                fail(f"terminal tombstone is malformed: {exc}")
+            if not isinstance(current,dict):
+                fail("terminal tombstone is malformed")
+            for key,value in expected.items():
+                actual=current.get(key)
+                if type(actual) is not type(value) or actual!=value:
+                    fail(f"terminal tombstone identity or receipt link mismatch: {key}")
+            return True
+
+        def write_tombstone(terminal_path: pathlib.Path, record: dict, terminal_digest: str) -> pathlib.Path:
+            tombstone_path=terminal_path.with_name("terminal-tombstone.json")
+            tombstone=tombstone_value(record,terminal_digest)
+            if not existing_tombstone_matches(tombstone_path,tombstone):
+                durable_store.replace_json(tombstone_path,tombstone)
             return tombstone_path
 
         def terminal_comment(record: dict, terminal: dict, terminal_digest: str) -> tuple[str,str]:
@@ -262,6 +285,14 @@ def _write_terminal(root: pathlib.Path, task_uid: str, terminal_receipt_path: pa
             already_finalized=(record.get("workflow_phase")=="post_merge_done" and
                 (record.get("phase_receipts") or {}).get("post_merge_done")==terminal and
                 (stored_terminal_digest==terminal_digest or (not stored_terminal_digest and fixture_legacy)))
+            # A valid v1 tombstone can be pinned by an immutable aggregate-v1
+            # child projection. Preserve its exact bytes, while rejecting a
+            # stale or malformed link before any reconciliation effects. A
+            # missing tombstone remains recoverable and is canonically created
+            # after the existing terminal effects complete.
+            existing_tombstone_matches(
+                terminal_path.with_name("terminal-tombstone.json"),
+                tombstone_value(record,terminal_digest))
             _validate_cleanup_intent(terminal_path,task_uid,record,terminal,already_finalized)
         finally:
             fcntl.flock(mapping_lock_handle.fileno(),fcntl.LOCK_UN)
@@ -638,12 +669,15 @@ def _delivery_status(context: dict) -> dict:
                     live_pr=context["pr"],live_repository=context["live_repository"],
                     comments=context["comments"],
                 )
+                if proof.get("status")!="passed" or proof.get("protocol_version")!=2:
+                    raise ValueError("selected v2 terminal delivery proof is not complete")
             except ValueError:
                 _validate_resumable_v2(context)
                 return {"status":"ready","protocol_version":2,"task_uid":context["task_uid"],
-                        "resume":True}
+                        "resume":True,"delivery":{"state":"pending","protocol_version":2}}
             return {"status":"already_finalized","protocol_version":proof["protocol_version"],
-                    "task_uid":context["task_uid"],"proof":proof}
+                    "task_uid":context["task_uid"],"proof":proof,
+                    "delivery":{"state":"complete","protocol_version":2}}
         proof=read_terminal_proof(
             context["root"],context["task_uid"],record,
             live_issue=context["issue"],live_project_item=context["project_item"],
@@ -654,6 +688,7 @@ def _delivery_status(context: dict) -> dict:
                 "task_uid":context["task_uid"],"proof":proof}
     _delivery_partial_legacy_effects(context)
     return {"status":"ready","protocol_version":2,"task_uid":context["task_uid"],
+            "delivery":{"state":"pending","protocol_version":2},
             "head_oid":context["head_oid"],"merge_commit_oid":context["merge_commit_oid"],
             "default_branch":context["default_branch"],
             "observed_target_oid":context["observed_target_oid"],
@@ -737,6 +772,10 @@ def _delivery_comment_readback(context: dict, body: str) -> dict | None:
         comment_body=str(comment.get("body") or "")
         if marker in comment_body:
             markers.append(comment)
+        author=comment.get("user") or {}
+        if comment_body==body and (not isinstance(author,dict)
+                or author.get("login")!=str(context["repository"]).split("/",1)[0]):
+            raise ValueError("terminal v2 evidence comment author mismatch")
         if (comment_body==body and type(comment.get("id")) is int and comment["id"]>0
                 and comment.get("html_url")==f"{issue_url}#issuecomment-{comment['id']}"):
             exact.append(comment)
@@ -948,7 +987,8 @@ def _write_delivery(root: pathlib.Path, task_uid: str) -> dict:
         if proof.get("protocol_version")!=2 or proof.get("status")!="passed":
             raise ValueError("terminal delivery finalizer readback did not select v2 proof")
         result={"status":"finalized","protocol_version":2,"task_uid":task_uid,
-                "terminal_receipt_sha256":receipt_digest,"comment_id":comment["id"]}
+                "terminal_receipt_sha256":receipt_digest,"comment_id":comment["id"],
+                "delivery":{"state":"complete","protocol_version":2}}
         print(json.dumps(result,sort_keys=True)); return result
 
 
