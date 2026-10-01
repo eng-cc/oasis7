@@ -1,6 +1,4 @@
-use std::fs;
 use std::io::{self, Read, Write};
-use std::path::Path;
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -9,10 +7,9 @@ use oasis7_local_signer::error::SignerError;
 use oasis7_local_signer::identity::sha256_hex;
 use oasis7_local_signer::installation::{
     current_euid, current_uid, load_fixed_installation_config, validate_fixed_sudo,
+    worker_sudo_args,
 };
-use oasis7_local_signer::job::{
-    prepare_job, prepare_job_dir, read_existing_request, resolve_existing_work_dir,
-};
+use oasis7_local_signer::job::JobDirectory;
 use oasis7_local_signer::protocol::{IPC_SCHEMA, IpcRequest, IpcResponse, read_response_frame};
 use oasis7_local_signer::types::InstallationConfig;
 
@@ -98,23 +95,25 @@ fn run() -> Result<(), CliError> {
             let job_id = job_id
                 .as_deref()
                 .ok_or_else(|| CliError::new("INVALID_INPUT", 2))?;
-            let job_dir =
-                prepare_job_dir(&installation, caller_uid, job_id).map_err(CliError::signer)?;
+            let job_dir = JobDirectory::open(&installation, caller_uid, job_id, true)
+                .map_err(CliError::signer)?;
             prepare_or_report_ready(&installation, &job_dir, job_id)
         }
         "submit" => {
             let job_id = job_id
                 .as_deref()
                 .ok_or_else(|| CliError::new("INVALID_INPUT", 2))?;
-            let job_dir = resolve_existing_work_dir(&installation, caller_uid, job_id)
+            let job_dir = JobDirectory::open(&installation, caller_uid, job_id, false)
                 .map_err(CliError::signer)?;
             require_job_material(&job_dir)?;
-            if !path_present(&job_dir.join("request.json"))?
-                || !path_present(&job_dir.join("request.payload.sha256"))?
+            if !job_dir.present("request.json").map_err(CliError::signer)?
+                || !job_dir
+                    .present("request.payload.sha256")
+                    .map_err(CliError::signer)?
             {
                 return Err(CliError::new("INVALID_INPUT", 2));
             }
-            let prepared = prepare_job(&job_dir).map_err(CliError::signer)?;
+            let prepared = job_dir.prepare().map_err(CliError::signer)?;
             let outcome = invoke_worker(&installation, prepared.ipc_request())?;
             print_response(&outcome.response)?;
             match &outcome.response {
@@ -140,12 +139,12 @@ fn run() -> Result<(), CliError> {
             let job_id = job_id
                 .as_deref()
                 .ok_or_else(|| CliError::new("INVALID_INPUT", 2))?;
-            let job_dir = resolve_existing_work_dir(&installation, caller_uid, job_id)
+            let job_dir = JobDirectory::open(&installation, caller_uid, job_id, false)
                 .map_err(CliError::signer)?;
-            if !path_present(&job_dir.join("request.json"))? {
+            if !job_dir.present("request.json").map_err(CliError::signer)? {
                 return Err(CliError::new("RECOVERY_REQUIRED", 10));
             }
-            let request = read_existing_request(&job_dir).map_err(CliError::signer)?;
+            let request = job_dir.read_request().map_err(CliError::signer)?;
             let ipc_request = IpcRequest::Inspect {
                 schema_version: IPC_SCHEMA.to_owned(),
                 installation_id: installation.installation_id.clone(),
@@ -186,14 +185,16 @@ fn require_bound_caller(installation: &InstallationConfig) -> Result<u32, CliErr
 
 fn prepare_or_report_ready(
     installation: &InstallationConfig,
-    job_dir: &Path,
+    job_dir: &JobDirectory,
     job_id: &str,
 ) -> Result<(), CliError> {
-    let input_present = path_present(&job_dir.join("input.json"))?;
-    let payload_present = path_present(&job_dir.join("payload.bin"))?;
+    let input_present = job_dir.present("input.json").map_err(CliError::signer)?;
+    let payload_present = job_dir.present("payload.bin").map_err(CliError::signer)?;
     if !input_present && !payload_present {
-        if path_present(&job_dir.join("request.json"))?
-            || path_present(&job_dir.join("request.payload.sha256"))?
+        if job_dir.present("request.json").map_err(CliError::signer)?
+            || job_dir
+                .present("request.payload.sha256")
+                .map_err(CliError::signer)?
         {
             return Err(CliError::new("RECOVERY_REQUIRED", 10));
         }
@@ -201,7 +202,7 @@ fn prepare_or_report_ready(
             "schema_version": "oasis7.local_signer_prepare_result.v1",
             "status": "JOB_DIRECTORY_READY",
             "job_id": job_id,
-            "work_dir": job_dir,
+            "work_dir": job_dir.path(),
             "installation_id": installation.installation_id,
             "job_directory_exists": true,
             "signing_enabled": false
@@ -212,7 +213,7 @@ fn prepare_or_report_ready(
         return Err(CliError::new("INVALID_INPUT", 2));
     }
 
-    let prepared = prepare_job(job_dir).map_err(CliError::signer)?;
+    let prepared = job_dir.prepare().map_err(CliError::signer)?;
     let output = serde_json::json!({
         "schema_version": "oasis7.local_signer_prepare_result.v1",
         "status": "PREPARED",
@@ -226,19 +227,13 @@ fn prepare_or_report_ready(
     print_json(&output)
 }
 
-fn require_job_material(job_dir: &Path) -> Result<(), CliError> {
-    if !path_present(&job_dir.join("input.json"))? || !path_present(&job_dir.join("payload.bin"))? {
+fn require_job_material(job_dir: &JobDirectory) -> Result<(), CliError> {
+    if !job_dir.present("input.json").map_err(CliError::signer)?
+        || !job_dir.present("payload.bin").map_err(CliError::signer)?
+    {
         return Err(CliError::new("INVALID_INPUT", 2));
     }
     Ok(())
-}
-
-fn path_present(path: &Path) -> Result<bool, CliError> {
-    match fs::symlink_metadata(path) {
-        Ok(_) => Ok(true),
-        Err(error) if error.kind() == io::ErrorKind::NotFound => Ok(false),
-        Err(_) => Err(CliError::new("INSTALLATION_DRIFT", 11)),
-    }
 }
 
 fn invoke_worker(
@@ -248,15 +243,8 @@ fn invoke_worker(
     let sudo = validate_fixed_sudo().map_err(CliError::signer)?;
     let frame = oasis7_local_signer::protocol::encode_request_frame(&request)
         .map_err(|_| CliError::protocol())?;
-    let signer_uid = installation.signer_uid.to_string();
     let mut child = Command::new(sudo)
-        .args([
-            "-n",
-            "-u",
-            signer_uid.as_str(),
-            "--",
-            installation.worker_executable.as_str(),
-        ])
+        .args(worker_sudo_args(installation))
         .env_clear()
         .env("LC_ALL", "C")
         .stdin(Stdio::piped())
