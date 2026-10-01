@@ -36,7 +36,7 @@ packet.
    the frozen write scope, consumed contracts, affected paths, tests, and
    required roles. Plan, selector, admission, CI, and closeout must bind the
    same projection. Unknown closure widens review; CI status cannot certify
-   impact closure.
+   impact closure. Set `closure_status` only from changed-scope analysis completeness and verifiable scope evidence; never derive it from CI conclusion, review status, or readiness.
 4. Generate one minimal packet for every required role and publish/read back
    the complete dispatch comment before dispatching any reviewer:
 
