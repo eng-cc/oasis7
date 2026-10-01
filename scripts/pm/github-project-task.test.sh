@@ -13,6 +13,9 @@ trap cleanup EXIT
 
 mkdir -p "$TMPDIR/.pm/github-project-sync" "$TMPDIR/bin"
 cp "$ROOT_DIR/scripts/pm/github-project-task.py" "$TMPDIR/github-project-task.py"
+cp "$ROOT_DIR/scripts/pm/closed_duplicate_candidate_guard.py" "$TMPDIR/closed_duplicate_candidate_guard.py"
+cp "$ROOT_DIR/scripts/pm/task_complete_claim.py" "$TMPDIR/task_complete_claim.py"
+cp "$ROOT_DIR/scripts/pm/loop_leaf_result.py" "$TMPDIR/loop_leaf_result.py"
 cp "$ROOT_DIR/scripts/pm/github-project-sync.py" "$TMPDIR/github-project-sync.py"
 cp "$ROOT_DIR/scripts/pm/portable_file_lock.py" "$TMPDIR/portable_file_lock.py"
 cp "$ROOT_DIR/scripts/pm/claim-ready.sh" "$TMPDIR/claim-ready.sh"
@@ -110,10 +113,11 @@ PY
       printf '[{"number":2001,"state":"OPEN","title":"[PM] GitHub-backed lifecycle smoke","url":"https://github.com/eng-cc/oasis7/issues/2001"}]\n'
     fi
     ;;
-  "issue view 2001 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason")
-    python3 - "$GH_ISSUE_BODY_STATE_FILE" <<'PY'
+  "issue view 2001 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason,updatedAt")
+    python3 - "$GH_ISSUE_BODY_STATE_FILE" "$GH_ISSUE_UPDATED_AT_FILE" <<'PY'
 import json, pathlib, sys
 body = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+updated_at = pathlib.Path(sys.argv[2]).read_text(encoding="utf-8").strip()
 print(json.dumps({
     "body": body,
     "number": 2001,
@@ -121,6 +125,7 @@ print(json.dumps({
     "url": "https://github.com/eng-cc/oasis7/issues/2001",
     "state": "OPEN",
     "stateReason": None,
+    "updatedAt": updated_at,
 }))
 PY
     ;;
@@ -128,8 +133,44 @@ PY
     n=$(( $(wc -l < "$GH_COMMENT_LOG") + 1 ))
     mkdir -p "$GH_COMMENT_DIR"
     cat "${@: -1}" > "$GH_COMMENT_DIR/$n"
+    python3 - "$GH_COMMENT_DIR/$n" "$GH_COMMENT_DIR/comment-$n.json" "$GH_ISSUE_UPDATED_AT_FILE" "$n" <<'PY'
+from datetime import datetime, timedelta, timezone
+import json, pathlib, re, sys
+body_path, comment_path, issue_updated_path, raw_id = sys.argv[1:]
+comment_id = int(raw_id)
+body = pathlib.Path(body_path).read_text(encoding="utf-8")
+verified = re.search(r"^Verified At: ([^\n]+)$", body, re.MULTILINE)
+if verified:
+    created_at = verified.group(1)
+else:
+    created_at = (datetime(2000, 1, 1, tzinfo=timezone.utc)
+                  + timedelta(seconds=comment_id)).isoformat().replace("+00:00", "Z")
+comment = {
+    "id": comment_id,
+    "body": body,
+    "html_url": f"https://github.com/eng-cc/oasis7/issues/2001#issuecomment-{comment_id}",
+    "issue_url": "https://api.github.com/repos/eng-cc/oasis7/issues/2001",
+    "created_at": created_at,
+    "updated_at": created_at,
+    "user": {"login": "eng-cc"},
+}
+pathlib.Path(comment_path).write_text(json.dumps(comment), encoding="utf-8")
+pathlib.Path(issue_updated_path).write_text(created_at + "\n", encoding="utf-8")
+PY
     printf 'comment-%s\n' "$n" >> "$GH_COMMENT_LOG"
     printf 'https://github.com/eng-cc/oasis7/issues/2001#issuecomment-%s\n' "$n"
+    ;;
+  "api repos/eng-cc/oasis7/issues/2001/comments --paginate --slurp")
+    python3 - "$GH_COMMENT_DIR" <<'PY'
+import json, pathlib, sys
+comment_dir = pathlib.Path(sys.argv[1])
+comments = [
+    json.loads(path.read_text(encoding="utf-8"))
+    for path in sorted(comment_dir.glob("comment-*.json"),
+                       key=lambda item: int(item.stem.split("-", 1)[1]))
+]
+print(json.dumps([comments]))
+PY
     ;;
   api\ repos/eng-cc/oasis7/issues/comments/*)
     comment_id="${*: -1}"
@@ -161,7 +202,7 @@ PY
   "issue list -R eng-cc/oasis7 --search task_99999999999999999999999999999999 in:body --json number,url,title,state --limit 5")
     printf '[{"number":2003,"state":"OPEN","title":"[PM] No-cache task","url":"https://github.com/eng-cc/oasis7/issues/2003"}]\n'
     ;;
-  "issue view 2003 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason")
+  "issue view 2003 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason,updatedAt")
     python3 - "$GH_CANONICAL_WORKTREE_HINT" <<'PY'
 import json, sys
 worktree = sys.argv[1]
@@ -184,13 +225,14 @@ print(json.dumps({
     "url": "https://github.com/eng-cc/oasis7/issues/2003",
     "state": "OPEN",
     "stateReason": None,
+    "updatedAt": "2026-10-01T00:00:00Z",
 }))
 PY
     ;;
-  issue\ view\ 20[0-9][0-9]\ -R\ eng-cc/oasis7\ --json\ body,number,title,url,state,stateReason)
-    python3 - "$TMPDIR/github-project-task.py" "$GH_MAPPING_PATH" "${3}" <<'PY'
+  issue\ view\ 20[0-9][0-9]\ -R\ eng-cc/oasis7\ --json\ body,number,title,url,state,stateReason,updatedAt)
+    python3 - "$TMPDIR/github-project-task.py" "$GH_MAPPING_PATH" "${3}" "${GH_ISSUE_UPDATED_AT_FILE_2006:-}" <<'PY'
 import importlib.util, json, pathlib, sys
-script, mapping_path, number = sys.argv[1:]
+script, mapping_path, number = sys.argv[1:4]
 spec = importlib.util.spec_from_file_location("fixture_github_project_task", script)
 assert spec and spec.loader
 module = importlib.util.module_from_spec(spec)
@@ -202,6 +244,9 @@ if record is None:
     raise SystemExit("fixture has no selected Issue mapping")
 uid = str(record.get("task_uid") or "")
 body = module.issue_body(module.task_from_record(uid, record))
+updated_at = "2026-10-01T00:00:00Z"
+if int(number) == 2006 and len(sys.argv) > 4 and sys.argv[4]:
+    updated_at = pathlib.Path(sys.argv[4]).read_text(encoding="utf-8").strip()
 print(json.dumps({
     "body": body,
     "number": int(number),
@@ -209,6 +254,7 @@ print(json.dumps({
     "url": str(record.get("issue_url") or ""),
     "state": "OPEN",
     "stateReason": None,
+    "updatedAt": updated_at,
 }))
 PY
     ;;
@@ -236,7 +282,48 @@ PY
     printf 'https://github.com/eng-cc/oasis7/issues/2003#issuecomment-%s\n' "$n"
     ;;
   "issue comment 2006 -R eng-cc/oasis7 --body-file "*)
-    printf 'https://github.com/eng-cc/oasis7/issues/2006#issuecomment-2006\n'
+    n=$(( $(wc -l < "$GH_COMMENT_LOG") + 1 ))
+    mkdir -p "$GH_COMMENT_DIR"
+    cat "${@: -1}" > "$GH_COMMENT_DIR/$n"
+    python3 - "$GH_COMMENT_DIR/$n" "$GH_COMMENT_DIR/comment-$n.json" "$GH_ISSUE_UPDATED_AT_FILE_2006" "$n" <<'PY'
+from datetime import datetime, timedelta, timezone
+import json, pathlib, re, sys
+body_path, comment_path, issue_updated_path, raw_id = sys.argv[1:]
+comment_id = int(raw_id)
+body = pathlib.Path(body_path).read_text(encoding="utf-8")
+verified = re.search(r"^Verified At: ([^\n]+)$", body, re.MULTILINE)
+if verified:
+    created_at = verified.group(1)
+else:
+    created_at = (datetime(2000, 1, 1, tzinfo=timezone.utc)
+                  + timedelta(seconds=comment_id)).isoformat().replace("+00:00", "Z")
+comment = {
+    "id": comment_id,
+    "body": body,
+    "html_url": f"https://github.com/eng-cc/oasis7/issues/2006#issuecomment-{comment_id}",
+    "issue_url": "https://api.github.com/repos/eng-cc/oasis7/issues/2006",
+    "created_at": created_at,
+    "updated_at": created_at,
+    "user": {"login": "eng-cc"},
+}
+pathlib.Path(comment_path).write_text(json.dumps(comment), encoding="utf-8")
+pathlib.Path(issue_updated_path).write_text(created_at + "\n", encoding="utf-8")
+PY
+    printf 'comment-%s\n' "$n" >> "$GH_COMMENT_LOG"
+    printf 'https://github.com/eng-cc/oasis7/issues/2006#issuecomment-%s\n' "$n"
+    ;;
+  "api repos/eng-cc/oasis7/issues/2006/comments --paginate --slurp")
+    python3 - "$GH_COMMENT_DIR" <<'PY'
+import json, pathlib, sys
+comment_dir = pathlib.Path(sys.argv[1])
+comments = [
+    item for path in sorted(comment_dir.glob("comment-*.json"),
+                             key=lambda item: int(item.stem.split("-", 1)[1]))
+    if (item := json.loads(path.read_text(encoding="utf-8"))).get("issue_url")
+       == "https://api.github.com/repos/eng-cc/oasis7/issues/2006"
+]
+print(json.dumps([comments]))
+PY
     ;;
   "project item-add 1 --owner eng-cc --url https://github.com/eng-cc/oasis7/issues/2001 --format json")
     printf '{"id":"ITEM_ID","content":{"url":"https://github.com/eng-cc/oasis7/issues/2001"}}\n'
@@ -342,6 +429,7 @@ git -C "$TMPDIR" commit -qm initial
 # root is registered and owns the task cache/evidence files used by the test.
 CANONICAL_WORKTREE_HINT="$(cd "$TMPDIR" && pwd -P)"
 export PATH="$TMPDIR/bin:$PATH"
+export PYTHONPATH="$TMPDIR${PYTHONPATH:+:$PYTHONPATH}"
 export GH_CALL_LOG="$TMPDIR/gh-calls.log"
 export GH_MAPPING_PATH="$TMPDIR/.pm/github-project-sync/tasks.json"
 export GH_PROJECT_STATE_FILE="$TMPDIR/project-live-state"
@@ -354,6 +442,8 @@ export GH_COMMENT_LOG="$TMPDIR/gh-comments.log"
 export GH_COMMENT_DIR="$TMPDIR/gh-comments"
 export GH_EDIT_BODY_LOG="$TMPDIR/issue-body-edited.md"
 export GH_ISSUE_BODY_STATE_FILE="$TMPDIR/issue-live-body.md"
+export GH_ISSUE_UPDATED_AT_FILE="$TMPDIR/.git/issue-updated-at"
+export GH_ISSUE_UPDATED_AT_FILE_2006="$TMPDIR/.git/issue-updated-at-2006"
 export GH_CANONICAL_WORKTREE_HINT="$CANONICAL_WORKTREE_HINT"
 export GH_PR_READ_COUNT_FILE="$TMPDIR/pr-read-count"
 export GH_PR_HEAD_SHA="$(git -C "$TMPDIR" rev-parse HEAD)"
@@ -364,6 +454,8 @@ export OASIS7_ALLOW_FIXTURE_VERIFICATION_PROFILE=1
 : > "$GH_COMMENT_LOG"
 : > "$GH_EDIT_BODY_LOG"
 mkdir -p "$GH_COMMENT_DIR"
+printf '2026-10-01T00:00:00Z\n' > "$GH_ISSUE_UPDATED_AT_FILE"
+printf '2026-10-01T00:00:00Z\n' > "$GH_ISSUE_UPDATED_AT_FILE_2006"
 
 NEW_JSON="$TMPDIR/new.json"
 python3 "$TMPDIR/github-project-task.py" new-task "$TMPDIR" \
@@ -781,7 +873,7 @@ PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-closeout.sh" \
   --role tpm \
   --task-uid "$TASK_UID" \
   --to-status done \
-  --verification-profile fixture_repository_state \
+  --verification-profile repository_required \
   --claim-type task_complete \
   --json > "$TMPDIR/done-closeout.json"
 
@@ -802,6 +894,10 @@ assert record["worktree_hint"] == str(pathlib.Path(sys.argv[1]).parents[2].resol
 assert len(comments) >= 7, comments
 assert record["claim_verifications"][-1]["claim_type"] == "task_complete", record
 assert record["claim_verifications"][-1]["status"] == "verified", record
+assert record["claim_verifications"][-1]["verification_profile"] == "repository_required", record
+assert record["claim_verifications"][-1]["verify_command"] == "true", record
+assert record["claim_verifications"][-1]["repository_head"] == record["claim_verifications"][-1]["frozen_source_head"], record
+assert "api repos/eng-cc/oasis7/issues/2001/comments --paginate --slurp" in calls, calls
 assert "issue create" in calls, calls
 assert "issue edit 2001" in calls, calls
 assert "issue close 2001" not in calls, calls
@@ -1042,8 +1138,16 @@ fi
 
 # `task_done` is an intermediate terminal workflow state. A Project whose live
 # schema exposes only the coarse `done` option must not strand remedial closeout;
-# fine terminal sequencing remains in the local mapping and receipts.
-CLOSEOUT_CLAIM='{"claim_type":"task_complete","status":"verified","allowed_to_claim":true,"verification_exit_code":0,"verified_at":"2026-07-01T12:00:00Z"}'
+# fine terminal sequencing remains in the local mapping and receipts. Generate
+# the claim from claim-ready so this path exercises the same canonical claim and
+# exact live Issue-comment readback as production closeout.
+PM_ROOT_DIR="$MISSING_OPTION_ROOT" "$ROOT_DIR/scripts/pm/claim-ready.sh" \
+  --task-uid "$MISSING_OPTION_UID" \
+  --verification-profile repository_required \
+  --claim-type task_complete \
+  --json > "$TMPDIR/missing-option-claim.json"
+CLOSEOUT_CLAIM="$(cat "$TMPDIR/missing-option-claim.json")"
+cp "$GH_ISSUE_UPDATED_AT_FILE_2006" "$TMPDIR/missing-option-claim-issue-updated-at.txt"
 if ! python3 "$TMPDIR/github-project-task.py" closeout-task "$MISSING_OPTION_ROOT" \
   --repo eng-cc/oasis7 --project-owner eng-cc --project-number 3 \
   --task-uid "$MISSING_OPTION_UID" --role tpm --to-status done \
@@ -1053,13 +1157,51 @@ if ! python3 "$TMPDIR/github-project-task.py" closeout-task "$MISSING_OPTION_ROO
   exit 1
 fi
 export GH_MAPPING_PATH="$PRIMARY_GH_MAPPING_PATH"
-python3 - "$MISSING_OPTION_ROOT/.pm/github-project-sync/tasks.json" "$MISSING_OPTION_UID" "$TMPDIR/missing-option-closeout.json" <<'PY'
-import json,sys
+python3 - "$MISSING_OPTION_ROOT/.pm/github-project-sync/tasks.json" "$MISSING_OPTION_UID" "$TMPDIR/missing-option-closeout.json" "$TMPDIR/missing-option-claim.json" "$GH_COMMENT_DIR" "$TMPDIR/missing-option-claim-issue-updated-at.txt" <<'PY'
+import json,pathlib,re,sys
 record=json.load(open(sys.argv[1],encoding="utf-8"))["tasks"][sys.argv[2]]
 payload=json.load(open(sys.argv[3],encoding="utf-8"))
+claim=json.load(open(sys.argv[4],encoding="utf-8"))
+comment_dir=pathlib.Path(sys.argv[5])
+issue_updated_at=pathlib.Path(sys.argv[6]).read_text(encoding="utf-8").strip()
 assert record["status"] == "done" and record["workflow_phase"] == "task_done", record
 assert payload["updated_field_values"] == 3, payload
+assert record["claim_verifications"][-1] == claim, (record["claim_verifications"][-1], claim)
+assert claim["claim_type"] == "task_complete" and claim["status"] == "verified", claim
+assert claim["verification_profile"] == "repository_required", claim
+assert claim["verify_command"] == "true", claim
+assert claim["verification_mode"] == "detached_frozen_tree", claim
+assert claim["repository_head"] == claim["frozen_source_head"], claim
+assert re.fullmatch(r"[0-9a-f]{40,64}", claim["frozen_source_head"]), claim
+assert re.fullmatch(r"[0-9a-f]{64}", claim["repository_fingerprint_before"]), claim
+assert claim["repository_fingerprint_before"] == claim["repository_fingerprint_after"], claim
+comments = [json.loads(path.read_text(encoding="utf-8"))
+            for path in sorted(comment_dir.glob("comment-*.json"))]
+expected_body = "\n".join((
+    "<!-- oasis7-pm-claim-verification -->",
+    f"Task UID: {sys.argv[2]}",
+    f"Claim Type: {claim['claim_type']}",
+    f"Verified At: {claim['verified_at']}",
+    f"Verification Exit Code: {claim['verification_exit_code']}",
+    f"Verification Status: {claim['status']}",
+    f"Verify Command: {claim['verify_command']}",
+    f"Claim Message: {claim['claim_message']}",
+    "",
+))
+matches = [comment for comment in comments
+           if comment.get("issue_url") == "https://api.github.com/repos/eng-cc/oasis7/issues/2006"
+           and comment.get("body") == expected_body]
+assert len(matches) == 1, matches
+comment = matches[0]
+assert type(comment["id"]) is int and comment["id"] > 0, comment
+assert comment["html_url"] == f"https://github.com/eng-cc/oasis7/issues/2006#issuecomment-{comment['id']}", comment
+assert comment["created_at"] == comment["updated_at"] == claim["verified_at"] == issue_updated_at, comment
 PY
+if ! grep -Fq 'api repos/eng-cc/oasis7/issues/2006/comments --paginate --slurp' "$GH_CALL_LOG"; then
+  echo "github-project-task.test: remedial closeout must read back the exact Issue claim comment" >&2
+  cat "$GH_CALL_LOG" >&2
+  exit 1
+fi
 
 # Cross-layer traceability fields must survive the Issue serializer/parser and
 # remain section-scoped. The Project projection is intentionally coarse; the

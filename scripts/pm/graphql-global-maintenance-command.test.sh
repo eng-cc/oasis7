@@ -3,7 +3,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"; TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 mkdir -p "$TMP/bin" "$TMP/root/.pm/github-project-sync" "$TMP/root/.pm/tasks"
 mkdir -p "$TMP/root/scripts/pm"
-cp "$ROOT/scripts/pm/github-project-task.py" "$ROOT/scripts/pm/github-project-sync.py" "$ROOT/scripts/pm/github-project-workflow.py" "$ROOT/scripts/pm/workflow-durable-store.py" "$TMP/root/scripts/pm/"
+cp "$ROOT/scripts/pm/github-project-task.py" "$ROOT/scripts/pm/task_complete_claim.py" "$ROOT/scripts/pm/loop_leaf_result.py" "$ROOT/scripts/pm/github-project-sync.py" "$ROOT/scripts/pm/github-project-workflow.py" "$ROOT/scripts/pm/workflow-durable-store.py" "$TMP/root/scripts/pm/"
 printf '{"version":1,"project":{"owner":"eng-cc","number":1,"repo":"eng-cc/oasis7"},"tasks":{}}\n' >"$TMP/root/.pm/github-project-sync/tasks.json"
 cat >"$TMP/bin/gh" <<'SH'
 #!/usr/bin/env bash

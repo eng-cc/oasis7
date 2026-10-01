@@ -110,6 +110,7 @@ python3 "$ROOT_DIR/scripts/pm/tpm-production-supervisor.test.py" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/terminal-transition-order.test.py" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/terminal-delivery-protocol.test.py" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/resource-cleanup-safety.test.py" >/dev/null
+python3 "$ROOT_DIR/scripts/pm/terminal_proof.test.py" >/dev/null
 "$ROOT_DIR/scripts/pm/workflow-adversarial-contract.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/pr-policy-discovery-contract.test.sh" ruleset >/dev/null
 "$ROOT_DIR/scripts/pm/pr-policy-discovery-contract.test.sh" none >/dev/null
@@ -124,11 +125,17 @@ OASIS7_PM_TEST_SCRATCH="$OASIS7_WORKFLOW_EVAL_SCRATCH/bootstrap" \
   "$ROOT_DIR/scripts/pm/bootstrap-immutable-request.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/post-merge-main-sync.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/post-merge-main-sync-default-cache-recovery.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/post-merge-finalize.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/post-merge-finalizer-ledger-red.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/post-merge-finalizer-comment-readback-red.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/post-merge-finalizer-project-ledger-red.test.sh" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/recover-terminal-task-mapping.test.py" >/dev/null
 "$ROOT_DIR/scripts/pm/patch-equivalence-receipt.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/post-merge-cleanup.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/post-merge-cleanup-trust.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/post-merge-cleanup-fault-isolation.test.sh" >/dev/null
 "$ROOT_DIR/scripts/pm/post-merge-cleanup-crash.test.sh" >/dev/null
+"$ROOT_DIR/scripts/pm/post-merge-cleanup-resume.test.sh" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/terminal-reconciliation-contract.test.py" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/terminal-task-audit-project-semantics.test.py" >/dev/null
 python3 "$ROOT_DIR/scripts/pm/non-merge-finalize-red.test.py" >/dev/null
