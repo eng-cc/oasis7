@@ -17,7 +17,7 @@
     "scenario_regression": ["rust_toolchain"],
     "operational_contracts": [],
     "packaging_contracts": [],
-    "workflow_governance": [],
+    "workflow_governance": ["rust_toolchain"],
     "codex_agent_config_validation": [],
     "compile_metrics": [],
     "required_gate_baseline": [],

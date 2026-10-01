@@ -7,10 +7,7 @@
 
 #[test]
 fn economy_module_call_uses_outer_transaction() {
-    let economy_source = include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/src/runtime/world/economy.rs"
-    ));
+    let economy_source = include_str!("../world/economy.rs");
     let economy_call = economy_source
         .split_once("    fn execute_economy_module_call<T: Serialize>(")
         .map(|(_, body)| body)
@@ -28,10 +25,7 @@ fn economy_module_call_uses_outer_transaction() {
         "economy evaluation must not re-enter the public clone-and-publish boundary"
     );
 
-    let publication_source = include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/src/runtime/world/module_runtime_publication.rs"
-    ));
+    let publication_source = include_str!("../world/module_runtime_publication.rs");
     let public_call = publication_source
         .split_once("    pub fn execute_module_call(")
         .map(|(_, body)| body)
