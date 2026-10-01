@@ -15,7 +15,7 @@
     },
     {
       "path": "doc/.governance/document-semantic-review-overrides.json",
-      "content_sha256": "dd4f0d5a524d65c210f4609756620fc5db3688d0a6cc6323fd6eaca722a06c0e"
+      "content_sha256": "97f45457e226d3eda4805d3f062a6da8d1b00da07515fae2a69844fbcb5b9356"
     },
     {
       "path": "doc/testing/evidence/inventory.json",
@@ -5523,7 +5523,7 @@
     },
     {
       "path": "doc/world-runtime/runtime/runtime-integration.md",
-      "content_sha256": "e67e3d592b987a7752011f46f2c829f1cfb6bd5488b3dc010ec464d7736b73c8",
+      "content_sha256": "f2f496414b58e9465c0a7d7bc6be5614df0a5d59fe16ee966c3320a6818991e1",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
@@ -5719,7 +5719,7 @@
     },
     {
       "path": "doc/world-runtime/wasm/wasm-interface.md",
-      "content_sha256": "a86dfa1152eb5b991ac3b8fc2261a61340241c53d8a28ef4eb196e35374ae542",
+      "content_sha256": "85fc0d196f89129059789111977ec244615ac524f78d97c7aa1b9c1475f6c04a",
       "registry_type": "professional_domain",
       "structural_owner": "runtime_engineer",
       "authority_entry": "doc/world-runtime/README.md",
