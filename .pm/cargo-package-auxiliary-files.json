@@ -1,0 +1,33 @@
+{
+  "schema": "oasis7-cargo-package-auxiliary-files/v1",
+  "auxiliary_files": [
+    {
+      "path": "doc/p2p/blockchain/local-file-signing-backend.design.md",
+      "package": "oasis7_local_signer"
+    },
+    {
+      "path": "doc/p2p/blockchain/local-file-signing-backend.runbook.md",
+      "package": "oasis7_local_signer"
+    },
+    {
+      "path": "scripts/local-signer/install-release.py",
+      "package": "oasis7_local_signer"
+    },
+    {
+      "path": "scripts/local-signer/installer.py",
+      "package": "oasis7_local_signer"
+    },
+    {
+      "path": "scripts/local-signer/macos_host.py",
+      "package": "oasis7_local_signer"
+    },
+    {
+      "path": "scripts/local-signer/package-release.py",
+      "package": "oasis7_local_signer"
+    },
+    {
+      "path": "scripts/local-signer/tests/test_release_installer.py",
+      "package": "oasis7_local_signer"
+    }
+  ]
+}
