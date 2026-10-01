@@ -7,21 +7,17 @@ targets = []
 db-urls = ["https://github.com/rustsec/advisory-db"]
 yanked = "deny"
 ignore = [
-  # Baseline existing dependency advisories; required CI should block net-new advisories
-  # while these are burned down in follow-up dependency modernization tasks.
+  # Baseline remaining unmaintained dependency advisories; required CI continues
+  # to block net-new advisories. Each retained exception has a finite review date.
   # Each ignore must keep a `rustsec-ignore` metadata line immediately above it.
   # `scripts/check-rustsec-ignore-baseline.sh` fails on missing metadata, expired
   # metadata, or unreviewed changes to the approved ignore set.
-  # rustsec-ignore: owner=repository_health_engineer; crate=serde_cbor; scope=workspace serde_cbor serialization debt; reason=legacy serde_cbor remains in protocol/runtime data paths pending serialization migration; expiry=2026-09-30; validation=cargo tree --all-features -i serde_cbor; local_crates=oasis7,oasis7_client_launcher,oasis7_consensus,oasis7_distfs,oasis7_net,oasis7_node,oasis7_proto,oasis7_wasm_executor,oasis7_wasm_sdk,wasm_module_observe
+  # rustsec-ignore: owner=repository_health_engineer; crate=serde_cbor; scope=workspace serde_cbor serialization debt; reason=RUSTSEC-2021-0127 reports no patched release and locked serde_cbor 0.11.2 remains across protocol runtime consensus and WASM consumers, so retain for one review window to plan a separately tested serialization migration and revalidate by 2026-10-31; expiry=2026-10-31; validation=cargo tree --locked --all-features --target all -i serde_cbor; local_crates=oasis7,oasis7_client_launcher,oasis7_consensus,oasis7_distfs,oasis7_net,oasis7_node,oasis7_proto,oasis7_wasm_executor,oasis7_wasm_sdk,wasm_module_observe
   "RUSTSEC-2021-0127", # serde_cbor unmaintained
-  # rustsec-ignore: owner=repository_health_engineer; crate=paste; scope=transitive macro dependency debt; reason=paste remains in the current dependency closure and should be removed by upstream crate modernization; expiry=2026-09-30; validation=cargo tree --target all -i paste; local_crates=oasis7,oasis7_client_launcher,oasis7_net,oasis7_node
+  # rustsec-ignore: owner=repository_health_engineer; crate=paste; scope=transitive network-interface dependency via if-watch and netlink; reason=RUSTSEC-2024-0436 reports paste 1.0.15 unmaintained with no patched release and the locked if-watch/netlink closure reaches oasis7_net oasis7_node oasis7 and oasis7_client_launcher, so retain for one review window and revalidate upstream replacement by 2026-10-31; expiry=2026-10-31; validation=cargo tree --locked --all-features --target all -i paste; local_crates=oasis7,oasis7_client_launcher,oasis7_net,oasis7_node
   "RUSTSEC-2024-0436", # paste unmaintained
-  # rustsec-ignore: owner=repository_health_engineer; crate=ttf-parser; scope=transitive UI font parser debt via egui/bevy/winit; reason=RUSTSEC-2026-0192 has no safe upgrade and currently enters only through launcher/viewer UI dependency closures pending upstream migration to maintained font parsing crates; expiry=2026-09-30; validation=cargo tree --locked --all-features --target all -i ttf-parser; local_crates=oasis7_client_launcher,pixel_world_bridge
+  # rustsec-ignore: owner=repository_health_engineer; crate=ttf-parser; scope=transitive UI font parsing via ab_glyph/epaint/winit/bevy; reason=RUSTSEC-2026-0192 reports no patched release and locked ttf-parser 0.25.1 reaches oasis7_client_launcher through eframe and pixel_world_bridge through bevy, so retain for one review window to assess a maintained parser migration and revalidate by 2026-10-31; expiry=2026-10-31; validation=cargo tree --locked --all-features --target all -i ttf-parser; local_crates=oasis7_client_launcher,pixel_world_bridge
   "RUSTSEC-2026-0192", # ttf-parser unmaintained
-  # rustsec-ignore: owner=repository_health_engineer; crate=quick-xml; scope=transitive Wayland scanner build-time parser debt via winit/eframe/bevy Linux UI dependency closure; reason=wayland-scanner 0.31.10 still requires quick-xml ^0.39 and no compatible lockfile-only upgrade is available; expiry=2026-09-30; validation=cargo tree --locked --target all -i quick-xml; local_crates=oasis7_client_launcher,pixel_world_bridge
-  "RUSTSEC-2026-0194", # quick-xml quadratic attribute duplicate check via wayland-scanner
-  # rustsec-ignore: owner=repository_health_engineer; crate=quick-xml; scope=transitive Wayland scanner build-time parser debt via winit/eframe/bevy Linux UI dependency closure; reason=wayland-scanner 0.31.10 still requires quick-xml ^0.39 and no compatible lockfile-only upgrade is available; expiry=2026-09-30; validation=cargo tree --locked --target all -i quick-xml; local_crates=oasis7_client_launcher,pixel_world_bridge
-  "RUSTSEC-2026-0195", # quick-xml namespace allocation DoS via wayland-scanner
 ]
 
 [licenses]
