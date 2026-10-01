@@ -94,6 +94,7 @@ class Fixture:
             "repository": self.repository,
             "completion_semantics": "delivery_only",
             "head_oid": git(self.worktree, "rev-parse", "HEAD"),
+            "merge_commit_oid": git(self.repo, "rev-parse", "HEAD"),
             "worktree": str(self.worktree),
             "branch": self.branch,
         }
@@ -101,12 +102,58 @@ class Fixture:
             json.dumps(receipt, sort_keys=True) + "\n", encoding="utf-8"
         )
 
+    def add_task_change(self) -> str:
+        (self.worktree / "task-change.txt").write_text("delivered change\n", encoding="utf-8")
+        git(self.worktree, "add", "task-change.txt")
+        git(self.worktree, "commit", "-qm", "task change")
+        head = git(self.worktree, "rev-parse", "HEAD")
+        git(self.worktree, "push", "-q", "origin", self.branch)
+        self.update_delivery_receipt(head_oid=head)
+        return head
+
+    def update_delivery_receipt(self, *, head_oid: str | None = None,
+                                merge_commit_oid: str | None = None) -> None:
+        path = self.receipt_root / "terminal-delivery-receipt.json"
+        receipt = json.loads(path.read_text(encoding="utf-8"))
+        if head_oid is not None:
+            receipt["head_oid"] = head_oid
+        if merge_commit_oid is not None:
+            receipt["merge_commit_oid"] = merge_commit_oid
+            receipt["observed_target_oid"] = merge_commit_oid
+        path.write_text(json.dumps(receipt, sort_keys=True) + "\n", encoding="utf-8")
+
+    def squash_task_change(self) -> tuple[str, str]:
+        head = self.add_task_change()
+        git(self.repo, "switch", "main")
+        (self.repo / "main-change.txt").write_text("independent main change\n", encoding="utf-8")
+        git(self.repo, "add", "main-change.txt")
+        git(self.repo, "commit", "-qm", "main change")
+        main_parent = git(self.repo, "rev-parse", "HEAD")
+        git(self.repo, "cherry-pick", head)
+        main_commit = git(self.repo, "rev-parse", "HEAD")
+        git(self.repo, "push", "-q", "origin", "main")
+        self.update_delivery_receipt(merge_commit_oid=main_commit)
+        result = subprocess.run(
+            [str(SCRIPT_DIR / "patch-equivalence-receipt.sh"), "--root", str(self.repo),
+             "--branch-tip", head, "--main-commit", main_commit, "--main-parent", main_parent],
+            text=True, capture_output=True,
+        )
+        if result.returncode:
+            raise AssertionError(f"patch-equivalence producer failed: {result.stderr.strip()}")
+        (self.receipt_root / "patch-equivalence-receipt.json").write_text(
+            result.stdout, encoding="utf-8"
+        )
+        return head, main_commit
+
     def execute(self, *, preflight: bool = False,
                 overrides: dict[str, object] | None = None) -> tuple[int, dict]:
         """Run the real CLI parser and cleanup path with only live delivery readback isolated."""
         hooks = {"_run_delivery_preflight": lambda _repo, _uid: {
                      "delivery": {"state": "complete", "protocol_version": 2}
                  },
+                 # Cleanup fixtures use a complete, deterministic all-UID
+                 # process snapshot instead of inheriting host lsof gaps.
+                 "_run": _cross_uid_process_probe(self),
                  # The cleanup remote is a local bare repo. Pin its canonical
                  # GitHub identity in this isolated fixture so no network lookup is possible.
                  "_origin_repository": lambda _repo: self.repository}
@@ -129,6 +176,48 @@ class Fixture:
                 setattr(EXECUTOR, name, function)
             sys.argv = old_argv
         return code, json.loads(stdout.getvalue())
+
+
+def _cross_uid_process_probe(fixture: Fixture, *, foreign_cwd: pathlib.Path | None = None,
+                             foreign_open_file: pathlib.Path | None = None,
+                             omit_foreign_readback: bool = False):
+    """Mock complete process and lsof snapshots, while leaving fixture Git real."""
+    real_run = EXECUTOR._run
+    current_pid = os.getpid()
+    parent_pid = os.getppid()
+    foreign_pid = max(current_pid, parent_pid) + 100_000
+    current_uid = os.getuid()
+    rows = (
+        (current_pid, parent_pid, current_uid, "qa-cleanup-runner"),
+        (parent_pid, 1, current_uid, "qa-cleanup-parent"),
+        (foreign_pid, 1, current_uid + 1, "foreign-worker-with-path-free-argv"),
+    )
+    ps_output = "".join(f"{pid} {ppid} {uid} {command}\n"
+                        for pid, ppid, uid, command in rows)
+
+    def run(args: list[str], *, cwd: pathlib.Path | None = None,
+            check: bool = True) -> subprocess.CompletedProcess[str]:
+        if args and args[0] == "ps":
+            return subprocess.CompletedProcess(args, 0, ps_output, "")
+        if args and args[0] == "lsof":
+            try:
+                requested = [int(value) for value in args[args.index("-p") + 1].split(",")]
+            except (ValueError, IndexError):
+                return subprocess.CompletedProcess(args, 1, "", "invalid fixture lsof pid set")
+            output: list[str] = []
+            for pid in requested:
+                if pid == foreign_pid and omit_foreign_readback:
+                    continue
+                is_foreign = pid == foreign_pid
+                cwd_path = foreign_cwd if is_foreign and foreign_cwd else fixture.root
+                output.extend((f"p{pid}\n", "fcwd\n", "tDIR\n", f"n{cwd_path}\n"))
+                open_path = (foreign_open_file if is_foreign and foreign_open_file
+                             else pathlib.Path("/dev/null"))
+                output.extend(("f0\n", "tCHR\n", f"n{open_path}\n"))
+            return subprocess.CompletedProcess(args, 0, "".join(output), "")
+        return real_run(args, cwd=cwd, check=check)
+
+    return run
 
 
 def test_preflight_is_read_only(base: pathlib.Path) -> None:
@@ -207,12 +296,13 @@ def test_locked_and_active_worktrees_are_retained(base: pathlib.Path) -> None:
     active_case = base / "active"
     active_case.mkdir()
     active = Fixture(active_case)
+    real_process_run = EXECUTOR._run
     process = subprocess.Popen([
         sys.executable, "-c", "import sys,time; time.sleep(30)", str(active.worktree)
     ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         time.sleep(0.15)
-        code, payload = active.execute()
+        code, payload = active.execute(overrides={"_run": real_process_run})
     finally:
         process.terminate()
         process.wait(timeout=5)
@@ -220,6 +310,145 @@ def test_locked_and_active_worktrees_are_retained(base: pathlib.Path) -> None:
     active_row = next(row for row in payload["resources"] if row["kind"] == "worktree")
     assert active_row["state"] == "retained" and active_row["reason"] == "active_process", active_row
     assert active.worktree.is_dir()
+
+    cwd_only_case = base / "active-cwd-with-argv-omitting-worktree"
+    cwd_only_case.mkdir()
+    cwd_only = Fixture(cwd_only_case)
+    process = subprocess.Popen(
+        [sys.executable, "-c", "import time; time.sleep(30)"],
+        cwd=cwd_only.worktree, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+    )
+    try:
+        time.sleep(0.15)
+        code, payload = cwd_only.execute(overrides={"_run": real_process_run})
+    finally:
+        process.terminate()
+        process.wait(timeout=5)
+    assert code == 3 and payload["status"] == "cleanup_deferred", payload
+    cwd_row = next(row for row in payload["resources"] if row["kind"] == "worktree")
+    assert cwd_row["state"] == "retained" and cwd_row["reason"] == "active_process", cwd_row
+    assert cwd_only.worktree.is_dir()
+
+
+def test_uncertain_process_use_readback_retains_worktree(base: pathlib.Path) -> None:
+    fixture = Fixture(base)
+
+    def unreadable(_path: pathlib.Path) -> bool:
+        raise EXECUTOR.CleanupError("process-use readback is unavailable")
+
+    code, payload = fixture.execute(overrides={"_process_mentions_path": unreadable})
+    assert code == 3 and payload["status"] == "cleanup_deferred", payload
+    row = next(row for row in payload["resources"] if row["kind"] == "worktree")
+    assert row["state"] == "retained" and row["reason"] == "process_use_readback_unavailable", row
+    assert fixture.worktree.is_dir()
+
+
+def test_foreign_uid_cwd_only_process_is_retained(base: pathlib.Path) -> None:
+    fixture = Fixture(base)
+    probe = _cross_uid_process_probe(fixture, foreign_cwd=fixture.worktree)
+
+    code, payload = fixture.execute(overrides={"_run": probe})
+
+    assert code == 3 and payload["status"] == "cleanup_deferred", payload
+    row = next(row for row in payload["resources"] if row["kind"] == "worktree")
+    assert row["state"] == "retained" and row["reason"] == "active_process", row
+    assert fixture.worktree.is_dir()
+
+
+def test_foreign_uid_open_file_is_retained(base: pathlib.Path) -> None:
+    fixture = Fixture(base)
+    probe = _cross_uid_process_probe(
+        fixture, foreign_open_file=fixture.worktree / "tracked.txt"
+    )
+
+    code, payload = fixture.execute(overrides={"_run": probe})
+
+    assert code == 3 and payload["status"] == "cleanup_deferred", payload
+    row = next(row for row in payload["resources"] if row["kind"] == "worktree")
+    assert row["state"] == "retained" and row["reason"] == "active_process", row
+    assert fixture.worktree.is_dir()
+
+
+def test_incomplete_foreign_uid_process_readback_retains_worktree(base: pathlib.Path) -> None:
+    fixture = Fixture(base)
+    probe = _cross_uid_process_probe(fixture, omit_foreign_readback=True)
+
+    code, payload = fixture.execute(overrides={"_run": probe})
+
+    assert code == 3 and payload["status"] == "cleanup_deferred", payload
+    row = next(row for row in payload["resources"] if row["kind"] == "worktree")
+    assert row["state"] == "retained" and row["reason"] == "process_use_readback_unavailable", row
+    assert fixture.worktree.is_dir()
+
+
+def test_complete_all_uid_idle_process_readback_allows_cleanup(base: pathlib.Path) -> None:
+    fixture = Fixture(base)
+    probe = _cross_uid_process_probe(fixture)
+
+    code, payload = fixture.execute(overrides={"_run": probe})
+
+    assert code == 0 and payload["status"] == "cleaned", payload
+    assert not fixture.worktree.exists()
+    assert _branch_rows(payload)["local_branch"]["state"] == "removed", payload
+    assert _branch_rows(payload)["remote_branch"]["state"] == "removed", payload
+
+
+def _branch_rows(payload: dict) -> dict[str, dict]:
+    return {row["kind"]: row for row in payload["resources"]
+            if row["kind"] in {"local_branch", "remote_branch"}}
+
+
+def _assert_branch_refs_present(fixture: Fixture) -> None:
+    local = subprocess.run(["git", "-C", str(fixture.repo), "show-ref", "--verify", "--quiet",
+                            f"refs/heads/{fixture.branch}"])
+    remote = subprocess.run(["git", "-C", str(fixture.remote), "show-ref", "--verify", "--quiet",
+                             f"refs/heads/{fixture.branch}"])
+    assert local.returncode == 0, "local task ref was deleted without proven integration"
+    assert remote.returncode == 0, "remote task ref was deleted without proven integration"
+
+
+def test_missing_squash_integration_proof_retains_both_branch_refs(base: pathlib.Path) -> None:
+    fixture = Fixture(base)
+    _head, _main = fixture.squash_task_change()
+    (fixture.receipt_root / "patch-equivalence-receipt.json").unlink()
+
+    code, payload = fixture.execute()
+
+    assert code == 3 and payload["status"] == "cleanup_deferred", payload
+    rows = _branch_rows(payload)
+    assert set(rows) == {"local_branch", "remote_branch"}, payload
+    assert all(row["state"] == "retained" for row in rows.values()), rows
+    _assert_branch_refs_present(fixture)
+
+
+def test_mismatched_squash_tree_proof_retains_both_branch_refs(base: pathlib.Path) -> None:
+    fixture = Fixture(base)
+    _head, _main = fixture.squash_task_change()
+    proof_path = fixture.receipt_root / "patch-equivalence-receipt.json"
+    proof = json.loads(proof_path.read_text(encoding="utf-8"))
+    proof["projected_tree_oid"] = "0" * len(proof["projected_tree_oid"])
+    proof_path.write_text(json.dumps(proof, sort_keys=True) + "\n", encoding="utf-8")
+
+    code, payload = fixture.execute()
+
+    assert code == 3 and payload["status"] == "cleanup_deferred", payload
+    rows = _branch_rows(payload)
+    assert all(row["state"] == "retained" for row in rows.values()), rows
+    _assert_branch_refs_present(fixture)
+
+
+def test_exact_squash_equivalence_allows_both_branch_refs_to_be_removed(base: pathlib.Path) -> None:
+    fixture = Fixture(base)
+    _head, _main = fixture.squash_task_change()
+
+    code, payload = fixture.execute()
+
+    assert code == 0 and payload["status"] == "cleaned", payload
+    rows = _branch_rows(payload)
+    assert {kind: row["state"] for kind, row in rows.items()} == {
+        "local_branch": "removed", "remote_branch": "removed",
+    }, rows
+    assert not fixture.worktree.exists()
 
 
 def test_only_external_target_cache_is_discarded(base: pathlib.Path) -> None:
@@ -272,7 +501,7 @@ def test_local_cas_and_remote_lease_preserve_replaced_oids(base: pathlib.Path) -
     remote_replacement = git(fixture.repo, "rev-parse", "HEAD")
     git(fixture.repo, "push", "-q", "origin", "main")
     seen: set[str] = set()
-    real_run = EXECUTOR._run
+    real_run = _cross_uid_process_probe(fixture)
 
     def race(args: list[str], *, cwd: pathlib.Path | None = None, check: bool = True):
         if args[:2] == ["git", "-C"] and "update-ref" in args and "-d" in args and "local" not in seen:
@@ -361,6 +590,14 @@ def main() -> int:
         test_exact_registered_resources_are_removed_and_journal_linked,
         test_untracked_tracked_and_ignored_evidence_are_retained,
         test_locked_and_active_worktrees_are_retained,
+        test_uncertain_process_use_readback_retains_worktree,
+        test_foreign_uid_cwd_only_process_is_retained,
+        test_foreign_uid_open_file_is_retained,
+        test_incomplete_foreign_uid_process_readback_retains_worktree,
+        test_complete_all_uid_idle_process_readback_allows_cleanup,
+        test_missing_squash_integration_proof_retains_both_branch_refs,
+        test_mismatched_squash_tree_proof_retains_both_branch_refs,
+        test_exact_squash_equivalence_allows_both_branch_refs_to_be_removed,
         test_only_external_target_cache_is_discarded,
         test_same_path_and_oid_recreation_is_retained,
         test_local_cas_and_remote_lease_preserve_replaced_oids,

@@ -927,6 +927,27 @@ def _fresh_resource_absence(root: pathlib.Path, kind: str, identity: dict[str, A
     from urllib.parse import quote
     repository = identity["remote_repository"]
     ref = identity["full_ref"].removeprefix("refs/")
+    # An exact ref lookup returns the same HTTP 404 for a missing ref and for
+    # a caller that cannot read the private repository. First establish that
+    # this gh caller can read the repository's branch collection, which uses
+    # the Contents read permission required for Git ref reads.
+    access_endpoint = f"repos/{repository}/branches?per_page=1"
+    access_result = subprocess.run(
+        ["gh", "api", "--include", access_endpoint], text=True,
+        capture_output=True, check=False,
+    )
+    access_response = (access_result.stdout or "").replace("\r\n", "\n")
+    access_match = re.match(r"HTTP/\S+ ([0-9]{3})(?: [^\n]*)?\n", access_response)
+    if not access_match or access_result.returncode or int(access_match.group(1)) != 200:
+        raise _ResourceDependencyError("current caller cannot prove remote branch read access")
+    access_separator = access_response.find("\n\n")
+    try:
+        access_payload = json.loads(access_response[access_separator + 2:]) if access_separator >= 0 else None
+    except json.JSONDecodeError as exc:
+        raise _ResourceDependencyError("remote branch read-access response is malformed") from exc
+    if not isinstance(access_payload, list):
+        raise _ResourceDependencyError("remote branch read-access response is not a branch list")
+
     endpoint = f"repos/{repository}/git/ref/{quote(ref, safe='/')}"
     result = subprocess.run(["gh", "api", "--include", endpoint], text=True, capture_output=True, check=False)
     response = (result.stdout or "").replace("\r\n", "\n")

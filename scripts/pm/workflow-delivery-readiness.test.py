@@ -836,6 +836,11 @@ class ResourceDependencyConsumerTest(unittest.TestCase):
             "full_ref": f"refs/heads/{self.upstream_branch}",
             "expected_oid": self.head_oid,
         }
+        self.remote_branch_resource_id = {
+            "remote_repository": REPO,
+            "full_ref": f"refs/heads/{self.upstream_branch}",
+            "expected_oid": self.head_oid,
+        }
 
     def tearDown(self) -> None:
         self.temp.cleanup()
@@ -846,7 +851,14 @@ class ResourceDependencyConsumerTest(unittest.TestCase):
         return result.stdout.strip()
 
     def resource_record(self, *, resource_id: dict[str, Any] | None = None,
-                        upstream_uid: str = UPSTREAM_UID) -> dict[str, Any]:
+                        upstream_uid: str = UPSTREAM_UID,
+                        kind: str = "local_branch") -> dict[str, Any]:
+        if kind not in {"local_branch", "remote_branch"}:
+            raise AssertionError(f"unsupported fixture resource kind: {kind}")
+        identities = {
+            "local_branch": self.local_branch_resource_id,
+            "remote_branch": self.remote_branch_resource_id,
+        }
         return {
             "schema": DELIVERY.RESOURCE_DEPENDENCY_SCHEMA,
             "repository": REPO,
@@ -854,8 +866,8 @@ class ResourceDependencyConsumerTest(unittest.TestCase):
             "task_issue_number": 900,
             "upstream_task_uid": upstream_uid,
             "resources": [{
-                "kind": "local_branch",
-                "resource_id": resource_id or self.local_branch_resource_id,
+                "kind": kind,
+                "resource_id": resource_id or identities[kind],
                 "required_state": "released",
             }],
         }
@@ -1122,6 +1134,51 @@ class ResourceDependencyConsumerTest(unittest.TestCase):
         mismatched, _proof = self.readiness([mismatched_comment])
         self.assertEqual(mismatched["resource_wait_state"], "blocked", mismatched)
         self.assertIn("differs from the accepted delivery", self.resource_blocker(mismatched)["reason"])
+
+    def test_remote_404_requires_repository_read_permission_before_release(self) -> None:
+        self.write_cleanup_snapshot("removed")
+        resource_comment = self.marker_comment(
+            DELIVERY.RESOURCE_DEPENDENCY_MARKER,
+            self.resource_record(kind="remote_branch"),
+            105,
+        )
+        real_run = DELIVERY.subprocess.run
+
+        def github_read(permission: bool):
+            calls: list[str] = []
+
+            def run(args, *positional, **keywords):
+                if args[:2] != ["gh", "api"] or "--include" not in args:
+                    return real_run(args, *positional, **keywords)
+                endpoint = args[-1]
+                calls.append(endpoint)
+                if endpoint == f"repos/{REPO}/branches?per_page=1":
+                    status, payload = ((200, [{"name": "main"}]) if permission else
+                                       (404, {"message": "Not Found"}))
+                elif endpoint == f"repos/{REPO}/git/ref/heads/{self.upstream_branch}":
+                    status, payload = 404, {"message": "Not Found"}
+                else:
+                    raise AssertionError(f"unexpected remote cleanup read: {args!r}")
+                stdout = f"HTTP/2 {status} {'OK' if status == 200 else 'Not Found'}\r\n\r\n"
+                stdout += json.dumps(payload)
+                return subprocess.CompletedProcess(args, 0, stdout, "")
+            return run, calls
+
+        for label, permission, expected_state in (
+            ("permission-hidden ref", False, "pending"),
+            ("authorized genuine absence", True, "released"),
+        ):
+            with self.subTest(case=label):
+                run, calls = github_read(permission)
+                with patch.object(DELIVERY.subprocess, "run", side_effect=run):
+                    result, proof = self.readiness([resource_comment])
+                self.assertTrue(result["delivery_ready"], result)
+                self.assertEqual(result["resource_wait_state"], expected_state, result)
+                row = proof["resource_release"]["rows"][0]
+                self.assertEqual(row["released"], permission, proof["resource_release"])
+                self.assertIn(f"repos/{REPO}/branches?per_page=1", calls)
+                if not permission:
+                    self.assertEqual(self.resource_blocker(result)["blocks_actions"], ["consume_artifact"])
 
     def test_malformed_ambiguous_and_missing_resource_evidence_fail_closed(self) -> None:
         malformed = {

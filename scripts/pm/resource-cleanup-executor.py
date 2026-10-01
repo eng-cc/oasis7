@@ -128,6 +128,8 @@ def _read_delivery_receipt(root: pathlib.Path, task_uid: str, repository: str) -
         raise CleanupError("canonical v2 delivery receipt identity mismatch")
     if not isinstance(receipt.get("head_oid"), str) or not OID_RE.fullmatch(receipt["head_oid"]):
         raise CleanupError("canonical v2 delivery receipt has no valid delivered head")
+    if not isinstance(receipt.get("merge_commit_oid"), str) or not OID_RE.fullmatch(receipt["merge_commit_oid"]):
+        raise CleanupError("canonical v2 delivery receipt has no valid integration commit")
     return receipt
 
 
@@ -184,6 +186,69 @@ def _branch_identity(record: dict[str, Any], receipt: dict[str, Any], repository
             {"remote_repository": repository, "full_ref": full_ref, "expected_oid": expected})
 
 
+def _branch_integration_proof(repo: pathlib.Path, receipt_root: pathlib.Path,
+                              receipt: dict[str, Any]) -> tuple[bool, str]:
+    """Prove the delivered branch is integrated before deleting either ref.
+
+    An ancestry merge needs no auxiliary receipt. A squash/rebase merge must
+    carry the existing canonical patch-equivalence receipt, which is checked
+    against the exact delivered head and merge commit and recomputed with the
+    repository-owned producer. The proof file is read-only here.
+    """
+    head = receipt.get("head_oid")
+    merge_commit = receipt.get("merge_commit_oid")
+    if not isinstance(head, str) or not OID_RE.fullmatch(head):
+        return False, "delivered_head_unavailable"
+    if not isinstance(merge_commit, str) or not OID_RE.fullmatch(merge_commit):
+        return False, "integration_commit_unavailable"
+
+    ancestry = _run(["git", "-C", str(repo), "merge-base", "--is-ancestor", head, merge_commit], check=False)
+    if ancestry.returncode == 0:
+        return True, "ancestry"
+    if ancestry.returncode != 1:
+        return False, "integration_ancestry_readback_unavailable"
+
+    proof_path = receipt_root / "patch-equivalence-receipt.json"
+    if proof_path.is_symlink() or not proof_path.is_file():
+        return False, "patch_equivalence_proof_missing"
+    try:
+        proof = json.loads(proof_path.read_bytes(), object_pairs_hook=_unique_object)
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return False, "patch_equivalence_proof_malformed"
+    if not isinstance(proof, dict):
+        return False, "patch_equivalence_proof_malformed"
+    expected_keys = {
+        "receipt_type", "schema_version", "issuer", "branch_tip", "main_commit",
+        "main_parent", "patch_id", "projected_tree_oid", "main_tree_oid",
+    }
+    if set(proof) != expected_keys:
+        return False, "patch_equivalence_proof_fields_mismatch"
+    if (proof.get("receipt_type") != "oasis7_patch_equivalence"
+            or proof.get("schema_version") != 2
+            or proof.get("issuer") != "oasis7_patch_equivalence_helper"
+            or proof.get("branch_tip") != head
+            or proof.get("main_commit") != merge_commit):
+        return False, "patch_equivalence_proof_identity_mismatch"
+
+    parent = _git(repo, "rev-parse", "--verify", f"{merge_commit}^1", check=False)
+    if not parent or not OID_RE.fullmatch(parent) or proof.get("main_parent") != parent:
+        return False, "patch_equivalence_first_parent_mismatch"
+    recomputed = _run([
+        "bash", str(SCRIPT_DIR / "patch-equivalence-receipt.sh"),
+        "--root", str(repo), "--branch-tip", head,
+        "--main-commit", merge_commit, "--main-parent", parent,
+    ], check=False)
+    if recomputed.returncode:
+        return False, "patch_equivalence_recomputation_failed"
+    try:
+        expected_proof = json.loads(recomputed.stdout, object_pairs_hook=_unique_object)
+    except (UnicodeDecodeError, json.JSONDecodeError, ValueError):
+        return False, "patch_equivalence_recomputation_malformed"
+    if not isinstance(expected_proof, dict) or proof != expected_proof:
+        return False, "patch_equivalence_tree_or_patch_mismatch"
+    return True, "patch_equivalence"
+
+
 def _worktree_rows(repo: pathlib.Path) -> list[dict[str, Any]]:
     raw = _git(repo, "worktree", "list", "--porcelain")
     rows: list[dict[str, Any]] = []
@@ -227,31 +292,140 @@ def _mapping_references(repo: pathlib.Path, mapping: pathlib.Path, task_uid: str
 
 
 def _process_mentions_path(path: pathlib.Path) -> bool:
-    # This is a positive active-use signal only. An empty scan is never treated
-    # as proof that every external App or Agent session has stopped.
-    result = _run(["ps", "-axo", "pid=,ppid=,command="], check=False)
+    # Inspect argv plus the live process cwd/open files. argv-only scanning
+    # misses editors, shells, and agents whose process was started elsewhere
+    # and later changed cwd into the task worktree. Unknown process readback
+    # retains the worktree; an empty scan still cannot prove every external
+    # App or Agent session has stopped.
+    result = _run(["ps", "-axo", "pid=,ppid=,uid=,command="], check=False)
     if result.returncode:
         raise CleanupError("process-use readback is unavailable")
-    rows: list[tuple[int, int, str]] = []
+    rows: list[tuple[int, int, int, str]] = []
     for line in result.stdout.splitlines():
-        fields = line.strip().split(None, 2)
-        if len(fields) != 3:
+        if not line.strip():
             continue
+        fields = line.strip().split(None, 3)
+        if len(fields) != 4:
+            raise CleanupError("process-use readback contains a malformed process row")
         try:
-            rows.append((int(fields[0]), int(fields[1]), fields[2]))
+            rows.append((int(fields[0]), int(fields[1]), int(fields[2]), fields[3]))
         except ValueError:
-            continue
+            raise CleanupError("process-use readback contains an invalid process identity")
+    if not rows or len({pid for pid, _ppid, _uid, _command in rows}) != len(rows):
+        raise CleanupError("process-use readback has no processes or duplicate process identities")
     ancestors = {os.getpid()}
     parent = os.getppid()
     while parent > 1 and parent not in ancestors:
         ancestors.add(parent)
-        next_parent = next((ppid for pid, ppid, _ in rows if pid == parent), 1)
+        next_parent = next((ppid for pid, ppid, _uid, _command in rows if pid == parent), 1)
         parent = next_parent
-    for pid, _ppid, command in rows:
+    for pid, _ppid, _uid, command in rows:
         if pid in ancestors:
             continue
         if str(path) in command:
             return True
+
+    # Do not filter by UID: another user's process can retain a worktree cwd
+    # or open file even when its argv omits the path. If lsof cannot prove full
+    # coverage for every visible process, cleanup must retain the worktree.
+    pids = [pid for pid, _ppid, _uid, _command in rows]
+    # lsof reports a blank NAME for ordinary macOS non-filesystem descriptors
+    # (for example PIPE, NPOLICY, NEXUS, and KQUEUE). Keep type information so
+    # those records do not make every scan ambiguous, while still retaining
+    # on unknown or filesystem descriptors whose path cannot be read.
+    open_files = _run(["lsof", "-n", "-F", "pfnt", "-p", ",".join(map(str, pids))], check=False)
+    seen_cwd: set[int] = set()
+    current_pid: int | None = None
+    current_fd = ""
+    current_type = ""
+    current_has_name = False
+    target = path.resolve(strict=False)
+    non_filesystem_types = {"PIPE", "NPOLICY", "NEXUS", "KQUEUE", "unix", "IPv4", "IPv6", "systm"}
+    empty_name_non_filesystem_types = {"PIPE", "NPOLICY", "NEXUS", "KQUEUE"}
+
+    def path_is_inside(value: str) -> bool:
+        for suffix in (" (deleted)", " (revoked)"):
+            if value.endswith(suffix):
+                value = value[:-len(suffix)]
+        if not value.startswith("/"):
+            return False
+        try:
+            candidate = pathlib.Path(value).resolve(strict=False)
+            candidate.relative_to(target)
+            return True
+        except ValueError:
+            return False
+        except (OSError, RuntimeError) as exc:
+            raise CleanupError("process-use file path cannot be resolved") from exc
+
+    known_pids = set(pids)
+    seen_pids: set[int] = set()
+
+    def finish_descriptor() -> None:
+        if current_fd and (not current_type or not current_has_name):
+            raise CleanupError("process-use descriptor path/type readback is incomplete")
+
+    for line in open_files.stdout.splitlines():
+        if not line:
+            continue
+        field, value = line[0], line[1:]
+        if field == "p":
+            finish_descriptor()
+            try:
+                current_pid = int(value)
+            except ValueError as exc:
+                raise CleanupError("process-use open-file readback has an invalid PID") from exc
+            if current_pid not in known_pids:
+                raise CleanupError("process-use open-file readback returned an unexpected PID")
+            if current_pid in seen_pids:
+                raise CleanupError("process-use open-file readback repeated a process identity")
+            seen_pids.add(current_pid)
+            current_fd = ""
+            current_type = ""
+            current_has_name = False
+        elif field == "f":
+            if current_pid is None:
+                raise CleanupError("process-use open-file readback has no process identity")
+            finish_descriptor()
+            if not value:
+                raise CleanupError("process-use open-file readback has an empty descriptor")
+            current_fd = value
+            current_type = ""
+            current_has_name = False
+        elif field == "t":
+            if current_pid is None or not current_fd or current_type or not value:
+                raise CleanupError("process-use descriptor type readback is incomplete")
+            current_type = value
+        elif field == "n":
+            if current_pid is None or not current_fd or not current_type or current_has_name:
+                raise CleanupError("process-use descriptor name readback is incomplete")
+            current_has_name = True
+            if not value:
+                if current_fd == "cwd" or current_type not in empty_name_non_filesystem_types:
+                    raise CleanupError("process-use open-file path is ambiguous")
+                continue
+            if value == "??":
+                raise CleanupError("process-use open-file path is ambiguous")
+            if current_fd == "cwd":
+                if not value.startswith("/"):
+                    raise CleanupError("process-use cwd readback is ambiguous")
+                seen_cwd.add(current_pid)
+            elif not value.startswith("/") and current_type not in non_filesystem_types:
+                raise CleanupError("process-use open-file path is ambiguous")
+            if path_is_inside(value):
+                return True
+        else:
+            raise CleanupError("process-use open-file readback contains an unknown field")
+
+    finish_descriptor()
+    if open_files.returncode:
+        raise CleanupError("process-use cwd/open-file readback is unavailable")
+    if seen_pids != known_pids:
+        raise CleanupError("process-use readback did not cover every visible process")
+    if seen_cwd != known_pids:
+        # Every visible process must have an inspectable cwd. A disappeared
+        # PID, denied lsof read, or incomplete response remains unknown.
+        raise CleanupError("process-use cwd readback is incomplete")
     return False
 
 
@@ -383,7 +557,8 @@ def _worktree_state(repo: pathlib.Path, mapping: pathlib.Path, task_uid: str,
 
 def _local_branch_state(repo: pathlib.Path, resource_id: dict[str, Any], rows: list[dict[str, Any]], *, mutate: bool,
                         history: dict[str, Any] | None = None,
-                        releasable_checkouts: set[str] | None = None) -> dict[str, Any]:
+                        releasable_checkouts: set[str] | None = None,
+                        integration_proof: tuple[bool, str] | None = None) -> dict[str, Any]:
     full_ref, expected = resource_id["full_ref"], resource_id["expected_oid"]
     branch = full_ref.removeprefix("refs/heads/")
     current = _git(repo, "rev-parse", "--verify", f"{full_ref}^{{commit}}", check=False)
@@ -399,6 +574,10 @@ def _local_branch_state(repo: pathlib.Path, resource_id: dict[str, Any], rows: l
     if current != expected:
         return {"state": "retained", "operation": "none", "reason": "branch_tip_changed",
                 "readback": {"full_ref": full_ref, "exists": True, "observed_oid": current, "expected_oid": expected}}
+    if integration_proof is not None and not integration_proof[0]:
+        return {"state": "retained", "operation": "none", "reason": "branch_integration_unproven",
+                "readback": {"full_ref": full_ref, "exists": True, "observed_oid": current,
+                             "expected_oid": expected, "proof_reason": integration_proof[1]}}
     users = [row["path"] for row in rows if row.get("branch") == full_ref]
     if users:
         releasable_checkouts = releasable_checkouts or set()
@@ -443,7 +622,8 @@ def _local_branch_state(repo: pathlib.Path, resource_id: dict[str, Any], rows: l
 
 
 def _remote_branch_state(repo: pathlib.Path, resource_id: dict[str, Any], *, mutate: bool,
-                         history: dict[str, Any] | None = None) -> dict[str, Any]:
+                         history: dict[str, Any] | None = None,
+                         integration_proof: tuple[bool, str] | None = None) -> dict[str, Any]:
     full_ref, expected = resource_id["full_ref"], resource_id["expected_oid"]
     line = _run(["git", "-C", str(repo), "ls-remote", "--heads", "origin", full_ref], check=False)
     if line.returncode:
@@ -462,6 +642,10 @@ def _remote_branch_state(repo: pathlib.Path, resource_id: dict[str, Any], *, mut
     if observed != expected:
         return {"state": "retained", "operation": "none", "reason": "branch_tip_changed",
                 "readback": {"full_ref": full_ref, "exists": True, "observed_oid": observed, "expected_oid": expected}}
+    if integration_proof is not None and not integration_proof[0]:
+        return {"state": "retained", "operation": "none", "reason": "branch_integration_unproven",
+                "readback": {"full_ref": full_ref, "exists": True, "observed_oid": observed,
+                             "expected_oid": expected, "proof_reason": integration_proof[1]}}
     if mutate:
         result = _run(["git", "-C", str(repo), "push", f"--force-with-lease={full_ref}:{expected}",
                        "origin", f":{full_ref}"], check=False)
@@ -779,6 +963,7 @@ def _perform(repo: pathlib.Path, task_uid: str, *, preflight: bool, output_json:
     root = _receipt_root(repo, task_uid, create=False)
     delivery_info = _run_delivery_preflight(repo, task_uid)
     receipt = _read_delivery_receipt(root, task_uid, repository)
+    integration_proof = _branch_integration_proof(repo, root, receipt)
     worktree_id = _worktree_identity(repo, record, receipt)
     branch_id, remote_id = _branch_identity(record, receipt, repository)
     resource_ids = {"worktree": worktree_id, "local_branch": branch_id, "remote_branch": remote_id}
@@ -801,8 +986,10 @@ def _perform(repo: pathlib.Path, task_uid: str, *, preflight: bool, output_json:
             "worktree": worktree_outcome,
             "local_branch": _local_branch_state(repo, branch_id, rows, mutate=False,
                                                  history=history,
-                                                 releasable_checkouts=releasable_checkouts),
-            "remote_branch": _remote_branch_state(repo, remote_id, mutate=False, history=history),
+                                                 releasable_checkouts=releasable_checkouts,
+                                                 integration_proof=integration_proof),
+            "remote_branch": _remote_branch_state(repo, remote_id, mutate=False, history=history,
+                                                   integration_proof=integration_proof),
         }
         blockers = [f"{kind}:{row['reason']}" for kind, row in outcomes.items() if row["state"] not in ("ready", "already_absent")]
         payload = {"status": "ready" if not blockers else "blocked", "task_uid": task_uid,
@@ -824,6 +1011,7 @@ def _perform(repo: pathlib.Path, task_uid: str, *, preflight: bool, output_json:
         delivery_info = _run_delivery_preflight(repo, task_uid)
         record, mapping = _load_mapping(repo, task_uid)
         receipt = _read_delivery_receipt(root, task_uid, repository)
+        integration_proof = _branch_integration_proof(repo, root, receipt)
         worktree_id = _worktree_identity(repo, record, receipt)
         branch_id, remote_id = _branch_identity(record, receipt, repository)
         resource_ids = {"worktree": worktree_id, "local_branch": branch_id, "remote_branch": remote_id}
@@ -852,7 +1040,8 @@ def _perform(repo: pathlib.Path, task_uid: str, *, preflight: bool, output_json:
         intent("local_branch", "git_update_ref_cas")
         try:
             outcomes["local_branch"] = _local_branch_state(repo, branch_id, current_rows,
-                                                            mutate=True, history=history)
+                                                            mutate=True, history=history,
+                                                            integration_proof=integration_proof)
         except (CleanupError, OSError) as exc:
             outcomes["local_branch"] = {"state": "failed", "operation": "git_update_ref_cas",
                                          "reason": "local_branch_readback_or_operation_failed",
@@ -860,7 +1049,8 @@ def _perform(repo: pathlib.Path, task_uid: str, *, preflight: bool, output_json:
         intent("remote_branch", "git_push_delete_with_lease")
         try:
             outcomes["remote_branch"] = _remote_branch_state(repo, remote_id, mutate=True,
-                                                              history=history)
+                                                              history=history,
+                                                              integration_proof=integration_proof)
         except (CleanupError, OSError) as exc:
             outcomes["remote_branch"] = {"state": "failed", "operation": "git_push_delete_with_lease",
                                           "reason": "remote_branch_readback_or_operation_failed",
