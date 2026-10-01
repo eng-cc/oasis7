@@ -118,6 +118,74 @@ class AuthoritativeMappingContract(unittest.TestCase):
                 MODULE.command_refresh_task(args)
         self.assertEqual(mapping_path.read_bytes(), before)
 
+    def test_issue_pr_number_normalization(self) -> None:
+        for value in ("7", "12345678901234567890"):
+            with self.subTest(value=value):
+                fields = MODULE.issue_task_fields(f"- pr_number: `{value}`\n")
+                self.assertIs(type(fields["pr_number"]), int)
+                self.assertEqual(int(value), fields["pr_number"])
+        self.assertNotIn("pr_number", MODULE.issue_task_fields(""))
+
+    def test_issue_pr_number_rejects_invalid_values(self) -> None:
+        for value in ("", "0", "-7", "+7", "07", "7.0", "7e0", " 7", "7 ", "７", "true"):
+            with self.subTest(value=value), self.assertRaises(SystemExit):
+                MODULE.issue_task_fields(f"- pr_number: `{value}`\n")
+        for body in (
+            "- pr_number: `7`\n- pr_number: `7`\n",
+            "- pr_number: `7`\n- pr_number: `8`\n",
+            "- pr_number: 7\n",
+        ):
+            with self.subTest(body=body), self.assertRaises(SystemExit):
+                MODULE.issue_task_fields(body)
+
+    def test_refresh_reconstructed_pr_number_preserves_terminal_route(self) -> None:
+        args = self.args()
+        args.root = self.repo
+        args.task_uid = self.uid
+        mapping_path = self.repo / args.mapping
+        original = {
+            "task_uid": self.uid, "status": "done", "workflow_phase": "task_done",
+            "project_item_id": "ITEM_ID", "pr_number": 7,
+            "pr_url": "https://github.com/eng-cc/oasis7/pull/7", **self.expected,
+        }
+        MODULE.save_mapping(mapping_path, {"version": 1,
+            "project": {"owner": "eng-cc", "number": 1, "id": "PROJECT_ID"},
+            "tasks": {self.uid: original}})
+        body = (f"task_uid: {self.uid}\n"
+                "- pr_number: `7`\n- pr_url: `https://github.com/eng-cc/oasis7/pull/7`\n")
+        live = {"task_uid": self.uid, "title": "Authority mapping contract",
+                "issue_number": 1, "issue_url": "https://github.com/eng-cc/oasis7/issues/1",
+                "owner_role": "tpm", "module": "engineering", "status": "done",
+                "priority": "P2", "worktree_hint": str(self.worktree),
+                **MODULE.issue_task_fields(body)}
+        node = {"id": "ITEM_ID", "project": {"id": "PROJECT_ID", "number": 1,
+                "owner": {"login": "eng-cc"}}, "fieldValues": {
+                "pageInfo": {"hasNextPage": False}, "nodes": [
+                    {"name": "Done", "field": {"name": "Status"}},
+                    {"name": "done", "field": {"name": "PM Status"}},
+                    {"name": "task_done", "field": {"name": "Workflow Phase"}}]}}
+        with (mock.patch.object(MODULE, "github_issue_record", return_value=live),
+              mock.patch.object(MODULE, "project_refresh_graphql", return_value={"data": {"nodes": [node]}}),
+              mock.patch("builtins.print")):
+            self.assertEqual(0, MODULE.command_refresh_task(args))
+        refreshed = MODULE.load_mapping(mapping_path)["tasks"][self.uid]
+        self.assertEqual("done", refreshed["status"])
+        self.assertEqual("task_done", refreshed["workflow_phase"])
+        spec = importlib.util.spec_from_file_location("terminal_audit_pr_normalization", ROOT / "scripts/pm/terminal-task-audit.py")
+        assert spec and spec.loader
+        audit = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(audit)
+        issue = {"number": 1, "url": live["issue_url"], "state": "CLOSED", "body": body}
+        with mock.patch.object(audit, "run_json", return_value=issue):
+            _, mode, error = audit._read_live_issue_route(self.uid, refreshed)
+        self.assertIsNone(error)
+        self.assertEqual("pr_task", mode)
+        self.assertIs(type(refreshed["pr_number"]), int)
+        # Terminal audit must continue rejecting untyped cached identities.
+        with mock.patch.object(audit, "run_json", return_value=issue):
+            _, _, error = audit._read_live_issue_route(self.uid, {**refreshed, "pr_number": "7"})
+        self.assertEqual("cached PR number is malformed", error)
+
     def test_selected_refresh_preserves_closed_without_merge_workflow_phase(self) -> None:
         args = self.args()
         args.root = self.repo

@@ -452,8 +452,11 @@ namespace/object/entity 作用域；在 ABI、manifest hash 和执行前拒绝�
   直接移动/写入核心 component，或把制度权限转化为共识/节点权限。制度语义
   仍由其领域治理和试点分册拥有，本合同只定义待实现、可验证的扩展边界。
 #### 3.1 目标授权对象：subject、issuer、scope 和 grant identity
-下面的结构是 `CapabilityGrantV2` 的语义草图。字段名、Canonical CBOR 编码、
-签名算法和 hash 域必须在实现前单独冻结；它不表示当前 Rust 类型已经存在。
+下面的结构保留为目标授权语义模型；`CapabilityGrantV2` Rust 类型已在
+`oasis7_wasm_abi` 中实现，grant body 使用 Canonical CBOR 编码并以 SHA-256 计算 body hash；
+runtime 基于已最终确认的 authority evidence 验证 issuer 与 issuance 的 Ed25519 签名。
+类型和这些实现不表示下方每个 target variant 与规则均已支持；当前受支持的 target
+及其边界以 runtime 实现和证据为准。
 ```text
 CapabilitySubject =
   Agent { agent_id, owner_binding, generation }
