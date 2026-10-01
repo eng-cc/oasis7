@@ -65,6 +65,13 @@ def write(root: Path, path: str, data: bytes | str) -> None:
     target.write_bytes(data.encode("utf-8") if isinstance(data, str) else data)
 
 
+def append_utf8_lf(path: Path, text: str) -> None:
+    """Append explicit UTF-8/LF bytes without platform text-mode translation."""
+    if "\r" in text:
+        raise ValueError("fixture suffix must use LF bytes only")
+    path.write_bytes(path.read_bytes() + text.encode("utf-8"))
+
+
 def canonical(value: Any) -> bytes:
     return (json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
 
@@ -158,6 +165,9 @@ def start_git(root: Path) -> None:
     git(root, "init", "--quiet")
     git(root, "config", "user.name", "Corpus Fixture")
     git(root, "config", "user.email", "corpus-fixture@example.invalid")
+    # Keep canonical metadata fixtures stable regardless of the host's global
+    # autocrlf setting; individual portability scenarios opt in explicitly.
+    git(root, "config", "core.autocrlf", "false")
 
 
 def commit_all(root: Path, message: str) -> str:
@@ -348,6 +358,7 @@ def reset_fixture(root: Path) -> None:
 
 def remove_fixture(root: Path) -> None:
     if root == _FIXTURE_ROOT:
+        git(root, "config", "core.autocrlf", "false", check=False)
         reset_fixture(root)
     else:
         shutil.rmtree(root, ignore_errors=True)
@@ -375,12 +386,13 @@ def write_wrapped(root: Path, path: str, schema: str, record: dict[str, Any]) ->
 def test_t01_sync_updates_one_object_only() -> None:
     root = make_fixture()
     try:
+        git(root, "config", "core.autocrlf", "true")
         source = "doc/product/agents-world-simulation/README.md"
         before_roots = {path: (root / path).read_bytes() for path in (CORPUS_ROOT, EVIDENCE_ROOT)}
         object_file = record_path("object", source)
         before = (root / object_file).read_bytes()
         source_file = root / source
-        source_file.write_text(source_file.read_text(encoding="utf-8") + "\nChanged one ordinary source.\n", encoding="utf-8")
+        append_utf8_lf(source_file, "\nChanged one ordinary source.\n")
         preexisting = set(git(root, "status", "--porcelain").stdout.splitlines())
         result = cli(root, "sync", "--path", source, "--apply")
         assert result.returncode == 0, result.stdout + result.stderr
@@ -822,13 +834,14 @@ def test_t23_replace_fault_never_reports_success_and_scoped_retry_recovers() -> 
     root = make_fixture()
     injector = Path(tempfile.mkdtemp(prefix="oasis7-corpus-fault-")).resolve()
     try:
+        git(root, "config", "core.autocrlf", "true")
         sources = [
             "doc/product/agents-world-simulation/README.md",
             "doc/product/player-entry-distribution/README.md",
         ]
         for index, source in enumerate(sources):
             target = root / source
-            target.write_text(target.read_text(encoding="utf-8") + f"fault-stage-{index}\n", encoding="utf-8")
+            append_utf8_lf(target, f"fault-stage-{index}\n")
         old_objects = {source: object_bytes(root, source) for source in sources}
         hook = '''import importlib, os, sys\nsys.path.insert(0, os.environ["OASIS7_CORPUS_MODULE_DIR"])\nmodule = importlib.import_module("document_corpus")\noriginal = module._safe_write\ncount = 0\ndef fail_second(repo_root, path, data):\n    global count\n    count += 1\n    if count == 2:\n        raise OSError("injected second replace failure")\n    return original(repo_root, path, data)\nmodule._safe_write = fail_second\n'''
         write(injector, "sitecustomize.py", hook)
@@ -896,7 +909,7 @@ def test_t24_lock_is_worktree_local_and_contention_returns_three() -> None:
 
         git(root, "worktree", "add", "--quiet", "--detach", str(other), "base")
         other_source = other / source
-        other_source.write_text(other_source.read_text(encoding="utf-8") + "other worktree\n", encoding="utf-8")
+        append_utf8_lf(other_source, "other worktree\n")
         independent = cli(other, "sync", "--path", source, "--apply")
         assert independent.returncode == 0, f"separate worktree was blocked:\n{independent.stdout}{independent.stderr}"
     finally:
@@ -911,6 +924,8 @@ def test_t24_lock_is_worktree_local_and_contention_returns_three() -> None:
 def test_t25_space_unicode_crlf_and_case_alias_safety() -> None:
     root = make_fixture()
     try:
+        # This case asserts raw CRLF preservation when Git has no EOL clean filter.
+        git(root, "config", "core.autocrlf", "false")
         spaced = "doc/product/agents-world-simulation/notes for 雪.md"
         raw = b"# raw bytes\r\nsecond line\r\n"
         write(root, spaced, raw)
@@ -938,6 +953,22 @@ def test_t25_space_unicode_crlf_and_case_alias_safety() -> None:
         parent = git(root, "rev-parse", "HEAD").stdout.strip()
         commit = git(root, "commit-tree", tree.stdout.strip(), "-p", parent, "-m", "case alias tree")
         expect_code(checker(root, revision=commit.stdout.strip()), "path-alias-collision", 1)
+    finally:
+        remove_fixture(root)
+
+
+def test_autocrlf_true_rejects_crlf_that_git_would_normalize() -> None:
+    root = make_fixture()
+    try:
+        git(root, "config", "core.autocrlf", "true")
+        source = "doc/product/agents-world-simulation/README.md"
+        object_before = object_bytes(root, source)
+        write(root, source, b"# Windows checkout bytes\r\n")
+        mismatch = cli(root, "sync", "--path", source, "--apply")
+        diagnostic = expect_code(mismatch, "hash-input-mismatch", 1)
+        assert diagnostic["source_path"] == source, diagnostic
+        assert "Git clean filters would change" in diagnostic["detail"], diagnostic
+        assert object_bytes(root, source) == object_before, "autocrlf mismatch changed the object"
     finally:
         remove_fixture(root)
 
@@ -1115,6 +1146,19 @@ def assert_legacy_export_matches_baseline(root: Path, output_dir: str) -> None:
 
 
 def test_t26_t27_full_migration_roundtrip_and_repeated_preconditions() -> None:
+    # This test checks out the immutable production baseline into a linked
+    # worktree. Pin checkout and every child Git invocation before worktree add
+    # so a developer's global core.autocrlf setting cannot rewrite the fixture.
+    with patch.dict(os.environ, {
+        "GIT_CONFIG_COUNT": "1",
+        "GIT_CONFIG_KEY_0": "core.autocrlf",
+        "GIT_CONFIG_VALUE_0": "false",
+    }):
+        assert git(ROOT, "config", "--get", "core.autocrlf").stdout.strip() == "false"
+        _run_t26_t27_full_migration_roundtrip_and_repeated_preconditions()
+
+
+def _run_t26_t27_full_migration_roundtrip_and_repeated_preconditions() -> None:
     container = Path(tempfile.mkdtemp(prefix="oasis7-corpus-migration-")).resolve()
     target = container / "repo"
     try:
@@ -1361,6 +1405,7 @@ def main() -> None:
         test_safe_write_falls_back_without_fchmod_and_cleans_failed_temp,
         test_t24_lock_is_worktree_local_and_contention_returns_three,
         test_t25_space_unicode_crlf_and_case_alias_safety,
+        test_autocrlf_true_rejects_crlf_that_git_would_normalize,
         test_t26_t27_full_migration_roundtrip_and_repeated_preconditions,
         test_t28_three_way_import_preserves_independent_main_review,
         test_t29_three_way_same_review_conflict_and_source_mismatch,

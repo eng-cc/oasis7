@@ -121,13 +121,14 @@ def group_digest(records: list[dict[str, Any]]) -> str:
 def test_t10_reviewed_content_change_does_not_refresh_the_review() -> None:
     root = _harness.make_fixture()
     try:
+        _harness.git(root, "config", "core.autocrlf", "true")
         source = "doc/product/agents-world-simulation/README.md"
         record = semantic_record(root, source)
         path = _harness.record_path("semantic", source)
         _harness.write_wrapped(root, path, "oasis7.document-semantic-entry/v1", record)
         before = (root / path).read_bytes()
         source_file = root / source
-        source_file.write_text(source_file.read_text(encoding="utf-8") + "changed after review\n", encoding="utf-8")
+        _harness.append_utf8_lf(source_file, "changed after review\n")
         sync = cli(root, "sync", "--path", source, "--apply")
         assert sync.returncode == 0, sync.stdout + sync.stderr
         assert (root / path).read_bytes() == before, "ordinary object sync renewed semantic review bytes"
@@ -139,6 +140,7 @@ def test_t10_reviewed_content_change_does_not_refresh_the_review() -> None:
 def test_t11_bundle_digest_and_member_contract_are_preserved() -> None:
     root = _harness.make_fixture()
     try:
+        _harness.git(root, "config", "core.autocrlf", "true")
         paths = [
             "doc/product/agents-world-simulation/README.md",
             "doc/product/player-entry-distribution/README.md",
@@ -156,7 +158,7 @@ def test_t11_bundle_digest_and_member_contract_are_preserved() -> None:
         valid = _harness.checker(root)
         assert valid.returncode == 0, valid.stdout + valid.stderr
         target = root / paths[0]
-        target.write_text(target.read_text(encoding="utf-8") + "bundle source changed\n", encoding="utf-8")
+        _harness.append_utf8_lf(target, "bundle source changed\n")
         sync = cli(root, "sync", "--path", paths[0], "--apply")
         assert sync.returncode == 0, sync.stdout + sync.stderr
         expect_code(_harness.checker(root), "semantic-bundle-drift", 1)
@@ -203,6 +205,7 @@ def test_t12_invalid_semantic_authority_owner_disposition_and_obligation_fail() 
 def test_t13_stale_review_proposal_returns_three_without_writes() -> None:
     root = _harness.make_fixture()
     try:
+        _harness.git(root, "config", "core.autocrlf", "true")
         source = "doc/testing/evidence/fixture-2026-09-30.md"
         proposal = ".cache/doc-governance/review-proposal.json"
         planned = cli(root, "propose", "--kind", "evidence", "--path", source, "--output", proposal)
@@ -214,7 +217,7 @@ def test_t13_stale_review_proposal_returns_three_without_writes() -> None:
             if path.is_file()
         }
         source_file = root / source
-        source_file.write_text(source_file.read_text(encoding="utf-8") + "stale proposal source\n", encoding="utf-8")
+        _harness.append_utf8_lf(source_file, "stale proposal source\n")
         source_after = source_file.read_bytes()
         result = cli(root, "apply-review", "--proposal", proposal, "--apply")
         expect_code(result, "proposal-stale", 3)
@@ -336,7 +339,7 @@ def test_t14_group_member_drift_and_membership_changes_fail() -> None:
         assert checker(root).returncode == 0, checker(root).stdout + checker(root).stderr
         source_file = root / source
         original_source = source_file.read_bytes()
-        source_file.write_text(source_file.read_text(encoding="utf-8") + "member changed\n", encoding="utf-8")
+        _harness.append_utf8_lf(source_file, "member changed\n")
         expect_code(checker(root), "evidence-content-drift", 1)
         source_file.write_bytes(original_source)
 
