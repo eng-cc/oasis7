@@ -51,6 +51,7 @@ class DeliveryFixture:
         self.remote_state_path = parent / "remote-branch-state.json"
         self.log_path = parent / "gh-log.jsonl"
         self.lost_marker = parent / "lost-response-once"
+        self.process_probe_mode: str | None = None
         self.remote = parent / "fixture-origin.git"
         self.bin.mkdir(parents=True)
         self._git("init", "-q", "-b", "main", str(self.root))
@@ -270,6 +271,43 @@ os.execv(os.environ["QA_REAL_GIT"], [os.environ["QA_REAL_GIT"], *args])
         git.chmod(0o755)
         self.real_git = real_git
 
+    def install_process_probe(self, mode: str) -> None:
+        """Control only ps/lsof readback while leaving producer and cleanup real."""
+        if mode not in {"complete-idle", "unavailable"}:
+            raise ValueError(f"unsupported process probe fixture mode: {mode}")
+        self.process_probe_mode = mode
+        ps = self.bin / "ps"
+        ps.write_text(r'''#!/usr/bin/env python3
+import os, sys
+if sys.argv[1:] != ["-axo", "pid=,ppid=,uid=,command="]:
+    raise SystemExit("unexpected fixture ps invocation: " + repr(sys.argv[1:]))
+try:
+    uid = os.getuid() + 1
+except AttributeError:
+    uid = 1001
+print(f"424242 1 {uid} fixture-process-with-path-free-argv")
+''', encoding="utf-8")
+        ps.chmod(0o755)
+        lsof = self.bin / "lsof"
+        lsof.write_text(r'''#!/usr/bin/env python3
+import os, sys
+args = sys.argv[1:]
+if args[:3] != ["-n", "-F", "pfnt"] or "-p" not in args:
+    raise SystemExit("unexpected fixture lsof invocation: " + repr(args))
+if os.environ["QA_PROCESS_PROBE_MODE"] == "unavailable":
+    print("fixture denies process readback", file=sys.stderr)
+    raise SystemExit(1)
+for pid in args[args.index("-p") + 1].split(","):
+    print("p" + pid)
+    print("fcwd")
+    print("tDIR")
+    print("n/tmp")
+    print("f0")
+    print("tCHR")
+    print("n/dev/null")
+''', encoding="utf-8")
+        lsof.chmod(0o755)
+
     def env(self, *, lose_response: bool = False, comment_author: str | None = None,
             comment_no_user: bool = False) -> dict[str, str]:
         env = dict(os.environ)
@@ -280,6 +318,10 @@ os.execv(os.environ["QA_REAL_GIT"], [os.environ["QA_REAL_GIT"], *args])
         env["QA_REAL_GIT"] = self.real_git
         env["QA_REMOTE_BRANCH_OID"] = self.head_oid
         env["QA_REMOTE_STATE"] = str(self.remote_state_path)
+        if self.process_probe_mode is None:
+            env.pop("QA_PROCESS_PROBE_MODE", None)
+        else:
+            env["QA_PROCESS_PROBE_MODE"] = self.process_probe_mode
         if lose_response:
             env["QA_LOSE_COMMENT_RESPONSE"] = "1"
         else:
@@ -560,6 +602,7 @@ class TerminalDeliveryProtocolTests(unittest.TestCase):
         self.assertFalse((self.fixture.receipt_root / "resource-cleanup.json").exists())
 
         before_cleanup = json.loads(self.fixture.state_path.read_text(encoding="utf-8"))
+        self.fixture.install_process_probe("complete-idle")
         cleanup_only = self.fixture.run_finalizer("--cleanup-only")
         self.assertEqual(cleanup_only.returncode, 0, cleanup_only.stdout + cleanup_only.stderr)
         cleanup_json = json.loads(cleanup_only.stdout)
@@ -580,12 +623,38 @@ class TerminalDeliveryProtocolTests(unittest.TestCase):
     def test_public_cleanup_preflight_consumes_the_same_strict_delivery_proof(self):
         produced = self.fixture.run_producer()
         self.assertEqual(produced.returncode, 0, produced.stderr)
+        self.fixture.install_process_probe("complete-idle")
         cleanup = self.fixture.run_cleanup("--preflight")
         self.assertEqual(cleanup.returncode, 0, cleanup.stdout + cleanup.stderr)
         payload = json.loads(cleanup.stdout)
         self.assertEqual(payload["status"], "ready", payload)
         self.assertEqual(payload["delivery"]["state"], "complete", payload)
         self.assertEqual({row["state"] for row in payload["resources"]}, {"ready"}, payload)
+
+    def test_unknown_process_coverage_defers_cleanup_without_revoking_delivery(self):
+        produced = self.fixture.run_producer()
+        self.assertEqual(produced.returncode, 0, produced.stderr)
+        delivery_path = self.fixture.receipt_root / "terminal-delivery-receipt.json"
+        delivery_raw = delivery_path.read_bytes()
+        proof_before = self.read_proof()
+        self.assertEqual(proof_before["status"], "passed", proof_before)
+
+        deferred = self.fixture.run_finalizer("--cleanup=defer")
+        self.assertEqual(deferred.returncode, 0, deferred.stdout + deferred.stderr)
+        self.assertEqual(json.loads(deferred.stdout)["delivery"],
+                         {"state": "complete", "protocol_version": 2})
+
+        self.fixture.install_process_probe("unavailable")
+        cleanup_only = self.fixture.run_finalizer("--cleanup-only")
+        self.assertEqual(cleanup_only.returncode, 3, cleanup_only.stdout + cleanup_only.stderr)
+        payload = json.loads(cleanup_only.stdout)
+        self.assertEqual(payload["delivery"], {"state": "complete", "protocol_version": 2}, payload)
+        self.assertEqual(payload["cleanup_state"], "cleanup_deferred", payload)
+        self.assertTrue(self.fixture.task.is_dir())
+        self.assertEqual(delivery_path.read_bytes(), delivery_raw)
+        proof_after = self.read_proof()
+        self.assertEqual(proof_after["status"], "passed", proof_after)
+        self.assertEqual(proof_after, proof_before)
 
     def install_selected_v1_fixture(self):
         """Install the accepted legacy proof chain in the disposable fixture."""
