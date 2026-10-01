@@ -194,6 +194,21 @@ def _write_terminal(root: pathlib.Path, task_uid: str, terminal_receipt_path: pa
             durable_store.replace_json(tombstone_path,tombstone)
             return tombstone_path
 
+        def terminal_comment(record: dict, terminal: dict, terminal_digest: str) -> tuple[str,str]:
+            phase="post_merge_done"
+            operation_id=hashlib.sha256(f"{task_uid}:post_merge_done:evidence_comment".encode()).hexdigest()
+            merge_receipt_digest=terminal.get("merge_receipt_sha256") or record.get("merge_receipt_sha256") or ""
+            main_sync_receipt_digest=terminal.get("main_sync_receipt_sha256") or (record.get("phase_receipt_sha256") or {}).get("main_sync") or ""
+            body=("<!-- oasis7-pm-evidence -->\n"+f"Operation-ID: {operation_id}\nTask UID: {task_uid}\nEvidence Phase: {phase}\n"
+                  "Receipt Chain Version: 1\nReceipt Type: oasis7_terminal_cleanup\nReceipt Issuer: post-merge-cleanup\n"
+                  f"PR Number: {record.get('pr_number')}\nPR URL: {record.get('pr_url')}\n"
+                  f"Merge Receipt SHA256: {merge_receipt_digest}\n"
+                  f"Main Sync Receipt SHA256: {main_sync_receipt_digest}\n"
+                  f"Terminal Receipt SHA256: {terminal_digest}\n"
+                  f"Receipt Chain Digest: {receipt_chain_digest(task_uid,record.get('repository'),record.get('issue_number'),record.get('pr_number'),record.get('pr_url'),merge_receipt_digest,main_sync_receipt_digest,terminal_digest)}\n"
+                  "Role: tpm\nCompleted: receipt-bound terminal finalization.\n")
+            return operation_id,body
+
         # Canonicalize the producer-selected file only after acquiring the
         # singleton task lock; the helper creates no alternate receipt path.
         canonical=subprocess.run([sys.executable,str(CANONICAL_ROOT_HELPER),"--default-worktree",str(root),
@@ -252,7 +267,15 @@ def _write_terminal(root: pathlib.Path, task_uid: str, terminal_receipt_path: pa
             fcntl.flock(mapping_lock_handle.fileno(),fcntl.LOCK_UN)
             mapping_lock_handle.close()
 
+        comment_operation_id,body=terminal_comment(record,terminal,terminal_digest)
         if already_finalized:
+            entry=_ledger_entry(ledger_path,"evidence_comment")
+            comment=_reconcile_comment(record,comment_operation_id,body)
+            if not comment:
+                fail("already-finalized terminal evidence comment has no unique live readback")
+            if ((entry.get("committed") or entry.get("result"))
+                    and str(entry.get("result") or "")!=comment):
+                fail("already-finalized terminal evidence comment conflicts with live ledger binding")
             ensure_terminal_project(mapping,record,ledger_path)
             ledger_transition(ledger_path,"issue_close","intent")
             issue=json.loads(subprocess.check_output(["gh","issue","view",str(record["issue_number"]),"-R",record["repository"],"--json","state"],text=True))
@@ -272,17 +295,6 @@ def _write_terminal(root: pathlib.Path, task_uid: str, terminal_receipt_path: pa
         record.setdefault("phase_receipts",{})[phase]=receipt
         record.setdefault("phase_receipt_sha256",{})[phase]=digest
         ensure_terminal_project(mapping,record,ledger_path)
-        comment_operation_id=hashlib.sha256(f"{task_uid}:post_merge_done:evidence_comment".encode()).hexdigest()
-        merge_receipt_digest=terminal.get("merge_receipt_sha256") or record.get("merge_receipt_sha256") or ""
-        main_sync_receipt_digest=terminal.get("main_sync_receipt_sha256") or (record.get("phase_receipt_sha256") or {}).get("main_sync") or ""
-        body=("<!-- oasis7-pm-evidence -->\n"+f"Operation-ID: {comment_operation_id}\nTask UID: {task_uid}\nEvidence Phase: {phase}\n"
-              "Receipt Chain Version: 1\nReceipt Type: oasis7_terminal_cleanup\nReceipt Issuer: post-merge-cleanup\n"
-              f"PR Number: {record.get('pr_number')}\nPR URL: {record.get('pr_url')}\n"
-              f"Merge Receipt SHA256: {merge_receipt_digest}\n"
-              f"Main Sync Receipt SHA256: {main_sync_receipt_digest}\n"
-              f"Terminal Receipt SHA256: {terminal_digest}\n"
-              f"Receipt Chain Digest: {receipt_chain_digest(task_uid,record.get('repository'),record.get('issue_number'),record.get('pr_number'),record.get('pr_url'),merge_receipt_digest,main_sync_receipt_digest,terminal_digest)}\n"
-              "Role: tpm\nCompleted: receipt-bound terminal finalization.\n")
         with tempfile.NamedTemporaryFile("w",encoding="utf-8",delete=False,dir="/tmp") as evidence:
             evidence.write(body); evidence_path=evidence.name
         try:
