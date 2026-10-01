@@ -523,6 +523,67 @@ else
   [[ -z "$PATCH_RECEIPT" ]] || die "patch-equivalence receipt is not accepted when main contains the task branch tip"
 fi
 
+# A v1 terminal receipt can be written before the task finalizer advances
+# task truth to post_merge_done. On a crash/resume retry, validate the existing
+# bytes against this fresh merge/main-sync chain and preserve them verbatim.
+# The intent journal proves the helper reached this receipt-creation stage;
+# identity and raw-chain digests bind the bytes to the current task.
+EXISTING_TERMINAL_RECEIPT=0
+if [[ "$DRY_RUN" == "0" && -f "$TERMINAL_RECEIPT_OUTPUT" ]]; then
+  [[ -f "$INTENT_JOURNAL" ]] || die "existing terminal cleanup receipt has no matching cleanup intent"
+  python3 - "$TERMINAL_RECEIPT_OUTPUT" "$MAPPING" "$TASK_UID" "$RECORDED_REPOSITORY" \
+      "$RECORDED_PR_NUMBER" "$WORKTREE" "$BRANCH" "$PR_RECEIPT" "$MAIN_SYNC_RECEIPT" <<'PY'
+import datetime,json,pathlib,sys
+path,mapping_path,uid,repository,pr_number,worktree,branch,merge_path,sync_path=sys.argv[1:]
+def unique_object(pairs):
+    result={}
+    for key,value in pairs:
+        if key in result:
+            raise ValueError(f'duplicate JSON key: {key}')
+        result[key]=value
+    return result
+try:
+    receipt=json.loads(pathlib.Path(path).read_text(encoding='utf-8'),object_pairs_hook=unique_object)
+    records=json.loads(pathlib.Path(mapping_path).read_text(encoding='utf-8'),object_pairs_hook=unique_object).get('tasks') or {}
+    task=records.get(uid) or {}
+except (OSError,json.JSONDecodeError) as exc:
+    raise SystemExit(f'post-merge-cleanup: existing terminal cleanup receipt is malformed: {exc}')
+import hashlib
+expected={
+    'receipt_type':'oasis7_terminal_cleanup',
+    'issuer':'post-merge-cleanup',
+    'cleanup_intent_required':True,
+    'task_uid':uid,
+    'repository':repository,
+    'issue_number':task.get('issue_number'),
+    'pr_number':int(pr_number),
+    'worktree':worktree,
+    'branch':branch,
+    'merge_receipt_sha256':hashlib.sha256(pathlib.Path(merge_path).read_bytes()).hexdigest(),
+    'main_sync_receipt_sha256':hashlib.sha256(pathlib.Path(sync_path).read_bytes()).hexdigest(),
+}
+if not isinstance(receipt,dict):
+    raise SystemExit('post-merge-cleanup: existing terminal cleanup receipt is not an object')
+for key,value in expected.items():
+    if receipt.get(key)!=value:
+        raise SystemExit(f'post-merge-cleanup: existing terminal cleanup receipt {key} disagrees with live task evidence')
+observed=receipt.get('observed_at')
+if not isinstance(observed,str):
+    raise SystemExit('post-merge-cleanup: existing terminal cleanup receipt lacks its original observed_at')
+try:
+    datetime.datetime.fromisoformat(observed.replace('Z','+00:00'))
+except ValueError as exc:
+    raise SystemExit(f'post-merge-cleanup: existing terminal cleanup receipt observed_at is malformed: {exc}')
+PY
+  if [[ "$TERMINAL_COMMITTED" != 1 ]]; then
+    update_intent_flag terminal_receipt_committed true
+    TERMINAL_COMMITTED=1
+  fi
+  EXISTING_TERMINAL_RECEIPT=1
+elif [[ "$DRY_RUN" == "0" && "$TERMINAL_COMMITTED" == 1 ]]; then
+  die "cleanup intent says terminal receipt is committed but its canonical bytes are missing"
+fi
+
 printf 'git -C %q worktree remove %q\n' "$REPO_ROOT" "$WORKTREE"
 if [[ "$PATCH_EQUIVALENCE_PROVEN" == 1 ]]; then
   printf 'git -C %q update-ref -d %q %q # exact-OID compare-and-delete\n' "$REPO_ROOT" "refs/heads/$BRANCH" "$BRANCH_TIP"
@@ -656,6 +717,11 @@ if (r.get('phase_receipts') or {}).get(terminal_phase) != receipt:
 if (r.get('phase_receipt_sha256') or {}).get(terminal_phase) != hashlib.sha256(p.read_bytes()).hexdigest():
  raise SystemExit('post-merge-cleanup: existing terminal receipt digest disagrees with task truth')
 PY
+    exit 0
+  fi
+  if [[ "$EXISTING_TERMINAL_RECEIPT" == 1 ]]; then
+    printf 'python3 %q --repo-root %q --task-uid %q --terminal-receipt %q\n' \
+      "$REPO_ROOT/scripts/pm/post-merge-finalize.py" "$REPO_ROOT" "$TASK_UID" "$TERMINAL_RECEIPT_OUTPUT"
     exit 0
   fi
   mkdir -p "$(dirname "$TERMINAL_RECEIPT_OUTPUT")"
