@@ -323,7 +323,21 @@ English/Chinese long-text overflow. Source/package
 tests now cover the World Feed and fail-closed Director boundary; this manual does not
 turn those tests into issuer-backed production access or a release claim.
 
+<a id="industry-detail-acceptance"></a>
+### 产业关系与细节层级验收入口（未来适用）
+
+当正式 surface 支持产业 projection 时，按 Pixel-world player-readable rendering 的目标合同，在同候选与权威数据下进行 external headed desktop+narrow 验收：确认节点/流类型/方向/吞吐/损耗、R1~R5 与阶段/告警区分，World/Region/Node 从热区主干流到配方库存的层级，location/Agent/module 定位与目标/下一步保留；检查未知、推断根因不冒充事实，密集节点/边裁剪负载和键盘/CJK 可读性。保留来源对账、state、console、截图和负载证据。该方法未执行，当前 routes/HUD/热点不证明产业图谱或 semantic zoom 已实现。
+
 ### 当前 Agent Chat 与高级 Prompt 设置
+
+#### 文本、输入与稳定性验收要求
+
+- 控制/详情/事件/诊断等正文应可选择和复制；中英文均须可读，长文本不得截断主要动作或结果。输入区、drawer 与控件内的点击、拖拽、滚轮不得误触世界相机或拾取。
+- Chat 必须支持中文组合输入；预编辑文字不得被当作已提交消息，compositionend/input 的浏览器时序差异不得重复插入或发送。切换 Agent、文本焦点和 drawer 时保持明确的草稿/焦点归属，文本编辑与组合态不得触发世界快捷键。
+- 当前多行编辑和显式 Send Chat 边界不变：Enter/Shift+Enter 不触发发送。历史 Enter 发送只可从固定 Git 基线追溯。
+- 输入和发送不得阻塞页面；失败显示原因及真实恢复下一步，pending 不冒充成功，恢复不得静默重放。当前 in-flight 拒绝和发送超时/显式重试有 main.test.jsx 与 viewer_agent_chat_auth_module.test.js 定向样例；它们不证明真实浏览器完整 IME 兼容。
+- 上述为持续验收要求。Escape 的 isComposing/229 保护与测试只证明局部焦点隔离；完整 Chat IME 去重、焦点切换、CJK/复制、输入隔离和无卡死仍须专项 external headed desktop+narrow 证据，本文不新增已通过声明。
+
 
 - Chat 和 Prompt 控制只对当前账号已绑定/权威认领且当前可控制的 Agent 开放；选中共享世界中的其他 Agent 不会授予控制权。无可控制 Agent 时，页面保持 blocked，并引导先认领 Agent 或等待 binding sync。
 - `Agent Chat` 是面向当前 Agent 的消息入口。发送成功只表示对应请求结果，不会绕过 runtime 权威裁决，也不证明产生了世界效果。

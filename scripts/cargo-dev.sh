@@ -35,7 +35,7 @@ Notes:
 
 Examples:
   ./scripts/cargo-dev.sh check -p oasis7
-  ./scripts/cargo-dev.sh test -p oasis7_viewer
+  ./scripts/cargo-dev.sh test -p oasis7
   ./scripts/cargo-dev.sh run -p oasis7 --bin oasis7_game_launcher
   ./scripts/cargo-dev.sh --print-target-dir
 USAGE

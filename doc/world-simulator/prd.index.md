@@ -45,20 +45,19 @@
 - 活跃补充：`*.manual.md` 与仍被当前模块 PRD 直接引用的 supporting spec，可在“活跃补充文档”区定向列出，但不并入下方 PRD/design 长表。
 - 排除规则：不纳入 `doc/devlog/**` 与非 PRD 配对文档（如临时草稿/日志快照）。
 - 按需进入：复签结论、状态收口、evidence、report、template 等审计留痕保留可检索性；除非它们重新成为当前 operator 或 owner 的直接入口，否则不进入默认首屏。
-- 历史入口：root world-simulator PRD/project legacy redirect shells 已删除，不作为主索引分母。
+- 历史入口：根目录旧规格与本地任务跳转文件已删除；当前入口见上方模块文档与 GitHub task truth，旧版本仅从 Git history 追溯。
 - 当前入口：本目录 `prd.md` 是 world-simulator 技术规格主入口；GitHub task issue / Project 是执行状态主入口。
 
 ## 历史证据入口
 
+旧 EGUI 侧栏、IME bridge、Chat deadlock 与 industry semantic zoom 八份文档已退役；文本复制、中英文与输入隔离、组合输入/发送/恢复要求由 Viewer 手册、semantic test API、Agent conversation/Prompt 与 Web Build Truth 承接，产业流向/瓶颈/目标定位与空间层级要求由 Player-readable World Stage 和 Pixel-world 可读性专业文档承接。旧实现从固定提交 `25fbcd7cf590c5e1b1248119d407cc7c34e8e634` 与原任务证据追溯；承接的是要求，不是完整 IME 或 semantic zoom 已验证完成的声明。
+
 以下文档只作为 archive-only evidence，用于审计追溯，不作为 world-simulator 日常阅读入口：
 
 - historical world-simulator PRD review checklist snapshot（后续已删除；当前 world-simulator 技术入口见 `doc/world-simulator/README.md`、`doc/world-simulator/prd.index.md` 与 `doc/world-simulator/prd.md`，任务真值见 GitHub）
-- Git history
-- Git history
-- Git history
 - Viewer 旧控制反馈三件套与二次历史归档说明均已删除；当前正式控制反馈的产品结果读 `doc/product/world-rules-core-gameplay/first-session-and-continuation.prd.md`，Viewer/API 合同读 `doc/world-simulator/prd.md`，间接控制玩法规则读 `doc/game/gameplay/gameplay-indirect-control-agency-contract.prd.md`；原始 retired slug 只从 Git history / GitHub task issue evidence 追溯。
-- Viewer Chat prompt-presets、profile editing、scroll 与 Agent Prompt default-value prefill 四组三件套已迁入 `doc/product/agents-world-simulation/agent-conversation-and-prompt-control.{prd,design,project}.md` 并物理删除；当前 surface、AgentChat、PromptControl、profile/override、鉴权与验证仍以 `doc/world-simulator/prd.md`、Viewer 手册和专业实现证据为准，历史 EGUI 布局不得外推为当前能力。
-- Viewer EGUI 控制区高级调试折叠三件套已退役删除；该 2026-02 已完成专题的历史审计证据从 Git history 与 Git history 追溯，当前 Viewer 操作与 Web 闭环入口改读 `doc/world-simulator/viewer/viewer-manual.manual.md` 与 `doc/world-simulator/viewer/README.md`。
+- Viewer Chat prompt-presets、profile editing、scroll 与 Agent Prompt default-value prefill 历史专题已迁入 `doc/product/agents-world-simulation/agent-conversation-and-prompt-control.{prd,design}.md` 并物理删除；当前 surface、AgentChat、PromptControl、profile/override、鉴权与验证仍以 `doc/world-simulator/prd.md`、Viewer 手册和专业实现证据为准，任务状态读 GitHub，历史 EGUI 布局不得外推为当前能力。
+- Viewer EGUI 控制区高级调试折叠三件套已退役删除；该 2026-02 已完成专题的历史审计证据从 Git history 与 GitHub task evidence 追溯，当前 Viewer 操作与 Web 闭环入口改读 `doc/world-simulator/viewer/viewer-manual.manual.md` 与 `doc/world-simulator/viewer/README.md`。
 - Launcher native legacy cleanup 三件套已退役删除；该 2026-03 已完成专题只作为 `oasis7_client_launcher` native cleanup 历史证据保留在 git history 与 GitHub task issue evidence comments，不能被外推为当前 web launcher/control-plane 字段退役结论。
 - 已删除的 intent/distributed/runtime closure 与 M4 market/hardware/data/governance closure 由 Git history 与 GitHub task evidence 追溯；当前阅读入口继续走下方活跃专题、GitHub task truth 与长期 world-simulator、P2P、runtime、gameplay 权威。
 - kernel rule-hook、Wasm readiness/executor/sandbox bridge/module-governance、Rust-to-Wasm build-suite、simulator `PowerStorage`、内建 `Compound/Hardware` hard-migration 与 runtime required 十项临时 ignore 九组 completed 三件套已退役删除。当前 simulator adapter / resource removal boundary 读 `doc/world-simulator/design.md` 与 `m4/industrial-resource-flow-contract.prd.md`；ABI、executor、artifact lifecycle 与 canonical build 读 `doc/world-runtime/wasm/` 和 `doc/world-runtime/prd.md`，历史实施只从 Git history / GitHub task issue evidence 追溯。
@@ -93,12 +92,8 @@
 | `doc/world-simulator/scenario/world-initialization.prd.md` | `doc/world-simulator/scenario/world-initialization.design.md` | GitHub Issue / Project evidence |
 | `doc/world-simulator/viewer/viewer-minimal-system.prd.md` | `doc/world-simulator/viewer/viewer-minimal-system.design.md` | GitHub Issue / Project evidence |
 | `doc/world-simulator/viewer/viewer-module-visual-entities.prd.md` | `doc/world-simulator/viewer/viewer-module-visual-entities.design.md` | GitHub Issue / Project evidence |
-| `doc/world-simulator/viewer/viewer-chat-ime-egui-bridge.prd.md` | `doc/world-simulator/viewer/viewer-chat-ime-egui-bridge.design.md` | GitHub Issue / Project evidence |
-| `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.prd.md` | `doc/world-simulator/viewer/viewer-chat-web-deadlock-resolution.design.md` | GitHub Issue / Project evidence |
 | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md` | `doc/world-simulator/viewer/viewer-control-plane-split-live-playback.design.md` | GitHub Issue / Project evidence |
-| `doc/world-simulator/viewer/viewer-egui-right-panel.prd.md` | `doc/world-simulator/viewer/viewer-egui-right-panel.design.md` | historical EGUI trace only; not a current layout authority |
 | `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.prd.md` | `doc/world-simulator/viewer/viewer-gameplay-release-experience-overhaul.design.md` | GitHub Issue / Project evidence |
-| `doc/world-simulator/viewer/viewer-industry-graph-semantic-zoom.prd.md` | `doc/world-simulator/viewer/viewer-industry-graph-semantic-zoom.design.md` | historical trace: completed 2026-02-28 / Git history and GitHub task evidence |
 | `doc/world-simulator/viewer/viewer-pixel-world-bridge-rendering.prd.md` | `doc/world-simulator/viewer/viewer-pixel-world-bridge-rendering.design.md` | historical trace: `task_40310c312e9f4681805b5b74b30cac9a` / `.pm/github-project-sync/task-archive.jsonl` |
 | `doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.prd.md` | `doc/world-simulator/viewer/viewer-pixel-world-player-readable-rendering.design.md` | historical trace: `task_b399bf37eff94c44a300c55f5db739d3` / GitHub issue #1294 / `.pm/github-project-sync/task-archive.jsonl` |
 | `doc/world-simulator/viewer/viewer-pixel-world-fragment-lod.prd.md` | `doc/world-simulator/viewer/viewer-pixel-world-fragment-lod.design.md` | historical trace: `task_428db5366f654c5e892ac300807cb9cc` / GitHub issue #986 / `.pm/github-project-sync/task-archive.jsonl` |

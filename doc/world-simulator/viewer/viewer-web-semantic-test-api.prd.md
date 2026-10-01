@@ -26,6 +26,12 @@
 - `getState()` 至少用于读取 `connectionStatus`、`logicalTime`、`eventSeq`、兼容 `tick`、`controlProfile`、`lastError` 和 `lastControlFeedback`。`tick === logicalTime` 是兼容 alias；时间和事件序号仅来自 runtime 消息，空结果不得被客户端合成为进展。
 - control feedback 必须区分 rejected、blocked、queued、发送失败以及后续观察到的 completed/no-progress；queued 不是 completion。live seek 的 unsupported-action、WebSocket 断链和 runtime 无增量均必须保留为不同可诊断状态。
 
+### Chat 输入验证边界
+
+- sendAgentChat(agentId, message) 是语义入口，不能模拟 compositionstart/update/end、焦点切换或逐键换行；helper 成功不能替代真实输入验证。
+- 分别验证语义层权限/空消息/in-flight 拒绝、timeout/error 与显式重试；真实 UI 组合态不误发、事件去重、Enter/Shift+Enter 多行编辑、焦点/世界快捷键隔离、无页面卡死与可见恢复。main.test.jsx 的 queued timeout 样例只覆盖部分语义路径。
+- 真实输入验收保留 state、console、截图和请求次数/消息文本证据；不得用本 helper 或 Escape 局部保护宣称完整 IME 通过。产品承诺见 Agent 对话与 Prompt 控制，当前操作见 Viewer 手册。
+
 ### Browser runtime-fatal state
 
 - 测试模式发现浏览器 rendering/runtime fatal 时，`getState()` 必须暴露 `connectionStatus=error`、非空 `lastError` 与单调递增的 `errorCount`；fatal 不能继续伪装为 `connecting`、成功连接或世界进展。

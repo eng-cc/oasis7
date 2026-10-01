@@ -30,7 +30,7 @@
 
 ## 5. 专题导航
 - 当前鉴权、防重放、长稳与归档设计直接由本文件和模块 PRD 承载。
-- `doc/headless-runtime/nonviewer/README.md` 只解释已退役专题的旧命名与历史追溯。
+- `doc/headless-runtime/README.md` 解释已退役专题的旧命名与历史追溯。
 
 ## 6. 鉴权与恢复边界
 

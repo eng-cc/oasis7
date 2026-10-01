@@ -208,38 +208,36 @@ def sort_bucket_labels(labels):
         if info is None:
             continue
         parsed.append(info)
-    return sorted(
+    sorted_buckets = sorted(
         parsed,
         key=lambda info: (
             math.inf if info["upper_bound_ms"] is None else info["upper_bound_ms"],
             info["label"],
         ),
     )
+    previous_upper_bound = 0
+    for info in sorted_buckets:
+        if info["kind"] == "le":
+            info["lower_bound_ms"] = previous_upper_bound
+            previous_upper_bound = info["upper_bound_ms"]
+    return sorted_buckets
 
 
 def percentile_from_buckets(bucket_delta: dict, percentile: int) -> dict | None:
     sorted_buckets = sort_bucket_labels(bucket_delta.keys())
     if not sorted_buckets:
         return None
-    total = 0
+    bucket_counts = {}
     for info in sorted_buckets:
-        if info["kind"] == "le":
-            total = max(total, max(int(bucket_delta.get(info["label"], 0)), 0))
+        bucket_counts[info["label"]] = max(int(bucket_delta.get(info["label"], 0)), 0)
+    total = sum(bucket_counts.values())
     if total <= 0:
         return None
-    target = math.ceil(total * percentile / 100.0)
+    target = (total * percentile + 99) // 100
+    cumulative = 0
     for info in sorted_buckets:
-        count = max(int(bucket_delta.get(info["label"], 0)), 0)
-        if info["kind"] == "gt":
-            if target > total:
-                return {
-                    "bucket_label": info["label"],
-                    "upper_bound_ms": info["upper_bound_ms"],
-                    "lower_bound_ms": info["lower_bound_ms"],
-                    "samples": total,
-                }
-            continue
-        if count >= target:
+        cumulative += bucket_counts[info["label"]]
+        if cumulative >= target:
             return {
                 "bucket_label": info["label"],
                 "upper_bound_ms": info["upper_bound_ms"],
