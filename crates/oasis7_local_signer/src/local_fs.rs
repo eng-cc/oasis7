@@ -1,5 +1,6 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
+use std::os::fd::AsFd;
 #[cfg(unix)]
 use std::os::unix::fs::{MetadataExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Component, Path, PathBuf};
@@ -88,6 +89,205 @@ impl CustodyLock {
 pub(crate) fn read_regular(path: &Path, max_bytes: usize) -> Result<Vec<u8>, SignerError> {
     let file = open_regular_file(path, max_bytes)?;
     read_open_candidate(file, max_bytes)
+}
+
+/// A retained directory capability; subsequent operations never resolve its ancestors again.
+pub(crate) struct Directory(File);
+
+impl Directory {
+    pub(crate) fn open(path: &Path, protected: bool) -> Result<Self, SignerError> {
+        crate::types::validate_absolute_path(&path.to_string_lossy())
+            .map_err(|_| SignerError::InstallationDrift)?;
+        let mut directory = File::open("/")?;
+        if protected {
+            validate_protected_metadata(&directory.metadata()?, false)?;
+            reject_extended_acl(&directory)?;
+        }
+        for component in path.components() {
+            if let Component::Normal(part) = component {
+                directory = File::from(
+                    openat(
+                        directory.as_fd(),
+                        part,
+                        OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
+                        Mode::empty(),
+                    )
+                    .map_err(map_openat_error)?,
+                );
+                if protected {
+                    validate_protected_metadata(&directory.metadata()?, false)?;
+                    reject_extended_acl(&directory)?;
+                }
+            }
+        }
+        Ok(Self(directory))
+    }
+
+    pub(crate) fn metadata(&self) -> Result<fs::Metadata, SignerError> {
+        Ok(self.0.metadata()?)
+    }
+
+    pub(crate) fn child(&self, name: &str, create: bool) -> Result<Self, SignerError> {
+        crate::protocol::validate_id(name).map_err(|_| SignerError::InstallationDrift)?;
+        if create {
+            match nix::sys::stat::mkdirat(self.0.as_fd(), name, Mode::from_bits_truncate(0o700)) {
+                Ok(()) => self.sync()?,
+                Err(nix::errno::Errno::EEXIST) => {}
+                Err(error) => return Err(SignerError::PersistenceFailed(error.into())),
+            }
+        }
+        Ok(Self(File::from(
+            openat(
+                self.0.as_fd(),
+                name,
+                OFlag::O_RDONLY | OFlag::O_DIRECTORY | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
+                Mode::empty(),
+            )
+            .map_err(map_openat_error)?,
+        )))
+    }
+
+    pub(crate) fn read(&self, name: &str, max: usize) -> Result<Vec<u8>, SignerError> {
+        let file = self.open_file(name, OFlag::O_RDONLY | OFlag::O_NONBLOCK)?;
+        read_open_candidate(file, max)
+    }
+
+    fn open_file(&self, name: &str, flags: OFlag) -> Result<File, SignerError> {
+        if name.contains('/') || name == "." || name == ".." {
+            return Err(SignerError::InstallationDrift);
+        }
+        Ok(File::from(
+            openat(
+                self.0.as_fd(),
+                name,
+                flags | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC,
+                Mode::from_bits_truncate(0o600),
+            )
+            .map_err(map_openat_error)?,
+        ))
+    }
+
+    pub(crate) fn exists(&self, name: &str) -> Result<bool, SignerError> {
+        match self.open_file(name, OFlag::O_RDONLY | OFlag::O_NONBLOCK) {
+            Ok(file) if file.metadata()?.is_file() && file.metadata()?.nlink() == 1 => Ok(true),
+            Ok(_) => Err(SignerError::InstallationDrift),
+            Err(SignerError::InstallationDrift) => {
+                match nix::sys::stat::fstatat(
+                    self.0.as_fd(),
+                    name,
+                    nix::fcntl::AtFlags::AT_SYMLINK_NOFOLLOW,
+                ) {
+                    Err(nix::errno::Errno::ENOENT) => Ok(false),
+                    _ => Err(SignerError::InstallationDrift),
+                }
+            }
+            Err(error) => Err(error),
+        }
+    }
+
+    pub(crate) fn write_new(&self, name: &str, bytes: &[u8]) -> Result<(), SignerError> {
+        let mut file = self.open_file(name, OFlag::O_WRONLY | OFlag::O_CREAT | OFlag::O_EXCL)?;
+        file.write_all(bytes)?;
+        file.sync_all()?;
+        Ok(())
+    }
+
+    pub(crate) fn sync(&self) -> Result<(), SignerError> {
+        self.0.sync_all()?;
+        Ok(())
+    }
+}
+
+pub(crate) fn validate_protected_metadata(
+    metadata: &fs::Metadata,
+    executable: bool,
+) -> Result<(), SignerError> {
+    if !protected_facts(
+        metadata.uid(),
+        metadata.permissions().mode(),
+        metadata.is_dir(),
+        metadata.is_file(),
+        metadata.nlink(),
+        executable,
+    ) {
+        return Err(SignerError::InstallationDrift);
+    }
+    Ok(())
+}
+
+fn protected_facts(
+    uid: u32,
+    mode: u32,
+    directory: bool,
+    regular: bool,
+    links: u64,
+    executable: bool,
+) -> bool {
+    uid == 0
+        && mode & 0o022 == 0
+        && (directory || (regular && links == 1))
+        && (!executable || mode & 0o111 != 0)
+}
+
+pub(crate) fn read_protected(
+    path: &Path,
+    max: usize,
+    executable: bool,
+) -> Result<Vec<u8>, SignerError> {
+    let parent = Directory::open(path.parent().ok_or(SignerError::InstallationDrift)?, true)?;
+    let name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or(SignerError::InstallationDrift)?;
+    let file = parent.open_file(name, OFlag::O_RDONLY | OFlag::O_NONBLOCK)?;
+    validate_protected_metadata(&file.metadata()?, executable)?;
+    reject_extended_acl(&file)?;
+    read_open_candidate(file, max)
+}
+
+#[cfg(target_os = "macos")]
+#[allow(unsafe_code)] // Darwin libc ACL API; retained fd only, owned ACL freed exactly once.
+fn reject_extended_acl(file: &File) -> Result<(), SignerError> {
+    use std::os::fd::AsRawFd;
+    unsafe extern "C" {
+        fn acl_get_fd_np(fd: libc::c_int, kind: libc::c_int) -> *mut libc::c_void;
+        fn acl_get_entry(
+            acl: *mut libc::c_void,
+            entry_id: libc::c_int,
+            entry: *mut *mut libc::c_void,
+        ) -> libc::c_int;
+        fn acl_free(value: *mut libc::c_void) -> libc::c_int;
+        fn acl_valid(value: *mut libc::c_void) -> libc::c_int;
+    }
+    // Darwin ACL_TYPE_EXTENDED = 0x100, ACL_FIRST_ENTRY = 0.
+    // Query only the retained descriptor; no pathname or privileged subprocess.
+    let acl = unsafe { acl_get_fd_np(file.as_raw_fd(), 0x100) };
+    if acl.is_null() {
+        // Darwin reports ENOENT for absence of an extended ACL on an open fd.
+        // The fd metadata was validated already; other retrieval failures deny.
+        return if std::io::Error::last_os_error().raw_os_error() == Some(libc::ENOENT) {
+            Ok(())
+        } else {
+            Err(SignerError::InstallationDrift)
+        };
+    }
+    let mut entry = std::ptr::null_mut();
+    let valid = unsafe { acl_valid(acl) } == 0;
+    let result = unsafe { acl_get_entry(acl, 0, &mut entry) };
+    let no_entry =
+        result == -1 && std::io::Error::last_os_error().raw_os_error() == Some(libc::EINVAL);
+    unsafe { acl_free(acl) };
+    // Darwin returns -1/EINVAL when a valid ACL has no first entry.
+    if valid && no_entry {
+        Ok(())
+    } else {
+        Err(SignerError::InstallationDrift)
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn reject_extended_acl(_file: &File) -> Result<(), SignerError> {
+    Ok(())
 }
 
 /// Reads a bounded candidate from one validated file descriptor.
@@ -522,6 +722,87 @@ mod candidate_tests {
 
     fn owner_uid(path: &Path) -> u32 {
         fs::metadata(path).expect("metadata").uid()
+    }
+
+    #[test]
+    fn protected_metadata_rejects_owner_write_nonexec_and_hardlink_drift() {
+        assert!(protected_facts(0, 0o755, false, true, 1, true));
+        for (uid, mode, regular, links) in [
+            (501, 0o755, true, 1),
+            (0, 0o775, true, 1),
+            (0, 0o757, true, 1),
+            (0, 0o644, true, 1),
+            (0, 0o755, false, 1),
+            (0, 0o755, true, 2),
+        ] {
+            assert!(!protected_facts(uid, mode, false, regular, links, true));
+        }
+        assert!(!protected_facts(501, 0o755, true, false, 1, false));
+        assert!(!protected_facts(0, 0o777, true, false, 1, false));
+    }
+
+    #[test]
+    fn retained_directory_survives_ancestor_swap_without_redirecting_read_or_publish() {
+        let scratch = Scratch::new();
+        let ancestor = scratch.path().join("documents");
+        let jobs = ancestor.join("jobs");
+        fs::create_dir_all(&jobs).unwrap();
+        let root = Directory::open(&jobs, false).unwrap();
+        let old = scratch.path().join("old-documents");
+        fs::rename(&ancestor, &old).unwrap();
+        fs::create_dir_all(&jobs).unwrap();
+        let job = root.child("job-01", true).unwrap();
+        job.write_new("request.json", b"original").unwrap();
+        job.sync().unwrap();
+        assert_eq!(job.read("request.json", 64).unwrap(), b"original");
+        assert_eq!(
+            fs::read(old.join("jobs/job-01/request.json")).unwrap(),
+            b"original"
+        );
+        assert!(!jobs.join("job-01").exists());
+    }
+
+    #[test]
+    fn retained_job_descriptor_rejects_leaf_symlink_replacement() {
+        let scratch = Scratch::new();
+        let directory = Directory::open(scratch.path(), false).unwrap();
+        let actual = scratch.path().join("actual");
+        fs::create_dir(&actual).unwrap();
+        std::os::unix::fs::symlink(actual, scratch.path().join("job-01")).unwrap();
+        assert!(directory.child("job-01", false).is_err());
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn protected_system_worker_read_checks_real_darwin_acl_and_mode() {
+        assert!(
+            !read_protected(Path::new("/usr/bin/true"), 1024 * 1024, true)
+                .unwrap()
+                .is_empty()
+        );
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn darwin_extended_acl_on_disposable_file_is_rejected() {
+        let scratch = Scratch::new();
+        let path = scratch.path().join("candidate.json");
+        fs::write(&path, b"public fixture").unwrap();
+        let file = File::open(&path).unwrap();
+        reject_extended_acl(&file).unwrap();
+        let user = std::process::Command::new("/usr/bin/id")
+            .arg("-un")
+            .output()
+            .unwrap();
+        assert!(user.status.success());
+        let user = String::from_utf8(user.stdout).unwrap();
+        let status = std::process::Command::new("/bin/chmod")
+            .args(["+a", &format!("user:{} allow write", user.trim())])
+            .arg(&path)
+            .status()
+            .unwrap();
+        assert!(status.success());
+        assert!(reject_extended_acl(&file).is_err());
     }
 
     #[test]

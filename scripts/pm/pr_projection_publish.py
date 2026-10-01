@@ -541,7 +541,8 @@ def _is_exact_create_retry(pr: dict[str, Any], publication_value: dict[str, Any]
 
 
 def _prior_create_push_lease(journal: pr_projection_journal.PublicationJournal,
-                             publication_value: dict[str, Any]) -> str | None:
+                             publication_value: dict[str, Any], *,
+                             absent_lease: str | None = None) -> str | None:
     """Return the exact lease from an existing create push intent, if present."""
     action_id = "push:" + publication_value["publication_id"]
     with journal.locked():
@@ -552,7 +553,7 @@ def _prior_create_push_lease(journal: pr_projection_journal.PublicationJournal,
         if len(matches) > 1:
             raise pr_projection_journal.JournalError("duplicate source push action")
         if not matches:
-            return None
+            return absent_lease
         expected = matches[0].get("expected")
         if (not isinstance(expected, dict)
                 or set(expected) != {"source_ref", "new_oid", "lease_oid"}
@@ -623,9 +624,13 @@ def publish(args: argparse.Namespace) -> dict[str, Any]:
             )
     else:
         remote_oid = adapter.read_source_ref(candidate["source_ref"])
+        # A lost push readback can leave H1 remote before any PR exists.
+        # Preserve the original intent lease (including null); the live OID
+        # is a lease only for a publication without a prior push intent.
+        prior_lease = _prior_create_push_lease(journal, candidate, absent_lease=remote_oid)
         result = publication.publish_create(
             adapter, journal, publication=candidate, projection=projection_value,
-            body=body, expected_remote_oid=remote_oid,
+            body=body, expected_remote_oid=prior_lease,
             legacy_projection_b64=legacy_projection_b64,
             resume_action_id=getattr(args, "resume_action_id", None),
         )
