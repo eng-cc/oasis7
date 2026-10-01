@@ -108,7 +108,7 @@ trusted_pm_identity_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh \
 assert_key_equals "$trusted_pm_identity_output" run_workflow_governance_contracts true
 assert_key_equals "$trusted_pm_identity_output" run_operational_contracts false
 assert_key_equals "$trusted_pm_identity_output" selected_capabilities workflow_governance
-assert_key_equals "$trusted_pm_identity_output" needs_rust_toolchain false
+assert_key_equals "$trusted_pm_identity_output" needs_rust_toolchain true
 assert_reason_contains "$trusted_pm_identity_output" "pm_process_identity_surfaces:.pm/example.json"
 
 trusted_process_identity_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh \
@@ -116,7 +116,7 @@ trusted_process_identity_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh
 assert_key_equals "$trusted_process_identity_output" run_workflow_governance_contracts true
 assert_key_equals "$trusted_process_identity_output" run_operational_contracts false
 assert_key_equals "$trusted_process_identity_output" selected_capabilities workflow_governance
-assert_key_equals "$trusted_process_identity_output" needs_rust_toolchain false
+assert_key_equals "$trusted_process_identity_output" needs_rust_toolchain true
 assert_reason_contains "$trusted_process_identity_output" "workflow_process_identity_guard:scripts/workflow-process-identity-check.py"
 
 trusted_process_identity_test_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh \
@@ -124,8 +124,26 @@ trusted_process_identity_test_output="$($ROOT_DIR/scripts/plan-rust-required-sco
 assert_key_equals "$trusted_process_identity_test_output" run_workflow_governance_contracts true
 assert_key_equals "$trusted_process_identity_test_output" run_operational_contracts false
 assert_key_equals "$trusted_process_identity_test_output" selected_capabilities workflow_governance
-assert_key_equals "$trusted_process_identity_test_output" needs_rust_toolchain false
+assert_key_equals "$trusted_process_identity_test_output" needs_rust_toolchain true
 assert_reason_contains "$trusted_process_identity_test_output" "workflow_process_identity_guard:scripts/workflow-process-identity-check.test.py"
+
+# The governance suite invokes a real nested required runner whose baseline
+# executes Cargo, rustfmt, and cargo-deny even for this non-Rust source path.
+trusted_exact_m_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh \
+  --event-name pull_request --changed-path scripts/pm/ci_reuse_acceptance_qa.test.py)"
+assert_key_equals "$trusted_exact_m_output" scope targeted
+assert_key_equals "$trusted_exact_m_output" selected_capabilities workflow_governance
+assert_key_equals "$trusted_exact_m_output" required_test_units 'required_gate_baseline;workflow_governance'
+assert_key_equals "$trusted_exact_m_output" needs_rust_toolchain true
+assert_key_equals "$trusted_exact_m_output" run_rust_baseline true
+assert_key_equals "$trusted_exact_m_output" needs_python true
+assert_key_equals "$trusted_exact_m_output" needs_markdown true
+for resource in needs_node needs_system_deps needs_wasm_target needs_trunk; do
+  assert_key_equals "$trusted_exact_m_output" "$resource" false
+done
+for selector in run_cargo_tooling_contracts run_doc_checker_contracts run_operational_contracts run_packaging_contracts; do
+  assert_key_equals "$trusted_exact_m_output" "$selector" false
+done
 
 trusted_cargo_tooling_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh \
   --event-name pull_request --changed-path scripts/cargo-dev-lib.test.sh)"
