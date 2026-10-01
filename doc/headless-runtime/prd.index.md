@@ -14,5 +14,5 @@
 ## 说明
 - 本索引用于保证模块专题文档在根入口文档树中可达。
 - 文档配对规则：`*.prd.md`、`*.design.md` 与同名 GitHub task issue evidence comments。
-- `doc/headless-runtime/nonviewer/README.md` 只解释旧命名与退役专题的历史路由。
+- `doc/headless-runtime/README.md` 解释旧命名与退役专题的历史追溯。
 - 已退役的 hardening 与 `nonviewer-design-alignment-*` 三件套不再占据活跃索引；历史证据从 Git history 与 GitHub task issue evidence comments 追溯。

@@ -125,7 +125,7 @@
   - AC-3: 与 `doc/scripts/precommit/pre-commit.prd.md`、`testing-manual.md` 口径一致。
   - AC-4: `run-viewer-web.sh`、`viewer-primary-web-entry-regression.sh` 与相关 freshness/browser automation 脚本被明确为当前 Viewer Web 主链路；`viewer-software-safe-*` 脚本只作为兼容/legacy regression 链路保留。
   - AC-5: `doc/scripts/**` 仍可读治理专题标题统一使用 `oasis7` 品牌；旧标题仅允许出现在正文历史上下文中。
-  - AC-6: `doc/scripts/precommit/pre-commit.{prd,project}.md` 中当前 viewer wasm 编译门禁、依赖说明与 CI 帮助文案必须写为 `oasis7_viewer` / `cargo check -p oasis7_viewer`；旧品牌 viewer 包名仅允许保留在历史记录或外部原文引用中。
+  - AC-6: 当前 Viewer UI 与 Web bundle 分别使用 `npm --prefix crates/oasis7_viewer run test:ui`、`test:feedback-contract` 与 `build:viewer`；Bevy bridge 使用实际存在的 `pixel_world_bridge` Rust package，后端协议使用 `oasis7` 的定向测试。各入口的覆盖对象和验证边界以 `testing-manual.md` 为准，不能相互替代；历史 Rust Viewer package 命令只保留在历史证据中。
   - AC-7: scripts 模块不得继续维护已删除的 `capture-viewer-frame`、texture inspector、theme preview 等 Viewer 3D/视觉 QA 工具专题。
   - AC-8: `site/skills/oasis7.md`、`scripts/setup-provider-oasis7-runtime.sh` 与 `scripts/provider-parity-p0.sh` 关联的当前 `cargo run -p` 命令和入口路径必须写为 `oasis7` / `crates/oasis7*`；旧品牌包名与源码路径仅允许保留在兼容说明、历史证据或外部原文引用中。
   - AC-9: 新增 `scripts/worktree-harness.sh` 作为 worktree 级主入口，至少提供 `up/down/status/url/logs/smoke` 六个动作，并把当前 worktree 的运行状态写入稳定 `state.json`。
