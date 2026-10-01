@@ -94,9 +94,19 @@ def verified_evidence(receipt: Any, data: dict[str, Any], head_oid: str, *, task
             and str(comment.get("html_url") or "") == str(receipt.get("url")))
 
 
-def rebuild_issue_evidence(repo: str, issue_number: int, task_uid: str, data: dict[str, Any]) -> dict[str, Any]:
-    raw = _run_json(["gh","api",f"repos/{repo}/issues/{issue_number}/comments","--paginate","--slurp"])
-    comments = [x for page in raw for x in page] if raw and isinstance(raw[0], list) else raw
+def rebuild_issue_evidence(repo: str, issue_number: int, task_uid: str, data: dict[str, Any], *, client=None) -> dict[str, Any]:
+    api_client = _github_api_client(_effective_tool_root(), client)
+    return _rebuild_issue_evidence_with_client(api_client, repo, issue_number, task_uid, data)
+
+
+def _rebuild_issue_evidence_with_client(api_client, repo: str, issue_number: int,
+                                        task_uid: str, data: dict[str, Any]) -> dict[str, Any]:
+    comments = _rest_pages(
+        api_client, f"repos/{repo}/issues/{issue_number}/comments",
+        operation="task_issue_comments",
+        context=_api_request_context("task_issue_comments", task_uid=task_uid,
+                                     pr_number=int(data.get("number") or 0)),
+    )
     result: dict[str, Any] = {"comment_dispositions":[],"review_dispositions":[],"admin_merge_authority":None}
     for comment in comments or []:
         body = str(comment.get("body") or "")
@@ -114,100 +124,48 @@ def rebuild_issue_evidence(repo: str, issue_number: int, task_uid: str, data: di
     return result
 
 
-def graphql_pages(repo: str, number: int, surface: str) -> list[dict[str, Any]]:
-    owner, name = repo.split("/", 1)
-    cursor = ""
-    collected: list[dict[str, Any]] = []
-    while True:
-        if surface in {"comments", "reviews", "reviewThreads"}:
-            fields = "id body url createdAt author{login} authorAssociation" if surface == "comments" else (
-                "id body url submittedAt createdAt state author{login}" if surface == "reviews" else "id isResolved"
-            )
-            query = (
-                "query($owner:String!,$repo:String!,$number:Int!,$cursor:String){"
-                "repository(owner:$owner,name:$repo){pullRequest(number:$number){"
-                + surface + "(first:100,after:$cursor){pageInfo{hasNextPage endCursor} nodes{" + fields + "}}"
-                "}}}"
-            )
-            path = ["data", "repository", "pullRequest", surface]
-        else:
-            query = (
-                "query($owner:String!,$repo:String!,$number:Int!,$cursor:String){"
-                "repository(owner:$owner,name:$repo){pullRequest(number:$number){"
-                "commits(last:1){nodes{commit{statusCheckRollup{"
-                "contexts(first:100,after:$cursor){pageInfo{hasNextPage endCursor} nodes{"
-                "__typename ... on CheckRun{databaseId name conclusion status checkSuite{app{databaseId}}} "
-                "... on StatusContext{context state}"
-                "}}}}}}}}}"
-            )
-            path = ["data", "repository", "pullRequest", "commits", "nodes"]
-        cmd = ["gh", "api", "graphql", "-f", f"query={query}", "-F", f"owner={owner}", "-F", f"repo={name}", "-F", f"number={number}"]
-        if cursor:
-            cmd += ["-F", f"cursor={cursor}"]
-        payload = json.loads(subprocess.check_output(cmd, text=True))
-        node: Any = payload
-        for key in path:
-            node = node[key]
-        if surface == "checks":
-            if not node:
-                return []
-            node = node[0]["commit"].get("statusCheckRollup")
-            if node is None:
-                return []
-            node = node["contexts"]
-        collected.extend(node.get("nodes") or [])
-        page = node.get("pageInfo") or {}
-        if not page.get("hasNextPage"):
-            return collected
-        next_cursor = str(page.get("endCursor") or "")
-        if not next_cursor or next_cursor == cursor:
-            raise SystemExit(f"pr-lifecycle-gate: {surface} pagination did not advance")
-        cursor = next_cursor
-
-
-def graphql_pr_snapshot(repo: str, number: int) -> dict[str, list[dict[str, Any]]]:
-    """Load all hot PR-watch surfaces in one bounded GraphQL request.
-
-    A watch poll intentionally fails closed when any surface exceeds 100 nodes;
-    silently issuing pagination reads would make the per-poll budget unbounded.
-    """
-    owner, name = repo.split("/", 1)
-    query = """query($owner:String!,$repo:String!,$number:Int!){
-      repository(owner:$owner,name:$repo){pullRequest(number:$number){
-        comments(first:100){pageInfo{hasNextPage} nodes{id body url createdAt author{login} authorAssociation}}
-        reviews(first:100){pageInfo{hasNextPage} nodes{id body url submittedAt createdAt state author{login}}}
-        reviewThreads(first:100){pageInfo{hasNextPage} nodes{id isResolved}}
-        commits(last:1){nodes{commit{statusCheckRollup{contexts(first:100){pageInfo{hasNextPage} nodes{
-          __typename ... on CheckRun{databaseId name conclusion status checkSuite{app{databaseId}}}
-          ... on StatusContext{context state}
-        }}}}}}
-      }}
-    }"""
-    payload = _run_json(["gh", "api", "graphql", "-f", f"query={query}",
-                         "-F", f"owner={owner}", "-F", f"repo={name}", "-F", f"number={number}"])
-    pr = (((payload.get("data") or {}).get("repository") or {}).get("pullRequest") or {})
-    surfaces = {"comments": pr.get("comments") or {}, "reviews": pr.get("reviews") or {},
-                "threads": pr.get("reviewThreads") or {}}
-    commits = ((pr.get("commits") or {}).get("nodes") or [])
-    rollup = ((commits[0].get("commit") or {}).get("statusCheckRollup") or {}) if commits else {}
-    surfaces["statusCheckRollup"] = rollup.get("contexts") or {}
-    oversized = [name for name, connection in surfaces.items()
-                 if (connection.get("pageInfo") or {}).get("hasNextPage")]
-    if oversized:
-        raise SystemExit("pr-lifecycle-gate: bounded PR snapshot exceeded 100 nodes for: " + ", ".join(oversized))
-    return {name: list(connection.get("nodes") or []) for name, connection in surfaces.items()}
-
-
 def _run_json(cmd: list[str]) -> Any:
     return json.loads(subprocess.check_output(cmd, text=True, stderr=subprocess.PIPE))
 
 
-def discover_required_policy(repo: str, branch: str) -> dict[str, Any]:
+def _rest_pages(client, path: str, *, operation: str, context: dict[str, Any] | None = None,
+                max_pages: int = 100) -> list[Any]:
+    from urllib.parse import urlencode
+
+    collected: list[Any] = []
+    for page in range(1, max_pages + 1):
+        separator = "&" if "?" in path else "?"
+        payload = client.rest(
+            "GET", f"{path}{separator}{urlencode({'per_page': 100, 'page': page})}",
+            operation=operation, context={**(context or {}), "api_family": "rest",
+                                          "operation_name": operation},
+        )
+        if not isinstance(payload, list):
+            raise ValueError(f"{operation} returned a non-array page")
+        collected.extend(payload)
+        if len(payload) < 100:
+            return collected
+    raise ValueError(f"{operation} exceeded the bounded 100-page read")
+
+
+def discover_required_policy(repo: str, branch: str, *, client=None,
+                             context: dict[str, Any] | None = None) -> dict[str, Any]:
+    from urllib.parse import quote
+
+    api_client = _github_api_client(_effective_tool_root(), client)
+    context = dict(context or {})
+    context.setdefault("script", Path(sys.argv[0]).name)
+    context.setdefault("operation", "required_policy_discovery")
+    context.setdefault("phase", "pr_lifecycle_gate")
+    context["api_family"] = "rest"
     classic_error = ""
     checks: list[dict[str, Any]] = []
     active_rule_types: set[str] = set()
     try:
-        protection = _run_json(["gh", "api", f"repos/{repo}/branches/{branch}/protection"])
+        protection = api_client.rest(
+            "GET", f"repos/{repo}/branches/{quote(branch, safe='')}/protection",
+            operation="branch_protection", context={**context, "operation_name": "BranchProtection"},
+        )
         required = protection.get("required_status_checks") or {}
         checks = [{"context": str(x), "app_id": None} for x in required.get("contexts") or []]
         checks += [{"context": str(x.get("context") or ""), "app_id": x.get("app_id")} for x in required.get("checks") or [] if x.get("context")]
@@ -219,17 +177,20 @@ def discover_required_policy(repo: str, branch: str) -> dict[str, Any]:
         for field in ("required_signatures", "required_linear_history", "required_conversation_resolution", "lock_branch"):
             if (protection.get(field) or {}).get("enabled") is True:
                 active_rule_types.add(field)
-    except subprocess.CalledProcessError as exc:
-        classic_error = str(exc.stderr or exc)
-    except json.JSONDecodeError as exc:
-        return {"status":"capability_blocked","source":"classic_branch_protection","reason":"malformed_classic_policy","resume":"restore policy read access and rerun","required_status_checks":[],"error":str(exc)}
+    except Exception as exc:
+        if getattr(exc, "status_code", None) == 404:
+            classic_error = "404 Not Found"
+        else:
+            return {"status":"capability_blocked","source":"classic_branch_protection",
+                    "reason":"policy_read_error","resume":"restore classic branch protection read access and rerun",
+                    "required_status_checks":[],"error":str(exc)}
     classic_missing = "404" in classic_error or "Not Found" in classic_error
     if classic_error and not classic_missing:
         return {"status":"capability_blocked","source":"classic_branch_protection","reason":"policy_read_error","resume":"restore classic branch protection read access and rerun","required_status_checks":[],"error":classic_error}
     try:
-        raw_rulesets = _run_json(["gh", "api", f"repos/{repo}/rulesets", "--paginate", "--slurp"])
-        rulesets = [item for page in raw_rulesets for item in page] if raw_rulesets and isinstance(raw_rulesets[0], list) else raw_rulesets
-    except (subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        rulesets = _rest_pages(api_client, f"repos/{repo}/rulesets", operation="repository_rulesets",
+                               context={**context, "operation_name": "RepositoryRulesets"})
+    except Exception as exc:
         return {"status": "capability_blocked", "source": "repository_rulesets", "reason": "permission_or_transport_failure", "resume": "restore GitHub ruleset read access and rerun", "required_status_checks": [], "error": str(exc)}
     checks = checks if not classic_error else []
     expanded_rulesets = []
@@ -238,12 +199,18 @@ def discover_required_policy(repo: str, branch: str) -> dict[str, Any]:
             expanded_rulesets.append(summary)
             continue
         try:
-            expanded_rulesets.append(_run_json(["gh", "api", f"repos/{repo}/rulesets/{summary['id']}"]))
-        except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError) as exc:
+            expanded_rulesets.append(api_client.rest(
+                "GET", f"repos/{repo}/rulesets/{summary['id']}", operation="ruleset_detail",
+                context={**context, "operation_name": "RulesetDetail"},
+            ))
+        except Exception as exc:
             return {"status": "capability_blocked", "source": "repository_rulesets", "reason": "ruleset_detail_unavailable", "resume": "restore GitHub ruleset detail access and rerun", "required_status_checks": [], "error": str(exc)}
     needs_default = any("~DEFAULT_BRANCH" in (((x.get("conditions") or {}).get("ref_name") or {}).get("include") or []) for x in expanded_rulesets)
     try:
-        default_branch = str(_run_json(["gh","api",f"repos/{repo}"]).get("default_branch") or "") if needs_default else ""
+        default_branch = str(api_client.rest(
+            "GET", f"repos/{repo}", operation="repository_metadata",
+            context={**context, "operation_name": "RepositoryMetadata"},
+        ).get("default_branch") or "") if needs_default else ""
     except Exception as exc:
         return {"status":"capability_blocked","source":"repository_metadata","reason":"default_branch_read_error","resume":"restore repository metadata read access and rerun","required_status_checks":[],"error":str(exc)}
     if needs_default and not default_branch:
@@ -291,16 +258,144 @@ def discover_required_policy(repo: str, branch: str) -> dict[str, Any]:
     return {"status": "resolved", "source": "classic_and_repository_rulesets" if not classic_error and rulesets else ("repository_rulesets" if rulesets else ("classic_branch_protection" if not classic_error else "explicit_no_policy")), "required_status_checks": list(unique.values()), "active_rule_types": sorted(active_rule_types)}
 
 
-def load_live(selector: str) -> dict[str, Any]:
-    fields = "number,url,state,isDraft,body,mergeable,mergeStateStatus,reviewDecision,headRefName,headRefOid,baseRefName,baseRefOid"
-    raw = subprocess.check_output(["gh", "pr", "view", selector, "--json", fields], text=True)
-    payload = json.loads(raw)
-    repo = json.loads(subprocess.check_output(["gh", "repo", "view", "--json", "nameWithOwner"], text=True))["nameWithOwner"]
-    payload["repository"] = repo
-    payload.update(graphql_pr_snapshot(repo, int(payload["number"])))
-    payload["policy_discovery"] = discover_required_policy(repo, str(payload["baseRefName"]))
+def _effective_tool_root(root: str | Path | None = None) -> Path:
+    return Path(root or os.environ.get("OASIS7_LOOP_TOOL_ROOT") or Path(__file__).resolve().parents[2]).resolve()
+
+
+def _api_request_context(operation: str, *, task_uid: str | None = None,
+                         pr_number: int | None = None) -> dict[str, Any]:
+    context: dict[str, Any] = {
+        "script": Path(sys.argv[0]).name, "operation": operation,
+        "phase": "pr_lifecycle_gate", "api_family": "graphql",
+        "operation_name": operation,
+    }
+    for env_name, key in (("OASIS7_OPERATION_ID", "operation_id"),
+                          ("OASIS7_PARENT_OPERATION_ID", "parent_operation_id")):
+        if os.environ.get(env_name):
+            context[key] = os.environ[env_name]
+    if task_uid:
+        context["task_uid"] = task_uid
+    if pr_number is not None:
+        context["pr_number"] = pr_number
+    return context
+
+
+def _github_api_client(effective_root: Path, client=None):
+    if client is not None:
+        return client
+    api = _load_effective_helper(effective_root, "github_api")
+    return api.GitHubAPIClient.from_gh()
+
+
+def _resolve_pr_selection(selector: str, *, repository_hint: str | None, number_hint: int | None,
+                          client, snapshot_module, context: dict[str, Any]) -> dict[str, Any]:
+    selected = str(selector or "").strip()
+    if not selected:
+        raise ValueError("PR selector is required")
+    url_match = re.fullmatch(r"https?://github\.com/([^/]+)/([^/]+)/pull/([1-9][0-9]*)(?:/.*)?", selected)
+    number_match = re.fullmatch(r"#?([1-9][0-9]*)", selected)
+    repo_number_match = re.fullmatch(r"([^/\s#]+)/([^/\s#]+)#([1-9][0-9]*)", selected)
+    if number_hint is not None and repository_hint:
+        if url_match:
+            repo_from_url = f"{url_match.group(1)}/{url_match.group(2)}"
+            if repo_from_url.casefold() != repository_hint.casefold() or int(url_match.group(3)) != int(number_hint):
+                raise ValueError("PR selector does not match the bound task repository/number")
+            return {"repository": repository_hint, "number": int(number_hint), "selector_kind": "url"}
+        if number_match:
+            if int(number_match.group(1)) != int(number_hint):
+                raise ValueError("PR selector does not match the bound task PR number")
+            return {"repository": repository_hint, "number": int(number_hint), "selector_kind": "number"}
+        if repo_number_match:
+            selected_repository = f"{repo_number_match.group(1)}/{repo_number_match.group(2)}"
+            if (selected_repository.casefold() != repository_hint.casefold()
+                    or int(repo_number_match.group(3)) != int(number_hint)):
+                raise ValueError("PR selector does not match the bound task repository/number")
+            return {"repository": repository_hint, "number": int(number_hint), "selector_kind": "repository_number"}
+        if selected.startswith("http://") or selected.startswith("https://"):
+            raise ValueError("PR URL must identify the bound GitHub repository and pull request")
+        if selected.startswith("#") and selected[1:].isdigit():
+            raise ValueError("PR selector number must be positive")
+        if "#" in selected and repo_number_match is None:
+            raise ValueError("repository PR selector must use owner/repository#number")
+        return {"repository": repository_hint, "number": int(number_hint),
+                "selector_kind": "bound_branch", "branch_assertion": selected}
+    resolved = snapshot_module.resolve_pr_selector(
+        client, selected, repository_hint=repository_hint,
+        context={**context, "operation": "resolve_pr_selector", "operation_name": "ResolvePRSelector"},
+    )
+    if not isinstance(resolved, dict) or not isinstance(resolved.get("number"), int):
+        raise ValueError("PR selector did not resolve to one pull request")
+    if repository_hint and str(resolved.get("repository") or "").casefold() != repository_hint.casefold():
+        raise ValueError("PR selector resolved outside the bound repository")
+    return resolved
+
+
+def load_live(selector: str, *, client=None, repository_hint: str | None = None,
+              number_hint: int | None = None, effective_root: str | Path | None = None,
+              task_uid: str | None = None) -> dict[str, Any]:
+    effective = _effective_tool_root(effective_root)
+    api_client = _github_api_client(effective, client)
+    snapshot_module = _load_effective_helper(effective, "github_pr_snapshot")
+    request_context = _api_request_context("pr_snapshot_full", task_uid=task_uid)
+    selection = _resolve_pr_selection(selector, repository_hint=repository_hint,
+                                      number_hint=number_hint, client=api_client,
+                                      snapshot_module=snapshot_module, context=request_context)
+    repository, number = str(selection["repository"]), int(selection["number"])
+    request_context["pr_number"] = number
+    payload = snapshot_module.fetch_pr_snapshot(
+        api_client, repository, number, context=request_context, fresh=True,
+    )
+    metadata = payload.get("snapshot_metadata")
+    if not isinstance(metadata, dict) or metadata.get("complete") is not True or metadata.get("fresh") is not True:
+        raise ValueError("formal PR snapshot is incomplete or not fresh")
+    branch_assertion = selection.get("branch_assertion")
+    if branch_assertion is not None and str(payload.get("headRefName") or "") != branch_assertion:
+        raise ValueError("PR head branch does not match the selected branch")
+    payload["policy_discovery"] = discover_required_policy(
+        repository, str(payload["baseRefName"]), client=api_client,
+        context=_api_request_context("required_policy_discovery", task_uid=task_uid, pr_number=number),
+    )
     payload["required_status_checks"] = payload["policy_discovery"]["required_status_checks"]
     return payload
+
+
+TASK_UID_RE = re.compile(r"^task_[0-9a-f]{32}$")
+REPOSITORY_RE = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
+
+
+def _read_bound_task(root: str | Path, task_uid: str) -> tuple[Path, dict[str, Any]]:
+    if not isinstance(task_uid, str) or not TASK_UID_RE.fullmatch(task_uid):
+        raise ValueError("live PR gate requires a valid bound task UID")
+    task_root = Path(root).resolve()
+    mapping_path = task_root / ".pm/github-project-sync/tasks.json"
+    if mapping_path.is_symlink() or not mapping_path.is_file():
+        raise ValueError("canonical task mapping is unavailable or symlinked")
+    mapping = json.loads(mapping_path.read_text(encoding="utf-8"))
+    if not isinstance(mapping, dict) or not isinstance(mapping.get("tasks"), dict):
+        raise ValueError("canonical task mapping has an invalid shape")
+    record = mapping["tasks"].get(task_uid)
+    if not isinstance(record, dict):
+        raise ValueError("task UID is absent from the canonical local binding")
+    repository = record.get("repository")
+    issue_number = record.get("issue_number")
+    pr_number = record.get("pr_number")
+    pr_url = record.get("pr_url") or record.get("pull_request_url")
+    if not isinstance(repository, str) or not REPOSITORY_RE.fullmatch(repository):
+        raise ValueError("bound task repository is missing or malformed")
+    if type(issue_number) is not int or issue_number <= 0:
+        raise ValueError("bound task issue number is missing or malformed")
+    if type(pr_number) is not int or pr_number <= 0:
+        raise ValueError("bound task PR number is missing or malformed")
+    match = re.fullmatch(r"https://github\.com/([^/]+)/([^/]+)/pull/([1-9][0-9]*)/?", str(pr_url or ""))
+    if (match is None or f"{match.group(1)}/{match.group(2)}".casefold() != repository.casefold()
+            or int(match.group(3)) != pr_number):
+        raise ValueError("bound task PR URL does not match its repository and number")
+    canonical_worktree = record.get("canonical_worktree")
+    if canonical_worktree and Path(str(canonical_worktree)).resolve() != task_root:
+        raise ValueError("--root does not match the task's canonical worktree binding")
+    return task_root, {**record, "task_uid": task_uid, "repository": repository,
+                       "issue_number": issue_number, "pr_number": pr_number,
+                       "pr_url": pr_url}
 
 
 def decision(data: dict[str, Any], admin_authorized: bool, *, evidence_mode: str = "production", advisory_reader=None) -> dict[str, Any]:
@@ -437,10 +532,15 @@ def decision(data: dict[str, Any], admin_authorized: bool, *, evidence_mode: str
     return result
 
 
-def read_pr_identity(repository, number):
-    return json.loads(subprocess.check_output([
-        'gh', 'pr', 'view', str(number), '--repo', repository,
-        '--json', 'number,state,isDraft,body,baseRefName,headRefName,baseRefOid,headRefOid'], text=True))
+def read_pr_identity(repository, number, *, client=None, effective_root=None, task_uid=None):
+    effective = _effective_tool_root(effective_root)
+    api_client = _github_api_client(effective, client)
+    snapshot_module = _load_effective_helper(effective, "github_pr_snapshot")
+    context = _api_request_context("pr_identity_final", task_uid=task_uid,
+                                   pr_number=int(number))
+    return snapshot_module.fetch_pr_identity(
+        api_client, str(repository), int(number), context=context,
+    )
 
 
 def local_loop_admission(root, uid, base, head, tool_root):
@@ -1570,13 +1670,21 @@ print(json.dumps(proof))
     return proof
 
 
-def production_decision(data, admin_authorized, root, uid, tool_root, integration_run_id=None):
+def production_decision(data, admin_authorized, root, uid, tool_root, integration_run_id=None,
+                        *, api_client=None):
     # Endpoint cache lives for one decision only; healthy polls issue no
     # provenance readbacks and advisory scan identity never enters CI digests.
     advisory_cache = {}
     def advisory_read(endpoint):
         if endpoint not in advisory_cache:
-            advisory_cache[endpoint] = _run_json(['gh', 'api', endpoint])
+            if api_client is None:
+                advisory_cache[endpoint] = _run_json(['gh', 'api', endpoint])
+            else:
+                advisory_cache[endpoint] = api_client.rest(
+                    "GET", endpoint, operation="codeql_advisory",
+                    context=_api_request_context("codeql_advisory", task_uid=uid,
+                                                 pr_number=int(data.get("number") or 0)),
+                )
         return advisory_cache[endpoint]
     advisory_options = ({'advisory_reader': advisory_read}
                         if str(data.get('mergeStateStatus') or '').upper() == 'UNSTABLE' else {})
@@ -1593,7 +1701,13 @@ def production_decision(data, admin_authorized, root, uid, tool_root, integratio
             data, root, uid, tool_root, admission, integration_run_id,
             require_strict=True if integration_run_id is not None or legacy_admission else "auto",
         )
-        fresh = read_pr_identity(data['repository'], data['number'])
+        if api_client is None:
+            fresh = read_pr_identity(data['repository'], data['number'])
+        else:
+            fresh = read_pr_identity(
+                data['repository'], data['number'], client=api_client,
+                effective_root=_effective_tool_root(tool_root), task_uid=uid,
+            )
         # Admission may involve slow remote reads. Even unchanged commit OIDs
         # cannot preserve authority after a draft, body or branch transition.
         fields = ('number', 'state', 'isDraft', 'body', 'baseRefName', 'headRefName', 'baseRefOid', 'headRefOid')
@@ -1618,6 +1732,145 @@ def production_decision(data, admin_authorized, root, uid, tool_root, integratio
     return result
 
 
+def _positive_environment_integer(name: str, default: int) -> int:
+    raw = os.environ.get(name)
+    if raw is None or raw == "":
+        return default
+    if not re.fullmatch(r"[1-9][0-9]*", raw):
+        raise ValueError(f"{name} must be a positive integer")
+    return int(raw)
+
+
+def _observation_candidate(data: dict[str, Any], task: dict[str, Any], task_uid: str) -> bool:
+    """Use PR-local signals only; a positive result merely queues a live gate."""
+    if data.get("state") != "OPEN" or data.get("isDraft") is not False:
+        return False
+    if str(data.get("mergeable") or "").upper() not in {"MERGEABLE", "TRUE"}:
+        return False
+    if str(data.get("mergeStateStatus") or "").upper() not in {"CLEAN", "BEHIND", "BLOCKED"}:
+        return False
+    if str(data.get("reviewDecision") or "").upper() == "CHANGES_REQUESTED":
+        return False
+    if any(str(review.get("state") or "").upper() == "CHANGES_REQUESTED"
+           for review in data.get("reviews") or [] if isinstance(review, dict)):
+        return False
+    if any(not bool(thread.get("isResolved", thread.get("is_resolved", False)))
+           for thread in data.get("threads") or [] if isinstance(thread, dict)):
+        return False
+    checks = data.get("statusCheckRollup") or []
+    if any(str(check.get("conclusion") or check.get("state") or check.get("status") or "").upper()
+           not in SUCCESS for check in checks if isinstance(check, dict)):
+        return False
+    if any(actionable(str(comment.get("body") or "")) for comment in data.get("comments") or []
+           if isinstance(comment, dict)):
+        return False
+    if any(actionable(str(review.get("body") or "")) and str(review.get("state") or "").upper() != "APPROVED"
+           for review in data.get("reviews") or [] if isinstance(review, dict)):
+        return False
+    hold = task.get("merge_hold")
+    if (not isinstance(hold, dict) or hold.get("kind") != "normal_pr_ci_watch"
+            or hold.get("active") is not False):
+        return False
+    # A mismatched body is a strong reason not to recommend a formal gate.
+    if task_uid not in str(data.get("body") or ""):
+        return False
+    return True
+
+
+def _run_observation(selector: str, *, task_root: Path, task: dict[str, Any],
+                     task_uid: str, effective_root: Path, client, watch_mode: bool) -> dict[str, Any]:
+    snapshot_module = _load_effective_helper(effective_root, "github_pr_snapshot")
+    observation_module = _load_effective_helper(effective_root, "github_observation")
+    request_context = _api_request_context("pr_observation", task_uid=task_uid,
+                                           pr_number=int(task["pr_number"]))
+    selection = _resolve_pr_selection(
+        selector, repository_hint=str(task["repository"]), number_hint=int(task["pr_number"]),
+        client=client, snapshot_module=snapshot_module, context=request_context,
+    )
+    policy_binding = task.get("loop_binding") if isinstance(task.get("loop_binding"), dict) else {}
+    helper_paths = (
+        "github_api.py", "portable_file_lock.py", "github_observation.py", "github_pr_snapshot.py",
+        "pr-lifecycle-gate.py",
+    )
+    helper_hashes = {}
+    for helper_name in helper_paths:
+        helper_path = effective_root / "scripts/pm" / helper_name
+        if helper_path.is_symlink() or not helper_path.is_file():
+            raise ValueError(f"effective observation helper is unavailable: {helper_name}")
+        helper_hashes[helper_name] = hashlib.sha256(helper_path.read_bytes()).hexdigest()
+    cache_context = {
+        "task_uid": task_uid,
+        "repository": selection["repository"],
+        "pr_number": int(selection["number"]),
+        "policy_commit": str(policy_binding.get("policy_commit") or "unbound"),
+        "helper_hashes": helper_hashes,
+        "merge_hold": task.get("merge_hold"),
+    }
+    def fetch():
+        snapshot = snapshot_module.fetch_pr_snapshot(
+            client, selection["repository"], int(selection["number"]),
+            context=_api_request_context("pr_observation_snapshot", task_uid=task_uid,
+                                         pr_number=int(selection["number"])),
+            fresh=True,
+        )
+        branch_assertion = selection.get("branch_assertion")
+        if branch_assertion is not None and str(snapshot.get("headRefName") or "") != branch_assertion:
+            raise ValueError("PR head branch does not match the selected branch")
+        return snapshot
+    evaluate = lambda data: _observation_candidate(data, task, task_uid)
+    query_version = snapshot_module.QUERY_VERSION
+    if not watch_mode:
+        return observation_module.observe_once(
+            client, selection["repository"], int(selection["number"]), fetch, evaluate,
+            task_uid=task_uid, context=cache_context, query_version=query_version,
+        )
+    interval = _positive_environment_integer("PM_PR_WATCH_INTERVAL_SECONDS", observation_module.DEFAULT_MIN_INTERVAL)
+    max_interval = _positive_environment_integer("PM_PR_WATCH_MAX_INTERVAL_SECONDS", observation_module.DEFAULT_MAX_INTERVAL)
+    max_polls = _positive_environment_integer("PM_PR_WATCH_MAX_POLLS", observation_module.DEFAULT_MAX_POLLS)
+    max_unchanged = _positive_environment_integer(
+        "PM_PR_WATCH_MAX_UNCHANGED_POLLS", observation_module.DEFAULT_MAX_UNCHANGED_POLLS,
+    )
+    if interval > max_interval:
+        raise ValueError("PM_PR_WATCH_INTERVAL_SECONDS must not exceed PM_PR_WATCH_MAX_INTERVAL_SECONDS")
+    result = observation_module.watch(
+        client, selection["repository"], int(selection["number"]), fetch, evaluate,
+        task_uid=task_uid, context=cache_context, query_version=query_version,
+        min_interval=interval, max_interval=max_interval, max_polls=max_polls,
+        max_unchanged_polls=max_unchanged,
+    )
+    if result.get("candidate_ready") is True:
+        import shlex
+        gate_script = effective_root / "scripts/pm/pr-lifecycle-gate.py"
+        result["formal_gate_command"] = " ".join(shlex.quote(part) for part in (
+            sys.executable, str(gate_script), str(selection["number"]),
+            "--root", str(task_root), "--tool-root", str(effective_root),
+            "--task-uid", task_uid, "--json",
+        ))
+    return result
+
+
+def _print_error(exc: BaseException, *, observation: bool, json_output: bool) -> int:
+    if hasattr(exc, "as_dict"):
+        payload = exc.as_dict()
+    else:
+        payload = {
+            "status": "capability_blocked", "reason": getattr(exc, "kind", "invalid_request"),
+            "error": str(exc), "ready_for_merge": False, "mutation_started": False,
+        }
+    if observation:
+        payload.update({"evidence_mode": "observation", "ready_for_merge": False,
+                        "candidate_ready": False, "requires_live_gate": True})
+        payload.pop("readiness_receipt", None)
+    print(json.dumps(payload, indent=2, sort_keys=True) if json_output else str(payload.get("error") or payload.get("reason")),
+          file=sys.stdout if json_output else sys.stderr)
+    status = payload.get("status")
+    if status == "external_wait":
+        return 75
+    if observation or status == "capability_blocked":
+        return 2
+    return 3
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("pr", nargs="?", default="")
@@ -1627,46 +1880,97 @@ def main() -> int:
     parser.add_argument("--integration-run-id", type=int, help="manual run locator; latest matching request still revalidated live")
     parser.add_argument("--tool-root", help="effective loop helper checkout (default: OASIS7_LOOP_TOOL_ROOT or this script checkout)")
     parser.add_argument("--merge-hold", choices=["normal_pr_ci_watch", *sorted(HOLDS)])
+    parser.add_argument("--observe", action="store_true", help="read a derived PR observation; never authorizes merge")
+    parser.add_argument("--watch", action="store_true", help="run bounded observation polls (requires --observe)")
     parser.add_argument("--admin-merge-authorized", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
-    data = json.loads(Path(args.fixture).read_text(encoding="utf-8")) if args.fixture else load_live(args.pr)
+    if args.watch and not args.observe:
+        parser.error("--watch requires --observe")
+    if args.fixture and (args.observe or args.watch):
+        parser.error("fixtures cannot be used for live observation")
+    if args.fixture:
+        data = json.loads(Path(args.fixture).read_text(encoding="utf-8"))
+    else:
+        try:
+            task_root, record = _read_bound_task(args.root, args.task_uid)
+            effective = _effective_tool_root(args.tool_root)
+            if not args.pr:
+                parser.error("live gate requires a bound PR selector")
+            if args.merge_hold:
+                parser.error("--merge-hold is fixture-only; live hold truth is rebuilt from the GitHub task issue")
+            # Load helper bytes and validate selection before reading credentials or making any request.
+            snapshot_module = _load_effective_helper(effective, "github_pr_snapshot")
+            selector = _resolve_pr_selection(
+                args.pr, repository_hint=record["repository"], number_hint=record["pr_number"],
+                client=None, snapshot_module=snapshot_module,
+                context=_api_request_context("validate_pr_selector", task_uid=args.task_uid,
+                                             pr_number=record["pr_number"]),
+            )
+            if selector.get("branch_assertion") is not None:
+                branch_assertion = selector["branch_assertion"]
+            else:
+                branch_assertion = None
+            api_client = _github_api_client(effective, None)
+            if args.observe:
+                data = _run_observation(
+                    args.pr, task_root=task_root, task=record, task_uid=args.task_uid,
+                    effective_root=effective, client=api_client, watch_mode=args.watch,
+                )
+                print(json.dumps(data, indent=2, sort_keys=True) if args.json else json.dumps(data, sort_keys=True))
+                if data.get("status") == "external_wait":
+                    return 75
+                if data.get("status") == "capability_blocked":
+                    return 2
+                return 0
+            data = load_live(
+                args.pr, client=api_client, repository_hint=record["repository"],
+                number_hint=record["pr_number"], effective_root=effective,
+                task_uid=args.task_uid,
+            )
+            if branch_assertion is not None and str(data.get("headRefName") or "") != branch_assertion:
+                raise ValueError("PR head branch does not match the selected branch")
+            rebuilt = rebuild_issue_evidence(
+                str(data["repository"]), record["issue_number"], args.task_uid, data,
+                client=api_client,
+            )
+            rebuilt_hold = rebuilt.get("merge_hold")
+            recorded_hold = record.get("merge_hold")
+            selector_matches_bound_pr = (
+                str(selector.get("repository") or "").casefold() == str(data.get("repository") or "").casefold()
+                and int(selector.get("number") or 0) == int(data.get("number") or 0)
+                and int(record["pr_number"]) == int(data.get("number") or 0)
+            )
+            default_hold_matches_live_pr = (
+                isinstance(recorded_hold, dict)
+                and recorded_hold.get("kind") == "normal_pr_ci_watch"
+                and recorded_hold.get("active") is False
+                and selector_matches_bound_pr
+            )
+            data["merge_hold"] = rebuilt_hold if rebuilt_hold is not None else (
+                recorded_hold if default_hold_matches_live_pr else None
+            )
+            data["comment_dispositions"] = rebuilt.get("comment_dispositions") or []
+            data["review_dispositions"] = rebuilt.get("review_dispositions") or []
+            data["admin_merge_authority"] = rebuilt.get("admin_merge_authority")
+            data["_api_client"] = api_client
+        except (ValueError, OSError, KeyError, TypeError, json.JSONDecodeError) as exc:
+            return _print_error(exc, observation=args.observe, json_output=args.json)
+        except Exception as exc:
+            # APIError is loaded from a trusted helper module, so use its typed status structurally.
+            if hasattr(exc, "as_dict"):
+                return _print_error(exc, observation=args.observe, json_output=args.json)
+            raise
     if args.fixture:
         evidence_mode = "fixture"
         if args.merge_hold:
             data["merge_hold"] = {"kind": args.merge_hold, "active": args.merge_hold in HOLDS, "requester":"fixture","reason":"fixture","resume_authority":"fixture"}
     if not args.fixture:
-        if not args.task_uid:
-            parser.error("live gate requires --task-uid so merge hold is read from task truth")
-        mapping = json.loads((Path(args.root) / ".pm/github-project-sync/tasks.json").read_text(encoding="utf-8"))
-        record = (mapping.get("tasks") or {}).get(args.task_uid) or {}
-        rebuilt = rebuild_issue_evidence(str(data["repository"]), int(record["issue_number"]), args.task_uid, data)
-        rebuilt_hold = rebuilt.get("merge_hold")
-        recorded_hold = record.get("merge_hold")
-        selected_pr_matches_live = str(args.pr or "") == str(data.get("number") or "")
-        recorded_pr = str(record.get("pr_number") or "")
-        default_hold_matches_live_pr = (
-            isinstance(recorded_hold, dict)
-            and recorded_hold.get("kind") == "normal_pr_ci_watch"
-            and recorded_hold.get("active") is False
-            and selected_pr_matches_live
-            and bool(recorded_pr)
-            and recorded_pr == str(data.get("number") or "")
-        )
-        # An explicit head-bound issue comment always wins.  The only local
-        # fallback is record-pr's canonical inactive default for this exact PR;
-        # caller-authored active holds never gain authority from cache shape.
-        data["merge_hold"] = rebuilt_hold if rebuilt_hold is not None else (
-            recorded_hold if default_hold_matches_live_pr else None
-        )
-        data["comment_dispositions"] = rebuilt.get("comment_dispositions") or []
-        data["review_dispositions"] = rebuilt.get("review_dispositions") or []
-        data["admin_merge_authority"] = rebuilt.get("admin_merge_authority")
         evidence_mode = "production"
-        if args.merge_hold:
-            parser.error("--merge-hold is fixture-only; live hold truth is rebuilt from the GitHub task issue")
     result = (decision(data, args.admin_merge_authorized, evidence_mode=evidence_mode) if args.fixture else
-              production_decision(data, args.admin_merge_authorized, Path(args.root), args.task_uid, args.tool_root, args.integration_run_id))
+              production_decision(data, args.admin_merge_authorized, task_root, args.task_uid,
+                                  str(effective), args.integration_run_id,
+                                  api_client=data.pop("_api_client", None)))
     print(json.dumps(result, indent=2, sort_keys=True) if args.json else ("ready_for_merge" if result["ready_for_merge"] else "\n".join(result["blockers"])))
     return 0 if result["ready_for_merge"] else 3
 

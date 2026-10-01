@@ -10,7 +10,6 @@ import pathlib
 import re
 import subprocess
 import sys
-import time
 from collections import Counter, OrderedDict
 from typing import Any, Optional
 
@@ -426,29 +425,14 @@ def run_json(cmd: list[str]) -> dict[str, Any]:
 
 
 def run_subprocess_with_retry(cmd: list[str], *, retries: int = 4) -> subprocess.CompletedProcess[str]:
-    for attempt in range(retries):
-        try:
-            return subprocess.run(cmd, check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=180)
-        except subprocess.TimeoutExpired:
-            if attempt + 1 >= retries:
-                raise
-            time.sleep(min(30, 2 ** attempt))
-        except subprocess.CalledProcessError as exc:
-            stderr = exc.stderr or ""
-            retryable = any(
-                marker in stderr.lower()
-                for marker in (
-                    "api rate limit exceeded",
-                    "secondary rate limit",
-                    "timeout",
-                    "temporarily unavailable",
-                    "try again",
-                )
-            )
-            if not retryable or attempt + 1 >= retries:
-                raise RuntimeError(f"command failed: {' '.join(cmd)}\n{stderr.strip()}") from exc
-            time.sleep(min(60, 2 ** attempt))
-    raise RuntimeError("unreachable subprocess retry state")
+    """Compatibility name; shared client owns retries and CLI requests run once."""
+    del retries
+    try:
+        return subprocess.run(cmd, check=True, text=True, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE, timeout=180)
+    except subprocess.CalledProcessError as exc:
+        stderr = exc.stderr or ""
+        raise RuntimeError(f"command failed: {' '.join(cmd)}\n{stderr.strip()}") from exc
 
 
 def run_passthrough(cmd: list[str]) -> int:
@@ -457,22 +441,7 @@ def run_passthrough(cmd: list[str]) -> int:
 
 def broad_graphql_budget() -> dict[str, Any]:
     """Fail closed before intentionally broad Project/issue operations."""
-    query = "query { rateLimit { remaining resetAt } }"
-    try:
-        payload = run_json(["gh", "api", "graphql", "-f", f"query={query}"])
-    except Exception as exc:
-        return {"status":"capability_blocked","reason":"graphql_rate_limit_unavailable",
-                "error":str(exc),"resumable":True,
-                "resume":"restore GitHub rateLimit access and rerun; stale cache is not accepted"}
-    rate = ((payload.get("data") or {}).get("rateLimit") or {})
-    remaining, reset_at = rate.get("remaining"), str(rate.get("resetAt") or "")
-    if not isinstance(remaining, int) or not reset_at:
-        return {"status":"capability_blocked","reason":"graphql_rate_limit_unknown","resumable":True,
-                "resume":"restore GitHub rateLimit visibility and rerun; stale cache is not accepted"}
-    if remaining < 100:
-        return {"status":"capability_blocked","reason":"graphql_budget_insufficient","remaining":remaining,
-                "resetAt":reset_at,"resumable":True,"resume":f"resume after {reset_at}"}
-    return {"status":"ok","remaining":remaining,"resetAt":reset_at}
+    return load_sync_module().broad_rate_limit_guard()
 
 
 def load_sync_module() -> Any:
@@ -547,14 +516,18 @@ def project_item_from_graphql_node(node: dict[str, Any]) -> dict[str, Any]:
 def fetch_project_items_by_ids(project_item_ids: list[str]) -> dict[str, dict[str, Any]]:
     if not project_item_ids:
         return {}
-    cmd = ["gh", "api", "graphql", "-f", f"query={PROJECT_ITEM_NODES_QUERY}"]
-    for project_item_id in project_item_ids:
-        cmd.extend(["-f", f"ids[]={project_item_id}"])
-    payload = run_json(cmd)
-    if payload.get("errors"):
-        raise RuntimeError("GitHub GraphQL Project item read returned errors")
+    payload = load_sync_module().graphql_request(
+        None,
+        PROJECT_ITEM_NODES_QUERY,
+        {"ids": project_item_ids},
+        operation="project_audit_selected_items",
+        context={"script": "github-project-workflow.py"},
+    )
     items: dict[str, dict[str, Any]] = {}
-    for node in (payload.get("data") or {}).get("nodes") or []:
+    nodes = payload.get("nodes")
+    if not isinstance(nodes, list):
+        raise RuntimeError("GitHub GraphQL Project item read returned malformed nodes")
+    for node in nodes:
         if not node:
             continue
         item = project_item_from_graphql_node(node)
@@ -699,6 +672,9 @@ def recover_missing_mapping_records(
             project_id,
         )
     except Exception as exc:
+        sync = load_sync_module()
+        if sync.is_github_api_error(exc):
+            raise
         return False, f"mapping recovery failed before audit validation: {exc}"
     changed = False
     mapped_tasks = mapping.setdefault("tasks", {})
@@ -755,7 +731,8 @@ def command_audit(args: argparse.Namespace) -> int:
     if args.full_list or getattr(args, "global_maintenance", False):
         budget = broad_graphql_budget()
         if budget["status"] != "ok":
-            print(json.dumps(budget, indent=2, sort_keys=True)); return 2
+            print(json.dumps(budget, indent=2, sort_keys=True))
+            return 75 if budget.get("status") == "external_wait" else 2
     root = args.root.resolve()
     statuses = selected_statuses(args)
     mapping_path = mapping_path_for(root, args.mapping)
@@ -1162,4 +1139,11 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        code = main()
+    except Exception as exc:
+        api_code = load_sync_module().github_api_error_exit(exc, "github-project-workflow")
+        if api_code is None:
+            raise
+        raise SystemExit(api_code)
+    raise SystemExit(code)

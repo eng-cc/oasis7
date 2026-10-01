@@ -1,6 +1,6 @@
 # Engineering Workflow Source of Truth
-Version: **v1.26.4**
-Last Updated: **2026-09-30**
+Version: **v1.26.5**
+Last Updated: **2026-10-01**
 ## 0. Purpose
 This file is the **only normative workflow specification** for engineering task execution in oasis7. Mandatory rule:
 1. Any workflow change must be edited in this file first.
@@ -52,7 +52,10 @@ Only when a change has a bound coordinating record and enters an aggregate candi
 - Selected terminal audit is `./scripts/pm/audit-pr-watch-issues.sh --task-uid <task_uid> --json`; repository-wide repair is the separate operator action `./scripts/pm/audit-pr-watch-issues.sh --global-maintenance --json`, guarded by the live GraphQL budget before issue listing.
 - Broad GraphQL reads live `rateLimit.remaining/resetAt` first and returns resumable `capability_blocked` when unknown or insufficient; stale cache is never authority to continue.
 - Project metadata is cached per process run; field updates skip values proven unchanged by the same live snapshot.
-- One-task refresh uses at most one Project GraphQL read including missing-item recovery; one PR-watch poll batches comments, reviews, threads, and checks; selected-task closeout reuses one audit while task, HEAD, and evidence inputs remain frozen.
+- One-task refresh uses at most one Project GraphQL read including missing-item recovery; one PR-watch poll batches PR metadata, comments, reviews, threads, and checks into one bounded GraphQL observation. Review-thread closeout retains detail by default; explicit `--summary` omits PR, review, and comment bodies and leaves those fields unrequested rather than empty. Requested fields and connection page metadata decode strictly; a known-empty connection requires present empty nodes and page information. Selected-task closeout retains two bounded selected-task audits across a write: one immediately before mutation and one after it. Each stage reuses its own live selected snapshot only within that stage; no cached pre-write audit substitutes for the post-write audit.
+- Migrated GitHub JSON API calls share one injectable transport, response-based rate-limit classification, and bounded query retry policy. Queries and REST reads make at most three total attempts; mutations are never automatically replayed after an uncertain send. A primary or secondary rate-limit pause is persisted across processes and prevents requests during the pause; recovery allows one bounded probe rather than a burst. Rate-limit `external_wait` returns resumable details with exit 75, which adapters preserve.
+- Observation caches and request statistics are derived diagnostics only. They cannot create readiness receipts, authorize claims or merges, replace the formal gate's live reads and final identity reread, or replace either selected-task audit. Budget reports cover instrumented paths and unknown request cost remains unknown; these reports are not merge gates or whole-account cost estimates.
+- Telemetry records request attempts, observed response cost/rate-limit metadata, and cache outcomes without tokens, authorization headers, query variables, or Issue/PR/comment bodies. Cache and pause keys isolate credential scope, repository/PR or selected-task/query context as applicable; failure to persist shared pause state must not be reported as active cross-process protection.
 - Commands expected to emit broad logs or search results must run through `./scripts/pm/bounded-command-output.py` when the repo-owned wrapper is available. The wrapper preserves the full stdout/stderr artifact, digest, exit status, and a bounded head/tail summary; truncation is explicit. This bounds only commands routed through the helper and does not claim control over Codex host logs, context windows, or tool `max_output_tokens`.
 - Required-gate changed-path planning is config-driven through `scripts/ci-required-scope.v2.json`; the planner is the only mapping authority for GitHub, local preflight, and CI receipts. Rules union matching gates, `full` dominates, known documentation paths may select no Rust gates, and unmatched/unresolvable paths select full scope. Compile-metrics implementation/scripts use the dedicated `compile_metrics` capability and run only the focused compile-metrics contract; `.github/workflows/compile-metrics.yml`, shared planner/config files, and other production workflow changes remain `full`. Invalid configuration fails the planner before CI execution.
 - Canonical specialist role-card changes under `.agents/roles/<role>.md` select `codex_agent_config_validation` because those cards are the adapter projection source; `.agents/roles/templates/**` remains documentation-only.
@@ -346,33 +349,13 @@ GitHub Issues + GitHub Project are the authoritative project-management surface 
 - Until aggregate activation, TPM MAY use one recorded coordinating Issue with ordered linked delivery tasks. Each child retains its own task truth and receipts; it cannot copy the coordinator's UID or receipt. The coordinating Issue stays open until every required delivery is merged and aggregate verification is recorded. This bridge does not authorize coordinator `task_done` or terminal completion through the singular PR or non-PR helper.
 
 - `workflow-report --phase start` and `workflow-report --phase close` require the selected `--task-uid` before any mapping or GitHub mutation. UID-less `workflow-report --phase review` remains the repository-wide review report.
-  A workflow-report `close` records report/evidence completion only through
-  `last_workflow_report_close_at`; it never writes `last_closed_at`. That field
-  is reserved for a real `task-closeout` lifecycle transition. Historical cache
-  values are audit artifacts and are not backfilled or reinterpreted.
-- `.pm/github-project-sync/tasks.json`, when generated locally, is a
-  deterministic mapping cache from `task_uid` to issue/project item handles. It
-  is ignored local runtime state, never a frozen implementation-head artifact.
-  Scripts must tolerate it being absent or refresh it from GitHub/task issue
-  evidence; ordinary lifecycle mutations must not require a task PR evidence
-  commit or invalidate same-head CI/review.
-- `.pm/github-project-sync/task-archive.jsonl` is an ignored legacy cache,
-  never project truth; historical checks lacking complete live GitHub evidence fail closed.
-- Lifecycle wrappers use GitHub Issues/Project as task truth. Ordinary audit,
-  readiness verification, and `claim-ready.sh` are read-only with respect to
-  `.pm/github-project-sync/tasks.json`; only an explicit create/sync/refresh or
-  lifecycle status mutation may rewrite that generated cache. Claim evidence
-  uses claim-specific timestamps and must not refresh record-level
-  `updated_at`. When refresh-capable GitHub access is available, audit fails on
-  cached title or acceptance drift instead of making stale cache content look
-  current.
+  A workflow-report `close` records report/evidence completion only through `last_workflow_report_close_at`; it never writes `last_closed_at`. That field is reserved for a real `task-closeout` lifecycle transition. Historical cache values are audit artifacts and are not backfilled or reinterpreted.
+- `.pm/github-project-sync/tasks.json`, when generated locally, is a deterministic mapping cache from `task_uid` to issue/project item handles. It is ignored local runtime state, never a frozen implementation-head artifact. Scripts must tolerate it being absent or refresh it from GitHub/task issue evidence; ordinary lifecycle mutations must not require a task PR evidence commit or invalidate same-head CI/review.
+- `.pm/github-project-sync/task-archive.jsonl` is an ignored legacy cache, never project truth; historical checks lacking complete live GitHub evidence fail closed.
+- Lifecycle wrappers use GitHub Issues/Project as task truth. Ordinary audit, readiness verification, and `claim-ready.sh` are read-only with respect to `.pm/github-project-sync/tasks.json`; only an explicit create/sync/refresh or lifecycle status mutation may rewrite that generated cache. Claim evidence uses claim-specific timestamps and must not refresh record-level `updated_at`. When refresh-capable GitHub access is available, audit fails on cached title or acceptance drift instead of making stale cache content look current.
 - Execution evidence is recorded in GitHub task issue evidence comments.
 - PRDs define product or domain intent, design documents define technical contracts, and test/operations artifacts retain their professional evidence authority. They may link to the GitHub Issue when useful, but must not copy mutable task status, task rows, or evidence ledgers.
-- Reusable policy, workflow docs, and role knowledge belong in the repository.
-  Task/process records, working memory, signals, sessions, stage/gate state,
-  and migration archives are ignored local caches; GitHub Issues/Project/evidence
-  comments are process truth. Missing caches never block ordinary lint; specific
-  historical checks lacking required live evidence fail closed.
+- Reusable policy, workflow docs, and role knowledge belong in the repository. Task/process records, working memory, signals, sessions, stage/gate state, and migration archives are ignored local caches; GitHub Issues/Project/evidence comments are process truth. Missing caches never block ordinary lint; specific historical checks lacking required live evidence fail closed.
 - `pm-lint` is read-only against the canonical workspace: it must capture one coherent full-`.pm` snapshot using before/after/source-vs-copy manifests with bounded retry/fail behavior, run every PM read against that single snapshot epoch, isolate Python bytecode under its temporary directory, and leave no ignored artifact behind. The surrounding guard must cover the complete `.pm` filesystem path set—including tracked, baseline-untracked, and ignored entries—with lstat file kind/mode/content or symlink target, while comparing exact Git index mode/OID/stage/path records separately. The guard records symlink state so type and retarget drift are visible; the lint source-manifest boundary must reject any `.pm` symlink before copying.
 
 Project field taxonomy:

@@ -21,6 +21,25 @@ gate = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(gate)
 
 
+class PolicyHTTPFailure(RuntimeError):
+    def __init__(self, status_code: int):
+        super().__init__(f"HTTP {status_code}")
+        self.status_code = status_code
+
+
+class PolicyClient:
+    def __init__(self, responses):
+        self.responses = iter(responses)
+        self.calls = []
+
+    def rest(self, method, path, payload=None, *, operation, context=None):
+        self.calls.append((method, path, operation))
+        value = next(self.responses)
+        if isinstance(value, BaseException):
+            raise value
+        return value
+
+
 def clean_pr() -> dict:
     return {
         "number": 9,
@@ -118,33 +137,35 @@ class FinalTrustRed(unittest.TestCase):
 
     def test_classic_and_applicable_rulesets_are_unioned(self) -> None:
         classic = {"required_status_checks": {"checks": [{"context": "classic", "app_id": 1}]}}
-        rulesets = [[{
+        rulesets = [{
             "id": 7,
             "target": "branch",
             "enforcement": "active",
             "conditions": {"ref_name": {"include": ["refs/heads/main"]}},
             "rules": [{"type": "required_status_checks", "parameters": {"required_status_checks": [{"context": "ruleset", "integration_id": 2}]}}],
-        }]]
-        with mock.patch.object(gate, "_run_json", side_effect=[classic, rulesets]):
-            result = gate.discover_required_policy("eng-cc/oasis7", "main")
+        }]
+        result = gate.discover_required_policy(
+            "eng-cc/oasis7", "main", client=PolicyClient([classic, rulesets]),
+        )
         self.assertEqual({("classic", 1), ("ruleset", 2)}, {(x["context"], x["app_id"]) for x in result["required_status_checks"]})
 
     def test_ruleset_ref_semantics_default_pattern_include_exclude(self) -> None:
-        missing = subprocess.CalledProcessError(1, ["gh"], stderr="HTTP 404")
-        rulesets = [[
+        missing = PolicyHTTPFailure(404)
+        rulesets = [
             {"id": 1, "target": "branch", "enforcement": "active", "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"]}}, "rules": [{"type": "required_status_checks", "parameters": {"required_status_checks": [{"context": "default", "integration_id": 1}]}}]},
             {"id": 2, "target": "branch", "enforcement": "active", "conditions": {"ref_name": {"include": ["refs/heads/release/*"]}}, "rules": [{"type": "required_status_checks", "parameters": {"required_status_checks": [{"context": "pattern", "integration_id": 2}]}}]},
             {"id": 3, "target": "branch", "enforcement": "active", "conditions": {"ref_name": {"include": ["~ALL"], "exclude": ["refs/heads/release/private*"]}}, "rules": [{"type": "required_status_checks", "parameters": {"required_status_checks": [{"context": "all", "integration_id": 3}]}}]},
-        ]]
-        with mock.patch.object(gate, "_run_json", side_effect=[missing, rulesets, {"default_branch":"main"}]):
-            result = gate.discover_required_policy("eng-cc/oasis7", "release/v1")
+        ]
+        result = gate.discover_required_policy(
+            "eng-cc/oasis7", "release/v1", client=PolicyClient([missing, rulesets, {"default_branch":"main"}]),
+        )
         identities = {(x["context"], x["app_id"]) for x in result["required_status_checks"]}
         self.assertNotIn(("default", 1), identities, "~DEFAULT_BRANCH must use actual default-branch identity")
         self.assertIn(("pattern", 2), identities)
         self.assertIn(("all", 3), identities)
 
     def test_ruleset_pull_request_approval_is_normalized_and_unknown_constraints_fail_closed(self) -> None:
-        missing = subprocess.CalledProcessError(1, ["gh"], stderr="HTTP 404")
+        missing = PolicyHTTPFailure(404)
         base = {
             "id": 1, "target": "branch", "enforcement": "active",
             "conditions": {"ref_name": {"include": ["refs/heads/main"]}},
@@ -154,8 +175,7 @@ class FinalTrustRed(unittest.TestCase):
                 "allowed_merge_methods": ["squash"],
             }}],
         }
-        with mock.patch.object(gate, "_run_json", side_effect=[missing, [[base]]]):
-            result = gate.discover_required_policy("eng-cc/oasis7", "main")
+        result = gate.discover_required_policy("eng-cc/oasis7", "main", client=PolicyClient([missing, [base]]))
         self.assertEqual(
             {"required_pull_request_reviews", "required_conversation_resolution"},
             set(result["active_rule_types"]),
@@ -163,8 +183,7 @@ class FinalTrustRed(unittest.TestCase):
 
         constrained = json.loads(json.dumps(base))
         constrained["rules"][0]["parameters"]["unknown_future_constraint"] = True
-        with mock.patch.object(gate, "_run_json", side_effect=[missing, [[constrained]]]):
-            result = gate.discover_required_policy("eng-cc/oasis7", "main")
+        result = gate.discover_required_policy("eng-cc/oasis7", "main", client=PolicyClient([missing, [constrained]]))
         self.assertIn("unsupported_pull_request_policy", result["active_rule_types"])
 
     def test_approval_only_blocked_defaults_to_admin_merge_but_never_bypasses_real_blockers(self) -> None:
@@ -294,8 +313,11 @@ class FinalTrustRed(unittest.TestCase):
             mapping = root / ".pm/github-project-sync/tasks.json"
             mapping.parent.mkdir(parents=True)
             mapping.write_text(json.dumps({"tasks": {task_uid: {
+                "repository": "eng-cc/oasis7",
                 "issue_number": 2198,
                 "pr_number": 2198,
+                "pr_url": "https://github.com/eng-cc/oasis7/pull/2198",
+                "canonical_worktree": str(root),
                 "merge_hold": {"kind": "normal_pr_ci_watch", "active": False,
                                "requester": "workflow", "reason": "normal",
                                "resume_authority": "workflow"},
@@ -303,6 +325,7 @@ class FinalTrustRed(unittest.TestCase):
             argv = ["pr-lifecycle-gate.py", "2198", "--root", str(root),
                     "--task-uid", task_uid, "--json"]
             with mock.patch.object(gate, "load_live", return_value=live), \
+                 mock.patch.object(gate, "_github_api_client", return_value=object()), \
                  mock.patch.object(gate, "local_loop_admission", return_value={'status':'legacy'}), \
                  mock.patch.object(gate, "read_pr_identity", return_value=live), \
                  mock.patch.object(gate, "rebuild_issue_evidence", return_value={
@@ -323,13 +346,18 @@ class FinalTrustRed(unittest.TestCase):
                 mapping = root / ".pm/github-project-sync/tasks.json"
                 mapping.parent.mkdir(parents=True)
                 record = {
+                    "repository": "eng-cc/oasis7",
                     "issue_number": 2198,
+                    "pr_url": "https://github.com/eng-cc/oasis7/pull/2198",
+                    "canonical_worktree": str(root),
                     "merge_hold": {"kind": "normal_pr_ci_watch", "active": False,
                                    "requester": "workflow", "reason": "normal",
                                    "resume_authority": "workflow"},
                 }
                 if recorded_pr is not None:
                     record["pr_number"] = recorded_pr
+                else:
+                    record["pr_number"] = None
                 mapping.write_text(json.dumps({"tasks": {task_uid: record}}))
                 argv = ["pr-lifecycle-gate.py", "2198", "--root", str(root),
                         "--task-uid", task_uid, "--json"]
@@ -337,8 +365,8 @@ class FinalTrustRed(unittest.TestCase):
                      mock.patch.object(gate, "rebuild_issue_evidence", return_value={
                          "comment_dispositions": [], "review_dispositions": []}), \
                      mock.patch.object(sys, "argv", argv):
-                    self.assertEqual(3, gate.main(),
-                                     "unbound or mismatched task truth must not authorize the default hold")
+                    self.assertEqual(2, gate.main(),
+                                     "unbound or mismatched task truth must block before live reads")
 
     def test_merge_hold_writer_binds_comment_to_live_pr_head(self) -> None:
         source = (ROOT / "scripts/pm/github-project-task.py").read_text(encoding="utf-8")
@@ -350,32 +378,23 @@ class FinalTrustRed(unittest.TestCase):
                          "the hold writer must read the PR head from GitHub, not stale task cache")
 
     def test_default_branch_is_queried_for_default_branch_ruleset(self) -> None:
-        missing = subprocess.CalledProcessError(1, ["gh"], stderr="HTTP 404")
-        rulesets = [[{
+        missing = PolicyHTTPFailure(404)
+        rulesets = [{
             "id": 41, "target": "branch", "enforcement": "active",
             "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"]}},
             "rules": [{"type": "required_status_checks", "parameters": {"required_status_checks": [{"context": "trunk-gate", "integration_id": 4}]}}],
-        }]]
-        calls: list[list[str]] = []
-        def fake(cmd: list[str]):
-            calls.append(cmd)
-            endpoint = cmd[2] if len(cmd) > 2 else ""
-            if "/branches/" in endpoint: raise missing
-            if endpoint.endswith("/rulesets"): return rulesets
-            if endpoint == "repos/eng-cc/oasis7": return {"default_branch": "trunk"}
-            raise AssertionError(cmd)
-        with mock.patch.object(gate, "_run_json", side_effect=fake):
-            result = gate.discover_required_policy("eng-cc/oasis7", "trunk")
-        self.assertTrue(any(len(c) > 2 and c[2] == "repos/eng-cc/oasis7" for c in calls),
+        }]
+        client = PolicyClient([missing, rulesets, {"default_branch": "trunk"}])
+        result = gate.discover_required_policy("eng-cc/oasis7", "trunk", client=client)
+        self.assertTrue(any(path == "repos/eng-cc/oasis7" for _method, path, _operation in client.calls),
                         "~DEFAULT_BRANCH requires querying the actual repository default branch")
         self.assertIn(("trunk-gate", 4), {(x["context"], x["app_id"]) for x in result["required_status_checks"]})
 
     def test_classic_403_is_terminal_policy_read_error_without_ruleset_fallback(self) -> None:
-        denied = subprocess.CalledProcessError(1, ["gh"], stderr="HTTP 403 Resource not accessible")
-        runner = mock.Mock(side_effect=denied)
-        with mock.patch.object(gate, "_run_json", runner):
-            result = gate.discover_required_policy("eng-cc/oasis7", "main")
-        self.assertEqual(1, runner.call_count, "only classic 404 may fall back to rulesets")
+        denied = PolicyHTTPFailure(403)
+        client = PolicyClient([denied])
+        result = gate.discover_required_policy("eng-cc/oasis7", "main", client=client)
+        self.assertEqual(1, len(client.calls), "only classic 404 may fall back to rulesets")
         self.assertEqual("capability_blocked", result["status"])
         self.assertEqual("policy_read_error", result["reason"])
 
@@ -410,8 +429,10 @@ class FinalTrustRed(unittest.TestCase):
             {"id": 101, "body": review_body, "html_url": "https://github.com/eng-cc/oasis7/issues/2198#issuecomment-101", "created_at": "2026-07-11T01:01:00Z", "user": {"login": "writer"}},
             {"id": 102, "body": comment_body, "html_url": "https://github.com/eng-cc/oasis7/issues/2198#issuecomment-102", "created_at": "2026-07-11T01:02:00Z", "user": {"login": "writer"}},
         ]]
-        with mock.patch.object(gate, "_run_json", return_value=issue_comments):
-            rebuilt = gate.rebuild_issue_evidence(data["repository"], 2198, "task_" + "1" * 32, data)
+        rebuilt = gate.rebuild_issue_evidence(
+            data["repository"], 2198, "task_" + "1" * 32, data,
+            client=PolicyClient([issue_comments[0]]),
+        )
         self.assertEqual("R1", rebuilt["review_dispositions"][0]["node_id"])
         self.assertEqual("C1", rebuilt["comment_dispositions"][0]["node_id"])
         data.update(rebuilt)
@@ -420,19 +441,14 @@ class FinalTrustRed(unittest.TestCase):
         self.assertTrue(result["ready_for_merge"], result)
 
     def test_default_branch_api_failure_is_structured_capability_blocker(self) -> None:
-        missing = subprocess.CalledProcessError(1, ["gh"], stderr="HTTP 404")
-        rulesets = [[{
+        missing = PolicyHTTPFailure(404)
+        rulesets = [{
             "id": 51, "target": "branch", "enforcement": "active",
             "conditions": {"ref_name": {"include": ["~DEFAULT_BRANCH"]}},
             "rules": [{"type": "required_status_checks", "parameters": {"required_status_checks": [{"context": "default-only", "integration_id": 5}]}}],
-        }]]
-        calls = iter([missing, rulesets, subprocess.CalledProcessError(1, ["gh"], stderr="HTTP 503")])
-        def fake(_cmd: list[str]):
-            value = next(calls)
-            if isinstance(value, Exception): raise value
-            return value
-        with mock.patch.object(gate, "_run_json", side_effect=fake):
-            result = gate.discover_required_policy("eng-cc/oasis7", "main")
+        }]
+        client = PolicyClient([missing, rulesets, PolicyHTTPFailure(503)])
+        result = gate.discover_required_policy("eng-cc/oasis7", "main", client=client)
         self.assertEqual("capability_blocked", result["status"])
         self.assertEqual("default_branch_read_error", result["reason"])
         self.assertEqual([], result["required_status_checks"])

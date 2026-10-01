@@ -19,27 +19,24 @@ source "$ROOT_DIR/scripts/worktree-harness-lib.sh"
 
 usage() {
   cat <<'USAGE'
-Usage: ./scripts/pr-review-thread-closeout.sh [pr-number] [options]
+Usage: ./scripts/pr-review-thread-closeout.sh [pr-number|pr-url|branch] [options]
 
 Inspect GitHub PR review threads for the current PR (or one explicit PR), and
 optionally resolve selected threads as part of the same-PR comment closeout
-loop.
-
-Default conventions:
-- PR: infer from current branch via `gh pr view`
-- action: report only
-- standard path: inspect threads -> patch/validate/push -> resolve threads -> recheck PR state
+loop. Omitting the selector resolves the current branch in the origin repository.
 
 Options:
   --unresolved-only          Only report unresolved threads
   --resolve-thread <id>      Resolve one explicit review thread id (repeatable)
   --resolve-all-unresolved   Resolve every currently unresolved review thread
+  --summary                  Omit review-comment bodies from the API response
   --json                     Print machine-readable JSON summary only
   -h, --help                 Show help
 
 Examples:
   ./scripts/pr-review-thread-closeout.sh
   ./scripts/pr-review-thread-closeout.sh 145 --json
+  ./scripts/pr-review-thread-closeout.sh https://github.com/eng-cc/oasis7/pull/145 --summary
   ./scripts/pr-review-thread-closeout.sh --unresolved-only
   ./scripts/pr-review-thread-closeout.sh --resolve-thread PRRT_kwDOGA
   ./scripts/pr-review-thread-closeout.sh --resolve-all-unresolved --json
@@ -51,11 +48,10 @@ die() {
   exit 1
 }
 
-command -v gh >/dev/null 2>&1 || die "`gh` is required"
-
 OUTPUT_JSON=0
 UNRESOLVED_ONLY=0
 RESOLVE_ALL=0
+SUMMARY=0
 RESOLVE_THREAD_IDS=()
 POSITIONAL=()
 
@@ -75,6 +71,10 @@ while [[ $# -gt 0 ]]; do
       RESOLVE_ALL=1
       shift
       ;;
+    --summary)
+      SUMMARY=1
+      shift
+      ;;
     --json)
       OUTPUT_JSON=1
       shift
@@ -91,321 +91,41 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ "${#POSITIONAL[@]}" -gt 1 ]]; then
-  die "expected at most one optional [pr-number]"
+  die "expected at most one PR number, URL, or branch selector"
 fi
 if [[ "$RESOLVE_ALL" == "1" && "${#RESOLVE_THREAD_IDS[@]}" -gt 0 ]]; then
   die "--resolve-all-unresolved cannot be combined with --resolve-thread"
 fi
-PR_SELECTOR="${POSITIONAL[0]:-}"
-if [[ -z "$PR_SELECTOR" ]]; then
+if [[ "${#POSITIONAL[@]}" -eq 0 ]]; then
   wh_require_git_worktree
 fi
-
-PR_VIEW_ARGS=(pr view)
-if [[ -n "$PR_SELECTOR" ]]; then
-  PR_VIEW_ARGS+=("$PR_SELECTOR")
-fi
-PR_VIEW_ARGS+=(--json number,url,headRefName,baseRefName,reviewDecision,mergeStateStatus)
-
-fetch_pr_view_json() {
-  gh "${PR_VIEW_ARGS[@]}"
-}
 
 TMP_DIR="$(mktemp -d)"
 cleanup() {
   rm -rf "$TMP_DIR"
 }
 trap cleanup EXIT
-
-PR_VIEW_FILE="$TMP_DIR/pr-view.json"
-REPO_FILE="$TMP_DIR/repo.json"
-THREADS_FILE="$TMP_DIR/threads.json"
 REPORT_FILE="$TMP_DIR/report.json"
 
-THREAD_QUERY="$(cat <<'EOF'
-query($owner:String!, $repo:String!, $number:Int!) {
-  repository(owner:$owner, name:$repo) {
-    pullRequest(number:$number) {
-      reviewThreads(first:100) {
-        pageInfo {
-          hasNextPage
-          endCursor
-        }
-        nodes {
-          id
-          isResolved
-          isOutdated
-          path
-          line
-          originalLine
-          startLine
-          originalStartLine
-          comments(first:20) {
-            pageInfo {
-              hasNextPage
-              endCursor
-            }
-            nodes {
-              id
-              body
-              createdAt
-              url
-              author {
-                login
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-}
-EOF
-)"
-
-RESOLVE_QUERY="$(cat <<'EOF'
-mutation($threadId:ID!) {
-  resolveReviewThread(input: {threadId: $threadId}) {
-    thread {
-      id
-      isResolved
-    }
-  }
-}
-EOF
-)"
-
-render_report_file() {
-  python3 - "$1" "$2" "$3" > "$REPORT_FILE" <<'PY'
-from __future__ import annotations
-
-import json
-import sys
-from pathlib import Path
-
-pr_view = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-threads_payload = json.loads(Path(sys.argv[2]).read_text(encoding="utf-8"))
-unresolved_only = sys.argv[3] == "1"
-
-threads = (
-    threads_payload.get("data", {})
-    .get("repository", {})
-    .get("pullRequest", {})
-    .get("reviewThreads", {})
-    .get("nodes", [])
-)
-review_threads_payload = (
-    threads_payload.get("data", {})
-    .get("repository", {})
-    .get("pullRequest", {})
-    .get("reviewThreads", {})
-)
-partial_reasons: list[str] = []
-if review_threads_payload.get("pageInfo", {}).get("hasNextPage"):
-    partial_reasons.append("reviewThreads(first:100) has additional pages")
-
-entries: list[dict[str, object]] = []
-for thread in threads:
-    comments = thread.get("comments", {}).get("nodes", [])
-    if thread.get("comments", {}).get("pageInfo", {}).get("hasNextPage"):
-        partial_reasons.append(
-            f"comments(first:20) has additional pages for {thread.get('id')}"
-        )
-    latest_comment = comments[-1] if comments else None
-    entries.append(
-        {
-            "id": thread.get("id"),
-            "is_resolved": bool(thread.get("isResolved")),
-            "is_outdated": bool(thread.get("isOutdated")),
-            "path": thread.get("path"),
-            "line": thread.get("line"),
-            "original_line": thread.get("originalLine"),
-            "start_line": thread.get("startLine"),
-            "original_start_line": thread.get("originalStartLine"),
-            "comment_count": len(comments),
-            "latest_comment": {
-                "author": (latest_comment or {}).get("author", {}).get("login"),
-                "body": (latest_comment or {}).get("body"),
-                "created_at": (latest_comment or {}).get("createdAt"),
-                "url": (latest_comment or {}).get("url"),
-            }
-            if latest_comment
-            else None,
-        }
-    )
-
-reported_entries = [
-    entry for entry in entries if not unresolved_only or not entry["is_resolved"]
-]
-
-payload = {
-    "pr": {
-        "number": pr_view.get("number"),
-        "url": pr_view.get("url"),
-        "head_ref": pr_view.get("headRefName"),
-        "base_ref": pr_view.get("baseRefName"),
-        "review_decision": pr_view.get("reviewDecision"),
-        "merge_state_status": pr_view.get("mergeStateStatus"),
-    },
-    "summary": {
-        "total_threads": len(entries),
-        "unresolved_threads": sum(1 for entry in entries if not entry["is_resolved"]),
-        "resolved_threads": sum(1 for entry in entries if entry["is_resolved"]),
-        "reported_threads": len(reported_entries),
-        "unresolved_only": unresolved_only,
-        "partial_scan": bool(partial_reasons),
-        "partial_reasons": partial_reasons,
-    },
-    "resolved_now": {
-        "count": 0,
-        "thread_ids": [],
-    },
-    "threads": reported_entries,
-}
-print(json.dumps(payload, ensure_ascii=True, indent=2))
-PY
-}
-
-refresh_pr_view_file() {
-  fetch_pr_view_json > "$PR_VIEW_FILE"
-}
-
-refresh_threads_file() {
-  gh api graphql \
-    -f query="$THREAD_QUERY" \
-    -F owner="$OWNER_LOGIN" \
-    -F repo="$REPO_NAME" \
-    -F number="$PR_NUMBER" > "$THREADS_FILE"
-}
-
-annotate_resolved_now() {
-  python3 - "$REPORT_FILE" "${THREAD_IDS_TO_RESOLVE[@]}" > "$REPORT_FILE.next" <<'PY'
-from __future__ import annotations
-
-import json
-import sys
-from pathlib import Path
-
-payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-thread_ids = sys.argv[2:]
-payload["resolved_now"]["count"] = len(thread_ids)
-payload["resolved_now"]["thread_ids"] = thread_ids
-print(json.dumps(payload, ensure_ascii=True, indent=2))
-PY
-  mv "$REPORT_FILE.next" "$REPORT_FILE"
-}
-
-fail_if_partial_scan() {
-  local partial_report
-  partial_report="$(python3 - "$REPORT_FILE" <<'PY'
-from __future__ import annotations
-
-import json
-import sys
-from pathlib import Path
-
-payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-summary = payload.get("summary", {})
-if not summary.get("partial_scan"):
-    raise SystemExit(0)
-print("; ".join(summary.get("partial_reasons", [])) or "partial GraphQL page")
-PY
-)"
-  [[ -z "$partial_report" ]] || die "review thread scan is partial; refusing to continue: $partial_report"
-}
-
-refresh_pr_view_file
-gh repo view --json owner,name > "$REPO_FILE"
-
-OWNER_LOGIN="$(python3 - "$REPO_FILE" <<'PY'
-from __future__ import annotations
-
-import json
-import sys
-from pathlib import Path
-
-payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-print(payload["owner"]["login"])
-PY
-)"
-REPO_NAME="$(python3 - "$REPO_FILE" <<'PY'
-from __future__ import annotations
-
-import json
-import sys
-from pathlib import Path
-
-payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-print(payload["name"])
-PY
-)"
-PR_NUMBER="$(python3 - "$PR_VIEW_FILE" <<'PY'
-from __future__ import annotations
-
-import json
-import sys
-from pathlib import Path
-
-payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-print(payload["number"])
-PY
-)"
-
-refresh_threads_file
-render_report_file "$PR_VIEW_FILE" "$THREADS_FILE" "$UNRESOLVED_ONLY"
-fail_if_partial_scan
-
-UNRESOLVED_IDS_FILE="$TMP_DIR/unresolved-ids.txt"
-if ! python3 - "$THREADS_FILE" >"$UNRESOLVED_IDS_FILE" <<'PY'
-from __future__ import annotations
-
-import json
-import sys
-from pathlib import Path
-
-payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-threads = (
-    payload.get("data", {})
-    .get("repository", {})
-    .get("pullRequest", {})
-    .get("reviewThreads", {})
-    .get("nodes", [])
-)
-for thread in threads:
-    if not thread.get("isResolved"):
-        print(thread.get("id"))
-PY
-then
-  die "failed to parse unresolved review thread ids"
+COMMAND=(python3 "$ROOT_DIR/scripts/pm/github_pr_snapshot.py" closeout)
+if [[ "${#POSITIONAL[@]}" -eq 1 ]]; then
+  COMMAND+=("${POSITIONAL[0]}")
 fi
+[[ "$SUMMARY" == "1" ]] && COMMAND+=(--summary)
+[[ "$UNRESOLVED_ONLY" == "1" ]] && COMMAND+=(--unresolved-only)
+[[ "$RESOLVE_ALL" == "1" ]] && COMMAND+=(--resolve-all-unresolved)
+RESOLVE_THREAD_COUNT=${#RESOLVE_THREAD_IDS[@]}
+for ((index = 0; index < RESOLVE_THREAD_COUNT; index++)); do
+  COMMAND+=(--resolve-thread "${RESOLVE_THREAD_IDS[$index]}")
+done
 
-ALL_UNRESOLVED_IDS=()
-while IFS= read -r thread_id; do
-  thread_id="${thread_id%$'\r'}"
-  ALL_UNRESOLVED_IDS+=("$thread_id")
-done <"$UNRESOLVED_IDS_FILE"
-
-THREAD_IDS_TO_RESOLVE=()
-if [[ "$RESOLVE_ALL" == "1" ]]; then
-  if [[ "${#ALL_UNRESOLVED_IDS[@]}" -gt 0 ]]; then
-    THREAD_IDS_TO_RESOLVE=("${ALL_UNRESOLVED_IDS[@]}")
-  fi
-elif [[ "${#RESOLVE_THREAD_IDS[@]}" -gt 0 ]]; then
-  THREAD_IDS_TO_RESOLVE=("${RESOLVE_THREAD_IDS[@]}")
-fi
-
-if [[ "${#THREAD_IDS_TO_RESOLVE[@]}" -gt 0 ]]; then
-  for thread_id in "${THREAD_IDS_TO_RESOLVE[@]}"; do
-    if ! printf '%s\n' ${ALL_UNRESOLVED_IDS[@]+"${ALL_UNRESOLVED_IDS[@]}"} | grep -qx "$thread_id"; then
-      die "thread is not currently unresolved on PR #$PR_NUMBER: $thread_id"
-    fi
-    gh api graphql -f query="$RESOLVE_QUERY" -F threadId="$thread_id" >/dev/null
-  done
-  refresh_pr_view_file
-  refresh_threads_file
-  render_report_file "$PR_VIEW_FILE" "$THREADS_FILE" "$UNRESOLVED_ONLY"
-  fail_if_partial_scan
-  annotate_resolved_now
+# Preserve the adapter's exit 75 external-wait signal for callers and workflow routing.
+set +e
+"${COMMAND[@]}" >"$REPORT_FILE"
+COMMAND_STATUS=$?
+set -e
+if [[ "$COMMAND_STATUS" -ne 0 ]]; then
+  exit "$COMMAND_STATUS"
 fi
 
 if [[ "$OUTPUT_JSON" == "1" ]]; then
@@ -421,7 +141,6 @@ import sys
 from pathlib import Path
 
 payload = json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
-
 print("pr review thread closeout")
 print(f"- pr: #{payload['pr']['number']} {payload['pr']['url']}")
 print(f"- head_ref: {payload['pr']['head_ref']}")
@@ -433,12 +152,10 @@ print(f"- unresolved_threads: {payload['summary']['unresolved_threads']}")
 print(f"- resolved_threads: {payload['summary']['resolved_threads']}")
 if payload["resolved_now"]["count"] > 0:
     print(f"- resolved_now: {payload['resolved_now']['count']}")
-
 threads = payload["threads"]
 if not threads:
     print("- details: none")
     raise SystemExit(0)
-
 print("- details:")
 for thread in threads:
     status = "resolved" if thread["is_resolved"] else "unresolved"

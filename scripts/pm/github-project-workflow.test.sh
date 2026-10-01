@@ -13,6 +13,7 @@ trap cleanup EXIT
 mkdir -p "$TMPDIR/.pm/tasks" "$TMPDIR/.pm/github-project-sync" "$TMPDIR/bin"
 cp "$ROOT_DIR/scripts/pm/github-project-workflow.py" "$TMPDIR/github-project-workflow.py"
 cp "$ROOT_DIR/scripts/pm/github-project-sync.py" "$TMPDIR/github-project-sync.py"
+cp "$ROOT_DIR/scripts/pm/fixtures/github_api_test_adapter.py" "$TMPDIR/github_api.py"
 
 cat > "$TMPDIR/.pm/tasks/task_11111111111111111111111111111111.yaml" <<'YAML'
 task_uid: task_11111111111111111111111111111111
@@ -121,23 +122,35 @@ item = {
                 "url": "https://github.com/eng-cc/oasis7/issues/101"},
     "fieldValues": {"pageInfo": {"hasNextPage": False}, "nodes": []},
 }
-original_run_json = module.run_json
+original_load_sync = module.load_sync_module
+captured = []
+class FakeSync:
+    def __init__(self, response=None, error=None):
+        self.response = response
+        self.error = error
+    def graphql_request(self, token, query, variables, *, operation, context=None):
+        captured.append((token, query, variables, operation, context))
+        if self.error:
+            raise self.error
+        return self.response
+
 try:
-    module.run_json = lambda _cmd: {"data": {"nodes": [item]}, "errors": [{"message": "partial response"}]}
+    module.load_sync_module = lambda: FakeSync(error=RuntimeError("GraphQL errors rejected by shared client"))
     try:
         module.fetch_project_items_by_ids(["ITEM_ID"])
-    except RuntimeError:
+    except RuntimeError as exc:
+        assert "shared client" in str(exc), exc
         pass
     else:
         raise AssertionError("GraphQL data accompanied by errors must be rejected")
-    module.run_json = lambda _cmd: {"data": {"nodes": [item]}}
+    module.load_sync_module = lambda: FakeSync(response={"nodes": [item]})
     assert module.fetch_project_items_by_ids(["ITEM_ID"])["ITEM_ID"]["id"] == "ITEM_ID"
-    module.run_json = lambda _cmd: {"data": {"nodes": [item]}, "errors": []}
-    assert module.fetch_project_items_by_ids(["ITEM_ID"])["ITEM_ID"]["id"] == "ITEM_ID"
-    module.run_json = lambda _cmd: {"data": {"nodes": []}}
+    assert captured[-1][2] == {"ids": ["ITEM_ID"]}, captured
+    assert captured[-1][3] == "project_audit_selected_items", captured
+    module.load_sync_module = lambda: FakeSync(response={"nodes": []})
     assert module.fetch_project_items_by_ids(["ITEM_ID"]) == {}
 finally:
-    module.run_json = original_run_json
+    module.load_sync_module = original_load_sync
 PY
 
 AUDIT_JSON="$TMPDIR/audit.json"
