@@ -54,7 +54,6 @@ Options:
   --identity-path <p>     Identity manifest path tracked by git
                           (default: <hash-path with .sha256 replaced by .identity.json>)
   --distfs-root <p>       DistFS builtin wasm root (default: .distfs/builtin_wasm)
-  --artifact-dir <p>      Deprecated alias of DistFS blobs dir (default: <distfs-root>/blobs)
   -h, --help              Show this help
 
 Env:
@@ -306,12 +305,6 @@ while [[ $# -gt 0 ]]; do
       [[ $# -ge 2 ]] || { echo "error: --distfs-root requires a value" >&2; exit 2; }
       DISTFS_ROOT="$2"
       DISTFS_BLOBS_DIR="$DISTFS_ROOT/blobs"
-      shift 2
-      ;;
-    --artifact-dir)
-      [[ $# -ge 2 ]] || { echo "error: --artifact-dir requires a value" >&2; exit 2; }
-      DISTFS_BLOBS_DIR="$2"
-      DISTFS_ROOT="$(dirname "$DISTFS_BLOBS_DIR")"
       shift 2
       ;;
     -h|--help)
