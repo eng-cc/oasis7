@@ -191,6 +191,12 @@ class BoundedRecoveryCLITests(unittest.TestCase):
     def test_unrelated_issue_drift_rejected_without_writes(self):
         self.run_case("guard_unrelated_issue_drift")
 
+    def test_repository_field_identity_drift_rejected_without_writes(self):
+        self.run_case("guard_repository_identity_drift")
+
+    def test_repository_field_malformed_identity_rejected_without_writes(self):
+        self.run_case("guard_repository_identity_malformed")
+
     def test_unrelated_project_drift_rejected_without_writes(self):
         self.run_case("guard_unrelated_project_drift")
 

@@ -3618,8 +3618,10 @@ class PublicationRecoveryAuthority:
           repository(owner:$owner,name:$repo) { issue(number:$issue) { number url body state viewerCanUpdate } }
           nodes(ids:$ids) { ... on ProjectV2Item { id project { id number viewerCanUpdate owner { ... on User { login } ... on Organization { login } } }
             fieldValues(first:100) { pageInfo { hasNextPage } nodes {
+              __typename
               ... on ProjectV2ItemFieldTextValue { text field { ... on ProjectV2FieldCommon { name } } }
               ... on ProjectV2ItemFieldSingleSelectValue { name field { ... on ProjectV2FieldCommon { name } } }
+              ... on ProjectV2ItemFieldRepositoryValue { repository { id nameWithOwner } field { ... on ProjectV2FieldCommon { name } } }
             } } } }
         }'''
         data = project_refresh_graphql(query, ["-f", f"owner={owner}", "-f", f"repo={repo}",
@@ -3642,7 +3644,19 @@ class PublicationRecoveryAuthority:
             name = (row.get("field") or {}).get("name")
             if not name or name in values:
                 raise ValueError("ambiguous Project field")
-            values[name] = row.get("name", row.get("text", ""))
+            if row.get("__typename") == "ProjectV2ItemFieldRepositoryValue":
+                repository = row.get("repository")
+                if (not isinstance(repository, dict) or set(repository) != {"id", "nameWithOwner"}
+                        or not isinstance(repository["id"], str) or not repository["id"].strip()
+                        or not isinstance(repository["nameWithOwner"], str)
+                        or re.fullmatch(r"[^/\s]+/[^/\s]+", repository["nameWithOwner"]) is None):
+                    raise ValueError("malformed Project Repository field")
+                values[name] = {"type": "repository", "id": repository["id"],
+                                "name_with_owner": repository["nameWithOwner"]}
+            elif row.get("__typename") not in (None, "ProjectV2ItemFieldTextValue", "ProjectV2ItemFieldSingleSelectValue"):
+                raise ValueError("unsupported Project field value type")
+            else:
+                values[name] = row.get("name", row.get("text", ""))
         raw_issue = (json.loads(run_text(["gh", "api", f"repos/{args.repo}/issues/{self.record['issue_number']}"]))
                      if final else {"body": issue_permission.get("body"), "state": issue_permission.get("state", "").lower()})
         raw_body = raw_issue.get("body")

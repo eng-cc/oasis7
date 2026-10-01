@@ -52,7 +52,7 @@ state=json.load(open(sys.argv[1])); print(json.dumps({"id":7,"full_name":"eng-cc
 PY
     ;;
   api\ graphql*)
-    python3 - "$GH_MAPPING_PATH" <<'PY'
+    python3 - "$GH_MAPPING_PATH" "$*" <<'PY'
 import base64, json, os, sys
 m=json.load(open(sys.argv[1])); uid,next_record=next(iter(m["tasks"].items())); pm_status=next_record["status"]
 def read_state(name, fallback):
@@ -69,6 +69,14 @@ phase=read_state("GH_PROJECT_PHASE_STATE_FILE", next_record.get("workflow_phase"
 field_nodes=[{"name":status,"field":{"name":"Status"}},{"text":uid,"field":{"name":"Task UID"}},{"name":next_record["owner_role"],"field":{"name":"Owner Role"}},{"name":next_record["module"],"field":{"name":"Module"}},{"name":pm_status,"field":{"name":"PM Status"}},{"name":phase,"field":{"name":"Workflow Phase"}},{"name":next_record["priority"],"field":{"name":"Priority"}},{"text":next_record["worktree_hint"],"field":{"name":"Canonical Worktree"}},{"name":"n/a","field":{"name":"Test Tier Required"}}]
 project_pr=read_state("GH_PROJECT_PR_STATE_FILE", next_record.get("pr_url") or "")
 if project_pr: field_nodes.append({"text":project_pr,"field":{"name":"PR"}})
+auth_path=os.environ.get("GH_REC_AUTH_STATE_FILE")
+if auth_path and os.path.exists(auth_path):
+    from pathlib import Path
+    identity_path=Path(auth_path).parent / "repository-field.json"
+    identity=json.loads(identity_path.read_text()) if identity_path.exists() else {"id":"R_fixture_oasis7","nameWithOwner":"eng-cc/oasis7"}
+    # Real GraphQL returns an empty object when its union member is not selected.
+    field_nodes.append({"__typename":"ProjectV2ItemFieldRepositoryValue","field":{"name":"Repository"},"repository":identity}
+        if "ProjectV2ItemFieldRepositoryValue" in sys.argv[2] else {})
 project_item={"id":next_record.get("project_item_id") or "ITEM_ID","project":{"id":"PROJECT_ID","number":1,"owner":{"login":"eng-cc"}},"fieldValues":{"pageInfo":{"hasNextPage":False},"nodes":field_nodes}}
 issue={"number":next_record["issue_number"],"url":next_record["issue_url"],"body":f"task_uid: {uid}","projectItems":{"nodes":[project_item]}}
 # Keep both GraphQL response shapes used by the bounded workflow commands:
@@ -896,7 +904,8 @@ def action(locator, comment_id):
         "intent_body_sha256":sha(intent_body.encode())}
 unrelated_issue={key:task.get(key) for key in ("task_uid","owner_role","module","priority","worktree_hint","primary_package")}
 unrelated_project={"Task UID":uid,"Owner Role":task["owner_role"],"Module":task["module"],"Priority":task["priority"],
-                   "Canonical Worktree":task["worktree_hint"],"Test Tier Required":"n/a"}
+                   "Canonical Worktree":task["worktree_hint"],"Test Tier Required":"n/a",
+                   "Repository":{"type":"repository","id":"R_fixture_oasis7","name_with_owner":"eng-cc/oasis7"}}
 admission={"schema":"oasis7-publication-recovery-admission/v1","operation":"record_pr_publication_recovery",
     "identity":{"repository":"eng-cc/oasis7","task_uid":uid,"issue_number":2001,"issue_url":task["issue_url"],
         "pr_number":2001,"pr_url":"https://github.com/eng-cc/oasis7/pull/2001","project_id":"PROJECT_ID",
@@ -955,6 +964,10 @@ if case == "guard_unrelated_issue_drift":
     (root / "issue-live-body.md").write_text(body)
 if case == "guard_unrelated_project_drift":
     (root / "project-live-status").write_text("Done\n")
+if case == "guard_repository_identity_drift":
+    (root / "repository-field.json").write_text(json.dumps({"id":"R_different","nameWithOwner":"eng-cc/different"}))
+if case == "guard_repository_identity_malformed":
+    (root / "repository-field.json").write_text(json.dumps({"id":"R_fixture_oasis7"}))
 if case == "guard_pr_task_refs_drift":
     (root / "recovery-pr-body.md").write_text("Task: task_" + "9" * 32 + "\nRefs #9999\n")
 # Negative variants alter only fake live IO or its authenticated TPM binding;
@@ -1099,6 +1112,17 @@ PY
   REC_STATUS=$?
   set -e
   tail -n +$((REC_CALLS_BEFORE + 1)) "$GH_CALL_LOG" >"$TMPDIR/rec-calls.log"
+  if [[ "$REC_CASE" == "guard_repository_identity_drift" || "$REC_CASE" == "guard_repository_identity_malformed" ]]; then
+    EXPECTED_REPOSITORY_ERROR="unrelated Issue/Project snapshot drift"
+    if [[ "$REC_CASE" == "guard_repository_identity_malformed" ]]; then
+      EXPECTED_REPOSITORY_ERROR="malformed Project Repository field"
+    fi
+    if ! grep -Fq "$EXPECTED_REPOSITORY_ERROR" "$TMPDIR/rec-record.err"; then
+      echo "FAIL test_rec_$REC_CASE: repository guard was not reached" >&2
+      cat "$TMPDIR/rec-record.err" >&2
+      exit 1
+    fi
+  fi
   if [[ "$REC_CASE" == "guard_scope_comment_drift" ]]; then
     python3 - "$TMPDIR" <<'PY'
 import hashlib, json, pathlib, sys
