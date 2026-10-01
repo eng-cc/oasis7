@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::protocol::{ExplicitNull, RollbackProtocolContext, validate_id};
 
-pub const INSTALLATION_SCHEMA: &str = "oasis7.local_signer_installation.v2";
+pub const INSTALLATION_SCHEMA: &str = "oasis7.local_signer_installation.v3";
 pub const POLICY_SCHEMA: &str = "oasis7.local_signer_policy.v2";
 pub const GRANT_SCHEMA: &str = "oasis7.local_signing_batch_grant.v1";
 
@@ -28,7 +28,9 @@ pub struct InstallationConfig {
 #[serde(deny_unknown_fields)]
 pub struct CallerBinding {
     pub uid: u32,
-    pub work_subdir: String,
+    pub work_dir: String,
+    pub work_device_id: u64,
+    pub work_inode: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -111,12 +113,8 @@ impl InstallationConfig {
         if self.control_schema_version.is_empty() {
             return Err("control_schema_version must not be empty".to_owned());
         }
-        if !std::path::Path::new(&self.store_dir).is_absolute() {
-            return Err("store_dir must be an absolute path".to_owned());
-        }
-        if !std::path::Path::new(&self.worker_executable).is_absolute() {
-            return Err("worker_executable must be an absolute path".to_owned());
-        }
+        validate_absolute_path(&self.store_dir)?;
+        validate_absolute_path(&self.worker_executable)?;
         if self.callers.is_empty() {
             return Err("installation must bind at least one caller".to_owned());
         }
@@ -127,7 +125,32 @@ impl InstallationConfig {
                     "caller UID must be non-root, differ from signer, and be unique".to_owned(),
                 );
             }
-            validate_work_subdir(&caller.work_subdir)?;
+            validate_absolute_path(&caller.work_dir)?;
+            let work = std::path::Path::new(&caller.work_dir);
+            let store = std::path::Path::new(&self.store_dir);
+            if work.starts_with(store) || store.starts_with(work) {
+                return Err("caller work root overlaps private store".to_owned());
+            }
+            for protected in [
+                std::path::Path::new(&self.worker_executable)
+                    .parent()
+                    .unwrap(),
+                std::path::Path::new(crate::installation::INSTALLATION_CONFIG_PATH)
+                    .parent()
+                    .unwrap(),
+            ] {
+                if work.starts_with(protected) || protected.starts_with(work) {
+                    return Err("caller root overlaps protected code or configuration".to_owned());
+                }
+            }
+            for other in &self.callers {
+                if caller.uid != other.uid {
+                    let other = std::path::Path::new(&other.work_dir);
+                    if work.starts_with(other) || other.starts_with(work) {
+                        return Err("caller work roots overlap".to_owned());
+                    }
+                }
+            }
         }
         Ok(())
     }
@@ -265,10 +288,15 @@ pub fn validate_sha256(value: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub fn validate_work_subdir(value: &str) -> Result<(), String> {
-    validate_id(value).map_err(|error| error.to_string())?;
-    if std::path::Path::new(value).components().count() != 1 {
-        return Err("work_subdir must be one path component".to_owned());
+pub fn validate_absolute_path(value: &str) -> Result<(), String> {
+    if !std::path::Path::new(value).is_absolute()
+        || value
+            .split('/')
+            .skip(1)
+            .any(|part| part.is_empty() || part == "." || part == "..")
+        || value.contains('\0')
+    {
+        return Err("path must be absolute without dot or parent components".to_owned());
     }
     Ok(())
 }
