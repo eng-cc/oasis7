@@ -26,6 +26,33 @@ from typing import Any, Iterable
 
 
 POLICY_SCHEMA = "oasis7-cargo-package-scope-policy/v1"
+AUXILIARY_REGISTRY_PATH = ".pm/cargo-package-auxiliary-files.json"
+AUXILIARY_REGISTRY_SCHEMA = "oasis7-cargo-package-auxiliary-files/v1"
+
+AUXILIARY_FORBIDDEN_PREFIXES = (
+    ".agents/",
+    ".buildkite/",
+    ".circleci/",
+    ".codex/",
+    ".github/",
+    ".gitlab/",
+    ".pm/",
+    ".cargo/",
+    "scripts/pm/",
+)
+AUXILIARY_FORBIDDEN_PATHS = {
+    "Jenkinsfile",
+    "azure-pipelines.yml",
+    "doc/engineering/workflow/source-of-truth.md",
+    "scripts/ci-tests.sh",
+    "scripts/ci-required-scope.v2.json",
+    "scripts/plan-rust-required-scope.json",
+    "scripts/plan-rust-required-scope.py",
+    "scripts/plan-rust-required-scope.sh",
+    "scripts/prepare-task-pr.sh",
+    ".gitlab-ci.yml",
+    ".travis.yml",
+}
 
 
 class ScopeError(Exception):
@@ -89,6 +116,92 @@ def safe_relative(path: str) -> str:
     return str(pure)
 
 
+def json_object_without_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON object key: {key}")
+        result[key] = value
+    return result
+
+
+def parse_auxiliary_registry(
+    payload: dict[str, Any], policy_path: str, protected_paths: list[str]
+) -> dict[str, str]:
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"schema", "auxiliary_files"}
+        or payload.get("schema") != AUXILIARY_REGISTRY_SCHEMA
+    ):
+        raise ScopeError("trusted_policy_invalid", "unexpected auxiliary registry schema or fields")
+    entries = payload.get("auxiliary_files")
+    if not isinstance(entries, list):
+        raise ScopeError("trusted_policy_invalid", "auxiliary_files must be a list")
+
+    protected = {safe_relative(path) for path in protected_paths}
+    registry: dict[str, str] = {}
+    for entry in entries:
+        if not isinstance(entry, dict) or set(entry) != {"path", "package"}:
+            raise ScopeError(
+                "trusted_policy_invalid",
+                "each auxiliary_files entry must contain exactly path and package",
+            )
+        path = entry.get("path")
+        package = entry.get("package")
+        if not isinstance(path, str) or not path or "\\" in path or "\x00" in path:
+            raise ScopeError("trusted_policy_invalid", "auxiliary path must be a normalized repository-relative file")
+        pure = PurePosixPath(path)
+        if (
+            pure.is_absolute()
+            or not pure.parts
+            or str(pure) != path
+            or any(part in ("", ".", "..") for part in path.split("/"))
+            or any(marker in path for marker in ("*", "?", "[", "]"))
+        ):
+            raise ScopeError("trusted_policy_invalid", f"auxiliary path is not an exact normalized file path: {path}")
+        if pure.suffix == ".rs":
+            raise ScopeError("ambiguous_package_attribution", f"Rust source cannot be attributed as auxiliary: {path}")
+        if pure.name in {"Cargo.toml", "Cargo.lock"}:
+            raise ScopeError("ambiguous_package_attribution", f"Cargo manifest or lock cannot be attributed as auxiliary: {path}")
+        if path in registry:
+            raise ScopeError("trusted_policy_invalid", f"duplicate auxiliary path registration: {path}")
+        if (
+            path == policy_path
+            or path in protected
+            or path in AUXILIARY_FORBIDDEN_PATHS
+            or any(path.startswith(prefix) for prefix in AUXILIARY_FORBIDDEN_PREFIXES)
+        ):
+            raise ScopeError("trusted_policy_invalid", f"protected governance path cannot be auxiliary: {path}")
+        if not isinstance(package, str) or not package or package != package.strip():
+            raise ScopeError("trusted_policy_invalid", f"auxiliary package must be a non-empty exact name: {path}")
+        registry[path] = package
+    return registry
+
+
+def trusted_auxiliary_registry(
+    repo: Path, base: str, head: str, policy_path: str, protected_paths: list[str]
+) -> dict[str, str]:
+    base_bytes = git_blob(repo, base, AUXILIARY_REGISTRY_PATH)
+    head_bytes = git_blob(repo, head, AUXILIARY_REGISTRY_PATH)
+    if base_bytes != head_bytes:
+        raise ScopeError(
+            "policy_self_modification",
+            f"auxiliary registry differs from trusted base: {AUXILIARY_REGISTRY_PATH}",
+        )
+    if base_bytes is None:
+        return {}
+    try:
+        trusted = json.loads(
+            base_bytes.decode("utf-8"), object_pairs_hook=json_object_without_duplicate_keys
+        )
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise ScopeError(
+            "trusted_policy_invalid",
+            f"trusted auxiliary registry is not valid JSON: {AUXILIARY_REGISTRY_PATH}",
+        ) from exc
+    return parse_auxiliary_registry(trusted, policy_path, protected_paths)
+
+
 def resolve_relative(source: str, target: str) -> str | None:
     try:
         target_path = PurePosixPath(target)
@@ -110,7 +223,9 @@ def resolve_relative(source: str, target: str) -> str | None:
     return "/".join(parts)
 
 
-def parse_policy(repo: Path, base: str, policy_arg: str) -> tuple[str, dict[str, Any]]:
+def parse_policy(
+    repo: Path, base: str, head: str, policy_arg: str
+) -> tuple[str, dict[str, Any], dict[str, str]]:
     policy_path = Path(policy_arg)
     if not policy_path.is_absolute():
         policy_path = repo / policy_path
@@ -122,8 +237,10 @@ def parse_policy(repo: Path, base: str, policy_arg: str) -> tuple[str, dict[str,
     if base_bytes is None:
         raise ScopeError("trusted_policy_unavailable", f"policy is absent from trusted base: {relative}")
     try:
-        trusted = json.loads(base_bytes.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        trusted = json.loads(
+            base_bytes.decode("utf-8"), object_pairs_hook=json_object_without_duplicate_keys
+        )
+    except (UnicodeDecodeError, ValueError) as exc:
         raise ScopeError("trusted_policy_invalid", f"trusted policy is not valid JSON: {relative}") from exc
     current_bytes = policy_path.read_bytes() if policy_path.is_file() else None
     if current_bytes is None or current_bytes != base_bytes:
@@ -132,10 +249,13 @@ def parse_policy(repo: Path, base: str, policy_arg: str) -> tuple[str, dict[str,
         raise ScopeError("trusted_policy_invalid", "unexpected policy schema")
     if trusted.get("policy_version") != 1:
         raise ScopeError("trusted_policy_invalid", "unsupported policy version")
+    if "auxiliary_files" in trusted:
+        raise ScopeError("trusted_policy_invalid", "auxiliary registrations must use the separate registry")
     protected = trusted.get("protected_paths")
     if not isinstance(protected, list) or not all(isinstance(item, str) for item in protected):
         raise ScopeError("trusted_policy_invalid", "protected_paths must be a string list")
-    return relative, trusted
+    auxiliary_registry = trusted_auxiliary_registry(repo, base, head, relative, protected)
+    return relative, trusted, auxiliary_registry
 
 
 def extract_git_tree(repo: Path, revision: str, target: Path) -> None:
@@ -220,6 +340,26 @@ def owner_for(path: str, packages: dict[str, list[tuple[str, str]]]) -> str | No
     if len({name for _, name in owners if _ == owners[0][0]}) > 1:
         return None
     return owners[0][1]
+
+
+def validate_auxiliary_owners(
+    registry: dict[str, str],
+    base_metadata: dict[str, Any],
+    head_metadata: dict[str, Any],
+    base_packages: dict[str, list[tuple[str, str]]],
+    head_packages: dict[str, list[tuple[str, str]]],
+) -> None:
+    for path, package in registry.items():
+        if metadata_package(base_metadata, package) is None or metadata_package(head_metadata, package) is None:
+            raise ScopeError(
+                "trusted_policy_invalid",
+                f"auxiliary package must resolve uniquely in base and head metadata: {package}",
+            )
+        if owner_for(path, base_packages) is not None or owner_for(path, head_packages) is not None:
+            raise ScopeError(
+                "trusted_policy_invalid",
+                f"auxiliary path overlaps Cargo metadata ownership: {path}",
+            )
 
 
 def package_manifest_paths(packages: dict[str, list[tuple[str, str]]]) -> dict[str, str]:
@@ -1206,7 +1346,9 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
     if not repo.is_dir() or not (repo / ".git").exists():
         raise ScopeError("invalid_repository", f"not a git checkout: {repo}")
     paths, renames = changed_files(repo, args.base, args.head)
-    policy_path, policy = parse_policy(repo, args.base, args.policy)
+    policy_path, policy, auxiliary_owners = parse_policy(
+        repo, args.base, args.head, args.policy
+    )
     protected = {safe_relative(path) for path in policy["protected_paths"]}
     normalized_paths = [safe_relative(path) for path in paths]
     standalone_lock_paths = sorted(
@@ -1228,6 +1370,13 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         head_metadata = cargo_metadata(head_root)
         base_packages = package_roots(base_root, base_metadata)
         head_packages = package_roots(head_root, head_metadata)
+        validate_auxiliary_owners(
+            auxiliary_owners,
+            base_metadata,
+            head_metadata,
+            base_packages,
+            head_packages,
+        )
         head_build_scripts = build_script_paths(head_root, head_metadata)
         changed = set(normalized_paths)
         package_changed = any(
@@ -1288,6 +1437,8 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         if path in ("Cargo.toml", "Cargo.lock") or path == policy_path:
             continue
         owner = owner_for(path, head_packages) or owner_for(path, base_packages)
+        if owner is None:
+            owner = auxiliary_owners.get(path)
         if owner is not None:
             package_owners.add(owner)
         else:
@@ -1298,8 +1449,8 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         raise ScopeError("ambiguous_package_attribution", ", ".join(unowned_rust))
 
     for old_path, new_path in zip(renames[::2], renames[1::2]):
-        old_owner = owner_for(old_path, base_packages)
-        new_owner = owner_for(new_path, head_packages)
+        old_owner = owner_for(old_path, base_packages) or auxiliary_owners.get(old_path)
+        new_owner = owner_for(new_path, head_packages) or auxiliary_owners.get(new_path)
         if old_owner and new_owner and old_owner != new_owner:
             raise ScopeError("cross_package_rename", f"{old_path} -> {new_path}")
         if old_owner:
