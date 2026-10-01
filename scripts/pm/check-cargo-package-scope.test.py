@@ -1154,6 +1154,64 @@ path = "src/lib.rs"
             ),
         )
 
+    def test_manifest_relative_include_same_package_is_allowed_with_unrelated_fixed_consumer(self) -> None:
+        repo, _ = self._fixture()
+        self._write(repo, "crates/alpha/assets/message.txt", "durable alpha message\n")
+        self._write(
+            repo,
+            "crates/beta/src/lib.rs",
+            'const MESSAGE: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/shared.rs"));\n'
+            "pub fn beta() {}\n",
+        )
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "base with fixed manifest-relative same-package includes")
+        base = self._git(repo, "rev-parse", "HEAD")
+
+        def mutate(root: Path) -> None:
+            self._write(
+                root,
+                "crates/alpha/src/lib.rs",
+                'const MESSAGE: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/assets/message.txt"));\n'
+                'pub fn alpha() { println!("changed"); }\n',
+            )
+
+        self._assert_allowed(repo, base, "alpha", mutate)
+
+    def test_manifest_relative_include_cross_package_suffix_is_rejected(self) -> None:
+        repo, base = self._fixture()
+        head = self._head(
+            repo,
+            lambda root: self._write(
+                root,
+                "crates/alpha/src/lib.rs",
+                'include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../beta/src/shared.rs"));\n'
+                "pub fn alpha() {}\n",
+            ),
+            "add manifest-relative cross-package include",
+        )
+        result = self._run_checker(repo, base, head, "alpha")
+        self.assertNotEqual(0, result.returncode, result.stdout)
+        payload = json.loads(result.stdout)
+        self.assertEqual("cross_package_include", payload.get("reason"), payload)
+
+    def test_manifest_relative_include_suffix_cannot_escape_repository(self) -> None:
+        repo, base = self._fixture()
+        head = self._head(
+            repo,
+            lambda root: self._write(
+                root,
+                "crates/alpha/src/lib.rs",
+                'include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/../../../outside.txt"));\n'
+                "pub fn alpha() {}\n",
+            ),
+            "add escaping manifest-relative include",
+        )
+        result = self._run_checker(repo, base, head, "alpha")
+        self.assertNotEqual(0, result.returncode, result.stdout)
+        payload = json.loads(result.stdout)
+        self.assertEqual("unresolved_rust_source_reference", payload.get("reason"), payload)
+        self.assertIn("out-of-repository", payload.get("detail", ""), payload)
+
     def test_cross_package_path_attribute_is_rejected(self) -> None:
         repo, base = self._fixture()
 
