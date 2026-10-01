@@ -2007,10 +2007,19 @@ def main() -> int:
             data["merge_hold"] = {"kind": args.merge_hold, "active": args.merge_hold in HOLDS, "requester":"fixture","reason":"fixture","resume_authority":"fixture"}
     if not args.fixture:
         evidence_mode = "production"
-    result = (decision(data, args.admin_merge_authorized, evidence_mode=evidence_mode) if args.fixture else
-              production_decision(data, args.admin_merge_authorized, task_root, args.task_uid,
-                                  str(effective), args.integration_run_id,
-                                  api_client=data.pop("_api_client", None)))
+    try:
+        result = (decision(data, args.admin_merge_authorized, evidence_mode=evidence_mode) if args.fixture else
+                  production_decision(data, args.admin_merge_authorized, task_root, args.task_uid,
+                                      str(effective), args.integration_run_id,
+                                      api_client=data.pop("_api_client", None)))
+    except Exception as exc:
+        # The final identity read is deliberately inside production_decision,
+        # after the initial live-read boundary above. Preserve the shared
+        # client's typed retry/status envelope at this public CLI boundary;
+        # non-API errors still surface for diagnosis.
+        if callable(getattr(exc, "as_dict", None)):
+            return _print_error(exc, observation=False, json_output=args.json)
+        raise
     print(json.dumps(result, indent=2, sort_keys=True) if args.json else ("ready_for_merge" if result["ready_for_merge"] else "\n".join(result["blockers"])))
     return 0 if result["ready_for_merge"] else 3
 

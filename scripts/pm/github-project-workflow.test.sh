@@ -15,6 +15,21 @@ cp "$ROOT_DIR/scripts/pm/github-project-workflow.py" "$TMPDIR/github-project-wor
 cp "$ROOT_DIR/scripts/pm/github-project-sync.py" "$TMPDIR/github-project-sync.py"
 cp "$ROOT_DIR/scripts/pm/fixtures/github_api_test_adapter.py" "$TMPDIR/github_api.py"
 
+# Instrument only the temporary API fixture so the selected CLI boundary test
+# can prove one GraphQL read attempt without touching the repository fixture.
+cat >> "$TMPDIR/github_api.py" <<'PY'
+_unobserved_graphql = GitHubAPIClient.graphql
+def _counted_graphql(self, query, variables=None, *, operation, mutation=False, context=None):
+    path = os.environ.get("GH_FIXTURE_GRAPHQL_LOG")
+    if path:
+        with open(path, "a", encoding="utf-8") as handle:
+            handle.write(json.dumps({"operation": operation, "mutation": mutation,
+                                     "query": query}) + "\n")
+    return _unobserved_graphql(self, query, variables, operation=operation,
+                               mutation=mutation, context=context)
+GitHubAPIClient.graphql = _counted_graphql
+PY
+
 cat > "$TMPDIR/.pm/tasks/task_11111111111111111111111111111111.yaml" <<'YAML'
 task_uid: task_11111111111111111111111111111111
 title: "active task"
@@ -915,6 +930,69 @@ uid = "task_44444444444444444444444444444444"
 assert payload["status"] == "failed", payload
 assert payload["selected_count"] == 1, payload
 assert any("missing mapping record" in item for item in payload["errors"]), payload
+PY
+
+# A selected audit must preserve the shared client's typed wait at the public
+# command boundary instead of converting it into a generic failed-audit row.
+mv "$TMPDIR/bin/gh" "$TMPDIR/bin/gh.original"
+cat > "$TMPDIR/bin/gh" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+if [[ -n "${GH_FIXTURE_GH_LOG:-}" ]]; then
+  printf '%s\n' "$*" >> "$GH_FIXTURE_GH_LOG"
+fi
+exec "${GH_FIXTURE_GH_DELEGATE:?}" "$@"
+SH
+chmod +x "$TMPDIR/bin/gh"
+
+PROJECT_WAIT_STDOUT="$TMPDIR/project-wait.stdout"
+PROJECT_WAIT_STDERR="$TMPDIR/project-wait.stderr"
+PROJECT_GRAPHQL_CALLS="$TMPDIR/project-wait.graphql.jsonl"
+PROJECT_GH_CALLS="$TMPDIR/project-wait.gh.jsonl"
+PROJECT_MAPPING="$MAPPING_ONLY/.pm/github-project-sync/tasks.json"
+PROJECT_MAPPING_BEFORE_SHA="$(shasum -a 256 "$PROJECT_MAPPING" | awk '{print $1}')"
+set +e
+GH_FIXTURE_EXTERNAL_WAIT=1 \
+GH_FIXTURE_GRAPHQL_LOG="$PROJECT_GRAPHQL_CALLS" \
+GH_FIXTURE_GH_LOG="$PROJECT_GH_CALLS" \
+GH_FIXTURE_GH_DELEGATE="$TMPDIR/bin/gh.original" \
+python3 "$TMPDIR/github-project-workflow.py" "$MAPPING_ONLY" \
+  --repo eng-cc/oasis7 \
+  --project-owner eng-cc \
+  --project-number 1 \
+  --mapping "$PROJECT_MAPPING" \
+  --json \
+  audit --task-uid task_33333333333333333333333333333333 \
+  > "$PROJECT_WAIT_STDOUT" 2> "$PROJECT_WAIT_STDERR"
+PROJECT_WAIT_EXIT=$?
+set -e
+PROJECT_MAPPING_AFTER_SHA="$(shasum -a 256 "$PROJECT_MAPPING" | awk '{print $1}')"
+if [[ "$PROJECT_WAIT_EXIT" != "75" ]]; then
+  echo "selected Project API wait expected exit 75, observed $PROJECT_WAIT_EXIT"
+  echo "selected GraphQL calls: $(wc -l < "$PROJECT_GRAPHQL_CALLS" | tr -d ' ')"
+  echo "GitHub subprocess sends: $(test -f "$PROJECT_GH_CALLS" && wc -l < "$PROJECT_GH_CALLS" | tr -d ' ' || echo 0)"
+  echo "mapping unchanged: $([[ "$PROJECT_MAPPING_BEFORE_SHA" == "$PROJECT_MAPPING_AFTER_SHA" ]] && echo yes || echo no)"
+  cat "$PROJECT_WAIT_STDOUT" "$PROJECT_WAIT_STDERR"
+fi
+[[ "$PROJECT_WAIT_EXIT" == "75" ]]
+[[ "$PROJECT_MAPPING_BEFORE_SHA" == "$PROJECT_MAPPING_AFTER_SHA" ]]
+python3 - "$PROJECT_WAIT_STDOUT" "$PROJECT_WAIT_STDERR" \
+  "$PROJECT_GRAPHQL_CALLS" "$PROJECT_GH_CALLS" <<'PY'
+import json, pathlib, sys
+stdout_path, stderr_path, graphql_path, gh_path = map(pathlib.Path, sys.argv[1:])
+assert stdout_path.read_text() == "", stdout_path.read_text()
+prefix, separator, payload_text = stderr_path.read_text().partition(": ")
+assert separator and prefix == "github-project-workflow", stderr_path.read_text()
+payload = json.loads(payload_text)
+assert payload["status"] == "external_wait", payload
+assert payload["reason"] == "primary_rate_limit", payload
+assert payload["retry_after_seconds"] == 120, payload
+assert payload["mutation_started"] is False, payload
+calls = [json.loads(line) for line in graphql_path.read_text().splitlines()]
+assert len(calls) == 1, calls
+assert calls[0]["mutation"] is False, calls
+assert "mutation" not in calls[0]["query"].lower(), calls
+assert not gh_path.exists() or gh_path.read_text() == "", gh_path.read_text()
 PY
 
 echo "github-project-workflow.test: OK"

@@ -4,12 +4,14 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import inspect
 import json
 import subprocess
 import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 from unittest import mock
 
@@ -337,6 +339,101 @@ class FinalTrustRed(unittest.TestCase):
                  mock.patch.object(sys, "argv", argv):
                 self.assertEqual(0, gate.main(),
                                  "an absent override comment must not erase the canonical default hold")
+
+    def test_final_identity_api_errors_are_serialized_at_public_cli_boundary(self) -> None:
+        task_uid = "task_" + "1" * 32
+        now = 2_000_000_000.0
+        cases = [
+            (429, {"Retry-After": "120"}, {"message": "secondary rate limit"},
+             "secondary_rate_limit", "external_wait", 75, 120),
+            (403, {"X-RateLimit-Remaining": "0", "X-RateLimit-Reset": str(int(now) + 120)},
+             {"message": "API rate limit exceeded"}, "primary_rate_limit", "external_wait", 75, 120),
+            (403, {}, {"message": "Resource not accessible by integration"},
+             "permission_denied", "capability_blocked", 2, None),
+        ]
+        for index, (status, headers, payload, reason, workflow_status, exit_code, min_retry) in enumerate(cases):
+            with self.subTest(reason=reason), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                task_mapping = root / ".pm/github-project-sync/tasks.json"
+                task_mapping.parent.mkdir(parents=True)
+                task_mapping.write_text(json.dumps({"tasks": {task_uid: {
+                    "repository": "eng-cc/oasis7",
+                    "issue_number": 2198,
+                    "pr_number": 2198,
+                    "pr_url": "https://github.com/eng-cc/oasis7/pull/2198",
+                    "canonical_worktree": str(root),
+                    "merge_hold": {"kind": "normal_pr_ci_watch", "active": False,
+                                   "requester": "workflow", "reason": "normal",
+                                   "resume_authority": "workflow"},
+                }}}))
+                live = clean_pr()
+                live.update({
+                    "number": 2198,
+                    "url": "https://github.com/eng-cc/oasis7/pull/2198",
+                    "body": f"Task: {task_uid}\nRefs #2198",
+                    "baseRefOid": "b" * 40,
+                    "headRefOid": "a" * 40,
+                    "policy_discovery": {"status": "resolved", "required_status_checks": [],
+                                         "active_rule_types": []},
+                    "required_status_checks": [],
+                })
+
+                class IdentityTransport:
+                    def __init__(self):
+                        self.calls = []
+
+                    def __call__(self, method, url, request_headers, body, timeout):
+                        self.calls.append((method, url, body))
+                        return api.HTTPResponse(status, headers, json.dumps(payload))
+
+                api._PROCESS_PAUSES.clear()
+                transport = IdentityTransport()
+                client = api.GitHubAPIClient(
+                    f"final-identity-token-{index}", transport=transport,
+                    state_root=root / "github-api-state", clock=lambda: now,
+                    sleeper=lambda _seconds: None,
+                )
+                argv = ["pr-lifecycle-gate.py", "2198", "--root", str(root),
+                        "--task-uid", task_uid, "--json"]
+                output = io.StringIO()
+                uncaught = None
+                with mock.patch.object(gate, "load_live", return_value=live), \
+                     mock.patch.object(gate, "_github_api_client", return_value=client), \
+                     mock.patch.object(gate, "local_loop_admission", return_value={"status": "legacy"}), \
+                     mock.patch.object(gate, "live_integration_admission", return_value=None), \
+                     mock.patch.object(gate, "rebuild_issue_evidence", return_value={
+                         "comment_dispositions": [], "review_dispositions": []}), \
+                     mock.patch.object(sys, "argv", argv), redirect_stdout(output):
+                    try:
+                        actual_exit = gate.main()
+                    except api.APIError as exc:
+                        uncaught = exc
+                        actual_exit = None
+
+                leaked = ({"kind": uncaught.kind, "workflow_status": uncaught.workflow_status,
+                           "retry_after_seconds": uncaught.retry_after_seconds}
+                          if uncaught is not None else None)
+                mutation_sends = [
+                    (method, url) for method, url, body in transport.calls
+                    if b"mutation" in body.lower()
+                ]
+                self.assertIsNone(
+                    uncaught,
+                    f"the public CLI leaked {leaked}; calls={len(transport.calls)}; "
+                    f"mutation_sends={mutation_sends}; stdout={output.getvalue()!r}",
+                )
+                result = json.loads(output.getvalue())
+                self.assertEqual(actual_exit, exit_code)
+                self.assertEqual(result["status"], workflow_status)
+                self.assertEqual(result["reason"], reason)
+                self.assertFalse(result["mutation_started"])
+                self.assertEqual(len(transport.calls), 1)
+                method, url, request_body = transport.calls[0]
+                self.assertEqual(method, "POST")
+                self.assertEqual(url, api.GRAPHQL_URL)
+                self.assertNotIn(b"mutation", request_body.lower())
+                if min_retry is not None:
+                    self.assertGreaterEqual(result["retry_after_seconds"], min_retry)
 
     def test_default_hold_requires_task_truth_bound_to_the_live_pr(self) -> None:
         task_uid = "task_" + "1" * 32

@@ -788,6 +788,10 @@ def command_audit(args: argparse.Namespace) -> int:
             project_items_by_task, duplicate_project_task_uids = fetch_project_items_by_mapping(tasks, mapped_tasks)
             expected_live_project_id = expected_project_id(args, mapping)
     except Exception as exc:
+        if load_sync_module().is_github_api_error(exc):
+            # The top-level CLI owns rendering typed API failures, including
+            # external-wait/75; do not turn them into an ordinary audit row.
+            raise
         project_items_by_task = {}
         duplicate_project_task_uids = []
         expected_live_project_id = ""
