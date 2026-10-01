@@ -233,6 +233,13 @@ class GitHubAPITests(unittest.TestCase):
             (42, "number"),
             (None, "JSON null is not a missing file"),
             ({"schema": "oasis7.github-api-budget/v0", "remaining": 500}, "wrong schema"),
+            ({"remaining": "3294", "used": 1706, "limit": 5000, "cost": None,
+              "resetAt": "2030-01-01T00:00:00Z", "observed_at": "2026-10-01T15:16:01Z",
+              "observed_at_epoch": self.clock.now}, "malformed schema-less legacy success"),
+            ({"remaining": 3294, "used": 1706, "limit": 5000, "cost": None,
+              "resetAt": "2030-01-01T00:00:00Z", "observed_at": "2026-10-01T15:16:01Z",
+              "observed_at_epoch": self.clock.now, "unrecognized": "extra"},
+             "unknown schema-less legacy field"),
             ({"schema": "oasis7.github-api-budget/v1", "remaining": True}, "boolean budget"),
             ({"schema": "oasis7.github-api-budget/v1", "pause_until_epoch": None},
              "null temporal value"),
@@ -256,6 +263,76 @@ class GitHubAPITests(unittest.TestCase):
                     client.graphql("query Read { viewer { login } }", operation="read")
                 self.assertEqual(caught.exception.kind, "shared_state_unavailable")
                 self.assertEqual(len(transport.calls), 0)
+
+    def test_valid_legacy_success_budget_is_read_and_upgraded_after_response(self):
+        API._PROCESS_PAUSES.clear()
+        transport = FakeTransport([response(payload={"data": {
+            "viewer": {"login": "legacy-reader"},
+            "rateLimit": {"cost": 1, "remaining": 3293, "used": 1707, "limit": 5000,
+                          "resetAt": "2030-01-01T00:00:00Z"},
+        }})])
+        client = self.client(transport, "legacy-success-token")
+        legacy_state = {
+            "remaining": 3294,
+            "used": 1706,
+            "limit": 5000,
+            "cost": None,
+            "resetAt": "2030-01-01T00:00:00Z",
+            "observed_at": "2026-10-01T15:16:01Z",
+            "observed_at_epoch": self.clock.now - 1,
+        }
+        path = client.state_path("budget", client._rate_state_key)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(legacy_state), encoding="utf-8")
+
+        result = client.graphql("query Read { viewer { login } rateLimit { remaining } }", operation="read")
+
+        self.assertEqual(result["viewer"]["login"], "legacy-reader")
+        self.assertEqual(len(transport.calls), 1)
+        stored = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(stored["schema"], "oasis7.github-api-budget/v1")
+        self.assertEqual(stored["remaining"], 3293)
+
+    def test_valid_legacy_pause_and_probe_facts_block_without_being_rewritten(self):
+        base = {
+            "remaining": 3294,
+            "used": 1706,
+            "limit": 5000,
+            "cost": None,
+            "resetAt": "2030-01-01T00:00:00Z",
+            "observed_at": "2026-10-01T15:16:01Z",
+            "observed_at_epoch": self.clock.now - 1,
+        }
+        cases = [
+            ({"pause_until_epoch": self.clock.now + 120,
+              "pause_until": int(self.clock.now + 120),
+              "pause_reason": "secondary_rate_limit",
+              "pause_resetAt": "2030-01-01T00:00:00Z",
+              "probe_until_epoch": 0, "probe_until": 0, "probe_owner": None},
+             "secondary_rate_limit"),
+            ({"pause_until_epoch": 0, "pause_until": 0, "pause_reason": None,
+              "pause_resetAt": None,
+              "probe_until_epoch": self.clock.now + 30,
+              "probe_until": int(self.clock.now + 30), "probe_owner": "legacy-probe-owner"},
+             "rate_limit_probe_pending"),
+        ]
+        for index, (facts, expected_kind) in enumerate(cases):
+            with self.subTest(state=expected_kind):
+                API._PROCESS_PAUSES.clear()
+                transport = FakeTransport([])
+                client = self.client(transport, f"legacy-pause-token-{index}")
+                legacy_state = {**base, **facts}
+                path = client.state_path("budget", client._rate_state_key)
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(json.dumps(legacy_state), encoding="utf-8")
+
+                with self.assertRaises(API.APIError) as caught:
+                    client.graphql("query Read { viewer { login } }", operation="read")
+
+                self.assertEqual(caught.exception.kind, expected_kind)
+                self.assertEqual(caught.exception.workflow_status, "external_wait")
+                self.assertEqual(len(transport.calls), 0)
+                self.assertEqual(json.loads(path.read_text(encoding="utf-8")), legacy_state)
 
     def test_rate_limit_guard_shares_one_measured_budget_probe(self):
         transport = FakeTransport([response(payload={"data": {"rateLimit": {

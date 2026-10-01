@@ -26,6 +26,13 @@ from typing import Any
 API_ROOT = "https://api.github.com"
 GRAPHQL_URL = f"{API_ROOT}/graphql"
 BUDGET_SCHEMA = "oasis7.github-api-budget/v1"
+LEGACY_BUDGET_REQUIRED_FIELDS = frozenset({
+    "remaining", "used", "limit", "cost", "resetAt", "observed_at", "observed_at_epoch",
+})
+LEGACY_BUDGET_OPTIONAL_FIELDS = frozenset({
+    "pause_until", "pause_until_epoch", "pause_reason", "pause_resetAt",
+    "probe_until", "probe_until_epoch", "probe_owner", "shared_persistence",
+})
 MAX_QUERY_ATTEMPTS = 3
 TELEMETRY_RETENTION_DAYS = 7
 TELEMETRY_MAX_BYTES = 50 * 1024 * 1024
@@ -551,6 +558,20 @@ class GitHubAPIClient:
         if state is None:
             return None
         valid = isinstance(state, dict) and state.get("schema") == BUDGET_SCHEMA
+        if isinstance(state, dict) and "schema" not in state:
+            # a8's successful GraphQL responses wrote these seven fields before
+            # the schema stamp existed. Recognize only that complete producer
+            # shape plus the known pause/probe fields, never arbitrary objects.
+            keys = set(state)
+            valid = (LEGACY_BUDGET_REQUIRED_FIELDS <= keys
+                     and keys <= LEGACY_BUDGET_REQUIRED_FIELDS | LEGACY_BUDGET_OPTIONAL_FIELDS
+                     and type(state.get("remaining")) is int)
+            pause_fields = {"pause_until", "pause_until_epoch", "pause_reason", "pause_resetAt"}
+            probe_fields = {"probe_until", "probe_until_epoch"}
+            if valid and pause_fields.intersection(keys):
+                valid = pause_fields <= keys
+            if valid and probe_fields.intersection(keys):
+                valid = probe_fields <= keys
         if valid:
             nullable_integer_fields = ("remaining", "used", "limit", "cost", "rest_remaining")
             integer_fields = ("pause_until", "probe_until")

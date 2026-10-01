@@ -1793,7 +1793,7 @@ def _observation_candidate(data: dict[str, Any], task: dict[str, Any], task_uid:
            if isinstance(comment, dict)):
         return False
     if any(actionable(str(review.get("body") or "")) and str(review.get("state") or "").upper() != "APPROVED"
-           for review in data.get("reviews") or [] if isinstance(review, dict)):
+           for review in latest_reviews(data.get("reviews") or [])):
         return False
     hold = task.get("merge_hold")
     if (not isinstance(hold, dict) or hold.get("kind") != "normal_pr_ci_watch"

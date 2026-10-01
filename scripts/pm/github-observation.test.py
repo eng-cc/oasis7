@@ -183,6 +183,29 @@ class ObservationTests(unittest.TestCase):
         self.assertFalse(blocked_thread["candidate_ready"])
         self.assertFalse(blocked_thread["ready_for_merge"])
 
+    def test_observation_ignores_actionable_body_from_superseded_review(self):
+        task_uid = "task_0123456789abcdef0123456789abcdef"
+        task = {"merge_hold": {"kind": "normal_pr_ci_watch", "active": False}}
+        data = self.snapshot(body=f"Task: {task_uid}")
+        data["comments"] = [{"id": "IC_OK", "body": "looks good"}]
+        data["reviews"] = [
+            {"id": "R_old", "state": "CHANGES_REQUESTED", "body": "[P1] Fix this error",
+             "author": {"login": "alice"}, "submittedAt": "2026-09-29T10:00:00Z"},
+            {"id": "R_new", "state": "APPROVED", "body": "Resolved",
+             "author": {"login": "alice"}, "submittedAt": "2026-09-30T10:00:00Z"},
+        ]
+
+        candidate = GATE._observation_candidate(data, task, task_uid)
+
+        self.assertTrue(candidate)
+
+        current_request = copy.deepcopy(data)
+        current_request["reviews"][-1] = {
+            "id": "R_current", "state": "CHANGES_REQUESTED", "body": "[P1] Fix this error",
+            "author": {"login": "alice"}, "submittedAt": "2026-10-01T10:00:00Z",
+        }
+        self.assertFalse(GATE._observation_candidate(current_request, task, task_uid))
+
     def test_business_change_resets_interval_and_volatile_rate_fields_do_not_change_digest(self):
         result1 = OBS.observe_once(self.client, "owner/repo", 42, self.fetch, self.evaluate)
         self.clock.now += result1["retry_after_seconds"] + 1
