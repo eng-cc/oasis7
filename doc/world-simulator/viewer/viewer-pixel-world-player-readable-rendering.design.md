@@ -16,6 +16,25 @@
 - WASM bridge/Rust render-state 读取并发布该字段；它服务于 Solid host HUD 和 rendered DOM。
 - renderer diagnostics、raw DTO 与模拟 fatal 控制默认折叠到诊断区。
 
+<a id="industry-detail-target"></a>
+## 产业关系与细节层级目标
+
+未来受支持产业视图以同一权威 projection 驱动文本与舞台，组织节点、流类型/方向、吞吐/损耗、层级/阶段/状态和定位目标。World/Region/Node 控制可见集及负载：远景优先热区/主干流，近景展示配方/库存；未知数据和推断根因明确标示，保留可发现的目标定位路径。
+
+本设计不恢复旧面板/图谱模块，不新增 DTO/runtime 协议；复用受支持渲染资产，数据扩展和交互深化须由专业 authority 确认。当前 routes 与热点只证明现行投影范围；完整产业图谱、吞吐流及 semantic zoom 仍须实现与浏览器验收证据。
+
+### 2.1 需求承接与分配表
+
+| 上游 requirement / professional acceptance（path#fragment） | 具体 obligation 与适用条件 | 本设计条款（path#anchor） | 外部 owner / dependency | 未覆盖范围 |
+| --- | --- | --- | --- | --- |
+| [产业图谱目标](viewer-pixel-world-player-readable-rendering.prd.md#industry-detail-requirements) | 受支持产业 projection 的节点、流向/吞吐/损耗、层级/阶段/状态、根因定位及分层可见集 | [产业与细节目标](viewer-pixel-world-player-readable-rendering.design.md#industry-detail-target) | Runtime 数据 authority；game_visual_interaction_designer 可读性；QA 验收 | 不新增协议/资产导入；不声明完整产业图谱或 semantic zoom 已实现 |
+
+### 11.1 验证映射表
+
+| 上游 requirement / professional acceptance（path#fragment） | 本设计条款（path#anchor） | 独立 obligation 与适用条件 | 准确验证方法、test/manual source、scenario/layer、candidate/environment | evidence target | 未证明范围 |
+| --- | --- | --- | --- | --- | --- |
+| [产业图谱目标](viewer-pixel-world-player-readable-rendering.prd.md#industry-detail-requirements) | [产业与细节目标](viewer-pixel-world-player-readable-rendering.design.md#industry-detail-target) | 未来支持产业数据时验证分层节点/流/状态与目标定位、推断/未知及负载边界 | [Viewer 手册验收入口](viewer-manual.manual.md#industry-detail-acceptance)：同候选/权威数据下 external headed desktop+narrow 验证 World/Region/Node 主次信息、符号/根因/定位、未知和拥塞密度；未执行 | 未来 state/权威来源对账、console、桌面/窄屏截图、可见集和负载证据 | 当前 routes/HUD/热点不替代产业图谱或 semantic zoom 通过；本文仅映射验收方法 |
+
 ## DTO Shape
 `commercial_surface`:
 - `objective.title`
