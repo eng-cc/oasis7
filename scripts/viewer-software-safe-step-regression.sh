@@ -24,7 +24,6 @@ Options:
   --startup-timeout <secs>  Wait timeout for stack URL (default: 240)
   --agent-id <id>           Target agent id (default: starter-agent-0)
   --progress-timeout-ms <ms> Wait timeout for natural live progress (default: 15000)
-  --step-timeout-ms <ms>    Deprecated alias for --progress-timeout-ms
   --headed                  Open browser in headed mode
   --headless                Open browser in headless mode (default)
   -h, --help                Show this help
@@ -326,8 +325,8 @@ while [[ $# -gt 0 ]]; do
       shift 2
       ;;
     --step-timeout-ms)
-      PROGRESS_TIMEOUT_MS="${2:-}"
-      shift 2
+      echo "error: unsupported option --step-timeout-ms; use --progress-timeout-ms" >&2
+      exit 2
       ;;
     --headed)
       HEADED=1

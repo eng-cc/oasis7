@@ -278,6 +278,8 @@ if [[ "$CLAIM_LABEL" == "ready_for_merge" ]]; then
   python3 - "$PR_GATE_JSON" <<'PY'
 import datetime as dt, json, re, sys
 p = json.load(open(sys.argv[1], encoding="utf-8"))
+if p.get("evidence_mode") == "observation" or p.get("requires_live_gate") is True or p.get("candidate_ready") is True:
+    raise SystemExit("claim-ready: PR observation is derived-only; rerun the formal live gate")
 if p.get("ready_for_merge") is not True or p.get("status") != "ready" or p.get("blockers"):
     raise SystemExit("claim-ready: PR lifecycle gate is not ready")
 r = p.get("readiness_receipt")
