@@ -1,15 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Regression coverage for terminal cleanup resume identities.  Each case uses
-# the production helper through the isolated crash fixture.  The legacy case
+# Regression coverage for terminal cleanup resume identities. Each case uses
+# the production helper with test-local parent-process fault injection. The legacy case
 # intentionally projects the durable journal to its historical schema so the
 # test can prove one-time migration without granting production callers a
 # journal-editing channel.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REAL_GIT="$(command -v git)"
-FAULT_FIXTURE="$ROOT_DIR/scripts/pm/fixtures/post-merge-cleanup-fault.sh"
 TMPDIR="$(mktemp -d)"
 cleanup() {
   for repo in "$TMPDIR"/*/repo; do
@@ -17,9 +16,89 @@ cleanup() {
     worktree="$(dirname "$repo")/task-worktree"
     "$REAL_GIT" -C "$repo" worktree remove --force "$worktree" >/dev/null 2>&1 || true
   done
-  rm -rf "$TMPDIR"
+  if [[ "${KEEP_CLEANUP_TEST_TMPDIR:-0}" == 1 ]]; then
+    printf 'post-merge-cleanup-resume.test: preserved fixture at %s\n' "$TMPDIR" >&2
+  else
+    rm -rf "$TMPDIR"
+  fi
 }
 trap cleanup EXIT
+
+register_fixture_worktree() {
+  local worktree="$1" branch="$2" uid="$3" repository="$4"
+  local fixture_map="$worktree/.pm/github-project-sync/tasks.json" registration
+  mkdir -p "$(dirname "$fixture_map")"
+  cat >"$fixture_map" <<EOF
+{"version":1,"tasks":{"$uid":{"task_uid":"$uid","repository":"$repository","canonical_worktree":"$worktree","task_branch":"$branch","default_branch":"main"}}}
+EOF
+  registration="$(python3 "$ROOT_DIR/scripts/pm/worktree_registration.py" --repo-root "$worktree" --task-uid "$uid")" || return 1
+  python3 - "$fixture_map" "$uid" "$registration" <<'PY'
+import json,sys
+record=json.load(open(sys.argv[1],encoding="utf-8"))["tasks"][sys.argv[2]]
+returned=json.loads(sys.argv[3])
+assert record["worktree_registration"] == returned, (record, returned)
+PY
+  rm -rf "$worktree/.pm"
+  printf '%s' "$registration"
+}
+
+assert_worktree_registration() {
+  local repo_root="$1" uid="$2" worktree="$3"
+  python3 - "$ROOT_DIR/scripts/pm" "$repo_root" "$uid" "$worktree" <<'PY'
+import json,pathlib,sys
+sys.path.insert(0,sys.argv[1])
+from worktree_registration import validate_worktree_registration
+repo=pathlib.Path(sys.argv[2]); uid=sys.argv[3]; expected=pathlib.Path(sys.argv[4]).resolve()
+record=json.loads((repo/".pm/github-project-sync/tasks.json").read_text(encoding="utf-8"))["tasks"][uid]
+assert pathlib.Path(record["canonical_worktree"]).resolve() == expected, record
+assert validate_worktree_registration(expected, record) == record["worktree_registration"], record
+PY
+}
+
+run_worktree_crash() {
+  local isolation_root="$1" repo="$2" worktree="$3" intent="$4"
+  shift 4
+  local fault_bin="$isolation_root/fault-bin" status
+  [[ "${1:-}" == "$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" ]] || return 2
+  python3 - "$isolation_root" "$repo" "$worktree" "$intent" <<'PY'
+import pathlib,subprocess,sys,tempfile
+root=pathlib.Path(sys.argv[1]).resolve(); temp=pathlib.Path(tempfile.gettempdir()).resolve()
+try: root.relative_to(temp)
+except ValueError: raise SystemExit("cleanup fault injection root is outside the system temporary boundary")
+repo,worktree,intent=(pathlib.Path(value).resolve() for value in sys.argv[2:])
+for path in (repo,worktree,intent):
+    try: path.relative_to(root)
+    except ValueError: raise SystemExit(f"cleanup fault injection path is outside its fixture root: {path}")
+if not repo.is_dir() or not worktree.is_dir():
+    raise SystemExit("cleanup fault injection requires an isolated live repository and worktree")
+def common(path):
+    raw=subprocess.check_output(["git","-C",str(path),"rev-parse","--git-common-dir"],text=True).strip()
+    value=pathlib.Path(raw)
+    return (value if value.is_absolute() else path/value).resolve()
+if common(repo)!=common(worktree):
+    raise SystemExit("cleanup fault injection repository/worktree common-dir mismatch")
+PY
+  mkdir -p "$fault_bin"
+  cat >"$fault_bin/git" <<'SH'
+#!/usr/bin/env bash
+set -euo pipefail
+"$CLEANUP_REAL_GIT" "$@"
+if [[ "$*" == "-C $CLEANUP_TEST_REPO worktree remove $CLEANUP_TEST_WORKTREE" ]]; then
+  kill -TERM "$CLEANUP_TEST_SCRIPT_PID"
+fi
+SH
+  chmod +x "$fault_bin/git"
+  if env PATH="$fault_bin:$isolation_root/bin:$PATH" \
+      CLEANUP_REAL_GIT="$REAL_GIT" CLEANUP_TEST_SCRIPT_PID="" \
+      CLEANUP_TEST_REPO="$repo" CLEANUP_TEST_WORKTREE="$worktree" \
+      bash -c 'export CLEANUP_TEST_SCRIPT_PID=$$; exec "$@"' bash "$@"; then
+    status=0
+  else
+    status=$?
+  fi
+  [[ "$status" == 143 ]] || return "$status"
+  return 86
+}
 
 write_common_receipts() {
   local repo="$1" receipts="$2" uid="$3" branch_tip="$4" main_commit="$5" observed_at="$6" mode="$7" patch_receipt="$8"
@@ -77,12 +156,13 @@ EOF
 }
 
 run_case() {
-  local name="$1" mode="$2" reappear="$3" legacy="$4"
+  local name="$1" mode="$2" reappear_before_retry="$3" reappear_after_terminal="$4" legacy="$5"
   local root="$TMPDIR/$name"
   local repo="$root/repo" worktree="$root/task-worktree"
   local branch="task/cleanup-$name" uid="task_11111111111111111111111111111111"
-  local observed_at base branch_tip main_commit receipts patch_receipt
+  local observed_at base branch_tip main_commit receipts patch_receipt registration
   mkdir -p "$repo"
+  repo="$(cd "$repo" && pwd -P)"
   git -C "$repo" init -q -b main
   git -C "$repo" config user.email test@example.invalid
   git -C "$repo" config user.name Test
@@ -91,6 +171,8 @@ run_case() {
   git -C "$repo" commit -qm base
   base="$(git -C "$repo" rev-parse HEAD)"
   git -C "$repo" worktree add -qb "$branch" "$worktree"
+  worktree="$(cd "$worktree" && pwd -P)"
+  registration="$(register_fixture_worktree "$worktree" "$branch" "$uid" "fixture/repo")"
   printf 'task change\n' >>"$worktree/file"
   git -C "$worktree" add file
   git -C "$worktree" commit -qm task-change
@@ -110,8 +192,9 @@ run_case() {
 
   mkdir -p "$repo/.pm/github-project-sync"
   cat >"$repo/.pm/github-project-sync/tasks.json" <<EOF
-{"version":1,"tasks":{"$uid":{"task_uid":"$uid","status":"done","issue_number":1,"pr_number":1,"pr_url":"https://example.invalid/pull/1","repository":"fixture/repo","canonical_worktree":"$worktree","task_branch":"$branch","default_branch":"main"}}}
+{"version":1,"tasks":{"$uid":{"task_uid":"$uid","status":"done","workflow_phase":"main_sync","issue_number":1,"pr_number":1,"pr_url":"https://example.invalid/pull/1","repository":"fixture/repo","canonical_worktree":"$worktree","task_branch":"$branch","default_branch":"main","worktree_registration":$registration}}}
 EOF
+  assert_worktree_registration "$repo" "$uid" "$worktree"
   receipts="$(python3 "$ROOT_DIR/scripts/pm/canonical-receipt-root.py" --default-worktree "$repo" --task-uid "$uid" --create)"
   if [[ "$mode" == patch_equivalence ]]; then
     patch_receipt="$receipts/patch-equivalence-receipt.json"
@@ -128,10 +211,64 @@ EOF
     --pr-receipt "$receipts/merge-receipt.json" --main-sync-receipt "$receipts/main-sync-receipt.json")
   [[ -z "$patch_receipt" ]] || cleanup_args+=(--patch-equivalence-receipt "$patch_receipt")
   cleanup_args+=(--terminal-receipt-output "$receipts/terminal-cleanup-receipt.json")
+  if [[ "$legacy" == 1 ]]; then
+    # A historical journal can only omit derived identities after its own
+    # successful cleanup transaction. Do not manufacture a half-completed
+    # crash record: run the owner normally, then project the durable result
+    # back to the old schema and prove retry backfills from trusted evidence.
+    env PATH="$root/bin:$PATH" TEST_HEAD_OID="$branch_tip" \
+      bash "${cleanup_args[@]}" >"$root/legacy-first.out" 2>"$root/legacy-first.err" \
+      || { cat "$root/legacy-first.err" >&2; return 1; }
+    [[ ! -e "$worktree" ]]
+    ! git -C "$repo" show-ref --verify --quiet "refs/heads/$branch"
+python3 - "$receipts" "$repo" "$branch_tip" "$repo/.pm/github-project-sync/tasks.json" "$uid" <<'PY'
+import hashlib,json,os,pathlib,subprocess,sys
+root=pathlib.Path(sys.argv[1]); repo,tip,mapping_path,uid=sys.argv[2:]
+common_raw=subprocess.check_output(["git","-C",repo,"rev-parse","--git-common-dir"],text=True).strip()
+common=os.path.realpath(common_raw if os.path.isabs(common_raw) else os.path.join(repo,common_raw))
+journal=json.loads((root/"cleanup-intent.json").read_text())
+assert all(journal.get(key) is True for key in ("worktree_removed","branch_deleted","terminal_receipt_committed")),journal
+assert journal.get("branch_tip")==tip and journal.get("worktree_common_dir")==common,journal
+for name in ("merge-receipt.json","main-sync-receipt.json","patch-equivalence-receipt.json","terminal-cleanup-receipt.json"):
+ path=root/name
+ if path.exists():
+  (root/(name+".before-retry.sha256")).write_text(hashlib.sha256(path.read_bytes()).hexdigest())
+# Retry before the finalizer advances task truth to post_merge_done. The
+# helper-generated terminal-cleanup receipt is already durable, so its exact
+# bytes must survive the retry that upgrades historical journal metadata.
+mapping=pathlib.Path(mapping_path); data=json.loads(mapping.read_text()); record=data["tasks"][uid]
+assert record.get("workflow_phase") == "main_sync",record
+assert "post_merge_done" not in record.get("phase_receipts",{}),record
+mapping.write_text(json.dumps(data)+"\n",encoding="utf-8")
+# Model the historical journal's old schema only after the completed helper
+# wrote it; the test never authors trusted state or completion flags.
+for key in ("worktree_common_dir","branch_tip","worktree_instance_id"):
+ journal.pop(key,None)
+(root/"cleanup-intent.json").write_text(json.dumps(journal)+"\n")
+PY
+    env PATH="$root/bin:$PATH" TEST_HEAD_OID="$branch_tip" \
+      bash "${cleanup_args[@]}" >"$root/legacy-retry.out" 2>"$root/legacy-retry.err" \
+      || { cat "$root/legacy-retry.err" >&2; return 1; }
+    python3 - "$receipts" "$repo" "$branch_tip" <<'PY'
+import hashlib,json,os,pathlib,subprocess,sys
+root=pathlib.Path(sys.argv[1]); repo,tip=sys.argv[2:]
+common_raw=subprocess.check_output(["git","-C",repo,"rev-parse","--git-common-dir"],text=True).strip()
+common=os.path.realpath(common_raw if os.path.isabs(common_raw) else os.path.join(repo,common_raw))
+journal=json.loads((root/"cleanup-intent.json").read_text())
+assert journal.get("branch_tip")==tip and journal.get("worktree_common_dir")==common,journal
+assert all(journal.get(key) is True for key in ("worktree_removed","branch_deleted","terminal_receipt_committed")),journal
+for name in ("merge-receipt.json","main-sync-receipt.json","patch-equivalence-receipt.json","terminal-cleanup-receipt.json"):
+ before=root/(name+".before-retry.sha256"); path=root/name
+ if before.exists(): assert hashlib.sha256(path.read_bytes()).hexdigest()==before.read_text(),name
+terminal=json.loads((root/"terminal-cleanup-receipt.json").read_text())
+assert terminal.get("cleanup_intent_required") is True,terminal
+assert terminal.get("task_uid")==journal.get("task_uid"),terminal
+PY
+    return 0
+  fi
   set +e
-  env PATH="$root/bin:$PATH" TEST_HEAD_OID="$branch_tip" \
-    "$FAULT_FIXTURE" --isolation-root "$root" --fault TPM_CLEANUP_FAULT_AFTER_WORKTREE_REMOVE -- \
-    "${cleanup_args[@]}" \
+  TEST_HEAD_OID="$branch_tip" run_worktree_crash "$root" "$repo" "$worktree" \
+    "$receipts/cleanup-intent.json" "${cleanup_args[@]}" \
     >"$root/first.out" 2>"$root/first.err"
   local first_status=$?
   set -e
@@ -142,28 +279,25 @@ EOF
 import json
 import sys
 journal = json.load(open(sys.argv[1], encoding="utf-8"))
-assert journal["worktree_removed"] is True, journal
+assert journal["worktree_remove_started"] is True, journal
+assert journal["worktree_removed"] is False, journal
 assert journal["branch_deleted"] is False, journal
 assert journal["terminal_receipt_committed"] is False, journal
 PY
 
-  if [[ "$legacy" == 1 ]]; then
-    python3 - "$receipts/cleanup-intent.json" <<'PY'
-import json
-import sys
-path = sys.argv[1]
-journal = json.load(open(path, encoding="utf-8"))
-# Historical cleanup-intent.json had only the identity and boolean state
-# fields.  This fixture models that durable artifact; production cleanup must
-# backfill only after live identity/proof validation.
-for key in ("worktree_common_dir", "branch_tip"):
-    journal.pop(key, None)
-open(path, "w", encoding="utf-8").write(json.dumps(journal) + "\n")
-PY
-  fi
-
-  if [[ "$reappear" == 1 ]]; then
+  if [[ "$reappear_before_retry" == 1 ]]; then
     git -C "$repo" worktree add -q "$worktree" "$branch"
+    set +e
+    env PATH="$root/bin:$PATH" TEST_HEAD_OID="$branch_tip" \
+      bash "${cleanup_args[@]}" >"$root/reused-path.out" 2>"$root/reused-path.err"
+    local reused_status=$?
+    set -e
+    [[ "$reused_status" != 0 ]]
+    grep -F "path_reused_or_recreated" "$root/reused-path.err" >/dev/null
+    [[ -d "$worktree" ]]
+    git -C "$repo" show-ref --verify --quiet "refs/heads/$branch"
+    [[ ! -e "$receipts/terminal-cleanup-receipt.json" ]]
+    return 0
   fi
   env PATH="$root/bin:$PATH" TEST_HEAD_OID="$branch_tip" \
     bash "${cleanup_args[@]}" \
@@ -178,23 +312,7 @@ assert all(journal[key] for key in ("worktree_removed", "branch_deleted", "termi
 terminal = json.load(open(sys.argv[2], encoding="utf-8"))
 assert terminal.get("cleanup_intent_required") is True, terminal
 PY
-  if [[ "$legacy" == 1 ]]; then
-    python3 - "$receipts/cleanup-intent.json" "$repo" "$branch_tip" <<'PY'
-import json
-import os
-import subprocess
-import sys
-journal = json.load(open(sys.argv[1], encoding="utf-8"))
-repo, branch_tip = sys.argv[2:]
-raw_common = subprocess.check_output(
-    ["git", "-C", repo, "rev-parse", "--git-common-dir"], text=True
-).strip()
-common = os.path.realpath(raw_common if os.path.isabs(raw_common) else os.path.join(repo, raw_common))
-assert journal["branch_tip"] == branch_tip, journal
-assert journal["worktree_common_dir"] == common, (journal, common)
-PY
-  fi
-  if [[ "$reappear" == 1 ]]; then
+  if [[ "$reappear_after_terminal" == 1 ]]; then
     # Model a fully finalized task whose exact checkout is recreated later.
     # Reconciliation must remove the residue without changing terminal receipt
     # bytes already bound into task truth.
@@ -209,11 +327,17 @@ PY
     before="$(shasum -a 256 "$receipts/terminal-cleanup-receipt.json" | awk '{print $1}')"
     git -C "$repo" branch "$branch" "$branch_tip"
     git -C "$repo" worktree add -q "$worktree" "$branch"
-    env PATH="$root/bin:$PATH" TEST_HEAD_OID="$branch_tip" bash "${cleanup_args[@]}" >"$root/terminal-reconcile.out"
+    set +e
+    env PATH="$root/bin:$PATH" TEST_HEAD_OID="$branch_tip" \
+      bash "${cleanup_args[@]}" >"$root/terminal-reconcile.out" 2>"$root/terminal-reconcile.err"
+    local reconcile_status=$?
+    set -e
+    [[ "$reconcile_status" != 0 ]]
+    grep -F "path_reused_or_recreated" "$root/terminal-reconcile.err" >/dev/null
     after="$(shasum -a 256 "$receipts/terminal-cleanup-receipt.json" | awk '{print $1}')"
     [[ "$before" == "$after" ]]
-    [[ ! -e "$worktree" ]]
-    ! git -C "$repo" show-ref --verify --quiet "refs/heads/$branch"
+    [[ -d "$worktree" ]]
+    git -C "$repo" show-ref --verify --quiet "refs/heads/$branch"
   fi
 }
 
@@ -224,8 +348,9 @@ run_stale_remote_tip_case() {
   local replacement_worktree="$root/replacement-worktree"
   local branch="task/cleanup-$name" replacement_branch="test/remote-$name"
   local uid="task_22222222222222222222222222222222"
-  local base branch_tip main_commit replacement_tip receipts observed_at
+  local base branch_tip main_commit replacement_tip receipts observed_at registration
   mkdir -p "$repo" "$root/bin"
+  repo="$(cd "$repo" && pwd -P)"
   git init --bare -q "$remote"
   git -C "$remote" symbolic-ref HEAD refs/heads/main
   git -C "$repo" init -q -b main
@@ -236,6 +361,8 @@ run_stale_remote_tip_case() {
   git -C "$repo" commit -qm base
   base="$(git -C "$repo" rev-parse HEAD)"
   git -C "$repo" worktree add -qb "$branch" "$worktree"
+  worktree="$(cd "$worktree" && pwd -P)"
+  registration="$(register_fixture_worktree "$worktree" "$branch" "$uid" "eng-cc/oasis7")"
   printf 'task change\n' >>"$worktree/file"
   git -C "$worktree" add file
   git -C "$worktree" commit -qm task-change
@@ -247,8 +374,9 @@ run_stale_remote_tip_case() {
 
   mkdir -p "$repo/.pm/github-project-sync"
   cat >"$repo/.pm/github-project-sync/tasks.json" <<EOF
-{"version":1,"tasks":{"$uid":{"task_uid":"$uid","status":"done","issue_number":1,"pr_number":1,"pr_url":"https://github.com/eng-cc/oasis7/pull/1","repository":"eng-cc/oasis7","canonical_worktree":"$worktree","task_branch":"$branch","default_branch":"main"}}}
+{"version":1,"tasks":{"$uid":{"task_uid":"$uid","status":"done","workflow_phase":"main_sync","issue_number":1,"pr_number":1,"pr_url":"https://github.com/eng-cc/oasis7/pull/1","repository":"eng-cc/oasis7","canonical_worktree":"$worktree","task_branch":"$branch","default_branch":"main","worktree_registration":$registration}}}
 EOF
+  assert_worktree_registration "$repo" "$uid" "$worktree"
   receipts="$(python3 "$ROOT_DIR/scripts/pm/canonical-receipt-root.py" --default-worktree "$repo" --task-uid "$uid" --create)"
   observed_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   cat >"$receipts/merge-receipt.json" <<EOF
@@ -285,9 +413,9 @@ EOF
     --pr-receipt "$receipts/merge-receipt.json" --main-sync-receipt "$receipts/main-sync-receipt.json"
     --terminal-receipt-output "$receipts/terminal-cleanup-receipt.json")
   set +e
-  env PATH="$root/bin:$PATH" TEST_HEAD_OID="$branch_tip" TEST_MERGED_AT="$observed_at" \
-    "$FAULT_FIXTURE" --isolation-root "$root" --fault TPM_CLEANUP_FAULT_AFTER_WORKTREE_REMOVE -- \
-    "${cleanup_args[@]}" >"$root/first.out" 2>"$root/first.err"
+  TEST_HEAD_OID="$branch_tip" TEST_MERGED_AT="$observed_at" \
+    run_worktree_crash "$root" "$repo" "$worktree" \
+      "$receipts/cleanup-intent.json" "${cleanup_args[@]}" >"$root/first.out" 2>"$root/first.err"
   local first_status=$?
   set -e
   [[ "$first_status" == 86 ]] || { cat "$root/first.err" >&2; echo "stale remote: expected crash fixture status 86, got $first_status" >&2; return 1; }
@@ -372,12 +500,13 @@ run_stale_remote_tip_case
 
 # Squash/rebase cleanup must resume with a force-delete only after the exact
 # patch-equivalence proof has passed; plain branch -d cannot prove that state.
-run_case patch_equivalence patch_equivalence 0 0
+run_case patch_equivalence patch_equivalence 0 0 0
 # A real #2692-style journal predates the identity fields and must resume only
 # after the fresh patch-equivalence proof, then persist the derived identity.
-run_case legacy_patch_equivalence patch_equivalence 0 1
+run_case legacy_patch_equivalence patch_equivalence 0 0 1
 # An exact canonical worktree may be recreated between journaled removal and
 # retry; identity readback must reconcile it before the normal safe removal.
-run_case reappeared_worktree ancestry 1 0
+run_case reappeared_worktree ancestry 1 0 0
+run_case terminal_reappeared_worktree ancestry 0 1 0
 
 echo "post-merge-cleanup-resume.test: OK"
