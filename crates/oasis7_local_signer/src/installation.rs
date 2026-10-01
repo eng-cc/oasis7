@@ -6,7 +6,7 @@ use nix::unistd::{getegid, geteuid, getuid};
 
 use crate::error::SignerError;
 use crate::identity::sha256_hex;
-use crate::local_fs::{read_regular, reject_symlink_components};
+use crate::local_fs::{Directory, read_protected, reject_symlink_components};
 use crate::types::{INSTALLATION_SCHEMA, InstallationConfig};
 
 #[cfg(target_os = "macos")]
@@ -54,10 +54,7 @@ pub fn load_fixed_installation_config() -> Result<InstallationConfig, SignerErro
 }
 
 pub fn load_installation_config(path: &Path) -> Result<InstallationConfig, SignerError> {
-    reject_symlink_components(path)?;
-    let bytes = read_regular(path, MAX_INSTALLATION_BYTES)?;
-    let metadata = fs::symlink_metadata(path).map_err(SignerError::PersistenceFailed)?;
-    validate_protected_file(&metadata)?;
+    let bytes = read_protected(path, MAX_INSTALLATION_BYTES, false)?;
     let config: InstallationConfig =
         serde_json::from_slice(&bytes).map_err(|_| SignerError::InstallationDrift)?;
     config
@@ -101,6 +98,8 @@ fn trusted_sudo_caller_for(
 
 pub fn validate_fixed_sudo() -> Result<PathBuf, SignerError> {
     let path = fixed_sudo_path();
+    read_protected(path, 128 * 1024 * 1024, true)
+        .map_err(|_| SignerError::UnsupportedPlatformOrFs)?;
     reject_symlink_components(path)?;
     let metadata = fs::symlink_metadata(path).map_err(|_| SignerError::UnsupportedPlatformOrFs)?;
     if !metadata.is_file() || metadata.uid() != 0 || metadata.permissions().mode() & 0o022 != 0 {
@@ -118,8 +117,8 @@ pub fn validate_fixed_sudo() -> Result<PathBuf, SignerError> {
 
 fn validate_store_identity(config: &InstallationConfig) -> Result<(), SignerError> {
     let store = Path::new(&config.store_dir);
-    reject_symlink_components(store)?;
-    let metadata = fs::symlink_metadata(store).map_err(|_| SignerError::InstallationDrift)?;
+    let directory = Directory::open(store, true)?;
+    let metadata = directory.metadata()?;
     if !metadata.is_dir()
         || metadata.dev() != config.store_device_id
         || metadata.ino() != config.store_inode
@@ -131,23 +130,23 @@ fn validate_store_identity(config: &InstallationConfig) -> Result<(), SignerErro
 
 fn validate_worker_binary(config: &InstallationConfig) -> Result<(), SignerError> {
     let executable = Path::new(&config.worker_executable);
-    reject_symlink_components(executable)?;
-    let metadata = fs::symlink_metadata(executable).map_err(|_| SignerError::InstallationDrift)?;
-    if !metadata.is_file() || metadata.uid() != 0 || metadata.permissions().mode() & 0o022 != 0 {
-        return Err(SignerError::InstallationDrift);
-    }
-    let bytes = read_regular(executable, 128 * 1024 * 1024)?;
+    let bytes = read_protected(executable, 128 * 1024 * 1024, true)?;
     if sha256_hex(&bytes) != config.worker_sha256 {
         return Err(SignerError::InstallationDrift);
     }
     Ok(())
 }
 
-fn validate_protected_file(metadata: &fs::Metadata) -> Result<(), SignerError> {
-    if !metadata.is_file() || metadata.uid() != 0 || metadata.permissions().mode() & 0o022 != 0 {
-        return Err(SignerError::InstallationDrift);
-    }
-    Ok(())
+pub fn worker_sudo_args(config: &InstallationConfig) -> Vec<String> {
+    vec![
+        "-n".to_owned(),
+        "-u".to_owned(),
+        format!("#{}", config.signer_uid),
+        "-g".to_owned(),
+        format!("#{}", config.signer_gid),
+        "--".to_owned(),
+        config.worker_executable.clone(),
+    ]
 }
 
 #[cfg(test)]
@@ -167,7 +166,9 @@ mod tests {
             signer_gid: 701,
             callers: vec![CallerBinding {
                 uid: 501,
-                work_subdir: "caller-501".to_owned(),
+                work_dir: "/Users/caller/jobs".to_owned(),
+                work_device_id: 1,
+                work_inode: 2,
             }],
             release_id: "release-01".to_owned(),
             worker_executable: "/Library/Application Support/oasis7/worker".to_owned(),
@@ -215,6 +216,31 @@ mod tests {
             trusted_sudo_caller_for(&config, 700, 702, Some("501")),
             Err(SignerError::AuthorizationDenied)
         ));
+    }
+
+    #[test]
+    fn sudo_invocation_selects_exact_numeric_uid_gid_and_no_worker_arguments() {
+        assert_eq!(
+            worker_sudo_args(&test_installation()),
+            [
+                "-n",
+                "-u",
+                "#700",
+                "-g",
+                "#701",
+                "--",
+                "/Library/Application Support/oasis7/worker"
+            ]
+        );
+    }
+
+    #[test]
+    fn root_or_unnormalized_worker_path_is_rejected_without_panic() {
+        for path in ["/", "/usr//bin/worker", "/usr/bin/worker/"] {
+            let mut config = test_installation();
+            config.worker_executable = path.to_owned();
+            assert!(config.validate().is_err());
+        }
     }
 
     #[test]
