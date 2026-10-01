@@ -158,6 +158,34 @@ class BoundedRecoveryCLITests(unittest.TestCase):
                          f"REC actual CLI case={case} exit={result.returncode}\n"
                          + result.stdout + result.stderr)
 
+    def test_recovery_record_pr_budget_covers_required_fresh_checks(self):
+        # Reuse the genuine immutable closure/three-role authority fixture and
+        # real publisher/record-pr. Scale only a subprocess deadline probe;
+        # the actual CLI still runs with its production aggregate budget.
+        fixture = (ROOT / "github-project-task.test.sh").read_text()
+        anchor = "import pr_projection_publish as publisher\nroot, uid, case = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]"
+        self.assertEqual(1, fixture.count(anchor))
+        probe = """import subprocess
+original_command_output = publisher.command_output
+def deadline_probe(command, *, timeout=publisher.LOCAL_COMMAND_TIMEOUT_SECONDS):
+    if "record-pr" in command:
+        # 0.8s represents an 80s barrier workload: too long for legacy60,
+        # within recovery180. A real child process enforces the deadline.
+        subprocess.run([sys.executable, "-c", "import time; time.sleep(0.8)"],
+            check=True, timeout=timeout / 100)
+    return original_command_output(command, timeout=timeout)
+publisher.command_output = deadline_probe
+"""
+        with tempfile.TemporaryDirectory() as temp:
+            isolated = Path(temp) / "budget-fixture.sh"
+            isolated.write_text(fixture.replace(anchor, "import pr_projection_publish as publisher\n" + probe + anchor.split("\n", 1)[1]))
+            environment = dict(os.environ, PM_ROOT_DIR=str(ROOT.parents[1]),
+                OASIS7_REC_RED_ONLY="1", OASIS7_REC_CASE="idempotent_repeat")
+            result = subprocess.run(["bash", str(isolated)], cwd=ROOT.parents[1],
+                env=environment, capture_output=True, text=True, timeout=60)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("PASS test_rec_idempotent_repeat", result.stdout)
+
     def test_project_post_issue_pre_cache_post_reconciles(self):
         self.run_case("project_post_issue_pre")
 
@@ -502,6 +530,7 @@ class PublicationMatrixTests(unittest.TestCase):
             with patch.object(publish_module, "command_output", return_value="") as command:
                 adapter.record_pr(UID, 999, publication["publication_id"])
 
+        self.assertEqual(60, command.call_args.kwargs["timeout"])
         argv = command.call_args.args[0]
         self.assertIn("record-pr", argv)
         self.assertIn("--repo", argv)

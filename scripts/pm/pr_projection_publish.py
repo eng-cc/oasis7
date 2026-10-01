@@ -426,7 +426,7 @@ class GitHubPublicationAdapter:
                                           self.args.source_ref, self.args.target_ref)
                 recovery = helper.PublicationRecoveryAuthority(selected_args, record, binding,
                                                                self.publication, publication, comments)
-            command_output(command, timeout=60)
+            command_output(command, timeout=180 if recovery is not None else 60)
             if recovery is not None:
                 # CLI success alone is not publication observation authority.
                 # The core may observe H1 only after this separate four-surface
