@@ -263,6 +263,72 @@ class RecoveryTest(unittest.TestCase):
         self.assertTrue(all(call and call[0] in {"api", "project"} for call in gh_calls), gh_calls)
         self.assertTrue(all("--method" not in call and "-X" not in call for call in gh_calls), gh_calls)
 
+    def test_v2_recovery_uses_exact_default_selector_after_task_worktree_is_removed(self) -> None:
+        protocol, fixture, mapping, record = self.prepare_v2_delivery()
+        uid = protocol.UID
+        self.assertEqual(mapping["tasks"][uid]["phase_receipt_type"]["post_merge_done"],
+                         "oasis7_terminal_delivery")
+        receipt_root = fixture.receipt_root
+        retained_path = fixture.task / ".pm/github-project-sync/tasks.json"
+        self.assertTrue(retained_path.is_file())
+        receipt_names_before = sorted(path.name for path in receipt_root.iterdir())
+        receipts_before = {
+            path.name: path.read_bytes()
+            for path in receipt_root.iterdir()
+            if path.is_file()
+        }
+        default_mapping_before = fixture.mapping_path.read_bytes()
+        main_before = subprocess.check_output(
+            ["git", "-C", str(fixture.root), "rev-parse", "main"], text=True,
+        ).strip()
+
+        subprocess.run([
+            "git", "-C", str(fixture.root), "worktree", "remove", "--force", str(fixture.task),
+        ], check=True, text=True, capture_output=True)
+        self.assertFalse(fixture.task.exists())
+        self.assertNotIn(
+            str(fixture.task),
+            subprocess.check_output(
+                ["git", "-C", str(fixture.root), "worktree", "list", "--porcelain"],
+                text=True,
+            ),
+        )
+        self.assertEqual(fixture.mapping_path.read_bytes(), default_mapping_before)
+
+        result = self.run_v2_recovery(fixture, uid)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn(result.stdout.strip(), {"existing", "repaired"})
+        recovered = json.loads(fixture.mapping_path.read_text(encoding="utf-8"))["tasks"][uid]
+        self.assertEqual(recovered["phase_receipt_type"]["post_merge_done"], "oasis7_terminal_delivery")
+        self.assertEqual(recovered["phase_receipt_sha256"], record["phase_receipt_sha256"])
+        self.assertEqual(recovered["phase_receipt_comment_id"], record["phase_receipt_comment_id"])
+        self.assertEqual(recovered["phase_receipt_comment_sha256"], record["phase_receipt_comment_sha256"])
+        self.assertEqual(
+            pathlib.Path(recovered["canonical_worktree"]).resolve(strict=False),
+            fixture.task.resolve(strict=False),
+        )
+        self.assertFalse(fixture.task.exists())
+        self.assertEqual(
+            sorted(path.name for path in receipt_root.iterdir()), receipt_names_before,
+        )
+        self.assertEqual(
+            {name: (receipt_root / name).read_bytes() for name in receipts_before}, receipts_before,
+        )
+        self.assertFalse((receipt_root / "main-sync-receipt.json").exists())
+        self.assertFalse((receipt_root / "terminal-cleanup-receipt.json").exists())
+        self.assertFalse((receipt_root / "resource-cleanup.json").exists())
+        self.assertEqual(
+            subprocess.check_output(
+                ["git", "-C", str(fixture.root), "rev-parse", "main"], text=True,
+            ).strip(),
+            main_before,
+        )
+        gh_calls = [json.loads(line) for line in fixture.log_path.read_text().splitlines()]
+        self.assertTrue(gh_calls)
+        self.assertTrue(all(call and call[0] in {"api", "project"} for call in gh_calls), gh_calls)
+        self.assertTrue(all("--method" not in call and "-X" not in call for call in gh_calls), gh_calls)
+
     def test_v2_recovery_fails_closed_when_selected_protocol_markers_are_missing(self) -> None:
         protocol, fixture, mapping, record = self.prepare_v2_delivery()
         uid = protocol.UID
