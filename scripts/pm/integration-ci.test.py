@@ -130,6 +130,8 @@ class TargetedProjectionPromotionTests(unittest.TestCase):
   self.assertEqual(self.projection['closure_status']['status'],'complete')
   self.assertEqual(self.projection['ci_scope'],pr['scope'])
   self.assertEqual(self.projection['ci_capabilities'],pr['selected_capabilities'].split(';'))
+  self.assertEqual(pr['needs_rust_toolchain'],'false')
+  self.assertEqual(pr['run_rust_baseline'],'false')
 
   # The integration target has advanced with a target-only commit.  The
   # trusted workflow must execute the targeted gate while retaining the source
@@ -141,7 +143,9 @@ class TargetedProjectionPromotionTests(unittest.TestCase):
   self.assertEqual(integration['impact_projection_digest'],self.projection['projection_digest'])
   self.assertEqual(integration['test_profile'],'required')
   self.assertEqual(integration['selected_capabilities'],'site_quality;workflow_governance')
-  self.assertEqual(integration['needs_rust_toolchain'],'false')
+  # Target-only workflow governance executes the nested Rust baseline.
+  self.assertEqual(integration['needs_rust_toolchain'],'true')
+  self.assertEqual(integration['run_rust_baseline'],'true')
   self.assertEqual(integration['changed_path_count'],'2')
 
  def test_unknown_closure_full_projection_is_accepted_with_exact_source_paths(self):
