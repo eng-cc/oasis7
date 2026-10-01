@@ -12,6 +12,7 @@ trap cleanup EXIT
 
 mkdir -p "$TMPDIR/.pm/tasks" "$TMPDIR/bin"
 cp "$ROOT_DIR/scripts/pm/github-project-sync.py" "$TMPDIR/github-project-sync.py"
+cp "$ROOT_DIR/scripts/pm/fixtures/github_api_test_adapter.py" "$TMPDIR/github_api.py"
 
 cat > "$TMPDIR/.pm/tasks/task_11111111111111111111111111111111.yaml" <<'YAML'
 task_uid: task_11111111111111111111111111111111
@@ -135,7 +136,6 @@ sync = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sync)
 
 response = {
-    "data": {
         "node": {
             "project": {"id": "PROJECT_ID"},
             "fieldValues": {"nodes": [
@@ -143,33 +143,108 @@ response = {
                 {"name": "In Progress", "field": {"name": "Status"}},
             ]},
         }
-    }
 }
 calls = []
-sync.github_token = lambda: "TEST_TOKEN"
-# Fake the HTTP response, not graphql_request: it unwraps payload["data"].
-sync.github_json_request = lambda token, url, payload: calls.append((token, url, payload)) or response
+class FakeClient:
+    def graphql(self, query, variables=None, *, operation, mutation=False, context=None):
+        calls.append((query, variables, operation, mutation, context))
+        return response
+
+fake_client = FakeClient()
+sync.github_api_client = lambda token=None: fake_client
+assert sync.github_api_client("TEST_TOKEN").__class__ is FakeClient
+explicit = sync.github_api_module().GitHubAPIClient(token="TEST_TOKEN")
+assert explicit.token == "TEST_TOKEN", explicit.token
 
 values = sync.read_project_item_field_values("PROJECT_ID", "ITEM_ID")
 assert values == {
     "Task UID": "task_11111111111111111111111111111111",
     "Status": "In Progress",
 }, values
-assert calls[0][0] == "TEST_TOKEN", calls
-assert calls[0][1] == "https://api.github.com/graphql", calls
-request = calls[0][2]
-assert "$item: ID!" in request["query"], request
-assert "$project" not in request["query"], request
-assert "project { id }" in request["query"], request
-assert request["variables"] == {"item": "ITEM_ID"}, request
+assert "$item: ID!" in calls[0][0], calls
+assert "$project" not in calls[0][0], calls
+assert "project { id }" in calls[0][0], calls
+assert calls[0][1] == {"item": "ITEM_ID"}, calls
+assert calls[0][2] == "project_sync_selected_item_readback", calls
+assert calls[0][3] is False, calls
 
-response["data"]["node"]["project"]["id"] = "OTHER_PROJECT_ID"
+response["node"]["project"]["id"] = "OTHER_PROJECT_ID"
 try:
     sync.read_project_item_field_values("PROJECT_ID", "ITEM_ID")
 except RuntimeError as exc:
     assert str(exc) == "Project item belongs to a different Project", exc
 else:
     raise AssertionError("wrong Project identity was accepted")
+PY
+
+python3 - "$TMPDIR/github-project-sync.py" <<'PY'
+import importlib.util
+import sys
+from collections import OrderedDict
+
+spec = importlib.util.spec_from_file_location("sync", sys.argv[1])
+sync = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(sync)
+
+task = OrderedDict(task_uid="task_11111111111111111111111111111111", status="committed",
+                   owner_role="tpm", module="engineering", priority="P2",
+                   worktree_hint="/tmp/active", updated_at="2026-06-29T00:00:00Z")
+fields = {
+    "Status": {"id": "STATUS", "options_by_name": {"In Progress": "STATUS_PROGRESS", "Todo": "STATUS_TODO"}},
+    "Priority": {"id": "PRIORITY", "options_by_name": {"P2": "P2", "P3": "P3"}},
+    "Blocked Reason": {"id": "BLOCKED_REASON"},
+}
+calls = []
+class FakeClient:
+    def graphql(self, query, variables=None, *, operation, mutation=False, context=None):
+        calls.append((query, variables, operation, mutation, context))
+        return {"updateProjectV2ItemFieldValue": {"projectV2Item": {"id": "ITEM_ID"}}}
+    def rest(self, method, path, payload=None, *, operation, mutation=None, context=None):
+        raise AssertionError("unexpected REST call")
+
+client = FakeClient()
+changed, skipped = sync.update_fields_direct(
+    client, "PROJECT_ID", "ITEM_ID", task, fields,
+    only_fields={"Status", "Priority"},
+    current_values={"Status": "In Progress", "Priority": "P2"},
+)
+assert changed == 0 and set(skipped) == {"Status:unchanged", "Priority:unchanged"}, (changed, skipped)
+assert calls == [], calls
+
+changed, skipped = sync.update_fields_direct(
+    client, "PROJECT_ID", "ITEM_ID", task, fields,
+    only_fields={"Status", "Priority"},
+    current_values={"Status": "Todo", "Priority": "P3"},
+)
+assert changed == 2 and skipped == [], (changed, skipped)
+assert len(calls) == 1, calls
+assert calls[0][2] == "project_sync_update_fields" and calls[0][3] is True, calls
+assert "f0:" in calls[0][0] and "f1:" in calls[0][0], calls[0][0]
+
+calls.clear()
+changed, skipped = sync.update_fields_direct(
+    client, "PROJECT_ID", "ITEM_ID", task, fields,
+    only_fields={"Status"}, current_values={},
+)
+assert changed == 1 and skipped == [], (changed, skipped)
+assert len(calls) == 1, calls
+
+empty_task = OrderedDict(task, status="committed")
+sync.edit_text_field = lambda *args: (_ for _ in ()).throw(AssertionError("empty field must not be written"))
+changed, skipped = sync.update_fields(
+    "PROJECT_ID", "ITEM_ID", empty_task, fields,
+    only_fields={"Blocked Reason"}, current_values={"Blocked Reason": ""},
+)
+assert changed == 0 and skipped == ["Blocked Reason:unchanged"], (changed, skipped)
+changed, skipped = sync.update_fields(
+    "PROJECT_ID", "ITEM_ID", empty_task, fields,
+    only_fields={"Blocked Reason"}, current_values={},
+)
+assert changed == 0 and skipped == ["Blocked Reason:empty_value"], (changed, skipped)
+assert sync.confirmed_project_field_values(
+    {}, empty_task, ["Blocked Reason:empty_value"], only_fields={"Blocked Reason"}
+) == {}
+print("github-project-sync.project-fields: OK")
 PY
 
 DRY_JSON="$TMPDIR/dry.json"

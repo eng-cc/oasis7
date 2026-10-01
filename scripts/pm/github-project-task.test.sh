@@ -14,8 +14,15 @@ trap cleanup EXIT
 mkdir -p "$TMPDIR/.pm/github-project-sync" "$TMPDIR/bin"
 cp "$ROOT_DIR/scripts/pm/github-project-task.py" "$TMPDIR/github-project-task.py"
 cp "$ROOT_DIR/scripts/pm/github-project-sync.py" "$TMPDIR/github-project-sync.py"
+cp "$ROOT_DIR/scripts/pm/fixtures/github_api_test_adapter.py" "$TMPDIR/github_api.py"
 cp "$ROOT_DIR/scripts/pm/portable_file_lock.py" "$TMPDIR/portable_file_lock.py"
 cp "$ROOT_DIR/scripts/pm/claim-ready.sh" "$TMPDIR/claim-ready.sh"
+cp "$ROOT_DIR/scripts/pm/loop_leaf_result.py" "$ROOT_DIR/scripts/pm/workflow-durable-store.py" \
+  "$ROOT_DIR/scripts/pm/closed_duplicate_candidate_guard.py" "$TMPDIR/"
+export PYTHONPATH="$TMPDIR${PYTHONPATH:+:$PYTHONPATH}"
+mkdir -p "$TMPDIR/scripts"
+cp -R "$ROOT_DIR/scripts/pm" "$TMPDIR/scripts/pm"
+cp "$ROOT_DIR/scripts/pm/fixtures/github_api_test_adapter.py" "$TMPDIR/scripts/pm/github_api.py"
 
 cat > "$TMPDIR/bin/gh" <<'SH'
 #!/usr/bin/env bash
@@ -110,7 +117,7 @@ PY
       printf '[{"number":2001,"state":"OPEN","title":"[PM] GitHub-backed lifecycle smoke","url":"https://github.com/eng-cc/oasis7/issues/2001"}]\n'
     fi
     ;;
-  "issue view 2001 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason")
+  issue\ view\ 2001\ -R\ eng-cc/oasis7\ --json\ body,number,title,url,state,stateReason*)
     python3 - "$GH_ISSUE_BODY_STATE_FILE" <<'PY'
 import json, pathlib, sys
 body = pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
@@ -161,7 +168,7 @@ PY
   "issue list -R eng-cc/oasis7 --search task_99999999999999999999999999999999 in:body --json number,url,title,state --limit 5")
     printf '[{"number":2003,"state":"OPEN","title":"[PM] No-cache task","url":"https://github.com/eng-cc/oasis7/issues/2003"}]\n'
     ;;
-  "issue view 2003 -R eng-cc/oasis7 --json body,number,title,url,state,stateReason")
+  issue\ view\ 2003\ -R\ eng-cc/oasis7\ --json\ body,number,title,url,state,stateReason*)
     python3 - "$GH_CANONICAL_WORKTREE_HINT" <<'PY'
 import json, sys
 worktree = sys.argv[1]
@@ -187,7 +194,7 @@ print(json.dumps({
 }))
 PY
     ;;
-  issue\ view\ 20[0-9][0-9]\ -R\ eng-cc/oasis7\ --json\ body,number,title,url,state,stateReason)
+  issue\ view\ 20[0-9][0-9]\ -R\ eng-cc/oasis7\ --json\ body,number,title,url,state,stateReason*)
     python3 - "$TMPDIR/github-project-task.py" "$GH_MAPPING_PATH" "${3}" <<'PY'
 import importlib.util, json, pathlib, sys
 script, mapping_path, number = sys.argv[1:]
@@ -692,7 +699,7 @@ fi
 
 CACHE_BEFORE_FAILURE="$(shasum -a 256 "$TMPDIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
 set +e
-GH_FAIL_ISSUE_EDIT=1 PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-closeout.sh" \
+GH_FAIL_ISSUE_EDIT=1 PM_ROOT_DIR="$TMPDIR" "$TMPDIR/scripts/pm/task-closeout.sh" \
   --role tpm --task-uid "$TASK_UID" --verification-profile fixture_repository_state --review-packet-file "$REVIEW_PACKET" --json \
   >"$TMPDIR/failed-closeout.json" 2>"$TMPDIR/failed-closeout.err"
 FAILED_CLOSEOUT_STATUS=$?
@@ -707,7 +714,7 @@ if [[ "$(cat "$GH_PROJECT_STATE_FILE")" != "ready" ]]; then
   exit 1
 fi
 GRAPHQL_BEFORE="$(grep -c 'api graphql' "$GH_CALL_LOG" || true)"
-PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/refresh-task-cache.sh" \
+PM_ROOT_DIR="$TMPDIR" "$TMPDIR/scripts/pm/refresh-task-cache.sh" \
   --task-uid "$TASK_UID" --json >"$TMPDIR/refreshed-after-partial.json"
 GRAPHQL_AFTER="$(grep -c 'api graphql' "$GH_CALL_LOG" || true)"
 [[ $((GRAPHQL_AFTER - GRAPHQL_BEFORE)) == 1 ]]
@@ -719,7 +726,7 @@ assert record["workflow_phase"] == "pre_pr_ready", record
 assert record["project_status"] == "Ready / PR", record
 assert record["reconciled_from_project"] is True, record
 PY
-PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/github-project-workflow.sh" \
+PM_ROOT_DIR="$TMPDIR" "$TMPDIR/scripts/pm/github-project-workflow.sh" \
   --json audit --task-uid "$TASK_UID" >"$TMPDIR/audit-after-refresh.json"
 # Refresh intentionally reconciles the partial remote Project state and rewrites
 # the local mapping. Bind the SIGTERM immutability check to that new baseline,
@@ -728,7 +735,7 @@ CACHE_BEFORE_INTERRUPT="$(shasum -a 256 "$TMPDIR/.pm/github-project-sync/tasks.j
 
 set +e
 GH_INTERRUPT_ISSUE_EDIT=1 PM_ROOT_DIR="$TMPDIR" /bin/bash -c \
-  'export GH_INTERRUPT_TARGET=$$; exec "$@"' bash "$ROOT_DIR/scripts/pm/task-closeout.sh" \
+  'export GH_INTERRUPT_TARGET=$$; exec "$@"' bash "$TMPDIR/scripts/pm/task-closeout.sh" \
   --role tpm --task-uid "$TASK_UID" --verification-profile fixture_repository_state --review-packet-file "$REVIEW_PACKET" --json \
   >"$TMPDIR/interrupted-closeout.json" 2>"$TMPDIR/interrupted-closeout.err"
 INTERRUPTED_CLOSEOUT_STATUS=$?
@@ -740,7 +747,7 @@ if [[ "$CACHE_BEFORE_INTERRUPT" != "$CACHE_AFTER_INTERRUPT" ]]; then
   exit 1
 fi
 
-PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-closeout.sh" \
+PM_ROOT_DIR="$TMPDIR" "$TMPDIR/scripts/pm/task-closeout.sh" \
   --role tpm \
   --task-uid "$TASK_UID" \
   --verification-profile fixture_repository_state \
@@ -777,7 +784,7 @@ pathlib.Path(r['non_pr_completion_evidence_file']).write_text(
 open(p,'w',encoding='utf-8').write(json.dumps(m)+'\n')
 PY
 
-PM_ROOT_DIR="$TMPDIR" "$ROOT_DIR/scripts/pm/task-closeout.sh" \
+PM_ROOT_DIR="$TMPDIR" "$TMPDIR/scripts/pm/task-closeout.sh" \
   --role tpm \
   --task-uid "$TASK_UID" \
   --to-status done \
@@ -1171,7 +1178,7 @@ with tempfile.TemporaryDirectory() as temp:
         {"name": "done", "field": {"name": "Workflow Phase"}},
     ]}}
     module.github_issue_record = lambda _repo, _uid: issue
-    module.project_refresh_graphql = lambda _query, _variables: {"data": {"nodes": [project_node]}}
+    module.project_refresh_graphql = lambda _query, _variables, **_kwargs: {"data": {"nodes": [project_node]}}
     module.authoritative_repository_identity = lambda _root, _repo, _hint: {
         "repository": "eng-cc/oasis7", "canonical_worktree": str(worktree),
         "task_branch": "task/traceability-round-trip", "default_branch": "main",
