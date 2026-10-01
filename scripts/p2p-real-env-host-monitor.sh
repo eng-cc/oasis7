@@ -114,11 +114,11 @@ while [[ $# -gt 0 ]]; do
       out_root=${2:-}
       shift 2
       ;;
-    --local-service|--observer-service)
+    --local-service)
       local_service=${2:-}
       shift 2
       ;;
-    --local-storage-path|--observer-storage-path)
+    --local-storage-path)
       local_storage_path=${2:-}
       shift 2
       ;;

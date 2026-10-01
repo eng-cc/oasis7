@@ -6,83 +6,41 @@ mkdir -p "$TMP/bin"
 cat >"$TMP/bin/python3" <<'SH'
 #!/usr/bin/env bash
 if [[ "${1:-}" == *pr-lifecycle-gate.py ]]; then
-  [[ "${TEST_GATE_FAILURE:-0}" != 1 ]] || exit 23
-  n=$(cat "$TEST_COUNT" 2>/dev/null || echo 0); n=$((n+1)); echo "$n" >"$TEST_COUNT"
-  state=blocked
-  [[ "${TEST_READY_FIRST:-0}" == 1 || ( "${TEST_NEVER_READY:-0}" != 1 && "$n" -ge 6 ) ]] && state=ready
-  printf '{"status":"%s","gate_epoch":"epoch-%s","readiness_receipt":{"observed_at":"2026-01-01T00:00:0%sZ","identity":"receipt-%s"},"nested":{"approval_only_receipt":{"identity":"nested-%s"}}}\n' "$state" "$n" "$n" "$n" "$n"
-  [[ "$state" == ready ]] && exit 0
-  exit 3
+  printf '%s\n' "$*" >"$TEST_ARGS"
+  printf '%s\n' "${TEST_GATE_PAYLOAD:-{\"evidence_mode\":\"observation\",\"status\":\"observed\",\"candidate_ready\":true,\"ready_for_merge\":false,\"requires_live_gate\":true,\"formal_gate_command\":\"python3 scripts/pm/pr-lifecycle-gate.py 1 --task-uid task_11111111111111111111111111111111 --json\"}}"
+  exit "${TEST_GATE_RC:-0}"
 fi
 exec /usr/bin/python3 "$@"
 SH
-cat >"$TMP/bin/sleep" <<'SH'
-#!/usr/bin/env bash
-echo "$1" >>"$TEST_SLEEPS"
-SH
-chmod +x "$TMP/bin/python3" "$TMP/bin/sleep"
+chmod +x "$TMP/bin/python3"
+export TEST_ARGS="$TMP/args"
 
-export TEST_COUNT="$TMP/count" TEST_SLEEPS="$TMP/sleeps"
-PATH="$TMP/bin:$PATH" PM_PR_WATCH_INTERVAL_SECONDS=60 PM_PR_WATCH_MAX_INTERVAL_SECONDS=600 \
-  PM_PR_WATCH_MAX_UNCHANGED_POLLS=10 bash "$ROOT/scripts/pm/pr-watch-loop.sh" 1 >"$TMP/out"
-diff -u <(printf '60\n120\n240\n480\n600\n') "$TMP/sleeps"
-[[ $(wc -l <"$TMP/out" | tr -d ' ') == 2 ]]
-grep -q '"status":"blocked"' "$TMP/out"
-grep -q '"status":"ready"' "$TMP/out"
+PATH="$TMP/bin:$PATH" bash "$ROOT/scripts/pm/pr-watch-loop.sh" 1 --task-uid task_11111111111111111111111111111111 --root /tmp/canonical >"$TMP/candidate.out"
+grep -q -- '--observe --watch --json' "$TEST_ARGS"
+grep -q -- '--task-uid task_11111111111111111111111111111111' "$TEST_ARGS"
+grep -q '"candidate_ready":true' "$TMP/candidate.out"
+grep -q '"ready_for_merge":false' "$TMP/candidate.out"
+if grep -q 'readiness_receipt' "$TMP/candidate.out"; then
+  echo "observation watcher emitted a readiness receipt" >&2
+  exit 1
+fi
 
-rm -f "$TMP/count" "$TMP/sleeps"
-PATH="$TMP/bin:$PATH" TEST_READY_FIRST=1 \
-  bash "$ROOT/scripts/pm/pr-watch-loop.sh" 1 >"$TMP/ready-out"
-[[ $(wc -l <"$TMP/ready-out" | tr -d ' ') == 1 ]]
-grep -q '"status":"ready"' "$TMP/ready-out"
-[[ ! -e "$TMP/sleeps" ]]
-
-rm -f "$TMP/count" "$TMP/sleeps"
 set +e
-PATH="$TMP/bin:$PATH" TEST_NEVER_READY=1 PM_PR_WATCH_MAX_POLLS=3 \
-  bash "$ROOT/scripts/pm/pr-watch-loop.sh" 1 >"$TMP/stable-out"
+PATH="$TMP/bin:$PATH" TEST_GATE_RC=75 \
+  TEST_GATE_PAYLOAD='{"evidence_mode":"observation","status":"external_wait","ready_for_merge":false,"candidate_ready":false,"requires_live_gate":true}' \
+  bash "$ROOT/scripts/pm/pr-watch-loop.sh" 1 --task-uid task_11111111111111111111111111111111 >"$TMP/wait.out"
 rc=$?
 set -e
 [[ "$rc" == 75 ]]
-diff -u <(printf '60\n') "$TMP/sleeps"
-[[ $(wc -l <"$TMP/stable-out" | tr -d ' ') == 2 ]]
-grep -q '"reason":"stable_pr_watch_unchanged_budget_exhausted"' "$TMP/stable-out"
-grep -q '"unchanged_polls":1' "$TMP/stable-out"
-grep -q '"snapshot_digest":"' "$TMP/stable-out"
-[[ $(cat "$TMP/count") == 2 ]]
-
-rm -f "$TMP/count" "$TMP/sleeps"
-set +e
-PATH="$TMP/bin:$PATH" TEST_NEVER_READY=1 PM_PR_WATCH_MAX_POLLS=4 PM_PR_WATCH_MAX_UNCHANGED_POLLS=2 \
-  bash "$ROOT/scripts/pm/pr-watch-loop.sh" 1 >"$TMP/two-unchanged-out"
-rc=$?
-set -e
-[[ "$rc" == 75 ]]
-[[ $(cat "$TMP/count") == 3 ]]
-grep -q '"unchanged_polls":2' "$TMP/two-unchanged-out"
+grep -q '"status":"external_wait"' "$TMP/wait.out"
 
 set +e
-PATH="$TMP/bin:$PATH" PM_PR_WATCH_INTERVAL_SECONDS=0 \
-  bash "$ROOT/scripts/pm/pr-watch-loop.sh" 1 >"$TMP/invalid-out" 2>"$TMP/invalid-err"
+PATH="$TMP/bin:$PATH" TEST_GATE_RC=2 \
+  TEST_GATE_PAYLOAD='{"evidence_mode":"observation","status":"capability_blocked","ready_for_merge":false,"candidate_ready":false,"requires_live_gate":true}' \
+  bash "$ROOT/scripts/pm/pr-watch-loop.sh" 1 --task-uid task_11111111111111111111111111111111 >"$TMP/blocked.out"
 rc=$?
 set -e
-[[ "$rc" == 64 ]]
-grep -q 'interval must be a positive integer' "$TMP/invalid-err"
-
-set +e
-PATH="$TMP/bin:$PATH" PM_PR_WATCH_MAX_UNCHANGED_POLLS=0 \
-  bash "$ROOT/scripts/pm/pr-watch-loop.sh" 1 >"$TMP/invalid-unchanged-out" 2>"$TMP/invalid-unchanged-err"
-rc=$?
-set -e
-[[ "$rc" == 64 ]]
-grep -q 'max_unchanged_polls must be a positive integer' "$TMP/invalid-unchanged-err"
-
-set +e
-PATH="$TMP/bin:$PATH" TEST_GATE_FAILURE=1 \
-  bash "$ROOT/scripts/pm/pr-watch-loop.sh" 1 >"$TMP/failure-out" 2>"$TMP/failure-err"
-rc=$?
-set -e
-[[ "$rc" == 23 ]]
-[[ ! -s "$TMP/failure-out" ]]
+[[ "$rc" == 2 ]]
+grep -q '"status":"capability_blocked"' "$TMP/blocked.out"
 
 echo "pr-watch-loop.test: OK"

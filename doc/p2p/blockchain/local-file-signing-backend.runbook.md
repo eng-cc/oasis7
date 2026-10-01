@@ -7,7 +7,7 @@ Owner: `blockchain_ops_engineer`. Authority: [release/installation design](local
 
 Build the three `oasis7_local_signer` Rust executables in release mode using the repository Cargo contract. `scripts/local-signer/package-release.py` packages existing binaries and reviewed installer modules into a new version directory. It records target, full source OID, schema versions, exact file sizes and SHA256 values. Review source/binary provenance and independently approve the exact manifest digest. A digest printed by the untrusted package is not approval by itself.
 
-No source command in this task changes host accounts, ACLs, sudo, keys or signing. The operator must separately authorize execution of the reviewed fixed installer and approve the host plan. macOS is the first supported apply target; Linux apply is explicitly unsupported.
+No source command in this task changes host accounts, ACLs, sudo, keys or signing. The operator must separately authorize root execution and approve the host plan. macOS is the first supported apply target; Linux apply is explicitly unsupported.
 
 An approved administrator stages the approved bundle as data before root Python imports. The following is a reviewable future host action, not executed source verification. `APPROVED_BUNDLE` is the reviewed regular-file package location, `EXPECTED_MANIFEST_SHA256` comes from independent approval, and `RELEASE_ID` must match its manifest. Verify `/private/var/db` is protected and the new staging parent has no ACLs or symlinks. Refuse an existing release staging directory; do not overwrite it.
 
@@ -25,7 +25,9 @@ test "$(/usr/bin/shasum -a 256 "$STAGING/manifest.json" | /usr/bin/awk '{print $
 /usr/bin/python3 -I -c 'import hashlib,json,pathlib,sys; p=pathlib.Path(sys.argv[1]); raw=(p/"manifest.json").read_bytes(); assert hashlib.sha256(raw).hexdigest()==sys.argv[2]; m=json.loads(raw); entry=next(x for x in m["files"] if x["name"]=="install-release.py"); code=(p/"install-release.py").read_bytes(); assert len(code)==entry["size_bytes"] and hashlib.sha256(code).hexdigest()==entry["sha256"]' "$STAGING" "$EXPECTED_MANIFEST_SHA256" || exit 9
 ```
 
-These fixed native tools copy data only. Root code execution starts with the exact reviewed launcher under `/usr/bin/python3 -I`; its protected-file loader independently checks approved manifest and module bytes before imports. The administrator must also compare the staged `install-release.py` digest with its independently reviewed manifest entry before executing it, because a launcher cannot authenticate itself before startup. Host Python availability, isolation flags and protected staging remain separate acceptance requirements. Staging does not create the signer account, sudo rule or custody store.
+These fixed native tools copy data only. They leave a partial staging directory untouched on interruption. Treat it as `STAGING_RECOVERY_REQUIRED`: do not overwrite, delete, or execute it. An operator must separately review the exact partial inventory, quarantine it through an explicitly authorized action, and create a fresh staging directory from the approved bundle. There is no automatic cleanup, retry, rollback, or resume.
+
+Before root startup, obtain the stdlib-only trusted bootstrap as a separate approved regular-file artifact. Its bytes are the reviewed `TRUSTED_BOOTSTRAP` string literal from the release's `install-release.py`, materialized outside the candidate stage before privileged execution. `APPROVED_BOOTSTRAP_SOURCE` must be outside `$STAGING`; `EXPECTED_BOOTSTRAP_SHA256` must come from independent review of the exact bootstrap bytes. Do not derive either value from the staged package or compute the expected digest in the same shell block. Shell command substitution removes trailing newlines from the source; approve the exact captured value. These are additional human approval inputs, and this source workflow does not provide publisher authentication. Verify `/usr/bin/python3` is the approved host interpreter and staging ancestors are protected; actual macOS ACL, sudo, account, and host acceptance remains separate. Staging does not create the signer account, sudo rule or custody store.
 
 ## Installation plan and apply
 
@@ -34,16 +36,21 @@ The approved release entrypoint accepts `plan` and `apply` as defined in [interf
 Plan performs readonly checks and writes only the requested new plan artifact. If readonly host evidence is inaccessible, report BLOCKED; a host administrator can run an approved readonly plan. Review exact actions and canonical plan bytes, then independently approve its SHA256. Apply requires root and both expected digests, checks the live plan again, journals effects and publishes sudo last.
 
 ```sh
-/usr/bin/python3 -I "$STAGING/install-release.py" plan \
+APPROVED_BOOTSTRAP_CODE="$(/bin/cat "$APPROVED_BOOTSTRAP_SOURCE")"
+ACTUAL_BOOTSTRAP_SHA256="$(/usr/bin/printf '%s' "$APPROVED_BOOTSTRAP_CODE" | /usr/bin/shasum -a 256 | /usr/bin/awk '{print $1}')"
+test "$ACTUAL_BOOTSTRAP_SHA256" = "$EXPECTED_BOOTSTRAP_SHA256" || exit 9
+/usr/bin/python3 -I -c "$APPROVED_BOOTSTRAP_CODE" plan \
   --release-dir "$STAGING" --expected-manifest-sha256 "$EXPECTED_MANIFEST_SHA256" \
   --store-dir '/Library/Application Support/oasis7-local-signer' \
   --work-dir "$APPROVED_WORK_DIR" --caller-user "$APPROVED_CALLER" \
   --signer-user _oasis7_signer --installation-id "$APPROVED_INSTALLATION_ID" \
   --deployment-id "$APPROVED_DEPLOYMENT_ID" --plan-out "$NEW_PLAN_FILE"
-/usr/bin/python3 -I "$STAGING/install-release.py" apply \
+/usr/bin/python3 -I -c "$APPROVED_BOOTSTRAP_CODE" apply \
   --release-dir "$STAGING" --expected-manifest-sha256 "$EXPECTED_MANIFEST_SHA256" \
   --plan "$NEW_PLAN_FILE" --expected-plan-sha256 "$INDEPENDENTLY_APPROVED_PLAN_SHA256"
 ```
+
+The bootstrap reads the release only through anchored nofollow directory and member descriptors. On each retained descriptor, `fgetattrlist` must prove that the volume's extended-security capability is valid and enabled. The returned-attribute bitmap must show either an absent ACL with the exact zero-filled reference framing, or a filesec with the exact `KAUTH_FILESEC_NOACL` sentinel and bounds. Zero-entry and populated ACLs, unsupported volumes, query errors, and malformed or truncated responses reject. Descriptor metadata is checked before and after capture. The bootstrap verifies the independently approved manifest and exact closed package inventory, captures the manifest, launcher, modules and binaries once, and executes only the in-memory snapshot. `install-release.py` receives the immutable captured-byte capsule; installer imports, release validation and installation copy consume those exact bytes without reopening candidate staging paths. Direct root execution of `$STAGING/install-release.py` is unsupported and returns `TRUSTED_BOOTSTRAP_REQUIRED`; it cannot protect the interpreter's initial script open. The supported root entry is the independently approved inline `-c` invocation above.
 
 The approved work parent must already exist and belong to the caller; the installer creates only the selected leaf and does not create or change HOME/Documents/keys ancestors. Unknown sudo-policy output, any effective ACL entry, a mounted unsupported/network filesystem, or an existing foreign installation blocks this first delivery. Keep the protected approved staging bundle for exact repeated verification.
 

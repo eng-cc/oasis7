@@ -2747,8 +2747,24 @@ def command_set_phase(args: argparse.Namespace) -> int:
     return 0
 
 
-def project_refresh_graphql(query: str, variables: list[str]) -> dict[str, Any]:
-    return json.loads(run_text(["gh", "api", "graphql", "-f", f"query={query}", *variables]))
+def project_refresh_graphql(
+    query: str,
+    variables: dict[str, Any],
+    *,
+    operation: str,
+    task_uid: str,
+) -> dict[str, Any]:
+    """Keep selected refresh on one named shared-client GraphQL read."""
+    sync = load_sync_module()
+    data = sync.graphql_request(
+        None,
+        query,
+        variables,
+        operation=operation,
+        context={"script": "github-project-task.py", "task_uid": task_uid},
+    )
+    # Existing refresh decoders consume the gh-compatible data envelope.
+    return {"data": data}
 
 
 def refresh_project_identity(
@@ -3094,7 +3110,12 @@ def command_refresh_task(args: argparse.Namespace) -> int:
           }
         }
         """
-        payload = project_refresh_graphql(query, ["-F", f"ids[]={item_id}"])
+        payload = project_refresh_graphql(
+            query,
+            {"ids": [item_id]},
+            operation="project_task_refresh_bound_item",
+            task_uid=args.task_uid,
+        )
         nodes = ((payload.get("data") or {}).get("nodes") or [])
         if nodes:
             selected_node = nodes[0]
@@ -3133,7 +3154,12 @@ def command_refresh_task(args: argparse.Namespace) -> int:
           }
         }
         """
-        payload = project_refresh_graphql(query, ["-f", f"q=repo:{args.repo} {args.task_uid} in:body"])
+        payload = project_refresh_graphql(
+            query,
+            {"q": f"repo:{args.repo} {args.task_uid} in:body"},
+            operation="project_task_refresh_issue_search",
+            task_uid=args.task_uid,
+        )
         issues = (((payload.get("data") or {}).get("search") or {}).get("nodes") or [])
         matches = [issue for issue in issues if re.search(
             rf"^task_uid:\s*{re.escape(args.task_uid)}$", str(issue.get("body") or ""), re.MULTILINE)]
@@ -3758,4 +3784,11 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        code = main()
+    except Exception as exc:
+        api_code = load_sync_module().github_api_error_exit(exc, "github-project-task")
+        if api_code is None:
+            raise
+        raise SystemExit(api_code)
+    raise SystemExit(code)
