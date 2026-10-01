@@ -1495,6 +1495,233 @@ class PublicationMatrixTests(unittest.TestCase):
                 )
             self.assertEqual(0, adapter.events.count("task-intent"))
 
+    def test_missing_task_post_event_sidecar_after_attempt_stays_pending(self):
+        class DeniedCommentAdapter(FakeAdapter):
+            def __init__(inner_self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                inner_self.post_attempts = 0
+
+            def publish_task_intent(inner_self, value):
+                inner_self.post_attempts += 1
+                inner_self.events.append("task-intent")
+                raise PermissionError("simulated uncertain GitHub comment-write result")
+
+        old_head, new_head = "3" * 40, "4" * 40
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection, adapter, journal = self.existing_update_case(
+                temp, 7242, old_head=old_head, new_head=new_head,
+                adapter_type=DeniedCommentAdapter,
+            )
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "Task intent response uncertain",
+            ):
+                self.run_publish_entrypoint(temp, publication, projection, adapter, journal)
+            self.assertEqual(1, adapter.post_attempts)
+            self.assertTrue(journal.task_events_path.exists())
+
+            # Model loss of the replaceable sidecar while keeping the exact
+            # same publication identity and the remote lookup empty.
+            journal.task_events_path.unlink()
+            with self.assertRaises(publication_module.PublicationError):
+                self.run_publish_entrypoint(temp, publication, projection, adapter, journal)
+
+            self.assertEqual(
+                1, adapter.post_attempts,
+                "a missing event sidecar must not turn an attempted action into a fresh POST",
+            )
+
+    def test_valid_prefix_rollback_before_attempt_marker_stays_pending(self):
+        class DeniedCommentAdapter(FakeAdapter):
+            def __init__(inner_self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                inner_self.post_attempts = 0
+
+            def publish_task_intent(inner_self, value):
+                inner_self.post_attempts += 1
+                inner_self.events.append("task-intent")
+                raise PermissionError("simulated uncertain GitHub comment-write result")
+
+        old_head, new_head = "5" * 40, "6" * 40
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection, adapter, journal = self.existing_update_case(
+                temp, 7243, old_head=old_head, new_head=new_head,
+                adapter_type=DeniedCommentAdapter,
+            )
+            action_id = "task-intent:" + publication["publication_id"]
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "Task intent response uncertain",
+            ):
+                self.run_publish_entrypoint(temp, publication, projection, adapter, journal)
+            self.assertEqual(1, adapter.post_attempts)
+
+            with journal.locked():
+                lines = journal.task_events_path.read_bytes().splitlines(keepends=True)
+                events = [json.loads(line) for line in lines]
+                action_events = [item["event"] for item in events
+                                 if item["action_id"] == action_id]
+                self.assertEqual(
+                    ["READ_EMPTY", "WRITE_INTENT", "POST_ATTEMPTED",
+                     "POST_RESPONSE_UNCERTAIN"], action_events,
+                )
+                # This is a complete, locally valid prefix: all remaining
+                # sequence numbers and newline boundaries still verify.
+                journal.task_events_path.write_bytes(b"".join(lines[:2]))
+
+            with self.assertRaises(publication_module.PublicationError):
+                self.run_publish_entrypoint(
+                    temp, publication, projection, adapter, journal,
+                    resume_action_id=action_id,
+                )
+
+            self.assertEqual(
+                1, adapter.post_attempts,
+                "a valid prefix rollback must not authorize another POST for the same action",
+            )
+
+    def test_old_unanchored_root_and_missing_sidecar_empty_read_stays_unknown(self):
+        old_head, new_head = "7" * 40, "8" * 40
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection, adapter, journal = self.existing_update_case(
+                temp, 7244, old_head=old_head, new_head=new_head,
+            )
+            # Emulate a pre-anchor e54 journal with no Task action record and
+            # no event sidecar. Its empty state cannot prove that history was
+            # never present and later lost.
+            with journal.locked():
+                state = journal._read_or_create()
+                state.pop("task_post_tail", None)
+                journal_module._atomic_json(journal.path, state)
+
+            with self.assertRaisesRegex(
+                publication_module.PublicationError, "UNKNOWN|anchor|history",
+            ):
+                self.run_publish_entrypoint(temp, publication, projection, adapter, journal)
+            self.assertEqual(0, adapter.events.count("task-intent"))
+
+    def test_old_unanchored_exact_server_readback_resolves_without_post(self):
+        old_head, new_head = "9" * 40, "a" * 40
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection, adapter, journal = self.existing_update_case(
+                temp, 7245, old_head=old_head, new_head=new_head,
+            )
+            action_id = "task-intent:" + publication["publication_id"]
+            adapter.publications.append(copy.deepcopy(publication))
+            adapter.publication_author_logins[publication["publication_id"]] = adapter.publisher_login
+            with journal.locked():
+                journal.intent(action_id, "publish_task_intent", {
+                    "publication_id": publication["publication_id"], "task_uid": UID,
+                })
+                state = journal._read_or_create()
+                state.pop("task_post_tail", None)
+                journal_module._atomic_json(journal.path, state)
+
+            result = self.run_publish_entrypoint(
+                temp, publication, projection, adapter, journal,
+                resume_action_id=action_id,
+            )
+
+            self.assertEqual("published", result["status"])
+            self.assertEqual(0, adapter.events.count("task-intent"))
+            with journal.locked():
+                events = journal.read_task_events(action_id)
+                self.assertEqual("RESOLVED", events[-1]["event"])
+
+    def test_unanchored_resolved_event_requires_exact_live_readback(self):
+        old_head, new_head = "b" * 40, "c" * 40
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection, adapter, journal = self.existing_update_case(
+                temp, 7248, old_head=old_head, new_head=new_head,
+            )
+            action_id = "task-intent:" + publication["publication_id"]
+            pr_binding = {"state": "unbound"}
+            with journal.locked():
+                _login, identity = publication_module._task_intent_identity(
+                    adapter, journal, publication, pr_binding,
+                )
+                journal.append_task_event(action_id, "READ_EMPTY", identity)
+                journal.append_task_event(
+                    action_id, "WRITE_INTENT", identity,
+                    {"payload_sha256": identity["payload_sha256"]},
+                )
+                journal.append_task_event(
+                    action_id, "POST_ATTEMPTED", identity,
+                    {"payload_sha256": identity["payload_sha256"]},
+                )
+                journal.append_task_event(
+                    action_id, "READ_MATCH", identity,
+                    {"publication_id": publication["publication_id"],
+                     "author_login": identity["publisher_login"],
+                     "payload_sha256": identity["payload_sha256"]},
+                )
+                journal.append_task_event(
+                    action_id, "RESOLVED", identity,
+                    {"publication_id": publication["publication_id"]},
+                )
+                state = journal.read_action_state()
+                state.pop("task_post_tail", None)
+                journal_module._atomic_json(journal.path, state)
+
+                with self.assertRaisesRegex(
+                    publication_module.PublicationError, "UNKNOWN|pending|anchor",
+                ):
+                    publication_module._intent(
+                        adapter, journal, publication, pr_binding=pr_binding,
+                        resume_action_id=action_id,
+                    )
+
+            self.assertEqual(0, adapter.events.count("task-intent"))
+
+    def test_root_task_post_tail_survives_other_main_journal_updates(self):
+        publication, _projection = make_publication(7246)
+        with tempfile.TemporaryDirectory() as temp:
+            journal = self.journal(temp, publication)
+            action_id = "task-intent:" + publication["publication_id"]
+            identity = {"publication_id": publication["publication_id"], "test": "tail-preservation"}
+
+            with journal.locked():
+                initial = journal.read()["task_post_tail"]
+                self.assertEqual(0, initial["sequence"])
+                journal.append_task_event(
+                    action_id, "READ_FAILED", identity, {"phase": "prewrite"},
+                )
+                anchored = journal.read()["task_post_tail"]
+                self.assertEqual(1, anchored["sequence"])
+
+                other_action = "other-action:" + publication["publication_id"]
+                journal.intent(other_action, "test_state_update", {"value": 1})
+                journal.observe(other_action, {"value": 1}, phase="TEST_CONFIRMED")
+
+                self.assertEqual(anchored, journal.read()["task_post_tail"])
+                self.assertEqual(["READ_FAILED"], [
+                    item["event"] for item in journal.read_task_events(action_id)
+                ])
+
+    def test_sidecar_fsync_before_root_anchor_crash_fails_closed(self):
+        publication, _projection = make_publication(7247)
+        with tempfile.TemporaryDirectory() as temp:
+            journal = self.journal(temp, publication)
+            action_id = "task-intent:" + publication["publication_id"]
+            identity = {"publication_id": publication["publication_id"], "test": "crash-gap"}
+            real_atomic_json = journal_module._atomic_json
+
+            with journal.locked():
+                self.assertEqual(0, journal.read()["task_post_tail"]["sequence"])
+
+                def crash_before_anchor_replace(path, value):
+                    if Path(path) == journal.path and "task_post_tail" in value:
+                        raise OSError("injected crash before root tail anchor commit")
+                    return real_atomic_json(path, value)
+
+                with patch.object(journal_module, "_atomic_json", side_effect=crash_before_anchor_replace):
+                    with self.assertRaises(journal_module.JournalError):
+                        journal.append_task_event(
+                            action_id, "READ_FAILED", identity, {"phase": "prewrite"},
+                        )
+
+            with journal.locked():
+                with self.assertRaisesRegex(journal_module.JournalError, "tail|anchor|history"):
+                    journal.read_task_events()
+
     def test_duplicate_task_post_event_history_fails_closed(self):
         old_head, new_head = "a" * 40, "b" * 40
         with tempfile.TemporaryDirectory() as temp:

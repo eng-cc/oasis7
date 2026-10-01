@@ -20,6 +20,7 @@ from portable_file_lock import ensure_lock_byte, fcntl
 SCHEMA = "oasis7-pr-publication-journal/v1"
 TASK_POST_EVENT_SCHEMA = "oasis7-pr-task-post-event/v1"
 TASK_POST_EVENTS_FILE = "task-publication-events.jsonl"
+TASK_POST_TAIL_SCHEMA = "oasis7-pr-task-post-tail/v1"
 TASK_POST_EVENT_TYPES = frozenset({
     "READ_FAILED", "READ_EMPTY", "READ_MATCH", "READ_CONFLICT",
     "WRITE_INTENT", "POST_ATTEMPTED", "POST_RESPONSE_UNCERTAIN", "RESOLVED",
@@ -134,9 +135,59 @@ class PublicationJournal:
             "phase": "PREPARED",
             "disposition": None,
             "actions": [],
+            "task_post_tail": self._task_post_tail(0, b""),
         }
         _atomic_json(self.path, value)
         return value
+
+    @staticmethod
+    def _task_post_tail(sequence: int, raw: bytes) -> dict[str, Any]:
+        return {
+            "schema": TASK_POST_TAIL_SCHEMA,
+            "sequence": sequence,
+            "digest": "sha256:" + hashlib.sha256(raw).hexdigest(),
+        }
+
+    @staticmethod
+    def _validate_task_post_tail(value: Any) -> dict[str, Any]:
+        required = {"schema", "sequence", "digest"}
+        if (not isinstance(value, dict) or set(value) != required
+                or value.get("schema") != TASK_POST_TAIL_SCHEMA
+                or type(value.get("sequence")) is not int or value["sequence"] < 0
+                or not isinstance(value.get("digest"), str)
+                or not _PUB_ID.fullmatch(value["digest"])):
+            raise JournalError("Task publication root tail anchor is malformed")
+        return value
+
+    def read_action_state(self) -> dict[str, Any]:
+        """Read the main journal without interpreting its separate event stream."""
+        self._assert_locked()
+        return self._read_or_create()
+
+    def has_task_post_tail(self) -> bool:
+        self._assert_locked()
+        return "task_post_tail" in self._read_or_create()
+
+    def anchor_task_history_after_exact_readback(self) -> None:
+        """Anchor legacy history only after the caller verified the exact remote record."""
+        self._assert_locked()
+        state = self._read_or_create()
+        if "task_post_tail" in state:
+            self.read_task_events()
+            return
+        exists = self.task_events_path.exists()
+        try:
+            raw = self.task_events_path.read_bytes() if exists else b""
+        except OSError as exc:
+            raise JournalError("Task publication event journal is unreadable") from exc
+        events = self._decode_task_events(raw, exists=exists)
+        state["task_post_tail"] = self._task_post_tail(len(events), raw)
+        try:
+            _atomic_json(self.path, state)
+        except OSError as exc:
+            raise JournalError("Task publication root tail anchor update was not confirmed durable") from exc
+        if self.read_task_events() != events:
+            raise JournalError("Task publication event history changed while anchoring exact readback")
 
     def read(self) -> dict[str, Any]:
         self._assert_locked()
@@ -144,20 +195,10 @@ class PublicationJournal:
         value["task_post_events"] = self.read_task_events()
         return value
 
-    def read_task_events(self, action_id: str | None = None, *,
-                         identity: dict[str, Any] | None = None) -> list[dict[str, Any]]:
-        """Read and validate the append-only Task-comment POST event stream."""
-        self._assert_locked()
-        if self.task_events_path.exists():
-            try:
-                raw = self.task_events_path.read_bytes()
-            except OSError as exc:
-                raise JournalError("Task publication event journal is unreadable") from exc
-            if not raw or not raw.endswith(b"\n"):
-                raise JournalError("Task publication event journal is truncated")
-            lines = raw.splitlines()
-        else:
-            lines = []
+    def _decode_task_events(self, raw: bytes, *, exists: bool) -> list[dict[str, Any]]:
+        if exists and (not raw or not raw.endswith(b"\n")):
+            raise JournalError("Task publication event journal is truncated")
+        lines = raw.splitlines() if exists else []
         events: list[dict[str, Any]] = []
         seen_identities: dict[str, dict[str, Any]] = {}
         for expected_sequence, line in enumerate(lines, start=1):
@@ -186,6 +227,28 @@ class PublicationJournal:
                 raise JournalError("Task publication action identity changed in event history")
             events.append(value)
         self._validate_task_event_sequences(events)
+        return events
+
+    def read_task_events(self, action_id: str | None = None, *,
+                         identity: dict[str, Any] | None = None,
+                         allow_unanchored: bool = False) -> list[dict[str, Any]]:
+        """Read and validate the append-only Task-comment POST event stream."""
+        self._assert_locked()
+        state = self._read_or_create()
+        anchored = "task_post_tail" in state
+        if not anchored and not allow_unanchored:
+            raise JournalError("Task publication event history lacks a durable root tail anchor")
+        anchor = self._validate_task_post_tail(state["task_post_tail"]) if anchored else None
+        try:
+            exists = self.task_events_path.exists()
+            raw = self.task_events_path.read_bytes() if exists else b""
+        except OSError as exc:
+            raise JournalError("Task publication event journal is unreadable") from exc
+        events = self._decode_task_events(raw, exists=exists)
+        if (anchor is not None
+                and (anchor["sequence"] != len(events)
+                     or anchor["digest"] != "sha256:" + hashlib.sha256(raw).hexdigest())):
+            raise JournalError("Task publication event history differs from its durable root tail anchor")
         if action_id is not None:
             events = [event for event in events if event["action_id"] == action_id]
         if identity is not None and any(event["identity"] != identity for event in events):
@@ -244,6 +307,8 @@ class PublicationJournal:
             "identity_digest": _canonical_digest(identity),
             "evidence": evidence or {},
         }
+        root_state = self._read_or_create()
+        old_tail = self._validate_task_post_tail(root_state.get("task_post_tail"))
         self.task_events_path.parent.mkdir(parents=True, exist_ok=True)
         existed = self.task_events_path.exists()
         encoded = json.dumps(record, ensure_ascii=False, sort_keys=True,
@@ -264,9 +329,26 @@ class PublicationJournal:
                 _fsync_dir(self.task_events_path.parent)
         except OSError as exc:
             raise JournalError("Task publication event append was not confirmed durable") from exc
-        observed = self.read_task_events()
+        try:
+            new_raw = self.task_events_path.read_bytes()
+        except OSError as exc:
+            raise JournalError("Task publication event append readback failed") from exc
+        observed = self._decode_task_events(new_raw, exists=True)
         if not observed or observed[-1] != record:
             raise JournalError("Task publication event append failed readback verification")
+        current_root = self._read_or_create()
+        if self._validate_task_post_tail(current_root.get("task_post_tail")) != old_tail:
+            raise JournalError("Task publication root tail anchor changed during event append")
+        current_root["task_post_tail"] = self._task_post_tail(len(observed), new_raw)
+        try:
+            _atomic_json(self.path, current_root)
+        except OSError as exc:
+            raise JournalError(
+                "Task publication root tail anchor update was not confirmed durable",
+            ) from exc
+        observed = self.read_task_events()
+        if not observed or observed[-1] != record:
+            raise JournalError("Task publication event/root tail verification failed")
         return record
 
     def _read_all_task_events(self) -> list[dict[str, Any]]:

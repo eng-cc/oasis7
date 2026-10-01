@@ -547,7 +547,7 @@ def _prior_create_push_lease(journal: pr_projection_journal.PublicationJournal,
     action_id = "push:" + publication_value["publication_id"]
     with journal.locked():
         matches = [
-            action for action in journal.read()["actions"]
+            action for action in journal.read_action_state()["actions"]
             if isinstance(action, dict) and action.get("action_id") == action_id
         ]
         if len(matches) > 1:

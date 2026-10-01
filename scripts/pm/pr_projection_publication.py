@@ -235,7 +235,8 @@ def _candidate(publication: dict[str, Any], projection: dict[str, Any]) -> tuple
 
 
 def _prior(journal: PublicationJournal, action_id: str) -> dict[str, Any] | None:
-    found = [item for item in journal.read()["actions"] if item.get("action_id") == action_id]
+    found = [item for item in journal.read_action_state()["actions"]
+             if item.get("action_id") == action_id]
     if len(found) > 1:
         raise JournalError("duplicate publication action")
     return found[0] if found else None
@@ -326,10 +327,11 @@ def _intent(adapter: Any, journal: PublicationJournal, publication: dict[str, An
     if resume_action_id is not None and resume_action_id != action:
         raise PublicationError("TASK_IDENTITY_CONFLICT", "recovery selector does not match the exact publication action")
     prior = _prior(journal, action)
-    events = journal.read_task_events(action)
+    history_anchored = journal.has_task_post_tail()
+    events = journal.read_task_events(action, allow_unanchored=True)
+    resolved = any(item["event"] == "RESOLVED" for item in events)
     if events:
         original_identity = events[0]["identity"]
-        resolved = any(item["event"] == "RESOLVED" for item in events)
         if resolved:
             current_without_binding = {key: value for key, value in identity.items()
                                       if key != "pr_binding"}
@@ -337,17 +339,19 @@ def _intent(adapter: Any, journal: PublicationJournal, publication: dict[str, An
                                         if key != "pr_binding"}
             if current_without_binding != original_without_binding:
                 raise JournalError("resolved Task publication action identity changed")
-            # Later publisher steps may bind the Task to the PR after this
-            # comment action completed. Preserve its original unbound/bound
-            # snapshot; a resolved action can never issue another POST.
-            return
-        if original_identity != identity:
+            if history_anchored:
+                # Later publisher steps may bind the Task to the PR after this
+                # comment action completed. Preserve its original unbound/bound
+                # snapshot; a resolved action can never issue another POST.
+                return
+        elif original_identity != identity:
             raise JournalError("Task publication action identity changed during recovery")
-    prior_event_ids = {item["action_id"] for item in journal.read_task_events()}
+    prior_event_ids = {
+        item["action_id"] for item in journal.read_task_events(allow_unanchored=True)
+    }
     if resume_action_id is not None and action not in prior_event_ids and prior is None:
         raise PublicationError("TASK_IDENTITY_CONFLICT", "recovery selector has no persisted publication action")
     attempted = any(item["event"] == "POST_ATTEMPTED" for item in events)
-    resolved = any(item["event"] == "RESOLVED" for item in events)
     if (events or prior is not None) and resume_action_id is None:
         raise PublicationError(
             "NETWORK_UNCERTAIN",
@@ -358,9 +362,11 @@ def _intent(adapter: Any, journal: PublicationJournal, publication: dict[str, An
         journal.append_task_event(action, event, identity, evidence)
 
     def fail_read(phase: str, detail: str) -> None:
-        append("READ_FAILED", phase=phase, detail=detail)
+        if history_anchored:
+            append("READ_FAILED", phase=phase, detail=detail)
 
     def read_publications(phase: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        nonlocal history_anchored
         try:
             result = adapter.find_task_publications(publication["publication_id"])
         except Exception as exc:
@@ -374,23 +380,33 @@ def _intent(adapter: Any, journal: PublicationJournal, publication: dict[str, An
             fail_read(phase, "malformed")
             raise PublicationError("NETWORK_UNCERTAIN", "Task publication lookup is malformed")
         if len(records) > 1:
-            append("READ_CONFLICT", phase=phase, count=len(records))
+            if history_anchored:
+                append("READ_CONFLICT", phase=phase, count=len(records))
             raise PublicationError("PUBLICATION_WRITE_CONFLICT", "Task publication lookup is ambiguous")
         if not records:
-            append("READ_EMPTY", phase=phase)
+            if history_anchored:
+                append("READ_EMPTY", phase=phase)
             return [], result
         try:
             current = validate_ci_publication(records[0])
         except ContractError as exc:
-            append("READ_CONFLICT", phase=phase, detail="invalid-publication")
+            if history_anchored:
+                append("READ_CONFLICT", phase=phase, detail="invalid-publication")
             raise PublicationError("TASK_IDENTITY_CONFLICT", "Task publication is invalid") from exc
         if current != publication:
-            append("READ_CONFLICT", phase=phase, detail="identity-mismatch")
+            if history_anchored:
+                append("READ_CONFLICT", phase=phase, detail="identity-mismatch")
             raise PublicationError("TASK_IDENTITY_CONFLICT", "Task publication identity/content differs")
         if (_publication_body(result, publication["publication_id"]) != identity["payload_utf8"]
                 or _publication_author(result, publication["publication_id"]) != identity["publisher_login"]):
-            append("READ_CONFLICT", phase=phase, detail="author-or-content-mismatch")
+            if history_anchored:
+                append("READ_CONFLICT", phase=phase, detail="author-or-content-mismatch")
             raise PublicationError("TASK_IDENTITY_CONFLICT", "Task publication author or canonical content differs")
+        if not history_anchored:
+            journal.anchor_task_history_after_exact_readback()
+            history_anchored = True
+        if resolved:
+            return records, result
         append("READ_MATCH", phase=phase,
                publication_id=publication["publication_id"],
                author_login=identity["publisher_login"],
@@ -408,6 +424,11 @@ def _intent(adapter: Any, journal: PublicationJournal, publication: dict[str, An
         raise
     if records:
         return
+    if not history_anchored:
+        raise PublicationError(
+            "NETWORK_UNCERTAIN",
+            "Task publication event history lacks a durable root tail anchor; UNKNOWN and pending",
+        )
     if legacy_history:
         raise PublicationError("NETWORK_UNCERTAIN", "legacy Task publication history is UNKNOWN; empty lookup cannot authorize POST")
     if attempted:
