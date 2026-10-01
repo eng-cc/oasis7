@@ -67,7 +67,10 @@ def validate_planned_items(
         if plan.get("disposition_validated") is not True:
             raise DriverError("empty planned item disposition is not validated")
         if disposition == "full_escalation":
-            raise DriverError("full escalation requires a separate passing exact-identity full-tier receipt")
+            raise DriverError(
+                "an empty package plan cannot satisfy full_escalation; run the generic full_escalation "
+                "test tier for this exact source head and require its passing full-tier receipt"
+            )
         result_list = list(results)
         if result_list:
             raise DriverError("unknown results for explicit empty-plan disposition")

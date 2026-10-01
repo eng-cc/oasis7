@@ -6,21 +6,25 @@
 
 审计轮次: 1
 
-> Authority boundary: this benchmark document explains testing-maturity
-> background and preserves the original 2026-03-24 benchmark history only. It
-> must not maintain current `shared_devnet`, `public_testnet`, `mainnet`, or
-> release status. Current network-tier truth lives in
-> `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md`.
+> Authority boundary: this benchmark preserves the original 2026-03-24 testing-
+> maturity snapshot and explicitly scoped follow-up evidence. It must not
+> maintain current `shared_devnet`, `public_testnet`, `mainnet`, release, or
+> live-fleet status. Current network-tier status belongs to
+> `doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.prd.md` and its
+> companion runbook. A dated `ready_for_live_candidate` result means only a
+> controlled, resettable, non-mainnet `public_testnet` candidate; it does not
+> mean public launch, a currently operating public fleet, open validator
+> onboarding, mainnet readiness, or production settlement.
 
 ## 1. Executive Summary
-- Problem Statement: oasis7 近几轮已经补齐签名交易、生产 signer custody、治理 signer 外部化和创世 ceremony 的专题规格，也已经开始做真实 governance registry import/audit/runbook，但团队仍缺一份“主流公链到底怎样分层测试、oasis7 当前已经覆盖到哪一层、还缺什么才能把 preview 做成更像主流链的工程体系”的正式基准。若继续只用零散 required/full、长跑和 drill 结果沟通，很容易把“局部门禁已存在”误判成“整体测试体系已接近主流公链”。
-- Proposed Solution: 由 testing 专业域维护测试体系对标 PRD，把主流公链常见测试层拆成 `spec/reference -> deterministic/unit/integration -> distributed/multi-node -> ui/playability -> longrun/chaos/drill -> network rehearsal / release-train readiness` 六层，再把 oasis7 可追溯的命令、证据与缺口映射进去；producer 只据此决定后续 execution workstreams 的优先级，不由本 benchmark 维护当前网络状态或成熟度。
+- Problem Statement: 在原始 2026-03-24 基准窗口，oasis7 已有签名交易、生产 signer custody、治理 signer 外部化和创世 ceremony 的专题规格，也已开始治理 registry import/audit/runbook；团队仍缺一份能说明主流公链测试分层、该窗口覆盖到哪一层及剩余缺口的正式基准。若继续只用零散 required/full、长跑和 drill 结果沟通，很容易把“局部门禁已存在”误判成“整体测试体系已接近主流公链”。
+- Proposed Solution: 由 testing 专业域维护测试体系对标 PRD，把主流公链常见测试层拆成 `spec/reference -> deterministic/unit/integration -> distributed/multi-node -> ui/playability -> longrun/chaos/drill -> network rehearsal / release-train readiness` 六层，再把 oasis7 可追溯的命令、证据与缺口映射为带日期的 benchmark snapshot；producer 只据此决定后续 execution workstreams 的优先级，不由本 benchmark 维护当前网络状态或成熟度。
 - Success Criteria:
   - SC-1: 明确给出不少于 6 层的“主流公链测试体系”分层模型，并区分“单客户端项目的等价替代要求”与“多客户端公链的原生做法”。
-  - SC-2: 明确给出 oasis7 当前 `已有 / 部分具备 / 缺失` 的测试矩阵，而不是只给抽象建议。
-  - SC-3: 明确指出当前强项至少包括：`required/full 基础门禁`、`分布式子系统库测试`、`Web-first UI 闭环`、`长跑套件`、`governance registry audit + drill runbook`。
-  - SC-4: 明确指出当前缺口至少包括：`fuzz/property-based gate 缺失`、formal `public_testnet` / `mainnet` readiness 仍需独立 gate、`真实 ceremony/drill 证据仍未完成`。
-  - SC-5: 形成 producer 可直接使用的下一步顺序：`先补 drill evidence -> 再补 fault/chaos/negative gate -> 再补 network rehearsal / release-train readiness`。
+  - SC-2: 明确给出 oasis7 在基准窗口的 `已有 / 部分具备 / 缺失` 测试矩阵，而不是只给抽象建议；该快照不代表当前运行状态。
+  - SC-3: 明确指出原始基准窗口的强项至少包括：`required/full 基础门禁`、`分布式子系统库测试`、`Web-first UI 闭环`、`长跑套件`、`governance registry audit + drill runbook`。
+  - SC-4: 明确指出原始基准窗口的缺口至少包括：`fuzz/property-based gate 缺失`、formal `public_testnet` / `mainnet` readiness 需要独立 gate、`governance / ceremony evidence 未充分`；后续窄范围 drill evidence 与当前 tier status 分别按 design 和正式 network-tier authority 解读。
+  - SC-5: 形成 producer 可直接使用的后续顺序：`补齐剩余治理 drill / ceremony evidence -> 扩充 fault/chaos/negative gate -> 再补 network rehearsal / release-train readiness`；已记录的窄范围 finality drill 不能当作整体治理或 release-train 收口。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -45,20 +49,22 @@
 | 功能点 | 字段定义 | 动作行为 | 状态转换 | 计算/判定规则 | 权限逻辑 |
 | --- | --- | --- | --- | --- | --- |
 | 主流公链分层模型 | `layer_id/layer_name/mainstream_expectation/oasis7_equivalent` | 冻结主流链常见测试层，并给出 oasis7 的等价要求 | `draft -> frozen` | 单客户端项目不得照搬“多客户端”字面要求，必须给出本项目等价替代层 | `producer_system_designer` 拍板，`qa_engineer` 联审 |
-| oasis7 当前映射 | `layer_id/current_coverage/evidence_paths/status` | 将 `required/full/S4/S6/S9/S10/governance audit` 映射到 benchmark | `unknown -> mapped` | 必须引用仓库内已有命令、手册或专题文档 | `qa_engineer` 主持，producer 收口 |
+| oasis7 历史映射快照 | `layer_id/coverage_at_snapshot/evidence_paths/status` | 将基准窗口内的 `required/full/S4/S6/S9/S10/governance audit` 映射到 benchmark | `unknown -> mapped` | 必须引用仓库内已有命令、手册或专题文档；当前网络状态由其正式 authority 查询 | `qa_engineer` 主持，producer 收口 |
 | 缺口矩阵 | `gap_id/layer_id/severity/owner/next_action` | 为每个缺失层给出 owner、优先级和下一动作 | `identified -> prioritized` | 若缺口直接影响安全口径或创世 gate，则至少记为 `high` | `producer_system_designer` 拍板 |
 | 口径门禁 | `claim_phrase/min_layer_status/reject_reason` | 根据 benchmark 覆盖状态决定是否允许某类外部表述 | `draft -> enforced` | 只要 network rehearsal、chaos/drill 或真实 ceremony evidence 未完成，就不得宣称“对标主流公链测试成熟度” | `liveops_community` 执行，producer 审批 |
 - Acceptance Criteria:
   - AC-1: 本专题必须明确写出主流公链测试体系至少包含六层：`spec/reference`、`deterministic/unit/integration`、`distributed/multi-node`、`ui/playability`、`longrun/chaos/drill`、`network rehearsal / release-train readiness`。
-  - AC-2: 本专题必须明确写出 oasis7 当前已具备 `S0/S1/S2/S4/S6/S9/S10 + governance registry audit/runbook` 这一类基础，但这些还不足以推导出“主流公链级测试体系已完成”。
-  - AC-3: 本专题必须明确写出：仓库当前没有冻结成正式 gate 的 fuzz/property-based 测试层。
-  - AC-4: 本专题必须明确写出：仓库当前没有共享 `devnet/testnet/canary release train` 的正式执行层。
-  - AC-5: 本专题必须明确写出：首轮真实 governance drill / genesis ceremony QA evidence 仍是当前高优先级缺口，而不是纯文档问题。
-  - AC-6: 本专题必须输出一份 `已有/部分具备/缺失/下一步` 矩阵，可直接给 producer 排序。
+  - AC-2: 本专题必须明确写出原始基准窗口已具备 `S0/S1/S2/S4/S6/S9/S10 + governance registry audit/runbook` 这一类基础，但这些不足以推导出“主流公链级测试体系已完成”，也不构成当前运行状态。
+  - AC-3: 本专题必须保留原始基准窗口的判断：当时仓库没有冻结成正式 gate 的 fuzz/property-based 测试层。
+  - AC-4: 本专题必须保留原始基准窗口的判断：当时仓库没有共享 `devnet/testnet/canary release train` 的正式执行层；后续 network-tier candidate 状态由独立 authority 管理，不改写此历史测试成熟度快照。
+<a id="ac-p2p-bench-005"></a>
+  - AC-5: 本专题必须保留原始基准窗口对 drill / ceremony 缺口的记录，并引用后续窄范围 default/live finality drill 的 pass/block/restore evidence；这组 evidence 不等于 signer custody、genesis ceremony、广泛 failover 覆盖或整体 QA 收口。详见 design 的历史补充证据节。
+<a id="ac-p2p-bench-006"></a>
+  - AC-6: 本专题必须输出一份带日期的 `已有/部分具备/缺失/下一步` 矩阵，可供 producer 排序；动态 task 与网络状态不由此矩阵维护。
   - AC-7: `testing-manual.md` 必须能找到本专题入口，避免测试分层与对标口径继续分离。
 - Non-Goals:
   - 不在本专题内直接实现 fuzz 框架、legacy shared_devnet rehearsal / formal test environment 或新的 chaos 平台。
-  - 不把当前 verdict 从 `not_mainnet_grade` 升级为任何更高级别。
+  - 不用本 benchmark 升级任何当前 network tier、release 或 live-fleet verdict。
   - 不替代具体 execution workstream 的详细测试卡。
 
 ## 3. AI System Requirements (If Applicable)
@@ -87,8 +93,8 @@
 
 ## 5. Risks & Roadmap
 - Phased Rollout:
-  - MVP: 建立 benchmark 文档、冻结 oasis7 当前映射与缺口矩阵。
-  - v1.1: 补首轮真实 governance drill / negative drill / QA evidence。
+  - MVP: 建立 benchmark 文档，冻结原始基准窗口的 oasis7 映射与缺口矩阵。
+  - v1.1: 扩充已存在的窄范围 finality drill evidence，继续补代表性 governance failure、signer custody、genesis ceremony 与 QA 证据。
   - v1.2: 补 network rehearsal / release-train readiness / 升级演练定义。
   - v2.0: 再决定是否需要引入 fuzz/property-based gate 或独立 verifier 路径。
 - Technical Risks:
@@ -108,5 +114,5 @@
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |
 | DEC-P2P-BENCH-001 | 用“主流公链测试分层 + oasis7 等价映射”做 benchmark | 直接照抄多客户端公链 checklist | oasis7 当前是单实现栈，必须给出等价要求才有执行意义。 |
-| DEC-P2P-BENCH-002 | 当前把 `governance audit/runbook` 记为强正向信号，但仍不等于 drill 完成 | 因为已有 import/audit 工具就直接记完成 | 缺真实 execution evidence，不能跨越 QA gate。 |
+| DEC-P2P-BENCH-002 | 把 governance audit/runbook 与窄范围 default/live finality drill 记为正向证据，但不等于完整治理 drill 或 ceremony 收口 | 因为已有 import/audit 工具或单条 pass case 就直接记整体完成 | 后续 evidence 已记录 `2-of-3` finality pass、negative gate block 和 baseline restore；custody、ceremony 与更广覆盖仍需独立证据，详见 design 的历史补充证据节。 |
 | DEC-P2P-BENCH-003 | 把 `network rehearsal / release-train readiness` 记为当前明显缺口 | 继续只在本地/clone-world dry-run 评估 readiness | 主流公链的成熟度很大一部分来自共享环境、升级窗口和持续演练。 |

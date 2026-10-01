@@ -232,7 +232,8 @@ checks = [
             "scoped repo context",
             "collaboration boundary",
             "`AGENTS.md` and the assigned role card are mandatory inputs",
-            "Every user request must enter the standard worktree flow before any substantive handling begins",
+            "Every request admitted under the prior-approval rule must enter the standard worktree flow before substantive handling",
+            "an unapproved workflow-change proposal stops before task/worktree bootstrap",
             "Read-only professional/domain questions must be dispatched to the matching bounded professional role slice",
             "The task/worktree decision and the professional-slice decision are intentionally decoupled",
             runtime_policy_marker,
@@ -243,7 +244,7 @@ checks = [
             "`visualization`",
             "`chain-world-state-substrate`",
             "Do not create a separate parent/planning surface",
-            "Reflection signal: use `capture-todo.sh` for an uncommitted cross-task idea;",
+            "Reflection signal: use `capture-todo.sh` for an uncommitted cross-task idea after any applicable workflow-change approval stop;",
             "### 1.2.3 GitHub Project-Backed PM Contract",
             "GitHub Issues + GitHub Project are the authoritative project-management",
             "Task UID` remains the stable internal identity",
@@ -604,6 +605,7 @@ import sys
 from pathlib import Path
 
 root = Path(sys.argv[1])
+source_text = (root / "doc/engineering/workflow/source-of-truth.md").read_text(encoding="utf-8")
 
 surfaces = {
     ".codex/config.toml": (root / ".codex/config.toml").read_text(encoding="utf-8"),
@@ -675,7 +677,8 @@ scenarios = [
         "expected_route": "default-workflow-bootstrap -> task truth -> matching professional role slice",
         "surface": "doc/engineering/workflow/source-of-truth.md",
         "required_markers": [
-            "Every user request must enter the standard worktree flow before any substantive handling begins",
+            "Every request admitted under the prior-approval rule must enter the standard worktree flow before substantive handling",
+            "an unapproved workflow-change proposal stops before task/worktree bootstrap",
             "Read-only/chat-only requests still split by judgment type after task truth exists:",
             "Read-only professional/domain questions must be dispatched to the matching bounded professional role slice",
             "Such read-only professional slices require the same GitHub-backed task and canonical task worktree as any other request.",
@@ -809,15 +812,17 @@ scenarios = [
         "expected_route": "freeze -> concurrent trusted exact-head CI and formal review -> current-identity join -> Pre-PR Ready/promotion",
         "surface": "doc/engineering/workflow/source-of-truth.md",
         "required_markers": [
-            "Parallel verification and fail-closed join.",
-            "trusted exact-head CI and role-complete professional review run concurrently",
-            "CI planning, role selection, review planning, closeout and promotion consume that projection",
-            "missing, pending, uncertain, stale, drifted, failed or unreadable evidence blocks the join",
-            "Explicit v1 remains read-only compatibility",
-            "configuration generation\nthrough the real parser/admission path",
-            "viewer through the runtime protocol",
-            "persistence write through real recovery",
-            "standard skill command through\nthe actual helper output",
+            "| Human-operated pre-PR role review | implemented |",
+            "TPM starts trusted same-head CI and source-bound professional review concurrently, then joins both current identities before readiness or promotion.",
+            "After freeze, build one verified impact projection, create/admit the default v2 source plan, and dispatch CI plus the complete formal-review batch concurrently.",
+            "task/head/base/projection/batch/packet drift fails closed.",
+            "Closeout and promotion live-validate the latest explicitly requested CI identity and join it with the completed source review; neither branch authorizes readiness alone",
+            "explicit v1 remains compatibility-only.",
+            "Both modes reject missing, pending, cancelled, failed, wrong-head, wrong-app, wrong-ref, malformed, or unreadable evidence",
+            "configuration generation through runtime admission",
+            "Viewer through the runtime protocol",
+            "persistence write through recovery",
+            "the skill command through its helper",
         ],
     },
     {
@@ -831,11 +836,12 @@ scenarios = [
             "generation to `record-pre-pr-review.sh`",
             "Require each role to return `findings` or `no_findings`, plus `residual_risk`",
             "Require trusted runtime attestation only when operating the future unattended supervisor.",
-            "Record plan/batch paths and digests in GitHub task issue evidence comments.",
+            "Before dispatch, record the plan and batch paths and digests in GitHub task issue evidence comments.",
             "dispatch the complete role batch while exact-head CI runs independently",
             "CI planner, role selector, plan, admission and closeout must bind the same projection digest",
             "Before Pre-PR Ready or promotion, perform the fail-closed",
-            "legacy `--evidence-digest` or audit-only shadow result never satisfies this",
+            "A legacy `--evidence-digest` or audit-only shadow result",
+            "never satisfies this join.",
         ],
     },
     {
@@ -1007,21 +1013,26 @@ scenarios = [
 ]
 
 review_skill = surfaces[".agents/skills/requesting-repo-owned-review/SKILL.md"]
-parallel_marker = "Parallel verification and fail-closed join."
+parallel_marker = "| Human-operated pre-PR role review | implemented |"
 join_marker = "Before Pre-PR Ready or promotion, perform the fail-closed"
 if source_text.index(parallel_marker) >= source_text.index("<a id=\"post-pr-merge-ready-gate\">"):
     raise SystemExit("workflow-behavior-eval: parallel CI/review contract must precede post-PR gates")
 if (
-    parallel_marker not in source_text
-    or "trusted exact-head CI and role-complete professional review run concurrently" not in source_text
-    or "CI planning, role selection, review planning, closeout and promotion consume that projection" not in source_text
+    "trusted same-head CI and source-bound professional review concurrently" not in source_text
+    or "then joins both current identities before readiness or promotion." not in source_text
+    or "CI plus the complete formal-review batch concurrently" not in source_text
+    or "task/head/base/projection/batch/packet drift fails closed." not in source_text
+    or "Closeout and promotion live-validate the latest explicitly requested CI identity and join it with the completed source review; neither branch authorizes readiness alone" not in source_text
 ):
     raise SystemExit("workflow-behavior-eval: fail-closed parallel CI/review join contract is incomplete")
 if "dispatch the complete role batch while exact-head CI runs independently" not in review_skill:
     raise SystemExit("workflow-behavior-eval: review skill does not activate concurrent CI/review scheduling")
 if join_marker not in review_skill and "fail-closed\njoin against the current PR" not in review_skill:
     raise SystemExit("workflow-behavior-eval: review skill does not require the current-identity join")
-if "legacy `--evidence-digest` or audit-only shadow result never satisfies this" not in review_skill:
+if (
+    "A legacy `--evidence-digest` or audit-only shadow result" not in review_skill
+    or "never satisfies this join." not in review_skill
+):
     raise SystemExit("workflow-behavior-eval: legacy evidence-digest restriction is missing")
 
 evaluated: list[dict[str, object]] = []
@@ -1208,11 +1219,11 @@ payload = {
     "workflow_path": "default-workflow-bootstrap -> new-task-worktree -> workflow-report -> repo-owned-workflow-router -> TPM coordinate/integrate only + professional role subagent dispatch -> prepare-task-pr --draft-candidate --create with verified projection -> exact-head CI and role review concurrently -> fail-closed join -> task-closeout -> prepare-task-pr --promote-draft -> PR CI/comment watch/fix -> review-thread-closeout -> merge/cleanup",
     "fixture_scope": "repo-owned bootstrap/routing surface checks, isolated worktree bootstrap smoke, GitHub-backed PM runtime tests, and fake-gh PR helper tests",
     "expected_agent_behavior": [
-        "every user request first routes through a repo-owned bootstrap surface rather than an external bootstrap",
-        "bootstrap creates or enters isolated task truth before fact lookup, chat answer, professional slice dispatch, or repository writeback",
+        "workflow-change tasks check explicit user approval before bootstrap; every admitted request first routes through a repo-owned bootstrap surface rather than an external bootstrap",
+        "after any applicable approval stop, bootstrap creates or enters isolated task truth before fact lookup, chat answer, professional slice dispatch, or repository writeback",
         "read-only professional/domain questions use matching role slices after task/worktree bootstrap",
         "task worktree bootstrap stays source-clean and starts the target task",
-        "read-only/chat-only requests are forced through task/worktree bootstrap",
+        "admitted read-only/chat-only requests are forced through task/worktree bootstrap after any applicable workflow-change approval stop",
         "TPM is the default main Agent / workflow coordinator / canonical integrator only",
         "TPM does not own professional/domain conclusions; matching professional role slices do",
         "brainstorming and TDD remain conditional while professional role work is represented as bounded subagent slices",
@@ -1229,7 +1240,7 @@ payload = {
     ],
     "verification_surface": [segment["id"] for segment in segments],
     "failure_signature": [
-        "default bootstrap surface disappears or no longer points every user request into repo-owned task truth",
+        "default bootstrap surface disappears or admitted requests no longer enter repo-owned task truth after any approval stop",
         "routing scenarios stop requiring read-only/chat-only work to establish task truth before answer or dispatch",
         "read-only professional/domain questions collapse back into TPM-owned conclusions",
         "TPM role or registry markers disappear from role surfaces",

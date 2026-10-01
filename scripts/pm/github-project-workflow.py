@@ -400,9 +400,7 @@ def load_archived_tasks(root: pathlib.Path, statuses: set[str]) -> dict[str, Ord
 
 
 def load_mapping(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists():
-        return {"version": 1, "tasks": {}}
-    return json.loads(path.read_text(encoding="utf-8"))
+    return durable_store.read_mapping(path, {"version": 1, "tasks": {}})
 
 
 _store_path = pathlib.Path(__file__).with_name("workflow-durable-store.py")
@@ -553,6 +551,8 @@ def fetch_project_items_by_ids(project_item_ids: list[str]) -> dict[str, dict[st
     for project_item_id in project_item_ids:
         cmd.extend(["-f", f"ids[]={project_item_id}"])
     payload = run_json(cmd)
+    if payload.get("errors"):
+        raise RuntimeError("GitHub GraphQL Project item read returned errors")
     items: dict[str, dict[str, Any]] = {}
     for node in (payload.get("data") or {}).get("nodes") or []:
         if not node:
@@ -760,8 +760,30 @@ def command_audit(args: argparse.Namespace) -> int:
     statuses = selected_statuses(args)
     mapping_path = mapping_path_for(root, args.mapping)
     mapping = load_mapping(mapping_path)
-    tasks = load_tasks(root, statuses, mapping)
     task_uid = getattr(args, "task_uid", None)
+    if task_uid:
+        retired = durable_store.retired_task(mapping, task_uid)
+        if retired is not None:
+            result = {
+                "status": "retired",
+                "project_owner": str((mapping.get("project") or {}).get("owner") or ""),
+                "project_number": (mapping.get("project") or {}).get("number"),
+                "mapping_path": str(mapping_path),
+                "task_uid": task_uid,
+                "selected_count": 0,
+                "project_item_count": 0,
+                "selected_statuses": sorted(statuses),
+                "status_counts": {},
+                "errors": [],
+                "warnings": [],
+                "selected_task": {"task_uid": task_uid, "target": "retired", "workflow_phase": ""},
+            }
+            if args.json:
+                print(json.dumps(result, indent=2, sort_keys=True))
+            else:
+                print(f"github-project-workflow audit: task UID {task_uid} is retired by a validated tombstone")
+            return 0
+    tasks = load_tasks(root, statuses, mapping)
     if task_uid:
         tasks = {uid: task for uid, task in tasks.items() if uid == args.task_uid}
     mapped_tasks = mapping.get("tasks", {})
@@ -1037,6 +1059,29 @@ def command_audit(args: argparse.Namespace) -> int:
 
 
 def command_step3_gate(args: argparse.Namespace) -> int:
+    archive_path = args.root / ".pm/github-project-sync/task-archive.jsonl"
+    if not archive_path.is_file():
+        message = (
+            "historical coverage requires complete GitHub Issue/Project evidence; "
+            "the local legacy archive is unavailable, so this gate cannot establish its historical task set"
+        )
+        if args.json:
+            print(
+                json.dumps(
+                    {
+                        "status": "failed",
+                        "selected_count": 0,
+                        "project_item_count": 0,
+                        "errors": [message],
+                        "warnings": [],
+                    },
+                    indent=2,
+                    sort_keys=True,
+                )
+            )
+        else:
+            print(f"github-project-workflow step3-gate: FAIL: {message}", file=sys.stderr)
+        return 1
     args.include_done = True
     args.strict_mapping = True
     args.full_list = True

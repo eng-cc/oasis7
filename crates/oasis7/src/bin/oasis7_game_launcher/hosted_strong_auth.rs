@@ -213,32 +213,6 @@ mod tests {
     use super::*;
     use ed25519_dalek::SigningKey;
 
-    fn lock_hosted_strong_auth_env() -> std::sync::MutexGuard<'static, ()> {
-        super::hosted_access::hosted_strong_auth_test_env_lock()
-            .lock()
-            .unwrap_or_else(|poisoned| poisoned.into_inner())
-    }
-
-    fn set_env(name: &str, value: &str) {
-        // SAFETY: This test/setup code mutates process environment in a controlled scope.
-        unsafe {
-            oasis7::env_mut::set_var(name, value);
-        }
-    }
-
-    fn clear_env() {
-        for name in [
-            HOSTED_STRONG_AUTH_PUBLIC_KEY_ENV,
-            HOSTED_STRONG_AUTH_PRIVATE_KEY_ENV,
-            HOSTED_STRONG_AUTH_APPROVAL_CODE_ENV,
-        ] {
-            // SAFETY: This test/setup code mutates process environment in a controlled scope.
-            unsafe {
-                oasis7::env_mut::remove_var(name);
-            }
-        }
-    }
-
     fn signer(seed: u8) -> (String, String) {
         let private_key = [seed; 32];
         let signing_key = SigningKey::from_bytes(&private_key);
@@ -250,12 +224,23 @@ mod tests {
 
     #[test]
     fn hosted_prompt_control_strong_auth_grant_requires_approval_code() {
-        let _guard = lock_hosted_strong_auth_env();
-        clear_env();
         let (public_key, private_key) = signer(41);
-        set_env(HOSTED_STRONG_AUTH_PUBLIC_KEY_ENV, public_key.as_str());
-        set_env(HOSTED_STRONG_AUTH_PRIVATE_KEY_ENV, private_key.as_str());
-        set_env(HOSTED_STRONG_AUTH_APPROVAL_CODE_ENV, "correct-code");
+        if !crate::hosted_test_env::run(&[
+            (
+                HOSTED_STRONG_AUTH_PUBLIC_KEY_ENV,
+                std::ffi::OsStr::new(&public_key),
+            ),
+            (
+                HOSTED_STRONG_AUTH_PRIVATE_KEY_ENV,
+                std::ffi::OsStr::new(&private_key),
+            ),
+            (
+                HOSTED_STRONG_AUTH_APPROVAL_CODE_ENV,
+                std::ffi::OsStr::new("correct-code"),
+            ),
+        ]) {
+            return;
+        }
 
         let mut issuer = HostedPlayerSessionIssuer::default();
         let issue = issuer.issue(DeploymentMode::HostedPublicJoin);
@@ -275,17 +260,27 @@ mod tests {
             response.error_code.as_deref(),
             Some("approval_code_invalid")
         );
-        clear_env();
     }
 
     #[test]
     fn hosted_prompt_control_strong_auth_grant_issues_preview_grant() {
-        let _guard = lock_hosted_strong_auth_env();
-        clear_env();
         let (public_key, private_key) = signer(42);
-        set_env(HOSTED_STRONG_AUTH_PUBLIC_KEY_ENV, public_key.as_str());
-        set_env(HOSTED_STRONG_AUTH_PRIVATE_KEY_ENV, private_key.as_str());
-        set_env(HOSTED_STRONG_AUTH_APPROVAL_CODE_ENV, "correct-code");
+        if !crate::hosted_test_env::run(&[
+            (
+                HOSTED_STRONG_AUTH_PUBLIC_KEY_ENV,
+                std::ffi::OsStr::new(&public_key),
+            ),
+            (
+                HOSTED_STRONG_AUTH_PRIVATE_KEY_ENV,
+                std::ffi::OsStr::new(&private_key),
+            ),
+            (
+                HOSTED_STRONG_AUTH_APPROVAL_CODE_ENV,
+                std::ffi::OsStr::new("correct-code"),
+            ),
+        ]) {
+            return;
+        }
 
         let mut issuer = HostedPlayerSessionIssuer::default();
         let issue = issuer.issue(DeploymentMode::HostedPublicJoin);
@@ -311,17 +306,27 @@ mod tests {
         assert_eq!(issued_grant.agent_id, "agent-0");
         assert_eq!(issued_grant.signer_public_key, public_key);
         assert!(issued_grant.expires_at_unix_ms > issued_grant.issued_at_unix_ms);
-        clear_env();
     }
 
     #[test]
     fn hosted_strong_auth_grant_rejects_main_token_transfer_until_lane_lands() {
-        let _guard = lock_hosted_strong_auth_env();
-        clear_env();
         let (public_key, private_key) = signer(43);
-        set_env(HOSTED_STRONG_AUTH_PUBLIC_KEY_ENV, public_key.as_str());
-        set_env(HOSTED_STRONG_AUTH_PRIVATE_KEY_ENV, private_key.as_str());
-        set_env(HOSTED_STRONG_AUTH_APPROVAL_CODE_ENV, "correct-code");
+        if !crate::hosted_test_env::run(&[
+            (
+                HOSTED_STRONG_AUTH_PUBLIC_KEY_ENV,
+                std::ffi::OsStr::new(&public_key),
+            ),
+            (
+                HOSTED_STRONG_AUTH_PRIVATE_KEY_ENV,
+                std::ffi::OsStr::new(&private_key),
+            ),
+            (
+                HOSTED_STRONG_AUTH_APPROVAL_CODE_ENV,
+                std::ffi::OsStr::new("correct-code"),
+            ),
+        ]) {
+            return;
+        }
 
         let mut issuer = HostedPlayerSessionIssuer::default();
         let issue = issuer.issue(DeploymentMode::HostedPublicJoin);
@@ -347,6 +352,5 @@ mod tests {
                 .as_deref()
                 .is_some_and(|message| message.contains("main_token_transfer"))
         );
-        clear_env();
     }
 }

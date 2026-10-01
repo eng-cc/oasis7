@@ -17,6 +17,7 @@ PLANNER = ROOT / "scripts" / "plan-rust-required-scope.sh"
 SELECTOR = ROOT / "scripts" / "pm" / "review-role-selector.py"
 REVIEW_PLAN = ROOT / "scripts" / "pm" / "review-plan.py"
 CLOSEOUT = ROOT / "scripts" / "pm" / "task-closeout.sh"
+REVIEW_SKILL = ROOT / ".agents" / "skills" / "requesting-repo-owned-review" / "SKILL.md"
 SPEC = importlib.util.spec_from_file_location("workflow_impact_projection", PROJECTION)
 assert SPEC is not None and SPEC.loader is not None
 WORKFLOW_IMPACT = importlib.util.module_from_spec(SPEC)
@@ -45,8 +46,8 @@ class WorkflowImpactConsumersTests(unittest.TestCase):
             "public_semantics": [],
             "affected_consumers": ["required-ci"],
             "closure_status": {"status": "complete", "reason": "verified", "evidence": [{
-                "path": "scripts/ci-required-scope.v2.json",
-                "sha256": "sha256:" + hashlib.sha256((ROOT / "scripts/ci-required-scope.v2.json").read_bytes()).hexdigest(),
+                "path": "Cargo.toml",
+                "sha256": "sha256:" + hashlib.sha256((ROOT / "Cargo.toml").read_bytes()).hexdigest(),
             }]},
         }
 
@@ -170,6 +171,14 @@ class WorkflowImpactConsumersTests(unittest.TestCase):
         review_help = self.run_consumer([str(REVIEW_PLAN), "--help"])
         self.assertIn("--source-review-input", review_help.stdout)
         self.assertIn("impact_projection_digest", CLOSEOUT.read_text(encoding="utf-8"))
+
+    def test_review_skill_defines_scope_only_closure_producer_contract(self) -> None:
+        skill = REVIEW_SKILL.read_text(encoding="utf-8")
+        self.assertIn(
+            "Set `closure_status` only from changed-scope analysis completeness and verifiable scope evidence; "
+            "never derive it from CI conclusion, review status, or readiness.",
+            skill,
+        )
 
     def test_missing_projection_path_fails_closed(self) -> None:
         missing = "/tmp/oasis7-missing-impact-projection.json"

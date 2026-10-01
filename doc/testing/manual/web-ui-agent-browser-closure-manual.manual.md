@@ -203,6 +203,12 @@ agent-browser --session "$AB_SESSION" screenshot output/playwright/viewer/viewer
 - `connectionStatus=connected`，或页面显式返回可追溯 blocker。
 - 至少产出 1 张截图、1 份 console 日志、1 份状态快照。
 
+### QA infrastructure receiver evidence boundary
+
+若本次采样用于状态提交、恢复、world scope 或 consumer parity 的 QA 证据，先按 [QA receiver source/scene method](../prd.md#qa-infrastructure-source-scene-method) 固定候选、world/branch/window、access mode 与 execution lane，再使用可见页面动作；`__AW_TEST__` 只可读取 readiness、当前状态、history 和诊断，不得代替玩家输入或权威 API/journal oracle。按 before/action/pending-or-outage/fresh-recovery/final 顺序保存截图、页面 state、console/request error 与可读的同候选 API/Agent authority refs，并校验每份 artifact 的路径、字节数和 digest。
+
+provider-backed 样本另外记录 provider kind、model、endpoint route 和 preflight evidence/provenance（不写 secret）。Viewer 截图或文本相似不能独自证明状态相同；缺少候选/窗口/权威 join 时标 `blocked`/`unverified`，观察到字段冲突或重复效果时保留 exact failure signature。当前底层 Viewer Debug 和 mock/plumbing 样本仍只用于相应诊断，不提升到 provider、S6 full 或 release proof。桌面+narrow 外部 headed 和 provider-backed Agent parity 的 full 要求由 S6/QA root 界定。
+
 ## software_safe 专项
 - 若只做 formal gameplay / summary 路径，优先跑 `viewer-software-safe-step-regression.sh`。
 - 若验证 prompt/chat/rollback，优先跑 `viewer-software-safe-chat-regression.sh`。

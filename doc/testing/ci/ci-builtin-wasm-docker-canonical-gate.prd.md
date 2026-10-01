@@ -7,17 +7,19 @@
 
 ## 1. Executive Summary
 - Problem Statement: builtin wasm 发布链路已经切到 Docker canonical build，但 testing 侧专题仍保留 keyed multi-runner、旧 required check 与旧 workflow 叙事，导致现行 Linux-only canonical gate 与历史 host-native 多 runner 对账口径混杂。
-- Proposed Solution: 将专题目标收敛为 Docker canonical gate：发布清单只保留 `linux-x86_64` 单 canonical token，GitHub-hosted gate 统一走 `.github/workflows/wasm-determinism-gate.yml`，required checks 与 release evidence 围绕 canonical Docker 输出组织；外部 Docker-capable macOS summary 只作为 full-tier 补充证据。
+- Proposed Solution: 将专题目标收敛为 Docker canonical gate：发布清单只保留 `linux-x86_64` 单 canonical token，GitHub-hosted gate 统一走 `.github/workflows/wasm-determinism-gate.yml`，required checks 与 release evidence 围绕 canonical Docker 输出组织；外部 Docker-capable macOS summary 只补充跨宿主产物证据，不属于 `test_tier_full`。
 - Success Criteria:
   - SC-1: `m1/m4/m5` hash manifest 仅包含单 canonical token：`linux-x86_64=<sha256>`。
   - SC-2: `sync-m*-builtin-wasm-artifacts.sh` 默认按 Docker canonical 平台校验，并拒绝 legacy / mixed 输入。
-  - SC-3: `.github/workflows/wasm-determinism-gate.yml` 成为唯一现行 builtin wasm 独立 gate，并在 PR/push 上先按 changed paths 规划命中的 `m1/m4/m5` module set；未命中时保持 required context 稳定但 job 内 no-op 成功。
-  - SC-4: required checks 默认包含以下 3 个汇总校验上下文：
+  - SC-3: `.github/workflows/wasm-determinism-gate.yml` 是现行 builtin wasm hash/evidence 独立 gate，并在 PR/push 上先按 changed paths 规划命中的 `m1/m4/m5` module set；未命中时保持 verify job context 稳定，但收集与校验步骤写出 scope note 后成功 no-op。
+  - SC-4: `Wasm Determinism Gate` 的 3 个稳定 verify job context 为：
     - `Wasm Determinism Gate / verify-wasm-determinism (m1)`
     - `Wasm Determinism Gate / verify-wasm-determinism (m4)`
     - `Wasm Determinism Gate / verify-wasm-determinism (m5)`
-  - SC-5: `source_hash` 仅基于可追踪源码与模块级 lockfile 输入，不再依赖 workspace 根 `Cargo.lock`。
-  - SC-6: 本地默认只读校验，manifest/identity 写入路径限定非 CI 的显式授权流程。
+    `scripts/ci-ensure-required-checks.py` 将这些名称作为 required-check policy 的默认上下文并集；该仓库配置不能单独证明 GitHub 当前已启用相同 branch protection。
+  - SC-5: `test_tier_required` / `test_tier_full` 是 `scripts/ci-tests.sh` 的测试层级；它们不执行也不替代独立的 `wasm-determinism-gate` hash / receipt-evidence 检查。额外导入的 macOS summary 只补跨宿主产物证据，不代表 `test_tier_full` 或 `./scripts/ci-tests.sh full` 的结果。
+  - SC-6: `source_hash` 仅基于可追踪源码与模块级 lockfile 输入，不再依赖 workspace 根 `Cargo.lock`。
+  - SC-7: 本地默认只读校验，manifest/identity 写入路径限定非 CI 的显式授权流程。
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -43,7 +45,7 @@
 | sync strict 模式 | `legacy_tokens`, `keyed_tokens`, `current_platform` | 检测 legacy / mixed 时直接失败 | `checking -> rejected/accepted` | 仅 canonical token 允许进入后续流程 | 本地默认只读，写入需显式授权 |
 | identity / receipt 输入收敛 | 源码白名单、模块 lockfile、build receipt、hash manifest token | 计算 `source_hash`、`identity_hash` 与 release evidence | `collecting -> hashing -> emitted` | 输入路径排序稳定，忽略未跟踪文件 | 由构建脚本统一执行 |
 | canonical summary / evidence 对账 | `runner`, `canonical_platform`, `module_hashes`, `receipt_evidence`, `module_set`, `scope` | planner 先产出 scope，runner 仅对命中的 module set 导出摘要；汇总脚本执行差异比较并生成 evidence | `planned -> generated -> uploaded -> reconciled` | 按 `module_id` 全量对齐 canonical 输出；无关改动允许 no-op success | CI workflow 自动执行 |
-| required check 保护 | check context 列表、strict 标记 | 自动注入/并集更新 `required_status_checks` | `planned -> applied -> verified` | 保留既有上下文并去重 | 需仓库写权限 |
+| required check 保护 | 三个稳定 verify job context、strict 标记 | 更新 required-check policy 的 context 并集 | `planned -> applied -> verified` | 保留既有上下文并去重；workflow 文件和脚本不证明 live branch-protection 状态 | 需仓库写权限 |
 - Acceptance Criteria:
   - AC-1: `m1/m4/m5_builtin_modules.sha256` 全量迁移到单 canonical token，且不含 legacy / 双平台 token。
   - AC-2: sync 脚本在 check / sync 两种模式均拒绝 legacy 或 mixed 输入。
@@ -78,7 +80,7 @@
   - `crates/oasis7/src/runtime/world/artifacts/m5_builtin_modules.sha256`
 - Edge Cases & Error Handling:
   - git diff base 不可解析：planner 必须回退为 `m1,m4,m5` 全量运行，不能静默漏跑。
-  - GitHub-hosted macOS 无 Docker daemon：默认 gate 只跑 Linux canonical runner；full-tier 通过外部 summary 导入补证。
+  - GitHub-hosted macOS 无 Docker daemon：独立 gate 只跑 Linux canonical runner；可导入真实 Docker-capable `darwin-arm64` summary 补充跨宿主产物证据，该证据不属于 `test_tier_full` 测试层级。
   - 当前平台不在 canonical 列表：`--check` 直接失败并提示 `OASIS7_WASM_CANONICAL_PLATFORMS`。
   - manifest 含重复平台 token：严格失败并报告 `module_id + platform`。
   - runner 缺摘要或摘要重复：汇总脚本失败并列出缺失 / 重复 runner。
@@ -108,9 +110,9 @@
 - Test Plan & Traceability:
 | PRD-ID | 对应任务 | 测试层级 | 验证方法 | 回归影响范围 |
 | --- | --- | --- | --- | --- |
-| PRD-TESTING-CI-WASMHARD-001 | T1/T2/T3 | `test_tier_required` | `sync-m4/m5 --check` + canonical token schema 校验 | builtin wasm manifest 稳定性 |
-| PRD-TESTING-CI-WASMHARD-002 | T1/T6/T7 | `test_tier_required` | identity / receipt evidence 对账 + source 输入白名单验证 | identity hash 可复现性 |
-| PRD-TESTING-CI-WASMHARD-003 | T1/T4/T5/T8/T9 | `test_tier_required` + `test_tier_full` | `wasm-determinism-gate` planner + no-op/collect 分流验证 + required check 注入脚本验证 | 发布门禁与策略治理 |
+| PRD-TESTING-CI-WASMHARD-001 | T1/T2/T3 | 独立 `wasm-determinism-gate`，不属于 `ci-tests` tier | `sync-m4/m5 --check` + canonical token schema 校验 | builtin wasm manifest 稳定性 |
+| PRD-TESTING-CI-WASMHARD-002 | T1/T6/T7 | 独立 hash / receipt-evidence 验证，不属于 `ci-tests` tier | identity / receipt evidence 对账 + source 输入白名单验证 | identity hash 可复现性 |
+| PRD-TESTING-CI-WASMHARD-003 | T1/T4/T5/T8/T9 | 独立 workflow context 与 required-check policy | `wasm-determinism-gate` planner + no-op/collect 分流验证 + required-check context 配置验证 | 发布门禁与策略治理 |
 - Decision Log:
 | 决策ID | 选定方案 | 备选方案（否决） | 依据 |
 | --- | --- | --- | --- |

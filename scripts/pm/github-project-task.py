@@ -9,6 +9,7 @@ import json
 import os
 import pathlib
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -16,6 +17,8 @@ import uuid
 from collections import OrderedDict
 from datetime import datetime
 from typing import Any
+
+from loop_leaf_result import verification_projection_errors
 
 
 ALL_STATUSES = ("candidate", "committed", "blocked", "ready", "pr_watch", "done", "deferred")
@@ -31,6 +34,8 @@ issue_authoritative_keys = frozenset(
         "source_type", "severity", "pr_url", "pr_number", "merge_hold",
         "primary_package",
         "loop_binding", "bootstrap_base_oid", "completion_mode",
+        "aggregate_plan_comment_id", "aggregate_plan_sha256",
+        "aggregate_completion_receipt_sha256",
         "traceability_mode", "coordination_ref", "traceability_record",
         "coordination_record", "traceability_candidate", "aggregate_candidate",
         "non_pr_completion_evidence", "non_pr_completion_evidence_sha256",
@@ -46,6 +51,11 @@ traceability_context_keys = frozenset(
 )
 traceability_issue_keys = frozenset({"loop_binding", *traceability_context_keys})
 project_lifecycle_keys = frozenset({"status", "workflow_phase"})
+ISSUE_ROUTE_FIELDS = (
+    "status", "workflow_phase", "completion_mode", "aggregate_plan_comment_id",
+    "aggregate_plan_sha256", "aggregate_completion_receipt_sha256", "pr_number", "pr_url",
+)
+LIVE_ROUTE_CACHE_FIELDS = ISSUE_ROUTE_FIELDS
 identity_bound_cache_keys = frozenset(
     {
         "repository", "canonical_worktree", "task_branch", "default_branch",
@@ -70,6 +80,22 @@ if not _store_path.exists(): _store_path = pathlib.Path.cwd()/"scripts/pm/workfl
 _store_spec = importlib.util.spec_from_file_location("workflow_durable_store", _store_path)
 assert _store_spec and _store_spec.loader
 durable_store = importlib.util.module_from_spec(_store_spec); _store_spec.loader.exec_module(durable_store)
+_candidate_guard_path = pathlib.Path(__file__).with_name("closed_duplicate_candidate_guard.py")
+_candidate_guard_module: Any | None = None
+
+
+def candidate_admission_guard_module() -> Any:
+    global _candidate_guard_module
+    if _candidate_guard_module is not None:
+        return _candidate_guard_module
+    if not _candidate_guard_path.is_file():
+        raise RuntimeError(f"candidate admission guard is unavailable beside this task entrypoint: {_candidate_guard_path}")
+    spec = importlib.util.spec_from_file_location("closed_duplicate_candidate_guard", _candidate_guard_path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load candidate admission guard at {_candidate_guard_path}")
+    _candidate_guard_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(_candidate_guard_module)
+    return _candidate_guard_module
 
 
 class _CommandExit(SystemExit):
@@ -128,9 +154,7 @@ def load_non_merge_finalizer_module() -> Any:
 
 
 def load_mapping(path: pathlib.Path) -> dict[str, Any]:
-    if not path.exists():
-        return {"version": 1, "tasks": {}}
-    return json.loads(path.read_text(encoding="utf-8"))
+    return durable_store.read_mapping(path, {"version": 1, "tasks": {}})
 
 
 save_mapping = durable_store.replace_json
@@ -442,6 +466,24 @@ def pr_number_from_url(pr_url: str) -> int | None:
     return int(match.group(1)) if match else None
 
 
+def same_pr_number(left: Any, right: Any) -> bool:
+    """Compare canonical numeric PR identities across Issue and mapping encodings."""
+    def canonical(value: Any) -> str | None:
+        if type(value) is int and value > 0:
+            return str(value)
+        if isinstance(value, str) and re.fullmatch(r"[1-9][0-9]*", value):
+            return value
+        return None
+
+    left_empty = left is None or (isinstance(left, str) and left == "")
+    right_empty = right is None or (isinstance(right, str) and right == "")
+    if left_empty or right_empty:
+        return left_empty and right_empty
+    left_number = canonical(left)
+    right_number = canonical(right)
+    return left_number is not None and left_number == right_number
+
+
 ISSUE_LIST_SECTIONS = ("Source refs:", "Doc refs:", "Related PRD:", "Acceptance:")
 
 
@@ -469,6 +511,26 @@ def issue_section_rows(body: str, header: str, *, references: bool) -> list[str]
             break
         values.append(match.group(1).strip())
     return values
+
+
+def strict_issue_scalar_fields(body: str, keys: tuple[str, ...]) -> dict[str, str]:
+    """Read safety-sensitive Issue scalars without accepting first-match ambiguity."""
+    fields: dict[str, str] = {}
+    for key in keys:
+        lines = re.findall(
+            rf"^[ \t]*(?:-[ \t]+)?{re.escape(key)}\b[^\n]*$",
+            body,
+            re.MULTILINE,
+        )
+        if not lines:
+            continue
+        if len(lines) != 1:
+            die(f"task Issue {key} field is duplicated")
+        match = re.fullmatch(rf"[ \t]*-[ \t]+{re.escape(key)}: `([^`\n]*)`[ \t]*", lines[0])
+        if not match:
+            die(f"task Issue {key} field is malformed")
+        fields[key] = match.group(1)
+    return fields
 
 
 def issue_task_fields(body: str) -> dict[str, Any]:
@@ -515,7 +577,12 @@ def issue_task_fields(body: str) -> dict[str, Any]:
         except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
             die(f"invalid traceability context: {exc}")
         fields.update(context)
-    for key in ("owner_role", "module", "status", "workflow_phase", "priority", "worktree_hint", "source_signal", "source_type", "severity", "completion_mode", "bootstrap_base_oid", "non_pr_completion_evidence_sha256", "last_closed_at"):
+    fields.update(strict_issue_scalar_fields(body, ISSUE_ROUTE_FIELDS))
+    if "pr_number" in fields:
+        if not re.fullmatch(r"[1-9][0-9]*", fields["pr_number"]):
+            die("task Issue pr_number field is malformed")
+        fields["pr_number"] = int(fields["pr_number"])
+    for key in ("owner_role", "module", "priority", "worktree_hint", "source_signal", "source_type", "severity", "bootstrap_base_oid", "non_pr_completion_evidence_sha256", "last_closed_at"):
         match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
         if match:
             fields[key] = match.group(1)
@@ -552,10 +619,6 @@ def issue_task_fields(body: str) -> dict[str, Any]:
     if hold_values:
         hold_values["active"] = str(hold_values.get("active", "false")).lower() == "true"
         fields["merge_hold"] = hold_values
-    for key in ("pr_url", "pr_number"):
-        match = re.search(rf"^- {re.escape(key)}: `([^`]+)`$", body, re.MULTILINE)
-        if match:
-            fields[key] = match.group(1)
     for key, header in (("source_refs", "Source refs:"), ("doc_refs", "Doc refs:"), ("related_prd", "Related PRD:")):
         values = issue_section_rows(body, header, references=True)
         if values is not None:
@@ -620,7 +683,7 @@ def github_issue_record(repo: str, task_uid: str) -> dict[str, Any] | None:
         if not number:
             die("task Issue discovery returned invalid identity")
         candidate = json.loads(run_text(["gh", "issue", "view", str(number), "-R", repo,
-                                         "--json", "body,number,title,url,state,stateReason"]))
+                                         "--json", "body,number,title,url,state,stateReason,updatedAt"]))
         candidate_body = str(candidate.get("body") or "").replace("\r\n", "\n")
         fields = re.findall(r"^task_uid:[^\n]*$", candidate_body, re.MULTILINE)
         uids = re.findall(r"^task_uid:\s*(task_[0-9a-f]{32})$", candidate_body, re.MULTILINE)
@@ -652,6 +715,7 @@ def github_issue_record(repo: str, task_uid: str) -> dict[str, Any] | None:
             "issue_url": str(issue.get("url") or hits[0].get("url") or ""),
             "issue_state": str(issue.get("state") or hits[0].get("state") or ""),
             "issue_state_reason": str(issue.get("stateReason") or ""),
+            "updated_at": str(issue.get("updatedAt") or ""),
             "_github_source": "issue_search",
         }
     )
@@ -666,10 +730,24 @@ def github_pull_request(repo: str, pr_number: int) -> dict[str, Any]:
     return payload
 
 
+def has_exact_task_pr_linkage(body: Any, task_uid: str, issue_number: int) -> bool:
+    """Require one canonical whole-line Task marker and non-closing Refs line."""
+    if not isinstance(body, str):
+        return False
+    lines = body.splitlines()
+    task_lines = [line for line in lines if line.startswith("Task:")]
+    refs_lines = [line for line in lines if line.startswith("Refs")]
+    return task_lines == [f"Task: {task_uid}"] and refs_lines == [f"Refs #{issue_number}"]
+
+
 def validate_record_pr_live_identity(
     args: argparse.Namespace,
     record: dict[str, Any],
     pr_number: int,
+    *,
+    allow_exact_publication_poststate: bool = False,
+    publication_intent: dict[str, Any] | None = None,
+    publication_module: Any | None = None,
 ) -> dict[str, Any]:
     """Bind record-pr to the live task Issue, registered worktree and live PR head."""
     try:
@@ -682,14 +760,42 @@ def validate_record_pr_live_identity(
         die("record-pr: live task Issue UID mismatch")
     if str(live_issue.get("issue_state") or "").strip().upper() != "OPEN":
         die("record-pr: live task Issue is not OPEN")
+    expected_status = "committed" if bool(getattr(args, "draft_candidate", False)) else "pr_watch"
+    expected_phase = "verification" if bool(getattr(args, "draft_candidate", False)) else "pr_watch"
+    if bool(getattr(args, "existing_ready_update", False)):
+        expected_status, expected_phase = record.get("status"), record.get("workflow_phase")
+    expected_url = f"https://github.com/{args.repo}/pull/{pr_number}"
+    exact_publication_poststate = allow_exact_publication_poststate and all(
+        live_issue.get(key) == value
+        for key, value in {
+            "status": expected_status,
+            "workflow_phase": expected_phase,
+            "pr_url": expected_url,
+        }.items()
+    ) and same_pr_number(live_issue.get("pr_number"), pr_number)
+    cached_projection_matches = all(
+        live_issue.get(key) == record.get(key)
+        for key in ("status", "workflow_phase", "pr_url")
+    ) and same_pr_number(live_issue.get("pr_number"), record.get("pr_number"))
+    if allow_exact_publication_poststate and not exact_publication_poststate and not cached_projection_matches:
+        die("record-pr: live Task Issue is neither cached truth nor the exact publication poststate")
     for key in (
         "issue_number", "issue_url", "owner_role", "module", "priority",
         "status", "workflow_phase", "worktree_hint",
     ):
         if live_issue.get(key) != record.get(key):
+            if exact_publication_poststate and key in {"status", "workflow_phase"}:
+                continue
             die(f"record-pr: live task Issue {key} differs from cached task truth")
     for key in ("pr_url", "pr_number"):
-        if live_issue.get(key) != record.get(key):
+        matches = (
+            same_pr_number(live_issue.get(key), record.get(key))
+            if key == "pr_number"
+            else live_issue.get(key) == record.get(key)
+        )
+        if not matches:
+            if exact_publication_poststate:
+                continue
             die(f"record-pr: live task Issue {key} differs from cached PR binding")
 
     if record.get("task_uid") != args.task_uid or str(record.get("repository") or "") != args.repo:
@@ -713,6 +819,18 @@ def validate_record_pr_live_identity(
         die(f"record-pr: canonical task HEAD readback failed: {exc}")
     if not re.fullmatch(r"[0-9a-fA-F]{40,64}", canonical_head):
         die("record-pr: canonical task HEAD identity is malformed")
+    if bool(getattr(args, "existing_ready_update", False)) and publication_intent is not None:
+        if publication_module is None:
+            die("record-pr: existing ready update requires validated C1 publication evidence")
+        if (
+            publication_intent.get("repository") != args.repo
+            or publication_intent.get("task_uid") != args.task_uid
+            or publication_intent.get("source_repository_id") != publication_intent.get("repository_id")
+            or publication_intent.get("source_ref") != identity["task_branch"]
+            or publication_intent.get("target_ref") != identity["default_branch"]
+            or str(publication_intent.get("source_head_oid") or "").casefold() != canonical_head.casefold()
+        ):
+            die("record-pr: C1 publication intent differs from current canonical task identity")
 
     try:
         live_pr = github_pull_request(args.repo, pr_number)
@@ -745,6 +863,25 @@ def validate_record_pr_live_identity(
         die("record-pr: live PR head does not match canonical task HEAD")
     if type(live_pr.get("draft")) is not bool or live_pr.get("draft") != bool(getattr(args, "draft_candidate", False)):
         die("record-pr: live PR draft state does not match requested task transition")
+    if bool(getattr(args, "existing_ready_update", False)):
+        if not isinstance(publication_intent, dict) or publication_module is None:
+            die("record-pr: existing ready update requires validated C1 publication evidence")
+        if not has_exact_task_pr_linkage(
+            live_pr.get("body"), args.task_uid, int(record.get("issue_number") or 0),
+        ):
+            die("record-pr: live ready-update PR lacks exact unique Task/Refs identity")
+        try:
+            live_projection = publication_module.decode_marker(live_pr.get("body"))
+        except (TypeError, ValueError) as exc:
+            die(f"record-pr: live ready-update PR projection marker is invalid: {exc}")
+        if (
+            live_projection.get("task_uid") != publication_intent.get("task_uid")
+            or str(live_projection.get("source_head_oid") or "").casefold()
+                != str(publication_intent.get("source_head_oid") or "").casefold()
+            or live_projection.get("scope_base_oid") != publication_intent.get("source_scope_oid")
+            or live_projection.get("projection_digest") != publication_intent.get("projection_digest")
+        ):
+            die("record-pr: live ready-update PR projection differs from C1 publication intent")
     return live_issue
 
 
@@ -768,6 +905,9 @@ def task_from_record(uid: str, record: dict[str, Any]) -> OrderedDict[str, Any]:
             ("loop_binding", record.get("loop_binding")),
             ("bootstrap_base_oid", record.get("bootstrap_base_oid")),
             ("completion_mode", record.get("completion_mode") or ""),
+            ("aggregate_plan_comment_id", record.get("aggregate_plan_comment_id") or ""),
+            ("aggregate_plan_sha256", record.get("aggregate_plan_sha256") or ""),
+            ("aggregate_completion_receipt_sha256", record.get("aggregate_completion_receipt_sha256") or ""),
             ("traceability_mode", record.get("traceability_mode")),
             ("coordination_ref", record.get("coordination_ref")),
             ("traceability_record", record.get("traceability_record")),
@@ -843,6 +983,12 @@ def issue_body(task: OrderedDict[str, Any]) -> str:
         lines.append(f"- pr_number: `{task.get('pr_number')}`")
     if task.get("completion_mode"):
         lines.append(f"- completion_mode: `{task.get('completion_mode')}`")
+        if task.get("aggregate_plan_comment_id"):
+            lines.append(f"- aggregate_plan_comment_id: `{task.get('aggregate_plan_comment_id')}`")
+        if task.get("aggregate_plan_sha256"):
+            lines.append(f"- aggregate_plan_sha256: `{task.get('aggregate_plan_sha256')}`")
+        if task.get("aggregate_completion_receipt_sha256"):
+            lines.append(f"- aggregate_completion_receipt_sha256: `{task.get('aggregate_completion_receipt_sha256')}`")
         evidence = str(task.get("non_pr_completion_evidence") or "").encode("utf-8")
         encoded = base64.urlsafe_b64encode(evidence).decode("ascii").rstrip("=")
         lines.append(f"- non_pr_completion_evidence_b64: `{encoded}`")
@@ -1554,6 +1700,12 @@ def require_record(args: argparse.Namespace) -> tuple[pathlib.Path, dict[str, An
     root = args.root.resolve()
     mapping_path = mapping_path_for(root, args.mapping)
     mapping = load_mapping(mapping_path)
+    try:
+        retired = durable_store.retired_task(mapping, args.task_uid)
+    except ValueError as exc:
+        die(f"task UID retirement ledger is invalid: {exc}")
+    if retired is not None:
+        die(f"task UID is retired and cannot be read or mutated: {args.task_uid}")
     record = mapping.get("tasks", {}).get(args.task_uid)
     if not record:
         try:
@@ -1564,6 +1716,290 @@ def require_record(args: argparse.Namespace) -> tuple[pathlib.Path, dict[str, An
             die(f"task_uid not found in mapping or GitHub issue body: {args.task_uid}")
         mapping.setdefault("tasks", {})[args.task_uid] = record
     return mapping_path, mapping, record
+
+
+def require_live_issue_route_matches_cache(repo: str, task_uid: str, record: dict[str, Any]) -> dict[str, Any]:
+    """Require the canonical Issue route and lifecycle to match the local projection."""
+    try:
+        live = github_issue_record(repo, task_uid)
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError, RuntimeError) as exc:
+        die(f"done transition: canonical live Issue route lookup failed closed: {exc}")
+    if not isinstance(live, dict):
+        die("done transition: canonical live Issue route is unavailable")
+    if (live.get("task_uid") != task_uid or type(live.get("issue_number")) is not int
+            or type(record.get("issue_number")) is not int
+            or live.get("issue_number") != record.get("issue_number")):
+        die("done transition: canonical live Issue identity differs from task mapping")
+
+    mismatched = []
+    for key in LIVE_ROUTE_CACHE_FIELDS:
+        cached_value = record.get(key)
+        live_value = live.get(key)
+        if key == "pr_number":
+            cached_value = None if cached_value in (None, "") else str(cached_value)
+            live_value = None if live_value in (None, "") else str(live_value)
+        else:
+            cached_value = None if cached_value in (None, "") else cached_value
+            live_value = None if live_value in (None, "") else live_value
+        if cached_value != live_value:
+            mismatched.append(key)
+    if mismatched:
+        aggregate_route = (
+            record.get("completion_mode") == "ordered_delivery_aggregate"
+            or live.get("completion_mode") == "ordered_delivery_aggregate"
+            or any(key.startswith("aggregate_") for key in mismatched)
+        )
+        route_name = "aggregate route/pointers" if aggregate_route else "Issue route/lifecycle"
+        die(f"done transition: canonical live {route_name} differ from task mapping ({', '.join(mismatched)})")
+    return live
+
+
+def validate_aggregate_task_complete_claim(
+    repo: str,
+    root: pathlib.Path,
+    task_uid: str,
+    claim: Any,
+    live_issue: dict[str, Any],
+) -> None:
+    """Validate the local claim-ready projection consumed by aggregate closeout.
+
+    This checks the repository-owned claim shape and its exact local source
+    identity. It does not claim trusted runtime attestation; that is outside the
+    current human-operated closeout contract.
+    """
+    if not isinstance(claim, dict):
+        die("closeout-task: aggregate completion requires canonical task_complete claim evidence")
+    if (claim.get("claim_type") != "task_complete" or claim.get("status") != "verified"
+            or claim.get("allowed_to_claim") is not True
+            or type(claim.get("verification_exit_code")) is not int
+            or claim.get("verification_exit_code") != 0
+            or claim.get("task_uid") != task_uid):
+        die("closeout-task: aggregate task_complete claim identity or result is invalid")
+
+    profile = claim.get("verification_profile")
+    if not isinstance(profile, str) or profile == "fixture_repository_state":
+        die("closeout-task: aggregate task_complete claim requires a production verification profile")
+    profile_commands = {
+        # Keep these command identities aligned with claim-ready.sh's
+        # repository-owned verification-profile switch. Profile/mode support
+        # itself is shared with loop_leaf_result.py.
+        "codex_subagent_role_fit": (
+            "./scripts/pm/verify-codex-subagent-role-fit.sh --task-uid " + shlex.quote(task_uid)
+        ),
+        "workflow_behavior": "./scripts/pm/workflow-behavior-eval.sh",
+        "repository_required": "true",
+    }
+    if profile not in profile_commands or claim.get("verify_command") != profile_commands[profile]:
+        die("closeout-task: aggregate task_complete claim profile/command is not repository-owned")
+
+    verification = {
+        "profile": profile,
+        "mode": claim.get("verification_mode"),
+        "frozen_source_head": claim.get("frozen_source_head"),
+        "frozen_source_tree": claim.get("frozen_source_tree"),
+        "repository_fingerprint_before": claim.get("repository_fingerprint_before"),
+        "repository_fingerprint_after": claim.get("repository_fingerprint_after"),
+        "verification_epoch_stable": claim.get("verification_epoch_stable"),
+        "verification_exit_code": claim.get("verification_exit_code"),
+    }
+    if verification_projection_errors(verification):
+        die("closeout-task: aggregate task_complete verification projection is incomplete or unsupported")
+    if claim.get("verification_mode") != "detached_frozen_tree":
+        die("closeout-task: aggregate task_complete claim must use detached frozen-tree verification")
+
+    try:
+        verified_at = datetime.fromisoformat(str(claim.get("verified_at") or "").replace("Z", "+00:00"))
+        current_time = datetime.now().astimezone()
+    except (TypeError, ValueError):
+        die("closeout-task: aggregate task_complete claim timestamp is invalid")
+    if verified_at.tzinfo is None or verified_at > current_time:
+        die("closeout-task: aggregate task_complete claim timestamp is not a valid current-round time")
+
+    validate_latest_task_complete_comment(repo, live_issue, task_uid, claim, profile_commands[profile], verified_at)
+
+    root = root.resolve()
+    fingerprint_tool = root / "scripts/pm/repo-state-fingerprint.py"
+    try:
+        fingerprint = json.loads(subprocess.check_output(
+            [sys.executable, str(fingerprint_tool), str(root)],
+            text=True,
+            stderr=subprocess.PIPE,
+        ))
+        head = str(fingerprint.get("head") or "")
+        tree = subprocess.check_output(
+            ["git", "-C", str(root), "rev-parse", "HEAD^{tree}"],
+            text=True,
+            stderr=subprocess.PIPE,
+        ).strip()
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError) as exc:
+        die(f"closeout-task: aggregate task_complete source identity read failed: {exc}")
+
+    expected_head = str(claim.get("frozen_source_head") or "")
+    expected_tree = str(claim.get("frozen_source_tree") or "")
+    if (not re.fullmatch(r"[0-9a-f]{40}", head)
+            or claim.get("repository_head") != head
+            or expected_head != head
+            or expected_tree != tree
+            or claim.get("repository_index_sha256") != fingerprint.get("index_sha256")
+            or claim.get("repository_fingerprint_before") != fingerprint.get("sha256")
+            or claim.get("repository_fingerprint_after") != fingerprint.get("sha256")):
+        die("closeout-task: aggregate task_complete claim does not bind current HEAD/tree/index/fingerprint")
+
+
+def validate_latest_task_complete_comment(
+    repo: str,
+    live_issue: dict[str, Any],
+    task_uid: str,
+    claim: dict[str, Any],
+    verify_command: str,
+    verified_at: datetime,
+) -> None:
+    """Require the latest Issue update to be the exact claim-ready readback."""
+    issue_number = live_issue.get("issue_number")
+    issue_url = f"https://github.com/{repo}/issues/{issue_number}"
+    if (type(issue_number) is not int or issue_number <= 0
+            or live_issue.get("issue_url") != issue_url
+            or str(live_issue.get("issue_state") or "").upper() != "OPEN"):
+        die("closeout-task: aggregate claim verification requires the exact open task Issue")
+    try:
+        comments = json.loads(run_text([
+            "gh", "api",
+            f"repos/{repo}/issues/{issue_number}/comments?per_page=1&sort=created&direction=desc",
+        ]))
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError, RuntimeError, subprocess.TimeoutExpired) as exc:
+        die(f"closeout-task: latest task claim comment readback failed closed: {exc}")
+    if not isinstance(comments, list) or len(comments) != 1 or not isinstance(comments[0], dict):
+        die("closeout-task: latest task claim comment readback is missing or malformed")
+    comment = comments[0]
+    expected_body = "\n".join((
+        "<!-- oasis7-pm-claim-verification -->",
+        f"Task UID: {task_uid}",
+        f"Claim Type: {claim['claim_type']}",
+        f"Verified At: {claim['verified_at']}",
+        f"Verification Exit Code: {claim['verification_exit_code']}",
+        f"Verification Status: {claim['status']}",
+        f"Verify Command: {verify_command}",
+        f"Claim Message: {claim.get('claim_message') or ''}",
+        "",
+    ))
+    comment_id = comment.get("id")
+    expected_comment_url = (
+        f"https://github.com/{repo}/issues/{issue_number}#issuecomment-{comment_id}"
+    )
+    expected_api_issue_url = f"https://api.github.com/repos/{repo}/issues/{issue_number}"
+    if (comment.get("body") != expected_body
+            or type(comment_id) is not int or comment_id <= 0
+            or comment.get("html_url") != expected_comment_url
+            or comment.get("issue_url") != expected_api_issue_url):
+        die("closeout-task: latest task comment does not exactly bind the task_complete claim")
+    try:
+        created_at = datetime.fromisoformat(str(comment.get("created_at") or "").replace("Z", "+00:00"))
+        comment_updated_at = datetime.fromisoformat(str(comment.get("updated_at") or "").replace("Z", "+00:00"))
+        issue_updated_at = datetime.fromisoformat(str(live_issue.get("updated_at") or "").replace("Z", "+00:00"))
+        current_time = datetime.now().astimezone()
+    except (TypeError, ValueError):
+        die("closeout-task: latest task claim comment timestamps are invalid")
+    if (created_at.tzinfo is None or comment_updated_at.tzinfo is None or issue_updated_at.tzinfo is None
+            or created_at < verified_at or created_at > current_time
+            or comment_updated_at != created_at or issue_updated_at != comment_updated_at):
+        die("closeout-task: task claim comment is stale, edited, or superseded on the live Issue")
+
+
+def validate_live_aggregate_lifecycle(
+    repo: str,
+    task_uid: str,
+    record: dict[str, Any],
+    live_issue: dict[str, Any],
+    *,
+    expected_state: str,
+) -> dict[str, Any]:
+    """Require the live coordinator Issue to retain its task_done projection.
+
+    Aggregate terminal completion advances the Project/mapping phase and then
+    closes the Issue. The Issue body remains at its verified `done/task_done`
+    closeout projection, so every terminal consumer checks that projection
+    against the bound aggregate route and receipt instead of trusting cache.
+    """
+    expected_state = expected_state.upper()
+    if expected_state not in {"OPEN", "CLOSED"}:
+        die("aggregate coordinator lifecycle expected Issue state is invalid")
+    if not isinstance(live_issue, dict):
+        die("aggregate coordinator lifecycle live Issue is unavailable")
+
+    body = live_issue.get("body")
+    if isinstance(body, str):
+        body = body.replace("\r\n", "\n")
+        uid_lines = re.findall(r"(?m)^[ \t]*(?:-[ \t]+)?task_uid[ \t]*:[^\n]*$", body)
+        if uid_lines != [f"task_uid: {task_uid}"]:
+            die("aggregate coordinator lifecycle Task UID is missing, malformed, or ambiguous")
+        try:
+            live_fields = issue_task_fields(body)
+        except SystemExit as exc:
+            die(f"aggregate coordinator lifecycle fields are malformed: {exc}")
+        if live_fields.get("trace_projection_error"):
+            die(f"aggregate coordinator lifecycle fields are malformed: {live_fields['trace_projection_error']}")
+        issue_url = str(live_issue.get("url") or "")
+        issue_state = str(live_issue.get("state") or "")
+    else:
+        # github_issue_record() is also a live source: it verifies the unique
+        # canonical UID in the Issue body and returns its strict parsed fields.
+        if live_issue.get("task_uid") != task_uid:
+            die("aggregate coordinator lifecycle Task UID is missing or ambiguous")
+        live_fields = live_issue
+        issue_url = str(live_issue.get("issue_url") or "")
+        issue_state = str(live_issue.get("issue_state") or "")
+
+    issue_number = live_issue.get("number", live_issue.get("issue_number"))
+    expected_url = f"https://github.com/{repo}/issues/{record.get('issue_number')}"
+    if (record.get("task_uid") != task_uid or record.get("repository") != repo
+            or type(record.get("issue_number")) is not int
+            or issue_number != record.get("issue_number") or issue_url != expected_url):
+        die("aggregate coordinator lifecycle Issue identity differs from task truth")
+    if issue_state.upper() != expected_state:
+        die(f"aggregate coordinator lifecycle Issue must remain {expected_state.lower()}")
+
+    if (record.get("status") != "done"
+            or record.get("workflow_phase") not in {"task_done", "post_merge_done"}
+            or record.get("completion_mode") != "ordered_delivery_aggregate"
+            or record.get("pr_number") or record.get("pr_url")
+            or not record.get("aggregate_plan_comment_id")
+            or not record.get("aggregate_plan_sha256")
+            or not re.fullmatch(r"[0-9a-f]{64}", str(record.get("aggregate_completion_receipt_sha256") or ""))):
+        die("aggregate coordinator lifecycle task truth is not terminalizable")
+
+    expected_fields = {
+        "status": "done",
+        "workflow_phase": "task_done",
+        "completion_mode": "ordered_delivery_aggregate",
+        "aggregate_plan_comment_id": str(record["aggregate_plan_comment_id"]),
+        "aggregate_plan_sha256": record["aggregate_plan_sha256"],
+        "aggregate_completion_receipt_sha256": record["aggregate_completion_receipt_sha256"],
+    }
+    if (any(live_fields.get(key) != value for key, value in expected_fields.items())
+            or live_fields.get("pr_number") not in (None, "")
+            or live_fields.get("pr_url") not in (None, "")):
+        die("aggregate coordinator lifecycle differs from the verified done/task_done route")
+    return live_fields
+
+
+def require_live_aggregate_lifecycle(
+    repo: str,
+    task_uid: str,
+    record: dict[str, Any],
+    *,
+    expected_state: str,
+) -> dict[str, Any]:
+    """Read and validate the live coordinator lifecycle before terminal effects."""
+    try:
+        live_issue = github_issue_record(repo, task_uid)
+    except (OSError, subprocess.CalledProcessError, json.JSONDecodeError, RuntimeError, SystemExit) as exc:
+        die(f"aggregate coordinator lifecycle live Issue read failed closed: {exc}")
+    if not isinstance(live_issue, dict):
+        die("aggregate coordinator lifecycle live Issue is unavailable")
+    validate_live_aggregate_lifecycle(
+        repo, task_uid, record, live_issue, expected_state=expected_state,
+    )
+    return live_issue
 
 
 def recover_missing_project_item(args: argparse.Namespace, record: dict[str, Any]) -> None:
@@ -1852,6 +2288,13 @@ def command_move_task(args: argparse.Namespace) -> int:
     mapping_path, mapping, record = require_record(args)
     previous = str(record.get("status") or "")
     previous_phase = str(record.get("workflow_phase") or "")
+    if args.to_status == "done" and record.get("completion_mode") == "ordered_delivery_aggregate":
+        die(
+            "move-task: ordered aggregate completion requires the exact aggregate receipt, plan, candidate, "
+            "and evidence through task-closeout.sh; generic move-task cannot publish aggregate task_done"
+        )
+    if args.to_status == "done":
+        require_live_issue_route_matches_cache(args.repo, args.task_uid, record)
     if args.to_status in GATE_OWNED_STATUSES:
         canonical_writer = (
             "task-closeout.sh with canonical review/CI evidence"
@@ -1925,9 +2368,36 @@ def command_closeout_task(args: argparse.Namespace) -> int:
     mapping_path, mapping, original = require_record(args)
     previous = str(original.get("status") or "")
     claim = json.loads(args.claim_json)
+    if args.to_status == "done" and original.get("completion_mode") == "ordered_delivery_aggregate" and not args.aggregate_receipt:
+        die("closeout-task: ordered aggregate completion requires an aggregate receipt")
+    if args.aggregate_receipt and original.get("completion_mode") != "ordered_delivery_aggregate":
+        die("closeout-task: aggregate receipt requires ordered aggregate task truth")
+    live_issue = None
+    if args.to_status == "done":
+        live_issue = require_live_issue_route_matches_cache(
+            getattr(args, "repo", DEFAULT_REPO), args.task_uid, original,
+        )
     if args.to_status != "deferred":
         if claim.get("status") != "verified" or not claim.get("allowed_to_claim"):
             die("closeout-task: verified immutable claim evidence is required")
+    if args.aggregate_receipt:
+        if args.to_status != "done" or args.pr_receipt:
+            die("closeout-task: aggregate receipt is done-only and excludes singular PR receipt")
+        if original.get("completion_mode") != "ordered_delivery_aggregate" or original.get("pr_number") or original.get("pr_url"):
+            die("closeout-task: coordinator mode/PR identity is invalid")
+        if not all((args.aggregate_plan, args.aggregate_candidate, args.aggregate_evidence)):
+            die("closeout-task: aggregate receipt requires plan, candidate and evidence")
+        validate_aggregate_task_complete_claim(
+            getattr(args, "repo", DEFAULT_REPO), args.root, args.task_uid, claim, live_issue or {},
+        )
+        validation = subprocess.run([
+            sys.executable, str(args.root.resolve() / "scripts/pm/aggregate-task-completion.py"), "validate",
+            "--repo-root", str(args.root.resolve()), "--task-uid", args.task_uid,
+            "--record", args.aggregate_plan, "--candidate", args.aggregate_candidate,
+            "--evidence", args.aggregate_evidence, "--receipt", args.aggregate_receipt, "--json",
+        ], text=True, capture_output=True)
+        if validation.returncode:
+            die("closeout-task: aggregate receipt live validation failed: " + (validation.stderr.strip() or validation.stdout.strip()))
     record = json.loads(json.dumps(original))
     closed_at = now()
     record.setdefault("claim_verifications", []).append(claim)
@@ -1939,6 +2409,11 @@ def command_closeout_task(args: argparse.Namespace) -> int:
         receipt = json.loads(pathlib.Path(args.pr_receipt).read_text(encoding="utf-8"))
         record["merge_receipt"] = receipt
         record["merge_receipt_sha256"] = hashlib.sha256(pathlib.Path(args.pr_receipt).read_bytes()).hexdigest()
+    if args.to_status == "done" and args.aggregate_receipt:
+        aggregate_path = pathlib.Path(args.aggregate_receipt)
+        receipt = json.loads(aggregate_path.read_text(encoding="utf-8"))
+        record["aggregate_completion_receipt"] = receipt
+        record["aggregate_completion_receipt_sha256"] = hashlib.sha256(aggregate_path.read_bytes()).hexdigest()
     if args.to_status == "done":
         recover_missing_project_item(args, record)
         if not record.get("project_item_id"):
@@ -1966,6 +2441,12 @@ def command_closeout_task(args: argparse.Namespace) -> int:
             "Merge Receipt PR": receipt.get("pr_url"),
             "Merge Receipt Head": receipt.get("head_oid"),
             "Merge Receipt Observed At": receipt.get("observed_at"),
+        })
+    if record.get("aggregate_completion_receipt"):
+        evidence_fields.update({
+            "Aggregate Receipt Type": "oasis7_aggregate_task_complete",
+            "Aggregate Receipt SHA256": record["aggregate_completion_receipt_sha256"],
+            "Aggregate Plan Comment ID": record["aggregate_completion_receipt"].get("plan_comment_id"),
         })
     comment_url = issue_comment(
         args.repo,
@@ -2002,6 +2483,9 @@ def command_closeout_task(args: argparse.Namespace) -> int:
         if record.get("merge_receipt"):
             cache_patch["merge_receipt"] = record["merge_receipt"]
             cache_patch["merge_receipt_sha256"] = record["merge_receipt_sha256"]
+        if record.get("aggregate_completion_receipt"):
+            cache_patch["aggregate_completion_receipt"] = record["aggregate_completion_receipt"]
+            cache_patch["aggregate_completion_receipt_sha256"] = record["aggregate_completion_receipt_sha256"]
         if record.get("project_item_id"):
             cache_patch["project_item_id"] = record["project_item_id"]
         for key in traceability_issue_keys:
@@ -2024,22 +2508,192 @@ def command_closeout_task(args: argparse.Namespace) -> int:
     return 0
 
 
+def command_bind_aggregate_plan(args: argparse.Namespace) -> int:
+    """Bind an immutable linked-delivery plan before any declared PR merges."""
+    mapping_path, _mapping, original = require_record(args)
+    if original.get("pr_number") or original.get("pr_url"):
+        die("bind-aggregate-plan: coordinator cannot have a singular PR")
+    if original.get("completion_mode") not in {None, "", "ordered_delivery_aggregate"}:
+        die("bind-aggregate-plan: coordinator already uses a different completion route")
+    if original.get("status") in {"done", "deferred"} or original.get("workflow_phase") in TERMINAL_WORKFLOW_PHASES:
+        die("bind-aggregate-plan: terminal coordinator cannot be rebound")
+    plan_path = pathlib.Path(args.plan).resolve(strict=True)
+    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    aggregate_path = args.root.resolve() / "scripts/pm/aggregate-task-completion.py"
+    aggregate_spec = importlib.util.spec_from_file_location("aggregate_task_completion", aggregate_path)
+    if not aggregate_spec or not aggregate_spec.loader:
+        die("bind-aggregate-plan: aggregate plan validator is unavailable")
+    aggregate_module = importlib.util.module_from_spec(aggregate_spec)
+    aggregate_spec.loader.exec_module(aggregate_module)
+    try:
+        aggregate_module.validate_plan(plan, args.task_uid)
+    except aggregate_module.ReceiptError as exc:
+        die(f"bind-aggregate-plan: invalid versioned plan: {exc}")
+    if plan.get("task_uid") != args.task_uid or plan.get("repository") != args.repo or plan.get("issue_number") != original.get("issue_number"):
+        die("bind-aggregate-plan: plan/coordinator identity mismatch")
+    canonical = json.dumps(plan, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    body = "<!-- oasis7-aggregate-delivery-plan/v1 -->\n" + canonical
+    expected_sha = "sha256:" + hashlib.sha256(body.encode("utf-8")).hexdigest()
+    comment = json.loads(run_text(["gh", "api", f"repos/{args.repo}/issues/comments/{args.comment_id}"]))
+    if (comment.get("id") != args.comment_id or comment.get("body") != body or
+            str(comment.get("issue_url") or "").rstrip("/").split("/")[-1] != str(original.get("issue_number"))):
+        die("bind-aggregate-plan: live plan comment body/Issue identity mismatch")
+    author = str((comment.get("user") or {}).get("login") or "")
+    if not author:
+        die("bind-aggregate-plan: live plan author is unavailable")
+    permission = json.loads(run_text(["gh", "api", f"repos/{args.repo}/collaborators/{author}/permission"]))
+    if permission.get("permission") != "admin":
+        die("bind-aggregate-plan: plan author lacks repository admin authority")
+    issue = json.loads(run_text(["gh", "api", f"repos/{args.repo}/issues/{original['issue_number']}"]))
+    issue_body = str(issue.get("body") or "").replace("\r\n", "\n")
+    issue_uid_fields = re.findall(r"(?m)^[ \t]*(?:-[ \t]+)?task_uid\b[^\n]*$", issue_body)
+    if issue.get("state") != "open" or issue_uid_fields != [f"task_uid: {args.task_uid}"]:
+        die("bind-aggregate-plan: live coordinator Issue identity/state mismatch")
+    live_fields = issue_task_fields(issue_body)
+    if live_fields.get("completion_mode") not in {None, "", "ordered_delivery_aggregate"}:
+        die("bind-aggregate-plan: live coordinator already uses a different completion route")
+    live_pointer = (live_fields.get("aggregate_plan_comment_id"), live_fields.get("aggregate_plan_sha256"))
+    if any(live_pointer) and live_pointer != (str(args.comment_id), expected_sha):
+        die("bind-aggregate-plan: live immutable plan pointer differs")
+    for child in plan.get("required_deliveries") or []:
+        number = child.get("pr_number") if isinstance(child, dict) else None
+        if not isinstance(number, int) or number <= 0:
+            die("bind-aggregate-plan: required delivery PR identity is invalid")
+        pr = json.loads(run_text(["gh", "pr", "view", str(number), "-R", args.repo, "--json", "state,isDraft,number,url"]))
+        if pr.get("state") != "OPEN" or pr.get("isDraft") is not True or pr.get("number") != number or pr.get("url") != child.get("pr_url"):
+            die("bind-aggregate-plan: all required PRs must be live drafts at binding")
+    old = (original.get("aggregate_plan_comment_id"), original.get("aggregate_plan_sha256"))
+    if any(old) and old != (str(args.comment_id), expected_sha):
+        die("bind-aggregate-plan: an immutable coordinator plan is already bound")
+    record = json.loads(json.dumps(original))
+    record.update(completion_mode="ordered_delivery_aggregate",
+                  aggregate_plan_comment_id=str(args.comment_id), aggregate_plan_sha256=expected_sha)
+    update_issue_body(args.repo, int(record["issue_number"]), task_from_record(args.task_uid, record))
+    reread = json.loads(run_text(["gh", "api", f"repos/{args.repo}/issues/{record['issue_number']}"]))
+    fields = issue_task_fields(str(reread.get("body") or ""))
+    if any(fields.get(key) != value for key, value in (("completion_mode", "ordered_delivery_aggregate"),
+                                                       ("aggregate_plan_comment_id", str(args.comment_id)),
+                                                       ("aggregate_plan_sha256", expected_sha))):
+        die("bind-aggregate-plan: live Issue pointer readback mismatch")
+    merge_task_mapping(mapping_path, args.task_uid, {
+        "completion_mode": "ordered_delivery_aggregate",
+        "aggregate_plan_comment_id": str(args.comment_id), "aggregate_plan_sha256": expected_sha,
+    })
+    print(json.dumps({"status": "bound", "task_uid": args.task_uid, "comment_id": args.comment_id,
+                      "plan_body_sha256": expected_sha}, sort_keys=True))
+    return 0
+
+
+def validate_canonical_aggregate_terminal_receipt(
+    args: argparse.Namespace,
+    record: dict[str, Any],
+    receipt: Any,
+    receipt_bytes: bytes,
+) -> None:
+    """Accept only the finalizer's exact, canonical durable aggregate receipt."""
+    root = args.root.resolve()
+    common = pathlib.Path(run_text(["git", "-C", str(root), "rev-parse", "--git-common-dir"]).strip())
+    if not common.is_absolute():
+        common = (root / common).resolve()
+    durable_root = common / "oasis7-workflow-receipts"
+    task_root = durable_root / args.task_uid
+    terminal_path = task_root / "aggregate-terminal-receipt.json"
+    supplied_path = pathlib.Path(args.receipt_json)
+    try:
+        supplied_resolved = supplied_path.resolve(strict=True)
+        terminal_resolved = terminal_path.resolve(strict=True)
+        canonical_bytes = terminal_path.read_bytes()
+    except OSError:
+        die("set-phase: canonical aggregate terminal receipt is not durably present")
+    if (durable_root.is_symlink() or task_root.is_symlink() or terminal_path.is_symlink()
+            or supplied_resolved != terminal_resolved or canonical_bytes != receipt_bytes):
+        die("set-phase: aggregate terminal receipt is not at its canonical durable identity")
+
+    expected_keys = {
+        "schema", "receipt_type", "issuer", "task_uid", "repository", "issue_number",
+        "aggregate_completion_receipt_sha256", "plan_comment_id", "observed_at", "receipt_sha256",
+    }
+    if not isinstance(receipt, dict) or set(receipt) != expected_keys:
+        die("set-phase: canonical aggregate terminal receipt schema is incomplete or ambiguous")
+    expected_storage = (json.dumps(receipt, sort_keys=True, indent=2) + "\n").encode("utf-8")
+    if receipt_bytes != expected_storage:
+        die("set-phase: aggregate terminal receipt bytes are not canonical finalizer output")
+    payload = {key: value for key, value in receipt.items() if key != "receipt_sha256"}
+    canonical = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    completion_sha = str(record.get("aggregate_completion_receipt_sha256") or "")
+    plan_comment_id = str(record.get("aggregate_plan_comment_id") or "")
+    plan_sha = str(record.get("aggregate_plan_sha256") or "")
+    expected_repository = str(args.repo or "")
+    cached_repository = str(record.get("repository") or expected_repository)
+    issue_number = record.get("issue_number")
+    try:
+        observed = datetime.fromisoformat(str(receipt.get("observed_at") or "").replace("Z", "+00:00"))
+        observed_valid = observed.tzinfo is not None
+    except ValueError:
+        observed_valid = False
+    if (
+        receipt.get("schema") != "oasis7.aggregate-terminal/v1"
+        or receipt.get("receipt_type") != "oasis7_aggregate_terminal"
+        or receipt.get("issuer") != "aggregate-task-finalizer"
+        or receipt.get("task_uid") != args.task_uid
+        or cached_repository != expected_repository
+        or receipt.get("repository") != expected_repository
+        or type(issue_number) is not int
+        or type(receipt.get("issue_number")) is not int
+        or receipt.get("issue_number") != issue_number
+        or not re.fullmatch(r"[0-9a-f]{64}", completion_sha)
+        or receipt.get("aggregate_completion_receipt_sha256") != completion_sha
+        or not plan_comment_id
+        or not plan_comment_id.isdecimal()
+        or int(plan_comment_id) <= 0
+        or type(receipt.get("plan_comment_id")) is not int
+        or receipt.get("plan_comment_id") <= 0
+        or not re.fullmatch(r"sha256:[0-9a-f]{64}", plan_sha)
+        or str(receipt.get("plan_comment_id")) != plan_comment_id
+        or not observed_valid
+        or receipt.get("receipt_sha256") != hashlib.sha256(canonical).hexdigest()
+    ):
+        die("set-phase: canonical aggregate terminal receipt identity or digest mismatch")
+
+
 def command_set_phase(args: argparse.Namespace) -> int:
     mapping_path, _mapping, original = require_record(args)
-    receipt = json.loads(pathlib.Path(args.receipt_json).read_text(encoding="utf-8"))
+    receipt_bytes = pathlib.Path(args.receipt_json).read_bytes()
+    receipt = json.loads(receipt_bytes.decode("utf-8"))
     current = str(original.get("workflow_phase") or "")
-    allowed_transition = args.phase in ALLOWED_PHASE_TRANSITIONS.get(current, set())
+    aggregate_terminal = args.phase == "post_merge_done" and original.get("completion_mode") == "ordered_delivery_aggregate"
+    allowed_transition = args.phase in ALLOWED_PHASE_TRANSITIONS.get(current, set()) or (aggregate_terminal and current == "task_done")
     if not allowed_transition:
         die(f"set-phase: transition {current!r} -> {args.phase!r} is not allowed")
-    receipt_schema = RECEIPT_SCHEMAS.get(args.phase)
+    receipt_schema = ("oasis7_aggregate_terminal", "aggregate-task-finalizer") if aggregate_terminal else RECEIPT_SCHEMAS.get(args.phase)
     if not receipt_schema or (receipt.get("receipt_type"), receipt.get("issuer")) != receipt_schema:
         die("set-phase: receipt schema or issuer mismatch")
     if receipt.get("task_uid") != args.task_uid:
         die("set-phase: receipt task_uid mismatch")
+    if aggregate_terminal:
+        if original.get("pr_number") or original.get("pr_url") or original.get("status") != "done":
+            die("set-phase: aggregate terminal coordinator identity/status is invalid")
+        digest = str(original.get("aggregate_completion_receipt_sha256") or "")
+        if not digest or receipt.get("aggregate_completion_receipt_sha256") != digest:
+            die("set-phase: aggregate terminal receipt chain mismatch")
+        if not all((args.aggregate_plan, args.aggregate_candidate, args.aggregate_evidence, args.aggregate_receipt)):
+            die("set-phase: aggregate terminal requires the exact plan/candidate/evidence/completion receipt")
+        validation = subprocess.run([
+            sys.executable, str(args.root.resolve() / "scripts/pm/aggregate-task-completion.py"), "validate",
+            "--repo-root", str(args.root.resolve()), "--task-uid", args.task_uid,
+            "--record", args.aggregate_plan, "--candidate", args.aggregate_candidate,
+            "--evidence", args.aggregate_evidence, "--receipt", args.aggregate_receipt, "--json",
+        ], text=True, capture_output=True)
+        if validation.returncode or hashlib.sha256(pathlib.Path(args.aggregate_receipt).read_bytes()).hexdigest() != digest:
+            die("set-phase: aggregate completion receipt no longer verifies live")
+        validate_canonical_aggregate_terminal_receipt(args, original, receipt, receipt_bytes)
+        require_live_aggregate_lifecycle(
+            args.repo, args.task_uid, original, expected_state="OPEN",
+        )
     record = json.loads(json.dumps(original))
     record["workflow_phase"] = args.phase
     record.setdefault("phase_receipts", {})[args.phase] = receipt
-    record.setdefault("phase_receipt_sha256", {})[args.phase] = hashlib.sha256(pathlib.Path(args.receipt_json).read_bytes()).hexdigest()
+    record.setdefault("phase_receipt_sha256", {})[args.phase] = hashlib.sha256(receipt_bytes).hexdigest()
     comment_url = issue_comment(args.repo, int(record["issue_number"]), evidence_body(
         args.task_uid, args.role, args.phase,
         {"Workflow Phase": args.phase, "Receipt Type": receipt.get("receipt_type"),
@@ -2295,8 +2949,21 @@ def preserve_identity_bound_cache(
 def command_refresh_task(args: argparse.Namespace) -> int:
     mapping_path = mapping_path_for(args.root.resolve(), args.mapping)
     latest = load_mapping(mapping_path)
+    try:
+        retired = durable_store.retired_task(latest, args.task_uid)
+    except ValueError as exc:
+        die(f"refresh-task: retirement ledger is invalid: {exc}")
+    if retired is not None:
+        die(f"refresh-task: Task UID is retired and cannot be refreshed: {args.task_uid}")
     existing = dict((latest.get("tasks") or {}).get(args.task_uid) or {})
     root = args.root.resolve()
+    if existing:
+        try:
+            candidate_admission_guard_module().guard_candidate_issue(latest, mapping_path, args.task_uid, existing)
+        except ValueError as exc:
+            die(f"refresh-task: {exc}")
+        except RuntimeError as exc:
+            die(f"refresh-task: {exc}")
     project = latest.get("project") or {}
     project = project if isinstance(project, dict) else {}
     canonical_owner = str(project.get("owner") or args.project_owner or "")
@@ -2624,6 +3291,9 @@ def command_record_pr(args: argparse.Namespace) -> int:
     previous = str(record.get("status") or "")
     previous_phase = str(record.get("workflow_phase") or "")
     is_draft_candidate = bool(getattr(args, "draft_candidate", False))
+    is_ready_update = bool(getattr(args, "existing_ready_update", False))
+    if is_ready_update and is_draft_candidate:
+        die("record-pr: existing ready update and draft candidate are mutually exclusive")
     if not re.fullmatch(
         rf"https://github\.com/{re.escape(args.repo)}/pull/[1-9][0-9]*(?:[?#].*)?",
         args.pr_url,
@@ -2641,20 +3311,96 @@ def command_record_pr(args: argparse.Namespace) -> int:
         die(
             "record-pr: terminal task cannot be reclassified; use its canonical finalizer or terminal runbook"
         )
-    if not is_draft_candidate and (previous, previous_phase) != ("ready", "pre_pr_ready"):
+    if is_ready_update:
+        if ((previous, previous_phase) not in {("pr_watch", "pr_watch"), ("ready", "pre_pr_ready")}
+                or not existing_pr_number or not existing_pr_urls):
+            die("record-pr: existing ready update requires the exact already-bound ready/pr_watch PR")
+    elif not is_draft_candidate and (previous, previous_phase) != ("ready", "pre_pr_ready"):
         die(
             "record-pr: non-draft pr_watch transition requires task truth at ready/pre_pr_ready; "
             "use prepare-task-pr.sh --promote-draft with canonical CI/review evidence"
         )
     if requested_pr_number is None:
         die("record-pr: PR number is missing or malformed")
-    live_issue = validate_record_pr_live_identity(args, record, requested_pr_number)
+    publication_binding_path = getattr(args, "publication_binding_json", None)
+    publication_binding = None
+    publication_intent = None
+    publication_module = None
+    binding_comment_exists = False
+    comments: list[dict[str, Any]] = []
+    if publication_binding_path:
+        publication_module = load_pr_projection_publication_module()
+        try:
+            publication_binding = json.loads(
+                pathlib.Path(publication_binding_path).read_text(encoding="utf-8")
+            )
+            publication_binding = publication_module.validate_publication_binding(publication_binding)
+        except (OSError, json.JSONDecodeError, ValueError) as exc:
+            die(f"record-pr: CI publication binding is invalid: {exc}")
+        if (publication_binding["repository"], publication_binding["task_uid"],
+                publication_binding["pr_number"], publication_binding["pr_url"]) != (
+                args.repo, args.task_uid, requested_pr_number, args.pr_url):
+            die("record-pr: CI publication binding differs from canonical Task/PR identity")
+        comments = github_issue_comments(args.repo, int(record["issue_number"]))
+        publication_records = []
+        binding_records = []
+        for comment in comments:
+            body = str(comment.get("body") or "")
+            if "<!-- oasis7-ci-publication/v1 -->" in body:
+                try:
+                    publication_records.append(publication_module.parse_publication_comment(body))
+                except ValueError as exc:
+                    die(f"record-pr: malformed CI publication intent: {exc}")
+            if "<!-- oasis7-ci-publication-binding/v1 -->" in body:
+                try:
+                    binding_records.append(publication_module.parse_publication_binding_comment(body))
+                except ValueError as exc:
+                    die(f"record-pr: malformed CI publication binding: {exc}")
+        matching_publications = [
+            item for item in publication_records
+            if item.get("publication_id") == publication_binding["publication_id"]
+        ]
+        if len(matching_publications) != 1:
+            die("record-pr: exact unique CI publication intent is not present on Task Issue")
+        intent = matching_publications[0]
+        publication_intent = intent
+        conflicting_same_head = [
+            item for item in publication_records
+            if (item.get("task_uid") == intent["task_uid"]
+                    and item.get("source_head_oid") == intent["source_head_oid"]
+                    and item.get("source_scope_oid") == intent["source_scope_oid"]
+                    and item.get("publication_id") != intent["publication_id"])
+        ]
+        if conflicting_same_head:
+            die("record-pr: same-H Task publication conflict requires explicit invalidation")
+        try:
+            publication_module.validate_publication_binding(
+                publication_binding, intent,
+            )
+        except ValueError as exc:
+            die(f"record-pr: CI publication binding does not match its intent: {exc}")
+        matching_bindings = [
+            item for item in binding_records
+            if item.get("publication_id") == publication_binding["publication_id"]
+        ]
+        if matching_bindings:
+            if len(matching_bindings) != 1 or matching_bindings[0] != publication_binding:
+                die("record-pr: conflicting reciprocal CI publication binding already exists")
+            binding_comment_exists = True
+    live_issue = validate_record_pr_live_identity(
+        args,
+        record,
+        requested_pr_number,
+        allow_exact_publication_poststate=(publication_binding is not None and is_draft_candidate),
+        publication_intent=publication_intent if is_ready_update else None,
+        publication_module=publication_module if is_ready_update else None,
+    )
     record["pr_url"] = args.pr_url
     number = pr_number_from_url(args.pr_url)
     if number is not None:
         record["pr_number"] = number
-    target_status = "committed" if is_draft_candidate else "pr_watch"
-    target_phase = "verification" if is_draft_candidate else "pr_watch"
+    target_status = previous if is_ready_update else ("committed" if is_draft_candidate else "pr_watch")
+    target_phase = previous_phase if is_ready_update else ("verification" if is_draft_candidate else "pr_watch")
     record["status"] = target_status
     record["workflow_phase"] = target_phase
     record.setdefault("merge_hold", {
@@ -2685,25 +3431,62 @@ def command_record_pr(args: argparse.Namespace) -> int:
         else:
             updated_fields = update_project_fields(args, task, str(record["project_item_id"]))
     update_issue_body(args.repo, int(record["issue_number"]), task)
-    comment_url = issue_comment(
-        args.repo,
-        int(record["issue_number"]),
-        evidence_body(
-            args.task_uid,
-            args.role,
-            target_phase,
-            {
-                "Completed": "Draft Candidate Action recorded without advancing PR watch." if is_draft_candidate else "PR created and task moved to PR watch.",
-                "Pending": "Wait for same-head CI receipt." if is_draft_candidate else "Watch required checks, mergeability, comments, and review threads.",
-                "Action": "record-pr",
-                "Validation Command": args.validation_command,
-                "Expected Result": f"Task phase is {target_phase} and PR URL is mapped.",
-                "Actual Result": args.pr_url,
-                "Blocker / Next Action": "Obtain the same-head CI receipt, complete role review and ready closeout, then promote the draft." if is_draft_candidate else "Continue normal PR watch/fix/merge unless manual packaging hold is explicitly recorded.",
-            },
-        ),
+    evidence_comment = evidence_body(
+        args.task_uid,
+        args.role,
+        target_phase,
+        {
+            "Completed": "Existing ready PR source binding updated without changing lifecycle state." if is_ready_update else ("Draft Candidate Action recorded without advancing PR watch." if is_draft_candidate else "PR created and task moved to PR watch."),
+            "Pending": "Wait for same-head CI receipt." if is_draft_candidate else "Watch required checks, mergeability, comments, and review threads.",
+            "Action": "record-pr",
+            "Validation Command": args.validation_command,
+            "Expected Result": f"Task phase is {target_phase} and PR URL is mapped.",
+            "Actual Result": args.pr_url,
+            "Blocker / Next Action": "Obtain new-head required CI and all required-role review, applicable current-target strict evidence and fresh merge gate; old-head approvals are historical." if is_ready_update else ("Obtain the same-head CI receipt, complete role review and ready closeout, then promote the draft." if is_draft_candidate else "Continue normal PR watch/fix/merge unless manual packaging hold is explicitly recorded."),
+        },
     )
-    record.setdefault("evidence_comments", []).append(comment_url)
+    comment_url = None
+    if publication_binding is not None:
+        def normalized_evidence(body: str) -> str:
+            return re.sub(r"^Recorded At: [^\n]*\n", "", body.replace("\r\n", "\n"), flags=re.MULTILINE)
+
+        matching_evidence = [
+            item for item in comments
+            if normalized_evidence(str(item.get("body") or "")) == normalized_evidence(evidence_comment)
+        ]
+        if len(matching_evidence) > 1:
+            die("record-pr: duplicate lifecycle evidence comments make reconciliation ambiguous")
+        if matching_evidence:
+            comment_url = str(matching_evidence[0].get("html_url") or matching_evidence[0].get("url") or "")
+            if not comment_url:
+                die("record-pr: existing lifecycle evidence comment lacks URL identity")
+        else:
+            comment_url = verified_issue_comment(
+                args.repo, int(record["issue_number"]), evidence_comment,
+            )
+    else:
+        comment_url = issue_comment(args.repo, int(record["issue_number"]), evidence_comment)
+    if comment_url not in record.setdefault("evidence_comments", []):
+        record["evidence_comments"].append(comment_url)
+    binding_comment_url = None
+    if publication_binding is not None and not binding_comment_exists:
+        body = publication_module.publication_binding_comment(publication_binding)
+        binding_comment_url = verified_issue_comment(
+            args.repo, int(record["issue_number"]), body,
+        )
+        record.setdefault("evidence_comments", []).append(binding_comment_url)
+    elif publication_binding is not None:
+        matching_comment_urls = [
+            str(comment.get("html_url") or comment.get("url") or "")
+            for comment in comments
+            if "<!-- oasis7-ci-publication-binding/v1 -->" in str(comment.get("body") or "")
+            and publication_module.parse_publication_binding_comment(str(comment.get("body") or "")) == publication_binding
+        ]
+        if len(matching_comment_urls) != 1 or not matching_comment_urls[0]:
+            die("record-pr: existing reciprocal binding comment readback is ambiguous")
+        binding_comment_url = matching_comment_urls[0]
+        if binding_comment_url not in record.setdefault("evidence_comments", []):
+            record["evidence_comments"].append(binding_comment_url)
     merge_task_mapping(mapping_path, args.task_uid, record, clear_keys=cleared_traceability)
     payload = {
         "task_uid": args.task_uid,
@@ -2715,9 +3498,36 @@ def command_record_pr(args: argparse.Namespace) -> int:
         "pr_number": record.get("pr_number"),
         "comment_url": comment_url,
         "updated_field_values": updated_fields,
+        "publication_binding_comment_url": binding_comment_url,
     }
     print(json.dumps(payload, indent=2, sort_keys=True) if args.json else f"record-pr: recorded {args.pr_url} for {args.task_uid}")
     return 0
+
+
+def load_pr_projection_publication_module() -> Any:
+    path = pathlib.Path(__file__).with_name("pr_projection_publication.py")
+    spec = importlib.util.spec_from_file_location("pr_projection_publication_impl", path)
+    if spec is None or spec.loader is None:
+        die(f"record-pr: cannot load {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def github_issue_comments(repository: str, issue_number: int) -> list[dict[str, Any]]:
+    try:
+        pages = json.loads(run_text([
+            "gh", "api", f"repos/{repository}/issues/{issue_number}/comments",
+            "--paginate", "--slurp",
+        ]))
+    except (subprocess.SubprocessError, json.JSONDecodeError) as exc:
+        die(f"record-pr: Task publication comment readback failed: {exc}")
+    if not isinstance(pages, list):
+        die("record-pr: Task publication comment response is malformed")
+    comments = [item for page in pages for item in (page if isinstance(page, list) else [page])]
+    if any(not isinstance(item, dict) or not isinstance(item.get("body"), str) for item in comments):
+        die("record-pr: Task publication comment entry is malformed")
+    return comments
 
 
 def command_set_merge_hold(args: argparse.Namespace) -> int:
@@ -2851,15 +3661,31 @@ def build_parser() -> argparse.ArgumentParser:
     closeout.add_argument("--to-status", required=True, choices=("ready", "done", "deferred"))
     closeout.add_argument("--claim-json", required=True)
     closeout.add_argument("--pr-receipt")
+    closeout.add_argument("--aggregate-plan")
+    closeout.add_argument("--aggregate-candidate")
+    closeout.add_argument("--aggregate-evidence")
+    closeout.add_argument("--aggregate-receipt")
     closeout.add_argument("--json", action="store_true")
     closeout.set_defaults(func=command_closeout_task)
+
+    bind_aggregate = subparsers.add_parser("bind-aggregate-plan")
+    add_common(bind_aggregate)
+    bind_aggregate.add_argument("--task-uid", required=True)
+    bind_aggregate.add_argument("--plan", required=True)
+    bind_aggregate.add_argument("--comment-id", type=int, required=True)
+    bind_aggregate.add_argument("--json", action="store_true")
+    bind_aggregate.set_defaults(func=command_bind_aggregate_plan)
 
     phase = subparsers.add_parser("set-phase")
     add_common(phase)
     phase.add_argument("--task-uid", required=True)
     phase.add_argument("--role", default="tpm")
-    phase.add_argument("--phase", required=True, choices=("main_sync",))
+    phase.add_argument("--phase", required=True, choices=("main_sync", "post_merge_done"))
     phase.add_argument("--receipt-json", required=True)
+    phase.add_argument("--aggregate-plan")
+    phase.add_argument("--aggregate-candidate")
+    phase.add_argument("--aggregate-evidence")
+    phase.add_argument("--aggregate-receipt")
     phase.add_argument("--json", action="store_true")
     phase.set_defaults(func=command_set_phase)
 
@@ -2876,6 +3702,8 @@ def build_parser() -> argparse.ArgumentParser:
     record_pr.add_argument("--role", default="tpm")
     record_pr.add_argument("--validation-command", default="./scripts/prepare-task-pr.sh --create")
     record_pr.add_argument("--draft-candidate", action="store_true")
+    record_pr.add_argument("--existing-ready-update", action="store_true")
+    record_pr.add_argument("--publication-binding-json")
     record_pr.add_argument("--json", action="store_true")
     record_pr.set_defaults(func=command_record_pr)
 

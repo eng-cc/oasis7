@@ -6,6 +6,8 @@
 ## 1. 设计定位
 定义 CI 与测试门禁专题设计，统一流水线分层、门禁策略、产物校验与失败保护。
 
+CodeQL 观察性扫描的独立扫描链、来源分类及非自启用边界见 [canonical clause](../../engineering/workflow/source-of-truth.md#codeql-advisory-analysis) 与 [接入设计](codeql-integration.design.md)。本专题保留现有 required/full 语义；新增规范不表示扫描实现或观察态已启用。
+
 ## 2. 设计结构
 - 流水线分层：按 `commit` / `required` / `full`、runner、target 或专题阶段划分执行链路。
 - required-scope 规划层：在保持 `required-gate` 单一上下文不变的前提下，先按 changed paths 规划 `minimal / targeted / full`，再决定哪些重型组件实际执行。

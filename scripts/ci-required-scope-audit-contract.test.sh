@@ -4,6 +4,12 @@ set -euo pipefail
 repo_root=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 planner="$repo_root/scripts/plan-rust-required-scope.sh"
 ci_tests="$repo_root/scripts/ci-tests.sh"
+versioned_config="$repo_root/scripts/fixtures/ci-required-scope.versioned-test.json"
+legacy_config="$repo_root/scripts/fixtures/ci-required-scope.legacy-test.json"
+active_config="$repo_root/scripts/ci-required-scope.v2.json"
+legacy_config_sha256="sha256:d656841b3c9fcf66fcd5ea1c37b43d9628e61d13ea48be8bda54e71511d505b4"
+versioned_config_sha256="sha256:918dc0c88bd1060ca94b4fd20d91f567dfb64ee2edbbae5f35b37237a50470b1"
+active_config_sha256="sha256:$(sha256sum "$active_config" | awk '{print $1}')"
 
 value_for_key() {
   local output="$1"
@@ -86,6 +92,24 @@ require_key "$minimal_plan" run_required_gate_baseline true
 require_key "$minimal_plan" run_operational_contracts false
 require_key "$minimal_plan" selected_capabilities required_gate_baseline
 require_reason_contains "$minimal_plan" required_gate_baseline:always_on
+effective_execution_contract="$(value_for_key "$minimal_plan" execution_contract)"
+effective_config_sha256="$(value_for_key "$minimal_plan" planner_config_sha256)"
+if [[ -z "$effective_execution_contract" && "$effective_config_sha256" == "$legacy_config_sha256" ]]; then
+  effective_policy_mode=legacy
+  cmp -s "$active_config" "$legacy_config" || {
+    echo "legacy effective required-scope config differs from its pinned compatibility fixture" >&2
+    exit 1
+  }
+elif [[ "$effective_execution_contract" == required-domain-split/v1 && "$effective_config_sha256" == "$active_config_sha256" ]]; then
+  effective_policy_mode=versioned
+  require_key "$minimal_plan" run_packaging_contracts false
+  require_key "$minimal_plan" run_workflow_governance_contracts false
+  require_key "$minimal_plan" run_doc_checker_contracts false
+  require_key "$minimal_plan" run_cargo_tooling_contracts false
+else
+  echo "effective required-scope config has an unsupported contract or digest: contract=${effective_execution_contract:-legacy} digest=$effective_config_sha256" >&2
+  exit 1
+fi
 
 packaging_plan="$($planner --event-name pull_request \
   --changed-path scripts/package-native-installer.sh \
@@ -97,7 +121,16 @@ packaging_plan="$($planner --event-name pull_request \
   --changed-path scripts/package-workflow-cache-reuse-contract.test.sh)"
 require_key "$packaging_plan" scope targeted
 require_key "$packaging_plan" selected_capabilities packaging_contracts
-require_key "$packaging_plan" run_operational_contracts true
+if [[ "$effective_policy_mode" == legacy ]]; then
+  require_key "$packaging_plan" run_operational_contracts true
+else
+  require_key "$packaging_plan" execution_contract required-domain-split/v1
+  require_key "$packaging_plan" planner_config_sha256 "$active_config_sha256"
+  require_key "$packaging_plan" run_packaging_contracts true
+  require_key "$packaging_plan" run_operational_contracts false
+  require_key "$packaging_plan" needs_python true
+  require_key "$packaging_plan" needs_markdown true
+fi
 require_key "$packaging_plan" run_rust_baseline false
 require_key "$packaging_plan" needs_rust_toolchain false
 require_key "$packaging_plan" needs_node false
@@ -114,6 +147,38 @@ for packaging_path in \
 done
 require_reason_contains "$packaging_plan" "required_gate_baseline:always_on"
 
+# Exercise versioned packaging semantics against the pinned fixture regardless
+# of the current effective policy; effective assertions above are selected
+# only after validating its contract and config digest.
+versioned_packaging_plan="$("$planner" --event-name pull_request --config "$versioned_config" \
+  --changed-path scripts/package-native-installer.sh \
+  --changed-path scripts/validate-release-platform-entrypoints.sh \
+  --changed-path scripts/package-viewer-web-delivery.sh \
+  --changed-path scripts/packaging-artifact-size-contract.test.sh \
+  --changed-path scripts/copy-viewer-web-dist.test.sh \
+  --changed-path scripts/native-packaging-contract.test.sh \
+  --changed-path scripts/package-workflow-cache-reuse-contract.test.sh)"
+require_key "$versioned_packaging_plan" execution_contract required-domain-split/v1
+require_key "$versioned_packaging_plan" planner_config_sha256 sha256:918dc0c88bd1060ca94b4fd20d91f567dfb64ee2edbbae5f35b37237a50470b1
+require_key "$versioned_packaging_plan" scope targeted
+require_key "$versioned_packaging_plan" selected_capabilities packaging_contracts
+require_key "$versioned_packaging_plan" run_packaging_contracts true
+require_key "$versioned_packaging_plan" run_operational_contracts false
+require_key "$versioned_packaging_plan" run_rust_baseline false
+require_key "$versioned_packaging_plan" needs_rust_toolchain false
+require_key "$versioned_packaging_plan" needs_python true
+require_key "$versioned_packaging_plan" needs_markdown true
+require_reason_contains "$versioned_packaging_plan" "packaging_contracts:scripts/package-native-installer.sh"
+
+legacy_fixture_plan="$("$planner" --event-name pull_request --config "$legacy_config" \
+  --changed-path doc/testing/prd.md)"
+require_key "$legacy_fixture_plan" planner_config_sha256 "$legacy_config_sha256"
+require_key "$legacy_fixture_plan" run_required_gate_baseline true
+if [[ -n "$(value_for_key "$legacy_fixture_plan" execution_contract)" ]]; then
+  echo "legacy fixture unexpectedly declares a versioned execution contract" >&2
+  exit 1
+fi
+
 release_packaging_plan="$($planner --event-name pull_request \
   --changed-path .github/workflows/release-packages.yml \
   --changed-path scripts/build-game-launcher-bundle.sh)"
@@ -124,6 +189,11 @@ require_key "$release_packaging_plan" needs_rust_toolchain true
 operational_plan="$("$planner" --event-name pull_request --changed-path scripts/p2p-public-testnet-package-rollout.test.sh)"
 require_key "$operational_plan" run_required_gate_baseline true
 require_key "$operational_plan" run_operational_contracts true
+if [[ "$effective_policy_mode" == versioned ]]; then
+  require_key "$operational_plan" execution_contract required-domain-split/v1
+  require_key "$operational_plan" planner_config_sha256 "$active_config_sha256"
+  require_key "$operational_plan" run_packaging_contracts false
+fi
 require_key "$operational_plan" run_rust_baseline false
 require_key "$operational_plan" needs_rust_toolchain false
 require_key "$operational_plan" selected_capabilities operational_contracts
@@ -137,13 +207,17 @@ require_key "$site_plan" needs_rust_toolchain false
 require_key "$site_plan" selected_capabilities site_quality
 require_reason_contains "$site_plan" site_quality:site/index.html
 
-operational_contracts_source="$(sed -n '/^run_operational_contract_tests() {/,/^}/p' "$ci_tests")"
-if ! grep -Fqx '  run python3 ./scripts/pm/ci-ready-receipt.test.py' <<<"$operational_contracts_source"; then
-  echo "workflow-governance receipt contract is not wired into run_operational_contract_tests" >&2
+workflow_governance_operational_source="$(sed -n '/^run_workflow_governance_operational_contract_tests() {/,/^}/p' "$ci_tests")"
+if ! grep -Fqx '  run python3 ./scripts/pm/workflow-next.test.py' <<<"$workflow_governance_operational_source"; then
+  echo "workflow-next behavior regression is not wired into workflow-governance operational tests" >&2
   exit 1
 fi
-if ! grep -Fqx '  run ./scripts/ci-required-scope-audit-contract.test.sh' <<<"$operational_contracts_source"; then
-  echo "required scope audit contract is not wired into run_operational_contract_tests" >&2
+if ! grep -Fqx '  run python3 ./scripts/pm/ci-ready-receipt.test.py' <<<"$workflow_governance_operational_source"; then
+  echo "workflow-governance receipt contract is not wired into run_workflow_governance_operational_contract_tests" >&2
+  exit 1
+fi
+if ! grep -Fqx '  run ./scripts/ci-required-scope-audit-contract.test.sh' <<<"$workflow_governance_operational_source"; then
+  echo "required scope audit contract is not wired into run_workflow_governance_operational_contract_tests" >&2
   exit 1
 fi
 
@@ -152,7 +226,7 @@ if ! grep -Fqx '    run_required_component "site quality contracts" "${OASIS7_CI
   exit 1
 fi
 
-packaging_runner_source="$(sed -n '/^run_packaging_contract_tests() {/,/^}/p' "$ci_tests")"
+packaging_runner_source="$(sed -n '/^run_packaging_artifact_contract_tests() {/,/^}/p' "$ci_tests")"
 if ! grep -Fqx '  run bash ./scripts/native-packaging-contract.test.sh' <<<"$packaging_runner_source"; then
   echo "packaging contract runner is not wired to native packaging fixtures" >&2
   exit 1
@@ -169,8 +243,10 @@ if ! grep -Fqx '  run bash ./scripts/package-workflow-cache-reuse-contract.test.
   echo "packaging contract runner is not wired to package workflow cache fixtures" >&2
   exit 1
 fi
-if ! grep -Fqx '  run_packaging_contract_tests' <<<"$(sed -n '/^run_operational_contract_tests() {/,/^}/p' "$ci_tests")"; then
-  echo "operational contract runner must include the focused packaging runner" >&2
+legacy_mixed_contract_source="$(sed -n '/^run_legacy_mixed_operational_contract_tests() {/,/^}/p' "$ci_tests")"
+if ! grep -Fqx '  run_packaging_artifact_contract_tests' <<<"$legacy_mixed_contract_source" || \
+   ! grep -Fqx '  run_packaging_artifact_contract_tests' <<<"$(sed -n '/^run_packaging_contract_tests() {/,/^}/p' "$ci_tests")"; then
+  echo "legacy mixed contract runner must include the focused packaging artifact runner" >&2
   exit 1
 fi
 
@@ -190,6 +266,9 @@ for package_workflow_path in \
   require_key "$package_workflow_plan" scope full
   require_key "$package_workflow_plan" run_operational_contracts true
   require_key "$package_workflow_plan" run_rust_baseline true
+  if [[ "$effective_policy_mode" == versioned ]]; then
+    require_key "$package_workflow_plan" run_packaging_contracts true
+  fi
   require_reason_contains "$package_workflow_plan" "packaging_workflow:$package_workflow_path"
 done
 
@@ -199,9 +278,13 @@ python3 - \
   "$repo_root/.github/workflows/rust.yml" \
   "$planner" <<'PY'
 import json
+import os
 import re
 import subprocess
 import sys
+import tempfile
+import textwrap
+from types import SimpleNamespace
 from pathlib import Path
 
 config_path, ci_tests_path, workflow_path, planner_path = map(Path, sys.argv[1:])
@@ -219,11 +302,23 @@ for item in ownership:
         raise SystemExit(f"selector ownership name is missing or duplicated: {name!r}")
     declared[name] = item
 inventory = set(re.findall(r"OASIS7_CI_RUN_[A-Z0-9_]+", ci_tests_path.read_text(encoding="utf-8")))
-if inventory != set(declared):
+execution_contract = config.get("execution_contract", "")
+versioned_selector_names = {
+    "OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS",
+    "OASIS7_CI_RUN_PACKAGING_CONTRACTS",
+    "OASIS7_CI_RUN_DOC_CHECKER_CONTRACTS",
+    "OASIS7_CI_RUN_CARGO_TOOLING_CONTRACTS",
+}
+active_inventory = inventory
+if execution_contract == "":
+    active_inventory = inventory - versioned_selector_names
+elif execution_contract != "required-domain-split/v1":
+    raise SystemExit(f"unsupported effective required-gate execution contract: {execution_contract}")
+if active_inventory != set(declared):
     raise SystemExit(
         "selector ownership drift: "
-        f"missing={sorted(inventory - set(declared))}, "
-        f"stale={sorted(set(declared) - inventory)}"
+        f"missing={sorted(active_inventory - set(declared))}, "
+        f"stale={sorted(set(declared) - active_inventory)}"
     )
 for name, item in declared.items():
     mode = item.get("mode")
@@ -265,6 +360,19 @@ planner_outputs = {
     if "=" in line
     for key, value in [line.split("=", 1)]
 }
+if execution_contract == "" and any(
+    field in planner_outputs
+    for field in (
+        "execution_contract",
+        "run_workflow_governance_contracts",
+        "run_packaging_contracts",
+        "run_doc_checker_contracts",
+        "run_cargo_tooling_contracts",
+        "needs_python",
+        "needs_markdown",
+    )
+):
+    raise SystemExit("legacy effective planner unexpectedly emitted versioned contract fields")
 
 # Every public-testnet package/rollout/observer/fleet-health implementation
 # source must stay paired with an operational fixture that invokes or imports
@@ -381,6 +489,158 @@ if not run_tier_match:
     raise SystemExit("required-gate test-tier env path is missing")
 run_tier_body = run_tier_match.group("body")
 
+canonical_workflow_text = (
+    repo_root / "doc/engineering/workflow/source-of-truth.md"
+).read_text(encoding="utf-8")
+native_wasm_anchor = '<a id="required-gate-native-wasm-smoke"></a>'
+native_wasm_anchor_start = canonical_workflow_text.find(native_wasm_anchor)
+if native_wasm_anchor_start < 0:
+    raise SystemExit("canonical native WASM smoke exception is missing")
+native_wasm_anchor_end = canonical_workflow_text.find(
+    "<a id=", native_wasm_anchor_start + len(native_wasm_anchor)
+)
+native_wasm_contract = canonical_workflow_text[
+    native_wasm_anchor_start:
+    native_wasm_anchor_end if native_wasm_anchor_end >= 0 else None
+]
+for contract_fragment in (
+    "Cargo package-profile planner's `target` field is a selector",
+    "`native` selects host-native Cargo tests",
+    "every planned item whose `target` is `native`",
+    "`OASIS7_WASM_BUILD_STD=0`",
+    "independent of package name",
+    "copied subprocess environment",
+    "non-native items",
+    "`OASIS7_WASM_TOOLCHAIN=nightly-2025-12-11`",
+    "`OASIS7_WASM_BUILD_STD=1`",
+    "`OASIS7_WASM_BUILD_STD_COMPONENTS=std,panic_abort`",
+):
+    if contract_fragment not in native_wasm_contract:
+        raise SystemExit(
+            "canonical native WASM smoke exception omits required contract: "
+            f"{contract_fragment}"
+        )
+
+profile_runner_match = re.search(
+    r"(?ms)^[ \t]*python3 -I - \"\$\{OASIS7_CARGO_PROFILE_PLAN\}\" "
+    r"\"\$\{OASIS7_CARGO_PROFILE_RESULTS\}\" <<'PY'[ \t]*\n"
+    r"(?P<source>.*?)^[ \t]*PY[ \t]*$",
+    run_tier_body,
+)
+if not profile_runner_match:
+    raise SystemExit("required-gate package-profile runner heredoc is missing")
+profile_runner_source = textwrap.dedent(profile_runner_match.group("source"))
+profile_plan = {
+    "items": [
+        {
+            "id": "wasm_build_suite-native",
+            "command": ["cargo", "test", "--package", "wasm_build_suite_native"],
+            "command_digest": "native-command-digest",
+            "package": "wasm_build_suite",
+            "profile": "native",
+            "target": "native",
+            "features": [],
+        },
+        {
+            "id": "wasm_module_observe-native",
+            "command": ["cargo", "test", "--package", "wasm_module_observe"],
+            "command_digest": "observer-command-digest",
+            "package": "wasm_module_observe",
+            "profile": "native",
+            "target": "native",
+            "features": [],
+        },
+        {
+            "id": "unrelated-native-profile",
+            "command": ["cargo", "test", "--package", "unrelated_native"],
+            "command_digest": "other-command-digest",
+            "package": "unrelated_native",
+            "profile": "native",
+            "target": "native",
+            "features": [],
+        },
+        {
+            "id": "wasm_build_suite-wasm",
+            "command": ["cargo", "check", "--package", "wasm_build_suite", "--target", "wasm32-unknown-unknown"],
+            "command_digest": "wasm-command-digest",
+            "package": "wasm_build_suite",
+            "profile": "wasm",
+            "target": "wasm32-unknown-unknown",
+            "features": [],
+        },
+    ],
+    "plan_id": "profile-env-contract-test",
+    "trusted_authority": {"toolchain": "1.96.0"},
+    "integration_base": "base-commit",
+    "source_head": "head-commit",
+    "tested_tree": "tested-tree",
+}
+with tempfile.TemporaryDirectory() as temporary_directory:
+    temporary_path = Path(temporary_directory)
+    plan_path = temporary_path / "plan.json"
+    results_path = temporary_path / "results.json"
+    plan_path.write_text(json.dumps(profile_plan), encoding="utf-8")
+    prior_argv = sys.argv
+    prior_run = subprocess.run
+    prior_build_std = os.environ.get("OASIS7_WASM_BUILD_STD")
+    observed_profile_envs = []
+    observed_global_build_std = []
+
+    def record_profile_run(command, *, env, check):
+        observed_profile_envs.append((command, dict(env), check))
+        observed_global_build_std.append(os.environ.get("OASIS7_WASM_BUILD_STD"))
+        return SimpleNamespace(returncode=0)
+
+    os.environ["OASIS7_WASM_BUILD_STD"] = "1"
+    subprocess.run = record_profile_run
+    sys.argv = ["required-gate-profile-runner", str(plan_path), str(results_path)]
+    try:
+        exec(compile(profile_runner_source, "required-gate-profile-runner", "exec"), {})
+    finally:
+        sys.argv = prior_argv
+        subprocess.run = prior_run
+        if prior_build_std is None:
+            os.environ.pop("OASIS7_WASM_BUILD_STD", None)
+        else:
+            os.environ["OASIS7_WASM_BUILD_STD"] = prior_build_std
+
+if len(observed_profile_envs) != len(profile_plan["items"]):
+    raise SystemExit("required-gate profile runner omitted planned item invocations")
+observed_build_std_by_item = {
+    item["id"]: environment.get("OASIS7_WASM_BUILD_STD")
+    for item, (_, environment, _) in zip(profile_plan["items"], observed_profile_envs)
+}
+for item_id in (
+    "wasm_build_suite-native",
+    "wasm_module_observe-native",
+    "unrelated-native-profile",
+):
+    if observed_build_std_by_item.get(item_id) != "0":
+        raise SystemExit(
+            "required-gate native-target item must disable build-std independent of package name: "
+            f"{item_id}={observed_build_std_by_item.get(item_id)!r}"
+        )
+if observed_build_std_by_item.get("wasm_build_suite-wasm") != "1":
+    raise SystemExit(
+        "required-gate non-native item must inherit the workflow build-std environment"
+    )
+if observed_global_build_std != ["1"] * len(profile_plan["items"]):
+    raise SystemExit("required-gate native override mutated the workflow-level environment")
+if any(check for _, _, check in observed_profile_envs):
+    raise SystemExit("required-gate profile runner changed subprocess check semantics")
+
+for workflow_fragment in (
+    '  OASIS7_WASM_TOOLCHAIN: nightly-2025-12-11',
+    '  OASIS7_WASM_BUILD_STD: "1"',
+    "  OASIS7_WASM_BUILD_STD_COMPONENTS: std,panic_abort",
+    'rustup toolchain install "${OASIS7_WASM_TOOLCHAIN}" --profile minimal --component rust-src',
+):
+    if workflow_fragment not in workflow_text:
+        raise SystemExit(
+            "required-gate native override must preserve pinned nightly determinism contract: "
+            f"{workflow_fragment}"
+        )
+
 for name, item in declared.items():
     if item.get("mode") == "planner-owned":
         field = item["planner_field"]
@@ -395,9 +655,14 @@ for name, item in declared.items():
                 f"{name} -> {field}"
             )
     else:
-        if name in workflow_text:
+        env_prefix = f"          {name}:"
+        env_assignment = next(
+            (line for line in run_tier_body.splitlines() if line.startswith(env_prefix)),
+            "",
+        )
+        if "steps.scope.outputs." in env_assignment:
             raise SystemExit(
-                f"manual-only selector is unexpectedly auto-wired in workflow: {name}"
+                f"manual-only selector is unexpectedly planner-wired in workflow: {name}"
             )
         expected_default = f"${{{name}:-false}}"
         if expected_default not in ci_tests_path.read_text(encoding="utf-8"):
@@ -409,8 +674,8 @@ PY
 # This is intentionally a direct-source guard.  Operational contract fixtures
 # may mention Cargo or use fake Cargo binaries in their own test processes, but
 # the runner itself must not gain a real Rust toolchain invocation unnoticed.
-if grep -Eiq '(^|[[:space:];|&()])(cargo|rustup)([[:space:]]|$)' <<<"$operational_contracts_source" || \
-   grep -Eiq '(^|[[:space:];|&()])run_cargo([[:space:]]|$)' <<<"$operational_contracts_source"; then
+if grep -Eiq '(^|[[:space:];|&()])(cargo|rustup)([[:space:]]|$)' <<<"$legacy_mixed_contract_source" || \
+   grep -Eiq '(^|[[:space:];|&()])run_cargo([[:space:]]|$)' <<<"$legacy_mixed_contract_source"; then
   echo "operational contract runner must not invoke Cargo or rustup directly" >&2
   exit 1
 fi
@@ -423,12 +688,36 @@ require_ci_tests_line '  run_required_component "standalone tool lockfiles" "${O
 workflow="$repo_root/.github/workflows/rust.yml"
 for job in windows-package-rollout-behavior testnet-packages-macos-arm64-contract public-testnet-fleet-health-contract; do
   if ! awk -v job="$job" '
-    $0 ~ "^  " job ":" { active=1; next }
-    active && /^  [A-Za-z0-9_-]+:/ { exit }
-    active && /if:.*github.event_name == .pull_request.*&& needs.required-gate.outputs.run_operational_contracts == .true./ { found=1 }
-    END { exit(found ? 0 : 1) }
+    $0 ~ "^  " job ":" { active=1 }
+    active && !($0 ~ "^  " job ":") && /^  [A-Za-z0-9_-]+:/ { active=0 }
+    active { body=body $0 "\n" }
+    END {
+      event_scoped=(body ~ /github.event_name == .pull_request./ && body ~ /workflow_dispatch/)
+      planner_scoped=(body ~ /needs.required-gate.outputs.run_operational_contracts == .true./ || body ~ /needs.required-gate.outputs.run_packaging_contracts == .true./)
+      exit(event_scoped && planner_scoped ? 0 : 1)
+    }
   ' "$workflow"; then
     echo "operational PR job is not planner-scoped: $job" >&2
+    exit 1
+  fi
+done
+
+for step in \
+  "Prepare exact manual integration from trusted default workflow" \
+  "Verify fleet-health collection contract"; do
+  if ! awk -v step="$step" '
+    $0 == "  public-testnet-fleet-health-contract:" { in_job=1; next }
+    in_job && /^  [A-Za-z0-9_-]+:/ { exit }
+    in_job && ($0 == "      - name: " step || $0 == "        name: " step) {
+      in_step=1
+      next
+    }
+    in_step && /^      - / { in_step=0 }
+    in_step && $0 == "        shell: bash" { has_bash_shell=1 }
+    in_step && $0 == "        run: |" { has_run=1 }
+    END { exit(has_bash_shell && has_run ? 0 : 1) }
+  ' "$workflow"; then
+    echo "fleet-health step must explicitly select Bash for its Bash run block: $step" >&2
     exit 1
   fi
 done

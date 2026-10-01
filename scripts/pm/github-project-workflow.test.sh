@@ -114,6 +114,30 @@ legacy_trace = module.normalized_issue_traceability(
 )
 assert legacy_trace["non_pr_completion_evidence"] == "legacy evidence", legacy_trace
 assert "non_pr_completion_evidence_sha256" not in legacy_trace, legacy_trace
+item = {
+    "id": "ITEM_ID",
+    "project": {"id": "PROJECT_ID", "number": 1, "owner": {"login": "eng-cc"}},
+    "content": {"body": "task_uid: task_11111111111111111111111111111111", "number": 101,
+                "url": "https://github.com/eng-cc/oasis7/issues/101"},
+    "fieldValues": {"pageInfo": {"hasNextPage": False}, "nodes": []},
+}
+original_run_json = module.run_json
+try:
+    module.run_json = lambda _cmd: {"data": {"nodes": [item]}, "errors": [{"message": "partial response"}]}
+    try:
+        module.fetch_project_items_by_ids(["ITEM_ID"])
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("GraphQL data accompanied by errors must be rejected")
+    module.run_json = lambda _cmd: {"data": {"nodes": [item]}}
+    assert module.fetch_project_items_by_ids(["ITEM_ID"])["ITEM_ID"]["id"] == "ITEM_ID"
+    module.run_json = lambda _cmd: {"data": {"nodes": [item]}, "errors": []}
+    assert module.fetch_project_items_by_ids(["ITEM_ID"])["ITEM_ID"]["id"] == "ITEM_ID"
+    module.run_json = lambda _cmd: {"data": {"nodes": []}}
+    assert module.fetch_project_items_by_ids(["ITEM_ID"]) == {}
+finally:
+    module.run_json = original_run_json
 PY
 
 AUDIT_JSON="$TMPDIR/audit.json"
@@ -137,6 +161,25 @@ assert any("retired .pm/tasks files present" in item for item in payload["errors
 PY
 
 rm -rf "$TMPDIR/.pm/tasks"
+
+STEP3_JSON="$TMPDIR/step3-missing-history.json"
+set +e
+python3 "$TMPDIR/github-project-workflow.py" "$TMPDIR" \
+  --repo eng-cc/oasis7 \
+  --project-owner eng-cc \
+  --project-number 1 \
+  --mapping "$TMPDIR/.pm/github-project-sync/tasks.json" \
+  --json \
+  step3-gate > "$STEP3_JSON"
+STEP3_EXIT=$?
+set -e
+[[ "$STEP3_EXIT" == "1" ]]
+python3 - "$STEP3_JSON" <<'PY'
+import json, pathlib, sys
+payload = json.loads(pathlib.Path(sys.argv[1]).read_text())
+assert payload["status"] == "failed", payload
+assert any("historical coverage requires complete GitHub" in item for item in payload["errors"]), payload
+PY
 
 python3 "$TMPDIR/github-project-workflow.py" "$TMPDIR" \
   --repo eng-cc/oasis7 \
@@ -257,6 +300,8 @@ esac
 SH
 chmod +x "$TMPDIR/bin/gh"
 
+printf '%s\n' '{"task_uid":"task_11111111111111111111111111111111","task":{"task_uid":"task_11111111111111111111111111111111","status":"committed"}}' \
+  > "$TMPDIR/.pm/github-project-sync/task-archive.jsonl"
 STEP3_JSON="$TMPDIR/step3.json"
 python3 "$TMPDIR/github-project-workflow.py" "$TMPDIR" \
   --repo eng-cc/oasis7 \

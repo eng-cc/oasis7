@@ -7,14 +7,99 @@ TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/oasis7-pm-lint-test.XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
 ignored_before="$(find "$ROOT_DIR/scripts/pm" \( -type d -name __pycache__ -o -type f -name '*.pyc' \) -print | sort)"
 
-python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" snapshot \
+PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" snapshot \
   --root "$ROOT_DIR" --state "$TMP_DIR/state" --pathspec .pm
 
 output="$($ROOT_DIR/scripts/pm/lint.sh)"
 grep -Fx "pm-lint: OK" <<<"$output" >/dev/null
 
-python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" check \
+COLD_CACHE_FIXTURE="$TMP_DIR/cold-cache-fixture"
+mkdir -p "$COLD_CACHE_FIXTURE/.agents" "$COLD_CACHE_FIXTURE/scripts"
+cp -R "$ROOT_DIR/.pm" "$COLD_CACHE_FIXTURE/.pm"
+cp -R "$ROOT_DIR/.agents/roles" "$COLD_CACHE_FIXTURE/.agents/roles"
+cp -R "$ROOT_DIR/scripts/pm" "$COLD_CACHE_FIXTURE/scripts/pm"
+shopt -s dotglob nullglob
+for path in "$ROOT_DIR"/*; do
+  name="$(basename "$path")"
+  [[ "$name" == ".pm" || "$name" == ".git" || "$name" == ".agents" || "$name" == "scripts" ]] && continue
+  ln -s "$path" "$COLD_CACHE_FIXTURE/$name"
+done
+shopt -u dotglob nullglob
+find "$COLD_CACHE_FIXTURE/scripts/pm" \( -type d -name __pycache__ -o -type f -name '*.pyc' \) -prune -exec rm -rf {} +
+if env -u PYTHONDONTWRITEBYTECODE \
+  PYTHONPYCACHEPREFIX="$COLD_CACHE_FIXTURE/inherited-pycache" \
+  PM_ROOT_DIR="$COLD_CACHE_FIXTURE" "$COLD_CACHE_FIXTURE/scripts/pm/lint.sh" \
+  >"$TMP_DIR/cold-cache-lint.out"; then
+  cold_cache_artifacts="$(find "$COLD_CACHE_FIXTURE" \( -type d -name __pycache__ -o -type f -name '*.pyc' \) -print)"
+  if [[ -n "$cold_cache_artifacts" ]]; then
+    echo "pm-lint.test: lint wrote Python artifacts into a cold physical source fixture" >&2
+    printf '%s\n' "$cold_cache_artifacts" >&2
+    exit 1
+  fi
+  grep -Fx "pm-lint: OK" "$TMP_DIR/cold-cache-lint.out" >/dev/null
+else
+  echo "pm-lint.test: cold physical source fixture unexpectedly failed lint" >&2
+  cat "$TMP_DIR/cold-cache-lint.out" >&2
+  exit 1
+fi
+
+PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" check \
   --root "$ROOT_DIR" --state "$TMP_DIR/state" --pathspec .pm >/dev/null
+
+CACHE_FIXTURE="$TMP_DIR/no-process-cache-fixture"
+mkdir -p "$CACHE_FIXTURE"
+cp -R "$ROOT_DIR/.pm" "$CACHE_FIXTURE/.pm"
+shopt -s dotglob nullglob
+for path in "$ROOT_DIR"/*; do
+  name="$(basename "$path")"
+  [[ "$name" == ".pm" || "$name" == ".git" ]] && continue
+  if [[ "$name" == ".gitignore" || "$name" == ".gitattributes" ]]; then
+    cp "$path" "$CACHE_FIXTURE/$name"
+    continue
+  fi
+  ln -s "$path" "$CACHE_FIXTURE/$name"
+done
+shopt -u dotglob nullglob
+git -C "$CACHE_FIXTURE" init -q
+rm -rf \
+  "$CACHE_FIXTURE/.pm/github-project-sync" \
+  "$CACHE_FIXTURE/.pm/roles/qa_engineer/backlog" \
+  "$CACHE_FIXTURE/.pm/roles/repository_health_engineer/backlog" \
+  "$CACHE_FIXTURE/.pm/roles/tpm/backlog" \
+  "$CACHE_FIXTURE/.pm/roles/viewer_engineer/backlog" \
+  "$CACHE_FIXTURE/.pm/scratch" \
+  "$CACHE_FIXTURE/.pm/stage" \
+  "$CACHE_FIXTURE/.pm/tasks" \
+  "$CACHE_FIXTURE/.pm/working_memory"
+rm -f "$CACHE_FIXTURE/.pm/registry/codex-sessions.yaml"
+PM_ROOT_DIR="$CACHE_FIXTURE" "$ROOT_DIR/scripts/pm/lint.sh" \
+  >"$TMP_DIR/no-cache-lint.out"
+grep -Fx "pm-lint: OK" "$TMP_DIR/no-cache-lint.out" >/dev/null
+
+mkdir -p \
+  "$CACHE_FIXTURE/.pm/github-project-sync" \
+  "$CACHE_FIXTURE/.pm/stage" \
+  "$CACHE_FIXTURE/.pm/working_memory"
+printf '{ malformed cache\n' >"$CACHE_FIXTURE/.pm/github-project-sync/tasks.json"
+printf '{ malformed archive\n' >"$CACHE_FIXTURE/.pm/github-project-sync/task-archive.jsonl"
+printf '{ malformed signals\n' >"$CACHE_FIXTURE/.pm/github-project-sync/signal-archive.jsonl"
+printf 'not: valid: stage\n' >"$CACHE_FIXTURE/.pm/stage/current.yaml"
+printf 'not: valid: gate\n' >"$CACHE_FIXTURE/.pm/stage/gate.yaml"
+printf 'not: valid: session\n' >"$CACHE_FIXTURE/.pm/registry/codex-sessions.yaml"
+printf 'not: valid: task\n' >"$CACHE_FIXTURE/.pm/working_memory/task_local.yaml"
+PM_ROOT_DIR="$CACHE_FIXTURE" "$ROOT_DIR/scripts/pm/lint.sh" \
+  >"$TMP_DIR/bad-cache-lint.out"
+grep -Fx "pm-lint: OK" "$TMP_DIR/bad-cache-lint.out" >/dev/null
+for ignored_path in \
+  .pm/github-project-sync/tasks.json \
+  .pm/github-project-sync/task-archive.jsonl \
+  .pm/github-project-sync/signal-archive.jsonl \
+  .pm/registry/codex-sessions.yaml \
+  .pm/stage/current.yaml \
+  .pm/stage/gate.yaml \
+  .pm/working_memory/task_local.yaml; do
+  git -C "$CACHE_FIXTURE" check-ignore -q "$ignored_path"
+done
 
 FIXTURE="$TMP_DIR/concurrent-fixture"
 mkdir -p "$FIXTURE"
@@ -23,7 +108,7 @@ shopt -s dotglob nullglob
 for path in "$ROOT_DIR"/*; do
   name="$(basename "$path")"
   [[ "$name" == ".pm" || "$name" == ".git" ]] && continue
-  if [[ "$name" == ".gitignore" ]]; then
+  if [[ "$name" == ".gitignore" || "$name" == ".gitattributes" ]]; then
     cp "$path" "$FIXTURE/$name"
     continue
   fi
@@ -33,7 +118,7 @@ shopt -u dotglob nullglob
 git -C "$FIXTURE" init -q
 git -C "$FIXTURE" add .pm
 
-python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" snapshot \
+PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" snapshot \
   --root "$FIXTURE" --state "$TMP_DIR/concurrent-state" --pathspec .pm
 
 READY="$TMP_DIR/snapshot-ready"
@@ -54,23 +139,33 @@ if [[ ! -f "$READY" ]]; then
   wait "$lint_pid" 2>/dev/null || true
   exit 1
 fi
-printf '\n# concurrent source epoch mutation\n' >>"$FIXTURE/.pm/stage/current.yaml"
+printf '\n# concurrent source epoch mutation\n' >>"$FIXTURE/.pm/README.md"
 : >"$CONTINUE"
 wait "$lint_pid"
 grep -Fx "pm-lint: OK" "$TMP_DIR/concurrent-lint.out" >/dev/null
 
-if python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" check \
+if PYTHONDONTWRITEBYTECODE=1 python3 "$ROOT_DIR/scripts/pm/guard-tracked-files.py" check \
   --root "$FIXTURE" --state "$TMP_DIR/concurrent-state" --pathspec .pm \
   >"$TMP_DIR/concurrent-guard.out" 2>"$TMP_DIR/concurrent-guard.err"; then
   echo "pm-lint.test: expected full-.pm guard to detect non-role source mutation" >&2
   exit 1
 fi
-grep -F "tracked projection drift: .pm/stage/current.yaml" \
+grep -F "tracked projection drift: .pm/README.md" \
   "$TMP_DIR/concurrent-guard.err" >/dev/null
 
 COPY_FIXTURE="$TMP_DIR/during-copy-fixture"
 mkdir -p "$COPY_FIXTURE"
 cp -R "$ROOT_DIR/.pm" "$COPY_FIXTURE/.pm"
+# The ignored runtime gate is absent in a clean checkout; seed the race fixture
+# from the tracked template so the chmod transition is deterministic.
+mkdir -p "$COPY_FIXTURE/.pm/stage"
+cp "$ROOT_DIR/.pm/templates/stage-gate.yaml" \
+  "$COPY_FIXTURE/.pm/stage/gate.yaml"
+chmod 0644 "$COPY_FIXTURE/.pm/stage/gate.yaml"
+if [[ ! -f "$COPY_FIXTURE/.pm/stage/gate.yaml" || -x "$COPY_FIXTURE/.pm/stage/gate.yaml" ]]; then
+  echo "pm-lint.test: during-copy gate fixture must start as a non-executable file" >&2
+  exit 1
+fi
 shopt -s dotglob nullglob
 for path in "$ROOT_DIR"/*; do
   name="$(basename "$path")"

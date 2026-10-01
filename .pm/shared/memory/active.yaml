@@ -2,28 +2,12 @@ version: 1
 scope: shared
 kind: memory_active
 records:
-  - id: MEM-SHARED-0001
-    role: shared
-    topic: gate.claim_envelope
-    summary: "claim envelope remains internal_only until stage gate is aligned"
-    source_refs:
-      - doc/engineering/self-evolution/file-based-self-evolution-management-2026-03-30.design.md
-      - .pm/tasks/task_3eb31966906e5ae7b8b8676d756c5510.execution.md
-    tags:
-      - stage
-      - claim_envelope
-    effective_at: 2026-03-30T22:25:40+08:00
-    last_reviewed_at: 2026-03-30T22:25:40+08:00
-    status: active
-    confidence: confirmed
-    promotion_reason: stage_decision
   - id: MEM-SHARED-0003
     role: shared
     topic: cross_role.workflow.task_scoped_working_memory_close_checklist
-    summary: "workflow-report close must count working_memory against the current task; when entry_count is zero, the checklist should point to codex-working-memory bootstrap instead of role-global review/autoflow guidance."
+    summary: "workflow-report close is scoped to the selected GitHub task; when it has no working-memory entries, bootstrap task context before using role-global review or autoflow guidance."
     source_refs:
-      - .pm/tasks/task_c832e71085c556e3a5ffda32fc73c053.execution.md
-      - .pm/tasks/task_dace9a712ee840cb836d1b2e2c6a00a7.execution.md
+      - doc/engineering/workflow/source-of-truth.md
     tags:
       - workflow
       - working_memory
@@ -38,7 +22,6 @@ records:
     topic: cross_role.workflow.github_pr_review_default_boundary
     summary: "The default workflow review boundary is GitHub PR review via ./scripts/prepare-task-pr.sh; local codex-review-snapshot is no longer required in workflow close or pre-commit flow."
     source_refs:
-      - .pm/tasks/task_72972433a36f46d0b8e95c04e1303a42.execution.md
       - AGENTS.md
     tags:
       - workflow

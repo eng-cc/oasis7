@@ -362,6 +362,23 @@ class ReviewIdentityV2Test(unittest.TestCase):
         identity["source_scope_oid"] = INTEGRATION_BASE
         self.assertNotEqual(digest, MODULE.source_review_digest(identity))
 
+    def test_integration_identity_rejects_conflicting_legacy_aliases(self):
+        for receipt in (
+            integration_receipt(run_id=12, integration_run_id=99),
+            integration_receipt(source_head_oid=HEAD, head_oid="e" * 40),
+            integration_receipt(integration_base_oid=INTEGRATION_BASE, base_oid="e" * 40),
+        ):
+            with self.subTest(receipt=receipt), self.assertRaisesRegex(ValueError, "conflicting aliases"):
+                MODULE.integration_ci_identity(receipt)
+
+    def test_integration_identity_requires_positive_numeric_provenance_ids(self):
+        for field, value in (
+            ("request_id", "abc"), ("run_id", 0), ("check_app_id", -1),
+            ("check_run_id", True),
+        ):
+            with self.subTest(field=field, value=value), self.assertRaisesRegex(ValueError, field):
+                MODULE.integration_ci_identity(integration_receipt(**{field: value}))
+
     def test_latest_integration_may_change_run_identity_when_tree_and_authority_match(self):
         source = MODULE.source_review_identity(**source_fields())
         accepted = MODULE.integration_ci_identity(integration_receipt())

@@ -47,6 +47,7 @@ Options:
   --create                Push branch if needed and run `gh pr create`; legacy task-bound `--create` is rejected
   --draft                 Add `--draft` when creating a PR
   --draft-candidate       Create/resume the frozen-head draft candidate before CI/review
+  --existing-ready-update Update the same admitted ready PR without changing its lifecycle state
   --promote-draft <receipt> Promote the draft only after a trusted ci_ready_receipt
   --title <text>          Explicit PR title (default: use gh --fill)
   --body-file <path>      Pass an explicit PR body file to `gh pr create`
@@ -107,6 +108,7 @@ REMOTE_NAME="origin"
 CREATE_PR=0
 DRAFT_PR=0
 DRAFT_CANDIDATE=0
+EXISTING_READY_UPDATE=0
 PROMOTE_DRAFT_RECEIPT=""
 OUTPUT_JSON=0
 PR_TITLE=""
@@ -139,6 +141,7 @@ while [[ $# -gt 0 ]]; do
       shift
       ;;
     --draft-candidate) CREATE_PR=1; DRAFT_PR=1; DRAFT_CANDIDATE=1; shift ;;
+    --existing-ready-update) CREATE_PR=1; DRAFT_CANDIDATE=1; EXISTING_READY_UPDATE=1; shift ;;
     --promote-draft) PROMOTE_DRAFT_RECEIPT="${2:-}"; shift 2 ;;
     --title)
       PR_TITLE="${2:-}"
@@ -172,6 +175,10 @@ done
 if [[ "${#POSITIONAL[@]}" -gt 1 ]]; then
   die "expected at most one optional [source-branch]"
 fi
+if [[ "$EXISTING_READY_UPDATE" == "1" \
+  && ( "$LEGACY_REVIEW_V1" == "1" || -z "$IMPACT_PROJECTION" ) ]]; then
+  die "existing-ready-update requires --impact-projection and cannot use --legacy-review-v1"
+fi
 if [[ -n "$IMPACT_PROJECTION" && -z "$REVIEW_CHANGE_CLASS" ]]; then
   die "--impact-projection requires --review-change-class so role identity can be verified"
 fi
@@ -200,6 +207,9 @@ fi
 [[ -n "$BASE_BRANCH" ]] || die "--base cannot be empty"
 [[ -n "$REMOTE_NAME" ]] || die "--remote cannot be empty"
 [[ "$SOURCE_BRANCH" != "$BASE_BRANCH" ]] || die "source and base branches must differ"
+if [[ "$EXISTING_READY_UPDATE" == "1" ]]; then
+  [[ "$DRAFT_PR" == "0" && -z "$PROMOTE_DRAFT_RECEIPT" ]] || die "existing ready update is mutually exclusive with draft creation/promotion"
+fi
 
 if [[ -n "$BODY_FILE" && ! -f "$BODY_FILE" ]]; then
   die "--body-file not found: $BODY_FILE"
@@ -605,7 +615,8 @@ local_role_review_status() {
   local source_head="$3"
   local comparison_ref="$4"
   local expected_comparison_oid="${5:-}"
-  python3 - "$source_worktree" "$source_branch" "$source_head" "$comparison_ref" "$expected_comparison_oid" <<'PY'
+  local allow_moved_comparison_ref="${6:-0}"
+  python3 - "$source_worktree" "$source_branch" "$source_head" "$comparison_ref" "$expected_comparison_oid" "$allow_moved_comparison_ref" <<'PY'
 from __future__ import annotations
 
 from pathlib import Path
@@ -620,6 +631,7 @@ source_branch = sys.argv[2]
 source_head = sys.argv[3]
 comparison_ref = sys.argv[4]
 expected_comparison_oid = sys.argv[5] if len(sys.argv) > 5 else ""
+allow_moved_comparison_ref = len(sys.argv) > 6 and sys.argv[6] == "1"
 root = source_worktree
 tasks_dir = root / ".pm" / "tasks"
 
@@ -960,23 +972,18 @@ required = {
     "Comparison OID": comparison_oid,
 }
 
-# Promotion binds the packet to the immutable receipt base OID.  Keep the
-# packet field as the default authority for pre-promotion validation, then
-# override that expected value only when promotion supplies a receipt base.
+# Every ordinary admission binds both the packet's symbolic Comparison Ref
+# and its resolved OID. Promotion alone may retain an older symbolic ref after
+# the base moves; there the immutable receipt OID is the range authority.
 if expected_comparison_oid:
     required["Comparison OID"] = expected_comparison_oid
-
-# The symbolic ref is audit context.  During promotion the receipt's base
-# OID is the immutable review-range authority, so a later move of the symbolic
-# base ref must not invalidate an otherwise exact packet.  Without a receipt,
-# retain the current comparison ref as the pre-PR validation authority.
-if not expected_comparison_oid:
+if not allow_moved_comparison_ref:
     required["Comparison Ref"] = comparison_ref
 
 missing: list[str] = []
 
 packet_comparison_ref = parse_field(selected_block, "Comparison Ref")
-if expected_comparison_oid:
+if allow_moved_comparison_ref:
     if not packet_comparison_ref:
         missing.append("Comparison Ref")
     elif not re.fullmatch(
@@ -1438,6 +1445,10 @@ fi
 
 COMPARISON_COMMIT_REF="${COMPARISON_REF}^{commit}"
 COMPARISON_HEAD="$(git rev-parse "$COMPARISON_COMMIT_REF")"
+SOURCE_SCOPE_BASE="$(git -C "$SOURCE_WORKTREE" merge-base "$COMPARISON_HEAD" "$SOURCE_HEAD")" \
+  || die "source projection merge-base is unavailable"
+[[ "$SOURCE_SCOPE_BASE" =~ ^[0-9a-f]{40,64}$ ]] \
+  || die "source projection merge-base is invalid"
 
 # Promotion reviews the ancestor scope OID; live admission keeps the CI integration OID.
 # The live receipt validator below remains authoritative for the PR/check
@@ -1456,6 +1467,17 @@ PY
 )" || die "promote_draft could not read ci_ready_receipt base identity"
   [[ "$PROMOTE_DRAFT_RECEIPT_BASE_OID" =~ ^[0-9a-f]{40,64}$ ]] || die "promote_draft ci_ready_receipt has invalid base identity"
   REVIEW_COMPARISON_OID="$(python3 -c 'import json,sys; r=json.load(open(sys.argv[1])); print(r.get("scope_base_oid",r["base_oid"]))' "$PROMOTE_DRAFT_RECEIPT")"
+fi
+if [[ -z "$REVIEW_COMPARISON_OID" ]]; then
+  if [[ "$LEGACY_REVIEW_V1" == "1" ]]; then
+    REVIEW_COMPARISON_OID="$COMPARISON_HEAD"
+  else
+    REVIEW_COMPARISON_OID="$SOURCE_SCOPE_BASE"
+  fi
+fi
+REVIEW_COMPARISON_REF_MAY_MOVE=0
+if [[ -n "$PROMOTE_DRAFT_RECEIPT" ]]; then
+  REVIEW_COMPARISON_REF_MAY_MOVE=1
 fi
 BASE_WORKTREE=""
 if [[ -n "$LOCAL_BASE_REF" ]]; then
@@ -1532,12 +1554,53 @@ fi
 LOCAL_REQUIRED_EXTRA_COMMANDS+=("$SYSTEM_DESIGN_TRACEABILITY_COMMAND")
 
 PLANNER_SCRIPT="$SOURCE_WORKTREE/scripts/plan-rust-required-scope.sh"
-if [[ -x "$PLANNER_SCRIPT" ]]; then
+if [[ -x "$PLANNER_SCRIPT" || -n "$IMPACT_PROJECTION" ]]; then
   PLANNER_ARGS=(--event-name pull_request --base-ref "$COMPARISON_REF" --head-ref "$SOURCE_HEAD")
+  PLANNER_RUNNER=("$PLANNER_SCRIPT")
   if [[ -n "$IMPACT_PROJECTION" ]]; then
-    PLANNER_ARGS+=(--impact-projection "$IMPACT_PROJECTION" --task-uid "$BOUND_TASK_UID" --scope-base-oid "$COMPARISON_HEAD")
+    TRUSTED_REQUIRED_SCOPE_DIR="$(mktemp -d)"
+    mkdir -p "$TRUSTED_REQUIRED_SCOPE_DIR/scripts/pm"
+    git -C "$SOURCE_WORKTREE" show "$COMPARISON_HEAD:scripts/plan-rust-required-scope.py" \
+      >"$TRUSTED_REQUIRED_SCOPE_DIR/scripts/plan-rust-required-scope.py" \
+      || die "trusted base required-scope planner is unavailable"
+    git -C "$SOURCE_WORKTREE" show "$COMPARISON_HEAD:scripts/ci-required-scope.v2.json" \
+      >"$TRUSTED_REQUIRED_SCOPE_DIR/scripts/ci-required-scope.v2.json" \
+      || die "trusted base required-scope config is unavailable"
+    git -C "$SOURCE_WORKTREE" show "$COMPARISON_HEAD:scripts/ci-tests.sh" \
+      >"$TRUSTED_REQUIRED_SCOPE_DIR/scripts/ci-tests.sh" \
+      || die "trusted base required-gate selector source is unavailable"
+    git -C "$SOURCE_WORKTREE" show "$COMPARISON_HEAD:scripts/pm/workflow-impact-projection.py" \
+      >"$TRUSTED_REQUIRED_SCOPE_DIR/scripts/pm/workflow-impact-projection.py" \
+      || die "trusted base impact-projection verifier is unavailable"
+    PLANNER_RUNNER=(python3 -I "$TRUSTED_REQUIRED_SCOPE_DIR/scripts/plan-rust-required-scope.py")
+    PLANNER_ARGS+=(--config "$TRUSTED_REQUIRED_SCOPE_DIR/scripts/ci-required-scope.v2.json")
+    PLANNER_ARGS+=(--impact-projection "$IMPACT_PROJECTION" --task-uid "$BOUND_TASK_UID" --scope-base-oid "$SOURCE_SCOPE_BASE")
   fi
-  if RUST_SCOPE_OUTPUT="$(cd "$SOURCE_WORKTREE" && "$PLANNER_SCRIPT" "${PLANNER_ARGS[@]}" 2>/dev/null)"; then
+  if [[ -n "$IMPACT_PROJECTION" ]]; then
+    if ! RUST_SCOPE_OUTPUT="$(cd "$SOURCE_WORKTREE" && "${PLANNER_RUNNER[@]}" "${PLANNER_ARGS[@]}" 2>&1)"; then
+      printf '%s\n' "$RUST_SCOPE_OUTPUT" >&2
+      die "trusted base required-scope planner rejected the impact projection"
+    fi
+  else
+    RUST_SCOPE_OUTPUT=""
+    if ! RUST_SCOPE_OUTPUT="$(cd "$SOURCE_WORKTREE" && "${PLANNER_RUNNER[@]}" "${PLANNER_ARGS[@]}" 2>/dev/null)"; then
+      RUST_SCOPE_OUTPUT=""
+    fi
+  fi
+  if [[ -n "$RUST_SCOPE_OUTPUT" ]]; then
+    PLANNER_EXECUTION_CONTRACT="$(plan_kv_get "$RUST_SCOPE_OUTPUT" "execution_contract")"
+    case "$PLANNER_EXECUTION_CONTRACT" in
+      ""|required-domain-split/v1) ;;
+      *) die "required-scope planner returned unsupported execution contract: $PLANNER_EXECUTION_CONTRACT" ;;
+    esac
+    LOCAL_REQUIRED_VERSIONED_ENV=""
+    if [[ "$PLANNER_EXECUTION_CONTRACT" == "required-domain-split/v1" ]]; then
+      LOCAL_REQUIRED_RENDERER="$SOURCE_WORKTREE/scripts/pm/required-gate-local-env.py"
+      [[ -f "$LOCAL_REQUIRED_RENDERER" ]] || die "versioned required-gate local renderer is unavailable"
+      if ! LOCAL_REQUIRED_VERSIONED_ENV="$(printf '%s\n' "$RUST_SCOPE_OUTPUT" | python3 "$LOCAL_REQUIRED_RENDERER")"; then
+        die "required-scope planner output failed versioned local environment validation"
+      fi
+    fi
     LOCAL_REQUIRED_SCOPE="$(plan_kv_get "$RUST_SCOPE_OUTPUT" "scope")"
     LOCAL_REQUIRED_SCOPE="${LOCAL_REQUIRED_SCOPE:-unavailable}"
     LOCAL_REQUIRED_CHANGED_PATH_COUNT="$(plan_kv_get "$RUST_SCOPE_OUTPUT" "changed_path_count")"
@@ -1572,7 +1635,8 @@ if [[ -x "$PLANNER_SCRIPT" ]]; then
       LOCAL_REQUIRED_EXTRA_COMMANDS+=("$PRODUCT_DOC_FULL_CORPUS_COMMAND")
     fi
 
-    if [[ "$LOCAL_REQUIRED_SCOPE" != "minimal" ]]; then
+    if [[ "$PLANNER_EXECUTION_CONTRACT" == "required-domain-split/v1" || \
+          "$LOCAL_REQUIRED_SCOPE" != "minimal" ]]; then
       RUN_OASIS7_REQUIRED_TESTS="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_oasis7_required_tests" "false")"
       RUN_SCENARIO_REGRESSION="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_scenario_regression" "false")"
       RUN_CONSENSUS_TESTS="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_consensus_tests" "false")"
@@ -1592,6 +1656,9 @@ if [[ -x "$PLANNER_SCRIPT" ]]; then
       RUN_CODEX_AGENT_CONFIG_VALIDATION="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_codex_agent_config_validation" "false")"
       RUN_COMPILE_METRICS_CONTRACT_TESTS="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_compile_metrics_contract_tests" "false")"
       RUN_RUST_BASELINE="$(plan_kv_get_default "$RUST_SCOPE_OUTPUT" "run_rust_baseline" "false")"
+      if [[ "$PLANNER_EXECUTION_CONTRACT" == "required-domain-split/v1" ]]; then
+        [[ -n "$LOCAL_REQUIRED_VERSIONED_ENV" ]] || die "versioned required-gate environment was not rendered"
+      fi
       LOCAL_REQUIRED_COMMAND="OASIS7_CI_RUN_OASIS7_REQUIRED_TESTS=$RUN_OASIS7_REQUIRED_TESTS \
 OASIS7_CI_RUN_SCENARIO_REGRESSION=$RUN_SCENARIO_REGRESSION \
 OASIS7_CI_RUN_CONSENSUS_TESTS=$RUN_CONSENSUS_TESTS \
@@ -1612,6 +1679,9 @@ OASIS7_CI_RUN_CODEX_AGENT_CONFIG_VALIDATION=$RUN_CODEX_AGENT_CONFIG_VALIDATION \
 OASIS7_CI_RUN_COMPILE_METRICS_CONTRACT_TESTS=$RUN_COMPILE_METRICS_CONTRACT_TESTS \
 OASIS7_CI_RUN_RUST_BASELINE=$RUN_RUST_BASELINE \
 ./scripts/ci-tests.sh required"
+      if [[ -n "$LOCAL_REQUIRED_VERSIONED_ENV" ]]; then
+        LOCAL_REQUIRED_COMMAND="$LOCAL_REQUIRED_VERSIONED_ENV $LOCAL_REQUIRED_COMMAND"
+      fi
     fi
     if [[ -z "$LOCAL_REQUIRED_COMMAND" ]]; then
       LOCAL_REQUIRED_COMMAND="git diff --check"
@@ -1625,14 +1695,13 @@ OASIS7_CI_RUN_RUST_BASELINE=$RUN_RUST_BASELINE \
       CLAIM_READY_COMMAND="$(render_cmd "./scripts/pm/claim-ready.sh" "--claim-type" "ready_for_pr" "--verification-profile" "repository_required")"
     fi
   fi
+  [[ -z "${TRUSTED_REQUIRED_SCOPE_DIR:-}" ]] || rm -rf "$TRUSTED_REQUIRED_SCOPE_DIR"
 fi
 
 # The package-scope result is an additive audit.  It never selects or removes
 # required tests.  The policy must already exist at the trusted comparison OID;
 # a policy introduced by this candidate cannot authorize its own enforcement.
 CARGO_PACKAGE_SCOPE_AUTHORITY_DIR="$(mktemp -d)"
-SOURCE_SCOPE_BASE="$(git -C "$SOURCE_WORKTREE" merge-base "$COMPARISON_HEAD" "$SOURCE_HEAD")" \
-  || die "Cargo package scope source merge-base is unavailable"
 CARGO_PACKAGE_SCOPE_CHECKER="$CARGO_PACKAGE_SCOPE_AUTHORITY_DIR/check-cargo-package-scope"
 CARGO_PACKAGE_SCOPE_POLICY="$SOURCE_WORKTREE/.pm/cargo-package-scope-policy.json"
 CARGO_PACKAGE_SCOPE_RELEVANT="$(python3 - "$SOURCE_WORKTREE" "$COMPARISON_HEAD" "$SOURCE_HEAD" <<'PY'
@@ -1744,7 +1813,7 @@ if git show-ref --verify --quiet "refs/remotes/$REMOTE_NAME/$SOURCE_BRANCH"; the
   REMOTE_SOURCE_REF="refs/remotes/$REMOTE_NAME/$SOURCE_BRANCH"
 fi
 
-LOCAL_ROLE_REVIEW_OUTPUT="$(local_role_review_status "$SOURCE_WORKTREE" "$SOURCE_BRANCH" "$SOURCE_HEAD" "$COMPARISON_REF" "$REVIEW_COMPARISON_OID")"
+LOCAL_ROLE_REVIEW_OUTPUT="$(local_role_review_status "$SOURCE_WORKTREE" "$SOURCE_BRANCH" "$SOURCE_HEAD" "$COMPARISON_REF" "$REVIEW_COMPARISON_OID" "$REVIEW_COMPARISON_REF_MAY_MOVE")"
 LOCAL_ROLE_REVIEW_STATUS="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "status")"
 LOCAL_ROLE_REVIEW_TASK_UID="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "task_uid")"
 LOCAL_ROLE_REVIEW_LOG_PATH="$(plan_kv_get "$LOCAL_ROLE_REVIEW_OUTPUT" "evidence_sink")"
@@ -1785,7 +1854,7 @@ if [[ -n "$REVIEW_CHANGE_CLASS" ]]; then
   ROLE_SELECTOR_ARGS=(--change-class "$REVIEW_CHANGE_CLASS" --changed-path-list "$LOCAL_REQUIRED_CHANGED_PATHS" --json)
   if [[ -n "$IMPACT_PROJECTION" ]]; then
     [[ -f "$IMPACT_PROJECTION" ]] || die "impact projection is not readable: $IMPACT_PROJECTION"
-    ROLE_SELECTOR_ARGS+=(--impact-projection "$IMPACT_PROJECTION" --task-uid "$BOUND_TASK_UID" --source-head-oid "$SOURCE_HEAD" --scope-base-oid "$COMPARISON_HEAD")
+    ROLE_SELECTOR_ARGS+=(--impact-projection "$IMPACT_PROJECTION" --task-uid "$BOUND_TASK_UID" --source-head-oid "$SOURCE_HEAD" --scope-base-oid "$SOURCE_SCOPE_BASE")
   fi
   [[ -z "$REVIEW_DOMAIN_ROLE" ]] || ROLE_SELECTOR_ARGS+=(--domain-role "$REVIEW_DOMAIN_ROLE")
   [[ "$REVIEW_VERIFICATION_AFFECTED" == "0" ]] || ROLE_SELECTOR_ARGS+=(--verification-affected)
@@ -2085,7 +2154,50 @@ CLEANUP_CMD_1="$(render_cmd \
 CLEANUP_CMD_2=""
 
 PR_URL=""
+if [[ "$CREATE_PR" == "1" && "$DRAFT_CANDIDATE" == "1" && -n "$LOCAL_ROLE_REVIEW_TASK_UID" && -n "$IMPACT_PROJECTION" ]]; then
+  command -v gh >/dev/null 2>&1 || die "gh not found in PATH"
+  CURRENT_REPO="$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
+  C1_BODY_PATH="$BODY_FILE"
+  C1_REMOVE_BODY=0
+  if [[ -z "$C1_BODY_PATH" ]]; then
+    C1_BODY_PATH="$(mktemp)"
+    C1_REMOVE_BODY=1
+    printf '%s\n' "$GENERATED_PR_BODY" >"$C1_BODY_PATH"
+  fi
+  C1_PUBLISH_ARGS=(
+    --worktree "$SOURCE_WORKTREE"
+    --repo "$CURRENT_REPO"
+    --issue-number "$TASK_ISSUE_NUMBER"
+    --task-uid "$LOCAL_ROLE_REVIEW_TASK_UID"
+    --remote "$REMOTE_NAME"
+    --source-ref "$SOURCE_BRANCH"
+    --target-ref "$BASE_BRANCH"
+    --source-head "$SOURCE_HEAD"
+    --target-oid "$COMPARISON_HEAD"
+    --projection "$IMPACT_PROJECTION"
+    --body-file "$C1_BODY_PATH"
+    --task-helper "$ROOT_DIR/scripts/pm/github-project-task.py"
+    --json
+  )
+  if [[ -n "$PR_TITLE" ]]; then
+    C1_PUBLISH_ARGS+=(--title "$PR_TITLE")
+  fi
+  if [[ "$EXISTING_READY_UPDATE" == "1" ]]; then
+    [[ "$DRAFT_PR" == "0" && -z "$PROMOTE_DRAFT_RECEIPT" ]] || die "existing ready update cannot create/promote a draft"
+    C1_PUBLISH_ARGS+=(--existing-ready-update)
+  fi
+  if ! C1_PUBLISH_OUTPUT="$(python3 "$ROOT_DIR/scripts/pm/pr_projection_publish.py" "${C1_PUBLISH_ARGS[@]}" 2>&1)"; then
+    [[ "$C1_REMOVE_BODY" == "1" ]] && rm -f "$C1_BODY_PATH"
+    die "ordered C1 PR publication failed; rerun the same prepare-task-pr command to reconcile its journal: $C1_PUBLISH_OUTPUT"
+  fi
+  [[ "$C1_REMOVE_BODY" == "1" ]] && rm -f "$C1_BODY_PATH"
+  PR_URL="$(python3 -c 'import json,sys; print(json.loads(sys.argv[1])["pr_url"])' "$C1_PUBLISH_OUTPUT")" \
+    || die "ordered C1 PR publication returned malformed success output"
+  CREATE_PR=0
+fi
 if [[ "$CREATE_PR" == "1" ]]; then
+  [[ "$EXISTING_READY_UPDATE" != "1" ]] \
+    || die "existing-ready-update cannot use the generic CREATE_PR fallback"
   command -v gh >/dev/null 2>&1 || die '`gh` not found in PATH'
   if [[ -z "$REMOTE_SOURCE_REF" ]]; then
     git -C "$SOURCE_WORKTREE" push -u "$REMOTE_NAME" "$SOURCE_BRANCH"

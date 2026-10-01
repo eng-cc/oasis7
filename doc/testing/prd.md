@@ -47,6 +47,7 @@
   - SC-12: 仓库必须提供一个 repo-local `L4` scaffold 入口，能够在单个 worktree 内稳定生成 `L4A` review packet、role/persona cards、`L4B` agent 卡副本、可选内部真人佐证 notes、最终 summary 与推荐命令，不再依赖临时手写 packet/card 文件名。
   - SC-13: 仓库必须提供一个 repo-local `L4B` embodied-agent runner，能够实际启动 producer playtest、执行最小真实操作链路、并把状态快照/截图/日志路径/summary 回填到同一 artifact 目录，而不是只留下手工提示。
   - SC-14: testing 模块具备一份 canonical 模型视觉评审 SOP，使截图/布局/遮挡/层级/可读性等常规视觉 review 默认由模型完成，并明确何时必须升级人工 owner。
+  - SC-15: QA infrastructure verification has a finite, reusable source-to-scene method that binds each accepted product and professional clause to its environment, oracle, artifact, evidence tier, and retained gap; it preserves the distinction between designed coverage and executed proof.
 
 ## 2. User Experience & Functionality
 - User Personas:
@@ -79,6 +80,7 @@
   - PRD-TESTING-009: As a playability reviewer, I want a designed panel of simulated player personas, so that internal review can compare multiple player mindsets without inventing a new formal role taxonomy.
   - PRD-TESTING-010: As a stage owner, I want `L4A/L4B/L5` boundaries written explicitly, so that synthetic、agentic、real-human playability claims stop collapsing into one undifferentiated `L4`.
   - PRD-TESTING-011: As a UI / Viewer owner, I want screenshot-based model visual review to be the default routine visual reviewer, so that most manual visual review is replaced by reproducible evidence and humans only handle escalations.
+  - PRD-TESTING-012: As a QA reviewer, I want an auditable source-to-scene receiver and per-object evidence-retention map, so that deterministic, integration, and full-environment evidence cannot be conflated or silently dropped.
 - Critical User Flows:
   1. Flow-TST-001: `识别改动类型 -> 匹配 S0~S10 -> 日常提交先执行 commit baseline，再按风险升级到 required/full -> 输出结果`
   2. Flow-TST-002: `发布前执行 full 套件 -> 按 Viewer/launcher 选择正确驱动链路 -> 汇总命令/日志/截图 -> 生成证据包`
@@ -118,6 +120,44 @@
 | 好玩性 subagent 评审系统 | `review_packet`、`requested_roles`、`role_review_card`、`aggregated_review_summary` | 按 changed surface 拉起标准角色 subagent，收集 review card，并汇总成内部结论 | `packet_ready -> parallel_review -> aggregated -> escalated/closed` | 默认必开 `producer + qa`；其余按 surface 触发；缺 L5 时不得越权宣称真实外部验证完成 | `producer_system_designer` 编排，`qa_engineer` 守门 |
 | 模拟玩家 persona 面板 | `selected_personas`、`persona_card`、`persona_divergence_summary`、`handoff_recommended_to` | 按主观体验风险选择多个 simulated personas，生成风格化体验假设，再回流标准角色 review | `selected -> simulated -> handed_off -> absorbed` | 不新增正式 `player` 角色；persona 只能补内部假设，不能替代 agent 实操试玩、真人试玩或外部验证 | `producer_system_designer` 决定是否开启，命中的标准角色负责收口 |
 | L4 synthetic/agent 分层 | `synthetic_playability_verdict`、`agentic_playtest_verdict`、`optional_internal_human_corroboration`、`calibration_status` | 先区分当前结论属于 `L4A` 还是 `L4B`，再决定是否可以升级 claim | `synthetic_ready -> agent_ready -> external_ready` | `L4A` 不得冒充 `L4B`；内部真人佐证只可作为 `L4B` 校准，不得伪装成 `L5`；无 calibration 时不得宣称低层已替代高层 | `producer_system_designer` 定义边界，`qa_engineer` 守门 |
+
+### QA infrastructure receiver
+
+This receiver turns accepted product and professional clauses into a reproducible verification plan and an auditable result. It is a QA evidence contract, not a product-rule authority, runtime implementation, or release approval. Product obligations start at [world-infrastructure Done](../product/world-infrastructure/prd.md#world-infrastructure-done); the P2P and deterministic-execution clauses remain in their professional PRDs and designs. The combined state-sync target inventory is the [GWSC design](longrun/game-world-state-sync-commit-closure-2026-06-26.design.md), including its exact 17 negative cases, 10 runtime groups, and 8 SC-9 cells. Those inventories define planned coverage; their presence here does not say that the cases were implemented or run.
+
+<a id="qa-infrastructure-source-scene-method"></a>
+#### Source-to-scene record and evaluation
+
+For each selected scene, cell, specimen, and tier, retain one record that binds: exact source path/fragment/identifier plus source OID and digest; candidate source/base/tested-tree identity; scenario and applicability owner; execution state (`planned`, `located`, `implemented`, or `executed`); world/branch/root/revision/window and configuration; access mode and execution lane; baseline and ordered phase observations; dependency/topology and provider identity; raw artifact locator, byte length, and digest; command/result or visible action; oracle assertions; tier verdict, failure signature or blocking reason; and the unproved boundary. Do not record tokens, private keys, or secret payloads. A content digest is an artifact-integrity check, not a domain receipt or finality proof.
+
+Evaluate in this order: (1) pin the current accepted source clauses and candidate/tree/world/window; reject stale or conflicting source identity; (2) enumerate the mandatory scene/case/cell and phase specimens, recording non-applicability only with the responsible domain owner's basis; (3) capture an unchanged baseline and classify the real dependency before an authorized execution; (4) verify artifact bytes, locator, length, and digest, then run structural, canonical, domain, trust, identity, and join oracles as separate checks; (5) compare before, interruption, fresh-read, recovery, retry, and replay observations for quantities, roots, receipts, windows, world progression, and consumer results; (6) independently verify the required provider/browser/Agent environment; (7) classify missing mandatory evidence as `blocked`/`unverified`, an observed invariant violation as `failed` with a reproducible signature, and shape-only evidence as `shape_verified`; use `passed` only when every assertion and the selected tier's environment are satisfied; (8) preserve success and failure artifacts append-only and report the exact scope and limitations. `planned`/`located`/`implemented`/`executed` are orthogonal to verdict; source links, fixtures, schema validity, and old green evidence never establish execution or current-candidate pass.
+
+<a id="qa-infrastructure-scene-families"></a>
+#### Finite source and scene families
+
+| Scene | Source clauses and accepted coverage | Required oracle / evidence boundary |
+| --- | --- | --- |
+| `V-FINALITY` | Product SC-1/2; DCS-001/003/004 and DC-1/3/4; current topology, authority roles, proof, and ordering. | P2P owns certificate, signer-set, round, and storage oracles; runtime binds execution; Ops establishes actual topology. Reject wrong signature, threshold, set, round, non-authoritative write, and role expansion. A single-node fixture is not full finality proof. |
+| `V-RECOVERY` | SC-3/6/7; DCS-002/005, DC-2/5, DE-3; GWSC DC5-01..05 and SR2-RT-01/03/09. | Join genesis/manifest/certificate/snapshot/log/root and same-candidate service state. Missing/conflicting proof stays isolated or blocked; preserve confirmed history; a closed commit gate yields zero new receipt, while restored pending work is rejudged under current conditions and may take effect at most once. Retain actual blocker and next step. |
+| `V-EXECUTION` | SC-4/5; DWE-001..004 and DE-1..4; all 17 QA negative cases and 10 runtime groups in the GWSC design. | Runtime/WASM owns determinism, ordering, migration, meter, and activation oracles; P2P owns canonical inclusion. Join both request orders, duplicates, crashes, replay, version selection, canonical bytes, and no-partial-mutation results. A local fixture does not prove canonical inclusion or recovery. |
+| `V-INDUSTRIAL` | SC-8 plus §4 industrial narrative and §5.2 allocation in the world-infrastructure PRD; gameplay SC-20/21/28/31 and stable-line clauses in [`world-rules-core-gameplay`](../product/world-rules-core-gameplay/prd.md). | Gameplay owns recipe, quantity, capacity, reservation, handoff, sink, and W/window meaning; runtime supplies journal/root facts. Distinguish accepted from held, produced, or delivered; prove conservation, once-only release/effect, and retained residuals. Keep each consumer's actual clause and evidence owner. |
+| `V-OUTAGE` | SC-9 outage narrative and exactly the eight named cells in GWSC `#sr2-sc9-eight-cells`: authority/read × stage_finish/transit/buffer_admission/terminal_settlement. | Fix one same-world baseline and retain before/outage/fresh/recovery/retry/replay values. Every authority cell includes root-absent pre-finality and root-present post-commit/pre-child specimens within that cell; do not add a ninth cell. Gameplay owns W/window disposition; Ops classifies the actual dependency; read outages never mutate world state. |
+| `V-WORLD-SCOPE` | SC-10; runtime world-scope design; consumer world identity. | Compare distinct global and local/development `world_id` through pre-submit target, intent, committed receipt, and result. Missing, mismatched, reused, or replayed identity fails closed and has zero global effect; labels alone are not identity proof. |
+| `V-CONSUMER` | SC-5/7/8/9/10; Agent PC-4 in [`provider-agent-experience-continuity`](../product/agents-world-simulation/provider-agent-experience-continuity.prd.md); cross-module FE-6/FE-7 in [`free-entry-world-progression-and-recognition`](../product/player-entry-distribution/free-entry-world-progression-and-recognition.prd.md); Agent harness §13 and Viewer control/readback contracts. | API, Viewer, and Agent observations must refer to the same candidate and agree on canonical state, status/blocker, root/lineage, quantities/window, receipt, progression, and next action. Prompt acknowledgement, provider prose, debug state, or a goal/memory entry is not world authority. Require actual surface/provenance evidence at the selected tier. |
+
+The source receiver preserves distinct upstream axes: product SC clauses and narratives, DCS/DWE REQ/AC, P2P/runtime DC/DE, and the GWSC QA cases are mapped independently. The complete path-level retention disposition is in [the 89-object consumption matrix](design.md#qa-infrastructure-89-consumption-matrix); it records retained source/evidence, actual consumer clause, domain owner, and remaining proof gap for every frozen object.
+
+<a id="qa-infrastructure-tier-boundaries"></a>
+#### Tier boundary and claim limits
+
+`test_tier_required` covers the 17 deterministic QA negatives, 10 runtime groups, and all 8 SC-9 cells, plus the active-provider `pure_api` consumer check required by the GWSC design. `test_tier_full` adds the same-candidate real-provider integration, external headed S6 capture at both desktop and narrow viewports, and provider-backed Agent parity. A mock provider, schema/fixture pass, screenshot alone, or local API response cannot substitute for those full requirements. Record provider kind, model, endpoint route, and preflight evidence/provenance as distinct fields while redacting credentials. Missing any mandatory cell, phase, archive readback, current verifier, or applicable environment keeps that scope blocked/unverified. These tiers do not by themselves establish playability, public-network readiness, or release approval.
+
+PWT-001 remains the documented bounded local provider-backed UI case. PWT-003/005/006/007 remain planned receiver cases until their actions and matching evidence are executed. Preserve PWT-004's dated 2026-09-17 provider-deferred record: HTTP 403 `bad_response_status_code`, no hello/tool-call, live headed status blocked. Local contract/build checks do not promote it to provider or gameplay pass.
+
+<a id="qa-infrastructure-equal-version-negative"></a>
+#### Equal-version migration negative
+
+The receiver includes the GWSC `MIG-01` specimen with structurally valid declared `PositiveU64` fields and `from_schema_version=to_schema_version="1"`. Shape validation is expected to accept this input shape. The semantic receiver must reject it before authoritative mutation, preserve the prior version/state/artifact bytes, and produce no partial charge, event, or world effect, following the existing [GWSC migration oracle](longrun/game-world-state-sync-commit-closure-2026-06-26.design.md#sr2-dc5-semantic-validator). This is a planned expected result, not a test execution or a schema rule; no runtime/WASM/schema implementation or proof is claimed here.
 - Acceptance Criteria:
   - AC-1: testing PRD 覆盖分层模型、触发矩阵、证据规范。
   - AC-2: testing project 文档维护分层测试演进任务。
@@ -248,6 +288,7 @@
 | PRD-TESTING-009 | durable simulated-player persona panel | `test_tier_required` | catalog, card schema, handoff and L4/L5-boundary sampling | 多风格内部玩家视角治理 |
 | PRD-TESTING-010 | durable L4 synthetic/agent split | `test_tier_required` | L4A/L4B/L5 boundary, manual entry and L4B runner sampling | synthetic/agent/real-human 玩法证据治理 |
 | PRD-TESTING-011 | model-visual-review-sop | `test_tier_required` | 模型视觉评审 SOP、输出模板、testing 根入口和 S6 手册互链、doc governance 检查 | routine 人工视觉 review 替代路径 |
+| PRD-TESTING-012 | QA infrastructure receiver | `test_tier_required` + `test_tier_full` | 逐条核对 source→scene→environment→oracle→artifact→tier 映射、17/10/8 coverage identity、89 个原始对象各自的消费/保留/缺口记录及当前候选实际证据；对 equal-version MIG-01 检查 shape 与 semantic verdict 分层 | 可审计的组合验证计划、证据留存与不得升级的明确边界 |
 
 ### 已退役的系统测试手册工程化标识
 

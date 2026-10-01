@@ -27,8 +27,6 @@ approved = [
     "RUSTSEC-2021-0127",
     "RUSTSEC-2024-0436",
     "RUSTSEC-2026-0192",
-    "RUSTSEC-2026-0194",
-    "RUSTSEC-2026-0195",
 ]
 required_keys = ("owner", "crate", "scope", "reason", "expiry", "validation", "local_crates")
 required_direct_baseline_keys = (
@@ -263,7 +261,8 @@ def package_name(line: str) -> str | None:
     return None
 
 def is_local_crate(line: str) -> bool:
-    return " (/ " in line or " (" in line and "/crates/" in line
+    # Treat first-party workspace package trees as local, while vendored patches remain third-party.
+    return " (/ " in line or " (/" in line and ("/crates/" in line or "/tools/" in line)
 
 def validate_dependency_scope(advisory_id: str, metadata: dict[str, str], line_no: int) -> None:
     args = cargo_tree_args(metadata.get("validation", ""), advisory_id, line_no)

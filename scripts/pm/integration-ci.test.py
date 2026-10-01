@@ -1,5 +1,6 @@
 """Manual integration revalidation uses current target and unchanged source."""
 import importlib.util
+import base64
 import hashlib
 import json
 import io
@@ -16,6 +17,28 @@ import shutil
 import textwrap
 
 HERE=Path(__file__).parent
+
+
+def required_test_tier_command(repo, scope_oid='b'*40):
+ workflow=(repo/'.github/workflows/rust.yml').read_text()
+ step=workflow.split('      - name: Run required test tier\n',1)[1].split('\n      - name:',1)[0]
+ run=step.split('        run:',1)[1]
+ command=textwrap.dedent(run.split('\n',1)[1]) if run.startswith(' |') else run.strip()
+ # GitHub substitutes these trusted workflow expressions before Bash runs.
+ # Keep the extracted script executable in this local shell fixture.
+ substitutions={
+  '${{ steps.scope.outputs.source_scope_base }}':scope_oid,
+  '${{ steps.scope.outputs.head_oid }}':scope_oid,
+  '${{ steps.scope.outputs.integration_base_oid }}':scope_oid,
+  '${{ github.token }}':'fixture-token',
+  '${{ inputs.task_uid }}':'task_'+'1'*32,
+  '${{ inputs.pr_number }}':'7',
+ }
+ for source,target in substitutions.items():
+  command=command.replace(source,target)
+ if '${{' in command:
+  raise AssertionError('unexpanded GitHub expression remains in required-tier fixture')
+ return command
 
 
 class TargetedProjectionPromotionTests(unittest.TestCase):
@@ -205,6 +228,46 @@ class IntegrationTests(unittest.TestCase):
      temp=Path(tmp);candidate=temp/'candidate';scripts=candidate/'scripts';scripts.mkdir(parents=True)
      frozen=temp/'integration-planner';frozen.mkdir()
      repo=HERE.parents[1]
+     fixture_bin=temp/'bin';fixture_bin.mkdir()
+     profile_oid=''
+     if event=='workflow_dispatch':
+      (candidate/'.pm').mkdir()
+      (candidate/'scripts/pm').mkdir()
+      for relative in (
+       '.pm/cargo-package-scope-policy.json',
+       'scripts/pm/check-cargo-package-scope',
+       'scripts/pm/workflow-impact-projection.py',
+       'scripts/pm/cargo_package_profile_planner.py',
+       'scripts/pm/cargo_package_profile_driver.py',
+      ):
+       destination=candidate/relative
+       destination.parent.mkdir(parents=True,exist_ok=True)
+       shutil.copy2(repo/relative,destination)
+      (candidate/'Cargo.toml').write_text(
+       '[package]\nname = "workflow-fixture"\nversion = "0.1.0"\nedition = "2021"\n',
+       encoding='utf-8',
+      )
+      (candidate/'src').mkdir()
+      (candidate/'src/lib.rs').write_text('',encoding='utf-8')
+      subprocess.run(['git','init','-q','-b','main'],cwd=candidate,check=True)
+      subprocess.run(['git','config','user.name','Integration Fixture'],cwd=candidate,check=True)
+      subprocess.run(['git','config','user.email','integration-fixture@example.invalid'],cwd=candidate,check=True)
+      subprocess.run(['git','add','.pm','scripts/pm','Cargo.toml','src/lib.rs'],cwd=candidate,check=True)
+      subprocess.run(['git','commit','-qm','trusted profile authority fixture'],cwd=candidate,check=True)
+      profile_oid=subprocess.check_output(['git','rev-parse','HEAD'],cwd=candidate,text=True).strip()
+      expected_api=f'repos/fixture/oasis7/commits/{profile_oid}/check-runs?per_page=100'
+      check_url='https://github.com/fixture/oasis7/actions/runs/12345/jobs/1'
+      gh=fixture_bin/'gh'
+      gh.write_text(
+       '#!/usr/bin/env python3\n'
+       'import json, sys\n'
+       f'expected = {expected_api!r}\n'
+       f'check_url = {check_url!r}\n'
+       "if sys.argv[1:] != ['api', expected]: raise SystemExit('unexpected GitHub API read')\n"
+       "print(json.dumps({'check_runs': [{'name': 'required-gate', 'details_url': check_url, 'id': 678, 'app': {'id': 901}}]}))\n",
+       encoding='utf-8',
+      )
+      gh.chmod(0o755)
      for name in ('ci-tests.sh','viewer-dependency-preflight.sh'):
       shutil.copy2(repo/'scripts'/name,frozen/name)
      marker=temp/'observed'
@@ -214,17 +277,24 @@ class IntegrationTests(unittest.TestCase):
      (scripts/'viewer-dependency-preflight.sh').write_text(candidate_preflight)
      (scripts/'doc-governance-check.sh').write_text('#!/bin/bash\npwd > "$OBSERVED"\nexit 37\n')
      (scripts/'doc-governance-check.sh').chmod(0o755)
-     workflow=(repo/'.github/workflows/rust.yml').read_text()
-     step=workflow.split('      - name: Run required test tier\n',1)[1].split('\n      - name:',1)[0]
-     run=step.split('        run:',1)[1]
-     command=textwrap.dedent(run.split('\n',1)[1]) if run.startswith(' |') else run.strip()
+     command=required_test_tier_command(repo,profile_oid or 'b'*40)
      env={**os.environ,'RUNNER_TEMP':str(temp),'GITHUB_WORKSPACE':str(candidate),
           'GITHUB_EVENT_NAME':event,'INTEGRATION_MODE':'integration_revalidation','OBSERVED':str(marker),
-          # This contract isolates frozen driver/preflight routing.  Required CI
-          # itself exports package-profile activation identity; do not leak that
-          # unrelated outer workflow state into this intentionally non-Git fixture.
-          'OASIS7_CARGO_SCOPE_BASE':'','OASIS7_CARGO_SCOPE_HEAD':'',
+          'INTEGRATION_WORKTREE':'',
+          # This contract isolates frozen driver/preflight routing. Required CI
+          # receives a self-contained trusted Git fixture for dispatch so the
+          # workflow authority check and real planner/driver still execute.
+          'OASIS7_CARGO_SCOPE_BASE':profile_oid,'OASIS7_CARGO_SCOPE_HEAD':profile_oid,
+          'OASIS7_CARGO_SCOPE_INTEGRATION_BASE':profile_oid,
+          'OASIS7_PRODUCT_DOC_BASE':profile_oid,'OASIS7_PRODUCT_DOC_HEAD':profile_oid,
           'OASIS7_CARGO_PROFILE_PLANNER':'','OASIS7_CARGO_PROFILE_DRIVER':''}
+     if event=='workflow_dispatch':
+      env.update({
+       'PATH':str(fixture_bin)+os.pathsep+env.get('PATH',''),
+       'GITHUB_REPOSITORY':'fixture/oasis7','GITHUB_SHA':profile_oid,
+       'GITHUB_WORKFLOW_REF':'fixture/oasis7/.github/workflows/rust.yml@refs/heads/main',
+       'GITHUB_WORKFLOW_SHA':profile_oid,'GITHUB_RUN_ID':'12345','GITHUB_RUN_ATTEMPT':'1',
+      })
      result=subprocess.run(['bash','-euo','pipefail','-c',command],cwd=candidate,env=env,text=True,capture_output=True)
      if event=='workflow_dispatch':
       self.assertEqual(result.returncode,37,result.stdout+result.stderr)
@@ -233,15 +303,165 @@ class IntegrationTests(unittest.TestCase):
       self.assertEqual(result.returncode,0,result.stdout+result.stderr)
       self.assertEqual(marker.read_text(),'candidate')
 
+ def test_integration_dispatch_fails_closed_without_trusted_profile_authority(self):
+  with tempfile.TemporaryDirectory() as tmp:
+   temp=Path(tmp);candidate=temp/'candidate';scripts=candidate/'scripts';scripts.mkdir(parents=True)
+   command=required_test_tier_command(HERE.parents[1])
+   observed=temp/'unexpected-side-effect'
+   (scripts/'doc-governance-check.sh').write_text('#!/usr/bin/env bash\nprintf invoked > "$OBSERVED"\n')
+   (scripts/'doc-governance-check.sh').chmod(0o755)
+   env={**os.environ,'RUNNER_TEMP':str(temp),'GITHUB_WORKSPACE':str(candidate),
+        'GITHUB_EVENT_NAME':'workflow_dispatch','INTEGRATION_MODE':'integration_revalidation',
+        'OBSERVED':str(observed),'INTEGRATION_WORKTREE':'',
+        'OASIS7_CARGO_SCOPE_BASE':'','OASIS7_CARGO_SCOPE_HEAD':'',
+        'OASIS7_CARGO_PROFILE_PLANNER':'','OASIS7_CARGO_PROFILE_DRIVER':''}
+   result=subprocess.run(['bash','-euo','pipefail','-c',command],cwd=candidate,env=env,text=True,capture_output=True)
+   self.assertEqual(result.returncode,1,result.stdout+result.stderr)
+   self.assertIn('trusted Cargo package profile authority is unavailable',result.stderr)
+   self.assertFalse((candidate/'output/cargo-package-profile').exists())
+   self.assertFalse(observed.exists())
+
  def test_integration_freezes_sourced_preflight_before_checkout(self):
   workflow=(HERE.parents[1]/'.github/workflows/rust.yml').read_text()
   before=workflow.split('integration_ci.py" prepare',1)[0]
   self.assertRegex(before,r'cp[^\n]*scripts/viewer-dependency-preflight\.sh[^\n]*integration-planner')
 
+ def test_projection_consumer_uses_trusted_driver_planner_and_keeps_exact_binding(self):
+  driver=(HERE.parents[1]/'scripts/ci-tests.sh').read_text()
+  consumer=driver.split('run_workflow_impact_projection_consumer() {',1)[1].split('\n}',1)[0]
+  self.assertIn('trusted_planner_root = Path(sys.argv[3]).resolve()',consumer)
+  self.assertIn('str(trusted_planner_root / "plan-rust-required-scope.py")',consumer)
+  self.assertNotIn('root / "scripts" / "plan-rust-required-scope.sh"',consumer)
+  for binding in (
+   '"--task-uid", projection["task_uid"]',
+   '"--head-ref", projection["source_head_oid"]',
+   '"--scope-base-oid", projection["scope_base_oid"]',
+   'planner.extend(("--changed-path", path))',
+   'planner_fields.get("impact_projection_digest") != expected_digest',
+   'planner_fields.get("impact_projection_status") != "verified"',
+  ):
+   self.assertIn(binding,consumer)
+  task_uid='task_'+'1'*32
+  source_head='a'*40
+  scope_base='b'*40
+  projection_digest='sha256:'+'c'*64
+  changed_path='scripts/ci-required-scope.v2.json'
+  with tempfile.TemporaryDirectory(prefix='oasis7-trusted-integration-planner-') as temporary:
+   root=Path(temporary)
+   candidate=root/'candidate'
+   trusted=root/'integration-planner'
+   candidate_scripts=candidate/'scripts'
+   candidate_pm=candidate_scripts/'pm'
+   trusted.mkdir()
+   candidate_pm.mkdir(parents=True)
+   (candidate_scripts/'ci-required-scope.v2.json').write_text('versioned-candidate-config\n')
+   projection={
+    'task_uid':task_uid,
+    'source_head_oid':source_head,
+    'scope_base_oid':scope_base,
+    'changed_paths':[changed_path],
+    'change_class':'workflow-doc',
+    'manual_roles':[],
+    'domain_role':None,
+    'verification_affected':False,
+    'projection_digest':projection_digest,
+   }
+   projection_path=candidate/'projection.json'
+   projection_path.write_text(json.dumps(projection),encoding='utf-8')
+   (candidate_pm/'workflow-impact-projection.py').write_text(textwrap.dedent('''\
+    import json
+    from pathlib import Path
+    def load_verified_projection(path, *, repo_root):
+        value = json.loads(Path(path).read_text(encoding="utf-8"))
+        if not (Path(repo_root) / "scripts/ci-required-scope.v2.json").is_file():
+            raise ValueError("candidate source config is missing")
+        return value
+   '''),encoding='utf-8')
+   selector_script=candidate_pm/'review-role-selector.py'
+   selector_script.write_text(textwrap.dedent(f'''\
+    #!/usr/bin/env python3
+    import json
+    import sys
+    args = sys.argv[1:]
+    def value(name): return args[args.index(name) + 1]
+    expected = {{
+        "--task-uid": {task_uid!r},
+        "--source-head-oid": {source_head!r},
+        "--scope-base-oid": {scope_base!r},
+    }}
+    if any(value(key) != wanted for key, wanted in expected.items()):
+        raise SystemExit("review selector identity changed")
+    print(json.dumps({{"impact_projection_digest": {projection_digest!r}, "impact_projection_status": "verified"}}))
+   '''),encoding='utf-8')
+   selector_script.chmod(0o755)
+   candidate_runner=candidate_scripts/'plan-rust-required-scope.sh'
+   candidate_runner.write_text('#!/bin/sh\necho candidate-planner-used > "$CANDIDATE_PLANNER_MARKER"\nexit 91\n')
+   candidate_runner.chmod(0o755)
+   (trusted/'ci-required-scope.v2.json').write_text('trusted-legacy-base-config\n')
+   trusted_marker=root/'trusted-planner-used'
+   (trusted/'plan-rust-required-scope.py').write_text(textwrap.dedent(f'''\
+    import os
+    import sys
+    from pathlib import Path
+    args = sys.argv[1:]
+    def value(name): return args[args.index(name) + 1]
+    expected = {{
+        "--event-name": "pull_request",
+        "--task-uid": {task_uid!r},
+        "--head-ref": {source_head!r},
+        "--scope-base-oid": {scope_base!r},
+        "--changed-path": {changed_path!r},
+    }}
+    if any(value(key) != wanted for key, wanted in expected.items()):
+        raise SystemExit("trusted planner identity or source path changed")
+    if Path(__file__).with_name("ci-required-scope.v2.json").read_text() != "trusted-legacy-base-config\\n":
+        raise SystemExit("planner did not use trusted base config")
+    if (Path.cwd() / "scripts/ci-required-scope.v2.json").read_text() != "versioned-candidate-config\\n":
+        raise SystemExit("candidate source config was not preserved")
+    Path(os.environ["TRUSTED_PLANNER_MARKER"]).write_text("trusted\\n")
+    print("impact_projection_digest={projection_digest}")
+    print("impact_projection_status=verified")
+   '''),encoding='utf-8')
+   start=driver.index('run_workflow_impact_projection_consumer() {')
+   end=driver.index('\n}\n\nproduct_doc_range()',start)+2
+   harness=root/'run-consumer.sh'
+   harness.write_text(
+    'set -euo pipefail\n'
+    'driver_dir="$TRUSTED_PLANNER_ROOT"\n'
+    'repo_root="$CANDIDATE_ROOT"\n'
+    'impact_projection="$PROJECTION_PATH"\n'
+    'run() { local executable="$1"; shift; "$executable" "$@"; }\n'
+    + driver[start:end]
+    + '\nrun_workflow_impact_projection_consumer\n',
+    encoding='utf-8',
+   )
+   env=os.environ.copy()
+   env.update({
+    'CANDIDATE_ROOT':str(candidate),
+    'CANDIDATE_PLANNER_MARKER':str(root/'candidate-planner-used'),
+    'PROJECTION_PATH':str(projection_path),
+    'TRUSTED_PLANNER_MARKER':str(trusted_marker),
+    'TRUSTED_PLANNER_ROOT':str(trusted),
+   })
+   result=subprocess.run(['bash',str(harness)],cwd=candidate,env=env,text=True,capture_output=True)
+   self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+   self.assertEqual(trusted_marker.read_text(),'trusted\n')
+   self.assertFalse((root/'candidate-planner-used').exists())
+
  def test_required_gate_registers_review_plan_suite(self):
   driver=(HERE.parents[1]/'scripts/ci-tests.sh').read_text()
-  operational=driver.split('run_operational_contract_tests() {',1)[1].split('\n}',1)[0]
-  self.assertIn('run python3 ./scripts/pm/review-plan.test.py',operational)
+  def function_body(name):
+   return driver.split(name+'() {',1)[1].split('\n}',1)[0]
+  workflow_operational=function_body('run_workflow_governance_operational_contract_tests')
+  self.assertIn('run python3 ./scripts/pm/review-plan.test.py',workflow_operational)
+  required=function_body('run_required_gate_capability_contracts')
+  self.assertIn('OASIS7_CI_RUN_WORKFLOW_GOVERNANCE_CONTRACTS run_workflow_governance_contract_tests',required)
+  legacy=function_body('run_legacy_mixed_operational_contract_tests')
+  self.assertIn('run_workflow_governance_operational_contract_tests',legacy)
+  full_capabilities=function_body('run_all_required_gate_capability_contract_tests')
+  self.assertIn('run_workflow_governance_contract_tests',full_capabilities)
+  for full_tier in ('run_full_core_tier_tests','run_full_support_tier_tests','run_full_required_superset'):
+   self.assertIn('run_all_required_gate_capability_contract_tests',function_body(full_tier))
 
  def test_real_parallel_merge_keeps_source_and_tests_current_base(self):
   self.assertTrue((HERE/'integration_ci.py').exists(),'manual integration recovery helper missing')
@@ -258,21 +478,510 @@ class IntegrationTests(unittest.TestCase):
    self.assertEqual(git('rev-parse','HEAD^{tree}'),result['tested_tree_oid'])
    self.assertEqual(result['scope_base_oid'],original)
    self.assertTrue((root/'target').exists());self.assertTrue((root/'source').exists())
+ def test_independent_merge_worktree_preserves_trusted_checkout(self):
+  spec=importlib.util.spec_from_file_location('integration_ci',HERE/'integration_ci.py');api=importlib.util.module_from_spec(spec);spec.loader.exec_module(api)
+  with tempfile.TemporaryDirectory() as tmp:
+   root=Path(tmp)/'trusted';root.mkdir()
+   destination=Path(tmp)/'integration'
+   def git(path,*args):return subprocess.check_output(['git','-C',str(path),*args],text=True).strip()
+   git(root,'init','-q','-b','main');git(root,'config','user.name','Test');git(root,'config','user.email','test@example.invalid')
+   (root/'base').write_text('base');git(root,'add','.');git(root,'commit','-qm','base');original=git(root,'rev-parse','HEAD')
+   git(root,'switch','-q','-c','source');(root/'source').write_text('source');git(root,'add','.');git(root,'commit','-qm','source');head=git(root,'rev-parse','HEAD')
+   git(root,'switch','-q','--detach',original);(root/'target').write_text('target');git(root,'add','.');git(root,'commit','-qm','target');base=git(root,'rev-parse','HEAD')
+   result=api.compose(root,base,head,worktree_path=destination)
+   self.assertEqual(base,git(root,'rev-parse','HEAD'))
+   self.assertEqual(result['tested_commit_oid'],git(destination,'rev-parse','HEAD'))
+   self.assertEqual(result['tested_tree_oid'],git(destination,'rev-parse','HEAD^{tree}'))
+   self.assertEqual([base,head],git(destination,'rev-list','--parents','-n','1','HEAD').split()[1:])
+   self.assertEqual(destination.resolve(),Path(result['integration_worktree']))
+
+class CurrentRequestSelectionTests(unittest.TestCase):
+ def setUp(self):
+  spec=importlib.util.spec_from_file_location('integration_ci_request_selection_test',HERE/'integration_ci.py')
+  self.api=importlib.util.module_from_spec(spec);spec.loader.exec_module(self.api)
+  self.uid='task_'+'1'*32
+  self.base='a'*40
+  self.head='b'*40
+
+ def run_row(self,run_id,request_key,*,created_at='2026-09-26T00:00:00Z',attempt=1):
+  return {
+   'id':run_id,'run_attempt':attempt,'created_at':created_at,
+   'event':'workflow_dispatch','path':self.api.WORKFLOW,
+   'head_sha':self.base,'head_branch':'main','repository':{'full_name':'owner/repo'},
+   'display_title':(
+    f'oasis7-ci|workflow_dispatch|integration_revalidation|{self.uid}|7|'
+    f'{self.base}|{self.head}|{request_key}'
+   ),
+  }
+
+ def unrelated_run_row(self,run_id,mode,*,request_key=None,request_uid=None,request_pr=8):
+  other_uid=request_uid or 'task_'+'2'*32
+  title=(
+   f'oasis7-ci|workflow_dispatch|{mode}|{other_uid}|{request_pr}|'
+   f'{"c"*40}|{"d"*40}'
+  )
+  if request_key is not None:
+   title+=f'|{request_key}'
+  return {
+   'id':run_id,'run_attempt':1,'created_at':'2026-09-26T00:00:00Z',
+   'event':'workflow_dispatch','path':self.api.WORKFLOW,
+   'head_sha':self.base,'head_branch':'main','repository':{'full_name':'owner/repo'},
+   'display_title':title,
+  }
+
+ def validation_only_row(self,run_id,*,uid=None,pr='7',base=None,head=None,validation_id=None):
+  uid=self.uid if uid is None else uid
+  base=self.base if base is None else base
+  head=self.head if head is None else head
+  validation_id='c'*64 if validation_id is None else validation_id
+  return {
+   'id':run_id,'run_attempt':1,'created_at':'2026-09-26T00:00:00Z',
+   'event':'workflow_dispatch','path':self.api.WORKFLOW,
+   'head_sha':self.base,'head_branch':'main','repository':{'full_name':'owner/repo'},
+   'display_title':(
+    f'oasis7-ci|workflow_dispatch|v1_reuse_validation_only|{uid}|{pr}|'
+    f'{base}|{head}|{validation_id}'
+   ),
+  }
+
+ def select(self,rows,request_key):
+  with patch.object(self.api,'gh',return_value={'workflow_runs':rows}):
+   return self.api.current_request(
+    'owner/repo',self.uid,7,self.base,self.head,'main',request_key=request_key,
+   )
+
+ def test_remote_selection_orders_run_ids_numerically_on_timestamp_tie(self):
+  rows=[self.run_row(99,'sha256:'+'1'*64),self.run_row(100,'sha256:'+'1'*64)]
+  selected=self.select(rows,'sha256:'+'1'*64)
+  self.assertEqual(100,selected['id'])
+
+ def test_remote_selection_isolates_exact_request_key_and_attempt(self):
+  key_a='sha256:'+'1'*64
+  key_b='sha256:'+'2'*64
+  rows=[
+   self.run_row(99,key_a,attempt=99),
+   self.run_row(100,key_b,attempt=100),
+  ]
+  selected_a=self.select(rows,key_a)
+  selected_b=self.select(rows,key_b)
+  self.assertEqual((99,99),(selected_a['id'],selected_a['run_attempt']))
+  self.assertEqual((100,100),(selected_b['id'],selected_b['run_attempt']))
+
+ def test_remote_selection_skips_unrelated_v1_reuse_validation_run(self):
+  key='sha256:'+'1'*64
+  validation_id='e'*64
+  unrelated=self.unrelated_run_row(
+   98,'v1_reuse_validation_only',request_key=validation_id,
+  )
+  integration=self.run_row(99,key)
+  selected=self.select([unrelated,integration],key)
+  self.assertEqual(99,selected['id'])
+  self.assertIsNone(self.select([unrelated],key))
+
+ def test_remote_selection_still_rejects_malformed_or_conflicting_v1_identity(self):
+  key='sha256:'+'1'*64
+  malformed_key=self.unrelated_run_row(
+   98,'v1_reuse_validation_only',request_key='not-a-validation-id',
+  )
+  malformed_identity=self.unrelated_run_row(
+   99,'v1_reuse_validation_only',request_key='e'*64,request_uid='task-invalid',
+  )
+  conflicting_identity=self.unrelated_run_row(
+   100,'v1_reuse_validation_only',request_key='f'*64,request_uid=self.uid,
+  )
+  cases=(
+   (malformed_key,'request key malformed'),
+   (malformed_identity,'current request identity malformed'),
+   (conflicting_identity,'request task/PR identity conflicts'),
+  )
+  for row,diagnostic in cases:
+   with self.subTest(diagnostic=diagnostic):
+    with self.assertRaisesRegex(ValueError,diagnostic):
+     self.select([row],key)
+
+ def test_remote_selection_still_rejects_malformed_or_ambiguous_current_identity(self):
+  key='sha256:'+'1'*64
+  malformed=self.run_row(99,key)
+  parts=malformed['display_title'].split('|')
+  parts[3]='task-invalid'
+  malformed['display_title']='|'.join(parts)
+  ambiguous=self.run_row(100,key)
+  parts=ambiguous['display_title'].split('|')
+  parts[4]='8'
+  ambiguous['display_title']='|'.join(parts)
+  cases=((malformed,'malformed'),(ambiguous,'conflicts'))
+  for row,diagnostic in cases:
+   with self.subTest(diagnostic=diagnostic):
+    with self.assertRaisesRegex(ValueError,diagnostic):
+     self.select([row],key)
+
+ def test_remote_selection_rejects_timezone_naive_creation_time(self):
+  row=self.run_row(99,'sha256:'+'1'*64,created_at='2026-09-26T00:00:00')
+  with self.assertRaisesRegex(ValueError,'request time malformed'):
+   self.select([row],'sha256:'+'1'*64)
+
+ def test_valid_unrelated_validation_only_titles_with_bare_ids_are_skipped(self):
+  rows=[
+   self.validation_only_row(
+    101,uid='task_'+'2'*32,pr='8',base='c'*40,head='d'*40,validation_id='e'*64,
+   ),
+   # Same Task/PR, but a different frozen base and source is another request.
+   self.validation_only_row(
+    102,base='f'*40,head='0'*40,validation_id='a'*64,
+   ),
+  ]
+  self.assertIsNone(self.select(rows,'sha256:'+'1'*64))
+
+ def test_validation_only_title_is_never_selected_as_integration_proof(self):
+  validation=self.validation_only_row(101,validation_id='c'*64)
+  integration=self.run_row(102,'sha256:'+'1'*64)
+  selected=self.select([validation,integration],'sha256:'+'1'*64)
+  self.assertEqual(102,selected['id'])
+
+ def test_validation_only_rows_with_malformed_keys_or_identity_are_rejected(self):
+  malformed_rows=[
+   ('key has production prefix',self.validation_only_row(101,validation_id='sha256:'+'c'*64)),
+   ('key has non-hex character',self.validation_only_row(102,validation_id='g'*64)),
+   ('task uid malformed',self.validation_only_row(103,uid='task_bad')),
+   ('PR is not canonical decimal',self.validation_only_row(104,pr='07')),
+   ('base oid malformed',self.validation_only_row(105,base='G'*40)),
+   ('source oid malformed',self.validation_only_row(106,head='not-an-oid')),
+  ]
+  for label,row in malformed_rows:
+   with self.subTest(label=label),self.assertRaises(ValueError):
+    self.select([row],'sha256:'+'1'*64)
+
+ def test_validation_only_title_missing_validation_id_suffix_is_rejected(self):
+  row=self.validation_only_row(107)
+  row['display_title']=row['display_title'].rsplit('|',1)[0]
+  with self.assertRaises(ValueError):
+   self.select([row],'sha256:'+'1'*64)
+
+ def test_validation_only_task_pr_conflicts_are_rejected(self):
+  conflicting_task=self.validation_only_row(101,pr='8')
+  conflicting_pr=self.validation_only_row(102,uid='task_'+'2'*32)
+  for row in (conflicting_task,conflicting_pr):
+   with self.subTest(title=row['display_title']),self.assertRaisesRegex(ValueError,'conflict'):
+    self.select([row],'sha256:'+'1'*64)
+
+class LocalTargetObservationTests(unittest.TestCase):
+ def setUp(self):
+  spec=importlib.util.spec_from_file_location('integration_ci_p1_test',HERE/'integration_ci.py')
+  self.api=importlib.util.module_from_spec(spec);spec.loader.exec_module(self.api)
+
+ def git(self,root,*args):
+  return subprocess.check_output(['git','-C',str(root),*args],text=True).strip()
+
+ def source_proof_fixture(self):
+  spec=importlib.util.spec_from_file_location(
+   'ci_required_artifact_v2_test_for_local_target',HERE/'ci-required-artifact-v2.test.py',
+  )
+  module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
+  plan=module.valid_plan()
+  artifact_id=1234
+  policy_context={
+   'schema':'oasis7-trusted-ci-reuse-policy-context/v1',
+   'repository':plan['repository'],'workflow_ref':plan['workflow_ref'],
+   'workflow_sha':plan['workflow_sha'],
+   'effective_policy_identity':plan['effective_policy_identity'],
+   'planner_inventory_authority':plan['planner_inventory_authority'],
+  }
+  artifact_helper=self.api._adjacent_module('ci_required_artifact_v2')
+  result_name=artifact_helper.result_artifact_name(
+   plan['workflow_run_id'],plan['run_attempt'],'unit-x',
+  )
+  plan_name=artifact_helper.plan_artifact_name(plan['workflow_run_id'],plan['run_attempt'])
+  gate_job=module.gate_job(plan)
+  trusted_attempt={
+   'schema':'oasis7-ci-trusted-source-attempt/v1',
+   'request_key':plan['request_key'],
+   'workflow_run_id':plan['workflow_run_id'],'run_attempt':plan['run_attempt'],
+   'check_app_id':plan['check_app_id'],'check_run_id':plan['check_run_id'],
+   'job_id':plan['job_id'],'job_name':'required-gate',
+   'plan_artifact_id':artifact_id,'plan_artifact_name':plan_name,
+   'result_artifacts':[{'unit_id':'unit-x','artifact_id':1235,'name':result_name}],
+  }
+  proof={
+   'request_key':plan['request_key'],'request_identity':plan['request_identity'],
+   'integration_base_oid':plan['integration_base_oid'],
+   'source_scope_oid':plan['source_scope_oid'],
+   'workflow_run_id':plan['workflow_run_id'],'run_attempt':plan['run_attempt'],
+   'check_app_id':plan['check_app_id'],'check_run_id':plan['check_run_id'],
+   'trusted_policy_context':policy_context,
+   'effective_policy_identity':plan['effective_policy_identity'],
+   'planner_inventory_authority':plan['planner_inventory_authority'],
+   'required_plan_v2_artifact_id':artifact_id,
+   'required_plan_v2_artifact_name':plan_name,
+   'required_plan_v2_payload':plan,
+   'required_result_v2_artifacts':[{'artifact_id':1235,'name':result_name,'payload':{'unit_id':'unit-x'}}],
+   'execution_jobs':[gate_job],
+   'job_id':plan['job_id'],'job_name':'required-gate',
+   'trusted_source_attempt':trusted_attempt,
+   'trusted_planner_inventory':{
+    **plan['planner_inventory_issuer'],
+    'producer':{**plan['planner_inventory_issuer']['producer'],'artifact_id':artifact_id},
+   },
+  }
+  return proof,plan
+
+ def test_source_plan_context_and_journal_keep_immutable_b_h_s_and_request(self):
+  proof,expected_plan=self.source_proof_fixture()
+  plan,identity,context=self.api._validate_keyed_source_plan(
+   'eng-cc/oasis7',expected_plan['task_uid'],expected_plan['pr_number'],proof,
+  )
+  self.assertEqual(expected_plan,plan)
+  self.assertEqual(expected_plan['request_identity'],identity)
+  self.assertEqual(expected_plan['planner_inventory_authority'],context['planner_inventory_authority'])
+  request_helper=self.api._adjacent_module('integration_executor_contract')
+  with tempfile.TemporaryDirectory() as temp:
+   journal=Path(temp)
+   record={
+    'schema':request_helper.VALIDATION_REQUEST_SCHEMA,
+    'request_key':proof['request_key'],'identity':identity,
+    'integration_base_oid':proof['integration_base_oid'],
+    'dispatch_attempts':1,'status':'observed',
+    'run_id':expected_plan['workflow_run_id'],'run_attempt':1,
+   }
+   path=request_helper._request_path(journal,proof['request_key'])
+   path.parent.mkdir(parents=True,exist_ok=True)
+   path.write_bytes(request_helper.canonical_bytes(record)+b'\n')
+   with patch.object(self.api,'git_common_dir',return_value=journal):
+    self.api._validate_source_request_journal('eng-cc/oasis7',proof,plan,identity)
+    for field,replacement in (
+     ('integration_base_oid','9'*40),('run_id',999),('run_attempt',3),
+    ):
+     changed={**record,field:replacement}
+     path.write_bytes(request_helper.canonical_bytes(changed)+b'\n')
+     with self.subTest(field=field),patch.object(self.api,'git_common_dir',return_value=journal):
+      with self.assertRaisesRegex(ValueError,'journal'):
+       self.api._validate_source_request_journal('eng-cc/oasis7',proof,plan,identity)
+
+ def test_source_attempt_binding_rejects_cross_attempt_and_artifact_locators(self):
+  proof,plan=self.source_proof_fixture()
+  self.assertEqual(proof['trusted_source_attempt'],self.api._validate_trusted_source_attempt(proof,plan))
+  mutations=(
+   ('run_attempt',lambda item:item.__setitem__('run_attempt',item['run_attempt']+1)),
+   ('check_run_id',lambda item:item.__setitem__('check_run_id',item['check_run_id']+1)),
+   ('plan_artifact_id',lambda item:item.__setitem__('plan_artifact_id',item['plan_artifact_id']+1)),
+   ('result_artifacts',lambda item:item['result_artifacts'][0].__setitem__('artifact_id',9999)),
+  )
+  for field,mutate in mutations:
+   changed=json.loads(json.dumps(proof))
+   mutate(changed['trusted_source_attempt'])
+   with self.subTest(field=field),self.assertRaisesRegex(ValueError,'trusted attempt'):
+    self.api._validate_trusted_source_attempt(changed,plan)
+
+ def test_local_target_reader_rejects_unbound_proof_before_live_reads(self):
+  with patch.object(self.api,'identity') as read_pr, \
+       patch.object(self.api,'current_request') as read_request, \
+       patch.object(self.api,'verified_run') as read_run:
+   with self.assertRaisesRegex(ValueError,'source required-plan v2 proof is incomplete'):
+    self.api.trusted_local_target_inventory(
+     'eng-cc/oasis7','task_'+'1'*32,7,{},
+    )
+   read_pr.assert_not_called()
+   read_request.assert_not_called()
+   read_run.assert_not_called()
+
+ def remote_fixture(self,*,conflict=False):
+  temp=tempfile.TemporaryDirectory()
+  root=Path(temp.name)/'checkout';root.mkdir()
+  remote=Path(temp.name)/'origin.git'
+  subprocess.run(['git','init','--bare','--quiet',str(remote)],check=True)
+  subprocess.run(['git','init','--quiet','-b','main',str(root)],check=True)
+  self.git(root,'config','user.name','Local target test')
+  self.git(root,'config','user.email','local-target@example.invalid')
+  (root/'shared.txt').write_text('base\n',encoding='utf-8')
+  self.git(root,'add','.');self.git(root,'commit','-qm','base')
+  source_scope=self.git(root,'rev-parse','HEAD')
+  self.git(root,'switch','-q','-c','source')
+  if conflict:
+   (root/'shared.txt').write_text('source\n',encoding='utf-8')
+  else:
+   (root/'source.txt').write_text('source\n',encoding='utf-8')
+  self.git(root,'add','.');self.git(root,'commit','-qm','source')
+  head=self.git(root,'rev-parse','HEAD')
+  self.git(root,'remote','add','origin',str(remote))
+  self.git(root,'push','-q','origin',f'{head}:refs/pull/7/head')
+  self.git(root,'switch','-q','main')
+  if conflict:
+   (root/'shared.txt').write_text('target\n',encoding='utf-8')
+  else:
+   (root/'target.txt').write_text('target\n',encoding='utf-8')
+  self.git(root,'add','.');self.git(root,'commit','-qm','target advance')
+  target=self.git(root,'rev-parse','HEAD')
+  self.git(root,'push','-q','origin','main')
+  return temp,root,source_scope,head,target
+
+ def test_exact_q_h_merge_uses_isolated_clean_worktrees_and_parent_order(self):
+  temp,root,source_scope,head,target=self.remote_fixture()
+  try:
+   before=self.git(root,'rev-parse','HEAD')
+   with self.api._local_target_worktrees(
+       root,'main',7,target,head,source_scope,
+   ) as value:
+    repository=value['repository_root'];planner=value['planner_root'];checkout=value['target_root']
+    merge_tree=self.git(repository,'merge-tree','--write-tree',target,head).splitlines()[0]
+    parents=self.git(checkout,'rev-list','--parents','-n','1','HEAD').split()
+    self.assertEqual([value['input_scope_commit_oid'],target,head],parents)
+    self.assertEqual(merge_tree,value['input_scope_tree_oid'])
+    self.assertEqual(target,self.git(planner,'rev-parse','HEAD'))
+    self.assertEqual(value['input_scope_commit_oid'],self.git(checkout,'rev-parse','HEAD'))
+    self.assertTrue((checkout/'source.txt').is_file())
+    self.assertTrue((checkout/'target.txt').is_file())
+    self.assertEqual('',self.git(planner,'status','--porcelain','--untracked-files=all'))
+    self.assertEqual('',self.git(checkout,'status','--porcelain','--untracked-files=all'))
+   self.assertEqual(before,self.git(root,'rev-parse','HEAD'))
+   self.assertEqual('',self.git(root,'status','--porcelain','--untracked-files=all'))
+  finally:
+   temp.cleanup()
+
+ def test_exact_q_h_merge_rejects_ref_drift_wrong_scope_and_conflicts(self):
+  temp,root,source_scope,head,target=self.remote_fixture()
+  try:
+   with self.assertRaisesRegex(ValueError,'fetched default-branch or PR head differs'):
+    with self.api._local_target_worktrees(root,'main',7,'f'*40,head,source_scope):
+     self.fail('wrong Q unexpectedly accepted')
+   with self.assertRaisesRegex(ValueError,'merge base differs'):
+    with self.api._local_target_worktrees(root,'main',7,target,head,'e'*40):
+     self.fail('wrong source scope unexpectedly accepted')
+  finally:
+   temp.cleanup()
+  conflict_temp,conflict_root,conflict_scope,conflict_head,conflict_target=self.remote_fixture(conflict=True)
+  try:
+   with self.assertRaisesRegex(ValueError,'merge has conflicts'):
+    with self.api._local_target_worktrees(
+        conflict_root,'main',7,conflict_target,conflict_head,conflict_scope,
+    ):
+     self.fail('conflicting Q/H merge unexpectedly accepted')
+  finally:
+   conflict_temp.cleanup()
+
+ def test_projection_marker_is_unique_canonical_and_duplicate_keys_are_rejected(self):
+  value={'task_uid':'task_'+'1'*32}
+  raw=json.dumps(value,separators=(',',':')).encode()
+  encoded=base64.b64encode(raw).decode()
+  body='PR context\n<!-- oasis7-impact-projection-b64: '+encoded+' -->\n'
+  parsed_raw,parsed=self.api._projection_from_pr_body(body)
+  self.assertEqual(raw,parsed_raw)
+  self.assertEqual(value,parsed)
+  with self.assertRaisesRegex(ValueError,'missing or ambiguous'):
+   self.api._projection_from_pr_body(body+body)
+  duplicate=base64.b64encode(b'{"task_uid":"one","task_uid":"two"}').decode()
+  with self.assertRaisesRegex(ValueError,'malformed'):
+   self.api._projection_from_pr_body('<!-- oasis7-impact-projection-b64: '+duplicate+' -->')
+
 
 class ProvenanceTests(unittest.TestCase):
  def setUp(self):
   spec=importlib.util.spec_from_file_location('integration_ci',HERE/'integration_ci.py');self.api=importlib.util.module_from_spec(spec);spec.loader.exec_module(self.api)
+  self.policy_module=self.api._adjacent_module('ci_reuse_policy')
+  self.policy_module.TRUSTED_EFFECTIVE_POLICY={'enabled_capabilities':[],'approved_executor_contract_digests':[],'check_app_id':15368}
+  # The focused provenance tests below exercise C3 artifact validation with a
+  # synthetic enabled policy.  The real W resolver is covered independently
+  # by ci_reuse_policy.test.py; keep these fixtures explicit and test-local.
+  self.api.trusted_policy_context_for_run=self.trusted_policy_context_for_run
+  self.api.trusted_policy_context=self.trusted_policy_context
   self.base='a'*40;self.head='b'*40;self.uid='task_'+'c'*32
   self.pr={'state':'open','merged':False,'draft':True,'body':'Task: '+self.uid+'\nRefs #1','base':{'sha':self.base,'ref':'main','repo':{'full_name':'owner/repo'}},'head':{'sha':self.head,'repo':{'full_name':'owner/repo'}}}
   self.run={'run_attempt':1,'created_at':'2026-09-09T00:00:00Z','run_started_at':'2026-09-09T00:00:00Z','event':'workflow_dispatch','head_branch':'main','head_sha':self.base,'path':self.api.WORKFLOW,'status':'completed','conclusion':'success','repository':{'full_name':'owner/repo'},'check_suite_id':8}
   self.payload=dict(schema=self.api.ARTIFACT,repository='owner/repo',workflow_run_id=9,base_oid=self.base,head_oid=self.head,task_uid=self.uid,pr_number=12,workflow_sha=self.base,workflow_ref='owner/repo/.github/workflows/rust.yml@refs/heads/main',integration_mode='integration_revalidation',check_name='required-gate',scope_base_oid='d'*40,tested_tree_oid='e'*40,tested_commit_oid='f'*40)
+  from integration_executor_contract import EXECUTOR_CONTRACT_PATHS
+  self.executor_contents={path:('trusted fixture '+path).encode() for path in EXECUTOR_CONTRACT_PATHS}
+ def trusted_policy_context(self,repository,branch,workflow_sha,default_branch_sha):
+  import integration_executor_contract as request_contract
+  policy=dict(self.policy_module.TRUSTED_EFFECTIVE_POLICY)
+  return {
+   'schema':'oasis7-trusted-ci-reuse-policy-context/v1',
+   'repository':repository,
+   'workflow_ref':f'{repository}/.github/workflows/rust.yml@refs/heads/{branch}',
+   'workflow_sha':workflow_sha,
+   'effective_policy':policy,
+   'effective_policy_identity':{
+    'schema':request_contract.EFFECTIVE_POLICY_IDENTITY_SCHEMA,
+    'digest':request_contract.effective_policy_digest(policy),
+   },
+   'planner_inventory_authority':{
+    'schema':'oasis7-planner-inventory-authority/v1',
+    'repository':repository,
+    'workflow_ref':f'{repository}/.github/workflows/rust.yml@refs/heads/{branch}',
+    'planner_authority_oid':workflow_sha,
+    'planner_config_sha256':'sha256:'+'a'*64,
+   },
+  }
+ def trusted_policy_context_for_run(self,repository,branch,run):
+  workflow_sha=run.get('head_sha')
+  return self.trusted_policy_context(repository,branch,workflow_sha,workflow_sha)
+ def policy(self,approved):
+  return {
+   'enabled_capabilities':['input-scope-reuse/v1'],
+   'approved_executor_contract_digests':[approved],
+   'check_app_id':42,
+  }
+ def keyed_request_identity(self,executor_digest,policy=None):
+  from integration_executor_contract import effective_policy_digest
+  policy=policy or self.policy(executor_digest)
+  return {
+   'repository':'owner/repo','task_uid':self.uid,'pr_number':12,'bootstrap_epoch':1,
+   'source_head_oid':self.head,'publication_id':'publication-1',
+   'source_projection_digest':'sha256:'+'1'*64,'unit_ids':['required-gate'],
+   'input_fingerprints':{'required-gate':'sha256:'+'2'*64},
+   'executor_contract_digest':executor_digest,
+   'effective_policy_digest':effective_policy_digest(policy),
+   'purpose':'integration_revalidation','applicability_mode':'input_scoped',
+   'snapshot_target_oid':None,
+  }
+ def bind_keyed_payload(self,executor_digest,run_head,*,policy=None,workflow_sha=None,attempt=1):
+  import integration_executor_contract as request_contract
+  policy=policy or self.policy(executor_digest)
+  self.policy_module.TRUSTED_EFFECTIVE_POLICY=dict(policy)
+  request_identity=self.keyed_request_identity(executor_digest,policy)
+  request_key=request_contract.validation_request_key(request_identity)
+  request=request_contract.validation_request_envelope({
+   'schema':request_contract.VALIDATION_REQUEST_SCHEMA,'request_key':request_key,
+   'identity':request_identity,'integration_base_oid':self.base,
+  })
+  self.run.update(head_sha=run_head,display_title=(
+   f'oasis7-ci|workflow_dispatch|integration_revalidation|{self.uid}|12|'
+   f'{self.base}|{self.head}|{request_key}'
+  ))
+  self.payload.update(
+   workflow_sha=workflow_sha or run_head,workflow_run_head_sha=run_head,
+   workflow_run_attempt=attempt,request_key=request_key,
+   validation_request=request,executor_contract_digest=executor_digest,
+  )
+  return request_key,request_identity,policy
+ def test_keyed_payload_decoders_require_canonical_v2_envelopes(self):
+  import integration_executor_contract as request_contract
+  from integration_executor_contract import canonical_bytes
+  executor_digest=request_contract.executor_contract_from_contents(self.executor_contents)['digest']
+  request_key,request_identity,effective_policy=self.bind_keyed_payload(executor_digest,'6'*40)
+  envelope={
+   'schema':request_contract.VALIDATION_REQUEST_SCHEMA,'request_key':request_key,
+   'identity':request_identity,'integration_base_oid':self.base,
+  }
+  encoded=base64.b64encode(canonical_bytes(envelope)).decode('ascii')
+  self.assertEqual(envelope,self.api.decode_validation_request(encoded,request_key))
+  pretty=base64.b64encode(json.dumps(envelope,indent=2).encode()).decode('ascii')
+  with self.assertRaisesRegex(ValueError,'not canonical'):
+   self.api.decode_validation_request(pretty,request_key)
+  policy_encoded=base64.b64encode(canonical_bytes(effective_policy)).decode('ascii')
+  self.assertEqual(effective_policy,self.api.decode_effective_policy(policy_encoded))
  def read(self,*args):
   path=args[-1]
   if '/workflows/rust.yml/runs?' in path:return {'workflow_runs':[{**self.run,'id':9,'display_title':f'oasis7-ci|workflow_dispatch|integration_revalidation|{self.uid}|12|{self.base}|{self.head}'}]}
+  if '/contents/' in path:
+   relative=path.split('/contents/',1)[1].split('?ref=',1)[0]
+   if relative=='scripts/pm/ci_reuse_policy.py':
+    trusted=(HERE/'ci_reuse_policy.py').read_bytes()
+    return {'type':'file','path':relative,'encoding':'base64','content':base64.b64encode(trusted).decode()}
+   if relative not in self.executor_contents:self.fail(path)
+   return {'type':'file','path':relative,'encoding':'base64','content':base64.b64encode(self.executor_contents[relative]).decode()}
+  if '/compare/' in path:return {'merge_base_commit':{'sha':self.base}}
   if path.endswith('/pulls/12'):return self.pr
-  if path=='repos/owner/repo':return {'default_branch':'main'}
+  if path=='repos/owner/repo':return {'full_name':'owner/repo','default_branch':'main'}
   if path.endswith('/runs/9'):return self.run
-  if 'check-runs' in path:return {'check_runs':[{'id':10,'name':'required-gate','app':{'id':42},'conclusion':'success','status':'completed','head_sha':self.base,'details_url':'https://github.com/owner/repo/actions/runs/9/job/10'}]}
+  if 'check-runs' in path:return {'check_runs':[{'id':10,'name':'required-gate','app':{'id':42},'conclusion':'success','status':'completed','head_sha':self.run['head_sha'],'details_url':'https://github.com/owner/repo/actions/runs/9/job/10'}]}
   if 'artifacts?' in path:return {'artifacts':[{'id':11,'name':self.api.ARTIFACT,'expired':False,'workflow_run':{'id':9}}]}
   self.fail(path)
  def test_identity_requires_one_complete_canonical_task_field(self):
@@ -303,8 +1012,323 @@ class ProvenanceTests(unittest.TestCase):
   with zipfile.ZipFile(raw,'w') as archive:archive.writestr(self.api.ARTIFACT+'.json',json.dumps(self.payload))
   with patch.object(self.api,'gh',side_effect=self.read),patch.object(self.api.subprocess,'check_output',return_value=raw.getvalue()):
    return self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42)
+ def test_attempt_execution_jobs_bind_run_attempt_and_exact_checks(self):
+  jobs=[{
+   'id':101,'run_id':9,'run_attempt':2,'name':'required-gate','status':'in_progress',
+   'conclusion':None,'head_sha':self.base,'labels':['ubuntu-24.04'],
+   'check_run_url':'https://api.github.com/repos/owner/repo/check-runs/201',
+  }]
+  def reader(*args):
+   path=args[-1]
+   if path=='repos/owner/repo/actions/runs/9':return {**self.run,'id':9,'run_attempt':2}
+   if path=='repos/owner/repo/actions/runs/9/attempts/2/jobs?per_page=100&page=1':return {'jobs':jobs}
+   if path=='repos/owner/repo/check-runs/201':return {
+    'id':201,'name':'required-gate','app':{'id':42},'head_sha':self.base,
+    'status':'in_progress','conclusion':None,
+   }
+   self.fail(path)
+  with patch.object(self.api,'gh',side_effect=reader):
+   proof=self.api.attempt_execution_jobs('owner/repo',9,2,self.base,42)
+  self.assertEqual([{
+   'workflow_run_id':9,'run_attempt':2,'job_id':101,'job_name':'required-gate',
+   'check_name':'required-gate','check_app_id':42,'check_run_id':201,
+   'head_sha':self.base,'status':'in_progress','conclusion':None,'labels':['ubuntu-24.04'],
+  }],proof)
+  with patch.object(self.api,'gh',side_effect=reader):
+   with self.assertRaisesRegex(ValueError,'positive integer'):
+    self.api.attempt_execution_jobs('owner/repo',9,True,self.base,42)
+ def test_attempt_execution_jobs_reject_wrong_check_app_and_attempt(self):
+  job={
+   'id':101,'run_id':9,'run_attempt':2,'name':'required-gate','status':'in_progress',
+   'conclusion':None,'head_sha':self.base,'labels':['ubuntu-24.04'],
+   'check_run_url':'https://api.github.com/repos/owner/repo/check-runs/201',
+  }
+  def reader(*args):
+   path=args[-1]
+   if path=='repos/owner/repo/actions/runs/9':return {**self.run,'id':9,'run_attempt':2}
+   if path.endswith('/attempts/2/jobs?per_page=100&page=1'):return {'jobs':[job]}
+   if path=='repos/owner/repo/check-runs/201':return {
+    'id':201,'name':'required-gate','app':{'id':43},'head_sha':self.base,
+    'status':'in_progress','conclusion':None,
+   }
+   self.fail(path)
+  with patch.object(self.api,'gh',side_effect=reader):
+   with self.assertRaisesRegex(ValueError,'check-run identity mismatch'):
+    self.api.attempt_execution_jobs('owner/repo',9,2,self.base,42)
+  with patch.object(self.api,'gh',side_effect=reader):
+   with self.assertRaisesRegex(ValueError,'attempt provenance mismatch'):
+    self.api.attempt_execution_jobs('owner/repo',9,1,self.base,42)
+ def test_attempt_execution_jobs_can_ignore_its_own_in_progress_result_job(self):
+  gate={
+   'id':101,'run_id':9,'run_attempt':2,'name':'required-gate','status':'completed',
+   'conclusion':'success','head_sha':self.base,'labels':['ubuntu-24.04'],
+   'check_run_url':'https://api.github.com/repos/owner/repo/check-runs/201',
+  }
+  current_result={
+   'id':102,'run_id':9,'run_attempt':2,'name':'required-result-v2 (unit-x)',
+   'status':'in_progress','conclusion':None,'head_sha':self.base,'labels':['ubuntu-24.04'],
+   'check_run_url':None,
+  }
+  def reader(*args):
+   path=args[-1]
+   if path=='repos/owner/repo/actions/runs/9':return {**self.run,'id':9,'run_attempt':2}
+   if path=='repos/owner/repo/actions/runs/9/attempts/2/jobs?per_page=100&page=1':
+    return {'jobs':[gate,current_result]}
+   if path=='repos/owner/repo/check-runs/201':return {
+    'id':201,'name':'required-gate','app':{'id':42},'head_sha':self.base,
+    'status':'completed','conclusion':'success',
+   }
+   self.fail(path)
+  with patch.object(self.api,'gh',side_effect=reader):
+   proof=self.api.attempt_execution_jobs(
+    'owner/repo',9,2,self.base,42,require_completed=True,job_names={'required-gate'},
+   )
+  self.assertEqual(['required-gate'],[job['job_name'] for job in proof])
+ def test_keyed_request_preflight_requires_key_in_authoritative_run_name(self):
+  required=('run-name: '+self.api.KEYED_RUN_NAME+'\non:\n  workflow_dispatch:\n    inputs:\n'
+            '      run_mode:\n        required: true\n        type: choice\n'
+            '      task_uid:\n        required: false\n        type: string\n'
+            '      pr_number:\n        required: false\n        type: string\n'
+            '      integration_base:\n        required: false\n        type: string\n'
+            '      expected_head:\n        required: false\n        type: string\n'
+            '      request_key:\n        required: false\n        type: string\n'
+            '      validation_request_b64:\n        required: false\n        type: string\n')
+  missing_title=required.replace(self.api.KEYED_RUN_NAME,'oasis7-ci|${{ inputs.expected_head }}')
+  key_only_title=required.replace(self.api.KEYED_RUN_NAME,'oasis7-ci|${{ inputs.request_key }}')
+  self.assertTrue(self.api.keyed_request_workflow_ready(required))
+  self.assertFalse(self.api.keyed_request_workflow_ready(missing_title))
+  self.assertFalse(self.api.keyed_request_workflow_ready(key_only_title))
+  self.assertFalse(self.api.keyed_request_workflow_ready(required+'\nrun-name: duplicate'))
+  actual=(HERE.parents[1]/'.github/workflows/rust.yml').read_text(encoding='utf-8')
+  self.assertTrue(self.api.keyed_request_workflow_ready(actual))
+ def test_keyed_request_preflight_ignores_comment_only_input_declarations(self):
+  workflow=('run-name: '+self.api.KEYED_RUN_NAME+'\non:\n  workflow_dispatch:\n    inputs:\n'
+            '      run_mode:\n        required: true\n        type: choice\n'
+            '      task_uid:\n        required: false\n        type: string\n'
+            '      pr_number:\n        required: false\n        type: string\n'
+            '      integration_base:\n        required: false\n        type: string\n'
+            '      expected_head:\n        required: false\n        type: string\n# request_key:\n'
+            '# validation_request_b64:\n# inputs.request_key\n')
+  self.assertFalse(self.api.keyed_request_workflow_ready(workflow))
+ def test_prepared_request_retry_keeps_journaled_base_after_main_advances(self):
+  from integration_executor_contract import (
+   EXECUTOR_CONTRACT_PATHS, effective_policy_digest, executor_contract_from_contents,
+   reserve_validation_request, validation_request_key,
+  )
+
+  contract=executor_contract_from_contents({
+   path:('trusted fixture '+path).encode() for path in EXECUTOR_CONTRACT_PATHS
+  })
+  effective_policy={
+   'enabled_capabilities':['input-scope-reuse/v1'],
+   'approved_executor_contract_digests':[contract['digest']],
+   'check_app_id':42,
+  }
+  self.policy_module.TRUSTED_EFFECTIVE_POLICY=dict(effective_policy)
+  projection_digest='sha256:'+'1'*64
+  request_identity={
+   'repository':'owner/repo',
+   'task_uid':self.uid,
+   'pr_number':12,
+   'bootstrap_epoch':1,
+   'source_head_oid':self.head,
+   'publication_id':'publication-1',
+   'source_projection_digest':projection_digest,
+   'unit_ids':['required-gate'],
+   'input_fingerprints':{'required-gate':'sha256:'+'2'*64},
+   'executor_contract_digest':contract['digest'],
+   'effective_policy_digest':effective_policy_digest(effective_policy),
+   'purpose':'integration_revalidation',
+   'applicability_mode':'input_scoped',
+   'snapshot_target_oid':None,
+  }
+  request_key=validation_request_key(request_identity)
+  original_base='3'*40
+  advanced_base='4'*40
+  workflow=(
+   'run-name: '+self.api.KEYED_RUN_NAME+'\non:\n  workflow_dispatch:\n    inputs:\n'
+   '      run_mode:\n        type: choice\n        required: true\n'
+   '      task_uid:\n        type: string\n        required: false\n'
+   '      pr_number:\n        type: string\n        required: false\n'
+   '      integration_base:\n        type: string\n        required: false\n'
+   '      expected_head:\n        type: string\n        required: false\n'
+   '      request_key:\n        type: string\n        required: false\n'
+   '      validation_request_b64:\n        type: string\n        required: false\n'
+  )
+  with tempfile.TemporaryDirectory() as directory:
+   reserve_validation_request(directory,request_key,request_identity,original_base)
+   projection_path=Path(directory)/'projection.json'
+   projection_path.write_text(
+    json.dumps({'projection_digest':projection_digest}),encoding='utf-8',
+   )
+   dispatches=[]
+
+   def read_api(*args):
+    path=args[-1]
+    if path.endswith('/pulls/12'):
+     return self.pr
+    if path=='repos/owner/repo':
+     return {'full_name':'owner/repo','default_branch':'main'}
+    if '/actions/workflows/rust.yml/runs?' in path:
+     return {'workflow_runs':[]}
+    if path.startswith(f'repos/owner/repo/contents/{self.api.WORKFLOW}?'):
+     return {
+      'type':'file','path':self.api.WORKFLOW,'encoding':'base64',
+      'content':base64.b64encode(workflow.encode()).decode(),
+     }
+    self.fail(path)
+
+   with patch.object(self.api,'gh',side_effect=read_api), \
+        patch.object(self.api,'default_branch_head',return_value=advanced_base), \
+        patch.object(self.api,'github_executor_contract',return_value=contract), \
+        patch.object(self.api.subprocess,'run',side_effect=lambda args,**_kwargs: dispatches.append(args)):
+    result=self.api.dispatch_request(
+     'owner/repo',self.uid,12,projection_path,request_identity,
+     effective_policy,
+     state_dir=directory,
+    )
+
+  self.assertEqual('pending',result['status'])
+  self.assertEqual(original_base,result['base_oid'])
+  self.assertEqual(1,len(dispatches))
+  fields={}
+  args=dispatches[0]
+  for index,value in enumerate(args[:-1]):
+   if value=='-f':
+    name,field_value=args[index+1].split('=',1)
+    fields[name]=field_value
+  self.assertEqual(original_base,fields['integration_base'])
+  payload=json.loads(base64.b64decode(fields['validation_request_b64']))
+  self.assertEqual('oasis7-ci-validation-request/v2',payload['schema'])
+  self.assertEqual(1,payload['identity']['bootstrap_epoch'])
+  self.assertEqual(original_base,payload['integration_base_oid'])
+  self.assertEqual(request_key,payload['request_key'])
+
+ def test_keyed_dispatch_stays_disabled_without_an_authorized_capability(self):
+  from integration_executor_contract import effective_policy_digest
+  policy={
+   'enabled_capabilities':[],
+   'approved_executor_contract_digests':[],
+   'check_app_id':15368,
+  }
+  self.assertTrue(effective_policy_digest(policy).startswith('sha256:'))
+  with patch.object(self.api,'gh',side_effect=self.read), \
+       patch.object(self.api,'default_branch_head',return_value=self.base), \
+       self.assertRaisesRegex(ValueError,'is disabled'):
+   self.api.dispatch_request('owner/repo',self.uid,12,'missing',{},policy)
+
  def test_new_default_workflow_run_authority_passes(self):
   check,proof=self.verify();self.assertEqual(check['id'],10);self.assertEqual(proof['head_oid'],self.head)
+ def test_keyed_workflow_base_divergence_uses_v2_reader_after_approved_w_contract(self):
+  from integration_executor_contract import executor_contract_from_contents
+  workflow_sha='6'*40;run_head='6'*40
+  executor_digest=executor_contract_from_contents(self.executor_contents)['digest']
+  request_key,request_identity,effective_policy=self.bind_keyed_payload(
+   executor_digest,run_head,workflow_sha=workflow_sha,
+  )
+  raw=io.BytesIO()
+  with zipfile.ZipFile(raw,'w') as archive:archive.writestr(self.api.ARTIFACT+'.json',json.dumps(self.payload))
+  gate_job={
+   'workflow_run_id':9,'run_attempt':1,'job_id':10,'job_name':'required-gate',
+   'check_name':'required-gate','check_app_id':42,'check_run_id':10,
+   'head_sha':run_head,'status':'completed','conclusion':'success','labels':['ubuntu-24.04'],
+  }
+  v2_proof={
+   'required_plan_v2_artifact_id':31,'required_plan_v2_artifact_name':'oasis7-required-plan-v2-9-a1',
+   'required_plan_v2_payload':{'schema':'oasis7-required-plan-v2'},
+   'required_result_v2_artifacts':[], 'source_scope_oid':'d'*40,
+   'workflow_run_id':9,'run_attempt':1,'check_app_id':42,'check_run_id':10,
+   'job_id':10,'job_name':'required-gate','execution_jobs':[gate_job],
+   'trusted_planner_inventory':{'producer':{'artifact_id':31}},
+   'trusted_source_attempt':{
+    'schema':'oasis7-ci-trusted-source-attempt/v1','request_key':request_key,
+    'workflow_run_id':9,'run_attempt':1,'check_app_id':42,'check_run_id':10,
+    'job_id':10,'job_name':'required-gate','plan_artifact_id':31,
+    'plan_artifact_name':'oasis7-required-plan-v2-9-a1','result_artifacts':[],
+   },
+  }
+  with patch.object(self.api,'gh',side_effect=self.read),patch.object(self.api.subprocess,'check_output',return_value=raw.getvalue()), \
+       patch.object(self.api,'attempt_execution_jobs',return_value=[gate_job]), \
+       patch.object(self.api,'read_keyed_v2_evidence',return_value=v2_proof):
+   check,proof=self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42,request_key=request_key,expected_attempt=1,request_identity=request_identity,effective_policy=effective_policy,approved_executor_contract_digests=[executor_digest])
+  self.assertEqual(workflow_sha,proof['workflow_sha'])
+  self.assertEqual(self.base,proof['base_oid'])
+  self.assertEqual(run_head,proof['workflow_run_head_sha'])
+  self.assertEqual(run_head,check['head_sha'])
+  self.assertEqual(11,proof['plan_artifact_id'])
+  self.assertEqual(31,proof['required_plan_v2_artifact_id'])
+  self.assertEqual(v2_proof['trusted_source_attempt'],proof['trusted_source_attempt'])
+ def test_keyed_consumer_rejects_changed_request_payload(self):
+  from integration_executor_contract import executor_contract_from_contents
+  run_head='6'*40
+  executor_digest=executor_contract_from_contents(self.executor_contents)['digest']
+  request_key,request_identity,effective_policy=self.bind_keyed_payload(executor_digest,run_head)
+  self.payload['validation_request']['identity']['bootstrap_epoch']=2
+  raw=io.BytesIO()
+  with zipfile.ZipFile(raw,'w') as archive:archive.writestr(self.api.ARTIFACT+'.json',json.dumps(self.payload))
+  with patch.object(self.api,'gh',side_effect=self.read),patch.object(self.api.subprocess,'check_output',return_value=raw.getvalue()):
+   with self.assertRaisesRegex(ValueError,'artifact authority'):
+    self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42,request_key=request_key,expected_attempt=1,request_identity=request_identity,effective_policy=effective_policy,approved_executor_contract_digests=[executor_digest])
+ def test_keyed_consumer_rejects_different_effective_policy_identity(self):
+  from integration_executor_contract import executor_contract_from_contents
+  run_head='6'*40
+  executor_digest=executor_contract_from_contents(self.executor_contents)['digest']
+  request_key,request_identity,effective_policy=self.bind_keyed_payload(executor_digest,run_head)
+  changed_policy={**effective_policy,'check_app_id':43}
+  with self.assertRaisesRegex(ValueError,'manual integration request identity mismatch'):
+   self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42,request_key=request_key,expected_attempt=1,request_identity=request_identity,effective_policy=changed_policy,approved_executor_contract_digests=[executor_digest])
+ def test_keyed_workflow_base_divergence_rejects_revoked_w_contract(self):
+  from integration_executor_contract import executor_contract_from_contents
+  workflow_sha='6'*40;run_head='6'*40
+  executor_digest=executor_contract_from_contents(self.executor_contents)['digest']
+  revoked='sha256:'+'7'*64
+  effective_policy=self.policy(revoked)
+  request_key,request_identity,effective_policy=self.bind_keyed_payload(
+   executor_digest,run_head,policy=effective_policy,workflow_sha=workflow_sha,
+  )
+  raw=io.BytesIO()
+  with zipfile.ZipFile(raw,'w') as archive:archive.writestr(self.api.ARTIFACT+'.json',json.dumps(self.payload))
+  with patch.object(self.api,'gh',side_effect=self.read),patch.object(self.api.subprocess,'check_output',return_value=raw.getvalue()):
+   with self.assertRaisesRegex(ValueError,'EXECUTOR_CONTRACT_CHANGED'):
+    self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42,request_key=request_key,expected_attempt=1,request_identity=request_identity,effective_policy=effective_policy,approved_executor_contract_digests=[revoked])
+ def test_keyed_verification_rejects_artifact_selected_workflow_sha(self):
+  from integration_executor_contract import executor_contract_from_contents
+  run_head='6'*40
+  executor_digest=executor_contract_from_contents(self.executor_contents)['digest']
+  request_key,request_identity,effective_policy=self.bind_keyed_payload(
+   executor_digest,run_head,workflow_sha='9'*40,
+  )
+  raw=io.BytesIO()
+  with zipfile.ZipFile(raw,'w') as archive:archive.writestr(self.api.ARTIFACT+'.json',json.dumps(self.payload))
+  with patch.object(self.api,'gh',side_effect=self.read),patch.object(self.api.subprocess,'check_output',return_value=raw.getvalue()):
+   with self.assertRaisesRegex(ValueError,'artifact authority'):
+    self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42,request_key=request_key,expected_attempt=1,request_identity=request_identity,effective_policy=effective_policy,approved_executor_contract_digests=[executor_digest])
+ def test_keyed_verification_requires_expected_run_attempt(self):
+  request_key='sha256:'+'8'*64
+  with patch.object(self.api,'gh',side_effect=self.read):
+   with self.assertRaisesRegex(ValueError,'expected attempt is required'):
+    self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42,request_key=request_key,approved_executor_contract_digests=['sha256:'+'7'*64])
+ def test_keyed_verification_rejects_different_api_run_attempt(self):
+  from integration_executor_contract import executor_contract_from_contents
+  run_head='6'*40
+  executor_digest=executor_contract_from_contents(self.executor_contents)['digest']
+  request_key,request_identity,effective_policy=self.bind_keyed_payload(executor_digest,run_head)
+  self.run['run_attempt']=2
+  with patch.object(self.api,'gh',side_effect=self.read):
+   with self.assertRaisesRegex(ValueError,'attempt mismatch'):
+    self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42,request_key=request_key,expected_attempt=1,request_identity=request_identity,effective_policy=effective_policy,approved_executor_contract_digests=[executor_digest])
+ def test_keyed_verification_rejects_artifact_attempt_from_another_attempt(self):
+  from integration_executor_contract import executor_contract_from_contents
+  run_head='6'*40
+  executor_digest=executor_contract_from_contents(self.executor_contents)['digest']
+  request_key,request_identity,effective_policy=self.bind_keyed_payload(
+   executor_digest,run_head,attempt=2,
+  )
+  raw=io.BytesIO()
+  with zipfile.ZipFile(raw,'w') as archive:archive.writestr(self.api.ARTIFACT+'.json',json.dumps(self.payload))
+  with patch.object(self.api,'gh',side_effect=self.read),patch.object(self.api.subprocess,'check_output',return_value=raw.getvalue()):
+   with self.assertRaisesRegex(ValueError,'artifact authority'):
+    self.api.verified_run('owner/repo',self.uid,12,self.base,self.head,9,42,request_key=request_key,expected_attempt=1,request_identity=request_identity,effective_policy=effective_policy,approved_executor_contract_digests=[executor_digest])
  def test_old_event_or_candidate_workflow_cannot_refresh(self):
   for key,value in [('event','pull_request'),('head_sha','0'*40),('head_branch','candidate'),('conclusion','failure')]:
    old=self.run[key];self.run[key]=value
@@ -336,9 +1360,23 @@ class ProvenanceTests(unittest.TestCase):
    envelope[key+'_digest']='sha256:'+hashlib.sha256(value).hexdigest()
   profile_payloads['envelope']=(json.dumps(envelope)+'\n').encode()
   artifact_names={11:self.api.ARTIFACT,21:'cargo-package-profile-envelope',22:'cargo-package-profile-plan',23:'cargo-package-profile-results',24:'cargo-package-profile-receipt'}
+  gate_job={
+   'id':10,'run_id':9,'run_attempt':1,'name':'required-gate','status':'completed','conclusion':'success',
+   'head_sha':self.base,'labels':['ubuntu-24.04'],
+   'check_run_url':'https://api.github.com/repos/owner/repo/check-runs/10',
+   'started_at':'2026-09-09T00:00:00Z','completed_at':'2026-09-09T01:00:00Z',
+  }
+  child_jobs=[
+   {'id':20,'run_id':9,'run_attempt':1,'name':'windows-package-rollout-behavior','status':'completed','conclusion':'success','head_sha':self.base,'labels':['windows-2022'],'check_run_url':'https://api.github.com/repos/owner/repo/check-runs/20'},
+   {'id':21,'run_id':9,'run_attempt':1,'name':'testnet-packages-macos-arm64-contract','status':'completed','conclusion':'success','head_sha':self.base,'labels':['ubuntu-24.04'],'check_run_url':'https://api.github.com/repos/owner/repo/check-runs/21'},
+   *({'id':30+i,'run_id':9,'run_attempt':1,'name':f'public-testnet-fleet-health-contract ({runner})','status':'completed','conclusion':'success','head_sha':self.base,'labels':[runner],'check_run_url':f'https://api.github.com/repos/owner/repo/check-runs/{30+i}'} for i,runner in enumerate(('ubuntu-24.04','windows-2022','macos-14'))),
+  ]
   def reader(*args):
-   if '/compare/' in args[-1]:return {'merge_base_commit':{'sha':self.payload['scope_base_oid']}}
-   if 'artifacts?' in args[-1]:return {'artifacts':[{'id':identifier,'name':name,'expired':False,'workflow_run':{'id':9}} for identifier,name in artifact_names.items()]}
+   path=args[-1]
+   if '/compare/' in path:return {'merge_base_commit':{'sha':self.payload['scope_base_oid']}}
+   if path=='repos/owner/repo/actions/jobs/10':return gate_job
+   if path=='repos/owner/repo/actions/runs/9/attempts/1/jobs?per_page=100&page=1':return {'jobs':[gate_job,*child_jobs]}
+   if 'artifacts?' in path:return {'artifacts':[{'id':identifier,'name':name,'expired':False,'created_at':'2026-09-09T00:30:00Z','workflow_run':{'id':9}} for identifier,name in artifact_names.items()]}
    return self.read(*args)
   def profile_artifact(repository,identifier):
    if identifier==11:return raw.getvalue()
@@ -368,7 +1406,7 @@ class ProvenanceTests(unittest.TestCase):
   self.assertIn('python3 -I "${RUNNER_TEMP}/integration-planner/plan-rust-required-scope.py"',required)
   self.assertIn("python3 -I - <<'PY'",required)
   self.assertLess(required.index('Upload required planner artifact'),required.index('Install pinned Rust toolchains'))
-  self.assertLess(required.index('cp scripts/plan-rust-required-scope.py'),required.index('integration_ci.py" prepare'))
+  self.assertLess(required.index('cp scripts/plan-rust-required-scope.py'),required.index('python3 -I "${RUNNER_TEMP}/integration_ci.py" "${prepare_args[@]}"'))
 
  def test_pull_request_base_planner_bundle_includes_impact_helper(self):
   workflow=(HERE.parents[1]/'.github/workflows/rust.yml').read_text()
@@ -381,8 +1419,33 @@ class ProvenanceTests(unittest.TestCase):
   self.assertLess(required.index(mkdir),required.index(helper))
   self.assertLess(required.index(helper),required.index(planner))
 
+ def test_markerless_pull_request_still_selects_immutable_base_planner(self):
+  workflow=(HERE.parents[1]/'.github/workflows/rust.yml').read_text()
+  required=workflow[workflow.index('  required-gate:'):workflow.index('  windows-package-rollout-behavior:')]
+  scope=required[required.index('      - id: scope\n'):required.index('      - name: Report planned scope')]
+  pr_start=scope.index('          if [[ "${GITHUB_EVENT_NAME}" == pull_request')
+  dispatch_start=scope.index('          elif [[ "${GITHUB_EVENT_NAME}" == workflow_dispatch ]]; then',pr_start)
+  pr_branch=scope[pr_start:dispatch_start]
+  self.assertTrue(pr_branch.startswith('          if [[ "${GITHUB_EVENT_NAME}" == pull_request ]]; then'))
+  planner='planner=(python3 -I "${authority_dir}/plan-rust-required-scope.py")'
+  projection_guard='if [[ -f "${RUNNER_TEMP}/impact-projection.json" ]]; then'
+  self.assertIn('git show "${base_ref}:scripts/plan-rust-required-scope.py"',pr_branch)
+  self.assertIn('git show "${base_ref}:scripts/ci-required-scope.v2.json"',pr_branch)
+  self.assertIn('git show "${base_ref}:scripts/pm/workflow-impact-projection.py"',pr_branch)
+  self.assertIn(planner,pr_branch)
+  self.assertIn(projection_guard,pr_branch)
+  self.assertLess(pr_branch.index(planner),pr_branch.index(projection_guard))
+  self.assertNotIn('planner=(./scripts/plan-rust-required-scope.sh)',pr_branch)
+
  def test_premerge_activation_cannot_dispatch_candidate(self):
-  with patch.object(self.api,'gh',side_effect=[self.pr,self.pr,{'default_branch':'main'},{'content':'bm8gbW9kZQ=='}]),patch.object(self.api.subprocess,'run') as run:
+  def api(*args):
+   path=args[-1]
+   if path.endswith('/pulls/12'):return self.pr
+   if path=='repos/owner/repo':return {'default_branch':'main'}
+   if path=='repos/owner/repo/git/ref/heads/main':return {'object':{'sha':self.base}}
+   if path.endswith('/contents/.github/workflows/rust.yml?ref='+self.base):return {'content':'bm8gbW9kZQ=='}
+   self.fail(path)
+  with patch.object(self.api,'gh',side_effect=api),patch.object(self.api.subprocess,'run') as run:
    with self.assertRaisesRegex(ValueError,'activation pending'):self.api.dispatch('owner/repo',self.uid,12,None)
    run.assert_not_called()
 
