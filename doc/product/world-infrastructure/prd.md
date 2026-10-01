@@ -189,7 +189,26 @@
 
 表中的分配不改变 §5 成功标准的测试层级。专题局部检查不能替代根 SC 的同候选组合证据；SC-9 的 `test_tier_required` 确定性矩阵与真实 provider API parity、以及 `test_tier_full` 增加的真实浏览器和 provider-backed Agent parity 是分别适用的义务，不能互相代签。
 
+以下回链补齐 §5.1/§5.2 的专业设计与验证接收关系，不改写各 SC 的独立义务或测试层级。QA 场景名称指向同一表中的准确行，不是新增测试或执行结果；每行同时使用 [`QA 方法`](../../testing/design.md#qa-infrastructure-evidence-method) 与 [`环境与 verdict`](../../testing/prd.md#qa-infrastructure-tier-boundaries) 固定 source/candidate/world/window、原始 artifact、domain oracle 与判定边界。
+
+| SC | 已有专业设计接收条款 | 实际 QA 接收场景 |
+| --- | --- | --- |
+| SC-1 | [`P2P 设计`](../../p2p/design.md#des-p2p-target-bft)、[`runtime 设计`](../../world-runtime/design.md#runtime-deterministic-design) | [`QA 场景`](../../testing/prd.md#qa-infrastructure-scene-families)：`V-FINALITY` |
+| SC-2 | [`P2P 设计`](../../p2p/design.md#des-p2p-layer-authority)、[`P2P 设计`](../../p2p/design.md#des-p2p-replication-scope) | [`QA 场景`](../../testing/prd.md#qa-infrastructure-scene-families)：`V-FINALITY` |
+| SC-3 | [`P2P 设计`](../../p2p/design.md#des-p2p-target-recovery)、[`runtime 设计`](../../world-runtime/design.md#runtime-recovery-design) | [`QA 场景`](../../testing/prd.md#qa-infrastructure-scene-families)：`V-RECOVERY` |
+| SC-4 | [`runtime 设计`](../../world-runtime/design.md#runtime-deterministic-design)、[`runtime 设计`](../../world-runtime/design.md#runtime-version-design) | [`QA 场景`](../../testing/prd.md#qa-infrastructure-scene-families)：`V-EXECUTION` |
+| SC-5 | [`runtime 设计`](../../world-runtime/design.md#runtime-pending-design)、[`runtime 设计`](../../world-runtime/design.md#runtime-lineage-design) | [`QA 场景`](../../testing/prd.md#qa-infrastructure-scene-families)：`V-EXECUTION / V-CONSUMER` |
+| SC-6 | [`runtime 设计`](../../world-runtime/design.md#runtime-recovery-design)、[`P2P 设计`](../../p2p/design.md#des-p2p-target-recovery) | [`QA 场景`](../../testing/prd.md#qa-infrastructure-scene-families)：`V-RECOVERY` |
+| SC-7 | [`P2P 设计`](../../p2p/design.md#des-p2p-target-service-gate)、[`runtime 设计`](../../world-runtime/design.md#runtime-recovery-design)、[`GWSC 目标场景`](../../testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md#sr2-dc5-semantic-validator) | [`QA 场景`](../../testing/prd.md#qa-infrastructure-scene-families)：`V-RECOVERY / V-CONSUMER` |
+| SC-8 | [`runtime 设计`](../../world-runtime/design.md#runtime-industrial-design) | [`QA 场景`](../../testing/prd.md#qa-infrastructure-scene-families)：`V-INDUSTRIAL / V-CONSUMER` |
+| SC-9 | [`runtime 设计`](../../world-runtime/design.md#runtime-industrial-outage-design)、[`GWSC 目标场景`](../../testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md#sr2-sc9-eight-cells) | [`QA 场景`](../../testing/prd.md#qa-infrastructure-scene-families)：`V-OUTAGE / V-CONSUMER` |
+| SC-10 | [`runtime 设计`](../../world-runtime/design.md#runtime-world-scope-design) | [`QA 场景`](../../testing/prd.md#qa-infrastructure-scene-families)：`V-WORLD-SCOPE / V-CONSUMER` |
+
+SC-5/7/8/9/10 的跨读面合同还由 [`Agent 消费`](../../world-simulator/llm/continuous-agent-harness.prd.md#harness-infrastructure-consumer-matrix)、[`Agent join`](../../world-simulator/llm/continuous-agent-harness.design.md#harness-infrastructure-evidence-join)、[`Viewer 读回`](../../world-simulator/viewer/viewer-control-plane-split-live-playback.prd.md#viewer-infrastructure-readback-contract)、[`Viewer 捕获`](../../world-simulator/viewer/viewer-manual.manual.md#viewer-infrastructure-capture-receiver)、[`Viewer join`](../../world-simulator/viewer/viewer-control-plane-split-live-playback.design.md#viewer-infrastructure-evidence-join) 承接；产品不拥有消费者实现或低层协议。SC-9 的八格分别保留 authority/read × 四边界及每个 authority cell 的 root-absent/pre-finality 与 root-present/post-commit/pre-child 两个 specimen；数量、window/W、receipt、progression 与 next-step 义务不被链接缩写。
+
 ### 5.3 事实边界与未决承接
+
+已合并的 P2P/runtime/GWSC 专业设计和本任务实际编写的 QA/Agent/Viewer 接收文档现可定位；[本次文档接收结果 #4180](https://github.com/eng-cc/oasis7/issues/4180)仅记录文档与追踪检查。其结果不构成 17/10/8 场景执行、active-provider API、真实 provider Agent、external headed desktop+narrow、同候选完整证明或发布通过。以下问题按“设计/接收可定位，当前实现与执行证明仍须各 owner 判定”复核，不以文档采用删除 proof gap。
 
 本文记录目标产品合同。共识原型与执行、恢复、消费者的当前能力边界分别由[分布式专题的现状](distributed-consensus-and-state-availability.prd.md#5-当前与目标的分离)、[执行专题的现状](deterministic-world-execution.prd.md#3-当前与目标的分离)及专业 authority 说明。文档采纳、设计承接、实现、已执行验证与公开发行是不同事实；本节和追踪表中的场景说明是验证要求，不能读作已有测试或已经通过。
 
