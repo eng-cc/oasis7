@@ -61,6 +61,8 @@ if args[:2] == ["issue", "view"]:
     issue_state = read("GH_ISSUE_STATE", {"state": "OPEN", "stateReason": None})
     state = issue_state["state"]
     body = path("GH_ISSUE_BODY").read_text()
+    comments = read("GH_COMMENTS", [])
+    updated_at = issue_state.get("updated_at") or (comments[-1].get("updated_at") if comments else None)
     if (os.environ.get("GH_MUTATE_MAPPING_ON_ISSUE_VIEW") == "1"
             and os.environ.get("GH_MUTATION_MARKER")
             and not path("GH_MUTATION_MARKER").exists()):
@@ -88,7 +90,8 @@ if args[:2] == ["issue", "view"]:
         print("closed issue body was not updated to done", file=sys.stderr)
         raise SystemExit(91)
     print(json.dumps({"state": state, "stateReason": issue_state.get("stateReason"), "body": body,
-                      "number": issue, "url": issue_url}))
+                      "number": issue, "url": issue_url,
+                      "updatedAt": updated_at}))
 elif args[:2] == ["issue", "edit"]:
     body = Path(args[args.index("--body-file") + 1]).read_text()
     path("GH_ISSUE_BODY").write_text(body)
@@ -97,8 +100,13 @@ elif args[:2] == ["issue", "comment"]:
     body = Path(args[args.index("--body-file") + 1]).read_text()
     comments = read("GH_COMMENTS", [])
     number = len(comments) + 1
+    verified_at = next((line.removeprefix("Verified At: ") for line in body.splitlines()
+                        if line.startswith("Verified At: ")), None)
+    created_at = verified_at or "2026-01-01T00:00:00+00:00"
     comments.append({"id": number,
                      "html_url": f"{issue_url}#issuecomment-{number}",
+                     "issue_url": f"https://api.github.com/repos/{repo}/issues/{issue}",
+                     "created_at": created_at, "updated_at": created_at,
                      "body": body})
     write("GH_COMMENTS", comments)
     print(f"{issue_url}#issuecomment-{number}")
@@ -279,6 +287,16 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.root = Path(self.tmp.name) / "repo"
         self.root.mkdir()
         subprocess.run(["git", "init", "-q", "-b", "main", str(self.root)], check=True)
+        (self.root / ".pm").mkdir()
+        (self.root / ".pm/.gitignore").write_text(
+            "/scratch/\n/github-project-sync/tasks.json\n/github-project-sync/*.lock\n",
+            encoding="utf-8",
+        )
+        (self.root / "tracked").write_text("fixture baseline\n", encoding="utf-8")
+        subprocess.run(["git", "-C", str(self.root), "config", "user.email", "test@example.invalid"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "config", "user.name", "Test"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "add", ".pm/.gitignore", "tracked"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "commit", "-qm", "fixture baseline"], check=True)
         (self.root / ".pm/github-project-sync").mkdir(parents=True)
         self.bin = Path(self.tmp.name) / "bin"
         self.bin.mkdir()
@@ -446,11 +464,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         task_worktree, default_mapping_path, evidence_path = self.stale_default_non_pr_worktrees(evidence)
         classified = self.classify_non_pr(evidence, repo_root=task_worktree)
         self.assertEqual(classified.returncode, 0, classified.stderr)
-        claim = json.dumps({
-            "claim_type": "task_complete", "status": "verified",
-            "allowed_to_claim": True, "verification_exit_code": 0,
-            "verified_at": "2026-09-17T00:00:00+08:00",
-        })
+        claim = json.dumps(self.claim_ready(task_worktree))
         closeout = subprocess.run([
             sys.executable, str(PROJECT_TASK), "closeout-task", str(task_worktree),
             "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
@@ -514,6 +528,20 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
             "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
             "--evidence", evidence, "--validation-command", "fixture classification", "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
+
+    def claim_ready(self, repo_root: Path | None = None) -> dict:
+        """Produce the accepted task_complete projection and fake live Issue comment."""
+        claim_root = repo_root or self.root
+        env = self.env.copy()
+        env["PM_ROOT_DIR"] = str(claim_root)
+        result = subprocess.run([
+            "bash", str(ROOT / "scripts/pm/claim-ready.sh"),
+            "--claim-type", "task_complete",
+            "--verification-profile", "repository_required",
+            "--task-uid", UID, "--json",
+        ], cwd=ROOT, env=env, text=True, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return json.loads(result.stdout)
 
     def legacy_receipt(self, evidence_digest: str, *, reason: str = "duplicate",
                        **extra: object) -> Path:
@@ -1159,11 +1187,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         classified = self.classify_non_pr("classified in the task worktree", repo_root=task_worktree)
         self.assertEqual(classified.returncode, 0, classified.stderr)
 
-        claim = json.dumps({
-            "claim_type": "task_complete", "status": "verified",
-            "allowed_to_claim": True, "verification_exit_code": 0,
-            "verified_at": "2026-08-30T00:00:00+08:00",
-        })
+        claim = json.dumps(self.claim_ready(task_worktree))
         closeout = subprocess.run([
             sys.executable, str(PROJECT_TASK), "closeout-task", str(task_worktree),
             "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
@@ -1669,11 +1693,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertIn("completion_mode: `non_pr_task`", self.issue_body.read_text())
         self.assertEqual(len(self.read_json(self.comments)), 1)
 
-        claim = json.dumps({
-            "claim_type": "task_complete", "status": "verified",
-            "allowed_to_claim": True, "verification_exit_code": 0,
-            "verified_at": "2026-08-30T00:00:00+08:00",
-        })
+        claim = json.dumps(self.claim_ready())
         closeout = subprocess.run([
             sys.executable, str(PROJECT_TASK), "closeout-task", str(self.root),
             "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
@@ -1688,7 +1708,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         finalized = self.invoke("non_pr_completed", Path(record["non_pr_completion_evidence_file"]))
         self.assertEqual(finalized.returncode, 0, finalized.stderr)
         self.assertEqual(self.read_json(self.closes), ["completed"])
-        self.assertEqual(len(self.read_json(self.comments)), 3)
+        self.assertEqual(len(self.read_json(self.comments)), 4)
 
         terminal_record = self.read_json(mapping_path)["tasks"][UID]
         terminal_issue_body = self.issue_body.read_text()
@@ -1831,11 +1851,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
 
         classified = self.classify_non_pr(evidence, repo_root=task_worktree)
         self.assertEqual(classified.returncode, 0, classified.stderr)
-        claim = json.dumps({
-            "claim_type": "task_complete", "status": "verified",
-            "allowed_to_claim": True, "verification_exit_code": 0,
-            "verified_at": "2026-09-16T00:00:00+08:00",
-        })
+        claim = json.dumps(self.claim_ready(task_worktree))
         closeout = subprocess.run([
             sys.executable, str(PROJECT_TASK), "closeout-task", str(task_worktree),
             "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
@@ -1911,7 +1927,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         tombstone = receipt_path.with_name("terminal-tombstone.json")
         self.assertTrue(tombstone.is_file())
         self.assertTrue(self.read_json(tombstone)["checkout_recreation_forbidden"])
-        self.assertEqual(len(self.read_json(self.comments)), 3)
+        self.assertEqual(len(self.read_json(self.comments)), 4)
         self.assertEqual(self.read_json(self.closes), ["completed"])
 
     def test_refresh_loss_of_non_pr_evidence_binding_fails_without_terminal_effects(self) -> None:
@@ -1919,11 +1935,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         _task_worktree, default_mapping_path, evidence_path = self.registered_non_pr_worktrees(evidence)
         classified = self.classify_non_pr(evidence, repo_root=_task_worktree)
         self.assertEqual(classified.returncode, 0, classified.stderr)
-        claim = json.dumps({
-            "claim_type": "task_complete", "status": "verified",
-            "allowed_to_claim": True, "verification_exit_code": 0,
-            "verified_at": "2026-09-16T00:00:00+08:00",
-        })
+        claim = json.dumps(self.claim_ready(_task_worktree))
         closeout = subprocess.run([
             sys.executable, str(PROJECT_TASK), "closeout-task", str(_task_worktree),
             "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
@@ -1948,7 +1960,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         )
         self.assertEqual(self.read_json(self.issue_state), {"state": "OPEN"})
         self.assertEqual(self.read_json(self.closes), [])
-        self.assertEqual(len(self.read_json(self.comments)), 2)
+        self.assertEqual(len(self.read_json(self.comments)), 3)
         self.assertFalse(any(
             call[:2] in (["issue", "edit"], ["issue", "close"], ["issue", "comment"], ["project", "item-edit"])
             for call in self.calls()[calls_before:]
@@ -1964,11 +1976,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         task_worktree, default_mapping_path, evidence_path = self.registered_non_pr_worktrees(evidence)
         classified = self.classify_non_pr(evidence, repo_root=task_worktree)
         self.assertEqual(classified.returncode, 0, classified.stderr)
-        claim = {
-            "claim_type": "task_complete", "status": "verified",
-            "allowed_to_claim": True, "verification_exit_code": 0,
-            "verified_at": "2026-09-16T00:00:00+08:00",
-        }
+        claim = self.claim_ready(task_worktree)
         closeout = subprocess.run([
             sys.executable, str(PROJECT_TASK), "closeout-task", str(task_worktree),
             "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
@@ -2033,11 +2041,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(classified.returncode, 0, classified.stderr)
         record = self.read_json(self.root / ".pm/github-project-sync/tasks.json")["tasks"][UID]
         canonical = Path(record["non_pr_completion_evidence_file"])
-        claim = json.dumps({
-            "claim_type": "task_complete", "status": "verified",
-            "allowed_to_claim": True, "verification_exit_code": 0,
-            "verified_at": "2026-08-30T00:00:00+08:00",
-        })
+        claim = json.dumps(self.claim_ready())
         closeout = subprocess.run([
             sys.executable, str(PROJECT_TASK), "closeout-task", str(self.root),
             "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
