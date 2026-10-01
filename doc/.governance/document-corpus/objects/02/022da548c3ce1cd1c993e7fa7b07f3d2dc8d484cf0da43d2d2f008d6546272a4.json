@@ -1,17 +1,17 @@
 {
   "record": {
-    "authority_entry": "doc/world-simulator/README.md",
+    "authority_entry": "doc/testing/README.md",
     "authority_layer": "professional_domain",
-    "content_sha256": "35b2f5f5a7a0a7f63f56cc528a441397a2c8abe4949bd3990e492975f712fbeb",
+    "content_sha256": "86fd318d5501e86d9bc18e31fb5548b8e71cd8a5d3340f1968bd4b80124b1b40",
     "inventory_disposition": "retain_for_owner_review",
     "lifecycle_candidate": "active_candidate",
-    "object_kind": "manual",
-    "path": "doc/world-simulator/viewer/viewer-manual.manual.md",
+    "object_kind": "design",
+    "path": "doc/testing/ci/codeql-integration.design.md",
     "registry_type": "professional_domain",
-    "routing_batch": "world-simulator-corpus-review",
+    "routing_batch": "testing-corpus-review",
     "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
-    "semantic_decision_owner": "runtime_engineer",
-    "structural_owner": "runtime_engineer"
+    "semantic_decision_owner": "qa_engineer",
+    "structural_owner": "qa_engineer"
   },
   "schema": "oasis7.document-corpus-object/v1"
 }
