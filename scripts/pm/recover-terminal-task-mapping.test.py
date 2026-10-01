@@ -3,9 +3,12 @@
 from __future__ import annotations
 
 import datetime as dt
+import copy
 import importlib.util
 import json
+import os
 import pathlib
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -15,6 +18,15 @@ import unittest
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 HELPER = ROOT / "scripts/pm/recover-terminal-task-mapping.py"
 UID = "task_11111111111111111111111111111111"
+
+
+def load_fixture_module(path: pathlib.Path, name: str):
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise AssertionError(f"cannot load fixture module: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 class RecoveryTest(unittest.TestCase):
@@ -67,6 +79,48 @@ class RecoveryTest(unittest.TestCase):
     def write_retained(self) -> None:
         path = self.worktree / ".pm/github-project-sync/tasks.json"
         path.write_text(json.dumps({"version": 1, "tasks": {UID: self.record}}) + "\n", encoding="utf-8")
+
+    def prepare_v2_delivery(self):
+        protocol = load_fixture_module(
+            ROOT / "scripts/pm/terminal-delivery-protocol.test.py",
+            "recovery_actual_delivery_fixture",
+        )
+        parent = self.root / "v2"
+        parent.mkdir()
+        fixture = protocol.DeliveryFixture(parent)
+        produced = fixture.run_producer()
+        self.assertEqual(produced.returncode, 0, produced.stderr)
+
+        # The CLI resolves canonical receipt metadata relative to the supplied
+        # default worktree. Keep it a self-contained disposable repository.
+        shutil.copytree(ROOT / "scripts/pm", fixture.root / "scripts/pm")
+        mapping = fixture.mapping()
+        uid = protocol.UID
+        record = copy.deepcopy(mapping["tasks"][uid])
+        issue_body = fixture.state["issue"]["body"] + (
+            "- status: `done`\n"
+            "- workflow_phase: `post_merge_done`\n"
+            "- completion_mode: `pr_task`\n"
+        )
+        state = json.loads(fixture.state_path.read_text(encoding="utf-8"))
+        state["issue"]["body"] = issue_body
+        state["project_item"]["content"]["body"] = issue_body
+        fixture.state = state
+        fixture._write_state()
+
+        retained_path = fixture.task / ".pm/github-project-sync/tasks.json"
+        retained_path.parent.mkdir(parents=True)
+        retained_path.write_text(json.dumps({
+            "version": 1, "project": mapping.get("project"), "tasks": {uid: record},
+        }, sort_keys=True) + "\n", encoding="utf-8")
+        fixture.log_path.write_text("", encoding="utf-8")
+        return protocol, fixture, mapping, record
+
+    def run_v2_recovery(self, fixture, uid: str):
+        return subprocess.run([
+            sys.executable, str(HELPER), "--repo-root", str(fixture.root),
+            "--mapping", str(fixture.mapping_path), "--task-uid", uid,
+        ], text=True, capture_output=True, env=fixture.env())
 
     def test_imports_complete_registered_terminal_record(self) -> None:
         self.assertIn("imported", self.invoke().stdout)
@@ -130,6 +184,142 @@ class RecoveryTest(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, "conflicting task record"):
             helper.import_recovered(RacingStore, self.mapping, UID, self.record)
         self.assertEqual(before, self.mapping.read_bytes())
+
+    def test_v2_recovery_imports_exact_live_delivery_when_default_row_is_absent(self) -> None:
+        protocol, fixture, mapping, record = self.prepare_v2_delivery()
+        uid = protocol.UID
+        mapping["tasks"].pop(uid)
+        fixture.mapping_path.write_text(
+            json.dumps(mapping, sort_keys=True) + "\n", encoding="utf-8",
+        )
+        retained_path = fixture.task / ".pm/github-project-sync/tasks.json"
+        retained_before = retained_path.read_bytes()
+        receipt_root = fixture.receipt_root
+        receipt_names_before = sorted(path.name for path in receipt_root.iterdir())
+        main_before = subprocess.check_output(
+            ["git", "-C", str(fixture.root), "rev-parse", "main"], text=True,
+        ).strip()
+
+        result = self.run_v2_recovery(fixture, uid)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "imported")
+        recovered = json.loads(fixture.mapping_path.read_text(encoding="utf-8"))["tasks"][uid]
+        self.assertEqual(recovered["task_uid"], uid)
+        self.assertEqual(recovered["repository"], protocol.REPOSITORY)
+        self.assertEqual(recovered["issue_number"], protocol.ISSUE)
+        self.assertEqual(recovered["pr_number"], protocol.PR)
+        self.assertEqual(recovered["pr_url"], protocol.PR_URL)
+        self.assertEqual(recovered["status"], "done")
+        self.assertEqual(recovered["workflow_phase"], "post_merge_done")
+        self.assertEqual(recovered["phase_receipt_type"]["post_merge_done"], "oasis7_terminal_delivery")
+        self.assertEqual(recovered["phase_receipt_sha256"], record["phase_receipt_sha256"])
+        self.assertEqual(retained_path.read_bytes(), retained_before)
+        self.assertEqual(
+            sorted(path.name for path in receipt_root.iterdir()), receipt_names_before,
+            "recovery must reuse delivery evidence without writing cleanup/sync receipts",
+        )
+        main_after = subprocess.check_output(
+            ["git", "-C", str(fixture.root), "rev-parse", "main"], text=True,
+        ).strip()
+        self.assertEqual(main_after, main_before)
+
+        gh_calls = [json.loads(line) for line in fixture.log_path.read_text().splitlines()]
+        self.assertTrue(gh_calls)
+        self.assertTrue(all(call and call[0] in {"api", "project"} for call in gh_calls), gh_calls)
+        self.assertTrue(all("--method" not in call and "-X" not in call for call in gh_calls), gh_calls)
+        self.assertIn(["api", f"repos/{protocol.REPOSITORY}/issues/{protocol.ISSUE}"], gh_calls)
+        self.assertIn(["api", f"repos/{protocol.REPOSITORY}/pulls/{protocol.PR}"], gh_calls)
+        self.assertIn([
+            "api", f"repos/{protocol.REPOSITORY}/issues/{protocol.ISSUE}/comments",
+            "--paginate", "--slurp",
+        ], gh_calls)
+        self.assertIn(["project", "view", "1", "--owner", "fixture", "--format", "json"], gh_calls)
+        self.assertIn(["api", f"repos/{protocol.REPOSITORY}"], gh_calls)
+        self.assertIn(["api", f"repos/{protocol.REPOSITORY}/git/ref/heads/main"], gh_calls)
+        merge_oid = fixture.state["merge_oid"]
+        target_oid = fixture.state["target_oid"]
+        self.assertIn([
+            "api", f"repos/{protocol.REPOSITORY}/compare/{merge_oid}...{target_oid}",
+        ], gh_calls)
+        self.assertTrue(any(call[:2] == ["api", "graphql"] for call in gh_calls), gh_calls)
+
+    def test_v2_recovery_accepts_same_exact_selector_in_default_and_retained_rows(self) -> None:
+        protocol, fixture, _mapping, _record = self.prepare_v2_delivery()
+        before_default = fixture.mapping_path.read_bytes()
+        retained_path = fixture.task / ".pm/github-project-sync/tasks.json"
+        before_retained = retained_path.read_bytes()
+
+        result = self.run_v2_recovery(fixture, protocol.UID)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(result.stdout.strip(), "repaired")
+        recovered = json.loads(fixture.mapping_path.read_text(encoding="utf-8"))["tasks"][protocol.UID]
+        self.assertEqual(recovered["phase_receipt_type"]["post_merge_done"], "oasis7_terminal_delivery")
+        self.assertEqual(recovered["phase_receipt_sha256"], json.loads(before_default)["tasks"][protocol.UID]["phase_receipt_sha256"])
+        self.assertEqual(recovered["workflow_phase"], "post_merge_done")
+        self.assertEqual(retained_path.read_bytes(), before_retained)
+        gh_calls = [json.loads(line) for line in fixture.log_path.read_text().splitlines()]
+        self.assertTrue(all(call and call[0] in {"api", "project"} for call in gh_calls), gh_calls)
+        self.assertTrue(all("--method" not in call and "-X" not in call for call in gh_calls), gh_calls)
+
+    def test_v2_recovery_fails_closed_when_selected_protocol_markers_are_missing(self) -> None:
+        protocol, fixture, mapping, record = self.prepare_v2_delivery()
+        uid = protocol.UID
+        for field in (
+            "phase_receipt_type", "phase_receipt_sha256",
+            "phase_receipt_comment_id", "phase_receipt_comment_sha256",
+        ):
+            record.pop(field, None)
+        mapping["tasks"][uid] = copy.deepcopy(record)
+        fixture.mapping_path.write_text(
+            json.dumps(mapping, sort_keys=True) + "\n", encoding="utf-8",
+        )
+        retained_path = fixture.task / ".pm/github-project-sync/tasks.json"
+        retained = json.loads(retained_path.read_text(encoding="utf-8"))
+        retained["tasks"][uid] = copy.deepcopy(record)
+        retained_path.write_text(json.dumps(retained, sort_keys=True) + "\n", encoding="utf-8")
+        before_default = fixture.mapping_path.read_bytes()
+        before_retained = retained_path.read_bytes()
+
+        result = self.run_v2_recovery(fixture, uid)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn(
+            "no previously selected v2 proof exists; legacy recovery requires",
+            result.stderr,
+        )
+        self.assertEqual(fixture.mapping_path.read_bytes(), before_default)
+        self.assertEqual(retained_path.read_bytes(), before_retained)
+        self.assertEqual(fixture.log_path.read_text(encoding="utf-8"), "")
+
+    def test_v2_recovery_fails_closed_on_ambiguous_retained_selectors(self) -> None:
+        protocol, fixture, _mapping, record = self.prepare_v2_delivery()
+        second = self.root / "v2-second-task-worktree"
+        subprocess.run([
+            "git", "-C", str(fixture.root), "worktree", "add", "-qb",
+            "task/recovery-ambiguous", str(second),
+        ], check=True)
+        conflicting = copy.deepcopy(record)
+        conflicting["canonical_worktree"] = str(second)
+        conflicting["task_branch"] = "task/recovery-ambiguous"
+        conflicting["phase_receipt_sha256"]["post_merge_done"] = "0" * 64
+        second_mapping = second / ".pm/github-project-sync/tasks.json"
+        second_mapping.parent.mkdir(parents=True)
+        second_mapping.write_text(json.dumps({
+            "version": 1, "tasks": {protocol.UID: conflicting},
+        }, sort_keys=True) + "\n", encoding="utf-8")
+        before_default = fixture.mapping_path.read_bytes()
+        retained_path = fixture.task / ".pm/github-project-sync/tasks.json"
+        before_retained = retained_path.read_bytes()
+
+        result = self.run_v2_recovery(fixture, protocol.UID)
+
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("conflicting v2 terminal selectors exist across task mappings", result.stderr)
+        self.assertEqual(fixture.mapping_path.read_bytes(), before_default)
+        self.assertEqual(retained_path.read_bytes(), before_retained)
+        self.assertEqual(fixture.log_path.read_text(encoding="utf-8"), "")
 
 
 if __name__ == "__main__":

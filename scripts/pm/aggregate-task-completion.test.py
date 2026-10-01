@@ -4,10 +4,15 @@ from __future__ import annotations
 
 import base64
 import copy
+import datetime as dt
 import hashlib
 import importlib.util
 import json
+import os
 import pathlib
+import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest import mock
@@ -31,6 +36,55 @@ def comment_body(plan: dict) -> str:
 
 def task_uid(hex_char: str) -> str:
     return "task_" + hex_char * 32
+
+
+def load_test_module(path: pathlib.Path, name: str):
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise AssertionError(f"cannot load fixture module: {path}")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def copy_pm_helpers(root: pathlib.Path) -> None:
+    (root / "scripts").mkdir(parents=True, exist_ok=True)
+    shutil.copytree(ROOT / "scripts/pm", root / "scripts/pm")
+
+
+def install_issue_pr_view_readback(fixture) -> None:
+    """Extend the producer's isolated gh fixture with terminal audit CLI reads."""
+    gh = fixture.bin / "gh"
+    base = fixture.bin / "gh-base"
+    gh.replace(base)
+    gh.write_text(r'''#!/usr/bin/env python3
+import json, os, pathlib, subprocess, sys
+args = sys.argv[1:]
+if args[:2] in (["issue", "view"], ["pr", "view"]):
+    state = json.loads(pathlib.Path(os.environ["QA_GH_STATE"]).read_text())
+    number = args[2]
+    if args[0] == "issue":
+        value = state["issue"]
+        result = {"number": value["number"], "url": value.get("html_url", value.get("url")),
+                  "title": value.get("title", "terminal fixture"), "state": value["state"],
+                  "body": value.get("body", ""), "stateReason": value.get("state_reason", ""),
+                  "updatedAt": value.get("updated_at", value.get("updatedAt", "2026-09-30T08:00:00Z"))}
+    else:
+        value = state["pr"]
+        head, base_ref = value.get("head", {}), value.get("base", {})
+        result = {"number": value["number"], "url": value.get("html_url", value.get("url")),
+                  "state": "MERGED" if value.get("merged") else str(value.get("state", "")).upper(),
+                  "mergedAt": value.get("merged_at"),
+                  "mergeCommit": {"oid": value.get("merge_commit_sha")},
+                  "headRefOid": head.get("sha"), "headRefName": head.get("ref"),
+                  "baseRefName": base_ref.get("ref"), "body": value.get("body", "")}
+    print(json.dumps(result))
+else:
+    base = pathlib.Path(__file__).with_name("gh-base")
+    result = subprocess.run([str(base), *args])
+    raise SystemExit(result.returncode)
+''', encoding="utf-8")
+    gh.chmod(0o755)
 
 
 class AggregateTaskCompletionTests(unittest.TestCase):
@@ -655,6 +709,364 @@ class AggregateTaskCompletionTests(unittest.TestCase):
                             self.helper.validate_terminal_receipt(
                                 ROOT, plan["task_uid"], plan, candidate, evidence, receipt,
                             )
+
+    def test_real_mixed_v1_v2_child_readers_build_and_revalidate_aggregate(self):
+        protocol = load_test_module(
+            ROOT / "scripts/pm/terminal-delivery-protocol.test.py",
+            "aggregate_actual_delivery_fixture",
+        )
+        legacy = load_test_module(
+            ROOT / "scripts/pm/loop_terminal.test.py",
+            "aggregate_actual_legacy_fixture",
+        )
+        claim_api = load_test_module(
+            ROOT / "scripts/pm/task_complete_claim.py",
+            "aggregate_actual_claim_api",
+        )
+
+        with tempfile.TemporaryDirectory(prefix="oasis7-aggregate-live-reader-") as directory:
+            parent = pathlib.Path(directory)
+            legacy_parent = parent / "legacy"
+            delivery_parent = parent / "delivery"
+            legacy_parent.mkdir()
+            delivery_parent.mkdir()
+
+            # V1 uses the immutable legacy receipt/comment fixture. V2 is
+            # produced by the real finalizer against its isolated GitHub stub.
+            v1_fixture = protocol.DeliveryFixture(legacy_parent)
+            v1_root = v1_fixture.root
+            copy_pm_helpers(v1_root)
+
+            v2_uid = task_uid("b")
+            v2_issue = 4102
+            v2_pr = 5102
+            v2_pr_url = f"https://github.com/fixture/repo/pull/{v2_pr}"
+            v2_issue_url = f"https://github.com/fixture/repo/issues/{v2_issue}"
+            with mock.patch.object(protocol, "UID", v2_uid), \
+                    mock.patch.object(protocol, "ISSUE", v2_issue), \
+                    mock.patch.object(protocol, "PR", v2_pr), \
+                    mock.patch.object(protocol, "PR_URL", v2_pr_url), \
+                    mock.patch.object(protocol, "ISSUE_URL", v2_issue_url):
+                v2_fixture = protocol.DeliveryFixture(delivery_parent)
+                producer = v2_fixture.bin / "gh"
+                producer_source = producer.read_text(encoding="utf-8")
+                comment_write = 'state["comments"].append(comment); state_path.write_text(json.dumps(state))'
+                self.assertIn(comment_write, producer_source)
+                # GitHub advances the parent Issue's updatedAt for comments.
+                # The immutable accepted claim comment is at NOW; the producer
+                # later publishes unrelated terminal evidence, which must not
+                # make historical claim selection reject that accepted claim.
+                producer_source = producer_source.replace(
+                    comment_write,
+                    'comment["created_at"] = "2026-09-30T08:00:01Z"; '
+                    'comment["updated_at"] = comment["created_at"]; '
+                    'state["comments"].append(comment); '
+                    'state["issue"]["updated_at"] = comment["created_at"]; '
+                    'state_path.write_text(json.dumps(state))',
+                )
+                for old, new in (
+                    ("issues/11/comments", f"issues/{v2_issue}/comments"),
+                    ("issues/11", f"issues/{v2_issue}"),
+                    ("pulls/12", f"pulls/{v2_pr}"),
+                    ("issues/11#issuecomment-", f"issues/{v2_issue}#issuecomment-"),
+                ):
+                    producer_source = producer_source.replace(old, new)
+                producer.write_text(producer_source, encoding="utf-8")
+                producer.chmod(0o755)
+                produced = v2_fixture.run_producer()
+                self.assertEqual(produced.returncode, 0, produced.stderr)
+
+            v2_root = v2_fixture.root
+            copy_pm_helpers(v2_root)
+            install_issue_pr_view_readback(v1_fixture)
+            install_issue_pr_view_readback(v2_fixture)
+
+            # The terminal task audit and aggregate reader consume these live
+            # fields. Add the completed task projection as the closeout's live
+            # Issue readback while leaving the producer's receipt/comment bytes
+            # untouched.
+            v2_mapping = v2_fixture.mapping()
+            v2_record = v2_mapping["tasks"][v2_uid]
+            v2_record["completion_mode"] = "pr_task"
+            v2_record["status"] = "done"
+            v2_record["workflow_phase"] = "post_merge_done"
+            # The producer's fake gh process persists its GitHub readbacks to
+            # disk; refresh the in-memory fixture before adding the aggregate
+            # task projection so the closed Issue and immutable comments remain
+            # the actual producer output.
+            v2_fixture.state = json.loads(v2_fixture.state_path.read_text(encoding="utf-8"))
+            claim_comment = next(
+                comment for comment in v2_fixture.state["comments"]
+                if comment.get("id") == 801
+            )
+            terminal_comment = next(
+                comment for comment in v2_fixture.state["comments"]
+                if "<!-- oasis7-pm-evidence/v2 -->" in comment.get("body", "")
+            )
+            self.assertGreater(terminal_comment["created_at"], claim_comment["created_at"])
+            self.assertEqual(
+                v2_fixture.state["issue"]["updated_at"], terminal_comment["created_at"],
+                "unrelated terminal evidence must advance the live Issue updatedAt",
+            )
+            v2_body = v2_fixture.state["issue"]["body"] + (
+                "- status: `done`\n"
+                "- workflow_phase: `post_merge_done`\n"
+                "- completion_mode: `pr_task`\n"
+            )
+            v2_fixture.state["issue"]["body"] = v2_body
+            v2_fixture.state["project_item"]["content"]["body"] = v2_body
+            v2_fixture.state["pr"]["head"]["ref"] = v2_record["task_branch"]
+            v2_fixture.mapping_path.write_text(
+                json.dumps(v2_mapping, sort_keys=True) + "\n", encoding="utf-8",
+            )
+            v2_fixture._write_state()
+
+            v1_uid = legacy.UID
+            v1_issue = 11
+            v1_pr = legacy.PR_NUMBER
+            v1_pr_url = legacy.PR_URL
+            v1_claim = copy.deepcopy(v1_fixture.record["claim_verifications"][0])
+            v1_claim["task_uid"] = v1_uid
+            v1_claim["frozen_source_head"] = legacy.PR["head"]["sha"]
+            v1_claim["repository_head"] = legacy.PR["head"]["sha"]
+            v1_claim["frozen_source_tree"] = "c" * 40
+            v1_claim["verified_at"] = "2026-09-10T00:00:00Z"
+            claim_history = base64.urlsafe_b64encode(
+                canonical_bytes([v1_claim]),
+            ).decode("ascii").rstrip("=")
+            v1_body = "\n".join((
+                "<!-- oasis7-pm-task -->",
+                f"task_uid: {v1_uid}",
+                "- status: `done`",
+                "- workflow_phase: `post_merge_done`",
+                "- completion_mode: `pr_task`",
+                f"- pr_number: `{v1_pr}`",
+                f"- pr_url: `{v1_pr_url}`",
+                f"- claim_verifications_b64: `{claim_history}`",
+            )) + "\n"
+            claim_created_at = "2026-09-10T00:00:01Z"
+            v1_claim_comment = {
+                "id": 8,
+                "body": claim_api._claim_comment_body(v1_uid, v1_claim),
+                "created_at": claim_created_at,
+                "updated_at": claim_created_at,
+                "html_url": f"{legacy.URL}#issuecomment-8",
+                "issue_url": f"https://api.github.com/repos/fixture/repo/issues/{v1_issue}",
+            }
+            legacy_comment = copy.deepcopy(legacy.COMMENT)
+            legacy_comment.update({
+                "id": 7,
+                "issue_url": f"https://api.github.com/repos/fixture/repo/issues/{v1_issue}",
+                "created_at": "2026-09-10T00:00:02Z",
+                "updated_at": "2026-09-10T00:00:02Z",
+            })
+            v1_issue_readback = copy.deepcopy(legacy.ISSUE)
+            v1_issue_readback.update({
+                "body": v1_body,
+                "state": "closed",
+                "state_reason": "completed",
+                "updated_at": claim_created_at,
+            })
+            v1_item = copy.deepcopy(legacy.ITEM)
+            v1_item["id"] = v1_fixture.state["project_item"]["id"]
+            v1_item["project"]["id"] = "PROJECT_fixture"
+            v1_item["content"].update({"number": v1_issue, "url": legacy.URL, "body": v1_body})
+            v1_item["fieldValues"]["pageInfo"]["hasNextPage"] = False
+            v1_pr_readback = copy.deepcopy(legacy.PR)
+            v1_pr_readback["head"]["ref"] = "task/fixture"
+            v1_receipts = legacy.RECEIPTS
+            v1_receipt_root = pathlib.Path(subprocess.check_output([
+                sys.executable, str(ROOT / "scripts/pm/canonical-receipt-root.py"),
+                "--default-worktree", str(v1_root), "--task-uid", v1_uid, "--create",
+            ], text=True).strip())
+            v1_raw = {}
+            for key, filename in (
+                ("merge", "merge-receipt.json"),
+                ("main_sync", "main-sync-receipt.json"),
+                ("terminal", "terminal-cleanup-receipt.json"),
+                ("tombstone", "terminal-tombstone.json"),
+            ):
+                v1_raw[filename] = v1_receipts[key]["bytes"]
+                (v1_receipt_root / filename).write_bytes(v1_raw[filename])
+            v1_ledger = {
+                "schema": "oasis7_finalizer_ledger_v1",
+                "task_uid": v1_uid,
+                "operations": {
+                    effect: {
+                        "effect": effect,
+                        "operation_id": hashlib.sha256(
+                            f"{v1_uid}:post_merge_done:{effect}".encode("utf-8"),
+                        ).hexdigest(),
+                        "intent": True,
+                        "readback": True,
+                        "committed": True,
+                    }
+                    for effect in ("issue_close", "project_update", "evidence_comment")
+                },
+            }
+            v1_raw["finalizer-ledger.json"] = canonical_bytes(v1_ledger) + b"\n"
+            (v1_receipt_root / "finalizer-ledger.json").write_bytes(v1_raw["finalizer-ledger.json"])
+            v1_record = {
+                "task_uid": v1_uid,
+                "repository": "fixture/repo",
+                "status": "done",
+                "workflow_phase": "post_merge_done",
+                "completion_mode": "pr_task",
+                "issue_number": v1_issue,
+                "issue_url": legacy.URL,
+                "pr_number": v1_pr,
+                "pr_url": v1_pr_url,
+                "default_branch": "main",
+                "canonical_worktree": "/fixture/worktree",
+                "task_branch": "task/fixture",
+                "project_item_id": v1_item["id"],
+                "claim_verifications": [v1_claim],
+                "merge_receipt": v1_receipts["merge"]["record"],
+                "merge_receipt_sha256": v1_receipts["merge"]["digest"],
+                "phase_receipts": {
+                    "main_sync": v1_receipts["main_sync"]["record"],
+                    "post_merge_done": v1_receipts["terminal"]["record"],
+                },
+                "phase_receipt_sha256": {
+                    "main_sync": v1_receipts["main_sync"]["digest"],
+                    "post_merge_done": v1_receipts["terminal"]["digest"],
+                },
+            }
+            v1_mapping = json.loads(v1_fixture.mapping_path.read_text(encoding="utf-8"))
+            v1_mapping["tasks"] = {v1_uid: v1_record}
+            v1_fixture.mapping_path.write_text(
+                json.dumps(v1_mapping, sort_keys=True) + "\n", encoding="utf-8",
+            )
+            v1_fixture.state.update({
+                "issue": v1_issue_readback,
+                "project_item": v1_item,
+                "pr": v1_pr_readback,
+                "comments": [legacy_comment, v1_claim_comment],
+            })
+            v1_fixture._write_state()
+
+            values = list(self.context())
+            plan, candidate, evidence, coordinator, _old_comment, _old_reports = values
+            first, second = plan["required_deliveries"]
+            first.update({
+                "task_uid": v1_uid, "issue_number": v1_issue,
+                "pr_number": v1_pr, "pr_url": v1_pr_url,
+            })
+            second.update({
+                "task_uid": v2_uid, "issue_number": v2_issue,
+                "pr_number": v2_pr, "pr_url": v2_pr_url,
+            })
+            plan["repository"] = "fixture/repo"
+            plan_comment_body = comment_body(plan)
+            comment = {
+                "id": 6001, "issue_number": plan["issue_number"],
+                "body": plan_comment_body, "author": "eng-cc", "permission": "admin",
+            }
+            plan_body_digest = hashlib.sha256(plan_comment_body.encode("utf-8")).hexdigest()
+            coordinator["repository"] = "fixture/repo"
+            coordinator["default_branch"] = "main"
+            coordinator["body"] = (
+                "<!-- oasis7-pm-task -->\n"
+                f"task_uid: {plan['task_uid']}\n"
+                "completion_mode: ordered_delivery_aggregate\n"
+                "aggregate_plan_comment_id: 6001\n"
+                f"aggregate_plan_sha256: sha256:{plan_body_digest}\n"
+            )
+
+            fixtures = {v1_uid: v1_fixture, v2_uid: v2_fixture}
+            original_reader = self.helper.read_child_report
+            with mock.patch.object(self.helper, "REPOSITORY", "fixture/repo"):
+                reports = {}
+                for delivery in plan["required_deliveries"]:
+                    fixture = fixtures[delivery["task_uid"]]
+                    with mock.patch.dict(os.environ, fixture.env()):
+                        audit_module = self.helper._import_terminal_audit(fixture.root)
+                        audit_report = audit_module.audit(fixture.root, delivery["task_uid"])
+                        self.assertEqual(
+                            audit_report["status"], "reconciled",
+                            json.dumps(audit_report, sort_keys=True),
+                        )
+                        reports[delivery["task_uid"]] = original_reader(
+                            fixture.root, delivery, "main",
+                        )
+
+                self.assertEqual(
+                    [reports[row["task_uid"]]["proof"]["protocol_version"]
+                     for row in plan["required_deliveries"]],
+                    [1, 2],
+                )
+                self.assertEqual(reports[v1_uid]["task"]["issue_number"], v1_issue)
+                self.assertEqual(reports[v1_uid]["task"]["pr_number"], v1_pr)
+                self.assertEqual(reports[v2_uid]["task"]["issue_number"], v2_issue)
+                self.assertEqual(reports[v2_uid]["task"]["pr_number"], v2_pr)
+
+                observed_at = dt.datetime.now(dt.timezone.utc).isoformat().replace("+00:00", "Z")
+                receipt = self.helper.build_receipt(
+                    task_uid=plan["task_uid"], plan=plan, candidate=candidate, evidence=evidence,
+                    coordinator_issue=coordinator, plan_comment=comment, child_reports=reports,
+                    effective_validator_commit="c" * 40, observed_at=observed_at,
+                )
+                self.assertEqual(receipt["schema"], "oasis7.aggregate-task-completion/v2")
+                self.assertEqual(
+                    [row["terminal_protocol_version"] for row in receipt["deliveries"]], [1, 2],
+                )
+
+                closed_coordinator = {**coordinator, "state": "CLOSED"}
+
+                def reread_child(_root, delivery, default_branch):
+                    fixture = fixtures[delivery["task_uid"]]
+                    with mock.patch.dict(os.environ, fixture.env()):
+                        return original_reader(fixture.root, delivery, default_branch)
+
+                with mock.patch.object(
+                    self.helper, "read_coordinator", return_value=(closed_coordinator, comment),
+                ), mock.patch.object(self.helper, "read_child_report", side_effect=reread_child):
+                    self.assertEqual(
+                        self.helper.validate_terminal_receipt(
+                            v2_root, plan["task_uid"], plan, candidate, evidence, receipt,
+                        ),
+                        receipt,
+                    )
+
+                v2_raw_delivery = (v2_fixture.receipt_root / "terminal-delivery-receipt.json").read_bytes()
+                v2_delivery_digest = hashlib.sha256(v2_raw_delivery).hexdigest()
+                self.assertEqual(
+                    v2_record["phase_receipt_sha256"]["post_merge_done"], v2_delivery_digest,
+                )
+                self.assertEqual(
+                    receipt["deliveries"][1]["selected_terminal_receipt_sha256"],
+                    v2_delivery_digest,
+                )
+                v2_map_saved = v2_fixture.mapping_path.read_bytes()
+                for label, mutate in (
+                    ("unknown protocol selector", lambda row: row["phase_receipt_type"].__setitem__(
+                        "post_merge_done", "oasis7_terminal_delivery_v9",
+                    )),
+                    ("changed raw receipt digest", lambda row: row["phase_receipt_sha256"].__setitem__(
+                        "post_merge_done", "0" * 64,
+                    )),
+                ):
+                    with self.subTest(v2_selector=label):
+                        v2_mutated_map = json.loads(v2_map_saved)
+                        mutate(v2_mutated_map["tasks"][v2_uid])
+                        v2_fixture.mapping_path.write_text(
+                            json.dumps(v2_mutated_map, sort_keys=True) + "\n", encoding="utf-8",
+                        )
+                        with mock.patch.dict(os.environ, v2_fixture.env()):
+                            with self.assertRaisesRegex(
+                                self.helper.ReceiptError, "not reconciled|proof readback",
+                            ):
+                                original_reader(v2_root, second, "main")
+                v2_fixture.mapping_path.write_bytes(v2_map_saved)
+
+                v1_after = {
+                    name: (v1_receipt_root / name).read_bytes() for name in v1_raw
+                }
+                self.assertEqual(v1_after, v1_raw)
+                self.assertEqual(
+                    (v2_fixture.receipt_root / "terminal-delivery-receipt.json").read_bytes(),
+                    v2_raw_delivery,
+                )
 
 
 if __name__ == "__main__":
