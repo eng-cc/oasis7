@@ -1294,12 +1294,41 @@ run_cargo_package_required_fixture() {
   local original_base_oid="$COMPARISON_OID"
   reset_smoke_branch_to_base
   write_project_trace
+  if [[ "$primary_package" == "oasis7_node" ]]; then
+    local observer_test_path="crates/oasis7_node/src/tests_observer_consensus_subscription.rs"
+    local observer_test_source="$SMOKE_WORKTREE/$observer_test_path"
+    if ! "$REAL_PYTHON" - "$observer_test_source" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+expected = '"/../oasis7/src/bin/oasis7_chain_runtime.rs"'
+raise SystemExit(0 if expected in source else 1)
+PY
+    then
+      echo "node package command fixture no longer contains its known cross-package source edge" >&2
+      return 1
+    fi
+    # This helper exercises prepare-task-pr command selection. The real
+    # cross-package edge remains covered by check-cargo-package-scope tests;
+    # replace only this source in the temporary fixture baseline so command
+    # projection is independent of that separate admission rule.
+    cat > "$observer_test_source" <<'EOF'
+// Fixture-only stand-in: the checker contract separately tests rejection of
+// node sources that include oasis7 package sources.
+#[test]
+fn package_command_fixture_placeholder() {}
+EOF
+  fi
   mkdir -p "$SMOKE_WORKTREE/.pm/github-project-sync"
   cat > "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" <<EOF
 {"project":{"repo":"eng-cc/oasis7"},"tasks":{"$TASK_UID":{"issue_number":123,"issue_url":"https://github.com/eng-cc/oasis7/issues/123","owner_role":"tpm","priority":"P3","project_item_id":"PVTI_fixture","repository":"eng-cc/oasis7","primary_package":"$primary_package","status":"ready","workflow_phase":"verification","task_uid":"$TASK_UID","title":"$fixture_name package scope fixture","canonical_worktree":"$SMOKE_WORKTREE_CANONICAL","task_branch":"$SMOKE_BRANCH","default_branch":"main","worktree_hint":"$SMOKE_WORKTREE_CANONICAL","evidence_comments":["https://github.com/eng-cc/oasis7/issues/123#issuecomment-1001","https://github.com/eng-cc/oasis7/issues/123#issuecomment-1002"],"claim_verifications":[{"status":"verified"}] }},"version":1}
 EOF
   "$REAL_GIT" -C "$SMOKE_WORKTREE" add doc/engineering/project.md
   "$REAL_GIT" -C "$SMOKE_WORKTREE" add -f .pm/github-project-sync/tasks.json
+  if [[ "$primary_package" == "oasis7_node" ]]; then
+    "$REAL_GIT" -C "$SMOKE_WORKTREE" add "crates/oasis7_node/src/tests_observer_consensus_subscription.rs"
+  fi
   "$REAL_GIT" -C "$SMOKE_WORKTREE" \
     -c user.name="oasis7 smoke" \
     -c user.email="smoke@example.invalid" \
