@@ -115,6 +115,52 @@ path = "src/lib.rs"
         self._git(repo, "commit", "-qm", "fixture base")
         return repo, self._git(repo, "rev-parse", "HEAD")
 
+    def _auxiliary_base(
+        self,
+        entries: object,
+        files: dict[str, str] | None = None,
+        protected_paths: list[str] | None = None,
+    ) -> tuple[Path, str]:
+        repo, _ = self._fixture()
+        policy_path = ".pm/cargo-package-scope-policy.json"
+        if protected_paths is not None:
+            policy = json.loads((repo / policy_path).read_text(encoding="utf-8"))
+            policy["protected_paths"] = protected_paths
+            self._write(repo, policy_path, json.dumps(policy, indent=2) + "\n")
+        self._write(
+            repo,
+            ".pm/cargo-package-auxiliary-files.json",
+            json.dumps(
+                {
+                    "schema": "oasis7-cargo-package-auxiliary-files/v1",
+                    "auxiliary_files": entries,
+                },
+                indent=2,
+            )
+            + "\n",
+        )
+        for path, content in (files or {}).items():
+            self._write(repo, path, content)
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "register trusted auxiliary file paths")
+        return repo, self._git(repo, "rev-parse", "HEAD")
+
+    def _assert_invalid_auxiliary_base(
+        self,
+        entries: object,
+        protected_paths: list[str] | None = None,
+    ) -> None:
+        repo, base = self._auxiliary_base(entries, protected_paths=protected_paths)
+        result = self._run_checker(repo, base, base, "auto")
+        combined = (result.stdout + "\n" + result.stderr).lower()
+        self.assertNotEqual(
+            0,
+            result.returncode,
+            f"expected invalid auxiliary registry rejection; stdout={result.stdout!r} stderr={result.stderr!r}",
+        )
+        self.assertNotIn("cargo_metadata_unavailable", combined, combined)
+        self.assertNotIn("git_range_unavailable", combined, combined)
+
     def _head(self, repo: Path, mutate: Callable[[Path], None], message: str) -> str:
         mutate(repo)
         self._git(repo, "add", "-A")
@@ -195,6 +241,23 @@ path = "src/lib.rs"
             0,
             result.returncode,
             f"expected semantic scope rejection; stdout={result.stdout!r} stderr={result.stderr!r}",
+        )
+        self.assertNotIn("cargo_metadata_unavailable", combined, combined)
+        self.assertNotIn("git_range_unavailable", combined, combined)
+
+    def _assert_invalid_auxiliary_json(self, registry_text: str) -> None:
+        repo, _ = self._fixture()
+        registry_path = ".pm/cargo-package-auxiliary-files.json"
+        self._write(repo, registry_path, registry_text)
+        self._git(repo, "add", registry_path)
+        self._git(repo, "commit", "-qm", "write duplicate-key auxiliary registry fixture")
+        base = self._git(repo, "rev-parse", "HEAD")
+        result = self._run_checker(repo, base, base, "auto")
+        combined = (result.stdout + "\n" + result.stderr).lower()
+        self.assertNotEqual(
+            0,
+            result.returncode,
+            f"expected duplicate-key policy rejection; stdout={result.stdout!r} stderr={result.stderr!r}",
         )
         self.assertNotIn("cargo_metadata_unavailable", combined, combined)
         self.assertNotIn("git_range_unavailable", combined, combined)
@@ -460,6 +523,64 @@ path = "src/lib.rs"
     def test_standalone_cargo_generated_lock_for_admitted_path_edge_is_allowed(self) -> None:
         repo, base = self._standalone_fixture()
         self._assert_allowed(repo, base, "alpha", self._add_standalone_lock_for_normal_path_edge)
+
+    def test_registered_auxiliary_change_with_valid_standalone_lock_change_is_allowed(self) -> None:
+        repo, _ = self._standalone_fixture()
+        self._write(
+            repo,
+            ".pm/cargo-package-auxiliary-files.json",
+            json.dumps(
+                {
+                    "schema": "oasis7-cargo-package-auxiliary-files/v1",
+                    "auxiliary_files": [
+                        {"path": "scripts/local-signer/helper.py", "package": "alpha"}
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+        )
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "register trusted signer auxiliary path")
+        base = self._git(repo, "rev-parse", "HEAD")
+
+        def mutate(root: Path) -> None:
+            self._add_standalone_lock_for_normal_path_edge(root)
+            self._write(root, "scripts/local-signer/helper.py", "print('registered')\n")
+
+        self._assert_allowed(repo, base, "alpha", mutate)
+
+    def test_registered_auxiliary_change_does_not_allow_unrelated_standalone_lock_change(self) -> None:
+        repo, _ = self._standalone_fixture()
+        self._write(
+            repo,
+            ".pm/cargo-package-auxiliary-files.json",
+            json.dumps(
+                {
+                    "schema": "oasis7-cargo-package-auxiliary-files/v1",
+                    "auxiliary_files": [
+                        {"path": "scripts/local-signer/helper.py", "package": "alpha"}
+                    ],
+                },
+                indent=2,
+            )
+            + "\n",
+        )
+        self._git(repo, "add", "-A")
+        self._git(repo, "commit", "-qm", "register trusted signer auxiliary path")
+        base = self._git(repo, "rev-parse", "HEAD")
+
+        def mutate(root: Path) -> None:
+            self._add_standalone_lock_for_normal_path_edge(root)
+            self._write(root, "scripts/local-signer/helper.py", "print('registered')\n")
+            lock = root / "tools/runner/Cargo.lock"
+            lock.write_text(
+                lock.read_text(encoding="utf-8")
+                + '\n[[package]]\nname = "unrelated"\nversion = "9.9.9"\n',
+                encoding="utf-8",
+            )
+
+        self._assert_rejected(repo, base, "alpha", mutate, "unattributable_lock_change")
 
     def test_standalone_lock_reachable_transitive_identity_mismatch_is_rejected(self) -> None:
         repo, base = self._standalone_transitive_fixture()
@@ -1574,6 +1695,211 @@ path = "src/lib.rs"
             (root / "shared/common.rs").write_text("pub const SHARED: u8 = 2;\n", encoding="utf-8")
 
         self._assert_rejected(repo, base, "alpha", mutate, "ambiguous_package_attribution")
+
+    def test_registered_auxiliary_files_cover_add_modify_delete_and_rename(self) -> None:
+        cases = [
+            (
+                "add",
+                [{"path": "scripts/local-signer/add.py", "package": "alpha"}],
+                {},
+                lambda root: self._write(root, "scripts/local-signer/add.py", "print('added')\n"),
+            ),
+            (
+                "modify",
+                [{"path": "doc/local-signer/operations.md", "package": "alpha"}],
+                {"doc/local-signer/operations.md": "before\n"},
+                lambda root: self._write(root, "doc/local-signer/operations.md", "after\n"),
+            ),
+            (
+                "delete",
+                [{"path": "scripts/local-signer/obsolete.py", "package": "alpha"}],
+                {"scripts/local-signer/obsolete.py": "print('obsolete')\n"},
+                lambda root: (root / "scripts/local-signer/obsolete.py").unlink(),
+            ),
+            (
+                "rename",
+                [
+                    {"path": "scripts/local-signer/old-name.py", "package": "alpha"},
+                    {"path": "scripts/local-signer/new-name.py", "package": "alpha"},
+                ],
+                {"scripts/local-signer/old-name.py": "print('same bytes')\n"},
+                lambda root: (root / "scripts/local-signer/old-name.py").rename(
+                    root / "scripts/local-signer/new-name.py"
+                ),
+            ),
+        ]
+        for operation, entries, files, change_auxiliary in cases:
+            with self.subTest(operation=operation):
+                repo, base = self._auxiliary_base(entries, files)
+
+                def mutate(root: Path, change_auxiliary=change_auxiliary) -> None:
+                    self._write(root, "crates/alpha/src/lib.rs", "pub fn alpha() { println!(\"changed\"); }\n")
+                    change_auxiliary(root)
+
+                self._assert_allowed(repo, base, "alpha", mutate)
+
+    def test_unregistered_auxiliary_sibling_is_not_covered_by_an_exact_entry(self) -> None:
+        repo, base = self._auxiliary_base(
+            [{"path": "scripts/local-signer/package-release.py", "package": "alpha"}]
+        )
+
+        def mutate(root: Path) -> None:
+            self._write(root, "crates/alpha/src/lib.rs", "pub fn alpha() { println!(\"changed\"); }\n")
+            self._write(root, "scripts/local-signer/package-release.py", "print('registered')\n")
+            self._write(root, "scripts/local-signer/unregistered-sibling.py", "print('unregistered')\n")
+
+        self._assert_rejected(repo, base, "alpha", mutate, "ambiguous_package_attribution")
+
+    def test_head_only_auxiliary_registration_cannot_self_authorize(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            self._write(root, "crates/alpha/src/lib.rs", "pub fn alpha() { println!(\"changed\"); }\n")
+            self._write(root, "scripts/local-signer/installer.py", "print('installer')\n")
+            registry_path = root / ".pm/cargo-package-auxiliary-files.json"
+            registry_path.write_text(
+                json.dumps(
+                    {
+                        "schema": "oasis7-cargo-package-auxiliary-files/v1",
+                        "auxiliary_files": [
+                            {"path": "scripts/local-signer/installer.py", "package": "alpha"}
+                        ],
+                    },
+                    indent=2,
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+
+        self._assert_rejected(repo, base, "alpha", mutate, "policy_self_modification")
+
+    def test_malformed_conflicting_unknown_and_reserved_auxiliary_registrations_fail_closed(self) -> None:
+        cases = [
+            ("registry must be a list", {"path": "scripts/setup.py", "package": "alpha"}),
+            ("entry must have exact fields", [{"path": "scripts/setup.py"}]),
+            ("entry cannot add authority fields", [{"path": "scripts/setup.py", "package": "alpha", "owner": "beta"}]),
+            ("parent traversal", [{"path": "../outside.py", "package": "alpha"}]),
+            ("absolute path", [{"path": "/outside.py", "package": "alpha"}]),
+            ("non-normalized path", [{"path": "scripts/./setup.py", "package": "alpha"}]),
+            ("glob path", [{"path": "scripts/*.py", "package": "alpha"}]),
+            ("unknown package", [{"path": "scripts/setup.py", "package": "missing"}]),
+            (
+                "duplicate path",
+                [
+                    {"path": "scripts/setup.py", "package": "alpha"},
+                    {"path": "scripts/setup.py", "package": "alpha"},
+                ],
+            ),
+            (
+                "conflicting path owners",
+                [
+                    {"path": "scripts/setup.py", "package": "alpha"},
+                    {"path": "scripts/setup.py", "package": "beta"},
+                ],
+            ),
+            ("Cargo-owned path cannot be remapped", [{"path": "crates/beta/src/lib.rs", "package": "alpha"}]),
+            ("scope policy path", [{"path": ".pm/cargo-package-scope-policy.json", "package": "alpha"}]),
+            ("auxiliary registry path", [{"path": ".pm/cargo-package-auxiliary-files.json", "package": "alpha"}]),
+            ("GitHub workflow path", [{"path": ".github/workflows/rust.yml", "package": "alpha"}]),
+            ("agent role path", [{"path": ".agents/roles/tpm.md", "package": "alpha"}]),
+            ("Codex adapter path", [{"path": ".codex/agents/tpm.toml", "package": "alpha"}]),
+            ("PM evidence path", [{"path": ".pm/tasks/example.execution.md", "package": "alpha"}]),
+            ("scope checker path", [{"path": "scripts/pm/check-cargo-package-scope", "package": "alpha"}]),
+            ("required CI gate entrypoint", [{"path": "scripts/ci-tests.sh", "package": "alpha"}]),
+            ("required scope planner config", [{"path": "scripts/ci-required-scope.v2.json", "package": "alpha"}]),
+            ("required scope planner Python entrypoint", [{"path": "scripts/plan-rust-required-scope.py", "package": "alpha"}]),
+            ("required scope planner shell entrypoint", [{"path": "scripts/plan-rust-required-scope.sh", "package": "alpha"}]),
+            ("required scope planner config path", [{"path": "scripts/plan-rust-required-scope.json", "package": "alpha"}]),
+            ("PR preparation path", [{"path": "scripts/prepare-task-pr.sh", "package": "alpha"}]),
+            (
+                "canonical workflow source path",
+                [{"path": "doc/engineering/workflow/source-of-truth.md", "package": "alpha"}],
+            ),
+        ]
+        for label, entries in cases:
+            with self.subTest(case=label):
+                self._assert_invalid_auxiliary_base(entries)
+
+    def test_registered_auxiliary_path_cannot_remap_unowned_rust_source(self) -> None:
+        repo, base = self._auxiliary_base(
+            [{"path": "shared/common.rs", "package": "alpha"}]
+        )
+
+        def mutate(root: Path) -> None:
+            self._write(root, "crates/alpha/src/lib.rs", "pub fn alpha() { println!(\"changed\"); }\n")
+            self._write(root, "shared/common.rs", "pub const SHARED: u8 = 2;\n")
+
+        self._assert_rejected(repo, base, "alpha", mutate, "ambiguous_package_attribution")
+
+    def test_protected_path_rejection_precedes_registered_auxiliary_attribution(self) -> None:
+        repo, base = self._auxiliary_base(
+            [{"path": "doc/local-signer/release.md", "package": "alpha"}],
+            {
+                "doc/local-signer/release.md": "before\n",
+                "ops/protected.md": "before\n",
+            },
+            protected_paths=[".pm/cargo-package-scope-policy.json", "ops/protected.md"],
+        )
+
+        def mutate(root: Path) -> None:
+            self._write(root, "crates/alpha/src/lib.rs", "pub fn alpha() { println!(\"changed\"); }\n")
+            self._write(root, "doc/local-signer/release.md", "after\n")
+            self._write(root, "ops/protected.md", "after\n")
+
+        self._assert_rejected(repo, base, "alpha", mutate, "policy_self_modification")
+
+    def test_auxiliary_attribution_does_not_allow_a_second_business_package(self) -> None:
+        repo, base = self._auxiliary_base(
+            [{"path": "scripts/local-signer/helper.py", "package": "alpha"}]
+        )
+
+        def mutate(root: Path) -> None:
+            self._write(root, "crates/alpha/src/lib.rs", "pub fn alpha() { println!(\"changed\"); }\n")
+            self._write(root, "crates/beta/src/lib.rs", "pub fn beta() { println!(\"changed\"); }\n")
+            self._write(root, "scripts/local-signer/helper.py", "print('helper')\n")
+
+        self._assert_rejected(repo, base, "alpha", mutate, "multiple_business_packages")
+
+    def test_auxiliary_rename_endpoints_must_resolve_to_the_same_package(self) -> None:
+        repo, base = self._auxiliary_base(
+            [
+                {"path": "scripts/local-signer/old-name.py", "package": "alpha"},
+                {"path": "scripts/local-signer/new-name.py", "package": "beta"},
+            ],
+            {"scripts/local-signer/old-name.py": "print('same bytes')\n"},
+        )
+
+        def mutate(root: Path) -> None:
+            self._write(root, "crates/alpha/src/lib.rs", "pub fn alpha() { println!(\"changed\"); }\n")
+            (root / "scripts/local-signer/old-name.py").rename(
+                root / "scripts/local-signer/new-name.py"
+            )
+
+        self._assert_rejected_behavior(repo, base, "alpha", mutate)
+
+    def test_auxiliary_registration_cannot_claim_a_protected_path(self) -> None:
+        self._assert_invalid_auxiliary_base(
+            [{"path": "ops/protected.md", "package": "alpha"}],
+            protected_paths=[".pm/cargo-package-scope-policy.json", "ops/protected.md"],
+        )
+
+    def test_duplicate_json_auxiliary_registry_or_member_keys_fail_closed(self) -> None:
+        policies = [
+            (
+                "duplicate registry key",
+                '{"schema":"oasis7-cargo-package-auxiliary-files/v1",'
+                '"auxiliary_files":[],"auxiliary_files":[]}\n',
+            ),
+            (
+                "duplicate member key",
+                '{"schema":"oasis7-cargo-package-auxiliary-files/v1",'
+                '"auxiliary_files":[{"path":"scripts/first.py","path":"scripts/second.py",'
+                '"package":"alpha"}]}\n',
+            ),
+        ]
+        for label, policy_text in policies:
+            with self.subTest(case=label):
+                self._assert_invalid_auxiliary_json(policy_text)
 
     def test_trusted_policy_self_modification_cannot_self_approve(self) -> None:
         repo, base = self._fixture()

@@ -89,7 +89,12 @@
   - Agent 对话、预设草稿和 Prompt/目标调整在产品层如何区分
   - 当前聊天入口、contextual command、Prompt profile 与协议怎样组织
   - 输入法、回车发送、预设编辑这些问题该去哪里看
-- 说明: 产品层先读新产品专题；当前 SolidJS surface、权限、preview/apply/rollback 和自动化合同以手册与 semantic test API 为准。`viewer-egui-right-panel` 仅是旧 EGUI 历史追溯，不是当前布局或操作入口；Quote 属于 contextual Command/Console，Search 是 Targets 内 `#entity-search` 过滤能力。
+- 说明: 产品层先读新产品专题；当前 SolidJS surface、权限、preview/apply/rollback 和自动化合同以手册与 semantic test API 为准。文本复制、中英文、输入隔离、Chat IME 去重与稳定性要求由上述入口承接；Quote 属于 contextual Command/Console，Search 是 Targets 内 `#entity-search` 过滤能力。
+
+### 已吸收的旧 Viewer 实现追溯
+
+- EGUI 右侧面板、Chat IME 桥接、Chat Web 锁重入和产业图谱语义缩放共八份旧文档已退役。有效输入要求进入手册、semantic test API 与 Agent 对话/Prompt 产品专题；稳定性进入 Web Build Truth；产业关系与空间层级目标进入 Player-readable World Stage 和 Pixel-world player-readable rendering。
+- 固定历史基线为 `25fbcd7cf590c5e1b1248119d407cc7c34e8e634`（第三轮复审 main，含 PR #4154）。可用 `git show <该OID>:doc/world-simulator/viewer/<旧文件名>` 读取原文：`viewer-egui-right-panel`、`viewer-chat-ime-egui-bridge`、`viewer-chat-web-deadlock-resolution`、`viewer-industry-graph-semantic-zoom`，各含 `.prd.md` 与 `.design.md`；原任务/截图/实施证据从 GitHub task issue evidence 和 `.pm/github-project-sync/task-archive.jsonl` 追溯。固定基线是历史证据，不声明当前实现或全场景验收通过。
 
 ### 6. release / 体验收口
 - 首读入口:

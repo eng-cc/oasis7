@@ -15,7 +15,8 @@
 | 按文件名查找仍独立维护的专题文档 | `doc/scripts/prd.index.md` |
 | 理解治理主题如何归入稳定模块权威 | `doc/scripts/governance/README.md` |
 | 选择 pre-commit 当前契约或修复流程 | `doc/scripts/precommit/README.md` |
-| 区分 WASM 历史追溯与当前发布级 pipeline | `doc/scripts/wasm/README.md` |
+| 当前发布级 deterministic WASM pipeline | `doc/world-runtime/wasm/wasm-deterministic-build-pipeline.prd.md` |
+| 旧 nightly / build-std 参数、CI 约束和 hash 漂移背景（历史，不是发布入口） | `doc/world-runtime/wasm/evidence.md#historical-nightly-build-std-provenance` |
 | 执行仓库任务生命周期 | `doc/engineering/workflow/source-of-truth.md` |
 | 选择测试套件与本地验证路径 | `testing-manual.md` |
 
@@ -30,6 +31,6 @@
 ## 文档树约束
 
 - 模块根目录只保留 `README.md`、`prd.md`、`design.md`、GitHub task issue evidence comments 和 `prd.index.md`。
-- 新专题按 `governance/`、`precommit/`、`wasm/` 或既有匹配主题目录落位；不要在模块根目录新增专题文件。
+- 新脚本专题按 `governance/`、`precommit/` 或既有匹配主题目录落位；WASM 发布设计与任务归入 world-runtime canonical pipeline，历史参数更正只回写其 evidence，不恢复旧 nightly 路由。不要在模块根目录新增专题文件。
 - 新增、移动或退役仍需独立维护的专题时，同步更新对应专题 README 与 `doc/scripts/prd.index.md`。
 - 历史完成记录留在 GitHub task issue evidence comments 或 evidence 文档；已被当前规范吸收的一次性交接说明不再作为 live 导航入口。

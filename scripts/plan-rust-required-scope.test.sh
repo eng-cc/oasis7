@@ -88,6 +88,30 @@ assert_key_equals "$trusted_policy_output" run_rust_baseline false
 assert_key_equals "$trusted_policy_output" needs_python true
 assert_key_equals "$trusted_policy_output" needs_markdown true
 
+# Advisory scan contracts route only their exact registered files. Shared CI
+# policy/dispatcher changes and future unknown security files retain full scope.
+for codeql_path in \
+  .github/workflows/codeql.yml \
+  scripts/security/codeql-policy.json \
+  scripts/security/codeql-plan.py \
+  scripts/security/codeql-plan.test.py \
+  scripts/security/codeql-health.py \
+  scripts/security/codeql-health.test.py \
+  scripts/security/codeql-workflow.test.py \
+  scripts/security/codeql-acceptance.test.py; do
+  codeql_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh \
+    --event-name pull_request --changed-path "$codeql_path")"
+  assert_key_equals "$codeql_output" run_workflow_governance_contracts true
+  assert_key_equals "$codeql_output" selected_capabilities workflow_governance
+  assert_key_equals "$codeql_output" needs_rust_toolchain true
+  assert_reason_contains "$codeql_output" "codeql_advisory_contracts:$codeql_path"
+done
+for codeql_unknown_or_shared in scripts/security/future-security-tool.py scripts/ci-tests.sh scripts/ci-required-scope.v2.json scripts/plan-rust-required-scope.py .github/workflows/rust.yml; do
+  codeql_full_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh \
+    --event-name pull_request --changed-path "$codeql_unknown_or_shared")"
+  assert_key_equals "$codeql_full_output" scope full
+done
+
 trusted_doc_checker_output="$($ROOT_DIR/scripts/plan-rust-required-scope.sh \
   --event-name pull_request --changed-path scripts/product-doc-governance-check.test.py)"
 assert_key_equals "$trusted_doc_checker_output" run_doc_checker_contracts true
