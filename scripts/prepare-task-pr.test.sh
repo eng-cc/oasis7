@@ -1168,6 +1168,16 @@ run_cargo_package_required_fixture() {
   local output_json="$4"
   local original_base_oid="$COMPARISON_OID"
   reset_smoke_branch_to_base
+  if [[ "$fixture_name" == "node-required" ]]; then
+    # This wrapper fixture is about task-bound selection for a one-file node
+    # diff, not the separate cross-package include contract.  The trusted
+    # checker now resolves this historical manifest-relative include and
+    # correctly rejects it, so omit that unrelated source from this synthetic
+    # comparison-base snapshot.  The checker and its negative include tests
+    # remain unchanged; no repository source is edited.
+    "$REAL_GIT" -C "$SMOKE_WORKTREE" rm -q -- \
+      crates/oasis7_node/src/tests_observer_consensus_subscription.rs
+  fi
   write_project_trace
   mkdir -p "$SMOKE_WORKTREE/.pm/github-project-sync"
   cat > "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" <<EOF
