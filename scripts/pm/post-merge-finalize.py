@@ -18,24 +18,6 @@ _workflow_spec=importlib.util.spec_from_file_location("github_project_workflow",
 assert _workflow_spec and _workflow_spec.loader
 project_workflow=importlib.util.module_from_spec(_workflow_spec); _workflow_spec.loader.exec_module(project_workflow)
 
-def _ledger_transition(path: pathlib.Path, task_uid: str, effect: str, state: str, result: object = None) -> None:
-    """Persist stable operation_id intent/action/readback/committed transitions."""
-    operation_id=hashlib.sha256(f"{task_uid}:post_merge_done:{effect}".encode()).hexdigest()
-    def cas_transition(ledger: dict) -> None:
-        # The path lock is the compare-and-swap boundary: expected_revision is
-        # read and advanced in one transaction, so concurrent effects cannot
-        # overwrite another operation's state.
-        expected_revision=int(ledger.get("revision",0))
-        if ledger and ledger.get("task_uid") not in (None,task_uid): fail("finalizer ledger task identity conflict")
-        operations=ledger.setdefault("operations",{})
-        entry=operations.setdefault(effect,{"operation_id":operation_id,"effect":effect})
-        if entry.get("operation_id")!=operation_id: fail("finalizer ledger operation identity conflict")
-        entry[state]=True
-        if result is not None: entry["result"]=result
-        ledger.update(schema="oasis7_finalizer_ledger_v1",task_uid=task_uid,
-                      revision=expected_revision+1)
-    durable_store.transact_json(path,cas_transition,{})
-
 def _ledger_entry(path: pathlib.Path, effect: str) -> dict:
     return ((durable_store.recover_atomic_journal(path).get("operations") or {}).get(effect) or {})
 
@@ -82,39 +64,6 @@ def _project_readback(project_id: str, number: int, item_id: str, task_uid: str,
             or url.path.rstrip("/")!=f"/{repository}/issues/{issue_number}"):
         fail("bound Project item content does not match task issue identity")
     return {name:str(item.get(name) or "") for name in ("Status","PM Status","Workflow Phase")}
-
-def _ensure_terminal_project(mapping: dict, record: dict, ledger_path: pathlib.Path,
-                             task_uid: str) -> None:
-    """Read back and repair the exact bound Project item, even after terminal drift."""
-    if not record.get("project_item_id"):
-        return
-    sync_path=SCRIPT_DIR/"github-project-sync.py"
-    spec=importlib.util.spec_from_file_location("oasis7_finalizer_sync",sync_path)
-    if spec is None or spec.loader is None: fail("terminal Project sync unavailable")
-    sync=importlib.util.module_from_spec(spec); spec.loader.exec_module(sync)
-    project=mapping.get("project") or {}; owner=str(project.get("owner") or record["repository"].split("/",1)[0])
-    project_id,fields=sync.project_context(owner,int(project.get("number") or 1))
-    task={"task_uid":task_uid,"status":record.get("status"),"workflow_phase":"post_merge_done",
-          "owner_role":record.get("owner_role"),"module":record.get("module"),
-          "priority":record.get("priority"),"worktree_hint":record.get("worktree_hint"),
-          "pr_url":record.get("pr_url"),"pr_number":record.get("pr_number")}
-    expected={k:v for k,v in sync.project_field_values(task).items()
-              if k in {"Status","PM Status","Workflow Phase"}}
-    _ledger_transition(ledger_path,task_uid,"project_update","intent")
-    live=_project_readback(project_id,int(project.get("number") or 1),str(record["project_item_id"]),
-                           task_uid,int(record["issue_number"]),str(record["repository"]))
-    missing={name for name,value in expected.items() if live.get(name)!=value}
-    if missing:
-        _ledger_transition(ledger_path,task_uid,"project_update","action",{"fields":sorted(missing)})
-        updated,skipped=sync.update_fields(project_id,str(record["project_item_id"]),task,fields,
-                                           only_fields=missing)
-        if skipped or updated!=len(missing): fail("terminal Project fields were not fully persisted")
-        live=_project_readback(project_id,int(project.get("number") or 1),str(record["project_item_id"]),
-                               task_uid,int(record["issue_number"]),str(record["repository"]))
-    if any(live.get(name)!=value for name,value in expected.items()):
-        fail("terminal Project field readback mismatch")
-    _ledger_transition(ledger_path,task_uid,"project_update","readback",live)
-    _ledger_transition(ledger_path,task_uid,"project_update","committed")
 
 def fail(message: str) -> None:
     raise SystemExit(f"post-merge-finalize: {message}")
@@ -176,178 +125,219 @@ def _validate_cleanup_intent(terminal_path: pathlib.Path, task_uid: str,
             or (resolution=="remote_ref_absent" and blocker.get("resolved_tip")!="")):
         fail("cleanup intent remote branch blocker resolution is malformed")
 
-def _write_terminal_tombstone(terminal_path: pathlib.Path, record: dict,
-                              terminal_digest: str) -> pathlib.Path:
-    """Publish the app-facing prohibition on recreating a finalized checkout."""
-    tombstone_path=terminal_path.with_name("terminal-tombstone.json")
-    tombstone={
-        "schema":"oasis7_terminal_tombstone_v1",
-        "task_uid":record.get("task_uid"),
-        "repository":record.get("repository"),
-        "issue_number":record.get("issue_number"),
-        "pr_number":record.get("pr_number"),
-        "canonical_worktree":record.get("canonical_worktree"),
-        "task_branch":record.get("task_branch"),
-        "workflow_phase":"post_merge_done",
-        "terminal_receipt_sha256":terminal_digest,
-        "checkout_recreation_forbidden":True,
-    }
-    durable_store.replace_json(tombstone_path,tombstone)
-    return tombstone_path
-
-def _write_terminal_locked(root: pathlib.Path, task_uid: str, terminal_receipt_path: pathlib.Path) -> int:
-    """Self-validating terminal authority; no prevalidated object is accepted."""
-    root=pathlib.Path(root).resolve(); path=root/".pm/github-project-sync/tasks.json"
-    canonical=subprocess.run([sys.executable,str(CANONICAL_ROOT_HELPER),"--default-worktree",str(root),
-        "--task-uid",task_uid,"--create","--path",str(terminal_receipt_path),"--name","terminal-cleanup-receipt.json"],text=True,capture_output=True)
-    if canonical.returncode: fail(canonical.stderr.strip() or "noncanonical terminal receipt")
-    terminal_receipt_path=pathlib.Path(canonical.stdout.strip())
-    lock=durable_store.mapping_lock_path(path)
-    lock_handle=lock.open("a+b")
-    ensure_lock_byte(lock_handle)
-    fcntl.flock(lock_handle.fileno(),fcntl.LOCK_EX)
-    lock_fd=lock_handle.fileno()
-    mapping=json.loads(path.read_text(encoding="utf-8")); record=(mapping.get("tasks") or {}).get(task_uid) or {}
-    terminal_path=pathlib.Path(terminal_receipt_path)
-    if not terminal_path.is_absolute(): fail("terminal cleanup receipt path must be absolute")
-    canonical_worktree=pathlib.Path(str(record.get("canonical_worktree") or root)).resolve()
-    try:
-        terminal_path.resolve().relative_to(canonical_worktree)
-    except ValueError:
-        pass
-    else:
-        fail("terminal cleanup receipt must be outside the canonical task worktree")
-    path_check=subprocess.run([sys.executable,str(SCRIPT_DIR/"validate-durable-terminal-path.py"),
-        "--mapping",str(path),"--task-uid",task_uid,"--path",str(terminal_path),
-        "--label","terminal cleanup receipt"],text=True,capture_output=True)
-    if path_check.returncode: fail(path_check.stderr.strip() or "invalid durable terminal receipt path")
-    terminal_path=pathlib.Path(path_check.stdout.strip()); terminal=json.loads(terminal_path.read_text(encoding="utf-8"))
-    ledger_path=terminal_path.with_name("finalizer-ledger.json")
-    terminal_digest=hashlib.sha256(terminal_path.read_bytes()).hexdigest()
-    expected={"task_uid":task_uid,"repository":record.get("repository"),
-              "issue_number":record.get("issue_number"),"pr_number":record.get("pr_number")}
-    if terminal.get("receipt_type")!="oasis7_terminal_cleanup" or terminal.get("issuer")!="post-merge-cleanup": fail("invalid terminal receipt")
-    for key,value in expected.items():
-        if str(terminal.get(key))!=str(value): fail(f"terminal receipt {key} mismatch")
-    recorded_worktree = pathlib.Path(str(record.get("canonical_worktree") or "")).expanduser().resolve()
-    receipt_worktree = terminal.get("worktree")
-    if not receipt_worktree:
-        fail("terminal receipt worktree identity missing")
-    if pathlib.Path(str(receipt_worktree)).expanduser().resolve() != recorded_worktree:
-        fail("terminal receipt worktree identity mismatch")
-    if not terminal.get("branch"):
-        fail("terminal receipt branch identity missing")
-    if str(terminal.get("branch")) != str(record.get("task_branch") or ""):
-        fail("terminal receipt branch identity mismatch")
-    if not record.get("merge_receipt") or not (record.get("phase_receipts") or {}).get("main_sync"): fail("terminal receipt disagrees with incomplete task receipt chain")
-    fixture_legacy=str(record.get("repository") or "").startswith("fixture/") and not record.get("merge_receipt_sha256")
-    if not fixture_legacy and terminal.get("merge_receipt_sha256") != record.get("merge_receipt_sha256"): fail("merge_receipt_sha256 mismatch against stored merge receipt")
-    stored_main=(record.get("phase_receipt_sha256") or {}).get("main_sync")
-    if not fixture_legacy and terminal.get("main_sync_receipt_sha256") != stored_main: fail("main_sync_receipt_sha256 mismatch against stored main-sync receipt")
-    stored_terminal_digest=(record.get("phase_receipt_sha256") or {}).get("post_merge_done")
-    already_finalized=(record.get("workflow_phase")=="post_merge_done" and
-        (record.get("phase_receipts") or {}).get("post_merge_done")==terminal and
-        (stored_terminal_digest==terminal_digest or (not stored_terminal_digest and fixture_legacy)))
-    _validate_cleanup_intent(terminal_path,task_uid,record,terminal,already_finalized)
-    # The lock protects the validation snapshot only. Remote effects use the
-    # durable ledger and never hold the mapping lock across a network call.
-    lock_handle.close(); lock_fd=-1
-    if already_finalized:
-        _ensure_terminal_project(mapping,record,ledger_path,task_uid)
-        _ledger_transition(ledger_path,task_uid,"issue_close","intent")
-        issue=json.loads(subprocess.check_output(["gh","issue","view",str(record["issue_number"]),"-R",record["repository"],"--json","state"],text=True))
-        _ledger_transition(ledger_path,task_uid,"issue_close","readback",issue)
-        if str(issue.get("state")).upper()!="CLOSED":
-            _ledger_transition(ledger_path,task_uid,"issue_close","action")
-            subprocess.run(["gh","issue","close",str(record["issue_number"]),"-R",record["repository"],"--reason","completed"],check=True)
-            issue=json.loads(subprocess.check_output(["gh","issue","view",str(record["issue_number"]),"-R",record["repository"],"--json","state"],text=True))
-            _ledger_transition(ledger_path,task_uid,"issue_close","readback",issue)
-            if str(issue.get("state")).upper()!="CLOSED": fail("issue close live readback mismatch")
-        _ledger_transition(ledger_path,task_uid,"issue_close","committed")
-        _write_terminal_tombstone(terminal_path,record,terminal_digest)
-        print(json.dumps({"status":"already_finalized","task_uid":task_uid},sort_keys=True)); return 0
-    if record.get("workflow_phase")!="main_sync": fail("terminal commit requires main_sync")
-    receipt=terminal; digest=terminal_digest
-    phase="post_merge_done"; record["workflow_phase"]=phase
-    record.setdefault("phase_receipts",{})[phase]=receipt
-    record.setdefault("phase_receipt_sha256",{})[phase]=digest
-    _ensure_terminal_project(mapping,record,ledger_path,task_uid)
-    comment_operation_id=hashlib.sha256(f"{task_uid}:post_merge_done:evidence_comment".encode()).hexdigest()
-    merge_receipt_digest = terminal.get("merge_receipt_sha256") or record.get("merge_receipt_sha256") or ""
-    main_sync_receipt_digest = terminal.get("main_sync_receipt_sha256") or (record.get("phase_receipt_sha256") or {}).get("main_sync") or ""
-    body=("<!-- oasis7-pm-evidence -->\n"+f"Operation-ID: {comment_operation_id}\nTask UID: {task_uid}\nEvidence Phase: {phase}\n"
-          "Receipt Chain Version: 1\nReceipt Type: oasis7_terminal_cleanup\nReceipt Issuer: post-merge-cleanup\n"
-          f"PR Number: {record.get('pr_number')}\nPR URL: {record.get('pr_url')}\n"
-          f"Merge Receipt SHA256: {merge_receipt_digest}\n"
-          f"Main Sync Receipt SHA256: {main_sync_receipt_digest}\n"
-          f"Terminal Receipt SHA256: {terminal_digest}\n"
-          f"Receipt Chain Digest: {receipt_chain_digest(task_uid, record.get('repository'), record.get('issue_number'), record.get('pr_number'), record.get('pr_url'), merge_receipt_digest, main_sync_receipt_digest, terminal_digest)}\n"
-          "Role: tpm\nCompleted: receipt-bound terminal finalization.\n")
-    with tempfile.NamedTemporaryFile("w",encoding="utf-8",delete=False,dir="/tmp") as evidence:
-        evidence.write(body); evidence_path=evidence.name
-    try:
-        entry=_ledger_entry(ledger_path,"evidence_comment")
-        comment=str(entry.get("result") or "") if entry.get("committed") else ""
-        if not comment and entry.get("action"):
-            comment=_reconcile_comment(record,comment_operation_id,body)
-        if not comment:
-            _ledger_transition(ledger_path,task_uid,"evidence_comment","intent")
-            _ledger_transition(ledger_path,task_uid,"evidence_comment","action")
-            # The create response/URL is transport output, never readback
-            # authority.  Reconcile the live paginated body unconditionally.
-            subprocess.check_output(["gh","issue","comment",str(record["issue_number"]),"-R",record["repository"],
-                                     "--body-file",evidence_path],text=True)
-            comment=_reconcile_comment(record,comment_operation_id,body)
-            if not comment: fail("evidence comment live readback has no unique matching issue/body/Operation-ID")
-        _ledger_transition(ledger_path,task_uid,"evidence_comment","readback",comment)
-        record.setdefault("evidence_comments",[]).append(comment)
-        _ledger_transition(ledger_path,task_uid,"evidence_comment","committed")
-    finally: pathlib.Path(evidence_path).unlink(missing_ok=True)
-    def commit_terminal(latest: dict) -> None:
-        current=(latest.get("tasks") or {}).get(task_uid) or {}
-        for key in ("repository","issue_number","pr_number","canonical_worktree"):
-            if str(current.get(key)) != str(expected.get(key) if key in expected else record.get(key)):
-                fail(f"task identity drifted during terminal effects: {key}")
-        if current.get("workflow_phase") != "main_sync": fail("workflow phase drifted during terminal effects")
-        current["workflow_phase"]="post_merge_done"
-        current.setdefault("phase_receipts",{})["post_merge_done"]=receipt
-        current.setdefault("phase_receipt_sha256",{})["post_merge_done"]=digest
-        current.setdefault("evidence_comments",[])
-        for value in record.get("evidence_comments",[]):
-            if value not in current["evidence_comments"]: current["evidence_comments"].append(value)
-        latest.setdefault("tasks",{})[task_uid]=current
-    durable_store.transact_json(path,commit_terminal)
-    _ledger_transition(ledger_path,task_uid,"issue_close","intent")
-    _ledger_transition(ledger_path,task_uid,"issue_close","action")
-    subprocess.run(["gh","issue","close",str(record["issue_number"]),"-R",record["repository"],"--reason","completed"],check=True)
-    closed_issue=json.loads(subprocess.check_output(["gh","issue","view",str(record["issue_number"]),"-R",record["repository"],"--json","state"],text=True))
-    _ledger_transition(ledger_path,task_uid,"issue_close","readback",closed_issue)
-    if str(closed_issue.get("state")).upper()!="CLOSED": fail("issue close live readback mismatch")
-    _ledger_transition(ledger_path,task_uid,"issue_close","committed")
-    _write_terminal_tombstone(terminal_path,record,terminal_digest)
-    print(json.dumps({"status":"finalized","task_uid":task_uid},sort_keys=True)); return 0
-
 def _write_terminal(root: pathlib.Path, task_uid: str, terminal_receipt_path: pathlib.Path) -> int:
-    """Serialize terminal effects on one persistent task-scoped flock inode."""
-    root=pathlib.Path(root).resolve(); path=root/".pm/github-project-sync/tasks.json"
-    # One task-scoped singleton covers validation, every remote effect, ledger
-    # CAS transition, terminal mapping commit, and issue-close readback.
+    """Validate and serialize all v1 terminal effects from durable task truth."""
+    root=pathlib.Path(root).resolve()
+    if not re.fullmatch(r"task_[0-9a-f]{32}",task_uid): fail("invalid Task UID for terminal finalizer lock")
+    path=root/".pm/github-project-sync/tasks.json"
     finalizer_lock=path.with_name(f"{path.name}.{task_uid}.finalizer-lock")
     finalizer_lock.parent.mkdir(parents=True,exist_ok=True)
-    finalizer_lock_handle=finalizer_lock.open("a+b")
-    ensure_lock_byte(finalizer_lock_handle)
-    finalizer_lock_fd=finalizer_lock_handle.fileno()
-    try:
-        fcntl.flock(finalizer_lock_fd,fcntl.LOCK_EX)
-        return _write_terminal_locked(root,task_uid,terminal_receipt_path)
-    finally:
-        finalizer_lock_handle.close()
+    with finalizer_lock.open("a+b") as finalizer_lock_handle:
+        ensure_lock_byte(finalizer_lock_handle)
+        fcntl.flock(finalizer_lock_handle.fileno(),fcntl.LOCK_EX)
+
+        # Mutations are closures over the task identity and receipt state
+        # resolved below while this persistent task lock is held.
+        def ledger_transition(ledger_path: pathlib.Path, effect: str, state: str,
+                             result: object = None) -> None:
+            operation_id=hashlib.sha256(f"{task_uid}:post_merge_done:{effect}".encode()).hexdigest()
+            def cas_transition(ledger: dict) -> None:
+                expected_revision=int(ledger.get("revision",0))
+                if ledger and ledger.get("task_uid") not in (None,task_uid): fail("finalizer ledger task identity conflict")
+                operations=ledger.setdefault("operations",{})
+                entry=operations.setdefault(effect,{"operation_id":operation_id,"effect":effect})
+                if entry.get("operation_id")!=operation_id: fail("finalizer ledger operation identity conflict")
+                entry[state]=True
+                if result is not None: entry["result"]=result
+                ledger.update(schema="oasis7_finalizer_ledger_v1",task_uid=task_uid,
+                              revision=expected_revision+1)
+            durable_store.transact_json(ledger_path,cas_transition,{})
+
+        def ensure_terminal_project(mapping: dict, record: dict, ledger_path: pathlib.Path) -> None:
+            if not record.get("project_item_id"):
+                return
+            sync_path=SCRIPT_DIR/"github-project-sync.py"
+            spec=importlib.util.spec_from_file_location("oasis7_finalizer_sync",sync_path)
+            if spec is None or spec.loader is None: fail("terminal Project sync unavailable")
+            sync=importlib.util.module_from_spec(spec); spec.loader.exec_module(sync)
+            project=mapping.get("project") or {}; owner=str(project.get("owner") or record["repository"].split("/",1)[0])
+            project_id,fields=sync.project_context(owner,int(project.get("number") or 1))
+            task={"task_uid":task_uid,"status":record.get("status"),"workflow_phase":"post_merge_done",
+                  "owner_role":record.get("owner_role"),"module":record.get("module"),
+                  "priority":record.get("priority"),"worktree_hint":record.get("worktree_hint"),
+                  "pr_url":record.get("pr_url"),"pr_number":record.get("pr_number")}
+            expected_fields={k:v for k,v in sync.project_field_values(task).items()
+                             if k in {"Status","PM Status","Workflow Phase"}}
+            ledger_transition(ledger_path,"project_update","intent")
+            live=_project_readback(project_id,int(project.get("number") or 1),str(record["project_item_id"]),
+                                   task_uid,int(record["issue_number"]),str(record["repository"]))
+            missing={name for name,value in expected_fields.items() if live.get(name)!=value}
+            if missing:
+                ledger_transition(ledger_path,"project_update","action",{"fields":sorted(missing)})
+                updated,skipped=sync.update_fields(project_id,str(record["project_item_id"]),task,fields,
+                                                   only_fields=missing)
+                if skipped or updated!=len(missing): fail("terminal Project fields were not fully persisted")
+                live=_project_readback(project_id,int(project.get("number") or 1),str(record["project_item_id"]),
+                                       task_uid,int(record["issue_number"]),str(record["repository"]))
+            if any(live.get(name)!=value for name,value in expected_fields.items()):
+                fail("terminal Project field readback mismatch")
+            ledger_transition(ledger_path,"project_update","readback",live)
+            ledger_transition(ledger_path,"project_update","committed")
+
+        def write_tombstone(terminal_path: pathlib.Path, record: dict, terminal_digest: str) -> pathlib.Path:
+            tombstone_path=terminal_path.with_name("terminal-tombstone.json")
+            tombstone={"schema":"oasis7_terminal_tombstone_v1","task_uid":record.get("task_uid"),
+                "repository":record.get("repository"),"issue_number":record.get("issue_number"),
+                "pr_number":record.get("pr_number"),"canonical_worktree":record.get("canonical_worktree"),
+                "task_branch":record.get("task_branch"),"workflow_phase":"post_merge_done",
+                "terminal_receipt_sha256":terminal_digest,"checkout_recreation_forbidden":True}
+            durable_store.replace_json(tombstone_path,tombstone)
+            return tombstone_path
+
+        # Canonicalize the producer-selected file only after acquiring the
+        # singleton task lock; the helper creates no alternate receipt path.
+        canonical=subprocess.run([sys.executable,str(CANONICAL_ROOT_HELPER),"--default-worktree",str(root),
+            "--task-uid",task_uid,"--create","--path",str(terminal_receipt_path),"--name","terminal-cleanup-receipt.json"],text=True,capture_output=True)
+        if canonical.returncode: fail(canonical.stderr.strip() or "noncanonical terminal receipt")
+        terminal_receipt_path=pathlib.Path(canonical.stdout.strip())
+        mapping_lock=durable_store.mapping_lock_path(path)
+        mapping_lock_handle=mapping_lock.open("a+b")
+        ensure_lock_byte(mapping_lock_handle)
+        fcntl.flock(mapping_lock_handle.fileno(),fcntl.LOCK_EX)
+        try:
+            mapping=json.loads(path.read_text(encoding="utf-8")); record=(mapping.get("tasks") or {}).get(task_uid) or {}
+            terminal_path=pathlib.Path(terminal_receipt_path)
+            if not terminal_path.is_absolute(): fail("terminal cleanup receipt path must be absolute")
+            canonical_worktree=pathlib.Path(str(record.get("canonical_worktree") or root)).resolve()
+            try:
+                terminal_path.resolve().relative_to(canonical_worktree)
+            except ValueError:
+                pass
+            else:
+                fail("terminal cleanup receipt must be outside the canonical task worktree")
+            path_check=subprocess.run([sys.executable,str(SCRIPT_DIR/"validate-durable-terminal-path.py"),
+                "--mapping",str(path),"--task-uid",task_uid,"--path",str(terminal_path),
+                "--label","terminal cleanup receipt"],text=True,capture_output=True)
+            if path_check.returncode: fail(path_check.stderr.strip() or "invalid durable terminal receipt path")
+            terminal_path=pathlib.Path(path_check.stdout.strip()); terminal=json.loads(terminal_path.read_text(encoding="utf-8"))
+            ledger_path=terminal_path.with_name("finalizer-ledger.json")
+            terminal_digest=hashlib.sha256(terminal_path.read_bytes()).hexdigest()
+            expected={"task_uid":task_uid,"repository":record.get("repository"),
+                      "issue_number":record.get("issue_number"),"pr_number":record.get("pr_number")}
+            if terminal.get("receipt_type")!="oasis7_terminal_cleanup" or terminal.get("issuer")!="post-merge-cleanup": fail("invalid terminal receipt")
+            for key,value in expected.items():
+                if str(terminal.get(key))!=str(value): fail(f"terminal receipt {key} mismatch")
+            recorded_worktree=pathlib.Path(str(record.get("canonical_worktree") or "")).expanduser().resolve()
+            receipt_worktree=terminal.get("worktree")
+            if not receipt_worktree: fail("terminal receipt worktree identity missing")
+            if pathlib.Path(str(receipt_worktree)).expanduser().resolve()!=recorded_worktree:
+                fail("terminal receipt worktree identity mismatch")
+            if not terminal.get("branch"): fail("terminal receipt branch identity missing")
+            if str(terminal.get("branch"))!=str(record.get("task_branch") or ""):
+                fail("terminal receipt branch identity mismatch")
+            if not record.get("merge_receipt") or not (record.get("phase_receipts") or {}).get("main_sync"):
+                fail("terminal receipt disagrees with incomplete task receipt chain")
+            fixture_legacy=str(record.get("repository") or "").startswith("fixture/") and not record.get("merge_receipt_sha256")
+            if not fixture_legacy and terminal.get("merge_receipt_sha256")!=record.get("merge_receipt_sha256"):
+                fail("merge_receipt_sha256 mismatch against stored merge receipt")
+            stored_main=(record.get("phase_receipt_sha256") or {}).get("main_sync")
+            if not fixture_legacy and terminal.get("main_sync_receipt_sha256")!=stored_main:
+                fail("main_sync_receipt_sha256 mismatch against stored main-sync receipt")
+            stored_terminal_digest=(record.get("phase_receipt_sha256") or {}).get("post_merge_done")
+            already_finalized=(record.get("workflow_phase")=="post_merge_done" and
+                (record.get("phase_receipts") or {}).get("post_merge_done")==terminal and
+                (stored_terminal_digest==terminal_digest or (not stored_terminal_digest and fixture_legacy)))
+            _validate_cleanup_intent(terminal_path,task_uid,record,terminal,already_finalized)
+        finally:
+            fcntl.flock(mapping_lock_handle.fileno(),fcntl.LOCK_UN)
+            mapping_lock_handle.close()
+
+        if already_finalized:
+            ensure_terminal_project(mapping,record,ledger_path)
+            ledger_transition(ledger_path,"issue_close","intent")
+            issue=json.loads(subprocess.check_output(["gh","issue","view",str(record["issue_number"]),"-R",record["repository"],"--json","state"],text=True))
+            ledger_transition(ledger_path,"issue_close","readback",issue)
+            if str(issue.get("state")).upper()!="CLOSED":
+                ledger_transition(ledger_path,"issue_close","action")
+                subprocess.run(["gh","issue","close",str(record["issue_number"]),"-R",record["repository"],"--reason","completed"],check=True)
+                issue=json.loads(subprocess.check_output(["gh","issue","view",str(record["issue_number"]),"-R",record["repository"],"--json","state"],text=True))
+                ledger_transition(ledger_path,"issue_close","readback",issue)
+                if str(issue.get("state")).upper()!="CLOSED": fail("issue close live readback mismatch")
+            ledger_transition(ledger_path,"issue_close","committed")
+            write_tombstone(terminal_path,record,terminal_digest)
+            print(json.dumps({"status":"already_finalized","task_uid":task_uid},sort_keys=True)); return 0
+        if record.get("workflow_phase")!="main_sync": fail("terminal commit requires main_sync")
+        receipt=terminal; digest=terminal_digest
+        phase="post_merge_done"; record["workflow_phase"]=phase
+        record.setdefault("phase_receipts",{})[phase]=receipt
+        record.setdefault("phase_receipt_sha256",{})[phase]=digest
+        ensure_terminal_project(mapping,record,ledger_path)
+        comment_operation_id=hashlib.sha256(f"{task_uid}:post_merge_done:evidence_comment".encode()).hexdigest()
+        merge_receipt_digest=terminal.get("merge_receipt_sha256") or record.get("merge_receipt_sha256") or ""
+        main_sync_receipt_digest=terminal.get("main_sync_receipt_sha256") or (record.get("phase_receipt_sha256") or {}).get("main_sync") or ""
+        body=("<!-- oasis7-pm-evidence -->\n"+f"Operation-ID: {comment_operation_id}\nTask UID: {task_uid}\nEvidence Phase: {phase}\n"
+              "Receipt Chain Version: 1\nReceipt Type: oasis7_terminal_cleanup\nReceipt Issuer: post-merge-cleanup\n"
+              f"PR Number: {record.get('pr_number')}\nPR URL: {record.get('pr_url')}\n"
+              f"Merge Receipt SHA256: {merge_receipt_digest}\n"
+              f"Main Sync Receipt SHA256: {main_sync_receipt_digest}\n"
+              f"Terminal Receipt SHA256: {terminal_digest}\n"
+              f"Receipt Chain Digest: {receipt_chain_digest(task_uid,record.get('repository'),record.get('issue_number'),record.get('pr_number'),record.get('pr_url'),merge_receipt_digest,main_sync_receipt_digest,terminal_digest)}\n"
+              "Role: tpm\nCompleted: receipt-bound terminal finalization.\n")
+        with tempfile.NamedTemporaryFile("w",encoding="utf-8",delete=False,dir="/tmp") as evidence:
+            evidence.write(body); evidence_path=evidence.name
+        try:
+            entry=_ledger_entry(ledger_path,"evidence_comment")
+            if entry.get("committed"):
+                live_comment=_reconcile_comment(record,comment_operation_id,body)
+                recorded_comment=str(entry.get("result") or "")
+                if not live_comment or recorded_comment!=live_comment:
+                    fail("committed terminal evidence comment conflicts with unique live readback")
+                comment=live_comment
+            elif entry.get("action"):
+                live_comment=_reconcile_comment(record,comment_operation_id,body)
+                if not live_comment:
+                    fail("terminal evidence comment action is uncertain and has no exact live readback")
+                comment=live_comment
+            else:
+                ledger_transition(ledger_path,"evidence_comment","intent")
+                ledger_transition(ledger_path,"evidence_comment","action")
+                subprocess.check_output(["gh","issue","comment",str(record["issue_number"]),"-R",record["repository"],
+                                         "--body-file",evidence_path],text=True)
+                comment=_reconcile_comment(record,comment_operation_id,body)
+                if not comment: fail("evidence comment live readback has no unique matching issue/body/Operation-ID")
+            ledger_transition(ledger_path,"evidence_comment","readback",comment)
+            record.setdefault("evidence_comments",[]).append(comment)
+            ledger_transition(ledger_path,"evidence_comment","committed")
+        finally:
+            pathlib.Path(evidence_path).unlink(missing_ok=True)
+        def commit_terminal(latest: dict) -> None:
+            current=(latest.get("tasks") or {}).get(task_uid) or {}
+            for key in ("repository","issue_number","pr_number","canonical_worktree"):
+                if str(current.get(key))!=str(expected.get(key) if key in expected else record.get(key)):
+                    fail(f"task identity drifted during terminal effects: {key}")
+            if current.get("workflow_phase")!="main_sync": fail("workflow phase drifted during terminal effects")
+            current["workflow_phase"]="post_merge_done"
+            current.setdefault("phase_receipts",{})["post_merge_done"]=receipt
+            current.setdefault("phase_receipt_sha256",{})["post_merge_done"]=digest
+            current.setdefault("evidence_comments",[])
+            for value in record.get("evidence_comments",[]):
+                if value not in current["evidence_comments"]: current["evidence_comments"].append(value)
+            latest.setdefault("tasks",{})[task_uid]=current
+        durable_store.transact_json(path,commit_terminal)
+        ledger_transition(ledger_path,"issue_close","intent")
+        ledger_transition(ledger_path,"issue_close","action")
+        subprocess.run(["gh","issue","close",str(record["issue_number"]),"-R",record["repository"],"--reason","completed"],check=True)
+        closed_issue=json.loads(subprocess.check_output(["gh","issue","view",str(record["issue_number"]),"-R",record["repository"],"--json","state"],text=True))
+        ledger_transition(ledger_path,"issue_close","readback",closed_issue)
+        if str(closed_issue.get("state")).upper()!="CLOSED": fail("issue close live readback mismatch")
+        ledger_transition(ledger_path,"issue_close","committed")
+        write_tombstone(terminal_path,record,terminal_digest)
+        print(json.dumps({"status":"finalized","task_uid":task_uid},sort_keys=True)); return 0
 
 
-def _delivery_receipt_root(root: pathlib.Path, task_uid: str, *, create: bool) -> pathlib.Path:
+def _delivery_receipt_root(root: pathlib.Path, task_uid: str) -> pathlib.Path:
     command=[sys.executable,str(CANONICAL_ROOT_HELPER),"--default-worktree",str(root),
              "--task-uid",task_uid,"--json"]
-    if create: command.append("--create")
     try:
         payload=json.loads(subprocess.check_output(command,text=True,stderr=subprocess.PIPE))
         return pathlib.Path(payload["receipt_root"])
@@ -472,7 +462,7 @@ def _delivery_live_context(root: pathlib.Path, task_uid: str) -> dict:
     if not record.get("project_item_id") or not record.get("canonical_worktree") or not record.get("task_branch"):
         raise ValueError("canonical task Project/worktree/branch identity is incomplete")
 
-    receipt_root=_delivery_receipt_root(root,task_uid,create=False)
+    receipt_root=_delivery_receipt_root(root,task_uid)
     issue=read_issue(repository,issue_number)
     pr=read_pull_request(repository,pr_number)
     comments=read_comments(repository,issue_number)
@@ -727,15 +717,6 @@ def _validate_resumable_v2(context: dict) -> None:
             raise ValueError("selected v2 terminal tombstone conflicts with receipt")
 
 
-def _delivery_project_update(context: dict, ledger_path: pathlib.Path) -> None:
-    terminal_mapping=dict(context["mapping"])
-    terminal_record=dict(context["record"])
-    terminal_record["workflow_phase"]="post_merge_done"
-    terminal_mapping["tasks"]=dict(terminal_mapping.get("tasks") or {})
-    terminal_mapping["tasks"][context["task_uid"]]=terminal_record
-    _ensure_terminal_project(terminal_mapping,terminal_record,ledger_path,context["task_uid"])
-
-
 def _delivery_comment_readback(context: dict, body: str) -> dict | None:
     issue_url=f"https://github.com/{context['repository']}/issues/{context['issue_number']}"
     marker="<!-- oasis7-pm-evidence/v2 -->"
@@ -754,163 +735,209 @@ def _delivery_comment_readback(context: dict, body: str) -> dict | None:
     return exact[0] if exact else None
 
 
-def _delivery_create_comment(context: dict, body: str, ledger_path: pathlib.Path) -> dict:
-    task_uid=context["task_uid"]
-    entry=_ledger_entry(ledger_path,"evidence_comment")
-    comment=_delivery_comment_readback(context,body)
-    if entry.get("committed"):
-        result=entry.get("result") or {}
-        if (comment is None or result.get("comment_id")!=comment.get("id")
-                or result.get("comment_sha256")!=hashlib.sha256(body.encode("utf-8")).hexdigest()):
-            raise ValueError("terminal delivery finalizer ledger comment binding conflicts with live readback")
-        return comment
-    if entry.get("action"):
-        if comment is None:
-            # A lost response cannot be distinguished from a delayed GitHub
-            # write. Never post a second v2 marker under that uncertainty.
-            raise ValueError("terminal delivery comment action is uncertain and no exact comment is visible; manual reconciliation is required")
-        return comment
-    if comment is not None:
-        raise ValueError("terminal delivery comment exists without a recorded finalizer action")
-    _ledger_transition(ledger_path,task_uid,"evidence_comment","intent")
-    _ledger_transition(ledger_path,task_uid,"evidence_comment","action")
-    with tempfile.NamedTemporaryFile("w",encoding="utf-8",newline="",delete=False,dir="/tmp") as evidence:
-        evidence.write(body); evidence_path=evidence.name
-    try:
-        subprocess.check_output(["gh","issue","comment",str(context["issue_number"]),
-                                 "-R",context["repository"],"--body-file",evidence_path],text=True)
-    finally:
-        pathlib.Path(evidence_path).unlink(missing_ok=True)
-    # Requery every page. The create response is not evidence.
-    context["comments"]=read_comments(context["repository"],context["issue_number"])
-    comment=_delivery_comment_readback(context,body)
-    if comment is None:
-        raise ValueError("terminal delivery comment write has no unique live readback")
-    return comment
-
-
-def _delivery_commit_mapping(context: dict, receipt: dict, receipt_digest: str,
-                             comment: dict, comment_digest: str) -> None:
-    path=context["mapping_path"]; task_uid=context["task_uid"]
-    def commit(latest: dict) -> None:
-        current=(latest.get("tasks") or {}).get(task_uid)
-        if not isinstance(current,dict):
-            raise ValueError("canonical task disappeared during terminal delivery")
-        for key in ("repository","issue_number","pr_number","pr_url","canonical_worktree","task_branch","merge_receipt_sha256"):
-            if str(current.get(key))!=str(context["record"].get(key)):
-                raise ValueError(f"canonical task identity drifted during delivery: {key}")
-        if current.get("workflow_phase")=="post_merge_done":
-            selected=(current.get("phase_receipt_type") or {}).get("post_merge_done")
-            if selected!="oasis7_terminal_delivery":
-                raise ValueError("canonical task already selected another terminal protocol")
-            if ((current.get("phase_receipt_sha256") or {}).get("post_merge_done")!=receipt_digest
-                    or (current.get("phase_receipts") or {}).get("post_merge_done")!=receipt):
-                raise ValueError("canonical task terminal delivery selector conflicts with receipt")
-        elif current.get("workflow_phase") not in {"task_done","main_sync"}:
-            raise ValueError("canonical workflow phase drifted before delivery selector commit")
-        current["workflow_phase"]="post_merge_done"
-        current.setdefault("phase_receipts",{})["post_merge_done"]=receipt
-        current.setdefault("phase_receipt_type",{})["post_merge_done"]="oasis7_terminal_delivery"
-        current.setdefault("phase_receipt_sha256",{})["post_merge_done"]=receipt_digest
-        current.setdefault("phase_receipt_comment_id",{})["post_merge_done"]=comment["id"]
-        current.setdefault("phase_receipt_comment_sha256",{})["post_merge_done"]=comment_digest
-        current.setdefault("evidence_comments",[])
-        url=comment.get("html_url")
-        if url and url not in current["evidence_comments"]:
-            current["evidence_comments"].append(url)
-        latest.setdefault("tasks",{})[task_uid]=current
-    durable_store.transact_json(path,commit)
-
-
-def _write_delivery_tombstone(context: dict, receipt_digest: str) -> pathlib.Path:
-    path=context["receipt_root"]/"terminal-tombstone.json"
-    _,delivery=_load_json_object(context["receipt_root"]/"terminal-delivery-receipt.json","terminal delivery receipt")
-    expected={
-        "schema":"oasis7_terminal_tombstone_v1","task_uid":context["task_uid"],
-        "repository":context["repository"],"issue_number":context["issue_number"],
-        "pr_number":context["pr_number"],"canonical_worktree":delivery["worktree"],
-        "task_branch":delivery["branch"],"workflow_phase":"post_merge_done",
-        "terminal_receipt_sha256":receipt_digest,"checkout_recreation_forbidden":True,
-    }
-    if path.exists():
-        _,existing=_load_json_object(path,"terminal tombstone")
-        if existing!=expected:
-            raise ValueError("existing terminal delivery tombstone conflicts with receipt")
-    else:
-        durable_store.replace_json(path,expected)
-    return path
-
-
-def _write_delivery_locked(root: pathlib.Path, task_uid: str) -> dict:
-    context=_delivery_live_context(root,task_uid)
-    state=_delivery_status(context)
-    if state["status"]=="already_finalized":
-        print(json.dumps({k:v for k,v in state.items() if k!="proof"},sort_keys=True)); return state
-    # Canonical-root identity creation is an effect, so it follows read-only
-    # preflight and occurs only on the actual producer path.
-    context["receipt_root"]=_delivery_receipt_root(pathlib.Path(root).resolve(),task_uid,create=True)
-    receipt=_delivery_record(context)
-    receipt_path=context["receipt_root"]/"terminal-delivery-receipt.json"
-    if not receipt_path.exists():
-        durable_store.replace_json(receipt_path,receipt)
-    raw,stored_receipt=_load_json_object(receipt_path,"terminal delivery receipt")
-    if stored_receipt!=receipt:
-        raise ValueError("canonical terminal delivery receipt changed during finalization")
-    receipt_digest=hashlib.sha256(raw).hexdigest()
-    ledger_path=context["receipt_root"]/"finalizer-ledger.json"
-    _delivery_project_update(context,ledger_path)
-    # Refresh comments after the Project write and before the comment action.
-    context["comments"]=read_comments(context["repository"],context["issue_number"])
-    body=terminal_delivery_comment_body(receipt,receipt_digest)
-    comment=_delivery_create_comment(context,body,ledger_path)
-    comment_digest=hashlib.sha256(str(comment["body"]).encode("utf-8")).hexdigest()
-    _ledger_transition(ledger_path,task_uid,"evidence_comment","readback",
-                       {"comment_id":comment["id"],"comment_sha256":comment_digest})
-    _ledger_transition(ledger_path,task_uid,"evidence_comment","committed")
-    _delivery_commit_mapping(context,receipt,receipt_digest,comment,comment_digest)
-
-    issue=read_issue(context["repository"],context["issue_number"])
-    _ledger_transition(ledger_path,task_uid,"issue_close","intent")
-    issue_state=str(issue.get("state") or "").upper()
-    issue_reason=str(issue.get("state_reason",issue.get("stateReason","")) or "").lower()
-    if issue_state=="OPEN":
-        _ledger_transition(ledger_path,task_uid,"issue_close","action")
-        subprocess.run(["gh","issue","close",str(context["issue_number"]),"-R",context["repository"],"--reason","completed"],check=True)
-        issue=read_issue(context["repository"],context["issue_number"])
-        issue_state=str(issue.get("state") or "").upper()
-        issue_reason=str(issue.get("state_reason",issue.get("stateReason","")) or "").lower()
-    if issue_state!="CLOSED" or issue_reason!="completed":
-        raise ValueError("terminal delivery Issue close readback mismatch")
-    _ledger_transition(ledger_path,task_uid,"issue_close","readback",issue)
-    _ledger_transition(ledger_path,task_uid,"issue_close","committed")
-    _write_delivery_tombstone(context,receipt_digest)
-
-    latest=durable_store.recover_atomic_journal(context["mapping_path"])
-    latest_record=(latest.get("tasks") or {}).get(task_uid)
-    if not isinstance(latest_record,dict):
-        raise ValueError("canonical task mapping disappeared after terminal delivery")
-    project,project_item=_delivery_project_item(context["repository"],context["issue_number"],task_uid,latest_record)
-    pr=read_pull_request(context["repository"],context["pr_number"])
-    comments=read_comments(context["repository"],context["issue_number"])
-    live_repository=read_live_repository(context["repository"],context["merge_commit_oid"],receipt["observed_target_oid"])
-    proof=read_terminal_proof(root,task_uid,latest_record,live_issue=issue,
-        live_project_item=project_item,live_pr=pr,live_repository=live_repository,comments=comments)
-    if proof.get("protocol_version")!=2 or proof.get("status")!="passed":
-        raise ValueError("terminal delivery finalizer readback did not select v2 proof")
-    result={"status":"finalized","protocol_version":2,"task_uid":task_uid,
-            "terminal_receipt_sha256":receipt_digest,"comment_id":comment["id"]}
-    print(json.dumps(result,sort_keys=True)); return result
-
-
 def _write_delivery(root: pathlib.Path, task_uid: str) -> dict:
     root=pathlib.Path(root).resolve()
+    if not re.fullmatch(r"task_[0-9a-f]{32}",task_uid):
+        raise ValueError("invalid Task UID for delivery finalizer lock")
     mapping_path=root/".pm/github-project-sync/tasks.json"
     lock=mapping_path.with_name(f"{mapping_path.name}.{task_uid}.finalizer-lock")
     lock.parent.mkdir(parents=True,exist_ok=True)
     with lock.open("a+b") as handle:
         ensure_lock_byte(handle)
         fcntl.flock(handle.fileno(),fcntl.LOCK_EX)
-        return _write_delivery_locked(root,task_uid)
+        # Every mutation below is a closure over the lock-held canonical task
+        # context; importing this module exposes no context-taking v2 writer.
+        context=_delivery_live_context(root,task_uid)
+        state=_delivery_status(context)
+        if state["status"]=="already_finalized":
+            print(json.dumps({k:v for k,v in state.items() if k!="proof"},sort_keys=True)); return state
+        _delivery_partial_legacy_effects(context)
+
+        create_root=[sys.executable,str(CANONICAL_ROOT_HELPER),"--default-worktree",str(root),
+                     "--task-uid",task_uid,"--json","--create"]
+        try:
+            root_payload=json.loads(subprocess.check_output(create_root,text=True,stderr=subprocess.PIPE))
+            context["receipt_root"]=pathlib.Path(root_payload["receipt_root"])
+        except (OSError,subprocess.SubprocessError,KeyError,TypeError,json.JSONDecodeError) as exc:
+            raise ValueError("canonical delivery receipt root unavailable") from exc
+
+        def ledger_transition(effect: str, transition: str, result: object = None) -> None:
+            operation_id=hashlib.sha256(f"{task_uid}:post_merge_done:{effect}".encode()).hexdigest()
+            def cas_transition(ledger: dict) -> None:
+                expected_revision=int(ledger.get("revision",0))
+                if ledger and ledger.get("task_uid") not in (None,task_uid):
+                    raise ValueError("finalizer ledger task identity conflict")
+                operations=ledger.setdefault("operations",{})
+                entry=operations.setdefault(effect,{"operation_id":operation_id,"effect":effect})
+                if entry.get("operation_id")!=operation_id:
+                    raise ValueError("finalizer ledger operation identity conflict")
+                entry[transition]=True
+                if result is not None: entry["result"]=result
+                ledger.update(schema="oasis7_finalizer_ledger_v1",task_uid=task_uid,
+                              revision=expected_revision+1)
+            durable_store.transact_json(ledger_path,cas_transition,{})
+
+        def ensure_project_updated() -> None:
+            mapping=context["mapping"]
+            record=context["record"]
+            sync_path=SCRIPT_DIR/"github-project-sync.py"
+            spec=importlib.util.spec_from_file_location("oasis7_finalizer_sync",sync_path)
+            if spec is None or spec.loader is None:
+                raise ValueError("terminal Project sync unavailable")
+            sync=importlib.util.module_from_spec(spec); spec.loader.exec_module(sync)
+            project=mapping.get("project") or {}
+            owner=str(project.get("owner") or record["repository"].split("/",1)[0])
+            project_id,fields=sync.project_context(owner,int(project.get("number") or 1))
+            task={"task_uid":task_uid,"status":record.get("status"),"workflow_phase":"post_merge_done",
+                  "owner_role":record.get("owner_role"),"module":record.get("module"),
+                  "priority":record.get("priority"),"worktree_hint":record.get("worktree_hint"),
+                  "pr_url":record.get("pr_url"),"pr_number":record.get("pr_number")}
+            expected={k:v for k,v in sync.project_field_values(task).items()
+                      if k in {"Status","PM Status","Workflow Phase"}}
+            ledger_transition("project_update","intent")
+            live=_project_readback(project_id,int(project.get("number") or 1),
+                str(record["project_item_id"]),task_uid,int(record["issue_number"]),str(record["repository"]))
+            missing={name for name,value in expected.items() if live.get(name)!=value}
+            if missing:
+                ledger_transition("project_update","action",{"fields":sorted(missing)})
+                updated,skipped=sync.update_fields(project_id,str(record["project_item_id"]),task,fields,
+                                                   only_fields=missing)
+                if skipped or updated!=len(missing):
+                    raise ValueError("terminal Project fields were not fully persisted")
+                live=_project_readback(project_id,int(project.get("number") or 1),
+                    str(record["project_item_id"]),task_uid,int(record["issue_number"]),str(record["repository"]))
+            if any(live.get(name)!=value for name,value in expected.items()):
+                raise ValueError("terminal Project field readback mismatch")
+            ledger_transition("project_update","readback",live)
+            ledger_transition("project_update","committed")
+
+        def create_comment(body: str) -> dict:
+            entry=_ledger_entry(ledger_path,"evidence_comment")
+            comment=_delivery_comment_readback(context,body)
+            if entry.get("committed"):
+                result=entry.get("result") or {}
+                if (comment is None or result.get("comment_id")!=comment.get("id")
+                        or result.get("comment_sha256")!=hashlib.sha256(body.encode("utf-8")).hexdigest()):
+                    raise ValueError("terminal delivery finalizer ledger comment binding conflicts with live readback")
+                return comment
+            if entry.get("action"):
+                if comment is None:
+                    raise ValueError("terminal delivery comment action is uncertain and no exact comment is visible; manual reconciliation is required")
+                return comment
+            if comment is not None:
+                raise ValueError("terminal delivery comment exists without a recorded finalizer action")
+            ledger_transition("evidence_comment","intent")
+            ledger_transition("evidence_comment","action")
+            with tempfile.NamedTemporaryFile("w",encoding="utf-8",newline="",delete=False,dir="/tmp") as evidence:
+                evidence.write(body); evidence_path=evidence.name
+            try:
+                subprocess.check_output(["gh","issue","comment",str(context["issue_number"]),
+                    "-R",context["repository"],"--body-file",evidence_path],text=True)
+            finally:
+                pathlib.Path(evidence_path).unlink(missing_ok=True)
+            context["comments"]=read_comments(context["repository"],context["issue_number"])
+            comment=_delivery_comment_readback(context,body)
+            if comment is None:
+                raise ValueError("terminal delivery comment write has no unique live readback")
+            return comment
+
+        def commit_mapping(receipt: dict, digest: str, comment: dict, comment_digest: str) -> None:
+            def commit(latest: dict) -> None:
+                current=(latest.get("tasks") or {}).get(task_uid)
+                if not isinstance(current,dict):
+                    raise ValueError("canonical task disappeared during terminal delivery")
+                for key in ("repository","issue_number","pr_number","pr_url","canonical_worktree","task_branch","merge_receipt_sha256"):
+                    if str(current.get(key))!=str(context["record"].get(key)):
+                        raise ValueError(f"canonical task identity drifted during delivery: {key}")
+                if current.get("workflow_phase")=="post_merge_done":
+                    selected=(current.get("phase_receipt_type") or {}).get("post_merge_done")
+                    if selected!="oasis7_terminal_delivery":
+                        raise ValueError("canonical task already selected another terminal protocol")
+                    if ((current.get("phase_receipt_sha256") or {}).get("post_merge_done")!=digest
+                            or (current.get("phase_receipts") or {}).get("post_merge_done")!=receipt):
+                        raise ValueError("canonical task terminal delivery selector conflicts with receipt")
+                elif current.get("workflow_phase") not in {"task_done","main_sync"}:
+                    raise ValueError("canonical workflow phase drifted before delivery selector commit")
+                current["workflow_phase"]="post_merge_done"
+                current.setdefault("phase_receipts",{})["post_merge_done"]=receipt
+                current.setdefault("phase_receipt_type",{})["post_merge_done"]="oasis7_terminal_delivery"
+                current.setdefault("phase_receipt_sha256",{})["post_merge_done"]=digest
+                current.setdefault("phase_receipt_comment_id",{})["post_merge_done"]=comment["id"]
+                current.setdefault("phase_receipt_comment_sha256",{})["post_merge_done"]=comment_digest
+                current.setdefault("evidence_comments",[])
+                url=comment.get("html_url")
+                if url and url not in current["evidence_comments"]:
+                    current["evidence_comments"].append(url)
+                latest.setdefault("tasks",{})[task_uid]=current
+            durable_store.transact_json(context["mapping_path"],commit)
+
+        def write_tombstone(receipt_digest: str) -> pathlib.Path:
+            path=context["receipt_root"]/"terminal-tombstone.json"
+            _,delivery=_load_json_object(context["receipt_root"]/"terminal-delivery-receipt.json","terminal delivery receipt")
+            expected={"schema":"oasis7_terminal_tombstone_v1","task_uid":task_uid,
+                "repository":context["repository"],"issue_number":context["issue_number"],
+                "pr_number":context["pr_number"],"canonical_worktree":delivery["worktree"],
+                "task_branch":delivery["branch"],"workflow_phase":"post_merge_done",
+                "terminal_receipt_sha256":receipt_digest,"checkout_recreation_forbidden":True}
+            if path.exists():
+                _,existing=_load_json_object(path,"terminal tombstone")
+                if existing!=expected:
+                    raise ValueError("existing terminal delivery tombstone conflicts with receipt")
+            else:
+                durable_store.replace_json(path,expected)
+            return path
+
+        # Resolve all authority while holding the task lock before any write.
+        receipt=_delivery_record(context)
+        receipt_path=context["receipt_root"]/"terminal-delivery-receipt.json"
+        if not receipt_path.exists():
+            durable_store.replace_json(receipt_path,receipt)
+        raw,stored_receipt=_load_json_object(receipt_path,"terminal delivery receipt")
+        if stored_receipt!=receipt:
+            raise ValueError("canonical terminal delivery receipt changed during finalization")
+        receipt_digest=hashlib.sha256(raw).hexdigest()
+        ledger_path=context["receipt_root"]/"finalizer-ledger.json"
+        ensure_project_updated()
+        context["comments"]=read_comments(context["repository"],context["issue_number"])
+        body=terminal_delivery_comment_body(receipt,receipt_digest)
+        comment=create_comment(body)
+        comment_digest=hashlib.sha256(str(comment["body"]).encode("utf-8")).hexdigest()
+        ledger_transition("evidence_comment","readback",
+                          {"comment_id":comment["id"],"comment_sha256":comment_digest})
+        ledger_transition("evidence_comment","committed")
+        commit_mapping(receipt,receipt_digest,comment,comment_digest)
+
+        issue=read_issue(context["repository"],context["issue_number"])
+        ledger_transition("issue_close","intent")
+        issue_state=str(issue.get("state") or "").upper()
+        issue_reason=str(issue.get("state_reason",issue.get("stateReason","")) or "").lower()
+        if issue_state=="OPEN":
+            ledger_transition("issue_close","action")
+            subprocess.run(["gh","issue","close",str(context["issue_number"]),"-R",context["repository"],"--reason","completed"],check=True)
+            issue=read_issue(context["repository"],context["issue_number"])
+            issue_state=str(issue.get("state") or "").upper()
+            issue_reason=str(issue.get("state_reason",issue.get("stateReason","")) or "").lower()
+        if issue_state!="CLOSED" or issue_reason!="completed":
+            raise ValueError("terminal delivery Issue close readback mismatch")
+        ledger_transition("issue_close","readback",issue)
+        ledger_transition("issue_close","committed")
+        write_tombstone(receipt_digest)
+
+        latest=durable_store.recover_atomic_journal(context["mapping_path"])
+        latest_record=(latest.get("tasks") or {}).get(task_uid)
+        if not isinstance(latest_record,dict):
+            raise ValueError("canonical task mapping disappeared after terminal delivery")
+        _,project_item=_delivery_project_item(context["repository"],context["issue_number"],task_uid,latest_record)
+        pr=read_pull_request(context["repository"],context["pr_number"])
+        comments=read_comments(context["repository"],context["issue_number"])
+        live_repository=read_live_repository(context["repository"],context["merge_commit_oid"],receipt["observed_target_oid"])
+        proof=read_terminal_proof(root,task_uid,latest_record,live_issue=issue,
+            live_project_item=project_item,live_pr=pr,live_repository=live_repository,comments=comments)
+        if proof.get("protocol_version")!=2 or proof.get("status")!="passed":
+            raise ValueError("terminal delivery finalizer readback did not select v2 proof")
+        result={"status":"finalized","protocol_version":2,"task_uid":task_uid,
+                "terminal_receipt_sha256":receipt_digest,"comment_id":comment["id"]}
+        print(json.dumps(result,sort_keys=True)); return result
 
 
 def _preflight_delivery(root: pathlib.Path, task_uid: str) -> dict:
