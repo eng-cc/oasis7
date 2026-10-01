@@ -1,0 +1,163 @@
+#!/usr/bin/env python3
+"""Read-only CodeQL health. API gaps remain unknown, never zero findings.
+
+Fixture input uses the same API-shaped records as the bounded live reader.
+This report is diagnostic data, not a merge receipt or scanning attestation.
+"""
+import argparse
+import datetime as dt
+import json
+import re
+import subprocess
+import sys
+
+UNITS = {"actions-repo": "actions", "python-repo": "python",
+         "javascript-repo": "javascript-typescript", "rust-repo": "rust"}
+
+
+def timestamp(value):
+    try:
+        result = dt.datetime.fromisoformat(value.replace("Z", "+00:00"))
+        return result if result.tzinfo else None
+    except (ValueError, TypeError, AttributeError):
+        return None
+
+
+def report(data, now, max_age_hours=24):
+    errors = list(data.get("errors", []))
+    identities = data.get("identity", {})
+    ref, sha = identities.get("ref"), identities.get("sha")
+    identity_valid = isinstance(ref, str) and ref.startswith("refs/") and bool(re.fullmatch(r"[0-9a-f]{40}", str(sha)))
+    if not identity_valid:
+        errors.append("missing or invalid requested ref/sha identity")
+    analyses = data.get("analyses")
+    jobs = data.get("jobs")
+    alerts = data.get("alerts")
+    units = []
+    for profile in ("default", "extended"):
+        for unit, language in UNITS.items():
+            category = f"oasis7/{unit}/{profile}"
+            matches = [a for a in (analyses or []) if identity_valid and
+                       a.get("category") == category and a.get("ref") == ref and
+                       a.get("commit_sha") == sha and a.get("tool", {}).get("name") == "CodeQL"]
+            matches.sort(key=lambda a: a.get("created_at", ""), reverse=True)
+            analysis = matches[0] if matches else None
+            job_matches = [j for j in (jobs or []) if j.get("name") == f"CodeQL / {unit} / {profile}"
+                           and j.get("head_sha") == sha and j.get("ref") == ref]
+            job_matches.sort(key=lambda j: j.get("started_at", ""), reverse=True)
+            job = job_matches[0] if job_matches else None
+            execution = "unknown"
+            if job:
+                state, conclusion = job.get("status"), job.get("conclusion")
+                steps = [s for s in job.get("steps", []) if s.get("name") == "CodeQL extraction and queries"]
+                execution = (steps[0].get("conclusion") or "unknown") if len(steps) == 1 else (
+                    conclusion if conclusion in ("cancelled", "timed_out") else
+                    state if state in ("queued", "in_progress", "waiting", "pending") else "unknown")
+            upload = "accepted" if analysis and not analysis.get("error") else "failed" if analysis else "unknown"
+            if not analysis and job:
+                upload_steps = [s for s in job.get("steps", []) if s.get("name") == "CodeQL SARIF upload"]
+                if len(upload_steps) == 1 and upload_steps[0].get("conclusion") == "failure":
+                    upload = "failed"
+            # Job success includes upload and does not prove a clean finding result.
+            relevant_alerts = [a for a in (alerts or []) if any(
+                i.get("category") == category and i.get("commit_sha") == sha and i.get("ref") == ref
+                for i in a.get("instances", []))]
+            findings = ("unknown" if alerts is None or not analysis else "open" if relevant_alerts else
+                        "no_open_findings" if data.get("alert_instances_complete") is True else "unknown")
+            completed = timestamp(analysis.get("created_at")) if analysis else None
+            age = (now - completed).total_seconds() / 3600 if completed else None
+            coverage = data.get("coverage", {}).get(category)
+            units.append({"unit": unit, "language": language, "profile": profile, "category": category,
+                          "execution_status": execution, "upload_status": upload, "finding_status": findings,
+                          "job_status": job.get("conclusion") or job.get("status") if job else "unknown",
+                          "open_findings": len(relevant_alerts) if findings != "unknown" else None,
+                          "coverage_age_hours": age, "fresh": age is not None and 0 <= age <= max_age_hours,
+                          "missing_manifests": coverage.get("missing_manifests") if isinstance(coverage, dict) else None,
+                          "coverage_status": "observed" if isinstance(coverage, dict) else "unknown",
+                          "analysis_id": analysis.get("id") if analysis else None,
+                          "tool_version": analysis.get("tool", {}).get("version") if analysis else None,
+                          "duration_seconds": job.get("duration_seconds") if job else None})
+    healthy = all(u["fresh"] and u["upload_status"] == "accepted" and u["execution_status"] == "success" for u in units)
+    return {"schema": "oasis7-codeql-health/v1", "identity": identities,
+            "status": "unknown" if errors else "healthy" if healthy else "incomplete_or_stale",
+            "errors": errors, "units": units,
+            "finding_trend": "unknown", "note": "fixture/API observations are not hosted coverage proof"}
+
+
+def read_pages(repo, endpoint, limit=10):
+    records = []
+    for page in range(1, limit + 1):
+        separator = "&" if "?" in endpoint else "?"
+        result = subprocess.run(["gh", "api", f"repos/{repo}/{endpoint}{separator}per_page=100&page={page}"],
+                                text=True, capture_output=True, timeout=30)
+        if result.returncode:
+            raise RuntimeError(f"{endpoint}: API read failed ({result.returncode})")
+        value = json.loads(result.stdout)
+        batch = value if isinstance(value, list) else value.get("workflow_runs", value.get("jobs"))
+        if not isinstance(batch, list):
+            raise RuntimeError(f"{endpoint}: unexpected API schema")
+        records.extend(batch)
+        if len(batch) < 100:
+            return records
+    raise RuntimeError(f"{endpoint}: page budget exceeded; incomplete data discarded")
+
+
+def live(repo, ref, sha):
+    from urllib.parse import quote
+    data = {"identity": {"repository": repo, "ref": ref, "sha": sha}, "errors": []}
+    for key, endpoint in (("analyses", f"code-scanning/analyses?ref={quote(ref, safe='')}"),
+                          ("runs", "actions/workflows/codeql.yml/runs"),
+                          ("alerts", f"code-scanning/alerts?state=open&ref={quote(ref, safe='')}")):
+        try:
+            data[key] = read_pages(repo, endpoint)
+        except (RuntimeError, subprocess.TimeoutExpired, json.JSONDecodeError) as error:
+            data[key] = None
+            data["errors"].append(str(error))
+    jobs = []
+    branch = ref.removeprefix("refs/heads/") if ref.startswith("refs/heads/") else None
+    relevant_runs = [r for r in (data.get("runs") or []) if branch and r.get("head_sha") == sha
+                     and r.get("head_branch") == branch and r.get("path") == ".github/workflows/codeql.yml"]
+    if len(relevant_runs) > 20:
+        data["errors"].append("run budget exceeded")
+    else:
+        for run in relevant_runs:
+            try:
+                for job in read_pages(repo, f"actions/runs/{run['id']}/jobs"):
+                    job["head_sha"], job["ref"] = run["head_sha"], ref
+                    start, end = timestamp(job.get("started_at")), timestamp(job.get("completed_at"))
+                    job["duration_seconds"] = (end - start).total_seconds() if start and end else None
+                    jobs.append(job)
+            except (RuntimeError, subprocess.TimeoutExpired, json.JSONDecodeError) as error:
+                data["errors"].append(str(error))
+    data["jobs"] = jobs
+    # Alerts API supplies most_recent_instance, not a complete historical scan.
+    if data.get("alerts") is not None:
+        for alert in data["alerts"]:
+            alert["instances"] = [alert.get("most_recent_instance", {})]
+    return data
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--fixture")
+    parser.add_argument("--repo")
+    parser.add_argument("--ref", default="refs/heads/main")
+    parser.add_argument("--sha")
+    parser.add_argument("--now")
+    args = parser.parse_args()
+    if args.fixture:
+        with open(args.fixture, encoding="utf-8") as source:
+            data = json.load(source)
+    else:
+        if not args.repo or not re.fullmatch(r"[\w.-]+/[\w.-]+", args.repo) or not re.fullmatch(r"[0-9a-f]{40}", args.sha or ""):
+            parser.error("live reads require --repo owner/name and exact --sha")
+        data = live(args.repo, args.ref, args.sha)
+    now = timestamp(args.now) if args.now else dt.datetime.now(dt.timezone.utc)
+    if now is None:
+        parser.error("--now must be a timezone-aware ISO timestamp")
+    print(json.dumps(report(data, now), indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

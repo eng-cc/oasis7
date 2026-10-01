@@ -567,7 +567,7 @@
     },
     {
       "path": "doc/engineering/workflow/source-of-truth.md",
-      "content_sha256": "0347f520030d45302ecccbee2fc1f5f8c4c3666dbd6513b8ca97b4c469e584cc",
+      "content_sha256": "02422d0a5e5c274bf3fb94e0c6a0b5b554ef54748104ba9b1d56875baa7233e6",
       "registry_type": "professional_domain",
       "structural_owner": "repository_health_engineer",
       "authority_entry": "doc/engineering/README.md",
@@ -4005,6 +4005,20 @@
       "semantic_decision_owner": "qa_engineer",
       "object_kind": "design",
       "lifecycle_candidate": "active_candidate",
+      "inventory_disposition": "retain_for_owner_review",
+      "routing_batch": "testing-corpus-review",
+      "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
+    },
+    {
+      "path": "doc/testing/ci/codeql-operations.md",
+      "content_sha256": "e23408dedcf1ce7269e6758c2b61e03c5816680f6f934ecf75e556d407e5e988",
+      "registry_type": "professional_domain",
+      "structural_owner": "qa_engineer",
+      "authority_entry": "doc/testing/README.md",
+      "authority_layer": "professional_domain",
+      "semantic_decision_owner": "qa_engineer",
+      "object_kind": "markdown_record",
+      "lifecycle_candidate": "review_required",
       "inventory_disposition": "retain_for_owner_review",
       "routing_batch": "testing-corpus-review",
       "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory"
