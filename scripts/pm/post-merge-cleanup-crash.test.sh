@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/pm/test-fixtures/resource-cleanup-process-probe.sh"
 REAL_GIT="$(command -v git)"
 TMPDIR="$(mktemp -d)"; trap 'rm -rf "$TMPDIR"' EXIT
 
@@ -165,6 +166,7 @@ EOF
     [[ ! -e "$receipts/terminal-cleanup-receipt.json" ]]
     return 0
   fi
+  oasis7_install_complete_process_probe "$TMPDIR/$name/bin"
   set +e
   local isolation_root; isolation_root="$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$TMPDIR/$name")"
   run_faulted_cleanup "$TMPDIR/$name" "$repo" "$worktree" "$branch" "$receipts/cleanup-intent.json" "$fault" "$expected_exit" \

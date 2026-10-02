@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"; TMPDIR="$(mktemp -d)"; trap 'rm -rf "$TMPDIR"' EXIT
+source "$ROOT_DIR/scripts/pm/test-fixtures/resource-cleanup-process-probe.sh"
 [[ ! -e "$ROOT_DIR/relative-main-sync.json" ]] || { echo "leaked relative main-sync artifact in repository root" >&2; exit 1; }
 REMOTE="$TMPDIR/origin.git"; DEFAULT="$TMPDIR/default"; TASK="$TMPDIR/task"
 UID_VALUE="task_11111111111111111111111111111111"; BRANCH="task/dual-terminal"
@@ -101,7 +102,12 @@ for bad_output in "relative-terminal.json" "$TASK/terminal.json"; do
   [[ ! -e "${bad_output}.intent.json" ]]
   grep -Eiq 'absolute|task worktree|receipt.*path' "$RECEIPTS/bad-cleanup.err"
 done
-"$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" --repo-root "$DEFAULT" --worktree "$TASK" --branch "$BRANCH" --main-ref main --task-uid "$UID_VALUE" --pr-receipt "$RECEIPTS/merge-receipt.json" --main-sync-receipt "$RECEIPTS/main-sync-receipt.json" --terminal-receipt-output "$RECEIPTS/terminal-cleanup-receipt.json"
+# Keep this legacy end-to-end positive path deterministic across hosts. The
+# production cleanup still runs normally; only its child process-readback
+# commands receive a complete synthetic all-UID snapshot.
+oasis7_install_complete_process_probe "$TMPDIR/bin"
+env PATH="$TMPDIR/bin:$PATH" \
+  "$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" --repo-root "$DEFAULT" --worktree "$TASK" --branch "$BRANCH" --main-ref main --task-uid "$UID_VALUE" --pr-receipt "$RECEIPTS/merge-receipt.json" --main-sync-receipt "$RECEIPTS/main-sync-receipt.json" --terminal-receipt-output "$RECEIPTS/terminal-cleanup-receipt.json"
 python3 "$ROOT_DIR/scripts/pm/post-merge-finalize.py" --repo-root "$DEFAULT" --task-uid "$UID_VALUE" --terminal-receipt "$RECEIPTS/terminal-cleanup-receipt.json"
 python3 - "$DEFAULT/.pm/github-project-sync/tasks.json" <<'PY'
 import json,sys

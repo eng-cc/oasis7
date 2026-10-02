@@ -8,6 +8,7 @@ set -euo pipefail
 # journal-editing channel.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
+source "$ROOT_DIR/scripts/pm/test-fixtures/resource-cleanup-process-probe.sh"
 REAL_GIT="$(command -v git)"
 TMPDIR="$(mktemp -d)"
 cleanup() {
@@ -205,6 +206,7 @@ EOF
   observed_at="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   write_common_receipts "$repo" "$receipts" "$uid" "$branch_tip" "$main_commit" "$observed_at" "$mode" "$patch_receipt"
   write_gh_fixture "$root" "$observed_at"
+  oasis7_install_complete_process_probe "$root/bin"
 
   local cleanup_args=("$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" --repo-root "$repo" --worktree "$worktree"
     --branch "$branch" --main-ref main --task-uid "$uid"
@@ -407,6 +409,7 @@ case "$*" in
 esac
 EOF
   chmod +x "$root/bin/gh"
+  oasis7_install_complete_process_probe "$root/bin"
 
   local cleanup_args=("$ROOT_DIR/scripts/pm/post-merge-cleanup.sh" --repo-root "$repo" --worktree "$worktree"
     --branch "$branch" --main-ref main --task-uid "$uid"

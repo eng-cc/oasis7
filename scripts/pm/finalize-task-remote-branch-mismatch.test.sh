@@ -5,6 +5,7 @@ set -euo pipefail
 # remote branch whose tip was replaced after merge. Producer readback is a
 # deterministic local fixture; cleanup mutations and OID checks use real Git.
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+source "$ROOT_DIR/scripts/pm/test-fixtures/resource-cleanup-process-probe.sh"
 TMPDIR="$(mktemp -d)"
 REAL_GIT="$(command -v git)"
 REPO="$TMPDIR/repo"
@@ -166,6 +167,10 @@ grep -F "task/PR mismatch" "$TMPDIR/wrong-pr.out" "$TMPDIR/wrong-pr.err" >/dev/n
 [[ -d "$TASK" ]]
 [[ "$(git -C "$REPO" rev-parse "refs/heads/$BRANCH")" == "$REVIEWED_HEAD" ]]
 [[ "$(git -C "$ORIGIN" rev-parse "refs/heads/$BRANCH")" == "$REMOTE_TIP" ]]
+
+# The next two calls exercise intended cleanup paths. Keep delivery/cleanup and
+# all Git checks live while giving the process guard a complete readback.
+oasis7_install_complete_process_probe "$TMPDIR/bin"
 
 MERGE_BEFORE="$(shasum -a 256 "$RECEIPT_ROOT/merge-receipt.json" | awk '{print $1}')"
 DELIVERY_BEFORE="$(shasum -a 256 "$RECEIPT_ROOT/terminal-delivery-receipt.json" | awk '{print $1}')"
