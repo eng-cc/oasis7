@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "bc4394689094f105aaf9768cacb50d7e1bb9890bd9b0155a2f85253733634999",
+    "current_authority": "doc/site/prd.md",
+    "decision_owner": "repository_health_engineer",
+    "disposition": "retain_current_authority",
+    "note": "navigation only; variable execution state stays in task evidence",
+    "path": "doc/site/README.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

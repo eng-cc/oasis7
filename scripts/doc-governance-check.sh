@@ -71,16 +71,15 @@ fail() {
   failures=$((failures + 1))
 }
 
+if ! "$PYTHON_BIN" "$repo_root/scripts/document-corpus-inventory-check.py" --repo-root "$repo_root"; then
+  fail "document corpus inventory contract"
+fi
+
 if ! "$PYTHON_BIN" "$repo_root/scripts/workflow-process-identity-check.py" --repo-root "$repo_root"; then
   fail "workflow process identity contract"
 fi
 
 run_product_doc_content_check() {
-  if ((full_corpus == 1)); then
-    "$PYTHON_BIN" scripts/product-doc-content-check.py \
-      --repo-root "$repo_root" --full-corpus
-    return
-  fi
   local base_oid="${OASIS7_PRODUCT_DOC_BASE:-}"
   local head_oid="${OASIS7_PRODUCT_DOC_HEAD:-}"
   if [[ -n "$base_oid" || -n "$head_oid" ]]; then
@@ -100,7 +99,11 @@ run_product_doc_content_check() {
     return 1
   fi
   "$PYTHON_BIN" scripts/product-doc-content-check.py \
-    --repo-root "$repo_root" --base "$base_oid" --head "$head_oid" --worktree
+    --repo-root "$repo_root" --base "$base_oid" --head "$head_oid" --worktree || return $?
+  if ((full_corpus == 1)); then
+    "$PYTHON_BIN" scripts/product-doc-content-check.py \
+      --repo-root "$repo_root" --full-corpus
+  fi
 }
 
 run_system_design_traceability_check() {

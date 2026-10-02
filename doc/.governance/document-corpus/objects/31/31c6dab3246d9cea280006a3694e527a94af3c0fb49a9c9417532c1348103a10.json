@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/devlog/README.md",
+    "authority_layer": "controlled_exception",
+    "content_sha256": "714759fab6dc1e7a0f9549b6531d5b2ae6347abf4b42b882d759e08a67d24e16",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "active_candidate",
+    "object_kind": "landing",
+    "path": "doc/devlog/README.md",
+    "registry_type": "retired_archive",
+    "routing_batch": "devlog-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "repository_health_engineer",
+    "structural_owner": "repository_health_engineer"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

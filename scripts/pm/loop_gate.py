@@ -6,6 +6,8 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
+import types
 
 
 def live_binding(task):
@@ -30,6 +32,26 @@ def live_binding(task):
     return json.loads(base64.urlsafe_b64decode(matches[0] + '=' * (-len(matches[0]) % 4)))
 
 
+def _pinned_module(tool_root, commit, name):
+    relative = 'scripts/pm/' + name + '.py'
+    entries = subprocess.check_output(
+        ['git', '-C', str(tool_root), 'ls-tree', commit, '--', relative], text=True,
+    ).splitlines()
+    if len(entries) != 1 or '\t' not in entries[0]:
+        raise ValueError('effective loop module missing or ambiguous: ' + relative)
+    metadata, recorded_path = entries[0].split('\t', 1)
+    mode, object_type, _oid = metadata.split()
+    if recorded_path != relative or mode != '100644' or object_type != 'blob':
+        raise ValueError('effective loop module has unsafe Git mode: ' + relative)
+    source = subprocess.check_output(['git', '-C', str(tool_root), 'show', commit + ':' + relative])
+    module = types.ModuleType(name)
+    module.__file__ = f'{tool_root}/{relative}@{commit}'
+    module.__package__ = ''
+    sys.modules[name] = module
+    exec(compile(source, module.__file__, 'exec'), module.__dict__)
+    return module
+
+
 def admission(root, task, base, head, tool_root=None, reader=None):
     # Packet/review callers supply their frozen ancestor scope base, not live integration base.
     binding = (reader or live_binding)(task)
@@ -37,14 +59,24 @@ def admission(root, task, base, head, tool_root=None, reader=None):
         return {'status': 'legacy', 'blockers': []}
     if task.get('loop_binding') != binding:
         raise ValueError('loop cache differs from live Issue; refresh canonical task first')
-    path = Path(__file__).with_name('loop.py')
-    spec = importlib.util.spec_from_file_location('loop_facade_gate', path)
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
     configured = tool_root or os.environ.get('OASIS7_LOOP_TOOL_ROOT')
-    if configured:
-        subprocess.run(['git', '-C', str(root), 'fetch', '--no-tags', 'origin', 'main:refs/remotes/origin/main'], check=True, capture_output=True)
-    result = module.validate_task(Path(root), task, Path(configured) if configured else None, base, head)
+    if not configured:
+        raise ValueError('activation prerequisite: explicit trusted --tool-root required')
+    effective = Path(configured).resolve()
+    commit = binding.get('policy_commit', '')
+    if not re.fullmatch(r'[0-9a-f]{40}', commit):
+        raise ValueError('missing immutable effective policy commit')
+    if subprocess.check_output(['git', '-C', str(effective), 'rev-parse', 'HEAD'], text=True).strip() != commit:
+        raise ValueError('effective tool HEAD mismatch')
+    if (subprocess.check_output(['git', '-C', str(effective), 'rev-parse', '--path-format=absolute', '--git-common-dir'], text=True).strip()
+            != subprocess.check_output(['git', '-C', str(root), 'rev-parse', '--path-format=absolute', '--git-common-dir'], text=True).strip()):
+        raise ValueError('effective tool repository mismatch')
+    subprocess.run(['git', '-C', str(root), 'fetch', '--no-tags', 'origin', 'main:refs/remotes/origin/main'], check=True, capture_output=True)
+    subprocess.run(['git', '-C', str(root), 'merge-base', '--is-ancestor', commit, 'refs/remotes/origin/main'], check=True, capture_output=True)
+    for name in ('loop_recovery', 'loop_gate'):
+        _pinned_module(effective, commit, name)
+    module = _pinned_module(effective, commit, 'loop')
+    result = module.validate_task(Path(root), task, effective, base, head)
     if result['status'] != 'passed': raise ValueError('loop admission: ' + '; '.join(result['blockers']))
     return result
 

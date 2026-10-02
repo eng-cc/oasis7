@@ -11,4 +11,4 @@ This directory contains reusable schemas and deliberately non-live examples. It 
 
 ## Lifecycle
 
-The exact existing template/example set is retained as one reviewed semantic bundle in `doc/.governance/document-semantic-review-overrides.json`. A zero text-reference count is not sufficient for deletion because schemas may be copied by operator or external workflows. Retirement requires a reviewed successor, semantic absorption, repaired callers, domain-owner approval, and QA/repository-health verification.
+The exact existing template/example set is retained as one reviewed semantic bundle in the v3 corpus records; resolve its current bundle record and complete member set with `python3 scripts/document-corpus-inventory.py locate --kind semantic --path <member-path>`. A zero text-reference count is not sufficient for deletion because schemas may be copied by operator or external workflows. Retirement requires a reviewed successor, semantic absorption, repaired callers, domain-owner approval, and QA/repository-health verification.

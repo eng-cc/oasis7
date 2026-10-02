@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "4f2e780167ec90732247694a55d7074dd4f582d8b8bc9920fcf79e603234192c",
+    "current_authority": "doc/world-runtime/prd.md",
+    "decision_owner": "runtime_engineer",
+    "disposition": "retain_current_controlled_runbook",
+    "note": "current replay rollback recovery SOP; procedures do not prove recovery safety or release currently passes",
+    "path": "doc/game/gameplay/gameplay-longrun-p0-replay-rollback-runbook-2026-03-06.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

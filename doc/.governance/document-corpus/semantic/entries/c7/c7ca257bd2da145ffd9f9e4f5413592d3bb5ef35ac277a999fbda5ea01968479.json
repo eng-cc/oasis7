@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "d9fa21e812898195e8f9c699a3e985dc8aeeb146264bed9937a047d8d130378c",
+    "current_authority": "doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md",
+    "decision_owner": "game_visual_interaction_designer",
+    "disposition": "retain_current_companion_authority",
+    "note": "active tokens icons status assets and screenshot-matrix companion",
+    "path": "doc/world-simulator/viewer/viewer-brand-system-2026-06-05.design.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

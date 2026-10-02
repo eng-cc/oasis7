@@ -1,0 +1,12 @@
+{
+  "record": {
+    "content_sha256": "247e9c6c9db79eb5e0b71975c9e6f7ca0060cea08974ad3e6fb6f6dc6d2dde21",
+    "current_authority": "doc/site/design.md",
+    "decision_owner": "game_visual_interaction_designer",
+    "disposition": "retain_comparison_target",
+    "note": "current route-family comparison target; not public claim authority",
+    "path": "doc/site/deck/html-roadshow-deck-page-2026-06-19.design.md",
+    "retirement_gate": "retire deck route, repair callers, then visual and QA review"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

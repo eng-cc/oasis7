@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/product/README.md",
+    "authority_layer": "product_overlay",
+    "content_sha256": "9c75d0ab1250cf7b1eaa32f328d17e3d0584f4d86564344f652b04e27514744a",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "active_candidate",
+    "object_kind": "markdown_record",
+    "path": "doc/product/agents-world-simulation/prd.md",
+    "registry_type": "product_overlay",
+    "routing_batch": "product-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "producer_system_designer",
+    "structural_owner": "producer_system_designer"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "1b9dd47ea5632934ec79af2e379c3a1bc688747bcd119d3e31d20aeb0021fff4",
+    "current_authority": "doc/readme/prd.md",
+    "decision_owner": "liveops_community",
+    "disposition": "retain_current_authority",
+    "note": "current README governance design",
+    "path": "doc/readme/design.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

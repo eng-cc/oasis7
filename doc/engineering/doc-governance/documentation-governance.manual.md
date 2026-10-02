@@ -82,6 +82,10 @@ python3 scripts/product-doc-content-check.py \
 - 为了让检查通过，把已删除专题的链接换成不存在的 placeholder：改为真实现行 authority 或明确的历史追溯说明。
 - evidence 数量超过触发器后，仅在 README 增加更多链接：先发起 QA 有效性与 repository-health 结构复核，再选择后续处置。
 
+### 4.3 Document corpus inventory v3
+
+`doc/engineering/doc-governance/document-corpus-inventory-v3.design.md` 定义全量 `doc/**` 覆盖、静态入口、逐对象与 semantic/evidence 分片、trusted loader、loop 归属和迁移要求。当前 checker 的实际能力以已合并并按 workflow source of truth 完成 activation 的版本为准；设计或候选代码本身不构成准入。切换完成后，使用 `scripts/document-corpus-inventory.py locate` 查看精确记录端点和组成员，使用 scoped `sync` 更新机器对象，使用 `propose` / `apply-review` 处理语义或 evidence 复核分片。`check` 与两个保留的 checker 入口执行同一模型；`export` 只输出衍生报告。不得使用 `--all` 扩大任务写范围或把自动同步解释为审批。
+
 ## 5. Evidence 生命周期
 
 `qa_engineer` 决定证据有效性与保留语义；`repository_health_engineer` 维护密度、导航和阈值。`doc/testing/evidence/README.md` 规定 count、age 与重复触发器；触发后选择聚合、归档或删除复核，本手册不授权直接批量删除证据。

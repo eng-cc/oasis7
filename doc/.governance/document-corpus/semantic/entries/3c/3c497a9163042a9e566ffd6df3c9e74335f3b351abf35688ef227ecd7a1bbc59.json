@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "0792dcda956d551ff66a397f0cc4e53ddf9d727f79b70e3fa4105851b244add0",
+    "current_authority": "testing-manual.md",
+    "decision_owner": "qa_engineer",
+    "disposition": "retain_current_authority",
+    "note": "current testing domain requirements authority",
+    "path": "doc/testing/prd.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

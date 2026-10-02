@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "5488db5c46eb7ccfb5196fffb87ded6cec9738be3a63eeda283b504a890c5768",
+    "current_authority": "doc/world-runtime/prd.md",
+    "decision_owner": "runtime_engineer",
+    "disposition": "retain_mixed_implementation_record",
+    "note": "on-demand governance-event design and 2026-03-04 implementation snapshot",
+    "path": "doc/world-runtime/governance/governance-events.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

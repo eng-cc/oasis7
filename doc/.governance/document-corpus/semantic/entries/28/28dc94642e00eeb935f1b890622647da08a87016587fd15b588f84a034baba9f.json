@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "ce60bde273558ce58927392c3432416c9d1ee73a6a16740645a711a1abbcd4f4",
+    "current_authority": "doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md",
+    "decision_owner": "runtime_engineer",
+    "disposition": "retain_current_target_contract",
+    "note": "current target design; fresh release evidence still required",
+    "path": "doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.design.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

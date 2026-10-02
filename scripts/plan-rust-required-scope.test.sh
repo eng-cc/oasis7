@@ -20,6 +20,15 @@ plan_for_paths() {
   "$ROOT_DIR/scripts/plan-rust-required-scope.sh" "${args[@]}"
 }
 
+plan_for_repo_config_paths() {
+  local args=(--event-name pull_request)
+  local path
+  for path in "$@"; do
+    args+=(--changed-path "$path")
+  done
+  "$ROOT_DIR/scripts/plan-rust-required-scope.sh" "${args[@]}"
+}
+
 value_for_key() {
   local output="$1"
   local key="$2"
@@ -518,6 +527,40 @@ for document_governance_path in "${document_governance_paths[@]}"; do
     "governance_script:$document_governance_path"
 done
 assert_reason_absent "$document_governance_output" "unclassified_or_unresolvable:"
+
+document_corpus_code_output="$(plan_for_repo_config_paths \
+  scripts/document_corpus.py \
+  scripts/document-corpus-inventory.py \
+  scripts/document-corpus-inventory-check.py \
+  scripts/document-corpus-inventory-check.test.py \
+  scripts/document-corpus-inventory-workflow.test.py \
+  scripts/document_evidence_policy.py \
+  scripts/doc-evidence-inventory-check.py \
+  scripts/doc-evidence-inventory-check.test.py \
+  doc/.governance/document-corpus-inventory.json \
+  doc/testing/evidence/inventory.json)"
+assert_key_equals "$document_corpus_code_output" scope targeted
+assert_key_equals "$document_corpus_code_output" selected_capabilities \
+  'doc_checker_contracts;workflow_governance'
+assert_key_equals "$document_corpus_code_output" run_doc_checker_contracts true
+assert_key_equals "$document_corpus_code_output" run_workflow_governance_contracts true
+assert_key_equals "$document_corpus_code_output" run_rust_baseline true
+assert_key_equals "$document_corpus_code_output" needs_rust_toolchain true
+assert_reason_absent "$document_corpus_code_output" "unclassified_or_unresolvable:"
+
+# Mutable shards are data-only under the general documentation rule; changing
+# a record cannot select Rust or a privileged checker capability.
+document_corpus_data_output="$(plan_for_repo_config_paths \
+  doc/.governance/document-corpus/semantic/aa/example.json)"
+assert_key_equals "$document_corpus_data_output" scope minimal
+assert_key_equals "$document_corpus_data_output" selected_capabilities required_gate_baseline
+assert_key_equals "$document_corpus_data_output" run_rust_baseline false
+assert_reason_absent "$document_corpus_data_output" "unclassified_or_unresolvable:"
+
+document_corpus_unknown_output="$(plan_for_repo_config_paths \
+  scripts/unknown-document-corpus-validator.py)"
+assert_key_equals "$document_corpus_unknown_output" scope full
+assert_key_equals "$document_corpus_unknown_output" run_rust_baseline true
 
 # The legacy hook is explicitly a silent compatibility no-op.  Its focused
 # fixture supplies forbidden-command shims and proves that the hook emits no

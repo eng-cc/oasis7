@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "1680f2f5d76e6448cc609bd741387a485bcecae4fb5bbdb569bf5b5ba014c455",
+    "current_authority": "doc/product/player-entry-distribution/release-communications-and-public-claims.prd.md",
+    "decision_owner": "viewer_engineer",
+    "disposition": "retain_current_authority",
+    "note": "current public claim and release boundary",
+    "path": "doc/site/prd.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}
