@@ -393,6 +393,116 @@ fn gameplay_submit_handler_accepts_valid_payload_and_commits_to_runtime() {
 }
 
 #[test]
+fn world_service_lost_response_recovers_signed_gameplay_by_original_request() {
+    let _guard = gameplay_submit_test_guard();
+    reset_gameplay_submit_state_for_tests();
+    let config = NodeConfig::new(
+        "node-lost-response",
+        "world-lost-response",
+        NodeRole::Sequencer,
+    )
+    .expect("node config")
+    .with_tick_interval(Duration::from_millis(20))
+    .expect("tick interval");
+    let calls = Arc::new(Mutex::new(Vec::new()));
+    let mut node = NodeRuntime::new(config).with_execution_hook(CapturingExecutionHook {
+        calls: calls.clone(),
+    });
+    node.start().expect("start node");
+    let runtime = Arc::new(Mutex::new(node));
+    let world_dir = gameplay_nonce_world_dir("lost-response");
+    let original = signed_gameplay_submit_request("player-lost-response", 41);
+    let body = serde_json::to_string(&original).expect("signed original request");
+    let http = format!(
+        "POST /v1/chain/gameplay/submit HTTP/1.1\r\nContent-Length: {}\r\n\r\n{}",
+        body.len(),
+        body
+    );
+    let (mut server, client) = tcp_stream_pair();
+    assert!(
+        maybe_handle_gameplay_submit_request(
+            &mut server,
+            http.as_bytes(),
+            &runtime,
+            "POST",
+            "/v1/chain/gameplay/submit",
+            &world_dir
+        )
+        .expect("signed submission")
+    );
+    // Discard the response without decoding the process-allocated action_id.
+    drop(server);
+    drop(client);
+    wait_for_committed_height(&runtime, 1);
+    assert!(!calls.lock().expect("captured commits").is_empty());
+    // CapturingExecutionHook proves admission/consensus, not a gameplay effect.
+    let (retry_status, retry) = submit_json(&runtime, &world_dir, &body);
+    assert_eq!(retry_status, 409);
+    assert_eq!(retry.error_code.as_deref(), Some("auth_nonce_replay"));
+
+    // Authenticate a recovery query with the original signed request; no action_id
+    // is available to the caller. The supported route must recover its association.
+    let query_body = serde_json::to_string(&serde_json::json!({
+        "world_id": "world-lost-response", "operation_domain": "gameplay",
+        "original_signed_request": original
+    }))
+    .expect("query body");
+    let path = "/internal/world/v1/outcomes/query";
+    let query = format!(
+        "POST {path} HTTP/1.1\r\nContent-Length: {}\r\n\r\n{}",
+        query_body.len(),
+        query_body
+    );
+    let (mut server, mut client) = tcp_stream_pair();
+    let transfer_handled = super::super::transfer_submit_api::maybe_handle_transfer_submit_request(
+        &mut server,
+        query.as_bytes(),
+        &runtime,
+        "POST",
+        path,
+        "node-lost-response",
+        "world-lost-response",
+        &world_dir,
+    )
+    .expect("existing transfer dispatcher");
+    let gameplay_handled = if transfer_handled {
+        false
+    } else {
+        maybe_handle_gameplay_submit_request(
+            &mut server,
+            query.as_bytes(),
+            &runtime,
+            "POST",
+            path,
+            &world_dir,
+        )
+        .expect("existing gameplay dispatcher")
+    };
+    drop(server);
+    let mut bytes = Vec::new();
+    client.read_to_end(&mut bytes).expect("query response");
+    runtime
+        .lock()
+        .expect("node lock")
+        .stop()
+        .expect("stop node");
+    std::fs::remove_dir_all(&world_dir).expect("remove test directory");
+    assert!(
+        transfer_handled || gameplay_handled,
+        "stable original-request outcome query is unhandled after signed admission and lost response; legacy retry only reports auth_nonce_replay"
+    );
+    let (status, recovered): (u16, serde_json::Value) = decode_http_json_response(&bytes);
+    assert_eq!(status, 200);
+    assert!(
+        matches!(
+            recovered["outcome"]["status"].as_str(),
+            Some("received" | "pending" | "committed")
+        ),
+        "recovery must report the original accepted request without submitting a new nonce"
+    );
+}
+
+#[test]
 fn gameplay_submit_handler_persists_strictly_increasing_nonce_across_reload() {
     let _guard = gameplay_submit_test_guard();
     reset_gameplay_submit_state_for_tests();

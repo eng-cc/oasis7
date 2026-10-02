@@ -1,5 +1,114 @@
 use super::*;
 
+/// A canonical publication height is not the runtime clock or event position.
+/// Exercise the real status HTTP + persisted-world synchronization path rather
+/// than the watermark helper so projection admission is covered as well.
+#[test]
+fn chain_linked_runtime_preserves_commit_height_separately_from_tick_and_events() {
+    let execution_world_dir = runtime_live_temp_dir("chain_sync_distinct_version_axes");
+    let mut execution_world = crate::runtime::World::new_production_hardened();
+    execution_world.submit_action(RuntimeAction::RegisterAgent {
+        agent_id: "version-axis-agent".to_string(),
+        pos: crate::geometry::GeoPos::new(1, 2, 0),
+    });
+    for _ in 0..5 {
+        execution_world
+            .step()
+            .expect("advance execution world clock");
+    }
+    execution_world
+        .save_to_dir(execution_world_dir.as_path())
+        .expect("persist execution world");
+    let chain_status = TestChainStatusServer::start_with_release_security_policy(
+        execution_world_dir,
+        ReleaseSecurityPolicy::default(),
+    );
+    chain_status.committed_height.store(1, Ordering::SeqCst);
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_chain_status_bind(chain_status.addr.clone()),
+    )
+    .expect("runtime server");
+    let mut session = RuntimeLiveSession::new();
+    session.playing = false;
+    let (mut writer, _peer) = test_writer_pair();
+    assert!(
+        server
+            .sync_chain_linked_runtime(&mut session, &mut writer)
+            .expect("sync publication")
+    );
+    assert_eq!(
+        server.world.state().time,
+        5,
+        "the published runtime clock must remain intact"
+    );
+    assert!(
+        server
+            .world
+            .state()
+            .agents
+            .contains_key("version-axis-agent")
+    );
+    assert_eq!(
+        server.last_chain_committed_height, 1,
+        "publication identity must retain the server commit height instead of max(height, tick, event position)"
+    );
+}
+
+#[test]
+fn chain_linked_runtime_observes_new_commit_without_advancing_runtime_clock() {
+    let execution_world_dir = runtime_live_temp_dir("chain_sync_commit_only_publication");
+    let mut execution_world = crate::runtime::World::new_production_hardened();
+    execution_world.submit_action(RuntimeAction::RegisterAgent {
+        agent_id: "commit-only-agent".to_string(),
+        pos: crate::geometry::GeoPos::new(1, 2, 0),
+    });
+    for _ in 0..5 {
+        execution_world
+            .step()
+            .expect("advance execution world clock");
+    }
+    execution_world
+        .save_to_dir(execution_world_dir.as_path())
+        .expect("persist execution world");
+    let chain_status = TestChainStatusServer::start_with_release_security_policy(
+        execution_world_dir,
+        ReleaseSecurityPolicy::default(),
+    );
+    chain_status.committed_height.store(1, Ordering::SeqCst);
+    let mut server = ViewerRuntimeLiveServer::new(
+        ViewerRuntimeLiveServerConfig::new(WorldScenario::Minimal)
+            .with_chain_status_bind(chain_status.addr.clone()),
+    )
+    .expect("runtime server");
+    let mut session = RuntimeLiveSession::new();
+    session.playing = false;
+    let (mut writer, _peer) = test_writer_pair();
+    server
+        .sync_chain_linked_runtime(&mut session, &mut writer)
+        .expect("first publication");
+    let original_tick = server.world.state().time;
+    let original_events = server.world.journal().events.clone();
+    chain_status.committed_height.store(2, Ordering::SeqCst);
+    server
+        .sync_chain_linked_runtime(&mut session, &mut writer)
+        .expect("commit-only publication");
+    assert_eq!(
+        server.world.state().time,
+        original_tick,
+        "a commit is not a gameplay tick"
+    );
+    assert_eq!(
+        server.world.journal().events,
+        original_events,
+        "a commit must not invent world events"
+    );
+    assert_eq!(
+        server.last_chain_committed_height, 2,
+        "a newer canonical publication must be observable even when tick and event position are unchanged"
+    );
+}
+
 fn read_raw_chain_sync_responses(
     peer: &std::net::TcpStream,
     timeout: Duration,
