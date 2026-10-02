@@ -53,7 +53,7 @@
     {"name": "OASIS7_CI_RUN_PROVIDER_LIVE_GATE", "mode": "manual-only", "owner": "release_operator", "reason": "Explicit provider-live execution remains operator-controlled and is never enabled by changed-path planning."}
   ],
   "rules": [
-    {"match": [".github/workflows/codeql.yml", "scripts/security/codeql-policy.json", "scripts/security/codeql-plan.py", "scripts/security/codeql-plan.test.py", "scripts/security/codeql-health.py", "scripts/security/codeql-health.test.py", "scripts/security/codeql-workflow.test.py", "scripts/security/codeql-acceptance.test.py"], "capabilities": ["workflow_governance"], "reason": "codeql_advisory_contracts"},
+    {"match": [".github/workflows/codeql.yml", "scripts/security/codeql-policy.json", "scripts/security/codeql-plan.py", "scripts/security/codeql-plan.test.py", "scripts/security/codeql-health.py", "scripts/security/codeql-health.test.py", "scripts/security/codeql-workflow.test.py", "scripts/security/codeql-acceptance.test.py", "scripts/security/codeql_upload_association.py", "scripts/security/codeql-upload-association.test.py"], "capabilities": ["workflow_governance"], "reason": "codeql_advisory_contracts"},
     {"match": ["doc/**", ".agents/**", ".pm/**", "AGENTS.md", "*.md"], "minimal": true, "reason": "governance_doc"},
     {"match": ["crates/oasis7/**"], "capabilities": ["oasis7_required", "launcher_web"], "reason": "runtime"},
     {"match": ["crates/oasis7/src/simulator/scenario.rs", "crates/oasis7/tests/oasis7_init_demo.rs", "doc/world-simulator/scenario/**"], "capabilities": ["scenario_regression"], "reason": "scenario_regression"},

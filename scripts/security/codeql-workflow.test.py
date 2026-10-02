@@ -95,7 +95,7 @@ class WorkflowTests(unittest.TestCase):
     def test_permissions_pins_and_no_business_chain(self):
         uses = re.findall(r"uses: ([^\s]+)", WORKFLOW)
         self.assertTrue(uses)
-        self.assertTrue(all(re.fullmatch(r"(?:actions/checkout|github/codeql-action/(?:init|analyze|upload-sarif))@[0-9a-f]{40}", action) for action in uses))
+        self.assertTrue(all(re.fullmatch(r"(?:actions/(?:checkout|upload-artifact)|github/codeql-action/(?:init|analyze|upload-sarif))@[0-9a-f]{40}", action) for action in uses))
         self.assertEqual(WORKFLOW.count("persist-credentials: false"), 2)
         for forbidden in ("pull_request_target", "continue-on-error", "secrets.", "secrets: inherit", "cargo build", "cargo test", "npm install", "npm build", "workflow_run", "environment:"):
             self.assertNotIn(forbidden, WORKFLOW)
@@ -110,6 +110,44 @@ class WorkflowTests(unittest.TestCase):
         self.assertIn("if: needs.plan.outputs.has_units == 'true'", WORKFLOW)
         self.assertIn("fail-fast: false", WORKFLOW)
         self.assertNotRegex(WORKFLOW, r"(?m)^  push:")
+
+    def test_upload_evidence_actual_producer_and_failure_identity(self):
+        # Execute the actual workflow producer, rather than a mirror serializer.
+        section = WORKFLOW.split("name: Record upload association evidence", 1)
+        self.assertEqual(len(section), 2, "official upload output is not persisted")
+        body = section[1].split("python3 -I - <<'PY'\n", 1)[1].split("          PY", 1)[0]
+        body = "\n".join(line[10:] for line in body.splitlines())
+        expected = {"schema", "repository", "workflow_path", "workflow_ref", "workflow_sha",
+                    "run_id", "run_attempt", "job_key", "job_name", "checkout_sha", "ref",
+                    "unit", "profile", "category", "execution_status", "upload_status", "upload_sarif_id"}
+        with tempfile.TemporaryDirectory() as folder:
+            env = {"RUNNER_TEMP": folder, "GITHUB_REPOSITORY": "example/repo",
+                   "GITHUB_RUN_ID": "23", "GITHUB_RUN_ATTEMPT": "2", "GITHUB_JOB": "analyze",
+                   "GITHUB_WORKFLOW_REF": "example/repo/.github/workflows/codeql.yml@refs/heads/main",
+                   "GITHUB_WORKFLOW_SHA": SHA, "GITHUB_REF": "refs/heads/main",
+                   "UNIT": "python-repo", "PROFILE": "extended", "CATEGORY": "oasis7/python-repo/extended",
+                   "CHECKOUT": SHA, "EXECUTION": "success", "UPLOAD": "success", "SARIF_ID": "official-upload-id"}
+            for status in ("success", "failure", "skipped", "cancelled"):
+                env["UPLOAD"] = status
+                with patch.dict(os.environ, env):
+                    exec(compile(body, "codeql.yml:evidence", "exec"), {})
+                value = json.loads((Path(folder) / "codeql-upload-evidence/evidence.json").read_text())
+                self.assertEqual(set(value), expected)
+                self.assertEqual(value["schema"], "oasis7-codeql-upload-evidence/v1")
+                self.assertEqual(value["run_id"], 23)
+                self.assertEqual(value["run_attempt"], 2)
+                self.assertEqual(value["job_key"], "analyze")
+                self.assertEqual(value["job_name"], "CodeQL / python-repo / extended")
+                self.assertEqual(value["workflow_sha"], SHA)
+                self.assertEqual(value["checkout_sha"], SHA)
+                self.assertEqual(value["upload_status"], status)
+                self.assertEqual(value["upload_sarif_id"], "official-upload-id" if status == "success" else "")
+        self.assertIn("SARIF_ID: ${{ steps.upload.outputs.sarif-id }}", section[1])
+        self.assertIn("actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02", section[1])
+        self.assertIn("name: oasis7-codeql-upload-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.unit }}-${{ needs.plan.outputs.profile }}", section[1])
+        self.assertIn("path: ${{ runner.temp }}/codeql-upload-evidence/evidence.json", section[1])
+        self.assertIn("if-no-files-found: error", section[1])
+        self.assertGreaterEqual(section[1].count("if: always()"), 2)
 
 
 if __name__ == "__main__":
