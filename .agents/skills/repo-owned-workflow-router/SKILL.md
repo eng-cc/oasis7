@@ -46,6 +46,8 @@ Do not treat specialist domain skills as mandatory default workflow phases. Sele
 - role:
 - slice type:
 - model configuration: `inherit current parent selection` by default; record observed runtime or `adapter inactive on this surface`
+- complexity classification: writing product documentation, writing system design documentation, and complex bug investigation must be classified as complex tasks for slice dispatch.
+- complex-slice override (optional): main Agent/TPM may explicitly request the main Agent/parent's model and reasoning configuration under the [canonical dispatch contract](../../../doc/engineering/workflow/source-of-truth.md#52-tpm-planning-and-subagent-dispatch); record concrete complexity reason, requested pair, supported dispatch mode, capability tradeoff and observed runtime or missing-evidence reason. Respect fixed role pins and tool/history restrictions; use a supported message-assigned fallback or record the unavailable request and permitted default/inherited dispatch. Use known parent settings or supported inheritance of both settings; otherwise record the limitation. Do not infer parent identifiers or treat requests as observations.
 - context delivery mode: minimal HEAD-bound task packet by default; record a concrete escalation reason before using full history
 - task packet identity: task UID, canonical worktree, base ref, current/frozen HEAD, producer/time
 - mandatory context checklist:
