@@ -1027,7 +1027,10 @@ def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=Fals
     if pr.get('state')!='open' or pr.get('merged'):
         raise SystemExit('ci-ready-receipt: integration PR not open')
     if base_ref and pr['base']['ref']!=base_ref: raise SystemExit('ci-ready-receipt: manual integration base ref mismatch')
-    current_target_oid,head=pr['base']['sha'],pr['head']['sha']
+    # PR-associated base.sha can remain historical after an additive source
+    # sync. Strict legacy requests bind the independently resolved live ref.
+    current_target_oid=integration_ci.default_branch_head(repository,pr['base']['ref'])
+    head=pr['head']['sha']
     base=current_target_oid
     try:
         request_record=None
@@ -1038,7 +1041,6 @@ def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=Fals
             request_record,request_identity=_trusted_validation_request(
               request_key,repository,uid,number,head)
             base=request_record["integration_base_oid"]
-            current_target_oid=integration_ci.default_branch_head(repository,pr['base']['ref'])
             _require_historical_base_ancestor_of_target(repository,base,current_target_oid)
         selected=current_request(repository,uid,number,base,head,pr['base']['ref'],
           request_key=request_key)
@@ -1100,10 +1102,12 @@ def selected_live(repository,uid,issue,number,check_name,app,allow_ready_pr=Fals
                 or (not allow_ready_pr and not fresh.get('draft'))
                 or f'Refs #{issue}' not in (fresh.get('body') or '')
                 or f'Task: {uid}' not in (fresh.get('body') or '')
-                or (request_key is None and fresh.get('base',{}).get('sha')!=current_target_oid)
+                or (request_key is None and fresh.get('base',{}).get('sha')!=pr.get('base',{}).get('sha'))
                 or fresh.get('base',{}).get('ref')!=pr['base']['ref']
                 or fresh.get('head',{}).get('sha')!=head):
                 raise ValueError('PR identity or admission changed during integration verification')
+            if request_key is None and integration_ci.default_branch_head(repository,fresh['base']['ref'])!=current_target_oid:
+                raise ValueError('default-branch target moved during integration verification')
             if request_key is not None:
                 current_target_oid=integration_ci.default_branch_head(repository,fresh['base']['ref'])
                 if (not isinstance(current_target_oid,str)
