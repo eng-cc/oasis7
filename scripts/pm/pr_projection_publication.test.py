@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import importlib.util
 import io
 import json
 import os
@@ -63,6 +64,9 @@ class FakeAdapter:
         self.events = []
         self.source_ref = initial_head
         self.ready_update_admitted = False
+        self.recovery_admission_available = True
+        self.recovery_surface_state = "all_pre"
+        self.metadata_writes = []
         self.projection = projection
         self.prs = []
         if initial_pr:
@@ -132,7 +136,16 @@ class FakeAdapter:
 
     def record_pr(self, task_uid, number, publication_id):
         self.events.append("record-pr")
+        self.metadata_writes.extend(("project", "issue", "mapping"))
         self.pr_binding = {"task_uid": task_uid, "pr_number": number}
+
+    def require_record_pr_recovery_admission(self):
+        self.events.append("check-record-pr-recovery-admission")
+        if not self.recovery_admission_available:
+            raise publication_module.PublicationError(
+                "NETWORK_UNCERTAIN",
+                f"recovery admission required for {self.recovery_surface_state}",
+            )
 
     def find_task_publication_bindings(self, pub_id):
         self.events.append("read-reciprocal")
@@ -198,6 +211,306 @@ class BoundedRecoveryCLITests(unittest.TestCase):
         self.assertEqual(0, result.returncode,
                          f"REC actual CLI case={case} exit={result.returncode}\n"
                          + result.stdout + result.stderr)
+
+    def fixture_journal(self, common_dir, publication):
+        return journal_module.open_journal(
+            common_dir, publication["repository"], publication["source_ref"],
+            publication["publication_id"], task_uid=publication["task_uid"],
+            source_head_oid=publication["source_head_oid"],
+            scope_base_oid=publication["source_scope_oid"],
+            projection_digest=publication["projection_digest"],
+        )
+
+    def existing_uncertain_record_pr_case(self, temp, index, *, surface_state,
+                                          uncertain_record_pr=True):
+        publication, projection = make_publication(index)
+        _, marker = publication_module.prepare(
+            task_uid=UID, source_head_oid=publication["source_head_oid"],
+            scope_base_oid=publication["source_scope_oid"],
+            projection_digest=publication["projection_digest"],
+        )
+        body = publication_module.replace_projection_marker(
+            f"Task: {UID}\nRefs #1", marker,
+        )
+        pr = {
+            "repository": publication["repository"], "source_ref": publication["source_ref"],
+            "target_ref": publication["target_ref"], "head_oid": publication["source_head_oid"],
+            "body": body, "state": "open", "merged": False,
+            "draft": True, "number": index,
+        }
+        adapter = FakeAdapter(
+            publication, projection,
+            initial_head=publication["source_head_oid"], initial_pr=pr,
+        )
+        adapter.recovery_admission_available = False
+        adapter.recovery_surface_state = surface_state
+        adapter.publications.append(copy.deepcopy(publication))
+        adapter.publication_author_logins[publication["publication_id"]] = adapter.publisher_login
+        journal = self.fixture_journal(temp, publication)
+        if uncertain_record_pr:
+            action = "record-pr:" + publication["publication_id"]
+            with journal.locked():
+                journal.intent(action, "record_pr", {
+                    "publication_id": publication["publication_id"],
+                    "task_uid": UID, "pr_number": index,
+                })
+                journal.uncertain(action, "NETWORK_UNCERTAIN")
+        return publication, projection, adapter, journal, f"Task: {UID}\nRefs #1\n"
+
+    def test_pending_record_pr_without_admission_blocks_project_post_issue_pre(self):
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection, adapter, journal, body = self.existing_uncertain_record_pr_case(
+                temp, 7240, surface_state="Project-post/Issue-pre",
+            )
+            error = None
+            try:
+                publication_module.publish_create(
+                    adapter, journal, publication=publication,
+                    projection=projection, body=body,
+                    expected_remote_oid=publication["source_head_oid"],
+                )
+            except publication_module.PublicationError as exc:
+                error = exc
+
+            self.assertIsNotNone(
+                error,
+                "uncertain Project-post/Issue-pre retry entered record-pr without admission; "
+                f"events={adapter.events!r}; metadata_writes={adapter.metadata_writes!r}",
+            )
+            self.assertIn("recovery admission", str(error))
+            self.assertEqual([], adapter.metadata_writes)
+            self.assertNotIn("task-intent", adapter.events,
+                             "exact readback must not turn recovery into another Task POST")
+            self.assertNotIn("push", adapter.events)
+            self.assertNotIn("create-pr", adapter.events)
+            self.assertNotIn("record-pr", adapter.events)
+            self.assertNotIn("publish-reciprocal", adapter.events)
+
+    def test_pending_record_pr_without_admission_blocks_exact_poststate(self):
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection, adapter, journal, body = self.existing_uncertain_record_pr_case(
+                temp, 7241, surface_state="Issue-and-Project-exact-poststate",
+            )
+            error = None
+            try:
+                publication_module.publish_create(
+                    adapter, journal, publication=publication,
+                    projection=projection, body=body,
+                    expected_remote_oid=publication["source_head_oid"],
+                )
+            except publication_module.PublicationError as exc:
+                error = exc
+
+            self.assertIsNotNone(
+                error,
+                "uncertain exact-poststate retry entered record-pr without admission; "
+                f"events={adapter.events!r}; metadata_writes={adapter.metadata_writes!r}",
+            )
+            self.assertIn("recovery admission", str(error))
+            self.assertEqual([], adapter.metadata_writes)
+            self.assertNotIn("task-intent", adapter.events)
+            self.assertNotIn("push", adapter.events)
+            self.assertNotIn("create-pr", adapter.events)
+            self.assertNotIn("record-pr", adapter.events)
+            self.assertNotIn("publish-reciprocal", adapter.events)
+
+    def test_first_record_pr_without_admission_keeps_all_pre_path(self):
+        with tempfile.TemporaryDirectory() as temp:
+            publication, projection, adapter, journal, body = self.existing_uncertain_record_pr_case(
+                temp, 7242, surface_state="Issue-and-Project-all-pre",
+                uncertain_record_pr=False,
+            )
+            result = publication_module.publish_create(
+                adapter, journal, publication=publication,
+                projection=projection, body=body,
+                expected_remote_oid=publication["source_head_oid"],
+            )
+
+            self.assertEqual("published", result["status"])
+            self.assertEqual(1, adapter.events.count("record-pr"))
+            self.assertEqual(["project", "issue", "mapping"], adapter.metadata_writes)
+            self.assertNotIn("check-record-pr-recovery-admission", adapter.events)
+
+    def legacy_anchor_lineage_case(self, temp):
+        root = Path(temp).resolve()
+        root.mkdir(parents=True, exist_ok=True)
+
+        def git(*args):
+            return subprocess.check_output(
+                ["git", "-C", str(root), *args], text=True,
+            ).strip()
+
+        subprocess.run(["git", "-C", str(root), "init", "-q"], check=True)
+        git("config", "user.name", "Publication Recovery Fixture")
+        git("config", "user.email", "publication-recovery-fixture@example.test")
+        (root / "lineage.txt").write_text("base\n", encoding="utf-8")
+        git("add", "lineage.txt")
+        git("commit", "-q", "-m", "base")
+        base_oid = git("rev-parse", "HEAD")
+        (root / "lineage.txt").write_text("current\n", encoding="utf-8")
+        git("add", "lineage.txt")
+        git("commit", "-q", "-m", "current")
+        current_oid = git("rev-parse", "HEAD")
+
+        def build(head, label):
+            return publication_module.build_task_publication(
+                repository="eng-cc/oasis7", repository_id=7, task_uid=UID,
+                bootstrap_epoch=1, source_repository_id=7,
+                source_ref="feature/publication-recovery", target_ref="main",
+                source_head_oid=head, source_scope_oid=base_oid,
+                planner_authority_oid=base_oid, planner_config_sha256=CONFIG,
+                policy_digest=digest({"policy": "legacy-anchor-fixture"}),
+                projection_digest=digest({"publication": label}),
+            )
+
+        previous = build(base_oid, "previous")
+        current = build(current_oid, "current")
+        old_journal = self.fixture_journal(root / ".git", previous)
+        current_journal = self.fixture_journal(root / ".git", current)
+        for journal, item in ((old_journal, previous), (current_journal, current)):
+            action = "record-pr:" + item["publication_id"]
+            with journal.locked():
+                journal.intent(action, "record_pr", {
+                    "publication_id": item["publication_id"],
+                    "task_uid": UID, "pr_number": 2001,
+                })
+                journal.uncertain(action, "NETWORK_UNCERTAIN")
+                if item is current:
+                    journal.intent(
+                        "task-intent:" + item["publication_id"],
+                        "publish_task_intent",
+                        {"publication_id": item["publication_id"], "task_uid": UID},
+                    )
+                    state = journal.read_action_state()
+                    state.pop("task_post_tail", None)
+                    journal_module._atomic_json(journal.path, state)
+
+        preanchor_raw = current_journal.path.read_bytes()
+        adapter = FakeAdapter(current, {"consumed_contracts": []}, initial_head=current_oid)
+        adapter.root = root
+        adapter.publications.append(copy.deepcopy(current))
+        adapter.publication_author_logins[current["publication_id"]] = adapter.publisher_login
+        binding = publication_module.build_publication_binding(
+            current, 2001, "https://github.com/eng-cc/oasis7/pull/2001",
+        )
+
+        def issue_comment(comment_id, item):
+            body = publication_module.publication_comment(item)
+            return {
+                "id": comment_id, "body": body,
+                "user": {"login": adapter.publisher_login},
+                "issue_url": "https://api.github.com/repos/eng-cc/oasis7/issues/1",
+                "html_url": f"https://github.com/eng-cc/oasis7/issues/1#issuecomment-{comment_id}",
+            }
+
+        comments = [issue_comment(1001, previous), issue_comment(1002, current)]
+
+        def lineage_evidence(item, comment_id, journal, raw):
+            body = comments[comment_id - 1001]["body"]
+            return {
+                "publication_id": item["publication_id"],
+                "action_id": "record-pr:" + item["publication_id"],
+                "journal_sha256": hashlib.sha256(raw).hexdigest(),
+                "H": item["source_head_oid"], "B": item["planner_authority_oid"],
+                "S": item["source_scope_oid"], "D": item["projection_digest"],
+                "intent_comment_id": comment_id,
+                "intent_body_sha256": hashlib.sha256(body.encode("utf-8")).hexdigest(),
+            }
+
+        old_raw = old_journal.path.read_bytes()
+        module_path = ROOT / "github-project-task.py"
+        spec = importlib.util.spec_from_file_location("publication_recovery_task_helper", module_path)
+        self.assertIsNotNone(spec)
+        self.assertIsNotNone(spec.loader)
+        helper = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(helper)
+        authority = object.__new__(helper.PublicationRecoveryAuthority)
+        authority.root = root
+        authority.args = type("Args", (), {
+            "root": root, "repo": "eng-cc/oasis7", "task_uid": UID,
+        })()
+        authority.record = {
+            "issue_number": 1, "issue_url": "https://github.com/eng-cc/oasis7/issues/1",
+        }
+        authority.intent = current
+        authority.binding = binding
+        authority.module = publication_module
+        authority.comment = {"user": {"login": adapter.publisher_login}}
+        authority.envelope = {
+            "current_action": lineage_evidence(current, 1002, current_journal, preanchor_raw),
+            "predecessor": lineage_evidence(previous, 1001, old_journal, old_raw),
+        }
+        return {
+            "adapter": adapter, "authority": authority, "comments": comments,
+            "current": current, "current_journal": current_journal,
+            "preanchor_raw": preanchor_raw,
+        }
+
+    def resolve_legacy_task_post_without_post(self, case):
+        current = case["current"]
+        action = "task-intent:" + current["publication_id"]
+        with case["current_journal"].locked():
+            publication_module._intent(
+                case["adapter"], case["current_journal"], current,
+                pr_binding={"task_uid": UID, "pr_number": 2001},
+                resume_action_id=action,
+            )
+            events = case["current_journal"].read_task_events(action)
+        return events
+
+    def test_exact_legacy_task_readback_anchor_migration_preserves_admitted_lineage(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case = self.legacy_anchor_lineage_case(temp)
+            events = self.resolve_legacy_task_post_without_post(case)
+            self.assertEqual(["READ_MATCH", "RESOLVED"], [item["event"] for item in events])
+            self.assertEqual(0, case["adapter"].events.count("task-intent"))
+            self.assertNotEqual(case["preanchor_raw"], case["current_journal"].path.read_bytes())
+
+            try:
+                case["authority"]._lineage(case["comments"])
+            except ValueError as exc:
+                self.fail(
+                    "an admitted exact Task readback may migrate only its verified legacy root tail; "
+                    f"lineage was rejected: {exc}"
+                )
+
+    def test_exact_legacy_task_readback_malformed_tail_stays_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case = self.legacy_anchor_lineage_case(temp)
+            events = self.resolve_legacy_task_post_without_post(case)
+            self.assertEqual(["READ_MATCH", "RESOLVED"], [item["event"] for item in events])
+            with case["current_journal"].locked():
+                state = case["current_journal"].read_action_state()
+                state["task_post_tail"]["digest"] = "sha256:" + "f" * 64
+                journal_module._atomic_json(case["current_journal"].path, state)
+                with self.assertRaisesRegex(journal_module.JournalError, "anchor"):
+                    case["current_journal"].read_task_events()
+
+    def test_exact_legacy_task_readback_sidecar_sequence_drift_stays_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case = self.legacy_anchor_lineage_case(temp)
+            events = self.resolve_legacy_task_post_without_post(case)
+            self.assertEqual(["READ_MATCH", "RESOLVED"], [item["event"] for item in events])
+            with case["current_journal"].locked():
+                lines = case["current_journal"].task_events_path.read_text().splitlines()
+                first = json.loads(lines[0])
+                first["sequence"] = 99
+                lines[0] = json.dumps(first, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+                case["current_journal"].task_events_path.write_text("\n".join(lines) + "\n")
+                with self.assertRaisesRegex(journal_module.JournalError, "sequence"):
+                    case["current_journal"].read_task_events()
+
+    def test_unrelated_current_journal_drift_does_not_gain_f1_lineage(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case = self.legacy_anchor_lineage_case(temp)
+            events = self.resolve_legacy_task_post_without_post(case)
+            self.assertEqual(["READ_MATCH", "RESOLVED"], [item["event"] for item in events])
+            with case["current_journal"].locked():
+                state = case["current_journal"].read_action_state()
+                state["unrelated_metadata"] = "tampered"
+                journal_module._atomic_json(case["current_journal"].path, state)
+            with self.assertRaisesRegex(ValueError, "raw publication journal hash mismatch"):
+                case["authority"]._lineage(case["comments"])
 
     def test_recovery_record_pr_budget_covers_required_fresh_checks(self):
         # Reuse the genuine immutable closure/three-role authority fixture and

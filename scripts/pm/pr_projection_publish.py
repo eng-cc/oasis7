@@ -217,6 +217,7 @@ class GitHubPublicationAdapter:
         self.pr_number: int | None = None
         self.authenticated_login: str | None = None
         self.reservation_fd: int | None = None
+        self.record_pr_recovery_required = False
 
     def gh(self, *args: str, timeout: float = 5.0,
            input_json: dict[str, Any] | None = None) -> str:
@@ -451,6 +452,18 @@ class GitHubPublicationAdapter:
             binding["existing_ready_update"] = True
         return binding
 
+    def require_record_pr_recovery_admission(self) -> None:
+        """Require a unique live recovery marker before retrying record-pr."""
+        if not self.task_helper.is_file():
+            raise RuntimeError("canonical recovery helper is unavailable")
+        marker = "<!-- oasis7-publication-recovery-admission/v1 -->"
+        comments = self._issue_comments()
+        if sum(marker in comment["body"] for comment in comments) != 1:
+            raise RuntimeError("one unique current record-pr recovery admission is required")
+        # record_pr() re-reads comments and reconstructs the full authority
+        # before helper launch, so a changed/removed admission fails closed.
+        self.record_pr_recovery_required = True
+
     def record_pr(self, task_uid: str, number: int, publication_id: str) -> None:
         url = f"https://github.com/{self.args.repo}/pull/{number}"
         binding = publication.build_publication_binding(self.publication, number, url)
@@ -474,7 +487,10 @@ class GitHubPublicationAdapter:
             # command failure intact before making discovery network requests.
             comments = self._issue_comments() if self.task_helper.is_file() else []
             marker = "<!-- oasis7-publication-recovery-admission/v1 -->"
-            if any(marker in c["body"] for c in comments):
+            admissions = [c for c in comments if marker in c["body"]]
+            if self.record_pr_recovery_required and len(admissions) != 1:
+                raise RuntimeError("required record-pr recovery admission changed before helper launch")
+            if admissions:
                 if self.task_helper != (self.root / "scripts/pm/github-project-task.py").resolve():
                     raise RuntimeError("recovery requires the canonical reviewed task helper")
                 spec = importlib.util.spec_from_file_location("publication_task_recovery_impl", self.task_helper)

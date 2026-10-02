@@ -651,6 +651,26 @@ def _record_and_bind(adapter: Any, journal: PublicationJournal,
                      expected_draft: bool = True) -> dict[str, Any]:
     number = pr["number"]
     action = "record-pr:" + publication["publication_id"]
+    prior = _prior(journal, action)
+    if prior is not None:
+        # A persisted record-pr action means a prior attempt may have changed
+        # only some of the Task projections. Do not let the ordinary helper
+        # path infer recovery authority from an Issue poststate or cache.
+        # First-time publication keeps the existing all-pre path.
+        require_admission = getattr(adapter, "require_record_pr_recovery_admission", None)
+        if not callable(require_admission):
+            raise PublicationError(
+                "NETWORK_UNCERTAIN",
+                "recovery admission check is unavailable for a persisted record-pr action",
+            )
+        try:
+            require_admission()
+        except PublicationError:
+            raise
+        except Exception as exc:
+            raise PublicationError(
+                "NETWORK_UNCERTAIN", f"record-pr recovery admission check failed: {exc}"
+            ) from exc
     journal.intent(action, "record_pr", {
         "publication_id": publication["publication_id"], "task_uid": publication["task_uid"],
         "pr_number": number,
