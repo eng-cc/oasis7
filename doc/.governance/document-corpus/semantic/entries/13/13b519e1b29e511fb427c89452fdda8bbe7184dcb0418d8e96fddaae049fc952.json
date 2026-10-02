@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "acf325f9129f86955f87aaa061564796ef0e03e50e0d3b408eeb0a59433cf397",
+    "current_authority": "doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md",
+    "decision_owner": "qa_engineer",
+    "disposition": "retain_current_authority",
+    "note": "current closure test design",
+    "path": "doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.design.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

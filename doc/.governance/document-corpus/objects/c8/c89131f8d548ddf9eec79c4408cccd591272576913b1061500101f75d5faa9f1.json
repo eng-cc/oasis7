@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/playability_test_result/README.md",
+    "authority_layer": "evidence_domain",
+    "content_sha256": "bd3cc4761282ad6144409a95ae0e79d306d63895b7feabdfc07044889fbb5511",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "active_candidate",
+    "object_kind": "prd_index",
+    "path": "doc/playability_test_result/prd.index.md",
+    "registry_type": "evidence_domain",
+    "routing_batch": "playability_test_result-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "qa_engineer",
+    "structural_owner": "qa_engineer"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

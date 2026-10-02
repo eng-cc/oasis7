@@ -1,0 +1,12 @@
+{
+  "record": {
+    "content_sha256": "57d6af1b14685f13dcf1fd27314338930466c4149693de2ec6e3bab0c3127e0c",
+    "current_authority": "doc/site/design.md",
+    "decision_owner": "game_visual_interaction_designer",
+    "disposition": "retain_comparison_target",
+    "note": "current route-family comparison target; not public claim authority",
+    "path": "doc/site/story/story-reader-page-2026-06-19.design.md",
+    "retirement_gate": "retire story route, repair callers, then visual and QA review"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

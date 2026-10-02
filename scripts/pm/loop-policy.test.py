@@ -5,7 +5,9 @@ import importlib.util
 import json
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
+import types
 import unittest
 
 HERE = Path(__file__).resolve().parent
@@ -24,7 +26,7 @@ class PolicyTests(unittest.TestCase):
         context = self.api.scope_context(self.root, integration, head)
         self.assertEqual(context['scope_base_oid'], self.base)
         self.assertEqual(context['integration_base_oid'], integration)
-        result = self.api.validate_scope(self.root, self.root, self.binding, context['scope_base_oid'], head)
+        result = self.api.validate_scope(self.tool, self.root, self.binding, context['scope_base_oid'], head)
         self.assertEqual(result['status'], 'passed', result)
         self.assertEqual([item['path'] for item in result['paths']], ['src/a.rs'])
 
@@ -46,12 +48,12 @@ class PolicyTests(unittest.TestCase):
         head=self.git('rev-parse','HEAD')
         for loop in ('product','system','code'):
             self.binding.update(loop=loop,write_scope=['**'])
-            result=self.api.validate_scope(self.root,self.root,self.binding,base,head)
+            result=self.api.validate_scope(self.tool,self.root,self.binding,base,head)
             self.assertEqual(result['status'],'blocked')
             self.assertTrue(any('mixed document' in b for b in result['blockers']),result)
         self.git('mv','doc/product/moved.md',mixed)
         self.git('commit','-qm','rename destination')
-        result=self.api.validate_scope(self.root,self.root,self.binding,head,self.git('rev-parse','HEAD'))
+        result=self.api.validate_scope(self.tool,self.root,self.binding,head,self.git('rev-parse','HEAD'))
         self.assertTrue(any('mixed document' in b for b in result['blockers']),result)
 
     def setUp(self):
@@ -65,16 +67,67 @@ class PolicyTests(unittest.TestCase):
         self.git("config", "user.email", "test@example.invalid")
         self.git("config", "user.name", "Test")
         self.write("scripts/pm/loop-policy.v1.json", (HERE / "loop-policy.v1.json").read_text())
+        self.write("scripts/document_corpus.py", '''
+import hashlib
+import subprocess
+
+CORE_MARKER = "pinned-core-bytes"
+CORPUS_ROOT = "doc/.governance/document-corpus-inventory.json"
+EVIDENCE_ROOT = "doc/testing/evidence/inventory.json"
+REGISTRY_PATH = "doc/.governance/top-level-directory-registry.json"
+LEGACY_SEMANTIC_ROOT = "doc/.governance/document-semantic-review-overrides.json"
+EVIDENCE_SUFFIXES = {".md", ".txt", ".json", ".jsonl", ".csv", ".tsv"}
+
+class GitCorpusView:
+    def __init__(self, root, revision):
+        self.root, self.snapshot_id = root, revision
+        self.paths = subprocess.check_output(["git", "-C", str(root), "ls-tree", "-r", "--name-only", revision, "--", "doc"], text=True).splitlines()
+    def list_doc_paths(self):
+        return self.paths
+    def file_mode(self, path):
+        raw = subprocess.check_output(["git", "-C", str(self.root), "ls-tree", "-z", self.snapshot_id, "--", path])
+        return raw.split(b" ", 1)[0].decode() if raw else "000000"
+
+class Model:
+    metadata_paths = set()
+    objects_by_path = {}
+    semantic_entries_by_path = {}
+    semantic_bundles_by_id = {}
+    evidence_entries_by_path = {}
+    evidence_groups_by_id = {}
+    path_to_bundle = {}
+    path_to_group = {}
+
+def load_corpus(view):
+    return Model()
+
+def locate(model, path):
+    return []
+
+def expected_object(view, source):
+    return None
+
+def record_path(kind, source):
+    key = hashlib.sha256(source.encode("utf-8")).hexdigest()
+    root = "evidence/entries" if kind in {"evidence", "evidence-entry"} else "objects"
+    return f"doc/.governance/document-corpus/{root}/{key[:2]}/{key}.json"
+''')
+        self.write("scripts/product-doc-content-check.py", "# pinned transitive checker fixture\n")
+        self.write("scripts/product_doc_markdown.py", "# pinned transitive markdown fixture\n")
         self.write("doc/product/a.md", "product")
         self.write("doc/engineering/a.md", "system")
         self.write("src/a.rs", "code")
         self.git("add", ".")
         self.git("commit", "-qm", "base")
         self.base = self.git("rev-parse", "HEAD")
+        self.git("update-ref", "refs/remotes/origin/main", self.base)
+        self.tool = self.root.parent / (self.root.name + "-effective")
+        self.git("worktree", "add", "--detach", str(self.tool), self.base)
+        self.addCleanup(lambda: self.git("worktree", "remove", "--force", str(self.tool)))
         self.binding = dict(schema="oasis7.loop-task/v1", task_uid="task_" + "a"*32,
             change_id="change-test", loop="product", owner_role="gameplay_designer",
             bootstrap_epoch=1, manual_request_ref="user-message-1", request_key="request-1",
-            write_scope=["doc/product/**"], out_of_scope=[], input_contracts=[],
+            write_scope=["doc/product/**", "doc/.governance/document-corpus/objects/**"], out_of_scope=[], input_contracts=[],
             acceptance_refs=["acceptance-1"], dependencies=[], target_delivery="pilot",
             policy_digest="sha256:"+hashlib.sha256((self.root / "scripts/pm/loop-policy.v1.json").read_bytes()).hexdigest(),
             policy_commit=self.base)
@@ -90,7 +143,7 @@ class PolicyTests(unittest.TestCase):
     def check(self):
         self.git("add", ".")
         self.git("commit", "-qm", "candidate")
-        return self.api.validate_scope(self.root, self.root, self.binding, self.base, self.git("rev-parse", "HEAD"))
+        return self.api.validate_scope(self.tool, self.root, self.binding, self.base, self.git("rev-parse", "HEAD"))
 
     def test_product_allowed(self):
         self.write("doc/product/a.md", "changed")
@@ -168,7 +221,7 @@ class PolicyTests(unittest.TestCase):
         ]:
             with self.subTest(allow=allow, deny=deny):
                 self.binding.update(write_scope=allow, out_of_scope=deny)
-                actual = self.api.validate_scope(self.root, self.root, self.binding, self.base, head)
+                actual = self.api.validate_scope(self.tool, self.root, self.binding, self.base, head)
                 self.assertEqual(actual["status"], expected, actual)
 
     def test_policy_glob_components_and_recursive_zero_depth(self):
@@ -206,7 +259,7 @@ class PolicyTests(unittest.TestCase):
             base = self.git("rev-parse", "HEAD")
             self.git("mv", source, target)
             self.git("commit", "-qm", "rename")
-            actual = self.api.validate_scope(self.root, self.root, self.binding, base,
+            actual = self.api.validate_scope(self.tool, self.root, self.binding, base,
                                              self.git("rev-parse", "HEAD"))
             self.assertIn("outside declared write scope: " + nested, actual["blockers"], actual)
 
@@ -232,6 +285,42 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(self.api.validate_tool_root(self.root,self.root,self.binding)["status"],"passed")
         self.write("scripts/pm/shadow.py","untracked executable authority")
         self.assertEqual(self.api.validate_tool_root(self.root,self.root,self.binding)["status"],"blocked")
+
+    def test_trusted_core_load_ignores_candidate_module_and_sys_modules_shadow(self):
+        self.git("update-ref", "refs/remotes/origin/main", self.base)
+        target = self.root.parent / (self.root.name + "-candidate")
+        self.git("worktree", "add", "--detach", str(target), self.base)
+        self.addCleanup(lambda: self.git("worktree", "remove", "--force", str(target)))
+        candidate = target / "scripts/document_corpus.py"
+        candidate.parent.mkdir(parents=True, exist_ok=True)
+        candidate.write_text("CORE_MARKER = 'candidate-shadow'\n")
+        sys.path.insert(0, str(candidate.parent))
+        self.addCleanup(lambda: sys.path.remove(str(candidate.parent)) if str(candidate.parent) in sys.path else None)
+        module_name = "_oasis7_effective_document_corpus_" + self.base
+        sys.modules[module_name] = types.ModuleType(module_name)
+        self.addCleanup(lambda: sys.modules.pop(module_name, None))
+
+        loaded = self.api.load_trusted_corpus_module(self.root, target, self.binding)
+
+        self.assertEqual(loaded.CORE_MARKER, "pinned-core-bytes")
+        self.assertEqual(Path(loaded.__file__).resolve(), (self.root / "scripts/document_corpus.py").resolve())
+        self.assertFalse((self.root / "scripts/__pycache__").exists())
+
+    def test_trusted_core_change_and_symlink_fail_closed(self):
+        self.git("update-ref", "refs/remotes/origin/main", self.base)
+        for relative in ("scripts/document_corpus.py", "scripts/product-doc-content-check.py", "scripts/product_doc_markdown.py"):
+            with self.subTest(relative=relative):
+                trusted = self.root / relative
+                original = trusted.read_bytes()
+                trusted.write_bytes(original + b"# drift\n")
+                self.assertEqual(self.api.validate_tool_root(self.root, self.root, self.binding)["status"], "blocked")
+                trusted.write_bytes(original)
+                trusted.unlink()
+                trusted.symlink_to("../doc/product/a.md")
+                verdict = self.api.validate_tool_root(self.root, self.root, self.binding)
+                self.assertEqual(verdict["status"], "blocked", verdict)
+                trusted.unlink()
+                trusted.write_bytes(original)
 
     def test_candidate_commit_cannot_be_effective_tool(self):
         self.git("update-ref","refs/remotes/origin/main",self.base)

@@ -319,45 +319,46 @@ jobs:
             echo "source_head=${head_ref}"
             echo "task_uid=${task_uid}"
           } >>"${GITHUB_OUTPUT}"
+          python3 - "${GITHUB_OUTPUT}" "${RUNNER_TEMP}/required-scope-outputs.json" <<'PY'
+          import json, pathlib, sys
+          source, target = map(pathlib.Path, sys.argv[1:])
+          outputs = {}
+          for line in source.read_text(encoding="utf-8").splitlines():
+              key, separator, value = line.partition("=")
+              if not separator or not key:
+                  raise SystemExit("required-scope output file contains an invalid line")
+              if key in outputs and outputs[key] != value:
+                  raise SystemExit(f"required-scope output {key} has conflicting duplicate values")
+              outputs[key] = value
+          temporary = target.with_name(target.name + ".tmp")
+          temporary.write_text(
+              json.dumps(outputs, ensure_ascii=False, separators=(",", ":")) + "\n",
+              encoding="utf-8",
+          )
+          temporary.replace(target)
+          PY
       - name: Report planned scope
+        env:
+          SCOPE_OUTPUTS_PATH: ${{ runner.temp }}/required-scope-outputs.json
         run: |
-          echo "execution_contract=${{ steps.scope.outputs.execution_contract }}"
-          echo "scope=${{ steps.scope.outputs.scope }}"
-          echo "selected_capabilities=${{ steps.scope.outputs.selected_capabilities }}"
-          echo "reason_summary=${{ steps.scope.outputs.reason_summary }}"
-          echo "changed_path_count=${{ steps.scope.outputs.changed_path_count }}"
-          echo "run_oasis7_required_tests=${{ steps.scope.outputs.run_oasis7_required_tests }}"
-          echo "run_consensus_tests=${{ steps.scope.outputs.run_consensus_tests }}"
-          echo "run_distfs_tests=${{ steps.scope.outputs.run_distfs_tests }}"
-          echo "run_oasis7_node_tests=${{ steps.scope.outputs.run_oasis7_node_tests }}"
-          echo "run_oasis7_net_tests=${{ steps.scope.outputs.run_oasis7_net_tests }}"
-          echo "run_oasis7_net_libp2p_tests=${{ steps.scope.outputs.run_oasis7_net_libp2p_tests }}"
-          echo "run_viewer_contract_tests=${{ steps.scope.outputs.run_viewer_contract_tests }}"
-          echo "run_viewer_wasm_check=${{ steps.scope.outputs.run_viewer_wasm_check }}"
-          echo "run_viewer_perf_smoke=${{ steps.scope.outputs.run_viewer_perf_smoke }}"
-          echo "run_pixel_world_bridge_lib_tests=${{ steps.scope.outputs.run_pixel_world_bridge_lib_tests }}"
-          echo "run_pixel_world_bridge_wasm_check=${{ steps.scope.outputs.run_pixel_world_bridge_wasm_check }}"
-          echo "run_launcher_web_build=${{ steps.scope.outputs.run_launcher_web_build }}"
-          echo "run_oasis7_workspace_support_crate_tests=${{ steps.scope.outputs.run_oasis7_workspace_support_crate_tests }}"
-          echo "run_scenario_regression=${{ steps.scope.outputs.run_scenario_regression }}"
-          echo "run_operational_contracts=${{ steps.scope.outputs.run_operational_contracts }}"
-          echo "run_workflow_governance_contracts=${{ steps.scope.outputs.run_workflow_governance_contracts }}"
-          echo "run_packaging_contracts=${{ steps.scope.outputs.run_packaging_contracts }}"
-          echo "run_doc_checker_contracts=${{ steps.scope.outputs.run_doc_checker_contracts }}"
-          echo "run_cargo_tooling_contracts=${{ steps.scope.outputs.run_cargo_tooling_contracts }}"
-          echo "run_site_contract_tests=${{ steps.scope.outputs.run_site_contract_tests }}"
-          echo "run_codex_agent_config_validation=${{ steps.scope.outputs.run_codex_agent_config_validation }}"
-          echo "run_compile_metrics_contract_tests=${{ steps.scope.outputs.run_compile_metrics_contract_tests }}"
-          echo "run_required_gate_baseline=${{ steps.scope.outputs.run_required_gate_baseline }}"
-          echo "needs_node=${{ steps.scope.outputs.needs_node }}"
-          echo "needs_python=${{ steps.scope.outputs.needs_python }}"
-          echo "needs_markdown=${{ steps.scope.outputs.needs_markdown }}"
-          echo "needs_system_deps=${{ steps.scope.outputs.needs_system_deps }}"
-          echo "needs_trunk=${{ steps.scope.outputs.needs_trunk }}"
-          echo "needs_wasm_target=${{ steps.scope.outputs.needs_wasm_target }}"
-          echo "run_rust_baseline=${{ steps.scope.outputs.run_rust_baseline }}"
-          echo "needs_rust_toolchain=${{ steps.scope.outputs.needs_rust_toolchain }}"
-          echo "planner_config_sha256=${{ steps.scope.outputs.planner_config_sha256 }}"
+          python3 -I - <<'PY'
+          import json, os, pathlib
+          source = json.loads(pathlib.Path(os.environ["SCOPE_OUTPUTS_PATH"]).read_text(encoding="utf-8"))
+          fields = (
+              "execution_contract", "scope", "selected_capabilities", "reason_summary", "changed_path_count",
+              "run_oasis7_required_tests", "run_consensus_tests", "run_distfs_tests", "run_oasis7_node_tests",
+              "run_oasis7_net_tests", "run_oasis7_net_libp2p_tests", "run_viewer_contract_tests",
+              "run_viewer_wasm_check", "run_viewer_perf_smoke", "run_pixel_world_bridge_lib_tests",
+              "run_pixel_world_bridge_wasm_check", "run_launcher_web_build", "run_oasis7_workspace_support_crate_tests",
+              "run_scenario_regression", "run_operational_contracts", "run_workflow_governance_contracts",
+              "run_packaging_contracts", "run_doc_checker_contracts", "run_cargo_tooling_contracts",
+              "run_site_contract_tests", "run_codex_agent_config_validation", "run_compile_metrics_contract_tests",
+              "run_required_gate_baseline", "needs_node", "needs_python", "needs_markdown", "needs_system_deps",
+              "needs_trunk", "needs_wasm_target", "run_rust_baseline", "needs_rust_toolchain", "planner_config_sha256",
+          )
+          for field in fields:
+              print(f"{field}={source.get(field, '')}")
+          PY
       - name: Install pinned Markdown runtime for keyed inventory observation
         if: ${{ inputs.request_key != '' }}
         run: python3 -m pip install --disable-pip-version-check --requirement scripts/doc-governance-requirements.txt
@@ -365,7 +366,7 @@ jobs:
         name: Build attempt-scoped required-plan v2 from trusted W and M
         env:
           GH_TOKEN: ${{ github.token }}
-          PLAN_JSON: ${{ toJSON(steps.scope.outputs) }}
+          SCOPE_OUTPUTS_PATH: ${{ runner.temp }}/required-scope-outputs.json
           INTEGRATION_JSON: ${{ steps.integration.outputs.identity }}
           INTEGRATION_REQUEST_KEY: ${{ inputs.request_key }}
           INTEGRATION_REQUEST_B64: ${{ inputs.validation_request_b64 }}
@@ -402,7 +403,7 @@ jobs:
           import integration_ci as integration_module
           import integration_executor_contract as request_contract
 
-          plan_output=json.loads(os.environ["PLAN_JSON"])
+          plan_output=json.loads(pathlib.Path(os.environ["SCOPE_OUTPUTS_PATH"]).read_text(encoding="utf-8"))
           integration=json.loads(os.environ["INTEGRATION_JSON"])
           if not isinstance(integration,dict) or not integration.get("integration_worktree"):
               raise SystemExit("exact keyed M worktree identity is unavailable")
@@ -460,7 +461,7 @@ jobs:
           PY
       - name: Write required planner artifact
         env:
-          PLAN_JSON: ${{ toJSON(steps.scope.outputs) }}
+          SCOPE_OUTPUTS_PATH: ${{ runner.temp }}/required-scope-outputs.json
           REPOSITORY: ${{ github.repository }}
           WORKFLOW_RUN_ID: ${{ github.run_id }}
           INTEGRATION_JSON: ${{ steps.integration.outputs.identity }}
@@ -468,7 +469,7 @@ jobs:
           mkdir -p output/required-plan
           python3 -I - <<'PY'
           import json, os, pathlib
-          source=json.loads(os.environ["PLAN_JSON"])
+          source=json.loads(pathlib.Path(os.environ["SCOPE_OUTPUTS_PATH"]).read_text(encoding="utf-8"))
           legacy_fields=(
               "scope", "selected_capabilities", "reason_summary", "changed_path_count",
               "source_scope_base", "integration_base", "source_head",

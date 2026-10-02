@@ -6,9 +6,11 @@ cd "$ROOT_DIR"
 
 content_probe="doc/testing/templates/unified-world-code-scan-content-probe.template.tsv"
 path_probe="doc/testing/templates/shared""-network-regression-probe.template.tsv"
+sandbox_root=""
 
 cleanup() {
   rm -f "$content_probe" "$path_probe"
+  [[ -z "$sandbox_root" ]] || rm -rf "$sandbox_root"
 }
 trap cleanup EXIT
 
@@ -30,6 +32,16 @@ assert_fails_with() {
   fi
 }
 
+make_sandbox() {
+  [[ -z "$sandbox_root" ]] || rm -rf "$sandbox_root"
+  sandbox_root="$(mktemp -d)"
+  mkdir -p "$sandbox_root/scripts/fixtures/document-corpus-v3"
+  cp ./scripts/unified-world-code-terminology-scan.sh "$sandbox_root/scripts/"
+  cp ./scripts/document_evidence_policy.py "$sandbox_root/scripts/"
+  cp -R ./scripts/fixtures/document-corpus-v3/legacy \
+    "$sandbox_root/scripts/fixtures/document-corpus-v3/"
+}
+
 cleanup
 
 ./scripts/unified-world-code-terminology-scan.sh >/dev/null
@@ -45,5 +57,42 @@ assert_fails_with "$path_probe: legacy terminology in path name" ./scripts/unifi
 rm -f "$path_probe"
 
 ./scripts/unified-world-code-terminology-scan.sh >/dev/null
+
+make_sandbox
+printf 'clean additional fixture\n' > \
+  "$sandbox_root/scripts/fixtures/document-corpus-v3/legacy/extra.json"
+assert_fails_with "fixture file set differs from the fixed manifest" \
+  "$sandbox_root/scripts/unified-world-code-terminology-scan.sh"
+
+make_sandbox
+linked_payload="$sandbox_root/scripts/fixtures/document-corpus-v3/legacy/document-corpus-inventory.json"
+rm -f "$linked_payload"
+ln -s inventory.json "$linked_payload"
+assert_fails_with "fixture path is not a regular file" \
+  "$sandbox_root/scripts/unified-world-code-terminology-scan.sh"
+
+make_sandbox
+printf '\n' >> "$sandbox_root/scripts/fixtures/document-corpus-v3/legacy/manifest.json"
+assert_fails_with "fixed manifest SHA-256 mismatch" \
+  "$sandbox_root/scripts/unified-world-code-terminology-scan.sh"
+
+make_sandbox
+printf 'changed payload bytes\n' >> \
+  "$sandbox_root/scripts/fixtures/document-corpus-v3/legacy/document-corpus-inventory.json"
+assert_fails_with "frozen payload byte count or SHA-256 mismatch" \
+  "$sandbox_root/scripts/unified-world-code-terminology-scan.sh"
+
+make_sandbox
+misused_reference="doc/testing/evidence/shared""-network-"
+printf 'unexpected_active_reference = "%s"\n' "$misused_reference" >> \
+  "$sandbox_root/scripts/document_evidence_policy.py"
+assert_fails_with "unexpected_active_reference" \
+  "$sandbox_root/scripts/unified-world-code-terminology-scan.sh"
+
+make_sandbox
+awk '/authority_path = / { print; exit }' ./scripts/document_evidence_policy.py >> \
+  "$sandbox_root/scripts/document_evidence_policy.py"
+assert_fails_with "exact compatibility reference must occur once; found 2" \
+  "$sandbox_root/scripts/unified-world-code-terminology-scan.sh"
 
 echo "unified-world-code-terminology-scan.test: OK"

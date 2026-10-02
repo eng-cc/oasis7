@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "58e2e5a350699eb220da2c266e33bf073625fc717b7786b7e4c58f16b6dc852e",
+    "current_authority": "doc/product/world-rules-core-gameplay/playability-evidence-and-claim-boundaries.prd.md",
+    "decision_owner": "gameplay_designer",
+    "disposition": "retain_current_authority",
+    "note": "professional evidence contract",
+    "path": "doc/playability_test_result/prd.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "2a5f97c5192a400f6ec60004597a3f5d52c1bd5b41a72a0b294dd9e7d63a07c1",
+    "current_authority": "doc/playability_test_result/prd.md",
+    "decision_owner": "repository_health_engineer",
+    "disposition": "retain_current_authority",
+    "note": "navigation and historical-evidence boundary",
+    "path": "doc/playability_test_result/README.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}
