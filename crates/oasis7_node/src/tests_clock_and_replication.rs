@@ -819,22 +819,63 @@ fn runtime_pos_state_persists_across_restart() {
             .expect("replication")
     };
 
+    // Build the restart precondition through the real commit and persistence paths
+    // without requiring eight background commits within a wall-clock deadline.
+    let seed_config = build_config();
+    let mut seed_engine = PosNodeEngine::new(&seed_config).expect("seed engine");
+    let mut seed_replication = super::replication::ReplicationRuntime::new(
+        seed_config
+            .replication
+            .as_ref()
+            .expect("seed replication config"),
+        &seed_config.node_id,
+    )
+    .expect("seed replication");
+    let seed_store = super::pos_state_store::PosNodeStateStore::from_replication(
+        seed_config
+            .replication
+            .as_ref()
+            .expect("seed replication config"),
+    );
+    let mut seed_hook = RecordingExecutionHook::new(Arc::new(Mutex::new(Vec::new())));
+    for height in 1..=8 {
+        let tick = seed_engine
+            .tick(
+                &seed_config.node_id,
+                &seed_config.world_id,
+                super::runtime_util::now_unix_ms(),
+                None,
+                Some(&mut seed_replication),
+                None,
+                None,
+                Vec::new(),
+                Some(&mut seed_hook),
+            )
+            .expect("seed commit");
+        assert_eq!(tick.consensus_snapshot.committed_height, height);
+        assert_eq!(tick.consensus_snapshot.last_execution_height, height);
+        seed_store
+            .save_engine_state(&seed_engine)
+            .expect("persist seed state");
+        thread::sleep(Duration::from_millis(1));
+    }
+
     let mut runtime = NodeRuntime::new(build_config()).with_execution_hook(
         RecordingExecutionHook::new(Arc::new(Mutex::new(Vec::new()))),
     );
     runtime.start().expect("start first");
     let reached = wait_until(Instant::now() + Duration::from_secs(2), || {
         let snapshot = runtime.snapshot();
-        snapshot.consensus.committed_height >= 8 && snapshot.consensus.last_execution_height >= 8
+        snapshot.consensus.committed_height > 8 && snapshot.consensus.last_execution_height > 8
     });
     runtime.stop().expect("stop first");
     let first = runtime.snapshot();
     assert!(first.last_error.is_none());
     assert!(
         reached
-            && first.consensus.committed_height >= 8
-            && first.consensus.last_execution_height >= 8,
-        "runtime did not reach seed height before restart: committed={} execution={} last_error={:?}",
+            && first.consensus.committed_height > 8
+            && first.consensus.last_execution_height > 8,
+        "runtime did not advance beyond seed height before restart: committed={} execution={} last_error={:?}",
         first.consensus.committed_height,
         first.consensus.last_execution_height,
         first.last_error
