@@ -48,6 +48,11 @@ def load_test_module(path: pathlib.Path, name: str):
 
 
 def copy_pm_helpers(root: pathlib.Path) -> None:
+    # DeliveryFixture now stages its own isolated PM tree and API adapter.
+    # Keep that complete tree instead of trying to copy over it (or replacing
+    # its adapter with the production transport).
+    if (root / "scripts/pm").is_dir():
+        return
     (root / "scripts").mkdir(parents=True, exist_ok=True)
     shutil.copytree(ROOT / "scripts/pm", root / "scripts/pm")
 

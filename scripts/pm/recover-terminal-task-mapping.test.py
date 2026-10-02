@@ -92,8 +92,8 @@ class RecoveryTest(unittest.TestCase):
         self.assertEqual(produced.returncode, 0, produced.stderr)
 
         # The CLI resolves canonical receipt metadata relative to the supplied
-        # default worktree. Keep it a self-contained disposable repository.
-        shutil.copytree(ROOT / "scripts/pm", fixture.root / "scripts/pm")
+        # default worktree. DeliveryFixture already stages the self-contained
+        # PM tree and its isolated GitHub API adapter.
         mapping = fixture.mapping()
         uid = protocol.UID
         record = copy.deepcopy(mapping["tasks"][uid])

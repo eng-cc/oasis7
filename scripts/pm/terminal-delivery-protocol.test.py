@@ -46,11 +46,13 @@ class DeliveryFixture:
         parent = parent.resolve()
         self.root = parent / "repo"
         self.task = parent / "task-worktree"
+        self.pm_tools = self.root / "scripts/pm"
         self.bin = parent / "bin"
         self.state_path = parent / "github-state.json"
         self.remote_state_path = parent / "remote-branch-state.json"
         self.log_path = parent / "gh-log.jsonl"
         self.lost_marker = parent / "lost-response-once"
+        self.lost_close_marker = parent / "lost-close-response-once"
         self.process_probe_mode: str | None = None
         self.remote = parent / "fixture-origin.git"
         self.bin.mkdir(parents=True)
@@ -66,6 +68,9 @@ class DeliveryFixture:
         (self.task / "README.md").write_text("base\nmerged task change\n", encoding="utf-8")
         self._git("add", "README.md", cwd=self.task)
         self._git("commit", "-qm", "task change", cwd=self.task)
+        shutil.copytree(ROOT / "scripts/pm", self.pm_tools)
+        shutil.copy2(ROOT / "scripts/pm/fixtures/github_api_test_adapter.py",
+                     self.pm_tools / "github_api.py")
         self.head_oid = self._git("rev-parse", "HEAD", cwd=self.task)
         self.head_tree = self._git("rev-parse", "HEAD^{tree}", cwd=self.task)
         self.worktree_common_dir = self._git(
@@ -162,7 +167,7 @@ class DeliveryFixture:
         self._write_state()
         self.remote_state_path.write_text(
             json.dumps({"refs/heads/task/protocol-fixture": self.head_oid}), encoding="utf-8")
-        helper = ROOT / "scripts/pm/canonical-receipt-root.py"
+        helper = self.pm_tools / "canonical-receipt-root.py"
         raw = subprocess.check_output([
             sys.executable, str(helper), "--default-worktree", str(self.root),
             "--task-uid", UID, "--create",
@@ -231,6 +236,11 @@ elif args[:2] == ["issue", "close"]:
     state["issue"]["state"] = "CLOSED"
     state["issue"]["state_reason"] = "completed"
     state_path.write_text(json.dumps(state))
+    if os.environ.get("QA_LOSE_ISSUE_CLOSE_RESPONSE") == "1":
+        marker = pathlib.Path(os.environ["QA_LOST_CLOSE_MARKER"])
+        if not marker.exists():
+            marker.touch()
+            raise SystemExit(74)
 elif args[:2] == ["issue", "view"]:
     out({"state":state["issue"]["state"],"state_reason":state["issue"].get("state_reason","")})
 else:
@@ -308,13 +318,15 @@ for pid in args[args.index("-p") + 1].split(","):
 ''', encoding="utf-8")
         lsof.chmod(0o755)
 
-    def env(self, *, lose_response: bool = False, comment_author: str | None = None,
+    def env(self, *, lose_response: bool = False, lose_close_response: bool = False,
+            comment_author: str | None = None,
             comment_no_user: bool = False) -> dict[str, str]:
         env = dict(os.environ)
         env["PATH"] = str(self.bin) + os.pathsep + env.get("PATH", "")
         env["QA_GH_STATE"] = str(self.state_path)
         env["QA_GH_LOG"] = str(self.log_path)
         env["QA_LOST_MARKER"] = str(self.lost_marker)
+        env["QA_LOST_CLOSE_MARKER"] = str(self.lost_close_marker)
         env["QA_REAL_GIT"] = self.real_git
         env["QA_REMOTE_BRANCH_OID"] = self.head_oid
         env["QA_REMOTE_STATE"] = str(self.remote_state_path)
@@ -326,6 +338,10 @@ for pid in args[args.index("-p") + 1].split(","):
             env["QA_LOSE_COMMENT_RESPONSE"] = "1"
         else:
             env.pop("QA_LOSE_COMMENT_RESPONSE", None)
+        if lose_close_response:
+            env["QA_LOSE_ISSUE_CLOSE_RESPONSE"] = "1"
+        else:
+            env.pop("QA_LOSE_ISSUE_CLOSE_RESPONSE", None)
         if comment_author is None:
             env.pop("QA_COMMENT_AUTHOR", None)
         else:
@@ -337,34 +353,28 @@ for pid in args[args.index("-p") + 1].split(","):
         return env
 
     def run_producer(self, *extra: str, lose_response: bool = False,
+                     lose_close_response: bool = False,
                      comment_author: str | None = None,
                      comment_no_user: bool = False) -> subprocess.CompletedProcess[str]:
         return subprocess.run([
-            sys.executable, str(ROOT / "scripts/pm/post-merge-finalize.py"),
+            sys.executable, str(self.pm_tools / "post-merge-finalize.py"),
             "--repo-root", str(self.root), "--task-uid", UID, "--delivery", *extra,
             "--json",
         ], text=True, capture_output=True,
-            env=self.env(lose_response=lose_response, comment_author=comment_author,
+            env=self.env(lose_response=lose_response, lose_close_response=lose_close_response,
+                         comment_author=comment_author,
                          comment_no_user=comment_no_user))
 
     def run_finalizer(self, *extra: str) -> subprocess.CompletedProcess[str]:
-        helper_dir = self.root / "scripts/pm"
-        if not helper_dir.exists():
-            helper_dir.parent.mkdir(parents=True, exist_ok=True)
-            helper_dir.symlink_to(ROOT / "scripts/pm", target_is_directory=True)
         return subprocess.run([
-            "bash", str(ROOT / "scripts/pm/finalize-task.sh"),
+            "bash", str(self.pm_tools / "finalize-task.sh"),
             "--repo-root", str(self.root), "--task-uid", UID, "--pr", str(PR),
             "--resume", *extra, "--json",
         ], cwd=self.root, text=True, capture_output=True, env=self.env())
 
     def run_cleanup(self, *extra: str) -> subprocess.CompletedProcess[str]:
-        helper_dir = self.root / "scripts/pm"
-        if not helper_dir.exists():
-            helper_dir.parent.mkdir(parents=True, exist_ok=True)
-            helper_dir.symlink_to(ROOT / "scripts/pm", target_is_directory=True)
         return subprocess.run([
-            "bash", str(ROOT / "scripts/pm/post-merge-cleanup.sh"),
+            "bash", str(self.pm_tools / "post-merge-cleanup.sh"),
             "--repo-root", str(self.root), "--task-uid", UID,
             "--delivery", *extra, "--json",
         ], cwd=self.root, text=True, capture_output=True, env=self.env())
@@ -435,6 +445,105 @@ class TerminalDeliveryProtocolTests(unittest.TestCase):
         self.assertEqual(json.loads(again.stdout)["status"], "already_finalized")
         calls = [json.loads(line) for line in self.fixture.log_path.read_text().splitlines()]
         self.assertEqual(sum(call[:2] == ["issue", "comment"] for call in calls), 1)
+
+    def test_lost_issue_close_response_recovers_same_delivery_without_duplicates(self):
+        mapping_before_preflight = self.fixture.mapping_path.read_bytes()
+        state_before_preflight = self.fixture.state_path.read_bytes()
+        receipt_files_before_preflight = {
+            path.name: path.read_bytes() for path in self.fixture.receipt_root.iterdir()
+            if path.is_file()
+        }
+
+        preflight = self.fixture.run_producer("--preflight")
+        self.assertEqual(preflight.returncode, 0, preflight.stderr)
+        self.assertEqual(json.loads(preflight.stdout)["status"], "ready")
+        self.assertEqual(self.fixture.mapping_path.read_bytes(), mapping_before_preflight)
+        self.assertEqual(self.fixture.state_path.read_bytes(), state_before_preflight)
+        self.assertEqual(
+            {path.name: path.read_bytes() for path in self.fixture.receipt_root.iterdir()
+             if path.is_file()},
+            receipt_files_before_preflight,
+        )
+        preflight_calls = [json.loads(line) for line in self.fixture.log_path.read_text().splitlines()]
+        self.assertFalse(any(call[:2] in (["issue", "close"], ["issue", "comment"],
+                                          ["project", "item-edit"])
+                             for call in preflight_calls), preflight_calls)
+
+        lost = self.fixture.run_producer(lose_close_response=True)
+        self.assertNotEqual(lost.returncode, 0, lost.stdout + lost.stderr)
+        self.assertTrue(self.fixture.lost_close_marker.exists())
+
+        after_lost = json.loads(self.fixture.state_path.read_text(encoding="utf-8"))
+        self.assertEqual(after_lost["issue"]["state"], "CLOSED")
+        self.assertEqual(after_lost["issue"]["state_reason"], "completed")
+        terminal_comments = [comment for comment in after_lost["comments"]
+                             if "<!-- oasis7-pm-evidence/v2 -->" in comment["body"]]
+        self.assertEqual(len(terminal_comments), 1, terminal_comments)
+        comment_after_lost = copy.deepcopy(terminal_comments[0])
+
+        record_after_lost = self.fixture.mapping()["tasks"][UID]
+        self.assertEqual(record_after_lost["workflow_phase"], "post_merge_done")
+        receipt_path = self.fixture.receipt_root / "terminal-delivery-receipt.json"
+        receipt_bytes_after_lost = receipt_path.read_bytes()
+        receipt_sha_after_lost = sha(receipt_bytes_after_lost)
+        self.assertEqual(record_after_lost["phase_receipt_type"]["post_merge_done"],
+                         "oasis7_terminal_delivery")
+        self.assertEqual(record_after_lost["phase_receipt_sha256"]["post_merge_done"],
+                         receipt_sha_after_lost)
+        self.assertFalse((self.fixture.receipt_root / "terminal-tombstone.json").exists())
+
+        ledger_path = self.fixture.receipt_root / "finalizer-ledger.json"
+        ledger_after_lost = json.loads(ledger_path.read_text(encoding="utf-8"))
+        close_after_lost = ledger_after_lost["operations"]["issue_close"]
+        expected_close_id = hashlib.sha256(f"{UID}:post_merge_done:issue_close".encode()).hexdigest()
+        self.assertEqual(close_after_lost["operation_id"], expected_close_id)
+        self.assertEqual(close_after_lost["effect"], "issue_close")
+        self.assertTrue(close_after_lost.get("intent"), close_after_lost)
+        self.assertTrue(close_after_lost.get("action"), close_after_lost)
+        self.assertFalse(close_after_lost.get("readback"), close_after_lost)
+        self.assertFalse(close_after_lost.get("committed"), close_after_lost)
+        calls_after_lost = [json.loads(line) for line in self.fixture.log_path.read_text().splitlines()]
+        self.assertEqual(sum(call[:2] == ["issue", "close"] for call in calls_after_lost), 1)
+        self.assertEqual(sum(call[:2] == ["issue", "comment"] for call in calls_after_lost), 1)
+
+        retry = self.fixture.run_producer()
+        self.assertEqual(retry.returncode, 0, retry.stdout + retry.stderr)
+        self.assertEqual(json.loads(retry.stdout)["status"], "finalized")
+        self.assertEqual(self.read_proof()["protocol_version"], 2)
+
+        recovered_state = json.loads(self.fixture.state_path.read_text(encoding="utf-8"))
+        self.assertEqual(recovered_state["issue"]["state"], "CLOSED")
+        self.assertEqual(recovered_state["issue"]["state_reason"], "completed")
+        recovered_terminal_comments = [comment for comment in recovered_state["comments"]
+                                       if "<!-- oasis7-pm-evidence/v2 -->" in comment["body"]]
+        self.assertEqual(recovered_terminal_comments, [comment_after_lost])
+        self.assertEqual(receipt_path.read_bytes(), receipt_bytes_after_lost)
+        recovered_record = self.fixture.mapping()["tasks"][UID]
+        self.assertEqual(recovered_record["phase_receipt_sha256"]["post_merge_done"],
+                         receipt_sha_after_lost)
+
+        tombstone_path = self.fixture.receipt_root / "terminal-tombstone.json"
+        tombstone = json.loads(tombstone_path.read_text(encoding="utf-8"))
+        self.assertEqual(tombstone["terminal_receipt_sha256"], receipt_sha_after_lost)
+        recovered_ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+        recovered_close = recovered_ledger["operations"]["issue_close"]
+        self.assertEqual(recovered_close["operation_id"], expected_close_id)
+        self.assertTrue(recovered_close.get("readback"), recovered_close)
+        self.assertTrue(recovered_close.get("committed"), recovered_close)
+        self.assertEqual(recovered_close.get("result", {}).get("state"), "CLOSED")
+        self.assertEqual(recovered_close.get("result", {}).get("state_reason"), "completed")
+
+        already_finalized = self.fixture.run_producer()
+        self.assertEqual(already_finalized.returncode, 0,
+                         already_finalized.stdout + already_finalized.stderr)
+        self.assertEqual(json.loads(already_finalized.stdout)["status"], "already_finalized")
+        final_state = json.loads(self.fixture.state_path.read_text(encoding="utf-8"))
+        final_terminal_comments = [comment for comment in final_state["comments"]
+                                  if "<!-- oasis7-pm-evidence/v2 -->" in comment["body"]]
+        self.assertEqual(final_terminal_comments, [comment_after_lost])
+        final_calls = [json.loads(line) for line in self.fixture.log_path.read_text().splitlines()]
+        self.assertEqual(sum(call[:2] == ["issue", "close"] for call in final_calls), 1)
+        self.assertEqual(sum(call[:2] == ["issue", "comment"] for call in final_calls), 1)
 
     def test_shared_reader_rejects_selector_digest_comment_claim_and_tombstone_drift(self):
         produced = self.fixture.run_producer()

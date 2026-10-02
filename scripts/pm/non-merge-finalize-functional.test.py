@@ -294,6 +294,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
             "github-project-workflow.py",
             "workflow-durable-store.py",
             "portable_file_lock.py",
+            "task_complete_claim.py",
             "loop_leaf_result.py",
             "closed_duplicate_candidate_guard.py",
             "canonical-receipt-root.py",

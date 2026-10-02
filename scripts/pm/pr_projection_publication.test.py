@@ -5,6 +5,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -136,6 +137,187 @@ class FakeClock:
     def sleep(self, duration):
         self.sleeps.append(duration)
         self.now += duration
+
+
+class BoundedRecoveryCLITests(unittest.TestCase):
+    """Use the real record-pr CLI; only the shell fixture replaces GitHub IO.
+
+    Journals, ancestor/current Git commits and publication comments are built
+    by production code in each disposable fixture. No FakeAdapter.record_pr
+    implementation stands in for the recovery boundary.
+    """
+
+    def run_case(self, case):
+        environment = dict(os.environ, OASIS7_REC_RED_ONLY="1", OASIS7_REC_CASE=case)
+        result = subprocess.run(
+            ["bash", str(ROOT / "github-project-task.test.sh")],
+            cwd=ROOT.parents[1], env=environment, capture_output=True,
+            text=True, timeout=30,
+        )
+        self.assertEqual(0, result.returncode,
+                         f"REC actual CLI case={case} exit={result.returncode}\n"
+                         + result.stdout + result.stderr)
+
+    def test_recovery_record_pr_budget_covers_required_fresh_checks(self):
+        # Reuse the genuine immutable closure/three-role authority fixture and
+        # real publisher/record-pr. Scale only a subprocess deadline probe;
+        # the actual CLI still runs with its production aggregate budget.
+        fixture = (ROOT / "github-project-task.test.sh").read_text()
+        anchor = "import pr_projection_publish as publisher\nroot, uid, case = pathlib.Path(sys.argv[1]), sys.argv[2], sys.argv[3]"
+        self.assertEqual(1, fixture.count(anchor))
+        probe = """import subprocess
+original_command_output = publisher.command_output
+def deadline_probe(command, *, timeout=publisher.LOCAL_COMMAND_TIMEOUT_SECONDS):
+    if "record-pr" in command:
+        # 0.8s represents an 80s barrier workload: too long for legacy60,
+        # within recovery180. A real child process enforces the deadline.
+        subprocess.run([sys.executable, "-c", "import time; time.sleep(0.8)"],
+            check=True, timeout=timeout / 100)
+    return original_command_output(command, timeout=timeout)
+publisher.command_output = deadline_probe
+"""
+        with tempfile.TemporaryDirectory() as temp:
+            isolated = Path(temp) / "budget-fixture.sh"
+            isolated.write_text(fixture.replace(anchor, "import pr_projection_publish as publisher\n" + probe + anchor.split("\n", 1)[1]))
+            environment = dict(os.environ, PM_ROOT_DIR=str(ROOT.parents[1]),
+                OASIS7_REC_RED_ONLY="1", OASIS7_REC_CASE="idempotent_repeat")
+            result = subprocess.run(["bash", str(isolated)], cwd=ROOT.parents[1],
+                env=environment, capture_output=True, text=True, timeout=60)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("PASS test_rec_idempotent_repeat", result.stdout)
+
+    def test_project_post_issue_pre_cache_post_reconciles(self):
+        self.run_case("project_post_issue_pre")
+
+    def test_project_pre_issue_post_reconciles(self):
+        self.run_case("project_pre_issue_post")
+
+    def test_all_pre_reconciles_with_final_readback(self):
+        self.run_case("all_pre")
+
+    def test_all_post_reconciles_with_final_readback(self):
+        self.run_case("all_post")
+
+    def test_each_issue_field_can_independently_be_pre_or_post(self):
+        self.run_case("fieldwise_issue_mixed")
+
+    def test_pre_cache_cannot_replace_final_authoritative_readback(self):
+        self.run_case("cache_pre_project_post")
+
+    def test_missing_old_journal_rejected_without_writes(self):
+        self.run_case("guard_missing_old_journal")
+
+    def test_old_observed_action_is_not_uncertain_lineage(self):
+        self.run_case("guard_old_not_uncertain")
+
+    def test_duplicate_current_intent_rejected_without_writes(self):
+        self.run_case("guard_duplicate_current_intent")
+
+    def test_missing_current_intent_rejected_without_writes(self):
+        self.run_case("guard_missing_current_intent")
+
+    def test_unrelated_issue_drift_rejected_without_writes(self):
+        self.run_case("guard_unrelated_issue_drift")
+
+    def test_repository_field_identity_drift_rejected_without_writes(self):
+        self.run_case("guard_repository_identity_drift")
+
+    def test_repository_field_malformed_identity_rejected_without_writes(self):
+        self.run_case("guard_repository_identity_malformed")
+
+    def test_project_item_content_must_be_exact_task_issue_before_writes(self):
+        for case in (
+            "guard_project_item_content_wrong",
+            "guard_project_item_content_missing",
+            "guard_project_item_content_nonissue",
+            "guard_project_item_content_cross_repository",
+        ):
+            with self.subTest(case=case):
+                self.run_case(case)
+
+    def test_project_item_content_is_rechecked_after_each_project_write(self):
+        self.run_case("guard_project_item_content_late_drift")
+
+    def test_unrelated_project_drift_rejected_without_writes(self):
+        self.run_case("guard_unrelated_project_drift")
+
+    def test_live_pr_head_drift_rejected_without_writes(self):
+        self.run_case("guard_pr_head_drift")
+
+    def test_live_pr_task_refs_drift_rejected_without_writes(self):
+        self.run_case("guard_pr_task_refs_drift")
+
+    def test_final_issue_read_failure_retains_current_pending_action(self):
+        self.run_case("pending_final_readback")
+
+    def test_repeated_actual_publisher_converges_idempotently(self):
+        self.run_case("idempotent_repeat")
+
+    def test_final_project_content_drift_retains_current_pending_action(self):
+        self.run_case("pending_project_content_drift")
+
+    def test_old_action_pr_tuple_mismatch_rejected_without_writes(self):
+        self.run_case("guard_old_action_tuple")
+
+    def test_current_journal_identity_digest_mismatch_rejected_without_writes(self):
+        self.run_case("guard_current_journal_identity")
+
+    def test_authentic_old_publication_nonancestor_rejected_without_writes(self):
+        self.run_case("guard_old_nonancestor")
+
+    def test_current_issue_write_permission_required_before_writes(self):
+        self.run_case("guard_issue_permission")
+
+    def test_current_project_write_permission_required_before_writes(self):
+        self.run_case("guard_project_permission")
+
+    def test_current_actor_must_match_live_tpm_admission_author(self):
+        self.run_case("guard_actor_mismatch")
+
+    def test_authenticated_step_scope_cannot_add_an_unapproved_helper(self):
+        self.run_case("guard_step_scope")
+
+    def test_running_helper_source_must_equal_reviewed_immutable_source(self):
+        self.run_case("guard_helper_source")
+
+    def test_helper_closure_digest_must_match_actual_bounded_role_returns(self):
+        self.run_case("guard_helper_closure_digest")
+
+    def test_historical_raw_journal_digest_is_separately_verified(self):
+        self.run_case("guard_old_raw_journal_hash")
+
+    def test_current_raw_journal_digest_is_separately_verified(self):
+        self.run_case("guard_current_raw_journal_hash")
+
+    def test_actual_local_role_return_digest_is_verified(self):
+        self.run_case("guard_role_return_digest")
+
+    def test_closed_issue_rejected_before_metadata_writes(self):
+        self.run_case("guard_issue_closed")
+
+    def test_closed_pr_rejected_before_metadata_writes(self):
+        self.run_case("guard_pr_closed")
+
+    def test_merged_pr_rejected_before_metadata_writes(self):
+        self.run_case("guard_pr_merged")
+
+    def test_raw_hash_equal_observed_pr_payload_must_be_exact(self):
+        self.run_case("guard_observed_payload_raw_hash_equal")
+
+    def test_raw_hash_equal_reciprocal_binding_payload_must_be_exact(self):
+        self.run_case("guard_binding_shape_raw_hash_equal")
+
+    def test_live_scope_comment_drift_rejected_before_metadata_writes(self):
+        self.run_case("guard_scope_comment_drift")
+
+    def test_noncanonical_observed_journal_rejected_before_writes(self):
+        self.run_case("guard_noncanonical_observed_journal")
+
+    def test_raw_hash_equal_current_action_requires_allowed_phase_and_disposition(self):
+        for case in ("guard_invalid_global_phase_raw_hash_equal",
+                     "guard_invalid_global_disposition_raw_hash_equal"):
+            with self.subTest(case=case):
+                self.run_case(case)
 
 
 class PublicationMatrixTests(unittest.TestCase):
@@ -361,6 +543,7 @@ class PublicationMatrixTests(unittest.TestCase):
             with patch.object(publish_module, "command_output", return_value="") as command:
                 adapter.record_pr(UID, 999, publication["publication_id"])
 
+        self.assertEqual(60, command.call_args.kwargs["timeout"])
         argv = command.call_args.args[0]
         self.assertIn("record-pr", argv)
         self.assertIn("--repo", argv)

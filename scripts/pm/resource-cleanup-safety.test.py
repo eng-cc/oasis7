@@ -180,18 +180,23 @@ class Fixture:
 
 def _cross_uid_process_probe(fixture: Fixture, *, foreign_cwd: pathlib.Path | None = None,
                              foreign_open_file: pathlib.Path | None = None,
-                             omit_foreign_readback: bool = False):
+                             omit_foreign_readback: bool = False,
+                             active_pid: int | None = None,
+                             active_argv: str = "fixture-active-process",
+                             active_cwd: pathlib.Path | None = None):
     """Mock complete process and lsof snapshots, while leaving fixture Git real."""
     real_run = EXECUTOR._run
     current_pid = os.getpid()
     parent_pid = os.getppid()
     foreign_pid = max(current_pid, parent_pid) + 100_000
     current_uid = os.getuid()
-    rows = (
+    rows = [
         (current_pid, parent_pid, current_uid, "qa-cleanup-runner"),
         (parent_pid, 1, current_uid, "qa-cleanup-parent"),
         (foreign_pid, 1, current_uid + 1, "foreign-worker-with-path-free-argv"),
-    )
+    ]
+    if active_pid is not None:
+        rows.append((active_pid, current_pid, current_uid, active_argv))
     ps_output = "".join(f"{pid} {ppid} {uid} {command}\n"
                         for pid, ppid, uid, command in rows)
 
@@ -209,7 +214,9 @@ def _cross_uid_process_probe(fixture: Fixture, *, foreign_cwd: pathlib.Path | No
                 if pid == foreign_pid and omit_foreign_readback:
                     continue
                 is_foreign = pid == foreign_pid
-                cwd_path = foreign_cwd if is_foreign and foreign_cwd else fixture.root
+                is_active = pid == active_pid
+                cwd_path = (active_cwd if is_active and active_cwd else
+                            foreign_cwd if is_foreign and foreign_cwd else fixture.root)
                 output.extend((f"p{pid}\n", "fcwd\n", "tDIR\n", f"n{cwd_path}\n"))
                 open_path = (foreign_open_file if is_foreign and foreign_open_file
                              else pathlib.Path("/dev/null"))
@@ -296,13 +303,17 @@ def test_locked_and_active_worktrees_are_retained(base: pathlib.Path) -> None:
     active_case = base / "active"
     active_case.mkdir()
     active = Fixture(active_case)
-    real_process_run = EXECUTOR._run
     process = subprocess.Popen([
         sys.executable, "-c", "import sys,time; time.sleep(30)", str(active.worktree)
     ], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     try:
         time.sleep(0.15)
-        code, payload = active.execute(overrides={"_run": real_process_run})
+        assert process.poll() is None, "active argv fixture process exited before cleanup probe"
+        probe = _cross_uid_process_probe(
+            active, active_pid=process.pid,
+            active_argv=f"python -c import sys,time; time.sleep(30) {active.worktree}",
+        )
+        code, payload = active.execute(overrides={"_run": probe})
     finally:
         process.terminate()
         process.wait(timeout=5)
@@ -320,7 +331,11 @@ def test_locked_and_active_worktrees_are_retained(base: pathlib.Path) -> None:
     )
     try:
         time.sleep(0.15)
-        code, payload = cwd_only.execute(overrides={"_run": real_process_run})
+        assert process.poll() is None, "active cwd fixture process exited before cleanup probe"
+        probe = _cross_uid_process_probe(
+            cwd_only, active_pid=process.pid, active_cwd=cwd_only.worktree,
+        )
+        code, payload = cwd_only.execute(overrides={"_run": probe})
     finally:
         process.terminate()
         process.wait(timeout=5)
