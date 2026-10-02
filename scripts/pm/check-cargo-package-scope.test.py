@@ -145,6 +145,12 @@ path = "src/lib.rs"
         self._git(repo, "commit", "-qm", "register trusted auxiliary file paths")
         return repo, self._git(repo, "rev-parse", "HEAD")
 
+    def _append_auxiliary_entry(self, repo: Path, entry: dict[str, str]) -> None:
+        registry_path = ".pm/cargo-package-auxiliary-files.json"
+        registry = json.loads((repo / registry_path).read_text(encoding="utf-8"))
+        registry["auxiliary_files"].append(entry)
+        self._write(repo, registry_path, json.dumps(registry, indent=2) + "\n")
+
     def _assert_invalid_auxiliary_base(
         self,
         entries: object,
@@ -1828,6 +1834,122 @@ path = "src/lib.rs"
                     change_auxiliary(root)
 
                 self._assert_allowed(repo, base, "alpha", mutate)
+
+    def test_registry_only_maintenance_accepts_valid_exact_path_update(self) -> None:
+        repo, base = self._auxiliary_base(
+            [{"path": "scripts/local-signer/existing.py", "package": "alpha"}]
+        )
+
+        def mutate(root: Path) -> None:
+            self._append_auxiliary_entry(
+                root,
+                {"path": "scripts/local-signer/new.py", "package": "beta"},
+            )
+
+        head = self._head(repo, mutate, "valid registry-only maintenance")
+        changed_paths = self._git(repo, "diff", "--name-only", base, head).splitlines()
+        self.assertEqual([".pm/cargo-package-auxiliary-files.json"], changed_paths)
+        result = self._run_checker(repo, base, head, "auto")
+        self.assertEqual(
+            0,
+            result.returncode,
+            f"expected a valid exact-path registry maintenance range; stdout={result.stdout!r} stderr={result.stderr!r}",
+        )
+        payload = json.loads(result.stdout)
+        self.assertEqual("allowed", payload.get("status"), payload)
+
+    def test_registry_only_maintenance_rejects_any_additional_changed_path(self) -> None:
+        repo, base = self._auxiliary_base(
+            [{"path": "scripts/local-signer/existing.py", "package": "alpha"}]
+        )
+
+        def mutate(root: Path) -> None:
+            self._append_auxiliary_entry(
+                root,
+                {"path": "scripts/local-signer/new.py", "package": "alpha"},
+            )
+            self._write(root, "crates/alpha/src/lib.rs", "pub fn alpha() { println!(\"changed\"); }\n")
+
+        self._assert_rejected(repo, base, "auto", mutate, "policy_self_modification")
+
+    def test_registry_only_maintenance_validates_candidate_entries(self) -> None:
+        cases = [
+            (
+                "unknown package",
+                {"path": "scripts/local-signer/new.py", "package": "missing"},
+            ),
+            (
+                "Cargo-owned path",
+                {"path": "crates/alpha/extra.md", "package": "alpha"},
+            ),
+            (
+                "protected path",
+                {"path": ".github/workflows/rust.yml", "package": "alpha"},
+            ),
+        ]
+        for label, entry in cases:
+            with self.subTest(case=label):
+                repo, base = self._auxiliary_base([])
+
+                def mutate(root: Path, entry: dict[str, str] = entry) -> None:
+                    self._append_auxiliary_entry(root, entry)
+
+                self._assert_rejected(repo, base, "auto", mutate, "trusted_policy_invalid")
+
+        repo, base = self._auxiliary_base([])
+
+        def mutate_schema(root: Path) -> None:
+            registry_path = ".pm/cargo-package-auxiliary-files.json"
+            registry = json.loads((root / registry_path).read_text(encoding="utf-8"))
+            registry["schema"] = "oasis7-cargo-package-auxiliary-files/v2"
+            self._write(root, registry_path, json.dumps(registry, indent=2) + "\n")
+
+        self._assert_rejected(repo, base, "auto", mutate_schema, "trusted_policy_invalid")
+
+    def test_registry_maintenance_rejects_an_additional_unowned_document(self) -> None:
+        repo, base = self._auxiliary_base(
+            [{"path": "scripts/local-signer/existing.py", "package": "alpha"}]
+        )
+
+        def mutate(root: Path) -> None:
+            self._append_auxiliary_entry(
+                root,
+                {"path": "scripts/local-signer/new.py", "package": "alpha"},
+            )
+            self._write(root, "docs/auxiliary-registry-note.md", "This is an unowned change.\n")
+
+        self._assert_rejected(repo, base, "auto", mutate, "policy_self_modification")
+
+    def test_registry_only_maintenance_can_create_registry_from_absence(self) -> None:
+        repo, base = self._fixture()
+
+        def mutate(root: Path) -> None:
+            self._write(
+                root,
+                ".pm/cargo-package-auxiliary-files.json",
+                json.dumps(
+                    {
+                        "schema": "oasis7-cargo-package-auxiliary-files/v1",
+                        "auxiliary_files": [
+                            {"path": "scripts/local-signer/new.py", "package": "alpha"}
+                        ],
+                    },
+                    indent=2,
+                )
+                + "\n",
+            )
+
+        self._assert_allowed(repo, base, "auto", mutate)
+
+    def test_registry_only_maintenance_can_delete_registry_to_absence(self) -> None:
+        repo, base = self._auxiliary_base(
+            [{"path": "scripts/local-signer/existing.py", "package": "alpha"}]
+        )
+
+        def mutate(root: Path) -> None:
+            (root / ".pm/cargo-package-auxiliary-files.json").unlink()
+
+        self._assert_allowed(repo, base, "auto", mutate)
 
     def test_unregistered_auxiliary_sibling_is_not_covered_by_an_exact_entry(self) -> None:
         repo, base = self._auxiliary_base(
