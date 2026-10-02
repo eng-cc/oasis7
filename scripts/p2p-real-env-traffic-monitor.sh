@@ -26,7 +26,6 @@ Options:
 
   --local-status-url <url>         local node status endpoint
                                    (default: http://127.0.0.1:5633/v1/chain/status)
-  --observer-status-url <url>      deprecated alias for --local-status-url
 
   --sequencer-target <user@host>   remote sequencer SSH target
                                    (default: root@39.104.204.172)
@@ -279,7 +278,7 @@ while [[ $# -gt 0 ]]; do
       summary_only=1
       shift
       ;;
-    --local-status-url|--observer-status-url)
+    --local-status-url)
       local_status_url=${2:-}
       shift 2
       ;;

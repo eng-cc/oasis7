@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/p2p/README.md",
+    "authority_layer": "professional_domain",
+    "content_sha256": "43ab27023bc92dfb4bd75e52d9661733c753df83ccff9d7648d8244e9aa99ad3",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "active_candidate",
+    "object_kind": "prd",
+    "path": "doc/p2p/blockchain/p2p-blockchain-p2pfs-hardening.prd.md",
+    "registry_type": "professional_domain",
+    "routing_batch": "p2p-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "blockchain_ops_engineer",
+    "structural_owner": "blockchain_ops_engineer"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "e22b7b0669aa7db6ab6578f8f20aa0c2396b8a9fad5416c5c351c0e605718da0",
+    "current_authority": "testing-manual.md",
+    "decision_owner": "qa_engineer",
+    "disposition": "retain_current_authority",
+    "note": "current S9 S10 claim boundary; results require same-window evidence",
+    "path": "doc/testing/longrun/game-world-state-sync-commit-closure-2026-06-26.prd.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

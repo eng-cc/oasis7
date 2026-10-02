@@ -133,5 +133,13 @@ def explain_unstable(data, read):
                                     'head_sha': sha, 'head_ref': branch, 'classification': 'advisory_codeql'})
         proof.update(explained=True, reason='all anomalous checks have exact advisory Actions provenance')
     except Exception as exc:
+        # A typed shared-client failure is not an explanatory provenance
+        # result. Let the caller preserve its workflow status and retry data.
+        if (callable(getattr(exc, 'as_dict', None))
+                and isinstance(getattr(exc, 'kind', None), str)
+                and getattr(exc, 'workflow_status', None) in {
+                    'external_wait', 'uncertain', 'capability_blocked',
+                }):
+            raise
         proof.update(explained=False, reason='provenance capability blocked: ' + str(exc))
     return proof

@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "3eed72aa5f1fabb2ffea83e5ace5229460549a961b18cebf54eeb9ddf0ad2a18",
+    "current_authority": "doc/playability_test_result/game-test.prd.md",
+    "decision_owner": "gameplay_designer",
+    "disposition": "retain_current_authority",
+    "note": "game-test design",
+    "path": "doc/playability_test_result/game-test.design.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

@@ -2,9 +2,13 @@
 """Focused tests for the validation-only producer's closed execution plan."""
 from __future__ import annotations
 
+from contextlib import redirect_stdout
+import io
 import importlib.util
+import json
 import re
 import sys
+import tempfile
 from types import SimpleNamespace
 from unittest.mock import patch
 import unittest
@@ -361,6 +365,56 @@ class CompleteCollectionTests(unittest.TestCase):
         for pages, _label in invalid:
             with self.subTest(pages=pages), self.assertRaises(producer.ProducerError):
                 producer._collection_rows(pages, "jobs", "attempt jobs")
+
+
+class MainOutputTests(unittest.TestCase):
+    def _assert_main_writes_artifact(self, schema, version):
+        validation_id = "a" * 64
+        run_id = 701
+        run_attempt = 3
+        payload = {
+            "schema": schema,
+            "validation_id": validation_id,
+            "run_id": run_id,
+            "run_attempt": run_attempt,
+            "tested_merge_oid": "b" * 40,
+            "tested_tree_oid": "c" * 40,
+        }
+        expected_artifact = (
+            f"oasis7-ci-reuse-validation-{version}-{validation_id}"
+            f"-r{run_id}-a{run_attempt}"
+        )
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            output_path = Path(temp_dir) / "github-output"
+            stdout = io.StringIO()
+            with (
+                patch.object(producer, "produce_validation", return_value=payload),
+                patch.object(sys, "argv", ["ci-reuse-validation.py"]),
+                patch.dict(producer.os.environ, {"GITHUB_OUTPUT": str(output_path)}),
+                redirect_stdout(stdout),
+            ):
+                producer.main()
+
+            expected_summary = {
+                "schema": schema,
+                "validation_id": validation_id,
+                "run_id": run_id,
+                "run_attempt": run_attempt,
+                "tested_merge_oid": "b" * 40,
+                "tested_tree_oid": "c" * 40,
+            }
+            self.assertEqual(
+                json.dumps(expected_summary, sort_keys=True, separators=(",", ":")) + "\n",
+                stdout.getvalue(),
+            )
+            self.assertEqual(f"artifact_name={expected_artifact}\n", output_path.read_text())
+
+    def test_main_writes_v1_artifact_name_for_returned_run_and_attempt(self):
+        self._assert_main_writes_artifact(producer.contract.PAYLOAD_SCHEMA, "v1")
+
+    def test_main_writes_v2_artifact_name_for_returned_run_and_attempt(self):
+        self._assert_main_writes_artifact(producer.contract.SUCCESSOR_PAYLOAD_SCHEMA, "v2")
 
 
 class WorkflowIsolationTests(unittest.TestCase):

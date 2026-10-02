@@ -18,7 +18,7 @@
 - `testing-manual.md` 与 `manual/*.manual.md` 仍是 operator 手册层，不由本页替代。
 
 ## 逐对象语义清单与新鲜度边界
-- [`inventory.json`](inventory.json) 是本子域的逐路径清单：它覆盖每个现存对象（不含清单自身），记录 lifecycle、语义角色、retention/domain owner、权威入口、处置建议与 residual risk。
+- [`inventory.json`](inventory.json) 是 v3 的静态委托入口，声明本子域逐对象覆盖范围；每个证据源对应的机器快照和 semantic/evidence review 记录存于 `doc/.governance/document-corpus/` 分片。定位和维护方式见 [`Document Corpus Inventory v3`](../../engineering/doc-governance/document-corpus-inventory-v3.design.md)。
 - 清单快照为 2026-08-02。`WINDOW_OBSERVATION` 只保存一个有边界、内容寻址的观测窗口，不构成当前 endpoint availability、fleet health、release readiness、recovery completion 或领域正确性结论；当前行动必须回到 formal runbook，重新采集 deployment truth 与同窗健康证据，再由对应领域 owner、QA/LiveOps 裁决。
 - `HISTORICAL_PROVENANCE`、`ARCHIVED_PROVENANCE` 与 `SUPPORTING_ARTIFACT` 不得被重新表述为当前发布或运行态真值。`AMBIGUOUS_LIFECYCLE` 必须先由清单列出的领域 owner 裁决。
 

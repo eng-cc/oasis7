@@ -16,6 +16,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import types
 from typing import Any
 
 
@@ -115,6 +116,39 @@ def git_value(path: pathlib.Path, *args: str) -> str:
         ).strip()
     except (OSError, subprocess.CalledProcessError):
         return ""
+
+
+def load_effective_loop_policy(root: pathlib.Path, binding: dict[str, Any]):
+    """Load binding validation from the immutable policy commit, never cwd imports."""
+    commit = binding.get("policy_commit", "")
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise ValueError("loop binding has no immutable effective policy commit")
+    subprocess.run(
+        ["git", "-C", str(root), "merge-base", "--is-ancestor", commit, "refs/remotes/origin/main"],
+        check=True, capture_output=True,
+    )
+
+    def execute(name: str):
+        relative = f"scripts/pm/{name}.py"
+        entries = subprocess.check_output(
+            ["git", "-C", str(root), "ls-tree", commit, "--", relative], text=True,
+        ).splitlines()
+        if len(entries) != 1 or "\t" not in entries[0]:
+            raise ValueError("effective loop module missing or ambiguous: " + relative)
+        metadata, recorded_path = entries[0].split("\t", 1)
+        mode, object_type, _oid = metadata.split()
+        if recorded_path != relative or mode != "100644" or object_type != "blob":
+            raise ValueError("effective loop module has unsafe Git mode: " + relative)
+        source = subprocess.check_output(["git", "-C", str(root), "show", commit + ":" + relative])
+        module = types.ModuleType(name)
+        module.__file__ = f"{root}/{relative}@{commit}"
+        module.__package__ = ""
+        sys.modules[name] = module
+        exec(compile(source, module.__file__, "exec"), module.__dict__)
+        return module
+
+    execute("loop_contracts")
+    return execute("loop_policy")
 
 
 def registered_worktrees(root: pathlib.Path) -> list[tuple[pathlib.Path, str]]:
@@ -939,7 +973,25 @@ def command_for(
         if not pr or not pr.isdigit() or not pr_url:
             add_blocker(blockers, "ambiguous state: PR watch phase lacks bound PR identity")
             return []
-        return ["python3", "./scripts/pm/pr-lifecycle-gate.py", pr, "--task-uid", uid, "--json"]
+        pm_dir = root / "scripts/pm"
+        gate_path = pm_dir / "pr-lifecycle-gate.py"
+        supports_observation = False
+        try:
+            gate_source = gate_path.read_text(encoding="utf-8") if gate_path.is_file() and not gate_path.is_symlink() else ""
+            supports_observation = (
+                'parser.add_argument("--observe"' in gate_source
+                and 'parser.add_argument("--watch"' in gate_source
+                and all((pm_dir / name).is_file() and not (pm_dir / name).is_symlink()
+                        for name in ("github_api.py", "portable_file_lock.py", "github_observation.py",
+                                     "github_pr_snapshot.py"))
+            )
+        except OSError:
+            supports_observation = False
+        command = ["python3", "./scripts/pm/pr-lifecycle-gate.py", pr, "--task-uid", uid]
+        if supports_observation:
+            command.extend(["--observe", "--watch"])
+        command.append("--json")
+        return command
     if phase == "task_done":
         terminal_root = default_root or root
         if status == "done" and task.get("completion_mode") == "non_pr_task":
@@ -1033,9 +1085,12 @@ def main() -> int:
         if exc.reconcile_command:
             payload["reconcile_command"] = exc.reconcile_command
     if task.get("loop_binding") is not None:
-        from loop_policy import validate_binding
         binding = task["loop_binding"]
-        result = validate_binding(binding)
+        try:
+            policy = load_effective_loop_policy(root, binding)
+            result = policy.validate_binding(binding)
+        except (OSError, ValueError, subprocess.SubprocessError) as exc:
+            result = {"blockers": [f"trusted loop policy unavailable: {exc}"]}
         for reason in result.get("blockers", []):
             add_blocker(blockers, f"stale identity: loop binding {reason}")
         if isinstance(binding, dict):

@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/p2p/README.md",
+    "authority_layer": "professional_domain",
+    "content_sha256": "92000bbde5f734191f6fbeed9ec49b0bb1448eeba2151e46a0740776c378d356",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "active_candidate",
+    "object_kind": "prd",
+    "path": "doc/p2p/token/mainchain-token-genesis-and-contributor-reward.prd.md",
+    "registry_type": "professional_domain",
+    "routing_batch": "p2p-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "blockchain_ops_engineer",
+    "structural_owner": "blockchain_ops_engineer"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

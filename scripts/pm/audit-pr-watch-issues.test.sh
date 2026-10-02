@@ -17,6 +17,13 @@ TASK_BLOCKED="task_dddddddddddddddddddddddddddddddd"
 MAPPING="$TMPDIR/tasks.json"
 LOG="$TMPDIR/gh.log"
 mkdir -p "$TMPDIR/bin"
+mkdir -p "$TMPDIR/scripts/pm"
+cp "$SCRIPT_DIR/audit-pr-watch-issues.py" "$SCRIPT_DIR/audit-pr-watch-issues.sh" \
+  "$SCRIPT_DIR/github-project-sync.py" "$SCRIPT_DIR/github-project-task.py" \
+  "$SCRIPT_DIR/workflow-durable-store.py" "$SCRIPT_DIR/loop_leaf_result.py" \
+  "$SCRIPT_DIR/closed_duplicate_candidate_guard.py" "$SCRIPT_DIR/portable_file_lock.py" \
+  "$TMPDIR/scripts/pm/"
+cp "$SCRIPT_DIR/fixtures/github_api_test_adapter.py" "$TMPDIR/scripts/pm/github_api.py"
 
 cat > "$MAPPING" <<EOF
 {
@@ -228,7 +235,7 @@ chmod +x "$TMPDIR/bin/gh"
 
 : > "$LOG"
 for selected_uid in task_gggggggggggggggggggggggggggggggg task_hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh; do
-  PATH="$TMPDIR/bin:$PATH" "$ROOT_DIR/scripts/pm/audit-pr-watch-issues.sh" \
+  PATH="$TMPDIR/bin:$PATH" "$TMPDIR/scripts/pm/audit-pr-watch-issues.sh" \
     --mapping "$MAPPING" --task-uid "$selected_uid" --json > "$TMPDIR/missing-issue.json"
 
   python3 - "$TMPDIR/missing-issue.json" "$selected_uid" <<'PY'
@@ -246,7 +253,7 @@ PY
 done
 [[ ! -s "$LOG" ]] || { echo "selected invalid issue number unexpectedly called GitHub" >&2; exit 1; }
 
-PATH="$TMPDIR/bin:$PATH" "$ROOT_DIR/scripts/pm/audit-pr-watch-issues.sh" --mapping "$MAPPING" --global-maintenance --json > "$TMPDIR/dry-run.json"
+PATH="$TMPDIR/bin:$PATH" "$TMPDIR/scripts/pm/audit-pr-watch-issues.sh" --mapping "$MAPPING" --global-maintenance --json > "$TMPDIR/dry-run.json"
 
 python3 - "$TMPDIR/dry-run.json" <<'PY'
 import json
@@ -264,7 +271,7 @@ assert by_number[130]["status"] == "blocked" and "pre-PR review" in by_number[13
 PY
 
 : > "$LOG"
-PATH="$TMPDIR/bin:$PATH" "$ROOT_DIR/scripts/pm/audit-pr-watch-issues.sh" --mapping "$MAPPING" --global-maintenance --close --json > "$TMPDIR/close.json"
+PATH="$TMPDIR/bin:$PATH" "$TMPDIR/scripts/pm/audit-pr-watch-issues.sh" --mapping "$MAPPING" --global-maintenance --close --json > "$TMPDIR/close.json"
 
 python3 - "$TMPDIR/close.json" "$MAPPING" "$LOG" <<'PY'
 import json

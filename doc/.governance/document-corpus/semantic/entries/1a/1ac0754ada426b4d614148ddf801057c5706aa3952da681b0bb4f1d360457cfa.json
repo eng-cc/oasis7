@@ -1,0 +1,12 @@
+{
+  "record": {
+    "content_sha256": "1a474c2c04f76f5f91e23d4f791dc2448c2cbda5d57d1587fe2747dc9f88a917",
+    "current_authority": "doc/p2p/blockchain/formal-network-tiers-testnet-mechanism.runbook.md",
+    "decision_owner": "blockchain_ops_engineer",
+    "disposition": "retain_legacy_rehearsal_provenance",
+    "note": "legacy shared-devnet rehearsal freeze and rollback provenance; never formal public-testnet mainnet settlement or launch authority",
+    "path": "doc/p2p/blockchain/p2p-shared-network-release-train-minimum-2026-03-24.runbook.md",
+    "retirement_gate": "absorb unique rollback contract and repair current callers, then blockchain ops LiveOps and QA review"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

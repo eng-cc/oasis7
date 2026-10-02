@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "a306524db09f124bb90bbee55a5ebe864600a154e8e0bcfaffe8163506c468fe",
+    "current_authority": "doc/world-simulator/viewer/viewer-visual-design-spec-2026-06-05.design.md",
+    "decision_owner": "game_visual_interaction_designer",
+    "disposition": "retain_current_design_supplement",
+    "note": "current page-family implementation supplement; not root visual or release authority",
+    "path": "doc/world-simulator/viewer/viewer-page-module-design-2026-06-18.design.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

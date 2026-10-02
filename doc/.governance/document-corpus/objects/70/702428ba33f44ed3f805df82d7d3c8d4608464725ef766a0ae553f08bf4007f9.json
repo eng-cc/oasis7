@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/testing/README.md",
+    "authority_layer": "professional_domain",
+    "content_sha256": "0dc40893f160c8bdca1ea2d6f3856b3f8bcb67db0856617842280148a3bd8eda",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "active_candidate",
+    "object_kind": "design",
+    "path": "doc/testing/ci/ci-builtin-wasm-docker-canonical-gate.design.md",
+    "registry_type": "professional_domain",
+    "routing_batch": "testing-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "qa_engineer",
+    "structural_owner": "qa_engineer"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

@@ -51,6 +51,7 @@ artifacts/robot_voxel_pipeline/
 
 .playwright
 .playwright-cli
+.cache/doc-governance/
 node_modules/
 crates/oasis7_viewer/.software-safe-build/
 crates/oasis7_viewer/dist

@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "5054a023109d35627845ac02cd8d5c511be83144ee995fe49c0e5942e662feac",
+    "current_authority": "testing-manual.md",
+    "decision_owner": "qa_engineer",
+    "disposition": "retain_dated_window_evidence",
+    "note": "historical wrapper and profile consistency pass; current bundle requires re-sign",
+    "path": "doc/world-runtime/evidence/runtime-launcher-profile-consistency-2026-03-11.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}
