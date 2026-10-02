@@ -3576,7 +3576,18 @@ class PublicationRecoveryAuthority:
                 # A confirmed retry preserves the core's observed journal.
                 # Prove the exact known observation delta against the admitted
                 # raw preimage; arbitrary edits never become lineage evidence.
-                if name != "current_action" or not self._observed_preimage(journal, evidence):
+                # The only additional migration is the legacy root-tail anchor
+                # written after exact Task-comment readback. It reconstructs
+                # the admitted bytes by removing that one field and validates
+                # the complete anchored READ_MATCH/RESOLVED sidecar.
+                observed = name == "current_action" and self._observed_preimage(journal, evidence)
+                anchored_readback = (
+                    name == "current_action"
+                    and self._legacy_exact_readback_anchor(
+                        path, common, journal, evidence, intent, unique[0],
+                    )
+                )
+                if not (observed or anchored_readback):
                     raise ValueError("raw publication journal hash mismatch")
             expected_identity = dict(repository=self.args.repo, branch=intent["source_ref"], publication_id=intent["publication_id"],
                 task_uid=self.args.task_uid, source_head_oid=evidence["H"], scope_base_oid=evidence["S"], projection_digest=evidence["D"])
@@ -3605,6 +3616,128 @@ class PublicationRecoveryAuthority:
         if found[0] != self.intent or found[0]["publication_id"] == found[1]["publication_id"]:
             raise ValueError("current/predecessor publication identity conflict")
         run_text(["git", "-C", str(self.root), "merge-base", "--is-ancestor", found[1]["source_head_oid"], found[0]["source_head_oid"]])
+
+    def _legacy_exact_readback_anchor(self, path: pathlib.Path, common: pathlib.Path,
+                                      journal: dict[str, Any], evidence: dict[str, Any],
+                                      intent: dict[str, Any], task_comment: dict[str, Any]) -> bool:
+        """Recognize only the exact legacy-tail addition proven by Task readback."""
+        from pr_projection_journal import (
+            JournalError, PublicationJournal, TASK_POST_EVENTS_FILE, TASK_POST_TAIL_SCHEMA,
+        )
+
+        try:
+            tail = journal.get("task_post_tail")
+            if (not isinstance(tail, dict) or set(tail) != {"schema", "sequence", "digest"}
+                    or tail.get("schema") != TASK_POST_TAIL_SCHEMA
+                    or type(tail.get("sequence")) is not int or tail["sequence"] < 0
+                    or not isinstance(tail.get("digest"), str)
+                    or re.fullmatch(r"sha256:[0-9a-f]{64}", tail["digest"]) is None):
+                return False
+
+            # Removing exactly the anchor must recreate the admitted canonical
+            # root bytes. Any changed action, phase, identity, or other field
+            # therefore remains outside this compatibility exception.
+            preimage = dict(journal)
+            del preimage["task_post_tail"]
+            if self.sha(self.encoded(preimage) + b"\n") != evidence["journal_sha256"]:
+                return False
+
+            events_path = path.with_name(TASK_POST_EVENTS_FILE)
+            exists = events_path.exists()
+            event_raw = events_path.read_bytes() if exists else b""
+            if not exists or not event_raw.endswith(b"\n"):
+                return False
+            reader = PublicationJournal(path, path.parent / "publisher.lock", journal["identity"],
+                                        common_dir=common, canonical_worktree=self.root)
+            events = reader._decode_task_events(event_raw, exists=exists)
+            # The sidecar is producer-canonical, not merely semantically
+            # equivalent JSON. This also rejects duplicate keys and byte drift.
+            for line, event in zip(event_raw.splitlines(keepends=True), events):
+                if line != self.encoded(event) + b"\n":
+                    return False
+            if (tail["sequence"] != len(events)
+                    or tail["digest"] != "sha256:" + self.sha(event_raw)
+                    or len(events) < 2):
+                return False
+
+            publication_id = intent["publication_id"]
+            action_id = "task-intent:" + publication_id
+            read_match, resolved = events[-2:]
+            if (read_match.get("event") != "READ_MATCH"
+                    or resolved.get("event") != "RESOLVED"
+                    or read_match.get("action_id") != action_id
+                    or resolved.get("action_id") != action_id
+                    or read_match.get("identity") != resolved.get("identity")):
+                return False
+
+            actor = (self.comment.get("user") or {}).get("login")
+            self._comment_identity(task_comment, actor)
+            if task_comment.get("body") != self.module.publication_comment(intent):
+                return False
+            identity = read_match.get("identity")
+            payload = task_comment["body"]
+            expected = {
+                "schema": "oasis7-pr-task-post-action/v1",
+                "repository": intent["repository"],
+                "repository_id": intent["repository_id"],
+                "task_issue_number": self.record["issue_number"],
+                "task_uid": self.args.task_uid,
+                "bootstrap_epoch": intent["bootstrap_epoch"],
+                "publication": intent,
+                "canonical_worktree": str(self.root.resolve()),
+                "git_common_dir": str(common.resolve()),
+                "source_ref": intent["source_ref"],
+                "target_ref": intent["target_ref"],
+                "source_head_oid": intent["source_head_oid"],
+                "scope_base_oid": intent["source_scope_oid"],
+                "planner_authority_oid": intent["planner_authority_oid"],
+                "planner_config_sha256": intent["planner_config_sha256"],
+                "policy_digest": intent["policy_digest"],
+                "projection_digest": intent["projection_digest"],
+                "publisher_login": actor,
+                "payload_utf8": payload,
+                "payload_sha256": "sha256:" + self.sha(payload.encode("utf-8")),
+            }
+            if (not isinstance(identity, dict)
+                    or set(identity) != set(expected) | {"pr_binding"}
+                    or any(identity.get(key) != value for key, value in expected.items())):
+                return False
+            pr_binding = identity.get("pr_binding")
+            if not isinstance(pr_binding, dict):
+                return False
+            # Accept only exact producer encodings. The create producer emits
+            # state=unbound or state=bound/pr_number; the update producer also
+            # pins its unbound candidate PR. Retain the older task_uid/pr_number
+            # shape for journals written before these producer encodings.
+            producer_binding = (
+                pr_binding == {"state": "unbound"}
+                or (set(pr_binding) == {"state", "pr_number"}
+                    and pr_binding.get("state") == "bound"
+                    and type(pr_binding.get("pr_number")) is int
+                    and pr_binding["pr_number"] == self.binding["pr_number"])
+                or (set(pr_binding) == {"state", "candidate_pr_number"}
+                    and pr_binding.get("state") == "unbound"
+                    and type(pr_binding.get("candidate_pr_number")) is int
+                    and pr_binding["candidate_pr_number"] == self.binding["pr_number"])
+            )
+            legacy_binding = (
+                set(pr_binding) == {"task_uid", "pr_number"}
+                and pr_binding.get("task_uid") == self.args.task_uid
+                and (pr_binding.get("pr_number") is None
+                     or (type(pr_binding.get("pr_number")) is int
+                         and pr_binding["pr_number"] == self.binding["pr_number"]))
+            )
+            if not producer_binding and not legacy_binding:
+                return False
+            if (read_match.get("evidence") != {
+                    "phase": "prewrite", "publication_id": publication_id,
+                    "author_login": actor, "payload_sha256": expected["payload_sha256"],
+                }
+                    or resolved.get("evidence") != {"publication_id": publication_id}):
+                return False
+            return True
+        except (JournalError, OSError, ValueError, KeyError, TypeError, UnicodeError):
+            return False
 
     def _binding_actions(self, journal: dict[str, Any]) -> list[dict[str, Any]]:
         binding_id = "reciprocal-binding:" + self.binding["publication_id"]
@@ -3841,6 +3974,7 @@ def command_record_pr(args: argparse.Namespace) -> int:
     if requested_pr_number is None:
         die("record-pr: PR number is missing or malformed")
     publication_binding_path = getattr(args, "publication_binding_json", None)
+    recovery_required = bool(getattr(args, "recovery_required", False))
     publication_binding = None
     publication_intent = None
     publication_module = None
@@ -3905,9 +4039,17 @@ def command_record_pr(args: argparse.Namespace) -> int:
             if len(matching_bindings) != 1 or matching_bindings[0] != publication_binding:
                 die("record-pr: conflicting reciprocal CI publication binding already exists")
             binding_comment_exists = True
+    if recovery_required and (publication_binding is None or not is_draft_candidate):
+        die("record-pr: required recovery needs an exact draft publication binding")
     recovery = None
-    if publication_binding is not None and is_draft_candidate and any(
-            PublicationRecoveryAuthority.marker in c["body"] for c in comments):
+    recovery_admissions = [
+        c for c in comments
+        if PublicationRecoveryAuthority.marker in c["body"]
+    ]
+    if recovery_required and len(recovery_admissions) != 1:
+        die("record-pr: required publication recovery admission is missing or ambiguous")
+    if (publication_binding is not None and is_draft_candidate
+            and (recovery_required or recovery_admissions)):
         try:
             recovery = PublicationRecoveryAuthority(args, record, publication_binding,
                                                      publication_intent, publication_module, comments)
@@ -4289,6 +4431,7 @@ def build_parser() -> argparse.ArgumentParser:
     record_pr.add_argument("--draft-candidate", action="store_true")
     record_pr.add_argument("--existing-ready-update", action="store_true")
     record_pr.add_argument("--publication-binding-json")
+    record_pr.add_argument("--recovery-required", action="store_true")
     record_pr.add_argument("--json", action="store_true")
     record_pr.set_defaults(func=command_record_pr)
 
