@@ -1,32 +1,99 @@
 #[test]
-fn production_observer_runtime_enables_consensus_subscription_without_publish() {
-    let source = include_str!(concat!(
-        env!("CARGO_MANIFEST_DIR"),
-        "/../oasis7/src/bin/oasis7_chain_runtime.rs"
-    ));
-    let attach = source
-        .split_once("fn attach_default_replication_network")
-        .map(|(_, body)| body)
-        .expect("default replication attachment exists");
-    assert!(
-        attach.contains("with_replication_network_consensus_enabled(true)"),
-        "production observer runtime must enable consensus subscription before checkpoint preflight"
-    );
-
+fn observer_consensus_endpoint_subscribes_without_publish() {
     let world_id = "world-observer-consensus-policy";
+    let network_impl = Arc::new(TestInMemoryNetwork::default());
     let network: Arc<
         dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
-    > = Arc::new(TestInMemoryNetwork::default());
+    > = network_impl.clone();
     let config =
         NodeConfig::new("observer", world_id, NodeRole::Observer).expect("observer config");
     let endpoint = ConsensusNetworkEndpoint::new(
-        &NodeReplicationNetworkHandle::new(network),
+        &NodeReplicationNetworkHandle::new(Arc::clone(&network)),
         world_id,
         true,
         &config.network_policy,
     )
     .expect("observer consensus subscription endpoint");
+    // This fixture exercises transport only; signed runtime authority is tested below.
+    let commit = GossipCommitMessage {
+        version: 1,
+        world_id: world_id.to_string(),
+        node_id: "node-observer-fixture".to_string(),
+        player_id: "player-observer-fixture".to_string(),
+        height: 37,
+        slot: 39,
+        epoch: 2,
+        block_hash: "observer-fixture-block-37".to_string(),
+        action_root: empty_action_root(),
+        actions: Vec::new(),
+        committed_at_ms: 37_000,
+        execution_block_hash: Some("observer-fixture-execution-block".to_string()),
+        execution_state_root: Some("observer-fixture-state-root".to_string()),
+        public_key_hex: None,
+        signature_hex: None,
+    };
+    let commit_topic = super::network_bridge::default_consensus_commit_topic(world_id);
+    let payload = serde_json::to_vec(&commit).expect("encode observer transport fixture");
+    network
+        .publish(commit_topic.as_str(), payload.as_slice())
+        .expect("publish subscribed transport fixture");
+    assert_eq!(
+        endpoint.drain_messages().expect("drain subscribed endpoint"),
+        vec![GossipMessage::Commit(commit.clone())],
+        "subscribed observer must receive exactly the identified commit"
+    );
+
+    let unsubscribed_network: Arc<
+        dyn oasis7_proto::distributed_net::DistributedNetwork<WorldError> + Send + Sync,
+    > = Arc::new(TestInMemoryNetwork::default());
+    let unsubscribed_endpoint = ConsensusNetworkEndpoint::new(
+        &NodeReplicationNetworkHandle::new(Arc::clone(&unsubscribed_network)),
+        world_id,
+        false,
+        &config.network_policy,
+    )
+    .expect("unsubscribed observer endpoint");
+    unsubscribed_network
+        .publish(commit_topic.as_str(), payload.as_slice())
+        .expect("publish unsubscribed transport fixture");
+    assert!(
+        unsubscribed_endpoint
+            .drain_messages()
+            .expect("drain unsubscribed endpoint")
+            .is_empty(),
+        "unsubscribed observer must not receive the commit"
+    );
+
     assert!(!endpoint.allows_publish());
+    let retained_count = || {
+        network_impl
+            .retained
+            .lock()
+            .expect("lock retained observer commits")
+            .get(commit_topic.as_str())
+            .map_or(0, Vec::len)
+    };
+    let before_count = retained_count();
+    let publish_result = endpoint.publish_commit(&commit);
+    let after_count = retained_count();
+    let expected_reason = format!(
+        "node_role_claim={} cannot {:?} {} on lane={}",
+        config.network_policy.node_role_claim,
+        oasis7_proto::distributed_net::NetworkLaneOperation::Publish,
+        commit_topic,
+        oasis7_proto::distributed_net::NetworkLane::ConsensusGossip
+    );
+    assert_eq!(
+        publish_result,
+        Err(NodeError::InvalidConfig {
+            reason: expected_reason,
+        }),
+        "observer publish must return the exact policy denial: before={before_count} after={after_count}"
+    );
+    assert_eq!(
+        after_count, before_count,
+        "denied observer publish must not send: before={before_count} after={after_count} result={publish_result:?}"
+    );
 }
 
 #[test]

@@ -297,12 +297,14 @@ if args[0] == "api":
             save()
             raise SystemExit("403 injected incomplete Issue comment pagination")
         comments = state["comments"]
-        if (state.get("edit_c1_on_third_locked_comments_read") is True
+        if ((state.get("edit_c1_on_locked_comments_read") is True
+                or state.get("edit_c1_on_third_locked_comments_read") is True)
                 and state.get("pr") is not None
                 and not any(item.get("kind") == "issue:body" and item.get("effect")
                             for item in state.get("mutations", []))):
             state["record_pr_c1_reads"] = state.get("record_pr_c1_reads", 0) + 1
-            if state["record_pr_c1_reads"] == 3:
+            target_read = (3 if state.get("edit_c1_on_third_locked_comments_read") is True else 4)
+            if state["record_pr_c1_reads"] == target_read:
                 for comment in comments:
                     if "<!-- oasis7-ci-publication/v1 -->" in comment.get("body", ""):
                         comment["updated_at"] = "2026-10-02T02:00:59Z"
@@ -383,6 +385,8 @@ class PublisherProcessTests(unittest.TestCase):
 
         shutil.copytree(HERE, self.repo / "scripts/pm",
                         ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        shutil.copy2(REPO_ROOT / "scripts/pm/fixtures/github_api_test_adapter.py",
+                     self.repo / "scripts/pm/github_api.py")
         (self.repo / "scripts").mkdir(exist_ok=True)
         for relative in ("scripts/plan-rust-required-scope.py",
                          "scripts/ci-required-scope.v2.json", "scripts/ci-tests.sh"):
@@ -604,6 +608,30 @@ class PublisherProcessTests(unittest.TestCase):
                          "completed replay must be a live-read no-op")
         self.assertEqual(1, len(self._effects("pr:create")))
         self.assertEqual(1, len(self._effects("issue:body")))
+
+    def test_record_pr_rejects_c1_timestamp_edit_on_locked_reread_before_writes(self):
+        self.state["edit_c1_on_locked_comments_read"] = True
+        self._save_state()
+
+        result = self.run_publisher()
+        state = self._load_state()
+        self.assertEqual(4, state.get("record_pr_c1_reads"))
+        c1 = [item for item in state["comments"]
+              if "<!-- oasis7-ci-publication/v1 -->" in item.get("body", "")]
+        self.assertEqual(1, len(c1))
+        self.assertEqual("2026-10-02T02:00:00Z", c1[0].get("created_at"))
+        self.assertEqual("2026-10-02T02:00:59Z", c1[0].get("updated_at"))
+        self.assertEqual(1, len(self._effects("pr:create", state)))
+        self.assertEqual([], self._effects("issue:body", state))
+        self.assertEqual([], [item for item in state["mutations"]
+                              if item.get("effect") and item.get("kind", "").startswith("project:")])
+        self.assertNotEqual(
+            0, result.returncode,
+            "record-pr must reject a C1 server timestamp edit on the locked reread; "
+            f"stdout={result.stdout!r} stderr={result.stderr!r}",
+        )
+        self.assertIn("TASK_IDENTITY_CONFLICT: record-pr rejected the live Issue/Project vector",
+                      result.stderr)
 
     def test_old_745_helper_happy_control_exposes_completed_replay_write(self):
         helper = self.old_745_helper()

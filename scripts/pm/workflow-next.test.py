@@ -6,6 +6,7 @@ import json
 import hashlib
 import importlib.util
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -482,6 +483,41 @@ class WorkflowNextTest(unittest.TestCase):
                 if phase == "task_done" and updates.get("pr_number"):
                     self.assertIn("--resume", payload["next_command"], payload)
                     self.assertNotIn("--preflight", payload["next_command"], payload)
+
+    def test_pr_watch_only_receives_observation_flags_when_effective_helpers_exist(self) -> None:
+        self.write_mapping(status="pr_watch", workflow_phase="pr_watch",
+                           pr_url="https://github.com/fixture/repo/pull/7", pr_number=7)
+        code, legacy = self.run_query()
+        self.assertEqual(code, 0, legacy)
+        self.assertNotIn("--observe", legacy["next_command"])
+        pm_dir = self.root / "scripts/pm"
+        pm_dir.mkdir(parents=True)
+        for name in ("pr-lifecycle-gate.py", "github_api.py", "portable_file_lock.py",
+                     "github_observation.py", "github_pr_snapshot.py"):
+            (pm_dir / name).write_bytes((ROOT / "scripts/pm" / name).read_bytes())
+        code, current = self.run_query()
+        self.assertEqual(code, 0, current)
+        self.assertIn("--observe", current["next_command"])
+        self.assertIn("--watch", current["next_command"])
+        (pm_dir / "github_observation.py").unlink()
+        code, incomplete = self.run_query()
+        self.assertEqual(code, 0, incomplete)
+        self.assertNotIn("--observe", incomplete["next_command"])
+        (pm_dir / "github_observation.py").write_bytes((ROOT / "scripts/pm/github_observation.py").read_bytes())
+        (pm_dir / "portable_file_lock.py").unlink()
+        code, missing_lock = self.run_query()
+        self.assertEqual(code, 0, missing_lock)
+        self.assertNotIn("--observe", missing_lock["next_command"])
+        (pm_dir / "portable_file_lock.py").write_bytes((ROOT / "scripts/pm/portable_file_lock.py").read_bytes())
+        gate_path = pm_dir / "pr-lifecycle-gate.py"
+        gate_path.write_text(
+            gate_path.read_text(encoding="utf-8").replace('parser.add_argument("--watch"',
+                                                            'parser.add_argument("--legacy-watch"'),
+            encoding="utf-8",
+        )
+        code, missing_watch = self.run_query()
+        self.assertEqual(code, 0, missing_watch)
+        self.assertNotIn("--observe", missing_watch["next_command"])
 
     def test_additive_projection_preserves_unclassified_terminal_delivery_semantics(self) -> None:
         self.write_mapping(status="candidate", workflow_phase="")
@@ -1347,6 +1383,23 @@ class WorkflowNextTest(unittest.TestCase):
 
 
 class AdoptedPinTerminalIntegrationTests(unittest.TestCase):
+    def setUp(self) -> None:
+        # The nested adoption fixture copies the production GitHub transport
+        # beside its fake `gh`. Route that copied transport through the same
+        # deterministic adapter used by the other process-level fixtures.
+        original_copytree = shutil.copytree
+        pm_source = (ROOT / "scripts/pm").resolve()
+        test_adapter = ROOT / "scripts/pm/fixtures/github_api_test_adapter.py"
+
+        def copytree_with_test_api(source, destination, *args, **kwargs):
+            result = original_copytree(source, destination, *args, **kwargs)
+            if Path(source).resolve() == pm_source:
+                shutil.copy2(test_adapter, Path(destination) / "github_api.py")
+            return result
+
+        shutil.copytree = copytree_with_test_api
+        self.addCleanup(setattr, shutil, "copytree", original_copytree)
+
     def test_real_adoption_chain_survives_merged_terminal_lookup(self) -> None:
         """Compose C's live adoption writer/reader with the real terminal query."""
         adoption_path = ROOT / "scripts/pm/github-project-task-policy-adoption.integration.test.py"

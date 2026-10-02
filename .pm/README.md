@@ -59,11 +59,16 @@ If its legacy archive is absent, only this diagnostic fails closed; ordinary rep
 # after task closeout succeeds:
 ./scripts/prepare-task-pr.sh --promote-draft <fresh ci_ready_receipt.json>
 ./scripts/pm/pr-lifecycle-gate.py <pr-number> --json
+./scripts/pm/pr-lifecycle-gate.py <pr-number> --task-uid <TASK-UID> --observe --json
+./scripts/pm/pr-lifecycle-gate.py <pr-number> --task-uid <TASK-UID> --observe --watch --json
 ./scripts/pr-review-thread-closeout.sh --unresolved-only
+./scripts/pr-review-thread-closeout.sh --unresolved-only --summary
 ```
 
 Task-bound legacy `--create` is rejected; promotion requires the fresh receipt and live draft-state checks above.
 The canonical links define all lifecycle gates, review attestation, and merge authority. These helpers enforce those definitions; this README does not restate them.
+Review-thread closeout includes detail by default. Its explicit `--summary` option omits PR, review, and comment bodies.
+`--observe` and bounded `--watch` report a derived PR view and never authorize merge. Observation uses local task hold data, which may be stale until task refresh; a later formal gate rebuilds hold evidence from the live Issue.
 
 After every planned reviewer has returned, the mechanical v2 review closeout entry is:
 
@@ -93,3 +98,12 @@ If a remote update is partial:
 ```
 
 Implementation entrypoints live under `.agents/skills/`; script-specific `--help` is authoritative for flags.
+
+## GitHub API Diagnostics
+
+```bash
+python3 ./scripts/pm/github_api.py stats --since 1h --json
+python3 ./scripts/pm/github_api.py status --json
+```
+
+These commands inspect local shared measurements and budget state without making GitHub requests. Their coverage is limited to instrumented paths, and their output is diagnostic rather than workflow or merge evidence. Shared request, pause, privacy, and error handling follows the canonical [GitHub query budget and terminal defaults](../doc/engineering/workflow/source-of-truth.md#github-query-budget-and-terminal-defaults).

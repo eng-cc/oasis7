@@ -3,18 +3,16 @@ from __future__ import annotations
 
 import argparse
 import base64
+import hashlib
 import importlib.util
 import json
-import os
 import pathlib
 import subprocess
 import sys
 import tempfile
 import re
 import threading
-import time
-import urllib.error
-import urllib.request
+import types
 from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime
@@ -54,6 +52,57 @@ PRIMARY_PACKAGE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]*\Z")
 ISSUE_URL_RE = re.compile(r"/issues/(\d+)(?:$|[?#])")
 RECOVERY_BATCH_SIZE = 10
 _PROJECT_CONTEXT_CACHE: dict[tuple[str, int], tuple[str, dict[str, dict[str, Any]]]] = {}
+_GITHUB_API_MODULES: dict[pathlib.Path, types.ModuleType] = {}
+
+
+def github_api_module() -> types.ModuleType:
+    """Load the shared client beside this helper (or its trusted repo root)."""
+    path = pathlib.Path(__file__).with_name("github_api.py").resolve()
+    if not path.is_file():
+        path = (pathlib.Path.cwd() / "scripts/pm/github_api.py").resolve()
+    module = _GITHUB_API_MODULES.get(path)
+    if module is not None:
+        return module
+    if not path.is_file():
+        raise RuntimeError(f"shared GitHub API client is unavailable at {path}")
+    module_name = "_oasis7_github_api_" + hashlib.sha256(str(path).encode("utf-8")).hexdigest()[:16]
+    loaded = sys.modules.get(module_name)
+    if isinstance(loaded, types.ModuleType):
+        _GITHUB_API_MODULES[path] = loaded
+        return loaded
+    spec = importlib.util.spec_from_file_location(module_name, path)
+    if spec is None or spec.loader is None:
+        raise RuntimeError(f"cannot load shared GitHub API client at {path}")
+    module = importlib.util.module_from_spec(spec)
+    # Register before execution so standard-library decorators such as
+    # dataclasses can resolve this dynamically loaded module by name.
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+    _GITHUB_API_MODULES[path] = module
+    return module
+
+
+def github_api_client(token: Any = None) -> Any:
+    """Keep caller-supplied credentials explicit; otherwise use gh precedence."""
+    client_type = github_api_module().GitHubAPIClient
+    if token is None:
+        return client_type.from_gh()
+    if hasattr(token, "graphql") and hasattr(token, "rest"):
+        return token
+    return client_type(token=token)
+
+
+def is_github_api_error(error: BaseException) -> bool:
+    return isinstance(error, github_api_module().APIError)
+
+
+def github_api_error_exit(error: BaseException, script: str) -> int | None:
+    """Render shared API failures consistently and preserve external-wait 75."""
+    if not is_github_api_error(error):
+        return None
+    detail = error.as_dict()  # type: ignore[attr-defined]
+    print(f"{script}: {json.dumps(detail, sort_keys=True)}", file=sys.stderr)
+    return 75 if detail.get("status") == "external_wait" else 2
 
 
 def die(message: str) -> None:
@@ -234,95 +283,61 @@ def reject_unretired_closed_duplicate(root: pathlib.Path, mapping: dict[str, Any
 
 
 def run_subprocess_with_retry(cmd: list[str], *, retries: int = 4) -> subprocess.CompletedProcess[str]:
-    for attempt in range(retries):
-        try:
-            return subprocess.run(cmd, check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
-            if attempt + 1 >= retries:
-                raise
-            time.sleep(min(30, 2 ** attempt))
-    raise RuntimeError("unreachable subprocess retry state")
+    """Compatibility name; GitHub subprocesses now receive exactly one attempt."""
+    # GitHub HTTP/GraphQL retries belong to GitHubAPIClient. Retrying a `gh`
+    # subprocess here can wrap that policy and replay a write after an
+    # ambiguous response, so every CLI request crosses this boundary once.
+    del retries
+    return subprocess.run(cmd, check=True, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=60)
 
 
-def github_token() -> str:
-    return run_text(["gh", "auth", "token"])
+def github_token() -> Any:
+    """Compatibility accessor returning one reusable shared GitHub API client."""
+    return github_api_client()
 
 
-def github_json_request(token: str, url: str, payload: dict[str, Any], *, retries: int = 5) -> dict[str, Any]:
-    body = json.dumps(payload).encode("utf-8")
-    headers = {
-        "Authorization": f"Bearer {token}",
-        "Accept": "application/vnd.github+json",
-        "Content-Type": "application/json",
-        "X-GitHub-Api-Version": "2022-11-28",
-    }
-    for attempt in range(retries):
-        request = urllib.request.Request(url, data=body, headers=headers, method="POST")
-        try:
-            with urllib.request.urlopen(request, timeout=60) as response:
-                return json.loads(response.read().decode("utf-8"))
-        except urllib.error.HTTPError as exc:
-            detail = exc.read().decode("utf-8", errors="replace")
-            retry_after = exc.headers.get("Retry-After")
-            if exc.code in {403, 429, 500, 502, 503, 504} and attempt + 1 < retries:
-                delay = int(retry_after) if retry_after and retry_after.isdigit() else min(60, 2 ** attempt)
-                time.sleep(delay)
-                continue
-            raise RuntimeError(f"GitHub API request failed {exc.code}: {detail[:500]}") from exc
-    raise RuntimeError("GitHub API request failed after retries")
-
-
-def graphql_request(token: str, query: str, variables: dict[str, Any] | None = None) -> dict[str, Any]:
-    if os.environ.get("OASIS7_PM_FAKE_GITHUB"):
-        # Process-level PM lifecycle tests exercise the real CLI against a
-        # fake `gh` executable. Keep this explicit test transport behind the
-        # existing fixture-only environment switch.
-        command = ["gh", "api", "graphql", "-f", f"query={query}"]
-        for name, value in (variables or {}).items():
-            if value is None:
-                continue
-            flag = "-F" if type(value) is int else "-f"
-            command.extend((flag, f"{name}={value}"))
-        payload = run_json(command)
-        if payload.get("errors"):
-            raise RuntimeError(f"GitHub GraphQL errors: {payload['errors']}")
-        return payload.get("data") or {}
-    payload = github_json_request(
-        token,
-        "https://api.github.com/graphql",
-        {"query": query, "variables": variables or {}},
+def graphql_request(
+    token: Any,
+    query: str,
+    variables: dict[str, Any] | None = None,
+    *,
+    operation: str = "project_sync_read",
+    mutation: bool = False,
+    context: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Use the shared strict client and return its already-decoded data object."""
+    client = github_api_client(token)
+    return client.graphql(
+        query,
+        variables,
+        operation=operation,
+        mutation=mutation,
+        context=context or {"script": "github-project-sync.py"},
     )
-    if payload.get("errors"):
-        raise RuntimeError(f"GitHub GraphQL errors: {payload['errors']}")
-    return payload.get("data") or {}
 
 
-def broad_rate_limit_guard(token: str = "") -> dict[str, Any]:
-    try:
-        payload = run_json(["gh","api","graphql","-f","query=query { rateLimit { remaining resetAt } }"])
-        rate = ((payload.get("data") or {}).get("rateLimit") or {})
-    except Exception as exc:
-        return {"status":"capability_blocked","reason":"graphql_rate_limit_unavailable","error":str(exc),
-                "resumable":True,"resume":"restore rateLimit access and rerun"}
-    remaining, reset_at = rate.get("remaining"), str(rate.get("resetAt") or "")
-    if not isinstance(remaining, int) or not reset_at:
-        return {"status":"capability_blocked","reason":"graphql_rate_limit_unknown","resumable":True,
-                "resume":"restore rateLimit visibility and rerun"}
-    if remaining < 100:
-        return {"status":"capability_blocked","reason":"graphql_budget_insufficient","remaining":remaining,
-                "resetAt":reset_at,"resumable":True,"resume":f"resume after {reset_at}"}
-    return {"status":"ok","remaining":remaining,"resetAt":reset_at}
+def broad_rate_limit_guard(token: Any = None) -> dict[str, Any]:
+    """Reuse a fresh persisted budget observation or perform one shared probe."""
+    client = github_api_client(token)
+    return client.rate_limit_guard(
+        minimum_remaining=100,
+        max_age_seconds=300,
+        operation="project_broad_preflight",
+        context={"script": "github-project-sync.py"},
+    )
 
 
-def create_issue_direct(token: str, repo: str, task: OrderedDict[str, Any]) -> dict[str, Any]:
-    owner, name = repo.split("/", 1)
-    payload = github_json_request(
-        token,
-        f"https://api.github.com/repos/{owner}/{name}/issues",
+def create_issue_direct(token: Any, repo: str, task: OrderedDict[str, Any]) -> dict[str, Any]:
+    payload = github_api_client(token).rest(
+        "POST",
+        f"repos/{repo}/issues",
         {
             "title": f"[PM] {task.get('title')}",
             "body": issue_body(task),
         },
+        operation="project_sync_create_issue",
+        mutation=True,
+        context={"script": "github-project-sync.py", "task_uid": str(task.get("task_uid") or "")},
     )
     return {
         "issue_url": str(payload.get("html_url") or ""),
@@ -331,7 +346,7 @@ def create_issue_direct(token: str, repo: str, task: OrderedDict[str, Any]) -> d
     }
 
 
-def add_project_item_direct(token: str, project_id: str, content_id: str) -> str:
+def add_project_item_direct(token: Any, project_id: str, content_id: str) -> str:
     data = graphql_request(
         token,
         """
@@ -342,6 +357,9 @@ def add_project_item_direct(token: str, project_id: str, content_id: str) -> str
         }
         """,
         {"projectId": project_id, "contentId": content_id},
+        operation="project_sync_add_item",
+        mutation=True,
+        context={"script": "github-project-sync.py"},
     )
     item_id = str(((data.get("addProjectV2ItemById") or {}).get("item") or {}).get("id") or "")
     if not item_id:
@@ -350,7 +368,7 @@ def add_project_item_direct(token: str, project_id: str, content_id: str) -> str
 
 
 def update_fields_direct(
-    token: str,
+    token: Any,
     project_id: str,
     item_id: str,
     task: OrderedDict[str, Any],
@@ -366,7 +384,7 @@ def update_fields_direct(
     for field_name, value in values.items():
         if only_fields is not None and field_name not in only_fields:
             continue
-        if current_values is not None and str(current_values.get(field_name) or "") == str(value):
+        if current_values is not None and field_name in current_values and str(current_values[field_name]) == str(value):
             skipped.append(f"{field_name}:unchanged")
             continue
         field = fields.get(field_name)
@@ -424,7 +442,17 @@ def update_fields_direct(
         + "\n".join(mutations)
         + "}"
     )
-    graphql_request(token, query, variables)
+    graphql_request(
+        token,
+        query,
+        variables,
+        operation="project_sync_update_fields",
+        mutation=True,
+        context={
+            "script": "github-project-sync.py",
+            "task_uid": str(task.get("task_uid") or ""),
+        },
+    )
     return len(mutations), skipped
 
 
@@ -488,6 +516,7 @@ def recover_project_mapping_for_task_uids(
     repo: str,
     task_uids: list[str],
     project_id: str = "",
+    client: Any = None,
 ) -> dict[str, dict[str, str]]:
     recovered: dict[str, dict[str, str]] = {}
     selected = []
@@ -526,11 +555,17 @@ def recover_project_mapping_for_task_uids(
             for index in range(len(batch))
         )
         query = f"query({variable_defs}) {{\n{searches}\n}}"
-        cmd = ["gh", "api", "graphql", "-f", f"query={query}"]
-        for index, task_uid in enumerate(batch):
-            cmd.extend(["-f", f"q{index}=repo:{repo} {task_uid} in:body"])
-        payload = run_json(cmd)
-        data = payload.get("data") or {}
+        variables = {
+            f"q{index}": f"repo:{repo} {task_uid} in:body"
+            for index, task_uid in enumerate(batch)
+        }
+        data = graphql_request(
+            client,
+            query,
+            variables,
+            operation="project_sync_selected_recovery",
+            context={"script": "github-project-sync.py"},
+        )
         for index, task_uid in enumerate(batch):
             nodes = ((data.get(f"s{index}") or {}).get("nodes") or [])
             matches = []
@@ -766,7 +801,7 @@ def update_fields(
     for field_name, value in values.items():
         if only_fields is not None and field_name not in only_fields:
             continue
-        if current_values is not None and str(current_values.get(field_name) or "") == str(value):
+        if current_values is not None and field_name in current_values and str(current_values[field_name]) == str(value):
             skipped.append(f"{field_name}:unchanged")
             continue
         field = fields.get(field_name)
@@ -790,9 +825,8 @@ def update_fields(
     return updated, skipped
 
 
-def read_project_item_field_values(project_id: str, item_id: str) -> dict[str, str]:
+def read_project_item_field_values(project_id: str, item_id: str, client: Any = None) -> dict[str, str]:
     """Read back the authoritative Project fields for one item after mutation."""
-    token = github_token()
     query = """
     query($item: ID!) {
       node(id: $item) {
@@ -806,7 +840,13 @@ def read_project_item_field_values(project_id: str, item_id: str) -> dict[str, s
       }
     }
     """
-    payload = graphql_request(token, query, {"item": item_id})
+    payload = graphql_request(
+        client,
+        query,
+        {"item": item_id},
+        operation="project_sync_selected_item_readback",
+        context={"script": "github-project-sync.py"},
+    )
     node = payload.get("node") or {}
     if str(((node.get("project") or {}).get("id") or "")) != project_id:
         raise RuntimeError("Project item belongs to a different Project")
@@ -857,7 +897,13 @@ def read_live_issue_project_item(repo: str, issue_number: int, project_id: str,
     seen_cursors = set()
     for _ in range(100):
         variables = {"owner": owner, "name": name, "number": issue_number, "after": after}
-        payload = graphql_request(token, membership_query, variables)
+        payload = graphql_request(
+            token,
+            membership_query,
+            variables,
+            operation="project_sync_live_issue_memberships",
+            context={"script": "github-project-sync.py", "issue_number": issue_number},
+        )
         repository = payload.get("repository") if isinstance(payload, dict) else None
         page_issue = repository.get("issue") if isinstance(repository, dict) else None
         if not isinstance(page_issue, dict):
@@ -936,7 +982,13 @@ def read_live_issue_project_item(repo: str, issue_number: int, project_id: str,
     seen_cursors = set()
     item_identity = None
     for _ in range(100):
-        payload = graphql_request(token, fields_query, {"item": item_id, "after": after})
+        payload = graphql_request(
+            token,
+            fields_query,
+            {"item": item_id, "after": after},
+            operation="project_sync_live_item_fields",
+            context={"script": "github-project-sync.py", "issue_number": issue_number},
+        )
         item = payload.get("node") if isinstance(payload, dict) else None
         if not isinstance(item, dict):
             raise RuntimeError("live Project item field readback is unavailable")
@@ -1045,10 +1097,13 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
     if not args.task_uid and not args.global_maintenance:
         die("--task-uid is required by default; use --global-maintenance for guarded broad sync")
+    api_client = None
     if args.global_maintenance:
-        budget = broad_rate_limit_guard()
+        api_client = github_api_client()
+        budget = broad_rate_limit_guard(api_client)
         if budget["status"] != "ok":
-            print(json.dumps(budget, indent=2, sort_keys=True)); return 2
+            print(json.dumps(budget, indent=2, sort_keys=True))
+            return 75 if budget.get("status") == "external_wait" else 2
     root = pathlib.Path(args.root).resolve()
     if not args.apply:
         args.dry_run = True
@@ -1127,19 +1182,30 @@ def main(argv: list[str] | None = None) -> int:
     if not args.skip_recover:
         selected_uids = [str(task["task_uid"]) for task in tasks]
         project_id = project_id_for(args.project_owner, args.project_number, mapping)
+        if selected_uids:
+            api_client = api_client or github_api_client()
+        current_project_values: dict[str, dict[str, str]] = {}
         for uid, recovered in recover_project_mapping_for_task_uids(
             args.project_owner,
             args.project_number,
             args.repo,
             selected_uids,
             project_id,
+            client=api_client,
         ).items():
             record = mapping["tasks"].setdefault(uid, {})
             record.setdefault("issue_url", recovered["issue_url"])
             if recovered.get("issue_number"):
                 record.setdefault("issue_number", int(recovered["issue_number"]))
             record.setdefault("project_item_id", recovered["project_item_id"])
-            record["project_field_values"] = dict(recovered.get("project_field_values") or {})
+            live_values = recovered.get("project_field_values")
+            if isinstance(live_values, dict):
+                current_project_values[uid] = dict(live_values)
+                record["project_field_values"] = dict(live_values)
+    else:
+        # The explicit --skip-recover path has no current Project observation;
+        # old mapping values must not be used as an unchanged proof.
+        current_project_values = {}
 
     summary: dict[str, Any] = {
         "dry_run": bool(args.dry_run),
@@ -1176,7 +1242,7 @@ def main(argv: list[str] | None = None) -> int:
 
     project_id, fields = project_context(args.project_owner, args.project_number)
     if args.direct_api:
-        token = github_token()
+        api_client = api_client or github_api_client()
         mapping_lock = threading.Lock()
 
         def sync_one(task: OrderedDict[str, Any]) -> dict[str, Any]:
@@ -1189,7 +1255,7 @@ def main(argv: list[str] | None = None) -> int:
             created_issue = False
             added_item = False
             if not issue_url:
-                created = create_issue_direct(token, args.repo, task)
+                created = create_issue_direct(api_client, args.repo, task)
                 issue_url = created["issue_url"]
                 issue_number = created["issue_number"]
                 content_id = created["content_id"]
@@ -1202,24 +1268,23 @@ def main(argv: list[str] | None = None) -> int:
                 if not content_id:
                     # Existing issue URLs recovered from older mappings need the node id.
                     owner, name = args.repo.split("/", 1)
-                    content = run_json(
-                        [
-                            "gh",
-                            "api",
-                            f"repos/{owner}/{name}/issues/{issue_number}",
-                        ]
+                    content = api_client.rest(
+                        "GET",
+                        f"repos/{owner}/{name}/issues/{issue_number}",
+                        operation="project_sync_resolve_issue_node",
+                        context={"script": "github-project-sync.py", "task_uid": uid},
                     )
                     content_id = str(content.get("node_id") or "")
-                project_item_id = add_project_item_direct(token, project_id, content_id)
+                project_item_id = add_project_item_direct(api_client, project_id, content_id)
                 added_item = True
             updated, skipped = update_fields_direct(
-                token,
+                api_client,
                 project_id,
                 str(project_item_id),
                 task,
                 fields,
                 only_fields=only_fields,
-                current_values=dict(record.get("project_field_values") or {}),
+                current_values=current_project_values.get(uid, {}),
             )
             with mapping_lock:
                 live_record = mapping["tasks"].setdefault(uid, {})
@@ -1242,7 +1307,7 @@ def main(argv: list[str] | None = None) -> int:
                     }
                 )
                 live_record["project_field_values"] = confirmed_project_field_values(
-                    dict(record.get("project_field_values") or {}), task, skipped, only_fields
+                    current_project_values.get(uid, {}), task, skipped, only_fields
                 )
                 if task.get("loop_binding") is not None:
                     live_record["loop_binding"] = task["loop_binding"]
@@ -1334,7 +1399,7 @@ def main(argv: list[str] | None = None) -> int:
                 die(f"github-project-sync: missing item id for {uid}")
             record["project_item_id"] = item_id
             summary["added_items"] += 1
-        current_values = dict(record.get("project_field_values") or {})
+        current_values = current_project_values.get(uid, {})
         updated, skipped = update_fields(project_id, str(item_id), task, fields,
                                          only_fields=only_fields, current_values=current_values)
         summary["updated_field_values"] += updated
@@ -1391,4 +1456,11 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    try:
+        code = main()
+    except Exception as exc:
+        api_code = github_api_error_exit(exc, "github-project-sync")
+        if api_code is None:
+            raise
+        raise SystemExit(api_code)
+    raise SystemExit(code)

@@ -12,6 +12,7 @@ trap cleanup EXIT
 
 mkdir -p "$TMPDIR/.pm/tasks" "$TMPDIR/bin"
 cp "$ROOT_DIR/scripts/pm/github-project-sync.py" "$TMPDIR/github-project-sync.py"
+cp "$ROOT_DIR/scripts/pm/fixtures/github_api_test_adapter.py" "$TMPDIR/github_api.py"
 
 cat > "$TMPDIR/.pm/tasks/task_11111111111111111111111111111111.yaml" <<'YAML'
 task_uid: task_11111111111111111111111111111111
@@ -135,7 +136,6 @@ sync = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(sync)
 
 response = {
-    "data": {
         "node": {
             "project": {"id": "PROJECT_ID"},
             "fieldValues": {"nodes": [
@@ -143,27 +143,32 @@ response = {
                 {"name": "In Progress", "field": {"name": "Status"}},
             ]},
         }
-    }
 }
 calls = []
-sync.github_token = lambda: "TEST_TOKEN"
-# Fake the HTTP response, not graphql_request: it unwraps payload["data"].
-sync.github_json_request = lambda token, url, payload: calls.append((token, url, payload)) or response
+class FakeClient:
+    def graphql(self, query, variables=None, *, operation, mutation=False, context=None):
+        calls.append((query, variables, operation, mutation, context))
+        return response
+
+fake_client = FakeClient()
+sync.github_api_client = lambda token=None: fake_client
+assert sync.github_api_client("TEST_TOKEN").__class__ is FakeClient
+explicit = sync.github_api_module().GitHubAPIClient(token="TEST_TOKEN")
+assert explicit.token == "TEST_TOKEN", explicit.token
 
 values = sync.read_project_item_field_values("PROJECT_ID", "ITEM_ID")
 assert values == {
     "Task UID": "task_11111111111111111111111111111111",
     "Status": "In Progress",
 }, values
-assert calls[0][0] == "TEST_TOKEN", calls
-assert calls[0][1] == "https://api.github.com/graphql", calls
-request = calls[0][2]
-assert "$item: ID!" in request["query"], request
-assert "$project" not in request["query"], request
-assert "project { id }" in request["query"], request
-assert request["variables"] == {"item": "ITEM_ID"}, request
+assert "$item: ID!" in calls[0][0], calls
+assert "$project" not in calls[0][0], calls
+assert "project { id }" in calls[0][0], calls
+assert calls[0][1] == {"item": "ITEM_ID"}, calls
+assert calls[0][2] == "project_sync_selected_item_readback", calls
+assert calls[0][3] is False, calls
 
-response["data"]["node"]["project"]["id"] = "OTHER_PROJECT_ID"
+response["node"]["project"]["id"] = "OTHER_PROJECT_ID"
 try:
     sync.read_project_item_field_values("PROJECT_ID", "ITEM_ID")
 except RuntimeError as exc:
@@ -219,7 +224,7 @@ field_pages = [
               }}},
 ]
 calls = []
-def read_page(_token, query, variables=None):
+def read_page(_token, query, variables=None, **_request_metadata):
     variables = variables or {}
     calls.append((query, variables))
     if "projectItems(first: 100" in query:
@@ -253,6 +258,171 @@ except RuntimeError as exc:
     assert "cursor is missing or repeated" in str(exc), exc
 else:
     raise AssertionError("incomplete membership pagination was accepted")
+PY
+
+python3 - "$TMPDIR/github-project-sync.py" <<'PY'
+import importlib.util
+import sys
+from collections import OrderedDict
+
+spec = importlib.util.spec_from_file_location("sync", sys.argv[1])
+sync = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(sync)
+
+task = OrderedDict(task_uid="task_11111111111111111111111111111111", status="committed",
+                   owner_role="tpm", module="engineering", priority="P2",
+                   worktree_hint="/tmp/active", updated_at="2026-06-29T00:00:00Z")
+fields = {
+    "Status": {"id": "STATUS", "options_by_name": {"In Progress": "STATUS_PROGRESS", "Todo": "STATUS_TODO"}},
+    "Priority": {"id": "PRIORITY", "options_by_name": {"P2": "P2", "P3": "P3"}},
+    "Blocked Reason": {"id": "BLOCKED_REASON"},
+}
+calls = []
+class FakeClient:
+    def graphql(self, query, variables=None, *, operation, mutation=False, context=None):
+        calls.append((query, variables, operation, mutation, context))
+        return {"updateProjectV2ItemFieldValue": {"projectV2Item": {"id": "ITEM_ID"}}}
+    def rest(self, method, path, payload=None, *, operation, mutation=None, context=None):
+        raise AssertionError("unexpected REST call")
+
+client = FakeClient()
+changed, skipped = sync.update_fields_direct(
+    client, "PROJECT_ID", "ITEM_ID", task, fields,
+    only_fields={"Status", "Priority"},
+    current_values={"Status": "In Progress", "Priority": "P2"},
+)
+assert changed == 0 and set(skipped) == {"Status:unchanged", "Priority:unchanged"}, (changed, skipped)
+assert calls == [], calls
+
+changed, skipped = sync.update_fields_direct(
+    client, "PROJECT_ID", "ITEM_ID", task, fields,
+    only_fields={"Status", "Priority"},
+    current_values={"Status": "Todo", "Priority": "P3"},
+)
+assert changed == 2 and skipped == [], (changed, skipped)
+assert len(calls) == 1, calls
+assert calls[0][2] == "project_sync_update_fields" and calls[0][3] is True, calls
+assert "f0:" in calls[0][0] and "f1:" in calls[0][0], calls[0][0]
+
+calls.clear()
+changed, skipped = sync.update_fields_direct(
+    client, "PROJECT_ID", "ITEM_ID", task, fields,
+    only_fields={"Status"}, current_values={},
+)
+assert changed == 1 and skipped == [], (changed, skipped)
+assert len(calls) == 1, calls
+
+empty_task = OrderedDict(task, status="committed")
+sync.edit_text_field = lambda *args: (_ for _ in ()).throw(AssertionError("empty field must not be written"))
+changed, skipped = sync.update_fields(
+    "PROJECT_ID", "ITEM_ID", empty_task, fields,
+    only_fields={"Blocked Reason"}, current_values={"Blocked Reason": ""},
+)
+assert changed == 0 and skipped == ["Blocked Reason:unchanged"], (changed, skipped)
+changed, skipped = sync.update_fields(
+    "PROJECT_ID", "ITEM_ID", empty_task, fields,
+    only_fields={"Blocked Reason"}, current_values={},
+)
+assert changed == 0 and skipped == ["Blocked Reason:empty_value"], (changed, skipped)
+assert sync.confirmed_project_field_values(
+    {}, empty_task, ["Blocked Reason:empty_value"], only_fields={"Blocked Reason"}
+) == {}
+print("github-project-sync.project-fields: OK")
+PY
+
+python3 - "$ROOT_DIR/scripts/pm/github-project-sync.py" "$ROOT_DIR/scripts/pm/github-project-task.py" <<'PY'
+import contextlib
+import importlib.util
+import io
+import pathlib
+import sys
+
+sync_path, task_path = map(pathlib.Path, sys.argv[1:])
+sys.path.insert(0, str(sync_path.parent))
+sync_spec = importlib.util.spec_from_file_location("sync_shared_client", sync_path)
+sync = importlib.util.module_from_spec(sync_spec)
+sync_spec.loader.exec_module(sync)
+
+project = {"id": "PROJECT_ID", "number": 1, "owner": {"login": "eng-cc"},
+           "viewerCanUpdate": True}
+membership_pages = [
+    {"repository": {"issue": {"id": "ISSUE_NODE", "number": 101,
+        "url": "https://github.com/eng-cc/oasis7/issues/101", "state": "OPEN",
+        "body": "task_uid: task_11111111111111111111111111111111",
+        "projectItems": {"nodes": [{"id": "OTHER", "isArchived": False,
+            "project": {**project, "id": "OTHER_PROJECT"}}],
+            "pageInfo": {"hasNextPage": True, "endCursor": "membership-next"}}}}},
+    {"repository": {"issue": {"id": "ISSUE_NODE", "number": 101,
+        "url": "https://github.com/eng-cc/oasis7/issues/101", "state": "OPEN",
+        "body": "task_uid: task_11111111111111111111111111111111",
+        "projectItems": {"nodes": [{"id": "ITEM_ID", "isArchived": False,
+            "project": project}], "pageInfo": {"hasNextPage": False, "endCursor": None}}}}},
+]
+field_pages = [
+    {"node": {"id": "ITEM_ID", "isArchived": False, "project": project,
+        "fieldValues": {"nodes": [{"name": "committed", "field": {"name": "PM Status"}}],
+            "pageInfo": {"hasNextPage": True, "endCursor": "fields-next"}}}},
+    {"node": {"id": "ITEM_ID", "isArchived": False, "project": project,
+        "fieldValues": {"nodes": [{"name": "execution", "field": {"name": "Workflow Phase"}}],
+            "pageInfo": {"hasNextPage": False, "endCursor": None}}}},
+]
+
+class PageClient:
+    def __init__(self):
+        self.calls = []
+    def graphql(self, query, variables=None, *, operation, mutation=False, context=None):
+        self.calls.append((query, variables, operation, mutation, context))
+        if "projectItems(first: 100" in query:
+            return membership_pages.pop(0)
+        return field_pages.pop(0)
+    def rest(self, *args, **kwargs):
+        raise AssertionError("unexpected REST request")
+
+client = PageClient()
+sync.github_api_client = lambda token=None: client
+result = sync.read_live_issue_project_item("eng-cc/oasis7", 101, "PROJECT_ID", 1)
+assert result["complete"] is True, result
+assert len(client.calls) == 4, client.calls
+assert [call[1].get("after") for call in client.calls] == [None, "membership-next", None, "fields-next"]
+assert all(call[3] is False for call in client.calls), client.calls
+assert [call[2] for call in client.calls] == [
+    "project_sync_live_issue_memberships", "project_sync_live_issue_memberships",
+    "project_sync_live_item_fields", "project_sync_live_item_fields",
+], client.calls
+assert len({id(sync.github_api_client(token)) for token in (client, client, client, client)}) == 1
+
+# The task helper must allow the typed shared-client failure to reach its
+# process boundary instead of flattening external_wait into an ordinary die().
+task_spec = importlib.util.spec_from_file_location("task_project_api_error", task_path)
+task = importlib.util.module_from_spec(task_spec)
+task_spec.loader.exec_module(task)
+sync = task.load_sync_module()
+task.load_sync_module = lambda: sync
+api = sync.github_api_module()
+rate_error = api.APIError("bounded external wait", kind="primary_rate_limit", retry_after_seconds=120)
+
+class RateLimitedClient:
+    def graphql(self, *args, **kwargs):
+        raise rate_error
+    def rest(self, *args, **kwargs):
+        raise AssertionError("unexpected REST request")
+
+sync.github_api_client = lambda token=None: RateLimitedClient()
+sync.project_context = lambda owner, number: ("PROJECT_ID", {})
+args = type("Args", (), {"project_owner": "eng-cc", "project_number": 1,
+    "repo": "eng-cc/oasis7", "task_uid": "task_11111111111111111111111111111111"})()
+record = {"task_uid": args.task_uid, "project_item_id": "ITEM_ID"}
+try:
+    task.validate_authoritative_project_fields(
+        args, {"project": {"id": "PROJECT_ID"}}, record,
+        {"issue_number": 101, "task_uid": args.task_uid, "status": "committed",
+         "workflow_phase": "execution"},
+    )
+except api.APIError as exc:
+    assert exc is rate_error and exc.exit_code == 75
+else:
+    raise AssertionError("task Project wrapper flattened typed external_wait")
+print("github-project-sync.shared-client-and-api-error: OK")
 PY
 
 DRY_JSON="$TMPDIR/dry.json"
