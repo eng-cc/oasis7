@@ -990,7 +990,8 @@ class ResourceDependencyConsumerTest(unittest.TestCase):
         ))
 
     def read_proof(self, resource_comments: list[dict[str, Any]] | None = None,
-                   *, include_artifact: bool = True) -> dict[str, Any]:
+                   *, include_artifact: bool = True,
+                   permission_check: Any | None = None) -> dict[str, Any]:
         downstream_body = f"task_uid: {TASK_UID}\n"
         upstream_body = "\n".join((
             f"task_uid: {UPSTREAM_UID}",
@@ -1047,13 +1048,18 @@ class ResourceDependencyConsumerTest(unittest.TestCase):
         loop_terminal.read_shared_terminal_proof = lambda *_args, **_kwargs: {
             "status": "passed", "protocol_version": 2, "head_oid": self.head_oid,
         }
+        permission_patch = (
+            patch.object(DELIVERY, "_is_admin", side_effect=permission_check)
+            if permission_check is not None else
+            patch.object(DELIVERY, "_is_admin", return_value=True)
+        )
         with (
             patch.object(DELIVERY, "_gh_json", side_effect=gh_json),
             patch.object(DELIVERY, "_pages", side_effect=pages),
             patch.object(DELIVERY, "_resolve_project_task_issue",
                          side_effect=lambda uid, _number=None: downstream_issue if uid == TASK_UID else upstream_issue),
             patch.object(DELIVERY, "_project_readback", return_value=project_reader),
-            patch.object(DELIVERY, "_is_admin", return_value=True),
+            permission_patch,
             patch.object(DELIVERY, "_verify_declared_ci", return_value=self.accepted_source_ci()),
             patch.object(DELIVERY, "_latest_authenticated_review", return_value=review),
             patch.dict(sys.modules, {"loop_terminal": loop_terminal}),
@@ -1063,8 +1069,12 @@ class ResourceDependencyConsumerTest(unittest.TestCase):
             )
 
     def readiness(self, resource_comments: list[dict[str, Any]] | None = None,
-                  *, include_artifact: bool = True) -> tuple[dict[str, Any], dict[str, Any]]:
-        proof = self.read_proof(resource_comments, include_artifact=include_artifact)
+                  *, include_artifact: bool = True,
+                  permission_check: Any | None = None) -> tuple[dict[str, Any], dict[str, Any]]:
+        proof = self.read_proof(
+            resource_comments, include_artifact=include_artifact,
+            permission_check=permission_check,
+        )
         return DELIVERY.derive_delivery_readiness(TASK_UID, proof), proof
 
     def resource_blocker(self, result: dict[str, Any]) -> dict[str, Any]:
@@ -1206,6 +1216,65 @@ class ResourceDependencyConsumerTest(unittest.TestCase):
         self.assertEqual(missing["resource_wait_state"], "pending", missing)
         self.assertIn("readback failed", " ".join(proof["resource_release"]["reasons"]))
         self.assertEqual(self.resource_blocker(missing)["blocks_actions"], ["consume_artifact"])
+
+    def test_possible_admin_resource_candidate_with_unknown_schema_fails_closed(self) -> None:
+        unknown_schema = self.resource_record()
+        unknown_schema["schema"] = "oasis7.unregistered-resource/v1"
+        missing_schema = self.resource_record()
+        del missing_schema["schema"]
+        nonadmin_schema = dict(unknown_schema)
+        wrong_task_schema = {**unknown_schema, "task_uid": "task_" + "c" * 32}
+
+        def permission_unavailable_for_candidate(_repo: str, login: str) -> bool:
+            if login == "synthetic-uncertain":
+                raise ValueError("permission unavailable")
+            return True
+
+        def known_nonadmin_candidate(_repo: str, login: str) -> bool:
+            return login != "synthetic-public"
+
+        cases = (
+            (
+                "unknown schema with admin", unknown_schema, "synthetic-admin",
+                lambda _repo, _login: True, "blocked",
+            ),
+            (
+                "missing schema with admin", missing_schema, "synthetic-admin",
+                lambda _repo, _login: True, "blocked",
+            ),
+            (
+                "unknown permission for possible match", unknown_schema, "synthetic-uncertain",
+                permission_unavailable_for_candidate,
+                "blocked",
+            ),
+            (
+                "known nonadmin", nonadmin_schema, "synthetic-public",
+                known_nonadmin_candidate, "not_applicable",
+            ),
+            (
+                "proven different Task binding", wrong_task_schema, "synthetic-admin",
+                lambda _repo, _login: True, "not_applicable",
+            ),
+        )
+        self.write_cleanup_snapshot("removed")
+        for index, (label, record, author, permission_check, expected_state) in enumerate(cases, start=120):
+            with self.subTest(case=label):
+                comment = self.marker_comment(
+                    DELIVERY.RESOURCE_DEPENDENCY_MARKER, record, index,
+                )
+                comment["user"]["login"] = author
+                result, proof = self.readiness(
+                    [comment], permission_check=permission_check,
+                )
+
+                self.assertEqual(result["resource_wait_state"], expected_state, result)
+                if expected_state == "blocked":
+                    self.assertEqual(
+                        self.resource_blocker(result)["blocks_actions"], ["consume_artifact"],
+                    )
+                    self.assertTrue(proof.get("resource_dependency_error"), proof)
+                else:
+                    self.assertIsNone(proof.get("resource_dependency_error"), proof)
 
     def test_resource_wait_without_artifact_fails_closed_and_no_wait_preserves_artifact(self) -> None:
         self.write_cleanup_snapshot("removed")
