@@ -285,6 +285,24 @@ jobs:
             echo "source_head=${head_ref}"
             echo "task_uid=${task_uid}"
           } >>"${GITHUB_OUTPUT}"
+          python3 - "${GITHUB_OUTPUT}" "${RUNNER_TEMP}/required-scope-outputs.json" <<'PY'
+          import json, pathlib, sys
+          source, target = map(pathlib.Path, sys.argv[1:])
+          outputs = {}
+          for line in source.read_text(encoding="utf-8").splitlines():
+              key, separator, value = line.partition("=")
+              if not separator or not key:
+                  raise SystemExit("required-scope output file contains an invalid line")
+              if key in outputs and outputs[key] != value:
+                  raise SystemExit(f"required-scope output {key} has conflicting duplicate values")
+              outputs[key] = value
+          temporary = target.with_name(target.name + ".tmp")
+          temporary.write_text(
+              json.dumps(outputs, ensure_ascii=False, separators=(",", ":")) + "\n",
+              encoding="utf-8",
+          )
+          temporary.replace(target)
+          PY
       - id: loop-ci-admission
         name: Validate trusted loop repository scope and content
         if: github.event_name == 'pull_request' || (github.event_name == 'workflow_dispatch' && inputs.run_mode == 'integration_revalidation')
@@ -367,24 +385,6 @@ jobs:
               ;;
           esac
 
-          python3 - "${GITHUB_OUTPUT}" "${RUNNER_TEMP}/required-scope-outputs.json" <<'PY'
-          import json, pathlib, sys
-          source, target = map(pathlib.Path, sys.argv[1:])
-          outputs = {}
-          for line in source.read_text(encoding="utf-8").splitlines():
-              key, separator, value = line.partition("=")
-              if not separator or not key:
-                  raise SystemExit("required-scope output file contains an invalid line")
-              if key in outputs and outputs[key] != value:
-                  raise SystemExit(f"required-scope output {key} has conflicting duplicate values")
-              outputs[key] = value
-          temporary = target.with_name(target.name + ".tmp")
-          temporary.write_text(
-              json.dumps(outputs, ensure_ascii=False, separators=(",", ":")) + "\n",
-              encoding="utf-8",
-          )
-          temporary.replace(target)
-          PY
       - name: Report planned scope
         env:
           SCOPE_OUTPUTS_PATH: ${{ runner.temp }}/required-scope-outputs.json

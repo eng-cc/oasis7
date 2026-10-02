@@ -3,10 +3,12 @@ import hashlib
 import copy
 import json
 from pathlib import Path
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import textwrap
 import unittest
 from unittest.mock import patch
 
@@ -117,6 +119,68 @@ class ContentTests(unittest.TestCase):
         self.assertEqual(result['status'],'passed',result)
         self.assertEqual(result['scope_context']['scope_base_oid'],self.base)
         self.assertEqual(result['scope_context']['integration_base_oid'],integration)
+
+    def test_required_plan_snapshot_reads_the_planner_steps_output_file(self):
+        workflow = (self.repository / '.github/workflows/rust.yml').read_text()
+
+        def step_block(step_id):
+            start = workflow.index(f'      - id: {step_id}\n')
+            end = workflow.find('\n      - ', start + 1)
+            return workflow[start:] if end < 0 else workflow[start:end]
+
+        snapshot = re.compile(
+            r"(?ms)^(?P<indent> +)python3 - \"\$\{GITHUB_OUTPUT\}\" "
+            r"\"\$\{RUNNER_TEMP\}/required-scope-outputs\.json\" <<'PY'\n"
+            r"(?P<body>.*?)^(?P=indent)PY$"
+        )
+        owners = []
+        for step_id in ('scope', 'loop-ci-admission'):
+            match = snapshot.search(step_block(step_id))
+            if match:
+                owners.append((step_id, textwrap.dedent(match.group('body'))))
+        self.assertEqual(len(owners), 1, 'one workflow step must snapshot planner outputs')
+
+        with tempfile.TemporaryDirectory(prefix='oasis7-scope-step-output-') as directory:
+            root = Path(directory)
+            scope_output = root / 'scope-GITHUB_OUTPUT'
+            admission_output = root / 'admission-GITHUB_OUTPUT'
+            snapshot_json = root / 'required-scope-outputs.json'
+            scope_output.write_text('', encoding='utf-8')
+            admission_output.write_text('admission_only=true\n', encoding='utf-8')
+
+            planner = subprocess.run(
+                [sys.executable, str(self.repository / 'scripts/plan-rust-required-scope.py'),
+                 '--event-name', 'pull_request', '--changed-path',
+                 'doc/engineering/workflow/source-of-truth.md', '--github-output', str(scope_output)],
+                cwd=self.repository, capture_output=True, text=True,
+            )
+            self.assertEqual(planner.returncode, 0, planner.stdout + planner.stderr)
+            planner_outputs = dict(
+                line.split('=', 1) for line in scope_output.read_text(encoding='utf-8').splitlines()
+            )
+            self.assertIn('scope', planner_outputs)
+            self.assertIn('planner_config_sha256', planner_outputs)
+            scope_additions = {
+                'source_scope_base': planner_outputs.get('source_scope_base', 'fixture-base'),
+                'source_head': planner_outputs.get('source_head', 'fixture-head'),
+            }
+            with scope_output.open('a', encoding='utf-8') as output:
+                for key, value in scope_additions.items():
+                    output.write(f'{key}={value}\n')
+                    planner_outputs[key] = value
+
+            owner, source_code = owners[0]
+            step_outputs = {'scope': scope_output, 'loop-ci-admission': admission_output}
+            copied = subprocess.run(
+                [sys.executable, '-I', '-c', source_code,
+                 str(step_outputs[owner]), str(snapshot_json)],
+                capture_output=True, text=True,
+            )
+            self.assertEqual(copied.returncode, 0, copied.stdout + copied.stderr)
+            snapshot_outputs = json.loads(snapshot_json.read_text(encoding='utf-8'))
+            self.assertEqual(snapshot_outputs.get('scope'), planner_outputs['scope'])
+            self.assertEqual(snapshot_outputs, planner_outputs)
+            self.assertEqual(owner, 'scope')
 
     def test_changed_publication_content_blocks(self):
         self.contract['content_refs'][0]['sha256']='sha256:'+'0'*64

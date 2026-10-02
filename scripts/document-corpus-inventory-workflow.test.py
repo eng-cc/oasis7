@@ -12,6 +12,7 @@ import sys
 import tempfile
 import types
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -52,14 +53,17 @@ class CorpusScopeTests(unittest.TestCase):
         self.addCleanup(lambda: shutil.rmtree(self.root, ignore_errors=True))
         self.product_source = "doc/product/README.md"
         self.object_endpoint = self.core.record_path("object", self.product_source)
+        self.authority_reads = []
 
     def make_fixture(self):
         root = Path(tempfile.mkdtemp(prefix="oasis7-corpus-scope-"))
         git(root, "init", "--quiet")
+        git(root, "remote", "add", "origin", "https://github.com/eng-cc/oasis7.git")
         git(root, "config", "user.name", "Corpus Scope Fixture")
         git(root, "config", "user.email", "corpus-scope@example.invalid")
         write(root, "doc/product/README.md", "# Product fixture\n")
         write(root, "doc/engineering/README.md", "# Engineering fixture\n")
+        write(root, "doc/engineering/workflow/source-of-truth.md", "# Fixture workflow source\n")
         write(root, self.core.REGISTRY_PATH, self.core.canonical_json({
             "version": 1,
             "directories": [
@@ -85,7 +89,11 @@ class CorpusScopeTests(unittest.TestCase):
             "legacy_baseline_id": "document-evidence-v1-at-v3-migration",
         }))
         view = self.core.WorktreeCorpusView(root)
-        for source in ("doc/engineering/README.md", "doc/product/README.md"):
+        for source in (
+            "doc/engineering/README.md",
+            "doc/engineering/workflow/source-of-truth.md",
+            "doc/product/README.md",
+        ):
             write(root, self.core.record_path("object", source), self.core._wrapped("object", self.core.expected_object(view, source)))
         git(root, "add", "-A")
         git(root, "commit", "-m", "fixture corpus baseline")
@@ -179,6 +187,32 @@ class CorpusScopeTests(unittest.TestCase):
         }
         if semantic_entry:
             self.binding["write_scope"].append(self.semantic_endpoint)
+        self.policy_identity_patch = patch.object(
+            self.policy,
+            "current_effective_policy_identity",
+            side_effect=self.fixture_current_policy_identity,
+        )
+        self.policy_identity_patch.start()
+        self.addCleanup(self.policy_identity_patch.stop)
+
+    def fixture_current_policy_identity(self, repo_root, repository):
+        self.authority_reads.append((Path(repo_root).resolve(), repository))
+        if repository != "eng-cc/oasis7":
+            raise ValueError("fixture refuses a noncanonical GitHub repository")
+        commit = self.binding["policy_commit"]
+        policy_bytes = subprocess.check_output(
+            ["git", "-C", str(repo_root), "show", f"{commit}:scripts/pm/loop-policy.v1.json"]
+        )
+        source_bytes = subprocess.check_output(
+            ["git", "-C", str(repo_root), "show", f"{commit}:doc/engineering/workflow/source-of-truth.md"]
+        )
+        return {
+            "default_branch": "main",
+            "default_branch_oid": commit,
+            "policy_commit": commit,
+            "policy_digest": "sha256:" + hashlib.sha256(policy_bytes).hexdigest(),
+            "workflow_source_digest": "sha256:" + hashlib.sha256(source_bytes).hexdigest(),
+        }
 
     def commit_scope_candidate(self, path: str, content: str):
         write(self.root, path, content)
@@ -199,6 +233,24 @@ class CorpusScopeTests(unittest.TestCase):
         verdict = self.policy.validate_scope(self.tool_root, self.root, self.binding, self.base, head)
         self.assertEqual(verdict["status"], "blocked", verdict)
         self.assertTrue(any(self.object_endpoint in item for item in verdict["blockers"]), verdict)
+
+    def test_missing_or_non_github_origin_blocks_before_policy_authority_lookup(self):
+        self.install_effective_tools()
+        head = self.commit_scope_candidate(self.product_source, "# Product fixture, changed.\n")
+
+        git(self.root, "remote", "set-url", "origin", "https://example.invalid/eng-cc/oasis7.git")
+        verdict = self.policy.validate_scope(self.tool_root, self.root, self.binding, self.base, head)
+        self.assertEqual(verdict["status"], "blocked", verdict)
+        self.assertTrue(any("canonical repository origin is not a GitHub remote" in item
+                            for item in verdict["blockers"]), verdict)
+        self.assertEqual(self.authority_reads, [])
+
+        git(self.root, "remote", "remove", "origin")
+        verdict = self.policy.validate_scope(self.tool_root, self.root, self.binding, self.base, head)
+        self.assertEqual(verdict["status"], "blocked", verdict)
+        self.assertTrue(any("canonical repository origin cannot be verified" in item
+                            for item in verdict["blockers"]), verdict)
+        self.assertEqual(self.authority_reads, [])
 
     def test_semantic_entry_inherits_source_loop_and_requires_source_scope(self):
         self.install_effective_tools(semantic_entry=True)
