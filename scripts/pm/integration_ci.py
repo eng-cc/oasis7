@@ -133,7 +133,7 @@ def identity(repository,uid,number,base,head,*,allow_base_advance=False):
         raise ValueError('positive integer pull request number required')
     if not OID.fullmatch(base) or not OID.fullmatch(head): raise ValueError('exact base/source OIDs required')
     pr=gh('api',f'repos/{repository}/pulls/{number}')
-    if pr.get('state')!='open' or pr.get('merged') or (not allow_base_advance and pr['base']['sha']!=base) or pr['head']['sha']!=head:
+    if pr.get('state')!='open' or pr.get('merged') or pr['head']['sha']!=head:
         raise ValueError('PR source/target moved; request a new integration run')
     if pr['base']['repo']['full_name']!=repository or pr['head']['repo']['full_name']!=repository:
         raise ValueError('integration repository identity mismatch')
@@ -146,6 +146,8 @@ def identity(repository,uid,number,base,head,*,allow_base_advance=False):
     repo=gh('api',f'repos/{repository}')
     branch=repo['default_branch']
     if pr['base']['ref']!=branch: raise ValueError('integration target must be default branch')
+    if not allow_base_advance and default_branch_head(repository,branch)!=base:
+        raise ValueError('default-branch target moved; request a new integration run')
     return pr,branch
 
 def default_branch_head(repository,branch):
@@ -1116,7 +1118,8 @@ def prepare(root,repository,uid,number,base,head,*,approved_executor_contract_di
     if not OID.fullmatch(workflow_sha) or not OID.fullmatch(execution_sha):
         raise ValueError('integration workflow/run identity is invalid')
     keyed_inputs=request_key is not None or validation_request_b64 is not None
-    _,branch=identity(repository,uid,number,base,head,allow_base_advance=keyed_inputs)
+    _,branch=identity(repository,uid,number,base,head,
+        allow_base_advance=keyed_inputs or approved_executor_contract_digests is not None)
     validation_request=None
     if keyed_inputs or effective_policy is not None or trusted_policy is not None:
         if request_key is None or validation_request_b64 is None or trusted_policy is None:

@@ -51,7 +51,11 @@ class TargetedProjectionPromotionTests(unittest.TestCase):
   (self.root/'README').write_text('base\n',encoding='utf-8')
   (self.root/'scripts').mkdir()
   shutil.copy2(HERE.parents[1]/'scripts/ci-required-scope.v2.json',self.root/'scripts/ci-required-scope.v2.json')
-  self.git('add','README','scripts/ci-required-scope.v2.json');self.git('commit','-qm','base')
+  for relative in ['scripts/plan-rust-required-scope.py','scripts/ci-tests.sh','scripts/pm/workflow-impact-projection.py']:
+   destination=self.root/relative
+   destination.parent.mkdir(parents=True,exist_ok=True)
+   shutil.copy2(HERE.parents[1]/relative,destination)
+  self.git('add','README','scripts');self.git('commit','-qm','base')
   self.scope_base=self.git('rev-parse','HEAD')
   self.git('switch','-q','-c','source')
   self.changed_path='site/index.html'
@@ -143,10 +147,90 @@ class TargetedProjectionPromotionTests(unittest.TestCase):
   self.assertEqual(integration['impact_projection_digest'],self.projection['projection_digest'])
   self.assertEqual(integration['test_profile'],'required')
   self.assertEqual(integration['selected_capabilities'],'site_quality;workflow_governance')
-  # Target-only workflow governance executes the nested Rust baseline.
   self.assertEqual(integration['needs_rust_toolchain'],'true')
   self.assertEqual(integration['run_rust_baseline'],'true')
   self.assertEqual(integration['changed_path_count'],'2')
+
+ def workflow_run_script(self,marker):
+  workflow=(HERE.parents[1]/'.github/workflows/rust.yml').read_text()
+  step=workflow.split(marker,1)[1].split('\n      - ',1)[0]
+  return textwrap.dedent(step.split('        run: |\n',1)[1])
+
+ def execute_historical_pr_workflow(self,merge_target,reject=None):
+  if merge_target:
+   self.git('switch','-q','source')
+   self.git('merge','--no-edit',self.integration_base)
+   self.source_head=self.git('rev-parse','HEAD')
+  fixture=self.root/'github-fixture.json'
+  fixture.write_text(json.dumps({'pr':{'state':'open','merged':False,'base':{
+   'ref':'main','sha':self.scope_base,'repo':{'full_name':'owner/repo'}},'head':{
+   'sha':self.source_head,'repo':{'full_name':'owner/repo'}}},'target':self.integration_base}))
+  if reject in ('head','ref','repo','closed'):
+   payload=json.loads(fixture.read_text())
+   if reject=='head':payload['pr']['head']['sha']='f'*40
+   elif reject=='ref':payload['pr']['base']['ref']='release'
+   elif reject=='repo':payload['pr']['head']['repo']['full_name']='fork/repo'
+   else:payload['pr']['state']='closed'
+   fixture.write_text(json.dumps(payload))
+  bin_dir=self.root/'test-bin';bin_dir.mkdir()
+  gh=bin_dir/'gh'
+  gh.write_text('#!/usr/bin/env python3\nimport json,os,sys\nf=json.load(open(os.environ["GH_FIXTURE"]))\np=sys.argv[-1]\n'
+   'if os.environ.get("TARGET_DRIFT") and "/git/ref/" in p:\n'
+   ' c=os.environ["GH_FIXTURE"]+".count"; n=int(open(c).read()) if os.path.exists(c) else 0;open(c,"w").write(str(n+1));f["target"]=f["target"] if n==0 else "f"*40\n'
+   'print(json.dumps(f["pr"] if "/pulls/" in p else {"object":{"sha":f["target"]}} if "/git/ref/" in p else {"full_name":"owner/repo","default_branch":"main"}))\n')
+  gh.chmod(0o755)
+  runner=self.root/'runner';runner.mkdir()
+  output=self.root/'target-output'
+  env={**os.environ,'PATH':str(bin_dir)+os.pathsep+os.environ['PATH'],'GH_FIXTURE':str(fixture),
+   'GITHUB_OUTPUT':str(output),'RUNNER_TEMP':str(runner),'GITHUB_EVENT_NAME':'pull_request',
+   'GITHUB_SHA':self.source_head,'PR_BODY':''}
+  if reject=='target_drift':env['TARGET_DRIFT']='1'
+  replacements={'${{ github.repository }}':'owner/repo','${{ github.event.pull_request.number }}':'7',
+   '${{ github.event.pull_request.head.sha }}':self.source_head,'${{ github.event.pull_request.base.sha }}':self.scope_base,
+   '${{ steps.pr_target.outputs.oid }}':self.integration_base,'${{ inputs.integration_base }}':'',
+   '${{ inputs.expected_head }}':'','${{ inputs.task_uid }}':'','${{ inputs.run_mode }}':'',
+   '${{ github.event.before }}':''}
+  def execute(script,expect_failure=False):
+   for source,target in replacements.items():script=script.replace(source,target)
+   self.assertNotIn('${{',script)
+   result=subprocess.run(['bash','-e','-c',script],cwd=self.root,env=env,text=True,capture_output=True)
+   if expect_failure:self.assertNotEqual(result.returncode,0)
+   else:self.assertEqual(result.returncode,0,result.stdout+result.stderr)
+  execute(self.workflow_run_script('      - id: pr_target\n'),reject in ('head','ref','repo','closed','target_drift'))
+  if reject in ('head','ref','repo','closed','target_drift'):return
+  self.assertEqual(output.read_text().strip(),'oid='+self.integration_base)
+  output.write_text('')
+  if reject=='missing_target':replacements['${{ steps.pr_target.outputs.oid }}']='f'*40
+  if reject=='ambiguous_scope':
+   fake_git=bin_dir/'git'
+   real_git=subprocess.check_output(['which','git'],text=True).strip()
+   fake_git.write_text('#!/bin/sh\nif [ "$1" = merge-base ]; then printf "%s\\n%s\\n" '+self.scope_base+' '+self.integration_base+'; else exec '+real_git+' "$@"; fi\n')
+   fake_git.chmod(0o755)
+  execute(self.workflow_run_script('      - id: scope\n'),reject in ('missing_target','ambiguous_scope'))
+  if reject in ('missing_target','ambiguous_scope'):return
+  results=dict(line.split('=',1) for line in output.read_text().splitlines())
+  expected_scope=self.git('merge-base',self.integration_base,self.source_head)
+  self.assertEqual(results['source_scope_base'],expected_scope)
+  self.assertEqual(results['integration_base_oid'],self.integration_base)
+  self.assertEqual(results['changed_path_count'],'1')
+  self.assertEqual(self.git('diff','--name-only',expected_scope,self.source_head),self.changed_path)
+  # Trusted planner files originate at Q, not a candidate source helper.
+  self.assertEqual((runner/'required-base-authority/plan-rust-required-scope.py').read_bytes(),
+   subprocess.check_output(['git','-C',str(self.root),'show',self.integration_base+':scripts/plan-rust-required-scope.py']))
+
+ def test_executable_workflow_historical_base_source_only_excludes_upstream(self):
+  self.execute_historical_pr_workflow(False)
+
+ def test_executable_workflow_historical_base_merged_source_excludes_upstream(self):
+  self.execute_historical_pr_workflow(True)
+
+ def test_executable_workflow_rejects_head_drift(self):self.execute_historical_pr_workflow(False,'head')
+ def test_executable_workflow_rejects_wrong_ref(self):self.execute_historical_pr_workflow(False,'ref')
+ def test_executable_workflow_rejects_wrong_repository(self):self.execute_historical_pr_workflow(False,'repo')
+ def test_executable_workflow_rejects_closed_pr(self):self.execute_historical_pr_workflow(False,'closed')
+ def test_executable_workflow_rejects_target_read_race(self):self.execute_historical_pr_workflow(False,'target_drift')
+ def test_executable_workflow_rejects_missing_fetched_target(self):self.execute_historical_pr_workflow(False,'missing_target')
+ def test_executable_workflow_rejects_ambiguous_scope(self):self.execute_historical_pr_workflow(False,'ambiguous_scope')
 
  def test_unknown_closure_full_projection_is_accepted_with_exact_source_paths(self):
   self.payload['closure_status']={
@@ -1029,6 +1113,29 @@ class ProvenanceTests(unittest.TestCase):
   self.payload=dict(schema=self.api.ARTIFACT,repository='owner/repo',workflow_run_id=9,base_oid=self.base,head_oid=self.head,task_uid=self.uid,pr_number=12,workflow_sha=self.base,workflow_ref='owner/repo/.github/workflows/rust.yml@refs/heads/main',integration_mode='integration_revalidation',check_name='required-gate',scope_base_oid='d'*40,tested_tree_oid='e'*40,tested_commit_oid='f'*40)
   from integration_executor_contract import EXECUTOR_CONTRACT_PATHS
   self.executor_contents={path:('trusted fixture '+path).encode() for path in EXECUTOR_CONTRACT_PATHS}
+
+ def historical_pr_api(self,*args):
+  path=args[1]
+  if path=='repos/owner/repo/pulls/12':return self.pr
+  if path=='repos/owner/repo':return {'default_branch':'main'}
+  if path=='repos/owner/repo/git/ref/heads/main':return {'object':{'sha':self.base}}
+  raise AssertionError('unexpected GitHub read '+path)
+
+ def test_historical_pr_base_does_not_reject_exact_current_target(self):
+  self.pr['base']['sha']='d'*40
+  with patch.object(self.api,'gh',side_effect=self.historical_pr_api):
+   actual,branch=self.api.identity('owner/repo',self.uid,12,self.base,self.head)
+  self.assertEqual(branch,'main')
+  self.assertEqual(actual['head']['sha'],self.head)
+  # Preserve historical PR metadata; resolving the target must not rewrite it.
+  self.assertEqual(actual['base']['sha'],'d'*40)
+
+ def test_historical_pr_base_cannot_authorize_stale_integration_target(self):
+  historical='d'*40
+  self.pr['base']['sha']=historical
+  with patch.object(self.api,'gh',side_effect=self.historical_pr_api):
+   with self.assertRaisesRegex(ValueError,'target|default.branch|moved'):
+    self.api.identity('owner/repo',self.uid,12,historical,self.head)
  def trusted_policy_context(self,repository,branch,workflow_sha,default_branch_sha):
   import integration_executor_contract as request_contract
   policy=dict(self.policy_module.TRUSTED_EFFECTIVE_POLICY)
@@ -1110,6 +1217,7 @@ class ProvenanceTests(unittest.TestCase):
   self.assertEqual(effective_policy,self.api.decode_effective_policy(policy_encoded))
  def read(self,*args):
   path=args[-1]
+  if path=='repos/owner/repo/git/ref/heads/main':return {'object':{'sha':self.base}}
   if '/workflows/rust.yml/runs?' in path:return {'workflow_runs':[{**self.run,'id':9,'display_title':f'oasis7-ci|workflow_dispatch|integration_revalidation|{self.uid}|12|{self.base}|{self.head}'}]}
   if '/contents/' in path:
    relative=path.split('/contents/',1)[1].split('?ref=',1)[0]

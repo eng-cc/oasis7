@@ -11,6 +11,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 import unittest
+from unittest.mock import patch
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -142,13 +143,44 @@ class TrustedRiskClassifierTests(unittest.TestCase):
         projection, source, current_base = self.source_projection(
             stable_contract=True, target_path="contracts/stable.md",
         )
-        self.assertTrue(
-            GATE.trusted_requires_strict_integration(
-                self.data_for(projection, source, current_base),
-                self.root, self.effective, TASK, self.policy_commit,
-            )
-        )
+        self.assertTrue(GATE.trusted_requires_strict_integration(
+            self.data_for(projection, source, current_base),
+            self.root, self.effective, TASK, self.policy_commit))
 
+    def historical_target_admission(self, target_path):
+        projection, source, target = self.source_projection(stable_contract=True, target_path=target_path)
+        data = {**self.data_for(projection, source, self.base), 'repository':'owner/repo',
+                'number':12, 'state':'OPEN', 'isDraft':False, 'baseRefName':'main',
+                'headRefName':'codex/source'}
+        observed = []
+        def admission(actual, *args, **kwargs):
+            # Exercise classification with the target actually propagated by the
+            # production entrypoint; absent propagation retains historical B.
+            assessed = kwargs.get('assessed_target_oid')
+            classifier_args = {'assessed_target_oid':assessed} if assessed is not None else {}
+            strict = GATE.trusted_requires_strict_integration(
+                actual, self.root, self.effective, TASK, self.policy_commit, **classifier_args)
+            observed.append(strict)
+            if strict:raise ValueError('strict integration required')
+            return None
+        with patch.object(GATE, 'decision', return_value={'ready_for_merge':True,'blockers':[]}), \
+             patch.object(GATE, 'live_target_oid', return_value=target), \
+             patch.object(GATE, 'local_loop_admission', return_value={'status':'passed'}), \
+             patch.object(GATE, 'live_integration_admission', side_effect=admission), \
+             patch.object(GATE, 'read_pr_identity', return_value=data):
+            result = GATE.production_decision(data, False, self.root, TASK, None)
+        self.assertEqual(data['baseRefOid'], self.base)
+        return observed, result
+
+    def test_historical_base_related_live_target_requires_strict(self):
+        observed, result = self.historical_target_admission('contracts/stable.md')
+        self.assertEqual(observed, [True])
+        self.assertFalse(result['ready_for_merge'])
+
+    def test_historical_base_unrelated_live_target_keeps_ordinary(self):
+        observed, result = self.historical_target_admission('unrelated.md')
+        self.assertEqual(observed, [False])
+        self.assertTrue(result['ready_for_merge'])
     def test_unmapped_consumed_contract_with_target_advance_fails_closed(self) -> None:
         projection, source, current_base = self.source_projection(
             stable_contract=True, mapped_contract=False,
