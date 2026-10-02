@@ -237,10 +237,34 @@ owner_role="$(python3 -c 'import json,sys; print(json.load(sys.stdin)["owner_rol
 if [[ "$preflight" == 1 ]]; then
   cleanup_blockers='[]'
   if [[ "$protocol_selector" == v2 ]]; then
-    cleanup_preflight="$($SCRIPT_DIR/post-merge-cleanup.sh --repo-root "$repo_root" --task-uid "$task_uid" --delivery --preflight --json)" || true
-    if [[ -n "$cleanup_preflight" ]]; then
-      cleanup_blockers="$(python3 -c 'import json,sys; p=json.loads(sys.stdin.read()); print(json.dumps(p.get("cleanup_blockers",[])))' <<<"$cleanup_preflight")"
+    cleanup_preflight_rc=0
+    if cleanup_preflight="$($SCRIPT_DIR/post-merge-cleanup.sh --repo-root "$repo_root" --task-uid "$task_uid" --delivery --preflight --json)"; then
+      :
+    else
+      cleanup_preflight_rc=$?
     fi
+    cleanup_blockers="$(python3 - "$cleanup_preflight" "$cleanup_preflight_rc" <<'PY'
+import json,sys
+raw, returncode = sys.argv[1], int(sys.argv[2])
+blockers = []
+if not raw.strip():
+    blockers.append("cleanup preflight helper returned no result")
+else:
+    try:
+        result = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        blockers.append("cleanup preflight helper returned invalid JSON")
+    else:
+        values = result.get("cleanup_blockers") if isinstance(result, dict) else None
+        if not isinstance(values, list) or any(not isinstance(value, str) or not value for value in values):
+            blockers.append("cleanup preflight helper returned invalid cleanup blockers")
+        else:
+            blockers.extend(values)
+if returncode:
+    blockers.append(f"cleanup preflight helper exited with status {returncode}")
+print(json.dumps(blockers))
+PY
+)"
   fi
   if [[ "$output_json" == 1 ]]; then
     python3 - "$identity_json" "$cleanup_blockers" <<'PY'

@@ -51,8 +51,9 @@ for waits.
   `capability_blocked`; it is not a legitimate wait.
 - TPM coordinates typed professional actions; the matching role owns the
   professional conclusion.
-- A created PR is not done. Continue through merge receipt, task done, main sync
-  and safe cleanup.
+- A created PR is not done. Follow the selected terminal protocol: v1 retains
+  its ordered main-sync and safe-cleanup chain; v2 delivery completes
+  independently, with main sync and cleanup remaining separate.
 
 ## Verification
 

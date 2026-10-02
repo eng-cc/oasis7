@@ -77,6 +77,25 @@ make_mock post-merge-main-sync.sh "echo main-sync >>\"\$TEST_SEQUENCE\"; exit 91
 cat >"$REPO/scripts/pm/post-merge-cleanup.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
+if [[ " $* " == *" --preflight "* ]]; then
+  mode="${TEST_CLEANUP_PREFLIGHT_MODE:-success}"
+  if [[ -n "${TEST_CLEANUP_PREFLIGHT_TRACE:-}" ]]; then
+    printf '%s\n' "$mode" >>"$TEST_CLEANUP_PREFLIGHT_TRACE"
+  fi
+  case "$mode" in
+    success)
+      printf '%s\n' '{"status":"cleaned","cleanup_state":"complete","cleanup":{},"cleanup_blockers":[]}'
+      exit 0
+      ;;
+    nonzero_no_json) exit 37 ;;
+    empty_success) exit 0 ;;
+    malformed_json) printf '%s\n' '{"cleanup_blockers": ['; exit 0 ;;
+    blocked_json_no_resources)
+      printf '%s\n' '{"status":"blocked","task_uid":"task_11111111111111111111111111111111","cleanup_blockers":["process-use readback unavailable"]}'
+      exit 43
+      ;;
+  esac
+fi
 echo cleanup >>"$TEST_SEQUENCE"
 printf '%s\n' '{"status":"cleaned","cleanup_state":"complete","cleanup":{},"cleanup_blockers":[]}'
 EOF
@@ -166,6 +185,71 @@ assert result["next_command"] == [
     "./scripts/pm/finalize-task.sh", "--repo-root", result["repo_root"],
     "--task-uid", result["task_uid"], "--pr", "7", "--resume", "--json"
 ], result
+PY
+
+# Select an existing v2 delivery only inside this isolated fixture so preflight
+# exercises the cleanup probe without invoking any terminal write.
+python3 - "$REPO/.pm/github-project-sync/tasks.json" "$UID_VALUE" <<'PY'
+import json, sys
+path, uid = sys.argv[1:]
+data = json.load(open(path, encoding="utf-8"))
+record = data["tasks"][uid]
+record["phase_receipt_type"] = {"post_merge_done": "oasis7_terminal_delivery"}
+record["phase_receipt_sha256"] = {"post_merge_done": "a" * 64}
+json.dump(data, open(path, "w", encoding="utf-8"), sort_keys=True)
+PY
+V2_PREFLIGHT_TRACE="$TMP/v2-preflight-trace.log"
+: >"$V2_PREFLIGHT_TRACE"
+v2_preflight_cleanup_case() {
+  local mode="$1" expected="$2" before_mapping before_receipts status
+  before_mapping="$(shasum -a 256 "$REPO/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
+  before_receipts="$(find "$REPO/.git/receipts" -type f -print | sort)"
+  set +e
+  TEST_SEQUENCE="$PREFLIGHT_SEQUENCE" TEST_REPO="$REPO" TEST_HEAD="$HEAD_OID" \
+    TEST_CLEANUP_PREFLIGHT_MODE="$mode" TEST_CLEANUP_PREFLIGHT_TRACE="$V2_PREFLIGHT_TRACE" \
+    "$REPO/scripts/pm/finalize-task.sh" --repo-root "$REPO" --task-uid "$UID_VALUE" --pr 7 --preflight --json \
+    >"$TMP/v2-preflight-$mode.json" 2>"$TMP/v2-preflight-$mode.err"
+  status=$?
+  set -e
+  if [[ "$status" != 0 ]]; then
+    echo "finalize-task v2 preflight failed instead of reporting cleanup blockers for $mode (exit $status)" >&2
+    cat "$TMP/v2-preflight-$mode.err" >&2
+    cat "$TMP/v2-preflight-$mode.json" >&2
+    exit 1
+  fi
+  python3 - "$TMP/v2-preflight-$mode.json" "$expected" "$mode" <<'PY'
+import json, sys
+result = json.load(open(sys.argv[1], encoding="utf-8"))
+expected, mode = sys.argv[2:]
+assert result["status"] == "ready", (mode, result)
+assert result["identity_status"] == "bound", (mode, result)
+assert result["blockers"] == [], (mode, result)
+assert result["delivery_blockers"] == [], (mode, result)
+blockers = result["cleanup_blockers"]
+assert isinstance(blockers, list) and all(isinstance(item, str) and item for item in blockers), (mode, result)
+if expected:
+    for expected_item in expected.split(";"):
+        assert any(expected_item in blocker for blocker in blockers), (mode, expected_item, result)
+else:
+    assert blockers == [], (mode, result)
+PY
+  [[ "$before_mapping" == "$(shasum -a 256 "$REPO/.pm/github-project-sync/tasks.json" | awk '{print $1}')" ]]
+  [[ "$before_receipts" == "$(find "$REPO/.git/receipts" -type f -print | sort)" ]]
+  test ! -s "$PREFLIGHT_SEQUENCE"
+}
+v2_preflight_cleanup_case success ""
+v2_preflight_cleanup_case blocked_json_no_resources "process-use readback unavailable;status 43"
+v2_preflight_cleanup_case nonzero_no_json "no result;status 37"
+v2_preflight_cleanup_case empty_success "no result"
+v2_preflight_cleanup_case malformed_json "invalid JSON"
+python3 - "$REPO/.pm/github-project-sync/tasks.json" "$UID_VALUE" <<'PY'
+import json, sys
+path, uid = sys.argv[1:]
+data = json.load(open(path, encoding="utf-8"))
+record = data["tasks"][uid]
+record.pop("phase_receipt_type", None)
+record.pop("phase_receipt_sha256", None)
+json.dump(data, open(path, "w", encoding="utf-8"), sort_keys=True)
 PY
 
 preflight_blocker() {

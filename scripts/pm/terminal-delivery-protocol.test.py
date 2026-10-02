@@ -322,6 +322,8 @@ for pid in args[args.index("-p") + 1].split(","):
             comment_author: str | None = None,
             comment_no_user: bool = False) -> dict[str, str]:
         env = dict(os.environ)
+        for name in ("GH_TOKEN", "GITHUB_TOKEN", "GITHUB_ENTERPRISE_TOKEN"):
+            env.pop(name, None)
         env["PATH"] = str(self.bin) + os.pathsep + env.get("PATH", "")
         env["QA_GH_STATE"] = str(self.state_path)
         env["QA_GH_LOG"] = str(self.log_path)
@@ -410,6 +412,103 @@ class TerminalDeliveryProtocolTests(unittest.TestCase):
             live_project_item=item, live_pr=pr, live_repository=live_repo,
             comments=comments,
         )
+
+    def _prepare_existing_delivery_receipt(self, mutate_receipt):
+        state_before = copy.deepcopy(json.loads(self.fixture.state_path.read_text(encoding="utf-8")))
+        mapping_before = self.fixture.mapping_path.read_bytes()
+        receipt_files_before = {
+            path.name: path.read_bytes() for path in self.fixture.receipt_root.iterdir()
+            if path.is_file()
+        }
+
+        created = self.fixture.run_producer()
+        self.assertEqual(created.returncode, 0, created.stdout + created.stderr)
+        receipt_path = self.fixture.receipt_root / "terminal-delivery-receipt.json"
+        receipt = json.loads(receipt_path.read_bytes())
+        mutate_receipt(receipt)
+        receipt_before = canonical(receipt) + b"\n"
+        receipt_path.write_bytes(receipt_before)
+
+        # Model a crash immediately after the immutable receipt was written:
+        # restore every other sink to its exact pre-finalization state.
+        self.fixture.state = state_before
+        self.fixture._write_state()
+        self.fixture.mapping_path.write_bytes(mapping_before)
+        for path in self.fixture.receipt_root.iterdir():
+            if (path.is_file() and path.name not in receipt_files_before
+                    and path.name != receipt_path.name):
+                path.unlink()
+        for name, raw in receipt_files_before.items():
+            (self.fixture.receipt_root / name).write_bytes(raw)
+        self.fixture.log_path.write_text("", encoding="utf-8")
+        self.fixture.lost_marker.unlink(missing_ok=True)
+        self.fixture.lost_close_marker.unlink(missing_ok=True)
+
+        ledger_path = self.fixture.receipt_root / "finalizer-ledger.json"
+        tombstone_path = self.fixture.receipt_root / "terminal-tombstone.json"
+        snapshot = {
+            "issue": state_before["issue"],
+            "project": state_before["project_item"],
+            "comments": state_before["comments"],
+            "mapping": mapping_before,
+            "ledger": ledger_path.read_bytes() if ledger_path.exists() else None,
+            "tombstone": tombstone_path.read_bytes() if tombstone_path.exists() else None,
+            "receipt": receipt_before,
+        }
+        return snapshot, ledger_path, tombstone_path
+
+    def _assert_no_terminal_effects(self, snapshot, ledger_path, tombstone_path, producer_output):
+        state_after = json.loads(self.fixture.state_path.read_text(encoding="utf-8"))
+        values = {
+            "Project": (state_after["project_item"], snapshot["project"]),
+            "Issue comment": (state_after["comments"], snapshot["comments"]),
+            "mapping": (self.fixture.mapping_path.read_bytes(), snapshot["mapping"]),
+            "Issue": (state_after["issue"], snapshot["issue"]),
+            "ledger": (ledger_path.read_bytes() if ledger_path.exists() else None, snapshot["ledger"]),
+            "tombstone": (
+                tombstone_path.read_bytes() if tombstone_path.exists() else None,
+                snapshot["tombstone"],
+            ),
+        }
+        changed = [name for name, (after, before) in values.items() if after != before]
+        receipt_path = self.fixture.receipt_root / "terminal-delivery-receipt.json"
+        receipt_unchanged = receipt_path.read_bytes() == snapshot["receipt"]
+
+        calls = [json.loads(line) for line in self.fixture.log_path.read_text().splitlines()]
+        writes = [call for call in calls if (
+            call[:2] in (["issue", "comment"], ["issue", "close"])
+            or (call[:2] == ["api", "graphql"]
+                and any("mutation" in str(argument).lower() for argument in call))
+        )]
+        self.assertEqual(
+            (changed, receipt_unchanged, writes),
+            ([], True, []),
+            f"terminal side-effect audit failed; changed sinks={changed}; "
+            f"receipt_unchanged={receipt_unchanged}; write_calls={writes}; "
+            f"producer_output={producer_output.strip()}",
+        )
+
+    def test_existing_v2_receipt_extra_key_is_rejected_before_any_terminal_effect(self):
+        snapshot, ledger_path, tombstone_path = self._prepare_existing_delivery_receipt(
+            lambda receipt: receipt.update({"unexpected_audit_note": "must be rejected"}),
+        )
+
+        result = self.fixture.run_producer()
+        output = result.stdout + result.stderr
+        self.assertNotEqual(result.returncode, 0, output)
+        self.assertIn("terminal delivery receipt closed schema mismatch", output)
+        self._assert_no_terminal_effects(snapshot, ledger_path, tombstone_path, output)
+
+    def test_existing_v2_receipt_invalid_observed_at_is_rejected_before_any_terminal_effect(self):
+        snapshot, ledger_path, tombstone_path = self._prepare_existing_delivery_receipt(
+            lambda receipt: receipt.update({"observed_at": "not-a-timestamp"}),
+        )
+
+        result = self.fixture.run_producer()
+        output = result.stdout + result.stderr
+        self.assertNotEqual(result.returncode, 0, output)
+        self.assertIn("terminal delivery receipt observation time is invalid", output)
+        self._assert_no_terminal_effects(snapshot, ledger_path, tombstone_path, output)
 
     def test_preflight_and_lost_comment_response_recover_one_delivery(self):
         preflight = self.fixture.run_producer("--preflight")

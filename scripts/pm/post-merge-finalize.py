@@ -577,6 +577,26 @@ def _delivery_live_context(root: pathlib.Path, task_uid: str) -> dict:
             "claim":claim,"task_complete_claim_sha256":claim_digest,"existing_delivery":existing}
 
 
+def _validate_existing_delivery_record(existing: dict, expected: dict) -> None:
+    if set(expected) != DELIVERY_RECEIPT_FIELDS:
+        raise ValueError("terminal delivery writer schema does not match the strict receipt schema")
+    if set(existing) != DELIVERY_RECEIPT_FIELDS:
+        raise ValueError("terminal delivery receipt closed schema mismatch")
+    observed_at=existing.get("observed_at")
+    try:
+        if not isinstance(observed_at,str):
+            raise ValueError("timestamp must be a string")
+        parsed=dt.datetime.fromisoformat(observed_at.replace("Z","+00:00"))
+        if parsed.tzinfo is None:
+            raise ValueError("timezone required")
+    except (TypeError,ValueError) as exc:
+        raise ValueError("terminal delivery receipt observation time is invalid") from exc
+    for key,value in expected.items():
+        if key=="observed_at":
+            continue
+        if type(existing[key]) is not type(value) or existing[key]!=value:
+            raise ValueError(f"existing delivery receipt conflicts with current live {key}")
+
 def _delivery_record(context: dict) -> dict:
     existing=context.get("existing_delivery")
     record={
@@ -595,11 +615,10 @@ def _delivery_record(context: dict) -> dict:
     }
     if existing is not None:
         # A receipt written before a lost local/remote response is immutable.
-        # Reuse it only when every authority field still matches, and let the
-        # live compare bundle prove its observed target remains on current main.
-        for key,value in record.items():
-            if key!="observed_at" and existing.get(key)!=value:
-                raise ValueError(f"existing delivery receipt conflicts with current live {key}")
+        # Validate its closed schema, original observation time, and every
+        # typed authority field before allowing any terminal side effect.
+        # Keep the original timestamp and exact file bytes on valid recovery.
+        _validate_existing_delivery_record(existing,record)
         record=existing
     return record
 
