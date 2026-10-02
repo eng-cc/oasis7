@@ -31,6 +31,7 @@ INVENTORY_AUTHORITY_SCHEMA = "oasis7-planner-inventory-authority/v1"
 INVENTORY_SCHEMA = "oasis7-trusted-planner-inventory/v1"
 
 BASELINE_OBLIGATIONS = (
+    "document-corpus-v3-check",
     "product-doc-changed-range",
     "product-doc-full-corpus",
     "workflow-process-identity",
@@ -46,12 +47,19 @@ BASELINE_OBLIGATIONS = (
 BASELINE_CHECKER_PATHS = (
     "scripts/ci-tests.sh",
     "scripts/doc-governance-check.sh",
+    "scripts/document-corpus-inventory-check.py",
+    "scripts/document-corpus-inventory.py",
+    "scripts/document_corpus.py",
+    "scripts/document_evidence_policy.py",
+    "scripts/doc-evidence-inventory-check.py",
     "scripts/workflow-process-identity-check.py",
     "scripts/product-doc-governance-check.py",
     "scripts/product-doc-content-check.py",
     "scripts/lint-skills.sh",
     "scripts/check-windows-paths.sh",
     "scripts/check-script-executable-bits.sh",
+    "doc/.governance/document-corpus-inventory.json",
+    "doc/testing/evidence/inventory.json",
     "scripts/pm/workflow-impact-projection.py",
     "scripts/pm/check-cargo-package-scope",
     "scripts/pm/cargo_package_profile_driver.py",

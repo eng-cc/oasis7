@@ -1,0 +1,16 @@
+{
+  "record": {
+    "content_set_sha256": "01425c21935870ad93711edc83bad78cb92f6d0045d97619ed29ae3b64658a9b",
+    "current_authority": "doc/world-runtime/prd.md",
+    "decision_owner": "qa_engineer",
+    "disposition": "retain_active_template_or_example",
+    "id": "world-runtime-checklists-and-templates",
+    "note": "blank acceptance and release/security scaffolds; never execution evidence or current pass",
+    "paths": [
+      "doc/world-runtime/checklists/runtime-core-boundary-acceptance-checklist.md",
+      "doc/world-runtime/templates/runtime-release-gate-metrics-template.md",
+      "doc/world-runtime/templates/runtime-security-numeric-regression-template.md"
+    ]
+  },
+  "schema": "oasis7.document-semantic-bundle/v1"
+}

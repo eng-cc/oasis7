@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/world-runtime/README.md",
+    "authority_layer": "professional_domain",
+    "content_sha256": "23d184d6cc08f6b19bbff1cfb3156472b4b03f5a62b92a0fe870d7f6ebe8fdd6",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "historical_candidate",
+    "object_kind": "prd",
+    "path": "doc/world-runtime/module/online-module-release-legality-closure-2026-03-08.prd.md",
+    "registry_type": "professional_domain",
+    "routing_batch": "world-runtime-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "runtime_engineer",
+    "structural_owner": "runtime_engineer"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "d512e08d0afff61371fafa090f9999ad82b539ce6ac058041633e59cca0d3144",
+    "current_authority": "doc/site/prd.md",
+    "decision_owner": "repository_health_engineer",
+    "disposition": "retain_current_authority",
+    "note": "exact discoverability index",
+    "path": "doc/site/prd.index.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/site/README.md",
+    "authority_layer": "professional_domain",
+    "content_sha256": "83d39c88a93031c93e9cfa3c972d61a84775bf5a1e3fa2353c847762db398f6e",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "historical_candidate",
+    "object_kind": "design",
+    "path": "doc/site/github-pages/github-pages-homepage-page-2026-06-19.design.md",
+    "registry_type": "professional_domain",
+    "routing_batch": "site-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "liveops_community",
+    "structural_owner": "liveops_community"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

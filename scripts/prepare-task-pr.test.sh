@@ -1142,6 +1142,131 @@ write_changed_path_fixture() {
   write_role_review_packet "$SOURCE_HEAD" "no_findings"
 }
 
+run_document_corpus_prepare_failure_fixture() {
+  local product_doc="doc/product/world-rules-core-gameplay/agent-ownership-and-stewardship.prd.md"
+  local checker="scripts/product-doc-content-check.py"
+  local issue_list="$TMPDIR/corpus-prepare-issue-list.json"
+  local issue_body="$TMPDIR/corpus-prepare-issue-body.json"
+  local issue_comments="$TMPDIR/corpus-prepare-issue-comments.json"
+  local gh_log="$TMPDIR/gh-corpus-prepare-failure.log"
+  local git_log="$TMPDIR/git-corpus-prepare-failure.log"
+  local pm_log="$TMPDIR/pm-corpus-prepare-failure.log"
+  local stdout_path="$TMPDIR/corpus-prepare-failure.stdout"
+  local stderr_path="$TMPDIR/corpus-prepare-failure.stderr"
+  local source_head
+  local prepare_status=0
+
+  reset_smoke_branch_to_base
+  write_changed_path_fixture "$product_doc"
+
+  # The fixture passes the ordinary changed-range invocation, then fails only
+  # when prepare-task-pr actually requests the full-corpus validation.
+  cat >"$SMOKE_WORKTREE/$checker" <<'PY'
+#!/usr/bin/env python3
+import sys
+
+if "--full-corpus" in sys.argv[1:]:
+    print("INJECTED_FULL_CORPUS_CHECK_FAILURE", file=sys.stderr)
+    raise SystemExit(23)
+PY
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" add "$checker"
+  "$REAL_GIT" -C "$SMOKE_WORKTREE" \
+    -c user.name="oasis7 smoke" \
+    -c user.email="smoke@example.invalid" \
+    -c commit.gpgsign=false \
+    commit --no-verify -m "test: inject full-corpus checker failure" >/dev/null
+  SOURCE_HEAD="$("$REAL_GIT" -C "$SMOKE_WORKTREE" rev-parse HEAD)"
+  write_role_review_packet "$SOURCE_HEAD" "no_findings"
+
+  "$REAL_PYTHON" - "$issue_list" "$issue_body" "$issue_comments" "$TASK_UID" "$SMOKE_WORKTREE_CANONICAL" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+issue_list_path, issue_body_path, issue_comments_path, task_uid, worktree = sys.argv[1:]
+issue_url = "https://github.com/eng-cc/oasis7/issues/123"
+title = "prepare corpus checker failure fixture"
+body = "\n".join((
+    "<!-- oasis7-pm-task -->",
+    f"task_uid: {task_uid}",
+    "",
+    "Task metadata:",
+    "- owner_role: `tpm`",
+    "- status: `committed`",
+    "- priority: `P3`",
+    f"- worktree_hint: `{worktree}`",
+)) + "\n"
+Path(issue_list_path).write_text(json.dumps([{
+    "number": 123,
+    "url": issue_url,
+    "title": title,
+    "state": "OPEN",
+}]) + "\n", encoding="utf-8")
+Path(issue_body_path).write_text(json.dumps({
+    "body": body,
+    "comments": [],
+    "number": 123,
+    "state": "OPEN",
+    "title": title,
+    "url": issue_url,
+}) + "\n", encoding="utf-8")
+Path(issue_comments_path).write_text(json.dumps({"comments": []}) + "\n", encoding="utf-8")
+PY
+
+  : >"$pm_log"
+  if TEST_GH_CURRENT_REPO="eng-cc/oasis7" \
+    TEST_GH_ISSUE_LIST_JSON="$issue_list" \
+    TEST_GH_ISSUE_BODY_JSON="$issue_body" \
+    TEST_GH_ISSUE_FULL_JSON="$issue_body" \
+    TEST_GH_ISSUE_VIEW_JSON="$issue_comments" \
+    TEST_GH_PERSIST_COMMENT=0 \
+    TEST_PM_EFFECT_LOG="$pm_log" \
+    run_prepare "$gh_log" "$git_log" --json >"$stdout_path" 2>"$stderr_path"; then
+    prepare_status=0
+  else
+    prepare_status=$?
+  fi
+
+  python3 - "$prepare_status" "$gh_log" "$git_log" "$pm_log" "$stdout_path" "$stderr_path" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+status = int(sys.argv[1])
+gh = Path(sys.argv[2]).read_text(encoding="utf-8").splitlines()
+git = Path(sys.argv[3]).read_text(encoding="utf-8").splitlines()
+pm = Path(sys.argv[4]).read_text(encoding="utf-8").splitlines()
+stdout = Path(sys.argv[5]).read_text(encoding="utf-8")
+stderr = Path(sys.argv[6]).read_text(encoding="utf-8")
+sentinel = "INJECTED_FULL_CORPUS_CHECK_FAILURE"
+if status == 0:
+    raise SystemExit("prepare-task-pr accepted an intentionally failing full-corpus check")
+if stderr.count(sentinel) != 1:
+    raise SystemExit(f"expected exactly one actual full-corpus checker invocation, got: {stderr}")
+if "full-corpus product document content gate failed for product-document changes" not in stderr:
+    raise SystemExit(f"prepare-task-pr did not report the full-corpus gate failure: {stderr}")
+if "Created PR:" in stdout:
+    raise SystemExit(f"failed full-corpus validation reached PR creation output: {stdout}")
+gh_writes = [
+    line for line in gh
+    if line.startswith(("issue comment ", "issue edit ", "project item-edit ", "pr create "))
+    or (line.startswith("api ") and re.search(r"(?:^| )--method (POST|PATCH|PUT|DELETE)(?: |$)", line))
+]
+if gh_writes:
+    raise SystemExit(f"failed full-corpus validation reached GitHub publication/state writes: {gh_writes}")
+if any(re.search(r"(?:^| )push(?: |$)", line) for line in git):
+    raise SystemExit(f"failed full-corpus validation reached git push: {git}")
+if pm:
+    raise SystemExit(f"failed full-corpus validation reached PM state-writing helpers: {pm}")
+PY
+  printf '%s\n' "prepare-task-pr full-corpus checker failure: OK"
+}
+
+if [[ "${TEST_ONLY_DOCUMENT_CORPUS_PREPARE_FAILURE:-0}" == "1" ]]; then
+  run_document_corpus_prepare_failure_fixture
+  exit $?
+fi
+
 write_tracked_legacy_process_fixture() {
   local process_path=".pm/tasks/$TASK_UID.yaml"
   write_task_binding
@@ -1179,12 +1304,41 @@ run_cargo_package_required_fixture() {
       crates/oasis7_node/src/tests_observer_consensus_subscription.rs
   fi
   write_project_trace
+  if [[ "$primary_package" == "oasis7_node" ]]; then
+    local observer_test_path="crates/oasis7_node/src/tests_observer_consensus_subscription.rs"
+    local observer_test_source="$SMOKE_WORKTREE/$observer_test_path"
+    if ! "$REAL_PYTHON" - "$observer_test_source" <<'PY'
+from pathlib import Path
+import sys
+
+source = Path(sys.argv[1]).read_text(encoding="utf-8")
+expected = '"/../oasis7/src/bin/oasis7_chain_runtime.rs"'
+raise SystemExit(0 if expected in source else 1)
+PY
+    then
+      echo "node package command fixture no longer contains its known cross-package source edge" >&2
+      return 1
+    fi
+    # This helper exercises prepare-task-pr command selection. The real
+    # cross-package edge remains covered by check-cargo-package-scope tests;
+    # replace only this source in the temporary fixture baseline so command
+    # projection is independent of that separate admission rule.
+    cat > "$observer_test_source" <<'EOF'
+// Fixture-only stand-in: the checker contract separately tests rejection of
+// node sources that include oasis7 package sources.
+#[test]
+fn package_command_fixture_placeholder() {}
+EOF
+  fi
   mkdir -p "$SMOKE_WORKTREE/.pm/github-project-sync"
   cat > "$SMOKE_WORKTREE/.pm/github-project-sync/tasks.json" <<EOF
 {"project":{"repo":"eng-cc/oasis7"},"tasks":{"$TASK_UID":{"issue_number":123,"issue_url":"https://github.com/eng-cc/oasis7/issues/123","owner_role":"tpm","priority":"P3","project_item_id":"PVTI_fixture","repository":"eng-cc/oasis7","primary_package":"$primary_package","status":"ready","workflow_phase":"verification","task_uid":"$TASK_UID","title":"$fixture_name package scope fixture","canonical_worktree":"$SMOKE_WORKTREE_CANONICAL","task_branch":"$SMOKE_BRANCH","default_branch":"main","worktree_hint":"$SMOKE_WORKTREE_CANONICAL","evidence_comments":["https://github.com/eng-cc/oasis7/issues/123#issuecomment-1001","https://github.com/eng-cc/oasis7/issues/123#issuecomment-1002"],"claim_verifications":[{"status":"verified"}] }},"version":1}
 EOF
   "$REAL_GIT" -C "$SMOKE_WORKTREE" add doc/engineering/project.md
   "$REAL_GIT" -C "$SMOKE_WORKTREE" add -f .pm/github-project-sync/tasks.json
+  if [[ "$primary_package" == "oasis7_node" ]]; then
+    "$REAL_GIT" -C "$SMOKE_WORKTREE" add "crates/oasis7_node/src/tests_observer_consensus_subscription.rs"
+  fi
   "$REAL_GIT" -C "$SMOKE_WORKTREE" \
     -c user.name="oasis7 smoke" \
     -c user.email="smoke@example.invalid" \
@@ -3462,6 +3616,7 @@ if not any("--full-corpus" in command for command in required["recommended_extra
         f"{required}"
     )
 PY
+run_document_corpus_prepare_failure_fixture
 
 # Existing-ready updates must reach the ordered publisher with the explicit
 # admission flag and must stop there if the publisher rejects the route.

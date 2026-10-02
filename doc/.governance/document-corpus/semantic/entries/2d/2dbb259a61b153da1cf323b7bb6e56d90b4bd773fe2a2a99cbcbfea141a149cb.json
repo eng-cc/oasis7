@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "b1277581ef636f4ec6bea7d4dbf2e199916986fc6ac3a4d36c48f213d5aecd5f",
+    "current_authority": "doc/world-runtime/prd.md",
+    "decision_owner": "runtime_engineer",
+    "disposition": "retain_current_authority",
+    "note": "current world-runtime design authority",
+    "path": "doc/world-runtime/design.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

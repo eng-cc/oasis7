@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/p2p/README.md",
+    "authority_layer": "professional_domain",
+    "content_sha256": "499564d428e2172eec1124600e1b8a836261cddcc2018b57790ebbc13d2eca98",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "historical_candidate",
+    "object_kind": "markdown_record",
+    "path": "doc/p2p/blockchain/p2p-public-testnet-faucet-operator-runbook-2026-07-04.md",
+    "registry_type": "professional_domain",
+    "routing_batch": "p2p-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "blockchain_ops_engineer",
+    "structural_owner": "blockchain_ops_engineer"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

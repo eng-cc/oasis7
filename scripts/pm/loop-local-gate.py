@@ -15,6 +15,30 @@ def run(*args):
     return subprocess.check_output(args, text=True).strip()
 
 
+def load_effective_module(tool_root: Path, commit: str, name: str):
+    relative = f'scripts/pm/{name}.py'
+    entries = run('git', '-C', str(tool_root), 'ls-tree', commit, '--', relative).splitlines()
+    if len(entries) != 1 or '\t' not in entries[0]:
+        raise ValueError('effective helper module missing or ambiguous: ' + relative)
+    metadata, recorded_path = entries[0].split('\t', 1)
+    mode, object_type, _oid = metadata.split()
+    path = tool_root / relative
+    expected = subprocess.check_output(['git', '-C', str(tool_root), 'show', commit + ':' + relative])
+    if (recorded_path != relative or mode != '100644' or object_type != 'blob'
+            or path.is_symlink() or not path.resolve().is_relative_to(tool_root.resolve())
+            or path.read_bytes() != expected):
+        raise ValueError('effective helper bytes or mode differ: ' + relative)
+    if run('git', '-C', str(tool_root), 'ls-files', '--others', '--', relative):
+        raise ValueError('untracked effective helper shadow: ' + relative)
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ValueError('effective helper module unavailable: ' + relative)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, required=True)
@@ -63,11 +87,13 @@ def main():
             for name in names:
                 if (tool / name).is_symlink() or (tool / name).read_bytes() != subprocess.check_output(['git', '-C', str(tool), 'show', commit + ':' + name]): raise ValueError('effective helper bytes mismatch')
             if run('git', '-C', str(tool), 'ls-files', '--others', '--', 'scripts/pm', ':(exclude)**/__pycache__/**'): raise ValueError('untracked effective helper shadow')
-            sys.path.insert(0, str(tool / 'scripts/pm'))
-            spec = importlib.util.spec_from_file_location('effective_loop', tool / 'scripts/pm/loop.py')
-            module = importlib.util.module_from_spec(spec); spec.loader.exec_module(module)
-            from loop_policy import scope_context
-            context = scope_context(root, args.base, args.head)
+            sys.dont_write_bytecode = True
+            load_effective_module(tool, commit, 'loop_contracts')
+            loop_policy = load_effective_module(tool, commit, 'loop_policy')
+            load_effective_module(tool, commit, 'loop_recovery')
+            load_effective_module(tool, commit, 'loop_gate')
+            module = load_effective_module(tool, commit, 'loop')
+            context = loop_policy.scope_context(root, args.base, args.head)
             def validated_admission():
                 return module.validate_task(
                     root, {**task, 'repository': repository}, tool,

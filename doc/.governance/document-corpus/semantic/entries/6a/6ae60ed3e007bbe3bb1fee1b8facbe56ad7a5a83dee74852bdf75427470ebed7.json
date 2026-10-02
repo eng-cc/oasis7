@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "ce65e0008d7fcd46d5c3ee77bbe630101abf6b77e96ac93842b8eb37aa15183f",
+    "current_authority": "doc/game/gameplay/gameplay-agent-claim-economy-contract.prd.md",
+    "decision_owner": "liveops_community",
+    "disposition": "retain_current_controlled_runbook",
+    "note": "current slot-1 restricted-grant SOP; no transferable public reward general eligibility launch or automatic entitlement",
+    "path": "doc/game/gameplay/gameplay-agent-claim-restricted-grant-liveops-runbook-2026-03-29.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "0efa12d7b24a24beb7f08bb9bde4a9f76a7db40d1569fbe50afb02ced2cddb26",
+    "current_authority": "doc/playability_test_result/prd.md",
+    "decision_owner": "qa_engineer",
+    "disposition": "retain_active_template",
+    "note": "current result-card schema; not evidence",
+    "path": "doc/playability_test_result/playability_test_card.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

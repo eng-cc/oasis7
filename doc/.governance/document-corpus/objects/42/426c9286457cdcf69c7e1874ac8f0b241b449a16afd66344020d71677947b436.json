@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/p2p/README.md",
+    "authority_layer": "professional_domain",
+    "content_sha256": "64771a8a5834eb7536e6c089f2b83751d07336848ada9e49cdbadaa5996f839f",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "review_required",
+    "object_kind": "markdown_record",
+    "path": "doc/p2p/design.md",
+    "registry_type": "professional_domain",
+    "routing_batch": "p2p-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "blockchain_ops_engineer",
+    "structural_owner": "blockchain_ops_engineer"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

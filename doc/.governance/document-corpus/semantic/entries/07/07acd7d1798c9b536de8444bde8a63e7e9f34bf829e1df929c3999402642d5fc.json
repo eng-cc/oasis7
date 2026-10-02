@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "45d075ab46af164d606d7e512a80439ffa7fdc5423b0939d12cb5d936a2ac345",
+    "current_authority": "doc/engineering/prd.md",
+    "decision_owner": "repository_health_engineer",
+    "disposition": "retain_current_authority",
+    "note": "current structural size and root-cause governance contract; scan counts stay command evidence",
+    "path": "doc/engineering/rust-governance/rust-1200-line-root-cause-governance-2026-03-29.prd.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

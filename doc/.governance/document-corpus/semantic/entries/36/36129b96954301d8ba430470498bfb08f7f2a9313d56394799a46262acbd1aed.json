@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "04b33d9d83c627f0789dacdb9cbc08ca7b7d1cac5062aefe805ab5e07bde5346",
+    "current_authority": "doc/headless-runtime/prd.md",
+    "decision_owner": "runtime_engineer",
+    "disposition": "retain_active_template",
+    "note": "active reusable incident archive template; not an incident pass fail or release record",
+    "path": "doc/headless-runtime/templates/longrun-archive-incident-template.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

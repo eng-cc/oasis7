@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "1c1b4ee3555575064f70bca4bc9b7590c74867c796285e3671e961e5e2d3e460",
+    "current_authority": "doc/world-simulator/viewer/viewer-manual.manual.md",
+    "decision_owner": "viewer_engineer",
+    "disposition": "retain_current_authority",
+    "note": "canonical to public mirror mapping",
+    "path": "doc/site/manual/README.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}
