@@ -7,6 +7,8 @@ import os
 from pathlib import Path
 import re
 import stat
+from collections.abc import Mapping
+from types import MappingProxyType
 
 RELEASE_SCHEMA = "oasis7.local_signer_release.v1"
 PLAN_SCHEMA = "oasis7.local_signer_install_plan.v1"
@@ -46,9 +48,14 @@ def package_release(binary_dir, installer_dir, output_dir, *, release_id, target
     return {"manifest_sha256": digest(raw), "release_dir": str(output)}
 
 
-def validate_release(release_dir, expected_manifest_sha256, target):
+def validate_release(release_dir, expected_manifest_sha256, target, *, captured_files=None):
     root = Path(release_dir)
-    raw = read_file(root / "manifest.json", 65536)
+    if captured_files is not None:
+        if not isinstance(captured_files, Mapping) or set(captured_files) != set(FILES) | {"manifest.json"} or any(type(data) is not bytes for data in captured_files.values()):
+            raise InstallError("INVALID_RELEASE", "invalid closed captured release")
+        raw = captured_files["manifest.json"]
+    else:
+        raw = read_file(root / "manifest.json", 65536)
     if not valid_hash(expected_manifest_sha256) or digest(raw) != expected_manifest_sha256:
         raise InstallError("INVALID_RELEASE", "manifest approval digest mismatch")
     manifest = parse_json(raw)
@@ -65,13 +72,13 @@ def validate_release(release_dir, expected_manifest_sha256, target):
         name = entry["name"]
         if name not in FILES or name in verified or type(entry["size_bytes"]) is not int or not 0 < entry["size_bytes"] <= limit(name) or not valid_hash(entry["sha256"]):
             raise InstallError("INVALID_RELEASE", "invalid file identity or size")
-        data = read_file(root / name, limit(name))
+        data = captured_files[name] if captured_files is not None else read_file(root / name, limit(name))
         if len(data) != entry["size_bytes"] or digest(data) != entry["sha256"]:
             raise InstallError("INVALID_RELEASE", "release file digest mismatch")
         verified[name] = data
-    if set(os.listdir(root)) != set(FILES) | {"manifest.json"}:
+    if captured_files is None and set(os.listdir(root)) != set(FILES) | {"manifest.json"}:
         raise InstallError("INVALID_RELEASE", "unexpected release members")
-    return {"manifest": manifest, "manifest_sha256": expected_manifest_sha256, "verified_bytes": verified, "manifest_bytes": raw}
+    return {"manifest": manifest, "manifest_sha256": expected_manifest_sha256, "verified_bytes": MappingProxyType(verified), "manifest_bytes": raw}
 
 
 def plan_installation(request, release, backend):

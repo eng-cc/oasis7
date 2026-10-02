@@ -74,6 +74,17 @@ PY
 # v2 identity and projection classifier.
 TEST_ROOT="$(mktemp -d)"
 trap 'rm -rf -- "$TEST_ROOT"' EXIT
+OBSERVATION_JSON="$TEST_ROOT/observation-candidate.json"
+printf '%s\n' '{"evidence_mode":"observation","status":"observed","ready_for_merge":false,"candidate_ready":true,"requires_live_gate":true}' >"$OBSERVATION_JSON"
+set +e
+bash "$SCRIPT_DIR/claim-ready.sh" --claim-type ready_for_merge --verify-command true \
+  --verification-profile repository_required --pr-gate-json "$OBSERVATION_JSON" \
+  --task-uid task_11111111111111111111111111111111 \
+  >"$TEST_ROOT/observation-claim.out" 2>"$TEST_ROOT/observation-claim.err"
+observation_rc=$?
+set -e
+[[ "$observation_rc" == 1 ]]
+grep -q 'PR observation is derived-only' "$TEST_ROOT/observation-claim.err"
 FIXTURE="$TEST_ROOT/fixture"
 UID_VALUE="task_11111111111111111111111111111111"
 mkdir -p "$FIXTURE/scripts/pm" "$FIXTURE/.pm/scratch/$UID_VALUE/review-plans" "$FIXTURE/.pm/github-project-sync" "$TEST_ROOT/bin"

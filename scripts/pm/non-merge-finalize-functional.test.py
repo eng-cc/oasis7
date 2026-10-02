@@ -23,8 +23,7 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[2]
-HELPER = ROOT / "scripts/pm/non-merge-finalize.py"
-PROJECT_TASK = ROOT / "scripts/pm/github-project-task.py"
+SHARED_API_TEST_ADAPTER = ROOT / "scripts/pm/fixtures/github_api_test_adapter.py"
 UID = "task_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 REPO = "fixture/repo"
 ISSUE = 11
@@ -286,6 +285,27 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name) / "repo"
         self.root.mkdir()
+        self.pm_tools = Path(self.tmp.name) / "pm-tools"
+        self.pm_tools.mkdir()
+        for name in (
+            "non-merge-finalize.py",
+            "github-project-task.py",
+            "github-project-sync.py",
+            "github-project-workflow.py",
+            "workflow-durable-store.py",
+            "portable_file_lock.py",
+            "loop_leaf_result.py",
+            "closed_duplicate_candidate_guard.py",
+            "canonical-receipt-root.py",
+            "loop_policy.py",
+            "bootstrap-task-snapshot.py",
+            "pr_projection_publication.py",
+            "post-merge-finalize.py",
+            "terminal_proof.py",
+            "validate-durable-terminal-path.py",
+        ):
+            shutil.copy2(ROOT / "scripts/pm" / name, self.pm_tools / name)
+        shutil.copy2(SHARED_API_TEST_ADAPTER, self.pm_tools / "github_api.py")
         subprocess.run(["git", "init", "-q", "-b", "main", str(self.root)], check=True)
         (self.root / ".pm").mkdir()
         (self.root / ".pm/.gitignore").write_text(
@@ -305,6 +325,8 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         gh.chmod(0o755)
         self.env = os.environ.copy()
         self.env["PATH"] = f"{self.bin}:{self.env['PATH']}"
+        self.env.pop("GH_TOKEN", None)
+        self.env.pop("GITHUB_TOKEN", None)
         self.calls_path = Path(self.tmp.name) / "calls.jsonl"
         self.comments = Path(self.tmp.name) / "comments.json"
         self.closes = Path(self.tmp.name) / "closes.json"
@@ -337,6 +359,10 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
 
     def tearDown(self) -> None:
         self.tmp.cleanup()
+
+    @property
+    def project_task(self) -> Path:
+        return self.pm_tools / "github-project-task.py"
 
     @staticmethod
     def write_state(path: Path, value: object) -> None:
@@ -466,7 +492,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(classified.returncode, 0, classified.stderr)
         claim = json.dumps(self.claim_ready(task_worktree))
         closeout = subprocess.run([
-            sys.executable, str(PROJECT_TASK), "closeout-task", str(task_worktree),
+            sys.executable, str(self.project_task), "closeout-task", str(task_worktree),
             "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
             "--to-status", "done", "--claim-json", claim, "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
@@ -514,7 +540,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
                 evidence = self.evidence()
         evidence = evidence or self.evidence()
         return subprocess.run([
-            sys.executable, str(HELPER), "--repo-root", str(finalizer_root),
+            sys.executable, str(self.pm_tools / "non-merge-finalize.py"), "--repo-root", str(finalizer_root),
             "--task-uid", UID, "--reason", reason,
             "--evidence-file", str(evidence), "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
@@ -524,7 +550,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         classification_root = repo_root or self.root
         self.env["GH_REFRESH_TASK"] = "1"
         return subprocess.run([
-            sys.executable, str(PROJECT_TASK), "classify-non-pr-task", str(classification_root),
+            sys.executable, str(self.project_task), "classify-non-pr-task", str(classification_root),
             "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
             "--evidence", evidence, "--validation-command", "fixture classification", "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
@@ -671,7 +697,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         mapping_path = self.mapping()
         self.env["GH_REFRESH_TASK"] = "1"
         result = subprocess.run([
-            sys.executable, str(PROJECT_TASK), "closeout-task", str(self.root),
+            sys.executable, str(self.project_task), "closeout-task", str(self.root),
             "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
             "--to-status", "deferred", "--claim-json", "{}", "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
@@ -1189,7 +1215,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
 
         claim = json.dumps(self.claim_ready(task_worktree))
         closeout = subprocess.run([
-            sys.executable, str(PROJECT_TASK), "closeout-task", str(task_worktree),
+            sys.executable, str(self.project_task), "closeout-task", str(task_worktree),
             "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
             "--to-status", "done", "--claim-json", claim, "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
@@ -1252,7 +1278,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         })
 
         refreshed = subprocess.run([
-            sys.executable, str(PROJECT_TASK), "refresh-task", str(self.root),
+            sys.executable, str(self.project_task), "refresh-task", str(self.root),
             "--repo", REPO, "--project-owner", "fixture", "--project-number", "1",
             "--task-uid", UID, "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
@@ -1695,7 +1721,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
 
         claim = json.dumps(self.claim_ready())
         closeout = subprocess.run([
-            sys.executable, str(PROJECT_TASK), "closeout-task", str(self.root),
+            sys.executable, str(self.project_task), "closeout-task", str(self.root),
             "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
             "--to-status", "done", "--claim-json", claim, "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
@@ -1714,7 +1740,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         terminal_issue_body = self.issue_body.read_text()
         terminal_project_fields = self.read_json(self.project_fields)
         audit = subprocess.run([
-            sys.executable, str(ROOT / "scripts/pm/github-project-workflow.py"),
+            sys.executable, str(self.pm_tools / "github-project-workflow.py"),
             str(self.root), "--repo", REPO, "--project-owner", "fixture",
             "--project-number", "1", "--json", "audit", "--task-uid", UID,
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
@@ -1736,7 +1762,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         task_worktree, default_mapping_path, evidence_path = self.complete_stale_default_non_pr_closeout(evidence)
 
         refreshed = subprocess.run([
-            sys.executable, str(PROJECT_TASK), "refresh-task", str(self.root),
+            sys.executable, str(self.project_task), "refresh-task", str(self.root),
             "--repo", REPO, "--project-owner", "fixture", "--project-number", "1",
             "--task-uid", UID, "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
@@ -1766,7 +1792,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         evidence_path.write_text("tampered task-worktree evidence\n", encoding="utf-8")
 
         refreshed = subprocess.run([
-            sys.executable, str(PROJECT_TASK), "refresh-task", str(self.root),
+            sys.executable, str(self.project_task), "refresh-task", str(self.root),
             "--repo", REPO, "--project-owner", "fixture", "--project-number", "1",
             "--task-uid", UID, "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
@@ -1786,7 +1812,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.issue_body.write_text(body, encoding="utf-8")
 
         refreshed = subprocess.run([
-            sys.executable, str(PROJECT_TASK), "refresh-task", str(self.root),
+            sys.executable, str(self.project_task), "refresh-task", str(self.root),
             "--repo", REPO, "--project-owner", "fixture", "--project-number", "1",
             "--task-uid", UID, "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
@@ -1800,7 +1826,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         evidence_path.unlink()
 
         refreshed = subprocess.run([
-            sys.executable, str(PROJECT_TASK), "refresh-task", str(self.root),
+            sys.executable, str(self.project_task), "refresh-task", str(self.root),
             "--repo", REPO, "--project-owner", "fixture", "--project-number", "1",
             "--task-uid", UID, "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
@@ -1815,7 +1841,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         default_mapping_path.write_text(json.dumps(mapping, sort_keys=True) + "\n", encoding="utf-8")
 
         refreshed = subprocess.run([
-            sys.executable, str(PROJECT_TASK), "refresh-task", str(self.root),
+            sys.executable, str(self.project_task), "refresh-task", str(self.root),
             "--repo", REPO, "--project-owner", "fixture", "--project-number", "1",
             "--task-uid", UID, "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
@@ -1853,7 +1879,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(classified.returncode, 0, classified.stderr)
         claim = json.dumps(self.claim_ready(task_worktree))
         closeout = subprocess.run([
-            sys.executable, str(PROJECT_TASK), "closeout-task", str(task_worktree),
+            sys.executable, str(self.project_task), "closeout-task", str(task_worktree),
             "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
             "--to-status", "done", "--claim-json", claim, "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
@@ -1871,7 +1897,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(task_record["claim_verifications"][-1], json.loads(claim))
 
         refreshed = subprocess.run([
-            sys.executable, str(PROJECT_TASK), "refresh-task", str(self.root),
+            sys.executable, str(self.project_task), "refresh-task", str(self.root),
             "--repo", REPO, "--project-owner", "fixture", "--project-number", "1",
             "--task-uid", UID, "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
@@ -1937,7 +1963,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(classified.returncode, 0, classified.stderr)
         claim = json.dumps(self.claim_ready(_task_worktree))
         closeout = subprocess.run([
-            sys.executable, str(PROJECT_TASK), "closeout-task", str(_task_worktree),
+            sys.executable, str(self.project_task), "closeout-task", str(_task_worktree),
             "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
             "--to-status", "done", "--claim-json", claim, "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
@@ -1948,7 +1974,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         default_mapping_path.write_text(json.dumps(default_mapping, sort_keys=True) + "\n")
         calls_before = len(self.calls())
         refreshed = subprocess.run([
-            sys.executable, str(PROJECT_TASK), "refresh-task", str(self.root),
+            sys.executable, str(self.project_task), "refresh-task", str(self.root),
             "--repo", REPO, "--project-owner", "fixture", "--project-number", "1",
             "--task-uid", UID, "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
@@ -1978,13 +2004,13 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         self.assertEqual(classified.returncode, 0, classified.stderr)
         claim = self.claim_ready(task_worktree)
         closeout = subprocess.run([
-            sys.executable, str(PROJECT_TASK), "closeout-task", str(task_worktree),
+            sys.executable, str(self.project_task), "closeout-task", str(task_worktree),
             "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
             "--to-status", "done", "--claim-json", json.dumps(claim), "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
         self.assertEqual(closeout.returncode, 0, closeout.stderr)
         refreshed = subprocess.run([
-            sys.executable, str(PROJECT_TASK), "refresh-task", str(self.root),
+            sys.executable, str(self.project_task), "refresh-task", str(self.root),
             "--repo", REPO, "--project-owner", "fixture", "--project-number", "1",
             "--task-uid", UID, "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
@@ -2007,7 +2033,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         mapping_before = default_mapping_path.read_bytes()
         refresh_calls_before = len(self.calls())
         refresh_loss = subprocess.run([
-            sys.executable, str(PROJECT_TASK), "refresh-task", str(self.root),
+            sys.executable, str(self.project_task), "refresh-task", str(self.root),
             "--repo", REPO, "--project-owner", "fixture", "--project-number", "1",
             "--task-uid", UID, "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
@@ -2043,7 +2069,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
         canonical = Path(record["non_pr_completion_evidence_file"])
         claim = json.dumps(self.claim_ready())
         closeout = subprocess.run([
-            sys.executable, str(PROJECT_TASK), "closeout-task", str(self.root),
+            sys.executable, str(self.project_task), "closeout-task", str(self.root),
             "--repo", REPO, "--task-uid", UID, "--role", "repository_health_engineer",
             "--to-status", "done", "--claim-json", claim, "--json",
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)
@@ -2095,7 +2121,7 @@ class NonMergeFinalizeFunctionalTest(unittest.TestCase):
             "pr_number": 22,
         }) + "\n")
         subprocess.run([
-            sys.executable, str(ROOT / "scripts/pm/post-merge-finalize.py"),
+            sys.executable, str(self.pm_tools / "post-merge-finalize.py"),
             "--repo-root", str(self.root), "--task-uid", UID,
             "--terminal-receipt", str(terminal),
         ], cwd=ROOT, env=self.env, text=True, capture_output=True)

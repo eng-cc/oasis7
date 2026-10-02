@@ -40,9 +40,15 @@ class TerminalTaskAuditProjectSemantics(unittest.TestCase):
                 "terminal-task-audit.py",
                 "canonical-receipt-root.py",
                 "github-project-workflow.py",
+                "github-project-sync.py",
+                "workflow-durable-store.py",
                 "portable_file_lock.py",
             ):
                 shutil.copy2(ROOT / "scripts/pm" / name, pm / name)
+            shutil.copy2(
+                ROOT / "scripts/pm/fixtures/github_api_test_adapter.py",
+                pm / "github_api.py",
+            )
             mapping_path = repo / ".pm/github-project-sync/tasks.json"
             mapping_path.parent.mkdir(parents=True)
             mapping_path.write_text(json.dumps({

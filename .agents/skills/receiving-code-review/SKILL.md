@@ -39,9 +39,10 @@ Start with:
 
 ```bash
 ./scripts/pr-review-thread-closeout.sh --unresolved-only
+./scripts/pr-review-thread-closeout.sh --unresolved-only --summary
 ```
 
-Use it to inventory unresolved threads. After a code fix is pushed, or an evidence-backed no-change disposition is recorded, resolve the intended threads explicitly, then re-check:
+Use it to inventory unresolved threads. The default report includes review details; add `--summary` when the inventory does not need PR, review, or comment bodies. After a code fix is pushed, or an evidence-backed no-change disposition is recorded, resolve the intended threads explicitly, then re-check:
 
 - `reviewDecision`
 - `mergeStateStatus`

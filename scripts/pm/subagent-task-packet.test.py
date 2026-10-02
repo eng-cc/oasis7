@@ -35,6 +35,25 @@ class PacketTest(unittest.TestCase):
         shutil.copy2(SOURCE.with_name("ci_ready_receipt_identity.py"), self.repo / "scripts/pm/ci_ready_receipt_identity.py")
         shutil.copy2(SOURCE.with_name("workflow-durable-store.py"), self.repo / "scripts/pm/workflow-durable-store.py")
         shutil.copy2(SOURCE.with_name("github-project-workflow.py"), self.repo / "scripts/pm/github-project-workflow.py")
+        shutil.copy2(SOURCE.with_name("github-project-sync.py"), self.repo / "scripts/pm/github-project-sync.py")
+        api_fixture = "\n".join([
+            "import json", "import subprocess", "", "class APIError(RuntimeError):",
+            "    def __init__(self, message, *, kind='malformed_response'):",
+            "        super().__init__(message)", "        self.kind = kind", "    def as_dict(self):",
+            "        return {'status': 'capability_blocked', 'reason': self.kind, 'error': str(self)}", "",
+            "class GitHubAPIClient:", "    @classmethod", "    def from_gh(cls, **_kwargs):", "        return cls()",
+            "    def graphql(self, _query, _variables=None, **_kwargs):",
+            "        result = subprocess.run(['gh', 'graphql'], check=True, text=True,",
+            "                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)",
+            "        try:", "            payload = json.loads(result.stdout)",
+            "        except json.JSONDecodeError as exc:",
+            "            raise APIError('fixture returned malformed GraphQL JSON') from exc",
+            "        data = payload.get('data') if isinstance(payload, dict) else None",
+            "        if not isinstance(data, dict):", "            raise APIError('fixture returned malformed GraphQL data')",
+            "        return data", "    def rest(self, *_args, **_kwargs):",
+            "        raise APIError('unexpected REST request in packet fixture')", "",
+        ])
+        (self.repo / "scripts/pm/github_api.py").write_text(api_fixture, encoding="utf-8")
         shutil.copy2(SOURCE.with_name("closed_duplicate_candidate_guard.py"), self.repo / "scripts/pm/closed_duplicate_candidate_guard.py")
         for helper in ('loop_gate.py', 'loop.py', 'loop_recovery.py'):
             shutil.copy2(SOURCE.with_name(helper), self.repo / 'scripts/pm' / helper)
