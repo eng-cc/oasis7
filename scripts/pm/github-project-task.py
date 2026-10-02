@@ -3673,17 +3673,29 @@ class PublicationRecoveryAuthority:
             pr_binding = identity.get("pr_binding")
             if not isinstance(pr_binding, dict):
                 return False
-            if (set(pr_binding) == {"state", "pr_number"}
-                    and pr_binding not in (
-                        {"state": "unbound"},
-                        {"state": "bound", "pr_number": self.binding["pr_number"]},
-                    )):
-                return False
-            if (set(pr_binding) == {"task_uid", "pr_number"}
-                    and (pr_binding.get("task_uid") != self.args.task_uid
-                         or pr_binding.get("pr_number") not in (None, self.binding["pr_number"]))):
-                return False
-            if set(pr_binding) not in ({"state", "pr_number"}, {"task_uid", "pr_number"}):
+            # Accept only exact producer encodings. The create producer emits
+            # state=unbound or state=bound/pr_number; the update producer also
+            # pins its unbound candidate PR. Retain the older task_uid/pr_number
+            # shape for journals written before these producer encodings.
+            producer_binding = (
+                pr_binding == {"state": "unbound"}
+                or (set(pr_binding) == {"state", "pr_number"}
+                    and pr_binding.get("state") == "bound"
+                    and type(pr_binding.get("pr_number")) is int
+                    and pr_binding["pr_number"] == self.binding["pr_number"])
+                or (set(pr_binding) == {"state", "candidate_pr_number"}
+                    and pr_binding.get("state") == "unbound"
+                    and type(pr_binding.get("candidate_pr_number")) is int
+                    and pr_binding["candidate_pr_number"] == self.binding["pr_number"])
+            )
+            legacy_binding = (
+                set(pr_binding) == {"task_uid", "pr_number"}
+                and pr_binding.get("task_uid") == self.args.task_uid
+                and (pr_binding.get("pr_number") is None
+                     or (type(pr_binding.get("pr_number")) is int
+                         and pr_binding["pr_number"] == self.binding["pr_number"]))
+            )
+            if not producer_binding and not legacy_binding:
                 return False
             if (read_match.get("evidence") != {
                     "phase": "prewrite", "publication_id": publication_id,
@@ -3930,6 +3942,7 @@ def command_record_pr(args: argparse.Namespace) -> int:
     if requested_pr_number is None:
         die("record-pr: PR number is missing or malformed")
     publication_binding_path = getattr(args, "publication_binding_json", None)
+    recovery_required = bool(getattr(args, "recovery_required", False))
     publication_binding = None
     publication_intent = None
     publication_module = None
@@ -3994,9 +4007,17 @@ def command_record_pr(args: argparse.Namespace) -> int:
             if len(matching_bindings) != 1 or matching_bindings[0] != publication_binding:
                 die("record-pr: conflicting reciprocal CI publication binding already exists")
             binding_comment_exists = True
+    if recovery_required and (publication_binding is None or not is_draft_candidate):
+        die("record-pr: required recovery needs an exact draft publication binding")
     recovery = None
-    if publication_binding is not None and is_draft_candidate and any(
-            PublicationRecoveryAuthority.marker in c["body"] for c in comments):
+    recovery_admissions = [
+        c for c in comments
+        if PublicationRecoveryAuthority.marker in c["body"]
+    ]
+    if recovery_required and len(recovery_admissions) != 1:
+        die("record-pr: required publication recovery admission is missing or ambiguous")
+    if (publication_binding is not None and is_draft_candidate
+            and (recovery_required or recovery_admissions)):
         try:
             recovery = PublicationRecoveryAuthority(args, record, publication_binding,
                                                      publication_intent, publication_module, comments)
@@ -4378,6 +4399,7 @@ def build_parser() -> argparse.ArgumentParser:
     record_pr.add_argument("--draft-candidate", action="store_true")
     record_pr.add_argument("--existing-ready-update", action="store_true")
     record_pr.add_argument("--publication-binding-json")
+    record_pr.add_argument("--recovery-required", action="store_true")
     record_pr.add_argument("--json", action="store_true")
     record_pr.set_defaults(func=command_record_pr)
 

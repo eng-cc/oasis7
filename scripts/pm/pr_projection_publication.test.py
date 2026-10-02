@@ -446,13 +446,14 @@ class BoundedRecoveryCLITests(unittest.TestCase):
             "preanchor_raw": preanchor_raw,
         }
 
-    def resolve_legacy_task_post_without_post(self, case):
+    def resolve_legacy_task_post_without_post(self, case, *, pr_binding=None):
         current = case["current"]
         action = "task-intent:" + current["publication_id"]
         with case["current_journal"].locked():
             publication_module._intent(
                 case["adapter"], case["current_journal"], current,
-                pr_binding={"task_uid": UID, "pr_number": 2001},
+                pr_binding=(pr_binding if pr_binding is not None else
+                            {"task_uid": UID, "pr_number": 2001}),
                 resume_action_id=action,
             )
             events = case["current_journal"].read_task_events(action)
@@ -461,7 +462,9 @@ class BoundedRecoveryCLITests(unittest.TestCase):
     def test_exact_legacy_task_readback_anchor_migration_preserves_admitted_lineage(self):
         with tempfile.TemporaryDirectory() as temp:
             case = self.legacy_anchor_lineage_case(temp)
-            events = self.resolve_legacy_task_post_without_post(case)
+            events = self.resolve_legacy_task_post_without_post(
+                case, pr_binding={"state": "unbound"},
+            )
             self.assertEqual(["READ_MATCH", "RESOLVED"], [item["event"] for item in events])
             self.assertEqual(0, case["adapter"].events.count("task-intent"))
             self.assertNotEqual(case["preanchor_raw"], case["current_journal"].path.read_bytes())
@@ -473,6 +476,31 @@ class BoundedRecoveryCLITests(unittest.TestCase):
                     "an admitted exact Task readback may migrate only its verified legacy root tail; "
                     f"lineage was rejected: {exc}"
                 )
+
+    def test_exact_legacy_task_readback_bound_producer_shape_preserves_lineage(self):
+        with tempfile.TemporaryDirectory() as temp:
+            case = self.legacy_anchor_lineage_case(temp)
+            events = self.resolve_legacy_task_post_without_post(
+                case, pr_binding={"state": "bound", "pr_number": 2001},
+            )
+            self.assertEqual(["READ_MATCH", "RESOLVED"], [item["event"] for item in events])
+            try:
+                case["authority"]._lineage(case["comments"])
+            except ValueError as exc:
+                self.fail(f"exact producer-bound Task readback should preserve lineage: {exc}")
+
+    def test_exact_legacy_task_readback_malformed_pr_binding_stays_rejected(self):
+        malformed_bindings = (
+            {"state": "unbound", "unexpected": True},
+            {"state": "bound", "pr_number": 2002},
+        )
+        for binding in malformed_bindings:
+            with self.subTest(binding=binding), tempfile.TemporaryDirectory() as temp:
+                case = self.legacy_anchor_lineage_case(temp)
+                events = self.resolve_legacy_task_post_without_post(case, pr_binding=binding)
+                self.assertEqual(["READ_MATCH", "RESOLVED"], [item["event"] for item in events])
+                with self.assertRaisesRegex(ValueError, "raw publication journal hash mismatch"):
+                    case["authority"]._lineage(case["comments"])
 
     def test_exact_legacy_task_readback_malformed_tail_stays_rejected(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -540,6 +568,113 @@ publisher.command_output = deadline_probe
                 env=environment, capture_output=True, text=True, timeout=60)
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
         self.assertIn("PASS test_rec_idempotent_repeat", result.stdout)
+
+    def test_child_cannot_fall_back_after_recovery_admission_is_revoked(self):
+        # Model the narrow launch race in an isolated copy of the shell fixture:
+        # parent preflight and helper selection see the marker, then the fake
+        # GitHub endpoint removes it on the real child CLI's first fresh read.
+        # Make Issue, Project, and mapping agree on the ordinary all-pre state
+        # so fallback would otherwise be eligible to write.
+        fixture = (ROOT / "github-project-task.test.sh").read_text()
+        comment_anchor = 'case = sys.argv[2]\nif case == "guard_scope_comment_drift"'
+        self.assertEqual(1, fixture.count(comment_anchor))
+        comment_hook = '''case = sys.argv[2]
+if case == "revoke_admission_after_child_launch" and __import__("os").environ.get("GH_REC_CHILD_LAUNCHED_FILE"):
+    launched = pathlib.Path(__import__("os").environ["GH_REC_CHILD_LAUNCHED_FILE"])
+    if launched.is_file():
+        counter = directory.parent / "gh-comment-read-count.txt"
+        reads = int(counter.read_text()) if counter.exists() else 0
+        reads += 1
+        counter.write_text(str(reads))
+        if reads == 1:
+            admission = directory / "9001"
+            assert admission.is_file(), "recovery admission was already absent before child read"
+            admission.unlink()
+            (directory.parent / "admission-revoked-during-child-read.txt").write_text("1\\n")
+if case == "guard_scope_comment_drift"'''
+        fixture = fixture.replace(comment_anchor, comment_hook)
+
+        recovery_case_anchor = 'if [[ "$REC_CASE" == "pending_final_readback" || "$REC_CASE" == "pending_project_content_drift" || "$REC_CASE" == "idempotent_repeat" ]]; then'
+        self.assertEqual(1, fixture.count(recovery_case_anchor))
+        fixture = fixture.replace(
+            recovery_case_anchor,
+            recovery_case_anchor.replace(
+                '"idempotent_repeat"',
+                '"idempotent_repeat" || "$REC_CASE" == "revoke_admission_after_child_launch"',
+            ),
+        )
+
+        all_pre_anchor = '    pr = adapter.read_pr(value["repository"], 2001)\n'
+        self.assertEqual(1, fixture.count(all_pre_anchor))
+        all_pre_setup = '''    pr = adapter.read_pr(value["repository"], 2001)
+    if case == "revoke_admission_after_child_launch":
+        import os
+        mapping_path = root / ".pm/github-project-sync/tasks.json"
+        mapping = json.loads(mapping_path.read_text())
+        mapping["tasks"][uid]["workflow_phase"] = "execution"
+        mapping_path.write_text(json.dumps(mapping))
+        (root / "project-live-phase").write_text("execution\\n")
+        (root / "project-pr.md").write_text("")
+        (root / "revocation-mapping-before.json").write_bytes(mapping_path.read_bytes())
+        (root / "revocation-issue-before.txt").write_bytes((root / "issue-live-body.md").read_bytes())
+        child_launched = root / "record-pr-child-launched.txt"
+        os.environ["GH_REC_CHILD_LAUNCHED_FILE"] = str(child_launched)
+        record_pr_globals = adapter.record_pr.__func__.__globals__
+        original_command_output = record_pr_globals["command_output"]
+        def mark_record_pr_child_launch(command, *, timeout=publisher.LOCAL_COMMAND_TIMEOUT_SECONDS,
+                                        reservation_fd=None):
+            child_launched.write_text("launched\\n")
+            return original_command_output(command, timeout=timeout, reservation_fd=reservation_fd)
+        record_pr_globals["command_output"] = mark_record_pr_child_launch
+'''
+        fixture = fixture.replace(all_pre_anchor, all_pre_setup)
+
+        revocation_branch_anchor = '    else:\n        publication._record_and_bind(adapter, local, value, pr)\n'
+        self.assertEqual(1, fixture.count(revocation_branch_anchor))
+        revocation_branch = '''    elif case == "revoke_admission_after_child_launch":
+        calls_path = root / "gh-calls.log"
+        calls_before = len(calls_path.read_text().splitlines())
+        issue_before = (root / "issue-live-body.md").read_bytes()
+        phase_before = (root / "project-live-phase").read_bytes()
+        project_pr_before = (root / "project-pr.md").read_bytes()
+        error = None
+        try:
+            publication._record_and_bind(adapter, local, value, pr)
+        except publication.PublicationError as exc:
+            error = exc
+        assert error is not None and error.code == "NETWORK_UNCERTAIN", error
+        revoked = root / "admission-revoked-during-child-read.txt"
+        assert revoked.is_file(), (
+            "child fresh read did not revoke admission; "
+            f"reads={(root / 'gh-comment-read-count.txt').read_text() if (root / 'gh-comment-read-count.txt').exists() else 'missing'}; "
+            f"launched={(root / 'record-pr-child-launched.txt').exists()}; "
+            f"calls={calls_path.read_text()}"
+        )
+        assert revoked.read_text() == "1\\n"
+        assert (root / "record-pr-child-launched.txt").is_file(), "real record-pr child was not launched"
+        calls = [line.replace("\\\\ ", " ") for line in calls_path.read_text().splitlines()[calls_before:]]
+        writes = [line for line in calls if line.startswith(("issue edit ", "issue comment ", "project item-edit "))]
+        assert not writes, "revoked recovery fell back to ordinary metadata writes: " + repr(writes)
+        assert (root / ".pm/github-project-sync/tasks.json").read_bytes() == (root / "revocation-mapping-before.json").read_bytes(), "revoked recovery changed mapping"
+        assert (root / "issue-live-body.md").read_bytes() == issue_before, "revoked recovery changed Issue"
+        assert (root / "project-live-phase").read_bytes() == phase_before, "revoked recovery changed Project phase"
+        assert (root / "project-pr.md").read_bytes() == project_pr_before, "revoked recovery changed Project PR"
+        assert not (root / "gh-comments/9001").exists(), "fixture failed to remove the admission marker"
+        print("PASS test_rec_revoke_admission_after_child_launch")
+    else:
+        publication._record_and_bind(adapter, local, value, pr)
+'''
+        fixture = fixture.replace(revocation_branch_anchor, revocation_branch)
+
+        with tempfile.TemporaryDirectory() as temp:
+            isolated = Path(temp) / "revocation-fixture.sh"
+            isolated.write_text(fixture)
+            environment = dict(os.environ, PM_ROOT_DIR=str(ROOT.parents[1]),
+                OASIS7_REC_RED_ONLY="1", OASIS7_REC_CASE="revoke_admission_after_child_launch")
+            result = subprocess.run(["bash", str(isolated)], cwd=ROOT.parents[1],
+                env=environment, capture_output=True, text=True, timeout=60)
+        self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertIn("PASS test_rec_revoke_admission_after_child_launch", result.stdout)
 
     def test_project_post_issue_pre_cache_post_reconciles(self):
         self.run_case("project_post_issue_pre")

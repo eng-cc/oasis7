@@ -479,6 +479,12 @@ class GitHubPublicationAdapter:
                 "--existing-ready-update" if getattr(self.args, "existing_ready_update", False) else "--draft-candidate",
                 "--publication-binding-json", str(path), "--json",
             ]
+            if self.record_pr_recovery_required:
+                # Preserve the parent's required-recovery mode across the
+                # process boundary. The child still reconstructs authority
+                # from its own fresh authenticated read; this flag only
+                # prevents a revoked marker from selecting the ordinary path.
+                command.append("--recovery-required")
             # The publisher derives recovery authority from live authenticated
             # comments and pure reads of the existing journals. It transports
             # no caller permission grant; record-pr recomputes it independently.
