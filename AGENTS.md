@@ -22,6 +22,8 @@ Canonical workflow: [capability](doc/engineering/workflow/source-of-truth.md#cap
 
 Subagent runtime 遵循 canonical capability policy：`.codex/config.toml` 不固定 root/default 模型；`.codex/agents/<role>.toml` 的模型与 reasoning 仅是 adapter-backed named-role activation 的 intended configuration。message-assigned fallback 必须记录 `adapter inactive on this surface`，默认 intended configuration 为 `inherit current parent selection`，并使用用户选择或 parent-inherited runtime；静态校验不证明 activation、模型可用性或 actual runtime，未取得 runtime evidence 时不得把 adapter pin 报告为 observed actual model/reasoning。
 
+写产品文档、写系统设计文档、复杂 bug 排查，派工时必须归类为复杂任务。复杂 slice 可由主 Agent（TPM）按 [canonical dispatch contract](doc/engineering/workflow/source-of-truth.md#52-tpm-planning-and-subagent-dispatch) 显式请求以主 Agent/父线程的 model 与 reasoning 配置覆盖默认值；派工前记录该 slice 的复杂度理由、请求值和工具能力限制，派工后记录实际 runtime evidence 或缺失原因。仅使用已知父线程设置或受支持的双设置继承方式，否则记录限制。保留普通 slice 默认值，遵守 fixed named-role pins 与工具限制；必要时采用受支持的 message-assigned fallback 并记录 tradeoff，无支持路径则记录未能采用的请求及实际允许的默认/继承派工。不得推断父线程设置或将请求值当作 observed runtime。
+
 创建 PR 前必须使用 `.agents/skills/requesting-repo-owned-review/SKILL.md` 派发 involved-role review。对外说明、社区反馈、事故复盘、玩家承诺或渠道 runbook 中，`liveops_community` 必须参与至少一个 slice。
 
 ## Operational Entrypoints
