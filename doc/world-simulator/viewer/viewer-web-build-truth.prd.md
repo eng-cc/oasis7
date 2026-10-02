@@ -11,7 +11,7 @@
 
 ## 1. Executive Summary
 - 当前 `crates/oasis7_viewer/software_safe_src/legacy_core.js` 同时承载状态、auth、反馈、控制发送、DOM 渲染与 bootstrap，多职责耦合导致主入口继续演进时改动半径过大。
-- 当前 viewer Web 产物流在文档上宣称 `viewer.js` 为 canonical 发布名，但仓库实际只跟踪 `software_safe.js` 生成 bundle，再由脚本复制成 `viewer.js`，`dist/pixel-world-bridge/` 生成目录也缺少同一条明确的 canonical 生成链。
+- 当前 `viewer.js` 是 canonical 生成 bundle；`software_safe.js` 是显式 `import "./viewer.js"` 的 generated compat alias。`build:viewer` 先构建 bundle，再由 finalize 同步 HTML alias 与 `dist/pixel-world-bridge/` 生成输入；不得再从 compat 文件反向复制 canonical bundle。
 - 本专题要同时解决两类工程债：把 `legacy_core.js` 下沉成多模块实现；把 Web 生成产物收口为明确的单一真值流程，避免继续由 compat 名称承担 canonical 语义。
 
 ## 目标
@@ -71,7 +71,12 @@
 
 - native-only runtime、live server、node 与持久化依赖不得重新进入 wasm Viewer dependency graph；Web 不支持的动作必须返回可诊断反馈，不能静默丢弃。
 - 从 bundle 中移出的字体等浏览器资源必须由 canonical finalize/served-asset flow 提供；加载失败必须有可用 fallback 或可见诊断，不能把缺失资源伪装成成功构建。
-- build/finalize 变更至少验证 `cargo check -p oasis7_viewer --target wasm32-unknown-unknown`、`npm --prefix crates/oasis7_viewer run build:software-safe`、`test:feedback-contract` 与 freshness 证据。历史 byte-size/trunk 对比仅是 Git/task evidence，不是当前性能预算。
+- build/finalize 变更至少验证 `npm --prefix crates/oasis7_viewer run build:viewer`、`test:feedback-contract` 与 freshness 证据；UI 行为另用适用 `test:ui`，Rust Bevy bridge 用实际 `pixel_world_bridge` package，后端协议用实际 `oasis7` 测试。不存在 Rust `oasis7_viewer` package，不得用失效 check 命令或任意测试替代原断言。历史 byte-size/trunk 对比不是当前预算。
+
+### Chat Web 稳定性验收边界
+
+- 输入和发送不得使页面卡死；pending、失败原因与恢复动作须可见，不误发/重复发送、不静默重放。构建/freshness 通过不证明真实输入无卡死、IME 完整兼容或恢复闭环；这些按 Viewer 手册与 semantic test API 的专项 UI/external headed 验收处理。
+- 旧锁重入及 epaint profile 处置仅为历史实现，不是当前 Viewer 构建要求。Launcher 仍使用 eframe；本文退役旧 Viewer 说明不授权删除 epaint 配置、egui vendor 或 Launcher 依赖。
 
 ## 接口 / 数据
 - 源码入口：

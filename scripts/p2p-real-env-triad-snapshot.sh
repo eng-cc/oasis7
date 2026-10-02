@@ -469,19 +469,19 @@ while [[ $# -gt 0 ]]; do
       explicit_node_specs+=("$(parse_node_spec "${2:-}")")
       shift 2
       ;;
-    --local-service|--observer-service)
+    --local-service)
       local_service=${2:-}
       shift 2
       ;;
-    --local-status-url|--observer-status-url)
+    --local-status-url)
       local_status_url=${2:-}
       shift 2
       ;;
-    --local-health-url|--observer-health-url)
+    --local-health-url)
       local_health_url=${2:-}
       shift 2
       ;;
-    --local-env-file|--observer-env-file)
+    --local-env-file)
       local_env_file=${2:-}
       shift 2
       ;;

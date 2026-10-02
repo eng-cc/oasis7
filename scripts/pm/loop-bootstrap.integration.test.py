@@ -138,6 +138,10 @@ class BootstrapEndToEnd(unittest.TestCase):
             root = temp / 'repo'
             (root / 'scripts').mkdir(parents=True)
             shutil.copytree(ROOT / 'scripts/pm', root / 'scripts/pm', ignore=shutil.ignore_patterns('__pycache__'))
+            shutil.copy2(
+                ROOT / 'scripts/pm/fixtures/github_api_test_adapter.py',
+                root / 'scripts/pm/github_api.py',
+            )
             for name in ['new-task-worktree.sh', 'worktree-harness-lib.sh']:
                 shutil.copy2(ROOT / 'scripts' / name, root / 'scripts' / name)
             (root / '.gitignore').write_text('.pm/\ntarget\nconfig.toml\n__pycache__/\n')
@@ -161,6 +165,8 @@ class BootstrapEndToEnd(unittest.TestCase):
             env = dict(os.environ, PATH=str(binary)+os.pathsep+os.environ['PATH'], FAKE_GH_STATE=str(state),
                        OASIS7_PM_FAKE_GITHUB='1',
                        TEST_SHARED_TARGET=str(temp/'target'), PYTHONDONTWRITEBYTECODE='1')
+            env.pop('GH_TOKEN', None)
+            env.pop('GITHUB_TOKEN', None)
             # Bootstrap mechanics are loop-agnostic.  Use a system-loop fixture
             # so this suite does not counterfeit the technical input that a
             # newly admitted code task is now required to consume.

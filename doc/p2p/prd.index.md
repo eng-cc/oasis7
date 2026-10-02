@@ -60,8 +60,8 @@
 - 纳入规则：纳入 `doc/p2p/**` 下所有 `*.prd.md` 及其同名 `*.design.md`；任务映射保留在 GitHub。
 - 当前补充阅读面：`*.runbook.md` 与仍被当前模块 PRD / 项目态直接引用的 supporting spec，可在“当前补充阅读面”区定向列出，但不并入下方三件套长表。
 - 排除规则：不纳入 `doc/devlog/**` 与非 PRD 配对文档（如 `*.release.md` 补充材料）。
-- 历史入口：根目录历史入口文件（`p2p.prd.md`）仅保留兼容跳转语义，不作为主索引分母。
-- 兼容跳转：历史路径命中时统一跳转到本目录 `prd.md` 主入口；任务追溯转到 GitHub。
+- 历史入口：根目录旧 PRD 跳转文件已删除；旧版本从 Git history 与 GitHub task evidence 追溯，不作为当前入口。
+- 当前规格入口为本目录 `prd.md`；任务状态与执行证据读对应 GitHub Issue / Project。
 
 ## 折叠阅读层（主从/增量组）
 | 子域 | 默认先读 | 折叠的增量/追溯入口 |

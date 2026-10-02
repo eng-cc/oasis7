@@ -26,6 +26,33 @@ from typing import Any, Iterable
 
 
 POLICY_SCHEMA = "oasis7-cargo-package-scope-policy/v1"
+AUXILIARY_REGISTRY_PATH = ".pm/cargo-package-auxiliary-files.json"
+AUXILIARY_REGISTRY_SCHEMA = "oasis7-cargo-package-auxiliary-files/v1"
+
+AUXILIARY_FORBIDDEN_PREFIXES = (
+    ".agents/",
+    ".buildkite/",
+    ".circleci/",
+    ".codex/",
+    ".github/",
+    ".gitlab/",
+    ".pm/",
+    ".cargo/",
+    "scripts/pm/",
+)
+AUXILIARY_FORBIDDEN_PATHS = {
+    "Jenkinsfile",
+    "azure-pipelines.yml",
+    "doc/engineering/workflow/source-of-truth.md",
+    "scripts/ci-tests.sh",
+    "scripts/ci-required-scope.v2.json",
+    "scripts/plan-rust-required-scope.json",
+    "scripts/plan-rust-required-scope.py",
+    "scripts/plan-rust-required-scope.sh",
+    "scripts/prepare-task-pr.sh",
+    ".gitlab-ci.yml",
+    ".travis.yml",
+}
 
 
 class ScopeError(Exception):
@@ -89,6 +116,92 @@ def safe_relative(path: str) -> str:
     return str(pure)
 
 
+def json_object_without_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    result: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError(f"duplicate JSON object key: {key}")
+        result[key] = value
+    return result
+
+
+def parse_auxiliary_registry(
+    payload: dict[str, Any], policy_path: str, protected_paths: list[str]
+) -> dict[str, str]:
+    if (
+        not isinstance(payload, dict)
+        or set(payload) != {"schema", "auxiliary_files"}
+        or payload.get("schema") != AUXILIARY_REGISTRY_SCHEMA
+    ):
+        raise ScopeError("trusted_policy_invalid", "unexpected auxiliary registry schema or fields")
+    entries = payload.get("auxiliary_files")
+    if not isinstance(entries, list):
+        raise ScopeError("trusted_policy_invalid", "auxiliary_files must be a list")
+
+    protected = {safe_relative(path) for path in protected_paths}
+    registry: dict[str, str] = {}
+    for entry in entries:
+        if not isinstance(entry, dict) or set(entry) != {"path", "package"}:
+            raise ScopeError(
+                "trusted_policy_invalid",
+                "each auxiliary_files entry must contain exactly path and package",
+            )
+        path = entry.get("path")
+        package = entry.get("package")
+        if not isinstance(path, str) or not path or "\\" in path or "\x00" in path:
+            raise ScopeError("trusted_policy_invalid", "auxiliary path must be a normalized repository-relative file")
+        pure = PurePosixPath(path)
+        if (
+            pure.is_absolute()
+            or not pure.parts
+            or str(pure) != path
+            or any(part in ("", ".", "..") for part in path.split("/"))
+            or any(marker in path for marker in ("*", "?", "[", "]"))
+        ):
+            raise ScopeError("trusted_policy_invalid", f"auxiliary path is not an exact normalized file path: {path}")
+        if pure.suffix == ".rs":
+            raise ScopeError("ambiguous_package_attribution", f"Rust source cannot be attributed as auxiliary: {path}")
+        if pure.name in {"Cargo.toml", "Cargo.lock"}:
+            raise ScopeError("ambiguous_package_attribution", f"Cargo manifest or lock cannot be attributed as auxiliary: {path}")
+        if path in registry:
+            raise ScopeError("trusted_policy_invalid", f"duplicate auxiliary path registration: {path}")
+        if (
+            path == policy_path
+            or path in protected
+            or path in AUXILIARY_FORBIDDEN_PATHS
+            or any(path.startswith(prefix) for prefix in AUXILIARY_FORBIDDEN_PREFIXES)
+        ):
+            raise ScopeError("trusted_policy_invalid", f"protected governance path cannot be auxiliary: {path}")
+        if not isinstance(package, str) or not package or package != package.strip():
+            raise ScopeError("trusted_policy_invalid", f"auxiliary package must be a non-empty exact name: {path}")
+        registry[path] = package
+    return registry
+
+
+def trusted_auxiliary_registry(
+    repo: Path, base: str, head: str, policy_path: str, protected_paths: list[str]
+) -> dict[str, str]:
+    base_bytes = git_blob(repo, base, AUXILIARY_REGISTRY_PATH)
+    head_bytes = git_blob(repo, head, AUXILIARY_REGISTRY_PATH)
+    if base_bytes != head_bytes:
+        raise ScopeError(
+            "policy_self_modification",
+            f"auxiliary registry differs from trusted base: {AUXILIARY_REGISTRY_PATH}",
+        )
+    if base_bytes is None:
+        return {}
+    try:
+        trusted = json.loads(
+            base_bytes.decode("utf-8"), object_pairs_hook=json_object_without_duplicate_keys
+        )
+    except (UnicodeDecodeError, ValueError) as exc:
+        raise ScopeError(
+            "trusted_policy_invalid",
+            f"trusted auxiliary registry is not valid JSON: {AUXILIARY_REGISTRY_PATH}",
+        ) from exc
+    return parse_auxiliary_registry(trusted, policy_path, protected_paths)
+
+
 def resolve_relative(source: str, target: str) -> str | None:
     try:
         target_path = PurePosixPath(target)
@@ -110,7 +223,30 @@ def resolve_relative(source: str, target: str) -> str | None:
     return "/".join(parts)
 
 
-def parse_policy(repo: Path, base: str, policy_arg: str) -> tuple[str, dict[str, Any]]:
+def resolve_manifest_relative(
+    root: Path,
+    packages: dict[str, list[tuple[str, str]]],
+    owner: str | None,
+    suffix: str,
+) -> str | None:
+    """Resolve the supported CARGO_MANIFEST_DIR concatenation for one owner."""
+    if owner is None:
+        return None
+    manifest = package_manifest_paths(packages).get(owner)
+    if manifest is None:
+        return None
+    try:
+        checkout = root.resolve()
+        manifest_dir = (root / PurePosixPath(manifest).parent).resolve()
+        target = Path(f"{manifest_dir}{suffix}").resolve()
+        return target.relative_to(checkout).as_posix()
+    except (OSError, RuntimeError, ValueError):
+        return None
+
+
+def parse_policy(
+    repo: Path, base: str, head: str, policy_arg: str
+) -> tuple[str, dict[str, Any], dict[str, str]]:
     policy_path = Path(policy_arg)
     if not policy_path.is_absolute():
         policy_path = repo / policy_path
@@ -122,8 +258,10 @@ def parse_policy(repo: Path, base: str, policy_arg: str) -> tuple[str, dict[str,
     if base_bytes is None:
         raise ScopeError("trusted_policy_unavailable", f"policy is absent from trusted base: {relative}")
     try:
-        trusted = json.loads(base_bytes.decode("utf-8"))
-    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        trusted = json.loads(
+            base_bytes.decode("utf-8"), object_pairs_hook=json_object_without_duplicate_keys
+        )
+    except (UnicodeDecodeError, ValueError) as exc:
         raise ScopeError("trusted_policy_invalid", f"trusted policy is not valid JSON: {relative}") from exc
     current_bytes = policy_path.read_bytes() if policy_path.is_file() else None
     if current_bytes is None or current_bytes != base_bytes:
@@ -132,10 +270,13 @@ def parse_policy(repo: Path, base: str, policy_arg: str) -> tuple[str, dict[str,
         raise ScopeError("trusted_policy_invalid", "unexpected policy schema")
     if trusted.get("policy_version") != 1:
         raise ScopeError("trusted_policy_invalid", "unsupported policy version")
+    if "auxiliary_files" in trusted:
+        raise ScopeError("trusted_policy_invalid", "auxiliary registrations must use the separate registry")
     protected = trusted.get("protected_paths")
     if not isinstance(protected, list) or not all(isinstance(item, str) for item in protected):
         raise ScopeError("trusted_policy_invalid", "protected_paths must be a string list")
-    return relative, trusted
+    auxiliary_registry = trusted_auxiliary_registry(repo, base, head, relative, protected)
+    return relative, trusted, auxiliary_registry
 
 
 def extract_git_tree(repo: Path, revision: str, target: Path) -> None:
@@ -220,6 +361,26 @@ def owner_for(path: str, packages: dict[str, list[tuple[str, str]]]) -> str | No
     if len({name for _, name in owners if _ == owners[0][0]}) > 1:
         return None
     return owners[0][1]
+
+
+def validate_auxiliary_owners(
+    registry: dict[str, str],
+    base_metadata: dict[str, Any],
+    head_metadata: dict[str, Any],
+    base_packages: dict[str, list[tuple[str, str]]],
+    head_packages: dict[str, list[tuple[str, str]]],
+) -> None:
+    for path, package in registry.items():
+        if metadata_package(base_metadata, package) is None or metadata_package(head_metadata, package) is None:
+            raise ScopeError(
+                "trusted_policy_invalid",
+                f"auxiliary package must resolve uniquely in base and head metadata: {package}",
+            )
+        if owner_for(path, base_packages) is not None or owner_for(path, head_packages) is not None:
+            raise ScopeError(
+                "trusted_policy_invalid",
+                f"auxiliary path overlaps Cargo metadata ownership: {path}",
+            )
 
 
 def package_manifest_paths(packages: dict[str, list[tuple[str, str]]]) -> dict[str, str]:
@@ -1135,35 +1296,70 @@ def check_cross_package_edges(
     # Rust paths may use an ordinary or a raw string literal.  Keep the raw
     # delimiter matched to its closing delimiter, including multiple hashes.
     literal = r'(?:"([^"\n]+)"|r(#{0,255})"([^"\n]+)"\2)'
+    manifest_relative = re.compile(
+        r'concat\s*!\s*\(\s*env\s*!\s*\(\s*"CARGO_MANIFEST_DIR"\s*\)\s*,'
+        r'\s*"([^"\\\n]*)"\s*\)'
+    )
     affected_packages = {owner_for(path, packages) for path in changed} - {None}
     for path in paths:
         owner = owner_for(path, packages)
         if not path.endswith(".rs"):
             continue
         text = without_rust_comments(source_text(repo, head, path))
-        for prefix, terminator, reason in (
-            (r"\binclude\s*!\s*\(\s*", ")", "cross_package_include"),
-            (r"\binclude_bytes\s*!\s*\(\s*", ")", "cross_package_include"),
-            (r"\binclude_str\s*!\s*\(\s*", ")", "cross_package_include"),
-            (r"#\s*\[\s*path\s*=\s*", "]", "cross_package_path"),
+        for prefix, terminator, reason, allow_manifest_relative in (
+            (r"\binclude\s*!\s*\(\s*", ")", "cross_package_include", True),
+            (r"\binclude_bytes\s*!\s*\(\s*", ")", "cross_package_include", True),
+            (r"\binclude_str\s*!\s*\(\s*", ")", "cross_package_include", True),
+            (r"#\s*\[\s*path\s*=\s*", "]", "cross_package_path", False),
         ):
             for reference in re.finditer(prefix, text):
-                match = re.match(literal, text[reference.end():])
-                if match is None or not text[reference.end() + match.end():].lstrip().startswith(terminator):
-                    if affected_packages:
-                        raise ScopeError("unresolved_rust_source_reference", f"{path} has non-literal {reason}")
-                    continue
-                target = match.group(1) or match.group(3)
-                if "\\" in target:
-                    if affected_packages:
-                        raise ScopeError("unresolved_rust_source_reference", f"{path} has escaped {reason}")
-                    continue
-                resolved = resolve_relative(path, target)
+                expression = text[reference.end():]
+                match = re.match(literal, expression)
+                is_manifest_relative = False
+                if match is not None and expression[match.end():].lstrip().startswith(terminator):
+                    target = match.group(1) or match.group(3)
+                    if "\\" in target:
+                        if affected_packages:
+                            raise ScopeError("unresolved_rust_source_reference", f"{path} has escaped {reason}")
+                        continue
+                    resolved = resolve_relative(path, target)
+                else:
+                    manifest_match = (
+                        manifest_relative.match(expression) if allow_manifest_relative else None
+                    )
+                    if (
+                        manifest_match is None
+                        or not expression[manifest_match.end():].lstrip().startswith(terminator)
+                    ):
+                        if affected_packages:
+                            raise ScopeError("unresolved_rust_source_reference", f"{path} has non-literal {reason}")
+                        continue
+                    is_manifest_relative = True
+                    suffix = manifest_match.group(1)
+                    if "\\" in suffix:
+                        if affected_packages:
+                            raise ScopeError("unresolved_rust_source_reference", f"{path} has escaped {reason}")
+                        continue
+                    if owner is None:
+                        if affected_packages:
+                            raise ScopeError(
+                                "unresolved_rust_source_reference",
+                                f"{path} has no unique Cargo owner for manifest-relative {reason}",
+                            )
+                        continue
+                    resolved = resolve_manifest_relative(repo, packages, owner, suffix)
                 if resolved is None:
                     if affected_packages:
                         raise ScopeError("unresolved_rust_source_reference", f"{path} has out-of-repository {reason}")
                     continue
                 target_owner = owner_for(resolved, packages) if resolved else None
+                if is_manifest_relative and target_owner is None:
+                    if affected_packages:
+                        raise ScopeError(
+                            "unresolved_rust_source_reference",
+                            f"{path} reaches a target with no unique Cargo owner: {resolved}",
+                        )
+                    continue
                 if target_owner is not None and target_owner != owner and (
                     owner in affected_packages or target_owner in affected_packages
                 ):
@@ -1206,7 +1402,9 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
     if not repo.is_dir() or not (repo / ".git").exists():
         raise ScopeError("invalid_repository", f"not a git checkout: {repo}")
     paths, renames = changed_files(repo, args.base, args.head)
-    policy_path, policy = parse_policy(repo, args.base, args.policy)
+    policy_path, policy, auxiliary_owners = parse_policy(
+        repo, args.base, args.head, args.policy
+    )
     protected = {safe_relative(path) for path in policy["protected_paths"]}
     normalized_paths = [safe_relative(path) for path in paths]
     standalone_lock_paths = sorted(
@@ -1228,6 +1426,13 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         head_metadata = cargo_metadata(head_root)
         base_packages = package_roots(base_root, base_metadata)
         head_packages = package_roots(head_root, head_metadata)
+        validate_auxiliary_owners(
+            auxiliary_owners,
+            base_metadata,
+            head_metadata,
+            base_packages,
+            head_packages,
+        )
         head_build_scripts = build_script_paths(head_root, head_metadata)
         changed = set(normalized_paths)
         package_changed = any(
@@ -1288,6 +1493,8 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         if path in ("Cargo.toml", "Cargo.lock") or path == policy_path:
             continue
         owner = owner_for(path, head_packages) or owner_for(path, base_packages)
+        if owner is None:
+            owner = auxiliary_owners.get(path)
         if owner is not None:
             package_owners.add(owner)
         else:
@@ -1298,8 +1505,8 @@ def evaluate(args: argparse.Namespace) -> dict[str, Any]:
         raise ScopeError("ambiguous_package_attribution", ", ".join(unowned_rust))
 
     for old_path, new_path in zip(renames[::2], renames[1::2]):
-        old_owner = owner_for(old_path, base_packages)
-        new_owner = owner_for(new_path, head_packages)
+        old_owner = owner_for(old_path, base_packages) or auxiliary_owners.get(old_path)
+        new_owner = owner_for(new_path, head_packages) or auxiliary_owners.get(new_path)
         if old_owner and new_owner and old_owner != new_owner:
             raise ScopeError("cross_package_rename", f"{old_path} -> {new_path}")
         if old_owner:
