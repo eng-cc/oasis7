@@ -498,6 +498,7 @@ def _is_admin(repository: str, login: str) -> bool:
 def _typed_record(
     comments: list[Any], marker: str, schema: str, issue_url: str, *,
     repository: str, task_uid: str, issue_number: int, ensure_ascii: bool = True,
+    reject_unknown_schema: bool = False,
 ) -> tuple[dict[str, Any], dict[str, Any]] | None:
     """Select one authenticated declaration after excluding other types/bindings."""
     authorized: list[tuple[dict[str, Any], dict[str, Any]]] = []
@@ -528,19 +529,34 @@ def _typed_record(
 
         if parse_error is None and isinstance(record, dict):
             if record.get("schema") != schema:
-                continue
-            candidate_uid = record.get("task_uid")
-            candidate_issue = record.get("task_issue_number")
-            candidate_repository = record.get("repository")
-            if isinstance(candidate_uid, str) and candidate_uid != task_uid:
-                continue
-            if type(candidate_issue) is int and candidate_issue != issue_number:
-                continue
-            if isinstance(candidate_repository, str) and candidate_repository != repository:
-                continue
-            if (candidate_uid != task_uid or type(candidate_issue) is not int
-                    or candidate_issue != issue_number or candidate_repository != repository):
-                parse_error = "typed evidence binding is incomplete or malformed"
+                if not reject_unknown_schema:
+                    continue
+                # Resource-wait marker versions are not interchangeable. If
+                # this record cannot be proven to belong to another Task, an
+                # unknown or missing schema must not erase a possible wait.
+                if (isinstance(record.get("task_uid"), str)
+                        and record["task_uid"] != task_uid):
+                    continue
+                if (type(record.get("task_issue_number")) is int
+                        and record["task_issue_number"] != issue_number):
+                    continue
+                if (isinstance(record.get("repository"), str)
+                        and record["repository"] != repository):
+                    continue
+                parse_error = "resource dependency schema is missing or unsupported"
+            else:
+                candidate_uid = record.get("task_uid")
+                candidate_issue = record.get("task_issue_number")
+                candidate_repository = record.get("repository")
+                if isinstance(candidate_uid, str) and candidate_uid != task_uid:
+                    continue
+                if type(candidate_issue) is int and candidate_issue != issue_number:
+                    continue
+                if isinstance(candidate_repository, str) and candidate_repository != repository:
+                    continue
+                if (candidate_uid != task_uid or type(candidate_issue) is not int
+                        or candidate_issue != issue_number or candidate_repository != repository):
+                    parse_error = "typed evidence binding is incomplete or malformed"
         elif parse_error is None:
             parse_error = "typed evidence must be a JSON object"
 
@@ -1026,7 +1042,7 @@ def read_explicit_edge(root: pathlib.Path, task: dict[str, Any]) -> dict[str, An
         resource_typed = _typed_record(
             comments, RESOURCE_DEPENDENCY_MARKER, RESOURCE_DEPENDENCY_SCHEMA, issue_url,
             repository=repository, task_uid=task_uid, issue_number=issue_number,
-            ensure_ascii=False,
+            ensure_ascii=False, reject_unknown_schema=True,
         )
     except (OSError, ValueError) as exc:
         resource_dependency_error = str(exc)
