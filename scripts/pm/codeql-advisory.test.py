@@ -201,6 +201,7 @@ class AdvisoryTests(unittest.TestCase):
             self.assertEqual(command[:2], ['gh', 'api'])
             return self.read(command[2])
         with patch.object(gate, '_run_json', side_effect=api), \
+                patch.object(gate, 'live_target_oid', return_value='b'*40), \
                 patch.object(gate, 'local_loop_admission', return_value={'status': 'passed'}), \
                 patch.object(gate, 'live_integration_admission', return_value=None), \
                 patch.object(gate, 'read_pr_identity', side_effect=lambda *_: copy.deepcopy(self.data)):

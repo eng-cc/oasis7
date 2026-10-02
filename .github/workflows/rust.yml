@@ -182,6 +182,36 @@ jobs:
           with pathlib.Path(sys.argv[2]).open("a",encoding="utf-8") as output:
               output.write("worktree="+identity.get("integration_worktree","")+"\n")
           PY
+      - id: pr_target
+        name: Freeze current PR target independently of historical PR base
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -I - "${{ github.repository }}" "${{ github.event.pull_request.number }}" \
+            "${{ github.event.pull_request.head.sha }}" "${GITHUB_OUTPUT}" <<'PY'
+          import json,re,subprocess,sys
+          repository,number,head,output=sys.argv[1:]
+          def read(path): return json.loads(subprocess.check_output(['gh','api',path],text=True))
+          pr=read(f'repos/{repository}/pulls/{number}')
+          repo=read(f'repos/{repository}')
+          branch=repo.get('default_branch')
+          if (repo.get('full_name')!=repository or not isinstance(branch,str) or not branch
+              or pr.get('state')!='open' or pr.get('merged')
+              or pr.get('base',{}).get('ref')!=branch
+              or pr.get('base',{}).get('repo',{}).get('full_name')!=repository
+              or pr.get('head',{}).get('repo',{}).get('full_name')!=repository
+              or pr.get('head',{}).get('sha')!=head):
+              raise SystemExit('PR repository/ref/head identity changed before target freeze')
+          ref=f'repos/{repository}/git/ref/heads/{branch}'
+          target=read(ref).get('object',{}).get('sha')
+          if not isinstance(target,str) or not re.fullmatch(r'[0-9a-f]{40,64}',target):
+              raise SystemExit('current PR target is unavailable')
+          fresh=read(f'repos/{repository}/pulls/{number}')
+          if fresh!=pr or read(ref).get('object',{}).get('sha')!=target:
+              raise SystemExit('PR or current target moved during target freeze')
+          with open(output,'a') as stream: stream.write(f'oid={target}\n')
+          PY
       - id: scope
         name: Plan required gate scope
         env:
@@ -191,7 +221,7 @@ jobs:
           head_ref="${GITHUB_SHA}"
           case "${GITHUB_EVENT_NAME}" in
             pull_request)
-              base_ref="${{ github.event.pull_request.base.sha }}"
+              base_ref="${{ steps.pr_target.outputs.oid }}"
               head_ref="${{ github.event.pull_request.head.sha }}"
               ;;
             workflow_dispatch)
@@ -205,7 +235,11 @@ jobs:
           planner=(./scripts/plan-rust-required-scope.sh)
           impact_args=()
           run_mode_args=()
-          scope_base_oid="$(git merge-base "${base_ref}" "${head_ref}")"
+          scope_base_oid="$(git merge-base --all "${base_ref}" "${head_ref}")"
+          if [[ ! "${scope_base_oid}" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]]; then
+            echo 'required scope requires one unique merge base' >&2
+            exit 1
+          fi
           if [[ "${GITHUB_EVENT_NAME}" == pull_request ]]; then
             authority_dir="${RUNNER_TEMP}/required-base-authority"
             mkdir -p "${authority_dir}/pm"
@@ -241,7 +275,7 @@ jobs:
             --head-ref "${head_ref}" \
             "${impact_args[@]}" \
             --github-output "${GITHUB_OUTPUT}"
-          source_scope_base="$(git merge-base "${base_ref}" "${head_ref}")"
+          source_scope_base="${scope_base_oid}"
           {
             echo "base_oid=${base_ref}"
             echo "integration_base_oid=${base_ref}"
@@ -262,7 +296,7 @@ jobs:
           head_ref="${GITHUB_SHA}"
           case "${GITHUB_EVENT_NAME}" in
             pull_request|workflow_dispatch)
-              base_ref="${{ github.event.pull_request.base.sha || inputs.integration_base }}"
+              base_ref="${{ steps.pr_target.outputs.oid || inputs.integration_base }}"
               head_ref="${{ github.event.pull_request.head.sha || inputs.expected_head }}"
               planner_args=(
                 --scope-base-oid "${{ steps.scope.outputs.source_scope_base }}"
@@ -864,7 +898,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          base_ref="${{ github.event.pull_request.base.sha || inputs.integration_base }}"
+          base_ref="${{ steps.pr_target.outputs.oid || inputs.integration_base }}"
           head_ref="${{ github.event.pull_request.head.sha || inputs.expected_head }}"
           pr_number="${{ github.event.pull_request.number || inputs.pr_number }}"
           planner_args=(

@@ -826,7 +826,7 @@ def _mapped_relation_paths(
     return relations, unmapped
 
 
-def trusted_requires_strict_integration(data: dict[str, Any], root: Path, effective: Path, uid: str, policy_commit: str) -> bool:
+def trusted_requires_strict_integration(data: dict[str, Any], root: Path, effective: Path, uid: str, policy_commit: str, *, assessed_target_oid=None) -> bool:
     """Derive strict escalation only from the verified published projection."""
     projection = _load_trusted_projection(data, root, effective, uid, policy_commit)
     if projection.get("review_escalated") is True or projection.get("verification_affected") is True:
@@ -856,7 +856,9 @@ def trusted_requires_strict_integration(data: dict[str, Any], root: Path, effect
     if projection.get("public_semantics"):
         return True
     scope_base = projection.get("scope_base_oid")
-    current_base = data.get("baseRefOid")
+    current_base = assessed_target_oid if assessed_target_oid is not None else data.get("baseRefOid")
+    if not isinstance(current_base, str) or not re.fullmatch(r'[0-9a-f]{40}', current_base):
+        raise ValueError('assessed integration target OID unavailable')
     if scope_base != current_base:
         try:
             subprocess.run(
@@ -910,8 +912,15 @@ def _validate_live_integration_proof(
                 and item.get('app_id') is not None}
         if len(pins) != 1 or str(proof.get('check_app_id')) != next(iter(pins), None):
             raise ValueError('selected integration check app differs from live required-check policy')
-    if strict and proof.get('integration_base_oid') != data['baseRefOid']:
-        _validate_keyed_q_applicability(proof, data)
+    if strict:
+        if proof.get('request_key') is not None:
+            if proof.get('integration_base_oid') != data['baseRefOid']:
+                _validate_keyed_q_applicability(proof, data)
+        elif proof.get('integration_base_oid') != (
+                proof.get('assessed_target_oid', data['baseRefOid'])
+                if proof.get('ci_validation_mode') == 'trusted_integration'
+                else data['baseRefOid']):
+            raise ValueError('strict integration differs from the assessed live default-branch target')
 
 
 def _positive_bootstrap_epoch(value: Any, label: str = 'bootstrap_epoch') -> int:
@@ -1598,7 +1607,7 @@ def _latest_local_keyed_request_key(root: Path, effective: Path, *, repository: 
     return selected_key
 
 
-def live_integration_admission(data, root, uid, tool_root, admission, integration_run_id=None, *, require_strict=None):
+def live_integration_admission(data, root, uid, tool_root, admission, integration_run_id=None, *, require_strict=None, assessed_target_oid=None):
     """Read trusted source-bound PR CI or strict integration evidence."""
     policy = data.get('policy_discovery') or {}
     required = policy.get('required_status_checks')
@@ -1642,7 +1651,8 @@ def live_integration_admission(data, root, uid, tool_root, admission, integratio
             raise ValueError('effective CI authority helper bytes differ: workflow-impact-projection.py')
     if task.get('repository') != data['repository']:
         raise ValueError('CI task repository identity mismatch')
-    strict = (trusted_requires_strict_integration(data, root, effective, uid, commit)
+    strict = (trusted_requires_strict_integration(data, root, effective, uid, commit,
+                                                assessed_target_oid=assessed_target_oid)
               if require_strict == "auto" else True if require_strict is None else bool(require_strict))
     if integration_run_id is not None:
         strict = True
@@ -1735,6 +1745,32 @@ print(json.dumps(proof))
     return proof
 
 
+def live_target_oid(data, api_client=None, uid=None):
+    repository = data.get('repository')
+    branch = data.get('baseRefName')
+    if not isinstance(repository, str) or not repository or not isinstance(branch, str) or not branch:
+        raise ValueError('live default-branch target identity is unavailable')
+    context = _api_request_context('pr_target_identity', task_uid=uid,
+                                   pr_number=int(data.get('number') or 0))
+    if api_client is None:
+        repository_info = _run_json(['gh', 'api', f'repos/{repository}'])
+    else:
+        repository_info = api_client.rest('GET', f'repos/{repository}',
+                                          operation='pr_target_identity', context=context)
+    if (not isinstance(repository_info, dict)
+            or repository_info.get('full_name') != repository
+            or repository_info.get('default_branch') != branch):
+        raise ValueError('PR target ref is not the live repository default branch')
+    endpoint = f"repos/{repository}/git/ref/heads/{branch}"
+    if api_client is None:
+        ref = _run_json(['gh', 'api', endpoint])
+    else:
+        ref = api_client.rest('GET', endpoint, operation='pr_target_identity', context=context)
+    oid = ref.get('object', {}).get('sha') if isinstance(ref, dict) else None
+    if not isinstance(oid, str) or not re.fullmatch(r'[0-9a-f]{40}', oid):
+        raise ValueError('live default-branch target OID unavailable')
+    return oid
+
 def production_decision(data, admin_authorized, root, uid, tool_root, integration_run_id=None,
                         *, api_client=None):
     # Endpoint cache lives for one decision only; healthy polls issue no
@@ -1757,7 +1793,8 @@ def production_decision(data, admin_authorized, root, uid, tool_root, integratio
     result = decision(data, admin_authorized, evidence_mode='pending_live_loop', **advisory_options)
     if not result['ready_for_merge']: return result
     try:
-        base, head = data.get('baseRefOid', ''), data.get('headRefOid', '')
+        base = live_target_oid(data, api_client, uid)
+        head = data.get('headRefOid', '')
         if not all(re.fullmatch(r'[0-9a-f]{40}', value) for value in (base, head)):
             raise ValueError('current PR base/head OIDs unavailable')
         admission = local_loop_admission(root, uid, base, head, tool_root)
@@ -1765,6 +1802,7 @@ def production_decision(data, admin_authorized, root, uid, tool_root, integratio
         integration = live_integration_admission(
             data, root, uid, tool_root, admission, integration_run_id,
             require_strict=True if integration_run_id is not None or legacy_admission else "auto",
+            assessed_target_oid=base,
         )
         if api_client is None:
             fresh = read_pr_identity(data['repository'], data['number'])
@@ -1779,6 +1817,12 @@ def production_decision(data, admin_authorized, root, uid, tool_root, integratio
         if (not isinstance(fresh, dict) or any(key not in fresh or key not in data or fresh[key] != data[key] for key in fields)
                 or fresh['state'] != 'OPEN' or fresh['isDraft'] is not False):
             raise ValueError('PR admission identity or state changed during live loop admission; rerun gate')
+        if ((integration is None or integration.get('request_key') is None)
+                and (live_target_oid(data, api_client, uid) != base
+                     or (integration is not None
+                         and integration.get('ci_validation_mode') == 'trusted_integration'
+                         and integration.get('assessed_target_oid', base) != base))):
+            raise ValueError('live default-branch target moved during strict integration admission')
         if integration is not None and integration.get('request_key') is not None:
             # Bind the lifecycle readiness epoch to the exact source attempt
             # and the fresh-Q C0 decision.  This prevents a receipt from being

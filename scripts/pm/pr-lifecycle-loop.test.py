@@ -30,6 +30,77 @@ spec.loader.exec_module(gate)
 
 
 class ProductionLoopTests(unittest.TestCase):
+    def setUp(self):
+        self.live_target_oid = gate.live_target_oid
+        target = patch.object(gate, 'live_target_oid', return_value='a' * 40)
+        target.start()
+        self.addCleanup(target.stop)
+
+    def test_live_target_requires_live_default_branch_identity(self):
+        class API:
+            def __init__(self):
+                self.paths = []
+
+            def rest(self, method, path, **_kwargs):
+                self.paths.append((method, path))
+                if path == 'repos/owner/repo':
+                    return {'full_name': 'owner/repo', 'default_branch': 'main'}
+                if path == 'repos/owner/repo/git/ref/heads/main':
+                    return {'object': {'sha': 'c' * 40}}
+                raise AssertionError(f'unexpected GitHub read: {path}')
+
+        api = API()
+        data = {'repository': 'owner/repo', 'baseRefName': 'main', 'number': 12}
+        self.assertEqual(self.live_target_oid(data, api_client=api, uid='task_' + '1' * 32), 'c' * 40)
+        self.assertEqual(api.paths, [
+            ('GET', 'repos/owner/repo'),
+            ('GET', 'repos/owner/repo/git/ref/heads/main'),
+        ])
+
+    def test_live_target_rejects_non_default_pr_ref_before_reading_target(self):
+        class API:
+            def __init__(self):
+                self.paths = []
+
+            def rest(self, method, path, **_kwargs):
+                self.paths.append((method, path))
+                if path == 'repos/owner/repo':
+                    return {'full_name': 'owner/repo', 'default_branch': 'main'}
+                if path == 'repos/owner/repo/git/ref/heads/release':
+                    return {'object': {'sha': 'd' * 40}}
+                raise AssertionError(f'unexpected GitHub read: {path}')
+
+        api = API()
+        data = {'repository': 'owner/repo', 'baseRefName': 'release', 'number': 12}
+        with self.assertRaisesRegex(ValueError, 'not the live repository default branch'):
+            self.live_target_oid(data, api_client=api, uid='task_' + '1' * 32)
+        self.assertEqual(api.paths, [('GET', 'repos/owner/repo')])
+
+    def test_historical_pr_base_uses_live_target_before_proof(self):
+        with patch.object(gate, 'live_target_oid', return_value='c' * 40), \
+             patch.object(gate, 'live_integration_admission', return_value={
+                 'head_oid': 'b' * 40, 'integration_base_oid': 'c' * 40,
+                 'assessed_target_oid': 'c' * 40, 'ci_validation_mode': 'trusted_integration'}):
+            result, admission = self.run_gate()
+        self.assertTrue(result['ready_for_merge'], result)
+        self.assertEqual(admission.call_args.args[2], 'c' * 40)
+
+    def test_live_target_move_after_strict_proof_cannot_mint_receipt(self):
+        with patch.object(gate, 'live_target_oid', side_effect=['c'*40, 'd'*40]), \
+             patch.object(gate, 'live_integration_admission', return_value={
+                 'head_oid':'b'*40, 'integration_base_oid':'c'*40,
+                 'assessed_target_oid':'c'*40, 'ci_validation_mode':'trusted_integration'}):
+            result, _ = self.run_gate()
+        self.assertFalse(result['ready_for_merge'], result)
+        self.assertNotIn('readiness_receipt', result)
+
+    def test_live_target_move_after_ordinary_classification_cannot_mint_receipt(self):
+        with patch.object(gate, 'live_target_oid', side_effect=['c'*40, 'd'*40]), \
+             patch.object(gate, 'live_integration_admission', return_value=None):
+            result, _ = self.run_gate()
+        self.assertFalse(result['ready_for_merge'], result)
+        self.assertNotIn('readiness_receipt', result)
+
     def test_final_live_pr_admission_rejects_same_oid_drift(self):
         uid = 'task_' + '1' * 32
         data = {'number': 12, 'repository': 'owner/repo', 'state': 'OPEN', 'isDraft': False,
@@ -806,6 +877,7 @@ class LocalKeyedIntentOrderingTests(unittest.TestCase):
         admission = {'status': 'passed', 'task': {'repository': 'owner/repo', 'issue_number': 1},
                      'tool_root': '/trusted', 'policy_commit': 'c' * 40}
         with patch.object(gate, 'local_loop_admission', return_value=admission), \
+             patch.object(gate, 'live_target_oid', return_value='a'*40), \
              patch.object(gate, 'live_integration_admission', return_value=v1_proof) as live_check, \
              patch.object(gate, 'read_pr_identity', return_value={
                  key: data[key] for key in (
