@@ -10,25 +10,31 @@ import re
 import stat
 import subprocess
 import sys
+from collections.abc import Mapping
 
 CONFIG = Path("/private/etc/oasis7/local-signer-installation.json")
 RELEASE_ROOT = Path("/usr/local/libexec/oasis7-local-signer")
 JOURNAL = Path("/private/var/db/oasis7-local-signer-install.json")
 SUDO = Path("/private/etc/sudoers.d/oasis7-local-signer")
 ENV = {"PATH": "/usr/bin:/bin:/usr/sbin:/sbin", "LANG": "C", "LC_ALL": "C"}
+RUNTIME_PATH = Path("/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/bin/python3.9")
 
 
 class MacOSHost:
-    def __init__(self):
+    def __init__(self, *, runtime_identity):
+        if (not isinstance(runtime_identity, Mapping) or not runtime_identity
+                or any(not isinstance(key, str) or not isinstance(value, str) for key, value in runtime_identity.items())):
+            raise InstallError("UNSUPPORTED_PLATFORM_OR_FS", "trusted runtime identity is missing")
+        self.runtime_identity = dict(runtime_identity)
         self.config = None
         self.receipt = None
 
     def observe(self, request, release):
         target = {"arm64": "aarch64-apple-darwin", "x86_64": "x86_64-apple-darwin"}.get(platform.machine(), "unsupported")
-        facts = dict(platform=sys.platform, target=target, root=os.geteuid() == 0, safe=False, acl_safe=False, sudo_safe=False, identity_available=False)
+        facts = dict(platform=sys.platform, target=target, root=os.geteuid() == 0, safe=False, acl_safe=False, sudo_safe=False, identity_available=False, runtime_identity=dict(self.runtime_identity))
         if sys.platform != "darwin":
             return facts
-        self.validate_interpreter()
+        self.validate_interpreter(self.runtime_identity)
         caller = pwd.getpwnam(request["caller_user"])
         if caller.pw_uid == 0 or request["signer_user"] != "_oasis7_signer":
             return facts
@@ -82,12 +88,17 @@ class MacOSHost:
         return result.stdout
 
     @staticmethod
-    def validate_interpreter():
+    def validate_interpreter(runtime_identity):
         executable = Path(sys.executable)
-        if executable != Path("/usr/bin/python3") or not sys.flags.isolated:
-            raise InstallError("UNSUPPORTED_PLATFORM_OR_FS", "fixed isolated interpreter required")
+        if (executable != RUNTIME_PATH or tuple(sys.version_info[:2]) != (3, 9)
+                or not sys.flags.isolated or not sys.flags.no_site or not sys.flags.dont_write_bytecode):
+            raise InstallError("UNSUPPORTED_PLATFORM_OR_FS", "fixed isolated CLT Python 3.9 runtime required")
         info = executable.lstat()
-        if not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022:
+        if (not stat.S_ISREG(info.st_mode) or info.st_uid != 0 or info.st_mode & 0o022
+                or str(info.st_dev) != runtime_identity.get("runtime_dev")
+                or str(info.st_ino) != runtime_identity.get("runtime_ino")
+                or str(info.st_mode) != runtime_identity.get("runtime_mode")
+                or runtime_identity.get("runtime_cdhash") != "77e5dcc021cbfa7e2c3940b5ea150e3da037f3cf"):
             raise InstallError("UNSUPPORTED_PLATFORM_OR_FS", "unprotected interpreter")
 
     def inspect_path(self, path, *, protected):
