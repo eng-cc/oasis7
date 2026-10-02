@@ -207,6 +207,11 @@ class PolicyAdoptionCLITests(unittest.TestCase):
         self.root.mkdir()
         pm = self.root / "scripts" / "pm"
         shutil.copytree(HERE, pm, ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+        # The process fixture must preserve the production GitHubAPIClient
+        # call graph while routing its REST/GraphQL transport through the
+        # existing stateful fake `gh` endpoint. A fixture token with the real
+        # fixed api.github.com transport only produces an unrelated HTTP 401.
+        shutil.copy2(HERE / "fixtures/github_api_test_adapter.py", pm / "github_api.py")
         source = HERE.parents[1] / "doc" / "engineering" / "workflow" / "source-of-truth.md"
         (self.root / "doc/engineering/workflow").mkdir(parents=True)
         shutil.copy2(source, self.root / "doc/engineering/workflow/source-of-truth.md")

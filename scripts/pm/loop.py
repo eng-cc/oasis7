@@ -415,6 +415,127 @@ def load_task(root, uid, *, recovery=False):
     return task
 
 
+def _bind_policy_snapshot(binding, context=None, *, bootstrap_epoch=None):
+    """Return the closed active-policy identity frozen by a bind action."""
+    if not isinstance(binding, dict):
+        raise ValueError('binding policy snapshot requires an immutable binding')
+    effective = None
+    if context is not None:
+        policy = context.get('effective_policy') if isinstance(context, dict) else None
+        if not isinstance(policy, dict) or policy.get('status') != 'passed':
+            raise ValueError('active policy pin is unresolved for bind action')
+        effective = policy.get('binding')
+        if not isinstance(effective, dict) or effective != binding:
+            raise ValueError('active policy snapshot differs from resolved binding')
+        pin_source = policy.get('pin_source')
+        policy_commit = policy.get('policy_commit')
+        policy_digest = policy.get('policy_digest')
+        adoption_chain_tip = policy.get('adoption_chain_tip')
+    else:
+        # resolve_effective_binding returns no context only for a complete
+        # no-adoption legacy read or a first bind with no current binding.
+        pin_source = 'immutable_binding'
+        policy_commit = binding.get('policy_commit')
+        policy_digest = binding.get('policy_digest')
+        adoption_chain_tip = None
+    epoch = binding.get('bootstrap_epoch') if bootstrap_epoch is None else bootstrap_epoch
+    if (not re.fullmatch(r'[0-9a-f]{40}', str(policy_commit or ''))
+            or not re.fullmatch(r'sha256:[0-9a-f]{64}', str(policy_digest or ''))
+            or type(epoch) is not int or epoch < 1):
+        raise ValueError('bind action effective policy identity is incomplete')
+    if pin_source == 'immutable_binding':
+        if adoption_chain_tip is not None:
+            raise ValueError('immutable policy pin unexpectedly has an adoption-chain tip')
+    elif pin_source == 'task_issue_adoption_chain':
+        if not re.fullmatch(r'sha256:[0-9a-f]{64}', str(adoption_chain_tip or '')):
+            raise ValueError('adopted policy pin has no exact chain tip')
+    else:
+        raise ValueError('bind action has an unsupported active policy source')
+    return {
+        'schema': 'oasis7.loop-effective-policy-snapshot/v1',
+        'policy_commit': policy_commit,
+        'policy_digest': policy_digest,
+        'pin_source': pin_source,
+        'adoption_chain_tip': adoption_chain_tip,
+        'bootstrap_epoch': epoch,
+    }
+
+
+def _bind_action_id(expected, policy_snapshot):
+    payload = json.dumps({'expected': expected,
+                          'effective_policy_snapshot': policy_snapshot},
+                         sort_keys=True, separators=(',', ':'))
+    return 'bind:v2:' + hashlib.sha256(payload.encode()).hexdigest()
+
+
+def _build_bind_action(root, task, binding, active_binding, policy_context):
+    """Freeze active policy beside, and without rewriting, the immutable binding."""
+    previous = task.get('loop_binding')
+    if previous is None:
+        policy_snapshot = _bind_policy_snapshot(binding)
+    else:
+        policy_snapshot = _bind_policy_snapshot(active_binding, policy_context)
+        if binding != previous:
+            if (policy_snapshot['pin_source'] != 'immutable_binding'
+                    or binding.get('policy_commit') != policy_snapshot['policy_commit']
+                    or binding.get('policy_digest') != policy_snapshot['policy_digest']):
+                raise ValueError('bind-loop cannot replace an existing effective policy pin')
+    if (policy_snapshot['pin_source'] == 'task_issue_adoption_chain'
+            and binding.get('bootstrap_epoch') != policy_snapshot['bootstrap_epoch']):
+        raise ValueError('policy adoption cannot change the bootstrap epoch')
+    expected = json.dumps(binding, sort_keys=True)
+    action = {
+        'action_id': _bind_action_id(expected, policy_snapshot),
+        'kind': 'bind_loop',
+        'expected': expected,
+        'effective_policy_snapshot': policy_snapshot,
+        'task_uid': task['task_uid'],
+        'repository': task['repository'],
+        'issue_number': task['issue_number'],
+        'previous_binding': previous,
+        'previous_epoch': task.get('bootstrap_epoch', 1),
+        'canonical_worktree': str(Path(root).resolve()),
+        'task_branch': task.get('task_branch'),
+        'project_item_id': task.get('project_item_id'),
+    }
+    return action
+
+
+def _check_bind_policy_snapshot(snapshot, active_binding, context, action,
+                                previous, target_binding, old_epoch):
+    """Require current live policy to equal the action's immutable pin snapshot."""
+    if not isinstance(snapshot, dict) or set(snapshot) != {
+            'schema', 'policy_commit', 'policy_digest', 'pin_source',
+            'adoption_chain_tip', 'bootstrap_epoch'}:
+        raise ValueError('binding journal policy snapshot is incomplete or unsupported')
+    if snapshot.get('schema') != 'oasis7.loop-effective-policy-snapshot/v1':
+        raise ValueError('binding journal policy snapshot schema mismatch')
+    current = _bind_policy_snapshot(active_binding, context)
+    if any(snapshot[key] != current[key] for key in (
+            'policy_commit', 'policy_digest', 'pin_source', 'adoption_chain_tip')):
+        raise ValueError('active policy pin differs from recorded bind action')
+    if snapshot['bootstrap_epoch'] == current['bootstrap_epoch']:
+        pass
+    elif (snapshot['pin_source'] == 'immutable_binding'
+          and previous is not None and previous != target_binding
+          and snapshot['bootstrap_epoch'] == old_epoch
+          and target_binding.get('bootstrap_epoch') == current['bootstrap_epoch']
+          and current['bootstrap_epoch'] == old_epoch + 1
+          and target_binding.get('policy_commit') == snapshot['policy_commit']
+          and target_binding.get('policy_digest') == snapshot['policy_digest']):
+        # A no-adoption explicit one-step migration may advance the task epoch
+        # while retaining the same original policy pin. Adoption itself never
+        # advances the epoch.
+        pass
+    else:
+        raise ValueError('active policy pin differs from recorded bind action')
+    if (previous is not None and previous != target_binding
+            and (snapshot['pin_source'] != 'immutable_binding'
+                 or target_binding.get('policy_commit') != snapshot['policy_commit']
+                 or target_binding.get('policy_digest') != snapshot['policy_digest'])):
+        raise ValueError('bind-loop cannot replace an existing effective policy pin')
+
+
 def recovery_task(root, task, tool_root):
     """Permit only a recorded old/new binding transition, never generic drift."""
     uid = task['task_uid']
@@ -433,8 +554,14 @@ def recovery_task(root, task, tool_root):
         raise ValueError('ambiguous pending binding transition')
     action = transitions[0]
     binding = json.loads(action['expected'])
-    if action['action_id'] != 'bind:' + hashlib.sha256(action['expected'].encode()).hexdigest():
+    legacy_action_id = 'bind:' + hashlib.sha256(action['expected'].encode()).hexdigest()
+    policy_snapshot = action.get('effective_policy_snapshot')
+    versioned_action_id = (_bind_action_id(action['expected'], policy_snapshot)
+                           if isinstance(policy_snapshot, dict) else None)
+    if action.get('action_id') not in (legacy_action_id, versioned_action_id):
         raise ValueError('binding journal action digest mismatch')
+    if policy_snapshot is not None and not isinstance(policy_snapshot, dict):
+        raise ValueError('binding journal policy snapshot is malformed')
     if any(action.get(k) != task.get(k) for k in ('task_uid', 'repository', 'issue_number')):
         raise ValueError('binding journal stable task identity mismatch')
     previous = action.get('previous_binding', binding)
@@ -451,7 +578,8 @@ def recovery_task(root, task, tool_root):
         raise ValueError('binding journal Project identity drift')
     if task.get('bootstrap_epoch', old_epoch) not in (old_epoch, binding['bootstrap_epoch']):
         raise ValueError('cached epoch outside binding journal')
-    for observed in (task.get('loop_binding'), live_binding(task)):
+    live_observed = live_binding(task)
+    for observed in (task.get('loop_binding'), live_observed):
         if observed not in (previous, binding):
             raise ValueError('binding drift outside journal old/new transition')
     for path in (root / '.pm/scratch' / uid / 'bootstrap-task-snapshot.json', common_dir(root) / 'oasis7-loop-lineage' / (uid + '.json')):
@@ -460,9 +588,40 @@ def recovery_task(root, task, tool_root):
             observed = saved.get('task', saved).get('loop_binding')
             if observed not in (previous, binding):
                 raise ValueError('snapshot/lineage drift outside binding journal')
-    recovery_authority(root, binding, tool_root)
+    if live_observed is None:
+        if previous is not None:
+            raise ValueError('binding transition has no live immutable binding')
+        active_binding, policy_context = binding, None
+    else:
+        resolution_task = {**task, 'loop_binding': live_observed,
+                           'bootstrap_epoch': live_observed.get('bootstrap_epoch')}
+        active_binding, policy_context = resolve_effective_binding(
+            root, resolution_task, return_context=True,
+        )
+        if not isinstance(active_binding, dict):
+            raise ValueError('binding transition has no resolved active policy pin')
+    policy = (policy_context or {}).get('effective_policy') if isinstance(policy_context, dict) else None
+    pin_source = policy.get('pin_source') if isinstance(policy, dict) else 'immutable_binding'
+    if policy_snapshot is None:
+        if action.get('action_id') != legacy_action_id:
+            raise ValueError('binding journal action digest mismatch')
+        if pin_source != 'immutable_binding':
+            raise ValueError('legacy bind action cannot prove adopted policy pin')
+        active_snapshot = _bind_policy_snapshot(active_binding, policy_context)
+        if (previous is not None and previous != binding
+                and (binding.get('policy_commit') != active_snapshot['policy_commit']
+                     or binding.get('policy_digest') != active_snapshot['policy_digest'])):
+            raise ValueError('legacy bind action cannot replace an effective policy pin')
+    else:
+        _check_bind_policy_snapshot(policy_snapshot, active_binding, policy_context,
+                                    action, previous, binding, old_epoch)
+        if action.get('action_id') != versioned_action_id:
+            raise ValueError('binding journal action digest mismatch')
+    current_oid = ((policy_context or {}).get('trusted_current_policy') or {}).get('default_branch_oid')
+    recovery_authority(root, active_binding, tool_root, trusted_default_oid=current_oid)
     return {**task, 'loop_binding': binding, 'bootstrap_epoch': binding['bootstrap_epoch'],
-            '_effective_loop_binding': binding}
+            '_effective_loop_binding': active_binding,
+            '_trusted_default_oid': current_oid}
 
 
 def recovery_authority(root, binding, tool_root, *, trusted_default_oid=None):
@@ -509,17 +668,41 @@ def _trusted_module(root, target, binding, name, *, trusted_default_oid=None):
     if common_dir(root) != common_dir(target):
         raise ValueError('tool root belongs to another repository')
     # Check every executable dependency before importing any candidate-controlled code.
-    files = _git(target, 'ls-tree', '-r', '--name-only', commit, '--', 'scripts/pm').splitlines()
+    trusted_import_files = (
+        'scripts/document_corpus.py',
+        'scripts/product-doc-content-check.py',
+        'scripts/product_doc_markdown.py',
+    )
+    files = _git(
+        root, 'ls-tree', '-r', '--name-only', commit, '--', 'scripts/pm',
+        *trusted_import_files,
+    ).splitlines()
+    trusted_root = Path(root).resolve()
     for relative in files:
         if not relative.endswith(('.py', '.sh', '.json')): continue
         expected = subprocess.check_output(['git', '-C', str(target), 'show', commit + ':' + relative])
-        if (root / relative).is_symlink() or (root / relative).read_bytes() != expected:
+        path = trusted_root / relative
+        if (path.is_symlink() or not path.resolve().is_relative_to(trusted_root)
+                or path.read_bytes() != expected):
             raise ValueError('effective helper bytes differ: ' + relative)
-    tracked = set(files)
-    for path in (root / 'scripts/pm').glob('*.py'):
-        if str(path.relative_to(root)) not in tracked:
-            raise ValueError('untracked executable in trusted tool root')
+    untracked = _git(
+        trusted_root, 'ls-files', '--others', '--', 'scripts/pm',
+        *trusted_import_files, ':(exclude)**/__pycache__/**',
+    ).splitlines()
+    if untracked:
+        raise ValueError('untracked executable in trusted tool root: ' + untracked[0])
+    sys.dont_write_bytecode = True
     sys.path.insert(0, str(root / 'scripts/pm'))
+    if name == 'loop_policy':
+        # loop_policy imports loop_contracts by module name. Replace any
+        # preloaded candidate object with the exact effective-root module.
+        contracts_path = trusted_root / 'scripts/pm/loop_contracts.py'
+        contract_spec = importlib.util.spec_from_file_location('loop_contracts', contracts_path)
+        if contract_spec is None or contract_spec.loader is None:
+            raise ValueError('trusted loop_contracts helper unavailable')
+        contracts = importlib.util.module_from_spec(contract_spec)
+        sys.modules['loop_contracts'] = contracts
+        contract_spec.loader.exec_module(contracts)
     path = root / 'scripts/pm' / (name + '.py')
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
@@ -825,8 +1008,9 @@ def main():
             subprocess.run(['git', '-C', str(root), 'fetch', '--no-tags', 'origin', 'main:refs/remotes/origin/main'], check=True, capture_output=True)
         effective_binding = None
         trusted_default_oid = None
+        policy_context = None
         if (effective_binding is None and task.get('loop_binding') is not None
-                and args.command not in ('bind', 'recover')):
+                and args.command != 'recover'):
             resolved = resolve_effective_binding(root, task, return_context=True)
             if isinstance(resolved, tuple) and len(resolved) == 2:
                 effective_binding, policy_context = resolved
@@ -845,29 +1029,34 @@ def main():
             binding = json.loads(args.loop_binding.read_text())
             if binding.get('manual_request_ref') != args.manual_request_ref:
                 raise ValueError('manual request does not match proposed binding')
+            active_binding = effective_binding if effective_binding is not None else binding
+            if not isinstance(active_binding, dict):
+                raise ValueError('bind requires a resolved effective policy pin')
+            if args.tool_root is None:
+                raise ValueError('bind requires an explicit trusted --tool-root')
+            effective_tool_root = existing_policy_tool_root(root, active_binding, args.tool_root)
             proposed = {**task, 'loop_binding': binding}
             if args.migrate_epoch is not None:
                 if args.migrate_epoch != int(task.get('bootstrap_epoch', 1)) + 1:
                     raise ValueError('migration must advance exactly one bootstrap epoch')
                 proposed['bootstrap_epoch'] = args.migrate_epoch
             with Reservation(common_dir(root), args.task_uid, binding['write_scope']) as reservation:
-                expected = json.dumps(binding, sort_keys=True)
-                action = {'action_id': 'bind:' + hashlib.sha256(expected.encode()).hexdigest(), 'kind': 'bind_loop', 'expected': expected,
-                          'repository': task['repository'], 'issue_number': task['issue_number'],
-                          'previous_binding': task.get('loop_binding'), 'previous_epoch': task.get('bootstrap_epoch', 1),
-                          'canonical_worktree': str(root), 'task_branch': task.get('task_branch'), 'project_item_id': task.get('project_item_id')}
-                command = [sys.executable, str(args.tool_root / 'scripts/pm/github-project-task.py'), 'bind-loop', str(root), '--task-uid', args.task_uid, '--loop-binding', str(args.loop_binding.resolve()), '--manual-request-ref', args.manual_request_ref, '--json']
+                action = _build_bind_action(root, task, binding, active_binding, policy_context)
+                command = [sys.executable, str(effective_tool_root / 'scripts/pm/github-project-task.py'), 'bind-loop', str(root), '--task-uid', args.task_uid, '--loop-binding', str(args.loop_binding.resolve()), '--manual-request-ref', args.manual_request_ref, '--json']
                 if args.migrate_epoch is not None: command += ['--migrate-epoch', str(args.migrate_epoch)]
                 command += ['--loop-action-json', json.dumps(action, sort_keys=True)]
 
                 def bind_mutation():
+                    validation_task = {**proposed, 'bootstrap_epoch': active_binding.get('bootstrap_epoch')}
                     checked = validate_task(
                         root,
-                        proposed,
-                        args.tool_root,
+                        validation_task,
+                        effective_tool_root,
                         contracts=True,
                         purpose='in_flight' if task.get('loop_binding') == binding else 'new_tasks',
                         resolve_policy=False,
+                        effective_binding=active_binding,
+                        trusted_default_oid=trusted_default_oid,
                     )
                     if checked['status'] != 'passed':
                         raise ValueError('; '.join(checked['blockers']))
@@ -882,14 +1071,15 @@ def main():
 
                 result = pre_mutation_admission(
                     'bind',
-                    binding=binding,
+                    binding=active_binding,
                     target_root=root,
-                    effective_tool_root=args.tool_root,
-                    source_commit=binding.get('policy_commit'),
-                    effective_tool_commit=binding.get('policy_commit'),
-                    record_source_commit=(binding.get('coordination_ref') or {}).get('source_commit'),
+                    effective_tool_root=effective_tool_root,
+                    source_commit=active_binding.get('policy_commit'),
+                    effective_tool_commit=active_binding.get('policy_commit'),
+                    record_source_commit=(active_binding.get('coordination_ref') or {}).get('source_commit'),
                     traceability_loader=lambda effective_root, commit: _traceability_adapter(
-                        effective_root, root, binding, commit
+                        effective_root, root, active_binding, commit,
+                        trusted_default_oid=trusted_default_oid,
                     ),
                     mutation=bind_mutation,
                 )

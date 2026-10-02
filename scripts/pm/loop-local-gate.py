@@ -15,6 +15,30 @@ def run(*args):
     return subprocess.check_output(args, text=True).strip()
 
 
+def load_effective_module(tool_root: Path, commit: str, name: str):
+    relative = f'scripts/pm/{name}.py'
+    entries = run('git', '-C', str(tool_root), 'ls-tree', commit, '--', relative).splitlines()
+    if len(entries) != 1 or '\t' not in entries[0]:
+        raise ValueError('effective helper module missing or ambiguous: ' + relative)
+    metadata, recorded_path = entries[0].split('\t', 1)
+    mode, object_type, _oid = metadata.split()
+    path = tool_root / relative
+    expected = subprocess.check_output(['git', '-C', str(tool_root), 'show', commit + ':' + relative])
+    if (recorded_path != relative or mode != '100644' or object_type != 'blob'
+            or path.is_symlink() or not path.resolve().is_relative_to(tool_root.resolve())
+            or path.read_bytes() != expected):
+        raise ValueError('effective helper bytes or mode differ: ' + relative)
+    if run('git', '-C', str(tool_root), 'ls-files', '--others', '--', relative):
+        raise ValueError('untracked effective helper shadow: ' + relative)
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ValueError('effective helper module unavailable: ' + relative)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--root', type=Path, required=True)
@@ -59,9 +83,11 @@ def main():
             active, policy_context = module.resolve_effective_binding(root, task, return_context=True)
             if not isinstance(active, dict): raise ValueError('effective loop binding is unavailable')
             trusted_default_oid = ((policy_context or {}).get('trusted_current_policy') or {}).get('default_branch_oid')
+            configured_tool = args.tool_root or os.environ.get('OASIS7_LOOP_TOOL_ROOT')
+            if not configured_tool: raise ValueError('activation prerequisite: explicit trusted --tool-root required')
             tool = module.existing_policy_tool_root(
                 root, active,
-                args.tool_root or os.environ.get('OASIS7_LOOP_TOOL_ROOT') or helper_root,
+                configured_tool,
             )
             commit = active.get('policy_commit', '')
             if not re.fullmatch(r'[0-9a-f]{40}', commit): raise ValueError('missing effective policy commit')

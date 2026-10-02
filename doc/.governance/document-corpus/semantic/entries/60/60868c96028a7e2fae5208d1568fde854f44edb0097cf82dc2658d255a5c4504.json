@@ -1,0 +1,12 @@
+{
+  "record": {
+    "content_sha256": "b0bed1f2df8fc0f45e328831738c2421ca8248b9d4ecd2f9d97a1ac1b2888844",
+    "current_authority": "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md",
+    "decision_owner": "blockchain_ops_engineer",
+    "disposition": "retain_current_procedure",
+    "note": "current no-start host materialization subprocedure; no topology readiness or release claim",
+    "path": "doc/testing/manual/public-testnet-fresh-validator-host-bootstrap-2026-07-28.manual.md",
+    "retirement_gate": "script retired or procedure absorbed into operator authority, callers repaired, blockchain ops and QA review"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

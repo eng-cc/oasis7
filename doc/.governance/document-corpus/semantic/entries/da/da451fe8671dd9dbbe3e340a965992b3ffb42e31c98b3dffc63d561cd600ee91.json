@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "a020136342c1bd3a632baec23b1ba9874716d11f2204379b16ffa35f017c6512",
+    "current_authority": "doc/site/prd.md",
+    "decision_owner": "viewer_engineer",
+    "disposition": "retain_current_authority",
+    "note": "current visual interaction and evidence-routing contract",
+    "path": "doc/site/design.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

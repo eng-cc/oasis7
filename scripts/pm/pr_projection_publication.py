@@ -418,61 +418,271 @@ def _candidate(publication: dict[str, Any], projection: dict[str, Any]) -> tuple
 
 
 def _prior(journal: PublicationJournal, action_id: str) -> dict[str, Any] | None:
-    found = [item for item in journal.read()["actions"] if item.get("action_id") == action_id]
+    found = [item for item in journal.read_action_state()["actions"]
+             if item.get("action_id") == action_id]
     if len(found) > 1:
         raise JournalError("duplicate publication action")
     return found[0] if found else None
 
 
-def _intent(adapter: Any, journal: PublicationJournal, publication: dict[str, Any]) -> None:
-    action = "task-intent:" + publication["publication_id"]
-    prior = _prior(journal, action)
+def _task_intent_identity(adapter: Any, journal: PublicationJournal,
+                          publication: dict[str, Any], pr_binding: dict[str, Any]
+                          ) -> tuple[str, dict[str, Any]]:
+    resolve_login = getattr(adapter, "resolve_publisher_login", None)
+    if not callable(resolve_login):
+        raise PublicationError("NETWORK_UNCERTAIN", "authenticated GitHub login resolver is unavailable")
     try:
-        result = adapter.find_task_publications(publication["publication_id"])
+        login = resolve_login()
     except Exception as exc:
-        if prior is not None:
-            journal.uncertain(action, "NETWORK_UNCERTAIN")
-        raise PublicationError("NETWORK_UNCERTAIN", f"Task publication readback failed: {exc}") from exc
-    if not isinstance(result, dict) or result.get("complete") is not True:
-        if prior is not None:
-            journal.uncertain(action, "NETWORK_UNCERTAIN")
-        raise PublicationError("NETWORK_UNCERTAIN", "Task publication lookup incomplete")
-    records = result.get("publications")
-    if not isinstance(records, list) or len(records) > 1:
-        journal.disposition("CONFLICT")
-        raise PublicationError("PUBLICATION_WRITE_CONFLICT", "Task publication lookup is ambiguous")
-    journal.intent(action, "publish_task_intent", {
-        "publication_id": publication["publication_id"], "task_uid": publication["task_uid"],
-    })
-    if records:
+        raise PublicationError("NETWORK_UNCERTAIN", f"authenticated GitHub login read failed: {exc}") from exc
+    if (not isinstance(login, str) or not login.strip()
+            or any(ord(character) < 33 for character in login)):
+        raise PublicationError("NETWORK_UNCERTAIN", "authenticated GitHub login is unresolved")
+    issue_number = getattr(adapter, "issue_number", None)
+    if type(issue_number) is not int or issue_number < 1:
+        raise PublicationError("TASK_IDENTITY_CONFLICT", "canonical Task Issue number is unavailable")
+    if not isinstance(pr_binding, dict):
+        raise PublicationError("TASK_IDENTITY_CONFLICT", "exact Task PR binding state is unavailable")
+    canonical_payload = publication_comment(publication)
+    payload_bytes = canonical_payload.encode("utf-8")
+    root = getattr(adapter, "root", None)
+    if root is None:
+        root = journal.canonical_worktree or journal.common_dir
+    try:
+        worktree = str(root.resolve())
+        common_dir = str(journal.common_dir.resolve())
+    except (AttributeError, OSError) as exc:
+        raise PublicationError("TASK_IDENTITY_CONFLICT", "canonical worktree identity is unavailable") from exc
+    identity = {
+        "schema": "oasis7-pr-task-post-action/v1",
+        "repository": publication["repository"],
+        "repository_id": publication["repository_id"],
+        "task_issue_number": issue_number,
+        "task_uid": publication["task_uid"],
+        "bootstrap_epoch": publication["bootstrap_epoch"],
+        "publication": publication,
+        "pr_binding": pr_binding,
+        "canonical_worktree": worktree,
+        "git_common_dir": common_dir,
+        "source_ref": publication["source_ref"],
+        "target_ref": publication["target_ref"],
+        "source_head_oid": publication["source_head_oid"],
+        "scope_base_oid": publication["source_scope_oid"],
+        "planner_authority_oid": publication["planner_authority_oid"],
+        "planner_config_sha256": publication["planner_config_sha256"],
+        "policy_digest": publication["policy_digest"],
+        "projection_digest": publication["projection_digest"],
+        "publisher_login": login,
+        "payload_utf8": canonical_payload,
+        "payload_sha256": "sha256:" + hashlib.sha256(payload_bytes).hexdigest(),
+    }
+    return "task-intent:" + publication["publication_id"], identity
+
+
+def _publication_author(result: dict[str, Any], publication_id: str) -> str | None:
+    authors = result.get("publication_authors")
+    if not isinstance(authors, list):
+        return None
+    matches = [item for item in authors
+               if isinstance(item, dict) and item.get("publication_id") == publication_id]
+    if len(matches) != 1:
+        return None
+    login = matches[0].get("author_login")
+    return login if isinstance(login, str) else None
+
+
+def _publication_body(result: dict[str, Any], publication_id: str) -> str | None:
+    bodies = result.get("publication_bodies")
+    if not isinstance(bodies, list):
+        return None
+    matches = [item for item in bodies
+               if isinstance(item, dict) and item.get("publication_id") == publication_id]
+    if len(matches) != 1:
+        return None
+    body = matches[0].get("body")
+    return body if isinstance(body, str) else None
+
+
+def _completed_record_binding(adapter: Any, publication: dict[str, Any],
+                              pr_number: int, expected_draft: bool) -> dict[str, Any] | None:
+    """Return the reciprocal binding only for an exact fresh completed replay."""
+    read_state = getattr(adapter, "read_completed_task_publication_state", None)
+    if not callable(read_state):
+        return None
+    try:
+        state = read_state(publication, pr_number, expected_draft)
+    except PublicationError:
+        raise
+    except Exception:
+        return None
+    if not isinstance(state, dict):
+        return None
+    project = state.get("project")
+    if not isinstance(project, dict) or project.get("status") != "passed":
+        return None
+    comments_read = state.get("comments_read")
+    task_author = state.get("live_task_author")
+    pr_binding = state.get("pr_binding")
+    resolved = resolve_task_publication(
+        comments_read, {key: publication[key] for key in _TASK_PUBLICATION_FIELDS},
+        live_task_author=task_author, pr_binding=pr_binding,
+    )
+    if resolved.get("status") != "passed" or resolved.get("pr_number") != pr_number:
+        return None
+    current = state.get("bindings_read")
+    if not isinstance(current, dict) or current.get("complete") is not True:
+        return None
+    bindings = current.get("bindings")
+    if not isinstance(bindings, list) or len(bindings) != 1:
+        return None
+    try:
+        observed = validate_publication_binding(bindings[0], publication)
+    except ContractError as exc:
+        raise PublicationError("TASK_IDENTITY_CONFLICT", "reciprocal binding is invalid") from exc
+    expected = build_publication_binding(
+        publication, pr_number, f"https://github.com/{publication['repository']}/pull/{pr_number}",
+    )
+    if observed != expected:
+        raise PublicationError("TASK_IDENTITY_CONFLICT", "Task is reciprocally bound to another PR")
+    pr = state.get("pr")
+    if not isinstance(pr, dict):
+        return None
+    _check_pr(pr, publication, pr_number, publication["source_head_oid"], expected_draft)
+    expected_body = state.get("expected_pr_body")
+    if isinstance(expected_body, str) and pr.get("body") != expected_body:
+        raise PublicationError("PUBLICATION_WRITE_CONFLICT", "PR body changed during completed replay")
+    return observed
+
+
+def _intent(adapter: Any, journal: PublicationJournal, publication: dict[str, Any], *,
+            pr_binding: dict[str, Any], resume_action_id: str | None = None) -> None:
+    action = "task-intent:" + publication["publication_id"]
+    action, identity = _task_intent_identity(adapter, journal, publication, pr_binding)
+    if resume_action_id is not None and resume_action_id != action:
+        raise PublicationError("TASK_IDENTITY_CONFLICT", "recovery selector does not match the exact publication action")
+    prior = _prior(journal, action)
+    history_anchored = journal.has_task_post_tail()
+    events = journal.read_task_events(action, allow_unanchored=True)
+    resolved = any(item["event"] == "RESOLVED" for item in events)
+    if events:
+        original_identity = events[0]["identity"]
+        if resolved:
+            current_without_binding = {key: value for key, value in identity.items()
+                                      if key != "pr_binding"}
+            original_without_binding = {key: value for key, value in original_identity.items()
+                                        if key != "pr_binding"}
+            if current_without_binding != original_without_binding:
+                raise JournalError("resolved Task publication action identity changed")
+            if history_anchored:
+                # Later publisher steps may bind the Task to the PR after this
+                # comment action completed. Preserve its original unbound/bound
+                # snapshot; a resolved action can never issue another POST.
+                return
+        elif original_identity != identity:
+            raise JournalError("Task publication action identity changed during recovery")
+    prior_event_ids = {
+        item["action_id"] for item in journal.read_task_events(allow_unanchored=True)
+    }
+    if resume_action_id is not None and action not in prior_event_ids and prior is None:
+        raise PublicationError("TASK_IDENTITY_CONFLICT", "recovery selector has no persisted publication action")
+    attempted = any(item["event"] == "POST_ATTEMPTED" for item in events)
+    if (events or prior is not None) and resume_action_id is None:
+        raise PublicationError(
+            "NETWORK_UNCERTAIN",
+            f"pending Task publication requires explicit --resume-action-id {action}",
+        )
+
+    def append(event: str, **evidence: Any) -> None:
+        journal.append_task_event(action, event, identity, evidence)
+
+    def fail_read(phase: str, detail: str) -> None:
+        if history_anchored:
+            append("READ_FAILED", phase=phase, detail=detail)
+
+    def read_publications(phase: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        nonlocal history_anchored
+        try:
+            result = adapter.find_task_publications(publication["publication_id"])
+        except Exception as exc:
+            fail_read(phase, type(exc).__name__)
+            raise PublicationError("NETWORK_UNCERTAIN", f"Task publication readback failed: {exc}") from exc
+        if not isinstance(result, dict) or result.get("complete") is not True:
+            fail_read(phase, "incomplete")
+            raise PublicationError("NETWORK_UNCERTAIN", "Task publication lookup incomplete")
+        records = result.get("publications")
+        if not isinstance(records, list):
+            fail_read(phase, "malformed")
+            raise PublicationError("NETWORK_UNCERTAIN", "Task publication lookup is malformed")
+        if len(records) > 1:
+            if history_anchored:
+                append("READ_CONFLICT", phase=phase, count=len(records))
+            raise PublicationError("PUBLICATION_WRITE_CONFLICT", "Task publication lookup is ambiguous")
+        if not records:
+            if history_anchored:
+                append("READ_EMPTY", phase=phase)
+            return [], result
         try:
             current = validate_ci_publication(records[0])
         except ContractError as exc:
-            journal.disposition("CONFLICT")
+            if history_anchored:
+                append("READ_CONFLICT", phase=phase, detail="invalid-publication")
             raise PublicationError("TASK_IDENTITY_CONFLICT", "Task publication is invalid") from exc
         if current != publication:
-            journal.disposition("CONFLICT")
+            if history_anchored:
+                append("READ_CONFLICT", phase=phase, detail="identity-mismatch")
             raise PublicationError("TASK_IDENTITY_CONFLICT", "Task publication identity/content differs")
-        journal.observe(action, {"publication_id": publication["publication_id"]}, phase="PREPARED")
+        if (_publication_body(result, publication["publication_id"]) != identity["payload_utf8"]
+                or _publication_author(result, publication["publication_id"]) != identity["publisher_login"]):
+            if history_anchored:
+                append("READ_CONFLICT", phase=phase, detail="author-or-content-mismatch")
+            raise PublicationError("TASK_IDENTITY_CONFLICT", "Task publication author or canonical content differs")
+        if not history_anchored:
+            journal.anchor_task_history_after_exact_readback()
+            history_anchored = True
+        if resolved:
+            return records, result
+        append("READ_MATCH", phase=phase,
+               publication_id=publication["publication_id"],
+               author_login=identity["publisher_login"],
+               payload_sha256=identity["payload_sha256"])
+        append("RESOLVED", publication_id=publication["publication_id"])
+        return records, result
+
+    # A prior v1 action has no durable boundary separating read from POST.
+    # Exact remote readback may reconcile a publication that is actually
+    # visible; an empty lookup can never authorize a new POST.
+    legacy_history = prior is not None
+    try:
+        records, _result = read_publications("prewrite")
+    except PublicationError:
+        raise
+    if records:
         return
-    if prior is not None:
-        journal.uncertain(action, "NETWORK_UNCERTAIN")
-        raise PublicationError("NETWORK_UNCERTAIN", "prior intent is not visible; refusing duplicate comment")
+    if not history_anchored:
+        raise PublicationError(
+            "NETWORK_UNCERTAIN",
+            "Task publication event history lacks a durable root tail anchor; UNKNOWN and pending",
+        )
+    if legacy_history:
+        raise PublicationError("NETWORK_UNCERTAIN", "legacy Task publication history is UNKNOWN; empty lookup cannot authorize POST")
+    if attempted:
+        raise PublicationError("NETWORK_UNCERTAIN", "Task POST was attempted; empty readback remains pending")
+
+    # Repeating WRITE_INTENT after a prior pre-attempt crash is safe only
+    # because the just-appended complete-empty read is the latest evidence.
+    append("WRITE_INTENT", payload_sha256=identity["payload_sha256"])
+    append("POST_ATTEMPTED", payload_sha256=identity["payload_sha256"])
+    confirmed = journal.read_task_events(action, identity=identity)
+    if not confirmed or confirmed[-1].get("event") != "POST_ATTEMPTED":
+        raise PublicationError("NETWORK_UNCERTAIN", "durable Task POST attempt marker could not be verified")
     try:
         adapter.publish_task_intent(publication)
     except Exception as exc:
-        journal.uncertain(action, "NETWORK_UNCERTAIN")
+        append("POST_RESPONSE_UNCERTAIN", detail=type(exc).__name__)
         raise PublicationError("NETWORK_UNCERTAIN", f"Task intent response uncertain: {exc}") from exc
-    try:
-        result = adapter.find_task_publications(publication["publication_id"])
-    except Exception as exc:
-        journal.uncertain(action, "NETWORK_UNCERTAIN")
-        raise PublicationError("NETWORK_UNCERTAIN", f"Task publication readback failed: {exc}") from exc
-    records = result.get("publications") if isinstance(result, dict) and result.get("complete") is True else None
-    if not isinstance(records, list) or len(records) != 1 or validate_ci_publication(records[0]) != publication:
-        journal.uncertain(action, "NETWORK_UNCERTAIN")
+    records, _result = read_publications("postattempt")
+    if len(records) != 1:
         raise PublicationError("NETWORK_UNCERTAIN", "Task intent lacks exact unique readback")
-    journal.observe(action, {"publication_id": publication["publication_id"]}, phase="PREPARED")
 
 
 def _push(adapter: Any, journal: PublicationJournal, publication: dict[str, Any],
@@ -551,7 +761,7 @@ def _preflight_task_pr_binding(adapter: Any, publication: dict[str, Any], *,
     if expected_pr_number is not None:
         if number != expected_pr_number:
             raise PublicationError("TASK_IDENTITY_CONFLICT", "Task is bound to another PR")
-        return None
+        return {"task_uid": publication["task_uid"], "pr_number": number}
     if not reconcile_exact_create:
         raise PublicationError("TASK_IDENTITY_CONFLICT", "Task already has a PR binding")
     try:
@@ -675,6 +885,29 @@ def _record_and_bind(adapter: Any, journal: PublicationJournal,
                      expected_draft: bool = True) -> dict[str, Any]:
     number = pr["number"]
     action = "record-pr:" + publication["publication_id"]
+    prior = _prior(journal, action)
+    if prior is not None:
+        completed = _completed_record_binding(adapter, publication, number, expected_draft)
+        if completed is not None:
+            return completed
+        # A persisted record-pr action means a prior attempt may have changed
+        # only some of the Task projections. Do not let the ordinary helper
+        # path infer recovery authority from an Issue poststate or cache.
+        # First-time publication keeps the existing all-pre path.
+        require_admission = getattr(adapter, "require_record_pr_recovery_admission", None)
+        if not callable(require_admission):
+            raise PublicationError(
+                "NETWORK_UNCERTAIN",
+                "recovery admission check is unavailable for a persisted record-pr action",
+            )
+        try:
+            require_admission()
+        except PublicationError:
+            raise
+        except Exception as exc:
+            raise PublicationError(
+                "NETWORK_UNCERTAIN", f"record-pr recovery admission check failed: {exc}"
+            ) from exc
     journal.intent(action, "record_pr", {
         "publication_id": publication["publication_id"], "task_uid": publication["task_uid"],
         "pr_number": number,
@@ -777,6 +1010,7 @@ def _record_and_bind(adapter: Any, journal: PublicationJournal,
 def publish_create(adapter: Any, journal: PublicationJournal, *, publication: dict[str, Any],
                    projection: dict[str, Any], body: str, expected_remote_oid: str | None = None,
                    legacy_projection_b64: str | None = None,
+                   resume_action_id: str | None = None,
                    clock: Callable[[], float] = time.monotonic,
                    sleep: Callable[[float], None] = time.sleep) -> dict[str, Any]:
     """Task intent/readback → H push → draft create → record-pr → reciprocal binding."""
@@ -784,10 +1018,16 @@ def publish_create(adapter: Any, journal: PublicationJournal, *, publication: di
     body = replace_projection_marker(body, marker, legacy_projection_b64=legacy_projection_b64)
     try:
         with journal.locked():
+            adapter.reservation_fd = journal.inherited_lock_fd()
             bound_pr = _preflight_task_pr_binding(
                 adapter, publication, reconcile_exact_create=True, body=body,
             )
-            _intent(adapter, journal, publication)
+            pr_binding = (
+                {"state": "bound", "pr_number": bound_pr["number"]}
+                if bound_pr is not None else {"state": "unbound"}
+            )
+            _intent(adapter, journal, publication, pr_binding=pr_binding,
+                    resume_action_id=resume_action_id)
             if bound_pr is not None:
                 pr = bound_pr
             else:
@@ -800,6 +1040,9 @@ def publish_create(adapter: Any, journal: PublicationJournal, *, publication: di
                     "binding": binding}
     except JournalError as exc:
         raise PublicationError("PUBLICATION_WRITE_CONFLICT", str(exc)) from exc
+    finally:
+        if hasattr(adapter, "reservation_fd"):
+            adapter.reservation_fd = None
 
 
 def _check_pr(pr: dict[str, Any], publication: dict[str, Any], number: int, head: str,
@@ -820,7 +1063,8 @@ def _check_pr(pr: dict[str, Any], publication: dict[str, Any], number: int, head
 def publish_update(adapter: Any, journal: PublicationJournal, *, publication: dict[str, Any],
                    projection: dict[str, Any], pr_number: int, old_head_oid: str,
                    body: str, legacy_projection_b64: str | None = None,
-                   expected_draft: bool = True, existing_ready_update: bool = False) -> dict[str, Any]:
+                   expected_draft: bool = True, existing_ready_update: bool = False,
+                   resume_action_id: str | None = None) -> dict[str, Any]:
     """Patch and verify P(H1) before pushing H1 under a lease on H0."""
     publication, marker = _candidate(publication, projection)
     if (type(expected_draft) is not bool or type(existing_ready_update) is not bool
@@ -833,7 +1077,8 @@ def publish_update(adapter: Any, journal: PublicationJournal, *, publication: di
     body = replace_projection_marker(body, marker, legacy_projection_b64=legacy_projection_b64)
     try:
         with journal.locked():
-            _preflight_task_pr_binding(
+            adapter.reservation_fd = journal.inherited_lock_fd()
+            task_binding = _preflight_task_pr_binding(
                 adapter, publication, expected_pr_number=pr_number,
             )
             if existing_ready_update:
@@ -883,7 +1128,13 @@ def publish_update(adapter: Any, journal: PublicationJournal, *, publication: di
                 "pr_number": pr_number, "expected_draft": expected_draft,
                 "existing_ready_update": existing_ready_update, "old_head_oid": old_head_oid,
             })
-            _intent(adapter, journal, publication)
+            pr_binding = (
+                {"state": "bound", "pr_number": task_binding["pr_number"]}
+                if task_binding is not None
+                else {"state": "unbound", "candidate_pr_number": pr_number}
+            )
+            _intent(adapter, journal, publication, pr_binding=pr_binding,
+                    resume_action_id=resume_action_id)
 
             action = "patch-body:" + publication["publication_id"]
             body_hash = lambda text: "sha256:" + hashlib.sha256(text.encode("utf-8")).hexdigest()
@@ -967,6 +1218,9 @@ def publish_update(adapter: Any, journal: PublicationJournal, *, publication: di
                     "binding": binding}
     except JournalError as exc:
         raise PublicationError("PUBLICATION_WRITE_CONFLICT", str(exc)) from exc
+    finally:
+        if hasattr(adapter, "reservation_fd"):
+            adapter.reservation_fd = None
 
 
 def publish(update: Callable[[str], Any], **kwargs: Any) -> dict[str, Any]:

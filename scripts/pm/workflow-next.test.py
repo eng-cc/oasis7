@@ -1277,6 +1277,25 @@ class WorkflowNextTest(unittest.TestCase):
                             for item in payload["blockers"]), payload)
 
     def test_post_merge_terminal_query_uses_default_worktree_after_task_checkout_removal(self) -> None:
+        # The binding below pins this commit, so give the fixture the canonical
+        # policy bytes and modules that the read-only consumer loads from that
+        # commit. Advance the default worktree to the same base before simulating
+        # adoption and later default-branch movement.
+        policy_dir = self.root / "scripts/pm"
+        policy_dir.mkdir(parents=True, exist_ok=True)
+        policy_paths = (
+            "loop-policy.v1.json",
+            "loop_contracts.py",
+            "loop_policy.py",
+        )
+        for name in policy_paths:
+            shutil.copyfile(ROOT / "scripts/pm" / name, policy_dir / name)
+        subprocess.run(["git", "-C", str(self.root), "add", "scripts/pm"], check=True)
+        subprocess.run(["git", "-C", str(self.root), "commit", "-qm", "fixture pinned policy"], check=True)
+        subprocess.run(
+            ["git", "-C", str(self.default_root), "merge", "--ff-only", "task/fixture"],
+            check=True, capture_output=True, text=True,
+        )
         task_worktree = Path(self.tmp.name) / "retired-task-worktree"
         subprocess.run([
             "git", "-C", str(self.root), "worktree", "add", "-qb", "task/retired", str(task_worktree),
@@ -1520,6 +1539,11 @@ class AdoptedPinTerminalIntegrationTests(unittest.TestCase):
         fixture.git("worktree", "unlock", str(fixture.task_root))
         fixture.git("worktree", "remove", "--force", str(fixture.task_root))
         self.assertFalse(fixture.task_root.exists())
+        fixture.git("update-ref", "-d", "refs/remotes/origin/main")
+        self.assertEqual(
+            fixture.git("for-each-ref", "--format=%(refname)", "refs/remotes/origin/main"),
+            "",
+        )
         terminal_live_read = fixture.invoke("read-live-policy-context", hosted=True)
         terminal_live_context = fixture.output_json(terminal_live_read)
         self.assertEqual(terminal_live_read.returncode, 0, terminal_live_read.stdout + terminal_live_read.stderr)
@@ -1535,7 +1559,7 @@ class AdoptedPinTerminalIntegrationTests(unittest.TestCase):
         terminal_mapping = mapping_path.read_bytes()
         task_issue_body = fixture.state()["issue"]["body"]
         main_head_before = fixture.git("rev-parse", "HEAD")
-        remote_tip_before = fixture.git("rev-parse", "refs/remotes/origin/main")
+        remote_tip_before = fixture.git("for-each-ref", "--format=%(refname)", "refs/remotes/origin/main")
         worktrees_before = fixture.git("worktree", "list", "--porcelain")
         state_before = fixture.state()
 
@@ -1559,7 +1583,10 @@ class AdoptedPinTerminalIntegrationTests(unittest.TestCase):
         self.assertEqual(mapping_path.read_bytes(), terminal_mapping, "read-only lookup must preserve the mapping")
         self.assertEqual(fixture.state()["issue"]["body"], task_issue_body, "terminal lookup must not reopen or rewrite the Issue")
         self.assertEqual(fixture.git("rev-parse", "HEAD"), main_head_before)
-        self.assertEqual(fixture.git("rev-parse", "refs/remotes/origin/main"), remote_tip_before)
+        self.assertEqual(
+            fixture.git("for-each-ref", "--format=%(refname)", "refs/remotes/origin/main"),
+            remote_tip_before,
+        )
         self.assertEqual(fixture.git("worktree", "list", "--porcelain"), worktrees_before)
         state_after = fixture.state()
         self.assertEqual(state_after["post_effects"], state_before["post_effects"])

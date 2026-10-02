@@ -16,6 +16,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import types
 from typing import Any
 
 
@@ -134,6 +135,67 @@ def git_value(path: pathlib.Path, *args: str) -> str:
         ).strip()
     except (OSError, subprocess.CalledProcessError):
         return ""
+
+
+def load_effective_loop_policy(
+    root: pathlib.Path,
+    binding: dict[str, Any],
+    trusted_current_policy: dict[str, Any],
+):
+    """Load pinned binding validation after checking ancestry to live default proof."""
+    commit = binding.get("policy_commit", "")
+    if not re.fullmatch(r"[0-9a-f]{40}", commit):
+        raise ValueError("loop binding has no immutable effective policy commit")
+    proof_fields = {
+        "default_branch", "default_branch_oid", "policy_commit", "policy_digest",
+        "workflow_source_digest",
+    }
+    if (not isinstance(trusted_current_policy, dict)
+            or set(trusted_current_policy) != proof_fields
+            or not isinstance(trusted_current_policy.get("default_branch"), str)
+            or not trusted_current_policy["default_branch"]
+            or not re.fullmatch(r"[0-9a-f]{40}", str(trusted_current_policy.get("default_branch_oid") or ""))
+            or trusted_current_policy.get("policy_commit") != trusted_current_policy.get("default_branch_oid")
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(trusted_current_policy.get("policy_digest") or ""))
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(trusted_current_policy.get("workflow_source_digest") or ""))):
+        raise ValueError("trusted live protected-default policy proof is unavailable or malformed")
+    current_oid = trusted_current_policy["default_branch_oid"]
+    present = subprocess.run(
+        ["git", "-C", str(root), "cat-file", "-e", f"{current_oid}^{{commit}}"],
+        check=False, capture_output=True,
+    )
+    if present.returncode:
+        raise ValueError("live protected-default tip object is unavailable locally; no fetch was attempted")
+    ancestry = subprocess.run(
+        ["git", "-C", str(root), "merge-base", "--is-ancestor", commit, current_oid],
+        check=False, capture_output=True,
+    )
+    if ancestry.returncode == 1:
+        raise ValueError("pinned loop policy commit is not an ancestor of the live protected default tip")
+    if ancestry.returncode:
+        raise ValueError("live protected-default ancestry could not be verified locally")
+
+    def execute(name: str):
+        relative = f"scripts/pm/{name}.py"
+        entries = subprocess.check_output(
+            ["git", "-C", str(root), "ls-tree", commit, "--", relative], text=True,
+        ).splitlines()
+        if len(entries) != 1 or "\t" not in entries[0]:
+            raise ValueError("effective loop module missing or ambiguous: " + relative)
+        metadata, recorded_path = entries[0].split("\t", 1)
+        mode, object_type, _oid = metadata.split()
+        if recorded_path != relative or mode != "100644" or object_type != "blob":
+            raise ValueError("effective loop module has unsafe Git mode: " + relative)
+        source = subprocess.check_output(["git", "-C", str(root), "show", commit + ":" + relative])
+        module = types.ModuleType(name)
+        module.__file__ = f"{root}/{relative}@{commit}"
+        module.__package__ = ""
+        sys.modules[name] = module
+        exec(compile(source, module.__file__, "exec"), module.__dict__)
+        return module
+
+    execute("loop_contracts")
+    return execute("loop_policy")
 
 
 def registered_worktrees(root: pathlib.Path) -> list[tuple[pathlib.Path, str]]:
@@ -1031,6 +1093,14 @@ def resolve_task_effective_policy(root: pathlib.Path, task: dict[str, Any]) -> t
                 "pin_source": "immutable_binding",
                 "adoption_chain_tip": None,
             }
+        trusted_current_policy = (context or {}).get("trusted_current_policy")
+        if not isinstance(trusted_current_policy, dict):
+            return binding, resolved, (
+                "WORKFLOW_POLICY_PENDING",
+                "trusted live protected-default policy proof is unavailable",
+            )
+        resolved = dict(resolved)
+        resolved["_trusted_current_policy"] = trusted_current_policy
         return binding, resolved, None
     except (loop_facade.PolicyReaderPending, OSError, subprocess.CalledProcessError) as exc:
         return None, None, ("WORKFLOW_POLICY_PENDING", str(exc))
@@ -1103,9 +1173,17 @@ def main() -> int:
         if exc.reconcile_command:
             payload["reconcile_command"] = exc.reconcile_command
     if task.get("loop_binding") is not None:
-        from loop_policy import validate_binding
         binding = task["loop_binding"]
-        result = validate_binding(binding)
+        effective_binding, resolved_policy, policy_blocker = resolve_task_effective_policy(root, task)
+        result = {"blockers": []}
+        if policy_blocker is None and isinstance(resolved_policy, dict):
+            try:
+                policy = load_effective_loop_policy(
+                    root, binding, resolved_policy.get("_trusted_current_policy"),
+                )
+                result = policy.validate_binding(binding)
+            except (OSError, ValueError, subprocess.SubprocessError) as exc:
+                result = {"blockers": [f"trusted loop policy unavailable: {exc}"]}
         for reason in result.get("blockers", []):
             add_blocker(blockers, f"stale identity: loop binding {reason}")
         if isinstance(binding, dict):
@@ -1115,7 +1193,6 @@ def main() -> int:
                     add_blocker(blockers, f"stale identity: loop binding {key} drift")
         payload["loop_binding"] = binding
         payload["continuation_mode"] = "manual_request_only"
-        effective_binding, resolved_policy, policy_blocker = resolve_task_effective_policy(root, task)
         if policy_blocker is None and isinstance(resolved_policy, dict):
             payload["effective_policy"] = {
                 key: resolved_policy.get(key)

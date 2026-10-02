@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -19,11 +20,26 @@ class ContentTests(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory(); self.addCleanup(self.tmp.cleanup)
         self.root = Path(self.tmp.name)
         shutil.copytree(Path(__file__).parent, self.root / 'scripts/pm', ignore=shutil.ignore_patterns('__pycache__'))
+        self.repository = Path(__file__).resolve().parents[2]
+        shutil.copy2(self.repository / 'scripts/document_corpus.py', self.root / 'scripts/document_corpus.py')
+        for relative in (
+            'doc/.governance/document-corpus-inventory.json',
+            'doc/.governance/top-level-directory-registry.json',
+            'doc/testing/evidence/inventory.json',
+        ):
+            target = self.root / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(self.repository / relative, target)
+        self.git('init', '-q'); self.git('config', 'user.name', 'Fixture'); self.git('config', 'user.email', 'fixture@example.invalid')
         (self.root / '.gitignore').write_text('__pycache__/\n')
         self.spec = self.root / 'doc/engineering/spec.md'; self.spec.parent.mkdir(parents=True); self.spec.write_text('<a id="a"></a>\napproved')
         source = self.root / 'doc/engineering/workflow/source-of-truth.md'; source.parent.mkdir(parents=True); source.write_text('trusted workflow source fixture')
-        self.git('init', '-q'); self.git('config', 'user.name', 'Fixture'); self.git('config', 'user.email', 'fixture@example.invalid')
         self.git('remote', 'add', 'origin', 'https://github.com/eng-cc/oasis7.git')
+        self.sync_objects(
+            'doc/.governance/top-level-directory-registry.json',
+            'doc/engineering/spec.md',
+            'doc/engineering/workflow/source-of-truth.md',
+        )
         self.git('add', '.'); self.git('commit', '-qm', 'effective')
         self.base = self.git('rev-parse', 'HEAD'); self.git('update-ref', 'refs/remotes/origin/main', self.base)
         self.spec_digest = 'sha256:'+hashlib.sha256(self.spec.read_bytes()).hexdigest()
@@ -34,6 +50,14 @@ class ContentTests(unittest.TestCase):
 
     def git(self,*args):
         return subprocess.check_output(['git','-C',str(self.root),*args],text=True).strip()
+
+    def sync_objects(self, *paths):
+        command = [sys.executable, str(self.repository / 'scripts/document-corpus-inventory.py'),
+                   '--repo-root', str(self.root), 'sync', '--worktree', '--apply']
+        for path in paths:
+            command.extend(('--path', path))
+        result = subprocess.run(command, capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
 
     def reader(self,repo,path):
         self.calls.append(path)
@@ -72,7 +96,9 @@ class ContentTests(unittest.TestCase):
         self.git('worktree','add','--detach',str(tools),self.base)
         self.addCleanup(lambda: self.git('worktree','remove','--force',str(tools)))
         self.git('switch','-c','task')
-        (self.root/'doc/engineering/task.md').write_text('task contract')
+        task_path = 'doc/engineering/task.md'
+        (self.root/task_path).write_text('task contract')
+        self.sync_objects(task_path)
         self.git('add','.');self.git('commit','-qm','task change')
         head=self.git('rev-parse','HEAD')
         self.git('switch','--detach',self.base)
@@ -81,6 +107,12 @@ class ContentTests(unittest.TestCase):
         integration=self.git('rev-parse','HEAD')
         self.git('update-ref','refs/remotes/origin/main',integration)
         self.git('switch','task')
+        key = hashlib.sha256(task_path.encode('utf-8')).hexdigest()
+        task_record = f'doc/.governance/document-corpus/objects/{key[:2]}/{key}.json'
+        self.binding['write_scope'] = ['doc/engineering/**']
+        result=self.check(tool_root=tools, base=integration, head=head)
+        self.assertEqual(result['status'],'blocked',result)
+        self.binding['write_scope'] = ['doc/engineering/**',task_record]
         result=self.check(tool_root=tools, base=integration, head=head)
         self.assertEqual(result['status'],'passed',result)
         self.assertEqual(result['scope_context']['scope_base_oid'],self.base)

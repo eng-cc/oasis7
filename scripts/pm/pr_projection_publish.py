@@ -7,6 +7,8 @@ import base64
 import hashlib
 import importlib.util
 import json
+import os
+from contextlib import contextmanager
 from pathlib import Path
 import re
 import subprocess
@@ -33,6 +35,29 @@ class PublishInputError(RuntimeError):
     pass
 
 
+@contextmanager
+def _inherited_reservation(reservation_fd: int | None):
+    """Keep the locked file handle open in a child that can outlive this process."""
+    if reservation_fd is None:
+        yield {}
+        return
+    if os.name == "nt":
+        import msvcrt
+
+        handle = msvcrt.get_osfhandle(reservation_fd)
+        os.set_handle_inheritable(handle, True)
+        startupinfo = subprocess.STARTUPINFO()
+        startupinfo.lpAttributeList = {"handle_list": [handle]}
+        try:
+            yield {"close_fds": True, "startupinfo": startupinfo}
+        finally:
+            os.set_handle_inheritable(handle, False)
+        return
+    if os.name != "posix":
+        raise PublishInputError("child publication reservation inheritance is unsupported")
+    yield {"close_fds": True, "pass_fds": (reservation_fd,)}
+
+
 def has_exact_task_pr_linkage(body: Any, task_uid: str, issue_number: int) -> bool:
     """Require one canonical whole-line Task marker and non-closing Refs line."""
     if not isinstance(body, str):
@@ -46,11 +71,13 @@ def has_exact_task_pr_linkage(body: Any, task_uid: str, issue_number: int) -> bo
     )
 
 
-def command_output(args: list[str], *, timeout: float = LOCAL_COMMAND_TIMEOUT_SECONDS) -> str:
+def command_output(args: list[str], *, timeout: float = LOCAL_COMMAND_TIMEOUT_SECONDS,
+                   reservation_fd: int | None = None) -> str:
     try:
-        return subprocess.run(args, check=True, text=True, encoding="utf-8",
-                              stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                              timeout=timeout).stdout.strip()
+        with _inherited_reservation(reservation_fd) as inherited:
+            return subprocess.run(args, check=True, text=True, encoding="utf-8",
+                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                  timeout=timeout, **inherited).stdout.strip()
     except subprocess.CalledProcessError as exc:
         detail = str(exc.stderr or "").strip()
         suffix = f": {detail[:500]}" if detail else f": {exc}"
@@ -108,6 +135,28 @@ def mapping_identity(root: Path, uid: str, repo: str, issue_number: int,
         if not matches:
             raise PublishInputError(f"canonical task mapping {key} identity mismatch")
     return record
+
+
+def _load_project_sync_module() -> Any:
+    path = HERE / "github-project-sync.py"
+    spec = importlib.util.spec_from_file_location("publication_project_sync", path)
+    if spec is None or spec.loader is None:
+        raise PublishInputError("canonical Project sync helper is unavailable")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def _mapping_project_identity(root: Path) -> dict[str, Any]:
+    path = root / ".pm/github-project-sync/tasks.json"
+    try:
+        mapping = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise PublishInputError(f"canonical task mapping is unreadable: {exc}") from exc
+    project = mapping.get("project") if isinstance(mapping, dict) else None
+    if not isinstance(project, dict):
+        raise PublishInputError("canonical task mapping has no Project identity")
+    return project
 
 
 def task_publication(root: Path, args: argparse.Namespace) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -192,20 +241,37 @@ class GitHubPublicationAdapter:
         self.issue_number = args.issue_number
         self.task_helper = Path(args.task_helper).resolve()
         self.pr_number: int | None = None
+        self.authenticated_login: str | None = None
+        self.reservation_fd: int | None = None
+        self.record_pr_recovery_required = False
 
     def gh(self, *args: str, timeout: float = 5.0,
            input_json: dict[str, Any] | None = None) -> str:
         input_text = json.dumps(input_json, ensure_ascii=False) if input_json is not None else None
         try:
-            result = subprocess.run(["gh", *args], input=input_text, check=True, text=True,
-                                    encoding="utf-8", stdout=subprocess.PIPE,
-                                    stderr=subprocess.PIPE, timeout=timeout)
+            with _inherited_reservation(self.reservation_fd) as inherited:
+                result = subprocess.run(["gh", *args], input=input_text, check=True, text=True,
+                                        encoding="utf-8", stdout=subprocess.PIPE,
+                                        stderr=subprocess.PIPE, timeout=timeout, **inherited)
             return result.stdout.strip()
         except subprocess.CalledProcessError as exc:
             detail = str(exc.stderr or "").strip()
             raise RuntimeError(f"GitHub request failed: {detail[:500] if detail else exc}") from exc
         except (OSError, subprocess.SubprocessError) as exc:
             raise RuntimeError(f"GitHub request failed: {exc}") from exc
+
+    def resolve_publisher_login(self) -> str:
+        """Resolve the current authenticated GitHub identity without probing write permission."""
+        raw = self.gh("api", "user", timeout=5.0)
+        try:
+            user = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError("authenticated GitHub user response is malformed") from exc
+        login = user.get("login") if isinstance(user, dict) else None
+        if not isinstance(login, str) or not login.strip() or any(ord(char) < 33 for char in login):
+            raise RuntimeError("authenticated GitHub login is unavailable")
+        self.authenticated_login = login
+        return login
 
     def _issue_comments(self) -> list[dict[str, Any]]:
         raw = self.gh("api", f"repos/{self.args.repo}/issues/{self.issue_number}/comments?per_page=100",
@@ -247,8 +313,12 @@ class GitHubPublicationAdapter:
         if not match:
             raise RuntimeError("Issue comment response has no comment identity")
         readback = json.loads(self.gh("api", f"repos/{self.args.repo}/issues/comments/{match.group(1)}"))
-        if readback.get("body") != body:
-            raise RuntimeError("Issue comment exact readback failed")
+        user = readback.get("user") if isinstance(readback, dict) else None
+        author = user.get("login") if isinstance(user, dict) else None
+        if (readback.get("body") != body
+                or not isinstance(self.authenticated_login, str)
+                or author != self.authenticated_login):
+            raise RuntimeError("Issue comment exact author/content readback failed")
         if (publication._TASK_PUBLICATION_MARKER in body
                 and not publication.comment_timestamps_are_unchanged(readback)):
             raise RuntimeError("C1 Issue comment timestamps are missing, malformed, or indicate an edit")
@@ -257,6 +327,8 @@ class GitHubPublicationAdapter:
         self._assert_task_identity()
         target = self.publication
         matches = []
+        authors = []
+        bodies = []
         for comment in self._issue_comments():
             body = comment["body"]
             if "<!-- oasis7-ci-publication/v1 -->" not in body:
@@ -269,10 +341,21 @@ class GitHubPublicationAdapter:
                         and not publication.comment_timestamps_are_unchanged(comment)):
                     raise RuntimeError("existing C1 Issue comment timestamps are missing, malformed, or indicate an edit")
                 matches.append(value)
-        return {"complete": True, "publications": matches}
+                user = comment.get("user") if isinstance(comment.get("user"), dict) else {}
+                authors.append({
+                    "publication_id": value["publication_id"],
+                    "author_login": user.get("login"),
+                })
+                bodies.append({"publication_id": value["publication_id"], "body": body})
+        return {
+            "complete": True, "publications": matches,
+            "publication_authors": authors, "publication_bodies": bodies,
+        }
 
     def publish_task_intent(self, value: dict[str, Any]) -> None:
         self._assert_task_identity()
+        if not isinstance(self.authenticated_login, str) or not self.authenticated_login:
+            raise RuntimeError("authenticated GitHub login was not resolved before POST")
         self._write_issue_comment(publication.publication_comment(value))
 
     def read_source_ref(self, source_ref: str) -> str | None:
@@ -299,7 +382,8 @@ class GitHubPublicationAdapter:
         else:
             lease = f"--force-with-lease=refs/heads/{source_ref}:"
         command_output(["git", "-C", str(self.root), "push", self.args.remote, lease,
-                        f"{new_oid}:refs/heads/{source_ref}"], timeout=60)
+                        f"{new_oid}:refs/heads/{source_ref}"], timeout=60,
+                       reservation_fd=self.reservation_fd)
 
     def find_task_prs(self, task_uid: str, source_ref: str, target_ref: str,
                       *, timeout_seconds: float = 5.0) -> dict[str, Any]:
@@ -349,7 +433,7 @@ class GitHubPublicationAdapter:
             else:
                 command.append("--fill")
             command.extend(["--body-file", str(path)])
-            command_output(command, timeout=60)
+            command_output(command, timeout=60, reservation_fd=self.reservation_fd)
         finally:
             path.unlink(missing_ok=True)
 
@@ -409,6 +493,364 @@ class GitHubPublicationAdapter:
             binding["existing_ready_update"] = True
         return binding
 
+    def read_completed_task_publication_state(self, value: dict[str, Any], number: int,
+                                              expected_draft: bool) -> dict[str, Any]:
+        issue = json.loads(self.gh("api", f"repos/{self.args.repo}/issues/{self.issue_number}", timeout=5.0))
+        body = issue.get("body") if isinstance(issue, dict) else None
+        if (not isinstance(issue, dict) or issue.get("number") != self.issue_number
+                or str(issue.get("state") or "").lower() != "open"
+                or not isinstance(body, str)):
+            raise RuntimeError("canonical Task issue is unavailable for completed replay")
+        uids = re.findall(r"^task_uid:\s*(task_[0-9a-f]{32})$", body, re.MULTILINE)
+        if uids != [value["task_uid"]]:
+            raise RuntimeError("completed replay Task UID readback mismatch")
+        hold_active = re.findall(r"^- merge_hold_active:\s*`([^`]+)`$", body, re.MULTILINE)
+        if (len(hold_active) > 1
+                or (hold_active and hold_active[0].lower() not in {"true", "false"})
+                or hold_active == ["true"]):
+            raise RuntimeError("completed replay Task hold readback is active or ambiguous")
+        task_status = re.findall(r"^- status:\s*`([^`]+)`\s*$", body, re.MULTILINE)
+        task_phase = re.findall(r"^- workflow_phase:\s*`([^`]+)`\s*$", body, re.MULTILINE)
+        pr_urls = re.findall(r"^- pr_url:\s*`([^`]+)`\s*$", body, re.MULTILINE)
+        pr_numbers = re.findall(r"^- pr_number:\s*`([0-9]+)`\s*$", body, re.MULTILINE)
+        if len(task_status) != 1 or len(task_phase) != 1 or len(pr_urls) != 1 or len(pr_numbers) != 1:
+            raise RuntimeError("completed replay Task lifecycle/PR binding is incomplete")
+        task_pr_number = int(pr_numbers[0])
+        task_pr_url = pr_urls[0]
+        if task_pr_number != number or task_pr_url != f"https://github.com/{self.args.repo}/pull/{number}":
+            raise RuntimeError("completed replay Task PR binding mismatches the candidate")
+        record = mapping_identity(self.root, value["task_uid"], self.args.repo, self.issue_number,
+                                  self.args.source_ref, self.args.target_ref)
+        if (record.get("status") != task_status[0]
+                or record.get("workflow_phase") != task_phase[0]
+                or record.get("pr_number") != number
+                or record.get("pr_url") != task_pr_url
+                or record.get("merge_hold", {}).get("active") is not False):
+            raise RuntimeError("completed replay local Task mapping differs from live Task")
+        project = self.read_completed_project_state(record, task_pr_url)
+        pr = self.read_pr(value["repository"], number)
+        if not has_exact_task_pr_linkage(pr.get("body"), value["task_uid"], self.issue_number):
+            raise RuntimeError("completed replay PR lacks exact Task/Refs linkage")
+        user = issue.get("user") if isinstance(issue.get("user"), dict) else {}
+        pr_binding = {
+            "repository": value["repository"],
+            "number": number,
+            "url": f"https://github.com/{value['repository']}/pull/{number}",
+            "state": pr.get("state"),
+            "merged": pr.get("merged"),
+            "draft": pr.get("draft"),
+            "source_ref": pr.get("source_ref"),
+            "target_ref": pr.get("target_ref"),
+            "source_head_oid": pr.get("head_oid"),
+            "task_uid": value["task_uid"],
+            "issue_number": self.issue_number,
+            "created_at": pr.get("created_at"),
+            "updated_at": pr.get("updated_at"),
+            "task_status": task_status[0],
+            "task_phase": task_phase[0],
+            "task_pr_number": task_pr_number,
+            "task_pr_url": task_pr_url,
+            "pr_author": pr.get("pr_author"),
+            "pr_author_type": pr.get("pr_author_type"),
+        }
+        if pr_binding["draft"] is not expected_draft:
+            raise RuntimeError("completed replay PR draft state differs from expected publication mode")
+        comments = self._issue_comments()
+        return {
+            "comments_read": {
+                "complete": True, "repository": value["repository"],
+                "issue_number": self.issue_number, "comments": comments,
+            },
+            "live_task_author": {"login": user.get("login"), "type": user.get("type")},
+            "pr_binding": pr_binding,
+            "project": project,
+            "bindings_read": self.find_task_publication_bindings(value["publication_id"]),
+            "pr": pr,
+            "expected_pr_body": pr.get("body"),
+        }
+
+    def read_completed_project_state(self, record: dict[str, Any], task_pr_url: str) -> dict[str, Any]:
+        project = _mapping_project_identity(self.root)
+        project_id = project.get("id")
+        project_owner = project.get("owner")
+        project_number = project.get("number")
+        item_id = record.get("project_item_id")
+        if (not isinstance(project_id, str) or not project_id
+                or not isinstance(project_owner, str) or not project_owner
+                or type(project_number) is not int or project_number < 1
+                or not isinstance(item_id, str) or not item_id):
+            raise publication.PublicationError(
+                "TASK_IDENTITY_CONFLICT", "completed replay Project mapping identity is incomplete",
+            )
+        owner, name = self.args.repo.split("/", 1)
+        membership_query = """
+        query($owner: String!, $name: String!, $number: Int!, $after: String) {
+          repository(owner: $owner, name: $name) {
+            issue(number: $number) {
+              id
+              number
+              url
+              state
+              projectItems(first: 100, after: $after) {
+                nodes {
+                  id
+                  isArchived
+                  project {
+                    id
+                    number
+                    viewerCanUpdate
+                    owner { ... on Organization { login } ... on User { login } }
+                  }
+                }
+                pageInfo { hasNextPage endCursor }
+              }
+            }
+          }
+        }
+        """
+        memberships: list[dict[str, Any]] = []
+        after: str | None = None
+        seen_cursors: set[str] = set()
+        issue_identity = None
+        for _ in range(100):
+            raw_membership = self.gh(
+                "api", "graphql",
+                "-f", "query=" + membership_query,
+                "-F", "owner=" + owner,
+                "-F", "name=" + name,
+                "-F", "number=" + str(self.issue_number),
+                "-F", "after=" + (after or ""),
+                timeout=10.0,
+            )
+            try:
+                payload = json.loads(raw_membership)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError("completed replay Issue Project membership readback is malformed") from exc
+            data = payload.get("data") if isinstance(payload, dict) else None
+            repository = data.get("repository") if isinstance(data, dict) else None
+            issue = repository.get("issue") if isinstance(repository, dict) else None
+            if not isinstance(issue, dict):
+                raise publication.PublicationError(
+                    "TASK_IDENTITY_CONFLICT", "completed replay Task Issue membership is unavailable",
+                )
+            current_issue = {key: issue.get(key) for key in ("id", "number", "url", "state")}
+            if issue_identity is None:
+                issue_identity = current_issue
+            elif current_issue != issue_identity:
+                raise publication.PublicationError(
+                    "NETWORK_UNCERTAIN",
+                    "completed replay Task Issue changed during Project membership pagination",
+                )
+            connection = issue.get("projectItems")
+            nodes = connection.get("nodes") if isinstance(connection, dict) else None
+            page_info = connection.get("pageInfo") if isinstance(connection, dict) else None
+            if (not isinstance(nodes, list) or not isinstance(page_info, dict)
+                    or type(page_info.get("hasNextPage")) is not bool):
+                raise publication.PublicationError(
+                    "NETWORK_UNCERTAIN", "completed replay Project membership pagination is incomplete",
+                )
+            if any(not isinstance(item, dict) or not isinstance(item.get("id"), str)
+                   or not item.get("id") or not isinstance(item.get("project"), dict)
+                   for item in nodes):
+                raise publication.PublicationError(
+                    "TASK_IDENTITY_CONFLICT", "completed replay Project membership entry is malformed",
+                )
+            memberships.extend(nodes)
+            if not page_info["hasNextPage"]:
+                break
+            cursor = page_info.get("endCursor")
+            if not isinstance(cursor, str) or not cursor or cursor in seen_cursors:
+                raise publication.PublicationError(
+                    "NETWORK_UNCERTAIN", "completed replay Project membership cursor is missing or repeated",
+                )
+            seen_cursors.add(cursor)
+            after = cursor
+        else:
+            raise publication.PublicationError(
+                "NETWORK_UNCERTAIN", "completed replay Project membership pagination limit exhausted",
+            )
+        if (not isinstance(issue_identity, dict)
+                or issue_identity.get("number") != self.issue_number
+                or issue_identity.get("url") != f"https://github.com/{self.args.repo}/issues/{self.issue_number}"
+                or str(issue_identity.get("state") or "").upper() != "OPEN"):
+            raise publication.PublicationError(
+                "TASK_IDENTITY_CONFLICT", "completed replay Task Issue identity/state is invalid",
+            )
+        membership_matches = [
+            item for item in memberships
+            if item.get("id") == item_id and item.get("project", {}).get("id") == project_id
+        ]
+        if len(membership_matches) != 1:
+            raise publication.PublicationError(
+                "TASK_IDENTITY_CONFLICT",
+                "completed replay cached Project item is not the live Task Issue Project item",
+            )
+        membership_project = membership_matches[0]["project"]
+        membership_owner = membership_project.get("owner")
+        if (membership_matches[0].get("isArchived") is not False
+                or membership_project.get("number") != project_number
+                or not isinstance(membership_owner, dict)
+                or membership_owner.get("login") != project_owner):
+            raise publication.PublicationError(
+                "TASK_IDENTITY_CONFLICT",
+                "completed replay Project membership identity is incomplete",
+            )
+        query = """
+        query($item: ID!, $after: String) {
+          node(id: $item) {
+            ... on ProjectV2Item {
+              id
+              isArchived
+              project {
+                id
+                number
+                viewerCanUpdate
+                owner { ... on Organization { login } ... on User { login } }
+              }
+              fieldValues(first: 100, after: $after) {
+                nodes {
+                  ... on ProjectV2ItemFieldTextValue {
+                    text
+                    field { ... on ProjectV2FieldCommon { name } }
+                  }
+                  ... on ProjectV2ItemFieldSingleSelectValue {
+                    name
+                    field { ... on ProjectV2FieldCommon { name } }
+                  }
+                }
+                pageInfo { hasNextPage endCursor }
+              }
+            }
+          }
+        }
+        """
+        live_values: dict[str, str] = {}
+        after = None
+        seen_cursors = set()
+        item_identity = None
+        for _ in range(100):
+            raw = self.gh(
+                "api", "graphql", "-f", "query=" + query,
+                "-F", "item=" + item_id, "-F", "after=" + (after or ""),
+                timeout=10.0,
+            )
+            try:
+                payload = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                raise RuntimeError("completed replay Project readback is malformed") from exc
+            data = payload.get("data") if isinstance(payload, dict) else None
+            node = data.get("node") if isinstance(data, dict) else None
+            if not isinstance(node, dict):
+                raise publication.PublicationError(
+                    "TASK_IDENTITY_CONFLICT", "completed replay Project item readback is unavailable",
+                )
+            current_identity = {
+                "id": node.get("id"), "isArchived": node.get("isArchived"),
+                "project": node.get("project"),
+            }
+            if item_identity is None:
+                item_identity = current_identity
+            elif current_identity != item_identity:
+                raise publication.PublicationError(
+                    "NETWORK_UNCERTAIN", "completed replay Project item changed during field pagination",
+                )
+            field_values = node.get("fieldValues")
+            page_info = field_values.get("pageInfo") if isinstance(field_values, dict) else None
+            nodes = field_values.get("nodes") if isinstance(field_values, dict) else None
+            if (not isinstance(page_info, dict)
+                    or type(page_info.get("hasNextPage")) is not bool
+                    or not isinstance(nodes, list)):
+                raise publication.PublicationError(
+                    "NETWORK_UNCERTAIN", "completed replay Project field readback is incomplete",
+                )
+            for value in nodes:
+                field = value.get("field") if isinstance(value, dict) else None
+                name = field.get("name") if isinstance(field, dict) else None
+                if not isinstance(name, str) or not name:
+                    raise publication.PublicationError(
+                        "TASK_IDENTITY_CONFLICT", "completed replay Project field value is malformed",
+                    )
+                if name in live_values:
+                    raise publication.PublicationError(
+                        "TASK_IDENTITY_CONFLICT", "completed replay Project field value is duplicated",
+                    )
+                raw = value.get("name")
+                if raw is None:
+                    raw = value.get("text")
+                if raw is not None and not isinstance(raw, str):
+                    raise publication.PublicationError(
+                        "TASK_IDENTITY_CONFLICT", "completed replay Project field value is malformed",
+                    )
+                live_values[name] = raw or ""
+            if not page_info["hasNextPage"]:
+                break
+            cursor = page_info.get("endCursor")
+            if not isinstance(cursor, str) or not cursor or cursor in seen_cursors:
+                raise publication.PublicationError(
+                    "NETWORK_UNCERTAIN", "completed replay Project field cursor is missing or repeated",
+                )
+            seen_cursors.add(cursor)
+            after = cursor
+        else:
+            raise publication.PublicationError(
+                "NETWORK_UNCERTAIN", "completed replay Project field pagination limit exhausted",
+            )
+        item_project = item_identity.get("project") if isinstance(item_identity, dict) else None
+        item_owner = item_project.get("owner") if isinstance(item_project, dict) else None
+        if (not isinstance(item_identity, dict)
+                or item_identity.get("id") != item_id
+                or item_identity.get("isArchived") is not False
+                or not isinstance(item_project, dict)
+                or item_project.get("id") != project_id
+                or item_project.get("number") != project_number
+                or not isinstance(item_owner, dict)
+                or item_owner.get("login") != project_owner):
+            raise publication.PublicationError(
+                "TASK_IDENTITY_CONFLICT",
+                "completed replay Project item identity readback is incomplete",
+            )
+        sync = _load_project_sync_module()
+        expected_record = dict(record)
+        expected_record.update({
+            "status": "committed",
+            "workflow_phase": "verification",
+            "pr_url": task_pr_url,
+            "pr_number": publication.pr_number_from_url(task_pr_url, self.args.repo),
+        })
+        expected = sync.project_field_values(expected_record)
+        required = {key: value for key, value in expected.items() if key in {
+            "Task UID", "Status", "PM Status", "Workflow Phase", "PR", "Canonical Worktree",
+            "Owner Role", "Module", "Priority", "Test Tier Required",
+        }}
+        missing = [key for key in required if key not in live_values]
+        drift = [key for key, value in required.items() if live_values.get(key) != value]
+        if missing or drift:
+            raise publication.PublicationError(
+                "TASK_IDENTITY_CONFLICT",
+                "completed replay live Project fields differ from the completed Task vector",
+            )
+        return {
+            "status": "passed",
+            "project_id": project_id,
+            "project_owner": project_owner,
+            "project_number": project_number,
+            "project_item_id": item_id,
+            "field_count": len(live_values),
+            "required_fields": sorted(required),
+        }
+
+    def require_record_pr_recovery_admission(self) -> None:
+        """Require a unique live recovery marker before retrying record-pr."""
+        if not self.task_helper.is_file():
+            raise RuntimeError("canonical recovery helper is unavailable")
+        marker = "<!-- oasis7-publication-recovery-admission/v1 -->"
+        comments = self._issue_comments()
+        if sum(marker in comment["body"] for comment in comments) != 1:
+            raise RuntimeError("one unique current record-pr recovery admission is required")
+        # record_pr() re-reads comments and reconstructs the full authority
+        # before helper launch, so a changed/removed admission fails closed.
+        self.record_pr_recovery_required = True
+
     def record_pr(self, task_uid: str, number: int, publication_id: str) -> None:
         url = f"https://github.com/{self.args.repo}/pull/{number}"
         binding = publication.build_publication_binding(self.publication, number, url)
@@ -417,13 +859,19 @@ class GitHubPublicationAdapter:
             path = Path(handle.name)
         try:
             command = [
-            sys.executable, str(self.task_helper), "record-pr", str(self.root),
+                sys.executable, str(self.task_helper), "record-pr", str(self.root),
                 "--repo", self.args.repo,
                 "--task-uid", task_uid, "--pr-url", url, "--role", "tpm",
                 "--validation-command", "C1 ordered CI projection publication",
                 "--existing-ready-update" if getattr(self.args, "existing_ready_update", False) else "--draft-candidate",
                 "--publication-binding-json", str(path), "--json",
             ]
+            if self.record_pr_recovery_required:
+                # Preserve the parent's required-recovery mode across the
+                # process boundary. The child still reconstructs authority
+                # from its own fresh authenticated read; this flag only
+                # prevents a revoked marker from selecting the ordinary path.
+                command.append("--recovery-required")
             # The publisher derives recovery authority from live authenticated
             # comments and pure reads of the existing journals. It transports
             # no caller permission grant; record-pr recomputes it independently.
@@ -432,7 +880,10 @@ class GitHubPublicationAdapter:
             # command failure intact before making discovery network requests.
             comments = self._issue_comments() if self.task_helper.is_file() else []
             marker = "<!-- oasis7-publication-recovery-admission/v1 -->"
-            if any(marker in c["body"] for c in comments):
+            admissions = [c for c in comments if marker in c["body"]]
+            if self.record_pr_recovery_required and len(admissions) != 1:
+                raise RuntimeError("required record-pr recovery admission changed before helper launch")
+            if admissions:
                 if self.task_helper != (self.root / "scripts/pm/github-project-task.py").resolve():
                     raise RuntimeError("recovery requires the canonical reviewed task helper")
                 spec = importlib.util.spec_from_file_location("publication_task_recovery_impl", self.task_helper)
@@ -446,7 +897,8 @@ class GitHubPublicationAdapter:
                 recovery = helper.PublicationRecoveryAuthority(selected_args, record, binding,
                                                                self.publication, publication, comments)
             try:
-                command_output(command, timeout=180 if recovery is not None else 60)
+                command_output(command, timeout=180 if recovery is not None else 60,
+                               reservation_fd=self.reservation_fd)
             except PublishInputError as exc:
                 detail = str(exc)
                 if "record-pr identity/vector conflict:" in detail:
@@ -495,6 +947,9 @@ class GitHubPublicationAdapter:
             "target_ref": base.get("ref"), "head_oid": head.get("sha"),
             "body": item.get("body") or "", "state": str(item.get("state") or "").lower(),
             "merged": bool(item.get("merged_at")), "draft": item.get("draft"),
+            "created_at": item.get("created_at"), "updated_at": item.get("updated_at"),
+            "pr_author": (item.get("user") or {}).get("login") if isinstance(item.get("user"), dict) else None,
+            "pr_author_type": (item.get("user") or {}).get("type") if isinstance(item.get("user"), dict) else None,
         }
 
     def patch_pr_body(self, repository: str, number: int, body: str) -> None:
@@ -546,7 +1001,7 @@ def _prior_create_push_lease(journal: pr_projection_journal.PublicationJournal,
     action_id = "push:" + publication_value["publication_id"]
     with journal.locked():
         matches = [
-            action for action in journal.read()["actions"]
+            action for action in journal.read_action_state()["actions"]
             if isinstance(action, dict) and action.get("action_id") == action_id
         ]
         if len(matches) > 1:
@@ -579,6 +1034,7 @@ def publish(args: argparse.Namespace) -> dict[str, Any]:
         source_head_oid=candidate["source_head_oid"],
         scope_base_oid=candidate["source_scope_oid"],
         projection_digest=candidate["projection_digest"],
+        canonical_worktree=root,
     )
     body = Path(args.body_file).read_text(encoding="utf-8")
     ready_update = bool(getattr(args, "existing_ready_update", False))
@@ -610,6 +1066,7 @@ def publish(args: argparse.Namespace) -> dict[str, Any]:
                 adapter, journal, publication=candidate, projection=projection_value,
                 body=pr["body"], expected_remote_oid=prior_lease,
                 legacy_projection_b64=legacy_projection_b64,
+                resume_action_id=getattr(args, "resume_action_id", None),
             )
         else:
             result = publication.publish_update(
@@ -617,6 +1074,7 @@ def publish(args: argparse.Namespace) -> dict[str, Any]:
                 pr_number=pr["number"], old_head_oid=pr["head_oid"], body=body,
                 legacy_projection_b64=legacy_projection_b64,
                 expected_draft=not ready_update, existing_ready_update=ready_update,
+                resume_action_id=getattr(args, "resume_action_id", None),
             )
     else:
         remote_oid = adapter.read_source_ref(candidate["source_ref"])
@@ -628,6 +1086,7 @@ def publish(args: argparse.Namespace) -> dict[str, Any]:
             adapter, journal, publication=candidate, projection=projection_value,
             body=body, expected_remote_oid=prior_lease,
             legacy_projection_b64=legacy_projection_b64,
+            resume_action_id=getattr(args, "resume_action_id", None),
         )
     result["pr_url"] = f"https://github.com/{candidate['repository']}/pull/{result['pr_number']}"
     return result
@@ -650,6 +1109,8 @@ def main() -> int:
     parser.add_argument("--title", default="")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--existing-ready-update", action="store_true")
+    parser.add_argument("--resume-action-id", default=None,
+                        help="resume only the exact persisted Task publication action")
     args = parser.parse_args()
     try:
         result = publish(args)

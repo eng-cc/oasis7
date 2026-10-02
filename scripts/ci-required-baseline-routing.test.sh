@@ -150,6 +150,12 @@ fi
 grep -Fq 'INJECTED_FAILURE:product-doc-governance-check.test.py' "$ci_fixture_log"
 grep -Fq 'TOOL:python3:./scripts/product-doc-governance-check.test.py' "$ci_fixture_log"
 
+if ci_fixture_run required strict CI_FIXTURE_FAIL_SCRIPT=doc-governance-check.sh; then
+  echo "a failing document-governance baseline command must fail the required dispatcher" >&2
+  exit 1
+fi
+grep -Fq 'INJECTED_FAILURE:doc-governance-check.sh' "$ci_fixture_log"
+
 if ci_fixture_run required legacy OASIS7_CI_RUN_PACKAGING_CONTRACTS=false; then
   echo "unversioned legacy mode must reject mixed new-selector fields" >&2
   exit 1

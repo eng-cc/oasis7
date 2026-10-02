@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "ed393e7e91c70ef061f712a389741a03305e64ed75772d3eb20966642c7086ed",
+    "current_authority": "doc/world-runtime/prd.md",
+    "decision_owner": "runtime_engineer",
+    "disposition": "retain_mixed_implementation_record",
+    "note": "on-demand audit-export design and 2026-03-04 implementation snapshot; current behavior requires code verification",
+    "path": "doc/world-runtime/governance/audit-export.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

@@ -59,6 +59,12 @@ class IngressTests(unittest.TestCase):
             shim_code = (
                 "import json,os,pathlib,sys\n"
                 "args=sys.argv[1:]\n"
+                "script_index=next((index for index,arg in enumerate(args) if arg=='-'),None)\n"
+                "if script_index is not None:\n"
+                "    sys.argv=['-']+args[script_index+1:]\n"
+                "    source=sys.stdin.read()\n"
+                "    exec(compile(source,'<stdin>','exec'),{'__name__':'__main__'})\n"
+                "    raise SystemExit(0)\n"
                 "if args and args[0]=='-I': args=args[1:]\n"
                 "script=pathlib.Path(args[0])\n"
                 "body=script.read_text(encoding='utf-8')\n"
@@ -97,6 +103,7 @@ class IngressTests(unittest.TestCase):
                 'WORKFLOW_SHIM_LOG': str(log),
             })
             (fixture / 'runner').mkdir()
+            (fixture / 'github-output').write_text('', encoding='utf-8')
             completed = subprocess.run(
                 ['bash', '-euo', 'pipefail', '-c', script], cwd=repo,
                 env=environment, text=True, capture_output=True,

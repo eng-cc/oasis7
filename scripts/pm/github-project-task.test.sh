@@ -308,6 +308,17 @@ PY
     python3 - "$GH_MAPPING_PATH" "$*" <<'PY'
 import base64, json, os, sys
 m=json.load(open(sys.argv[1])); uid,next_record=next(iter(m["tasks"].items())); pm_status=next_record["status"]
+if (os.environ.get("OASIS7_REC_CASE") == "guard_project_item_content_late_drift"
+        and "content" in sys.argv[2]):
+    from pathlib import Path
+    auth_path=os.environ.get("GH_REC_AUTH_STATE_FILE")
+    content_path=os.environ.get("GH_REC_PROJECT_ITEM_CONTENT_FILE")
+    if auth_path and content_path and Path(content_path + ".drifted").is_file():
+        root=Path(auth_path).parent
+        journal_path=Path((root / "current-journal-path.md").read_text())
+        snapshot=root / "current-journal-drift-boundary.json"
+        if not snapshot.exists():
+            snapshot.write_bytes(journal_path.read_bytes())
 def read_state(name, fallback):
     path=os.environ.get(name)
     if path and os.path.exists(path):
@@ -381,7 +392,10 @@ PY
 import json, pathlib, sys
 directory = pathlib.Path(sys.argv[1])
 case = sys.argv[2]
-if case in {"guard_scope_comment_drift", "guard_c1_timestamp_recovery_drift", "guard_recovery_context_drift"}:
+import os
+scope_drift_armed = (case != "guard_scope_comment_drift" or pathlib.Path(
+    os.environ.get("GH_REC_SCOPE_DRIFT_ARMED_FILE", "/no-such-oasis7-scope-arm")).is_file())
+if case in {"guard_scope_comment_drift", "guard_c1_timestamp_recovery_drift", "guard_recovery_context_drift"} and scope_drift_armed:
     counter = directory.parent / "gh-comment-read-count.txt"
     reads = int(counter.read_text()) if counter.exists() else 0
     reads += 1
@@ -1084,9 +1098,10 @@ PY
   printf 'committed\n' >"$GH_PROJECT_STATE_FILE"
   printf 'In Progress\n' >"$GH_PROJECT_STATUS_STATE_FILE"
   printf 'verification\n' >"$GH_PROJECT_PHASE_STATE_FILE"
-  export GH_REC_AUTH_STATE_FILE="$TMPDIR/recovery-auth-state.json"
-  export GH_REC_PROJECT_ITEM_CONTENT_FILE="$TMPDIR/project-item-content.json"
-  export GH_REC_PROJECT_CONTENT_DRIFT_ARMED_FILE="$TMPDIR/project-content-drift-armed"
+export GH_REC_AUTH_STATE_FILE="$TMPDIR/recovery-auth-state.json"
+export GH_REC_PROJECT_ITEM_CONTENT_FILE="$TMPDIR/project-item-content.json"
+export GH_REC_PROJECT_CONTENT_DRIFT_ARMED_FILE="$TMPDIR/project-content-drift-armed"
+export GH_REC_SCOPE_DRIFT_ARMED_FILE="$TMPDIR/scope-comment-drift-armed"
   python3 - "$TMPDIR" "$TASK_UID" "$REC_OLD_HEAD" "$GH_PR_HEAD_SHA" "$GH_PR_TASK_BRANCH" <<'PY'
 import hashlib, importlib.util, json, os, pathlib, subprocess, sys
 root, uid, old_head, head, branch = pathlib.Path(sys.argv[1]).resolve(), *sys.argv[2:]
@@ -1263,21 +1278,21 @@ spec = importlib.util.spec_from_file_location("rec_task", root / "github-project
 helper = importlib.util.module_from_spec(spec); spec.loader.exec_module(helper)
 path = root / ".pm/github-project-sync/tasks.json"; mapping = json.loads(path.read_text())
 record = mapping["tasks"][uid]
-if case in {"all_pre", "cache_pre_project_post", "pending_final_readback", "pending_project_content_drift", "idempotent_repeat", "guard_c1_writer_unreachable_step_suffix", "guard_c1_writer_binding_comment_without_predecessors", "guard_c1_writer_observed_vector_live_before", "guard_c1_writer_uncertain_step_with_observation"}:
+if case in {"all_pre", "cache_pre_project_post", "pending_final_readback", "pending_project_content_drift", "idempotent_repeat", "interrupted_retry_accumulates_pending_steps", "guard_issue_body_proof_after_write", "guard_c1_writer_unreachable_step_suffix", "guard_c1_writer_binding_comment_without_predecessors", "guard_c1_writer_observed_vector_live_before", "guard_c1_writer_uncertain_step_with_observation"}:
     record.update(workflow_phase="execution")
     path.write_text(json.dumps(mapping))
 if case in {"all_post", "project_pre_issue_post"} or (case.startswith("guard_") and case not in {"guard_c1_writer_unreachable_step_suffix", "guard_c1_writer_binding_comment_without_predecessors", "guard_c1_writer_observed_vector_live_before", "guard_c1_writer_uncertain_step_with_observation"}):
     issue = dict(record, workflow_phase="verification", pr_number=2001,
                  pr_url="https://github.com/eng-cc/oasis7/pull/2001")
     (root / "issue-live-body.md").write_text(helper.issue_body(helper.task_from_record(uid, issue)))
-if case in {"guard_c1_writer_unreachable_step_suffix", "guard_c1_writer_binding_comment_without_predecessors", "guard_c1_writer_observed_vector_live_before", "guard_c1_writer_uncertain_step_with_observation"}:
+if case in {"guard_c1_writer_unreachable_step_suffix", "guard_c1_writer_binding_comment_without_predecessors", "guard_c1_writer_observed_vector_live_before", "guard_c1_writer_uncertain_step_with_observation", "interrupted_retry_accumulates_pending_steps", "guard_issue_body_proof_after_write"}:
     issue = dict(record, workflow_phase="execution", pr_number=None, pr_url=None)
     (root / "issue-live-body.md").write_text(helper.issue_body(helper.task_from_record(uid, issue)))
-if case in {"all_pre", "project_pre_issue_post", "guard_project_item_content_late_drift", "guard_c1_writer_unreachable_step_suffix", "guard_c1_writer_binding_comment_without_predecessors", "guard_c1_writer_observed_vector_live_before", "guard_c1_writer_uncertain_step_with_observation"}:
+if case in {"all_pre", "project_pre_issue_post", "guard_project_item_content_late_drift", "guard_c1_writer_unreachable_step_suffix", "guard_c1_writer_binding_comment_without_predecessors", "guard_c1_writer_observed_vector_live_before", "guard_c1_writer_uncertain_step_with_observation", "interrupted_retry_accumulates_pending_steps", "guard_issue_body_proof_after_write"}:
     (root / "project-live-phase").write_text("execution\n")
     (root / "project-pr.md").write_text("")
-if case == "fieldwise_issue_mixed":
-    issue = dict(record, workflow_phase="verification")
+if case == "guard_fieldwise_issue_mixed":
+    issue = dict(record, workflow_phase="verification", pr_number=None, pr_url=None)
     (root / "issue-live-body.md").write_text(helper.issue_body(helper.task_from_record(uid, issue)))
 if case == "guard_missing_old_journal":
     pathlib.Path((root / "old-journal-path.md").read_text()).unlink()
@@ -1414,7 +1429,7 @@ if case in {"guard_observed_payload_raw_hash_equal", "guard_binding_shape_raw_ha
             "guard_c1_writer_unknown_journal_drift", "guard_c1_writer_reordered_journal_drift",
             "guard_c1_writer_step_without_vector", "guard_c1_writer_unreachable_step_suffix",
             "guard_c1_writer_binding_comment_without_predecessors", "guard_c1_writer_observed_vector_live_before",
-            "guard_c1_writer_uncertain_step_with_observation"}:
+            "guard_c1_writer_uncertain_step_with_observation", "guard_fieldwise_issue_mixed"}:
     current_path=pathlib.Path((root / "current-journal-path.md").read_text())
     (root / "current-journal-before.json").write_bytes(current_path.read_bytes())
 PY
@@ -1463,7 +1478,19 @@ PY
     exit 0
   fi
   if [[ "$REC_CASE" == "guard_pr_head_drift" ]]; then export GH_PR_HEAD_SHA="$REC_OLD_HEAD"; fi
-  if [[ "$REC_CASE" == "guard_project_item_content_late_drift" ]]; then : >"$GH_REC_PROJECT_CONTENT_DRIFT_ARMED_FILE"; fi
+if [[ "$REC_CASE" == "guard_project_item_content_late_drift" ]]; then : >"$GH_REC_PROJECT_CONTENT_DRIFT_ARMED_FILE"; fi
+if [[ "$REC_CASE" == "guard_scope_comment_drift" ]]; then
+  python3 - "$TMPDIR" <<'PY'
+import json, pathlib, sys
+root=pathlib.Path(sys.argv[1]); comments=root / "gh-comments"
+admission=json.loads((root / "recovery-admission.json").read_text())
+rows=admission["scope_evidence"]
+assert len(rows) == 5, f"scope drift fixture expected five seeded comments, found {len(rows)}"
+assert all((comments / str(row["comment_id"])).is_file() for row in rows), "scope evidence comment was not seeded before drift arm"
+PY
+  printf '0\n' >"$TMPDIR/gh-comment-read-count.txt"
+  : >"$GH_REC_SCOPE_DRIFT_ARMED_FILE"
+fi
   if [[ "$REC_CASE" == "guard_api_external_wait" ]]; then export GH_FIXTURE_EXTERNAL_WAIT=1; fi
   if [[ "$REC_CASE" == "guard_recovery_context_drift" ]]; then printf '0\n' >"$TMPDIR/gh-comment-read-count.txt"; fi
   rm -f "$GH_REC_AUTH_STATE_FILE.api-user-reads"
@@ -1502,6 +1529,140 @@ module.PublicationRecoveryAuthority.check=traced_check
 sys.argv=[script,*cli_args]
 raise SystemExit(module.main())
 PY
+  elif [[ "$REC_CASE" == "interrupted_retry_accumulates_pending_steps" ]]; then
+    GH_INTERRUPT_AFTER_ISSUE_EDIT=1 bash -c 'export GH_INTERRUPT_TARGET=$$; exec python3 "$@"' bash \
+      "$TMPDIR/scripts/pm/github-project-task.py" record-pr "$TMPDIR" \
+      --repo eng-cc/oasis7 --project-owner eng-cc --project-number 1 \
+      --task-uid "$TASK_UID" --pr-url "https://github.com/eng-cc/oasis7/pull/2001" \
+      --draft-candidate --publication-binding-json "$TMPDIR/recovery-binding.json" --json \
+      >"$TMPDIR/rec-record-first.json" 2>"$TMPDIR/rec-record-first.err"
+    FIRST_STATUS=$?
+    set -e
+    if [[ "$FIRST_STATUS" != "143" ]]; then
+      echo "FAIL test_rec_interrupted_retry_accumulates_pending_steps: first Issue write did not interrupt after applying (exit=$FIRST_STATUS)" >&2
+      cat "$TMPDIR/rec-record-first.err" >&2
+      exit 1
+    fi
+    python3 - "$TMPDIR" <<'PY'
+import json, pathlib, sys
+root=pathlib.Path(sys.argv[1])
+journal=json.loads(pathlib.Path((root / "current-journal-path.md").read_text()).read_bytes())
+binding=json.loads((root / "recovery-binding.json").read_text())
+rows={row.get("action_id"):row for row in journal["actions"]}
+issue_step="record-pr-step:"+binding["publication_id"]+":issue"
+assert rows[issue_step]["state"] == "intent", rows[issue_step]
+assert "- pr_number: `2001`" in (root / "issue-live-body.md").read_text(), "Issue effect was not applied before interruption"
+PY
+    set +e
+    GH_INTERRUPT_AFTER_PHASE_EDIT=1 bash -c 'export GH_INTERRUPT_TARGET=$$; exec python3 "$@"' bash \
+      "$TMPDIR/scripts/pm/github-project-task.py" record-pr "$TMPDIR" \
+      --repo eng-cc/oasis7 --project-owner eng-cc --project-number 1 \
+      --task-uid "$TASK_UID" --pr-url "https://github.com/eng-cc/oasis7/pull/2001" \
+      --draft-candidate --publication-binding-json "$TMPDIR/recovery-binding.json" --json \
+      >"$TMPDIR/rec-record-second.json" 2>"$TMPDIR/rec-record-second.err"
+    SECOND_STATUS=$?
+    set -e
+    if [[ "$SECOND_STATUS" != "143" ]]; then
+      echo "FAIL test_rec_interrupted_retry_accumulates_pending_steps: retry did not apply Workflow Phase then interrupt (exit=$SECOND_STATUS)" >&2
+      cat "$TMPDIR/rec-record-second.err" >&2
+      exit 1
+    fi
+    python3 - "$TMPDIR" <<'PY'
+import json, pathlib, sys
+root=pathlib.Path(sys.argv[1])
+journal=json.loads(pathlib.Path((root / "current-journal-path.md").read_text()).read_bytes())
+binding=json.loads((root / "recovery-binding.json").read_text())
+rows={row.get("action_id"):row for row in journal["actions"]}
+prefix="record-pr-step:"+binding["publication_id"]+":"
+assert rows[prefix+"issue"]["state"] == "intent", rows[prefix+"issue"]
+assert rows[prefix+"project:Workflow Phase"]["state"] == "intent", rows[prefix+"project:Workflow Phase"]
+assert (root / "project-live-phase").read_text().strip() == "verification", "Workflow Phase effect was not applied before interruption"
+PY
+    set +e
+    python3 "$TMPDIR/scripts/pm/github-project-task.py" record-pr "$TMPDIR" \
+      --repo eng-cc/oasis7 --project-owner eng-cc --project-number 1 \
+      --task-uid "$TASK_UID" --pr-url "https://github.com/eng-cc/oasis7/pull/2001" \
+      --draft-candidate --publication-binding-json "$TMPDIR/recovery-binding.json" --json \
+      >"$TMPDIR/rec-record.json" 2>"$TMPDIR/rec-record.err"
+    REC_STATUS=$?
+  elif [[ "$REC_CASE" == "guard_issue_body_proof_after_write" ]]; then
+    cp "$GH_ISSUE_BODY_STATE_FILE" "$TMPDIR/issue-body-before-record-pr.txt"
+    GH_INTERRUPT_AFTER_ISSUE_EDIT=1 bash -c 'export GH_INTERRUPT_TARGET=$$; exec python3 "$@"' bash \
+      "$TMPDIR/scripts/pm/github-project-task.py" record-pr "$TMPDIR" \
+      --repo eng-cc/oasis7 --project-owner eng-cc --project-number 1 \
+      --task-uid "$TASK_UID" --pr-url "https://github.com/eng-cc/oasis7/pull/2001" \
+      --draft-candidate --publication-binding-json "$TMPDIR/recovery-binding.json" --json \
+      >"$TMPDIR/rec-record-first.json" 2>"$TMPDIR/rec-record-first.err"
+    FIRST_STATUS=$?
+    set -e
+    if [[ "$FIRST_STATUS" != "143" ]]; then
+      echo "FAIL test_rec_guard_issue_body_proof_after_write: first Issue write did not interrupt after applying (exit=$FIRST_STATUS)" >&2
+      cat "$TMPDIR/rec-record-first.err" >&2
+      exit 1
+    fi
+    cp "$GH_ISSUE_BODY_STATE_FILE" "$TMPDIR/issue-body-target-after-first.txt"
+    python3 - "$TMPDIR/issue-live-body.md" <<'PY'
+import pathlib, sys
+path=pathlib.Path(sys.argv[1])
+path.write_bytes(path.read_bytes() + b"\n<!-- unowned Issue content changed after the recorded Issue effect -->\n")
+PY
+    cp "$(cat "$TMPDIR/current-journal-path.md")" "$TMPDIR/issue-body-journal-before-retry.json"
+    cp "$TMPDIR/.pm/github-project-sync/tasks.json" "$TMPDIR/issue-body-mapping-before-retry.json"
+    cp "$GH_ISSUE_BODY_STATE_FILE" "$TMPDIR/issue-body-before-retry.txt"
+    RETRY_CALLS_BEFORE="$(wc -l < "$GH_CALL_LOG")"
+    set +e
+    python3 "$TMPDIR/scripts/pm/github-project-task.py" record-pr "$TMPDIR" \
+      --repo eng-cc/oasis7 --project-owner eng-cc --project-number 1 \
+      --task-uid "$TASK_UID" --pr-url "https://github.com/eng-cc/oasis7/pull/2001" \
+      --draft-candidate --publication-binding-json "$TMPDIR/recovery-binding.json" --json \
+      >"$TMPDIR/rec-record-retry.json" 2>"$TMPDIR/rec-record-retry.err"
+    RETRY_STATUS=$?
+    set -e
+    tail -n +$((RETRY_CALLS_BEFORE + 1)) "$GH_CALL_LOG" >"$TMPDIR/issue-body-retry-calls.log"
+    if [[ "$RETRY_STATUS" == "0" ]]; then
+      echo "FAIL test_rec_guard_issue_body_proof_after_write: changed non-owned Issue body was accepted after an interrupted Issue write" >&2
+      cat "$TMPDIR/rec-record-retry.err" >&2
+      exit 1
+    fi
+    python3 - "$TMPDIR" <<'PY'
+import hashlib, json, pathlib, sys
+root=pathlib.Path(sys.argv[1])
+journal_path=pathlib.Path((root / "current-journal-path.md").read_text())
+journal=json.loads(journal_path.read_bytes())
+binding=json.loads((root / "recovery-binding.json").read_text())
+action_id="record-pr-step:"+binding["publication_id"]+":issue"
+rows=[action for action in journal["actions"] if action.get("action_id") == action_id]
+assert len(rows) == 1 and rows[0]["state"] == "intent", rows
+proof=rows[0]["expected"].get("issue_body_proof")
+assert isinstance(proof, dict), "Issue step intent lacks durable full-body proof before the Issue effect"
+assert set(proof) == {"schema", "before_body", "before_body_sha256", "target_body", "target_body_sha256", "writer_default_merge_hold"}, proof
+assert proof["schema"] == "oasis7-record-pr-issue-body-proof/v1", proof
+before=(root / "issue-body-before-record-pr.txt").read_bytes()
+target=(root / "issue-body-target-after-first.txt").read_bytes()
+assert proof["before_body"].encode("utf-8") == before
+assert proof["target_body"].encode("utf-8") == target
+assert proof["before_body_sha256"] == hashlib.sha256(before).hexdigest()
+assert proof["target_body_sha256"] == hashlib.sha256(target).hexdigest()
+hold=proof["writer_default_merge_hold"]
+assert isinstance(hold, dict) and set(hold) == {"kind", "active", "requester", "reason", "resume_authority", "recorded_at"}, hold
+assert hold["kind"] == "normal_pr_ci_watch" and hold["active"] is False
+assert isinstance(hold["recorded_at"], str) and hold["recorded_at"]
+PY
+    if grep -Eq '^issue (edit|comment) |^project item-edit ' "$TMPDIR/issue-body-retry-calls.log"; then
+      echo "FAIL test_rec_guard_issue_body_proof_after_write: body drift retry wrote remote metadata" >&2
+      cat "$TMPDIR/issue-body-retry-calls.log" >&2
+      exit 1
+    fi
+    python3 - "$TMPDIR" <<'PY'
+import pathlib, sys
+root=pathlib.Path(sys.argv[1])
+journal_path=pathlib.Path((root / "current-journal-path.md").read_text())
+assert journal_path.read_bytes() == (root / "issue-body-journal-before-retry.json").read_bytes()
+assert (root / "issue-live-body.md").read_bytes() == (root / "issue-body-before-retry.txt").read_bytes()
+assert (root / ".pm/github-project-sync/tasks.json").read_bytes() == (root / "issue-body-mapping-before-retry.json").read_bytes()
+PY
+    echo "PASS test_rec_guard_issue_body_proof_after_write rejected non-owned body drift before retry effects"
+    exit 0
   else
     python3 "$TMPDIR/scripts/pm/github-project-task.py" record-pr "$TMPDIR" \
       --repo eng-cc/oasis7 --project-owner eng-cc --project-number 1 \
@@ -1770,7 +1931,9 @@ assert (root / ".pm/github-project-sync/tasks.json").read_bytes() == (root / "re
 old=pathlib.Path((root / "old-journal-path.md").read_text())
 assert old.read_bytes() == (root / "old-journal-before.json").read_bytes(), "late content drift changed historical journal"
 current=pathlib.Path((root / "current-journal-path.md").read_text())
-assert current.read_bytes() == (root / "current-journal-before.json").read_bytes(), "late content drift changed current journal"
+boundary=root / "current-journal-drift-boundary.json"
+assert boundary.is_file(), "late content drift was not captured at the fresh read boundary"
+assert current.read_bytes() == boundary.read_bytes(), "late content drift changed the journal after the legitimate first Project write"
 PY
     echo "PASS test_rec_$REC_CASE rejected after first Project edit before later metadata writes"
     exit 0
@@ -2043,15 +2206,55 @@ assert record["workflow_phase"] == "pre_pr_ready", record
 assert record["project_status"] == "Ready / PR", record
 assert record["reconciled_from_project"] is True, record
 PY
+set +e
 PM_ROOT_DIR="$TMPDIR" "$TMPDIR/scripts/pm/github-project-workflow.sh" \
-  --json audit --task-uid "$TASK_UID" >"$TMPDIR/audit-after-refresh.json"
-# Refresh intentionally reconciles the partial remote Project state and rewrites
-# the local mapping. Bind the SIGTERM immutability check to that new baseline,
-# not to the pre-refresh cache captured for the failed closeout.
+  --json audit --task-uid "$TASK_UID" >"$TMPDIR/audit-after-refresh.json" 2>"$TMPDIR/audit-after-refresh.err"
+PARTIAL_AUDIT_STATUS=$?
+set -e
+# Refresh reconciles the Project projection but does not rewrite Issue authority.
+# The selected-task audit must expose that remaining split brain before retry.
+if [[ "$PARTIAL_AUDIT_STATUS" == "0" ]]; then
+  echo "github-project-task.test: expected audit to reject Project-only closeout recovery" >&2
+  exit 1
+fi
+python3 - "$TMPDIR/audit-after-refresh.json" "$TASK_UID" <<'PY'
+import json, sys
+result=json.load(open(sys.argv[1],encoding="utf-8"))
+assert result["status"] == "failed", result
+assert any(error == f"{sys.argv[2]}: cached workflow_phase drift; refresh explicitly from authoritative GitHub issue"
+           for error in result["errors"]), result["errors"]
+PY
+# Restore the original committed projection with the ordinary supported
+# `move-task` writer. This reconciles the Issue, Project, and cache without
+# inventing Issue content or bypassing the selected-task audit.
+PM_ROOT_DIR="$TMPDIR" python3 "$TMPDIR/github-project-task.py" move-task "$TMPDIR" \
+  --repo eng-cc/oasis7 --project-owner eng-cc --project-number 1 \
+  --task-uid "$TASK_UID" --to-status committed --json >"$TMPDIR/compensated-after-partial.json"
+python3 - "$TMPDIR/.pm/github-project-sync/tasks.json" "$TASK_UID" "$GH_ISSUE_BODY_STATE_FILE" "$GH_PROJECT_PHASE_STATE_FILE" "$GH_PROJECT_STATE_FILE" "$GH_PROJECT_STATUS_STATE_FILE" <<'PY'
+import json, pathlib, sys
+record=json.load(open(sys.argv[1],encoding="utf-8"))["tasks"][sys.argv[2]]
+issue=pathlib.Path(sys.argv[3]).read_text(encoding="utf-8")
+phase=pathlib.Path(sys.argv[4]).read_text(encoding="utf-8").strip()
+pm_status=pathlib.Path(sys.argv[5]).read_text(encoding="utf-8").strip()
+status=pathlib.Path(sys.argv[6]).read_text(encoding="utf-8").strip()
+assert (record["status"], record["workflow_phase"]) == ("committed", "execution"), record
+assert "- status: `committed`" in issue and "- workflow_phase: `execution`" in issue, issue
+assert phase == "execution" and pm_status == "committed" and status == "In Progress", (phase, pm_status, status)
+PY
+PM_ROOT_DIR="$TMPDIR" "$TMPDIR/scripts/pm/github-project-workflow.sh" \
+  --json audit --task-uid "$TASK_UID" >"$TMPDIR/audit-after-compensation.json"
+python3 - "$TMPDIR/audit-after-compensation.json" <<'PY'
+import json, sys
+result=json.load(open(sys.argv[1],encoding="utf-8"))
+assert result["status"] == "ok" and result["errors"] == [], result
+PY
+# Bind the SIGTERM immutability check to the refreshed local-cache baseline;
+# the authoritative audit above confirms that the ordinary compensation has
+# restored matching Issue/Project/cache state before closeout is retried.
 CACHE_BEFORE_INTERRUPT="$(shasum -a 256 "$TMPDIR/.pm/github-project-sync/tasks.json" | awk '{print $1}')"
 
 set +e
-GH_INTERRUPT_ISSUE_EDIT=1 PM_ROOT_DIR="$TMPDIR" /bin/bash -c \
+GH_INTERRUPT_AFTER_ISSUE_EDIT=1 PM_ROOT_DIR="$TMPDIR" /bin/bash -c \
   'export GH_INTERRUPT_TARGET=$$; exec "$@"' bash "$TMPDIR/scripts/pm/task-closeout.sh" \
   --role tpm --task-uid "$TASK_UID" --verification-profile fixture_repository_state --review-packet-file "$REVIEW_PACKET" --json \
   >"$TMPDIR/interrupted-closeout.json" 2>"$TMPDIR/interrupted-closeout.err"
@@ -2063,6 +2266,29 @@ if [[ "$CACHE_BEFORE_INTERRUPT" != "$CACHE_AFTER_INTERRUPT" ]]; then
   echo "github-project-task.test: interrupted closeout changed mapping" >&2
   exit 1
 fi
+GRAPHQL_BEFORE_INTERRUPT_REFRESH="$(grep -c 'api graphql' "$GH_CALL_LOG" || true)"
+PM_ROOT_DIR="$TMPDIR" "$TMPDIR/scripts/pm/refresh-task-cache.sh" \
+  --task-uid "$TASK_UID" --json >"$TMPDIR/refreshed-after-interrupt.json"
+GRAPHQL_AFTER_INTERRUPT_REFRESH="$(grep -c 'api graphql' "$GH_CALL_LOG" || true)"
+[[ $((GRAPHQL_AFTER_INTERRUPT_REFRESH - GRAPHQL_BEFORE_INTERRUPT_REFRESH)) == 1 ]]
+python3 - "$TMPDIR/.pm/github-project-sync/tasks.json" "$TASK_UID" "$GH_ISSUE_BODY_STATE_FILE" "$GH_PROJECT_PHASE_STATE_FILE" "$GH_PROJECT_STATE_FILE" "$GH_PROJECT_STATUS_STATE_FILE" <<'PY'
+import json, pathlib, sys
+record=json.load(open(sys.argv[1],encoding="utf-8"))["tasks"][sys.argv[2]]
+issue=pathlib.Path(sys.argv[3]).read_text(encoding="utf-8")
+phase=pathlib.Path(sys.argv[4]).read_text(encoding="utf-8").strip()
+pm_status=pathlib.Path(sys.argv[5]).read_text(encoding="utf-8").strip()
+status=pathlib.Path(sys.argv[6]).read_text(encoding="utf-8").strip()
+assert (record["status"], record["workflow_phase"]) == ("ready", "pre_pr_ready"), record
+assert "- status: `ready`" in issue and "- workflow_phase: `pre_pr_ready`" in issue, issue
+assert phase == "pre_pr_ready" and pm_status == "ready" and status == "Ready / PR", (phase, pm_status, status)
+PY
+PM_ROOT_DIR="$TMPDIR" "$TMPDIR/scripts/pm/github-project-workflow.sh" \
+  --json audit --task-uid "$TASK_UID" >"$TMPDIR/audit-after-interrupt-refresh.json"
+python3 - "$TMPDIR/audit-after-interrupt-refresh.json" <<'PY'
+import json, sys
+result=json.load(open(sys.argv[1],encoding="utf-8"))
+assert result["status"] == "ok" and result["errors"] == [], result
+PY
 
 PM_ROOT_DIR="$TMPDIR" "$TMPDIR/scripts/pm/task-closeout.sh" \
   --role tpm \
@@ -2070,6 +2296,23 @@ PM_ROOT_DIR="$TMPDIR" "$TMPDIR/scripts/pm/task-closeout.sh" \
   --verification-profile fixture_repository_state \
   --review-packet-file "$REVIEW_PACKET" \
   --json > "$TMPDIR/closeout.json"
+
+python3 - "$GH_ISSUE_BODY_STATE_FILE" "$GH_PROJECT_PHASE_STATE_FILE" "$GH_PROJECT_STATUS_STATE_FILE" <<'PY'
+import pathlib, sys
+issue=pathlib.Path(sys.argv[1]).read_text(encoding="utf-8")
+phase=pathlib.Path(sys.argv[2]).read_text(encoding="utf-8").strip()
+status=pathlib.Path(sys.argv[3]).read_text(encoding="utf-8").strip()
+assert "- status: `ready`" in issue and "- workflow_phase: `pre_pr_ready`" in issue, issue
+assert phase == "pre_pr_ready", phase
+assert status == "Ready / PR", status
+PY
+PM_ROOT_DIR="$TMPDIR" "$TMPDIR/scripts/pm/github-project-workflow.sh" \
+  --json audit --task-uid "$TASK_UID" >"$TMPDIR/audit-after-retry.json"
+python3 - "$TMPDIR/audit-after-retry.json" <<'PY'
+import json, sys
+result=json.load(open(sys.argv[1],encoding="utf-8"))
+assert result["status"] == "ok" and result["errors"] == [], result
+PY
 
 python3 "$TMPDIR/github-project-task.py" record-pr "$TMPDIR" \
   --repo eng-cc/oasis7 \
@@ -2088,17 +2331,18 @@ assert record["workflow_phase"] == "pr_watch", record
 assert "OPT_PR_WATCH_PHASE" in calls, calls
 PY
 
-python3 - "$TMPDIR/.pm/github-project-sync/tasks.json" "$TASK_UID" <<'PY'
-import hashlib, json, pathlib, sys
-p=sys.argv[1]; m=json.load(open(p,encoding='utf-8')); r=m['tasks'][sys.argv[2]]
-r['completion_mode']='non_pr_task'; r['non_pr_completion_evidence']='persisted fixture completion truth'
-r['non_pr_completion_evidence_sha256'] = hashlib.sha256(
-    (r['non_pr_completion_evidence'] + '\n').encode('utf-8')
-).hexdigest()
-pathlib.Path(r['non_pr_completion_evidence_file']).write_text(
-    r['non_pr_completion_evidence'] + '\n', encoding='utf-8'
-)
-open(p,'w',encoding='utf-8').write(json.dumps(m)+'\n')
+python3 - "$TMPDIR/.pm/github-project-sync/tasks.json" "$TASK_UID" "$GH_ISSUE_BODY_STATE_FILE" <<'PY'
+import base64, hashlib, json, pathlib, sys
+record=json.load(open(sys.argv[1],encoding='utf-8'))['tasks'][sys.argv[2]]
+body=pathlib.Path(sys.argv[3]).read_text(encoding='utf-8')
+evidence=record.get('non_pr_completion_evidence')
+assert record.get('completion_mode') == 'non_pr_task', record
+assert evidence == 'Read-only workflow audit completed without a PR.', record
+encoded=base64.urlsafe_b64encode(evidence.encode('utf-8')).decode('ascii').rstrip('=')
+assert f'- non_pr_completion_evidence_b64: `{encoded}`' in body, body
+digest=hashlib.sha256((evidence+'\n').encode('utf-8')).hexdigest()
+assert record.get('non_pr_completion_evidence_sha256') == digest, record
+assert f'- non_pr_completion_evidence_sha256: `{digest}`' in body, body
 PY
 
 PM_ROOT_DIR="$TMPDIR" "$TMPDIR/scripts/pm/task-closeout.sh" \

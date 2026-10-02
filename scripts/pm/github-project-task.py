@@ -1261,43 +1261,75 @@ def loop_lineage_path(root: pathlib.Path, task_uid: str) -> pathlib.Path:
 def validate_loop_inputs(root: pathlib.Path, binding: dict[str, Any], repository: str, purpose: str) -> None:
     """Admission of selected manual inputs; never scan unrelated tasks."""
     tool_root = pathlib.Path(__file__).resolve().parents[2]
+    trusted_import_files = (
+        "scripts/document_corpus.py",
+        "scripts/product-doc-content-check.py",
+        "scripts/product_doc_markdown.py",
+    )
     commit = binding.get("policy_commit", "")
     if not re.fullmatch(r"[0-9a-f]{40}", commit):
         die("manual admission requires immutable policy commit")
     if run_text(["git", "-C", str(tool_root), "rev-parse", "HEAD"]) != commit:
         die("manual admission helper is not running from pinned effective policy")
-    run_text(["git", "-C", str(tool_root), "diff", "--no-ext-diff", "--no-textconv", "--exit-code", commit, "--", "scripts/pm"])
-    shadows = run_text(["git", "-C", str(tool_root), "ls-files", "--others", "--", "scripts/pm"])
+    run_text(["git", "-C", str(tool_root), "diff", "--no-ext-diff", "--no-textconv", "--exit-code", commit, "--", "scripts/pm", *trusted_import_files])
+    shadows = run_text(["git", "-C", str(tool_root), "ls-files", "--others", "--", "scripts/pm", *trusted_import_files, ":(exclude)**/__pycache__/**"])
     if any(path.endswith((".py", ".sh", ".json")) for path in shadows.splitlines()):
         die("untracked executable authority in manual helper root")
-    sys.path.insert(0, str(pathlib.Path(__file__).parent))
-    try:
-        import loop_policy
-        import loop_contracts
-        for result in (loop_policy.validate_tool_root(tool_root, root, binding),
-                       loop_contracts.validate_contracts(tool_root, root, binding, purpose=purpose)):
-            if result.get("status") != "passed":
-                die("manual input admission blocked: " + str(result.get("blockers")))
-        bindings = {binding["task_uid"]: binding}
-        pending = list(binding["dependencies"])
-        while pending:
-            uid = pending.pop()
-            if uid in bindings:
-                continue
-            if len(bindings) >= 64:
-                die("selected dependency closure exceeds 64 tasks; narrow the dependency contract")
-            live = github_issue_record(repository, uid)
-            require_loop_dependency_ready(live or {}, uid, repository, root)
-            dependency = (live or {}).get("loop_binding")
-            if not isinstance(dependency, dict):
-                die("selected dependency binding unavailable: " + uid)
-            bindings[uid] = validate_loop_binding(dependency)
-            pending.extend(dependency["dependencies"])
-        result = loop_policy.validate_dependencies(binding, bindings)
+    if run_text(["git", "-C", str(tool_root), "rev-parse", "--path-format=absolute", "--git-common-dir"]) != run_text(["git", "-C", str(root), "rev-parse", "--path-format=absolute", "--git-common-dir"]):
+        die("manual helper root belongs to another repository")
+
+    def load_pinned_module(name: str):
+        relative = f"scripts/pm/{name}.py"
+        entries = run_text(["git", "-C", str(tool_root), "ls-tree", commit, "--", relative]).splitlines()
+        if len(entries) != 1 or "\t" not in entries[0]:
+            die("effective helper module missing or ambiguous: " + relative)
+        metadata, recorded_path = entries[0].split("\t", 1)
+        mode, object_type, _oid = metadata.split()
+        path = tool_root / relative
+        if (recorded_path != relative or mode != "100644" or object_type != "blob"
+                or path.is_symlink() or not path.resolve().is_relative_to(tool_root.resolve())
+                or path.read_bytes() != subprocess.check_output(["git", "-C", str(tool_root), "show", commit + ":" + relative])):
+            die("effective helper bytes or mode differ: " + relative)
+        if run_text(["git", "-C", str(tool_root), "ls-files", "--others", "--", relative]):
+            die("untracked effective helper shadow: " + relative)
+        spec = importlib.util.spec_from_file_location(name, path)
+        if spec is None or spec.loader is None:
+            die("effective helper module unavailable: " + relative)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[name] = module
+        spec.loader.exec_module(module)
+        return module
+
+    sys.dont_write_bytecode = True
+    # loop_policy imports loop_contracts by name; replace any preloaded module
+    # with the exact pinned helper before executing the policy bytes.
+    loop_contracts = load_pinned_module("loop_contracts")
+    loop_policy = load_pinned_module("loop_policy")
+    for result in (loop_policy.validate_tool_root(tool_root, root, binding),
+                   loop_contracts.validate_contracts(tool_root, root, binding, purpose=purpose)):
         if result.get("status") != "passed":
-            die("manual dependency admission blocked: " + str(result.get("blockers")))
-    finally:
-        sys.path.pop(0)
+            die("manual input admission blocked: " + str(result.get("blockers")))
+    bindings = {binding["task_uid"]: binding}
+    pending = list(binding["dependencies"])
+    while pending:
+        uid = pending.pop()
+        if uid in bindings:
+            continue
+        if len(bindings) >= 64:
+            die("selected dependency closure exceeds 64 tasks; narrow the dependency contract")
+        live = github_issue_record(repository, uid)
+        require_loop_dependency_ready(live or {}, uid, repository, root)
+        dependency = (live or {}).get("loop_binding")
+        if not isinstance(dependency, dict):
+            die("selected dependency binding unavailable: " + uid)
+        binding_result = loop_policy.validate_binding(dependency)
+        if binding_result.get("status") != "passed":
+            die("invalid selected dependency binding: " + str(binding_result.get("blockers")))
+        bindings[uid] = dependency
+        pending.extend(dependency["dependencies"])
+    result = loop_policy.validate_dependencies(binding, bindings)
+    if result.get("status") != "passed":
+        die("manual dependency admission blocked: " + str(result.get("blockers")))
 
 
 def require_loop_dependency_ready(live: dict[str, Any], task_uid: str, repository: str = DEFAULT_REPO,
@@ -3552,17 +3584,34 @@ class PublicationRecoveryAuthority:
             if expected_raw is not None:
                 if raw != expected_raw:
                     if (name != "current_action"
-                            or not self._record_pr_writer_postimage(journal, evidence, comments)):
+                            or not self._record_pr_writer_postimage(
+                                journal, evidence, comments, baseline_raw=expected_raw,
+                            )):
                         raise ValueError("current publication journal differs from its bounded C1 writer postimage")
                     self._current_journal_expected_raw = raw
             elif self.sha(raw) != evidence["journal_sha256"]:
                 # A confirmed retry preserves the core's observed journal.
-                # Prove either that known observation delta or the finite
-                # record-pr/current-comment sequence against the admitted raw
-                # preimage; arbitrary edits never become lineage evidence.
-                if (name != "current_action"
-                        or not (self._observed_preimage(journal, evidence)
-                                or self._record_pr_writer_postimage(journal, evidence, comments))):
+                # Prove the exact known observation delta against the admitted
+                # raw preimage; arbitrary edits never become lineage evidence.
+                # The only additional migration is the legacy root-tail anchor
+                # written after exact Task-comment readback. It reconstructs
+                # the admitted bytes by removing that one field and validates
+                # the complete anchored READ_MATCH/RESOLVED sidecar.
+                observed = name == "current_action" and self._observed_preimage(journal, evidence)
+                anchored_readback = (
+                    name == "current_action"
+                    and self._legacy_exact_readback_anchor(
+                        path, common, journal, evidence, intent, unique[0],
+                    )
+                )
+                writer_postimage = (
+                    name == "current_action"
+                    and self._record_pr_writer_postimage(
+                        journal, evidence, comments,
+                        anchor_context=(path, common, intent, unique[0]),
+                    )
+                )
+                if not (observed or anchored_readback or writer_postimage):
                     raise ValueError("raw publication journal hash mismatch")
             if name == "current_action" and expected_raw is None:
                 self._current_journal_expected_raw = raw
@@ -3593,6 +3642,128 @@ class PublicationRecoveryAuthority:
         if found[0] != self.intent or found[0]["publication_id"] == found[1]["publication_id"]:
             raise ValueError("current/predecessor publication identity conflict")
         run_text(["git", "-C", str(self.root), "merge-base", "--is-ancestor", found[1]["source_head_oid"], found[0]["source_head_oid"]])
+
+    def _legacy_exact_readback_anchor(self, path: pathlib.Path, common: pathlib.Path,
+                                      journal: dict[str, Any], evidence: dict[str, Any],
+                                      intent: dict[str, Any], task_comment: dict[str, Any]) -> bool:
+        """Recognize only the exact legacy-tail addition proven by Task readback."""
+        from pr_projection_journal import (
+            JournalError, PublicationJournal, TASK_POST_EVENTS_FILE, TASK_POST_TAIL_SCHEMA,
+        )
+
+        try:
+            tail = journal.get("task_post_tail")
+            if (not isinstance(tail, dict) or set(tail) != {"schema", "sequence", "digest"}
+                    or tail.get("schema") != TASK_POST_TAIL_SCHEMA
+                    or type(tail.get("sequence")) is not int or tail["sequence"] < 0
+                    or not isinstance(tail.get("digest"), str)
+                    or re.fullmatch(r"sha256:[0-9a-f]{64}", tail["digest"]) is None):
+                return False
+
+            # Removing exactly the anchor must recreate the admitted canonical
+            # root bytes. Any changed action, phase, identity, or other field
+            # therefore remains outside this compatibility exception.
+            preimage = dict(journal)
+            del preimage["task_post_tail"]
+            if self.sha(self.encoded(preimage) + b"\n") != evidence["journal_sha256"]:
+                return False
+
+            events_path = path.with_name(TASK_POST_EVENTS_FILE)
+            exists = events_path.exists()
+            event_raw = events_path.read_bytes() if exists else b""
+            if not exists or not event_raw.endswith(b"\n"):
+                return False
+            reader = PublicationJournal(path, path.parent / "publisher.lock", journal["identity"],
+                                        common_dir=common, canonical_worktree=self.root)
+            events = reader._decode_task_events(event_raw, exists=exists)
+            # The sidecar is producer-canonical, not merely semantically
+            # equivalent JSON. This also rejects duplicate keys and byte drift.
+            for line, event in zip(event_raw.splitlines(keepends=True), events):
+                if line != self.encoded(event) + b"\n":
+                    return False
+            if (tail["sequence"] != len(events)
+                    or tail["digest"] != "sha256:" + self.sha(event_raw)
+                    or len(events) < 2):
+                return False
+
+            publication_id = intent["publication_id"]
+            action_id = "task-intent:" + publication_id
+            read_match, resolved = events[-2:]
+            if (read_match.get("event") != "READ_MATCH"
+                    or resolved.get("event") != "RESOLVED"
+                    or read_match.get("action_id") != action_id
+                    or resolved.get("action_id") != action_id
+                    or read_match.get("identity") != resolved.get("identity")):
+                return False
+
+            actor = (self.comment.get("user") or {}).get("login")
+            self._comment_identity(task_comment, actor)
+            if task_comment.get("body") != self.module.publication_comment(intent):
+                return False
+            identity = read_match.get("identity")
+            payload = task_comment["body"]
+            expected = {
+                "schema": "oasis7-pr-task-post-action/v1",
+                "repository": intent["repository"],
+                "repository_id": intent["repository_id"],
+                "task_issue_number": self.record["issue_number"],
+                "task_uid": self.args.task_uid,
+                "bootstrap_epoch": intent["bootstrap_epoch"],
+                "publication": intent,
+                "canonical_worktree": str(self.root.resolve()),
+                "git_common_dir": str(common.resolve()),
+                "source_ref": intent["source_ref"],
+                "target_ref": intent["target_ref"],
+                "source_head_oid": intent["source_head_oid"],
+                "scope_base_oid": intent["source_scope_oid"],
+                "planner_authority_oid": intent["planner_authority_oid"],
+                "planner_config_sha256": intent["planner_config_sha256"],
+                "policy_digest": intent["policy_digest"],
+                "projection_digest": intent["projection_digest"],
+                "publisher_login": actor,
+                "payload_utf8": payload,
+                "payload_sha256": "sha256:" + self.sha(payload.encode("utf-8")),
+            }
+            if (not isinstance(identity, dict)
+                    or set(identity) != set(expected) | {"pr_binding"}
+                    or any(identity.get(key) != value for key, value in expected.items())):
+                return False
+            pr_binding = identity.get("pr_binding")
+            if not isinstance(pr_binding, dict):
+                return False
+            # Accept only exact producer encodings. The create producer emits
+            # state=unbound or state=bound/pr_number; the update producer also
+            # pins its unbound candidate PR. Retain the older task_uid/pr_number
+            # shape for journals written before these producer encodings.
+            producer_binding = (
+                pr_binding == {"state": "unbound"}
+                or (set(pr_binding) == {"state", "pr_number"}
+                    and pr_binding.get("state") == "bound"
+                    and type(pr_binding.get("pr_number")) is int
+                    and pr_binding["pr_number"] == self.binding["pr_number"])
+                or (set(pr_binding) == {"state", "candidate_pr_number"}
+                    and pr_binding.get("state") == "unbound"
+                    and type(pr_binding.get("candidate_pr_number")) is int
+                    and pr_binding["candidate_pr_number"] == self.binding["pr_number"])
+            )
+            legacy_binding = (
+                set(pr_binding) == {"task_uid", "pr_number"}
+                and pr_binding.get("task_uid") == self.args.task_uid
+                and (pr_binding.get("pr_number") is None
+                     or (type(pr_binding.get("pr_number")) is int
+                         and pr_binding["pr_number"] == self.binding["pr_number"]))
+            )
+            if not producer_binding and not legacy_binding:
+                return False
+            if (read_match.get("evidence") != {
+                    "phase": "prewrite", "publication_id": publication_id,
+                    "author_login": actor, "payload_sha256": expected["payload_sha256"],
+                }
+                    or resolved.get("evidence") != {"publication_id": publication_id}):
+                return False
+            return True
+        except (JournalError, OSError, ValueError, KeyError, TypeError, UnicodeError):
+            return False
 
     def _binding_actions(self, journal: dict[str, Any]) -> list[dict[str, Any]]:
         binding_id = "reciprocal-binding:" + self.binding["publication_id"]
@@ -3653,11 +3824,28 @@ class PublicationRecoveryAuthority:
                         return True
         return False
 
-    def _record_pr_writer_postimage(self, journal: dict[str, Any], evidence: dict[str, Any],
-                                    comments: list[dict[str, Any]]) -> bool:
-        """Prove only finite record-pr/vector/comment transitions from the admitted bytes."""
+    def _record_pr_writer_postimage(
+        self, journal: dict[str, Any], evidence: dict[str, Any], comments: list[dict[str, Any]], *,
+        baseline_raw: bytes | None = None,
+        anchor_context: tuple[pathlib.Path, pathlib.Path, dict[str, Any], dict[str, Any]] | None = None,
+    ) -> bool:
+        """Prove finite writer transitions from one previously admitted raw baseline."""
         def reject() -> bool:
             return False
+
+        def matches_baseline(candidate: dict[str, Any]) -> bool:
+            candidate_raw = self.encoded(candidate) + b"\n"
+            if baseline_raw is not None:
+                return candidate_raw == baseline_raw
+            if self.sha(candidate_raw) == evidence["journal_sha256"]:
+                return True
+            if anchor_context is None:
+                return False
+            path, common, intent, task_comment = anchor_context
+            return self._legacy_exact_readback_anchor(
+                path, common, candidate, evidence, intent, task_comment,
+            )
+
         actions = journal.get("actions")
         if not isinstance(actions, list):
             return reject()
@@ -3750,6 +3938,7 @@ class PublicationRecoveryAuthority:
         step_options: list[list[dict[str, Any] | None]] = []
         if vector_rows:
             for step in step_names:
+                step_id = f"record-pr-step:{publication_id}:{step}"
                 task_expected = transition_module._next_expected(
                     sequence, step, issue_before, issue_target, project_before, project_target,
                 )
@@ -3760,13 +3949,65 @@ class PublicationRecoveryAuthority:
                     "projection_digest": evidence["D"], "sequence": sequence, **task_expected,
                 }
                 if step == "issue":
+                    expected_body = self._current_issue_expected_body
+                    admitted_body = self._admitted_issue_body
+                    if not isinstance(expected_body, str) or not isinstance(admitted_body, str):
+                        return reject()
+                    existing_steps = [
+                        action for action in actions
+                        if isinstance(action, dict) and action.get("action_id") == step_id
+                    ]
+                    if len(existing_steps) > 1:
+                        return reject()
+                    existing_expected = (
+                        existing_steps[0].get("expected")
+                        if existing_steps and isinstance(existing_steps[0].get("expected"), dict)
+                        else {}
+                    )
+                    existing_proof = existing_expected.get("issue_body_proof")
+                    if existing_steps:
+                        proof = existing_proof
+                        if not isinstance(proof, dict):
+                            return reject()
+                    else:
+                        proof = {
+                            "schema": "oasis7-record-pr-issue-body-proof/v1",
+                            "before_body": admitted_body,
+                            "before_body_sha256": self.sha(admitted_body.encode("utf-8")),
+                            "target_body": expected_body,
+                            "target_body_sha256": self.sha(expected_body.encode("utf-8")),
+                        }
+                        if self._expected_default_merge_hold is not None:
+                            proof["writer_default_merge_hold"] = self._expected_default_merge_hold
+                    allowed_proof_keys = {
+                        "schema", "before_body", "before_body_sha256",
+                        "target_body", "target_body_sha256", "writer_default_merge_hold",
+                    }
+                    if (not isinstance(proof, dict) or not set(proof).issubset(allowed_proof_keys)
+                            or proof.get("schema") != "oasis7-record-pr-issue-body-proof/v1"
+                            or not isinstance(proof.get("before_body"), str)
+                            or not isinstance(proof.get("target_body"), str)
+                            or proof.get("before_body_sha256") != self.sha(proof["before_body"].encode("utf-8"))
+                            or proof.get("target_body") != expected_body
+                            or proof.get("target_body_sha256") != self.sha(expected_body.encode("utf-8"))):
+                        return reject()
+                    if "writer_default_merge_hold" in proof:
+                        hold = proof.get("writer_default_merge_hold")
+                        if (not isinstance(hold, dict)
+                                or set(hold) != {"kind", "active", "requester", "reason", "resume_authority", "recorded_at"}
+                                or hold.get("kind") != "normal_pr_ci_watch"
+                                or hold.get("active") is not False
+                                or not isinstance(hold.get("recorded_at"), str)
+                                or not hold.get("recorded_at")):
+                            return reject()
+                    step_expected["issue_body_proof"] = proof
+                if step == "issue":
                     observed_value = issue_target
                 else:
                     field = step.removeprefix("project:")
                     key = "workflow_phase" if field == "Workflow Phase" else "pr"
                     observed_value = {"task_uid": self.args.task_uid, "field": field,
                                      "value": project_target[key]}
-                step_id = f"record-pr-step:{publication_id}:{step}"
                 options = action_variants(step_id, "record_pr_transition_step", step_expected,
                                           {"step": step, "readback": observed_value},
                                           reject_uncertain_observation=True)
@@ -3981,7 +4222,9 @@ class PublicationRecoveryAuthority:
             for step in added_steps:
                 if step in reachable["completed_steps"]:
                     completed = current_step_by_name.get(step)
-                    if not isinstance(completed, dict) or completed.get("state") != "observed":
+                    if (not isinstance(completed, dict)
+                            or completed.get("state") not in {"intent", "uncertain", "observed"}
+                            or step not in latest_completed):
                         return False
                     continue
                 if step not in reachable_steps:
@@ -4003,13 +4246,9 @@ class PublicationRecoveryAuthority:
                 elif state in {"intent", "uncertain"}:
                     pending_steps.append(step)
                     is_current_next = bool(latest_next_steps and step == latest_next_steps[0])
-                    is_postwrite_unobserved = (
-                        state == "intent" and latest_completed and step == latest_completed[-1]
-                    )
-                    if not (is_current_next or is_postwrite_unobserved):
+                    is_confirmed_pending = step in latest_completed
+                    if not (is_current_next or is_confirmed_pending):
                         return False
-            if len(pending_steps) > 1:
-                return False
 
             # A complete vector readback cannot skip any step that was still
             # pending in the fresh starting vector for this invocation.
@@ -4076,7 +4315,7 @@ class PublicationRecoveryAuthority:
                 for disposition in (None, "NETWORK_UNCERTAIN"):
                     candidate["phase"] = phase
                     candidate["disposition"] = disposition
-                    if self.sha(self.encoded(candidate) + b"\n") == evidence["journal_sha256"]:
+                    if matches_baseline(candidate):
                         return True
         for selected in itertools.product(*option_groups):
             candidate = json.loads(json.dumps(journal))
@@ -4100,7 +4339,7 @@ class PublicationRecoveryAuthority:
                 for disposition in (None, "NETWORK_UNCERTAIN"):
                     candidate["phase"] = phase
                     candidate["disposition"] = disposition
-                    if self.sha(self.encoded(candidate) + b"\n") == evidence["journal_sha256"]:
+                    if matches_baseline(candidate):
                         return True
         return reject()
 
@@ -4222,6 +4461,20 @@ class PublicationRecoveryAuthority:
             raise ValueError("unrelated Issue body changed during recovery")
         if not exact_writer_postimage:
             self.unrelated_body = unrelated_body
+        if exact_writer_postimage and self._expected_default_merge_hold is None:
+            hold = live.get("merge_hold")
+            expected_hold_projection = {
+                "kind": "normal_pr_ci_watch",
+                "active": False,
+                "requester": self.args.role,
+                "reason": "default PR purpose decision recorded by record-pr",
+                "resume_authority": self.args.role,
+            }
+            if hold == expected_hold_projection:
+                self._expected_default_merge_hold = {
+                    **expected_hold_projection,
+                    "recorded_at": "",
+                }
         adjusted = dict(self.record)
         for key in self.issue_owned:
             adjusted[key] = live.get(key)
@@ -4346,6 +4599,7 @@ def command_record_pr(args: argparse.Namespace) -> int:
     if requested_pr_number is None:
         die("record-pr: PR number is missing or malformed")
     publication_binding_path = getattr(args, "publication_binding_json", None)
+    recovery_required = bool(getattr(args, "recovery_required", False))
     publication_binding = None
     publication_intent = None
     publication_module = None
@@ -4410,9 +4664,17 @@ def command_record_pr(args: argparse.Namespace) -> int:
             if len(matching_bindings) != 1 or matching_bindings[0] != publication_binding:
                 die("record-pr: conflicting reciprocal CI publication binding already exists")
             binding_comment_exists = True
+    if recovery_required and (publication_binding is None or not is_draft_candidate):
+        die("record-pr: required recovery needs an exact draft publication binding")
     recovery = None
-    if publication_binding is not None and is_draft_candidate and any(
-            PublicationRecoveryAuthority.marker in c["body"] for c in comments):
+    recovery_admissions = [
+        c for c in comments
+        if PublicationRecoveryAuthority.marker in c["body"]
+    ]
+    if recovery_required and len(recovery_admissions) != 1:
+        die("record-pr: required publication recovery admission is missing or ambiguous")
+    if (publication_binding is not None and is_draft_candidate
+            and (recovery_required or recovery_admissions)):
         try:
             recovery = PublicationRecoveryAuthority(args, record, publication_binding,
                                                      publication_intent, publication_module, comments)
@@ -5916,6 +6178,15 @@ def command_record_pr_c1_draft(
                 and expected_hold.get("active") is False):
             recovery._expected_default_merge_hold = json.loads(json.dumps(expected_hold))
 
+    def issue_target_body(live_issue: dict[str, Any]) -> str:
+        next_record = json.loads(json.dumps(target_record))
+        for key in issue_authoritative_keys:
+            if key in live_issue:
+                next_record[key] = live_issue[key]
+        next_record.update(target_task)
+        synchronize_live_issue_traceability(args.repo, task_uid, next_record, live=live_issue)
+        return issue_body(task_from_record(task_uid, next_record))
+
     def recheck_authority() -> None:
         if recovery is not None:
             recovery.check()
@@ -5942,7 +6213,6 @@ def command_record_pr_c1_draft(
             if key in current:
                 next_record[key] = current[key]
         next_record.update(target)
-        next_record["updated_at"] = now()
         synchronize_live_issue_traceability(args.repo, task_uid, next_record, live=current)
         recheck_authority()
         next_task = task_from_record(task_uid, next_record)
@@ -5952,6 +6222,8 @@ def command_record_pr_c1_draft(
             # unrelated parsed fields and allowed vector transition.
             if recovery._current_issue_expected_body != issue_body(next_task):
                 raise RuntimeError("record-pr Task Issue target differs from its admitted postimage")
+        if issue_body(next_task) != issue_target_body(current):
+            raise RuntimeError("record-pr Task Issue target proof drifted before write")
         update_issue_body(args.repo, issue_number, next_task)
 
     def write_project(field_name: str, value: str) -> None:
@@ -6083,12 +6355,31 @@ def command_record_pr_c1_draft(
                 {"publication_id": publication_intent["publication_id"],
                  "task_uid": task_uid, "pr_number": pr_number},
             )
+            latest_raw_issue = json.loads(run_text(["gh", "api", f"repos/{args.repo}/issues/{issue_number}"]))
+            if (not isinstance(latest_raw_issue, dict)
+                    or latest_raw_issue.get("number") != issue_number
+                    or str(latest_raw_issue.get("state") or "").upper() != "OPEN"
+                    or not isinstance(latest_raw_issue.get("body"), str)):
+                raise record_pr_module.RecordPRConflict("Task Issue raw body proof readback is malformed")
+            issue_body_before = str(latest_raw_issue.get("body") or "").replace("\r\n", "\n")
+            issue_body_target = issue_target_body(latest_issue)
+            if recovery is not None and recovery._current_issue_expected_body != issue_body_target:
+                raise record_pr_module.RecordPRConflict(
+                    "record-pr Task Issue target differs from its admitted body proof",
+                )
             initial_state = read_live()
             transition_result = record_pr_module.reconcile_record_pr_vector(
                 journal, publication_intent,
                 task_uid=task_uid, pr_number=pr_number, pr_url=pr_url,
                 read_live=read_live, write_issue=write_issue,
                 write_project_field=write_project,
+                issue_body_before=issue_body_before,
+                issue_body_target=issue_body_target,
+                issue_body_default_merge_hold=(
+                    json.loads(json.dumps(target_record["merge_hold"]))
+                    if isinstance(target_record.get("merge_hold"), dict)
+                    and latest_issue.get("merge_hold") is None else None
+                ),
             )
             evidence_comment = evidence_body(
                 task_uid, args.role, target_phase,
@@ -6414,6 +6705,7 @@ def build_parser() -> argparse.ArgumentParser:
     record_pr.add_argument("--draft-candidate", action="store_true")
     record_pr.add_argument("--existing-ready-update", action="store_true")
     record_pr.add_argument("--publication-binding-json")
+    record_pr.add_argument("--recovery-required", action="store_true")
     record_pr.add_argument("--json", action="store_true")
     record_pr.set_defaults(func=command_record_pr)
 

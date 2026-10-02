@@ -1,0 +1,12 @@
+{
+  "record": {
+    "content_sha256": "83d39c88a93031c93e9cfa3c972d61a84775bf5a1e3fa2353c847762db398f6e",
+    "current_authority": "doc/site/design.md",
+    "decision_owner": "game_visual_interaction_designer",
+    "disposition": "retain_comparison_target",
+    "note": "Image2 hierarchy target; not browser or QA evidence",
+    "path": "doc/site/github-pages/github-pages-homepage-page-2026-06-19.design.md",
+    "retirement_gate": "absorb comparison constraints, repair callers, then visual and QA review"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

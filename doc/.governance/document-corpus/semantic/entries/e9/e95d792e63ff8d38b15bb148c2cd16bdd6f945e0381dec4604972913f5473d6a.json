@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "448dc2beea93c373489a22d17ba0deac641cc612b92766fc534007214021e3af",
+    "current_authority": "doc/p2p/blockchain/public-testnet-governed-bootstrap.runbook.md",
+    "decision_owner": "qa_engineer",
+    "disposition": "retain_current_procedure",
+    "note": "current attach-existing-node procedure; last verified example is window evidence",
+    "path": "doc/testing/manual/local-public-testnet-letai-test-environment-2026-06-23.manual.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

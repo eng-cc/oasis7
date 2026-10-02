@@ -2,6 +2,8 @@
 """Journaled live Issue/Project vector recovery for the C1 record-pr action."""
 from __future__ import annotations
 
+import hashlib
+
 from typing import Any, Callable
 
 import pr_projection_transition as transition
@@ -67,9 +69,13 @@ def _vectors(state: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
 
 def _next_expected(sequence: str, step: str, task_before: dict[str, Any],
                    task_target: dict[str, Any], project_before: dict[str, Any],
-                   project_target: dict[str, Any]) -> dict[str, Any]:
+                   project_target: dict[str, Any],
+                   issue_body_proof: dict[str, Any] | None = None) -> dict[str, Any]:
     if step == "issue":
-        return {"task_before": task_before, "task_target": task_target}
+        expected = {"task_before": task_before, "task_target": task_target}
+        if issue_body_proof is not None:
+            expected["issue_body_proof"] = issue_body_proof
+        return expected
     field_name = step.removeprefix("project:")
     if field_name not in {"Workflow Phase", "PR"}:
         raise RecordPRConflict("journal requested an unsupported Project transition field")
@@ -91,6 +97,9 @@ def reconcile_record_pr_vector(
     read_live: Callable[[], dict[str, Any]],
     write_issue: Callable[[dict[str, Any]], None],
     write_project_field: Callable[[str, str], None],
+    issue_body_before: str | None = None,
+    issue_body_target: str | None = None,
+    issue_body_default_merge_hold: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Reach only one exact ordered prefix, journaling every live step.
 
@@ -169,6 +178,19 @@ def reconcile_record_pr_vector(
     project_before = {"task_uid": task_uid, "status": "In Progress",
                       "pm_status": "committed", "workflow_phase": "execution", "pr": ""}
     project_target = {**project_before, "workflow_phase": "verification", "pr": pr_url}
+    issue_body_proof = None
+    if issue_body_before is not None or issue_body_target is not None:
+        if not isinstance(issue_body_before, str) or not isinstance(issue_body_target, str):
+            raise RecordPRConflict("record-pr Issue body proof is incomplete")
+        issue_body_proof = {
+            "schema": "oasis7-record-pr-issue-body-proof/v1",
+            "before_body": issue_body_before,
+            "before_body_sha256": hashlib.sha256(issue_body_before.encode("utf-8")).hexdigest(),
+            "target_body": issue_body_target,
+            "target_body_sha256": hashlib.sha256(issue_body_target.encode("utf-8")).hexdigest(),
+        }
+        if isinstance(issue_body_default_merge_hold, dict):
+            issue_body_proof["writer_default_merge_hold"] = issue_body_default_merge_hold
 
     for step in classified["next_steps"]:
         before, after = _vectors(live)
@@ -181,7 +203,8 @@ def reconcile_record_pr_vector(
             journal.disposition("CONFLICT")
             raise RecordPRConflict("live vector moved outside the next journaled record-pr step")
         task_expected = _next_expected(classified["sequence"], step, issue_before,
-                                       issue_target, project_before, project_target)
+                                       issue_target, project_before, project_target,
+                                       issue_body_proof=issue_body_proof)
         step_id = "record-pr-step:" + str(publication_id) + ":" + step
         step_expected = {
             "publication_id": publication_id, "task_uid": task_uid,

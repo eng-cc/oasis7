@@ -48,6 +48,9 @@ def load_module(name: str, path: Path):
 
 task_api = load_module("publisher_test_task_api", HERE / "github-project-task.py")
 sync_api = load_module("publisher_test_sync_api", HERE / "github-project-sync.py")
+publication_api = load_module("publisher_test_publication_api", HERE / "pr_projection_publication.py")
+journal_api = load_module("publisher_test_journal_api", HERE / "pr_projection_journal.py")
+packet_api = load_module("publisher_test_packet_api", HERE / "subagent-task-packet.py")
 
 
 FAKE_GH = r'''#!/usr/bin/env python3
@@ -89,9 +92,14 @@ def field_nodes():
     result = []
     for name, value in project_field_values().items():
         node = {"field": {"name": name}}
-        if name in state["single_select_fields"]:
+        if isinstance(value, dict) and value.get("type") == "repository":
+            node["__typename"] = "ProjectV2ItemFieldRepositoryValue"
+            node["repository"] = {"id": value["id"], "nameWithOwner": value["name_with_owner"]}
+        elif name in state["single_select_fields"]:
+            node["__typename"] = "ProjectV2ItemFieldSingleSelectValue"
             node["name"] = value
         else:
+            node["__typename"] = "ProjectV2ItemFieldTextValue"
             node["text"] = value
         result.append(node)
     return result
@@ -114,6 +122,7 @@ def append_comment(body):
         "id": next_id, "body": body,
         "html_url": f"{state['issue']['url']}#issuecomment-{next_id}",
         "url": f"{state['issue']['url']}#issuecomment-{next_id}",
+        "issue_url": f"https://api.github.com/repos/{state['repository']}/issues/{state['issue']['number']}",
         "created_at": created, "updated_at": created,
         "user": {"login": state["login"], "type": "User"},
         "author_association": "MEMBER",
@@ -258,15 +267,34 @@ if args[0] == "api":
     if endpoint == "graphql":
         flags = graphql_flags()
         query = flags.get("query", "")
+        if "nodes(ids:" in query:
+            issue = state["issue"]
+            project = {"id": state["project_id"], "number": state["project_number"],
+                       "viewerCanUpdate": state.get("project_viewer_can_update", True),
+                       "owner": {"login": state["project_owner"]}}
+            item = {"id": state["project_item"], "isArchived": False, "project": project,
+                    "content": {"__typename": "Issue", "number": issue["number"],
+                                "url": issue["url"],
+                                "repository": {"nameWithOwner": state["repository"]}},
+                    "fieldValues": {"nodes": field_nodes(),
+                                    "pageInfo": {"hasNextPage": False, "endCursor": None}}}
+            payload = {"data": {
+                "repository": {"issue": {"number": issue["number"], "url": issue["url"],
+                                         "body": issue["body"], "state": issue["state"].upper(),
+                                         "viewerCanUpdate": True}},
+                "nodes": [item],
+            }}
+            emit(payload)
         if "repository(owner:" in query:
             issue = state["issue"]
             project = {"id": state["project_id"], "number": state["project_number"],
-                       "viewerCanUpdate": True, "owner": {"login": state["project_owner"]}}
+                       "viewerCanUpdate": state.get("project_viewer_can_update", True),
+                       "owner": {"login": state["project_owner"]}}
             item = {"id": state["project_item"], "isArchived": False, "project": project}
             payload = {"data": {"repository": {"issue": {
                 "id": "I_fixture", "number": issue["number"], "url": issue["url"],
                 "state": issue["state"].upper(), "body": issue["body"],
-                "projectItems": {"nodes": [item],
+                "projectItems": {"nodes": state.get("issue_project_items", [item]),
                                  "pageInfo": {"hasNextPage": False, "endCursor": None}},
             }}}}
             emit(payload)
@@ -291,7 +319,9 @@ if args[0] == "api":
             raise SystemExit("Issue comment not found: " + str(comment_id))
         emit(found[0])
     if endpoint == "repos/" + state["repository"] + f"/issues/{state['issue']['number']}":
-        emit(issue_payload())
+        payload = issue_payload()
+        payload["state"] = state["issue"]["state"]
+        emit(payload)
     if endpoint.startswith("repos/" + state["repository"] + f"/issues/{state['issue']['number']}/comments"):
         if state.get("faults", {}).get("issue-comments-read"):
             save()
@@ -395,13 +425,17 @@ class PublisherProcessTests(unittest.TestCase):
             shutil.copy2(REPO_ROOT / relative, destination)
         roles = self.repo / ".agents/roles"
         roles.mkdir(parents=True)
-        shutil.copy2(REPO_ROOT / ".agents/roles/repository_health_engineer.md",
-                     roles / "repository_health_engineer.md")
+        for role in ("runtime_engineer", "repository_health_engineer", "qa_engineer"):
+            shutil.copy2(REPO_ROOT / f".agents/roles/{role}.md", roles / f"{role}.md")
+        shutil.copy2(REPO_ROOT / "AGENTS.md", self.repo / "AGENTS.md")
+        source_of_truth = self.repo / "doc/engineering/workflow/source-of-truth.md"
+        source_of_truth.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(REPO_ROOT / "doc/engineering/workflow/source-of-truth.md", source_of_truth)
         (self.repo / ".gitignore").write_text(
             ".pm/\n__pycache__/\n*.pyc\n",
             encoding="utf-8",
         )
-        (self.repo / "doc").mkdir()
+        (self.repo / "doc").mkdir(exist_ok=True)
         (self.repo / "doc/fixture.md").write_text("fixture baseline\n", encoding="utf-8")
         git(self.repo, "add", ".")
         git(self.repo, "commit", "-m", "trusted fixture base")
@@ -518,8 +552,9 @@ class PublisherProcessTests(unittest.TestCase):
         if result.returncode:
             raise AssertionError(f"projection fixture failed: {result.stderr}\n{result.stdout}")
 
-    def publisher_command(self, helper: Path | None = None) -> list[str]:
-        return [
+    def publisher_command(self, helper: Path | None = None,
+                          resume_action_id: str | None = None) -> list[str]:
+        command = [
             sys.executable, str(self.task_root / "scripts/pm/pr_projection_publish.py"),
             "--worktree", str(self.task_root), "--repo", REPOSITORY,
             "--issue-number", str(ISSUE), "--task-uid", UID, "--remote", "origin",
@@ -529,9 +564,13 @@ class PublisherProcessTests(unittest.TestCase):
             "--task-helper", str(helper or self.task_root / "scripts/pm/github-project-task.py"),
             "--json",
         ]
+        if resume_action_id is not None:
+            command.extend(["--resume-action-id", resume_action_id])
+        return command
 
-    def run_publisher(self, *, helper: Path | None = None):
-        return subprocess.run(self.publisher_command(helper), text=True,
+    def run_publisher(self, *, helper: Path | None = None,
+                      resume_action_id: str | None = None):
+        return subprocess.run(self.publisher_command(helper, resume_action_id), text=True,
                               capture_output=True, env=self.env, timeout=90)
 
     def old_745_helper(self) -> Path:
@@ -578,15 +617,389 @@ class PublisherProcessTests(unittest.TestCase):
         self.assertEqual(PR_URL, state["project_values"]["PR"])
         self.assertIsNotNone(state["pr"])
         self.assertIs(state["pr"]["draft"], True)
-        c1 = [item for item in state["comments"] if "<!-- oasis7-ci-publication/v1 -->" in item["body"]]
+        c1 = [publication_api.parse_publication_comment(item["body"])
+              for item in state["comments"]
+              if "<!-- oasis7-ci-publication/v1 -->" in item["body"]]
+        current_c1 = [item for item in c1 if item["source_head_oid"] == self.source_head]
         reciprocal = [item for item in state["comments"] if "<!-- oasis7-ci-publication-binding/v1 -->" in item["body"]]
-        self.assertEqual(1, len(c1), "one immutable C1 intent must exist")
+        self.assertEqual(1, len(current_c1), "one immutable current C1 intent must exist")
         self.assertEqual(1, len(reciprocal), "one reciprocal C1 binding must exist")
 
     def _journal(self):
         journals = list((self.repo / ".git/oasis7/pr-publication").glob("*/*/journal.json"))
         self.assertEqual(1, len(journals), f"expected one exact publication journal, found {journals}")
         return json.loads(journals[0].read_text(encoding="utf-8"))
+
+    def _pending_resume_action_id(self) -> str:
+        return "task-intent:" + self._journal()["identity"]["publication_id"]
+
+    @staticmethod
+    def _canonical(value):
+        return json.dumps(value, ensure_ascii=False, sort_keys=True,
+                          separators=(",", ":")).encode("utf-8")
+
+    @classmethod
+    def _sha(cls, value) -> str:
+        raw = value if isinstance(value, bytes) else cls._canonical(value)
+        return hashlib.sha256(raw).hexdigest()
+
+    def _common_git_dir(self) -> Path:
+        return Path(git(self.task_root, "rev-parse", "--path-format=absolute",
+                        "--git-common-dir")).resolve()
+
+    def _publication_journal_path(self, publication: dict) -> Path:
+        path, _ = journal_api.publication_paths(
+            self._common_git_dir(), publication["repository"],
+            publication["source_ref"], publication["publication_id"],
+        )
+        return path
+
+    def _append_comment(self, comment_id: int, body: str) -> None:
+        self.state.setdefault("comments", []).append({
+            "id": comment_id,
+            "body": body,
+            "html_url": f"{self.state['issue']['url']}#issuecomment-{comment_id}",
+            "url": f"{self.state['issue']['url']}#issuecomment-{comment_id}",
+            "issue_url": f"https://api.github.com/repos/{REPOSITORY}/issues/{ISSUE}",
+            "created_at": f"2026-10-02T01:{comment_id % 60:02d}:00Z",
+            "updated_at": f"2026-10-02T01:{comment_id % 60:02d}:00Z",
+            "user": {"login": LOGIN, "type": "User"},
+            "author_association": "MEMBER",
+        })
+
+    def _task_record(self) -> dict:
+        return json.loads((self.task_root / ".pm/github-project-sync/tasks.json").read_text(
+            encoding="utf-8"))["tasks"][UID]
+
+    def _build_predecessor_publication(self) -> tuple[dict, dict]:
+        projection = json.loads(self.projection_path.read_text(encoding="utf-8"))
+        predecessor = publication_api.build_task_publication(
+            repository=REPOSITORY,
+            repository_id=self.state["repository_id"],
+            task_uid=UID,
+            bootstrap_epoch=None,
+            source_repository_id=self.state["repository_id"],
+            source_ref="task/publication-fixture",
+            target_ref="main",
+            source_head_oid=self.target_oid,
+            source_scope_oid=self.target_oid,
+            planner_authority_oid=self.target_oid,
+            planner_config_sha256=projection["planner_config_sha256"],
+            policy_digest=projection["planner_digest"],
+            projection_digest=projection["projection_digest"],
+        )
+        identity = {
+            "repository": REPOSITORY,
+            "branch": predecessor["source_ref"],
+            "publication_id": predecessor["publication_id"],
+            "task_uid": UID,
+            "source_head_oid": predecessor["source_head_oid"],
+            "scope_base_oid": predecessor["source_scope_oid"],
+            "projection_digest": predecessor["projection_digest"],
+        }
+        path, lock = journal_api.publication_paths(
+            self._common_git_dir(), REPOSITORY, predecessor["source_ref"],
+            predecessor["publication_id"],
+        )
+        local = journal_api.PublicationJournal(
+            path, lock, identity, common_dir=self._common_git_dir(),
+            canonical_worktree=self.task_root,
+        )
+        with local.locked():
+            action_id = "record-pr:" + predecessor["publication_id"]
+            local.intent(
+                action_id,
+                "record_pr",
+                {"publication_id": predecessor["publication_id"],
+                 "task_uid": UID, "pr_number": PR},
+            )
+            local.uncertain(
+                "record-pr:" + predecessor["publication_id"],
+                "NETWORK_UNCERTAIN",
+            )
+        self._append_comment(1001, publication_api.publication_comment(predecessor))
+        return predecessor, {"publication": predecessor, "journal_path": path}
+
+    def _publication_action(self, publication: dict, journal_path: Path,
+                            comment_id: int) -> dict:
+        raw = journal_path.read_bytes()
+        return {
+            "publication_id": publication["publication_id"],
+            "action_id": "record-pr:" + publication["publication_id"],
+            "journal_sha256": self._sha(raw),
+            "H": publication["source_head_oid"],
+            "B": publication["planner_authority_oid"],
+            "S": publication["source_scope_oid"],
+            "D": publication["projection_digest"],
+            "intent_comment_id": comment_id,
+            "intent_body_sha256": self._sha(
+                publication_api.publication_comment(publication).encode("utf-8")),
+        }
+
+    def _helper_manifest(self) -> tuple[list[dict], str]:
+        rows = []
+        for line in git(self.task_root, "ls-tree", "-r", "HEAD", "--", "scripts/pm").splitlines():
+            metadata, path = line.split("\t", 1)
+            mode, kind, oid = metadata.split()
+            self.assertEqual("blob", kind)
+            rows.append({"path": path, "mode": mode, "blob_oid": oid})
+        rows.sort(key=lambda item: item["path"].encode("ascii"))
+        return rows, self._sha(rows)
+
+    def _seed_recovery_reviews(self, closure_sha: str) -> tuple[Path, list[dict]]:
+        review = self.task_root / ".pm/scratch" / UID / "recovery-role-review"
+        packet_dir = self.task_root / ".pm/scratch" / UID / "slice-packets"
+        review.mkdir(parents=True, exist_ok=True)
+        packet_dir.mkdir(parents=True, exist_ok=True)
+        task = self._task_record()
+        roles = ("runtime_engineer", "repository_health_engineer", "qa_engineer")
+        ledger = []
+        returns = []
+        for index, role in enumerate(roles, 1):
+            slice_id = f"00000000-0000-4000-8000-{index:012d}"
+            packet = {
+                "schema": "oasis7-subagent-task-packet/v1",
+                "identity": {
+                    "task_uid": UID,
+                    "repository": REPOSITORY,
+                    "project_item_id": PROJECT_ITEM,
+                    "task_status": "committed",
+                    "issue_url": task["issue_url"],
+                    "worktree": str(self.task_root),
+                    "branch": "task/publication-fixture",
+                    "head": self.source_head,
+                    "base_ref": self.target_oid,
+                    "base_sha": self.target_oid,
+                    "base_binding": "immutable_oid",
+                    "packet_producer": "tpm",
+                },
+                "slice": {
+                    "slice_id": slice_id,
+                    "role": role,
+                    "slice_type": "professional_review",
+                    "owner_role": task["owner_role"],
+                    "integration_owner": "tpm",
+                    "integration_order": "REC bounded review then exact action binding",
+                    "context_delivery_mode": "minimal_head_bound_task_packet",
+                    "intended_model_configuration": "inherit current parent selection",
+                    "actual_dispatched_model_reasoning": "fixture unobserved",
+                    "actual_runtime_evidence_reason": "fixture adapter inactive",
+                    "role_activation": "message_assigned_adapter_inactive",
+                    "write_scope": "scratch-only bounded helper review",
+                    "return_contract": "exact immutable helper closure verdict",
+                    "validation_command": "human-operated local provenance",
+                    "formal_sink": task["issue_url"],
+                    "full_history_escalation_reason": "",
+                },
+                "context": {
+                    "user_intent": "existing approved same-PR metadata recovery",
+                    "work_item": "REC bounded helper review",
+                    "non_goals": "no CI/review/Ready authority",
+                    "acceptance_target": "exact immutable helper closure",
+                    "evidence_summary": "isolated authentic Git/helper/role artifact fixture",
+                    "collaboration_boundary": "fixture scratch only",
+                    "governance_refs": [
+                        "AGENTS.md",
+                        "doc/engineering/workflow/source-of-truth.md",
+                        f".agents/roles/{role}.md",
+                    ],
+                    "scoped_refs": [
+                        "scripts/pm/github-project-task.py",
+                        "scripts/pm/pr_projection_publish.py",
+                    ],
+                },
+            }
+            packet["packet_digest"] = packet_api.canonical_digest(packet)
+            packet_path = packet_dir / f"{slice_id}.json"
+            packet_path.write_bytes(self._canonical(packet) + b"\n")
+            returned = {
+                "task_uid": UID,
+                "role": role,
+                "slice_id": slice_id,
+                "head": self.source_head,
+                "status": "completed",
+                "scope_verdict": "approved",
+                "risk_verdict": "approved",
+                "findings": "no_findings",
+                "residual_risk": "isolated fixture",
+                "helper_source_oid": self.source_head,
+                "helper_closure_sha256": closure_sha,
+                "activation": "message-assigned",
+                "context_delivery": "minimal_head_bound_task_packet",
+                "actual_runtime": "fixture inherited unobserved",
+            }
+            return_path = review / f"{role}.return.json"
+            return_path.write_bytes(self._canonical(returned) + b"\n")
+            return_sha = self._sha(return_path.read_bytes())
+            ledger.append(dict(returned, artifact_digest=return_sha,
+                               artifacts=[str(return_path.relative_to(self.task_root))]))
+            returns.append({
+                "role": role,
+                "slice_id": slice_id,
+                "packet_sha256": self._sha(packet_path.read_bytes()),
+                "source_head_oid": self.source_head,
+                "return_path": str(return_path.relative_to(self.task_root)),
+                "return_sha256": return_sha,
+                "verdict": "approved",
+            })
+        ledger_path = review / "ledger.jsonl"
+        ledger_path.write_bytes(b"".join(self._canonical(row) + b"\n" for row in ledger))
+        return ledger_path, returns
+
+    def _seed_recovery_admission(self, *, current_journal_before: dict | None = None) -> str:
+        self.state = self._load_state()
+        current_c1 = [item for item in self.state["comments"]
+                      if "<!-- oasis7-ci-publication/v1 -->" in item["body"]]
+        self.assertEqual(1, len(current_c1))
+        current_publication = publication_api.parse_publication_comment(current_c1[0]["body"])
+        current_journal = self._publication_journal_path(current_publication)
+        if current_journal_before is not None:
+            self.assertEqual(current_journal_before, json.loads(current_journal.read_text(
+                encoding="utf-8")))
+        _, predecessor = self._build_predecessor_publication()
+        manifest, closure_sha = self._helper_manifest()
+        ledger_path, returns = self._seed_recovery_reviews(closure_sha)
+        frozen_red_digest = self._sha(b"synthetic isolated frozen RED patch")
+        fixture_identity = f"Task UID {UID}; Issue {self.state['issue']['url']}; same PR {PR_URL}"
+
+        def plan_row(step, acceptance, dependencies, command, evidence, writes,
+                     exclusions, role_slices):
+            return {
+                "step_id": step,
+                "acceptance_refs": acceptance,
+                "dependencies": dependencies,
+                "verification_command": command,
+                "verification_evidence": evidence,
+                "write_scope": writes,
+                "out_of_scope": exclusions,
+                "required_role_slices": role_slices,
+            }
+
+        rows = [
+            plan_row("REC-SPEC", "fixture Task original acceptance plus same-PR publication recovery",
+                     "existing user approval; same fixture PR; immutable historical journal",
+                     "workflow documentation contracts and runtime/QA API closure",
+                     "source-only contract tests and bounded runtime/QA returns",
+                     "doc/engineering/workflow/source-of-truth.md only by repository_health_engineer",
+                     "gate waiver; activation; raw task/cache/Project patches; another PR",
+                     "repository_health_engineer author; runtime_engineer and qa_engineer API review"),
+            plan_row("REC-RED", "partial Issue/Project write recovery exact journal/UID/H/PR and complete poststate",
+                     "REC-SPEC closure", "focused genuine github-project-task/publication RED tests",
+                     "immutable test patch digest and actual exit logs; independent QA",
+                     "scripts/pm/github-project-task.test.sh and scripts/pm/pr_projection_publication.test.py by runtime_engineer",
+                     "production helpers before admitted GREEN; loosened assertions",
+                     "runtime_engineer test author; qa_engineer independent RED"),
+            plan_row("REC-GREEN", "authentic journal-constrained partial-poststate reconciliation; reject drift and missing readback",
+                     "actual RED confirmed plus TPM GREEN admission",
+                     "focused REC cases and ordinary task/publication regressions",
+                     "runtime and independent QA GREEN logs/digests; immutable reviewed helper closure",
+                     "scripts/pm/github-project-task.py; scripts/pm/pr_projection_publish.py only if required for journal transport/recovery",
+                     "other helpers; activation; forged authority; historical journal mutation",
+                     "runtime_engineer implementation; qa_engineer independent; repository_health_engineer conformance"),
+            plan_row("REC-RESTORE", "fresh current-H unique fixture PR reciprocal binding through canonical execution authority",
+                     "REC-SPEC/RED/GREEN closure and executable-route confirmation",
+                     "canonical selected-task refresh/audit/publication resume and live four-surface readback",
+                     "complete exact poststate; unique reciprocal binding; current action observed only after final readback",
+                     "canonical tasktruth/journal through approved helpers only",
+                     "raw cache/body/Project patches; rollback; CI before binding; second PR",
+                     "repository_health_engineer authority review; runtime_engineer route; TPM execution"),
+            plan_row("REC-DELIVER", "fixture original acceptance and bounded recovery delivered in same Task/same PR",
+                     "REC-RESTORE complete",
+                     "fresh freeze, involved-role review, required CI and canonical merge/finalization",
+                     "current source/base/scope/projection roles, CI, receipts and cleanup",
+                     "sameTask samePR only; original two CLI paths retained, total seven approved paths max",
+                     "second PR; historical receipt reuse; activation; unrelated delivery completion",
+                     "runtime_engineer/repository_health_engineer/qa_engineer formal review; TPM integration"),
+        ]
+        scope_bodies = {
+            7101: "WP2 bounded dormant CLI artifact output prerequisite\n" + fixture_identity
+                  + "\nPlan-Gap entries beforewrites:\n"
+                  + "CLI-RED acceptance_refs original artifact output acceptance; dependencies actual focused CLI RED; "
+                  + "verification_command focused main-output unittest; verification_evidence actual exit/log/test patch digest; "
+                  + "write_scope scripts/pm/ci-reuse-validation.test.py ONLY; out_of_scope production helpers/schema/activation; "
+                  + "required_role_slices runtime_engineer author and independent qa_engineer.\n"
+                  + "CLI-GREEN acceptance_refs verified payload mode to artifact output while disabled; dependencies immutable RED plus QA; "
+                  + "verification_command same focused cases and producer/contract/readback negatives; verification_evidence actual GREEN logs/diff; "
+                  + "write_scope scripts/pm/ci-reuse-validation.py ONLY; out_of_scope authority/schema/activation; "
+                  + "required_role_slices runtime_engineer implementation and independent qa_engineer.",
+            7102: "CLI-RED completed and independently confirmed. Frozen synthetic test digest "
+                  + frozen_red_digest + ". CLI-GREEN admission: runtime_engineer may modify ONLY "
+                  + "scripts/pm/ci-reuse-validation.py; original tests remain immutable. No other source, policy, "
+                  + "schema, commits, dispatch or activation. " + fixture_identity,
+            7103: "User authority intake: explicit same-PR source-first recovery; existing original acceptance retained; "
+                  + "original two CLI paths from synthetic history retained; total seven approved paths max. No gate exceptions.\n"
+                  + fixture_identity + "\nPlan-Gap Evidence:\n" + json.dumps(rows, indent=2),
+            7104: "REC-SPEC COMPLETE with bounded runtime_engineer and independent qa_engineer API closure. "
+                  + "REC-RED admission: ONLY scripts/pm/github-project-task.test.sh and "
+                  + "scripts/pm/pr_projection_publication.test.py. Frozen synthetic RED digest "
+                  + frozen_red_digest + "; no production helpers until a new TPM GREEN admission. "
+                  + "Preserve exact final readback, pending uncertainty and immutable historical journal; no activation. "
+                  + fixture_identity,
+            7105: "REC-RED COMPLETE / GREEN ADMITTED: frozen synthetic test patch " + frozen_red_digest
+                  + "; actual focused RED and independent QA confirmed. Runtime may implement ONLY "
+                  + "scripts/pm/github-project-task.py and scripts/pm/pr_projection_publish.py "
+                  + "(publisher only when journal transport/recovery requires it). Frozen tests immutable; exact independent "
+                  + "final Issue/Project/PR/unique binding readback before current action observed; retain pending state on "
+                  + "uncertainty; no historical journal mutation, activation or other helper scope. " + fixture_identity,
+        }
+        scope = []
+        for comment_id, body in scope_bodies.items():
+            self._append_comment(comment_id, body)
+            scope.append({
+                "comment_id": comment_id,
+                "comment_url": f"{self.state['issue']['url']}#issuecomment-{comment_id}",
+                "body_sha256": self._sha(body.encode("utf-8")),
+                "author_login": LOGIN,
+            })
+        issue_task = self._task_state(self.state)
+        unrelated_issue = {
+            "task_uid": UID,
+            "owner_role": self._task_record()["owner_role"],
+            "module": "engineering",
+            "priority": "P2",
+            "worktree_hint": str(self.task_root),
+            "primary_package": None,
+        }
+        unrelated_project = {key: value for key, value in self.state["project_values"].items()
+                             if key not in {"Status", "PM Status", "Workflow Phase", "PR"}}
+        admission = {
+            "schema": "oasis7-publication-recovery-admission/v1",
+            "operation": "record_pr_publication_recovery",
+            "identity": {
+                "repository": REPOSITORY,
+                "task_uid": UID,
+                "issue_number": ISSUE,
+                "issue_url": self.state["issue"]["url"],
+                "pr_number": PR,
+                "pr_url": PR_URL,
+                "project_id": PROJECT_ID,
+                "project_item_id": PROJECT_ITEM,
+                "canonical_worktree": str(self.task_root),
+                "source_ref": "task/publication-fixture",
+                "target_ref": "main",
+            },
+            "scope_evidence": scope,
+            "current_action": self._publication_action(current_publication, current_journal, current_c1[0]["id"]),
+            "predecessor": self._publication_action(predecessor["publication"], predecessor["journal_path"], 1001),
+            "helper_review": {
+                "helper_source_oid": self.source_head,
+                "helper_closure_sha256": closure_sha,
+                "closure_manifest": manifest,
+                "ledger_path": str(ledger_path.relative_to(self.task_root)),
+                "ledger_sha256": self._sha(ledger_path.read_bytes()),
+                "role_returns": returns,
+            },
+            "unrelated_snapshot": {
+                "issue_sha256": self._sha(self._canonical(unrelated_issue)),
+                "project_sha256": self._sha(self._canonical(unrelated_project)),
+            },
+        }
+        self.assertEqual("verification", issue_task["workflow_phase"])
+        body = ("<!-- oasis7-publication-recovery-admission/v1 -->\n```json\n"
+                + self._canonical(admission).decode("utf-8") + "\n```\n")
+        self._append_comment(9001, body)
+        self._save_state()
+        return "task-intent:" + current_publication["publication_id"]
 
     def test_real_publisher_and_record_pr_complete_then_noop_retry(self):
         first = self.run_publisher()
@@ -609,6 +1022,94 @@ class PublisherProcessTests(unittest.TestCase):
         self.assertEqual(1, len(self._effects("pr:create")))
         self.assertEqual(1, len(self._effects("issue:body")))
 
+    def test_completed_replay_requires_fresh_live_project_vector(self):
+        first = self.run_publisher()
+        self.assertEqual(0, first.returncode, first.stderr)
+        baseline_state = self._load_state()
+        self._assert_complete(baseline_state)
+        baseline_mutations = list(baseline_state["mutations"])
+        baseline_comments = list(baseline_state["comments"])
+
+        mapping_path = self.task_root / ".pm/github-project-sync/tasks.json"
+        mapping_bytes = mapping_path.read_bytes()
+        journal_paths = list((self.repo / ".git/oasis7/pr-publication").glob("*/*/journal.json"))
+        self.assertEqual(1, len(journal_paths), f"expected one publication journal, found {journal_paths}")
+        journal_bytes = journal_paths[0].read_bytes()
+
+        # The local Task cache and Issue still claim verification. Only the
+        # authoritative live Project Workflow Phase is changed, so a completed
+        # replay must not accept the cache as a substitute for Project truth.
+        self.state["project_values"]["Workflow Phase"] = "execution"
+        self._save_state()
+        result = self.run_publisher()
+        after = self._load_state()
+
+        self.assertNotEqual(
+            0, result.returncode,
+            "completed replay must reject a fresh live Project vector that differs from Task/PR state; "
+            f"stdout={result.stdout!r} stderr={result.stderr!r}",
+        )
+        self.assertEqual(baseline_mutations, after["mutations"],
+                         "Project drift must not authorize publication writes")
+        self.assertEqual(baseline_comments, after["comments"],
+                         "Project drift must not create comments or another C1 record")
+        self.assertEqual("execution", after["project_values"]["Workflow Phase"],
+                         "the test drift must remain visible after the rejected replay")
+        self.assertEqual(mapping_bytes, mapping_path.read_bytes(),
+                         "a rejected completed replay must not rewrite the Task cache")
+        self.assertEqual(journal_bytes, journal_paths[0].read_bytes(),
+                         "a rejected completed replay must not rewrite publication history")
+
+    def test_completed_replay_rejects_live_status_drift(self):
+        first = self.run_publisher()
+        self.assertEqual(0, first.returncode, first.stderr)
+        baseline = self._load_state()
+        self._assert_complete(baseline)
+        mutations = list(baseline["mutations"])
+        self.state["project_values"]["Status"] = "Done"
+        self._save_state()
+        result = self.run_publisher()
+        after = self._load_state()
+        self.assertNotEqual(
+            0, result.returncode,
+            "completed replay must reject Status drift in the live Project vector; "
+            f"stdout={result.stdout!r} stderr={result.stderr!r}",
+        )
+        self.assertEqual(mutations, after["mutations"], "Status drift must not authorize writes")
+        self.assertEqual("Done", after["project_values"]["Status"], "test drift must remain visible")
+
+    def test_completed_replay_rejects_detached_live_issue_project_item(self):
+        first = self.run_publisher()
+        self.assertEqual(0, first.returncode, first.stderr)
+        baseline = self._load_state()
+        self._assert_complete(baseline)
+        mutations = list(baseline["mutations"])
+        self.state["issue_project_items"] = []
+        self._save_state()
+        result = self.run_publisher()
+        after = self._load_state()
+        self.assertNotEqual(
+            0, result.returncode,
+            "completed replay must reject a cached Project item no longer linked from the live Task Issue; "
+            f"stdout={result.stdout!r} stderr={result.stderr!r}",
+        )
+        self.assertEqual(mutations, after["mutations"], "detached item must not authorize writes")
+        self.assertEqual([], after["issue_project_items"], "test detachment must remain visible")
+
+
+    def test_completed_replay_accepts_readable_project_without_update_permission(self):
+        first = self.run_publisher()
+        self.assertEqual(0, first.returncode, first.stderr)
+        baseline = self._load_state()
+        self._assert_complete(baseline)
+        mutations = list(baseline["mutations"])
+        self.state["project_viewer_can_update"] = False
+        self._save_state()
+        result = self.run_publisher()
+        after = self._load_state()
+        self.assertEqual(0, result.returncode, result.stderr)
+        self._assert_complete(after)
+        self.assertEqual(mutations, after["mutations"], "read-only replay must remain a no-write operation")
     def test_record_pr_rejects_c1_timestamp_edit_on_locked_reread_before_writes(self):
         self.state["edit_c1_on_locked_comments_read"] = True
         self._save_state()
@@ -647,10 +1148,10 @@ class PublisherProcessTests(unittest.TestCase):
         state = self._load_state()
         self._assert_complete(state)
         self.assertEqual(1, len(self._effects("pr:create", state)))
-        self.assertEqual(2, len(self._effects("issue:body", state)),
-                         "the 745 helper is a happy control but rewrites completed Issue state")
-        self.assertGreater(len(state["mutations"]), len(first_mutations),
-                           "old completed replay should provide the behavioral RED witness")
+        self.assertEqual(1, len(self._effects("issue:body", state)),
+                         "completed replay must stop before the old helper can rewrite Issue state")
+        self.assertEqual(first_mutations, state["mutations"],
+                         "completed replay must be a live-read no-op even with the old helper")
 
     def test_pr_create_without_confirmable_readback_stays_pending_without_repost(self):
         self.state["faults"]["pr-list-after-create"] = "always"
@@ -684,7 +1185,8 @@ class PublisherProcessTests(unittest.TestCase):
         self.assertEqual(1, len(self._effects("project:Workflow Phase", partial)))
         self.assertEqual([], self._effects("project:PR", partial))
 
-        retried = self.run_publisher()
+        resume_action_id = self._seed_recovery_admission(current_journal_before=self._journal())
+        retried = self.run_publisher(resume_action_id=resume_action_id)
         self.assertEqual(0, retried.returncode, retried.stderr)
         final = self._load_state()
         self._assert_complete(final)
@@ -803,11 +1305,13 @@ class PublisherProcessTests(unittest.TestCase):
         self.state["faults"].pop("project-fields-incomplete")
         self._save_state()
         resumed = self.run_publisher()
-        self.assertEqual(0, resumed.returncode, resumed.stderr)
+        self.assertNotEqual(0, resumed.returncode, resumed.stderr)
+        self.assertIn("recovery admission", resumed.stderr)
         final = self._load_state()
-        self._assert_complete(final)
         self.assertEqual(1, len(self._effects("pr:create", final)))
-        self.assertEqual(1, len(self._effects("issue:body", final)))
+        self.assertEqual([], self._effects("issue:body", final))
+        self.assertEqual([], self._effects("project:Workflow Phase", final))
+        self.assertEqual([], self._effects("project:PR", final))
 
     def test_issue_comment_permission_failure_blocks_then_resumes_without_guessing(self):
         self.state["faults"]["issue-comments-read"] = True
@@ -822,7 +1326,7 @@ class PublisherProcessTests(unittest.TestCase):
 
         self.state["faults"].pop("issue-comments-read")
         self._save_state()
-        resumed = self.run_publisher()
+        resumed = self.run_publisher(resume_action_id=self._pending_resume_action_id())
         self.assertEqual(0, resumed.returncode, resumed.stderr)
         self._assert_complete(self._load_state())
 
@@ -845,10 +1349,13 @@ class PublisherProcessTests(unittest.TestCase):
         self.state["project_viewer_can_update"] = True
         self._save_state()
         resumed = self.run_publisher()
-        self.assertEqual(0, resumed.returncode, resumed.stderr)
+        self.assertNotEqual(0, resumed.returncode, resumed.stderr)
+        self.assertIn("recovery admission", resumed.stderr)
         final = self._load_state()
-        self._assert_complete(final)
         self.assertEqual(1, len(self._effects("pr:create", final)))
+        self.assertEqual([], self._effects("issue:body", final))
+        self.assertEqual([], self._effects("project:Workflow Phase", final))
+        self.assertEqual([], self._effects("project:PR", final))
 
     def test_t21_issue_complete_project_old_interruption_retries_missing_steps_only(self):
         self.state["faults"]["project:Workflow Phase"] = "interrupt-before"
@@ -874,7 +1381,8 @@ class PublisherProcessTests(unittest.TestCase):
                           if action["action_id"].endswith(":issue"))
         self.assertEqual("observed", issue_step["state"])
 
-        retried = self.run_publisher()
+        resume_action_id = self._seed_recovery_admission(current_journal_before=journal)
+        retried = self.run_publisher(resume_action_id=resume_action_id)
         self.assertEqual(0, retried.returncode, retried.stderr)
         final = self._load_state()
         self._assert_complete(final)
@@ -906,8 +1414,9 @@ class PublisherProcessTests(unittest.TestCase):
         self.state["project_values"]["Workflow Phase"] = "execution"
         self.state["project_values"]["PR"] = PR_URL
         self._save_state()
+        resume_action_id = self._seed_recovery_admission()
         before = list(self.state["mutations"])
-        retry = self.run_publisher()
+        retry = self.run_publisher(resume_action_id=resume_action_id)
         self.assertNotEqual(0, retry.returncode)
         self.assertIn("conflict", retry.stderr.lower())
         after = self._load_state()
@@ -923,7 +1432,7 @@ class PublisherProcessTests(unittest.TestCase):
                                  if "<!-- oasis7-ci-publication/v1 -->" in item["body"]]))
         self.assertIsNone(state["pr"])
 
-        second = self.run_publisher()
+        second = self.run_publisher(resume_action_id=self._pending_resume_action_id())
         self.assertEqual(0, second.returncode, second.stderr)
         state = self._load_state()
         self._assert_complete(state)

@@ -208,6 +208,167 @@ class LoopTests(unittest.TestCase):
         with patch.object(module,'common_dir',return_value=Path('/absent')), patch.object(module,'recovery_status',return_value={'pending_actions':[action]}), patch.object(module,'live_binding',return_value=dict(new,bootstrap_epoch=3)):
             with self.assertRaisesRegex(ValueError,'outside journal'): module.recovery_task(Path('/absent'),task,Path('/trusted'))
 
+    def test_recovery_rejects_active_policy_pin_drift_for_recorded_bind(self):
+        uid = 'task_' + 'a' * 32
+        original = {'task_uid':uid,'owner_role':'repository_health_engineer','bootstrap_epoch':1,
+                    'policy_commit':'a'*40,'policy_digest':'sha256:'+'1'*64}
+        adopted = dict(original, policy_commit='b'*40, policy_digest='sha256:'+'2'*64)
+        expected = json.dumps(original, sort_keys=True)
+        snapshot = {'schema':'oasis7.loop-effective-policy-snapshot/v1',
+                    'policy_commit':original['policy_commit'], 'policy_digest':original['policy_digest'],
+                    'pin_source':'immutable_binding', 'adoption_chain_tip':None, 'bootstrap_epoch':1}
+        task = {'task_uid':uid,'owner_role':original['owner_role'],'repository':'eng-cc/oasis7',
+                'issue_number':1,'task_branch':'task/fixture','project_item_id':'P',
+                'bootstrap_epoch':1,'loop_binding':original}
+        action = {'task_uid':uid,'repository':task['repository'],'issue_number':1,'kind':'bind_loop',
+                  'expected':expected,'action_id':'bind:'+hashlib.sha256(expected.encode()).hexdigest(),
+                  'previous_binding':original,'previous_epoch':1,'canonical_worktree':'/fixture',
+                  'task_branch':'task/fixture','project_item_id':'P',
+                  'effective_policy_snapshot':snapshot}
+        context = {'effective_policy': {'status':'passed','binding':adopted,
+                    'policy_commit':adopted['policy_commit'],'policy_digest':adopted['policy_digest'],
+                    'pin_source':'task_issue_adoption_chain','adoption_chain_tip':'sha256:'+'3'*64,
+                    'bootstrap_epoch':1},
+                   'trusted_current_policy': {'default_branch_oid':'c'*40}}
+        with patch.object(module,'common_dir',return_value=Path('/unused')), \
+             patch.object(module,'recovery_status',return_value={'pending_actions':[action]}), \
+             patch.object(module,'live_binding',return_value=original), \
+             patch.object(module,'resolve_effective_binding',return_value=(adopted,context)), \
+             patch.object(module,'recovery_authority') as authority:
+            with self.assertRaisesRegex(ValueError,'active policy pin differs from recorded bind action'):
+                module.recovery_task(Path('/fixture'),task,Path('/trusted'))
+            authority.assert_not_called()
+
+    def test_legacy_bind_recovery_does_not_silently_adopt_policy_chain(self):
+        uid = 'task_' + 'a' * 32
+        original = {'task_uid':uid,'owner_role':'repository_health_engineer','bootstrap_epoch':1,
+                    'policy_commit':'a'*40,'policy_digest':'sha256:'+'1'*64}
+        adopted = dict(original, policy_commit='b'*40, policy_digest='sha256:'+'2'*64)
+        expected = json.dumps(original, sort_keys=True)
+        task = {'task_uid':uid,'owner_role':original['owner_role'],'repository':'eng-cc/oasis7',
+                'issue_number':1,'task_branch':'task/fixture','project_item_id':'P',
+                'bootstrap_epoch':1,'loop_binding':original}
+        action = {'task_uid':uid,'repository':task['repository'],'issue_number':1,'kind':'bind_loop',
+                  'expected':expected,'action_id':'bind:'+hashlib.sha256(expected.encode()).hexdigest(),
+                  'previous_binding':original,'previous_epoch':1,'canonical_worktree':'/fixture',
+                  'task_branch':'task/fixture','project_item_id':'P'}
+        context = {'effective_policy': {'status':'passed','binding':adopted,
+                    'policy_commit':adopted['policy_commit'],'policy_digest':adopted['policy_digest'],
+                    'pin_source':'task_issue_adoption_chain','adoption_chain_tip':'sha256:'+'3'*64,
+                    'bootstrap_epoch':1},
+                   'trusted_current_policy': {'default_branch_oid':'c'*40}}
+        with patch.object(module,'common_dir',return_value=Path('/unused')), \
+             patch.object(module,'recovery_status',return_value={'pending_actions':[action]}), \
+             patch.object(module,'live_binding',return_value=original), \
+             patch.object(module,'resolve_effective_binding',return_value=(adopted,context)), \
+             patch.object(module,'recovery_authority') as authority:
+            with self.assertRaisesRegex(ValueError,'legacy bind action cannot prove adopted policy pin'):
+                module.recovery_task(Path('/fixture'),task,Path('/trusted'))
+            authority.assert_not_called()
+
+    def test_bind_action_freezes_effective_pin_without_rewriting_immutable_binding(self):
+        uid = 'task_' + 'a' * 32
+        original = {'task_uid':uid,'owner_role':'repository_health_engineer','bootstrap_epoch':1,
+                    'policy_commit':'a'*40,'policy_digest':'sha256:'+'1'*64,
+                    'write_scope':['doc/product/**']}
+        adopted = dict(original, policy_commit='b'*40, policy_digest='sha256:'+'2'*64)
+        context = {'effective_policy': {'status':'passed','binding':adopted,
+                    'policy_commit':adopted['policy_commit'],'policy_digest':adopted['policy_digest'],
+                    'pin_source':'task_issue_adoption_chain','adoption_chain_tip':'sha256:'+'3'*64}}
+        task = {'task_uid':uid,'owner_role':original['owner_role'],'repository':'eng-cc/oasis7',
+                'issue_number':1,'task_branch':'task/fixture','project_item_id':'P',
+                'bootstrap_epoch':1,'loop_binding':original}
+        action = module._build_bind_action(Path('/fixture'),task,original,adopted,context)
+        self.assertEqual(json.loads(action['expected']), original)
+        self.assertEqual(task['loop_binding'], original)
+        self.assertEqual(action['effective_policy_snapshot'], {
+            'schema':'oasis7.loop-effective-policy-snapshot/v1',
+            'policy_commit':adopted['policy_commit'], 'policy_digest':adopted['policy_digest'],
+            'pin_source':'task_issue_adoption_chain', 'adoption_chain_tip':'sha256:'+'3'*64,
+            'bootstrap_epoch':1,
+        })
+        self.assertEqual(action['action_id'], module._bind_action_id(
+            action['expected'], action['effective_policy_snapshot']))
+        changed_snapshot = dict(action['effective_policy_snapshot'], adoption_chain_tip='sha256:'+'4'*64)
+        self.assertNotEqual(action['action_id'], module._bind_action_id(action['expected'], changed_snapshot))
+
+    def test_recovery_accepts_original_and_frozen_adopted_pins_without_rewriting_binding(self):
+        uid = 'task_' + 'a' * 32
+        original = {'task_uid':uid,'owner_role':'repository_health_engineer','bootstrap_epoch':1,
+                    'policy_commit':'a'*40,'policy_digest':'sha256:'+'1'*64,
+                    'write_scope':['doc/product/**']}
+        adopted = dict(original, policy_commit='b'*40, policy_digest='sha256:'+'2'*64)
+        task = {'task_uid':uid,'owner_role':original['owner_role'],'repository':'eng-cc/oasis7',
+                'issue_number':1,'task_branch':'task/fixture','project_item_id':'P',
+                'bootstrap_epoch':1,'loop_binding':original}
+        cases = (
+            ('immutable', original, {'effective_policy': {'status':'passed','binding':original,
+                'policy_commit':original['policy_commit'],'policy_digest':original['policy_digest'],
+                'pin_source':'immutable_binding','adoption_chain_tip':None}}),
+            ('adopted', adopted, {'effective_policy': {'status':'passed','binding':adopted,
+                'policy_commit':adopted['policy_commit'],'policy_digest':adopted['policy_digest'],
+                'pin_source':'task_issue_adoption_chain','adoption_chain_tip':'sha256:'+'3'*64}}),
+        )
+        for name, active, context in cases:
+            with self.subTest(pin_source=name):
+                action = module._build_bind_action(Path('/fixture'),task,original,active,context)
+                with patch.object(module,'common_dir',return_value=Path('/unused')), \
+                     patch.object(module,'recovery_status',return_value={'pending_actions':[action]}), \
+                     patch.object(module,'live_binding',return_value=original), \
+                     patch.object(module,'resolve_effective_binding',return_value=(active,{
+                         **context,'trusted_current_policy':{'default_branch_oid':'c'*40}})), \
+                     patch.object(module,'recovery_authority') as authority:
+                    recovered = module.recovery_task(Path('/fixture'),task,Path('/trusted'))
+                self.assertEqual(recovered['loop_binding'], original)
+                self.assertEqual(recovered['_effective_loop_binding'], active)
+                self.assertEqual(recovered['_trusted_default_oid'], 'c'*40)
+                authority.assert_called_once_with(Path('/fixture'),active,Path('/trusted'),
+                                                  trusted_default_oid='c'*40)
+
+    def test_recovery_active_pin_drift_stops_before_helper_or_reconcile(self):
+        uid = 'task_' + 'a' * 32
+        original = {'task_uid':uid,'owner_role':'repository_health_engineer','bootstrap_epoch':1,
+                    'policy_commit':'a'*40,'policy_digest':'sha256:'+'1'*64,
+                    'write_scope':['doc/product/**']}
+        adopted = dict(original, policy_commit='b'*40, policy_digest='sha256:'+'2'*64)
+        snapshot = module._bind_policy_snapshot(original)
+        expected = json.dumps(original, sort_keys=True)
+        action = {'action_id':'bind:'+hashlib.sha256(expected.encode()).hexdigest(),
+                  'kind':'bind_loop','expected':expected,'effective_policy_snapshot':snapshot,
+                  'task_uid':uid,'repository':'eng-cc/oasis7','issue_number':1,
+                  'previous_binding':original,'previous_epoch':1,
+                  'canonical_worktree':'/fixture','task_branch':'task/fixture','project_item_id':'P'}
+        context = {'effective_policy': {'status':'passed','binding':adopted,
+                    'policy_commit':adopted['policy_commit'],'policy_digest':adopted['policy_digest'],
+                    'pin_source':'task_issue_adoption_chain','adoption_chain_tip':'sha256:'+'3'*64},
+                   'trusted_current_policy': {'default_branch_oid':'c'*40}}
+        task = {'task_uid':uid,'owner_role':original['owner_role'],'repository':'eng-cc/oasis7',
+                'issue_number':1,'task_branch':'task/fixture','project_item_id':'P',
+                'bootstrap_epoch':1,'loop_binding':original}
+        output = io.StringIO()
+        with patch.object(sys,'argv',['loop.py','recover','--repo-root','/fixture','--tool-root','/trusted',
+                                      '--task-uid',uid,'--manual-request-ref','current','--json']), \
+             patch.object(module,'load_task',return_value=task), \
+             patch.object(module,'common_dir',return_value=Path('/unused')), \
+             patch.object(module,'recovery_status',return_value={'pending_actions':[action]}), \
+             patch.object(module,'live_binding',return_value=original), \
+             patch.object(module,'resolve_effective_binding',return_value=(adopted,context)), \
+             patch.object(module.subprocess,'run',return_value=subprocess.CompletedProcess([],0,'','')), \
+             patch.object(module.subprocess,'check_output') as check_output, \
+             patch.object(module,'recovery_authority') as authority, \
+             patch.object(module,'reconcile') as reconcile, \
+             patch.object(module,'record_action') as record_action, \
+             redirect_stdout(output):
+            result = module.main()
+        self.assertEqual(result,2)
+        payload = json.loads(output.getvalue())
+        self.assertEqual(payload['status'],'blocked')
+        self.assertIn('active policy pin differs from recorded bind action',payload['blockers'][0])
+        check_output.assert_not_called()
+        authority.assert_not_called()
+        reconcile.assert_not_called()
+        record_action.assert_not_called()
+
     def test_legacy_passes_without_activation(self):
         self.assertEqual(module.validate_task(Path('.'), {'task_uid': 'x'}, None)['status'], 'legacy')
 
@@ -288,11 +449,34 @@ class LoopTests(unittest.TestCase):
             git('config', 'user.email', 'fixture@example.invalid')
             helpers = root / 'scripts/pm'
             helpers.mkdir(parents=True)
+            repository = Path(__file__).resolve().parents[2]
             for filename in ('loop.py', 'loop_gate.py', 'loop_recovery.py', 'loop_policy.py', 'loop_contracts.py', 'loop_terminal.py', 'loop-policy.v1.json'):
                 shutil.copy2(Path(__file__).with_name(filename), helpers / filename)
+            shutil.copy2(repository / 'scripts/document_corpus.py', root / 'scripts/document_corpus.py')
+            for relative in (
+                'doc/.governance/document-corpus-inventory.json',
+                'doc/.governance/top-level-directory-registry.json',
+                'doc/testing/evidence/inventory.json',
+            ):
+                target = root / relative
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(repository / relative, target)
             product = root / 'doc/product/a.md'
             product.parent.mkdir(parents=True)
             product.write_text('before')
+
+            product_path = product.relative_to(root).as_posix()
+            registry_path = 'doc/.governance/top-level-directory-registry.json'
+
+            def sync_objects(*paths):
+                command = [sys.executable, str(repository / 'scripts/document-corpus-inventory.py'),
+                           '--repo-root', str(root), 'sync', '--worktree', '--apply']
+                for path in paths:
+                    command.extend(('--path', path))
+                result = subprocess.run(command, capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+            sync_objects(registry_path, product_path)
             git('add', '.')
             git('commit', '-qm', 'effective')
             base = git('rev-parse', 'HEAD')
@@ -300,12 +484,20 @@ class LoopTests(unittest.TestCase):
             trusted = Path(tmp) / 'trusted'
             git('worktree', 'add', '--detach', str(trusted), base)
             product.write_text('after')
+            sync_objects(product_path)
             git('add', '.')
             git('commit', '-qm', 'candidate')
             uid = 'task_' + 'a' * 32
-            binding = dict(schema='oasis7.loop-task/v1', task_uid=uid, change_id='c', loop='product', owner_role='gameplay_designer', bootstrap_epoch=1, manual_request_ref='user-1', request_key='r', write_scope=['doc/product/**'], out_of_scope=[], input_contracts=[], acceptance_refs=['a'], dependencies=[], target_delivery='pilot', policy_commit=base, policy_digest='sha256:' + hashlib.sha256((helpers / 'loop-policy.v1.json').read_bytes()).hexdigest())
-            task = dict(task_uid=uid, owner_role='gameplay_designer', bootstrap_epoch=1, repository='fixture/repo', issue_number=1, loop_binding=binding)
+            product_key = hashlib.sha256(product_path.encode('utf-8')).hexdigest()
+            product_record = f'doc/.governance/document-corpus/objects/{product_key[:2]}/{product_key}.json'
+            binding = dict(schema='oasis7.loop-task/v1', task_uid=uid, change_id='c', loop='product', owner_role='gameplay_designer', bootstrap_epoch=1, manual_request_ref='user-1', request_key='r', write_scope=['doc/product/**', product_record], out_of_scope=[], input_contracts=[], acceptance_refs=['a'], dependencies=[], target_delivery='pilot', policy_commit=base, policy_digest='sha256:' + hashlib.sha256((helpers / 'loop-policy.v1.json').read_bytes()).hexdigest())
+            task = dict(task_uid=uid, owner_role='gameplay_designer', bootstrap_epoch=1,
+                        repository='fixture/repo', issue_number=1, loop_binding=binding)
             with patch.object(module, 'resolve_effective_binding', side_effect=lambda _root, selected, **_kwargs: selected.get('loop_binding')), patch.object(module, '_validate_pinned_tool_root', return_value=({'status': 'passed', 'blockers': []}, None)):
+                binding['write_scope'] = ['doc/product/**']
+                result = module.validate_task(root, task, trusted, base, git('rev-parse', 'HEAD'))
+                self.assertEqual(result['status'], 'blocked', result)
+                binding['write_scope'] = ['doc/product/**', product_record]
                 result = module.validate_task(root, task, trusted, base, git('rev-parse', 'HEAD'))
             self.assertEqual(result['status'], 'passed', result)
             (trusted / 'scripts/pm/loop_policy.py').write_text('raise Exception("tampered")')

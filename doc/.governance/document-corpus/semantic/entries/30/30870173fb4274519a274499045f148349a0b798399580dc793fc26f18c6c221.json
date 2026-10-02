@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "403478648c77dbf734574e3c4c0f9d4dfba5da62aa3902a142e9aa0e02bf3719",
+    "current_authority": "doc/testing/prd.md",
+    "decision_owner": "qa_engineer",
+    "disposition": "retain_current_authority",
+    "note": "current testing domain design authority",
+    "path": "doc/testing/design.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/scripts/README.md",
+    "authority_layer": "professional_domain",
+    "content_sha256": "55035d342693fffcf09053e5f806b9ab9ee85e565c60d3a589967ef72251b83e",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "review_required",
+    "object_kind": "markdown_record",
+    "path": "doc/scripts/prd.md",
+    "registry_type": "professional_domain",
+    "routing_batch": "scripts-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "repository_health_engineer",
+    "structural_owner": "repository_health_engineer"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

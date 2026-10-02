@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/core/README.md",
+    "authority_layer": "professional_domain",
+    "content_sha256": "d03911055d188381e7b2d0cac046bc982bccfd0546754894424355886a4cd5ce",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "review_required",
+    "object_kind": "markdown_record",
+    "path": "doc/core/checklists/cross-module-impact-checklist.md",
+    "registry_type": "professional_domain",
+    "routing_batch": "core-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "producer_system_designer",
+    "structural_owner": "producer_system_designer"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}

@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "e6406ecdbb8ee3bcc5ae13876257e40f067b75c72cfb3482ba90fa7eceec4a3c",
+    "current_authority": "doc/game/gameplay/gameplay-top-level-design.prd.md",
+    "decision_owner": "gameplay_designer",
+    "disposition": "retain_repeatable_procedure",
+    "note": "conditional regression procedure; four retired Rust Viewer assertions lack proven equivalents; current UI tests do not substitute; not a current pass",
+    "path": "doc/playability_test_result/topics/industrial-onboarding-required-tier-cards-2026-03-15.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

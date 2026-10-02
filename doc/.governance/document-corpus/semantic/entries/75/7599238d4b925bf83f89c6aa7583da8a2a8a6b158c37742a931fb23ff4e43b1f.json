@@ -1,0 +1,11 @@
+{
+  "record": {
+    "content_sha256": "b60b94874a33a1ac4f27809534c5f0ca09742c22441763908ce78918bf2cb334",
+    "current_authority": "doc/testing/prd.md",
+    "decision_owner": "qa_engineer",
+    "disposition": "retain_current_authority",
+    "note": "current trend formula and collection contract; dated baselines remain window facts",
+    "path": "doc/testing/governance/testing-quality-trend-tracking-2026-03-11.prd.md"
+  },
+  "schema": "oasis7.document-semantic-entry/v1"
+}

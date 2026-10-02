@@ -1,0 +1,17 @@
+{
+  "record": {
+    "authority_entry": "doc/product/README.md",
+    "authority_layer": "product_overlay",
+    "content_sha256": "5511c9ee8f53ddd4f5f50e38ad2732ca03a9ba7c4868931fb576daad382f5a2e",
+    "inventory_disposition": "retain_for_owner_review",
+    "lifecycle_candidate": "active_candidate",
+    "object_kind": "markdown_record",
+    "path": "doc/product/world-infrastructure/prd.md",
+    "registry_type": "product_overlay",
+    "routing_batch": "product-corpus-review",
+    "routing_note": "heuristic routing only; no lifecycle, authority, migration, or deletion decision is authorized by this inventory",
+    "semantic_decision_owner": "producer_system_designer",
+    "structural_owner": "producer_system_designer"
+  },
+  "schema": "oasis7.document-corpus-object/v1"
+}
